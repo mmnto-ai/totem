@@ -32,9 +32,16 @@ export async function runSync(
 
   if (incremental) {
     const changedPaths = options.changedFiles ?? getChangedFiles(projectRoot, 'HEAD~1', log);
-    const changedSet = new Set(changedPaths);
-    filesToProcess = allFiles.filter((f) => changedSet.has(f.relativePath));
-    log(`Incremental sync: ${filesToProcess.length} changed files (of ${allFiles.length} total)`);
+    if (changedPaths === null) {
+      log('Git diff failed, falling back to full sync...');
+      await store.reset();
+      filesToProcess = allFiles;
+      log(`Full sync (fallback): ${filesToProcess.length} files to process`);
+    } else {
+      const changedSet = new Set(changedPaths);
+      filesToProcess = allFiles.filter((f) => changedSet.has(f.relativePath));
+      log(`Incremental sync: ${filesToProcess.length} changed files (of ${allFiles.length} total)`);
+    }
   } else {
     log('Full sync: resetting index...');
     await store.reset();

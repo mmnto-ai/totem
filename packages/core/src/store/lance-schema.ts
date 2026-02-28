@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ContentTypeSchema, ChunkStrategySchema } from '../config-schema.js';
 
 /**
  * Zod schema for validating a stored chunk before insertion.
@@ -9,14 +10,8 @@ export const StoredChunkSchema = z.object({
   content: z.string(),
   contextPrefix: z.string(),
   filePath: z.string(),
-  type: z.enum(['code', 'session_log', 'spec']),
-  strategy: z.enum([
-    'typescript-ast',
-    'markdown-heading',
-    'session-log',
-    'schema-file',
-    'test-file',
-  ]),
+  type: ContentTypeSchema,
+  strategy: ChunkStrategySchema,
   label: z.string(),
   startLine: z.number().int(),
   endLine: z.number().int(),

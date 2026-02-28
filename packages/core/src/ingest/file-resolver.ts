@@ -49,7 +49,7 @@ export function getChangedFiles(
   projectRoot: string,
   sinceRef: string = 'HEAD~1',
   onWarn?: (msg: string) => void,
-): string[] {
+): string[] | null {
   try {
     const output = execSync(`git diff --name-only ${sinceRef}`, {
       cwd: projectRoot,
@@ -60,12 +60,12 @@ export function getChangedFiles(
       .map((line) => line.trim())
       .filter(Boolean);
   } catch (err) {
-    const msg = `Failed to get changed files from git, skipping incremental sync. Error: ${err instanceof Error ? err.message : String(err)}`;
+    const msg = `Failed to get changed files from git. Error: ${err instanceof Error ? err.message : String(err)}`;
     if (onWarn) {
       onWarn(msg);
     } else {
       console.warn(`[Totem Warning] ${msg}`);
     }
-    return [];
+    return null;
   }
 }

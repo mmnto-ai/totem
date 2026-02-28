@@ -17,6 +17,11 @@ const MAX_SPLIT_DEPTH = 3;
  */
 export class MarkdownChunker implements Chunker {
   readonly strategy: ChunkStrategy = 'markdown-heading';
+  private onWarn: ((msg: string) => void) | undefined;
+
+  constructor(onWarn?: (msg: string) => void) {
+    this.onWarn = onWarn;
+  }
 
   chunk(content: string, filePath: string, type: ContentType): Chunk[] {
     const tree = unified()
@@ -100,9 +105,12 @@ export class MarkdownChunker implements Chunker {
       }
       return result;
     } catch (err) {
-      console.warn(
-        `[Totem Warning] Failed to parse frontmatter in ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      const msg = `Failed to parse frontmatter in ${filePath}: ${err instanceof Error ? err.message : String(err)}`;
+      if (this.onWarn) {
+        this.onWarn(msg);
+      } else {
+        console.warn(`[Totem Warning] ${msg}`);
+      }
       return {};
     }
   }
