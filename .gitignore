@@ -13,8 +13,6 @@ dist/
 # IDE & AI tool configs
 .vscode/
 *.code-workspace
-.claude/
-.gemini/settings.json
 scratchpad/
 
 # OS
