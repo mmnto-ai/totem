@@ -14,7 +14,8 @@ dist/
 .vscode/
 *.code-workspace
 .claude/
-.gemini/
+.gemini/settings.json
+scratchpad/
 
 # OS
 .DS_Store
