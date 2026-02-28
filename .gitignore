@@ -10,9 +10,11 @@ dist/
 .env
 .env.local
 
-# IDE
+# IDE & AI tool configs
 .vscode/
 *.code-workspace
+.claude/
+.gemini/
 
 # OS
 .DS_Store
