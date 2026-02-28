@@ -18,10 +18,18 @@
     "test": "echo \"No tests yet\" && exit 0"
   },
   "dependencies": {
+    "@lancedb/lancedb": "^0.13.0",
+    "glob": "^11.0.0",
+    "openai": "^4.77.0",
+    "remark-frontmatter": "^5.0.0",
+    "remark-parse": "^11.0.0",
+    "typescript": "^5.7.0",
+    "unified": "^11.0.0",
+    "yaml": "^2.4.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.0"
+    "@types/mdast": "^4.0.0"
   },
   "files": ["dist"],
   "license": "MIT"
