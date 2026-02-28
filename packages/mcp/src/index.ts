@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 
-/**
- * Totem MCP Server
- *
- * Exposes two tools over stdio:
- *   - search_knowledge(query, type_filter?, max_results?)
- *   - add_lesson(lesson, context_tags)
- *
- * Implementation deferred to Phase 3.
- */
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { registerSearchKnowledge } from './tools/search-knowledge.js';
+import { registerAddLesson } from './tools/add-lesson.js';
 
-console.log('[Totem MCP] Server not yet implemented (Phase 3)');
-console.log('[Totem MCP] Will expose: search_knowledge, add_lesson');
-process.exit(0);
+const server = new McpServer({
+  name: '@mmnto/totem',
+  version: '0.1.0',
+});
+
+registerSearchKnowledge(server);
+registerAddLesson(server);
+
+const transport = new StdioServerTransport();
+await server.connect(transport);

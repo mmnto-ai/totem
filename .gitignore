@@ -14,6 +14,7 @@ dist/
 .vscode/
 *.code-workspace
 .claude/
+.gemini/settings.json
 scratchpad/
 
 # OS

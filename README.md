@@ -35,10 +35,23 @@ This is a Turborepo monorepo consisting of:
    npx @mmnto/cli sync
    ```
 
+4. **Configure the MCP Server**:
+   Add Totem to your AI agent's configuration (e.g., Claude Desktop or Gemini):
+   ```json
+   {
+     "mcpServers": {
+       "totem": {
+         "command": "npx",
+         "args": ["-y", "@mmnto/mcp"]
+       }
+     }
+   }
+   ```
+
 ## Project Roadmap
 
 - [x] **Phase 1: Scaffold** - Core monorepo setup, `totem init` CLI, and config schemas.
 - [x] **Phase 2: Ingest Pipeline** - Chunking strategies (AST, Markdown, etc.) and `totem sync` indexing into LanceDB.
-- [ ] **Phase 3: MCP Server** - `search_knowledge` and `add_lesson` tool implementations over stdio.
+- [x] **Phase 3: MCP Server** - `search_knowledge` and `add_lesson` tool implementations over stdio.
 - [ ] **Phase 4: Workflow Integration** - Integration with dev loop tools (`pnpm oracle`, post-merge git hooks).
 - [ ] **Phase 5: Ephemeral Memory** - The "Kick" (reset) functionality.
