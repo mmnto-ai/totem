@@ -58,7 +58,7 @@ export async function getContext(): Promise<ServerContext> {
 
   const configPath = path.join(projectRoot, 'totem.config.ts');
   if (!fs.existsSync(configPath)) {
-    throw new Error('No totem.config.ts found in current directory. Run `totem init` first.');
+    throw new Error('[Totem Error] No totem.config.ts found in current directory. Run `totem init` first.');
   }
 
   loadEnv(projectRoot);
