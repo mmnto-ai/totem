@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "totem-dev": {
+      "command": "node",
+      "args": ["./packages/mcp/dist/index.js"]
+    }
+  }
+}

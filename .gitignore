@@ -15,6 +15,7 @@ dist/
 *.code-workspace
 .claude/
 .gemini/settings.json
+.mcp.json
 scratchpad/
 
 # OS
