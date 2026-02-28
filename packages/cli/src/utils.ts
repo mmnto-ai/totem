@@ -40,8 +40,7 @@ export async function loadConfig(configPath: string): Promise<TotemConfig> {
 export function resolveConfigPath(cwd: string): string {
   const configPath = path.join(cwd, 'totem.config.ts');
   if (!fs.existsSync(configPath)) {
-    console.error('[Totem Error] No totem.config.ts found. Run `totem init` first.');
-    process.exit(1);
+    throw new Error('[Totem Error] No totem.config.ts found. Run `totem init` first.');
   }
   return configPath;
 }

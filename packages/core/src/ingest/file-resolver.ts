@@ -56,8 +56,10 @@ export function getChangedFiles(
       .split('\n')
       .map((line) => line.trim())
       .filter(Boolean);
-  } catch {
-    // If git diff fails (no commits, not a repo, etc.), return empty
+  } catch (err) {
+    console.warn(
+      `[Totem Warning] Failed to get changed files from git, skipping incremental sync. Error: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return [];
   }
 }

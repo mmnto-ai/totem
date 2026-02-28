@@ -17,6 +17,13 @@ export async function searchCommand(
   const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
   await store.connect();
 
+  const VALID_TYPES = ['code', 'session_log', 'spec'];
+  if (options.type && !VALID_TYPES.includes(options.type)) {
+    throw new Error(
+      `[Totem Error] Invalid type filter: '${options.type}'. Valid types are: ${VALID_TYPES.join(', ')}`,
+    );
+  }
+
   const results = await store.search({
     query,
     typeFilter: options.type as ContentType | undefined,
