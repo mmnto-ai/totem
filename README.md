@@ -53,5 +53,5 @@ This is a Turborepo monorepo consisting of:
 - [x] **Phase 1: Scaffold** - Core monorepo setup, `totem init` CLI, and config schemas.
 - [x] **Phase 2: Ingest Pipeline** - Chunking strategies (AST, Markdown, etc.) and `totem sync` indexing into LanceDB.
 - [x] **Phase 3: MCP Server** - `search_knowledge` and `add_lesson` tool implementations over stdio.
-- [ ] **Phase 4: Workflow Integration** - Integration with dev loop tools (`pnpm oracle`, post-merge git hooks).
+- [x] **Phase 4: Workflow Integration** - Integration with dev loop tools (`pnpm oracle`, post-merge git hooks).
 - [ ] **Phase 5: Ephemeral Memory** - The "Kick" (reset) functionality.
