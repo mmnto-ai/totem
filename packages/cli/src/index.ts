@@ -3,6 +3,15 @@
 import { Command } from 'commander';
 import { initCommand } from './commands/init.js';
 
+function handleError(err: unknown): never {
+  if (err instanceof Error) {
+    console.error(err.message);
+  } else {
+    console.error('[Totem Error] An unknown error occurred:', err);
+  }
+  process.exit(1);
+}
+
 const program = new Command();
 
 program
@@ -17,16 +26,21 @@ program
     try {
       await initCommand();
     } catch (err) {
-      console.error('[Totem Error]', err);
-      process.exit(1);
+      handleError(err);
     }
   });
 
 program
   .command('sync')
   .description('Re-index project files into the local vector store')
-  .action(() => {
-    console.log('[Totem] sync is not yet implemented (Phase 2)');
+  .option('--full', 'Force a full re-index (ignores incremental)')
+  .action(async (opts: { full?: boolean }) => {
+    try {
+      const { syncCommand } = await import('./commands/sync.js');
+      await syncCommand(opts);
+    } catch (err) {
+      handleError(err);
+    }
   });
 
 program
@@ -34,16 +48,25 @@ program
   .description('Search the knowledge index')
   .option('-t, --type <type>', 'Filter by content type (code, session_log, spec)')
   .option('-n, --max-results <n>', 'Maximum results to return', '5')
-  .action((query: string, opts: { type?: string; maxResults?: string }) => {
-    console.log('[Totem] search is not yet implemented (Phase 2)');
-    console.log(`  query: ${query}, type: ${opts.type ?? 'all'}, max: ${opts.maxResults ?? '5'}`);
+  .action(async (query: string, opts: { type?: string; maxResults?: string }) => {
+    try {
+      const { searchCommand } = await import('./commands/search.js');
+      await searchCommand(query, opts);
+    } catch (err) {
+      handleError(err);
+    }
   });
 
 program
   .command('stats')
   .description('Show index statistics')
-  .action(() => {
-    console.log('[Totem] stats is not yet implemented (Phase 2)');
+  .action(async () => {
+    try {
+      const { statsCommand } = await import('./commands/stats.js');
+      await statsCommand();
+    } catch (err) {
+      handleError(err);
+    }
   });
 
 program.parse();

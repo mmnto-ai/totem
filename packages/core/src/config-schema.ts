@@ -27,18 +27,26 @@ export const IngestTargetSchema = z.object({
 export const OpenAIProviderSchema = z.object({
   provider: z.literal('openai'),
   model: z.string().default('text-embedding-3-small'),
+  dimensions: z.number().int().positive().optional(),
 });
 
 export const OllamaProviderSchema = z.object({
   provider: z.literal('ollama'),
   model: z.string().default('nomic-embed-text'),
   baseUrl: z.string().default('http://localhost:11434'),
+  dimensions: z.number().int().positive().optional(),
 });
 
 export const EmbeddingProviderSchema = z.discriminatedUnion('provider', [
   OpenAIProviderSchema,
   OllamaProviderSchema,
 ]);
+
+export const DEFAULT_IGNORE_PATTERNS = [
+  '**/node_modules/**',
+  '**/.lancedb/**',
+  '**/dist/**',
+];
 
 export const TotemConfigSchema = z.object({
   /** Glob patterns and chunking strategies for each ingest target */
@@ -52,6 +60,9 @@ export const TotemConfigSchema = z.object({
 
   /** Optional: override the .lancedb/ directory path */
   lanceDir: z.string().default('.lancedb'),
+
+  /** Optional: glob patterns to exclude from indexing */
+  ignorePatterns: z.array(z.string()).default(DEFAULT_IGNORE_PATTERNS),
 });
 
 export type ChunkStrategy = z.infer<typeof ChunkStrategySchema>;
