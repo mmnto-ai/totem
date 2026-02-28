@@ -51,7 +51,10 @@ export function registerSearchKnowledge(server: McpServer): void {
 
         return { content: [{ type: 'text' as const, text: formatted }] };
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const originalMessage = err instanceof Error ? err.message : String(err);
+        const message = originalMessage.startsWith('[Totem Error]')
+          ? originalMessage
+          : `[Totem Error] Failed to search knowledge: ${originalMessage}`;
         return { content: [{ type: 'text' as const, text: message }], isError: true };
       }
     },

@@ -25,7 +25,7 @@ export function registerAddLesson(server: McpServer): void {
         const { projectRoot, config } = await getContext();
 
         const totemDir = path.join(projectRoot, config.totemDir);
-        fs.mkdirSync(totemDir, { recursive: true });
+        await fs.promises.mkdir(totemDir, { recursive: true });
 
         const lessonsPath = path.join(totemDir, 'lessons.md');
         const timestamp = new Date().toISOString();
@@ -36,7 +36,7 @@ export function registerAddLesson(server: McpServer): void {
           `**Tags:** ${tags}\n\n` +
           `${lesson}\n`;
 
-        fs.appendFileSync(lessonsPath, entry, 'utf-8');
+        await fs.promises.appendFile(lessonsPath, entry, 'utf-8');
 
         return {
           content: [
@@ -47,7 +47,10 @@ export function registerAddLesson(server: McpServer): void {
           ],
         };
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const originalMessage = err instanceof Error ? err.message : String(err);
+        const message = originalMessage.startsWith('[Totem Error]')
+          ? originalMessage
+          : `[Totem Error] Failed to add lesson: ${originalMessage}`;
         return { content: [{ type: 'text' as const, text: message }], isError: true };
       }
     },
