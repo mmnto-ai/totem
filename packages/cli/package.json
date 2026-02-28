@@ -1,0 +1,27 @@
+{
+  "name": "@mmnto/cli",
+  "version": "0.1.0",
+  "description": "CLI for Totem — AI persistent memory and context layer",
+  "type": "module",
+  "bin": {
+    "totem": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "dependencies": {
+    "@mmnto/totem": "workspace:*",
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  },
+  "files": ["dist"],
+  "license": "MIT"
+}
