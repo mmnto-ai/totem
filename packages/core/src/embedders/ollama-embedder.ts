@@ -8,16 +8,18 @@ const DEFAULT_DIMENSIONS = 768;
  * No SDK required — plain fetch.
  */
 export class OllamaEmbedder implements Embedder {
-  readonly dimensions = DEFAULT_DIMENSIONS;
+  readonly dimensions: number;
   private model: string;
   private baseUrl: string;
 
   constructor(
     model: string = 'nomic-embed-text',
     baseUrl: string = 'http://localhost:11434',
+    dimensions?: number,
   ) {
     this.model = model;
     this.baseUrl = baseUrl;
+    this.dimensions = dimensions ?? DEFAULT_DIMENSIONS;
   }
 
   async embed(texts: string[]): Promise<number[][]> {

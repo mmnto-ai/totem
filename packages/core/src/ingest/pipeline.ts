@@ -27,11 +27,11 @@ export async function runSync(
   await store.connect();
 
   // 3. Resolve files to process
-  const allFiles = resolveFiles(config.targets, projectRoot);
+  const allFiles = resolveFiles(config.targets, projectRoot, config.ignorePatterns);
   let filesToProcess: ResolvedFile[];
 
   if (incremental) {
-    const changedPaths = options.changedFiles ?? getChangedFiles(projectRoot);
+    const changedPaths = options.changedFiles ?? getChangedFiles(projectRoot, 'HEAD~1', log);
     const changedSet = new Set(changedPaths);
     filesToProcess = allFiles.filter((f) => changedSet.has(f.relativePath));
     log(`Incremental sync: ${filesToProcess.length} changed files (of ${allFiles.length} total)`);

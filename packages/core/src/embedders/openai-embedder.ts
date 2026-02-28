@@ -5,12 +5,13 @@ const MAX_BATCH_SIZE = 2048;
 const DEFAULT_DIMENSIONS = 1536;
 
 export class OpenAIEmbedder implements Embedder {
-  readonly dimensions = DEFAULT_DIMENSIONS;
+  readonly dimensions: number;
   private client: OpenAI;
   private model: string;
 
-  constructor(model: string = 'text-embedding-3-small') {
+  constructor(model: string = 'text-embedding-3-small', dimensions?: number) {
     this.model = model;
+    this.dimensions = dimensions ?? DEFAULT_DIMENSIONS;
 
     const apiKey = process.env['OPENAI_API_KEY'];
     if (!apiKey) {

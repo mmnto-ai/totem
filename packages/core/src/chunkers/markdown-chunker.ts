@@ -24,7 +24,7 @@ export class MarkdownChunker implements Chunker {
       .use(remarkFrontmatter, ['yaml'])
       .parse(content) as Root;
 
-    const metadata = this.extractFrontmatter(tree);
+    const metadata = this.extractFrontmatter(tree, filePath);
     const chunks: Chunk[] = [];
     const lines = content.split('\n');
 
@@ -86,7 +86,7 @@ export class MarkdownChunker implements Chunker {
     return chunks;
   }
 
-  private extractFrontmatter(tree: Root): Record<string, string> {
+  private extractFrontmatter(tree: Root, filePath: string): Record<string, string> {
     const yamlNode = tree.children.find((n) => n.type === 'yaml');
     if (!yamlNode || !('value' in yamlNode)) return {};
 
@@ -99,7 +99,10 @@ export class MarkdownChunker implements Chunker {
         result[key] = String(value);
       }
       return result;
-    } catch {
+    } catch (err) {
+      console.warn(
+        `[Totem Warning] Failed to parse frontmatter in ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+      );
       return {};
     }
   }

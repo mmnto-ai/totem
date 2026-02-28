@@ -7,6 +7,7 @@ export {
   EmbeddingProviderSchema,
   OpenAIProviderSchema,
   OllamaProviderSchema,
+  DEFAULT_IGNORE_PATTERNS,
 } from './config-schema.js';
 
 export type {

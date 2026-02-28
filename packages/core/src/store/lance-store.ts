@@ -110,13 +110,15 @@ export class LanceStore {
   async stats(): Promise<{ totalChunks: number; byType: Record<string, number> }> {
     if (!this.table) return { totalChunks: 0, byType: {} };
 
-    const allRows = await this.table.query().select(['type']).toArray();
+    const totalChunks = await this.table.countRows();
+
+    const typeRows = await this.table.query().select(['type']).toArray();
     const byType: Record<string, number> = {};
-    for (const row of allRows) {
+    for (const row of typeRows) {
       const t = row['type'] as string;
       byType[t] = (byType[t] ?? 0) + 1;
     }
 
-    return { totalChunks: allRows.length, byType };
+    return { totalChunks, byType };
   }
 }

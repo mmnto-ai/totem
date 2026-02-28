@@ -2,6 +2,7 @@ import { globSync } from 'glob';
 import { execSync } from 'node:child_process';
 import * as path from 'node:path';
 import type { IngestTarget } from '../config-schema.js';
+import { DEFAULT_IGNORE_PATTERNS } from '../config-schema.js';
 
 export interface ResolvedFile {
   absolutePath: string;
@@ -13,6 +14,7 @@ export interface ResolvedFile {
 export function resolveFiles(
   targets: IngestTarget[],
   projectRoot: string,
+  ignorePatterns: string[] = DEFAULT_IGNORE_PATTERNS,
 ): ResolvedFile[] {
   const results: ResolvedFile[] = [];
   const seen = new Set<string>();
@@ -21,7 +23,7 @@ export function resolveFiles(
     const matches = globSync(target.glob, {
       cwd: projectRoot,
       nodir: true,
-      ignore: ['**/node_modules/**', '**/.lancedb/**', '**/dist/**'],
+      ignore: ignorePatterns,
     });
 
     for (const relativePath of matches) {
@@ -46,6 +48,7 @@ export function resolveFiles(
 export function getChangedFiles(
   projectRoot: string,
   sinceRef: string = 'HEAD~1',
+  onWarn?: (msg: string) => void,
 ): string[] {
   try {
     const output = execSync(`git diff --name-only ${sinceRef}`, {
@@ -57,9 +60,12 @@ export function getChangedFiles(
       .map((line) => line.trim())
       .filter(Boolean);
   } catch (err) {
-    console.warn(
-      `[Totem Warning] Failed to get changed files from git, skipping incremental sync. Error: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    const msg = `Failed to get changed files from git, skipping incremental sync. Error: ${err instanceof Error ? err.message : String(err)}`;
+    if (onWarn) {
+      onWarn(msg);
+    } else {
+      console.warn(`[Totem Warning] ${msg}`);
+    }
     return [];
   }
 }

@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { LanceStore, createEmbedder } from '@mmnto/totem';
+import { LanceStore, createEmbedder, ContentTypeSchema } from '@mmnto/totem';
 import type { ContentType } from '@mmnto/totem';
 import { loadEnv, loadConfig, resolveConfigPath } from '../utils.js';
 
@@ -17,8 +17,8 @@ export async function searchCommand(
   const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
   await store.connect();
 
-  const VALID_TYPES = ['code', 'session_log', 'spec'];
-  if (options.type && !VALID_TYPES.includes(options.type)) {
+  const VALID_TYPES = ContentTypeSchema.options;
+  if (options.type && !VALID_TYPES.includes(options.type as ContentType)) {
     throw new Error(
       `[Totem Error] Invalid type filter: '${options.type}'. Valid types are: ${VALID_TYPES.join(', ')}`,
     );

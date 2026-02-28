@@ -19,8 +19,8 @@ export interface Embedder {
 export function createEmbedder(config: EmbeddingProvider): Embedder {
   switch (config.provider) {
     case 'openai':
-      return new OpenAIEmbedder(config.model);
+      return new OpenAIEmbedder(config.model, config.dimensions);
     case 'ollama':
-      return new OllamaEmbedder(config.model, config.baseUrl);
+      return new OllamaEmbedder(config.model, config.baseUrl, config.dimensions);
   }
 }
