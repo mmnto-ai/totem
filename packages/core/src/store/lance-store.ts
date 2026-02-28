@@ -84,7 +84,7 @@ export class LanceStore {
       filePath: row['filePath'] as string,
       type: row['type'] as ContentType,
       label: row['label'] as string,
-      score: row['_distance'] != null ? 1 - (row['_distance'] as number) : 0,
+      score: row['_distance'] != null ? 1 / (1 + (row['_distance'] as number)) : 0,
       metadata: JSON.parse((row['metadata'] as string) || '{}') as Record<string, string>,
     }));
   }

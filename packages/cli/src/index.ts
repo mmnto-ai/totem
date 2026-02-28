@@ -3,6 +3,15 @@
 import { Command } from 'commander';
 import { initCommand } from './commands/init.js';
 
+function handleError(err: unknown): never {
+  if (err instanceof Error) {
+    console.error(err.message);
+  } else {
+    console.error('[Totem Error] An unknown error occurred:', err);
+  }
+  process.exit(1);
+}
+
 const program = new Command();
 
 program
@@ -17,8 +26,7 @@ program
     try {
       await initCommand();
     } catch (err) {
-      console.error('[Totem Error]', err);
-      process.exit(1);
+      handleError(err);
     }
   });
 
@@ -31,8 +39,7 @@ program
       const { syncCommand } = await import('./commands/sync.js');
       await syncCommand(opts);
     } catch (err) {
-      console.error('[Totem Error]', err);
-      process.exit(1);
+      handleError(err);
     }
   });
 
@@ -46,8 +53,7 @@ program
       const { searchCommand } = await import('./commands/search.js');
       await searchCommand(query, opts);
     } catch (err) {
-      console.error('[Totem Error]', err);
-      process.exit(1);
+      handleError(err);
     }
   });
 
@@ -59,8 +65,7 @@ program
       const { statsCommand } = await import('./commands/stats.js');
       await statsCommand();
     } catch (err) {
-      console.error('[Totem Error]', err);
-      process.exit(1);
+      handleError(err);
     }
   });
 

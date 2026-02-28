@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { TotemConfig } from '../config-schema.js';
 import type { Chunk, SyncOptions } from '../types.js';
 import { createChunker } from '../chunkers/chunker.js';
@@ -21,7 +22,7 @@ export async function runSync(
   const embedder = createEmbedder(config.embedding);
 
   // 2. Connect to store
-  const storePath = `${projectRoot}/${config.lanceDir}`;
+  const storePath = path.join(projectRoot, config.lanceDir);
   const store = new LanceStore(storePath, embedder);
   await store.connect();
 

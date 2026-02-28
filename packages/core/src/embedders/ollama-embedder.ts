@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { Embedder } from './embedder.js';
 
 const DEFAULT_DIMENSIONS = 768;
@@ -39,7 +40,7 @@ export class OllamaEmbedder implements Embedder {
       );
     }
 
-    const data = (await response.json()) as { embeddings: number[][] };
+    const data = z.object({ embeddings: z.array(z.array(z.number())) }).parse(await response.json());
     return data.embeddings;
   }
 }
