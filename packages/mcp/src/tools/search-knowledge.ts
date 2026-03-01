@@ -8,6 +8,10 @@ import { getContext, reconnectStore } from '../context.js';
 
 type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
 
+// Heuristic to detect stale LanceDB file handles after a full sync rebuild.
+// Brittle — may need updating if LanceDB changes its error message format.
+const LANCE_STALE_ERROR_PATTERN = /not found|LanceError/i;
+
 async function performSearch(
   query: string,
   typeFilter?: ContentType,
@@ -65,10 +69,7 @@ export function registerSearchKnowledge(server: McpServer): void {
       } catch (err) {
         const originalMessage = err instanceof Error ? err.message : String(err);
 
-        // Detect stale LanceDB file handles after a full sync rebuild.
-        // NOTE: This relies on string matching LanceDB error messages, which may
-        // break if the library changes its error format in a future version.
-        const isStale = /not found/i.test(originalMessage) || /LanceError/i.test(originalMessage);
+        const isStale = LANCE_STALE_ERROR_PATTERN.test(originalMessage);
 
         if (isStale) {
           try {
