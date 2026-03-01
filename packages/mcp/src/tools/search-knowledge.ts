@@ -9,7 +9,10 @@ import { getContext, reconnectStore } from '../context.js';
 type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
 
 // Heuristic to detect stale LanceDB file handles after a full sync rebuild.
-// Brittle — may need updating if LanceDB changes its error message format.
+// Observed errors that indicate a stale handle:
+//   - "IO-error: ... not found" when underlying .lance files are deleted
+//   - "LanceError: ..." for other file access issues after rebuild
+// TODO: Replace with error codes if future LanceDB versions expose them.
 const LANCE_STALE_ERROR_PATTERN = /not found|LanceError/i;
 
 async function performSearch(
