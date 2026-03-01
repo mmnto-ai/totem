@@ -1,44 +1,37 @@
 // Config schemas
-export {
-  TotemConfigSchema,
-  ChunkStrategySchema,
-  ContentTypeSchema,
-  IngestTargetSchema,
-  EmbeddingProviderSchema,
-  OpenAIProviderSchema,
-  OllamaProviderSchema,
-  DEFAULT_IGNORE_PATTERNS,
-} from './config-schema.js';
-
 export type {
-  TotemConfig,
   ChunkStrategy,
   ContentType,
-  IngestTarget,
   EmbeddingProvider,
+  IngestTarget,
+  TotemConfig,
+} from './config-schema.js';
+export {
+  ChunkStrategySchema,
+  ContentTypeSchema,
+  DEFAULT_IGNORE_PATTERNS,
+  EmbeddingProviderSchema,
+  IngestTargetSchema,
+  OllamaProviderSchema,
+  OpenAIProviderSchema,
+  TotemConfigSchema,
 } from './config-schema.js';
 
 // Types
-export type {
-  Chunk,
-  StoredChunk,
-  SearchResult,
-  SyncOptions,
-  SearchOptions,
-} from './types.js';
+export type { Chunk, SearchOptions, SearchResult, StoredChunk, SyncOptions } from './types.js';
 
 // Chunkers
-export { createChunker } from './chunkers/chunker.js';
 export type { Chunker } from './chunkers/chunker.js';
+export { createChunker } from './chunkers/chunker.js';
 
 // Embedders
-export { createEmbedder } from './embedders/embedder.js';
 export type { Embedder } from './embedders/embedder.js';
+export { createEmbedder } from './embedders/embedder.js';
 
 // Store
-export { LanceStore } from './store/lance-store.js';
 export { TOTEM_TABLE_NAME } from './store/lance-schema.js';
+export { LanceStore } from './store/lance-store.js';
 
 // Pipeline
-export { runSync, resolveFiles, getChangedFiles } from './ingest/sync.js';
 export type { ResolvedFile } from './ingest/sync.js';
+export { getChangedFiles, resolveFiles, runSync } from './ingest/sync.js';

@@ -1,5 +1,6 @@
 import { runSync } from '@mmnto/totem';
-import { loadEnv, loadConfig, resolveConfigPath } from '../utils.js';
+
+import { loadConfig, loadEnv, resolveConfigPath } from '../utils.js';
 
 export async function syncCommand(options: { full?: boolean }): Promise<void> {
   const cwd = process.cwd();
@@ -16,7 +17,5 @@ export async function syncCommand(options: { full?: boolean }): Promise<void> {
     onProgress: (msg) => console.log(`[Totem] ${msg}`),
   });
 
-  console.log(
-    `[Totem] Done: ${result.chunksProcessed} chunks from ${result.filesProcessed} files`,
-  );
+  console.log(`[Totem] Done: ${result.chunksProcessed} chunks from ${result.filesProcessed} files`);
 }

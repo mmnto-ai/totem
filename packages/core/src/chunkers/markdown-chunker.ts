@@ -1,11 +1,12 @@
-import { unified } from 'unified';
-import remarkParse from 'remark-parse';
+import type { Content, Heading, PhrasingContent, Root } from 'mdast';
 import remarkFrontmatter from 'remark-frontmatter';
+import remarkParse from 'remark-parse';
+import { unified } from 'unified';
 import YAML from 'yaml';
-import type { Root, Heading, Content, PhrasingContent } from 'mdast';
+
+import type { ChunkStrategy, ContentType } from '../config-schema.js';
 import type { Chunk } from '../types.js';
 import type { Chunker } from './chunker.js';
-import type { ChunkStrategy, ContentType } from '../config-schema.js';
 
 const MAX_SPLIT_DEPTH = 3;
 
@@ -24,10 +25,7 @@ export class MarkdownChunker implements Chunker {
   }
 
   chunk(content: string, filePath: string, type: ContentType): Chunk[] {
-    const tree = unified()
-      .use(remarkParse)
-      .use(remarkFrontmatter, ['yaml'])
-      .parse(content) as Root;
+    const tree = unified().use(remarkParse).use(remarkFrontmatter, ['yaml']).parse(content) as Root;
 
     const metadata = this.extractFrontmatter(tree, filePath);
     const chunks: Chunk[] = [];
@@ -49,9 +47,10 @@ export class MarkdownChunker implements Chunker {
 
       const label = currentHeading ?? filePath;
       const contextPrefix = `File: ${filePath} | Section: ${label}`;
-      const endLine = sectionNodes.length > 0
-        ? (sectionNodes[sectionNodes.length - 1]!.position?.end.line ?? sectionStartLine)
-        : sectionStartLine;
+      const endLine =
+        sectionNodes.length > 0
+          ? (sectionNodes[sectionNodes.length - 1]!.position?.end.line ?? sectionStartLine)
+          : sectionStartLine;
 
       chunks.push({
         content: sectionText.trim(),

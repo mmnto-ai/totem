@@ -1,10 +1,10 @@
-import type { Chunk } from '../types.js';
 import type { ChunkStrategy, ContentType } from '../config-schema.js';
-import { SessionLogChunker } from './session-log-chunker.js';
+import type { Chunk } from '../types.js';
 import { MarkdownChunker } from './markdown-chunker.js';
-import { TypeScriptChunker } from './typescript-chunker.js';
 import { SchemaFileChunker } from './schema-file-chunker.js';
+import { SessionLogChunker } from './session-log-chunker.js';
 import { TestFileChunker } from './test-file-chunker.js';
+import { TypeScriptChunker } from './typescript-chunker.js';
 
 /**
  * All chunkers implement this interface.
@@ -13,11 +13,7 @@ import { TestFileChunker } from './test-file-chunker.js';
 export interface Chunker {
   readonly strategy: ChunkStrategy;
 
-  chunk(
-    content: string,
-    filePath: string,
-    type: ContentType,
-  ): Chunk[];
+  chunk(content: string, filePath: string, type: ContentType): Chunk[];
 }
 
 const CHUNKER_MAP: Record<ChunkStrategy, new () => Chunker> = {

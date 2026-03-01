@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { ContentTypeSchema, ChunkStrategySchema } from '../config-schema.js';
+
+import { ChunkStrategySchema, ContentTypeSchema } from '../config-schema.js';
 
 /**
  * Zod schema for validating a stored chunk before insertion.

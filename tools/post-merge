@@ -1,0 +1,12 @@
+#!/bin/sh
+# Post-merge hook — re-indexes Totem in the background after pull/merge.
+
+echo "[totem] Triggering background re-index..."
+
+# Run totem sync in background with 60s timeout. Non-blocking, informational only.
+(
+  timeout 60 pnpm totem sync 2>/dev/null
+  if [ $? -eq 0 ]; then
+    echo "[totem] Re-index complete."
+  fi
+) &

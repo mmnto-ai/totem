@@ -1,0 +1,27 @@
+#!/bin/sh
+# Pre-push hook — runs format check, lint, and tests before pushing.
+
+echo "[totem] Running pre-push checks..."
+
+echo "[totem] Checking formatting..."
+pnpm run format:check
+if [ $? -ne 0 ]; then
+  echo "[totem] ❌ Formatting check failed. Run 'pnpm run format' to fix."
+  exit 1
+fi
+
+echo "[totem] Running linter..."
+pnpm run lint
+if [ $? -ne 0 ]; then
+  echo "[totem] ❌ Lint failed. Fix errors above before pushing."
+  exit 1
+fi
+
+echo "[totem] Running tests..."
+pnpm run test
+if [ $? -ne 0 ]; then
+  echo "[totem] ❌ Tests failed. Fix errors above before pushing."
+  exit 1
+fi
+
+echo "[totem] ✅ All pre-push checks passed."

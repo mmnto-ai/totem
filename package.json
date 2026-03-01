@@ -8,13 +8,21 @@
     "test": "turbo run test",
     "lint": "turbo run lint",
     "clean": "turbo run clean",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "node tools/install-hooks.js",
     "changeset": "changeset",
     "version": "changeset version",
     "release": "changeset version && changeset publish"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",
+    "eslint": "^10.0.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "prettier": "^3.8.1",
     "turbo": "^2.4.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.56.1"
   }
 }

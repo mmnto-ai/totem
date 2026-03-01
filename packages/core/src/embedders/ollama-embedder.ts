@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import type { Embedder } from './embedder.js';
 
 const DEFAULT_DIMENSIONS = 768;
@@ -36,9 +37,7 @@ export class OllamaEmbedder implements Embedder {
 
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(
-        `[Totem Error] Ollama embedding failed (${response.status}): ${body}`,
-      );
+      throw new Error(`[Totem Error] Ollama embedding failed (${response.status}): ${body}`);
     }
 
     const data = z

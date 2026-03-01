@@ -15,6 +15,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
+    "lint": "eslint src/",
     "test": "echo \"No tests yet\" && exit 0"
   },
   "dependencies": {
@@ -31,6 +32,8 @@
   "devDependencies": {
     "@types/mdast": "^4.0.0"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "license": "MIT"
 }

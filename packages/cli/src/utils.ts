@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { TotemConfigSchema } from '@mmnto/totem';
+
 import type { TotemConfig } from '@mmnto/totem';
+import { TotemConfigSchema } from '@mmnto/totem';
 
 /**
  * Load environment variables from .env file (does not override existing).
@@ -29,7 +30,7 @@ export function loadEnv(cwd: string): void {
 export async function loadConfig(configPath: string): Promise<TotemConfig> {
   const { createJiti } = await import('jiti');
   const jiti = createJiti(import.meta.url);
-  const mod = await jiti.import(configPath) as Record<string, unknown>;
+  const mod = (await jiti.import(configPath)) as Record<string, unknown>;
   const raw = mod['default'] ?? mod;
   return TotemConfigSchema.parse(raw);
 }

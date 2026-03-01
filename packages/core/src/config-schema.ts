@@ -12,11 +12,7 @@ export const ChunkStrategySchema = z.enum([
   'test-file',
 ]);
 
-export const ContentTypeSchema = z.enum([
-  'code',
-  'session_log',
-  'spec',
-]);
+export const ContentTypeSchema = z.enum(['code', 'session_log', 'spec']);
 
 export const IngestTargetSchema = z.object({
   glob: z.string(),
@@ -42,11 +38,7 @@ export const EmbeddingProviderSchema = z.discriminatedUnion('provider', [
   OllamaProviderSchema,
 ]);
 
-export const DEFAULT_IGNORE_PATTERNS = [
-  '**/node_modules/**',
-  '**/.lancedb/**',
-  '**/dist/**',
-];
+export const DEFAULT_IGNORE_PATTERNS = ['**/node_modules/**', '**/.lancedb/**', '**/dist/**'];
 
 export const TotemConfigSchema = z.object({
   /** Glob patterns and chunking strategies for each ingest target */
