@@ -18,6 +18,9 @@ dist/
 .mcp.json
 scratchpad/
 
+# Design assets (local only)
+design/
+
 # OS
 .DS_Store
 Thumbs.db
