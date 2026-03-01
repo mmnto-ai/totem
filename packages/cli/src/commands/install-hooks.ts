@@ -40,12 +40,12 @@ function detectHookManager(cwd: string): HookManager | null {
   const pkgPath = path.join(cwd, 'package.json');
   if (fs.existsSync(pkgPath)) {
     try {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      const pkg: { 'simple-git-hooks'?: unknown } = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
       if (pkg['simple-git-hooks']) {
         return 'simple-git-hooks';
       }
     } catch {
-      // Malformed package.json — skip detection
+      console.log('[Totem] Warning: could not parse package.json while detecting hook manager.');
     }
   }
 

@@ -198,13 +198,18 @@ export async function initCommand(): Promise<void> {
         injectAnswer.trim().toLowerCase() === 'yes'
       ) {
         for (const file of foundAiFiles) {
-          const filePath = path.join(cwd, file);
-          const content = fs.readFileSync(filePath, 'utf-8');
-          if (!content.includes('Totem Memory Reflexes')) {
-            fs.appendFileSync(filePath, AI_PROMPT_BLOCK);
-            console.log(`[Totem] Injected reflexes into ${file}`);
-          } else {
-            console.log(`[Totem] ${file} already contains Totem reflexes.`);
+          try {
+            const filePath = path.join(cwd, file);
+            const content = fs.readFileSync(filePath, 'utf-8');
+            if (!content.includes('Totem Memory Reflexes')) {
+              fs.appendFileSync(filePath, AI_PROMPT_BLOCK);
+              console.log(`[Totem] Injected reflexes into ${file}`);
+            } else {
+              console.log(`[Totem] ${file} already contains Totem reflexes.`);
+            }
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error(`\n[Totem Error] Failed to inject reflexes into ${file}: ${message}`);
           }
         }
       }
