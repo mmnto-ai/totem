@@ -65,7 +65,9 @@ export function registerSearchKnowledge(server: McpServer): void {
       } catch (err) {
         const originalMessage = err instanceof Error ? err.message : String(err);
 
-        // Detect stale LanceDB file handles after a full sync rebuild
+        // Detect stale LanceDB file handles after a full sync rebuild.
+        // NOTE: This relies on string matching LanceDB error messages, which may
+        // break if the library changes its error format in a future version.
         const isStale = /not found/i.test(originalMessage) || /LanceError/i.test(originalMessage);
 
         if (isStale) {
