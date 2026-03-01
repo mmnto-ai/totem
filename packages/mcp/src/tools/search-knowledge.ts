@@ -1,9 +1,40 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
+import type { ContentType } from '@mmnto/totem';
 import { ContentTypeSchema } from '@mmnto/totem';
 
 import { getContext, reconnectStore } from '../context.js';
+
+type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
+
+async function performSearch(
+  query: string,
+  typeFilter?: ContentType,
+  maxResults?: number,
+): Promise<ToolResult> {
+  const { store } = await getContext();
+  const results = await store.search({
+    query,
+    typeFilter,
+    maxResults: maxResults ?? 5,
+  });
+
+  if (results.length === 0) {
+    return { content: [{ type: 'text' as const, text: 'No results found.' }] };
+  }
+
+  const formatted = results
+    .map(
+      (r, i) =>
+        `### ${i + 1}. ${r.label} (${r.type})\n` +
+        `**File:** ${r.filePath} | **Score:** ${r.score.toFixed(3)}\n\n` +
+        `${r.content}`,
+    )
+    .join('\n\n---\n\n');
+
+  return { content: [{ type: 'text' as const, text: formatted }] };
+}
 
 export function registerSearchKnowledge(server: McpServer): void {
   server.registerTool(
@@ -30,28 +61,7 @@ export function registerSearchKnowledge(server: McpServer): void {
     },
     async ({ query, type_filter, max_results }) => {
       try {
-        const { store } = await getContext();
-
-        const results = await store.search({
-          query,
-          typeFilter: type_filter,
-          maxResults: max_results ?? 5,
-        });
-
-        if (results.length === 0) {
-          return { content: [{ type: 'text' as const, text: 'No results found.' }] };
-        }
-
-        const formatted = results
-          .map(
-            (r, i) =>
-              `### ${i + 1}. ${r.label} (${r.type})\n` +
-              `**File:** ${r.filePath} | **Score:** ${r.score.toFixed(3)}\n\n` +
-              `${r.content}`,
-          )
-          .join('\n\n---\n\n');
-
-        return { content: [{ type: 'text' as const, text: formatted }] };
+        return await performSearch(query, type_filter, max_results);
       } catch (err) {
         const originalMessage = err instanceof Error ? err.message : String(err);
 
@@ -61,27 +71,7 @@ export function registerSearchKnowledge(server: McpServer): void {
         if (isStale) {
           try {
             await reconnectStore();
-            const { store } = await getContext();
-            const results = await store.search({
-              query,
-              typeFilter: type_filter,
-              maxResults: max_results ?? 5,
-            });
-
-            if (results.length === 0) {
-              return { content: [{ type: 'text' as const, text: 'No results found.' }] };
-            }
-
-            const formatted = results
-              .map(
-                (r, i) =>
-                  `### ${i + 1}. ${r.label} (${r.type})\n` +
-                  `**File:** ${r.filePath} | **Score:** ${r.score.toFixed(3)}\n\n` +
-                  `${r.content}`,
-              )
-              .join('\n\n---\n\n');
-
-            return { content: [{ type: 'text' as const, text: formatted }] };
+            return await performSearch(query, type_filter, max_results);
           } catch (retryErr) {
             const retryMessage = retryErr instanceof Error ? retryErr.message : String(retryErr);
             return {
