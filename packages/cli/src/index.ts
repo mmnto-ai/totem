@@ -35,7 +35,8 @@ program
   .command('sync')
   .description('Re-index project files into the local vector store')
   .option('--full', 'Force a full re-index (ignores incremental)')
-  .action(async (opts: { full?: boolean }) => {
+  .option('--incremental', 'Run an incremental sync (default behavior)')
+  .action(async (opts: { full?: boolean; incremental?: boolean }) => {
     try {
       const { syncCommand } = await import('./commands/sync.js');
       await syncCommand(opts);
@@ -65,6 +66,18 @@ program
     try {
       const { statsCommand } = await import('./commands/stats.js');
       await statsCommand();
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
+  .command('install-hooks')
+  .description('Install post-merge git hook for automatic Totem sync')
+  .action(async () => {
+    try {
+      const { installHooksCommand } = await import('./commands/install-hooks.js');
+      await installHooksCommand();
     } catch (err) {
       handleError(err);
     }
