@@ -59,8 +59,10 @@ export async function runSync(
     let content: string;
     try {
       content = fs.readFileSync(file.absolutePath, 'utf-8');
-    } catch (_err) {
-      log(`  Skipping (read error): ${file.relativePath}`);
+    } catch (err) {
+      log(
+        `  Skipping (read error: ${err instanceof Error ? err.message : String(err)}): ${file.relativePath}`,
+      );
       continue;
     }
 

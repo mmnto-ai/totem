@@ -35,7 +35,7 @@ for (const hook of hooks) {
   // Make executable on Unix (no-op on Windows, git bash handles it)
   try {
     chmodSync(dest, 0o755);
-  } catch {
+  } catch (_err) {
     // chmod may fail on Windows — hooks still work via git bash
   }
 
