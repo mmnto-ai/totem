@@ -1,4 +1,4 @@
-import type { ContentType, ChunkStrategy } from './config-schema.js';
+import type { ChunkStrategy, ContentType } from './config-schema.js';
 
 /**
  * A single chunk produced by any chunker.

@@ -1,6 +1,6 @@
 import type { EmbeddingProvider } from '../config-schema.js';
-import { OpenAIEmbedder } from './openai-embedder.js';
 import { OllamaEmbedder } from './ollama-embedder.js';
+import { OpenAIEmbedder } from './openai-embedder.js';
 
 /**
  * All embedding providers implement this interface.

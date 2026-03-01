@@ -1,6 +1,8 @@
-import { globSync } from 'glob';
 import { execSync } from 'node:child_process';
 import * as path from 'node:path';
+
+import { globSync } from 'glob';
+
 import type { IngestTarget } from '../config-schema.js';
 import { DEFAULT_IGNORE_PATTERNS } from '../config-schema.js';
 

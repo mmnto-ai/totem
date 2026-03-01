@@ -1,11 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {
-  TotemConfigSchema,
-  LanceStore,
-  createEmbedder,
-} from '@mmnto/totem';
-import type { TotemConfig, Embedder } from '@mmnto/totem';
+
+import type { Embedder, TotemConfig } from '@mmnto/totem';
+import { createEmbedder, LanceStore, TotemConfigSchema } from '@mmnto/totem';
 
 export interface ServerContext {
   projectRoot: string;
@@ -15,6 +12,16 @@ export interface ServerContext {
 }
 
 let cached: ServerContext | undefined;
+
+/**
+ * Re-open the cached LanceStore connection after a full sync rebuild.
+ * No-op if the context hasn't been initialized yet.
+ */
+export async function reconnectStore(): Promise<void> {
+  if (cached) {
+    await cached.store.reconnect();
+  }
+}
 
 /**
  * Load environment variables from .env file (does not override existing).
@@ -42,7 +49,7 @@ function loadEnv(cwd: string): void {
 async function loadConfig(configPath: string): Promise<TotemConfig> {
   const { createJiti } = await import('jiti');
   const jiti = createJiti(import.meta.url);
-  const mod = await jiti.import(configPath) as Record<string, unknown>;
+  const mod = (await jiti.import(configPath)) as Record<string, unknown>;
   const raw = mod['default'] ?? mod;
   return TotemConfigSchema.parse(raw);
 }
@@ -58,7 +65,9 @@ export async function getContext(): Promise<ServerContext> {
 
   const configPath = path.join(projectRoot, 'totem.config.ts');
   if (!fs.existsSync(configPath)) {
-    throw new Error('[Totem Error] No totem.config.ts found in current directory. Run `totem init` first.');
+    throw new Error(
+      '[Totem Error] No totem.config.ts found in current directory. Run `totem init` first.',
+    );
   }
 
   loadEnv(projectRoot);

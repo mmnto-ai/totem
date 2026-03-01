@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+
 import type { Embedder } from './embedder.js';
 
 const MAX_BATCH_SIZE = 2048;
@@ -17,7 +18,7 @@ export class OpenAIEmbedder implements Embedder {
     if (!apiKey) {
       throw new Error(
         '[Totem Error] No embedding provider configured.\n' +
-        "Set OPENAI_API_KEY in your .env or configure 'ollama' in totem.config.ts.",
+          "Set OPENAI_API_KEY in your .env or configure 'ollama' in totem.config.ts.",
       );
     }
 

@@ -12,6 +12,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
+    "lint": "eslint src/",
     "test": "echo \"No tests yet\" && exit 0"
   },
   "dependencies": {
@@ -24,6 +25,8 @@
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "license": "MIT"
 }

@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
+import * as readline from 'node:readline/promises';
+
 import type { IngestTarget } from '@mmnto/totem';
 
 interface DetectedProject {

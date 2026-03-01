@@ -1,9 +1,10 @@
-import { unified } from 'unified';
+import type { Content, Heading, PhrasingContent, Root } from 'mdast';
 import remarkParse from 'remark-parse';
-import type { Root, Content, Heading, PhrasingContent } from 'mdast';
+import { unified } from 'unified';
+
+import type { ChunkStrategy, ContentType } from '../config-schema.js';
 import type { Chunk } from '../types.js';
 import type { Chunker } from './chunker.js';
-import type { ChunkStrategy, ContentType } from '../config-schema.js';
 
 /**
  * Session Log Chunker — the most critical chunker.
@@ -39,9 +40,7 @@ export class SessionLogChunker implements Chunker {
       if (!text.trim()) continue;
 
       const breadcrumbPath = breadcrumbs.filter(Boolean).join(' > ');
-      const contextPrefix = breadcrumbPath
-        ? `[${breadcrumbPath}]`
-        : `[${filePath}]`;
+      const contextPrefix = breadcrumbPath ? `[${breadcrumbPath}]` : `[${filePath}]`;
 
       const label = breadcrumbPath || filePath;
       const startLine = node.position?.start.line ?? 1;

@@ -1,7 +1,8 @@
 import ts from 'typescript';
+
+import type { ChunkStrategy, ContentType } from '../config-schema.js';
 import type { Chunk } from '../types.js';
 import type { Chunker } from './chunker.js';
-import type { ChunkStrategy, ContentType } from '../config-schema.js';
 
 /**
  * Schema File Chunker.

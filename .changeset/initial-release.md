@@ -1,7 +1,7 @@
 ---
-"@mmnto/totem": minor
-"@mmnto/cli": minor
-"@mmnto/mcp": minor
+'@mmnto/totem': minor
+'@mmnto/cli': minor
+'@mmnto/mcp': minor
 ---
 
 Initial release — Phases 1-3 complete.

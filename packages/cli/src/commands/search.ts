@@ -1,7 +1,9 @@
 import * as path from 'node:path';
-import { LanceStore, createEmbedder, ContentTypeSchema } from '@mmnto/totem';
+
 import type { ContentType } from '@mmnto/totem';
-import { loadEnv, loadConfig, resolveConfigPath } from '../utils.js';
+import { ContentTypeSchema, createEmbedder, LanceStore } from '@mmnto/totem';
+
+import { loadConfig, loadEnv, resolveConfigPath } from '../utils.js';
 
 export async function searchCommand(
   query: string,

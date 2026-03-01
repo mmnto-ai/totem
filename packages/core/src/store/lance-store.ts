@@ -1,9 +1,11 @@
-import * as lancedb from '@lancedb/lancedb';
 import { randomUUID } from 'node:crypto';
-import type { Chunk, StoredChunk, SearchResult, SearchOptions } from '../types.js';
+
+import * as lancedb from '@lancedb/lancedb';
+
 import type { ContentType } from '../config-schema.js';
-import { TOTEM_TABLE_NAME } from './lance-schema.js';
 import type { Embedder } from '../embedders/embedder.js';
+import type { Chunk, SearchOptions, SearchResult, StoredChunk } from '../types.js';
+import { TOTEM_TABLE_NAME } from './lance-schema.js';
 
 export class LanceStore {
   private db: lancedb.Connection | null = null;
@@ -31,9 +33,7 @@ export class LanceStore {
     if (chunks.length === 0) return;
 
     // Build the text to embed: contextPrefix + content
-    const textsToEmbed = chunks.map(
-      (c) => `${c.contextPrefix} ${c.content}`,
-    );
+    const textsToEmbed = chunks.map((c) => `${c.contextPrefix} ${c.content}`);
 
     const vectors = await this.embedder.embed(textsToEmbed);
 
@@ -68,9 +68,7 @@ export class LanceStore {
 
     const [queryVector] = await this.embedder.embed([options.query]);
 
-    let query = this.table
-      .vectorSearch(queryVector!)
-      .limit(maxResults);
+    let query = this.table.vectorSearch(queryVector!).limit(maxResults);
 
     if (options.typeFilter) {
       query = query.where(`type = '${options.typeFilter.replace(/'/g, "''")}'`);
@@ -104,6 +102,13 @@ export class LanceStore {
       await this.db.dropTable(TOTEM_TABLE_NAME);
     }
     this.table = null;
+  }
+
+  /** Re-open the LanceDB connection, picking up rebuilt files after a full sync. */
+  async reconnect(): Promise<void> {
+    this.db = null;
+    this.table = null;
+    await this.connect();
   }
 
   /** Return stats about the current index. */

@@ -1,6 +1,8 @@
 import * as path from 'node:path';
-import { LanceStore, createEmbedder } from '@mmnto/totem';
-import { loadEnv, loadConfig, resolveConfigPath } from '../utils.js';
+
+import { createEmbedder, LanceStore } from '@mmnto/totem';
+
+import { loadConfig, loadEnv, resolveConfigPath } from '../utils.js';
 
 export async function statsCommand(): Promise<void> {
   const cwd = process.cwd();

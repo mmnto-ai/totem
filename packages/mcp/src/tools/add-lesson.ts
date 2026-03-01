@@ -1,7 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { z } from 'zod';
+
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
+
 import { getContext } from '../context.js';
 
 export function registerAddLesson(server: McpServer): void {
@@ -31,10 +33,7 @@ export function registerAddLesson(server: McpServer): void {
         const timestamp = new Date().toISOString();
         const tags = context_tags.join(', ');
 
-        const entry =
-          `\n## Lesson — ${timestamp}\n\n` +
-          `**Tags:** ${tags}\n\n` +
-          `${lesson}\n`;
+        const entry = `\n## Lesson — ${timestamp}\n\n` + `**Tags:** ${tags}\n\n` + `${lesson}\n`;
 
         await fs.promises.appendFile(lessonsPath, entry, 'utf-8');
 

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Post-merge hook — re-indexes Totem in the background after pull/merge.
+
+echo "[totem] Triggering background re-index..."
+
+# Run totem sync in background. Non-blocking, informational only.
+(
+  if pnpm totem sync > .git/totem-sync.log 2>&1; then
+    echo "[totem] Background re-index complete."
+  else
+    echo "[totem] Warning: background re-index failed. See .git/totem-sync.log for details."
+  fi
+) &

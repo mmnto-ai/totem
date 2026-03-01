@@ -1,7 +1,47 @@
-import { z } from 'zod';
-import { ContentTypeSchema } from '@mmnto/totem';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { getContext } from '../context.js';
+import { z } from 'zod';
+
+import type { ContentType } from '@mmnto/totem';
+import { ContentTypeSchema } from '@mmnto/totem';
+
+import { getContext, reconnectStore } from '../context.js';
+
+type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
+
+// Heuristic to detect stale LanceDB file handles after a full sync rebuild.
+// Observed errors that indicate a stale handle:
+//   - "IO-error: ... not found" when underlying .lance files are deleted
+//   - "LanceError: ..." for other file access issues after rebuild
+// TODO: Replace with error codes if future LanceDB versions expose them.
+const LANCE_STALE_ERROR_PATTERN = /not found|LanceError/i;
+
+async function performSearch(
+  query: string,
+  typeFilter?: ContentType,
+  maxResults?: number,
+): Promise<ToolResult> {
+  const { store } = await getContext();
+  const results = await store.search({
+    query,
+    typeFilter,
+    maxResults: maxResults ?? 5,
+  });
+
+  if (results.length === 0) {
+    return { content: [{ type: 'text' as const, text: 'No results found.' }] };
+  }
+
+  const formatted = results
+    .map(
+      (r, i) =>
+        `### ${i + 1}. ${r.label} (${r.type})\n` +
+        `**File:** ${r.filePath} | **Score:** ${r.score.toFixed(3)}\n\n` +
+        `${r.content}`,
+    )
+    .join('\n\n---\n\n');
+
+  return { content: [{ type: 'text' as const, text: formatted }] };
+}
 
 export function registerSearchKnowledge(server: McpServer): void {
   server.registerTool(
@@ -28,30 +68,30 @@ export function registerSearchKnowledge(server: McpServer): void {
     },
     async ({ query, type_filter, max_results }) => {
       try {
-        const { store } = await getContext();
-
-        const results = await store.search({
-          query,
-          typeFilter: type_filter,
-          maxResults: max_results ?? 5,
-        });
-
-        if (results.length === 0) {
-          return { content: [{ type: 'text' as const, text: 'No results found.' }] };
-        }
-
-        const formatted = results
-          .map(
-            (r, i) =>
-              `### ${i + 1}. ${r.label} (${r.type})\n` +
-              `**File:** ${r.filePath} | **Score:** ${r.score.toFixed(3)}\n\n` +
-              `${r.content}`,
-          )
-          .join('\n\n---\n\n');
-
-        return { content: [{ type: 'text' as const, text: formatted }] };
+        return await performSearch(query, type_filter, max_results);
       } catch (err) {
         const originalMessage = err instanceof Error ? err.message : String(err);
+
+        const isStale = LANCE_STALE_ERROR_PATTERN.test(originalMessage);
+
+        if (isStale) {
+          try {
+            await reconnectStore();
+            return await performSearch(query, type_filter, max_results);
+          } catch (retryErr) {
+            const retryMessage = retryErr instanceof Error ? retryErr.message : String(retryErr);
+            return {
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `[Totem Error] Failed to search knowledge after reconnect: ${retryMessage}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+        }
+
         const message = originalMessage.startsWith('[Totem Error]')
           ? originalMessage
           : `[Totem Error] Failed to search knowledge: ${originalMessage}`;

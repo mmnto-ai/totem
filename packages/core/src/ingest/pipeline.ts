@@ -1,12 +1,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { TotemConfig } from '../config-schema.js';
-import type { Chunk, SyncOptions } from '../types.js';
+
 import { createChunker } from '../chunkers/chunker.js';
+import type { TotemConfig } from '../config-schema.js';
 import { createEmbedder } from '../embedders/embedder.js';
 import { LanceStore } from '../store/lance-store.js';
-import { resolveFiles, getChangedFiles } from './file-resolver.js';
+import type { Chunk, SyncOptions } from '../types.js';
 import type { ResolvedFile } from './file-resolver.js';
+import { getChangedFiles, resolveFiles } from './file-resolver.js';
 
 const EMBED_BATCH_SIZE = 100;
 
@@ -59,7 +60,9 @@ export async function runSync(
     try {
       content = fs.readFileSync(file.absolutePath, 'utf-8');
     } catch (err) {
-      log(`  Skipping (read error): ${file.relativePath}`);
+      log(
+        `  Skipping (read error: ${err instanceof Error ? err.message : String(err)}): ${file.relativePath}`,
+      );
       continue;
     }
 
