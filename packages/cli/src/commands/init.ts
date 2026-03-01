@@ -5,6 +5,16 @@ import * as readline from 'node:readline/promises';
 
 import type { IngestTarget } from '@mmnto/totem';
 
+import { installPostMergeHook } from './install-hooks.js';
+
+const AI_PROMPT_BLOCK = `
+## Totem Memory Reflexes (Auto-Generated)
+You have access to the Totem MCP for long-term project memory. You must operate with the following reflexes:
+- **Triage & Bug Fixes:** Before guessing at solutions, use \`search_knowledge\` with the error trace to check for known project quirks.
+- **Planning:** Before writing specs or architecture, use \`search_knowledge\` to retrieve domain constraints and past ADRs.
+- **Anchoring:** After resolving a complex bug or establishing a new architectural pattern, autonomously call \`add_lesson\` to persist the knowledge for future sessions.
+`;
+
 interface DetectedProject {
   hasTypeScript: boolean;
   hasSrc: boolean;
@@ -173,6 +183,40 @@ export async function initCommand(): Promise<void> {
       provider = 'ollama';
       console.log('[Totem] Configured for Ollama. Make sure it is running locally.');
     }
+
+    // Auto-detect AI Context Files
+    const aiFiles = ['CLAUDE.md', '.cursorrules'];
+    const foundAiFiles = aiFiles.filter((f) => fs.existsSync(path.join(cwd, f)));
+
+    if (foundAiFiles.length > 0) {
+      console.log(`\n[Totem] Detected AI context files: ${foundAiFiles.join(', ')}`);
+      const injectAnswer = await rl.question(
+        'Would you like to inject Totem automated memory reflexes into these files? (y/N): ',
+      );
+      if (
+        injectAnswer.trim().toLowerCase() === 'y' ||
+        injectAnswer.trim().toLowerCase() === 'yes'
+      ) {
+        for (const file of foundAiFiles) {
+          try {
+            const filePath = path.join(cwd, file);
+            const content = fs.readFileSync(filePath, 'utf-8');
+            if (!content.includes('Totem Memory Reflexes')) {
+              fs.appendFileSync(filePath, AI_PROMPT_BLOCK);
+              console.log(`[Totem] Injected reflexes into ${file}`);
+            } else {
+              console.log(`[Totem] ${file} already contains Totem reflexes.`);
+            }
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error(`\n[Totem Error] Failed to inject reflexes into ${file}: ${message}`);
+          }
+        }
+      }
+    }
+
+    // Offer to install post-merge git hook
+    await installPostMergeHook(cwd, rl);
   } finally {
     rl.close();
   }
