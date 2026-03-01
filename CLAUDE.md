@@ -170,6 +170,11 @@ embedding: { provider: 'ollama', model: 'nomic-embed-text', baseUrl: 'http://loc
 
 ## Development Workflow
 
+### Git & Branching
+
+- **Branch Protection:** The `main` branch is formally protected. NEVER commit or push directly to `main`.
+- **Workflow:** Always create a feature branch, commit your changes there, and open a Pull Request. Direct pushes to `main` bypass the Shift-Left safety checks (Pre-Push CI and PR Review Bots).
+
 ### Environment
 
 - **Platform:** Windows 11 + Git Bash

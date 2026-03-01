@@ -24,3 +24,6 @@ design/
 # OS
 .DS_Store
 Thumbs.db
+
+# Strategy & Private Docs
+.strategy/
