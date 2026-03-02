@@ -13,7 +13,7 @@
     "prepare": "node tools/install-hooks.js",
     "changeset": "changeset",
     "version": "changeset version",
-    "release": "changeset version && changeset publish"
+    "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",

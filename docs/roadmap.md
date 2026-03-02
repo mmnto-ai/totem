@@ -31,6 +31,7 @@ This document outlines the high-level goals and strategic pillars for the Totem 
 **Goal:** Serve as the "Org Chart" for a developer's multi-agent AI team, standardizing shift-left workflows.
 
 - [x] **Native CLI Commands:** Ported the bespoke `satur8d` scripts into native `@mmnto/cli` commands (`totem spec`, `totem shield`, `totem triage`, `totem briefing`, `totem handoff`). (Epic #17)
+- [ ] **Workflow Auto-Injection:** Update `totem init` to inject Workflow Reflexes into AI prompts so agents know how to dogfood/use the native CLI commands. (Issue #47)
 - [ ] **Configurable Governance:** Add `auditLoopLimit` and `shieldSeverityThreshold` to `totem.config.ts` to control AI review depth. (Issue #34)
 - [ ] **Roles & Handoffs:** Allow users to map installed tools (Claude CLI, Gemini CLI, Ollama) to roles (Builder, Reviewer) in `totem.config.ts`.
 - [ ] **PR Learning Loop:** Build `totem learn <pr-url>` to parse GitHub PR review comments and auto-extract architectural lessons into `.totem/lessons.md`. (Issue #18)
@@ -39,7 +40,7 @@ This document outlines the high-level goals and strategic pillars for the Totem 
 
 **Status:** Future
 
-- [ ] Implement Changesets and npm publishing (Issue #5)
+- [ ] Implement Changesets and npm publishing (Issue #5 / #46)
 - [ ] Implement Memory Consolidation command (`totem consolidate`) to clean up old lessons. (Issue #23)
 - [ ] CLI UI/UX Polish: Interactive prompts, colors, and the hidden Oregon Trail Easter Egg. (Issue #21)
 - [ ] Implement `reset()` and ephemeral memory for the MCP tool

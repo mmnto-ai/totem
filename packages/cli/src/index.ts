@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 
+import { createRequire } from 'node:module';
+
 import { Command } from 'commander';
 
 import { initCommand } from './commands/init.js';
+
+const require = createRequire(import.meta.url);
+const { version } = require('../package.json') as { version: string };
 
 function handleError(err: unknown): never {
   if (err instanceof Error) {
@@ -18,7 +23,7 @@ const program = new Command();
 program
   .name('totem')
   .description('Totem — persistent memory and context layer for AI agents')
-  .version('0.1.0');
+  .version(version);
 
 program
   .command('init')

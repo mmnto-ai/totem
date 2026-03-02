@@ -35,5 +35,18 @@
   "files": [
     "dist"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "author": "mmnto-ai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mmnto-ai/totem.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/mmnto-ai/totem",
+  "bugs": {
+    "url": "https://github.com/mmnto-ai/totem/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }
