@@ -36,6 +36,7 @@ This document outlines the high-level goals and strategic pillars for the Totem 
 - [ ] **PR Learning Loop:** Build `totem learn <pr-url>` to parse GitHub PR review comments and auto-extract architectural lessons into `.totem/lessons.md`. (Issue #18)
 
 ## Pillar 4: Friction Elimination & Polish (Phase 5)
+
 **Status:** Future
 
 - [ ] Implement Changesets and npm publishing (Issue #5)
