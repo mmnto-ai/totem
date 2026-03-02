@@ -16,6 +16,9 @@ const LLM_TIMEOUT_MS = 180_000;
 const TEMP_ID_BYTES = 4;
 const MAX_DIFF_CHARS = 50_000;
 const QUERY_DIFF_TRUNCATE = 2_000;
+const MAX_SPEC_RESULTS = 3;
+const MAX_SESSION_RESULTS = 5;
+const MAX_CODE_RESULTS = 5;
 // execFileSync on Windows can't resolve executables without shell
 const IS_WIN = process.platform === 'win32';
 const MODEL_NAME_RE = /^[\w./:_-]+$/;
@@ -105,9 +108,9 @@ async function retrieveContext(query: string, store: LanceStore): Promise<Retrie
     store.search({ query, typeFilter, maxResults });
 
   const [specs, sessions, code] = await Promise.all([
-    search('spec', 3),
-    search('session_log', 5),
-    search('code', 5),
+    search('spec', MAX_SPEC_RESULTS),
+    search('session_log', MAX_SESSION_RESULTS),
+    search('code', MAX_CODE_RESULTS),
   ]);
 
   return { specs, sessions, code };
