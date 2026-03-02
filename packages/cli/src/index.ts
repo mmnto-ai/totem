@@ -3,11 +3,12 @@
 import { createRequire } from 'node:module';
 
 import { Command } from 'commander';
+import { z } from 'zod';
 
 import { initCommand } from './commands/init.js';
 
 const require = createRequire(import.meta.url);
-const { version } = require('../package.json') as { version: string };
+const { version } = z.object({ version: z.string() }).parse(require('../package.json'));
 
 function handleError(err: unknown): never {
   if (err instanceof Error) {
