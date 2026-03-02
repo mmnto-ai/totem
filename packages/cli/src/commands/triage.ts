@@ -65,7 +65,7 @@ const GhIssueListItemSchema = z.object({
   number: z.number(),
   title: z.string(),
   labels: z.array(z.object({ name: z.string() })),
-  updatedAt: z.string(),
+  updatedAt: z.string().datetime(),
 });
 type GhIssueListItem = z.infer<typeof GhIssueListItemSchema>;
 
