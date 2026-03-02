@@ -4,6 +4,7 @@ export type {
   ContentType,
   EmbeddingProvider,
   IngestTarget,
+  Orchestrator,
   TotemConfig,
 } from './config-schema.js';
 export {
@@ -14,6 +15,8 @@ export {
   IngestTargetSchema,
   OllamaProviderSchema,
   OpenAIProviderSchema,
+  OrchestratorSchema,
+  ShellOrchestratorSchema,
   TotemConfigSchema,
 } from './config-schema.js';
 

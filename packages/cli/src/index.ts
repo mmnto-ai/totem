@@ -72,6 +72,21 @@ program
   });
 
 program
+  .command('spec <input>')
+  .description('Generate a pre-work spec briefing for a GitHub issue or topic')
+  .option('--raw', 'Output retrieved context without LLM synthesis')
+  .option('--out <path>', 'Write output to a file instead of stdout')
+  .option('--model <name>', 'Override the default model for the orchestrator')
+  .action(async (input: string, opts: { raw?: boolean; out?: string; model?: string }) => {
+    try {
+      const { specCommand } = await import('./commands/spec.js');
+      await specCommand(input, opts);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('install-hooks')
   .description('Install post-merge git hook for automatic Totem sync')
   .action(async () => {

@@ -40,12 +40,25 @@ export const EmbeddingProviderSchema = z.discriminatedUnion('provider', [
 
 export const DEFAULT_IGNORE_PATTERNS = ['**/node_modules/**', '**/.lancedb/**', '**/dist/**'];
 
+export const ShellOrchestratorSchema = z.object({
+  provider: z.literal('shell'),
+  /** Shell command with {file} and {model} placeholders */
+  command: z.string(),
+  /** Default model name substituted for {model} if --model is not passed */
+  defaultModel: z.string().optional(),
+});
+
+export const OrchestratorSchema = z.discriminatedUnion('provider', [ShellOrchestratorSchema]);
+
 export const TotemConfigSchema = z.object({
   /** Glob patterns and chunking strategies for each ingest target */
   targets: z.array(IngestTargetSchema).min(1),
 
   /** Embedding provider configuration */
   embedding: EmbeddingProviderSchema,
+
+  /** Optional: LLM orchestrator for spec/triage/shield commands */
+  orchestrator: OrchestratorSchema.optional(),
 
   /** Optional: override the .totem/ directory path */
   totemDir: z.string().default('.totem'),
@@ -61,4 +74,5 @@ export type ChunkStrategy = z.infer<typeof ChunkStrategySchema>;
 export type ContentType = z.infer<typeof ContentTypeSchema>;
 export type IngestTarget = z.infer<typeof IngestTargetSchema>;
 export type EmbeddingProvider = z.infer<typeof EmbeddingProviderSchema>;
+export type Orchestrator = z.infer<typeof OrchestratorSchema>;
 export type TotemConfig = z.infer<typeof TotemConfigSchema>;
