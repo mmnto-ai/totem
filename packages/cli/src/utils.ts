@@ -118,12 +118,14 @@ export function writeOutput(content: string, outPath?: string): void {
 
 // ─── Context formatting ─────────────────────────────────
 
+const MAX_RESULT_CONTENT_LENGTH = 300;
+
 export function formatResults(results: SearchResult[], heading: string): string {
   if (results.length === 0) return '';
   const items = results
     .map(
       (r) =>
-        `- **${r.label}** (${r.filePath}, score: ${r.score.toFixed(3)})\n  ${r.content.slice(0, 300).replace(/\n/g, '\n  ')}`,
+        `- **${r.label}** (${r.filePath}, score: ${r.score.toFixed(3)})\n  ${r.content.slice(0, MAX_RESULT_CONTENT_LENGTH).replace(/\n/g, '\n  ')}`,
     )
     .join('\n\n');
   return `\n=== ${heading} ===\n${items}\n`;

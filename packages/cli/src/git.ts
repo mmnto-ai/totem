@@ -2,6 +2,10 @@ import { execFileSync } from 'node:child_process';
 
 import { IS_WIN } from './utils.js';
 
+// ─── Constants ──────────────────────────────────────────
+
+const GIT_COMMAND_TIMEOUT_MS = 15_000;
+
 // ─── Git helpers ────────────────────────────────────────
 
 export function getGitBranch(cwd: string): string {
@@ -34,7 +38,7 @@ export function getGitDiff(mode: 'staged' | 'all', cwd: string): string {
     return execFileSync('git', args, {
       cwd,
       encoding: 'utf-8',
-      timeout: 15_000,
+      timeout: GIT_COMMAND_TIMEOUT_MS,
       shell: IS_WIN,
     });
   } catch (err) {
@@ -53,7 +57,7 @@ export function getGitDiffStat(cwd: string): string {
     return execFileSync('git', ['diff', 'HEAD', '--stat'], {
       cwd,
       encoding: 'utf-8',
-      timeout: 15_000,
+      timeout: GIT_COMMAND_TIMEOUT_MS,
       shell: IS_WIN,
     }).trim();
   } catch {
