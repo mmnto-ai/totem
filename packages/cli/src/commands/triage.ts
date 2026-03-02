@@ -1,7 +1,6 @@
 import { execFileSync, execSync } from 'node:child_process';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { z } from 'zod';
@@ -178,7 +177,9 @@ function invokeShellOrchestrator(
   cwd: string,
 ): string {
   const tmpName = `totem-triage-${crypto.randomBytes(TEMP_ID_BYTES).toString('hex')}.md`;
-  const tempPath = path.join(os.tmpdir(), tmpName);
+  const tempDir = path.join(cwd, '.totem', 'temp');
+  fs.mkdirSync(tempDir, { recursive: true });
+  const tempPath = path.join(tempDir, tmpName);
 
   try {
     fs.writeFileSync(tempPath, prompt, { encoding: 'utf-8', mode: 0o600 });
