@@ -1,16 +1,15 @@
-import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 
 import type { ContentType, SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore } from '@mmnto/totem';
 
+import { extractChangedFiles, getGitDiff } from '../git.js';
 import {
-  invokeShellOrchestrator,
+  formatResults,
   loadConfig,
   loadEnv,
-  MODEL_NAME_RE,
   resolveConfigPath,
-  writeOutput,
+  runOrchestrator,
 } from '../utils.js';
 
 // ─── Constants ──────────────────────────────────────────
@@ -21,8 +20,6 @@ const QUERY_DIFF_TRUNCATE = 2_000;
 const MAX_SPEC_RESULTS = 3;
 const MAX_SESSION_RESULTS = 5;
 const MAX_CODE_RESULTS = 5;
-// execFileSync on Windows can't resolve executables without shell
-const IS_WIN = process.platform === 'win32';
 
 // ─── System prompt ──────────────────────────────────────
 
@@ -61,41 +58,6 @@ Respond with ONLY the sections below. No preamble, no closing remarks.
 [Specific past traps, lessons, or decisions from Totem knowledge that apply to this diff. If none, say "No relevant history found."]
 `;
 
-// ─── Git helpers ────────────────────────────────────────
-
-function getGitDiff(mode: 'staged' | 'all', cwd: string): string {
-  const args = mode === 'staged' ? ['diff', '--staged'] : ['diff', 'HEAD'];
-  try {
-    const result = execFileSync('git', args, {
-      cwd,
-      encoding: 'utf-8',
-      timeout: 15_000,
-      shell: IS_WIN,
-    });
-    return result;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('ENOENT') || msg.includes('not found')) {
-      throw new Error(
-        `[Totem Error] 'git' command not found. Ensure Git is installed and in your PATH.`,
-      );
-    }
-    throw new Error(`[Totem Error] Failed to get git diff: ${msg}`);
-  }
-}
-
-function extractChangedFiles(diff: string): string[] {
-  const files: string[] = [];
-  for (const line of diff.split('\n')) {
-    if (line.startsWith('diff --git')) {
-      // Format: diff --git a/path/to/file b/path/to/file
-      const match = line.match(/^diff --git a\/.+ b\/(.+)$/);
-      if (match) files.push(match[1]);
-    }
-  }
-  return files;
-}
-
 // ─── LanceDB retrieval ─────────────────────────────────
 
 interface RetrievedContext {
@@ -124,17 +86,6 @@ function buildSearchQuery(changedFiles: string[], diff: string): string {
 }
 
 // ─── Prompt assembly ────────────────────────────────────
-
-function formatResults(results: SearchResult[], heading: string): string {
-  if (results.length === 0) return '';
-  const items = results
-    .map(
-      (r) =>
-        `- **${r.label}** (${r.filePath}, score: ${r.score.toFixed(3)})\n  ${r.content.slice(0, 300).replace(/\n/g, '\n  ')}`,
-    )
-    .join('\n\n');
-  return `\n=== ${heading} ===\n${items}\n`;
-}
 
 function assemblePrompt(diff: string, changedFiles: string[], context: RetrievedContext): string {
   const sections: string[] = [SYSTEM_PROMPT];
@@ -211,51 +162,5 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const prompt = assemblePrompt(diff, changedFiles, context);
   console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
-  // --raw mode: output context only
-  if (options.raw) {
-    writeOutput(prompt, options.out);
-    console.error(`[${TAG}] Raw context output complete (${totalResults} chunks).`);
-    return;
-  }
-
-  // Require orchestrator for LLM synthesis
-  if (!config.orchestrator) {
-    throw new Error(
-      `[Totem Error] No orchestrator configured. Add an 'orchestrator' block to totem.config.ts.\n` +
-        `Example:\n  orchestrator: {\n    provider: 'shell',\n    command: 'gemini --model {model} --file {file}',\n    defaultModel: 'gemini-2.5-pro',\n  }`,
-    );
-  }
-
-  if (config.orchestrator.provider !== 'shell') {
-    throw new Error(
-      `[Totem Error] Unsupported orchestrator provider: '${config.orchestrator.provider}'. Only 'shell' is supported.`,
-    );
-  }
-
-  const model = options.model ?? config.orchestrator.defaultModel;
-  if (!model) {
-    throw new Error(
-      `[Totem Error] No model specified. Provide one with --model or set 'defaultModel' in your orchestrator config.`,
-    );
-  }
-  if (model.startsWith('-') || !MODEL_NAME_RE.test(model)) {
-    throw new Error(
-      `[Totem Error] Invalid model name '${model}'. Model names may not start with a hyphen and may only contain word characters, dots, slashes, colons, underscores, and hyphens.`,
-    );
-  }
-  console.error(`[${TAG}] Model: ${model}`);
-
-  const result = invokeShellOrchestrator(
-    prompt,
-    config.orchestrator.command,
-    model,
-    cwd,
-    TAG,
-    config.totemDir,
-  );
-  writeOutput(result, options.out);
-
-  if (options.out) {
-    console.error(`[${TAG}] Shield review written to ${options.out}`);
-  }
+  runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });
 }

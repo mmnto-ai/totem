@@ -1,23 +1,14 @@
-import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import {
-  invokeShellOrchestrator,
-  loadConfig,
-  loadEnv,
-  MODEL_NAME_RE,
-  resolveConfigPath,
-  writeOutput,
-} from '../utils.js';
+import { getGitBranch, getGitDiff, getGitDiffStat, getGitStatus } from '../git.js';
+import { loadConfig, loadEnv, resolveConfigPath, runOrchestrator } from '../utils.js';
 
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Handoff';
 const MAX_DIFF_CHARS = 50_000;
 const LESSONS_TAIL_LINES = 100;
-// execFileSync on Windows can't resolve executables without shell
-const IS_WIN = process.platform === 'win32';
 
 // ─── System prompt ──────────────────────────────────────
 
@@ -55,64 +46,6 @@ Respond with ONLY the sections below. No preamble, no closing remarks.
 ### Next Steps
 [Clear, ordered list of what the next session should do first. Be specific — not "continue working" but "finish implementing X in file Y, then run tests."]
 `;
-
-// ─── Git helpers ────────────────────────────────────────
-
-function getGitBranch(cwd: string): string {
-  try {
-    return execFileSync('git', ['branch', '--show-current'], {
-      cwd,
-      encoding: 'utf-8',
-      shell: IS_WIN,
-    }).trim();
-  } catch {
-    return '(unknown)';
-  }
-}
-
-function getGitStatus(cwd: string): string {
-  try {
-    return execFileSync('git', ['status', '--porcelain'], {
-      cwd,
-      encoding: 'utf-8',
-      shell: IS_WIN,
-    }).trim();
-  } catch {
-    return '';
-  }
-}
-
-function getGitDiff(cwd: string): string {
-  try {
-    return execFileSync('git', ['diff', 'HEAD'], {
-      cwd,
-      encoding: 'utf-8',
-      timeout: 15_000,
-      shell: IS_WIN,
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('ENOENT') || msg.includes('not found')) {
-      throw new Error(
-        `[Totem Error] 'git' command not found. Ensure Git is installed and in your PATH.`,
-      );
-    }
-    throw new Error(`[Totem Error] Failed to get git diff: ${msg}`);
-  }
-}
-
-function getGitDiffStat(cwd: string): string {
-  try {
-    return execFileSync('git', ['diff', 'HEAD', '--stat'], {
-      cwd,
-      encoding: 'utf-8',
-      timeout: 15_000,
-      shell: IS_WIN,
-    }).trim();
-  } catch {
-    return '';
-  }
-}
 
 // ─── Lessons file reader ────────────────────────────────
 
@@ -190,7 +123,7 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
 
   // Get diff
   console.error(`[${TAG}] Getting uncommitted diff...`);
-  const diff = getGitDiff(cwd);
+  const diff = getGitDiff('all', cwd);
   const diffStat = diff.trim() ? getGitDiffStat(cwd) : '';
 
   if (diff.trim()) {
@@ -210,51 +143,5 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
   const prompt = assemblePrompt(branch, status, diff, diffStat, lessons);
   console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
-  // --raw mode: output context only
-  if (options.raw) {
-    writeOutput(prompt, options.out);
-    console.error(`[${TAG}] Raw context output complete.`);
-    return;
-  }
-
-  // Require orchestrator for LLM synthesis
-  if (!config.orchestrator) {
-    throw new Error(
-      `[Totem Error] No orchestrator configured. Add an 'orchestrator' block to totem.config.ts.\n` +
-        `Example:\n  orchestrator: {\n    provider: 'shell',\n    command: 'gemini --model {model} --file {file}',\n    defaultModel: 'gemini-2.5-pro',\n  }`,
-    );
-  }
-
-  if (config.orchestrator.provider !== 'shell') {
-    throw new Error(
-      `[Totem Error] Unsupported orchestrator provider: '${config.orchestrator.provider}'. Only 'shell' is supported.`,
-    );
-  }
-
-  const model = options.model ?? config.orchestrator.defaultModel;
-  if (!model) {
-    throw new Error(
-      `[Totem Error] No model specified. Provide one with --model or set 'defaultModel' in your orchestrator config.`,
-    );
-  }
-  if (model.startsWith('-') || !MODEL_NAME_RE.test(model)) {
-    throw new Error(
-      `[Totem Error] Invalid model name '${model}'. Model names may not start with a hyphen and may only contain word characters, dots, slashes, colons, underscores, and hyphens.`,
-    );
-  }
-  console.error(`[${TAG}] Model: ${model}`);
-
-  const result = invokeShellOrchestrator(
-    prompt,
-    config.orchestrator.command,
-    model,
-    cwd,
-    TAG,
-    config.totemDir,
-  );
-  writeOutput(result, options.out);
-
-  if (options.out) {
-    console.error(`[${TAG}] Handoff written to ${options.out}`);
-  }
+  runOrchestrator({ prompt, tag: TAG, options, config, cwd });
 }

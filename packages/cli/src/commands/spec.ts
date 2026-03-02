@@ -7,21 +7,19 @@ import type { ContentType, SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore } from '@mmnto/totem';
 
 import {
-  invokeShellOrchestrator,
+  formatResults,
+  GH_TIMEOUT_MS,
+  IS_WIN,
   loadConfig,
   loadEnv,
-  MODEL_NAME_RE,
   resolveConfigPath,
-  writeOutput,
+  runOrchestrator,
 } from '../utils.js';
 
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Spec';
-const GH_TIMEOUT_MS = 15_000;
 const QUERY_BODY_TRUNCATE = 500;
-// execFileSync on Windows can't resolve executables without shell
-const IS_WIN = process.platform === 'win32';
 
 // ─── System prompt ──────────────────────────────────────
 
@@ -127,17 +125,6 @@ function buildSearchQuery(issue: GhIssue): string {
 
 // ─── Prompt assembly ────────────────────────────────────
 
-function formatResults(results: SearchResult[], heading: string): string {
-  if (results.length === 0) return '';
-  const items = results
-    .map(
-      (r) =>
-        `- **${r.label}** (${r.filePath}, score: ${r.score.toFixed(3)})\n  ${r.content.slice(0, 300).replace(/\n/g, '\n  ')}`,
-    )
-    .join('\n\n');
-  return `\n=== ${heading} ===\n${items}\n`;
-}
-
 function assemblePrompt(
   issue: GhIssue | null,
   freeText: string | null,
@@ -222,51 +209,5 @@ export async function specCommand(input: string, options: SpecOptions): Promise<
   const prompt = assemblePrompt(issue, issueNumber ? null : input, context);
   console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
-  // --raw mode: output context only
-  if (options.raw) {
-    writeOutput(prompt, options.out);
-    console.error(`[${TAG}] Raw context output complete (${totalResults} chunks).`);
-    return;
-  }
-
-  // Require orchestrator for LLM synthesis
-  if (!config.orchestrator) {
-    throw new Error(
-      `[Totem Error] No orchestrator configured. Add an 'orchestrator' block to totem.config.ts.\n` +
-        `Example:\n  orchestrator: {\n    provider: 'shell',\n    command: 'gemini --model {model} --file {file}',\n    defaultModel: 'gemini-2.5-pro',\n  }`,
-    );
-  }
-
-  if (config.orchestrator.provider !== 'shell') {
-    throw new Error(
-      `[Totem Error] Unsupported orchestrator provider: '${config.orchestrator.provider}'. Only 'shell' is supported.`,
-    );
-  }
-
-  const model = options.model ?? config.orchestrator.defaultModel;
-  if (!model) {
-    throw new Error(
-      `[Totem Error] No model specified. Provide one with --model or set 'defaultModel' in your orchestrator config.`,
-    );
-  }
-  if (model.startsWith('-') || !MODEL_NAME_RE.test(model)) {
-    throw new Error(
-      `[Totem Error] Invalid model name '${model}'. Model names may not start with a hyphen and may only contain word characters, dots, slashes, colons, underscores, and hyphens.`,
-    );
-  }
-  console.error(`[${TAG}] Model: ${model}`);
-
-  const result = invokeShellOrchestrator(
-    prompt,
-    config.orchestrator.command,
-    model,
-    cwd,
-    TAG,
-    config.totemDir,
-  );
-  writeOutput(result, options.out);
-
-  if (options.out) {
-    console.error(`[${TAG}] Spec written to ${options.out}`);
-  }
+  runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });
 }

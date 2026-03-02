@@ -3,14 +3,20 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import type { TotemConfig } from '@mmnto/totem';
+import type { SearchResult, TotemConfig } from '@mmnto/totem';
 import { TotemConfigSchema } from '@mmnto/totem';
 
 // ─── Shared constants ────────────────────────────────────
 
 const LLM_TIMEOUT_MS = 180_000;
 const TEMP_ID_BYTES = 4;
-export const MODEL_NAME_RE = /^[\w./:_-]+$/;
+const MODEL_NAME_RE = /^[\w./:_-]+$/;
+
+/** execFileSync on Windows can't resolve executables without `shell: true`. */
+export const IS_WIN = process.platform === 'win32';
+
+/** Timeout for GitHub CLI calls (ms). */
+export const GH_TIMEOUT_MS = 15_000;
 
 /**
  * Load environment variables from .env file (does not override existing).
@@ -107,5 +113,90 @@ export function writeOutput(content: string, outPath?: string): void {
     fs.writeFileSync(outPath, content, 'utf-8');
   } else {
     console.log(content);
+  }
+}
+
+// ─── Context formatting ─────────────────────────────────
+
+export function formatResults(results: SearchResult[], heading: string): string {
+  if (results.length === 0) return '';
+  const items = results
+    .map(
+      (r) =>
+        `- **${r.label}** (${r.filePath}, score: ${r.score.toFixed(3)})\n  ${r.content.slice(0, 300).replace(/\n/g, '\n  ')}`,
+    )
+    .join('\n\n');
+  return `\n=== ${heading} ===\n${items}\n`;
+}
+
+// ─── Orchestrator runner ─────────────────────────────────
+
+export interface OrchestratorRunOptions {
+  raw?: boolean;
+  out?: string;
+  model?: string;
+}
+
+/**
+ * Validate orchestrator config, then either output raw context (--raw) or
+ * invoke the shell orchestrator and write the result.
+ */
+export function runOrchestrator(opts: {
+  prompt: string;
+  tag: string;
+  options: OrchestratorRunOptions;
+  config: TotemConfig;
+  cwd: string;
+  totalResults?: number;
+}): void {
+  const { prompt, tag, options, config, cwd } = opts;
+
+  // --raw mode: output context only
+  if (options.raw) {
+    writeOutput(prompt, options.out);
+    const suffix = opts.totalResults != null ? ` (${opts.totalResults} chunks)` : '';
+    console.error(`[${tag}] Raw context output complete${suffix}.`);
+    return;
+  }
+
+  // Require orchestrator for LLM synthesis
+  if (!config.orchestrator) {
+    throw new Error(
+      `[Totem Error] No orchestrator configured. Add an 'orchestrator' block to totem.config.ts.\n` +
+        `Example:\n  orchestrator: {\n    provider: 'shell',\n    command: 'gemini --model {model} --file {file}',\n    defaultModel: 'gemini-2.5-pro',\n  }`,
+    );
+  }
+
+  if (config.orchestrator.provider !== 'shell') {
+    throw new Error(
+      `[Totem Error] Unsupported orchestrator provider: '${config.orchestrator.provider}'. Only 'shell' is supported.`,
+    );
+  }
+
+  const model = options.model ?? config.orchestrator.defaultModel;
+  if (!model) {
+    throw new Error(
+      `[Totem Error] No model specified. Provide one with --model or set 'defaultModel' in your orchestrator config.`,
+    );
+  }
+  if (model.startsWith('-') || !MODEL_NAME_RE.test(model)) {
+    throw new Error(
+      `[Totem Error] Invalid model name '${model}'. Model names may not start with a hyphen and may only contain word characters, dots, slashes, colons, underscores, and hyphens.`,
+    );
+  }
+  console.error(`[${tag}] Model: ${model}`);
+
+  const result = invokeShellOrchestrator(
+    prompt,
+    config.orchestrator.command,
+    model,
+    cwd,
+    tag,
+    config.totemDir,
+  );
+  writeOutput(result, options.out);
+
+  if (options.out) {
+    console.error(`[${tag}] Written to ${options.out}`);
   }
 }
