@@ -18,7 +18,9 @@ const GH_TIMEOUT_MS = 15_000;
 const LLM_TIMEOUT_MS = 180_000;
 const TEMP_ID_BYTES = 4;
 const QUERY_BODY_TRUNCATE = 500;
+// execFileSync on Windows can't resolve executables without shell
 const IS_WIN = process.platform === 'win32';
+const MODEL_NAME_RE = /^[\w./:_-]+$/;
 
 // ─── System prompt ──────────────────────────────────────
 
@@ -279,6 +281,11 @@ export async function specCommand(input: string, options: SpecOptions): Promise<
   if (!model) {
     throw new Error(
       `[Totem Error] No model specified. Provide one with --model or set 'defaultModel' in your orchestrator config.`,
+    );
+  }
+  if (!MODEL_NAME_RE.test(model)) {
+    throw new Error(
+      `[Totem Error] Invalid model name '${model}'. Model names may only contain word characters, dots, slashes, colons, underscores, and hyphens.`,
     );
   }
   console.error(`[${TAG}] Model: ${model}`);
