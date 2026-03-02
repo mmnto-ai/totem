@@ -201,6 +201,9 @@ function invokeShellOrchestrator(
     });
 
     return result.trim();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`[Totem Error] Shell orchestrator command failed: ${msg}`);
   } finally {
     try {
       fs.unlinkSync(tempPath);
@@ -283,9 +286,9 @@ export async function specCommand(input: string, options: SpecOptions): Promise<
       `[Totem Error] No model specified. Provide one with --model or set 'defaultModel' in your orchestrator config.`,
     );
   }
-  if (!MODEL_NAME_RE.test(model)) {
+  if (model.startsWith('-') || !MODEL_NAME_RE.test(model)) {
     throw new Error(
-      `[Totem Error] Invalid model name '${model}'. Model names may only contain word characters, dots, slashes, colons, underscores, and hyphens.`,
+      `[Totem Error] Invalid model name '${model}'. Model names may not start with a hyphen and may only contain word characters, dots, slashes, colons, underscores, and hyphens.`,
     );
   }
   console.error(`[${TAG}] Model: ${model}`);
