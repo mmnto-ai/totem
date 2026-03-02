@@ -133,6 +133,21 @@ program
   });
 
 program
+  .command('handoff')
+  .description('Generate an end-of-session handoff snapshot for the next session')
+  .option('--raw', 'Output retrieved context without LLM synthesis')
+  .option('--out <path>', 'Write output to a file instead of stdout')
+  .option('--model <name>', 'Override the default model for the orchestrator')
+  .action(async (opts: { raw?: boolean; out?: string; model?: string }) => {
+    try {
+      const { handoffCommand } = await import('./commands/handoff.js');
+      await handoffCommand(opts);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('install-hooks')
   .description('Install post-merge git hook for automatic Totem sync')
   .action(async () => {
