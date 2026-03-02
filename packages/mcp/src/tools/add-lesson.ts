@@ -22,6 +22,9 @@ function detectSyncCommand(projectRoot: string): { cmd: string; args: string[] }
 
 const RECONNECT_DELAY_MS = 5_000;
 
+/** Debounce guard — prevents concurrent sync processes. */
+let syncPending = false;
+
 export function registerAddLesson(server: McpServer): void {
   server.registerTool(
     'add_lesson',
@@ -55,24 +58,32 @@ export function registerAddLesson(server: McpServer): void {
 
         // Fire-and-forget: spawn background incremental sync so the lesson
         // is searchable within this session (Issue #22).
-        const { cmd, args } = detectSyncCommand(projectRoot);
-        const child = spawn(cmd, args, {
-          cwd: projectRoot,
-          detached: true,
-          stdio: 'ignore',
-          shell: true,
-          windowsHide: true,
-        });
-        child.unref();
-
-        // Reconnect the store after the sync has had time to finish,
-        // so the next search_knowledge call sees the new data.
-        setTimeout(() => {
-          reconnectStore().catch((err: unknown) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            process.stderr.write(`[Totem] Store reconnect after sync failed: ${msg}\n`);
+        // Debounce: skip if a sync is already in flight.
+        if (!syncPending) {
+          syncPending = true;
+          const { cmd, args } = detectSyncCommand(projectRoot);
+          const child = spawn(cmd, args, {
+            cwd: projectRoot,
+            detached: true,
+            stdio: 'ignore',
+            shell: true,
+            windowsHide: true,
           });
-        }, RECONNECT_DELAY_MS);
+          child.unref();
+
+          // Reconnect the store after the sync has had time to finish,
+          // so the next search_knowledge call sees the new data.
+          const logPath = path.join(totemDir, 'mcp-errors.log');
+          setTimeout(() => {
+            syncPending = false;
+            reconnectStore().catch((err: unknown) => {
+              const msg = `[${new Date().toISOString()}] Store reconnect failed: ${err instanceof Error ? err.message : String(err)}\n`;
+              fs.promises.appendFile(logPath, msg, 'utf-8').catch(() => {
+                // Last-resort: file logging failed — nothing left to do.
+              });
+            });
+          }, RECONNECT_DELAY_MS);
+        }
 
         return {
           content: [
