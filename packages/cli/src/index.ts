@@ -103,6 +103,21 @@ program
   });
 
 program
+  .command('triage')
+  .description('Prioritize open issues into an active work roadmap')
+  .option('--raw', 'Output retrieved context without LLM synthesis')
+  .option('--out <path>', 'Write output to a file instead of stdout')
+  .option('--model <name>', 'Override the default model for the orchestrator')
+  .action(async (opts: { raw?: boolean; out?: string; model?: string }) => {
+    try {
+      const { triageCommand } = await import('./commands/triage.js');
+      await triageCommand(opts);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('install-hooks')
   .description('Install post-merge git hook for automatic Totem sync')
   .action(async () => {
