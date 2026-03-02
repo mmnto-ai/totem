@@ -17,7 +17,7 @@ This document outlines the high-level goals and strategic pillars for the Totem 
 
 ## Pillar 2: The Reflex Engine (Phase 3)
 
-**Status:** Active Focus (Epic #19)
+**Status:** Completed (Epic #19)
 **Goal:** Ensure the memory layer is actively used. Automate the configuration of AI agents to autonomously query and write to Totem.
 
 - [x] **Auto-Injection:** `totem init` injects memory reflexes into `CLAUDE.md`, `.cursorrules`, and `.gemini/`. (Issue #10)
@@ -27,15 +27,15 @@ This document outlines the high-level goals and strategic pillars for the Totem 
 
 ## Pillar 3: The Workflow Orchestrator (Phase 4)
 
-**Status:** Planning (Epic #20)
+**Status:** Active Focus (Epic #20)
 **Goal:** Serve as the "Org Chart" for a developer's multi-agent AI team, standardizing shift-left workflows.
 
-- [ ] **Native CLI Commands:** Port the bespoke `satur8d` scripts into native `@mmnto/cli` commands (`totem spec`, `totem triage`, `totem shield`). (Issue #16)
+- [x] **Native CLI Commands:** Ported the bespoke `satur8d` scripts into native `@mmnto/cli` commands (`totem spec`, `totem shield`, `totem triage`, `totem briefing`, `totem handoff`). (Epic #17)
+- [ ] **Configurable Governance:** Add `auditLoopLimit` and `shieldSeverityThreshold` to `totem.config.ts` to control AI review depth. (Issue #34)
 - [ ] **Roles & Handoffs:** Allow users to map installed tools (Claude CLI, Gemini CLI, Ollama) to roles (Builder, Reviewer) in `totem.config.ts`.
 - [ ] **PR Learning Loop:** Build `totem learn <pr-url>` to parse GitHub PR review comments and auto-extract architectural lessons into `.totem/lessons.md`. (Issue #18)
 
 ## Pillar 4: Friction Elimination & Polish (Phase 5)
-
 **Status:** Future
 
 - [ ] Implement Changesets and npm publishing (Issue #5)
