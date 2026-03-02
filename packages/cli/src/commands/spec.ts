@@ -4,6 +4,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { z } from 'zod';
+
 import type { ContentType, SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore } from '@mmnto/totem';
 
@@ -62,13 +64,14 @@ Respond with ONLY the sections below. No preamble, no closing remarks.
 
 // ─── GitHub helpers ─────────────────────────────────────
 
-interface GhIssue {
-  number: number;
-  title: string;
-  body: string | null;
-  labels: { name: string }[];
-  state: string;
-}
+const GhIssueSchema = z.object({
+  number: z.number(),
+  title: z.string(),
+  body: z.string().nullable(),
+  labels: z.array(z.object({ name: z.string() })),
+  state: z.string(),
+});
+type GhIssue = z.infer<typeof GhIssueSchema>;
 
 function fetchIssue(issueNumber: number, cwd: string): GhIssue {
   try {
@@ -77,8 +80,11 @@ function fetchIssue(issueNumber: number, cwd: string): GhIssue {
       ['issue', 'view', String(issueNumber), '--json', 'number,title,body,labels,state'],
       { cwd, encoding: 'utf-8', timeout: GH_TIMEOUT_MS, shell: IS_WIN },
     );
-    return JSON.parse(result) as GhIssue;
+    return GhIssueSchema.parse(JSON.parse(result));
   } catch (err) {
+    if (err instanceof z.ZodError) {
+      throw new Error(`[Totem Error] Failed to parse GitHub issue response: ${err.message}`);
+    }
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('ENOENT') || msg.includes('not found')) {
       throw new Error(
@@ -269,7 +275,12 @@ export async function specCommand(input: string, options: SpecOptions): Promise<
     );
   }
 
-  const model = options.model ?? config.orchestrator.defaultModel ?? 'default';
+  const model = options.model ?? config.orchestrator.defaultModel;
+  if (!model) {
+    throw new Error(
+      `[Totem Error] No model specified. Provide one with --model or set 'defaultModel' in your orchestrator config.`,
+    );
+  }
   console.error(`[${TAG}] Model: ${model}`);
 
   const result = invokeShellOrchestrator(prompt, config.orchestrator.command, model, cwd);

@@ -18,7 +18,8 @@
   "dependencies": {
     "@mmnto/totem": "workspace:*",
     "commander": "^13.1.0",
-    "jiti": "^2.4.0"
+    "jiti": "^2.4.0",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

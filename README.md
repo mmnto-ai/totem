@@ -12,7 +12,7 @@ When you're three levels deep in a debugging session, you need to know if the co
 
 - **Local-First & Git-Native:** Memory shouldn't be locked in a cloud SaaS. Totem compiles an embedded LanceDB vector index right inside your project (`.lancedb/`). The actual knowledge is stored in a human-readable, version-controlled `.totem/lessons.md` file. Review your AI's memory in your PRs.
 - **The Reflex Engine:** Totem doesn't just give your AI a database; it gives them _reflexes_. `totem init` auto-injects behavioral triggers into your AI's system prompts (`CLAUDE.md`, `.cursorrules`), forcing them to autonomously document traps and query architecture before they write code.
-- **Multi-Agent Orchestration:** (Coming Soon) Use Claude to write code, Gemini to review PRs, and a local DeepSeek model for fast checks. Totem acts as the "Shared Brain" for your entire AI org chart.
+- **Multi-Agent Orchestration:** Use Claude to write code, Gemini to review PRs, and a local DeepSeek model for fast checks. Totem acts as the "Shared Brain" and workflow orchestrator (via `totem spec`) for your entire AI org chart.
 
 ## Architecture
 
@@ -60,6 +60,29 @@ Add Totem to your AI agent's configuration (e.g., Claude Desktop or Gemini):
   }
 }
 ```
+
+### 5. Generate Pre-Work Specs (The Orchestrator)
+
+Totem can read a GitHub issue, query its vector DB for past architectural lessons and relevant code, and synthesize a complete pre-work briefing for your AI.
+
+First, configure your orchestrator in `totem.config.ts`:
+
+```typescript
+// Use the Gemini CLI as your orchestrator
+orchestrator: {
+  provider: 'shell',
+  command: 'gemini --model {model} --prompt "{file}"',
+  defaultModel: 'gemini-2.5-pro'
+}
+```
+
+Then, generate a spec:
+
+```bash
+npx @mmnto/cli spec 123
+```
+
+_(Totem will fetch Issue #123, assemble the relevant context, and invoke your orchestrator to print the briefing)._
 
 ## Strategic Roadmap
 
