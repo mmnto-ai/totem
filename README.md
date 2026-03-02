@@ -14,6 +14,16 @@ When you're three levels deep in a debugging session, you need to know if the co
 - **The Reflex Engine:** Totem doesn't just give your AI a database; it gives them _reflexes_. `totem init` auto-injects behavioral triggers into your AI's system prompts (`CLAUDE.md`, `.cursorrules`), forcing them to autonomously document traps and query architecture before they write code.
 - **Multi-Agent Orchestration:** Use Claude to write code, Gemini to review PRs, and a local DeepSeek model for fast checks. Totem acts as the "Shared Brain" and workflow orchestrator (via `totem spec`) for your entire AI org chart.
 
+## Philosophy: The Unix Approach to AI
+
+The tech industry is currently trying to build massive, monolithic "AI Developer Platforms" — web apps where you type a prompt and a black-box swarm of cloud agents writes the code for you.
+
+Developers hate black boxes.
+
+Totem applies the **Unix Philosophy** to AI orchestration. We believe AI models are just standard IO processes. You don't need a heavy web UI to orchestrate them; you just need a CLI.
+
+By building our orchestrator as discrete, composable commands (`spec`, `shield`, `triage`), we keep the developer in the terminal. You define the "Traction Points." If an AI generates a bad plan, you can run `totem spec --raw` to debug the context, edit the markdown, and fix it yourself. We don't replace your editor; we provide the invisible, configurable plumbing that connects your local agents together.
+
 ## Architecture
 
 This is a Turborepo monorepo consisting of:
