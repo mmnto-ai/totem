@@ -62,10 +62,12 @@ export function registerAddLesson(server: McpServer): void {
         if (!syncPending) {
           syncPending = true;
           const { cmd, args } = detectSyncCommand(projectRoot);
+          const logPath = path.join(totemDir, 'mcp-sync.log');
+          const logStream = fs.createWriteStream(logPath, { flags: 'a' });
           const child = spawn(cmd, args, {
             cwd: projectRoot,
             detached: true,
-            stdio: 'ignore',
+            stdio: ['ignore', logStream, logStream],
             shell: true,
             windowsHide: true,
           });
@@ -73,15 +75,18 @@ export function registerAddLesson(server: McpServer): void {
 
           // Reconnect the store after the sync has had time to finish,
           // so the next search_knowledge call sees the new data.
-          const logPath = path.join(totemDir, 'mcp-errors.log');
+          const errLogPath = path.join(totemDir, 'mcp-errors.log');
           setTimeout(() => {
-            syncPending = false;
-            reconnectStore().catch((err: unknown) => {
-              const msg = `[${new Date().toISOString()}] Store reconnect failed: ${err instanceof Error ? err.message : String(err)}\n`;
-              fs.promises.appendFile(logPath, msg, 'utf-8').catch(() => {
-                // Last-resort: file logging failed — nothing left to do.
+            reconnectStore()
+              .catch((err: unknown) => {
+                const msg = `[${new Date().toISOString()}] Store reconnect failed: ${err instanceof Error ? err.message : String(err)}\n`;
+                fs.promises.appendFile(errLogPath, msg, 'utf-8').catch(() => {
+                  // Last-resort: file logging failed — nothing left to do.
+                });
+              })
+              .finally(() => {
+                syncPending = false;
               });
-            });
           }, RECONNECT_DELAY_MS);
         }
 
