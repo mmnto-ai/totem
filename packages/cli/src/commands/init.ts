@@ -9,7 +9,7 @@ import { installPostMergeHook } from './install-hooks.js';
 
 const AI_PROMPT_BLOCK = `
 
-## Totem Memory Reflexes (Auto-Generated)
+## Totem AI Integration (Auto-Generated)
 You have access to the Totem MCP for long-term project memory. You MUST operate with the following reflexes:
 
 ### Memory Reflexes
@@ -232,7 +232,10 @@ export async function initCommand(): Promise<void> {
           try {
             const filePath = path.join(cwd, file);
             const content = fs.readFileSync(filePath, 'utf-8');
-            if (!content.includes('Totem Memory Reflexes')) {
+            if (
+              !content.includes('Totem AI Integration') &&
+              !content.includes('Totem Memory Reflexes')
+            ) {
               fs.appendFileSync(filePath, AI_PROMPT_BLOCK);
               console.log(`[Totem] Injected reflexes into ${file}`);
             } else {
