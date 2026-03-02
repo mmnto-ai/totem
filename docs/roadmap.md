@@ -20,16 +20,17 @@ This document outlines the high-level goals and strategic pillars for the Totem 
 **Status:** Active Focus (Epic #19)
 **Goal:** Ensure the memory layer is actively used. Automate the configuration of AI agents to autonomously query and write to Totem.
 
-- [ ] **Auto-Injection:** `totem init` injects memory reflexes into `CLAUDE.md`, `.cursorrules`, and `.gemini/`. (Issues #9, #10)
-- [ ] **Hooks:** Background incremental sync via `post-merge` hook so the local index never goes stale. (Issue #11)
-- [ ] **Operational Playbooks:** Define mechanisms for surfacing operational rules (e.g. "always use MCP tools") dynamically when needed.
+- [x] **Auto-Injection:** `totem init` injects memory reflexes into `CLAUDE.md`, `.cursorrules`, and `.gemini/`. (Issue #10)
+- [x] **Hooks:** Background incremental sync via `post-merge` hook so the local index never goes stale. (Issue #11)
+- [x] **Close the Loop:** Auto-trigger incremental sync via the `add_lesson` MCP tool to close the within-session gap. (Issue #22)
+- [x] **Proactive Triggers:** Update injected AI reflexes to enforce proactive anchoring rather than reactive learning. (Issue #24)
 
 ## Pillar 3: The Workflow Orchestrator (Phase 4)
 
 **Status:** Planning (Epic #20)
 **Goal:** Serve as the "Org Chart" for a developer's multi-agent AI team, standardizing shift-left workflows.
 
-- [ ] **Native CLI Commands:** Port the bespoke `satur8d` scripts into native `@mmnto/cli` commands (`totem spec`, `totem triage`, `totem shield`).
+- [ ] **Native CLI Commands:** Port the bespoke `satur8d` scripts into native `@mmnto/cli` commands (`totem spec`, `totem triage`, `totem shield`). (Issue #16)
 - [ ] **Roles & Handoffs:** Allow users to map installed tools (Claude CLI, Gemini CLI, Ollama) to roles (Builder, Reviewer) in `totem.config.ts`.
 - [ ] **PR Learning Loop:** Build `totem learn <pr-url>` to parse GitHub PR review comments and auto-extract architectural lessons into `.totem/lessons.md`. (Issue #18)
 
@@ -38,5 +39,7 @@ This document outlines the high-level goals and strategic pillars for the Totem 
 **Status:** Future
 
 - [ ] Implement Changesets and npm publishing (Issue #5)
+- [ ] Implement Memory Consolidation command (`totem consolidate`) to clean up old lessons. (Issue #23)
+- [ ] CLI UI/UX Polish: Interactive prompts, colors, and the hidden Oregon Trail Easter Egg. (Issue #21)
 - [ ] Implement `reset()` and ephemeral memory for the MCP tool
 - [ ] Support implicit context via `totem integrate claude` to single-click install the MCP config

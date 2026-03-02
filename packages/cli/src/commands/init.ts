@@ -8,11 +8,17 @@ import type { IngestTarget } from '@mmnto/totem';
 import { installPostMergeHook } from './install-hooks.js';
 
 const AI_PROMPT_BLOCK = `
+
 ## Totem Memory Reflexes (Auto-Generated)
-You have access to the Totem MCP for long-term project memory. You must operate with the following reflexes:
-- **Triage & Bug Fixes:** Before guessing at solutions, use \`search_knowledge\` with the error trace to check for known project quirks.
-- **Planning:** Before writing specs or architecture, use \`search_knowledge\` to retrieve domain constraints and past ADRs.
-- **Anchoring:** After resolving a complex bug or establishing a new architectural pattern, autonomously call \`add_lesson\` to persist the knowledge for future sessions.
+You have access to the Totem MCP for long-term project memory. You MUST operate with the following reflexes:
+
+1. **Pull Before Planning:** Before writing specs, architecture, or fixing complex bugs, use \`search_knowledge\` to retrieve domain constraints and past traps.
+2. **Proactive Anchoring (The 3 Triggers):** You must autonomously call \`add_lesson\` when any of the following occur — do NOT wait for the user to ask:
+   - **The Trap Trigger:** If you spend >2 turns fixing a bug caused by a framework quirk, unexpected API response, or edge case. (Anchor the symptom + fix).
+   - **The Pivot Trigger:** If the user introduces a new architectural pattern or deprecates an old one. (Anchor the rule).
+   - **The Handoff Trigger:** At the end of a session or when wrapping up a complex feature, extract the non-obvious lessons learned and anchor them.
+
+Lessons are automatically re-indexed in the background after each \`add_lesson\` call — no manual sync needed.
 `;
 
 interface DetectedProject {

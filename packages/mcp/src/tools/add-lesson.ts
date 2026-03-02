@@ -1,17 +1,33 @@
+import { spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-import { getContext } from '../context.js';
+import { getContext, reconnectStore } from '../context.js';
+
+/**
+ * Detect the correct package-manager command for running `totem sync`.
+ */
+function detectSyncCommand(projectRoot: string): { cmd: string; args: string[] } {
+  if (fs.existsSync(path.join(projectRoot, 'pnpm-lock.yaml'))) {
+    return { cmd: 'pnpm', args: ['exec', 'totem', 'sync', '--incremental'] };
+  }
+  if (fs.existsSync(path.join(projectRoot, 'yarn.lock'))) {
+    return { cmd: 'yarn', args: ['totem', 'sync', '--incremental'] };
+  }
+  return { cmd: 'npx', args: ['totem', 'sync', '--incremental'] };
+}
+
+const RECONNECT_DELAY_MS = 5_000;
 
 export function registerAddLesson(server: McpServer): void {
   server.registerTool(
     'add_lesson',
     {
       description:
-        'Persist a lesson learned to .totem/lessons.md. The lesson will be indexed on the next `totem sync`.',
+        'Persist a lesson learned to .totem/lessons.md. An incremental re-index is automatically triggered in the background.',
       inputSchema: {
         lesson: z.string().describe('The lesson text to persist'),
         context_tags: z
@@ -37,11 +53,32 @@ export function registerAddLesson(server: McpServer): void {
 
         await fs.promises.appendFile(lessonsPath, entry, 'utf-8');
 
+        // Fire-and-forget: spawn background incremental sync so the lesson
+        // is searchable within this session (Issue #22).
+        const { cmd, args } = detectSyncCommand(projectRoot);
+        const child = spawn(cmd, args, {
+          cwd: projectRoot,
+          detached: true,
+          stdio: 'ignore',
+          shell: true,
+          windowsHide: true,
+        });
+        child.unref();
+
+        // Reconnect the store after the sync has had time to finish,
+        // so the next search_knowledge call sees the new data.
+        setTimeout(() => {
+          reconnectStore().catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            process.stderr.write(`[Totem] Store reconnect after sync failed: ${msg}\n`);
+          });
+        }, RECONNECT_DELAY_MS);
+
         return {
           content: [
             {
               type: 'text' as const,
-              text: `Lesson saved to ${config.totemDir}/lessons.md. It will be indexed on next \`totem sync\`.`,
+              text: `Lesson saved to ${config.totemDir}/lessons.md. Background re-index triggered — it will be searchable shortly.`,
             },
           ],
         };
