@@ -245,7 +245,14 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   }
   console.error(`[${TAG}] Model: ${model}`);
 
-  const result = invokeShellOrchestrator(prompt, config.orchestrator.command, model, cwd, TAG);
+  const result = invokeShellOrchestrator(
+    prompt,
+    config.orchestrator.command,
+    model,
+    cwd,
+    TAG,
+    config.totemDir,
+  );
   writeOutput(result, options.out);
 
   if (options.out) {

@@ -256,7 +256,14 @@ export async function specCommand(input: string, options: SpecOptions): Promise<
   }
   console.error(`[${TAG}] Model: ${model}`);
 
-  const result = invokeShellOrchestrator(prompt, config.orchestrator.command, model, cwd, TAG);
+  const result = invokeShellOrchestrator(
+    prompt,
+    config.orchestrator.command,
+    model,
+    cwd,
+    TAG,
+    config.totemDir,
+  );
   writeOutput(result, options.out);
 
   if (options.out) {

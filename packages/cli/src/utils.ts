@@ -62,9 +62,10 @@ export function invokeShellOrchestrator(
   model: string,
   cwd: string,
   tag: string,
+  totemDir: string,
 ): string {
   const tmpName = `totem-${tag.toLowerCase()}-${crypto.randomBytes(TEMP_ID_BYTES).toString('hex')}.md`;
-  const tempDir = path.join(cwd, '.totem', 'temp');
+  const tempDir = path.join(cwd, totemDir, 'temp');
   fs.mkdirSync(tempDir, { recursive: true });
   const tempPath = path.join(tempDir, tmpName);
 
