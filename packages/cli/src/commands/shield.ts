@@ -1,18 +1,21 @@
-import { execFileSync, execSync } from 'node:child_process';
-import * as crypto from 'node:crypto';
-import * as fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 
 import type { ContentType, SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore } from '@mmnto/totem';
 
-import { loadConfig, loadEnv, resolveConfigPath } from '../utils.js';
+import {
+  invokeShellOrchestrator,
+  loadConfig,
+  loadEnv,
+  MODEL_NAME_RE,
+  resolveConfigPath,
+  writeOutput,
+} from '../utils.js';
 
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Shield';
-const LLM_TIMEOUT_MS = 180_000;
-const TEMP_ID_BYTES = 4;
 const MAX_DIFF_CHARS = 50_000;
 const QUERY_DIFF_TRUNCATE = 2_000;
 const MAX_SPEC_RESULTS = 3;
@@ -20,7 +23,6 @@ const MAX_SESSION_RESULTS = 5;
 const MAX_CODE_RESULTS = 5;
 // execFileSync on Windows can't resolve executables without shell
 const IS_WIN = process.platform === 'win32';
-const MODEL_NAME_RE = /^[\w./:_-]+$/;
 
 // ─── System prompt ──────────────────────────────────────
 
@@ -163,46 +165,6 @@ function assemblePrompt(diff: string, changedFiles: string[], context: Retrieved
   return sections.join('\n');
 }
 
-// ─── Shell orchestrator ─────────────────────────────────
-
-function invokeShellOrchestrator(
-  prompt: string,
-  command: string,
-  model: string,
-  cwd: string,
-): string {
-  const tmpName = `totem-shield-${crypto.randomBytes(TEMP_ID_BYTES).toString('hex')}.md`;
-  const tempDir = path.join(cwd, '.totem', 'temp');
-  fs.mkdirSync(tempDir, { recursive: true });
-  const tempPath = path.join(tempDir, tmpName);
-
-  try {
-    fs.writeFileSync(tempPath, prompt, { encoding: 'utf-8', mode: 0o600 });
-
-    const resolvedCmd = command.replace(/\{file\}/g, tempPath).replace(/\{model\}/g, model);
-
-    console.error(`[${TAG}] Invoking orchestrator (this may take 15-60 seconds)...`);
-
-    const result = execSync(resolvedCmd, {
-      cwd,
-      encoding: 'utf-8',
-      timeout: LLM_TIMEOUT_MS,
-      stdio: ['pipe', 'pipe', 'inherit'],
-    });
-
-    return result.trim();
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`[Totem Error] Shell orchestrator command failed: ${msg}`);
-  } finally {
-    try {
-      fs.unlinkSync(tempPath);
-    } catch {
-      // Temp cleanup is best-effort
-    }
-  }
-}
-
 // ─── Main command ───────────────────────────────────────
 
 export interface ShieldOptions {
@@ -283,24 +245,10 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   }
   console.error(`[${TAG}] Model: ${model}`);
 
-  const result = invokeShellOrchestrator(prompt, config.orchestrator.command, model, cwd);
+  const result = invokeShellOrchestrator(prompt, config.orchestrator.command, model, cwd, TAG);
   writeOutput(result, options.out);
 
   if (options.out) {
     console.error(`[${TAG}] Shield review written to ${options.out}`);
-  }
-}
-
-// ─── Output helpers ─────────────────────────────────────
-
-function writeOutput(content: string, outPath?: string): void {
-  if (outPath) {
-    const dir = path.dirname(outPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(outPath, content, 'utf-8');
-  } else {
-    console.log(content);
   }
 }
