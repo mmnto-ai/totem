@@ -27,3 +27,9 @@ Thumbs.db
 
 # Strategy & Private Docs
 .strategy/
+
+# CLI Dogfooding Artifacts
+specs/
+handoff.md
+session-handoff.md
+.totem/temp/

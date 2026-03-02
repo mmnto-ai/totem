@@ -61,9 +61,9 @@ Add Totem to your AI agent's configuration (e.g., Claude Desktop or Gemini):
 }
 ```
 
-### 5. Generate Pre-Work Specs (The Orchestrator)
+### 5. The Workflow Orchestrator
 
-Totem can read a GitHub issue, query its vector DB for past architectural lessons and relevant code, and synthesize a complete pre-work briefing for your AI.
+Totem ships with native CLI commands that orchestrate your entire shift-left workflow by querying LanceDB and invoking your AI to make project-aware decisions.
 
 First, configure your orchestrator in `totem.config.ts`:
 
@@ -72,17 +72,51 @@ First, configure your orchestrator in `totem.config.ts`:
 orchestrator: {
   provider: 'shell',
   command: 'gemini --model {model} --prompt "{file}"',
-  defaultModel: 'gemini-2.5-pro'
+  defaultModel: 'gemini-3-pro-preview'
 }
 ```
 
-Then, generate a spec:
+Then, run the workflow commands:
+
+**Session Briefings (`briefing`)**
+
+```bash
+npx @mmnto/cli briefing
+```
+
+_(Totem fetches your current git branch, uncommitted changes, open PRs, and recent session momentum to generate a startup briefing for your AI)._
+
+**Pre-Work Briefings (`spec`)**
 
 ```bash
 npx @mmnto/cli spec 123
 ```
 
-_(Totem will fetch Issue #123, assemble the relevant context, and invoke your orchestrator to print the briefing)._
+_(Totem fetches GitHub Issue #123, retrieves relevant architectural context, and synthesizes a pre-work spec)._
+
+**Pre-Flight Reviews (`shield`)**
+
+```bash
+npx @mmnto/cli shield
+```
+
+_(Totem reads your uncommitted git diff, queries LanceDB for related traps, and performs an architectural code review before you push)._
+
+**Post-Merge Roadmap (`triage`)**
+
+```bash
+npx @mmnto/cli triage --out docs/active_work.md
+```
+
+_(Totem fetches your open GitHub issues, reads recent session momentum, and generates a prioritized roadmap for your next task)._
+
+**End of Session (`handoff`)**
+
+```bash
+npx @mmnto/cli handoff --out session-handoff.md
+```
+
+_(Totem captures your uncommitted git changes and any lessons learned today, synthesizing a tactical snapshot so your next session doesn't start cold)._
 
 ## Strategic Roadmap
 
