@@ -1,63 +1,65 @@
 # Totem
 
-**Totem** is a persistent memory and context layer for AI agents. Built on the Model Context Protocol (MCP), it replaces brute-force context stuffing with semantic retrieval over code, session history, specs, and Architectural Decision Records (ADRs).
+**Your AI team forgets. Totem remembers.**
 
-## Philosophy: Anchor, Spin, Kick
+Developers are hitting the limits of "context stuffing." Brute-forcing a 2M token window with your entire codebase is slow, expensive, and leads to hallucinations. 
 
-While the shipped API relies on standard, self-documenting methods, the conceptual model for Totem relies on three metaphors:
+**Totem** is a semantic memory layer and workflow orchestrator for your AI agents (Claude, Gemini, Cursor). Instead of blindly dumping files into a prompt, Totem gives your AI a local, version-controlled vector database. It teaches them to proactively remember your project's architectural decisions, domain constraints, and bug traps so you don't have to repeat yourself every session.
 
-- **Anchor (`add_lesson`):** Persist a key lesson, decision, or piece of knowledge. It commits an insight into the long-term context memory (`.totem/lessons.md`).
-- **Spin (`search_knowledge` / `totem sync`):** Query the persistent index to pull relevant architectural guidance, code snippets, or session logs.
-- **Kick (`reset`):** (Coming in Phase 5) Flush the ephemeral context, effectively resetting short-term memory while keeping anchored decisions intact.
+When you're three levels deep in a debugging session, you need to know if the code you are writing is real, or just an AI hallucinating an anti-pattern you banned three months ago. You need a totem.
+
+## Why Totem?
+
+- **Local-First & Git-Native:** Memory shouldn't be locked in a cloud SaaS. Totem compiles an embedded LanceDB vector index right inside your project (`.lancedb/`). The actual knowledge is stored in a human-readable, version-controlled `.totem/lessons.md` file. Review your AI's memory in your PRs.
+- **The Reflex Engine:** Totem doesn't just give your AI a database; it gives them *reflexes*. `totem init` auto-injects behavioral triggers into your AI's system prompts (`CLAUDE.md`, `.cursorrules`), forcing them to autonomously document traps and query architecture before they write code.
+- **Multi-Agent Orchestration:** (Coming Soon) Use Claude to write code, Gemini to review PRs, and a local DeepSeek model for fast checks. Totem acts as the "Shared Brain" for your entire AI org chart.
 
 ## Architecture
 
-Totem uses an embedded vector database (**LanceDB**) combined with customizable embedding models (OpenAI or Ollama) to index your project.
-
-### Core Structure
-
 This is a Turborepo monorepo consisting of:
 
-- **`@mmnto/totem`** (`packages/core`): The core chunking logic and LanceDB interface.
-- **`@mmnto/cli`** (`packages/cli`): The executable interface (`totem init`, `totem sync`).
-- **`@mmnto/mcp`** (`packages/mcp`): The standard I/O MCP server for AI clients (like Claude and Gemini).
+- **`@mmnto/totem`**: The core chunking logic (AST, Markdown headings, Session logs) and LanceDB interface.
+- **`@mmnto/cli`**: The executable interface (`totem init`, `totem sync`).
+- **`@mmnto/mcp`**: The standard I/O Model Context Protocol (MCP) server that exposes the `search_knowledge` and `add_lesson` tools to your AI.
 
 ## Getting Started
 
-1. **Initialize Totem** in your consuming project:
+### 1. Initialize Totem
+Run this inside your consuming project (e.g., your Next.js or Node app):
+```bash
+npx @mmnto/cli init
+```
+This will auto-detect your project structure, generate a `totem.config.ts`, install automated git hooks, and inject the Proactive Memory Reflexes into your AI's system prompt.
 
-   ```bash
-   npx @mmnto/cli init
-   ```
+### 2. Configure your Embedding Provider
+Totem defaults to OpenAI's `text-embedding-3-small` for a zero-friction start. You can configure this, or switch to a local Ollama model (`nomic-embed-text`), in `totem.config.ts`. Ensure your `.env` contains an `OPENAI_API_KEY` if using the default.
 
-   This will auto-detect your project structure (TypeScript, React, Markdown, etc.) and generate a `totem.config.ts`.
+### 3. Sync the Index
+```bash
+npx @mmnto/cli sync
+```
+*(Note: If you accepted the git hook installation during `init`, Totem will automatically run incremental background syncs after every `git pull` or `git merge`).*
 
-2. **Configure your Embedding Provider**:
-   Totem defaults to OpenAI's `text-embedding-3-small`. You can configure this or switch to a local Ollama model (`nomic-embed-text`) in `totem.config.ts`.
+### 4. Connect the MCP Server
+Add Totem to your AI agent's configuration (e.g., Claude Desktop or Gemini):
+```json
+{
+  "mcpServers": {
+    "totem": {
+      "command": "npx",
+      "args": ["-y", "@mmnto/mcp"]
+    }
+  }
+}
+```
 
-3. **Sync the Index**:
+## Strategic Roadmap
 
-   ```bash
-   npx @mmnto/cli sync
-   ```
+Totem is actively evolving from a memory database into a full Shift-Left orchestrator.
 
-4. **Configure the MCP Server**:
-   Add Totem to your AI agent's configuration (e.g., Claude Desktop or Gemini):
-   ```json
-   {
-     "mcpServers": {
-       "totem": {
-         "command": "npx",
-         "args": ["-y", "@mmnto/mcp"]
-       }
-     }
-   }
-   ```
+- [x] **Pillar 1: The Memory Layer** - Local vector DB, syntax-aware chunking, and MCP interface.
+- [x] **Pillar 2: The Reflex Engine** - Auto-injection of AI prompts, proactive learning triggers, and background git hooks. (See [Epic #19](https://github.com/mmnto-ai/totem/issues/19))
+- [ ] **Pillar 3: The Workflow Orchestrator** - Native CLI commands (`totem spec`, `totem shield`) for pre-work briefings and local PR reviews. (See [Epic #20](https://github.com/mmnto-ai/totem/issues/20))
+- [ ] **Pillar 4: Polish** - Automated memory consolidation, UI/UX polish, and an Oregon Trail Easter Egg. 
 
-## Project Roadmap
-
-- [x] **Phase 1: Scaffold** - Core monorepo setup, `totem init` CLI, and config schemas.
-- [x] **Phase 2: Ingest Pipeline** - Chunking strategies (AST, Markdown, etc.) and `totem sync` indexing into LanceDB.
-- [x] **Phase 3: MCP Server** - `search_knowledge` and `add_lesson` tool implementations over stdio.
-- [x] **Phase 4: Workflow Integration** - Integration with dev loop tools (`pnpm oracle`, post-merge git hooks).
-- [ ] **Phase 5: Ephemeral Memory** - The "Kick" (reset) functionality.
+For a deeper dive into the system design, see `docs/architecture.md`.
