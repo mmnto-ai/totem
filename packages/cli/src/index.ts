@@ -87,6 +87,21 @@ program
   });
 
 program
+  .command('briefing')
+  .description('Generate a session startup briefing with current context')
+  .option('--raw', 'Output retrieved context without LLM synthesis')
+  .option('--out <path>', 'Write output to a file instead of stdout')
+  .option('--model <name>', 'Override the default model for the orchestrator')
+  .action(async (opts: { raw?: boolean; out?: string; model?: string }) => {
+    try {
+      const { briefingCommand } = await import('./commands/briefing.js');
+      await briefingCommand(opts);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('shield')
   .description('Pre-flight code review: analyze your diff against Totem knowledge')
   .option('--raw', 'Output retrieved context without LLM synthesis')
