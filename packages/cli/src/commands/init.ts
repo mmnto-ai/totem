@@ -135,63 +135,79 @@ export async function initCommand(): Promise<void> {
   const cwd = process.cwd();
   const configPath = path.join(cwd, 'totem.config.ts');
   const totemDir = path.join(cwd, '.totem');
+  const configExists = fs.existsSync(configPath);
 
-  // Check if config already exists
-  if (fs.existsSync(configPath)) {
-    console.log('[Totem] totem.config.ts already exists. Skipping init.');
-    return;
-  }
-
-  console.log('[Totem] Scanning project...');
-  const detected = detectProject(cwd);
-
-  // Log what was detected
-  const detections: string[] = [];
-  if (detected.hasTypeScript) detections.push('TypeScript');
-  if (detected.hasSrc) detections.push('src/');
-  if (detected.hasDocs) detections.push('docs/');
-  if (detected.hasSpecs) detections.push('specs/');
-  if (detected.hasContext) detections.push('context/');
-  if (detected.hasSessions) detections.push('session logs');
-
-  if (detections.length > 0) {
-    console.log(`[Totem] Detected: ${detections.join(', ')}`);
-  } else {
-    console.log('[Totem] No specific project structure detected. Using markdown defaults.');
-  }
-
-  const targets = buildTargets(detected);
-
-  // Prompt for embedding provider
   const rl = readline.createInterface({ input, output });
-  let provider: 'openai' | 'ollama' = 'openai';
 
   try {
-    const answer = await rl.question(
-      'Enter your OpenAI API key (or press Enter to configure local Ollama later): ',
-    );
+    if (!configExists) {
+      // --- Fresh install: generate config ---
+      console.log('[Totem] Scanning project...');
+      const detected = detectProject(cwd);
 
-    if (answer.trim()) {
-      // Write API key to .env
-      const envPath = path.join(cwd, '.env');
-      const envLine = `OPENAI_API_KEY=${answer.trim()}\n`;
+      const detections: string[] = [];
+      if (detected.hasTypeScript) detections.push('TypeScript');
+      if (detected.hasSrc) detections.push('src/');
+      if (detected.hasDocs) detections.push('docs/');
+      if (detected.hasSpecs) detections.push('specs/');
+      if (detected.hasContext) detections.push('context/');
+      if (detected.hasSessions) detections.push('session logs');
 
-      if (fs.existsSync(envPath)) {
-        const existing = fs.readFileSync(envPath, 'utf-8');
-        if (!existing.includes('OPENAI_API_KEY')) {
-          fs.appendFileSync(envPath, envLine);
-        }
+      if (detections.length > 0) {
+        console.log(`[Totem] Detected: ${detections.join(', ')}`);
       } else {
-        fs.writeFileSync(envPath, envLine);
+        console.log('[Totem] No specific project structure detected. Using markdown defaults.');
       }
 
-      console.log('[Totem] OpenAI API key saved to .env');
+      const targets = buildTargets(detected);
+
+      let provider: 'openai' | 'ollama' = 'openai';
+      const answer = await rl.question(
+        'Enter your OpenAI API key (or press Enter to configure local Ollama later): ',
+      );
+
+      if (answer.trim()) {
+        const envPath = path.join(cwd, '.env');
+        const envLine = `OPENAI_API_KEY=${answer.trim()}\n`;
+
+        if (fs.existsSync(envPath)) {
+          const existing = fs.readFileSync(envPath, 'utf-8');
+          if (!existing.includes('OPENAI_API_KEY')) {
+            fs.appendFileSync(envPath, envLine);
+          }
+        } else {
+          fs.writeFileSync(envPath, envLine);
+        }
+
+        console.log('[Totem] OpenAI API key saved to .env');
+      } else {
+        provider = 'ollama';
+        console.log('[Totem] Configured for Ollama. Make sure it is running locally.');
+      }
+
+      const configContent = generateConfig(targets, provider);
+      fs.writeFileSync(configPath, configContent, 'utf-8');
+      console.log('[Totem] Created totem.config.ts');
     } else {
-      provider = 'ollama';
-      console.log('[Totem] Configured for Ollama. Make sure it is running locally.');
+      console.log('[Totem] totem.config.ts already exists. Checking reflexes and hooks...');
     }
 
-    // Auto-detect AI Context Files
+    // --- Always run: .totem/ directory ---
+    if (!fs.existsSync(totemDir)) {
+      fs.mkdirSync(totemDir, { recursive: true });
+    }
+
+    const lessonsPath = path.join(totemDir, 'lessons.md');
+    if (!fs.existsSync(lessonsPath)) {
+      fs.writeFileSync(
+        lessonsPath,
+        `# Totem Lessons\n\nLessons learned from PR reviews and Shield checks.\nThis file is version-controlled and reviewed in PR diffs.\n\n---\n`,
+        'utf-8',
+      );
+      console.log('[Totem] Created .totem/lessons.md');
+    }
+
+    // --- Always run: AI prompt injection ---
     const aiFiles = ['CLAUDE.md', '.cursorrules'];
     const foundAiFiles = aiFiles.filter((f) => fs.existsSync(path.join(cwd, f)));
 
@@ -222,41 +238,21 @@ export async function initCommand(): Promise<void> {
       }
     }
 
-    // Offer to install post-merge git hook
+    // --- Always run: post-merge git hook ---
     await installPostMergeHook(cwd, rl);
+
+    // --- Always run: .gitignore ---
+    const gitignorePath = path.join(cwd, '.gitignore');
+    if (fs.existsSync(gitignorePath)) {
+      const gitignore = fs.readFileSync(gitignorePath, 'utf-8');
+      if (!gitignore.includes('.lancedb')) {
+        fs.appendFileSync(gitignorePath, '\n# Totem\n.lancedb/\n');
+        console.log('[Totem] Added .lancedb/ to .gitignore');
+      }
+    }
+
+    console.log('[Totem] Init complete. Run `totem sync` to index your project.');
   } finally {
     rl.close();
   }
-
-  // Generate totem.config.ts
-  const configContent = generateConfig(targets, provider);
-  fs.writeFileSync(configPath, configContent, 'utf-8');
-  console.log('[Totem] Created totem.config.ts');
-
-  // Create .totem/ directory with lessons.md
-  if (!fs.existsSync(totemDir)) {
-    fs.mkdirSync(totemDir, { recursive: true });
-  }
-
-  const lessonsPath = path.join(totemDir, 'lessons.md');
-  if (!fs.existsSync(lessonsPath)) {
-    fs.writeFileSync(
-      lessonsPath,
-      `# Totem Lessons\n\nLessons learned from PR reviews and Shield checks.\nThis file is version-controlled and reviewed in PR diffs.\n\n---\n`,
-      'utf-8',
-    );
-  }
-  console.log('[Totem] Created .totem/lessons.md');
-
-  // Ensure .lancedb/ is in .gitignore
-  const gitignorePath = path.join(cwd, '.gitignore');
-  if (fs.existsSync(gitignorePath)) {
-    const gitignore = fs.readFileSync(gitignorePath, 'utf-8');
-    if (!gitignore.includes('.lancedb')) {
-      fs.appendFileSync(gitignorePath, '\n# Totem\n.lancedb/\n');
-      console.log('[Totem] Added .lancedb/ to .gitignore');
-    }
-  }
-
-  console.log('[Totem] Init complete. Run `totem sync` to index your project.');
 }
