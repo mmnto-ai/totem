@@ -5,6 +5,12 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "bin": {
     "totem-mcp": "./dist/index.js"
   },
@@ -28,5 +34,18 @@
   "files": [
     "dist"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "author": "mmnto-ai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mmnto-ai/totem.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://github.com/mmnto-ai/totem",
+  "bugs": {
+    "url": "https://github.com/mmnto-ai/totem/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

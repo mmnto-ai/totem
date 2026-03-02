@@ -1,8 +1,14 @@
 #!/usr/bin/env node
 
+import { createRequire } from 'node:module';
+
 import { Command } from 'commander';
+import { z } from 'zod';
 
 import { initCommand } from './commands/init.js';
+
+const require = createRequire(import.meta.url);
+const { version } = z.object({ version: z.string() }).parse(require('../package.json'));
 
 function handleError(err: unknown): never {
   if (err instanceof Error) {
@@ -18,7 +24,7 @@ const program = new Command();
 program
   .name('totem')
   .description('Totem — persistent memory and context layer for AI agents')
-  .version('0.1.0');
+  .version(version);
 
 program
   .command('init')
