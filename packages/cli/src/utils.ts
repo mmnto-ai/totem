@@ -71,7 +71,7 @@ export function invokeShellOrchestrator(
   try {
     fs.writeFileSync(tempPath, prompt, { encoding: 'utf-8', mode: 0o600 });
 
-    const resolvedCmd = command.replace(/\{file\}/g, tempPath).replace(/\{model\}/g, model);
+    const resolvedCmd = command.replace(/\{file\}/g, `"${tempPath}"`).replace(/\{model\}/g, model);
 
     console.error(`[${tag}] Invoking orchestrator (this may take 15-60 seconds)...`);
 
