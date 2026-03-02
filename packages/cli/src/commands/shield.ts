@@ -71,6 +71,11 @@ function getGitDiff(mode: 'staged' | 'all', cwd: string): string {
     return result;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('ENOENT') || msg.includes('not found')) {
+      throw new Error(
+        `[Totem Error] 'git' command not found. Ensure Git is installed and in your PATH.`,
+      );
+    }
     throw new Error(`[Totem Error] Failed to get git diff: ${msg}`);
   }
 }
