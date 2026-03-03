@@ -12,6 +12,28 @@ export interface ResolvedFile {
   target: IngestTarget;
 }
 
+/**
+ * Get the set of non-gitignored files in the project.
+ * Returns null if git is unavailable or the project is not a git repo.
+ */
+function getGitNonIgnoredFiles(projectRoot: string): Set<string> | null {
+  try {
+    const output = execSync('git ls-files --cached --others --exclude-standard', {
+      cwd: projectRoot,
+      encoding: 'utf-8',
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    return new Set(
+      output
+        .split('\n')
+        .filter(Boolean)
+        .map((f) => f.replace(/\\/g, '/')),
+    );
+  } catch {
+    return null;
+  }
+}
+
 /** Resolve glob patterns from config targets to actual file paths. */
 export function resolveFiles(
   targets: IngestTarget[],
@@ -20,6 +42,7 @@ export function resolveFiles(
 ): ResolvedFile[] {
   const results: ResolvedFile[] = [];
   const seen = new Set<string>();
+  const nonIgnored = getGitNonIgnoredFiles(projectRoot);
 
   for (const target of targets) {
     const matches = globSync(target.glob, {
@@ -29,8 +52,10 @@ export function resolveFiles(
     });
 
     for (const relativePath of matches) {
-      if (seen.has(relativePath)) continue;
-      seen.add(relativePath);
+      const normalized = relativePath.replace(/\\/g, '/');
+      if (seen.has(normalized)) continue;
+      if (nonIgnored && !nonIgnored.has(normalized)) continue;
+      seen.add(normalized);
 
       results.push({
         absolutePath: path.join(projectRoot, relativePath),
