@@ -111,25 +111,28 @@ const GeminiOutputSchema = z.object({
 function tryParseGeminiJson(
   raw: string,
 ): { content: string; inputTokens: number; outputTokens: number; latencyMs: number | null } | null {
+  let data: unknown;
   try {
-    const result = GeminiOutputSchema.safeParse(JSON.parse(raw));
-    if (!result.success) return null;
-
-    const modelKey = Object.keys(result.data.stats.models)[0];
-    if (!modelKey) return null;
-
-    const modelStats = result.data.stats.models[modelKey];
-    if (!modelStats) return null;
-
-    return {
-      content: result.data.response,
-      inputTokens: modelStats.tokens?.input ?? 0,
-      outputTokens: modelStats.tokens?.candidates ?? 0,
-      latencyMs: modelStats.api?.totalLatencyMs ?? null,
-    };
+    data = JSON.parse(raw);
   } catch {
     return null;
   }
+
+  const result = GeminiOutputSchema.safeParse(data);
+  if (!result.success) return null;
+
+  const modelKey = Object.keys(result.data.stats.models)[0];
+  if (!modelKey) return null;
+
+  const modelStats = result.data.stats.models[modelKey];
+  if (!modelStats) return null;
+
+  return {
+    content: result.data.response,
+    inputTokens: modelStats.tokens?.input ?? 0,
+    outputTokens: modelStats.tokens?.candidates ?? 0,
+    latencyMs: modelStats.api?.totalLatencyMs ?? null,
+  };
 }
 
 // ─── Shell orchestrator ─────────────────────────────────
