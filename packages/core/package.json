@@ -1,6 +1,6 @@
 {
   "name": "@mmnto/totem",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Persistent memory and context layer for AI agents",
   "type": "module",
   "main": "./dist/index.js",
@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@lancedb/lancedb": "^0.13.0",
+    "apache-arrow": "17.0.0",
     "glob": "^11.0.0",
     "openai": "^4.77.0",
     "remark-frontmatter": "^5.0.0",

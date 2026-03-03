@@ -60,6 +60,9 @@ importers:
       '@lancedb/lancedb':
         specifier: ^0.13.0
         version: 0.13.0(apache-arrow@17.0.0)
+      apache-arrow:
+        specifier: 17.0.0
+        version: 17.0.0
       glob:
         specifier: ^11.0.0
         version: 11.1.0

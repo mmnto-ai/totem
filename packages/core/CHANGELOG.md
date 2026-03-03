@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 0.2.2
+
+### Patch Changes
+
+- fix: add apache-arrow as a direct dependency to satisfy lancedb peer requirement
+
 ## 0.2.1
 
 ### Patch Changes
