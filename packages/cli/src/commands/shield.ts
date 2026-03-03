@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import type { ContentType, SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore } from '@mmnto/totem';
 
-import { extractChangedFiles, getGitDiff } from '../git.js';
+import { extractChangedFiles, getDefaultBranch, getGitBranchDiff, getGitDiff } from '../git.js';
 import {
   formatResults,
   loadConfig,
@@ -131,10 +131,18 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   loadEnv(cwd);
   const config = await loadConfig(configPath);
 
-  // Get git diff
+  // Get git diff — try uncommitted/staged first, fall back to branch diff vs main
   const mode = options.staged ? 'staged' : 'all';
   console.error(`[${TAG}] Getting ${mode === 'staged' ? 'staged' : 'uncommitted'} diff...`);
-  const diff = getGitDiff(mode, cwd);
+  let diff = getGitDiff(mode, cwd);
+
+  if (!diff.trim()) {
+    const base = getDefaultBranch(cwd);
+    console.error(
+      `[${TAG}] No uncommitted changes. Falling back to branch diff (${base}...HEAD)...`,
+    );
+    diff = getGitBranchDiff(cwd, base);
+  }
 
   if (!diff.trim()) {
     console.error(`[${TAG}] No changes detected. Nothing to review.`);
