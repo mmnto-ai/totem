@@ -32,6 +32,7 @@ This document outlines the high-level goals and strategic pillars for the Totem 
 
 - [x] **Native CLI Commands:** Ported the bespoke `satur8d` scripts into native `@mmnto/cli` commands (`totem spec`, `totem shield`, `totem triage`, `totem briefing`, `totem handoff`). (Epic #17)
 - [ ] **Workflow Auto-Injection:** Update `totem init` to inject Workflow Reflexes into AI prompts so agents know how to dogfood/use the native CLI commands. (Issue #47)
+- [ ] **Model Orchestration:** Add per-command model overrides to `totem.config.ts` to balance reasoning-heavy (`spec`, `shield`) vs. velocity-heavy (`briefing`, `triage`) tasks. (Issue #56)
 - [ ] **Configurable Governance:** Add `auditLoopLimit` and `shieldSeverityThreshold` to `totem.config.ts` to control AI review depth. (Issue #34)
 - [ ] **Roles & Handoffs:** Allow users to map installed tools (Claude CLI, Gemini CLI, Ollama) to roles (Builder, Reviewer) in `totem.config.ts`.
 - [ ] **PR Learning Loop:** Build `totem learn <pr-url>` to parse GitHub PR review comments and auto-extract architectural lessons into `.totem/lessons.md`. (Issue #18)

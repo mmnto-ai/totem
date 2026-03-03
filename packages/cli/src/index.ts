@@ -154,6 +154,27 @@ program
   });
 
 program
+  .command('learn <pr-number>')
+  .description('Extract lessons from a PR review into .totem/lessons.md')
+  .option('--raw', 'Output assembled prompt without LLM synthesis')
+  .option('--out <path>', 'Write output to a file instead of stdout')
+  .option('--model <name>', 'Override the default model for the orchestrator')
+  .option('--dry-run', 'Show extracted lessons without writing to lessons.md')
+  .action(
+    async (
+      prNumber: string,
+      opts: { raw?: boolean; out?: string; model?: string; dryRun?: boolean },
+    ) => {
+      try {
+        const { learnCommand } = await import('./commands/learn.js');
+        await learnCommand(prNumber, opts);
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
+
+program
   .command('install-hooks')
   .description('Install post-merge git hook for automatic Totem sync')
   .action(async () => {

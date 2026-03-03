@@ -28,3 +28,69 @@ When executing external shell commands (like invoking the Gemini CLI orchestrato
 **Tags:** mcp, security, trap, gemini
 
 When generating temporary files for an AI agent to read (such as orchestrator prompts), do NOT use the global OS temp directory (`os.tmpdir()`). Secure MCP clients (like the Gemini CLI) run with strict workspace boundary restrictions and will throw a 'Path not in workspace' error if asked to read a file outside the project root. Always write temporary agent files inside the project directory (e.g., `.totem/temp/`).
+
+## Lesson — 2026-03-03T01:51:33.783Z
+
+**Tags:** gemini-cli, orchestrator, telemetry, json-output
+
+Gemini CLI `-o json` flag returns structured output with `response` (content) and `stats.models.<model>.tokens` (input, candidates, cached, thoughts, tool) plus `stats.models.<model>.api` (totalRequests, totalLatencyMs). Use try-parse on stdout rather than string-matching the command for `-o json` — handles edge cases and doesn't require config awareness.
+
+## Lesson — 2026-03-03T01:52:00.000Z
+
+**Tags:** gemini-cli, quota, tokens, overhead
+
+Gemini CLI injects ~8,000+ tokens of its own system prompt overhead even with `-e none`. A trivial 5-word input costs 8,254 input tokens. This "base tax" means telemetry token counts will always look inflated relative to our actual prompt content. Important context when evaluating cost — don't panic at high input token counts.
+
+## Lesson — 2026-03-03T01:52:10.000Z
+
+**Tags:** gemini-cli, quota, rate-limiting, caching
+
+Gemini free-tier quota is rate-limited by requests per rolling 24h window, NOT by tokens. A 5KB prompt and a 55KB prompt cost the same — one call. Caching (reducing call count) is the highest-leverage optimization, not prompt size reduction.
+
+## Lesson — 2026-03-03T01:52:20.000Z
+
+**Tags:** shield, git, branch-diff, fallback
+
+`totem shield` must fall back to branch diff (`main...HEAD`) when no uncommitted changes exist, otherwise it's useless after committing. Use `getDefaultBranch()` to dynamically detect the base branch via `git symbolic-ref refs/remotes/origin/HEAD` with main/master probe fallback. Throw (don't silently return 'main') if detection fails entirely.
+
+## Lesson — 2026-03-03T02:16:24.772Z
+
+**Tags:** spawn, stdio, writestream, trap, windows, mcp
+
+When spawning a background child process with output redirected to a log file, use `fs.openSync(path, 'a')` to get a synchronous file descriptor instead of `fs.createWriteStream()`. The WriteStream's `fd` is `null` until the async 'open' event fires, which causes `spawn()` to reject the stdio argument. Close the FD in the parent after spawning — Node duplicates it for the child.
+
+## Lesson — 2026-03-03T03:20:15.922Z
+
+**Tags:** git, cli, error-handling
+
+Distinguish between a missing binary (`ENOENT`) and a command execution failure when wrapping CLI tools to prevent silent, incorrect fallbacks. Swallowing all errors can lead to generic defaults being used when the environment itself is misconfigured, delaying the diagnosis of a missing dependency.
+
+## Lesson — 2026-03-03T03:20:15.923Z
+
+**Tags:** typescript, telemetry, trap
+
+Use nullish coalescing (`??`) instead of logical OR (`||`) when defaulting numeric metrics like latency or token counts, as `||` incorrectly triggers the fallback for valid `0` values (e.g., cached responses). This prevents inaccurate telemetry where a real zero-value is replaced by a wall-clock fallback.
+
+## Lesson — 2026-03-03T03:20:15.923Z
+
+**Tags:** telemetry, metrics, data-parsing
+
+Return `null` instead of `0` when an external API fails to provide a metric to avoid ambiguity with valid zero-value measurements. This allows downstream logic to accurately detect missing data and decide when to employ alternative calculation methods like wall-clock time.
+
+## Lesson — 2026-03-03T03:20:15.923Z
+
+**Tags:** git, cli, validation
+
+Throw an explicit error if a required environmental configuration (like a repository's default branch) cannot be detected, rather than returning a hardcoded fallback. Hardcoded fallbacks like 'main' cause confusing downstream failures if the assumption is incorrect for the user's specific environment.
+
+## Lesson — 2026-03-03T03:20:15.923Z
+
+**Tags:** telemetry, zod, maintenance
+
+Isolate `JSON.parse` in its own try/catch block when processing external CLI output to differentiate between malformed JSON and logic errors in subsequent schema validation. This improves error precision by separating raw parsing failures from structure mismatches.
+
+## Lesson — 2026-03-03T03:20:15.923Z
+
+**Tags:** cli, design-decision
+
+For rough diagnostic summaries or progress indicators, `string.length` is often sufficient for size approximations in primarily English/ASCII contexts. Avoiding byte-precision calculations for non-critical displays reduces code complexity when the difference is negligible for the use case.

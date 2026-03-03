@@ -1,0 +1,478 @@
+import { execFileSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+import { z } from 'zod';
+
+import type { SearchResult } from '@mmnto/totem';
+import { createEmbedder, LanceStore, runSync } from '@mmnto/totem';
+
+import {
+  formatResults,
+  GH_TIMEOUT_MS,
+  invokeShellOrchestrator,
+  IS_WIN,
+  loadConfig,
+  loadEnv,
+  resolveConfigPath,
+  writeOutput,
+} from '../utils.js';
+
+// ─── Constants ──────────────────────────────────────────
+
+const TAG = 'Learn';
+const MAX_EXISTING_LESSONS = 10;
+const MAX_REVIEW_BODY_CHARS = 50_000;
+const MODEL_NAME_RE = /^[\w./:_-]+$/;
+
+// ─── System prompt ──────────────────────────────────────
+
+const SYSTEM_PROMPT = `# Learn System Prompt — PR Lesson Extraction
+
+## Purpose
+Extract tactical lessons from a pull request's review comments and discussion.
+
+## Role
+You are a knowledge curator analyzing a PR's review threads. Your job is to distill non-obvious lessons — traps, patterns, decisions with rationale — that will prevent future mistakes.
+
+## Rules
+- Extract ONLY non-obvious lessons (traps, surprising behaviors, pattern decisions with rationale)
+- Ignore GCA boilerplate, simple acknowledgments, nits, and formatting suggestions
+- When a suggestion was DECLINED, the author's rationale is often the most valuable lesson
+- Each lesson should be 1-2 sentences capturing WHAT happened and WHY it matters
+- Tags should be lowercase, comma-separated, reflecting the technical domain
+- If existing lessons are provided, do NOT extract duplicates or near-duplicates
+- If no lessons are worth extracting, output exactly: NONE
+
+## Output Format
+For each lesson, use this exact delimiter format:
+
+---LESSON---
+Tags: tag1, tag2, tag3
+The lesson text. One or two sentences capturing the trap/pattern and WHY it matters.
+---END---
+
+If no lessons found, output exactly: NONE
+`;
+
+// ─── GitHub helpers ─────────────────────────────────────
+
+const GhPrSchema = z.object({
+  number: z.number(),
+  title: z.string(),
+  body: z.string().nullable(),
+  state: z.string(),
+  comments: z.array(
+    z.object({
+      author: z.object({ login: z.string() }),
+      body: z.string(),
+    }),
+  ),
+  reviews: z.array(
+    z.object({
+      author: z.object({ login: z.string() }),
+      state: z.string(),
+      body: z.string(),
+    }),
+  ),
+});
+type GhPr = z.infer<typeof GhPrSchema>;
+
+const GhReviewCommentSchema = z.object({
+  id: z.number(),
+  user: z.object({ login: z.string() }),
+  body: z.string(),
+  path: z.string(),
+  diff_hunk: z.string(),
+  in_reply_to_id: z.number().optional(),
+});
+type GhReviewComment = z.infer<typeof GhReviewCommentSchema>;
+
+function fetchPr(prNumber: number, cwd: string): GhPr {
+  try {
+    const result = execFileSync(
+      'gh',
+      ['pr', 'view', String(prNumber), '--json', 'number,title,body,state,comments,reviews'],
+      { cwd, encoding: 'utf-8', timeout: GH_TIMEOUT_MS, shell: IS_WIN },
+    );
+    return GhPrSchema.parse(JSON.parse(result));
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      throw new Error(`[Totem Error] Failed to parse GitHub PR response: ${err.message}`);
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('ENOENT') || msg.includes('not found')) {
+      throw new Error(
+        `[Totem Error] GitHub CLI (gh) is required for PR fetching. Install: https://cli.github.com`,
+      );
+    }
+    throw new Error(`[Totem Error] Failed to fetch PR #${prNumber}: ${msg}`);
+  }
+}
+
+function getRepoNwo(cwd: string): string {
+  try {
+    const result = execFileSync(
+      'gh',
+      ['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'],
+      {
+        cwd,
+        encoding: 'utf-8',
+        timeout: GH_TIMEOUT_MS,
+        shell: IS_WIN,
+      },
+    );
+    return result.trim();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`[Totem Error] Failed to detect repository: ${msg}`);
+  }
+}
+
+function fetchReviewComments(prNumber: number, cwd: string): GhReviewComment[] {
+  const nwo = getRepoNwo(cwd);
+  try {
+    const result = execFileSync(
+      'gh',
+      ['api', `repos/${nwo}/pulls/${prNumber}/comments`, '--paginate'],
+      { cwd, encoding: 'utf-8', timeout: GH_TIMEOUT_MS, shell: IS_WIN },
+    );
+    const parsed = JSON.parse(result);
+    return z.array(GhReviewCommentSchema).parse(parsed);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      throw new Error(`[Totem Error] Failed to parse review comments: ${err.message}`);
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`[Totem Error] Failed to fetch review comments for PR #${prNumber}: ${msg}`);
+  }
+}
+
+// ─── Thread grouping ────────────────────────────────────
+
+interface CommentThread {
+  path: string;
+  diffHunk: string;
+  comments: { author: string; body: string }[];
+}
+
+function groupIntoThreads(comments: GhReviewComment[]): CommentThread[] {
+  // Build a map of id -> comment for threading
+  const byId = new Map<number, GhReviewComment>();
+  for (const c of comments) byId.set(c.id, c);
+
+  // Group by root comment (the one without in_reply_to_id)
+  const threadMap = new Map<number, GhReviewComment[]>();
+  for (const c of comments) {
+    const rootId = c.in_reply_to_id ?? c.id;
+    const thread = threadMap.get(rootId) ?? [];
+    thread.push(c);
+    threadMap.set(rootId, thread);
+  }
+
+  const threads: CommentThread[] = [];
+  for (const [rootId, threadComments] of threadMap) {
+    const root = byId.get(rootId) ?? threadComments[0]!;
+    threads.push({
+      path: root.path,
+      diffHunk: root.diff_hunk,
+      comments: threadComments.map((c) => ({ author: c.user.login, body: c.body })),
+    });
+  }
+
+  return threads;
+}
+
+// ─── LanceDB retrieval ─────────────────────────────────
+
+async function retrieveExistingLessons(store: LanceStore): Promise<SearchResult[]> {
+  return store.search({
+    query: 'lesson trap pattern decision',
+    typeFilter: 'session_log',
+    maxResults: MAX_EXISTING_LESSONS,
+  });
+}
+
+// ─── Prompt assembly ────────────────────────────────────
+
+const GCA_MARKERS = ['Using Gemini Code Assist', 'Gemini Code Assist'];
+
+function isGcaBoilerplate(body: string): boolean {
+  return GCA_MARKERS.some((marker) => body.includes(marker));
+}
+
+function assemblePrompt(
+  pr: GhPr,
+  threads: CommentThread[],
+  existingLessons: SearchResult[],
+): string {
+  const sections: string[] = [SYSTEM_PROMPT];
+
+  // PR metadata
+  sections.push('=== PR METADATA ===');
+  sections.push(`PR #${pr.number}: ${pr.title}`);
+  sections.push(`State: ${pr.state}`);
+  if (pr.body) {
+    sections.push('');
+    sections.push(pr.body);
+  }
+
+  // Review summaries (non-empty review bodies)
+  const reviewBodies = pr.reviews.filter((r) => r.body.trim());
+  if (reviewBodies.length > 0) {
+    sections.push('\n=== REVIEW SUMMARIES ===');
+    for (const r of reviewBodies) {
+      sections.push(`[${r.author.login} — ${r.state}]`);
+      sections.push(r.body);
+      sections.push('');
+    }
+  }
+
+  // Regular PR comments (filter GCA boilerplate)
+  const prComments = pr.comments.filter((c) => !isGcaBoilerplate(c.body));
+  if (prComments.length > 0) {
+    sections.push('\n=== PR COMMENTS ===');
+    for (const c of prComments) {
+      sections.push(`[${c.author.login}]`);
+      sections.push(c.body);
+      sections.push('');
+    }
+  }
+
+  // Inline review comment threads
+  if (threads.length > 0) {
+    sections.push('\n=== INLINE REVIEW THREADS ===');
+    for (const thread of threads) {
+      sections.push(`--- ${thread.path} ---`);
+      sections.push('```diff');
+      sections.push(thread.diffHunk);
+      sections.push('```');
+      for (const c of thread.comments) {
+        sections.push(`[${c.author}]: ${c.body}`);
+      }
+      sections.push('');
+    }
+  }
+
+  // Existing lessons for dedup context
+  const lessonSection = formatResults(existingLessons, 'EXISTING LESSONS (do NOT duplicate)');
+  if (lessonSection) {
+    sections.push('\n=== DEDUP CONTEXT ===');
+    sections.push(lessonSection);
+  }
+
+  // Truncate if needed
+  let prompt = sections.join('\n');
+  if (prompt.length > MAX_REVIEW_BODY_CHARS) {
+    prompt = prompt.slice(0, MAX_REVIEW_BODY_CHARS) + '\n\n... [content truncated] ...';
+  }
+
+  return prompt;
+}
+
+// ─── Lesson parser ──────────────────────────────────────
+
+export interface ExtractedLesson {
+  tags: string[];
+  text: string;
+}
+
+const LESSON_RE = /---LESSON---\s*\nTags:\s*(.+)\n([\s\S]+?)---END---/g;
+
+export function parseLessons(llmOutput: string): ExtractedLesson[] {
+  if (llmOutput.trim() === 'NONE') return [];
+
+  const lessons: ExtractedLesson[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = LESSON_RE.exec(llmOutput)) !== null) {
+    const tags = match[1]!
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const text = match[2]!.trim();
+    if (text) {
+      lessons.push({ tags, text });
+    }
+  }
+
+  return lessons;
+}
+
+// ─── Lesson writer ──────────────────────────────────────
+
+export function appendLessons(lessons: ExtractedLesson[], lessonsPath: string): void {
+  const dir = path.dirname(lessonsPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  const entries = lessons
+    .map((l) => {
+      const timestamp = new Date().toISOString();
+      const tags = l.tags.join(', ');
+      return `\n## Lesson — ${timestamp}\n\n**Tags:** ${tags}\n\n${l.text}\n`;
+    })
+    .join('');
+
+  fs.appendFileSync(lessonsPath, entries, 'utf-8');
+}
+
+// ─── Main command ───────────────────────────────────────
+
+export interface LearnOptions {
+  raw?: boolean;
+  out?: string;
+  model?: string;
+  dryRun?: boolean;
+}
+
+export async function learnCommand(prNumber: string, options: LearnOptions): Promise<void> {
+  const cwd = process.cwd();
+  const configPath = resolveConfigPath(cwd);
+  loadEnv(cwd);
+  const config = await loadConfig(configPath);
+
+  // Validate PR number
+  const num = parseInt(prNumber, 10);
+  if (isNaN(num) || num <= 0) {
+    throw new Error(`[Totem Error] Invalid PR number: '${prNumber}'. Must be a positive integer.`);
+  }
+
+  // Fetch PR data
+  console.error(`[${TAG}] Fetching PR #${num}...`);
+  const pr = fetchPr(num, cwd);
+  console.error(`[${TAG}] Title: ${pr.title}`);
+
+  // Fetch inline review comments
+  console.error(`[${TAG}] Fetching review comments...`);
+  const reviewComments = fetchReviewComments(num, cwd);
+  console.error(`[${TAG}] Found ${reviewComments.length} inline review comments`);
+
+  // Filter GCA boilerplate from inline comments
+  const filteredComments = reviewComments.filter((c) => !isGcaBoilerplate(c.body));
+
+  // Early exit if no review content
+  const hasReviewContent =
+    pr.reviews.some((r) => r.body.trim()) ||
+    pr.comments.some((c) => !isGcaBoilerplate(c.body)) ||
+    filteredComments.length > 0;
+
+  if (!hasReviewContent) {
+    console.error(`[${TAG}] No review content found in PR #${num}. Nothing to extract.`);
+    return;
+  }
+
+  // Group inline comments into threads
+  const threads = groupIntoThreads(filteredComments);
+  console.error(`[${TAG}] Grouped into ${threads.length} review threads`);
+
+  // Connect to LanceDB for dedup context
+  const embedder = createEmbedder(config.embedding);
+  const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
+  await store.connect();
+
+  console.error(`[${TAG}] Querying existing lessons for dedup...`);
+  const existingLessons = await retrieveExistingLessons(store);
+  console.error(`[${TAG}] Found ${existingLessons.length} existing lessons for context`);
+
+  // Assemble prompt
+  const prompt = assemblePrompt(pr, threads, existingLessons);
+  console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
+
+  // --raw mode: output prompt only
+  if (options.raw) {
+    writeOutput(prompt, options.out);
+    console.error(`[${TAG}] Raw context output complete.`);
+    return;
+  }
+
+  // Validate orchestrator config (duplicated from runOrchestrator since we need to intercept output)
+  if (!config.orchestrator) {
+    throw new Error(
+      `[Totem Error] No orchestrator configured. Add an 'orchestrator' block to totem.config.ts.\n` +
+        `Example:\n  orchestrator: {\n    provider: 'shell',\n    command: 'gemini --model {model} -e none < {file}',\n    defaultModel: 'gemini-2.5-pro',\n  }`,
+    );
+  }
+
+  if (config.orchestrator.provider !== 'shell') {
+    throw new Error(
+      `[Totem Error] Unsupported orchestrator provider: '${config.orchestrator.provider}'. Only 'shell' is supported.`,
+    );
+  }
+
+  const model = options.model ?? config.orchestrator.defaultModel;
+  if (!model) {
+    throw new Error(
+      `[Totem Error] No model specified. Provide one with --model or set 'defaultModel' in your orchestrator config.`,
+    );
+  }
+  if (model.startsWith('-') || !MODEL_NAME_RE.test(model)) {
+    throw new Error(
+      `[Totem Error] Invalid model name '${model}'. Model names may not start with a hyphen and may only contain word characters, dots, slashes, colons, underscores, and hyphens.`,
+    );
+  }
+  console.error(`[${TAG}] Model: ${model}`);
+
+  // Invoke orchestrator directly (need to intercept output for parsing)
+  const result = invokeShellOrchestrator(
+    prompt,
+    config.orchestrator.command,
+    model,
+    cwd,
+    TAG,
+    config.totemDir,
+  );
+
+  const secs = (result.durationMs / 1000).toFixed(1);
+  if (result.inputTokens != null && result.outputTokens != null) {
+    const inTok = result.inputTokens.toLocaleString();
+    const outTok = result.outputTokens.toLocaleString();
+    console.error(`[${TAG}] Done: ${secs}s | ${inTok} in | ${outTok} out`);
+  } else {
+    console.error(`[${TAG}] Done: ${secs}s | ${(prompt.length / 1024).toFixed(0)}KB prompt`);
+  }
+
+  // Parse lessons from LLM output
+  const lessons = parseLessons(result.content);
+
+  if (lessons.length === 0) {
+    console.error(`[${TAG}] No lessons extracted from PR #${num}.`);
+    return;
+  }
+
+  console.error(`[${TAG}] Extracted ${lessons.length} lesson(s)`);
+
+  // --dry-run mode: preview lessons without writing
+  if (options.dryRun) {
+    console.error(`[${TAG}] Dry run — lessons not written.`);
+    for (const lesson of lessons) {
+      console.log(`\n  Tags: ${lesson.tags.join(', ')}`);
+      console.log(`  ${lesson.text}`);
+    }
+    return;
+  }
+
+  // Append lessons to .totem/lessons.md
+  const lessonsPath = path.join(cwd, config.totemDir, 'lessons.md');
+  appendLessons(lessons, lessonsPath);
+  console.error(`[${TAG}] Appended ${lessons.length} lesson(s) to ${config.totemDir}/lessons.md`);
+
+  // Run incremental sync so lessons are immediately searchable
+  console.error(`[${TAG}] Running incremental sync...`);
+  const syncResult = await runSync(config, {
+    projectRoot: cwd,
+    incremental: true,
+    onProgress: (msg) => console.error(`[${TAG}] ${msg}`),
+  });
+  console.error(
+    `[${TAG}] Sync complete: ${syncResult.chunksProcessed} chunks from ${syncResult.filesProcessed} files`,
+  );
+
+  // Print summary
+  console.log(`\nExtracted ${lessons.length} lesson(s) from PR #${num}:`);
+  for (const lesson of lessons) {
+    console.log(`\n  Tags: ${lesson.tags.join(', ')}`);
+    console.log(`  ${lesson.text}`);
+  }
+}
