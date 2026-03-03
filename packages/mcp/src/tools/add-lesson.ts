@@ -63,15 +63,16 @@ export function registerAddLesson(server: McpServer): void {
           syncPending = true;
           const { cmd, args } = detectSyncCommand(projectRoot);
           const logPath = path.join(totemDir, 'mcp-sync.log');
-          const logStream = fs.createWriteStream(logPath, { flags: 'a' });
+          const logFd = fs.openSync(logPath, 'a');
           const child = spawn(cmd, args, {
             cwd: projectRoot,
             detached: true,
-            stdio: ['ignore', logStream, logStream],
+            stdio: ['ignore', logFd, logFd],
             shell: true,
             windowsHide: true,
           });
           child.unref();
+          fs.closeSync(logFd);
 
           // Reconnect the store after the sync has had time to finish,
           // so the next search_knowledge call sees the new data.
