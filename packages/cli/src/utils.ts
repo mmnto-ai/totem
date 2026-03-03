@@ -3,6 +3,8 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { z } from 'zod';
+
 import type { SearchResult, TotemConfig } from '@mmnto/totem';
 import { TotemConfigSchema } from '@mmnto/totem';
 
@@ -90,6 +92,16 @@ function appendTelemetry(entry: TelemetryEntry, cwd: string, totemDir: string): 
   }
 }
 
+const GeminiModelStatsSchema = z.object({
+  tokens: z.object({ input: z.number(), candidates: z.number() }).optional(),
+  api: z.object({ totalLatencyMs: z.number() }).optional(),
+});
+
+const GeminiOutputSchema = z.object({
+  response: z.string(),
+  stats: z.object({ models: z.record(GeminiModelStatsSchema) }),
+});
+
 /**
  * Try to parse Gemini CLI JSON output. Returns extracted data or null if
  * the output is not valid Gemini JSON (e.g. raw text from a non-Gemini orchestrator).
@@ -98,27 +110,20 @@ function tryParseGeminiJson(
   raw: string,
 ): { content: string; inputTokens: number; outputTokens: number; latencyMs: number } | null {
   try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof parsed['response'] !== 'string' || typeof parsed['stats'] !== 'object') {
-      return null;
-    }
-    const stats = parsed['stats'] as Record<string, unknown>;
-    const models = stats['models'] as Record<string, unknown> | undefined;
-    if (!models) return null;
+    const result = GeminiOutputSchema.safeParse(JSON.parse(raw));
+    if (!result.success) return null;
 
-    // Iterate model keys — we may not know the exact model string
-    const modelKey = Object.keys(models)[0];
+    const modelKey = Object.keys(result.data.stats.models)[0];
     if (!modelKey) return null;
 
-    const modelStats = models[modelKey] as Record<string, unknown>;
-    const tokens = modelStats['tokens'] as Record<string, number> | undefined;
-    const api = modelStats['api'] as Record<string, number> | undefined;
+    const modelStats = result.data.stats.models[modelKey];
+    if (!modelStats) return null;
 
     return {
-      content: parsed['response'] as string,
-      inputTokens: tokens?.['input'] ?? 0,
-      outputTokens: tokens?.['candidates'] ?? 0,
-      latencyMs: api?.['totalLatencyMs'] ?? 0,
+      content: result.data.response,
+      inputTokens: modelStats.tokens?.input ?? 0,
+      outputTokens: modelStats.tokens?.candidates ?? 0,
+      latencyMs: modelStats.api?.totalLatencyMs ?? 0,
     };
   } catch {
     return null;
