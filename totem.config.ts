@@ -19,6 +19,7 @@ const config: TotemConfig = {
     overrides: {
       spec: 'gemini-3.1-pro-preview',
       shield: 'gemini-3.1-pro-preview',
+      triage: 'gemini-3.1-pro-preview',
     },
   },
 
