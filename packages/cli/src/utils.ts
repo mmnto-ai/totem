@@ -266,10 +266,12 @@ export function runOrchestrator(opts: {
     );
   }
 
-  const model = options.model ?? config.orchestrator.defaultModel;
+  const tagKey = tag.toLowerCase();
+  const model =
+    options.model ?? config.orchestrator.overrides?.[tagKey] ?? config.orchestrator.defaultModel;
   if (!model) {
     throw new Error(
-      `[Totem Error] No model specified. Provide one with --model or set 'defaultModel' in your orchestrator config.`,
+      `[Totem Error] No model specified. Provide one with --model, set a command-specific model in 'overrides', or set a 'defaultModel' in your orchestrator config.`,
     );
   }
   if (model.startsWith('-') || !MODEL_NAME_RE.test(model)) {
