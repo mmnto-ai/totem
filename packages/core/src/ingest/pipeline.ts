@@ -15,8 +15,7 @@ export async function runSync(
   config: TotemConfig,
   options: SyncOptions,
 ): Promise<{ chunksProcessed: number; filesProcessed: number }> {
-  const { projectRoot, onProgress } = options;
-  let incremental = options.incremental;
+  const { projectRoot, incremental, onProgress } = options;
   const log = onProgress ?? (() => {});
 
   // 1. Create embedder
@@ -27,12 +26,6 @@ export async function runSync(
   const storePath = path.join(projectRoot, config.lanceDir);
   const store = new LanceStore(storePath, embedder);
   await store.connect();
-
-  // 2b. Auto-heal: force full sync when incremental is requested but DB is empty
-  if (incremental && (await store.isEmpty())) {
-    log('Empty database detected. Forcing full sync...');
-    incremental = false;
-  }
 
   // 3. Resolve files to process
   const allFiles = resolveFiles(config.targets, projectRoot, config.ignorePatterns, log);
