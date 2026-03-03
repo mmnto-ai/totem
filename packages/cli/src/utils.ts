@@ -296,9 +296,9 @@ export function runOrchestrator(opts: {
 
   // Console summary
   const secs = (result.durationMs / 1000).toFixed(1);
-  if (result.inputTokens != null) {
+  if (result.inputTokens != null && result.outputTokens != null) {
     const inTok = result.inputTokens.toLocaleString();
-    const outTok = result.outputTokens!.toLocaleString();
+    const outTok = result.outputTokens.toLocaleString();
     console.error(`[${tag}] Done: ${secs}s | ${inTok} in | ${outTok} out`);
   } else {
     console.error(`[${tag}] Done: ${secs}s | ${(prompt.length / 1024).toFixed(0)}KB prompt`);
