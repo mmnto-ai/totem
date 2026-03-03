@@ -10,11 +10,11 @@ import { createEmbedder, LanceStore, runSync } from '@mmnto/totem';
 import {
   formatResults,
   GH_TIMEOUT_MS,
-  invokeShellOrchestrator,
   IS_WIN,
   loadConfig,
   loadEnv,
   resolveConfigPath,
+  runOrchestrator,
   writeOutput,
 } from '../utils.js';
 
@@ -23,7 +23,6 @@ import {
 const TAG = 'Learn';
 const MAX_EXISTING_LESSONS = 10;
 const MAX_REVIEW_BODY_CHARS = 50_000;
-const MODEL_NAME_RE = /^[\w./:_-]+$/;
 
 // ─── System prompt ──────────────────────────────────────
 
@@ -387,61 +386,12 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
   const prompt = assemblePrompt(pr, threads, existingLessons);
   console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
-  // --raw mode: output prompt only
-  if (options.raw) {
-    writeOutput(prompt, options.out);
-    console.error(`[${TAG}] Raw context output complete.`);
-    return;
-  }
-
-  // Validate orchestrator config (duplicated from runOrchestrator since we need to intercept output)
-  if (!config.orchestrator) {
-    throw new Error(
-      `[Totem Error] No orchestrator configured. Add an 'orchestrator' block to totem.config.ts.\n` +
-        `Example:\n  orchestrator: {\n    provider: 'shell',\n    command: 'gemini --model {model} -e none < {file}',\n    defaultModel: 'gemini-2.5-pro',\n  }`,
-    );
-  }
-
-  if (config.orchestrator.provider !== 'shell') {
-    throw new Error(
-      `[Totem Error] Unsupported orchestrator provider: '${config.orchestrator.provider}'. Only 'shell' is supported.`,
-    );
-  }
-
-  const model = options.model ?? config.orchestrator.defaultModel;
-  if (!model) {
-    throw new Error(
-      `[Totem Error] No model specified. Provide one with --model or set 'defaultModel' in your orchestrator config.`,
-    );
-  }
-  if (model.startsWith('-') || !MODEL_NAME_RE.test(model)) {
-    throw new Error(
-      `[Totem Error] Invalid model name '${model}'. Model names may not start with a hyphen and may only contain word characters, dots, slashes, colons, underscores, and hyphens.`,
-    );
-  }
-  console.error(`[${TAG}] Model: ${model}`);
-
-  // Invoke orchestrator directly (need to intercept output for parsing)
-  const result = invokeShellOrchestrator(
-    prompt,
-    config.orchestrator.command,
-    model,
-    cwd,
-    TAG,
-    config.totemDir,
-  );
-
-  const secs = (result.durationMs / 1000).toFixed(1);
-  if (result.inputTokens != null && result.outputTokens != null) {
-    const inTok = result.inputTokens.toLocaleString();
-    const outTok = result.outputTokens.toLocaleString();
-    console.error(`[${TAG}] Done: ${secs}s | ${inTok} in | ${outTok} out`);
-  } else {
-    console.error(`[${TAG}] Done: ${secs}s | ${(prompt.length / 1024).toFixed(0)}KB prompt`);
-  }
+  // Run orchestrator (handles --raw mode, validation, invocation, telemetry)
+  const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd });
+  if (content == null) return; // --raw mode handled
 
   // Parse lessons from LLM output
-  const lessons = parseLessons(result.content);
+  const lessons = parseLessons(content);
 
   if (lessons.length === 0) {
     console.error(`[${TAG}] No lessons extracted from PR #${num}.`);

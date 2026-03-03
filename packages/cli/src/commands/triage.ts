@@ -14,6 +14,7 @@ import {
   loadEnv,
   resolveConfigPath,
   runOrchestrator,
+  writeOutput,
 } from '../utils.js';
 
 // ─── Constants ──────────────────────────────────────────
@@ -200,5 +201,9 @@ export async function triageCommand(options: TriageOptions): Promise<void> {
   const prompt = assemblePrompt(issues, context);
   console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
-  runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });
+  const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });
+  if (content != null) {
+    writeOutput(content, options.out);
+    if (options.out) console.error(`[${TAG}] Written to ${options.out}`);
+  }
 }

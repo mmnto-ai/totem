@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { getGitBranch, getGitDiff, getGitDiffStat, getGitStatus } from '../git.js';
-import { loadConfig, loadEnv, resolveConfigPath, runOrchestrator } from '../utils.js';
+import { loadConfig, loadEnv, resolveConfigPath, runOrchestrator, writeOutput } from '../utils.js';
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -143,5 +143,9 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
   const prompt = assemblePrompt(branch, status, diff, diffStat, lessons);
   console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
-  runOrchestrator({ prompt, tag: TAG, options, config, cwd });
+  const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd });
+  if (content != null) {
+    writeOutput(content, options.out);
+    if (options.out) console.error(`[${TAG}] Written to ${options.out}`);
+  }
 }

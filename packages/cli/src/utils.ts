@@ -228,7 +228,11 @@ export interface OrchestratorRunOptions {
 
 /**
  * Validate orchestrator config, then either output raw context (--raw) or
- * invoke the shell orchestrator and write the result.
+ * invoke the shell orchestrator and return the LLM content.
+ *
+ * Returns `undefined` in --raw mode (prompt already written to output).
+ * Returns the LLM response content string otherwise.
+ * Callers are responsible for writing output via `writeOutput()`.
  */
 export function runOrchestrator(opts: {
   prompt: string;
@@ -237,7 +241,7 @@ export function runOrchestrator(opts: {
   config: TotemConfig;
   cwd: string;
   totalResults?: number;
-}): void {
+}): string | undefined {
   const { prompt, tag, options, config, cwd } = opts;
 
   // --raw mode: output context only
@@ -245,7 +249,7 @@ export function runOrchestrator(opts: {
     writeOutput(prompt, options.out);
     const suffix = opts.totalResults != null ? ` (${opts.totalResults} chunks)` : '';
     console.error(`[${tag}] Raw context output complete${suffix}.`);
-    return;
+    return undefined;
   }
 
   // Require orchestrator for LLM synthesis
@@ -309,9 +313,5 @@ export function runOrchestrator(opts: {
     console.error(`[${tag}] Done: ${secs}s | ${(prompt.length / 1024).toFixed(0)}KB prompt`);
   }
 
-  writeOutput(result.content, options.out);
-
-  if (options.out) {
-    console.error(`[${tag}] Written to ${options.out}`);
-  }
+  return result.content;
 }
