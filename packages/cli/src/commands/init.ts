@@ -132,7 +132,14 @@ const config: TotemConfig = {
   targets: [
 ${formatTargets(targets)}
   ],
+
 ${embeddingBlock}
+
+  orchestrator: {
+    provider: 'shell',
+    command: 'gemini --model {model} -o json -e none < {file}',
+    defaultModel: 'gemini-3-flash-preview',
+  },
 };
 
 export default config;

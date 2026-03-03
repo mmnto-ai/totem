@@ -11,6 +11,7 @@ import { TotemConfigSchema } from '@mmnto/totem';
 const LLM_TIMEOUT_MS = 180_000;
 const TEMP_ID_BYTES = 4;
 const MODEL_NAME_RE = /^[\w./:_-]+$/;
+const TELEMETRY_FILE = 'telemetry.jsonl';
 
 /** execFileSync on Windows can't resolve executables without `shell: true`. */
 export const IS_WIN = process.platform === 'win32';
@@ -60,6 +61,70 @@ export function resolveConfigPath(cwd: string): string {
   return configPath;
 }
 
+// ─── Telemetry ──────────────────────────────────────────
+
+interface TelemetryEntry {
+  timestamp: string;
+  tag: string;
+  model: string;
+  promptChars: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  durationMs: number;
+}
+
+export interface OrchestratorResult {
+  content: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  durationMs: number;
+}
+
+function appendTelemetry(entry: TelemetryEntry, cwd: string, totemDir: string): void {
+  try {
+    const tempDir = path.join(cwd, totemDir, 'temp');
+    fs.mkdirSync(tempDir, { recursive: true });
+    fs.appendFileSync(path.join(tempDir, TELEMETRY_FILE), JSON.stringify(entry) + '\n', 'utf-8');
+  } catch {
+    // Telemetry is best-effort — never block the command
+  }
+}
+
+/**
+ * Try to parse Gemini CLI JSON output. Returns extracted data or null if
+ * the output is not valid Gemini JSON (e.g. raw text from a non-Gemini orchestrator).
+ */
+function tryParseGeminiJson(
+  raw: string,
+): { content: string; inputTokens: number; outputTokens: number; latencyMs: number } | null {
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof parsed['response'] !== 'string' || typeof parsed['stats'] !== 'object') {
+      return null;
+    }
+    const stats = parsed['stats'] as Record<string, unknown>;
+    const models = stats['models'] as Record<string, unknown> | undefined;
+    if (!models) return null;
+
+    // Iterate model keys — we may not know the exact model string
+    const modelKey = Object.keys(models)[0];
+    if (!modelKey) return null;
+
+    const modelStats = models[modelKey] as Record<string, unknown>;
+    const tokens = modelStats['tokens'] as Record<string, number> | undefined;
+    const api = modelStats['api'] as Record<string, number> | undefined;
+
+    return {
+      content: parsed['response'] as string,
+      inputTokens: tokens?.['input'] ?? 0,
+      outputTokens: tokens?.['candidates'] ?? 0,
+      latencyMs: api?.['totalLatencyMs'] ?? 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ─── Shell orchestrator ─────────────────────────────────
 
 export function invokeShellOrchestrator(
@@ -69,7 +134,7 @@ export function invokeShellOrchestrator(
   cwd: string,
   tag: string,
   totemDir: string,
-): string {
+): OrchestratorResult {
   const tmpName = `totem-${tag.toLowerCase()}-${crypto.randomBytes(TEMP_ID_BYTES).toString('hex')}.md`;
   const tempDir = path.join(cwd, totemDir, 'temp');
   fs.mkdirSync(tempDir, { recursive: true });
@@ -82,14 +147,26 @@ export function invokeShellOrchestrator(
 
     console.error(`[${tag}] Invoking orchestrator (this may take 15-60 seconds)...`);
 
-    const result = execSync(resolvedCmd, {
+    const startMs = Date.now();
+    const raw = execSync(resolvedCmd, {
       cwd,
       encoding: 'utf-8',
       timeout: LLM_TIMEOUT_MS,
       stdio: ['pipe', 'pipe', 'inherit'],
     });
+    const wallMs = Date.now() - startMs;
 
-    return result.trim();
+    const gemini = tryParseGeminiJson(raw);
+    if (gemini) {
+      return {
+        content: gemini.content,
+        inputTokens: gemini.inputTokens,
+        outputTokens: gemini.outputTokens,
+        durationMs: gemini.latencyMs || wallMs,
+      };
+    }
+
+    return { content: raw.trim(), inputTokens: null, outputTokens: null, durationMs: wallMs };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`[Totem Error] Shell orchestrator command failed: ${msg}`);
@@ -196,7 +273,33 @@ export function runOrchestrator(opts: {
     tag,
     config.totemDir,
   );
-  writeOutput(result, options.out);
+
+  // Log telemetry
+  appendTelemetry(
+    {
+      timestamp: new Date().toISOString(),
+      tag,
+      model,
+      promptChars: prompt.length,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      durationMs: result.durationMs,
+    },
+    cwd,
+    config.totemDir,
+  );
+
+  // Console summary
+  const secs = (result.durationMs / 1000).toFixed(1);
+  if (result.inputTokens != null) {
+    const inTok = result.inputTokens.toLocaleString();
+    const outTok = result.outputTokens!.toLocaleString();
+    console.error(`[${tag}] Done: ${secs}s | ${inTok} in | ${outTok} out`);
+  } else {
+    console.error(`[${tag}] Done: ${secs}s | ${(prompt.length / 1024).toFixed(0)}KB prompt`);
+  }
+
+  writeOutput(result.content, options.out);
 
   if (options.out) {
     console.error(`[${tag}] Written to ${options.out}`);

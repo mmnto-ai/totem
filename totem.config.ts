@@ -14,7 +14,7 @@ const config: TotemConfig = {
 
   orchestrator: {
     provider: 'shell',
-    command: 'gemini --model {model} -e none < {file}',
+    command: 'gemini --model {model} -o json -e none < {file}',
     defaultModel: 'gemini-3-flash-preview',
   },
 
