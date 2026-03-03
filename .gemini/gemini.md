@@ -11,11 +11,12 @@
 
 - **Branch Protection:** The `main` branch is formally protected. NEVER commit or push directly to `main`. Always create a feature branch and open a Pull Request.
 
-
 ## Totem AI Integration (Auto-Generated)
+
 You have access to the Totem MCP for long-term project memory. You MUST operate with the following reflexes:
 
 ### Memory Reflexes
+
 1. **Pull Before Planning:** Before writing specs, architecture, or fixing complex bugs, use `search_knowledge` to retrieve domain constraints and past traps.
 2. **Proactive Anchoring (The 3 Triggers):** You must autonomously call `add_lesson` when any of the following occur — do NOT wait for the user to ask:
    - **The Trap Trigger:** If you spend >2 turns fixing a bug caused by a framework quirk, unexpected API response, or edge case. (Anchor the symptom + fix).
@@ -26,7 +27,9 @@ You have access to the Totem MCP for long-term project memory. You MUST operate 
 Lessons are automatically re-indexed in the background after each `add_lesson` call — no manual sync needed.
 
 ### Workflow Orchestrator Rituals
+
 Totem provides CLI commands that map to your development lifecycle. Use them at these moments:
+
 1. **Start of Session:** Run `totem briefing` to get oriented with current branch state, open PRs, and recent context. Run `totem triage` if you need to pick a new task.
 2. **Before Implementation:** Run `totem spec <issue-url-or-topic>` to generate an architectural plan and review related context before writing code.
 3. **Before PR/Push:** Run `totem shield` to analyze uncommitted changes against project knowledge — catches architectural drift and pattern violations.
