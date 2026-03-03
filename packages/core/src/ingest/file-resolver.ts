@@ -28,6 +28,7 @@ function getGitNonIgnoredFiles(
         cwd: projectRoot,
         encoding: 'utf-8',
         maxBuffer: 10 * 1024 * 1024,
+        shell: process.platform === 'win32',
       },
     );
     return new Set(
@@ -44,8 +45,6 @@ function getGitNonIgnoredFiles(
         : `Could not read git index for .gitignore filtering. Falling back to ignorePatterns only. Error: ${errorMsg}`;
     if (onWarn) {
       onWarn(msg);
-    } else {
-      console.warn(`[Totem Warning] ${msg}`);
     }
     return null;
   }
@@ -108,8 +107,6 @@ export function getChangedFiles(
     const msg = `Failed to get changed files from git. Error: ${err instanceof Error ? err.message : String(err)}`;
     if (onWarn) {
       onWarn(msg);
-    } else {
-      console.warn(`[Totem Warning] ${msg}`);
     }
     return null;
   }
