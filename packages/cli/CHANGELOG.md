@@ -1,5 +1,13 @@
 # @mmnto/cli
 
+## 0.2.1
+
+### Patch Changes
+
+- Harden orchestrator prompts with stronger personas (Red Team Reality Checker, Staff Architect, strict PM) and upgrade spec/shield/triage model overrides to gemini-3.1-pro-preview.
+- Updated dependencies
+  - @mmnto/totem@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes
