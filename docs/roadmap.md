@@ -35,7 +35,7 @@ This document outlines the high-level goals and strategic pillars for the Totem 
 - [ ] **Model Orchestration:** Add per-command model overrides to `totem.config.ts` to balance reasoning-heavy (`spec`, `shield`) vs. velocity-heavy (`briefing`, `triage`) tasks. (Issue #56)
 - [ ] **Configurable Governance:** Add `auditLoopLimit` and `shieldSeverityThreshold` to `totem.config.ts` to control AI review depth. (Issue #34)
 - [ ] **Roles & Handoffs:** Allow users to map installed tools (Claude CLI, Gemini CLI, Ollama) to roles (Builder, Reviewer) in `totem.config.ts`.
-- [ ] **PR Learning Loop:** Build `totem learn <pr-url>` to parse GitHub PR review comments and auto-extract architectural lessons into `.totem/lessons.md`. (Issue #18)
+- [x] **PR Learning Loop:** Build `totem learn <pr-number>` to parse GitHub PR review comments and auto-extract architectural lessons into `.totem/lessons.md`. (Issue #18)
 
 ## Pillar 4: Friction Elimination & Polish (Phase 5)
 

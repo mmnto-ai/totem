@@ -85,6 +85,7 @@ const GhReviewCommentSchema = z.object({
   path: z.string(),
   diff_hunk: z.string(),
   in_reply_to_id: z.number().optional(),
+  created_at: z.string().optional(),
 });
 type GhReviewComment = z.infer<typeof GhReviewCommentSchema>;
 
@@ -172,6 +173,12 @@ function groupIntoThreads(comments: GhReviewComment[]): CommentThread[] {
 
   const threads: CommentThread[] = [];
   for (const [rootId, threadComments] of threadMap) {
+    // Sort by created_at to ensure chronological order within thread
+    threadComments.sort((a, b) => {
+      if (!a.created_at || !b.created_at) return 0;
+      return a.created_at.localeCompare(b.created_at);
+    });
+
     const root = byId.get(rootId) ?? threadComments[0]!;
     threads.push({
       path: root.path,
@@ -188,7 +195,7 @@ function groupIntoThreads(comments: GhReviewComment[]): CommentThread[] {
 async function retrieveExistingLessons(store: LanceStore): Promise<SearchResult[]> {
   return store.search({
     query: 'lesson trap pattern decision',
-    typeFilter: 'session_log',
+    typeFilter: 'spec',
     maxResults: MAX_EXISTING_LESSONS,
   });
 }
