@@ -21,14 +21,14 @@ function getGitNonIgnoredFiles(
   onWarn?: (msg: string) => void,
 ): Set<string> | null {
   try {
-    const output = execSync('git ls-files --cached --others --exclude-standard', {
+    const output = execSync('git ls-files -z --cached --others --exclude-standard', {
       cwd: projectRoot,
       encoding: 'utf-8',
       maxBuffer: 10 * 1024 * 1024,
     });
     return new Set(
       output
-        .split('\n')
+        .split('\0')
         .filter(Boolean)
         .map((f) => f.replace(/\\/g, '/')),
     );
