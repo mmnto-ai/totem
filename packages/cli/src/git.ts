@@ -101,7 +101,9 @@ export function getDefaultBranch(cwd: string): string {
         // Try next candidate
       }
     }
-    return 'main';
+    throw new Error(
+      `[Totem Error] Could not determine default branch. Neither 'main' nor 'master' found locally, and 'git symbolic-ref' failed.`,
+    );
   }
 }
 
