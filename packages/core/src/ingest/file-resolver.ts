@@ -33,7 +33,11 @@ function getGitNonIgnoredFiles(
         .map((f) => f.replace(/\\/g, '/')),
     );
   } catch (err) {
-    const msg = `Could not read git index for .gitignore filtering. Falling back to ignorePatterns only. Error: ${err instanceof Error ? err.message : String(err)}`;
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    const msg =
+      errorMsg.includes('ENOENT') || errorMsg.includes('not found')
+        ? `Command 'git' not found. Cannot use .gitignore for filtering. Falling back to ignorePatterns only.`
+        : `Could not read git index for .gitignore filtering. Falling back to ignorePatterns only. Error: ${errorMsg}`;
     if (onWarn) {
       onWarn(msg);
     } else {
