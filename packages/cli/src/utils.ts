@@ -87,8 +87,10 @@ function appendTelemetry(entry: TelemetryEntry, cwd: string, totemDir: string): 
     const tempDir = path.join(cwd, totemDir, 'temp');
     fs.mkdirSync(tempDir, { recursive: true });
     fs.appendFileSync(path.join(tempDir, TELEMETRY_FILE), JSON.stringify(entry) + '\n', 'utf-8');
-  } catch {
-    // Telemetry is best-effort — never block the command
+  } catch (err) {
+    // Telemetry is best-effort — never block the command, but warn on failure
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[Totem Warning] Failed to write telemetry: ${msg}`);
   }
 }
 
