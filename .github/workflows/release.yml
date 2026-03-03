@@ -21,8 +21,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm install -g npm@latest
+        name: Upgrade npm for OIDC support
 
       - run: pnpm install --frozen-lockfile
 
