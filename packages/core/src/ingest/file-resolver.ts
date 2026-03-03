@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import * as path from 'node:path';
 
 import { globSync } from 'glob';
@@ -21,11 +21,15 @@ function getGitNonIgnoredFiles(
   onWarn?: (msg: string) => void,
 ): Set<string> | null {
   try {
-    const output = execSync('git ls-files -z --cached --others --exclude-standard', {
-      cwd: projectRoot,
-      encoding: 'utf-8',
-      maxBuffer: 10 * 1024 * 1024,
-    });
+    const output = execFileSync(
+      'git',
+      ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+      {
+        cwd: projectRoot,
+        encoding: 'utf-8',
+        maxBuffer: 10 * 1024 * 1024,
+      },
+    );
     return new Set(
       output
         .split('\0')
