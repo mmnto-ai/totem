@@ -266,7 +266,9 @@ export function runOrchestrator(opts: {
     );
   }
 
-  const model = options.model ?? config.orchestrator.defaultModel;
+  const tagKey = tag.toLowerCase();
+  const model =
+    options.model ?? config.orchestrator.overrides?.[tagKey] ?? config.orchestrator.defaultModel;
   if (!model) {
     throw new Error(
       `[Totem Error] No model specified. Provide one with --model or set 'defaultModel' in your orchestrator config.`,

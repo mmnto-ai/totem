@@ -139,6 +139,10 @@ ${embeddingBlock}
     provider: 'shell',
     command: 'gemini --model {model} -o json -e none < {file}',
     defaultModel: 'gemini-3-flash-preview',
+    overrides: {
+      'spec': 'gemini-3-pro-preview',
+      'shield': 'gemini-3-pro-preview',
+    },
   },
 };
 
