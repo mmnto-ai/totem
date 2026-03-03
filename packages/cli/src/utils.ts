@@ -110,7 +110,7 @@ const GeminiOutputSchema = z.object({
  */
 function tryParseGeminiJson(
   raw: string,
-): { content: string; inputTokens: number; outputTokens: number; latencyMs: number } | null {
+): { content: string; inputTokens: number; outputTokens: number; latencyMs: number | null } | null {
   try {
     const result = GeminiOutputSchema.safeParse(JSON.parse(raw));
     if (!result.success) return null;
@@ -125,7 +125,7 @@ function tryParseGeminiJson(
       content: result.data.response,
       inputTokens: modelStats.tokens?.input ?? 0,
       outputTokens: modelStats.tokens?.candidates ?? 0,
-      latencyMs: modelStats.api?.totalLatencyMs ?? 0,
+      latencyMs: modelStats.api?.totalLatencyMs ?? null,
     };
   } catch {
     return null;
@@ -169,7 +169,7 @@ export function invokeShellOrchestrator(
         content: gemini.content,
         inputTokens: gemini.inputTokens,
         outputTokens: gemini.outputTokens,
-        durationMs: gemini.latencyMs || wallMs,
+        durationMs: gemini.latencyMs ?? wallMs,
       };
     }
 
