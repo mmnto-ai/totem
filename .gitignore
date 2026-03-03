@@ -33,3 +33,4 @@ specs/
 handoff.md
 session-handoff.md
 .totem/temp/
+.totem/*.log

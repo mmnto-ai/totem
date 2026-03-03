@@ -46,7 +46,7 @@ export const ShellOrchestratorSchema = z.object({
   command: z.string(),
   /** Default model name substituted for {model} if --model is not passed */
   defaultModel: z.string().optional(),
-  /** Optional per-command model overrides (e.g., { 'spec': 'gemini-3-pro-preview' }) */
+  /** Optional per-command model overrides (e.g., { 'spec': 'gemini-3.1-pro-preview' }) */
   overrides: z.record(z.string()).optional(),
 });
 

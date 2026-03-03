@@ -82,7 +82,7 @@ First, configure your orchestrator in `totem.config.ts`:
 orchestrator: {
   provider: 'shell',
   command: 'gemini --model {model} --prompt "{file}"',
-  defaultModel: 'gemini-3-pro-preview'
+  defaultModel: 'gemini-3.1-pro-preview'
 }
 ```
 
@@ -102,7 +102,7 @@ _(Totem fetches your current git branch, uncommitted changes, open PRs, and rece
 npx @mmnto/cli spec 123
 ```
 
-_(Totem fetches GitHub Issue #123, retrieves relevant architectural context, and synthesizes a pre-work spec)._
+_(Totem fetches GitHub Issue #123, retrieves relevant architectural context, and synthesizes a pre-work spec. The AI strictly adopts the persona of a **Staff-Level Architect**, refusing to write code and instead focusing on data contracts, edge cases, and technical planning)._
 
 **Pre-Flight Reviews (`shield`)**
 
@@ -110,7 +110,7 @@ _(Totem fetches GitHub Issue #123, retrieves relevant architectural context, and
 npx @mmnto/cli shield
 ```
 
-_(Totem reads your uncommitted git diff, queries LanceDB for related traps, and performs an architectural code review before you push)._
+_(Totem reads your uncommitted git diff, queries LanceDB for related traps, and performs an architectural code review before you push. The AI adopts a ruthless **Red Team Reality Checker** persona, demanding evidence of tests and explicitly looking for reasons the code will fail)._
 
 **Post-Merge Roadmap (`triage`)**
 
@@ -118,7 +118,7 @@ _(Totem reads your uncommitted git diff, queries LanceDB for related traps, and 
 npx @mmnto/cli triage --out docs/active_work.md
 ```
 
-_(Totem fetches your open GitHub issues, reads recent session momentum, and generates a prioritized roadmap for your next task)._
+_(Totem fetches your open GitHub issues, reads recent session momentum, and generates a prioritized roadmap for your next task. The AI strictly acts as a **Product Manager**, setting scope boundaries and prioritizing work based on momentum)._
 
 **End of Session (`handoff`)**
 
