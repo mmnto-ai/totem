@@ -6,6 +6,15 @@ import { IS_WIN } from './utils.js';
 
 const GIT_COMMAND_TIMEOUT_MS = 15_000;
 
+function throwIfGitMissing(err: unknown): void {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes('ENOENT') || msg.includes('not found')) {
+    throw new Error(
+      `[Totem Error] 'git' command not found. Ensure Git is installed and in your PATH.`,
+    );
+  }
+}
+
 // ─── Git helpers ────────────────────────────────────────
 
 export function getGitBranch(cwd: string): string {
@@ -42,12 +51,8 @@ export function getGitDiff(mode: 'staged' | 'all', cwd: string): string {
       shell: IS_WIN,
     });
   } catch (err) {
+    throwIfGitMissing(err);
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('ENOENT') || msg.includes('not found')) {
-      throw new Error(
-        `[Totem Error] 'git' command not found. Ensure Git is installed and in your PATH.`,
-      );
-    }
     throw new Error(`[Totem Error] Failed to get git diff: ${msg}`);
   }
 }
@@ -80,12 +85,7 @@ export function getDefaultBranch(cwd: string): string {
     // ref is like "origin/main" — strip the remote prefix
     return ref.replace(/^origin\//, '');
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('ENOENT') || msg.includes('not found')) {
-      throw new Error(
-        `[Totem Error] 'git' command not found. Ensure Git is installed and in your PATH.`,
-      );
-    }
+    throwIfGitMissing(err);
 
     // Fallback: check if 'main' exists, then 'master'
     for (const branch of ['main', 'master']) {
@@ -115,12 +115,8 @@ export function getGitBranchDiff(cwd: string, base?: string): string {
       shell: IS_WIN,
     });
   } catch (err) {
+    throwIfGitMissing(err);
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('ENOENT') || msg.includes('not found')) {
-      throw new Error(
-        `[Totem Error] 'git' command not found. Ensure Git is installed and in your PATH.`,
-      );
-    }
     throw new Error(`[Totem Error] Failed to get branch diff (${baseBranch}...HEAD): ${msg}`);
   }
 }
