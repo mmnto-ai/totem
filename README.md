@@ -82,7 +82,12 @@ First, configure your orchestrator in `totem.config.ts`:
 orchestrator: {
   provider: 'shell',
   command: 'gemini --model {model} --prompt "{file}"',
-  defaultModel: 'gemini-3.1-pro-preview'
+  defaultModel: 'gemini-3-flash-preview',
+  overrides: {
+    spec: 'gemini-3.1-pro-preview',
+    shield: 'gemini-3.1-pro-preview',
+    triage: 'gemini-3.1-pro-preview'
+  }
 }
 ```
 
