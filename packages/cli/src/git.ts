@@ -79,7 +79,14 @@ export function getDefaultBranch(cwd: string): string {
     }).trim();
     // ref is like "origin/main" — strip the remote prefix
     return ref.replace(/^origin\//, '');
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('ENOENT') || msg.includes('not found')) {
+      throw new Error(
+        `[Totem Error] 'git' command not found. Ensure Git is installed and in your PATH.`,
+      );
+    }
+
     // Fallback: check if 'main' exists, then 'master'
     for (const branch of ['main', 'master']) {
       try {
