@@ -28,7 +28,7 @@ export async function runSync(
   await store.connect();
 
   // 3. Resolve files to process
-  const allFiles = resolveFiles(config.targets, projectRoot, config.ignorePatterns);
+  const allFiles = resolveFiles(config.targets, projectRoot, config.ignorePatterns, log);
   let filesToProcess: ResolvedFile[];
 
   if (incremental) {
