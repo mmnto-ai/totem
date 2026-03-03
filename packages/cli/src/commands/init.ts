@@ -23,6 +23,7 @@ You have access to the Totem MCP for long-term project memory. You MUST operate 
 Lessons are automatically re-indexed in the background after each \`add_lesson\` call — no manual sync needed.
 
 ### Workflow Orchestrator Rituals
+[FOR LOCAL CLI/TERMINAL AGENTS ONLY] Do not attempt to run these commands if you are a headless bot or operating in a cloud PR environment (e.g., Gemini Code Assist on GitHub).
 Totem provides CLI commands that map to your development lifecycle. Use them at these moments:
 1. **Start of Session:** Run \`totem briefing\` to get oriented with current branch state, open PRs, and recent context. Run \`totem triage\` if you need to pick a new task.
 2. **Before Implementation:** Run \`totem spec <issue-url-or-topic>\` to generate an architectural plan and review related context before writing code.
