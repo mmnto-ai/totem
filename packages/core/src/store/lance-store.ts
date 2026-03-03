@@ -111,6 +111,12 @@ export class LanceStore {
     await this.connect();
   }
 
+  /** Return true if the table doesn't exist or has zero rows. */
+  async isEmpty(): Promise<boolean> {
+    if (!this.table) return true;
+    return (await this.table.countRows()) === 0;
+  }
+
   /** Return stats about the current index. */
   async stats(): Promise<{ totalChunks: number; byType: Record<string, number> }> {
     if (!this.table) return { totalChunks: 0, byType: {} };
