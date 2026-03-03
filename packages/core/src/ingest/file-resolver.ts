@@ -16,7 +16,10 @@ export interface ResolvedFile {
  * Get the set of non-gitignored files in the project.
  * Returns null if git is unavailable or the project is not a git repo.
  */
-function getGitNonIgnoredFiles(projectRoot: string): Set<string> | null {
+function getGitNonIgnoredFiles(
+  projectRoot: string,
+  onWarn?: (msg: string) => void,
+): Set<string> | null {
   try {
     const output = execSync('git ls-files --cached --others --exclude-standard', {
       cwd: projectRoot,
@@ -29,7 +32,13 @@ function getGitNonIgnoredFiles(projectRoot: string): Set<string> | null {
         .filter(Boolean)
         .map((f) => f.replace(/\\/g, '/')),
     );
-  } catch {
+  } catch (err) {
+    const msg = `Could not read git index for .gitignore filtering. Falling back to ignorePatterns only. Error: ${err instanceof Error ? err.message : String(err)}`;
+    if (onWarn) {
+      onWarn(msg);
+    } else {
+      console.warn(`[Totem Warning] ${msg}`);
+    }
     return null;
   }
 }
@@ -39,10 +48,11 @@ export function resolveFiles(
   targets: IngestTarget[],
   projectRoot: string,
   ignorePatterns: string[] = DEFAULT_IGNORE_PATTERNS,
+  onWarn?: (msg: string) => void,
 ): ResolvedFile[] {
   const results: ResolvedFile[] = [];
   const seen = new Set<string>();
-  const nonIgnored = getGitNonIgnoredFiles(projectRoot);
+  const nonIgnored = getGitNonIgnoredFiles(projectRoot, onWarn);
 
   for (const target of targets) {
     const matches = globSync(target.glob, {
