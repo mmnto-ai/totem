@@ -2,7 +2,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { getGitBranch, getGitDiff, getGitDiffStat, getGitStatus } from '../git.js';
-import { loadConfig, loadEnv, resolveConfigPath, runOrchestrator, writeOutput } from '../utils.js';
+import {
+  loadConfig,
+  loadEnv,
+  resolveConfigPath,
+  runOrchestrator,
+  wrapXml,
+  writeOutput,
+} from '../utils.js';
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -75,7 +82,7 @@ function assemblePrompt(
   // Git state
   sections.push('=== GIT STATE ===');
   sections.push(`Branch: ${branch}`);
-  sections.push(`Status:\n${status || '(clean working tree)'}`);
+  sections.push(`Status:\n${status ? wrapXml('git_status', status) : '(clean working tree)'}`);
 
   // Diff
   sections.push('\n=== DIFF ===');
@@ -87,10 +94,14 @@ function assemblePrompt(
       sections.push('');
     }
     if (diff.length > MAX_DIFF_CHARS) {
-      sections.push(diff.slice(0, MAX_DIFF_CHARS));
-      sections.push(`\n... [diff truncated at ${MAX_DIFF_CHARS} chars] ...`);
+      sections.push(
+        wrapXml(
+          'git_diff',
+          diff.slice(0, MAX_DIFF_CHARS) + `\n... [diff truncated at ${MAX_DIFF_CHARS} chars] ...`,
+        ),
+      );
     } else {
-      sections.push(diff);
+      sections.push(wrapXml('git_diff', diff));
     }
   }
 

@@ -10,6 +10,7 @@ import {
   loadEnv,
   resolveConfigPath,
   runOrchestrator,
+  wrapXml,
   writeOutput,
 } from '../utils.js';
 
@@ -99,10 +100,14 @@ function assemblePrompt(diff: string, changedFiles: string[], context: Retrieved
   sections.push(`Changed files: ${changedFiles.join(', ')}`);
   sections.push('');
   if (diff.length > MAX_DIFF_CHARS) {
-    sections.push(diff.slice(0, MAX_DIFF_CHARS));
-    sections.push(`\n... [diff truncated at ${MAX_DIFF_CHARS} chars] ...`);
+    sections.push(
+      wrapXml(
+        'git_diff',
+        diff.slice(0, MAX_DIFF_CHARS) + `\n... [diff truncated at ${MAX_DIFF_CHARS} chars] ...`,
+      ),
+    );
   } else {
-    sections.push(diff);
+    sections.push(wrapXml('git_diff', diff));
   }
 
   // Totem knowledge

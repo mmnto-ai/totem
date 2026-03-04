@@ -15,6 +15,7 @@ import {
   loadEnv,
   resolveConfigPath,
   runOrchestrator,
+  wrapXml,
 } from '../utils.js';
 
 // ─── Constants ──────────────────────────────────────────
@@ -219,7 +220,7 @@ function assemblePrompt(
   sections.push(`State: ${pr.state}`);
   if (pr.body) {
     sections.push('');
-    sections.push(pr.body);
+    sections.push(wrapXml('pr_body', pr.body));
   }
 
   // Review summaries (non-empty review bodies)
@@ -228,7 +229,7 @@ function assemblePrompt(
     sections.push('\n=== REVIEW SUMMARIES ===');
     for (const r of reviewBodies) {
       sections.push(`[${r.author.login} — ${r.state}]`);
-      sections.push(r.body);
+      sections.push(wrapXml('review_body', r.body));
       sections.push('');
     }
   }
@@ -239,7 +240,7 @@ function assemblePrompt(
     sections.push('\n=== PR COMMENTS ===');
     for (const c of prComments) {
       sections.push(`[${c.author.login}]`);
-      sections.push(c.body);
+      sections.push(wrapXml('comment_body', c.body));
       sections.push('');
     }
   }
@@ -249,11 +250,9 @@ function assemblePrompt(
     sections.push('\n=== INLINE REVIEW THREADS ===');
     for (const thread of threads) {
       sections.push(`--- ${thread.path} ---`);
-      sections.push('```diff');
-      sections.push(thread.diffHunk);
-      sections.push('```');
+      sections.push(wrapXml('diff_hunk', thread.diffHunk));
       for (const c of thread.comments) {
-        sections.push(`[${c.author}]: ${c.body}`);
+        sections.push(`[${c.author}]:\n${wrapXml('comment_body', c.body)}`);
       }
       sections.push('');
     }

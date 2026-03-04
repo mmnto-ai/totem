@@ -14,6 +14,7 @@ import {
   loadEnv,
   resolveConfigPath,
   runOrchestrator,
+  wrapXml,
   writeOutput,
 } from '../utils.js';
 
@@ -141,7 +142,7 @@ function assemblePrompt(issues: GhIssueListItem[], context: RetrievedContext): s
   // Issue inventory
   sections.push('=== OPEN ISSUES ===');
   sections.push(`Total: ${issues.length} open issues\n`);
-  sections.push(formatIssueInventory(issues));
+  sections.push(wrapXml('issue_list', formatIssueInventory(issues)));
 
   // Totem knowledge
   const specSection = formatResults(context.specs, 'RECENT SPECS & ADRs');
