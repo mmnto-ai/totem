@@ -1,5 +1,15 @@
 # @mmnto/cli
 
+## 0.4.0
+
+### Minor Changes
+
+- Add evidence-based quality gate to `totem shield` — LLM now emits a structured PASS/FAIL verdict that gates CI and pre-push hooks with a non-zero exit code on failure.
+
+### Patch Changes
+
+- @mmnto/totem@0.4.0
+
 ## 0.3.0
 
 ### Minor Changes
