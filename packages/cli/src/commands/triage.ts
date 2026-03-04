@@ -162,6 +162,7 @@ export interface TriageOptions {
   raw?: boolean;
   out?: string;
   model?: string;
+  noCache?: boolean;
 }
 
 export async function triageCommand(options: TriageOptions): Promise<void> {

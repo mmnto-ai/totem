@@ -121,17 +121,18 @@ function tryParseGeminiJson(
   const result = GeminiOutputSchema.safeParse(data);
   if (!result.success) return null;
 
-  const modelKey = Object.keys(result.data.stats.models)[0];
-  if (!modelKey) return null;
+  const allModelStats = Object.values(result.data.stats.models);
+  if (allModelStats.length === 0) return null;
 
-  const modelStats = result.data.stats.models[modelKey];
-  if (!modelStats) return null;
+  const inputTokens = allModelStats.reduce((sum, s) => sum + (s.tokens?.input ?? 0), 0);
+  const outputTokens = allModelStats.reduce((sum, s) => sum + (s.tokens?.candidates ?? 0), 0);
+  const latencyMs = allModelStats.reduce((sum, s) => sum + (s.api?.totalLatencyMs ?? 0), 0) || null;
 
   return {
     content: result.data.response,
-    inputTokens: modelStats.tokens?.input ?? 0,
-    outputTokens: modelStats.tokens?.candidates ?? 0,
-    latencyMs: modelStats.api?.totalLatencyMs ?? null,
+    inputTokens,
+    outputTokens,
+    latencyMs,
   };
 }
 
@@ -153,7 +154,10 @@ export function invokeShellOrchestrator(
   try {
     fs.writeFileSync(tempPath, prompt, { encoding: 'utf-8', mode: 0o600 });
 
-    const resolvedCmd = command.replace(/\{file\}/g, `"${tempPath}"`).replace(/\{model\}/g, model);
+    const quotedPath = IS_WIN
+      ? `"${tempPath.replace(/"/g, '""')}"`
+      : `'${tempPath.replace(/'/g, "'\\''")}'`;
+    const resolvedCmd = command.replace(/\{file\}/g, quotedPath).replace(/\{model\}/g, model);
 
     console.error(`[${tag}] Invoking orchestrator (this may take 15-60 seconds)...`);
 
@@ -162,7 +166,7 @@ export function invokeShellOrchestrator(
       cwd,
       encoding: 'utf-8',
       timeout: LLM_TIMEOUT_MS,
-      stdio: ['pipe', 'pipe', 'inherit'],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
     const wallMs = Date.now() - startMs;
 
@@ -177,9 +181,24 @@ export function invokeShellOrchestrator(
     }
 
     return { content: raw.trim(), inputTokens: null, outputTokens: null, durationMs: wallMs };
-  } catch (err) {
+  } catch (err: unknown) {
+    const execErr = err as { stderr?: Buffer | string };
+    const stderr = execErr.stderr ? execErr.stderr.toString() : '';
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`[Totem Error] Shell orchestrator command failed: ${msg}`);
+    const fullError = `${msg}\n${stderr}`;
+
+    const lowerMsg = fullError.toLowerCase();
+    if (
+      lowerMsg.includes('quota') ||
+      lowerMsg.includes('429') ||
+      lowerMsg.includes('too many requests')
+    ) {
+      const quotaErr = new Error(fullError);
+      quotaErr.name = 'QuotaError';
+      throw quotaErr;
+    }
+
+    throw new Error(`[Totem Error] Shell orchestrator command failed: ${fullError}`);
   } finally {
     try {
       fs.unlinkSync(tempPath);
@@ -224,7 +243,17 @@ export interface OrchestratorRunOptions {
   raw?: boolean;
   out?: string;
   model?: string;
+  noCache?: boolean;
 }
+
+const DEFAULT_TTLS: Record<string, number> = {
+  triage: 3600, // 1 hour
+  briefing: 1800, // 30 min
+  spec: 3600, // 1 hour
+  shield: 0,
+  handoff: 0,
+  learn: 0,
+};
 
 /**
  * Validate orchestrator config, then either output raw context (--raw) or
@@ -267,7 +296,7 @@ export function runOrchestrator(opts: {
   }
 
   const tagKey = tag.toLowerCase();
-  const model =
+  let model =
     options.model ?? config.orchestrator.overrides?.[tagKey] ?? config.orchestrator.defaultModel;
   if (!model) {
     throw new Error(
@@ -281,14 +310,111 @@ export function runOrchestrator(opts: {
   }
   console.error(`[${tag}] Model: ${model}`);
 
-  const result = invokeShellOrchestrator(
-    prompt,
-    config.orchestrator.command,
-    model,
-    cwd,
-    tag,
-    config.totemDir,
-  );
+  const ttlSeconds = config.orchestrator.cacheTtls?.[tagKey] ?? DEFAULT_TTLS[tagKey] ?? 0;
+  const useCache = ttlSeconds > 0 && !options.noCache;
+  let cachePath = '';
+
+  if (useCache) {
+    const hash = crypto
+      .createHash('sha256')
+      .update(prompt)
+      .update(model)
+      .digest('hex')
+      .slice(0, 16);
+    const cacheDir = path.join(cwd, config.totemDir, 'cache');
+    cachePath = path.join(cacheDir, `${tagKey}-${hash}.json`);
+
+    if (fs.existsSync(cachePath)) {
+      try {
+        const cacheData = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+        const ageMs = Date.now() - cacheData.timestamp;
+        if (ageMs < ttlSeconds * 1000) {
+          console.error(`[${tag}] Result loaded from cache (TTL: ${ttlSeconds}s)`);
+          return cacheData.content;
+        }
+      } catch {
+        // Ignore cache read errors
+      }
+    }
+  }
+
+  let result: OrchestratorResult;
+  try {
+    result = invokeShellOrchestrator(
+      prompt,
+      config.orchestrator.command,
+      model,
+      cwd,
+      tag,
+      config.totemDir,
+    );
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'QuotaError') {
+      const fallback = config.orchestrator.fallbackModel;
+      if (fallback && model !== fallback) {
+        console.error(
+          `[${tag}] Quota exhausted for ${model}. Retrying with fallback model: ${fallback}...`,
+        );
+        try {
+          result = invokeShellOrchestrator(
+            prompt,
+            config.orchestrator.command,
+            fallback,
+            cwd,
+            tag,
+            config.totemDir,
+          );
+          // Note: we update `model` to the fallback so telemetry logs the correct one
+          model = fallback;
+        } catch (fallbackErr: unknown) {
+          const originalMsg = err.message;
+          const fallbackMsg =
+            fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+          throw new Error(
+            `[Totem Error] Primary model '${model}' failed and fallback model '${fallback}' also failed.\n\n` +
+              `Primary error:\n${originalMsg}\n\n` +
+              `Fallback error:\n${fallbackMsg}`,
+          );
+        }
+      } else {
+        throw new Error(
+          `[Totem Error] Quota exhausted for ${model}.\n` +
+            `  Quota resets on a rolling daily window.\n` +
+            `  Options:\n` +
+            `    - Switch to a flash model: totem <command> --model <name>\n` +
+            `    - Inspect the prompt without calling the API: totem <command> --raw\n` +
+            `    - Set a fallbackModel in totem.config.ts`,
+        );
+      }
+    } else {
+      throw err;
+    }
+  }
+
+  if (useCache && result.content && result.durationMs > 0) {
+    try {
+      // Recalculate cache path — `model` may have changed to fallbackModel
+      const cacheHash = crypto
+        .createHash('sha256')
+        .update(prompt)
+        .update(model)
+        .digest('hex')
+        .slice(0, 16);
+      const cacheDir = path.join(cwd, config.totemDir, 'cache');
+      const finalCachePath = path.join(cacheDir, `${tagKey}-${cacheHash}.json`);
+      fs.mkdirSync(cacheDir, { recursive: true });
+      fs.writeFileSync(
+        finalCachePath,
+        JSON.stringify({
+          timestamp: Date.now(),
+          content: result.content,
+        }),
+        { encoding: 'utf-8', mode: 0o600 },
+      );
+    } catch {
+      // Ignore cache write errors
+    }
+  }
 
   // Log telemetry
   appendTelemetry(
