@@ -154,6 +154,19 @@ program
   });
 
 program
+  .command('anchor [lesson]')
+  .alias('add-lesson')
+  .description('Interactively add a lesson to project memory (or pass string as argument)')
+  .action(async (lesson?: string) => {
+    try {
+      const { anchorCommand } = await import('./commands/anchor.js');
+      await anchorCommand(lesson);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('learn <pr-number>')
   .description('Extract lessons from a PR review into .totem/lessons.md')
   .option('--raw', 'Output assembled prompt without LLM synthesis')
