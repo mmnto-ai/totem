@@ -159,8 +159,8 @@ program
   });
 
 program
-  .command('anchor [lesson]')
-  .alias('add-lesson')
+  .command('add-lesson [lesson]')
+  .alias('anchor')
   .description('Interactively add a lesson to project memory (or pass string as argument)')
   .action(async (lesson?: string) => {
     try {

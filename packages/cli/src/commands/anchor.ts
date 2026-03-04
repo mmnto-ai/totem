@@ -55,7 +55,7 @@ export async function anchorCommand(lessonArg?: string): Promise<void> {
       if (symptom.trim()) parts.push(`**Symptom:** ${symptom.trim()}`);
       if (fix.trim()) parts.push(`**Fix/Rule:** ${fix.trim()}`);
 
-      lessonText = parts.join('\\n');
+      lessonText = parts.join('\n');
     } finally {
       rl.close();
     }
@@ -69,10 +69,10 @@ export async function anchorCommand(lessonArg?: string): Promise<void> {
   const timestamp = new Date().toISOString();
   const tagString = tags.length > 0 ? tags.join(', ') : 'manual';
 
-  const entry = `\\n## Lesson — ${timestamp}\\n\\n**Tags:** ${tagString}\\n\\n${lessonText.trim()}\\n`;
+  const entry = `\n## Lesson — ${timestamp}\n\n**Tags:** ${tagString}\n\n${lessonText.trim()}\n`;
 
   fs.appendFileSync(lessonsPath, entry, 'utf-8');
-  console.log(`\\n[Totem] Lesson saved to ${config.totemDir}/lessons.md`);
+  console.log(`\n[Totem] Lesson saved to ${config.totemDir}/lessons.md`);
 
   const logPath = path.join(totemDir, 'mcp-sync.log');
   console.log('[Totem] Triggering background re-index...');
