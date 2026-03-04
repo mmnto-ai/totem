@@ -178,8 +178,9 @@ export function invokeShellOrchestrator(
     }
 
     return { content: raw.trim(), inputTokens: null, outputTokens: null, durationMs: wallMs };
-  } catch (err: any) {
-    const stderr = err.stderr ? err.stderr.toString() : '';
+  } catch (err: unknown) {
+    const execErr = err as { stderr?: Buffer | string };
+    const stderr = execErr.stderr ? execErr.stderr.toString() : '';
     const msg = err instanceof Error ? err.message : String(err);
     const fullError = `${msg}\n${stderr}`;
 
