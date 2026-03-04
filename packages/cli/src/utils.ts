@@ -126,7 +126,7 @@ function tryParseGeminiJson(
 
   const inputTokens = allModelStats.reduce((sum, s) => sum + (s.tokens?.input ?? 0), 0);
   const outputTokens = allModelStats.reduce((sum, s) => sum + (s.tokens?.candidates ?? 0), 0);
-  const latencyMs = allModelStats[0]?.api?.totalLatencyMs ?? null;
+  const latencyMs = allModelStats.reduce((sum, s) => sum + (s.api?.totalLatencyMs ?? 0), 0) || null;
 
   return {
     content: result.data.response,
@@ -401,7 +401,7 @@ export function runOrchestrator(opts: {
           timestamp: Date.now(),
           content: result.content,
         }),
-        'utf-8',
+        { encoding: 'utf-8', mode: 0o600 },
       );
     } catch {
       // Ignore cache write errors
