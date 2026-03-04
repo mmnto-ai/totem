@@ -41,6 +41,11 @@ Perform a hostile pre-flight code review on a git diff. Catch unhandled errors, 
 ## Output Format
 Respond with ONLY the sections below. No preamble, no closing remarks.
 
+### Verdict
+[Exactly one line: PASS or FAIL followed by " — " and a one-line reason.]
+Example: "PASS — All changes have corresponding test coverage."
+Example: "FAIL — New functionality in utils.ts lacks corresponding test updates."
+
 ### Summary
 [1-2 sentences describing what this diff does at a high level]
 
@@ -115,6 +120,19 @@ function assemblePrompt(diff: string, changedFiles: string[], context: Retrieved
   return sections.join('\n');
 }
 
+// ─── Verdict parsing ────────────────────────────────────
+
+// Matches "### Verdict" (with optional bold/whitespace), then PASS/FAIL on the next line.
+// Tolerant of: **PASS**, em-dash (—), en-dash (–), hyphen (-), colon (:), or any combo as separator.
+const VERDICT_RE =
+  /^#{1,3}\s+\*{0,2}Verdict\*{0,2}\s*\r?\n\*{0,2}(PASS|FAIL)\*{0,2}\s*(?:[—–\-:]+\s*)?(.*)$/m;
+
+export function parseVerdict(content: string): { pass: boolean; reason: string } | null {
+  const match = VERDICT_RE.exec(content);
+  if (!match) return null;
+  return { pass: match[1] === 'PASS', reason: match[2].trim() };
+}
+
 // ─── Main command ───────────────────────────────────────
 
 export interface ShieldOptions {
@@ -174,5 +192,16 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   if (content != null) {
     writeOutput(content, options.out);
     if (options.out) console.error(`[${TAG}] Written to ${options.out}`);
+
+    // Parse verdict and gate on failure (skip in --raw mode — no LLM output)
+    if (!options.raw) {
+      const verdict = parseVerdict(content);
+      if (verdict) {
+        console.error(`[${TAG}] Verdict: ${verdict.pass ? 'PASS' : 'FAIL'} — ${verdict.reason}`);
+        if (!verdict.pass) process.exit(1);
+      } else {
+        console.error(`[${TAG}] Verdict: not found (defaulting to PASS)`);
+      }
+    }
   }
 }
