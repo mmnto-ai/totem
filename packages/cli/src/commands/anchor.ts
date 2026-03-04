@@ -21,14 +21,14 @@ export async function anchorCommand(lessonArg?: string): Promise<void> {
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);
   const config = await loadConfig(configPath);
-  
+
   const totemDir = path.join(cwd, config.totemDir);
   if (!fs.existsSync(totemDir)) {
     fs.mkdirSync(totemDir, { recursive: true });
   }
 
   const lessonsPath = path.join(totemDir, 'lessons.md');
-  
+
   let lessonText = lessonArg;
   const tags: string[] = [];
 
@@ -40,16 +40,21 @@ export async function anchorCommand(lessonArg?: string): Promise<void> {
       const symptom = await rl.question('> Symptom (e.g., App crashes on reload...): ');
       const fix = await rl.question('> Fix/Rule (e.g., Use custom localStorage wrappers...): ');
       const tagStr = await rl.question('> Tags (comma separated): ');
-      
+
       if (tagStr.trim()) {
-        tags.push(...tagStr.split(',').map((t) => t.trim()).filter(Boolean));
+        tags.push(
+          ...tagStr
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean),
+        );
       }
 
       const parts: string[] = [];
       if (context.trim()) parts.push(`**Context:** ${context.trim()}`);
       if (symptom.trim()) parts.push(`**Symptom:** ${symptom.trim()}`);
       if (fix.trim()) parts.push(`**Fix/Rule:** ${fix.trim()}`);
-      
+
       lessonText = parts.join('\\n');
     } finally {
       rl.close();
@@ -63,7 +68,7 @@ export async function anchorCommand(lessonArg?: string): Promise<void> {
 
   const timestamp = new Date().toISOString();
   const tagString = tags.length > 0 ? tags.join(', ') : 'manual';
-  
+
   const entry = `\\n## Lesson — ${timestamp}\\n\\n**Tags:** ${tagString}\\n\\n${lessonText.trim()}\\n`;
 
   fs.appendFileSync(lessonsPath, entry, 'utf-8');

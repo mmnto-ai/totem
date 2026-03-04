@@ -125,6 +125,14 @@ npx @mmnto/cli triage --out docs/active_work.md
 
 _(Totem fetches your open GitHub issues, reads recent session momentum, and generates a prioritized roadmap for your next task. The AI strictly acts as a **Product Manager**, setting scope boundaries and prioritizing work based on momentum)._
 
+**Proactive Anchoring (`anchor` / `add-lesson`)**
+
+```bash
+npx @mmnto/cli anchor
+```
+
+_(Totem interactively prompts you to document a context, symptom, and fix/rule. It saves the lesson to `.totem/lessons.md` and automatically triggers a background re-index so the new knowledge is instantly available to your AI agents)._
+
 **End of Session (`handoff`)**
 
 ```bash
