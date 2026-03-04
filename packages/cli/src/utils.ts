@@ -385,10 +385,18 @@ export function runOrchestrator(opts: {
 
   if (useCache && result.content && result.durationMs > 0) {
     try {
+      // Recalculate cache path — `model` may have changed to fallbackModel
+      const cacheHash = crypto
+        .createHash('sha256')
+        .update(prompt)
+        .update(model)
+        .digest('hex')
+        .slice(0, 16);
       const cacheDir = path.join(cwd, config.totemDir, 'cache');
+      const finalCachePath = path.join(cacheDir, `${tagKey}-${cacheHash}.json`);
       fs.mkdirSync(cacheDir, { recursive: true });
       fs.writeFileSync(
-        cachePath,
+        finalCachePath,
         JSON.stringify({
           timestamp: Date.now(),
           content: result.content,
