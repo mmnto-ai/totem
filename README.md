@@ -83,15 +83,20 @@ orchestrator: {
   provider: 'shell',
   command: 'gemini --model {model} --prompt "{file}"',
   defaultModel: 'gemini-3-flash-preview',
+  fallbackModel: 'gemini-2.5-flash', // Used automatically on quota/rate-limit errors
   overrides: {
     spec: 'gemini-3.1-pro-preview',
     shield: 'gemini-3.1-pro-preview',
     triage: 'gemini-3.1-pro-preview'
+  },
+  cacheTtls: {
+    triage: 3600, // Cache results for 1 hour
+    briefing: 1800 // Cache results for 30 minutes
   }
 }
 ```
 
-Then, run the workflow commands:
+Then, run the workflow commands (pass `--no-cache` to bypass caching and force a fresh LLM call):
 
 **Session Briefings (`briefing`)**
 
