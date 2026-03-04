@@ -48,6 +48,8 @@ export const ShellOrchestratorSchema = z.object({
   defaultModel: z.string().optional(),
   /** Optional per-command model overrides (e.g., { 'spec': 'gemini-3.1-pro-preview' }) */
   overrides: z.record(z.string()).optional(),
+  /** Optional per-command cache TTLs in seconds (e.g., { 'triage': 3600, 'shield': 0 }) */
+  cacheTtls: z.record(z.number()).optional(),
 });
 
 export const OrchestratorSchema = z.discriminatedUnion('provider', [ShellOrchestratorSchema]);

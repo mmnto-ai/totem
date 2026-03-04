@@ -83,6 +83,7 @@ program
   .option('--raw', 'Output retrieved context without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
+  .option('--no-cache', 'Bypass cache and force a fresh LLM call')
   .action(async (input: string, opts: { raw?: boolean; out?: string; model?: string }) => {
     try {
       const { specCommand } = await import('./commands/spec.js');
@@ -98,6 +99,7 @@ program
   .option('--raw', 'Output retrieved context without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
+  .option('--no-cache', 'Bypass cache and force a fresh LLM call')
   .action(async (opts: { raw?: boolean; out?: string; model?: string }) => {
     try {
       const { briefingCommand } = await import('./commands/briefing.js');
@@ -113,6 +115,7 @@ program
   .option('--raw', 'Output retrieved context without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
+  .option('--no-cache', 'Bypass cache and force a fresh LLM call')
   .option('--staged', 'Review only staged changes (default: all uncommitted)')
   .action(async (opts: { raw?: boolean; out?: string; model?: string; staged?: boolean }) => {
     try {
@@ -129,6 +132,7 @@ program
   .option('--raw', 'Output retrieved context without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
+  .option('--no-cache', 'Bypass cache and force a fresh LLM call')
   .action(async (opts: { raw?: boolean; out?: string; model?: string }) => {
     try {
       const { triageCommand } = await import('./commands/triage.js');
@@ -144,6 +148,7 @@ program
   .option('--raw', 'Output retrieved context without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
+  .option('--no-cache', 'Bypass cache and force a fresh LLM call')
   .action(async (opts: { raw?: boolean; out?: string; model?: string }) => {
     try {
       const { handoffCommand } = await import('./commands/handoff.js');

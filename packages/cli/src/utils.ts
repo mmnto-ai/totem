@@ -224,7 +224,17 @@ export interface OrchestratorRunOptions {
   raw?: boolean;
   out?: string;
   model?: string;
+  noCache?: boolean;
 }
+
+const DEFAULT_TTLS: Record<string, number> = {
+  triage: 3600, // 1 hour
+  briefing: 1800, // 30 min
+  spec: 3600, // 1 hour
+  shield: 0,
+  handoff: 0,
+  learn: 0,
+};
 
 /**
  * Validate orchestrator config, then either output raw context (--raw) or
@@ -281,6 +291,34 @@ export function runOrchestrator(opts: {
   }
   console.error(`[${tag}] Model: ${model}`);
 
+  const ttlSeconds = config.orchestrator.cacheTtls?.[tagKey] ?? DEFAULT_TTLS[tagKey] ?? 0;
+  const useCache = ttlSeconds > 0 && !options.noCache;
+  let cachePath = '';
+
+  if (useCache) {
+    const hash = crypto
+      .createHash('sha256')
+      .update(prompt)
+      .update(model)
+      .digest('hex')
+      .slice(0, 16);
+    const cacheDir = path.join(cwd, config.totemDir, 'cache');
+    cachePath = path.join(cacheDir, `${tagKey}-${hash}.json`);
+
+    if (fs.existsSync(cachePath)) {
+      try {
+        const cacheData = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+        const ageMs = Date.now() - cacheData.timestamp;
+        if (ageMs < ttlSeconds * 1000) {
+          console.error(`[${tag}] Result loaded from cache (TTL: ${ttlSeconds}s)`);
+          return cacheData.content;
+        }
+      } catch {
+        // Ignore cache read errors
+      }
+    }
+  }
+
   const result = invokeShellOrchestrator(
     prompt,
     config.orchestrator.command,
@@ -289,6 +327,23 @@ export function runOrchestrator(opts: {
     tag,
     config.totemDir,
   );
+
+  if (useCache && result.content && result.durationMs > 0) {
+    try {
+      const cacheDir = path.join(cwd, config.totemDir, 'cache');
+      fs.mkdirSync(cacheDir, { recursive: true });
+      fs.writeFileSync(
+        cachePath,
+        JSON.stringify({
+          timestamp: Date.now(),
+          content: result.content,
+        }),
+        'utf-8',
+      );
+    } catch {
+      // Ignore cache write errors
+    }
+  }
 
   // Log telemetry
   appendTelemetry(

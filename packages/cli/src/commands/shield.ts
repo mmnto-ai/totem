@@ -121,6 +121,7 @@ export interface ShieldOptions {
   raw?: boolean;
   out?: string;
   model?: string;
+  noCache?: boolean;
   staged?: boolean;
 }
 
