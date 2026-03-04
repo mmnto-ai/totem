@@ -348,8 +348,8 @@ export function runOrchestrator(opts: {
       tag,
       config.totemDir,
     );
-  } catch (err: any) {
-    if (err.name === 'QuotaError') {
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'QuotaError') {
       const fallback = config.orchestrator.fallbackModel;
       if (fallback && model !== fallback) {
         console.error(
