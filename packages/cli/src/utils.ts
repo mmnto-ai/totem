@@ -355,16 +355,27 @@ export function runOrchestrator(opts: {
         console.error(
           `[${tag}] Quota exhausted for ${model}. Retrying with fallback model: ${fallback}...`,
         );
-        result = invokeShellOrchestrator(
-          prompt,
-          config.orchestrator.command,
-          fallback,
-          cwd,
-          tag,
-          config.totemDir,
-        );
-        // Note: we update `model` to the fallback so telemetry logs the correct one
-        model = fallback;
+        try {
+          result = invokeShellOrchestrator(
+            prompt,
+            config.orchestrator.command,
+            fallback,
+            cwd,
+            tag,
+            config.totemDir,
+          );
+          // Note: we update `model` to the fallback so telemetry logs the correct one
+          model = fallback;
+        } catch (fallbackErr: unknown) {
+          const originalMsg = err.message;
+          const fallbackMsg =
+            fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+          throw new Error(
+            `[Totem Error] Primary model '${model}' failed and fallback model '${fallback}' also failed.\n\n` +
+              `Primary error:\n${originalMsg}\n\n` +
+              `Fallback error:\n${fallbackMsg}`,
+          );
+        }
       } else {
         throw new Error(
           `[Totem Error] Quota exhausted for ${model}.\n` +
