@@ -15,6 +15,7 @@ import {
   loadEnv,
   resolveConfigPath,
   runOrchestrator,
+  wrapXml,
   writeOutput,
 } from '../utils.js';
 
@@ -126,7 +127,9 @@ function assemblePrompt(
   // Git state
   sections.push('=== GIT STATE ===');
   sections.push(`Branch: ${branch}`);
-  sections.push(`Uncommitted changes:\n${status || '(clean working tree)'}`);
+  sections.push(
+    `Uncommitted changes:\n${status ? wrapXml('git_status', status) : '(clean working tree)'}`,
+  );
 
   // Open PRs
   sections.push('\n=== OPEN PULL REQUESTS ===');

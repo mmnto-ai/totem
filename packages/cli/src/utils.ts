@@ -222,6 +222,18 @@ export function writeOutput(content: string, outPath?: string): void {
   }
 }
 
+// ─── XML delimiting ─────────────────────────────────────
+
+/**
+ * Wrap external/user-supplied content in XML tags to create a clear boundary
+ * between system instructions and passive data. Escapes matching closing tags
+ * in the content to prevent breakout.
+ */
+export function wrapXml(tag: string, content: string): string {
+  const escaped = content.replaceAll(`</${tag}>`, `<\\/${tag}>`);
+  return `<${tag}>\n${escaped}\n</${tag}>`;
+}
+
 // ─── Context formatting ─────────────────────────────────
 
 const MAX_RESULT_CONTENT_LENGTH = 300;

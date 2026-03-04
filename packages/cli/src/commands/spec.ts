@@ -14,6 +14,7 @@ import {
   loadEnv,
   resolveConfigPath,
   runOrchestrator,
+  wrapXml,
   writeOutput,
 } from '../utils.js';
 
@@ -138,7 +139,7 @@ function assemblePrompt(
     sections.push(`State: ${issue.state}`);
     if (issue.body) {
       sections.push('');
-      sections.push(issue.body);
+      sections.push(wrapXml('issue_body', issue.body));
     }
   } else if (freeText) {
     sections.push('=== TOPIC ===');
