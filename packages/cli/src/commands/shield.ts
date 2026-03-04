@@ -198,7 +198,9 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     if (!options.raw) {
       const verdict = parseVerdict(content);
       if (verdict) {
-        console.error(`[${TAG}] Verdict: ${verdict.pass ? 'PASS' : 'FAIL'}${verdict.reason ? ` — ${verdict.reason}` : ''}`);
+        console.error(
+          `[${TAG}] Verdict: ${verdict.pass ? 'PASS' : 'FAIL'}${verdict.reason ? ` — ${verdict.reason}` : ''}`,
+        );
         if (!verdict.pass) process.exit(1);
       } else {
         console.error(`[${TAG}] Verdict: not found (defaulting to FAIL — fix LLM output format)`);
