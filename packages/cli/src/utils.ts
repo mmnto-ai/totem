@@ -230,7 +230,11 @@ export function writeOutput(content: string, outPath?: string): void {
  * in the content to prevent breakout.
  */
 export function wrapXml(tag: string, content: string): string {
-  const escaped = content.replace(new RegExp('<\\/\\s*' + tag + '\\s*>', 'gi'), `&lt;/${tag}&gt;`);
+  const safeTag = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escaped = content.replace(
+    new RegExp('<\\/\\s*' + safeTag + '\\s*>', 'gi'),
+    `&lt;/${tag}&gt;`,
+  );
   return `<${tag}>\n${escaped}\n</${tag}>`;
 }
 
