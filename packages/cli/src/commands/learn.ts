@@ -252,7 +252,7 @@ function assemblePrompt(
       sections.push(`--- ${thread.path} ---`);
       sections.push(wrapXml('diff_hunk', thread.diffHunk));
       for (const c of thread.comments) {
-        sections.push(`[${c.author}]: ${wrapXml('comment_body', c.body)}`);
+        sections.push(`[${c.author}]:\n${wrapXml('comment_body', c.body)}`);
       }
       sections.push('');
     }
