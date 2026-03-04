@@ -121,17 +121,18 @@ function tryParseGeminiJson(
   const result = GeminiOutputSchema.safeParse(data);
   if (!result.success) return null;
 
-  const modelKey = Object.keys(result.data.stats.models)[0];
-  if (!modelKey) return null;
+  const allModelStats = Object.values(result.data.stats.models);
+  if (allModelStats.length === 0) return null;
 
-  const modelStats = result.data.stats.models[modelKey];
-  if (!modelStats) return null;
+  const inputTokens = allModelStats.reduce((sum, s) => sum + (s.tokens?.input ?? 0), 0);
+  const outputTokens = allModelStats.reduce((sum, s) => sum + (s.tokens?.candidates ?? 0), 0);
+  const latencyMs = allModelStats[0]?.api?.totalLatencyMs ?? null;
 
   return {
     content: result.data.response,
-    inputTokens: modelStats.tokens?.input ?? 0,
-    outputTokens: modelStats.tokens?.candidates ?? 0,
-    latencyMs: modelStats.api?.totalLatencyMs ?? null,
+    inputTokens,
+    outputTokens,
+    latencyMs,
   };
 }
 
@@ -162,7 +163,7 @@ export function invokeShellOrchestrator(
       cwd,
       encoding: 'utf-8',
       timeout: LLM_TIMEOUT_MS,
-      stdio: ['pipe', 'pipe', 'inherit'],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
     const wallMs = Date.now() - startMs;
 
@@ -177,8 +178,25 @@ export function invokeShellOrchestrator(
     }
 
     return { content: raw.trim(), inputTokens: null, outputTokens: null, durationMs: wallMs };
-  } catch (err) {
+  } catch (err: any) {
+    const stderr = err.stderr ? err.stderr.toString() : '';
     const msg = err instanceof Error ? err.message : String(err);
+    const fullError = `${msg}\n${stderr}`;
+
+    const lowerMsg = fullError.toLowerCase();
+    if (
+      lowerMsg.includes('quota') ||
+      lowerMsg.includes('429') ||
+      lowerMsg.includes('too many requests')
+    ) {
+      const quotaErr = new Error(fullError);
+      quotaErr.name = 'QuotaError';
+      throw quotaErr;
+    }
+
+    if (stderr) {
+      console.error(stderr);
+    }
     throw new Error(`[Totem Error] Shell orchestrator command failed: ${msg}`);
   } finally {
     try {
@@ -277,7 +295,7 @@ export function runOrchestrator(opts: {
   }
 
   const tagKey = tag.toLowerCase();
-  const model =
+  let model =
     options.model ?? config.orchestrator.overrides?.[tagKey] ?? config.orchestrator.defaultModel;
   if (!model) {
     throw new Error(
@@ -319,14 +337,47 @@ export function runOrchestrator(opts: {
     }
   }
 
-  const result = invokeShellOrchestrator(
-    prompt,
-    config.orchestrator.command,
-    model,
-    cwd,
-    tag,
-    config.totemDir,
-  );
+  let result: OrchestratorResult;
+  try {
+    result = invokeShellOrchestrator(
+      prompt,
+      config.orchestrator.command,
+      model,
+      cwd,
+      tag,
+      config.totemDir,
+    );
+  } catch (err: any) {
+    if (err.name === 'QuotaError') {
+      const fallback = config.orchestrator.fallbackModel;
+      if (fallback && model !== fallback) {
+        console.error(
+          `[${tag}] Quota exhausted for ${model}. Retrying with fallback model: ${fallback}...`,
+        );
+        result = invokeShellOrchestrator(
+          prompt,
+          config.orchestrator.command,
+          fallback,
+          cwd,
+          tag,
+          config.totemDir,
+        );
+        // Note: we update `model` to the fallback so telemetry logs the correct one
+        model = fallback;
+      } else {
+        throw new Error(
+          `[Totem Error] Quota exhausted for ${model}.\n` +
+            `  Quota resets on a rolling daily window.\n` +
+            `  Options:\n` +
+            `    - Switch to a flash model: totem <command> --model <name>\n` +
+            `    - Inspect the prompt without calling the API: totem <command> --raw\n` +
+            `    - Set a fallbackModel in totem.config.ts`,
+        );
+      }
+    } else {
+      throw err;
+    }
+  }
 
   if (useCache && result.content && result.durationMs > 0) {
     try {

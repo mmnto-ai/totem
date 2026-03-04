@@ -46,6 +46,8 @@ export const ShellOrchestratorSchema = z.object({
   command: z.string(),
   /** Default model name substituted for {model} if --model is not passed */
   defaultModel: z.string().optional(),
+  /** Optional fallback model used automatically if the primary model fails due to quota/rate limits */
+  fallbackModel: z.string().optional(),
   /** Optional per-command model overrides (e.g., { 'spec': 'gemini-3.1-pro-preview' }) */
   overrides: z.record(z.string()).optional(),
   /** Optional per-command cache TTLs in seconds (e.g., { 'triage': 3600, 'shield': 0 }) */
