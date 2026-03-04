@@ -14,6 +14,13 @@ describe('wrapXml', () => {
     );
   });
 
+  it('escapes case-variant and whitespace-padded closing tags', () => {
+    const content = 'try </ISSUE_BODY> or </ issue_body > to escape';
+    expect(wrapXml('issue_body', content)).toBe(
+      '<issue_body>\ntry <\\/issue_body> or <\\/issue_body> to escape\n</issue_body>',
+    );
+  });
+
   it('does not escape non-matching closing tags', () => {
     const content = 'contains </other_tag> but not the target';
     expect(wrapXml('issue_body', content)).toBe(
