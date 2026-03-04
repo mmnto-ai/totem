@@ -200,7 +200,8 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
         console.error(`[${TAG}] Verdict: ${verdict.pass ? 'PASS' : 'FAIL'} — ${verdict.reason}`);
         if (!verdict.pass) process.exit(1);
       } else {
-        console.error(`[${TAG}] Verdict: not found (defaulting to PASS)`);
+        console.error(`[${TAG}] Verdict: not found (defaulting to FAIL — fix LLM output format)`);
+        process.exit(1);
       }
     }
   }
