@@ -198,10 +198,7 @@ export function invokeShellOrchestrator(
       throw quotaErr;
     }
 
-    if (stderr) {
-      console.error(stderr);
-    }
-    throw new Error(`[Totem Error] Shell orchestrator command failed: ${msg}`);
+    throw new Error(`[Totem Error] Shell orchestrator command failed: ${fullError}`);
   } finally {
     try {
       fs.unlinkSync(tempPath);

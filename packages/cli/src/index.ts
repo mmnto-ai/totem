@@ -84,14 +84,19 @@ program
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
   .option('--no-cache', 'Bypass cache and force a fresh LLM call')
-  .action(async (input: string, opts: { raw?: boolean; out?: string; model?: string }) => {
-    try {
-      const { specCommand } = await import('./commands/spec.js');
-      await specCommand(input, opts);
-    } catch (err) {
-      handleError(err);
-    }
-  });
+  .action(
+    async (
+      input: string,
+      opts: { raw?: boolean; out?: string; model?: string; noCache?: boolean },
+    ) => {
+      try {
+        const { specCommand } = await import('./commands/spec.js');
+        await specCommand(input, opts);
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
 
 program
   .command('briefing')
@@ -100,7 +105,7 @@ program
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
   .option('--no-cache', 'Bypass cache and force a fresh LLM call')
-  .action(async (opts: { raw?: boolean; out?: string; model?: string }) => {
+  .action(async (opts: { raw?: boolean; out?: string; model?: string; noCache?: boolean }) => {
     try {
       const { briefingCommand } = await import('./commands/briefing.js');
       await briefingCommand(opts);
@@ -117,14 +122,22 @@ program
   .option('--model <name>', 'Override the default model for the orchestrator')
   .option('--no-cache', 'Bypass cache and force a fresh LLM call')
   .option('--staged', 'Review only staged changes (default: all uncommitted)')
-  .action(async (opts: { raw?: boolean; out?: string; model?: string; staged?: boolean }) => {
-    try {
-      const { shieldCommand } = await import('./commands/shield.js');
-      await shieldCommand(opts);
-    } catch (err) {
-      handleError(err);
-    }
-  });
+  .action(
+    async (opts: {
+      raw?: boolean;
+      out?: string;
+      model?: string;
+      noCache?: boolean;
+      staged?: boolean;
+    }) => {
+      try {
+        const { shieldCommand } = await import('./commands/shield.js');
+        await shieldCommand(opts);
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
 
 program
   .command('triage')
@@ -133,7 +146,7 @@ program
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
   .option('--no-cache', 'Bypass cache and force a fresh LLM call')
-  .action(async (opts: { raw?: boolean; out?: string; model?: string }) => {
+  .action(async (opts: { raw?: boolean; out?: string; model?: string; noCache?: boolean }) => {
     try {
       const { triageCommand } = await import('./commands/triage.js');
       await triageCommand(opts);
@@ -149,7 +162,7 @@ program
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
   .option('--no-cache', 'Bypass cache and force a fresh LLM call')
-  .action(async (opts: { raw?: boolean; out?: string; model?: string }) => {
+  .action(async (opts: { raw?: boolean; out?: string; model?: string; noCache?: boolean }) => {
     try {
       const { handoffCommand } = await import('./commands/handoff.js');
       await handoffCommand(opts);
