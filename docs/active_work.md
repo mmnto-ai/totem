@@ -1,15 +1,14 @@
 # Active Work
 
-## Current Focus: The Reflex Engine
+## Current Focus: Phase 1 Onboarding & Polish
 
-We are currently focusing on the **Reflex Engine** (Epic #19).
-
-Our goal is to ensure that a user who installs Totem does not have to spend 20 minutes coaxing their AI to use the tools.
+We have completed Epic #19 (The Reflex Engine) and are now focused on polishing the "Magic" Onboarding experience (Phase 1) before shifting to core stability and safety.
 
 ### Active Tasks
 
-1. Upgrading `totem init` to auto-inject System Prompts into `CLAUDE.md`, `.gemini/gemini.md`, etc.
-2. Automating git hooks so `totem sync` runs in the background.
+1. **#89 UX Polish for `totem init`:** Fix double-prompting and print clean success summaries so developers trust the onboarding.
+2. **Epic #86 Seamless Host Integration:** Expand beyond dogfooding to properly package Totem integration instructions, auto-scaffolding, and skills/custom commands for Gemini CLI, Claude Code, and Cursor.
+3. **#21 CLI UI/UX Polish:** Swap generic `console.log` for `@clack/prompts` and `ora` spinners to make the CLI feel premium.
 
 ## Dogfooding: Session Start Hooks
 
@@ -73,4 +72,9 @@ Add a `hooks` section alongside existing MCP server config:
 
 ## Next Up
 
-After the Reflex Engine is robust, we will begin porting the workflow commands (`totem spec`, `totem shield`) for Epic #20 (The Workflow Orchestrator).
+After the Phase 1 Onboarding polish is complete, we will move on to **Phase 2: Core Stability & Data Safety**. This includes:
+
+1. #91 Normalize LanceDB paths (Windows backslash fixes)
+2. #90 Refactor to `IssueAdapter` (decouple from GitHub)
+3. #77 Test audit (backfill CLI unit tests)
+4. #78 Shell escaping edge cases

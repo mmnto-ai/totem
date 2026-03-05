@@ -1,15 +1,12 @@
-import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
-
-import { z } from 'zod';
 
 import type { ContentType, SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore } from '@mmnto/totem';
 
+import { GitHubCliAdapter } from '../adapters/github-cli.js';
+import type { StandardIssueListItem } from '../adapters/issue-adapter.js';
 import {
   formatResults,
-  GH_TIMEOUT_MS,
-  IS_WIN,
   loadConfig,
   loadEnv,
   resolveConfigPath,
@@ -58,46 +55,7 @@ Respond with ONLY the sections below. No preamble, no closing remarks.
 [Issues that cannot progress without external input, decisions, or prerequisite work. If none, say "None identified."]
 `;
 
-// ─── GitHub helpers ─────────────────────────────────────
-
-const GhIssueListItemSchema = z.object({
-  number: z.number(),
-  title: z.string(),
-  labels: z.array(z.object({ name: z.string() })),
-  updatedAt: z.string().datetime(),
-});
-type GhIssueListItem = z.infer<typeof GhIssueListItemSchema>;
-
-function fetchOpenIssues(cwd: string): GhIssueListItem[] {
-  try {
-    const result = execFileSync(
-      'gh',
-      [
-        'issue',
-        'list',
-        '--state',
-        'open',
-        '--json',
-        'number,title,labels,updatedAt',
-        '--limit',
-        String(GH_ISSUE_LIMIT),
-      ],
-      { cwd, encoding: 'utf-8', timeout: GH_TIMEOUT_MS, shell: IS_WIN },
-    );
-    return z.array(GhIssueListItemSchema).parse(JSON.parse(result));
-  } catch (err) {
-    if (err instanceof z.ZodError) {
-      throw new Error(`[Totem Error] Failed to parse GitHub issue list response: ${err.message}`);
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('ENOENT') || msg.includes('not found')) {
-      throw new Error(
-        `[Totem Error] GitHub CLI (gh) is required for issue fetching. Install: https://cli.github.com`,
-      );
-    }
-    throw new Error(`[Totem Error] Failed to fetch open issues: ${msg}`);
-  }
-}
+// ─── Issue helpers ──────────────────────────────────────
 
 // ─── LanceDB retrieval ─────────────────────────────────
 
@@ -118,17 +76,17 @@ async function retrieveContext(query: string, store: LanceStore): Promise<Retrie
   return { specs, sessions };
 }
 
-function buildSearchQuery(issues: GhIssueListItem[]): string {
+function buildSearchQuery(issues: StandardIssueListItem[]): string {
   const titles = issues.map((i) => i.title).join(' ');
-  const labels = [...new Set(issues.flatMap((i) => i.labels.map((l) => l.name)))].join(' ');
+  const labels = [...new Set(issues.flatMap((i) => i.labels))].join(' ');
   return `${titles} ${labels}`.slice(0, QUERY_TITLES_TRUNCATE).trim();
 }
 
 // ─── Prompt assembly ────────────────────────────────────
 
-function formatIssueInventory(issues: GhIssueListItem[]): string {
+function formatIssueInventory(issues: StandardIssueListItem[]): string {
   const rows = issues.map((i) => {
-    const labels = i.labels.map((l) => l.name).join(', ') || '(none)';
+    const labels = i.labels.join(', ') || '(none)';
     const updated = i.updatedAt.slice(0, 10); // YYYY-MM-DD
     return `| #${i.number} | ${i.title} | ${labels} | ${updated} |`;
   });
@@ -136,7 +94,7 @@ function formatIssueInventory(issues: GhIssueListItem[]): string {
   return ['| Issue | Title | Labels | Updated |', '|---|---|---|---|', ...rows].join('\n');
 }
 
-function assemblePrompt(issues: GhIssueListItem[], context: RetrievedContext): string {
+function assemblePrompt(issues: StandardIssueListItem[], context: RetrievedContext): string {
   const sections: string[] = [SYSTEM_PROMPT];
 
   // Issue inventory
@@ -163,7 +121,7 @@ export interface TriageOptions {
   raw?: boolean;
   out?: string;
   model?: string;
-  noCache?: boolean;
+  fresh?: boolean;
 }
 
 export async function triageCommand(options: TriageOptions): Promise<void> {
@@ -174,7 +132,8 @@ export async function triageCommand(options: TriageOptions): Promise<void> {
 
   // Fetch open issues
   console.error(`[${TAG}] Fetching open issues...`);
-  const issues = fetchOpenIssues(cwd);
+  const adapter = new GitHubCliAdapter(cwd);
+  const issues = adapter.fetchOpenIssues(GH_ISSUE_LIMIT);
 
   if (issues.length === 0) {
     console.error(`[${TAG}] No open issues found. Nothing to triage.`);

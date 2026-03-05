@@ -21,7 +21,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 **Goal:** If users can't install Totem easily and don't trust what it does, advanced features won't matter. Make onboarding frictionless and the CLI feel premium.
 
-- [ ] **#87 Auto-configure AI tools:** `totem init` scaffolds `.gemini/settings.json`, `CLAUDE.md`, and `.cursorrules` automatically.
+- [x] **#87 Auto-configure AI tools:** `totem init` scaffolds `.gemini/settings.json`, `CLAUDE.md`, and `.cursorrules` automatically.
 - [ ] **#89 UX Polish for `totem init`:** Fix double-prompting and print clean success summaries so developers trust the onboarding.
 - [ ] **#86 Seamless Host Integration:** Build the `SessionStart` hooks, Claude custom commands, and `Totem Architect` skills that #87 installs.
 - [ ] **#21 CLI UI/UX Polish:** Swap generic `console.log` for `@clack/prompts` and `ora` spinners.
@@ -31,7 +31,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 **Goal:** Before ingesting enterprise databases, the local vector index and LLM prompts must be bulletproof across all environments.
 
-- [ ] **#80 Security: Add XML delimiting:** Close the prompt injection gap in orchestrator commands.
+- [x] **#80 Security: Add XML delimiting:** Close the prompt injection gap in orchestrator commands.
 - [ ] **#91 Normalize LanceDB paths:** Fix Windows backslash issues before users share `.lancedb` folders across OS boundaries.
 - [ ] **#90 Refactor to `IssueAdapter`:** Extract `gh` CLI logic into an interface to decouple from GitHub.
 - [ ] **#77 Test audit:** Backfill CLI unit tests using the newly added Vitest infrastructure.
@@ -55,4 +55,4 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [ ] **#79 Documentation Ingestion Pipeline:** Build Pull/Push models for Notion, Confluence, or internal wikis.
 - [ ] **#34 Configurable Governance:** Let enterprise teams configure AI review loops (`auditLoopLimit`, `shieldSeverityThreshold`).
 - [ ] **#42 Universal AI DevEx:** Evolve `totem init` to inject "Best Practices" guardrails (Anti-Refactor, Test Coverage triggers).
-- [ ] Implement Changesets and npm publishing (Issue #5 / #46)
+- [x] Implement Changesets and npm publishing (Issue #5 / #46)

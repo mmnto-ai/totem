@@ -328,7 +328,7 @@ export interface LearnOptions {
   raw?: boolean;
   out?: string;
   model?: string;
-  noCache?: boolean;
+  fresh?: boolean;
   dryRun?: boolean;
 }
 

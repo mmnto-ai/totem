@@ -83,11 +83,11 @@ program
   .option('--raw', 'Output retrieved context without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
-  .option('--no-cache', 'Bypass cache and force a fresh LLM call')
+  .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
   .action(
     async (
       input: string,
-      opts: { raw?: boolean; out?: string; model?: string; noCache?: boolean },
+      opts: { raw?: boolean; out?: string; model?: string; fresh?: boolean },
     ) => {
       try {
         const { specCommand } = await import('./commands/spec.js');
@@ -104,8 +104,8 @@ program
   .option('--raw', 'Output retrieved context without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
-  .option('--no-cache', 'Bypass cache and force a fresh LLM call')
-  .action(async (opts: { raw?: boolean; out?: string; model?: string; noCache?: boolean }) => {
+  .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
+  .action(async (opts: { raw?: boolean; out?: string; model?: string; fresh?: boolean }) => {
     try {
       const { briefingCommand } = await import('./commands/briefing.js');
       await briefingCommand(opts);
@@ -120,14 +120,14 @@ program
   .option('--raw', 'Output retrieved context without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
-  .option('--no-cache', 'Bypass cache and force a fresh LLM call')
+  .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
   .option('--staged', 'Review only staged changes (default: all uncommitted)')
   .action(
     async (opts: {
       raw?: boolean;
       out?: string;
       model?: string;
-      noCache?: boolean;
+      fresh?: boolean;
       staged?: boolean;
     }) => {
       try {
@@ -145,8 +145,8 @@ program
   .option('--raw', 'Output retrieved context without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
-  .option('--no-cache', 'Bypass cache and force a fresh LLM call')
-  .action(async (opts: { raw?: boolean; out?: string; model?: string; noCache?: boolean }) => {
+  .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
+  .action(async (opts: { raw?: boolean; out?: string; model?: string; fresh?: boolean }) => {
     try {
       const { triageCommand } = await import('./commands/triage.js');
       await triageCommand(opts);
@@ -161,8 +161,8 @@ program
   .option('--raw', 'Output retrieved context without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
-  .option('--no-cache', 'Bypass cache and force a fresh LLM call')
-  .action(async (opts: { raw?: boolean; out?: string; model?: string; noCache?: boolean }) => {
+  .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
+  .action(async (opts: { raw?: boolean; out?: string; model?: string; fresh?: boolean }) => {
     try {
       const { handoffCommand } = await import('./commands/handoff.js');
       await handoffCommand(opts);
@@ -190,11 +190,12 @@ program
   .option('--raw', 'Output assembled prompt without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
+  .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
   .option('--dry-run', 'Show extracted lessons without writing to lessons.md')
   .action(
     async (
       prNumber: string,
-      opts: { raw?: boolean; out?: string; model?: string; dryRun?: boolean },
+      opts: { raw?: boolean; out?: string; model?: string; fresh?: boolean; dryRun?: boolean },
     ) => {
       try {
         const { learnCommand } = await import('./commands/learn.js');

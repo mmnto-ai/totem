@@ -259,7 +259,7 @@ export interface OrchestratorRunOptions {
   raw?: boolean;
   out?: string;
   model?: string;
-  noCache?: boolean;
+  fresh?: boolean;
 }
 
 const DEFAULT_TTLS: Record<string, number> = {
@@ -327,7 +327,7 @@ export function runOrchestrator(opts: {
   console.error(`[${tag}] Model: ${model}`);
 
   const ttlSeconds = config.orchestrator.cacheTtls?.[tagKey] ?? DEFAULT_TTLS[tagKey] ?? 0;
-  const useCache = ttlSeconds > 0 && !options.noCache;
+  const useCache = ttlSeconds > 0 && !options.fresh;
   let cachePath = '';
 
   if (useCache) {

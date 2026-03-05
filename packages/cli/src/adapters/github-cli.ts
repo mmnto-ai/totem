@@ -1,0 +1,111 @@
+import { execFileSync } from 'node:child_process';
+
+import { z } from 'zod';
+
+import { GH_TIMEOUT_MS, IS_WIN } from '../utils.js';
+import type { IssueAdapter, StandardIssue, StandardIssueListItem } from './issue-adapter.js';
+
+// ─── Zod schemas for GitHub CLI JSON output ─────────────
+
+const GhIssueSchema = z.object({
+  number: z.number(),
+  title: z.string(),
+  body: z.string().nullable(),
+  labels: z.array(z.object({ name: z.string() })),
+  state: z.string(),
+});
+
+const GhIssueListItemSchema = z.object({
+  number: z.number(),
+  title: z.string(),
+  labels: z.array(z.object({ name: z.string() })),
+  updatedAt: z.string().datetime(),
+});
+
+// ─── Shared error handling ──────────────────────────────
+
+function handleGhError(err: unknown, context: string): never {
+  if (err instanceof Error && err.message.includes('[Totem Error]')) {
+    throw err;
+  }
+  if (err instanceof z.ZodError) {
+    throw new Error(`[Totem Error] Failed to parse GitHub ${context}: ${err.message}`);
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes('ENOENT')) {
+    throw new Error(
+      `[Totem Error] GitHub CLI (gh) is required for issue fetching. Install: https://cli.github.com`,
+    );
+  }
+  throw new Error(`[Totem Error] Failed to fetch ${context}: ${msg}`);
+}
+
+// ─── Adapter implementation ─────────────────────────────
+
+const DEFAULT_ISSUE_LIMIT = 100;
+
+export class GitHubCliAdapter implements IssueAdapter {
+  constructor(private cwd: string) {}
+
+  private fetchAndParse<T>(args: string[], schema: z.ZodType<T>, context: string): T {
+    try {
+      const raw = execFileSync('gh', args, {
+        cwd: this.cwd,
+        encoding: 'utf-8',
+        timeout: GH_TIMEOUT_MS,
+        shell: IS_WIN,
+      });
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new Error(
+          `[Totem Error] GitHub CLI returned invalid JSON for ${context}. Are you authenticated?`,
+        );
+      }
+
+      return schema.parse(parsed);
+    } catch (err) {
+      handleGhError(err, context);
+    }
+  }
+
+  fetchIssue(issueNumber: number): StandardIssue {
+    const issue = this.fetchAndParse(
+      ['issue', 'view', String(issueNumber), '--json', 'number,title,body,labels,state'],
+      GhIssueSchema,
+      `issue #${issueNumber}`,
+    );
+    return {
+      number: issue.number,
+      title: issue.title,
+      body: issue.body ?? '',
+      state: issue.state,
+      labels: issue.labels.map((l) => l.name),
+    };
+  }
+
+  fetchOpenIssues(limit: number = DEFAULT_ISSUE_LIMIT): StandardIssueListItem[] {
+    const issues = this.fetchAndParse(
+      [
+        'issue',
+        'list',
+        '--state',
+        'open',
+        '--json',
+        'number,title,labels,updatedAt',
+        '--limit',
+        String(limit),
+      ],
+      z.array(GhIssueListItemSchema),
+      'open issues',
+    );
+    return issues.map((i) => ({
+      number: i.number,
+      title: i.title,
+      labels: i.labels.map((l) => l.name),
+      updatedAt: i.updatedAt,
+    }));
+  }
+}

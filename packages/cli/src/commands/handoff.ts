@@ -118,7 +118,7 @@ export interface HandoffOptions {
   raw?: boolean;
   out?: string;
   model?: string;
-  noCache?: boolean;
+  fresh?: boolean;
 }
 
 export async function handoffCommand(options: HandoffOptions): Promise<void> {

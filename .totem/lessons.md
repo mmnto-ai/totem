@@ -94,3 +94,51 @@ Isolate `JSON.parse` in its own try/catch block when processing external CLI out
 **Tags:** cli, design-decision
 
 For rough diagnostic summaries or progress indicators, `string.length` is often sufficient for size approximations in primarily English/ASCII contexts. Avoiding byte-precision calculations for non-critical displays reduces code complexity when the difference is negligible for the use case.
+
+## Lesson — 2026-03-05T03:12:04.126Z
+
+**Tags:** architecture, adapter-pattern, issue-tracker, pivot
+
+The IssueAdapter interface lives at `packages/cli/src/adapters/issue-adapter.ts` with `StandardIssue` and `StandardIssueListItem` types. The GitHub implementation is `GitHubCliAdapter` at `packages/cli/src/adapters/github-cli.ts`. Future issue tracker adapters (Jira, Linear) should implement the same interface. PR-related gh calls (briefing.ts, learn.ts) are NOT yet abstracted — they would need a separate PrAdapter interface.
+
+## Lesson — 2026-03-05T03:16:17.884Z
+
+**Tags:** workflow, shield, pre-push, trap
+
+ALWAYS run `totem shield` before pushing or creating a PR. This is a core Workflow Orchestrator Ritual defined in CLAUDE.md. Don't skip it even when momentum is high — that's exactly when mistakes slip through.
+
+## Lesson — 2026-03-05T04:05:14.473Z
+
+**Tags:** architecture, adapter-pattern, DRY, trap
+
+When creating adapter/wrapper classes that call external CLIs (like `gh`), extract the shared exec → JSON.parse → schema.validate pattern into a private helper method immediately. Don't duplicate the try/parse/catch/validate boilerplate across methods — GCA will flag it and it's a waste of review rounds.
+
+## Lesson — 2026-03-05T04:05:16.794Z
+
+**Tags:** error-handling, DRY, trap
+
+When adding error re-throw guards (like checking for `[Totem Error]` prefix before calling a shared error handler), put the guard IN the shared handler — not duplicated at every call site. Centralize error routing in one place.
+
+## Lesson — 2026-03-05T04:05:19.420Z
+
+**Tags:** regex, input-validation, trap
+
+When writing regex to parse user input (like GitHub URLs), always anchor with `^` and include the protocol (`https?://`). Unanchored regexes match substrings embedded in other text, which is almost never the intent for CLI input parsing.
+
+## Lesson — 2026-03-05T04:05:21.566Z
+
+**Tags:** detection, init, false-positive, trap
+
+When detecting tool presence via filesystem checks in `totem init`, use specific marker files (like `.cursorrules`, `.cursor/mcp.json`) — not bare directory existence checks (like `.cursor/`). Generic directory names cause false positives.
+
+## Lesson — 2026-03-05T04:11:55.046Z
+
+**Tags:** security, input-validation, env-injection, init, trap
+
+Any CLI command that writes user input to a file (.env, config, etc.) must sanitize at the boundary: strip newlines/carriage returns, validate format with a regex, and quote values. This is especially critical for .env files where newline injection creates arbitrary environment variables. Always treat interactive CLI input as untrusted, same as HTTP input.
+
+## Lesson — 2026-03-05T04:32:16.597Z
+
+**Tags:** scaffolding, init, best-practices, file-modification, security
+
+Scaffolding command best practices for `totem init` and similar commands that modify user files: (1) Never create duplicate entries — use regex with `^` anchor and `/m` flag to check for existing keys. (2) Ensure trailing newline before appending — check `!existing.endsWith('\n')` and prepend `\n` if needed. (3) Sanitize all user input before writing to files — strip newlines, validate format, quote values. (4) Use specific marker files for tool detection, not bare directory existence. (5) Print a summary of every file modified so users can verify. (6) Prefer skip-if-exists over overwrite — use `--force` flag for explicit overwrites.

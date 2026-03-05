@@ -1,15 +1,12 @@
-import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
-
-import { z } from 'zod';
 
 import type { ContentType, SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore } from '@mmnto/totem';
 
+import { GitHubCliAdapter } from '../adapters/github-cli.js';
+import type { StandardIssue } from '../adapters/issue-adapter.js';
 import {
   formatResults,
-  GH_TIMEOUT_MS,
-  IS_WIN,
   loadConfig,
   loadEnv,
   resolveConfigPath,
@@ -61,38 +58,7 @@ Respond with ONLY the sections below. No preamble, no closing remarks.
 [Specific test scenarios needed to prove the feature works and edge cases are handled. Reference existing test file patterns when applicable.]
 `;
 
-// ─── GitHub helpers ─────────────────────────────────────
-
-const GhIssueSchema = z.object({
-  number: z.number(),
-  title: z.string(),
-  body: z.string().nullable(),
-  labels: z.array(z.object({ name: z.string() })),
-  state: z.string(),
-});
-type GhIssue = z.infer<typeof GhIssueSchema>;
-
-function fetchIssue(issueNumber: number, cwd: string): GhIssue {
-  try {
-    const result = execFileSync(
-      'gh',
-      ['issue', 'view', String(issueNumber), '--json', 'number,title,body,labels,state'],
-      { cwd, encoding: 'utf-8', timeout: GH_TIMEOUT_MS, shell: IS_WIN },
-    );
-    return GhIssueSchema.parse(JSON.parse(result));
-  } catch (err) {
-    if (err instanceof z.ZodError) {
-      throw new Error(`[Totem Error] Failed to parse GitHub issue response: ${err.message}`);
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('ENOENT') || msg.includes('not found')) {
-      throw new Error(
-        `[Totem Error] GitHub CLI (gh) is required for issue fetching. Install: https://cli.github.com`,
-      );
-    }
-    throw new Error(`[Totem Error] Failed to fetch issue #${issueNumber}: ${msg}`);
-  }
-}
+// ─── Issue helpers ──────────────────────────────────────
 
 // ─── LanceDB retrieval ─────────────────────────────────
 
@@ -115,16 +81,16 @@ async function retrieveContext(query: string, store: LanceStore): Promise<Retrie
   return { specs, sessions, code };
 }
 
-function buildSearchQuery(issue: GhIssue): string {
-  const labels = issue.labels.map((l) => l.name).join(' ');
-  const bodySnippet = (issue.body ?? '').slice(0, QUERY_BODY_TRUNCATE);
+function buildSearchQuery(issue: StandardIssue): string {
+  const labels = issue.labels.join(' ');
+  const bodySnippet = issue.body.slice(0, QUERY_BODY_TRUNCATE);
   return `${issue.title} ${labels} ${bodySnippet}`.trim();
 }
 
 // ─── Prompt assembly ────────────────────────────────────
 
 function assemblePrompt(
-  issue: GhIssue | null,
+  issue: StandardIssue | null,
   freeText: string | null,
   context: RetrievedContext,
 ): string {
@@ -132,9 +98,10 @@ function assemblePrompt(
 
   // Target issue or free-text topic
   if (issue) {
-    const issueLabels = issue.labels.map((l) => l.name).join(', ');
+    const issueLabels = issue.labels.join(', ');
     sections.push('=== TARGET ISSUE ===');
-    sections.push(`Issue #${issue.number}: ${issue.title}`);
+    sections.push(`Issue #${issue.number}`);
+    sections.push(wrapXml('issue_title', issue.title));
     sections.push(`Labels: ${issueLabels || '(none)'}`);
     sections.push(`State: ${issue.state}`);
     if (issue.body) {
@@ -167,7 +134,7 @@ export interface SpecOptions {
   raw?: boolean;
   out?: string;
   model?: string;
-  noCache?: boolean;
+  fresh?: boolean;
 }
 
 export async function specCommand(input: string, options: SpecOptions): Promise<void> {
@@ -181,14 +148,20 @@ export async function specCommand(input: string, options: SpecOptions): Promise<
   const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
   await store.connect();
 
-  // Parse input: issue number or free-text
-  const issueNumber = /^\d+$/.test(input) ? parseInt(input, 10) : null;
-  let issue: GhIssue | null = null;
+  // Parse input: issue number, GitHub URL, or free-text
+  const urlMatch = input.match(/^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/);
+  const issueNumber = /^\d+$/.test(input)
+    ? parseInt(input, 10)
+    : urlMatch
+      ? parseInt(urlMatch[1], 10)
+      : null;
+  let issue: StandardIssue | null = null;
   let query: string;
 
   if (issueNumber) {
     console.error(`[${TAG}] Fetching issue #${issueNumber}...`);
-    issue = fetchIssue(issueNumber, cwd);
+    const adapter = new GitHubCliAdapter(cwd);
+    issue = adapter.fetchIssue(issueNumber);
     console.error(`[${TAG}] Title: ${issue.title}`);
     query = buildSearchQuery(issue);
   } else {
