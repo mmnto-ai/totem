@@ -1,5 +1,22 @@
 # @mmnto/mcp
 
+## 0.7.0
+
+### Minor Changes
+
+- Unify gh-utils and PrAdapter, comprehensive test audit, bug fixes
+  - Extracted shared `gh-utils` with `ghFetchAndParse` and `handleGhError`
+  - Added `PrAdapter` abstraction for PR data fetching
+  - Added unit tests for all adapters, orchestrator, and CLI commands
+  - Fixed maxBuffer overflow on paginated GitHub API responses
+  - Added GitHub API rate limit detection
+  - Simplified ZodError messages for better UX
+
+### Patch Changes
+
+- Updated dependencies
+  - @mmnto/totem@0.7.0
+
 ## 0.6.0
 
 ### Patch Changes
