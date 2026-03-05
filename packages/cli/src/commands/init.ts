@@ -46,6 +46,7 @@ type AiTool = 'Claude Code' | 'Gemini CLI' | 'Cursor';
 interface AiToolInfo {
   name: AiTool;
   mcpPath: string;
+  reflexFile: string | null;
   serverEntry: Record<string, unknown>;
 }
 
@@ -61,16 +62,19 @@ const AI_TOOLS: AiToolInfo[] = [
   {
     name: 'Claude Code',
     mcpPath: '.mcp.json',
+    reflexFile: 'CLAUDE.md',
     serverEntry: { type: 'stdio', command: npxCmd, args: npxArgs },
   },
   {
     name: 'Gemini CLI',
     mcpPath: '.gemini/settings.json',
+    reflexFile: '.gemini/gemini.md',
     serverEntry: { command: npxCmd, args: npxArgs },
   },
   {
     name: 'Cursor',
     mcpPath: '.cursor/mcp.json',
+    reflexFile: '.cursorrules',
     serverEntry: { type: 'stdio', command: npxCmd, args: npxArgs },
   },
 ];
@@ -85,7 +89,7 @@ function detectAiTools(cwd: string): AiToolInfo[] {
   if (exists('.gemini')) {
     detected.push(AI_TOOLS.find((t) => t.name === 'Gemini CLI')!);
   }
-  if (exists('.cursorrules')) {
+  if (exists('.cursorrules') || exists('.cursor/mcp.json') || exists('.cursor')) {
     detected.push(AI_TOOLS.find((t) => t.name === 'Cursor')!);
   }
 
@@ -261,6 +265,23 @@ export default config;
 `;
 }
 
+/** Inject reflex block into an AI context file if not already present. */
+function injectReflexes(filePath: string): 'injected' | 'exists' | 'missing' {
+  if (!fs.existsSync(filePath)) return 'missing';
+
+  const content = fs.readFileSync(filePath, 'utf-8');
+  if (content.includes('Totem AI Integration') || content.includes('Totem Memory Reflexes')) {
+    return 'exists';
+  }
+  fs.appendFileSync(filePath, AI_PROMPT_BLOCK);
+  return 'injected';
+}
+
+interface InitSummaryEntry {
+  file: string;
+  action: string;
+}
+
 export async function initCommand(): Promise<void> {
   const cwd = process.cwd();
   const configPath = path.join(cwd, 'totem.config.ts');
@@ -268,6 +289,7 @@ export async function initCommand(): Promise<void> {
   const configExists = fs.existsSync(configPath);
 
   const rl = readline.createInterface({ input, output });
+  const summary: InitSummaryEntry[] = [];
 
   try {
     if (!configExists) {
@@ -309,7 +331,7 @@ export async function initCommand(): Promise<void> {
           fs.writeFileSync(envPath, envLine);
         }
 
-        console.log('[Totem] OpenAI API key saved to .env');
+        summary.push({ file: '.env', action: 'Saved OpenAI API key' });
       } else {
         provider = 'ollama';
         console.log('[Totem] Configured for Ollama. Make sure it is running locally.');
@@ -317,7 +339,7 @@ export async function initCommand(): Promise<void> {
 
       const configContent = generateConfig(targets, provider);
       fs.writeFileSync(configPath, configContent, 'utf-8');
-      console.log('[Totem] Created totem.config.ts');
+      summary.push({ file: 'totem.config.ts', action: 'Created with auto-detected targets' });
     } else {
       console.log('[Totem] totem.config.ts already exists. Checking reflexes and hooks...');
     }
@@ -334,55 +356,21 @@ export async function initCommand(): Promise<void> {
         `# Totem Lessons\n\nLessons learned from PR reviews and Shield checks.\nThis file is version-controlled and reviewed in PR diffs.\n\n---\n`,
         'utf-8',
       );
-      console.log('[Totem] Created .totem/lessons.md');
+      summary.push({ file: '.totem/lessons.md', action: 'Created lessons file' });
     }
 
-    // --- Always run: AI prompt injection ---
-    const aiFiles = ['CLAUDE.md', '.cursorrules', '.gemini/gemini.md'];
-    const foundAiFiles = aiFiles.filter((f) => fs.existsSync(path.join(cwd, f)));
-
-    if (foundAiFiles.length > 0) {
-      console.log(`\n[Totem] Detected AI context files: ${foundAiFiles.join(', ')}`);
-      const injectAnswer = await rl.question(
-        'Would you like to inject Totem automated memory reflexes into these files? (y/N): ',
-      );
-      if (
-        injectAnswer.trim().toLowerCase() === 'y' ||
-        injectAnswer.trim().toLowerCase() === 'yes'
-      ) {
-        for (const file of foundAiFiles) {
-          try {
-            const filePath = path.join(cwd, file);
-            const content = fs.readFileSync(filePath, 'utf-8');
-            if (
-              !content.includes('Totem AI Integration') &&
-              !content.includes('Totem Memory Reflexes')
-            ) {
-              fs.appendFileSync(filePath, AI_PROMPT_BLOCK);
-              console.log(`[Totem] Injected reflexes into ${file}`);
-            } else {
-              console.log(`[Totem] ${file} already contains Totem reflexes.`);
-            }
-          } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            console.error(`\n[Totem Error] Failed to inject reflexes into ${file}: ${message}`);
-          }
-        }
-      }
-    }
-
-    // --- Always run: MCP server registration ---
+    // --- Unified AI tool selection ---
     const detectedTools = detectAiTools(cwd);
 
     if (detectedTools.length > 0) {
       const toolNames = detectedTools.map((t) => t.name).join(', ');
       console.log(`\n[Totem] Detected AI tools: ${toolNames}`);
-      const mcpAnswer = await rl.question(
-        'Which tools should Totem configure MCP for? [all/none/select] (default: all): ',
+      const toolAnswer = await rl.question(
+        'Which tools should Totem configure? [all/none/select] (default: all): ',
       );
 
       let selectedTools: AiToolInfo[];
-      const trimmed = mcpAnswer.trim().toLowerCase();
+      const trimmed = toolAnswer.trim().toLowerCase();
 
       if (trimmed === 'none') {
         selectedTools = [];
@@ -399,6 +387,7 @@ export async function initCommand(): Promise<void> {
         selectedTools = detectedTools;
       }
 
+      // --- MCP scaffolding for selected tools ---
       for (const tool of selectedTools) {
         const filePath = path.join(cwd, tool.mcpPath);
         const result = scaffoldMcpConfig(filePath, tool.serverEntry);
@@ -410,11 +399,26 @@ export async function initCommand(): Promise<void> {
           );
           console.log(`  "totem": ${JSON.stringify(tool.serverEntry, null, 2)}\n`);
         } else if (result.action === 'created') {
-          console.log(`[Totem] Created ${tool.mcpPath} with Totem MCP server.`);
+          summary.push({ file: tool.mcpPath, action: `Created with Totem MCP server` });
         } else if (result.action === 'merged') {
-          console.log(`[Totem] Added Totem MCP server to existing ${tool.mcpPath}.`);
-        } else {
-          console.log(`[Totem] ${tool.mcpPath} already has Totem configured.`);
+          summary.push({ file: tool.mcpPath, action: `Added totem to mcpServers` });
+        }
+      }
+
+      // --- Reflex injection for selected tools ---
+      for (const tool of selectedTools) {
+        if (!tool.reflexFile) continue;
+        const filePath = path.join(cwd, tool.reflexFile);
+        try {
+          const result = injectReflexes(filePath);
+          if (result === 'injected') {
+            summary.push({ file: tool.reflexFile, action: 'Injected memory reflexes' });
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(
+            `\n[Totem Error] Failed to inject reflexes into ${tool.reflexFile}: ${message}`,
+          );
         }
       }
     }
@@ -428,11 +432,20 @@ export async function initCommand(): Promise<void> {
       const gitignore = fs.readFileSync(gitignorePath, 'utf-8');
       if (!gitignore.includes('.lancedb')) {
         fs.appendFileSync(gitignorePath, '\n# Totem\n.lancedb/\n');
-        console.log('[Totem] Added .lancedb/ to .gitignore');
+        summary.push({ file: '.gitignore', action: 'Added .lancedb/ exclusion' });
       }
     }
 
-    console.log('[Totem] Init complete. Run `totem sync` to index your project.');
+    // --- Print summary ---
+    if (summary.length > 0) {
+      console.log('\n--- Totem Init Summary ---');
+      for (const entry of summary) {
+        console.log(`  [OK] ${entry.file} — ${entry.action}`);
+      }
+      console.log('--------------------------');
+    }
+
+    console.log('\n[Totem] Init complete. Run `totem sync` to index your project.');
   } finally {
     rl.close();
   }
