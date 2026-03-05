@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as readline from 'node:readline/promises';
 
 import type { SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore, runSync } from '@mmnto/totem';
@@ -230,6 +231,7 @@ export interface LearnOptions {
   model?: string;
   fresh?: boolean;
   dryRun?: boolean;
+  yes?: boolean;
 }
 
 export async function learnCommand(prNumber: string, options: LearnOptions): Promise<void> {
@@ -300,14 +302,46 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
 
   console.error(`[${TAG}] Extracted ${lessons.length} lesson(s)`);
 
+  // Display extracted lessons for review
+  console.error('');
+  console.error(
+    `[${TAG}] ⚠ WARNING: These lessons were extracted from PR comments, which may include content from untrusted contributors.`,
+  );
+  console.error(`[${TAG}] Review each lesson carefully before accepting.\n`);
+
+  for (let i = 0; i < lessons.length; i++) {
+    const lesson = lessons[i]!;
+    console.error(`  [${i + 1}] Tags: ${lesson.tags.join(', ')}`);
+    console.error(`      ${lesson.text}`);
+    console.error('');
+  }
+
   // --dry-run mode: preview lessons without writing
   if (options.dryRun) {
     console.error(`[${TAG}] Dry run — lessons not written.`);
-    for (const lesson of lessons) {
-      console.log(`\n  Tags: ${lesson.tags.join(', ')}`);
-      console.log(`  ${lesson.text}`);
-    }
     return;
+  }
+
+  // Confirmation gate
+  if (!options.yes) {
+    if (!process.stdin.isTTY) {
+      throw new Error(
+        `[Totem Error] Refusing to write lessons in non-interactive mode. Use --yes to bypass confirmation.`,
+      );
+    }
+
+    const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
+    try {
+      const answer = await rl.question(
+        `[${TAG}] Write ${lessons.length} lesson(s) to lessons.md? [Y/n] `,
+      );
+      if (answer.trim().toLowerCase() === 'n') {
+        console.error(`[${TAG}] Aborted — no lessons written.`);
+        return;
+      }
+    } finally {
+      rl.close();
+    }
   }
 
   // Append lessons to .totem/lessons.md
