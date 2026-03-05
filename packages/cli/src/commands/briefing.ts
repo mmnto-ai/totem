@@ -154,7 +154,7 @@ export interface BriefingOptions {
   raw?: boolean;
   out?: string;
   model?: string;
-  noCache?: boolean;
+  fresh?: boolean;
 }
 
 export async function briefingCommand(options: BriefingOptions): Promise<void> {

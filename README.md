@@ -96,7 +96,7 @@ orchestrator: {
 }
 ```
 
-Then, run the workflow commands (pass `--no-cache` to bypass caching and force a fresh LLM call):
+Then, run the workflow commands (pass `--fresh` to bypass caching and force a fresh LLM call):
 
 **Session Briefings (`briefing`)**
 
