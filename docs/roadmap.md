@@ -1,48 +1,58 @@
 # Totem Roadmap
 
-This document outlines the high-level goals and strategic pillars for the Totem project.
+This document outlines the strategic phases for the Totem project, focusing on moving from a solid architectural foundation to frictionless user adoption, and eventually enterprise scale.
 
-## Pillar 1: The Memory Layer (Phase 1 & 2)
+## Foundations (Mostly Complete)
 
-**Status:** Mostly Complete
-**Goal:** Provide a persistent memory and context layer for AI agents via an embedded vector database (LanceDB).
+The core embedded vector database, MCP server, and baseline CLI commands have been implemented.
 
 - [x] Turborepo scaffolding (core, cli, mcp)
-- [x] Syntax-aware chunkers (TypeScript AST, Markdown headings, Session logs)
-- [x] Embedders (OpenAI & Ollama fallback)
-- [x] LanceDB store and incremental `totem sync`
+- [x] Syntax-aware chunkers and LanceDB store with incremental `totem sync`
 - [x] MCP Server with `search_knowledge` and `add_lesson`
+- [x] Auto-Injection of memory reflexes into `CLAUDE.md`, `.cursorrules`, and `.gemini/`
+- [x] Ported native `@mmnto/cli` orchestrator commands (`spec`, `shield`, `triage`, `briefing`, `handoff`, `learn`)
+- [x] **PR Learning Loop:** `totem learn <pr-number>` parses reviews to extract architectural lessons.
+- [x] **Evidence-Based Quality Gate:** `totem shield` enforces test coverage and returns exit codes.
 - [ ] Validate OpenAI Happy Path (Issue #4 / #8)
-- [ ] Cross-platform onboarding for Windows/macOS (Issue #12)
 
-## Pillar 2: The Reflex Engine (Phase 3)
+---
 
-**Status:** Completed (Epic #19)
-**Goal:** Ensure the memory layer is actively used. Automate the configuration of AI agents to autonomously query and write to Totem.
+## Phase 1: The "Magic" Onboarding & Polish
 
-- [x] **Auto-Injection:** `totem init` injects memory reflexes into `CLAUDE.md`, `.cursorrules`, and `.gemini/`. (Issue #10)
-- [x] **Hooks:** Background incremental sync via `post-merge` hook so the local index never goes stale. (Issue #11)
-- [x] **Close the Loop:** Auto-trigger incremental sync via the `add_lesson` MCP tool to close the within-session gap. (Issue #22)
-- [x] **Proactive Triggers:** Update injected AI reflexes to enforce proactive anchoring rather than reactive learning. (Issue #24)
+**Goal:** If users can't install Totem easily and don't trust what it does, advanced features won't matter. Make onboarding frictionless and the CLI feel premium.
 
-## Pillar 3: The Workflow Orchestrator (Phase 4)
+- [ ] **#87 Auto-configure AI tools:** `totem init` scaffolds `.gemini/settings.json`, `CLAUDE.md`, and `.cursorrules` automatically.
+- [ ] **#89 UX Polish for `totem init`:** Fix double-prompting and print clean success summaries so developers trust the onboarding.
+- [ ] **#86 Seamless Host Integration:** Build the `SessionStart` hooks, Claude custom commands, and `Totem Architect` skills that #87 installs.
+- [ ] **#21 CLI UI/UX Polish:** Swap generic `console.log` for `@clack/prompts` and `ora` spinners.
+- [ ] **#12 Cross-platform onboarding:** Ensure docs and installers work flawlessly across Windows (PowerShell) and macOS.
 
-**Status:** Active Focus (Epic #20)
-**Goal:** Serve as the "Org Chart" for a developer's multi-agent AI team, standardizing shift-left workflows.
+## Phase 2: Core Stability & Data Safety
 
-- [x] **Native CLI Commands:** Ported the bespoke `satur8d` scripts into native `@mmnto/cli` commands (`totem spec`, `totem shield`, `totem triage`, `totem briefing`, `totem handoff`). (Epic #17)
-- [ ] **Workflow Auto-Injection:** Update `totem init` to inject Workflow Reflexes into AI prompts so agents know how to dogfood/use the native CLI commands. (Issue #47)
-- [ ] **Model Orchestration:** Add per-command model overrides to `totem.config.ts` to balance reasoning-heavy (`spec`, `shield`) vs. velocity-heavy (`briefing`, `triage`) tasks. (Issue #56)
-- [ ] **Configurable Governance:** Add `auditLoopLimit` and `shieldSeverityThreshold` to `totem.config.ts` to control AI review depth. (Issue #34)
-- [ ] **Roles & Handoffs:** Allow users to map installed tools (Claude CLI, Gemini CLI, Ollama) to roles (Builder, Reviewer) in `totem.config.ts`.
-- [x] **PR Learning Loop:** Build `totem learn <pr-number>` to parse GitHub PR review comments and auto-extract architectural lessons into `.totem/lessons.md`. (Issue #18)
+**Goal:** Before ingesting enterprise databases, the local vector index and LLM prompts must be bulletproof across all environments.
 
-## Pillar 4: Friction Elimination & Polish (Phase 5)
+- [ ] **#80 Security: Add XML delimiting:** Close the prompt injection gap in orchestrator commands.
+- [ ] **#91 Normalize LanceDB paths:** Fix Windows backslash issues before users share `.lancedb` folders across OS boundaries.
+- [ ] **#90 Refactor to `IssueAdapter`:** Extract `gh` CLI logic into an interface to decouple from GitHub.
+- [ ] **#77 Test audit:** Backfill CLI unit tests using the newly added Vitest infrastructure.
+- [ ] **#78 Shell escaping edge cases:** Validate `execSync` safety with PowerShell as default shell.
 
-**Status:** Future
+## Phase 3: Workflow Expansion (Power User Tools)
 
+**Goal:** Give existing users more ways to interact with their data locally and visualize their usage.
+
+- [ ] **#44 `totem bridge`:** Build a mid-session context compaction tool to clear token windows without losing place.
+- [ ] **#74 `totem oracle`:** Add a frictionless Q&A command to query LanceDB without strict personas.
+- [ ] **#92 Telemetry Logging & Dashboard:** Persist token stats to `.totem/telemetry.jsonl` and build `totem stats` to track API quota usage.
+- [ ] **#83 Support GitHub issue URLs:** Allow users to paste full URLs in addition to issue numbers for `totem spec` and `triage`.
+- [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
+
+## Phase 4: Enterprise Expansion
+
+**Goal:** Scale Totem from individual developers to entire organizations by ingesting third-party data sources.
+
+- [ ] **#84 Issue Tracking Adapters:** Implement Jira and Linear adapters using the interface built in Phase 2.
+- [ ] **#79 Documentation Ingestion Pipeline:** Build Pull/Push models for Notion, Confluence, or internal wikis.
+- [ ] **#34 Configurable Governance:** Let enterprise teams configure AI review loops (`auditLoopLimit`, `shieldSeverityThreshold`).
+- [ ] **#42 Universal AI DevEx:** Evolve `totem init` to inject "Best Practices" guardrails (Anti-Refactor, Test Coverage triggers).
 - [ ] Implement Changesets and npm publishing (Issue #5 / #46)
-- [ ] Implement Memory Consolidation command (`totem consolidate`) to clean up old lessons. (Issue #23)
-- [ ] CLI UI/UX Polish: Interactive prompts, colors, and the hidden Oregon Trail Easter Egg. (Issue #21)
-- [ ] Implement `reset()` and ephemeral memory for the MCP tool
-- [ ] Support implicit context via `totem integrate claude` to single-click install the MCP config
