@@ -84,7 +84,7 @@ function buildSearchQuery(issues: StandardIssueListItem[]): string {
 
 // ─── Prompt assembly ────────────────────────────────────
 
-function formatIssueInventory(issues: StandardIssueListItem[]): string {
+export function formatIssueInventory(issues: StandardIssueListItem[]): string {
   const rows = issues.map((i) => {
     const labels = i.labels.join(', ') || '(none)';
     const updated = i.updatedAt.slice(0, 10); // YYYY-MM-DD

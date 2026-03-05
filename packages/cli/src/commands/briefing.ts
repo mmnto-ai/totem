@@ -77,7 +77,7 @@ async function retrieveContext(query: string, store: LanceStore): Promise<Retrie
 
 // ─── Prompt assembly ────────────────────────────────────
 
-function formatPRList(prs: StandardPrListItem[]): string {
+export function formatPRList(prs: StandardPrListItem[]): string {
   if (prs.length === 0) return '(none)';
   return prs.map((pr) => `- #${pr.number} — ${pr.title} (branch: ${pr.headRefName})`).join('\n');
 }

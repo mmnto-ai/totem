@@ -56,7 +56,7 @@ Respond with ONLY the sections below. No preamble, no closing remarks.
 
 // ─── Lessons file reader ────────────────────────────────
 
-function readRecentLessons(cwd: string, totemDir: string): string {
+export function readRecentLessons(cwd: string, totemDir: string): string {
   const lessonsPath = path.join(cwd, totemDir, 'lessons.md');
   if (!fs.existsSync(lessonsPath)) return '';
 
