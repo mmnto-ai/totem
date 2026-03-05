@@ -35,9 +35,10 @@ Perform a hostile pre-flight code review on a git diff. Catch unhandled errors, 
 
 ## Critical Rules
 - **Evidence-Based Quality Gate:** If the diff adds new functionality or fixes a bug but DOES NOT include a corresponding update to a \`.test.ts\` file or test logs, you MUST flag this as a CRITICAL failure.
-- **Pessimistic Review:** Look for unhandled promise rejections, missing database indexes, race conditions, and skipped error handling.
+- **Pessimistic Review:** Look for security vulnerabilities (unsanitized inputs, shell injection, prompt injection, env variable injection), unhandled promise rejections, missing database indexes, race conditions, and skipped error handling.
 - **Focus on the Diff:** Only comment on code that is actually changing. Reference specific lines/hunks.
 - **Use Knowledge:** Cite Totem knowledge when it directly applies (e.g., "Session #142 noted a trap regarding...").
+- **Enforce Lessons:** Treat all retrieved Totem lessons as a strict checklist. If the diff violates a retrieved lesson, you MUST flag it as a Critical Issue.
 
 ## Output Format
 Respond with ONLY the sections below. No preamble, no closing remarks.
@@ -54,7 +55,7 @@ Example: "FAIL — New functionality in utils.ts lacks corresponding test update
 [Issues that WILL cause failures or regressions. MUST include missing tests for new features. If none, say "None found."]
 
 ### Warnings (Should Fix)
-[Pattern violations, potential performance traps, and lessons ignored from past sessions. If none, say "None found."]
+[Pattern violations, potential performance traps, DRY violations, and lessons ignored from past sessions. If none, say "None found."]
 
 ### Reality Check
 [A single skeptical question or edge case the developer probably didn't test for. (e.g., "What happens if the API rate limits on line 42?")]
@@ -112,7 +113,10 @@ function assemblePrompt(diff: string, changedFiles: string[], context: Retrieved
 
   // Totem knowledge
   const specSection = formatResults(context.specs, 'RELATED SPECS & ADRs');
-  const sessionSection = formatResults(context.sessions, 'RELATED SESSION HISTORY & LESSONS');
+  const sessionSection = formatResults(
+    context.sessions,
+    'LESSONS & SESSION HISTORY (ENFORCE AS CHECKLIST)',
+  );
   const codeSection = formatResults(context.code, 'RELATED CODE PATTERNS');
 
   if (specSection || sessionSection || codeSection) {
