@@ -318,20 +318,28 @@ export async function initCommand(): Promise<void> {
         'Enter your OpenAI API key (or press Enter to configure local Ollama later): ',
       );
 
-      if (answer.trim()) {
-        const envPath = path.join(cwd, '.env');
-        const envLine = `OPENAI_API_KEY=${answer.trim()}\n`;
-
-        if (fs.existsSync(envPath)) {
-          const existing = fs.readFileSync(envPath, 'utf-8');
-          if (!existing.includes('OPENAI_API_KEY')) {
-            fs.appendFileSync(envPath, envLine);
-          }
+      const apiKey = answer.trim().replace(/[\r\n]/g, '');
+      if (apiKey) {
+        if (!/^sk-[a-zA-Z0-9_-]+$/.test(apiKey)) {
+          console.error(
+            '[Totem] Warning: API key does not look like a valid OpenAI key (expected sk-...). Skipping.',
+          );
+          provider = 'ollama';
         } else {
-          fs.writeFileSync(envPath, envLine);
-        }
+          const envPath = path.join(cwd, '.env');
+          const envLine = `OPENAI_API_KEY="${apiKey}"\n`;
 
-        summary.push({ file: '.env', action: 'Saved OpenAI API key' });
+          if (fs.existsSync(envPath)) {
+            const existing = fs.readFileSync(envPath, 'utf-8');
+            if (!/^OPENAI_API_KEY=/m.test(existing)) {
+              fs.appendFileSync(envPath, envLine);
+            }
+          } else {
+            fs.writeFileSync(envPath, envLine);
+          }
+
+          summary.push({ file: '.env', action: 'Saved OpenAI API key' });
+        }
       } else {
         provider = 'ollama';
         console.log('[Totem] Configured for Ollama. Make sure it is running locally.');
