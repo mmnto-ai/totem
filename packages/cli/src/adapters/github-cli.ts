@@ -32,7 +32,7 @@ function handleGhError(err: unknown, context: string): never {
     throw new Error(`[Totem Error] Failed to parse GitHub ${context}: ${err.message}`);
   }
   const msg = err instanceof Error ? err.message : String(err);
-  if (msg.includes('ENOENT') || msg.includes('not found')) {
+  if (msg.includes('ENOENT')) {
     throw new Error(
       `[Totem Error] GitHub CLI (gh) is required for issue fetching. Install: https://cli.github.com`,
     );
