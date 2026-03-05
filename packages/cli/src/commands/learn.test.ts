@@ -102,6 +102,11 @@ describe('sanitize', () => {
   it('strips OSC sequences', () => {
     expect(sanitize('\x1b]0;malicious title\x07safe text')).toBe('safe text');
   });
+
+  it('strips C1 control characters', () => {
+    expect(sanitize('before\x9bafter')).toBe('beforeafter');
+    expect(sanitize('test\x9dmore')).toBe('testmore');
+  });
 });
 
 // ─── appendLessons ──────────────────────────────────────
