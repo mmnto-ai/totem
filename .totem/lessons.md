@@ -130,3 +130,15 @@ When writing regex to parse user input (like GitHub URLs), always anchor with `^
 **Tags:** detection, init, false-positive, trap
 
 When detecting tool presence via filesystem checks in `totem init`, use specific marker files (like `.cursorrules`, `.cursor/mcp.json`) — not bare directory existence checks (like `.cursor/`). Generic directory names cause false positives.
+
+## Lesson — 2026-03-05T04:11:55.046Z
+
+**Tags:** security, input-validation, env-injection, init, trap
+
+Any CLI command that writes user input to a file (.env, config, etc.) must sanitize at the boundary: strip newlines/carriage returns, validate format with a regex, and quote values. This is especially critical for .env files where newline injection creates arbitrary environment variables. Always treat interactive CLI input as untrusted, same as HTTP input.
+
+## Lesson — 2026-03-05T04:32:16.597Z
+
+**Tags:** scaffolding, init, best-practices, file-modification, security
+
+Scaffolding command best practices for `totem init` and similar commands that modify user files: (1) Never create duplicate entries — use regex with `^` anchor and `/m` flag to check for existing keys. (2) Ensure trailing newline before appending — check `!existing.endsWith('\n')` and prepend `\n` if needed. (3) Sanitize all user input before writing to files — strip newlines, validate format, quote values. (4) Use specific marker files for tool detection, not bare directory existence. (5) Print a summary of every file modified so users can verify. (6) Prefer skip-if-exists over overwrite — use `--force` flag for explicit overwrites.
