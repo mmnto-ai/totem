@@ -68,14 +68,14 @@ export function resolveFiles(
       ignore: ignorePatterns,
     });
 
-    for (const relativePath of matches) {
-      const normalized = relativePath.replace(/\\/g, '/');
-      if (seen.has(normalized)) continue;
-      if (nonIgnored && !nonIgnored.has(normalized)) continue;
-      seen.add(normalized);
+    for (const rawPath of matches) {
+      const relativePath = rawPath.replace(/\\/g, '/');
+      if (seen.has(relativePath)) continue;
+      if (nonIgnored && !nonIgnored.has(relativePath)) continue;
+      seen.add(relativePath);
 
       results.push({
-        absolutePath: path.join(projectRoot, relativePath),
+        absolutePath: path.join(projectRoot, rawPath),
         relativePath,
         target,
       });
@@ -101,7 +101,7 @@ export function getChangedFiles(
     });
     return output
       .split('\n')
-      .map((line) => line.trim())
+      .map((line) => line.trim().replace(/\\/g, '/'))
       .filter(Boolean);
   } catch (err) {
     const msg = `Failed to get changed files from git. Error: ${err instanceof Error ? err.message : String(err)}`;
