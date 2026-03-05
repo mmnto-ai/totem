@@ -181,8 +181,13 @@ export async function specCommand(input: string, options: SpecOptions): Promise<
   const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
   await store.connect();
 
-  // Parse input: issue number or free-text
-  const issueNumber = /^\d+$/.test(input) ? parseInt(input, 10) : null;
+  // Parse input: issue number, GitHub URL, or free-text
+  const urlMatch = input.match(/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/);
+  const issueNumber = /^\d+$/.test(input)
+    ? parseInt(input, 10)
+    : urlMatch
+      ? parseInt(urlMatch[1], 10)
+      : null;
   let issue: GhIssue | null = null;
   let query: string;
 
