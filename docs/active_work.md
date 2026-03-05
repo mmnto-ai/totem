@@ -1,14 +1,20 @@
 # Active Work
 
-## Current Focus: Phase 1 Onboarding & Polish
+## Current Focus: v0.6.0 Release & Architectural Hardening
 
-We have completed Epic #19 (The Reflex Engine) and are now focused on polishing the "Magic" Onboarding experience (Phase 1) before shifting to core stability and safety.
+We have successfully completed the core objectives for **Phase 1 Onboarding** (`totem init` UX polish) and **Phase 2 Stability** (Adapter pattern decoupling, path normalization, and a massive 103+ unit test audit).
+
+Our immediate priority is to merge the Phase 2 refactor PR (#103) and **Publish Release v0.6.0**.
+
+Following the release, we will pivot to hardening the architecture based on the findings from the Staff-Level Code Review, before moving on to Epic #86 (Seamless Host Integration).
 
 ### Active Tasks
 
-1. **#89 UX Polish for `totem init`:** Fix double-prompting and print clean success summaries so developers trust the onboarding.
-2. **Epic #86 Seamless Host Integration:** Expand beyond dogfooding to properly package Totem integration instructions, auto-scaffolding, and skills/custom commands for Gemini CLI, Claude Code, and Cursor.
-3. **#21 CLI UI/UX Polish:** Swap generic `console.log` for `@clack/prompts` and `ora` spinners to make the CLI feel premium.
+1. **Merge PR #103** (Phase 2 Refactor & Test Audit) and publish `v0.6.0` to npm.
+2. **#104 Stream chunks to LanceDB:** Fix the ingestion pipeline to prevent OOM crashes on large enterprise repos.
+3. **#105 OpenAI Rate Limit Resilience:** Add exponential backoff to the embedder.
+4. **#106 Fix Stale LanceDB Handles:** Update the MCP server to aggressively reconnect on any LanceDB search error, replacing the brittle regex heuristic.
+5. **#107 MCP Sync Visibility:** Pipe the background `totem sync` child process logs to the LLM via MCP progress events.
 
 ## Dogfooding: Session Start Hooks
 
@@ -72,9 +78,7 @@ Add a `hooks` section alongside existing MCP server config:
 
 ## Next Up
 
-After the Phase 1 Onboarding polish is complete, we will move on to **Phase 2: Core Stability & Data Safety**. This includes:
+After the release and architectural hardening are complete, we will return to expanding the ecosystem:
 
-1. #91 Normalize LanceDB paths (Windows backslash fixes)
-2. #90 Refactor to `IssueAdapter` (decouple from GitHub)
-3. #77 Test audit (backfill CLI unit tests)
-4. #78 Shell escaping edge cases
+1. **Epic #86 Seamless Host Integration** (Gemini/Claude extensions)
+2. **#21 CLI UI/UX Polish** (adding `@clack/prompts` and spinners)
