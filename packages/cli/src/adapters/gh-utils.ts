@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { GH_TIMEOUT_MS, IS_WIN } from '../utils.js';
 
 const GH_MAX_BUFFER = 10 * 1024 * 1024; // 10MB — handles paginated API responses
+const GH_PAGINATED_TIMEOUT_MS = 60_000; // 60s — paginated endpoints can be slow
 
 /**
  * Shared error handler for all GitHub CLI interactions.
@@ -37,11 +38,12 @@ export function ghFetchAndParse<T>(
   context: string,
   cwd: string,
 ): T {
+  const isPaginated = args.includes('--paginate');
   try {
     const raw = execFileSync('gh', args, {
       cwd,
       encoding: 'utf-8',
-      timeout: GH_TIMEOUT_MS,
+      timeout: isPaginated ? GH_PAGINATED_TIMEOUT_MS : GH_TIMEOUT_MS,
       shell: IS_WIN,
       maxBuffer: GH_MAX_BUFFER,
     });
@@ -51,7 +53,7 @@ export function ghFetchAndParse<T>(
       parsed = JSON.parse(raw);
     } catch {
       throw new Error(
-        `[Totem Error] GitHub CLI returned invalid JSON for ${context}. Are you authenticated?`,
+        `[Totem Error] GitHub CLI returned invalid JSON for ${context}. Run \`gh auth status\` to check your authentication.`,
       );
     }
 
