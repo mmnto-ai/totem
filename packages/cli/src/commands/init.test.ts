@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { scaffoldMcpConfig } from './init.js';
@@ -93,6 +94,6 @@ describe('scaffoldMcpConfig', () => {
     const result = scaffoldMcpConfig(filePath, 'Claude Code', SERVER_ENTRY);
 
     expect(result.action).toBe('skipped');
-    expect(result.error).toContain('invalid JSON');
+    expect(result.err).toContain('invalid JSON');
   });
 });

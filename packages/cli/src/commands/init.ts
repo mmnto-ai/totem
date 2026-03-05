@@ -87,7 +87,7 @@ export function scaffoldMcpConfig(
   filePath: string,
   toolName: string,
   serverEntry: Record<string, unknown>,
-): { action: 'created' | 'merged' | 'skipped'; error?: string } {
+): { action: 'created' | 'merged' | 'skipped'; err?: string } {
   try {
     if (!fs.existsSync(filePath)) {
       const dir = path.dirname(filePath);
@@ -109,7 +109,7 @@ export function scaffoldMcpConfig(
     } catch {
       return {
         action: 'skipped',
-        error: `Could not parse ${path.basename(filePath)} (invalid JSON)`,
+        err: `Could not parse ${path.basename(filePath)} (invalid JSON)`,
       };
     }
 
@@ -124,7 +124,7 @@ export function scaffoldMcpConfig(
     return { action: 'merged' };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { action: 'skipped', error: message };
+    return { action: 'skipped', err: message };
   }
 }
 
@@ -382,8 +382,8 @@ export async function initCommand(): Promise<void> {
         const filePath = path.join(cwd, tool.mcpPath);
         const result = scaffoldMcpConfig(filePath, tool.name, tool.serverEntry);
 
-        if (result.error) {
-          console.log(`\n[Totem] ${result.error}`);
+        if (result.err) {
+          console.log(`\n[Totem] ${result.err}`);
           console.log(`Add this manually to your ${tool.mcpPath} under "mcpServers":\n`);
           console.log(`  "totem": ${JSON.stringify(tool.serverEntry, null, 2)}\n`);
         } else if (result.action === 'created') {
