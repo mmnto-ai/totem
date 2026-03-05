@@ -5,6 +5,7 @@ import * as readline from 'node:readline/promises';
 
 import type { IngestTarget } from '@mmnto/totem';
 
+import { IS_WIN } from '../utils.js';
 import { installPostMergeHook } from './install-hooks.js';
 
 const AI_PROMPT_BLOCK = `
@@ -48,9 +49,8 @@ interface AiToolInfo {
   serverEntry: Record<string, unknown>;
 }
 
-const isWin = process.platform === 'win32';
-const npxCmd = isWin ? 'cmd' : 'npx';
-const npxArgs = isWin ? ['/c', 'npx', '-y', '@mmnto/mcp'] : ['-y', '@mmnto/mcp'];
+const npxCmd = IS_WIN ? 'cmd' : 'npx';
+const npxArgs = IS_WIN ? ['/c', 'npx', '-y', '@mmnto/mcp'] : ['-y', '@mmnto/mcp'];
 
 const AI_TOOLS: AiToolInfo[] = [
   {
