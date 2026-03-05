@@ -226,7 +226,6 @@ export function appendLessons(lessons: ExtractedLesson[], lessonsPath: string): 
 // ─── Terminal sanitization ──────────────────────────────
 
 /** Strip ANSI escape sequences and control characters to prevent terminal injection. */
-// eslint-disable-next-line no-control-regex
 const CONTROL_RE = /\x1b\[[0-9;]*[a-zA-Z]|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g;
 
 export function sanitize(text: string): string {
