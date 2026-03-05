@@ -225,9 +225,9 @@ export function appendLessons(lessons: ExtractedLesson[], lessonsPath: string): 
 
 // ─── Terminal sanitization ──────────────────────────────
 
-/** Strip ANSI escape sequences and control characters to prevent terminal injection. */
+/** Strip ANSI escape sequences, control characters, and BiDi overrides to prevent terminal injection. */
 const CONTROL_RE =
-  /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07\x1b]*[\x07\x1b\\]|[\x00-\x08\x0b-\x1f\x7f\x80-\x9f]/g;
+  /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07\x1b]*[\x07\x1b\\]|[\x00-\x08\x0b-\x1f\x7f\x80-\x9f]|[\u202A-\u202E\u2066-\u2069]/g;
 
 export function sanitize(text: string): string {
   return text.replace(CONTROL_RE, '');
@@ -359,7 +359,7 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
 
   for (let i = 0; i < lessons.length; i++) {
     const lesson = lessons[i]!;
-    console.error(`  [${i + 1}] Tags: ${sanitize(lesson.tags.join(', '))}`);
+    console.error(`  [${i + 1}] Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`);
     console.error(`      ${sanitize(lesson.text).replace(/\n/g, '\n      ')}`);
     console.error('');
   }
@@ -368,8 +368,8 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
   if (options.dryRun) {
     console.error(`[${TAG}] Dry run — lessons not written.`);
     for (const lesson of lessons) {
-      console.log(`\n  Tags: ${lesson.tags.join(', ')}`);
-      console.log(`  ${lesson.text}`);
+      console.log(`\n  Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`);
+      console.log(`  ${sanitize(lesson.text).replace(/\n/g, '\n  ')}`);
     }
     return;
   }

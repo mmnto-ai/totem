@@ -107,6 +107,11 @@ describe('sanitize', () => {
     expect(sanitize('before\x9bafter')).toBe('beforeafter');
     expect(sanitize('test\x9dmore')).toBe('testmore');
   });
+
+  it('strips BiDi control characters', () => {
+    expect(sanitize('hello\u202Aworld\u202C')).toBe('helloworld');
+    expect(sanitize('text\u2066hidden\u2069end')).toBe('texthiddenend');
+  });
 });
 
 // ─── appendLessons ──────────────────────────────────────
