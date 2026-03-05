@@ -1,5 +1,16 @@
 # @mmnto/cli
 
+## 0.5.0
+
+### Minor Changes
+
+- a91d8ac: Auto-scaffold MCP server configs during `totem init` for detected AI tools (Claude Code, Gemini CLI, Cursor)
+
+### Patch Changes
+
+- bf9ffaa: Fix MCP config scaffolding on Windows by wrapping `npx` with `cmd /c` (bare `npx` fails as a spawned command on win32)
+  - @mmnto/totem@0.5.0
+
 ## 0.4.0
 
 ### Minor Changes
