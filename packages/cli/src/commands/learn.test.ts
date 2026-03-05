@@ -94,6 +94,14 @@ describe('sanitize', () => {
   it('strips cursor manipulation sequences', () => {
     expect(sanitize('\x1b[2Aup two lines\x1b[K')).toBe('up two lines');
   });
+
+  it('strips carriage returns', () => {
+    expect(sanitize('visible\rhidden')).toBe('visiblehidden');
+  });
+
+  it('strips OSC sequences', () => {
+    expect(sanitize('\x1b]0;malicious title\x07safe text')).toBe('safe text');
+  });
 });
 
 // ─── appendLessons ──────────────────────────────────────
@@ -178,7 +186,7 @@ describe('confirmLessons', () => {
 
   it('throws in non-TTY without --yes', async () => {
     await expect(confirmLessons(3, { isTTY: false })).rejects.toThrow(
-      '[Totem Error] Refusing to write lessons in non-interactive mode',
+      '[Totem Error] Refusing to write lessons in non-interactive mode. Use --yes to bypass confirmation.',
     );
   });
 

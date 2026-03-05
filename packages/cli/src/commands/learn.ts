@@ -226,7 +226,7 @@ export function appendLessons(lessons: ExtractedLesson[], lessonsPath: string): 
 // ─── Terminal sanitization ──────────────────────────────
 
 /** Strip ANSI escape sequences and control characters to prevent terminal injection. */
-const CONTROL_RE = /\x1b\[[0-9;]*[a-zA-Z]|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g;
+const CONTROL_RE = /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07\x1b]*[\x07\x1b\\]|[\x00-\x08\x0b-\x1f\x7f]/g;
 
 export function sanitize(text: string): string {
   return text.replace(CONTROL_RE, '');
