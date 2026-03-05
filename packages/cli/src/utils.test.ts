@@ -10,6 +10,7 @@ import {
   formatResults,
   loadEnv,
   resolveConfigPath,
+  sanitize,
   tryParseGeminiJson,
   wrapXml,
   writeOutput,
@@ -21,6 +22,50 @@ function makeResult(
 ): SearchResult {
   return { contextPrefix: '', type: 'code', metadata: {}, ...overrides };
 }
+
+// ─── sanitize ───────────────────────────────────────────
+
+describe('sanitize', () => {
+  it('strips ANSI escape sequences', () => {
+    expect(sanitize('\x1b[31mred text\x1b[0m')).toBe('red text');
+  });
+
+  it('strips control characters', () => {
+    expect(sanitize('hello\x00\x07\x08world')).toBe('helloworld');
+  });
+
+  it('preserves normal text with newlines and tabs', () => {
+    expect(sanitize('line1\nline2\ttab')).toBe('line1\nline2\ttab');
+  });
+
+  it('strips cursor manipulation sequences', () => {
+    expect(sanitize('\x1b[2Aup two lines\x1b[K')).toBe('up two lines');
+  });
+
+  it('strips carriage returns', () => {
+    expect(sanitize('visible\rhidden')).toBe('visiblehidden');
+  });
+
+  it('strips OSC sequences terminated by BEL', () => {
+    expect(sanitize('\x1b]0;malicious title\x07safe text')).toBe('safe text');
+  });
+
+  it('strips OSC sequences terminated by ST', () => {
+    expect(sanitize('\x1b]0;malicious title\x1b\\safe text')).toBe('safe text');
+  });
+
+  it('strips C1 control characters', () => {
+    expect(sanitize('before\x9bafter')).toBe('beforeafter');
+    expect(sanitize('test\x9dmore')).toBe('testmore');
+  });
+
+  it('strips BiDi control characters', () => {
+    expect(sanitize('hello\u202Aworld\u202C')).toBe('helloworld');
+    expect(sanitize('text\u2066hidden\u2069end')).toBe('texthiddenend');
+  });
+});
+
+// ─── wrapXml ────────────────────────────────────────────
 
 describe('wrapXml', () => {
   it('wraps content in XML tags', () => {

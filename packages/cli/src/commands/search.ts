@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import type { ContentType } from '@mmnto/totem';
 import { ContentTypeSchema, createEmbedder, LanceStore } from '@mmnto/totem';
 
-import { loadConfig, loadEnv, resolveConfigPath } from '../utils.js';
+import { loadConfig, loadEnv, resolveConfigPath, sanitize } from '../utils.js';
 
 export async function searchCommand(
   query: string,
@@ -38,8 +38,9 @@ export async function searchCommand(
   }
 
   for (const result of results) {
-    console.log(`\n--- ${result.label} (${result.type}) ---`);
-    console.log(`File: ${result.filePath} | Score: ${result.score.toFixed(3)}`);
-    console.log(result.content.slice(0, 200) + (result.content.length > 200 ? '...' : ''));
+    console.log(`\n--- ${sanitize(result.label)} (${result.type}) ---`);
+    console.log(`File: ${sanitize(result.filePath)} | Score: ${result.score.toFixed(3)}`);
+    const snippet = result.content.slice(0, 200) + (result.content.length > 200 ? '...' : '');
+    console.log(sanitize(snippet));
   }
 }
