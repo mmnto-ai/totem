@@ -227,7 +227,7 @@ export function appendLessons(lessons: ExtractedLesson[], lessonsPath: string): 
 
 /** Strip ANSI escape sequences, control characters, and BiDi overrides to prevent terminal injection. */
 const CONTROL_RE =
-  /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07\x1b]*[\x07\x1b\\]|[\x00-\x08\x0b-\x1f\x7f\x80-\x9f]|[\u202A-\u202E\u2066-\u2069]/g;
+  /\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?(?:\x07|\x1b\\)|[\x00-\x08\x0b-\x1f\x7f\x80-\x9f]|[\u202A-\u202E\u2066-\u2069]/g;
 
 export function sanitize(text: string): string {
   return text.replace(CONTROL_RE, '');
@@ -384,9 +384,15 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
     return;
   }
 
+  // Sanitize before persisting — strip any terminal injection from stored lessons
+  const sanitizedLessons = lessons.map((l) => ({
+    tags: l.tags.map((t) => sanitize(t)),
+    text: sanitize(l.text),
+  }));
+
   // Append lessons to .totem/lessons.md
   const lessonsPath = path.join(cwd, config.totemDir, 'lessons.md');
-  appendLessons(lessons, lessonsPath);
+  appendLessons(sanitizedLessons, lessonsPath);
   console.error(`[${TAG}] Appended ${lessons.length} lesson(s) to ${config.totemDir}/lessons.md`);
 
   // Run incremental sync so lessons are immediately searchable

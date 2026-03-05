@@ -99,8 +99,12 @@ describe('sanitize', () => {
     expect(sanitize('visible\rhidden')).toBe('visiblehidden');
   });
 
-  it('strips OSC sequences', () => {
+  it('strips OSC sequences terminated by BEL', () => {
     expect(sanitize('\x1b]0;malicious title\x07safe text')).toBe('safe text');
+  });
+
+  it('strips OSC sequences terminated by ST', () => {
+    expect(sanitize('\x1b]0;malicious title\x1b\\safe text')).toBe('safe text');
   });
 
   it('strips C1 control characters', () => {
