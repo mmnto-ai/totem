@@ -40,6 +40,94 @@ interface DetectedProject {
   hasSessions: boolean;
 }
 
+type AiTool = 'Claude Code' | 'Gemini CLI' | 'Cursor';
+
+interface AiToolInfo {
+  name: AiTool;
+  mcpPath: string;
+  serverEntry: Record<string, unknown>;
+}
+
+const AI_TOOLS: AiToolInfo[] = [
+  {
+    name: 'Claude Code',
+    mcpPath: '.mcp.json',
+    serverEntry: { type: 'stdio', command: 'npx', args: ['-y', '@mmnto/mcp'] },
+  },
+  {
+    name: 'Gemini CLI',
+    mcpPath: '.gemini/settings.json',
+    serverEntry: { command: 'npx', args: ['-y', '@mmnto/mcp'] },
+  },
+  {
+    name: 'Cursor',
+    mcpPath: '.cursor/mcp.json',
+    serverEntry: { type: 'stdio', command: 'npx', args: ['-y', '@mmnto/mcp'] },
+  },
+];
+
+function detectAiTools(cwd: string): AiToolInfo[] {
+  const exists = (p: string) => fs.existsSync(path.join(cwd, p));
+  const detected: AiToolInfo[] = [];
+
+  if (exists('CLAUDE.md') || exists('.claude')) {
+    detected.push(AI_TOOLS.find((t) => t.name === 'Claude Code')!);
+  }
+  if (exists('.gemini')) {
+    detected.push(AI_TOOLS.find((t) => t.name === 'Gemini CLI')!);
+  }
+  if (exists('.cursorrules')) {
+    detected.push(AI_TOOLS.find((t) => t.name === 'Cursor')!);
+  }
+
+  return detected;
+}
+
+export function scaffoldMcpConfig(
+  filePath: string,
+  toolName: string,
+  serverEntry: Record<string, unknown>,
+): { action: 'created' | 'merged' | 'skipped'; error?: string } {
+  try {
+    if (!fs.existsSync(filePath)) {
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(
+        filePath,
+        JSON.stringify({ mcpServers: { totem: serverEntry } }, null, 2) + '\n',
+        'utf-8',
+      );
+      return { action: 'created' };
+    }
+
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return {
+        action: 'skipped',
+        error: `Could not parse ${path.basename(filePath)} (invalid JSON)`,
+      };
+    }
+
+    const servers = (parsed.mcpServers ?? {}) as Record<string, unknown>;
+    if ('totem' in servers) {
+      return { action: 'skipped' };
+    }
+
+    servers.totem = serverEntry;
+    parsed.mcpServers = servers;
+    fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
+    return { action: 'merged' };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { action: 'skipped', error: message };
+  }
+}
+
 function detectProject(cwd: string): DetectedProject {
   const exists = (p: string) => fs.existsSync(path.join(cwd, p));
   return {
@@ -258,6 +346,52 @@ export async function initCommand(): Promise<void> {
             const message = err instanceof Error ? err.message : String(err);
             console.error(`\n[Totem Error] Failed to inject reflexes into ${file}: ${message}`);
           }
+        }
+      }
+    }
+
+    // --- Always run: MCP server registration ---
+    const detectedTools = detectAiTools(cwd);
+
+    if (detectedTools.length > 0) {
+      const toolNames = detectedTools.map((t) => t.name).join(', ');
+      console.log(`\n[Totem] Detected AI tools: ${toolNames}`);
+      const mcpAnswer = await rl.question(
+        'Which tools should Totem configure MCP for? [all/none/select] (default: all): ',
+      );
+
+      let selectedTools: AiToolInfo[];
+      const trimmed = mcpAnswer.trim().toLowerCase();
+
+      if (trimmed === 'none') {
+        selectedTools = [];
+      } else if (trimmed === 'select') {
+        selectedTools = [];
+        for (const tool of detectedTools) {
+          const pick = await rl.question(`  Configure ${tool.name}? (Y/n): `);
+          if (pick.trim().toLowerCase() !== 'n' && pick.trim().toLowerCase() !== 'no') {
+            selectedTools.push(tool);
+          }
+        }
+      } else {
+        // 'all' or Enter (default)
+        selectedTools = detectedTools;
+      }
+
+      for (const tool of selectedTools) {
+        const filePath = path.join(cwd, tool.mcpPath);
+        const result = scaffoldMcpConfig(filePath, tool.name, tool.serverEntry);
+
+        if (result.error) {
+          console.log(`\n[Totem] ${result.error}`);
+          console.log(`Add this manually to your ${tool.mcpPath} under "mcpServers":\n`);
+          console.log(`  "totem": ${JSON.stringify(tool.serverEntry, null, 2)}\n`);
+        } else if (result.action === 'created') {
+          console.log(`[Totem] Created ${tool.mcpPath} with Totem MCP server.`);
+        } else if (result.action === 'merged') {
+          console.log(`[Totem] Added Totem MCP server to existing ${tool.mcpPath}.`);
+        } else {
+          console.log(`[Totem] ${tool.mcpPath} already has Totem configured.`);
         }
       }
     }
