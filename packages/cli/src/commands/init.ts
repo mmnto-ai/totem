@@ -89,7 +89,7 @@ function detectAiTools(cwd: string): AiToolInfo[] {
   if (exists('.gemini')) {
     detected.push(AI_TOOLS.find((t) => t.name === 'Gemini CLI')!);
   }
-  if (exists('.cursorrules') || exists('.cursor/mcp.json') || exists('.cursor')) {
+  if (exists('.cursorrules') || exists('.cursor/mcp.json')) {
     detected.push(AI_TOOLS.find((t) => t.name === 'Cursor')!);
   }
 

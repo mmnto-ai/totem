@@ -148,7 +148,7 @@ export async function specCommand(input: string, options: SpecOptions): Promise<
   await store.connect();
 
   // Parse input: issue number, GitHub URL, or free-text
-  const urlMatch = input.match(/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/);
+  const urlMatch = input.match(/^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/);
   const issueNumber = /^\d+$/.test(input)
     ? parseInt(input, 10)
     : urlMatch
