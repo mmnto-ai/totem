@@ -331,7 +331,7 @@ export async function initCommand(): Promise<void> {
 
           if (fs.existsSync(envPath)) {
             const existing = fs.readFileSync(envPath, 'utf-8');
-            if (!/^OPENAI_API_KEY=/m.test(existing)) {
+            if (!/^\s*OPENAI_API_KEY\s*=/m.test(existing)) {
               fs.appendFileSync(envPath, envLine);
             }
           } else {
