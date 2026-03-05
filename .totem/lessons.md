@@ -94,3 +94,9 @@ Isolate `JSON.parse` in its own try/catch block when processing external CLI out
 **Tags:** cli, design-decision
 
 For rough diagnostic summaries or progress indicators, `string.length` is often sufficient for size approximations in primarily English/ASCII contexts. Avoiding byte-precision calculations for non-critical displays reduces code complexity when the difference is negligible for the use case.
+
+## Lesson — 2026-03-05T03:12:04.126Z
+
+**Tags:** architecture, adapter-pattern, issue-tracker, pivot
+
+The IssueAdapter interface lives at `packages/cli/src/adapters/issue-adapter.ts` with `StandardIssue` and `StandardIssueListItem` types. The GitHub implementation is `GitHubCliAdapter` at `packages/cli/src/adapters/github-cli.ts`. Future issue tracker adapters (Jira, Linear) should implement the same interface. PR-related gh calls (briefing.ts, learn.ts) are NOT yet abstracted — they would need a separate PrAdapter interface.
