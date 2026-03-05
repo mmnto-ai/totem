@@ -100,3 +100,9 @@ For rough diagnostic summaries or progress indicators, `string.length` is often 
 **Tags:** architecture, adapter-pattern, issue-tracker, pivot
 
 The IssueAdapter interface lives at `packages/cli/src/adapters/issue-adapter.ts` with `StandardIssue` and `StandardIssueListItem` types. The GitHub implementation is `GitHubCliAdapter` at `packages/cli/src/adapters/github-cli.ts`. Future issue tracker adapters (Jira, Linear) should implement the same interface. PR-related gh calls (briefing.ts, learn.ts) are NOT yet abstracted — they would need a separate PrAdapter interface.
+
+## Lesson — 2026-03-05T03:16:17.884Z
+
+**Tags:** workflow, shield, pre-push, trap
+
+ALWAYS run `totem shield` before pushing or creating a PR. This is a core Workflow Orchestrator Ritual defined in CLAUDE.md. Don't skip it even when momentum is high — that's exactly when mistakes slip through.

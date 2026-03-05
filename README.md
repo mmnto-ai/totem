@@ -1,5 +1,9 @@
 # Totem
 
+> [!WARNING]
+> **Developer Preview / Early Alpha**
+> Totem is currently in early alpha. We are actively working on improving the "Magic Onboarding" experience (UX polish, seamless host integration) and stabilizing support for different ingestion setups and platform variations (Windows/macOS). If you encounter friction during `totem init`, please bear with us as we polish these workflows!
+
 **Your AI team forgets. Totem remembers.**
 
 Developers are hitting the limits of "context stuffing." Brute-forcing a 2M token window with your entire codebase is slow, expensive, and leads to hallucinations.
