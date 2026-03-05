@@ -100,7 +100,8 @@ function assemblePrompt(
   if (issue) {
     const issueLabels = issue.labels.join(', ');
     sections.push('=== TARGET ISSUE ===');
-    sections.push(`Issue #${issue.number}: ${issue.title}`);
+    sections.push(`Issue #${issue.number}`);
+    sections.push(wrapXml('issue_title', issue.title));
     sections.push(`Labels: ${issueLabels || '(none)'}`);
     sections.push(`State: ${issue.state}`);
     if (issue.body) {
