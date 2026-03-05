@@ -4,9 +4,23 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { scaffoldMcpConfig } from './init.js';
+import { buildNpxCommand, scaffoldMcpConfig } from './init.js';
 
 const SERVER_ENTRY = { type: 'stdio', command: 'npx', args: ['-y', '@mmnto/mcp'] };
+
+describe('buildNpxCommand', () => {
+  it('returns cmd /c npx on Windows', () => {
+    const result = buildNpxCommand(true);
+    expect(result.command).toBe('cmd');
+    expect(result.args).toEqual(['/c', 'npx', '-y', '@mmnto/mcp']);
+  });
+
+  it('returns bare npx on non-Windows', () => {
+    const result = buildNpxCommand(false);
+    expect(result.command).toBe('npx');
+    expect(result.args).toEqual(['-y', '@mmnto/mcp']);
+  });
+});
 
 describe('scaffoldMcpConfig', () => {
   let tmpDir: string;

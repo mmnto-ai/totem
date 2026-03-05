@@ -5,6 +5,7 @@ import * as readline from 'node:readline/promises';
 
 import type { IngestTarget } from '@mmnto/totem';
 
+import { IS_WIN } from '../utils.js';
 import { installPostMergeHook } from './install-hooks.js';
 
 const AI_PROMPT_BLOCK = `
@@ -48,21 +49,29 @@ interface AiToolInfo {
   serverEntry: Record<string, unknown>;
 }
 
+export function buildNpxCommand(isWin: boolean): { command: string; args: string[] } {
+  return isWin
+    ? { command: 'cmd', args: ['/c', 'npx', '-y', '@mmnto/mcp'] }
+    : { command: 'npx', args: ['-y', '@mmnto/mcp'] };
+}
+
+const { command: npxCmd, args: npxArgs } = buildNpxCommand(IS_WIN);
+
 const AI_TOOLS: AiToolInfo[] = [
   {
     name: 'Claude Code',
     mcpPath: '.mcp.json',
-    serverEntry: { type: 'stdio', command: 'npx', args: ['-y', '@mmnto/mcp'] },
+    serverEntry: { type: 'stdio', command: npxCmd, args: npxArgs },
   },
   {
     name: 'Gemini CLI',
     mcpPath: '.gemini/settings.json',
-    serverEntry: { command: 'npx', args: ['-y', '@mmnto/mcp'] },
+    serverEntry: { command: npxCmd, args: npxArgs },
   },
   {
     name: 'Cursor',
     mcpPath: '.cursor/mcp.json',
-    serverEntry: { type: 'stdio', command: 'npx', args: ['-y', '@mmnto/mcp'] },
+    serverEntry: { type: 'stdio', command: npxCmd, args: npxArgs },
   },
 ];
 
