@@ -316,9 +316,13 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
     console.error('');
   }
 
-  // --dry-run mode: preview lessons without writing
+  // --dry-run mode: preview lessons to stdout (pipeable) without writing
   if (options.dryRun) {
     console.error(`[${TAG}] Dry run — lessons not written.`);
+    for (const lesson of lessons) {
+      console.log(`\n  Tags: ${lesson.tags.join(', ')}`);
+      console.log(`  ${lesson.text}`);
+    }
     return;
   }
 
