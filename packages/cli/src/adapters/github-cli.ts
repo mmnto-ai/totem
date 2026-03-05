@@ -48,68 +48,64 @@ export class GitHubCliAdapter implements IssueAdapter {
   constructor(private cwd: string) {}
 
   private fetchAndParse<T>(args: string[], schema: z.ZodType<T>, context: string): T {
-    const raw = execFileSync('gh', args, {
-      cwd: this.cwd,
-      encoding: 'utf-8',
-      timeout: GH_TIMEOUT_MS,
-      shell: IS_WIN,
-    });
-
-    let parsed: unknown;
     try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw new Error(
-        `[Totem Error] GitHub CLI returned invalid JSON for ${context}. Are you authenticated?`,
-      );
-    }
+      const raw = execFileSync('gh', args, {
+        cwd: this.cwd,
+        encoding: 'utf-8',
+        timeout: GH_TIMEOUT_MS,
+        shell: IS_WIN,
+      });
 
-    return schema.parse(parsed);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new Error(
+          `[Totem Error] GitHub CLI returned invalid JSON for ${context}. Are you authenticated?`,
+        );
+      }
+
+      return schema.parse(parsed);
+    } catch (err) {
+      handleGhError(err, context);
+    }
   }
 
   fetchIssue(issueNumber: number): StandardIssue {
-    try {
-      const issue = this.fetchAndParse(
-        ['issue', 'view', String(issueNumber), '--json', 'number,title,body,labels,state'],
-        GhIssueSchema,
-        `issue #${issueNumber}`,
-      );
-      return {
-        number: issue.number,
-        title: issue.title,
-        body: issue.body ?? '',
-        state: issue.state,
-        labels: issue.labels.map((l) => l.name),
-      };
-    } catch (err) {
-      handleGhError(err, `issue #${issueNumber}`);
-    }
+    const issue = this.fetchAndParse(
+      ['issue', 'view', String(issueNumber), '--json', 'number,title,body,labels,state'],
+      GhIssueSchema,
+      `issue #${issueNumber}`,
+    );
+    return {
+      number: issue.number,
+      title: issue.title,
+      body: issue.body ?? '',
+      state: issue.state,
+      labels: issue.labels.map((l) => l.name),
+    };
   }
 
   fetchOpenIssues(limit: number = DEFAULT_ISSUE_LIMIT): StandardIssueListItem[] {
-    try {
-      const issues = this.fetchAndParse(
-        [
-          'issue',
-          'list',
-          '--state',
-          'open',
-          '--json',
-          'number,title,labels,updatedAt',
-          '--limit',
-          String(limit),
-        ],
-        z.array(GhIssueListItemSchema),
-        'open issues',
-      );
-      return issues.map((i) => ({
-        number: i.number,
-        title: i.title,
-        labels: i.labels.map((l) => l.name),
-        updatedAt: i.updatedAt,
-      }));
-    } catch (err) {
-      handleGhError(err, 'open issues');
-    }
+    const issues = this.fetchAndParse(
+      [
+        'issue',
+        'list',
+        '--state',
+        'open',
+        '--json',
+        'number,title,labels,updatedAt',
+        '--limit',
+        String(limit),
+      ],
+      z.array(GhIssueListItemSchema),
+      'open issues',
+    );
+    return issues.map((i) => ({
+      number: i.number,
+      title: i.title,
+      labels: i.labels.map((l) => l.name),
+      updatedAt: i.updatedAt,
+    }));
   }
 }
