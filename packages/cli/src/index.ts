@@ -192,10 +192,18 @@ program
   .option('--model <name>', 'Override the default model for the orchestrator')
   .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
   .option('--dry-run', 'Show extracted lessons without writing to lessons.md')
+  .option('--yes', 'Skip confirmation prompt (use in scripts/CI)')
   .action(
     async (
       prNumber: string,
-      opts: { raw?: boolean; out?: string; model?: string; fresh?: boolean; dryRun?: boolean },
+      opts: {
+        raw?: boolean;
+        out?: string;
+        model?: string;
+        fresh?: boolean;
+        dryRun?: boolean;
+        yes?: boolean;
+      },
     ) => {
       try {
         const { learnCommand } = await import('./commands/learn.js');

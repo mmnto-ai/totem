@@ -1,10 +1,11 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { Readable, Writable } from 'node:stream';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { appendLessons, parseLessons } from './learn.js';
+import { appendLessons, confirmLessons, parseLessons, sanitize } from './learn.js';
 
 // ─── parseLessons ───────────────────────────────────────
 
@@ -75,6 +76,48 @@ Tags: empty
   });
 });
 
+// ─── sanitize ───────────────────────────────────────────
+
+describe('sanitize', () => {
+  it('strips ANSI escape sequences', () => {
+    expect(sanitize('\x1b[31mred text\x1b[0m')).toBe('red text');
+  });
+
+  it('strips control characters', () => {
+    expect(sanitize('hello\x00\x07\x08world')).toBe('helloworld');
+  });
+
+  it('preserves normal text with newlines and tabs', () => {
+    expect(sanitize('line1\nline2\ttab')).toBe('line1\nline2\ttab');
+  });
+
+  it('strips cursor manipulation sequences', () => {
+    expect(sanitize('\x1b[2Aup two lines\x1b[K')).toBe('up two lines');
+  });
+
+  it('strips carriage returns', () => {
+    expect(sanitize('visible\rhidden')).toBe('visiblehidden');
+  });
+
+  it('strips OSC sequences terminated by BEL', () => {
+    expect(sanitize('\x1b]0;malicious title\x07safe text')).toBe('safe text');
+  });
+
+  it('strips OSC sequences terminated by ST', () => {
+    expect(sanitize('\x1b]0;malicious title\x1b\\safe text')).toBe('safe text');
+  });
+
+  it('strips C1 control characters', () => {
+    expect(sanitize('before\x9bafter')).toBe('beforeafter');
+    expect(sanitize('test\x9dmore')).toBe('testmore');
+  });
+
+  it('strips BiDi control characters', () => {
+    expect(sanitize('hello\u202Aworld\u202C')).toBe('helloworld');
+    expect(sanitize('text\u2066hidden\u2069end')).toBe('texthiddenend');
+  });
+});
+
 // ─── appendLessons ──────────────────────────────────────
 
 describe('appendLessons', () => {
@@ -128,5 +171,72 @@ describe('appendLessons', () => {
     const content = fs.readFileSync(lessonsPath, 'utf-8');
     // Match ISO 8601 pattern in heading
     expect(content).toMatch(/## Lesson — \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+  });
+});
+
+// ─── confirmLessons ─────────────────────────────────────
+
+function makeInput(response: string): Readable {
+  const input = new Readable({ read() {} });
+  // Push response after a tick so readline can consume it
+  setImmediate(() => {
+    input.push(response + '\n');
+    input.push(null);
+  });
+  return input;
+}
+
+const nullOutput = new Writable({
+  write(_chunk, _enc, cb) {
+    cb();
+  },
+});
+
+describe('confirmLessons', () => {
+  it('returns true when --yes is set', async () => {
+    const result = await confirmLessons(3, { yes: true, isTTY: false });
+    expect(result).toBe(true);
+  });
+
+  it('throws in non-TTY without --yes', async () => {
+    await expect(confirmLessons(3, { isTTY: false })).rejects.toThrow(
+      '[Totem Error] Refusing to write lessons in non-interactive mode. Use --yes to bypass confirmation.',
+    );
+  });
+
+  it('returns true when user confirms with empty input (default Y)', async () => {
+    const result = await confirmLessons(2, {
+      isTTY: true,
+      input: makeInput(''),
+      output: nullOutput,
+    });
+    expect(result).toBe(true);
+  });
+
+  it('returns true when user types y', async () => {
+    const result = await confirmLessons(2, {
+      isTTY: true,
+      input: makeInput('y'),
+      output: nullOutput,
+    });
+    expect(result).toBe(true);
+  });
+
+  it('returns false when user types n', async () => {
+    const result = await confirmLessons(2, {
+      isTTY: true,
+      input: makeInput('n'),
+      output: nullOutput,
+    });
+    expect(result).toBe(false);
+  });
+
+  it('returns false when user types N', async () => {
+    const result = await confirmLessons(1, {
+      isTTY: true,
+      input: makeInput('N'),
+      output: nullOutput,
+    });
+    expect(result).toBe(false);
   });
 });

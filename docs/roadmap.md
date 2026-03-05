@@ -22,7 +22,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 **Goal:** If users can't install Totem easily and don't trust what it does, advanced features won't matter. Make onboarding frictionless and the CLI feel premium.
 
 - [x] **#87 Auto-configure AI tools:** `totem init` scaffolds `.gemini/settings.json`, `CLAUDE.md`, and `.cursorrules` automatically.
-- [ ] **#89 UX Polish for `totem init`:** Fix double-prompting and print clean success summaries so developers trust the onboarding.
+- [x] **#89 UX Polish for `totem init`:** Fix double-prompting and print clean success summaries so developers trust the onboarding.
 - [ ] **#86 Seamless Host Integration:** Build the `SessionStart` hooks, Claude custom commands, and `Totem Architect` skills that #87 installs.
 - [ ] **#21 CLI UI/UX Polish:** Swap generic `console.log` for `@clack/prompts` and `ora` spinners.
 - [ ] **#12 Cross-platform onboarding:** Ensure docs and installers work flawlessly across Windows (PowerShell) and macOS.
@@ -32,9 +32,10 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 **Goal:** Before ingesting enterprise databases, the local vector index and LLM prompts must be bulletproof across all environments.
 
 - [x] **#80 Security: Add XML delimiting:** Close the prompt injection gap in orchestrator commands.
-- [ ] **#91 Normalize LanceDB paths:** Fix Windows backslash issues before users share `.lancedb` folders across OS boundaries.
-- [ ] **#90 Refactor to `IssueAdapter`:** Extract `gh` CLI logic into an interface to decouple from GitHub.
-- [ ] **#77 Test audit:** Backfill CLI unit tests using the newly added Vitest infrastructure.
+- [ ] **#111 Security:** Mitigate indirect prompt injection in `learn` command via PR comments _(Active)_.
+- [x] **#91 Normalize LanceDB paths:** Fix Windows backslash issues before users share `.lancedb` folders across OS boundaries.
+- [x] **#90 Refactor to `IssueAdapter` / `PrAdapter`:** Extract `gh` CLI logic into interfaces to decouple from GitHub.
+- [x] **#77 Test audit:** Backfill CLI unit tests using the newly added Vitest infrastructure. (103+ tests passing)
 - [ ] **#78 Shell escaping edge cases:** Validate `execSync` safety with PowerShell as default shell.
 
 ## Phase 3: Workflow Expansion (Power User Tools)
@@ -44,7 +45,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [ ] **#44 `totem bridge`:** Build a mid-session context compaction tool to clear token windows without losing place.
 - [ ] **#74 `totem oracle`:** Add a frictionless Q&A command to query LanceDB without strict personas.
 - [ ] **#92 Telemetry Logging & Dashboard:** Persist token stats to `.totem/telemetry.jsonl` and build `totem stats` to track API quota usage.
-- [ ] **#83 Support GitHub issue URLs:** Allow users to paste full URLs in addition to issue numbers for `totem spec` and `triage`.
+- [x] **#83 Support GitHub issue URLs:** Allow users to paste full URLs in addition to issue numbers for `totem spec` and `triage`.
 - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
 
 ## Phase 4: Enterprise Expansion

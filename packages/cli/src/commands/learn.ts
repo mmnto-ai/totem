@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as readline from 'node:readline/promises';
 
 import type { SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore, runSync } from '@mmnto/totem';
@@ -222,6 +223,54 @@ export function appendLessons(lessons: ExtractedLesson[], lessonsPath: string): 
   fs.appendFileSync(lessonsPath, entries, 'utf-8');
 }
 
+// ─── Terminal sanitization ──────────────────────────────
+
+/** Strip ANSI escape sequences, control characters, and BiDi overrides to prevent terminal injection. */
+const CONTROL_RE =
+  /\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?(?:\x07|\x1b\\)|[\x00-\x08\x0b-\x1f\x7f\x80-\x9f]|[\u202A-\u202E\u2066-\u2069]/g;
+
+export function sanitize(text: string): string {
+  return text.replace(CONTROL_RE, '');
+}
+
+// ─── Confirmation gate ──────────────────────────────────
+
+/**
+ * Returns true if lessons should be written, false to abort.
+ * Throws in non-interactive environments without --yes.
+ */
+export async function confirmLessons(
+  count: number,
+  opts: {
+    yes?: boolean;
+    isTTY?: boolean;
+    input?: NodeJS.ReadableStream;
+    output?: NodeJS.WritableStream;
+  },
+): Promise<boolean> {
+  if (opts.yes) return true;
+
+  if (!opts.isTTY) {
+    throw new Error(
+      `[Totem Error] Refusing to write lessons in non-interactive mode. Use --yes to bypass confirmation.`,
+    );
+  }
+
+  const rl = readline.createInterface({
+    input: opts.input ?? process.stdin,
+    output: opts.output ?? process.stderr,
+  });
+  try {
+    const answer = await rl.question(`[${TAG}] Write ${count} lesson(s) to lessons.md? [Y/n] `);
+    if (answer.trim().toLowerCase() === 'n') {
+      return false;
+    }
+    return true;
+  } finally {
+    rl.close();
+  }
+}
+
 // ─── Main command ───────────────────────────────────────
 
 export interface LearnOptions {
@@ -230,6 +279,7 @@ export interface LearnOptions {
   model?: string;
   fresh?: boolean;
   dryRun?: boolean;
+  yes?: boolean;
 }
 
 export async function learnCommand(prNumber: string, options: LearnOptions): Promise<void> {
@@ -300,19 +350,49 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
 
   console.error(`[${TAG}] Extracted ${lessons.length} lesson(s)`);
 
-  // --dry-run mode: preview lessons without writing
+  // Display extracted lessons for review
+  console.error('');
+  console.error(
+    `[${TAG}] ⚠ WARNING: These lessons were extracted from PR comments, which may include content from untrusted contributors.`,
+  );
+  console.error(`[${TAG}] Review each lesson carefully before accepting.\n`);
+
+  for (let i = 0; i < lessons.length; i++) {
+    const lesson = lessons[i]!;
+    console.error(`  [${i + 1}] Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`);
+    console.error(`      ${sanitize(lesson.text).replace(/\n/g, '\n      ')}`);
+    console.error('');
+  }
+
+  // --dry-run mode: preview lessons to stdout (pipeable) without writing
   if (options.dryRun) {
     console.error(`[${TAG}] Dry run — lessons not written.`);
     for (const lesson of lessons) {
-      console.log(`\n  Tags: ${lesson.tags.join(', ')}`);
-      console.log(`  ${lesson.text}`);
+      console.log(`\n  Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`);
+      console.log(`  ${sanitize(lesson.text).replace(/\n/g, '\n  ')}`);
     }
     return;
   }
 
+  // Confirmation gate
+  const confirmed = await confirmLessons(lessons.length, {
+    yes: options.yes,
+    isTTY: !!process.stdin.isTTY,
+  });
+  if (!confirmed) {
+    console.error(`[${TAG}] Aborted — no lessons written.`);
+    return;
+  }
+
+  // Sanitize before persisting — strip any terminal injection from stored lessons
+  const sanitizedLessons = lessons.map((l) => ({
+    tags: l.tags.map((t) => sanitize(t)),
+    text: sanitize(l.text),
+  }));
+
   // Append lessons to .totem/lessons.md
   const lessonsPath = path.join(cwd, config.totemDir, 'lessons.md');
-  appendLessons(lessons, lessonsPath);
+  appendLessons(sanitizedLessons, lessonsPath);
   console.error(`[${TAG}] Appended ${lessons.length} lesson(s) to ${config.totemDir}/lessons.md`);
 
   // Run incremental sync so lessons are immediately searchable

@@ -1,20 +1,22 @@
 # Active Work
 
-## Current Focus: v0.6.0 Release & Architectural Hardening
+## Current Focus: Security Hardening & Stability
 
-We have successfully completed the core objectives for **Phase 1 Onboarding** (`totem init` UX polish) and **Phase 2 Stability** (Adapter pattern decoupling, path normalization, and a massive 103+ unit test audit).
+**v0.7.0 published** — Phase 2 refactor (unified gh-utils, PrAdapter, 103+ tests) shipped.
 
-Our immediate priority is to merge the Phase 2 refactor PR (#103) and **Publish Release v0.6.0**.
-
-Following the release, we will pivot to hardening the architecture based on the findings from the Staff-Level Code Review, before moving on to Epic #86 (Seamless Host Integration).
+Our immediate priority is security hardening (#111 learn command prompt injection), followed by stability fixes and onboarding polish.
 
 ### Active Tasks
 
-1. **Merge PR #103** (Phase 2 Refactor & Test Audit) and publish `v0.6.0` to npm.
-2. **#104 Stream chunks to LanceDB:** Fix the ingestion pipeline to prevent OOM crashes on large enterprise repos.
-3. **#105 OpenAI Rate Limit Resilience:** Add exponential backoff to the embedder.
-4. **#106 Fix Stale LanceDB Handles:** Update the MCP server to aggressively reconnect on any LanceDB search error, replacing the brittle regex heuristic.
-5. **#107 MCP Sync Visibility:** Pipe the background `totem sync` child process logs to the LLM via MCP progress events.
+1. **PR #115** — Confirmation prompt for `learn` command (#111). Mitigates indirect prompt injection from untrusted PR comments.
+2. **#106 Fix Stale LanceDB Handles:** Re-initialize store on error instead of brittle regex heuristic.
+3. **#104 Stream chunks to LanceDB:** Fix the ingestion pipeline to prevent OOM crashes on large repos.
+4. **#105 OpenAI Rate Limit Resilience:** Add exponential backoff to the embedder.
+
+### Open PRs
+
+- **#115** — `feat: add confirmation prompt to learn command` (branch: `feat/learn-confirmation`)
+- **#114** — `docs: update README, roadmap, and lessons for v0.7.0` (branch: `chore/docs-update`)
 
 ## Dogfooding: Session Start Hooks
 
@@ -78,7 +80,8 @@ Add a `hooks` section alongside existing MCP server config:
 
 ## Next Up
 
-After the release and architectural hardening are complete, we will return to expanding the ecosystem:
+After security hardening is complete, we will return to expanding the ecosystem:
 
 1. **Epic #86 Seamless Host Integration** (Gemini/Claude extensions)
 2. **#21 CLI UI/UX Polish** (adding `@clack/prompts` and spinners)
+3. **#12 Cross-platform onboarding** (Windows/macOS docs)
