@@ -105,10 +105,11 @@ export function scaffoldMcpConfig(
     let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(raw) as Record<string, unknown>;
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       return {
         action: 'skipped',
-        err: `Could not parse ${path.basename(filePath)} (invalid JSON)`,
+        err: `Could not parse ${path.basename(filePath)} (invalid JSON): ${message}`,
       };
     }
 

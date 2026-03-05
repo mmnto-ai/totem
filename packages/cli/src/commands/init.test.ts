@@ -105,5 +105,6 @@ describe('scaffoldMcpConfig', () => {
 
     expect(result.action).toBe('skipped');
     expect(result.err).toContain('invalid JSON');
+    expect(result.err).toContain('at position'); // includes original parse error detail
   });
 });
