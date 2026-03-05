@@ -105,4 +105,9 @@ describe('parseVerdict', () => {
     const content = '## Verdict\nPASS — Fine.';
     expect(parseVerdict(content)).toEqual({ pass: true, reason: 'Fine.' });
   });
+
+  it('handles verdict without any heading markers', () => {
+    const content = 'Verdict\nPASS — All good without hashes.';
+    expect(parseVerdict(content)).toEqual({ pass: true, reason: 'All good without hashes.' });
+  });
 });

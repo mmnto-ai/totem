@@ -1,6 +1,26 @@
-import { describe, expect, it } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
-import { wrapXml } from './utils.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { SearchResult } from '@mmnto/totem';
+
+import {
+  formatResults,
+  loadEnv,
+  resolveConfigPath,
+  tryParseGeminiJson,
+  wrapXml,
+  writeOutput,
+} from './utils.js';
+
+/** Helper to build a minimal SearchResult for tests. */
+function makeResult(
+  overrides: Partial<SearchResult> & Pick<SearchResult, 'label' | 'filePath' | 'score' | 'content'>,
+): SearchResult {
+  return { contextPrefix: '', type: 'code', metadata: {}, ...overrides };
+}
 
 describe('wrapXml', () => {
   it('wraps content in XML tags', () => {
@@ -37,5 +57,238 @@ describe('wrapXml', () => {
     expect(wrapXml('git_status', content)).toBe(
       '<git_status>\nline 1\nline 2\nline 3\n</git_status>',
     );
+  });
+});
+
+// ─── formatResults ──────────────────────────────────────
+
+describe('formatResults', () => {
+  it('returns empty string for empty results', () => {
+    expect(formatResults([], 'HEADING')).toBe('');
+  });
+
+  it('formats results with heading, label, filePath, and score', () => {
+    const results = [
+      makeResult({
+        label: 'function: foo',
+        filePath: 'src/foo.ts',
+        score: 0.875,
+        content: 'function foo() {}',
+      }),
+    ];
+    const output = formatResults(results, 'CODE');
+    expect(output).toContain('=== CODE ===');
+    expect(output).toContain('**function: foo**');
+    expect(output).toContain('src/foo.ts');
+    expect(output).toContain('0.875');
+    expect(output).toContain('function foo() {}');
+  });
+
+  it('truncates long content at 300 chars', () => {
+    const longContent = 'x'.repeat(500);
+    const results = [
+      makeResult({ label: 'test', filePath: 'test.ts', score: 0.5, content: longContent }),
+    ];
+    const output = formatResults(results, 'TEST');
+    // Should contain exactly 300 x's, not 500
+    expect(output).toContain('x'.repeat(300));
+    expect(output).not.toContain('x'.repeat(301));
+  });
+
+  it('formats multiple results separated by blank lines', () => {
+    const results = [
+      makeResult({ label: 'first', filePath: 'a.ts', score: 0.9, content: 'aaa' }),
+      makeResult({ label: 'second', filePath: 'b.ts', score: 0.8, content: 'bbb' }),
+    ];
+    const output = formatResults(results, 'RESULTS');
+    expect(output).toContain('**first**');
+    expect(output).toContain('**second**');
+  });
+});
+
+// ─── writeOutput ────────────────────────────────────────
+
+describe('writeOutput', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-utils-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('writes content to file when outPath is provided', () => {
+    const outPath = path.join(tmpDir, 'output.md');
+    writeOutput('hello world', outPath);
+    expect(fs.readFileSync(outPath, 'utf-8')).toBe('hello world');
+  });
+
+  it('creates directories when they do not exist', () => {
+    const outPath = path.join(tmpDir, 'nested', 'dir', 'output.md');
+    writeOutput('nested content', outPath);
+    expect(fs.readFileSync(outPath, 'utf-8')).toBe('nested content');
+  });
+
+  it('writes to stdout when no outPath is given', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    writeOutput('stdout content');
+    expect(spy).toHaveBeenCalledWith('stdout content');
+    spy.mockRestore();
+  });
+});
+
+// ─── tryParseGeminiJson ──────────────────────────────
+
+describe('tryParseGeminiJson', () => {
+  it('returns null for non-JSON input', () => {
+    expect(tryParseGeminiJson('plain text output')).toBeNull();
+  });
+
+  it('returns null for JSON that does not match Gemini schema', () => {
+    expect(tryParseGeminiJson('{"foo": "bar"}')).toBeNull();
+  });
+
+  it('returns null when stats.models is empty', () => {
+    const input = JSON.stringify({
+      response: 'hello',
+      stats: { models: {} },
+    });
+    expect(tryParseGeminiJson(input)).toBeNull();
+  });
+
+  it('parses valid Gemini output with token stats', () => {
+    const input = JSON.stringify({
+      response: 'The answer is 42.',
+      stats: {
+        models: {
+          'gemini-2.5-pro': {
+            tokens: { input: 500, candidates: 200 },
+            api: { totalLatencyMs: 3000 },
+          },
+        },
+      },
+    });
+    const result = tryParseGeminiJson(input);
+    expect(result).toEqual({
+      content: 'The answer is 42.',
+      inputTokens: 500,
+      outputTokens: 200,
+      latencyMs: 3000,
+    });
+  });
+
+  it('aggregates stats across multiple models', () => {
+    const input = JSON.stringify({
+      response: 'multi-model',
+      stats: {
+        models: {
+          'model-a': { tokens: { input: 100, candidates: 50 }, api: { totalLatencyMs: 1000 } },
+          'model-b': { tokens: { input: 200, candidates: 75 }, api: { totalLatencyMs: 2000 } },
+        },
+      },
+    });
+    const result = tryParseGeminiJson(input);
+    expect(result).toEqual({
+      content: 'multi-model',
+      inputTokens: 300,
+      outputTokens: 125,
+      latencyMs: 3000,
+    });
+  });
+
+  it('returns latencyMs null when api stats are missing', () => {
+    const input = JSON.stringify({
+      response: 'no api stats',
+      stats: {
+        models: {
+          'gemini-flash': { tokens: { input: 10, candidates: 5 } },
+        },
+      },
+    });
+    const result = tryParseGeminiJson(input);
+    expect(result).not.toBeNull();
+    expect(result!.latencyMs).toBeNull();
+  });
+
+  it('defaults missing token counts to zero', () => {
+    const input = JSON.stringify({
+      response: 'no tokens key',
+      stats: {
+        models: {
+          'gemini-flash': { api: { totalLatencyMs: 500 } },
+        },
+      },
+    });
+    const result = tryParseGeminiJson(input);
+    expect(result).not.toBeNull();
+    expect(result!.inputTokens).toBe(0);
+    expect(result!.outputTokens).toBe(0);
+  });
+});
+
+// ─── resolveConfigPath ───────────────────────────────
+
+describe('resolveConfigPath', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-config-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns config path when totem.config.ts exists', () => {
+    fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), 'export default {}', 'utf-8');
+    const result = resolveConfigPath(tmpDir);
+    expect(result).toBe(path.join(tmpDir, 'totem.config.ts'));
+  });
+
+  it('throws when totem.config.ts is missing', () => {
+    expect(() => resolveConfigPath(tmpDir)).toThrow('No totem.config.ts found');
+  });
+});
+
+// ─── loadEnv ─────────────────────────────────────────
+
+describe('loadEnv', () => {
+  let tmpDir: string;
+  const TEST_KEY = 'TOTEM_TEST_LOADENV_KEY';
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-env-'));
+    delete process.env[TEST_KEY];
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    delete process.env[TEST_KEY];
+  });
+
+  it('loads variables from .env file', () => {
+    fs.writeFileSync(path.join(tmpDir, '.env'), `${TEST_KEY}=hello`, 'utf-8');
+    loadEnv(tmpDir);
+    expect(process.env[TEST_KEY]).toBe('hello');
+  });
+
+  it('does not override existing env variables', () => {
+    process.env[TEST_KEY] = 'existing';
+    fs.writeFileSync(path.join(tmpDir, '.env'), `${TEST_KEY}=new`, 'utf-8');
+    loadEnv(tmpDir);
+    expect(process.env[TEST_KEY]).toBe('existing');
+  });
+
+  it('skips comments and blank lines', () => {
+    fs.writeFileSync(path.join(tmpDir, '.env'), `# comment\n\n${TEST_KEY}=value`, 'utf-8');
+    loadEnv(tmpDir);
+    expect(process.env[TEST_KEY]).toBe('value');
+  });
+
+  it('does nothing when .env file is missing', () => {
+    loadEnv(tmpDir); // should not throw
+    expect(process.env[TEST_KEY]).toBeUndefined();
   });
 });

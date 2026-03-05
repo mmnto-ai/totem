@@ -108,7 +108,7 @@ const GeminiOutputSchema = z.object({
  * Try to parse Gemini CLI JSON output. Returns extracted data or null if
  * the output is not valid Gemini JSON (e.g. raw text from a non-Gemini orchestrator).
  */
-function tryParseGeminiJson(
+export function tryParseGeminiJson(
   raw: string,
 ): { content: string; inputTokens: number; outputTokens: number; latencyMs: number | null } | null {
   let data: unknown;

@@ -133,9 +133,9 @@ function assemblePrompt(diff: string, changedFiles: string[], context: Retrieved
 
 // Matches "### Verdict" at the START of output (no /m flag — anchored to string start to
 // prevent prompt-injection via fake verdict blocks embedded in quoted diff content).
-// Tolerant of: leading whitespace, **PASS**, em-dash (—), en-dash (–), hyphen (-), colon (:).
+// Tolerant of: leading whitespace, optional heading markers, **PASS**, em-dash (—), en-dash (–), hyphen (-), colon (:).
 const VERDICT_RE =
-  /^\s*#{1,3}\s+\*{0,2}Verdict\*{0,2}\s*\r?\n\*{0,2}(PASS|FAIL)\*{0,2}\s*(?:[—–\-:]+\s*)?(.*)/;
+  /^\s*(?:#{1,3}\s+)?\*{0,2}Verdict\*{0,2}\s*\r?\n\*{0,2}(PASS|FAIL)\*{0,2}\s*(?:[—–\-:]+\s*)?(.*)/;
 
 export function parseVerdict(content: string): { pass: boolean; reason: string } | null {
   const match = VERDICT_RE.exec(content);

@@ -1,8 +1,6 @@
-import { execFileSync } from 'node:child_process';
-
 import { z } from 'zod';
 
-import { GH_TIMEOUT_MS, IS_WIN } from '../utils.js';
+import { ghFetchAndParse } from './gh-utils.js';
 import type { IssueAdapter, StandardIssue, StandardIssueListItem } from './issue-adapter.js';
 
 // ─── Zod schemas for GitHub CLI JSON output ─────────────
@@ -22,24 +20,6 @@ const GhIssueListItemSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 
-// ─── Shared error handling ──────────────────────────────
-
-function handleGhError(err: unknown, context: string): never {
-  if (err instanceof Error && err.message.includes('[Totem Error]')) {
-    throw err;
-  }
-  if (err instanceof z.ZodError) {
-    throw new Error(`[Totem Error] Failed to parse GitHub ${context}: ${err.message}`);
-  }
-  const msg = err instanceof Error ? err.message : String(err);
-  if (msg.includes('ENOENT')) {
-    throw new Error(
-      `[Totem Error] GitHub CLI (gh) is required for issue fetching. Install: https://cli.github.com`,
-    );
-  }
-  throw new Error(`[Totem Error] Failed to fetch ${context}: ${msg}`);
-}
-
 // ─── Adapter implementation ─────────────────────────────
 
 const DEFAULT_ISSUE_LIMIT = 100;
@@ -47,35 +27,12 @@ const DEFAULT_ISSUE_LIMIT = 100;
 export class GitHubCliAdapter implements IssueAdapter {
   constructor(private cwd: string) {}
 
-  private fetchAndParse<T>(args: string[], schema: z.ZodType<T>, context: string): T {
-    try {
-      const raw = execFileSync('gh', args, {
-        cwd: this.cwd,
-        encoding: 'utf-8',
-        timeout: GH_TIMEOUT_MS,
-        shell: IS_WIN,
-      });
-
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        throw new Error(
-          `[Totem Error] GitHub CLI returned invalid JSON for ${context}. Are you authenticated?`,
-        );
-      }
-
-      return schema.parse(parsed);
-    } catch (err) {
-      handleGhError(err, context);
-    }
-  }
-
   fetchIssue(issueNumber: number): StandardIssue {
-    const issue = this.fetchAndParse(
+    const issue = ghFetchAndParse(
       ['issue', 'view', String(issueNumber), '--json', 'number,title,body,labels,state'],
       GhIssueSchema,
       `issue #${issueNumber}`,
+      this.cwd,
     );
     return {
       number: issue.number,
@@ -87,7 +44,7 @@ export class GitHubCliAdapter implements IssueAdapter {
   }
 
   fetchOpenIssues(limit: number = DEFAULT_ISSUE_LIMIT): StandardIssueListItem[] {
-    const issues = this.fetchAndParse(
+    const issues = ghFetchAndParse(
       [
         'issue',
         'list',
@@ -100,6 +57,7 @@ export class GitHubCliAdapter implements IssueAdapter {
       ],
       z.array(GhIssueListItemSchema),
       'open issues',
+      this.cwd,
     );
     return issues.map((i) => ({
       number: i.number,
