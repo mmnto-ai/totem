@@ -1,5 +1,15 @@
 # @mmnto/cli
 
+## 0.6.0
+
+### Minor Changes
+
+- Shield: add security checklist (prompt injection, input sanitization, env injection) and enforce retrieved Totem lessons as strict review gate
+
+### Patch Changes
+
+- @mmnto/totem@0.6.0
+
 ## 0.5.0
 
 ### Minor Changes
