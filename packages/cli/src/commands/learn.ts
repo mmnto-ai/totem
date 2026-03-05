@@ -223,6 +223,44 @@ export function appendLessons(lessons: ExtractedLesson[], lessonsPath: string): 
   fs.appendFileSync(lessonsPath, entries, 'utf-8');
 }
 
+// ─── Confirmation gate ──────────────────────────────────
+
+/**
+ * Returns true if lessons should be written, false to abort.
+ * Throws in non-interactive environments without --yes.
+ */
+export async function confirmLessons(
+  count: number,
+  opts: {
+    yes?: boolean;
+    isTTY?: boolean;
+    input?: NodeJS.ReadableStream;
+    output?: NodeJS.WritableStream;
+  },
+): Promise<boolean> {
+  if (opts.yes) return true;
+
+  if (!opts.isTTY) {
+    throw new Error(
+      `[Totem Error] Refusing to write lessons in non-interactive mode. Use --yes to bypass confirmation.`,
+    );
+  }
+
+  const rl = readline.createInterface({
+    input: opts.input ?? process.stdin,
+    output: opts.output ?? process.stderr,
+  });
+  try {
+    const answer = await rl.question(`[${TAG}] Write ${count} lesson(s) to lessons.md? [Y/n] `);
+    if (answer.trim().toLowerCase() === 'n') {
+      return false;
+    }
+    return true;
+  } finally {
+    rl.close();
+  }
+}
+
 // ─── Main command ───────────────────────────────────────
 
 export interface LearnOptions {
@@ -327,25 +365,13 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
   }
 
   // Confirmation gate
-  if (!options.yes) {
-    if (!process.stdin.isTTY) {
-      throw new Error(
-        `[Totem Error] Refusing to write lessons in non-interactive mode. Use --yes to bypass confirmation.`,
-      );
-    }
-
-    const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
-    try {
-      const answer = await rl.question(
-        `[${TAG}] Write ${lessons.length} lesson(s) to lessons.md? [Y/n] `,
-      );
-      if (answer.trim().toLowerCase() === 'n') {
-        console.error(`[${TAG}] Aborted — no lessons written.`);
-        return;
-      }
-    } finally {
-      rl.close();
-    }
+  const confirmed = await confirmLessons(lessons.length, {
+    yes: options.yes,
+    isTTY: !!process.stdin.isTTY,
+  });
+  if (!confirmed) {
+    console.error(`[${TAG}] Aborted — no lessons written.`);
+    return;
   }
 
   // Append lessons to .totem/lessons.md
