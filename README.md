@@ -60,6 +60,10 @@ npx @mmnto/cli sync
 
 _(Note: If you accepted the git hook installation during `init`, Totem will automatically run incremental background syncs after every `git pull` or `git merge`)._
 
+> [!TIP]
+> **Troubleshooting Index Issues:**
+> Anytime you manually delete the `.lancedb` folder, always run `pnpm exec totem sync --full` (or just `totem sync --full` if you add it to your `package.json` scripts). The `--full` flag skips the incremental deletion logic entirely, dropping the old index and recreating it from scratch, completely avoiding the buggy DELETE query.
+
 ### 4. Connect the MCP Server
 
 Add Totem to your AI agent's configuration (e.g., Claude Desktop or Gemini):
