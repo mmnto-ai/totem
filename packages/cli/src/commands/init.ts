@@ -48,21 +48,25 @@ interface AiToolInfo {
   serverEntry: Record<string, unknown>;
 }
 
+const isWin = process.platform === 'win32';
+const npxCmd = isWin ? 'cmd' : 'npx';
+const npxArgs = isWin ? ['/c', 'npx', '-y', '@mmnto/mcp'] : ['-y', '@mmnto/mcp'];
+
 const AI_TOOLS: AiToolInfo[] = [
   {
     name: 'Claude Code',
     mcpPath: '.mcp.json',
-    serverEntry: { type: 'stdio', command: 'npx', args: ['-y', '@mmnto/mcp'] },
+    serverEntry: { type: 'stdio', command: npxCmd, args: npxArgs },
   },
   {
     name: 'Gemini CLI',
     mcpPath: '.gemini/settings.json',
-    serverEntry: { command: 'npx', args: ['-y', '@mmnto/mcp'] },
+    serverEntry: { command: npxCmd, args: npxArgs },
   },
   {
     name: 'Cursor',
     mcpPath: '.cursor/mcp.json',
-    serverEntry: { type: 'stdio', command: 'npx', args: ['-y', '@mmnto/mcp'] },
+    serverEntry: { type: 'stdio', command: npxCmd, args: npxArgs },
   },
 ];
 
