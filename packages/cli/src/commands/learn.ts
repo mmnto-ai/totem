@@ -223,6 +223,16 @@ export function appendLessons(lessons: ExtractedLesson[], lessonsPath: string): 
   fs.appendFileSync(lessonsPath, entries, 'utf-8');
 }
 
+// ─── Terminal sanitization ──────────────────────────────
+
+/** Strip ANSI escape sequences and control characters to prevent terminal injection. */
+// eslint-disable-next-line no-control-regex
+const CONTROL_RE = /\x1b\[[0-9;]*[a-zA-Z]|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g;
+
+export function sanitize(text: string): string {
+  return text.replace(CONTROL_RE, '');
+}
+
 // ─── Confirmation gate ──────────────────────────────────
 
 /**
@@ -349,8 +359,8 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
 
   for (let i = 0; i < lessons.length; i++) {
     const lesson = lessons[i]!;
-    console.error(`  [${i + 1}] Tags: ${lesson.tags.join(', ')}`);
-    console.error(`      ${lesson.text}`);
+    console.error(`  [${i + 1}] Tags: ${sanitize(lesson.tags.join(', '))}`);
+    console.error(`      ${sanitize(lesson.text).replace(/\n/g, '\n      ')}`);
     console.error('');
   }
 

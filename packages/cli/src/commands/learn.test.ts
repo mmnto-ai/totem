@@ -5,7 +5,7 @@ import { Readable, Writable } from 'node:stream';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { appendLessons, confirmLessons, parseLessons } from './learn.js';
+import { appendLessons, confirmLessons, parseLessons, sanitize } from './learn.js';
 
 // ─── parseLessons ───────────────────────────────────────
 
@@ -73,6 +73,26 @@ Tags: empty
 ---END---`;
     const lessons = parseLessons(output);
     expect(lessons).toEqual([]);
+  });
+});
+
+// ─── sanitize ───────────────────────────────────────────
+
+describe('sanitize', () => {
+  it('strips ANSI escape sequences', () => {
+    expect(sanitize('\x1b[31mred text\x1b[0m')).toBe('red text');
+  });
+
+  it('strips control characters', () => {
+    expect(sanitize('hello\x00\x07\x08world')).toBe('helloworld');
+  });
+
+  it('preserves normal text with newlines and tabs', () => {
+    expect(sanitize('line1\nline2\ttab')).toBe('line1\nline2\ttab');
+  });
+
+  it('strips cursor manipulation sequences', () => {
+    expect(sanitize('\x1b[2Aup two lines\x1b[K')).toBe('up two lines');
   });
 });
 
