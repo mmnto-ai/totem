@@ -49,8 +49,13 @@ interface AiToolInfo {
   serverEntry: Record<string, unknown>;
 }
 
-const npxCmd = IS_WIN ? 'cmd' : 'npx';
-const npxArgs = IS_WIN ? ['/c', 'npx', '-y', '@mmnto/mcp'] : ['-y', '@mmnto/mcp'];
+export function buildNpxCommand(isWin: boolean): { command: string; args: string[] } {
+  return isWin
+    ? { command: 'cmd', args: ['/c', 'npx', '-y', '@mmnto/mcp'] }
+    : { command: 'npx', args: ['-y', '@mmnto/mcp'] };
+}
+
+const { command: npxCmd, args: npxArgs } = buildNpxCommand(IS_WIN);
 
 const AI_TOOLS: AiToolInfo[] = [
   {
