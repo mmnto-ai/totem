@@ -94,7 +94,7 @@ describe('GitHubCliAdapter', () => {
     it('throws on invalid JSON', () => {
       mockedExec.mockReturnValue('not json');
       expect(() => adapter.fetchOpenIssues()).toThrow(
-        '[Totem Error] GitHub CLI returned invalid JSON',
+        '[Totem Error] GitHub CLI returned invalid JSON for open issues. Run `gh auth status` to check your authentication.',
       );
     });
 
@@ -102,7 +102,9 @@ describe('GitHubCliAdapter', () => {
       mockedExec.mockImplementation(() => {
         throw new Error('ENOENT');
       });
-      expect(() => adapter.fetchOpenIssues()).toThrow('GitHub CLI (gh) is required');
+      expect(() => adapter.fetchOpenIssues()).toThrow(
+        '[Totem Error] GitHub CLI (gh) is required. Install: https://cli.github.com',
+      );
     });
   });
 });

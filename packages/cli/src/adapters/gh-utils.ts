@@ -17,7 +17,7 @@ export function handleGhError(err: unknown, context: string): never {
     throw err;
   }
   if (err instanceof z.ZodError) {
-    throw new Error(`[Totem Error] Failed to parse GitHub ${context}: ${err.message}`);
+    throw new Error(`[Totem Error] Failed to parse GitHub ${context}`);
   }
   const msg = err instanceof Error ? err.message : String(err);
   if (msg.includes('ENOENT')) {
