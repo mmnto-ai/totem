@@ -156,7 +156,7 @@ Totem is actively evolving from a memory database into a full Shift-Left orchest
 
 - [x] **Pillar 1: The Memory Layer** - Local vector DB, syntax-aware chunking, and MCP interface.
 - [x] **Pillar 2: The Reflex Engine** - Auto-injection of AI prompts, proactive learning triggers, and background git hooks. (See [Epic #19](https://github.com/mmnto-ai/totem/issues/19))
-- [ ] **Pillar 3: The Workflow Orchestrator** - Native CLI commands (`totem spec`, `totem shield`) for pre-work briefings and local PR reviews. (See [Epic #20](https://github.com/mmnto-ai/totem/issues/20))
-- [ ] **Pillar 4: Polish** - Automated memory consolidation and CLI UI/UX polish.
+- [x] **Pillar 3: The Workflow Orchestrator** - Native CLI commands (`totem spec`, `totem shield`, `totem triage`) for pre-work briefings and local PR reviews. (See [Epic #20](https://github.com/mmnto-ai/totem/issues/20))
+- [ ] **Pillar 4: Polish** - Automated memory consolidation, comprehensive test coverage, robust GitHub API handling, and CLI UI/UX polish.
 
 For a deeper dive into the system design, see `docs/architecture.md`.
