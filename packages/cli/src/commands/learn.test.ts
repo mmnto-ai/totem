@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { appendLessons, type ExtractedLesson, parseLessons } from './learn.js';
+import { appendLessons, parseLessons } from './learn.js';
 
 // ─── parseLessons ───────────────────────────────────────
 

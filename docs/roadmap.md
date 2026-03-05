@@ -32,6 +32,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 **Goal:** Before ingesting enterprise databases, the local vector index and LLM prompts must be bulletproof across all environments.
 
 - [x] **#80 Security: Add XML delimiting:** Close the prompt injection gap in orchestrator commands.
+- [ ] **#111 Security:** Mitigate indirect prompt injection in `learn` command via PR comments _(Active)_.
 - [x] **#91 Normalize LanceDB paths:** Fix Windows backslash issues before users share `.lancedb` folders across OS boundaries.
 - [x] **#90 Refactor to `IssueAdapter` / `PrAdapter`:** Extract `gh` CLI logic into interfaces to decouple from GitHub.
 - [x] **#77 Test audit:** Backfill CLI unit tests using the newly added Vitest infrastructure. (103+ tests passing)
