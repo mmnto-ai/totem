@@ -25,6 +25,9 @@ const GhIssueListItemSchema = z.object({
 // ─── Shared error handling ──────────────────────────────
 
 function handleGhError(err: unknown, context: string): never {
+  if (err instanceof Error && err.message.includes('[Totem Error]')) {
+    throw err;
+  }
   if (err instanceof z.ZodError) {
     throw new Error(`[Totem Error] Failed to parse GitHub ${context}: ${err.message}`);
   }
@@ -70,9 +73,6 @@ export class GitHubCliAdapter implements IssueAdapter {
         labels: issue.labels.map((l) => l.name),
       };
     } catch (err) {
-      if (err instanceof Error && err.message.includes('[Totem Error]')) {
-        throw err;
-      }
       handleGhError(err, `issue #${issueNumber}`);
     }
   }
@@ -111,9 +111,6 @@ export class GitHubCliAdapter implements IssueAdapter {
         updatedAt: i.updatedAt,
       }));
     } catch (err) {
-      if (err instanceof Error && err.message.includes('[Totem Error]')) {
-        throw err;
-      }
       handleGhError(err, 'open issues');
     }
   }
