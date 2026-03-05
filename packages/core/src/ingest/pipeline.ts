@@ -63,7 +63,11 @@ export async function runSync(
 
   async function flushBuffer(): Promise<void> {
     if (buffer.length === 0) return;
-    await store.insert(buffer);
+    // Slice into EMBED_BATCH_SIZE batches to respect embedder limits
+    for (let i = 0; i < buffer.length; i += EMBED_BATCH_SIZE) {
+      const batch = buffer.slice(i, i + EMBED_BATCH_SIZE);
+      await store.insert(batch);
+    }
     totalChunks += buffer.length;
     log(`  Embedded ${totalChunks} chunks so far`);
     buffer = [];
