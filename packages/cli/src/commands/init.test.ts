@@ -21,7 +21,7 @@ describe('scaffoldMcpConfig', () => {
 
   it('creates a new file when none exists', () => {
     const filePath = path.join(tmpDir, '.mcp.json');
-    const result = scaffoldMcpConfig(filePath, 'Claude Code', SERVER_ENTRY);
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
 
     expect(result).toEqual({ action: 'created' });
     const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
@@ -34,7 +34,7 @@ describe('scaffoldMcpConfig', () => {
 
   it('creates parent directories if needed', () => {
     const filePath = path.join(tmpDir, '.gemini', 'settings.json');
-    const result = scaffoldMcpConfig(filePath, 'Gemini CLI', SERVER_ENTRY);
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
 
     expect(result).toEqual({ action: 'created' });
     expect(fs.existsSync(filePath)).toBe(true);
@@ -49,7 +49,7 @@ describe('scaffoldMcpConfig', () => {
     };
     fs.writeFileSync(filePath, JSON.stringify(existing, null, 2), 'utf-8');
 
-    const result = scaffoldMcpConfig(filePath, 'Claude Code', SERVER_ENTRY);
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
 
     expect(result).toEqual({ action: 'merged' });
     const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
@@ -62,7 +62,7 @@ describe('scaffoldMcpConfig', () => {
     fs.mkdirSync(path.join(tmpDir, '.gemini'));
     fs.writeFileSync(filePath, JSON.stringify({ otherKey: true }, null, 2), 'utf-8');
 
-    const result = scaffoldMcpConfig(filePath, 'Gemini CLI', SERVER_ENTRY);
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
 
     expect(result).toEqual({ action: 'merged' });
     const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
@@ -79,7 +79,7 @@ describe('scaffoldMcpConfig', () => {
     };
     fs.writeFileSync(filePath, JSON.stringify(existing, null, 2), 'utf-8');
 
-    const result = scaffoldMcpConfig(filePath, 'Claude Code', SERVER_ENTRY);
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
 
     expect(result).toEqual({ action: 'skipped' });
     // Verify it didn't overwrite the existing entry
@@ -87,11 +87,21 @@ describe('scaffoldMcpConfig', () => {
     expect(content.mcpServers.totem.command).toBe('old-command');
   });
 
+  it('returns error when mcpServers is not an object', () => {
+    const filePath = path.join(tmpDir, '.mcp.json');
+    fs.writeFileSync(filePath, JSON.stringify({ mcpServers: 'not-an-object' }, null, 2), 'utf-8');
+
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
+
+    expect(result.action).toBe('skipped');
+    expect(result.err).toContain('must be an object');
+  });
+
   it('returns error on malformed JSON', () => {
     const filePath = path.join(tmpDir, '.mcp.json');
     fs.writeFileSync(filePath, '{ invalid json !!!', 'utf-8');
 
-    const result = scaffoldMcpConfig(filePath, 'Claude Code', SERVER_ENTRY);
+    const result = scaffoldMcpConfig(filePath, SERVER_ENTRY);
 
     expect(result.action).toBe('skipped');
     expect(result.err).toContain('invalid JSON');

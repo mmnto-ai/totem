@@ -85,7 +85,6 @@ function detectAiTools(cwd: string): AiToolInfo[] {
 
 export function scaffoldMcpConfig(
   filePath: string,
-  toolName: string,
   serverEntry: Record<string, unknown>,
 ): { action: 'created' | 'merged' | 'skipped'; err?: string } {
   try {
@@ -110,6 +109,18 @@ export function scaffoldMcpConfig(
       return {
         action: 'skipped',
         err: `Could not parse ${path.basename(filePath)} (invalid JSON)`,
+      };
+    }
+
+    if (
+      parsed.mcpServers !== undefined &&
+      (typeof parsed.mcpServers !== 'object' ||
+        parsed.mcpServers === null ||
+        Array.isArray(parsed.mcpServers))
+    ) {
+      return {
+        action: 'skipped',
+        err: `Could not merge config: "mcpServers" in ${path.basename(filePath)} must be an object.`,
       };
     }
 
@@ -380,11 +391,13 @@ export async function initCommand(): Promise<void> {
 
       for (const tool of selectedTools) {
         const filePath = path.join(cwd, tool.mcpPath);
-        const result = scaffoldMcpConfig(filePath, tool.name, tool.serverEntry);
+        const result = scaffoldMcpConfig(filePath, tool.serverEntry);
 
         if (result.err) {
-          console.log(`\n[Totem] ${result.err}`);
-          console.log(`Add this manually to your ${tool.mcpPath} under "mcpServers":\n`);
+          console.error(`\n[Totem Error] ${result.err}`);
+          console.log(
+            `To fix this, add the following manually to your ${tool.mcpPath} under "mcpServers":\n`,
+          );
           console.log(`  "totem": ${JSON.stringify(tool.serverEntry, null, 2)}\n`);
         } else if (result.action === 'created') {
           console.log(`[Totem] Created ${tool.mcpPath} with Totem MCP server.`);
