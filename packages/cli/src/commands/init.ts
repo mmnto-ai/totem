@@ -332,7 +332,8 @@ export async function initCommand(): Promise<void> {
           if (fs.existsSync(envPath)) {
             const existing = fs.readFileSync(envPath, 'utf-8');
             if (!/^\s*OPENAI_API_KEY\s*=/m.test(existing)) {
-              fs.appendFileSync(envPath, envLine);
+              const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+              fs.appendFileSync(envPath, prefix + envLine);
             }
           } else {
             fs.writeFileSync(envPath, envLine);
