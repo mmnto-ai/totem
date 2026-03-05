@@ -4,6 +4,8 @@ import { z } from 'zod';
 
 import { GH_TIMEOUT_MS, IS_WIN } from '../utils.js';
 
+const GH_MAX_BUFFER = 10 * 1024 * 1024; // 10MB — handles paginated API responses
+
 /**
  * Shared error handler for all GitHub CLI interactions.
  * Re-throws [Totem Error] as-is, wraps ZodErrors and ENOENT, and
@@ -19,6 +21,9 @@ export function handleGhError(err: unknown, context: string): never {
   const msg = err instanceof Error ? err.message : String(err);
   if (msg.includes('ENOENT')) {
     throw new Error(`[Totem Error] GitHub CLI (gh) is required. Install: https://cli.github.com`);
+  }
+  if (/\b(403|429)\b/.test(msg) || /rate.limit/i.test(msg)) {
+    throw new Error(`[Totem Error] GitHub API rate limit exceeded. Try again later.`);
   }
   throw new Error(`[Totem Error] Failed to fetch ${context}: ${msg}`);
 }
@@ -38,6 +43,7 @@ export function ghFetchAndParse<T>(
       encoding: 'utf-8',
       timeout: GH_TIMEOUT_MS,
       shell: IS_WIN,
+      maxBuffer: GH_MAX_BUFFER,
     });
 
     let parsed: unknown;

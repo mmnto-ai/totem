@@ -51,6 +51,16 @@ describe('handleGhError', () => {
       '[Totem Error] Failed to fetch test: string error',
     );
   });
+
+  it('detects 403 as rate limit error', () => {
+    const err = new Error('HTTP 403: rate limit exceeded');
+    expect(() => handleGhError(err, 'PRs')).toThrow('[Totem Error] GitHub API rate limit exceeded');
+  });
+
+  it('detects 429 as rate limit error', () => {
+    const err = new Error('HTTP 429: Too Many Requests');
+    expect(() => handleGhError(err, 'PRs')).toThrow('[Totem Error] GitHub API rate limit exceeded');
+  });
 });
 
 // ─── ghFetchAndParse ────────────────────────────────────
