@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import type { StandardIssueListItem } from '../adapters/issue-adapter.js';
-
 import { formatIssueInventory } from './triage.js';
 
 describe('formatIssueInventory', () => {

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-import type { IssueAdapter, StandardIssue, StandardIssueListItem } from './issue-adapter.js';
 import { ghFetchAndParse } from './gh-utils.js';
+import type { IssueAdapter, StandardIssue, StandardIssueListItem } from './issue-adapter.js';
 
 // ─── Zod schemas for GitHub CLI JSON output ─────────────
 

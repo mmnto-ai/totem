@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import type { StandardPrListItem } from '../adapters/pr-adapter.js';
-
 import { formatPRList } from './briefing.js';
 
 describe('formatPRList', () => {
