@@ -70,10 +70,7 @@ export class GitHubCliAdapter implements IssueAdapter {
         labels: issue.labels.map((l) => l.name),
       };
     } catch (err) {
-      if (
-        err instanceof Error &&
-        (err.message.includes('[Totem Error]') || err.message.includes('invalid JSON'))
-      ) {
+      if (err instanceof Error && err.message.includes('[Totem Error]')) {
         throw err;
       }
       handleGhError(err, `issue #${issueNumber}`);
@@ -114,10 +111,7 @@ export class GitHubCliAdapter implements IssueAdapter {
         updatedAt: i.updatedAt,
       }));
     } catch (err) {
-      if (
-        err instanceof Error &&
-        (err.message.includes('[Totem Error]') || err.message.includes('invalid JSON'))
-      ) {
+      if (err instanceof Error && err.message.includes('[Totem Error]')) {
         throw err;
       }
       handleGhError(err, 'open issues');
