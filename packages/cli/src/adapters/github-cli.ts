@@ -47,24 +47,33 @@ const DEFAULT_ISSUE_LIMIT = 100;
 export class GitHubCliAdapter implements IssueAdapter {
   constructor(private cwd: string) {}
 
+  private fetchAndParse<T>(args: string[], schema: z.ZodType<T>, context: string): T {
+    const raw = execFileSync('gh', args, {
+      cwd: this.cwd,
+      encoding: 'utf-8',
+      timeout: GH_TIMEOUT_MS,
+      shell: IS_WIN,
+    });
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new Error(
+        `[Totem Error] GitHub CLI returned invalid JSON for ${context}. Are you authenticated?`,
+      );
+    }
+
+    return schema.parse(parsed);
+  }
+
   fetchIssue(issueNumber: number): StandardIssue {
     try {
-      const raw = execFileSync(
-        'gh',
+      const issue = this.fetchAndParse(
         ['issue', 'view', String(issueNumber), '--json', 'number,title,body,labels,state'],
-        { cwd: this.cwd, encoding: 'utf-8', timeout: GH_TIMEOUT_MS, shell: IS_WIN },
+        GhIssueSchema,
+        `issue #${issueNumber}`,
       );
-
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        throw new Error(
-          `[Totem Error] GitHub CLI returned invalid JSON for issue #${issueNumber}. Are you authenticated?`,
-        );
-      }
-
-      const issue = GhIssueSchema.parse(parsed);
       return {
         number: issue.number,
         title: issue.title,
@@ -79,8 +88,7 @@ export class GitHubCliAdapter implements IssueAdapter {
 
   fetchOpenIssues(limit: number = DEFAULT_ISSUE_LIMIT): StandardIssueListItem[] {
     try {
-      const raw = execFileSync(
-        'gh',
+      const issues = this.fetchAndParse(
         [
           'issue',
           'list',
@@ -91,19 +99,9 @@ export class GitHubCliAdapter implements IssueAdapter {
           '--limit',
           String(limit),
         ],
-        { cwd: this.cwd, encoding: 'utf-8', timeout: GH_TIMEOUT_MS, shell: IS_WIN },
+        z.array(GhIssueListItemSchema),
+        'open issues',
       );
-
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        throw new Error(
-          `[Totem Error] GitHub CLI returned invalid JSON for issue list. Are you authenticated?`,
-        );
-      }
-
-      const issues = z.array(GhIssueListItemSchema).parse(parsed);
       return issues.map((i) => ({
         number: i.number,
         title: i.title,
