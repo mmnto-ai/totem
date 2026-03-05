@@ -1,16 +1,13 @@
-import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-
-import { z } from 'zod';
 
 import type { SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore, runSync } from '@mmnto/totem';
 
+import { GitHubCliPrAdapter } from '../adapters/github-cli-pr.js';
+import type { StandardPr, StandardReviewComment } from '../adapters/pr-adapter.js';
 import {
   formatResults,
-  GH_TIMEOUT_MS,
-  IS_WIN,
   loadConfig,
   loadEnv,
   resolveConfigPath,
@@ -54,100 +51,6 @@ The lesson text. One or two sentences capturing the trap/pattern and WHY it matt
 If no lessons found, output exactly: NONE
 `;
 
-// ─── GitHub helpers ─────────────────────────────────────
-
-const GhPrSchema = z.object({
-  number: z.number(),
-  title: z.string(),
-  body: z.string().nullable(),
-  state: z.string(),
-  comments: z.array(
-    z.object({
-      author: z.object({ login: z.string() }),
-      body: z.string(),
-    }),
-  ),
-  reviews: z.array(
-    z.object({
-      author: z.object({ login: z.string() }),
-      state: z.string(),
-      body: z.string(),
-    }),
-  ),
-});
-type GhPr = z.infer<typeof GhPrSchema>;
-
-const GhReviewCommentSchema = z.object({
-  id: z.number(),
-  user: z.object({ login: z.string() }),
-  body: z.string(),
-  path: z.string(),
-  diff_hunk: z.string(),
-  in_reply_to_id: z.number().optional(),
-  created_at: z.string().optional(),
-});
-type GhReviewComment = z.infer<typeof GhReviewCommentSchema>;
-
-function fetchPr(prNumber: number, cwd: string): GhPr {
-  try {
-    const result = execFileSync(
-      'gh',
-      ['pr', 'view', String(prNumber), '--json', 'number,title,body,state,comments,reviews'],
-      { cwd, encoding: 'utf-8', timeout: GH_TIMEOUT_MS, shell: IS_WIN },
-    );
-    return GhPrSchema.parse(JSON.parse(result));
-  } catch (err) {
-    if (err instanceof z.ZodError) {
-      throw new Error(`[Totem Error] Failed to parse GitHub PR response: ${err.message}`);
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('ENOENT') || msg.includes('not found')) {
-      throw new Error(
-        `[Totem Error] GitHub CLI (gh) is required for PR fetching. Install: https://cli.github.com`,
-      );
-    }
-    throw new Error(`[Totem Error] Failed to fetch PR #${prNumber}: ${msg}`);
-  }
-}
-
-function getRepoNwo(cwd: string): string {
-  try {
-    const result = execFileSync(
-      'gh',
-      ['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'],
-      {
-        cwd,
-        encoding: 'utf-8',
-        timeout: GH_TIMEOUT_MS,
-        shell: IS_WIN,
-      },
-    );
-    return result.trim();
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`[Totem Error] Failed to detect repository: ${msg}`);
-  }
-}
-
-function fetchReviewComments(prNumber: number, cwd: string): GhReviewComment[] {
-  const nwo = getRepoNwo(cwd);
-  try {
-    const result = execFileSync(
-      'gh',
-      ['api', `repos/${nwo}/pulls/${prNumber}/comments`, '--paginate'],
-      { cwd, encoding: 'utf-8', timeout: GH_TIMEOUT_MS, shell: IS_WIN },
-    );
-    const parsed = JSON.parse(result);
-    return z.array(GhReviewCommentSchema).parse(parsed);
-  } catch (err) {
-    if (err instanceof z.ZodError) {
-      throw new Error(`[Totem Error] Failed to parse review comments: ${err.message}`);
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`[Totem Error] Failed to fetch review comments for PR #${prNumber}: ${msg}`);
-  }
-}
-
 // ─── Thread grouping ────────────────────────────────────
 
 interface CommentThread {
@@ -156,15 +59,13 @@ interface CommentThread {
   comments: { author: string; body: string }[];
 }
 
-function groupIntoThreads(comments: GhReviewComment[]): CommentThread[] {
-  // Build a map of id -> comment for threading
-  const byId = new Map<number, GhReviewComment>();
+function groupIntoThreads(comments: StandardReviewComment[]): CommentThread[] {
+  const byId = new Map<number, StandardReviewComment>();
   for (const c of comments) byId.set(c.id, c);
 
-  // Group by root comment (the one without in_reply_to_id)
-  const threadMap = new Map<number, GhReviewComment[]>();
+  const threadMap = new Map<number, StandardReviewComment[]>();
   for (const c of comments) {
-    const rootId = c.in_reply_to_id ?? c.id;
+    const rootId = c.inReplyToId ?? c.id;
     const thread = threadMap.get(rootId) ?? [];
     thread.push(c);
     threadMap.set(rootId, thread);
@@ -172,17 +73,16 @@ function groupIntoThreads(comments: GhReviewComment[]): CommentThread[] {
 
   const threads: CommentThread[] = [];
   for (const [rootId, threadComments] of threadMap) {
-    // Sort by created_at to ensure chronological order within thread
     threadComments.sort((a, b) => {
-      if (!a.created_at || !b.created_at) return 0;
-      return a.created_at.localeCompare(b.created_at);
+      if (!a.createdAt || !b.createdAt) return 0;
+      return a.createdAt.localeCompare(b.createdAt);
     });
 
     const root = byId.get(rootId) ?? threadComments[0]!;
     threads.push({
       path: root.path,
-      diffHunk: root.diff_hunk,
-      comments: threadComments.map((c) => ({ author: c.user.login, body: c.body })),
+      diffHunk: root.diffHunk,
+      comments: threadComments.map((c) => ({ author: c.author, body: c.body })),
     });
   }
 
@@ -208,7 +108,7 @@ function isGcaBoilerplate(body: string): boolean {
 }
 
 function assemblePrompt(
-  pr: GhPr,
+  pr: StandardPr,
   threads: CommentThread[],
   existingLessons: SearchResult[],
 ): string {
@@ -228,7 +128,7 @@ function assemblePrompt(
   if (reviewBodies.length > 0) {
     sections.push('\n=== REVIEW SUMMARIES ===');
     for (const r of reviewBodies) {
-      sections.push(`[${r.author.login} — ${r.state}]`);
+      sections.push(`[${r.author} — ${r.state}]`);
       sections.push(wrapXml('review_body', r.body));
       sections.push('');
     }
@@ -239,7 +139,7 @@ function assemblePrompt(
   if (prComments.length > 0) {
     sections.push('\n=== PR COMMENTS ===');
     for (const c of prComments) {
-      sections.push(`[${c.author.login}]`);
+      sections.push(`[${c.author}]`);
       sections.push(wrapXml('comment_body', c.body));
       sections.push('');
     }
@@ -346,12 +246,13 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
 
   // Fetch PR data
   console.error(`[${TAG}] Fetching PR #${num}...`);
-  const pr = fetchPr(num, cwd);
+  const adapter = new GitHubCliPrAdapter(cwd);
+  const pr = adapter.fetchPr(num);
   console.error(`[${TAG}] Title: ${pr.title}`);
 
   // Fetch inline review comments
   console.error(`[${TAG}] Fetching review comments...`);
-  const reviewComments = fetchReviewComments(num, cwd);
+  const reviewComments = adapter.fetchReviewComments(num);
   console.error(`[${TAG}] Found ${reviewComments.length} inline review comments`);
 
   // Filter GCA boilerplate from inline comments

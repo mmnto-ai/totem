@@ -1,16 +1,13 @@
-import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
-
-import { z } from 'zod';
 
 import type { ContentType, SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore } from '@mmnto/totem';
 
+import { GitHubCliPrAdapter } from '../adapters/github-cli-pr.js';
+import type { StandardPrListItem } from '../adapters/pr-adapter.js';
 import { getGitBranch, getGitStatus } from '../git.js';
 import {
   formatResults,
-  GH_TIMEOUT_MS,
-  IS_WIN,
   loadConfig,
   loadEnv,
   resolveConfigPath,
@@ -59,37 +56,6 @@ Respond with ONLY the sections below. No preamble, no closing remarks.
 [Single clear recommendation for what the developer should do first in this session. Consider: uncommitted work to commit/continue, PRs to review/merge, next issue to pick up.]
 `;
 
-// ─── GitHub helpers ─────────────────────────────────────
-
-const GhPrListItemSchema = z.object({
-  number: z.number(),
-  title: z.string(),
-  headRefName: z.string(),
-});
-type GhPrListItem = z.infer<typeof GhPrListItemSchema>;
-
-function fetchOpenPRs(cwd: string): GhPrListItem[] {
-  try {
-    const result = execFileSync(
-      'gh',
-      ['pr', 'list', '--state', 'open', '--json', 'number,title,headRefName'],
-      { cwd, encoding: 'utf-8', timeout: GH_TIMEOUT_MS, shell: IS_WIN },
-    );
-    return z.array(GhPrListItemSchema).parse(JSON.parse(result));
-  } catch (err) {
-    if (err instanceof z.ZodError) {
-      throw new Error(`[Totem Error] Failed to parse GitHub PR list response: ${err.message}`);
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('ENOENT') || msg.includes('not found')) {
-      throw new Error(
-        `[Totem Error] GitHub CLI (gh) is required for PR fetching. Install: https://cli.github.com`,
-      );
-    }
-    throw new Error(`[Totem Error] Failed to fetch open PRs: ${msg}`);
-  }
-}
-
 // ─── LanceDB retrieval ─────────────────────────────────
 
 interface RetrievedContext {
@@ -111,7 +77,7 @@ async function retrieveContext(query: string, store: LanceStore): Promise<Retrie
 
 // ─── Prompt assembly ────────────────────────────────────
 
-function formatPRList(prs: GhPrListItem[]): string {
+function formatPRList(prs: StandardPrListItem[]): string {
   if (prs.length === 0) return '(none)';
   return prs.map((pr) => `- #${pr.number} — ${pr.title} (branch: ${pr.headRefName})`).join('\n');
 }
@@ -119,7 +85,7 @@ function formatPRList(prs: GhPrListItem[]): string {
 function assemblePrompt(
   branch: string,
   status: string,
-  prs: GhPrListItem[],
+  prs: StandardPrListItem[],
   context: RetrievedContext,
 ): string {
   const sections: string[] = [SYSTEM_PROMPT];
@@ -171,7 +137,8 @@ export async function briefingCommand(options: BriefingOptions): Promise<void> {
 
   // Fetch open PRs
   console.error(`[${TAG}] Fetching open PRs...`);
-  const prs = fetchOpenPRs(cwd);
+  const adapter = new GitHubCliPrAdapter(cwd);
+  const prs = adapter.fetchOpenPRs();
   console.error(`[${TAG}] Found ${prs.length} open PRs.`);
 
   // Connect to LanceDB
