@@ -106,3 +106,27 @@ The IssueAdapter interface lives at `packages/cli/src/adapters/issue-adapter.ts`
 **Tags:** workflow, shield, pre-push, trap
 
 ALWAYS run `totem shield` before pushing or creating a PR. This is a core Workflow Orchestrator Ritual defined in CLAUDE.md. Don't skip it even when momentum is high — that's exactly when mistakes slip through.
+
+## Lesson — 2026-03-05T04:05:14.473Z
+
+**Tags:** architecture, adapter-pattern, DRY, trap
+
+When creating adapter/wrapper classes that call external CLIs (like `gh`), extract the shared exec → JSON.parse → schema.validate pattern into a private helper method immediately. Don't duplicate the try/parse/catch/validate boilerplate across methods — GCA will flag it and it's a waste of review rounds.
+
+## Lesson — 2026-03-05T04:05:16.794Z
+
+**Tags:** error-handling, DRY, trap
+
+When adding error re-throw guards (like checking for `[Totem Error]` prefix before calling a shared error handler), put the guard IN the shared handler — not duplicated at every call site. Centralize error routing in one place.
+
+## Lesson — 2026-03-05T04:05:19.420Z
+
+**Tags:** regex, input-validation, trap
+
+When writing regex to parse user input (like GitHub URLs), always anchor with `^` and include the protocol (`https?://`). Unanchored regexes match substrings embedded in other text, which is almost never the intent for CLI input parsing.
+
+## Lesson — 2026-03-05T04:05:21.566Z
+
+**Tags:** detection, init, false-positive, trap
+
+When detecting tool presence via filesystem checks in `totem init`, use specific marker files (like `.cursorrules`, `.cursor/mcp.json`) — not bare directory existence checks (like `.cursor/`). Generic directory names cause false positives.
