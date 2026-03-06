@@ -214,4 +214,17 @@ Deeply nested content.
     const deepChunk = chunks.find((c) => c.content.includes('Deeply nested'));
     expect(deepChunk!.label).toBe('Level 1 > Level 2 > Level 3');
   });
+
+  it('correctly builds breadcrumbs for skipped heading levels', () => {
+    const md = `# Level 1
+
+### Level 3
+
+Content for level 3.
+`;
+    const chunks = chunker.chunk(md, 'test.md', 'spec');
+
+    const l3Chunk = chunks.find((c) => c.content.includes('Content for level 3'));
+    expect(l3Chunk!.label).toBe('Level 1 > Level 3');
+  });
 });
