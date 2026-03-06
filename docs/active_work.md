@@ -21,7 +21,7 @@ The project is currently focused on "Phase 2: Core Stability & Data Safety," pri
 
 - **User Story:** As an AI querying the vector index, I need markdown chunks to include their full heading hierarchy (e.g., `[Session 142 > Traps > Next.js]`) in the `contextPrefix` so I don't lose the structural context of isolated paragraphs.
 - **Scope Boundaries:** Update `MarkdownChunker` and `SessionLogChunker` to track heading depth during AST traversal and prepend the breadcrumb trail to the chunk's label/prefix. Do not modify the underlying `remark` parsing or Zod schemas.
-- **Why Next:** Without structural breadcrumbs, retrieved markdown paragraphs often lack enough context for the AI to understand *what* the paragraph is describing, reducing the quality of `totem spec` and `totem shield` outputs.
+- **Why Next:** Without structural breadcrumbs, retrieved markdown paragraphs often lack enough context for the AI to understand _what_ the paragraph is describing, reducing the quality of `totem spec` and `totem shield` outputs.
 
 ### Blocked / Needs Input
 
