@@ -1,6 +1,6 @@
 {
   "name": "@mmnto/cli",
-  "version": "0.9.2",
+  "version": "0.10.0",
   "description": "CLI for Totem — AI persistent memory and context layer",
   "type": "module",
   "bin": {
