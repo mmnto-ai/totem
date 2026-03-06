@@ -130,3 +130,45 @@ When writing regex to parse user input (like GitHub URLs), always anchor with `^
 **Tags:** scaffolding, init, best-practices, file-modification, security
 
 Scaffolding command best practices for `totem init` and similar commands that modify user files: (1) Never create duplicate entries — use regex with `^` anchor and `/m` flag to check for existing keys. (2) Ensure trailing newline before appending — check `!existing.endsWith('\n')` and prepend `\n` if needed. (3) Sanitize all user input before writing to files — strip newlines, validate format, quote values. (4) Use specific marker files for tool detection, not bare directory existence. (5) Print a summary of every file modified so users can verify. (6) Prefer skip-if-exists over overwrite — use `--force` flag for explicit overwrites.
+
+## Lesson — 2026-03-05T22:37:32.237Z
+
+**Tags:** security, cli, sanitization, output
+
+When writing CLI output streams (like summaries or logs), ensure all content derived from external or potentially untrusted sources is sanitized to strip control characters. Even if the primary payload is sanitized before storage, unsanitized summary outputs piped to other tools can be used for terminal injection attacks.
+
+## Lesson — 2026-03-06T00:17:02.961Z
+
+**Tags:** architecture, product-strategy, dsl, scope-creep
+
+When designing user-extensible CLI tools (like 'totem run'), avoid prematurely building DSLs or plugin systems for data fetching (e.g., git diffs, issue trackers). Start by exposing simple prompt overrides (e.g., checking for '.totem/prompts/shield.md' before using a hardcoded string). Only build an execution runner once the limitations of simple overrides are empirically proven. Building a workflow schema before user demand exists is a classic trap for over-engineering.
+
+## Lesson — 2026-03-06T01:32:23.369Z
+
+**Tags:** security, mcp, sanitization, architecture
+
+When designing MCP servers, do not automatically apply terminal sanitization (stripping control characters/ANSI escapes) to tool output. MCP tools are consumed by LLMs, not directly by standard terminals. Stripping characters from MCP search results will degrade the fidelity of code snippets and formatting that the LLM relies on. Terminal injection is a CLI presentation concern, not an MCP data payload concern.
+
+## Lesson — 2026-03-06T02:09:28.451Z
+
+**Tags:** error-handling, robustness, lance-db
+
+When implementing retries for "stale" database handles, capture and report the original error if the retry also fails to prevent swallowing the diagnostic root cause of non-transient failures. A blanket catch-and-retry can obscure the true error if the initial failure was not actually due to a stale connection.
+
+## Lesson — 2026-03-06T02:09:28.451Z
+
+**Tags:** resilience, network, backoff
+
+Always incorporate random jitter into exponential backoff calculations to stagger retry attempts across concurrent clients. This prevents "thundering herd" spikes that can overwhelm a recovering service if multiple instances retry at identical intervals.
+
+## Lesson — 2026-03-06T02:09:28.451Z
+
+**Tags:** architecture, readability, simplicity
+
+Prioritize standard inline idioms (like error message extraction) over creating dedicated helper functions for very few call sites to minimize indirection. Avoid "over-DRYing" code when the resulting abstraction adds more complexity than the repetition it replaces.
+
+## Lesson — 2026-03-06T02:40:46.658Z
+
+**Tags:** architecture, testing, lancedb, core
+
+The '@mmnto/totem' core package (which handles the ingestion pipeline, syntactic chunkers, embedders, and LanceDB store) currently has zero test coverage. Since this package manages the stateful local database and complex parsing logic (e.g., Markdown/AST chunking), bugs here are difficult to debug (e.g., LanceDB stale handles or datafusion case-sensitivity issues). Integration tests running 'totem sync' against a real LanceDB instance and unit tests for the chunkers are the highest priority for technical debt remediation.

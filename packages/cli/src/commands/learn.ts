@@ -13,6 +13,7 @@ import {
   loadEnv,
   resolveConfigPath,
   runOrchestrator,
+  sanitize,
   wrapXml,
 } from '../utils.js';
 
@@ -223,16 +224,6 @@ export function appendLessons(lessons: ExtractedLesson[], lessonsPath: string): 
   fs.appendFileSync(lessonsPath, entries, 'utf-8');
 }
 
-// ─── Terminal sanitization ──────────────────────────────
-
-/** Strip ANSI escape sequences, control characters, and BiDi overrides to prevent terminal injection. */
-const CONTROL_RE =
-  /\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?(?:\x07|\x1b\\)|[\x00-\x08\x0b-\x1f\x7f\x80-\x9f]|[\u202A-\u202E\u2066-\u2069]/g;
-
-export function sanitize(text: string): string {
-  return text.replace(CONTROL_RE, '');
-}
-
 // ─── Confirmation gate ──────────────────────────────────
 
 /**
@@ -406,10 +397,10 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
     `[${TAG}] Sync complete: ${syncResult.chunksProcessed} chunks from ${syncResult.filesProcessed} files`,
   );
 
-  // Print summary
-  console.log(`\nExtracted ${lessons.length} lesson(s) from PR #${num}:`);
-  for (const lesson of lessons) {
-    console.log(`\n  Tags: ${lesson.tags.join(', ')}`);
-    console.log(`  ${lesson.text}`);
+  // Print summary (use sanitized lessons to prevent terminal injection in piped output)
+  console.log(`\nExtracted ${sanitizedLessons.length} lesson(s) from PR #${num}:`);
+  for (const lesson of sanitizedLessons) {
+    console.log(`\n  Tags: ${lesson.tags.join(', ').replace(/\n/g, ' ')}`);
+    console.log(`  ${lesson.text.replace(/\n/g, '\n  ')}`);
   }
 }

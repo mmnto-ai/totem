@@ -31,8 +31,14 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 **Goal:** Before ingesting enterprise databases, the local vector index and LLM prompts must be bulletproof across all environments.
 
+- [ ] **#121 Bug: LanceDB `deleteByFile`** edge cases causing silent incremental sync failures.
+- [ ] **#122 Core Tests:** Backfill unit and integration tests for `@mmnto/totem` core database and chunking logic.
 - [x] **#80 Security: Add XML delimiting:** Close the prompt injection gap in orchestrator commands.
-- [ ] **#111 Security:** Mitigate indirect prompt injection in `learn` command via PR comments _(Active)_.
+- [x] **#111 Security:** Mitigate indirect prompt injection in `learn` command via PR comments.
+- [x] **#116 Security:** Sanitize CLI output streams to prevent terminal injection attacks.
+- [x] **#106 Robustness:** Prevent stale LanceDB handles by re-initializing store on error.
+- [x] **#105 Resilience:** Add exponential backoff to OpenAI embedder for rate limits.
+- [x] **#104 Performance:** Stream chunks to LanceDB during sync to prevent OOM on large repos.
 - [x] **#91 Normalize LanceDB paths:** Fix Windows backslash issues before users share `.lancedb` folders across OS boundaries.
 - [x] **#90 Refactor to `IssueAdapter` / `PrAdapter`:** Extract `gh` CLI logic into interfaces to decouple from GitHub.
 - [x] **#77 Test audit:** Backfill CLI unit tests using the newly added Vitest infrastructure. (103+ tests passing)
@@ -42,6 +48,8 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 **Goal:** Give existing users more ways to interact with their data locally and visualize their usage.
 
+- [ ] **#119 `totem run <workflow>`:** Introduce a custom AI task runner to execute user-defined markdown workflows via the orchestrator.
+- [ ] **#120 Custom Prompt Overrides:** Allow users to override the hardcoded personas for built-in commands (`spec`, `shield`, etc.) via `.totem/prompts/`.
 - [ ] **#44 `totem bridge`:** Build a mid-session context compaction tool to clear token windows without losing place.
 - [ ] **#74 `totem oracle`:** Add a frictionless Q&A command to query LanceDB without strict personas.
 - [ ] **#92 Telemetry Logging & Dashboard:** Persist token stats to `.totem/telemetry.jsonl` and build `totem stats` to track API quota usage.

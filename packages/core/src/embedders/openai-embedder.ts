@@ -4,6 +4,8 @@ import type { Embedder } from './embedder.js';
 
 const MAX_BATCH_SIZE = 2048;
 const DEFAULT_DIMENSIONS = 1536;
+const MAX_RETRIES = 3;
+const INITIAL_BACKOFF_MS = 1000;
 
 export class OpenAIEmbedder implements Embedder {
   readonly dimensions: number;
@@ -32,10 +34,7 @@ export class OpenAIEmbedder implements Embedder {
 
     for (let i = 0; i < texts.length; i += MAX_BATCH_SIZE) {
       const batch = texts.slice(i, i + MAX_BATCH_SIZE);
-      const response = await this.client.embeddings.create({
-        model: this.model,
-        input: batch,
-      });
+      const response = await this.embedWithRetry(batch);
 
       const sorted = response.data.sort((a, b) => a.index - b.index);
       for (const item of sorted) {
@@ -44,5 +43,30 @@ export class OpenAIEmbedder implements Embedder {
     }
 
     return results;
+  }
+
+  private async embedWithRetry(
+    batch: string[],
+  ): Promise<OpenAI.Embeddings.CreateEmbeddingResponse> {
+    let lastErr: unknown;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        return await this.client.embeddings.create({
+          model: this.model,
+          input: batch,
+        });
+      } catch (err) {
+        lastErr = err;
+        const isRetryable =
+          err instanceof OpenAI.APIError && (err.status === 429 || err.status === 503);
+        if (!isRetryable || attempt === MAX_RETRIES) break;
+        const delay = INITIAL_BACKOFF_MS * 2 ** attempt + Math.random() * 1000;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+    const message = lastErr instanceof Error ? lastErr.message : String(lastErr);
+    throw new Error(
+      `[Totem Error] OpenAI embedding failed after ${MAX_RETRIES + 1} attempts: ${message}`,
+    );
   }
 }

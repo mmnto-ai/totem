@@ -18,7 +18,8 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 - `totem init`: Scaffolds `totem.config.ts`, installs git hooks, and injects AI memory reflexes.
 - `totem sync`: Crawls target directories defined in `totem.config.ts`, chunks, embeds, and updates the LanceDB index.
 - `totem search`: Direct debug query interface.
-- _(Future)_ `totem spec` / `totem shield`: Standardized workflow orchestration commands.
+- `totem run <workflow>`: A custom AI task runner that executes user-defined markdown workflows using the orchestrator.
+- `totem spec` / `totem shield`: Standardized workflow orchestration commands.
 
 ### 3. The MCP Server (`@mmnto/mcp`)
 

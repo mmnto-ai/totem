@@ -8,13 +8,6 @@ import { getContext, reconnectStore } from '../context.js';
 
 type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
 
-// Heuristic to detect stale LanceDB file handles after a full sync rebuild.
-// Observed errors that indicate a stale handle:
-//   - "IO-error: ... not found" when underlying .lance files are deleted
-//   - "LanceError: ..." for other file access issues after rebuild
-// TODO: Replace with error codes if future LanceDB versions expose them.
-const LANCE_STALE_ERROR_PATTERN = /not found|LanceError/i;
-
 async function performSearch(
   query: string,
   typeFilter?: ContentType,
@@ -69,33 +62,28 @@ export function registerSearchKnowledge(server: McpServer): void {
     async ({ query, type_filter, max_results }) => {
       try {
         return await performSearch(query, type_filter, max_results);
-      } catch (err) {
-        const originalMessage = err instanceof Error ? err.message : String(err);
+      } catch (originalErr) {
+        // Any LanceDB error could indicate a stale handle (e.g. files deleted
+        // during a full sync rebuild). Reconnect and retry once before failing.
+        try {
+          await reconnectStore();
+          return await performSearch(query, type_filter, max_results);
+        } catch (retryErr) {
+          // Retry failed — report both errors for diagnostics
+          const originalMessage =
+            originalErr instanceof Error ? originalErr.message : String(originalErr);
+          const retryMessage = retryErr instanceof Error ? retryErr.message : String(retryErr);
 
-        const isStale = LANCE_STALE_ERROR_PATTERN.test(originalMessage);
+          const text =
+            originalMessage === retryMessage
+              ? `[Totem Error] Search failed: ${originalMessage}`
+              : `[Totem Error] Search failed. Initial error: ${originalMessage}. Retry after reconnect also failed: ${retryMessage}`;
 
-        if (isStale) {
-          try {
-            await reconnectStore();
-            return await performSearch(query, type_filter, max_results);
-          } catch (retryErr) {
-            const retryMessage = retryErr instanceof Error ? retryErr.message : String(retryErr);
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `[Totem Error] Failed to search knowledge after reconnect: ${retryMessage}`,
-                },
-              ],
-              isError: true,
-            };
-          }
+          return {
+            content: [{ type: 'text' as const, text }],
+            isError: true,
+          };
         }
-
-        const message = originalMessage.startsWith('[Totem Error]')
-          ? originalMessage
-          : `[Totem Error] Failed to search knowledge: ${originalMessage}`;
-        return { content: [{ type: 'text' as const, text: message }], isError: true };
       }
     },
   );

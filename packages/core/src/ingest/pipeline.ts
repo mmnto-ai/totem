@@ -57,8 +57,17 @@ export async function runSync(
     log(`Full sync: ${filesToProcess.length} files to process`);
   }
 
-  // 4. Chunk all files
-  const allChunks: Chunk[] = [];
+  // 4. Chunk files and stream to LanceDB in batches (bounded memory)
+  let totalChunks = 0;
+  let buffer: Chunk[] = [];
+
+  async function flushBuffer(): Promise<void> {
+    if (buffer.length === 0) return;
+    await store.insert(buffer);
+    totalChunks += buffer.length;
+    log(`  Embedded ${totalChunks} chunks so far`);
+    buffer = [];
+  }
 
   for (const file of filesToProcess) {
     log(`Chunking ${file.relativePath}...`);
@@ -86,23 +95,22 @@ export async function runSync(
       await store.deleteByFile(file.relativePath);
     }
 
-    allChunks.push(...chunks);
+    buffer.push(...chunks);
     log(`  ${chunks.length} chunks from ${file.relativePath}`);
+
+    // Flush when buffer reaches batch size to keep memory bounded
+    if (buffer.length >= EMBED_BATCH_SIZE) {
+      await flushBuffer();
+    }
   }
 
-  // 5. Embed and store in batches
-  log(`Embedding ${allChunks.length} chunks...`);
+  // Flush remaining chunks
+  await flushBuffer();
 
-  for (let i = 0; i < allChunks.length; i += EMBED_BATCH_SIZE) {
-    const batch = allChunks.slice(i, i + EMBED_BATCH_SIZE);
-    await store.insert(batch);
-    log(`  Embedded ${Math.min(i + EMBED_BATCH_SIZE, allChunks.length)}/${allChunks.length}`);
-  }
-
-  log(`Sync complete: ${allChunks.length} chunks from ${filesToProcess.length} files`);
+  log(`Sync complete: ${totalChunks} chunks from ${filesToProcess.length} files`);
 
   return {
-    chunksProcessed: allChunks.length,
+    chunksProcessed: totalChunks,
     filesProcessed: filesToProcess.length,
   };
 }

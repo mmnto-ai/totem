@@ -6,9 +6,11 @@
 
 **Your AI team forgets. Totem remembers.**
 
-Developers are hitting the limits of "context stuffing." Brute-forcing a 2M token window with your entire codebase is slow, expensive, and leads to hallucinations.
+Right now, AI development is where code versioning was before Git. Every time you open a new AI session, your agents have amnesia. They forget why you chose Drizzle over Prisma, they hallucinate deprecated database tables, and they fall into the same architectural traps you fixed last week.
 
-**Totem** is a semantic memory layer and workflow orchestrator for your AI agents (Claude, Gemini, Cursor). Instead of blindly dumping files into a prompt, Totem gives your AI a local, version-controlled vector database. It teaches them to proactively remember your project's architectural decisions, domain constraints, and bug traps so you don't have to repeat yourself every session.
+**Totem is the state manager for your AI's brain.**
+
+It is an **AI Control Plane for Local Development**. Instead of uploading your proprietary codebase to a cloud SaaS platform, Totem compiles a syntax-aware, embedded vector index (LanceDB) right inside your project. It acts as an **Architectural Linter**, using the standard Model Context Protocol (MCP) to force your local agents (Claude, Gemini, Cursor) to read your project's constraints, decisions, and trap-logs _before_ they write a single line of code.
 
 When you're three levels deep in a debugging session, you need to know if the code you are writing is real, or just an AI hallucinating an anti-pattern you banned three months ago. You need a totem.
 
@@ -17,6 +19,7 @@ When you're three levels deep in a debugging session, you need to know if the co
 - **Local-First & Git-Native:** Memory shouldn't be locked in a cloud SaaS. Totem compiles an embedded LanceDB vector index right inside your project (`.lancedb/`). The actual knowledge is stored in a human-readable, version-controlled `.totem/lessons.md` file. Review your AI's memory in your PRs.
 - **The Reflex Engine:** Totem doesn't just give your AI a database; it gives them _reflexes_. `totem init` auto-injects behavioral triggers into your AI's system prompts (`CLAUDE.md`, `.cursorrules`), forcing them to autonomously document traps and query architecture before they write code.
 - **Multi-Agent Orchestration:** Use Claude to write code, Gemini to review PRs, and a local DeepSeek model for fast checks. Totem acts as the "Shared Brain" and workflow orchestrator (via `totem spec`) for your entire AI org chart.
+- **Built for Enterprise Scale:** The ingestion pipeline streams chunks in batches directly to the local vector store, maintaining a flat memory footprint regardless of how massive your monorepo gets.
 
 ## Philosophy: The Unix Approach to AI
 
@@ -36,6 +39,11 @@ This is a Turborepo monorepo consisting of:
 - **`@mmnto/cli`**: The executable interface (`totem init`, `totem sync`).
 - **`@mmnto/mcp`**: The standard I/O Model Context Protocol (MCP) server that exposes the `search_knowledge` and `add_lesson` tools to your AI.
 
+## Security & Privacy
+
+- **100% Local Privacy:** Totem's vector database (`.lancedb/`) lives entirely within your local repository. Your codebase is never uploaded to a centralized SaaS platform or external memory service.
+- **Injection Hardening:** Totem actively sanitizes untrusted inputs (like PR comments fetched during `totem learn` and external GitHub issues) before persisting them and before writing to terminal output streams. This prevents indirect prompt injection and terminal injection attacks.
+
 ## Getting Started
 
 ### 1. Initialize Totem
@@ -51,6 +59,10 @@ This will auto-detect your project structure, generate a `totem.config.ts`, inst
 ### 2. Configure your Embedding Provider
 
 Totem defaults to OpenAI's `text-embedding-3-small` for a zero-friction start. You can configure this, or switch to a local Ollama model (`nomic-embed-text`), in `totem.config.ts`. Ensure your `.env` contains an `OPENAI_API_KEY` if using the default.
+
+> [!TIP]
+> **OpenAI Rate Limits:**
+> Totem uses exponential backoff to handle transient API rate limits, but if you have a massive codebase and run into strict, persistent OpenAI quota limits during your very first full index, we recommend switching your provider to the local `Ollama` fallback for the initial sync.
 
 ### 3. Sync the Index
 
@@ -80,6 +92,9 @@ Add Totem to your AI agent's configuration (e.g., Claude Desktop or Gemini):
 ```
 
 ### 5. The Workflow Orchestrator
+
+> [!NOTE]
+> **Prerequisite:** Currently, all orchestrator commands that fetch remote issue or PR data (like `spec`, `triage`, and `learn`) require the [GitHub CLI (`gh`)](https://cli.github.com/) to be installed and authenticated on your machine. Adapters for Jira, Linear, and others are on the roadmap.
 
 Totem ships with native CLI commands that orchestrate your entire shift-left workflow by querying LanceDB and invoking your AI to make project-aware decisions.
 
