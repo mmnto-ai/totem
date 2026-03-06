@@ -312,8 +312,8 @@ describe('scaffoldClaudeHooks', () => {
     );
     const skill = scaffoldFile(
       path.join(skillsDir, 'totem.md'),
-      '<!-- [totem] auto-generated -->\ntest\n',
-      '<!-- [totem] auto-generated',
+      '<!-- [totem] auto-generated — Totem Architect skill -->\ntest\n',
+      '<!-- [totem] auto-generated — Totem Architect skill -->',
     );
 
     expect(sessionStart).toEqual({ action: 'created' });

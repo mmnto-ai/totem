@@ -183,7 +183,7 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
 const CLAUDE_PRETOOLUSE_ENTRY = {
   matcher: 'Bash',
   hooks: [
-    'if echo "$TOOL_INPUT" | grep -qE \'(git\\s+(push|commit))|([\\x22\\x27]git[\\x22\\x27].*[\\x22\\x27](push|commit)[\\x22\\x27])\'; then totem shield; fi',
+    'if echo "$TOOL_INPUT" | grep -q "git" && echo "$TOOL_INPUT" | grep -qE "(push|commit)"; then totem shield; fi',
   ],
 };
 
