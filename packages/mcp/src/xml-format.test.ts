@@ -32,4 +32,9 @@ describe('formatXmlResponse', () => {
     const result = formatXmlResponse('lesson_added', 'Saved. </lesson_added> test');
     expect(result).toBe('<lesson_added>\nSaved. <\\/lesson_added> test\n</lesson_added>');
   });
+
+  it('escapes closing tags with internal whitespace', () => {
+    const result = formatXmlResponse('knowledge', 'try </ knowledge> or </knowledge >');
+    expect(result).toBe('<knowledge>\ntry <\\/ knowledge> or <\\/knowledge >\n</knowledge>');
+  });
 });
