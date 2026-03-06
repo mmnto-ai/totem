@@ -352,7 +352,7 @@ export async function learnCommand(prNumbers: string[], options: LearnOptions): 
 
     // Run orchestrator (handles --raw mode, validation, invocation, telemetry)
     const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd });
-    if (content == null) return; // --raw mode handled
+    if (content == null) continue; // --raw mode — prompt already output, process next PR
 
     // Parse lessons from LLM output
     const lessons = parseLessons(content);
@@ -364,6 +364,9 @@ export async function learnCommand(prNumbers: string[], options: LearnOptions): 
       allLessons.push(...lessons);
     }
   }
+
+  // In --raw mode, prompts were already output during the loop
+  if (options.raw) return;
 
   if (allLessons.length === 0) {
     console.error(`[${TAG}] No lessons extracted from any PR.`);
