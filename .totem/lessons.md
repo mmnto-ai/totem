@@ -243,4 +243,16 @@ Core Product Philosophy: 'Invisible Orchestration'. Totem must scale down to sol
 
 **Tags:** architecture, product-strategy, roadmap, missing-pieces
 
-Roadmap gap analysis: The current roadmap is heavily indexed on *text/code* orchestration but misses the *observability/state* layer. Developers will quickly lose trust in a vector database if they cannot 'see' what is inside it or how it is parsing their files. We need a 'totem inspect' or local dashboard UI (Phase 3) that allows users to visualize their chunks, see what files were ignored, and delete bad lessons manually. Additionally, Phase 2 is missing a formal 'Ejection/Uninstall' command to remove all injected hooks and prompts gracefully.
+Roadmap gap analysis: The current roadmap is heavily indexed on _text/code_ orchestration but misses the _observability/state_ layer. Developers will quickly lose trust in a vector database if they cannot 'see' what is inside it or how it is parsing their files. We need a 'totem inspect' or local dashboard UI (Phase 3) that allows users to visualize their chunks, see what files were ignored, and delete bad lessons manually. Additionally, Phase 2 is missing a formal 'Ejection/Uninstall' command to remove all injected hooks and prompts gracefully.
+
+## Lesson — 2026-03-06T04:18:37.256Z
+
+**Tags:** architecture, future-ideas, mcp, context-compaction
+
+Future feature consideration: Once MCP or AI host environments support 'pre-compaction' and 'post-compaction' lifecycle hooks, Totem should intercept them. A pre-compaction hook could automatically trigger 'totem handoff' to save the current session state, and a post-compaction hook could automatically run 'totem triage' to seamlessly reload the most critical context back into the fresh window. This would eliminate the need for developers to manually guard against memory resets.
+
+## Lesson — 2026-03-06T04:20:45.590Z
+
+**Tags:** product-strategy, value-prop, proactive-memory
+
+The ultimate value proposition of Totem is transforming a sterile vector database into a proactive 'developer journal and cheatsheet'. The true magic happens when the AI is configured to proactively identify and suggest lessons _before_ the human realizes they need to remember them. This transitions the tool from passive retrieval to active mentorship.
