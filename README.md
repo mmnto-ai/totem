@@ -132,10 +132,10 @@ _(Totem fetches your current git branch, uncommitted changes, open PRs, and rece
 **Pre-Work Briefings (`spec`)**
 
 ```bash
-npx @mmnto/cli spec 123
+npx @mmnto/cli spec 123 124 https://github.com/org/repo/issues/125
 ```
 
-_(Totem fetches GitHub Issue #123, retrieves relevant architectural context, and synthesizes a pre-work spec. The AI strictly adopts the persona of a **Staff-Level Architect**, refusing to write code and instead focusing on data contracts, edge cases, and technical planning)._
+_(Totem fetches multiple GitHub Issues, retrieves relevant architectural context, and synthesizes a pre-work spec. The AI strictly adopts the persona of a **Staff-Level Architect**, refusing to write code and instead focusing on data contracts, edge cases, and technical planning)._
 
 **Pre-Flight Reviews (`shield`)**
 
@@ -161,6 +161,14 @@ npx @mmnto/cli anchor
 
 _(Totem interactively prompts you to document a context, symptom, and fix/rule. It saves the lesson to `.totem/lessons.md` and automatically triggers a background re-index so the new knowledge is instantly available to your AI agents)._
 
+**PR Learning Loop (`learn`)**
+
+```bash
+npx @mmnto/cli learn 101 102
+```
+
+_(Totem fetches one or more recently merged PRs, reads the review comments, and extracts systemic architectural traps or rules. It interactively asks you to confirm the extracted rules before appending them to your project's memory)._
+
 **End of Session (`handoff`)**
 
 ```bash
@@ -168,6 +176,10 @@ npx @mmnto/cli handoff --out session-handoff.md
 ```
 
 _(Totem captures your uncommitted git changes and any lessons learned today, synthesizing a tactical snapshot so your next session doesn't start cold)._
+
+> [!TIP]
+> **Custom Prompt Overrides**
+> By default, the orchestrator uses highly opinionated personas (like the "Red Team Architect" in `shield`). If you want to customize these, simply create a markdown file in `.totem/prompts/<command>.md` (e.g., `.totem/prompts/shield.md`). Totem will automatically detect your file and use your custom rules instead of the built-in system prompt.
 
 ## Strategic Roadmap
 
