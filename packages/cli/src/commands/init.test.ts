@@ -240,7 +240,7 @@ describe('scaffoldClaudeHooks', () => {
     expect(content.hooks.PreToolUse).toBeDefined();
   });
 
-  it('skips when hooks already exist (user-customized)', () => {
+  it('deep merges when hooks exist but no totem entry', () => {
     const dir = path.join(tmpDir, '.claude');
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, 'settings.local.json');
@@ -249,10 +249,27 @@ describe('scaffoldClaudeHooks', () => {
 
     const result = scaffoldClaudeHooks(filePath);
 
-    expect(result).toEqual({ action: 'skipped' });
-    // Verify original content preserved
+    expect(result).toEqual({ action: 'merged' });
     const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    // Preserves existing entry
     expect(content.hooks.PreToolUse[0].matcher).toBe('custom');
+    // Appends totem entry
+    expect(content.hooks.PreToolUse[1].matcher).toBe('Bash');
+    expect(JSON.stringify(content.hooks.PreToolUse[1])).toContain('totem shield');
+  });
+
+  it('skips when totem shield hook already exists', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.local.json');
+    const existing = {
+      hooks: { PreToolUse: [{ matcher: 'Bash', hooks: ['totem shield'] }] },
+    };
+    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeHooks(filePath);
+
+    expect(result).toEqual({ action: 'skipped' });
   });
 
   it('returns error on malformed JSON', () => {

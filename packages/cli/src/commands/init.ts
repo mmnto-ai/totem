@@ -118,7 +118,7 @@ try {
     timeout: 30000,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  process.stdout.write(output);
+  process.stderr.write(output);
 } catch (err) {
   process.stderr.write('[totem] briefing unavailable: ' + err.message + '\\n');
 }
@@ -131,7 +131,7 @@ const { execSync } = require('child_process');
 module.exports = function beforeTool(toolName, toolInput) {
   if (toolName !== 'run_shell_command') return;
   const cmd = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput);
-  if (!/git\\s+(push|commit)/.test(cmd)) return;
+  if (!/git\\s+(push|commit)/.test(cmd) && !/["']git["'].*["'](push|commit)["']/.test(cmd)) return;
 
   try {
     execSync('totem shield', { encoding: 'utf-8', timeout: 60000, stdio: 'inherit' });
@@ -180,15 +180,11 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
 
 // --- Claude Code hook installer ---
 
-const CLAUDE_HOOKS_CONFIG = {
-  hooks: {
-    PreToolUse: [
-      {
-        matcher: 'Bash',
-        hooks: ['if echo "$TOOL_INPUT" | grep -qE "git\\s+(push|commit)"; then totem shield; fi'],
-      },
-    ],
-  },
+const CLAUDE_PRETOOLUSE_ENTRY = {
+  matcher: 'Bash',
+  hooks: [
+    'if echo "$TOOL_INPUT" | grep -qE \'git\\s+(push|commit)|"git".*"(push|commit)"\'; then totem shield; fi',
+  ],
 };
 
 /**
@@ -205,8 +201,10 @@ export function scaffoldClaudeHooks(filePath: string): {
       fs.mkdirSync(dir, { recursive: true });
     }
 
+    const fullConfig = { hooks: { PreToolUse: [CLAUDE_PRETOOLUSE_ENTRY] } };
+
     if (!fs.existsSync(filePath)) {
-      fs.writeFileSync(filePath, JSON.stringify(CLAUDE_HOOKS_CONFIG, null, 2) + '\n', 'utf-8');
+      fs.writeFileSync(filePath, JSON.stringify(fullConfig, null, 2) + '\n', 'utf-8');
       return { action: 'created' };
     }
 
@@ -222,12 +220,18 @@ export function scaffoldClaudeHooks(filePath: string): {
       };
     }
 
-    // If hooks already exist, don't overwrite — user may have customized
-    if (parsed.hooks !== undefined) {
+    // Deep merge: check if PreToolUse already has a totem entry
+    const hooks = (parsed.hooks ?? {}) as Record<string, unknown[]>;
+    const preToolUse = (hooks.PreToolUse ?? []) as Array<{ matcher?: string }>;
+
+    if (
+      preToolUse.some((h) => h.matcher === 'Bash' && JSON.stringify(h).includes('totem shield'))
+    ) {
       return { action: 'skipped' };
     }
 
-    parsed.hooks = CLAUDE_HOOKS_CONFIG.hooks;
+    hooks.PreToolUse = [...preToolUse, CLAUDE_PRETOOLUSE_ENTRY];
+    parsed.hooks = hooks;
     fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
     return { action: 'merged' };
   } catch (err) {

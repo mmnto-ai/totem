@@ -8,7 +8,7 @@ try {
     timeout: 30000,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  process.stdout.write(output);
+  process.stderr.write(output);
 } catch (err) {
   process.stderr.write('[totem] briefing unavailable: ' + err.message + '\n');
 }
