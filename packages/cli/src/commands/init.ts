@@ -100,7 +100,7 @@ export function scaffoldFile(
     return { action: 'created' };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { action: 'skipped', err: message };
+    return { action: 'skipped', err: `[Totem Error] ${message}` };
   }
 }
 
@@ -216,7 +216,7 @@ export function scaffoldClaudeHooks(filePath: string): {
       const message = err instanceof Error ? err.message : String(err);
       return {
         action: 'skipped',
-        err: `Could not parse settings.local.json (invalid JSON): ${message}`,
+        err: `[Totem Error] Could not parse settings.local.json (invalid JSON): ${message}`,
       };
     }
 
@@ -228,14 +228,14 @@ export function scaffoldClaudeHooks(filePath: string): {
     ) {
       return {
         action: 'skipped',
-        err: 'Could not merge config: "hooks" in settings.local.json must be an object.',
+        err: '[Totem Error] Could not merge config: "hooks" in settings.local.json must be an object.',
       };
     }
     const hooks = (hooksUntyped ?? {}) as Record<string, unknown>;
     if (hooks.PreToolUse !== undefined && !Array.isArray(hooks.PreToolUse)) {
       return {
         action: 'skipped',
-        err: 'Could not merge config: "hooks.PreToolUse" in settings.local.json must be an array.',
+        err: '[Totem Error] Could not merge config: "hooks.PreToolUse" in settings.local.json must be an array.',
       };
     }
     const preToolUse = (hooks.PreToolUse ?? []) as Array<{ matcher?: string }>;
@@ -257,7 +257,7 @@ export function scaffoldClaudeHooks(filePath: string): {
     return { action: 'merged' };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { action: 'skipped', err: message };
+    return { action: 'skipped', err: `[Totem Error] ${message}` };
   }
 }
 
