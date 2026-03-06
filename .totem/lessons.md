@@ -346,3 +346,9 @@ Use dynamic imports for heavy dependencies (e.g., `ora` for spinners) within the
 **Tags:** logging, error-handling, trap
 
 Avoid using `${err}` in logging template literals as it relies on a generic `toString()` call; instead, explicitly extract `err.message` (or the full error object) to ensure consistent and informative output across different catch blocks.
+
+## Lesson — 2026-03-06T08:00:19.826Z
+
+**Tags:** totem, workflow, spec, optimization
+
+When using 'totem spec', it is most valuable for exploring unfamiliar territory or framing large epics. For well-scoped sub-tasks where the developer has already read the code and written detailed descriptions, running 'totem spec' adds marginal value and wastes time/quota. The optimal pattern is to 'spec the epic, skip specs on sub-tasks you scoped yourself'.
