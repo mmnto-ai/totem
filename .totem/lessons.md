@@ -172,3 +172,27 @@ Prioritize standard inline idioms (like error message extraction) over creating 
 **Tags:** architecture, testing, lancedb, core
 
 The '@mmnto/totem' core package (which handles the ingestion pipeline, syntactic chunkers, embedders, and LanceDB store) currently has zero test coverage. Since this package manages the stateful local database and complex parsing logic (e.g., Markdown/AST chunking), bugs here are difficult to debug (e.g., LanceDB stale handles or datafusion case-sensitivity issues). Integration tests running 'totem sync' against a real LanceDB instance and unit tests for the chunkers are the highest priority for technical debt remediation.
+
+## Lesson — 2026-03-06T03:05:07.771Z
+
+**Tags:** architecture, future-ideas, multi-repo
+
+Future feature consideration: 'Federated Memory'. Allow a local Totem index in one repository to query or communicate with a Totem index in another local repository (e.g., an app repo querying a shared component library's traps). This would require standardizing the schema and allowing 'totem.config.ts' to define remote/external LanceDB paths.
+
+## Lesson — 2026-03-06T03:06:36.174Z
+
+**Tags:** architecture, federated-memory, dogfooding
+
+When dogfooding Totem across multiple local projects, recognize that the Totem repository itself serves as the 'Mothership'. Lessons learned about how to _use_ AI effectively (e.g., prompt injection, LLM behaviors, MCP tool boundaries) naturally aggregate in the Totem repo. Other consuming repos (like 'satur8d' or 'arhgap11') would benefit immensely from querying the Totem repo's LanceDB index to inherit those AI behavioral best practices without duplicating them.
+
+## Lesson — 2026-03-06T03:09:19.161Z
+
+**Tags:** architecture, product-strategy, federated-memory, enterprise
+
+When designing Phase 4 (Enterprise Expansion), avoid building Totem as a 'mesh communication layer' (p2p networking, realtime sockets). Instead, maintain the 'Unix Philosophy' by having the central platform CI/CD pipeline pull or ingest the static '.totem/' artifacts (lessons, handoffs) from developers' branches. The intelligence comes from the aggregated LanceDB index, not from inventing a new networking protocol. Keep the infrastructure dumb and the queries smart.
+
+## Lesson — 2026-03-06T03:11:07.960Z
+
+**Tags:** architecture, enterprise, status, workflow
+
+To support team-wide status querying without a centralized server (Phase 4), leverage the existing PR and branch infrastructure. Instead of having Totem instances ping each other, developers should push their 'session-handoff.md' and 'active_work.md' to draft PRs or remote branches at the end of the day. A team lead's Totem can then run a workflow that clones/fetches those branches and aggregates the markdown files into a single context for the orchestrator LLM to summarize.

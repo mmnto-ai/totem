@@ -16,7 +16,7 @@
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
     "lint": "eslint src/",
-    "test": "echo \"No tests yet\" && exit 0"
+    "test": "vitest run"
   },
   "dependencies": {
     "@lancedb/lancedb": "^0.13.0",
@@ -31,7 +31,8 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "@types/mdast": "^4.0.0"
+    "@types/mdast": "^4.0.0",
+    "vitest": "^3.0.0"
   },
   "files": [
     "dist"
