@@ -333,6 +333,39 @@ describe('scaffoldClaudeHooks', () => {
   });
 });
 
+describe('Claude shield-gate script scaffolding', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-shield-gate-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('creates shield-gate.cjs with correct content', () => {
+    const filePath = path.join(tmpDir, '.totem', 'hooks', 'shield-gate.cjs');
+    const MARKER = '// [totem] auto-generated';
+    const CONTENT = `${MARKER} — Claude Code shield gate hook\nconst { execSync } = require('child_process');\n`;
+
+    const result = scaffoldFile(filePath, CONTENT, MARKER);
+
+    expect(result).toEqual({ action: 'created' });
+    const written = fs.readFileSync(filePath, 'utf-8');
+    expect(written).toContain('require');
+    expect(written).toContain(MARKER);
+  });
+
+  it('uses .cjs extension for ESM compatibility', () => {
+    const filePath = path.join(tmpDir, '.totem', 'hooks', 'shield-gate.cjs');
+    const result = scaffoldFile(filePath, '// [totem] auto-generated\ntest\n');
+
+    expect(result).toEqual({ action: 'created' });
+    expect(filePath).toMatch(/\.cjs$/);
+  });
+});
+
 describe('Gemini hook scaffolding', () => {
   let tmpDir: string;
 

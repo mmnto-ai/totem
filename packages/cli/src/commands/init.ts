@@ -200,7 +200,7 @@ const CLAUDE_PRETOOLUSE_ENTRY = {
   hooks: [
     {
       type: 'command',
-      command: 'node .totem/hooks/shield-gate.js',
+      command: 'node .totem/hooks/shield-gate.cjs',
     },
   ],
 };
@@ -306,7 +306,7 @@ async function installClaudeHooks(cwd: string): Promise<HookInstallerResult[]> {
   const results: HookInstallerResult[] = [];
 
   // Scaffold the shield-gate script
-  const scriptRel = '.totem/hooks/shield-gate.js';
+  const scriptRel = '.totem/hooks/shield-gate.cjs';
   const scriptResult = scaffoldFile(
     path.join(cwd, scriptRel),
     CLAUDE_SHIELD_GATE,
