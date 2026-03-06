@@ -262,3 +262,9 @@ The ultimate value proposition of Totem is transforming a sterile vector databas
 **Tags:** architecture, product-strategy, workflows, triage
 
 While it is tempting to make 'totem triage' automatically invoke 'totem learn' on recently merged PRs, this violates the principle of modularity and creates a massive, fragile 'mega-command'. 'triage' is for planning the future; 'learn' is for extracting rules from the past. Keep them decoupled. If a team wants them linked, they should compose them via the upcoming 'totem run <workflow>' runner (e.g., 'totem run sprint-planning' which calls learn then triage).
+
+## Lesson — 2026-03-06T04:53:50.730Z
+
+**Tags:** product-strategy, open-source, go-to-market, business-model
+
+Strategic Note: Totem _must_ remain open source. Developer tools (especially ones that read local code and inject git hooks) die behind paywalls because they cannot establish trust. The open-source CLI and local LanceDB instance act as the 'loss leader' to build a massive user base and establish the '.totem/lessons.md' format as an industry standard. Monetization (if desired later) should happen at the Enterprise Phase 4 level (e.g., hosting the 'Mothership' federated indexes, SSO, or team analytics dashboards), not by closing the core CLI.
