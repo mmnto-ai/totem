@@ -9,6 +9,7 @@ import { GitHubCliPrAdapter } from '../adapters/github-cli-pr.js';
 import type { StandardPr, StandardReviewComment } from '../adapters/pr-adapter.js';
 import {
   formatResults,
+  getSystemPrompt,
   loadConfig,
   loadEnv,
   resolveConfigPath,
@@ -22,6 +23,7 @@ import {
 const TAG = 'Learn';
 const MAX_EXISTING_LESSONS = 10;
 const MAX_REVIEW_BODY_CHARS = 50_000;
+const MAX_INPUTS = 5;
 
 // ─── System prompt ──────────────────────────────────────
 
@@ -113,8 +115,9 @@ function assemblePrompt(
   pr: StandardPr,
   threads: CommentThread[],
   existingLessons: SearchResult[],
+  systemPrompt: string,
 ): string {
-  const sections: string[] = [SYSTEM_PROMPT];
+  const sections: string[] = [systemPrompt];
 
   // PR metadata
   sections.push('=== PR METADATA ===');
@@ -273,46 +276,30 @@ export interface LearnOptions {
   yes?: boolean;
 }
 
-export async function learnCommand(prNumber: string, options: LearnOptions): Promise<void> {
+export async function learnCommand(prNumbers: string[], options: LearnOptions): Promise<void> {
+  // Validate and deduplicate PR numbers
+  const unique = [...new Set(prNumbers)];
+  if (unique.length > MAX_INPUTS) {
+    throw new Error(
+      `[Totem Error] Too many PR numbers (${unique.length}). Maximum is ${MAX_INPUTS}.`,
+    );
+  }
+
+  const nums: number[] = [];
+  for (const prNumber of unique) {
+    const num = parseInt(prNumber, 10);
+    if (isNaN(num) || num <= 0) {
+      throw new Error(
+        `[Totem Error] Invalid PR number: '${prNumber}'. Must be a positive integer.`,
+      );
+    }
+    nums.push(num);
+  }
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);
   const config = await loadConfig(configPath);
-
-  // Validate PR number
-  const num = parseInt(prNumber, 10);
-  if (isNaN(num) || num <= 0) {
-    throw new Error(`[Totem Error] Invalid PR number: '${prNumber}'. Must be a positive integer.`);
-  }
-
-  // Fetch PR data
-  console.error(`[${TAG}] Fetching PR #${num}...`);
-  const adapter = new GitHubCliPrAdapter(cwd);
-  const pr = adapter.fetchPr(num);
-  console.error(`[${TAG}] Title: ${pr.title}`);
-
-  // Fetch inline review comments
-  console.error(`[${TAG}] Fetching review comments...`);
-  const reviewComments = adapter.fetchReviewComments(num);
-  console.error(`[${TAG}] Found ${reviewComments.length} inline review comments`);
-
-  // Filter GCA boilerplate from inline comments
-  const filteredComments = reviewComments.filter((c) => !isGcaBoilerplate(c.body));
-
-  // Early exit if no review content
-  const hasReviewContent =
-    pr.reviews.some((r) => r.body.trim()) ||
-    pr.comments.some((c) => !isGcaBoilerplate(c.body)) ||
-    filteredComments.length > 0;
-
-  if (!hasReviewContent) {
-    console.error(`[${TAG}] No review content found in PR #${num}. Nothing to extract.`);
-    return;
-  }
-
-  // Group inline comments into threads
-  const threads = groupIntoThreads(filteredComments);
-  console.error(`[${TAG}] Grouped into ${threads.length} review threads`);
 
   // Connect to LanceDB for dedup context
   const embedder = createEmbedder(config.embedding);
@@ -323,23 +310,67 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
   const existingLessons = await retrieveExistingLessons(store);
   console.error(`[${TAG}] Found ${existingLessons.length} existing lessons for context`);
 
-  // Assemble prompt
-  const prompt = assemblePrompt(pr, threads, existingLessons);
-  console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
+  // Resolve system prompt (allow .totem/prompts/learn.md override)
+  const systemPrompt = getSystemPrompt('learn', SYSTEM_PROMPT, cwd, config.totemDir);
 
-  // Run orchestrator (handles --raw mode, validation, invocation, telemetry)
-  const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd });
-  if (content == null) return; // --raw mode handled
+  // Process each PR sequentially, accumulating lessons
+  const allLessons: ExtractedLesson[] = [];
+  const adapter = new GitHubCliPrAdapter(cwd);
 
-  // Parse lessons from LLM output
-  const lessons = parseLessons(content);
+  for (const num of nums) {
+    // Fetch PR data
+    console.error(`[${TAG}] Fetching PR #${num}...`);
+    const pr = adapter.fetchPr(num);
+    console.error(`[${TAG}] Title: ${pr.title}`);
 
-  if (lessons.length === 0) {
-    console.error(`[${TAG}] No lessons extracted from PR #${num}.`);
+    // Fetch inline review comments
+    console.error(`[${TAG}] Fetching review comments...`);
+    const reviewComments = adapter.fetchReviewComments(num);
+    console.error(`[${TAG}] Found ${reviewComments.length} inline review comments`);
+
+    // Filter GCA boilerplate from inline comments
+    const filteredComments = reviewComments.filter((c) => !isGcaBoilerplate(c.body));
+
+    // Skip if no review content
+    const hasReviewContent =
+      pr.reviews.some((r) => r.body.trim()) ||
+      pr.comments.some((c) => !isGcaBoilerplate(c.body)) ||
+      filteredComments.length > 0;
+
+    if (!hasReviewContent) {
+      console.error(`[${TAG}] No review content found in PR #${num}. Skipping.`);
+      continue;
+    }
+
+    // Group inline comments into threads
+    const threads = groupIntoThreads(filteredComments);
+    console.error(`[${TAG}] Grouped into ${threads.length} review threads`);
+
+    // Assemble prompt
+    const prompt = assemblePrompt(pr, threads, existingLessons, systemPrompt);
+    console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
+
+    // Run orchestrator (handles --raw mode, validation, invocation, telemetry)
+    const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd });
+    if (content == null) return; // --raw mode handled
+
+    // Parse lessons from LLM output
+    const lessons = parseLessons(content);
+
+    if (lessons.length === 0) {
+      console.error(`[${TAG}] No lessons extracted from PR #${num}.`);
+    } else {
+      console.error(`[${TAG}] Extracted ${lessons.length} lesson(s) from PR #${num}`);
+      allLessons.push(...lessons);
+    }
+  }
+
+  if (allLessons.length === 0) {
+    console.error(`[${TAG}] No lessons extracted from any PR.`);
     return;
   }
 
-  console.error(`[${TAG}] Extracted ${lessons.length} lesson(s)`);
+  console.error(`[${TAG}] Total: ${allLessons.length} lesson(s) from ${nums.length} PR(s)`);
 
   // Display extracted lessons for review
   console.error('');
@@ -348,8 +379,8 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
   );
   console.error(`[${TAG}] Review each lesson carefully before accepting.\n`);
 
-  for (let i = 0; i < lessons.length; i++) {
-    const lesson = lessons[i]!;
+  for (let i = 0; i < allLessons.length; i++) {
+    const lesson = allLessons[i]!;
     console.error(`  [${i + 1}] Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`);
     console.error(`      ${sanitize(lesson.text).replace(/\n/g, '\n      ')}`);
     console.error('');
@@ -358,7 +389,7 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
   // --dry-run mode: preview lessons to stdout (pipeable) without writing
   if (options.dryRun) {
     console.error(`[${TAG}] Dry run — lessons not written.`);
-    for (const lesson of lessons) {
+    for (const lesson of allLessons) {
       console.log(`\n  Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`);
       console.log(`  ${sanitize(lesson.text).replace(/\n/g, '\n  ')}`);
     }
@@ -366,7 +397,7 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
   }
 
   // Confirmation gate
-  const confirmed = await confirmLessons(lessons.length, {
+  const confirmed = await confirmLessons(allLessons.length, {
     yes: options.yes,
     isTTY: !!process.stdin.isTTY,
   });
@@ -376,7 +407,7 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
   }
 
   // Sanitize before persisting — strip any terminal injection from stored lessons
-  const sanitizedLessons = lessons.map((l) => ({
+  const sanitizedLessons = allLessons.map((l) => ({
     tags: l.tags.map((t) => sanitize(t)),
     text: sanitize(l.text),
   }));
@@ -384,7 +415,9 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
   // Append lessons to .totem/lessons.md
   const lessonsPath = path.join(cwd, config.totemDir, 'lessons.md');
   appendLessons(sanitizedLessons, lessonsPath);
-  console.error(`[${TAG}] Appended ${lessons.length} lesson(s) to ${config.totemDir}/lessons.md`);
+  console.error(
+    `[${TAG}] Appended ${allLessons.length} lesson(s) to ${config.totemDir}/lessons.md`,
+  );
 
   // Run incremental sync so lessons are immediately searchable
   console.error(`[${TAG}] Running incremental sync...`);
@@ -397,8 +430,9 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
     `[${TAG}] Sync complete: ${syncResult.chunksProcessed} chunks from ${syncResult.filesProcessed} files`,
   );
 
-  // Print summary (use sanitized lessons to prevent terminal injection in piped output)
-  console.log(`\nExtracted ${sanitizedLessons.length} lesson(s) from PR #${num}:`);
+  // Print summary
+  const prLabel = nums.length === 1 ? `PR #${nums[0]}` : `${nums.length} PRs`;
+  console.log(`\nExtracted ${sanitizedLessons.length} lesson(s) from ${prLabel}:`);
   for (const lesson of sanitizedLessons) {
     console.log(`\n  Tags: ${lesson.tags.join(', ').replace(/\n/g, ' ')}`);
     console.log(`  ${lesson.text.replace(/\n/g, '\n  ')}`);

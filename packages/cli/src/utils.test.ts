@@ -8,6 +8,7 @@ import type { SearchResult } from '@mmnto/totem';
 
 import {
   formatResults,
+  getSystemPrompt,
   loadEnv,
   resolveConfigPath,
   sanitize,
@@ -335,5 +336,54 @@ describe('loadEnv', () => {
   it('does nothing when .env file is missing', () => {
     loadEnv(tmpDir); // should not throw
     expect(process.env[TEST_KEY]).toBeUndefined();
+  });
+});
+
+// ─── getSystemPrompt ──────────────────────────────────
+
+describe('getSystemPrompt', () => {
+  let tmpDir: string;
+  const DEFAULT_PROMPT = 'default system prompt';
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-prompt-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns default when override file does not exist', () => {
+    expect(getSystemPrompt('shield', DEFAULT_PROMPT, tmpDir, '.totem')).toBe(DEFAULT_PROMPT);
+  });
+
+  it('returns file content when override file exists', () => {
+    const promptsDir = path.join(tmpDir, '.totem', 'prompts');
+    fs.mkdirSync(promptsDir, { recursive: true });
+    fs.writeFileSync(path.join(promptsDir, 'shield.md'), 'custom shield prompt', 'utf-8');
+    expect(getSystemPrompt('shield', DEFAULT_PROMPT, tmpDir, '.totem')).toBe(
+      'custom shield prompt',
+    );
+  });
+
+  it('returns default when override file is empty', () => {
+    const promptsDir = path.join(tmpDir, '.totem', 'prompts');
+    fs.mkdirSync(promptsDir, { recursive: true });
+    fs.writeFileSync(path.join(promptsDir, 'spec.md'), '   \n  ', 'utf-8');
+    expect(getSystemPrompt('spec', DEFAULT_PROMPT, tmpDir, '.totem')).toBe(DEFAULT_PROMPT);
+  });
+
+  it('returns default for invalid command names (path traversal)', () => {
+    expect(getSystemPrompt('../../../etc/passwd', DEFAULT_PROMPT, tmpDir, '.totem')).toBe(
+      DEFAULT_PROMPT,
+    );
+  });
+
+  it('returns default when file is unreadable', () => {
+    const promptsDir = path.join(tmpDir, '.totem', 'prompts');
+    fs.mkdirSync(promptsDir, { recursive: true });
+    // Create a directory with the same name as the expected file — reading it will throw
+    fs.mkdirSync(path.join(promptsDir, 'learn.md'));
+    expect(getSystemPrompt('learn', DEFAULT_PROMPT, tmpDir, '.totem')).toBe(DEFAULT_PROMPT);
   });
 });

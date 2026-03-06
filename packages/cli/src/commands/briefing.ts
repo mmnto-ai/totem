@@ -8,6 +8,7 @@ import type { StandardPrListItem } from '../adapters/pr-adapter.js';
 import { getGitBranch, getGitStatus } from '../git.js';
 import {
   formatResults,
+  getSystemPrompt,
   loadConfig,
   loadEnv,
   resolveConfigPath,
@@ -87,8 +88,9 @@ function assemblePrompt(
   status: string,
   prs: StandardPrListItem[],
   context: RetrievedContext,
+  systemPrompt: string,
 ): string {
-  const sections: string[] = [SYSTEM_PROMPT];
+  const sections: string[] = [systemPrompt];
 
   // Git state
   sections.push('=== GIT STATE ===');
@@ -155,8 +157,11 @@ export async function briefingCommand(options: BriefingOptions): Promise<void> {
     `[${TAG}] Found: ${context.specs.length} specs, ${context.sessions.length} sessions`,
   );
 
+  // Resolve system prompt (allow .totem/prompts/briefing.md override)
+  const systemPrompt = getSystemPrompt('briefing', SYSTEM_PROMPT, cwd, config.totemDir);
+
   // Assemble prompt
-  const prompt = assemblePrompt(branch, status, prs, context);
+  const prompt = assemblePrompt(branch, status, prs, context, systemPrompt);
   console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });

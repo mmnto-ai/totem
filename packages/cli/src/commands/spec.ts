@@ -7,6 +7,7 @@ import { GitHubCliAdapter } from '../adapters/github-cli.js';
 import type { StandardIssue } from '../adapters/issue-adapter.js';
 import {
   formatResults,
+  getSystemPrompt,
   loadConfig,
   loadEnv,
   resolveConfigPath,
@@ -19,6 +20,7 @@ import {
 
 const TAG = 'Spec';
 const QUERY_BODY_TRUNCATE = 500;
+const MAX_INPUTS = 5;
 
 // ─── System prompt ──────────────────────────────────────
 
@@ -87,30 +89,37 @@ function buildSearchQuery(issue: StandardIssue): string {
   return `${issue.title} ${labels} ${bodySnippet}`.trim();
 }
 
+// ─── Input types ────────────────────────────────────────
+
+interface ParsedInput {
+  issue: StandardIssue | null;
+  freeText: string | null;
+}
+
 // ─── Prompt assembly ────────────────────────────────────
 
 function assemblePrompt(
-  issue: StandardIssue | null,
-  freeText: string | null,
+  inputs: ParsedInput[],
   context: RetrievedContext,
+  systemPrompt: string,
 ): string {
-  const sections: string[] = [SYSTEM_PROMPT];
+  const sections: string[] = [systemPrompt];
 
-  // Target issue or free-text topic
-  if (issue) {
-    const issueLabels = issue.labels.join(', ');
-    sections.push('=== TARGET ISSUE ===');
-    sections.push(`Issue #${issue.number}`);
-    sections.push(wrapXml('issue_title', issue.title));
-    sections.push(`Labels: ${issueLabels || '(none)'}`);
-    sections.push(`State: ${issue.state}`);
-    if (issue.body) {
-      sections.push('');
-      sections.push(wrapXml('issue_body', issue.body));
+  for (const { issue, freeText } of inputs) {
+    if (issue) {
+      const issueLabels = issue.labels.join(', ');
+      sections.push(`\n=== ISSUE #${issue.number}: ${issue.title} ===`);
+      sections.push(wrapXml('issue_title', issue.title));
+      sections.push(`Labels: ${issueLabels || '(none)'}`);
+      sections.push(`State: ${issue.state}`);
+      if (issue.body) {
+        sections.push('');
+        sections.push(wrapXml('issue_body', issue.body));
+      }
+    } else if (freeText) {
+      sections.push('\n=== TOPIC ===');
+      sections.push(freeText);
     }
-  } else if (freeText) {
-    sections.push('=== TOPIC ===');
-    sections.push(freeText);
   }
 
   // Totem knowledge
@@ -137,7 +146,12 @@ export interface SpecOptions {
   fresh?: boolean;
 }
 
-export async function specCommand(input: string, options: SpecOptions): Promise<void> {
+export async function specCommand(inputs: string[], options: SpecOptions): Promise<void> {
+  const unique = [...new Set(inputs)];
+  if (unique.length > MAX_INPUTS) {
+    throw new Error(`[Totem Error] Too many inputs (${unique.length}). Maximum is ${MAX_INPUTS}.`);
+  }
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);
@@ -148,28 +162,34 @@ export async function specCommand(input: string, options: SpecOptions): Promise<
   const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
   await store.connect();
 
-  // Parse input: issue number, GitHub URL, or free-text
-  const urlMatch = input.match(/^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/);
-  const issueNumber = /^\d+$/.test(input)
-    ? parseInt(input, 10)
-    : urlMatch
-      ? parseInt(urlMatch[1], 10)
-      : null;
-  let issue: StandardIssue | null = null;
-  let query: string;
+  // Parse and fetch all inputs sequentially
+  const adapter = new GitHubCliAdapter(cwd);
+  const parsed: ParsedInput[] = [];
+  const queryParts: string[] = [];
 
-  if (issueNumber) {
-    console.error(`[${TAG}] Fetching issue #${issueNumber}...`);
-    const adapter = new GitHubCliAdapter(cwd);
-    issue = adapter.fetchIssue(issueNumber);
-    console.error(`[${TAG}] Title: ${issue.title}`);
-    query = buildSearchQuery(issue);
-  } else {
-    console.error(`[${TAG}] Topic: ${input}`);
-    query = input;
+  for (const input of unique) {
+    const urlMatch = input.match(/^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/);
+    const issueNumber = /^\d+$/.test(input)
+      ? parseInt(input, 10)
+      : urlMatch
+        ? parseInt(urlMatch[1]!, 10)
+        : null;
+
+    if (issueNumber) {
+      console.error(`[${TAG}] Fetching issue #${issueNumber}...`);
+      const issue = adapter.fetchIssue(issueNumber);
+      console.error(`[${TAG}] Title: ${issue.title}`);
+      parsed.push({ issue, freeText: null });
+      queryParts.push(buildSearchQuery(issue));
+    } else {
+      console.error(`[${TAG}] Topic: ${input}`);
+      parsed.push({ issue: null, freeText: input });
+      queryParts.push(input);
+    }
   }
 
   // Retrieve context from LanceDB
+  const query = queryParts.join(' ');
   console.error(`[${TAG}] Querying Totem index...`);
   const context = await retrieveContext(query, store);
   const totalResults = context.specs.length + context.sessions.length + context.code.length;
@@ -177,8 +197,11 @@ export async function specCommand(input: string, options: SpecOptions): Promise<
     `[${TAG}] Found: ${context.specs.length} specs, ${context.sessions.length} sessions, ${context.code.length} code chunks`,
   );
 
+  // Resolve system prompt (allow .totem/prompts/spec.md override)
+  const systemPrompt = getSystemPrompt('spec', SYSTEM_PROMPT, cwd, config.totemDir);
+
   // Assemble prompt
-  const prompt = assemblePrompt(issue, issueNumber ? null : input, context);
+  const prompt = assemblePrompt(parsed, context, systemPrompt);
   console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });

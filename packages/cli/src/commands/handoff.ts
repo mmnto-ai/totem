@@ -3,6 +3,7 @@ import * as path from 'node:path';
 
 import { getGitBranch, getGitDiff, getGitDiffStat, getGitStatus } from '../git.js';
 import {
+  getSystemPrompt,
   loadConfig,
   loadEnv,
   resolveConfigPath,
@@ -76,8 +77,9 @@ function assemblePrompt(
   diff: string,
   diffStat: string,
   lessons: string,
+  systemPrompt: string,
 ): string {
-  const sections: string[] = [SYSTEM_PROMPT];
+  const sections: string[] = [systemPrompt];
 
   // Git state
   sections.push('=== GIT STATE ===');
@@ -151,8 +153,11 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
     `[${TAG}] Lessons: ${lessons ? `${lessons.split('\n').length} lines` : 'none found'}`,
   );
 
+  // Resolve system prompt (allow .totem/prompts/handoff.md override)
+  const systemPrompt = getSystemPrompt('handoff', SYSTEM_PROMPT, cwd, config.totemDir);
+
   // Assemble prompt
-  const prompt = assemblePrompt(branch, status, diff, diffStat, lessons);
+  const prompt = assemblePrompt(branch, status, diff, diffStat, lessons, systemPrompt);
   console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd });

@@ -6,6 +6,7 @@ import { createEmbedder, LanceStore } from '@mmnto/totem';
 import { extractChangedFiles, getDefaultBranch, getGitBranchDiff, getGitDiff } from '../git.js';
 import {
   formatResults,
+  getSystemPrompt,
   loadConfig,
   loadEnv,
   resolveConfigPath,
@@ -93,8 +94,13 @@ function buildSearchQuery(changedFiles: string[], diff: string): string {
 
 // ─── Prompt assembly ────────────────────────────────────
 
-function assemblePrompt(diff: string, changedFiles: string[], context: RetrievedContext): string {
-  const sections: string[] = [SYSTEM_PROMPT];
+function assemblePrompt(
+  diff: string,
+  changedFiles: string[],
+  context: RetrievedContext,
+  systemPrompt: string,
+): string {
+  const sections: string[] = [systemPrompt];
 
   // Diff section
   sections.push('=== DIFF ===');
@@ -194,8 +200,11 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     `[${TAG}] Found: ${context.specs.length} specs, ${context.sessions.length} sessions, ${context.code.length} code chunks`,
   );
 
+  // Resolve system prompt (allow .totem/prompts/shield.md override)
+  const systemPrompt = getSystemPrompt('shield', SYSTEM_PROMPT, cwd, config.totemDir);
+
   // Assemble prompt
-  const prompt = assemblePrompt(diff, changedFiles, context);
+  const prompt = assemblePrompt(diff, changedFiles, context, systemPrompt);
   console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });

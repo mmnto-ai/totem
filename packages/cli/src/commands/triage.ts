@@ -7,6 +7,7 @@ import { GitHubCliAdapter } from '../adapters/github-cli.js';
 import type { StandardIssueListItem } from '../adapters/issue-adapter.js';
 import {
   formatResults,
+  getSystemPrompt,
   loadConfig,
   loadEnv,
   resolveConfigPath,
@@ -94,8 +95,12 @@ export function formatIssueInventory(issues: StandardIssueListItem[]): string {
   return ['| Issue | Title | Labels | Updated |', '|---|---|---|---|', ...rows].join('\n');
 }
 
-function assemblePrompt(issues: StandardIssueListItem[], context: RetrievedContext): string {
-  const sections: string[] = [SYSTEM_PROMPT];
+function assemblePrompt(
+  issues: StandardIssueListItem[],
+  context: RetrievedContext,
+  systemPrompt: string,
+): string {
+  const sections: string[] = [systemPrompt];
 
   // Issue inventory
   sections.push('=== OPEN ISSUES ===');
@@ -156,8 +161,11 @@ export async function triageCommand(options: TriageOptions): Promise<void> {
     `[${TAG}] Found: ${context.specs.length} specs, ${context.sessions.length} sessions`,
   );
 
+  // Resolve system prompt (allow .totem/prompts/triage.md override)
+  const systemPrompt = getSystemPrompt('triage', SYSTEM_PROMPT, cwd, config.totemDir);
+
   // Assemble prompt
-  const prompt = assemblePrompt(issues, context);
+  const prompt = assemblePrompt(issues, context, systemPrompt);
   console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });

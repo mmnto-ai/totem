@@ -208,6 +208,34 @@ export function invokeShellOrchestrator(
   }
 }
 
+// ─── System prompt overrides ─────────────────────────────
+
+const SAFE_COMMAND_NAME_RE = /^[a-z][a-z0-9_-]{0,30}$/;
+
+/**
+ * Load a custom system prompt from `.totem/prompts/<commandName>.md` if it exists.
+ * Falls back to the built-in default prompt when the file is missing, empty, or unreadable.
+ */
+export function getSystemPrompt(
+  commandName: string,
+  defaultPrompt: string,
+  cwd: string,
+  totemDir: string,
+): string {
+  if (!SAFE_COMMAND_NAME_RE.test(commandName)) return defaultPrompt;
+
+  const promptPath = path.join(cwd, totemDir, 'prompts', `${commandName}.md`);
+  if (!fs.existsSync(promptPath)) return defaultPrompt;
+
+  try {
+    const content = fs.readFileSync(promptPath, 'utf-8');
+    if (!content.trim()) return defaultPrompt;
+    return content;
+  } catch {
+    return defaultPrompt;
+  }
+}
+
 // ─── Output helpers ─────────────────────────────────────
 
 export function writeOutput(content: string, outPath?: string): void {

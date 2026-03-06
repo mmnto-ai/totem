@@ -78,20 +78,20 @@ program
   });
 
 program
-  .command('spec <input>')
-  .description('Generate a pre-work spec briefing for a GitHub issue or topic')
+  .command('spec <inputs...>')
+  .description('Generate a pre-work spec briefing for GitHub issue(s) or topic(s)')
   .option('--raw', 'Output retrieved context without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
   .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
   .action(
     async (
-      input: string,
+      inputs: string[],
       opts: { raw?: boolean; out?: string; model?: string; fresh?: boolean },
     ) => {
       try {
         const { specCommand } = await import('./commands/spec.js');
-        await specCommand(input, opts);
+        await specCommand(inputs, opts);
       } catch (err) {
         handleError(err);
       }
@@ -185,8 +185,8 @@ program
   });
 
 program
-  .command('learn <pr-number>')
-  .description('Extract lessons from a PR review into .totem/lessons.md')
+  .command('learn <pr-numbers...>')
+  .description('Extract lessons from PR review(s) into .totem/lessons.md')
   .option('--raw', 'Output assembled prompt without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
@@ -195,7 +195,7 @@ program
   .option('--yes', 'Skip confirmation prompt (use in scripts/CI)')
   .action(
     async (
-      prNumber: string,
+      prNumbers: string[],
       opts: {
         raw?: boolean;
         out?: string;
@@ -207,7 +207,7 @@ program
     ) => {
       try {
         const { learnCommand } = await import('./commands/learn.js');
-        await learnCommand(prNumber, opts);
+        await learnCommand(prNumbers, opts);
       } catch (err) {
         handleError(err);
       }
