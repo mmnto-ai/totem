@@ -292,3 +292,9 @@ When designing multi-input orchestrator commands (like 'totem spec' or 'totem le
 **Tags:** ux, cli, product-strategy
 
 When implementing CLI UX polish (Issue #21), adopt the '@clack/prompts' library. It provides a distinct, vertical-line connecting visual style that feels significantly more modern and premium than older libraries like 'inquirer'. This directly supports the 'Magic Onboarding' goal of making the CLI feel less like a barebones script and more like a high-end developer product.
+
+## Lesson — 2026-03-06T05:43:04.609Z
+
+**Tags:** engineering-strategy, velocity, ux, incremental-delivery
+
+Incremental UX Delivery Strategy: When polishing a CLI, do not attempt to rewrite the entire interactive prompt system (e.g., migrating to @clack/prompts) in one massive PR. Follow Claude's strategy: prioritize the 'low-hanging fruit' first (async spinners via 'ora', branded output via 'picocolors') to provide immediate visual feedback. The heavier structural refactoring of the input loops can be deferred to a follow-up. This maintains high velocity and avoids blocking the release of smaller, compounding improvements.
