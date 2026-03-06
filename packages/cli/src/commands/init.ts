@@ -165,7 +165,7 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
     {
       rel: '.gemini/skills/totem.md',
       content: GEMINI_SKILL,
-      marker: '<!-- [totem] auto-generated',
+      marker: '<!-- [totem] auto-generated — Totem Architect skill -->',
     },
   ];
 
@@ -241,7 +241,12 @@ export function scaffoldClaudeHooks(filePath: string): {
     const preToolUse = (hooks.PreToolUse ?? []) as Array<{ matcher?: string }>;
 
     if (
-      preToolUse.some((h) => h.matcher === 'Bash' && JSON.stringify(h).includes('totem shield'))
+      preToolUse.some(
+        (h: { matcher?: string; hooks?: string[] }) =>
+          h.matcher === 'Bash' &&
+          Array.isArray(h.hooks) &&
+          h.hooks.some((cmd) => cmd.includes('totem shield')),
+      )
     ) {
       return { action: 'skipped' };
     }
