@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
 import * as readline from 'node:readline/promises';
 
+import { log } from '../ui.js';
 import { IS_WIN, loadConfig, loadEnv, resolveConfigPath } from '../utils.js';
 
 function detectSyncCommand(cwd: string): { cmd: string; args: string[] } {
@@ -62,7 +63,7 @@ export async function anchorCommand(lessonArg?: string): Promise<void> {
   }
 
   if (!lessonText || !lessonText.trim()) {
-    console.error('[Totem Error] Lesson text cannot be empty.');
+    log.error('Totem', 'Lesson text cannot be empty.');
     return;
   }
 
@@ -72,10 +73,10 @@ export async function anchorCommand(lessonArg?: string): Promise<void> {
   const entry = `\n## Lesson — ${timestamp}\n\n**Tags:** ${tagString}\n\n${lessonText.trim()}\n`;
 
   fs.appendFileSync(lessonsPath, entry, 'utf-8');
-  console.log(`\n[Totem] Lesson saved to ${config.totemDir}/lessons.md`);
+  log.success('Totem', `Lesson saved to ${config.totemDir}/lessons.md`);
 
   const logPath = path.join(totemDir, 'mcp-sync.log');
-  console.log('[Totem] Triggering background re-index...');
+  log.dim('Totem', 'Triggering background re-index...');
   try {
     const { cmd, args } = detectSyncCommand(cwd);
     const logFd = fs.openSync(logPath, 'a');
@@ -88,6 +89,6 @@ export async function anchorCommand(lessonArg?: string): Promise<void> {
     });
     child.unref();
   } catch (err) {
-    console.error('[Totem Warning] Failed to trigger background sync:', err);
+    log.warn('Totem', `Failed to trigger background sync: ${err}`);
   }
 }

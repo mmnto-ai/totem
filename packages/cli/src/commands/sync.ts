@@ -1,6 +1,6 @@
 import { runSync } from '@mmnto/totem';
 
-import { createSpinner, log } from '../ui.js';
+import { createSpinner } from '../ui.js';
 import { loadConfig, loadEnv, resolveConfigPath } from '../utils.js';
 
 const TAG = 'Sync';

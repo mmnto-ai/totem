@@ -4,7 +4,7 @@ import type { ContentType, SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore } from '@mmnto/totem';
 
 import { extractChangedFiles, getDefaultBranch, getGitBranchDiff, getGitDiff } from '../git.js';
-import { bold, error as errorColor, log, success as successColor } from '../ui.js';
+import { bold, errorColor, log, success as successColor } from '../ui.js';
 import {
   formatResults,
   getSystemPrompt,

@@ -324,8 +324,9 @@ export async function initCommand(): Promise<void> {
       const apiKey = answer.trim().replace(/[\r\n]/g, '');
       if (apiKey) {
         if (!/^sk-[a-zA-Z0-9_-]+$/.test(apiKey)) {
-          console.error(
-            '[Totem] Warning: API key does not look like a valid OpenAI key (expected sk-...). Skipping.',
+          log.warn(
+            'Totem',
+            'API key does not look like a valid OpenAI key (expected sk-...). Skipping.',
           );
           provider = 'ollama';
         } else {
@@ -346,14 +347,14 @@ export async function initCommand(): Promise<void> {
         }
       } else {
         provider = 'ollama';
-        console.log('[Totem] Configured for Ollama. Make sure it is running locally.');
+        log.info('Totem', 'Configured for Ollama. Make sure it is running locally.');
       }
 
       const configContent = generateConfig(targets, provider);
       fs.writeFileSync(configPath, configContent, 'utf-8');
       summary.push({ file: 'totem.config.ts', action: 'Created with auto-detected targets' });
     } else {
-      console.log('[Totem] totem.config.ts already exists. Checking reflexes and hooks...');
+      log.dim('Totem', 'totem.config.ts already exists. Checking reflexes and hooks...');
     }
 
     // --- Always run: .totem/ directory ---
@@ -376,7 +377,7 @@ export async function initCommand(): Promise<void> {
 
     if (detectedTools.length > 0) {
       const toolNames = detectedTools.map((t) => t.name).join(', ');
-      console.log(`\n[Totem] Detected AI tools: ${toolNames}`);
+      log.info('Totem', `Detected AI tools: ${bold(toolNames)}`);
       const toolAnswer = await rl.question(
         'Which tools should Totem configure? [all/none/select] (default: all): ',
       );
@@ -405,11 +406,11 @@ export async function initCommand(): Promise<void> {
         const result = scaffoldMcpConfig(filePath, tool.serverEntry);
 
         if (result.err) {
-          console.error(`\n[Totem Error] ${result.err}`);
-          console.log(
+          log.error('Totem', result.err);
+          console.error(
             `To fix this, add the following manually to your ${tool.mcpPath} under "mcpServers":\n`,
           );
-          console.log(`  "totem": ${JSON.stringify(tool.serverEntry, null, 2)}\n`);
+          console.error(`  "totem": ${JSON.stringify(tool.serverEntry, null, 2)}\n`);
         } else if (result.action === 'created') {
           summary.push({ file: tool.mcpPath, action: `Created with Totem MCP server` });
         } else if (result.action === 'merged') {
@@ -428,9 +429,7 @@ export async function initCommand(): Promise<void> {
           }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          console.error(
-            `\n[Totem Error] Failed to inject reflexes into ${tool.reflexFile}: ${message}`,
-          );
+          log.error('Totem', `Failed to inject reflexes into ${tool.reflexFile}: ${message}`);
         }
       }
     }
@@ -450,14 +449,14 @@ export async function initCommand(): Promise<void> {
 
     // --- Print summary ---
     if (summary.length > 0) {
-      console.log('\n--- Totem Init Summary ---');
+      console.error(`\n${brand('--- Totem Init Summary ---')}`);
       for (const entry of summary) {
-        console.log(`  [OK] ${entry.file} — ${entry.action}`);
+        console.error(`  ${success('OK')} ${dim(entry.file)} — ${entry.action}`);
       }
-      console.log('--------------------------');
+      console.error(brand('--------------------------'));
     }
 
-    console.log('\n[Totem] Init complete. Run `totem sync` to index your project.');
+    log.success('Totem', 'Init complete. Run `totem sync` to index your project.');
   } finally {
     rl.close();
   }

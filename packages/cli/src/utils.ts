@@ -8,7 +8,7 @@ import { z } from 'zod';
 import type { SearchResult, TotemConfig } from '@mmnto/totem';
 import { TotemConfigSchema } from '@mmnto/totem';
 
-import { bold, dim, error as errorColor, log, success as successColor } from './ui.js';
+import { bold, log } from './ui.js';
 
 // ─── Shared constants ────────────────────────────────────
 
