@@ -358,3 +358,33 @@ When using 'totem spec', it is most valuable for exploring unfamiliar territory 
 **Tags:** architecture, hooks, json, shell
 
 When scaffolding agent hooks (like Claude's PreToolUse) or background git hooks, avoid embedding complex shell pipelines (e.g., grep chains, escaping quotes) directly inline within JSON configuration files. It is fragile and hard to test. Long-term architectural rule: Extract hook logic into dedicated, version-controlled executable scripts (e.g., \`.totem/hooks/shield-gate.js\` or \`.gemini/hooks/BeforeTool.js\`) and have the JSON config simply invoke the script.
+
+## Lesson — 2026-03-06T10:00:40.352Z
+
+**Tags:** cli, hooks, unix
+
+Route host hook output (e.g., briefing or shield results) to `stderr` rather than `stdout`. This prevents background task logs from polluting the AI's tool return values while ensuring the user still receives visibility into the hook's execution.
+
+## Lesson — 2026-03-06T10:00:40.352Z
+
+**Tags:** regex, hooks, git, compatibility
+
+Avoid complex single-regex patterns for intercepting git commands in AI tool inputs, which often fail due to platform-specific escaping or POSIX compatibility issues. A dual-grep approach (e.g., `grep "git" && grep -E "push|commit"`) is more robust for reliably catching both plain text and JSON-encoded arguments.
+
+## Lesson — 2026-03-06T10:00:40.352Z
+
+**Tags:** security, mcp, prompt-injection
+
+MCP tools returning raw file content are vulnerable to Indirect Prompt Injection if the output lacks distinct delimiters. Use unique XML tags and escaped internal markers to ensure the host AI treats retrieved knowledge as untrusted data rather than a continuation of its system instructions.
+
+## Lesson — 2026-03-06T10:00:40.352Z
+
+**Tags:** security, shell, hooks
+
+Treat environment variables provided by the host AI (such as `$TOOL_INPUT` in Claude Code) as untrusted data. Using them directly in shell commands like `echo` within a hook can lead to command injection if the input contains shell metacharacters.
+
+## Lesson — 2026-03-06T10:00:40.352Z
+
+**Tags:** nodejs, configuration, idempotency
+
+When scaffolding configuration files that store settings in JSON arrays (like `.claude/settings.local.json`), implement deep merging to append entries rather than overwriting the entire key. This allows the tool to maintain idempotency while preserving existing user-defined hooks.

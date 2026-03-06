@@ -1,83 +1,29 @@
-# Active Work
+### Active Work Summary
 
-## Current Focus: v0.8.0 Release
+The project is currently focused on "Phase 2: Core Stability & Data Safety," prioritizing the robustness of LLM prompts and the local vector index before expanding to enterprise data ingestion. Recent momentum centers on stabilizing CLI orchestration, refining background sync mechanisms, and ensuring secure context delivery to the AI.
 
-**v0.7.0 published** — Phase 2 refactor + security hardening complete (132 tests passing).
+### Prioritized Roadmap
 
-### Recently Merged
+**Do Next (Core Stability & Security)**
 
-- **PR #142** — Gemini CLI & Claude Code seamless host integration hooks (#138, #139, #140)
-- **PR #133** — Custom prompt overrides (#120) + multi-arg spec/learn (#117)
-- **PR #134** — Recovered roadmap/strategy docs
+1. #149 — security: XML-delimit MCP tool responses to mitigate indirect prompt injection — Critical immediate fix to ensure prompt data safety and prevent poisoning.
+2. #148 — feat: add Zod schema validation for Claude settings.local.json — Vital for configuration stability and predictable agent behavior.
+3. #147 — chore: extract inline shell hooks into dedicated Node.js scripts — Cleans up the `totem init` injection path and improves cross-platform reliability.
+4. #127 — feat: Add heading hierarchy breadcrumbs to MarkdownChunker labels — Enhances vector index chunking quality and retrieval context.
 
-### In Progress
+**Up Next (Workflow & CLI Enhancements)** 5. #107 — UX: Emit background sync logs via MCP progress events — Improves observability and user trust during black-box sync operations. 6. #143 — feat(cli): add `totem wrap` command to chain post-merge workflow — Directly extends the orchestrator's workflow capabilities. 7. #126 — Epic: Invisible Orchestration & Auto-Triggering (The 'Init and Forget' Protocol) — Core to the project's foundational vision of automated workflows. 8. #44 — Feature: Add `totem bridge` command for mid-session context compaction — Addresses immediate workflow friction regarding token bloat.
 
-- **#21 CLI UI/UX Polish** — Branded colors (picocolors), ora spinners, ASCII banner (branch: `feat/cli-ux-polish`)
+**Backlog (Phase 3: Power User Tools & Observability)** 9. #119 — Epic: Custom Workflow Runner (`totem run <workflow>`) — Key Phase 3 goal for workflow expansion. 10. #130 — Epic: Database Observability & Management (`totem inspect`) — Key Phase 3 goal to visualize index health and build trust.
 
-## Dogfooding: Session Start Hooks
+### Next Issue (User Story & Scope)
 
-We dogfood Totem inside this monorepo but **do not** run `totem init` here (it would overwrite development configs with production templates). Native execution hooks must be configured manually and kept in sync with the scaffolding logic in `packages/cli/src/commands/init.ts`.
+**#149 — security: XML-delimit MCP tool responses to mitigate indirect prompt injection**
 
-### Claude Code (`.claude/settings.local.json`)
+- **User Story:** As an AI agent utilizing Totem, I need external knowledge returned by MCP tools to be strictly XML-delimited so that my prompt context remains secure against indirect injection attacks from untrusted repository data.
+- **Scope Boundaries:** Update the MCP server response formatters (e.g., in `search-knowledge.ts`) to wrap all text outputs in standardized XML tags. **Do not** refactor the underlying LanceDB retrieval logic. **Do not** change how the chunks are originally generated. Focus solely on the final string formatting before it hits the LLM.
+- **Why Next:** It directly fulfills the Phase 2 mandate for "Data Safety." If the LLM context isn't secure from the data it retrieves, the entire ingestion pipeline is a liability.
 
-Add a `hooks` section alongside existing permissions:
+### Blocked / Needs Input
 
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node packages/cli/dist/index.js briefing",
-            "timeout": 30
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-- `matcher: "startup"` fires only on new sessions (not resume/clear/compact)
-- Stdout is injected as context visible to Claude
-- Timeout is in seconds
-
-### Gemini CLI (`.gemini/settings.json`)
-
-Add a `hooks` section alongside existing MCP server config:
-
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      {
-        "name": "totem-briefing",
-        "type": "command",
-        "command": "node packages/cli/dist/index.js briefing",
-        "timeout": 30000,
-        "description": "Load Totem session briefing on startup"
-      }
-    ]
-  }
-}
-```
-
-- Timeout is in milliseconds
-- Uses `GEMINI_PROJECT_DIR` env var for path resolution
-
-### Important Notes
-
-- Both configs are **gitignored** — they must be applied manually after a fresh clone.
-- The hooks point to compiled `dist/index.js` — run `pnpm build` in the CLI package before starting an agent session.
-- If the briefing command hangs (e.g., LLM API timeout), the agent startup may be delayed up to the configured timeout.
-
-## Next Up
-
-1. **Publish v0.8.0** after #21 merges
-2. **#12 Cross-platform onboarding** (Windows/macOS docs)
-3. **#107 MCP progress events** for background sync visibility
-4. **#126 Epic: Gamification** (streak tracking, achievement badges)
-5. **#143 `totem wrap` command** to chain post-merge workflow
+- **#4** — Validate OpenAI Embedding Provider (Happy Path) (P1, blocked)
+- **#8** — Validate dogfood sync with OpenAI embeddings (P1, blocked)
