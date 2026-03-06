@@ -1,4 +1,4 @@
-import { execFileSync, execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 
 import { globSync } from 'glob';
@@ -96,17 +96,19 @@ export function getChangedFiles(
   onWarn?: (msg: string) => void,
 ): string[] | null {
   try {
-    const diffOutput = execSync(`git diff --name-only ${sinceRef}`, {
+    const diffOutput = execFileSync('git', ['diff', '--name-only', sinceRef], {
       cwd: projectRoot,
       encoding: 'utf-8',
+      shell: process.platform === 'win32',
     });
 
     // Also pick up untracked files (new files not yet committed)
     let untrackedOutput = '';
     try {
-      untrackedOutput = execSync('git ls-files --others --exclude-standard', {
+      untrackedOutput = execFileSync('git', ['ls-files', '--others', '--exclude-standard'], {
         cwd: projectRoot,
         encoding: 'utf-8',
+        shell: process.platform === 'win32',
       });
     } catch (err) {
       if (onWarn) {
@@ -141,9 +143,10 @@ export function getChangedFiles(
  */
 export function getHeadSha(projectRoot: string, onWarn?: (msg: string) => void): string | null {
   try {
-    return execSync('git rev-parse HEAD', {
+    return execFileSync('git', ['rev-parse', 'HEAD'], {
       cwd: projectRoot,
       encoding: 'utf-8',
+      shell: process.platform === 'win32',
     }).trim();
   } catch (err) {
     if (onWarn) {

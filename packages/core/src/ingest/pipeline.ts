@@ -41,6 +41,9 @@ export async function runSync(
   let incremental = options.incremental;
   const log = onProgress ?? (() => {});
 
+  // 0. Capture HEAD SHA early — before any async work that might race with new commits
+  const headSha = getHeadSha(projectRoot, log);
+
   // 1. Create embedder
   log('Initializing embedding provider...');
   const embedder = createEmbedder(config.embedding);
@@ -165,7 +168,6 @@ export async function runSync(
   log(`Sync complete: ${totalChunks} chunks from ${filesToProcess.length} files`);
 
   // Persist sync state so next incremental sync knows where to diff from
-  const headSha = getHeadSha(projectRoot, log);
   if (headSha) {
     writeSyncState(totemDir, { lastSyncSha: headSha, timestamp: Date.now() });
   }
