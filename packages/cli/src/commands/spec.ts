@@ -118,7 +118,7 @@ function assemblePrompt(
       }
     } else if (freeText) {
       sections.push('\n=== TOPIC ===');
-      sections.push(freeText);
+      sections.push(wrapXml('topic_text', freeText));
     }
   }
 
