@@ -60,7 +60,7 @@ export class OpenAIEmbedder implements Embedder {
         const isRetryable =
           err instanceof OpenAI.APIError && (err.status === 429 || err.status === 503);
         if (!isRetryable || attempt === MAX_RETRIES) break;
-        const delay = INITIAL_BACKOFF_MS * 2 ** attempt;
+        const delay = INITIAL_BACKOFF_MS * 2 ** attempt + Math.random() * 1000;
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
