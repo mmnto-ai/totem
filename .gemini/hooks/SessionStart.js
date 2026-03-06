@@ -10,5 +10,9 @@ try {
   });
   process.stderr.write(output);
 } catch (err) {
-  process.stderr.write('[totem] briefing unavailable: ' + err.message + '\n');
+  process.stderr.write(
+    '[Totem Error] Briefing unavailable: ' +
+      (err instanceof Error ? err.message : String(err)) +
+      '\n',
+  );
 }

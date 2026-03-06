@@ -120,7 +120,7 @@ try {
   });
   process.stderr.write(output);
 } catch (err) {
-  process.stderr.write('[totem] briefing unavailable: ' + err.message + '\\n');
+  process.stderr.write('[Totem Error] Briefing unavailable: ' + (err instanceof Error ? err.message : String(err)) + '\\n');
 }
 `;
 
@@ -183,7 +183,7 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
 const CLAUDE_PRETOOLUSE_ENTRY = {
   matcher: 'Bash',
   hooks: [
-    'if echo "$TOOL_INPUT" | grep -qE \'git\\s+(push|commit)|"git".*"(push|commit)"\'; then totem shield; fi',
+    'if echo "$TOOL_INPUT" | grep -qE \'(git\\s+(push|commit))|([\\x22\\x27]git[\\x22\\x27].*[\\x22\\x27](push|commit)[\\x22\\x27])\'; then totem shield; fi',
   ],
 };
 
@@ -221,7 +221,17 @@ export function scaffoldClaudeHooks(filePath: string): {
     }
 
     // Deep merge: check if PreToolUse already has a totem entry
-    const hooks = (parsed.hooks ?? {}) as Record<string, unknown>;
+    const hooksUntyped = (parsed as { hooks?: unknown }).hooks;
+    if (
+      hooksUntyped !== undefined &&
+      (typeof hooksUntyped !== 'object' || hooksUntyped === null || Array.isArray(hooksUntyped))
+    ) {
+      return {
+        action: 'skipped',
+        err: 'Could not merge config: "hooks" in settings.local.json must be an object.',
+      };
+    }
+    const hooks = (hooksUntyped ?? {}) as Record<string, unknown>;
     if (hooks.PreToolUse !== undefined && !Array.isArray(hooks.PreToolUse)) {
       return {
         action: 'skipped',
