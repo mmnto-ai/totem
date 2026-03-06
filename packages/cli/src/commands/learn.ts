@@ -400,7 +400,7 @@ export async function learnCommand(prNumber: string, options: LearnOptions): Pro
   // Print summary (use sanitized lessons to prevent terminal injection in piped output)
   console.log(`\nExtracted ${sanitizedLessons.length} lesson(s) from PR #${num}:`);
   for (const lesson of sanitizedLessons) {
-    console.log(`\n  Tags: ${lesson.tags.join(', ')}`);
-    console.log(`  ${lesson.text}`);
+    console.log(`\n  Tags: ${lesson.tags.join(', ').replace(/\n/g, ' ')}`);
+    console.log(`  ${lesson.text.replace(/\n/g, '\n  ')}`);
   }
 }
