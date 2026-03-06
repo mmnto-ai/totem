@@ -142,3 +142,27 @@ When writing CLI output streams (like summaries or logs), ensure all content der
 **Tags:** architecture, product-strategy, dsl, scope-creep
 
 When designing user-extensible CLI tools (like 'totem run'), avoid prematurely building DSLs or plugin systems for data fetching (e.g., git diffs, issue trackers). Start by exposing simple prompt overrides (e.g., checking for '.totem/prompts/shield.md' before using a hardcoded string). Only build an execution runner once the limitations of simple overrides are empirically proven. Building a workflow schema before user demand exists is a classic trap for over-engineering.
+
+## Lesson — 2026-03-06T01:32:23.369Z
+
+**Tags:** security, mcp, sanitization, architecture
+
+When designing MCP servers, do not automatically apply terminal sanitization (stripping control characters/ANSI escapes) to tool output. MCP tools are consumed by LLMs, not directly by standard terminals. Stripping characters from MCP search results will degrade the fidelity of code snippets and formatting that the LLM relies on. Terminal injection is a CLI presentation concern, not an MCP data payload concern.
+
+## Lesson — 2026-03-06T02:09:28.451Z
+
+**Tags:** error-handling, robustness, lance-db
+
+When implementing retries for "stale" database handles, capture and report the original error if the retry also fails to prevent swallowing the diagnostic root cause of non-transient failures. A blanket catch-and-retry can obscure the true error if the initial failure was not actually due to a stale connection.
+
+## Lesson — 2026-03-06T02:09:28.451Z
+
+**Tags:** resilience, network, backoff
+
+Always incorporate random jitter into exponential backoff calculations to stagger retry attempts across concurrent clients. This prevents "thundering herd" spikes that can overwhelm a recovering service if multiple instances retry at identical intervals.
+
+## Lesson — 2026-03-06T02:09:28.451Z
+
+**Tags:** architecture, readability, simplicity
+
+Prioritize standard inline idioms (like error message extraction) over creating dedicated helper functions for very few call sites to minimize indirection. Avoid "over-DRYing" code when the resulting abstraction adds more complexity than the repetition it replaces.

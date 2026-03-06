@@ -6,9 +6,11 @@
 
 **Your AI team forgets. Totem remembers.**
 
-Developers are hitting the limits of "context stuffing." Brute-forcing a 2M token window with your entire codebase is slow, expensive, and leads to hallucinations.
+Right now, AI development is where code versioning was before Git. Every time you open a new AI session, your agents have amnesia. They forget why you chose Drizzle over Prisma, they hallucinate deprecated database tables, and they fall into the same architectural traps you fixed last week.
 
-**Totem** is a semantic memory layer and workflow orchestrator for your AI agents (Claude, Gemini, Cursor). Instead of blindly dumping files into a prompt, Totem gives your AI a local, version-controlled vector database. It teaches them to proactively remember your project's architectural decisions, domain constraints, and bug traps so you don't have to repeat yourself every session.
+**Totem is the state manager for your AI's brain.**
+
+It is an **AI Control Plane for Local Development**. Instead of uploading your proprietary codebase to a cloud SaaS platform, Totem compiles a syntax-aware, embedded vector index (LanceDB) right inside your project. It acts as an **Architectural Linter**, using the standard Model Context Protocol (MCP) to force your local agents (Claude, Gemini, Cursor) to read your project's constraints, decisions, and trap-logs _before_ they write a single line of code.
 
 When you're three levels deep in a debugging session, you need to know if the code you are writing is real, or just an AI hallucinating an anti-pattern you banned three months ago. You need a totem.
 
