@@ -3,6 +3,8 @@ import * as path from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
 import * as readline from 'node:readline/promises';
 
+import { z } from 'zod';
+
 import type { IngestTarget } from '@mmnto/totem';
 
 import { bold, brand, dim, log, printBanner, success } from '../ui.js';
@@ -180,12 +182,62 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
 
 // --- Claude Code hook installer ---
 
+const CLAUDE_SHIELD_GATE = `// [totem] auto-generated — Claude Code shield gate hook
+// Intercepts git push/commit to run \`totem shield\` before proceeding.
+const { execSync } = require('child_process');
+
+const input = process.env.TOOL_INPUT || '';
+if (/git/.test(input) && /(push|commit)/.test(input)) {
+  try {
+    execSync('totem shield', { encoding: 'utf-8', timeout: 60000, stdio: 'inherit' });
+  } catch (err) {
+    process.exit(1);
+  }
+}
+`;
+
 const CLAUDE_PRETOOLUSE_ENTRY = {
   matcher: 'Bash',
   hooks: [
-    'if printf "%s" "$TOOL_INPUT" | grep -q "git" && printf "%s" "$TOOL_INPUT" | grep -qE "(push|commit)"; then totem shield; fi',
+    {
+      type: 'command',
+      command: 'node .totem/hooks/shield-gate.cjs',
+    },
   ],
 };
+
+// Zod schema for the subset of settings.local.json that we need to validate.
+// Uses .passthrough() to preserve unknown keys during round-trip read/write.
+const HookCommandSchema = z.union([
+  z.string(),
+  z.object({ type: z.string(), command: z.string() }).passthrough(),
+]);
+
+const ClaudeSettingsSchema = z
+  .object({
+    hooks: z
+      .object({
+        PreToolUse: z
+          .array(
+            z
+              .object({
+                matcher: z.string().optional(),
+                hooks: z.array(HookCommandSchema).optional(),
+              })
+              .passthrough(),
+          )
+          .optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+/** Check whether a hook entry already contains a totem shield reference. */
+function hasTotemShield(entry: z.infer<typeof HookCommandSchema>): boolean {
+  if (typeof entry === 'string') return entry.includes('totem shield');
+  return entry.command.includes('totem shield') || entry.command.includes('shield-gate');
+}
 
 /**
  * Merge Totem hooks into .claude/settings.local.json without overwriting
@@ -209,9 +261,9 @@ export function scaffoldClaudeHooks(filePath: string): {
     }
 
     const raw = fs.readFileSync(filePath, 'utf-8');
-    let parsed: Record<string, unknown>;
+    let rawParsed: unknown;
     try {
-      parsed = JSON.parse(raw) as Record<string, unknown>;
+      rawParsed = JSON.parse(raw);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return {
@@ -220,38 +272,27 @@ export function scaffoldClaudeHooks(filePath: string): {
       };
     }
 
-    // Deep merge: check if PreToolUse already has a totem entry
-    const hooksUntyped = (parsed as { hooks?: unknown }).hooks;
-    if (
-      hooksUntyped !== undefined &&
-      (typeof hooksUntyped !== 'object' || hooksUntyped === null || Array.isArray(hooksUntyped))
-    ) {
+    const result = ClaudeSettingsSchema.safeParse(rawParsed);
+    if (!result.success) {
+      const detail = result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
       return {
         action: 'skipped',
-        err: '[Totem Error] Could not merge config: "hooks" in settings.local.json must be an object.',
+        err: `[Totem Error] Could not merge config: settings.local.json has unexpected shape: ${detail}`,
       };
     }
-    const hooks = (hooksUntyped ?? {}) as Record<string, unknown>;
-    if (hooks.PreToolUse !== undefined && !Array.isArray(hooks.PreToolUse)) {
-      return {
-        action: 'skipped',
-        err: '[Totem Error] Could not merge config: "hooks.PreToolUse" in settings.local.json must be an array.',
-      };
-    }
-    const preToolUse = (hooks.PreToolUse ?? []) as Array<{ matcher?: string }>;
+
+    const parsed = result.data;
+    const preToolUse = parsed.hooks?.PreToolUse ?? [];
 
     if (
       preToolUse.some(
-        (h: { matcher?: string; hooks?: string[] }) =>
-          h &&
-          h.matcher === 'Bash' &&
-          Array.isArray(h.hooks) &&
-          h.hooks.some((cmd) => typeof cmd === 'string' && cmd.includes('totem shield')),
+        (h) => h.matcher === 'Bash' && Array.isArray(h.hooks) && h.hooks.some(hasTotemShield),
       )
     ) {
       return { action: 'skipped' };
     }
 
+    const hooks = parsed.hooks ?? {};
     hooks.PreToolUse = [...preToolUse, CLAUDE_PRETOOLUSE_ENTRY];
     parsed.hooks = hooks;
     fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
@@ -263,10 +304,23 @@ export function scaffoldClaudeHooks(filePath: string): {
 }
 
 async function installClaudeHooks(cwd: string): Promise<HookInstallerResult[]> {
-  const rel = '.claude/settings.local.json';
-  const filePath = path.join(cwd, rel);
-  const result = scaffoldClaudeHooks(filePath);
-  return [{ file: rel, ...result }];
+  const results: HookInstallerResult[] = [];
+
+  // Scaffold the shield-gate script
+  const scriptRel = '.totem/hooks/shield-gate.cjs';
+  const scriptResult = scaffoldFile(
+    path.join(cwd, scriptRel),
+    CLAUDE_SHIELD_GATE,
+    TOTEM_FILE_MARKER,
+  );
+  results.push({ file: scriptRel, ...scriptResult });
+
+  // Scaffold the settings.local.json hook entry
+  const settingsRel = '.claude/settings.local.json';
+  const settingsResult = scaffoldClaudeHooks(path.join(cwd, settingsRel));
+  results.push({ file: settingsRel, ...settingsResult });
+
+  return results;
 }
 
 const AI_TOOLS: AiToolInfo[] = [

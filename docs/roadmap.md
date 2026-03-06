@@ -37,6 +37,9 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [ ] **#121 Bug: LanceDB `deleteByFile`** edge cases causing silent incremental sync failures.
 - [ ] **#122 Core Tests:** Backfill unit and integration tests for `@mmnto/totem` core database and chunking logic.
 - [ ] **#131 Clean Ejection:** Build `totem eject` to safely remove git hooks, prompt injections, and database artifacts if a user uninstalls.
+- [x] **#149 Security:** XML-delimit MCP tool responses to mitigate indirect prompt injection.
+- [x] **#148 Config:** Add Zod schema validation for Claude settings.local.json.
+- [x] **#147 Core:** Extract inline shell hooks into dedicated Node.js scripts.
 - [x] **#80 Security: Add XML delimiting:** Close the prompt injection gap in orchestrator commands.
 - [x] **#111 Security:** Mitigate indirect prompt injection in `learn` command via PR comments.
 - [x] **#116 Security:** Sanitize CLI output streams to prevent terminal injection attacks.

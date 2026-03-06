@@ -218,6 +218,11 @@ describe('scaffoldClaudeHooks', () => {
     expect(content.hooks).toBeDefined();
     expect(content.hooks.PreToolUse).toHaveLength(1);
     expect(content.hooks.PreToolUse[0].matcher).toBe('Bash');
+    // Verify object format (not bare strings) — #153
+    expect(content.hooks.PreToolUse[0].hooks[0]).toEqual({
+      type: 'command',
+      command: expect.stringContaining('shield-gate'),
+    });
   });
 
   it('creates parent directories as needed', () => {
@@ -255,15 +260,36 @@ describe('scaffoldClaudeHooks', () => {
     expect(content.hooks.PreToolUse[0].matcher).toBe('custom');
     // Appends totem entry
     expect(content.hooks.PreToolUse[1].matcher).toBe('Bash');
-    expect(JSON.stringify(content.hooks.PreToolUse[1])).toContain('totem shield');
+    expect(JSON.stringify(content.hooks.PreToolUse[1])).toContain('shield-gate');
   });
 
-  it('skips when totem shield hook already exists', () => {
+  it('skips when totem shield hook exists (bare string format — legacy)', () => {
     const dir = path.join(tmpDir, '.claude');
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, 'settings.local.json');
     const existing = {
       hooks: { PreToolUse: [{ matcher: 'Bash', hooks: ['totem shield'] }] },
+    };
+    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeHooks(filePath);
+
+    expect(result).toEqual({ action: 'skipped' });
+  });
+
+  it('skips when totem shield hook exists (object format)', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.local.json');
+    const existing = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: 'Bash',
+            hooks: [{ type: 'command', command: 'node .totem/hooks/shield-gate.js' }],
+          },
+        ],
+      },
     };
     fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
 
@@ -284,6 +310,18 @@ describe('scaffoldClaudeHooks', () => {
     expect(result.err).toContain('invalid JSON');
   });
 
+  it('returns error when hooks has unexpected shape', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.local.json');
+    fs.writeFileSync(filePath, JSON.stringify({ hooks: 'not-an-object' }, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeHooks(filePath);
+
+    expect(result.action).toBe('skipped');
+    expect(result.err).toContain('unexpected shape');
+  });
+
   it('is idempotent — double invoke does not duplicate', () => {
     const filePath = path.join(tmpDir, '.claude', 'settings.local.json');
 
@@ -292,6 +330,39 @@ describe('scaffoldClaudeHooks', () => {
 
     const second = scaffoldClaudeHooks(filePath);
     expect(second).toEqual({ action: 'skipped' });
+  });
+});
+
+describe('Claude shield-gate script scaffolding', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-shield-gate-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('creates shield-gate.cjs with correct content', () => {
+    const filePath = path.join(tmpDir, '.totem', 'hooks', 'shield-gate.cjs');
+    const MARKER = '// [totem] auto-generated';
+    const CONTENT = `${MARKER} — Claude Code shield gate hook\nconst { execSync } = require('child_process');\n`;
+
+    const result = scaffoldFile(filePath, CONTENT, MARKER);
+
+    expect(result).toEqual({ action: 'created' });
+    const written = fs.readFileSync(filePath, 'utf-8');
+    expect(written).toContain('require');
+    expect(written).toContain(MARKER);
+  });
+
+  it('uses .cjs extension for ESM compatibility', () => {
+    const filePath = path.join(tmpDir, '.totem', 'hooks', 'shield-gate.cjs');
+    const result = scaffoldFile(filePath, '// [totem] auto-generated\ntest\n');
+
+    expect(result).toEqual({ action: 'created' });
+    expect(filePath).toMatch(/\.cjs$/);
   });
 });
 

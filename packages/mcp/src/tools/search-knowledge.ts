@@ -5,6 +5,7 @@ import type { ContentType } from '@mmnto/totem';
 import { ContentTypeSchema } from '@mmnto/totem';
 
 import { getContext, reconnectStore } from '../context.js';
+import { formatXmlResponse } from '../xml-format.js';
 
 type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
 
@@ -21,7 +22,11 @@ async function performSearch(
   });
 
   if (results.length === 0) {
-    return { content: [{ type: 'text' as const, text: 'No results found.' }] };
+    return {
+      content: [
+        { type: 'text' as const, text: formatXmlResponse('knowledge', 'No results found.') },
+      ],
+    };
   }
 
   const formatted = results
@@ -33,7 +38,7 @@ async function performSearch(
     )
     .join('\n\n---\n\n');
 
-  return { content: [{ type: 'text' as const, text: formatted }] };
+  return { content: [{ type: 'text' as const, text: formatXmlResponse('knowledge', formatted) }] };
 }
 
 export function registerSearchKnowledge(server: McpServer): void {

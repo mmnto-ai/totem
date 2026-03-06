@@ -6,9 +6,9 @@ The project is currently focused on "Phase 2: Core Stability & Data Safety," pri
 
 **Do Next (Core Stability & Security)**
 
-1. #149 — security: XML-delimit MCP tool responses to mitigate indirect prompt injection — Critical immediate fix to ensure prompt data safety and prevent poisoning.
-2. #148 — feat: add Zod schema validation for Claude settings.local.json — Vital for configuration stability and predictable agent behavior.
-3. #147 — chore: extract inline shell hooks into dedicated Node.js scripts — Cleans up the `totem init` injection path and improves cross-platform reliability.
+1. #158 — chore: unify XML escaping utilities (`formatXmlResponse` + `wrapXml`) — Follow up to PR #157 to ensure consistent XML generation across CLI and MCP.
+2. #156 — bug: incremental sync does not remove deleted files from LanceDB — Core fix to prevent ghost context from polluting orchestrator memory.
+3. #155 — bug: incremental sync misses changes due to stateless HEAD~1 diff — Core fix to ensure robust state tracking via `.totem/cache/sync-state.json`.
 4. #127 — feat: Add heading hierarchy breadcrumbs to MarkdownChunker labels — Enhances vector index chunking quality and retrieval context.
 
 **Up Next (Workflow & CLI Enhancements)** 5. #107 — UX: Emit background sync logs via MCP progress events — Improves observability and user trust during black-box sync operations. 6. #143 — feat(cli): add `totem wrap` command to chain post-merge workflow — Directly extends the orchestrator's workflow capabilities. 7. #126 — Epic: Invisible Orchestration & Auto-Triggering (The 'Init and Forget' Protocol) — Core to the project's foundational vision of automated workflows. 8. #44 — Feature: Add `totem bridge` command for mid-session context compaction — Addresses immediate workflow friction regarding token bloat.
@@ -17,11 +17,11 @@ The project is currently focused on "Phase 2: Core Stability & Data Safety," pri
 
 ### Next Issue (User Story & Scope)
 
-**#149 — security: XML-delimit MCP tool responses to mitigate indirect prompt injection**
+**#158 — chore: unify XML escaping utilities (formatXmlResponse + wrapXml)**
 
-- **User Story:** As an AI agent utilizing Totem, I need external knowledge returned by MCP tools to be strictly XML-delimited so that my prompt context remains secure against indirect injection attacks from untrusted repository data.
-- **Scope Boundaries:** Update the MCP server response formatters (e.g., in `search-knowledge.ts`) to wrap all text outputs in standardized XML tags. **Do not** refactor the underlying LanceDB retrieval logic. **Do not** change how the chunks are originally generated. Focus solely on the final string formatting before it hits the LLM.
-- **Why Next:** It directly fulfills the Phase 2 mandate for "Data Safety." If the LLM context isn't secure from the data it retrieves, the entire ingestion pipeline is a liability.
+- **User Story:** As a maintainer, I need the XML escaping logic to be unified across the MCP server and CLI orchestrator so that indirect prompt injection mitigations are consistently applied and tested in one place.
+- **Scope Boundaries:** Move `formatXmlResponse` and `wrapXml` into a shared utility file (e.g., in `@mmnto/core` or a shared utils package). Settle on a single escaping strategy (backslash vs HTML entities) based on the LLM's parsing preference, update all references, and migrate the tests. **Do not** change how the external context itself is fetched or parsed.
+- **Why Next:** This is a direct, small follow-up to PR #157 that ensures our new security posture is maintainable and consistent across the monorepo.
 
 ### Blocked / Needs Input
 
