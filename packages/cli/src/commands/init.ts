@@ -243,9 +243,10 @@ export function scaffoldClaudeHooks(filePath: string): {
     if (
       preToolUse.some(
         (h: { matcher?: string; hooks?: string[] }) =>
+          h &&
           h.matcher === 'Bash' &&
           Array.isArray(h.hooks) &&
-          h.hooks.some((cmd) => cmd.includes('totem shield')),
+          h.hooks.some((cmd) => typeof cmd === 'string' && cmd.includes('totem shield')),
       )
     ) {
       return { action: 'skipped' };
