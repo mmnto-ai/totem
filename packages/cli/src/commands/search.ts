@@ -39,7 +39,9 @@ export async function searchCommand(
 
   for (const result of results) {
     console.log(`\n--- ${sanitize(result.label).replace(/\n/g, ' ')} (${result.type}) ---`);
-    console.log(`File: ${sanitize(result.filePath).replace(/\n/g, ' ')} | Score: ${result.score.toFixed(3)}`);
+    console.log(
+      `File: ${sanitize(result.filePath).replace(/\n/g, ' ')} | Score: ${result.score.toFixed(3)}`,
+    );
     const snippet = result.content.slice(0, 200) + (result.content.length > 200 ? '...' : '');
     console.log(sanitize(snippet));
   }
