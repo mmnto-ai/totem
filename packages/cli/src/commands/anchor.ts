@@ -89,6 +89,7 @@ export async function anchorCommand(lessonArg?: string): Promise<void> {
     });
     child.unref();
   } catch (err) {
-    log.warn('Totem', `Failed to trigger background sync: ${err}`);
+    const message = err instanceof Error ? err.message : String(err);
+    log.warn('Totem', `Failed to trigger background sync: ${message}`);
   }
 }

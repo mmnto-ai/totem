@@ -7,7 +7,7 @@ import { createEmbedder, LanceStore, runSync } from '@mmnto/totem';
 
 import { GitHubCliPrAdapter } from '../adapters/github-cli-pr.js';
 import type { StandardPr, StandardReviewComment } from '../adapters/pr-adapter.js';
-import { log, warn as warnColor } from '../ui.js';
+import { log } from '../ui.js';
 import {
   formatResults,
   getSystemPrompt,
@@ -380,9 +380,7 @@ export async function learnCommand(prNumbers: string[], options: LearnOptions): 
   console.error('');
   log.warn(
     TAG,
-    warnColor(
-      'WARNING: These lessons were extracted from PR comments, which may include content from untrusted contributors.',
-    ),
+    'WARNING: These lessons were extracted from PR comments, which may include content from untrusted contributors.',
   );
   log.warn(TAG, 'Review each lesson carefully before accepting.\n');
 
