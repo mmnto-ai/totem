@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { buildNpxCommand, scaffoldMcpConfig } from './init.js';
+import { buildNpxCommand, scaffoldFile, scaffoldMcpConfig } from './init.js';
 
 const SERVER_ENTRY = { type: 'stdio', command: 'npx', args: ['-y', '@mmnto/mcp'] };
 
@@ -120,5 +120,80 @@ describe('scaffoldMcpConfig', () => {
     expect(result.action).toBe('skipped');
     expect(result.err).toContain('invalid JSON');
     expect(result.err).toContain('at position'); // includes original parse error detail
+  });
+});
+
+describe('scaffoldFile', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-scaffold-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const MARKER = '// [totem] auto-generated';
+  const CONTENT = `${MARKER}\nconsole.log("hello");\n`;
+
+  it('creates a new file when none exists', () => {
+    const filePath = path.join(tmpDir, 'hooks', 'SessionStart.js');
+    const result = scaffoldFile(filePath, CONTENT, MARKER);
+
+    expect(result).toEqual({ action: 'created' });
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe(CONTENT);
+  });
+
+  it('creates parent directories as needed', () => {
+    const filePath = path.join(tmpDir, 'deep', 'nested', 'file.js');
+    const result = scaffoldFile(filePath, CONTENT, MARKER);
+
+    expect(result).toEqual({ action: 'created' });
+    expect(fs.existsSync(filePath)).toBe(true);
+  });
+
+  it('returns exists when marker is already present', () => {
+    const filePath = path.join(tmpDir, 'hook.js');
+    fs.writeFileSync(filePath, CONTENT, 'utf-8');
+
+    const result = scaffoldFile(filePath, CONTENT, MARKER);
+
+    expect(result).toEqual({ action: 'exists' });
+  });
+
+  it('skips when file exists without marker (user-customized)', () => {
+    const filePath = path.join(tmpDir, 'hook.js');
+    fs.writeFileSync(filePath, '// user custom hook\nconsole.log("mine");\n', 'utf-8');
+
+    const result = scaffoldFile(filePath, CONTENT, MARKER);
+
+    expect(result).toEqual({ action: 'skipped' });
+    // Verify original content is preserved
+    expect(fs.readFileSync(filePath, 'utf-8')).toContain('user custom hook');
+  });
+
+  it('is idempotent — double invoke produces same result', () => {
+    const filePath = path.join(tmpDir, 'hook.js');
+
+    const first = scaffoldFile(filePath, CONTENT, MARKER);
+    expect(first).toEqual({ action: 'created' });
+
+    const second = scaffoldFile(filePath, CONTENT, MARKER);
+    expect(second).toEqual({ action: 'exists' });
+
+    // Content unchanged
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe(CONTENT);
+  });
+
+  it('uses default marker when none provided', () => {
+    const filePath = path.join(tmpDir, 'default.js');
+    const content = '// [totem] auto-generated\ndefault content\n';
+
+    const result = scaffoldFile(filePath, content);
+    expect(result).toEqual({ action: 'created' });
+
+    const second = scaffoldFile(filePath, content);
+    expect(second).toEqual({ action: 'exists' });
   });
 });

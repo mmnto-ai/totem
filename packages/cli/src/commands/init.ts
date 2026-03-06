@@ -44,17 +44,57 @@ interface DetectedProject {
 
 type AiTool = 'Claude Code' | 'Gemini CLI' | 'Cursor';
 
+export interface HookInstallerResult {
+  file: string;
+  action: 'created' | 'exists' | 'skipped';
+  err?: string;
+}
+
 interface AiToolInfo {
   name: AiTool;
   mcpPath: string;
   reflexFile: string | null;
   serverEntry: Record<string, unknown>;
+  hookInstaller?: (cwd: string) => Promise<HookInstallerResult[]>;
 }
 
 export function buildNpxCommand(isWin: boolean): { command: string; args: string[] } {
   return isWin
     ? { command: 'cmd', args: ['/c', 'npx', '-y', '@mmnto/mcp'] }
     : { command: 'npx', args: ['-y', '@mmnto/mcp'] };
+}
+
+const TOTEM_FILE_MARKER = '// [totem] auto-generated';
+
+/**
+ * Scaffold a file with idempotency — skips if the marker is already present.
+ * Creates parent directories as needed.
+ */
+export function scaffoldFile(
+  filePath: string,
+  content: string,
+  marker: string = TOTEM_FILE_MARKER,
+): { action: 'created' | 'exists' | 'skipped'; err?: string } {
+  try {
+    if (fs.existsSync(filePath)) {
+      const existing = fs.readFileSync(filePath, 'utf-8');
+      if (existing.includes(marker)) {
+        return { action: 'exists' };
+      }
+      return { action: 'skipped' };
+    }
+
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    fs.writeFileSync(filePath, content, 'utf-8');
+    return { action: 'created' };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { action: 'skipped', err: message };
+  }
 }
 
 const { command: npxCmd, args: npxArgs } = buildNpxCommand(IS_WIN);
@@ -430,6 +470,19 @@ export async function initCommand(): Promise<void> {
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           log.error('Totem', `Failed to inject reflexes into ${tool.reflexFile}: ${message}`);
+        }
+      }
+
+      // --- Hook installation for selected tools ---
+      for (const tool of selectedTools) {
+        if (!tool.hookInstaller) continue;
+        const results = await tool.hookInstaller(cwd);
+        for (const result of results) {
+          if (result.err) {
+            log.error('Totem', `Hook scaffolding failed for ${result.file}: ${result.err}`);
+          } else if (result.action === 'created') {
+            summary.push({ file: result.file, action: `Scaffolded ${tool.name} hook` });
+          }
         }
       }
     }
