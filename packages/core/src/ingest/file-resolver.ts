@@ -128,15 +128,12 @@ export function getChangedFiles(
       }
     }
 
-    const paths = new Set<string>();
-    for (const entry of diffOutput.split('\0')) {
-      const trimmed = entry.replace(/\\/g, '/');
-      if (trimmed) paths.add(trimmed);
-    }
-    for (const entry of untrackedOutput.split('\0')) {
-      const trimmed = entry.replace(/\\/g, '/');
-      if (trimmed) paths.add(trimmed);
-    }
+    const paths = new Set(
+      (diffOutput + untrackedOutput)
+        .split('\0')
+        .map((p) => p.replace(/\\/g, '/'))
+        .filter(Boolean),
+    );
 
     return [...paths];
   } catch (err) {

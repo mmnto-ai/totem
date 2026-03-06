@@ -41,9 +41,7 @@ function readSyncState(totemDir: string, onProgress?: (msg: string) => void): Sy
 function writeSyncState(totemDir: string, state: SyncState): void {
   const statePath = path.join(totemDir, SYNC_STATE_FILE);
   const dir = path.dirname(statePath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(statePath, JSON.stringify(state, null, 2) + '\n', 'utf-8');
 }
 
