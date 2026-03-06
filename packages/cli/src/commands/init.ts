@@ -3,8 +3,9 @@ import * as path from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
 import * as readline from 'node:readline/promises';
 
-import type { IngestTarget } from '@mmnto/totem';
 import { z } from 'zod';
+
+import type { IngestTarget } from '@mmnto/totem';
 
 import { bold, brand, dim, log, printBanner, success } from '../ui.js';
 import { IS_WIN } from '../utils.js';
