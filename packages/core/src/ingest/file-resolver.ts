@@ -85,18 +85,28 @@ export function resolveFiles(
   return results;
 }
 
+/** Validate that a git ref is safe (hex SHA, HEAD~N, branch name — no shell metacharacters). */
+const SAFE_GIT_REF = /^[a-zA-Z0-9_./:~^{}\-]+$/;
+
 /**
  * Get files changed since a given git ref (e.g., HEAD~1 or a commit SHA).
  * Also includes untracked files so new files are picked up on incremental sync.
- * Used for incremental sync.
+ * Uses -z for null-delimited output consistent with getGitNonIgnoredFiles.
  */
 export function getChangedFiles(
   projectRoot: string,
   sinceRef: string = 'HEAD~1',
   onWarn?: (msg: string) => void,
 ): string[] | null {
+  if (!SAFE_GIT_REF.test(sinceRef)) {
+    if (onWarn) {
+      onWarn(`Invalid git ref "${sinceRef}" — falling back to full sync.`);
+    }
+    return null;
+  }
+
   try {
-    const diffOutput = execFileSync('git', ['diff', '--name-only', sinceRef], {
+    const diffOutput = execFileSync('git', ['diff', '-z', '--name-only', sinceRef], {
       cwd: projectRoot,
       encoding: 'utf-8',
       shell: process.platform === 'win32',
@@ -105,7 +115,7 @@ export function getChangedFiles(
     // Also pick up untracked files (new files not yet committed)
     let untrackedOutput = '';
     try {
-      untrackedOutput = execFileSync('git', ['ls-files', '--others', '--exclude-standard'], {
+      untrackedOutput = execFileSync('git', ['ls-files', '-z', '--others', '--exclude-standard'], {
         cwd: projectRoot,
         encoding: 'utf-8',
         shell: process.platform === 'win32',
@@ -119,12 +129,12 @@ export function getChangedFiles(
     }
 
     const paths = new Set<string>();
-    for (const line of diffOutput.split('\n')) {
-      const trimmed = line.trim().replace(/\\/g, '/');
+    for (const entry of diffOutput.split('\0')) {
+      const trimmed = entry.replace(/\\/g, '/');
       if (trimmed) paths.add(trimmed);
     }
-    for (const line of untrackedOutput.split('\n')) {
-      const trimmed = line.trim().replace(/\\/g, '/');
+    for (const entry of untrackedOutput.split('\0')) {
+      const trimmed = entry.replace(/\\/g, '/');
       if (trimmed) paths.add(trimmed);
     }
 

@@ -36,11 +36,11 @@ describe('getHeadSha', () => {
 });
 
 describe('getChangedFiles', () => {
-  it('returns deduplicated paths from diff and untracked', () => {
+  it('returns deduplicated paths from diff and untracked (null-delimited)', () => {
     vi.mocked(childProcess.execFileSync).mockImplementation(
       (_cmd: string, args?: readonly string[]) => {
-        if (args && args.includes('diff')) return 'src/a.ts\nsrc/b.ts\n';
-        if (args && args.includes('ls-files')) return 'src/b.ts\nsrc/new.ts\n';
+        if (args && args.includes('diff')) return 'src/a.ts\0src/b.ts\0';
+        if (args && args.includes('ls-files')) return 'src/b.ts\0src/new.ts\0';
         return '';
       },
     );
@@ -62,7 +62,7 @@ describe('getChangedFiles', () => {
   it('still returns diff results when untracked listing fails', () => {
     vi.mocked(childProcess.execFileSync).mockImplementation(
       (_cmd: string, args?: readonly string[]) => {
-        if (args && args.includes('diff')) return 'src/a.ts\n';
+        if (args && args.includes('diff')) return 'src/a.ts\0';
         throw new Error('ls-files failed');
       },
     );
@@ -75,11 +75,24 @@ describe('getChangedFiles', () => {
   it('normalizes backslashes to forward slashes', () => {
     vi.mocked(childProcess.execFileSync).mockImplementation(
       (_cmd: string, args?: readonly string[]) => {
-        if (args && args.includes('diff')) return 'src\\foo\\bar.ts\n';
+        if (args && args.includes('diff')) return 'src\\foo\\bar.ts\0';
         return '';
       },
     );
     const result = getChangedFiles('/project');
     expect(result).toEqual(['src/foo/bar.ts']);
+  });
+
+  it('rejects sinceRef with shell metacharacters', () => {
+    const warn = vi.fn();
+    const result = getChangedFiles('/project', 'HEAD; rm -rf /', warn);
+    expect(result).toBeNull();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Invalid git ref'));
+  });
+
+  it('accepts valid hex SHA as sinceRef', () => {
+    vi.mocked(childProcess.execFileSync).mockReturnValue('');
+    const result = getChangedFiles('/project', 'abc123def456');
+    expect(result).toEqual([]);
   });
 });

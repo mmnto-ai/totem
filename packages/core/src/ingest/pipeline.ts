@@ -17,7 +17,13 @@ function readSyncState(totemDir: string): SyncState | null {
   try {
     const raw = fs.readFileSync(statePath, 'utf-8');
     const parsed = JSON.parse(raw) as SyncState;
-    if (typeof parsed.lastSyncSha === 'string' && parsed.lastSyncSha) return parsed;
+    if (
+      typeof parsed.lastSyncSha === 'string' &&
+      parsed.lastSyncSha &&
+      typeof parsed.timestamp === 'number'
+    ) {
+      return parsed;
+    }
     return null;
   } catch {
     return null;
