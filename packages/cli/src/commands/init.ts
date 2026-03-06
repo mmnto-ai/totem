@@ -99,18 +99,159 @@ export function scaffoldFile(
 
 const { command: npxCmd, args: npxArgs } = buildNpxCommand(IS_WIN);
 
+// --- Gemini CLI hook templates ---
+
+const GEMINI_SESSION_START = `// [totem] auto-generated — Gemini CLI SessionStart hook
+// Runs \`totem briefing\` at the start of every Gemini CLI session.
+const { execSync } = require('child_process');
+
+try {
+  const output = execSync('totem briefing', {
+    encoding: 'utf-8',
+    timeout: 30000,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  process.stdout.write(output);
+} catch (err) {
+  process.stderr.write('[totem] briefing unavailable: ' + err.message + '\\n');
+}
+`;
+
+const GEMINI_BEFORE_TOOL = `// [totem] auto-generated — Gemini CLI BeforeTool hook
+// Intercepts git push/commit to run \`totem shield\` before proceeding.
+const { execSync } = require('child_process');
+
+module.exports = function beforeTool(toolName, toolInput) {
+  if (toolName !== 'run_shell_command') return;
+  const cmd = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput);
+  if (!/git\\s+(push|commit)/.test(cmd)) return;
+
+  try {
+    execSync('totem shield', { encoding: 'utf-8', timeout: 60000, stdio: 'inherit' });
+  } catch (err) {
+    throw new Error('[totem] Shield check failed. Fix violations before pushing.\\n' + err.message);
+  }
+};
+`;
+
+const GEMINI_SKILL = `<!-- [totem] auto-generated — Totem Architect skill -->
+# Totem Architect
+
+Before designing, planning, or implementing features, query the project's memory index for relevant context:
+
+1. Use the \`search_knowledge\` MCP tool with a query describing what you're about to build.
+2. Review returned lessons, specs, and code patterns before writing any code.
+3. If you discover a trap or architectural constraint, factor it into your design.
+
+This ensures you build on existing knowledge rather than repeating past mistakes.
+`;
+
+async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
+  const results: HookInstallerResult[] = [];
+  const files: Array<{ rel: string; content: string; marker: string }> = [
+    {
+      rel: '.gemini/hooks/SessionStart.js',
+      content: GEMINI_SESSION_START,
+      marker: TOTEM_FILE_MARKER,
+    },
+    { rel: '.gemini/hooks/BeforeTool.js', content: GEMINI_BEFORE_TOOL, marker: TOTEM_FILE_MARKER },
+    {
+      rel: '.gemini/skills/totem.md',
+      content: GEMINI_SKILL,
+      marker: '<!-- [totem] auto-generated',
+    },
+  ];
+
+  for (const { rel, content, marker } of files) {
+    const filePath = path.join(cwd, rel);
+    const result = scaffoldFile(filePath, content, marker);
+    results.push({ file: rel, ...result });
+  }
+
+  return results;
+}
+
+// --- Claude Code hook installer ---
+
+const CLAUDE_HOOKS_CONFIG = {
+  hooks: {
+    PreToolUse: [
+      {
+        matcher: 'Bash',
+        hooks: ['if echo "$TOOL_INPUT" | grep -qE "git\\s+(push|commit)"; then totem shield; fi'],
+      },
+    ],
+  },
+};
+
+/**
+ * Merge Totem hooks into .claude/settings.local.json without overwriting
+ * existing user-defined hooks.
+ */
+export function scaffoldClaudeHooks(filePath: string): {
+  action: 'created' | 'merged' | 'skipped';
+  err?: string;
+} {
+  try {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, JSON.stringify(CLAUDE_HOOKS_CONFIG, null, 2) + '\n', 'utf-8');
+      return { action: 'created' };
+    }
+
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(raw) as Record<string, unknown>;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        action: 'skipped',
+        err: `Could not parse settings.local.json (invalid JSON): ${message}`,
+      };
+    }
+
+    // If hooks already exist, don't overwrite — user may have customized
+    if (parsed.hooks !== undefined) {
+      return { action: 'skipped' };
+    }
+
+    parsed.hooks = CLAUDE_HOOKS_CONFIG.hooks;
+    fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
+    return { action: 'merged' };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { action: 'skipped', err: message };
+  }
+}
+
+async function installClaudeHooks(cwd: string): Promise<HookInstallerResult[]> {
+  const rel = '.claude/settings.local.json';
+  const filePath = path.join(cwd, rel);
+  const result = scaffoldClaudeHooks(filePath);
+  return [
+    { file: rel, action: result.action === 'merged' ? 'created' : result.action, err: result.err },
+  ];
+}
+
 const AI_TOOLS: AiToolInfo[] = [
   {
     name: 'Claude Code',
     mcpPath: '.mcp.json',
     reflexFile: 'CLAUDE.md',
     serverEntry: { type: 'stdio', command: npxCmd, args: npxArgs },
+    hookInstaller: installClaudeHooks,
   },
   {
     name: 'Gemini CLI',
     mcpPath: '.gemini/settings.json',
     reflexFile: '.gemini/gemini.md',
     serverEntry: { command: npxCmd, args: npxArgs },
+    hookInstaller: installGeminiHooks,
   },
   {
     name: 'Cursor',

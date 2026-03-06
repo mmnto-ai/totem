@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { buildNpxCommand, scaffoldFile, scaffoldMcpConfig } from './init.js';
+import { buildNpxCommand, scaffoldClaudeHooks, scaffoldFile, scaffoldMcpConfig } from './init.js';
 
 const SERVER_ENTRY = { type: 'stdio', command: 'npx', args: ['-y', '@mmnto/mcp'] };
 
@@ -195,5 +195,135 @@ describe('scaffoldFile', () => {
 
     const second = scaffoldFile(filePath, content);
     expect(second).toEqual({ action: 'exists' });
+  });
+});
+
+describe('scaffoldClaudeHooks', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-claude-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('creates settings.local.json when none exists', () => {
+    const filePath = path.join(tmpDir, '.claude', 'settings.local.json');
+    const result = scaffoldClaudeHooks(filePath);
+
+    expect(result).toEqual({ action: 'created' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.hooks).toBeDefined();
+    expect(content.hooks.PreToolUse).toHaveLength(1);
+    expect(content.hooks.PreToolUse[0].matcher).toBe('Bash');
+  });
+
+  it('creates parent directories as needed', () => {
+    const filePath = path.join(tmpDir, '.claude', 'settings.local.json');
+    scaffoldClaudeHooks(filePath);
+    expect(fs.existsSync(filePath)).toBe(true);
+  });
+
+  it('merges into existing config without hooks', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.local.json');
+    fs.writeFileSync(filePath, JSON.stringify({ theme: 'dark' }, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeHooks(filePath);
+
+    expect(result).toEqual({ action: 'merged' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.theme).toBe('dark');
+    expect(content.hooks.PreToolUse).toBeDefined();
+  });
+
+  it('skips when hooks already exist (user-customized)', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.local.json');
+    const existing = { hooks: { PreToolUse: [{ matcher: 'custom', hooks: ['echo hi'] }] } };
+    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeHooks(filePath);
+
+    expect(result).toEqual({ action: 'skipped' });
+    // Verify original content preserved
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.hooks.PreToolUse[0].matcher).toBe('custom');
+  });
+
+  it('returns error on malformed JSON', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.local.json');
+    fs.writeFileSync(filePath, '{ broken!!!', 'utf-8');
+
+    const result = scaffoldClaudeHooks(filePath);
+
+    expect(result.action).toBe('skipped');
+    expect(result.err).toContain('invalid JSON');
+  });
+
+  it('is idempotent — double invoke does not duplicate', () => {
+    const filePath = path.join(tmpDir, '.claude', 'settings.local.json');
+
+    const first = scaffoldClaudeHooks(filePath);
+    expect(first).toEqual({ action: 'created' });
+
+    const second = scaffoldClaudeHooks(filePath);
+    expect(second).toEqual({ action: 'skipped' });
+  });
+
+  it('Gemini hooks scaffold all three files', () => {
+    const geminiDir = path.join(tmpDir, '.gemini');
+    fs.mkdirSync(geminiDir, { recursive: true });
+
+    const hooksDir = path.join(geminiDir, 'hooks');
+    const skillsDir = path.join(geminiDir, 'skills');
+
+    // Scaffold using scaffoldFile directly (same as installGeminiHooks internally)
+    const sessionStart = scaffoldFile(
+      path.join(hooksDir, 'SessionStart.js'),
+      '// [totem] auto-generated\ntest\n',
+    );
+    const beforeTool = scaffoldFile(
+      path.join(hooksDir, 'BeforeTool.js'),
+      '// [totem] auto-generated\ntest\n',
+    );
+    const skill = scaffoldFile(
+      path.join(skillsDir, 'totem.md'),
+      '<!-- [totem] auto-generated -->\ntest\n',
+      '<!-- [totem] auto-generated',
+    );
+
+    expect(sessionStart).toEqual({ action: 'created' });
+    expect(beforeTool).toEqual({ action: 'created' });
+    expect(skill).toEqual({ action: 'created' });
+
+    // Second run — idempotent
+    const sessionStart2 = scaffoldFile(
+      path.join(hooksDir, 'SessionStart.js'),
+      '// [totem] auto-generated\ntest\n',
+    );
+    expect(sessionStart2).toEqual({ action: 'exists' });
+  });
+
+  it('Gemini hooks skip user-customized files', () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(hooksDir, 'SessionStart.js'),
+      '// my custom session hook\nconsole.log("custom");\n',
+      'utf-8',
+    );
+
+    const result = scaffoldFile(
+      path.join(hooksDir, 'SessionStart.js'),
+      '// [totem] auto-generated\ntest\n',
+    );
+    expect(result).toEqual({ action: 'skipped' });
   });
 });
