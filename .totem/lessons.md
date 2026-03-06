@@ -304,3 +304,57 @@ Incremental UX Delivery Strategy: When polishing a CLI, do not attempt to rewrit
 **Tags:** motivation, solo-developer, product-strategy, velocity
 
 When the friction of solo development feels overwhelming and burnout is near, rely on the architecture. You don't have to carry the entire context of 'Totem' and 'satur8d' in your head simultaneously. The LanceDB indexes are designed precisely to hold that weight for you. Build the system so that you can walk away, take a break, and when you return, 'totem triage' instantly reloads your exact mental state without spending 3 hours remembering where you left off. The tools must serve the human's endurance.
+
+## Lesson — 2026-03-06T06:25:26.036Z
+
+**Tags:** security, llm, prompts, prompt-injection
+
+Wrap all untrusted external content, especially data extracted from PR comments or free-text topics, in XML tags to prevent direct and indirect prompt injection. Indirect injection via PR comments is a high-risk vector for commands that synthesize historical context.
+
+## Lesson — 2026-03-06T06:25:26.036Z
+
+**Tags:** workflow, security, trap
+
+Be mindful of pull request size limits; oversized PRs may cause automated security review tools to skip analysis, allowing vulnerabilities to merge without detection.
+
+## Lesson — 2026-03-06T06:25:26.036Z
+
+**Tags:** security, filesystem, prompt-engineering
+
+When implementing local system prompt overrides from a directory like `.totem/prompts/`, strictly enforce path traversal protection to prevent arbitrary files from being read into the LLM context.
+
+## Lesson — 2026-03-06T06:25:26.036Z
+
+**Tags:** security, architecture, sanitization, ui
+
+Perform sanitization of untrusted data (like PR titles or LLM output) at the system input boundaries rather than the display layer. Baking sanitization into low-level logging helpers is often wasteful for hardcoded strings and improperly couples display logic with security concerns.
+
+## Lesson — 2026-03-06T06:25:26.036Z
+
+**Tags:** cli, unix-philosophy, architecture
+
+Route all decorative UI output, including spinners, banners, and branded tags, to `stderr` while reserving `stdout` strictly for pipeable data. This ensures the CLI remains compatible with Unix pipes and redirection without polluting data streams with decorative artifacts.
+
+## Lesson — 2026-03-06T06:25:26.036Z
+
+**Tags:** performance, imports, cli
+
+Use dynamic imports for heavy dependencies (e.g., `ora` for spinners) within the specific functions that require them. This prevents a performance "tax" on the startup time of every CLI command, keeping lightweight commands fast.
+
+## Lesson — 2026-03-06T06:25:26.036Z
+
+**Tags:** logging, error-handling, trap
+
+Avoid using `${err}` in logging template literals as it relies on a generic `toString()` call; instead, explicitly extract `err.message` (or the full error object) to ensure consistent and informative output across different catch blocks.
+
+## Lesson — 2026-03-06T08:00:19.826Z
+
+**Tags:** totem, workflow, spec, optimization
+
+When using 'totem spec', it is most valuable for exploring unfamiliar territory or framing large epics. For well-scoped sub-tasks where the developer has already read the code and written detailed descriptions, running 'totem spec' adds marginal value and wastes time/quota. The optimal pattern is to 'spec the epic, skip specs on sub-tasks you scoped yourself'.
+
+## Lesson — 2026-03-06T09:08:26.567Z
+
+**Tags:** architecture, hooks, json, shell
+
+When scaffolding agent hooks (like Claude's PreToolUse) or background git hooks, avoid embedding complex shell pipelines (e.g., grep chains, escaping quotes) directly inline within JSON configuration files. It is fragile and hard to test. Long-term architectural rule: Extract hook logic into dedicated, version-controlled executable scripts (e.g., \`.totem/hooks/shield-gate.js\` or \`.gemini/hooks/BeforeTool.js\`) and have the JSON config simply invoke the script.

@@ -276,3 +276,12 @@ Totem provides CLI commands that map to your development lifecycle. Use them at 
 2. **Before Implementation:** Run `totem spec <issue-url-or-topic>` to generate an architectural plan and review related context before writing code.
 3. **Before PR/Push:** Run `totem shield` to analyze uncommitted changes against project knowledge — catches architectural drift and pattern violations.
 4. **End of Session:** Run `totem handoff` to generate a snapshot for the next agent session with current progress and open threads.
+
+### Cloud / PR Review Bots
+
+[FOR CLOUD BOTS ONLY — e.g., Gemini Code Assist, GitHub Copilot PR Review]
+You do NOT have access to the local CLI. Instead, use the Totem MCP tools directly:
+
+1. **Before reviewing a PR:** Call `search_knowledge` with queries about the files and patterns being changed to check for known traps and architectural constraints.
+2. **Before suggesting changes:** Call `search_knowledge` to verify your suggestion aligns with established project patterns and past lessons.
+3. **When you spot a recurring issue:** Call `add_lesson` to persist the trap so future reviews catch it automatically.

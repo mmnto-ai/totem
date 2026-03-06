@@ -40,8 +40,7 @@ export function registerSearchKnowledge(server: McpServer): void {
   server.registerTool(
     'search_knowledge',
     {
-      description:
-        'Search the Totem knowledge index for relevant code, session logs, specs, or lessons.',
+      description: `Search the Totem knowledge index for relevant code, session logs, specs, or lessons. Use this BEFORE writing code, reviewing PRs, or making architectural decisions to retrieve domain constraints, past traps, and established patterns.`,
       inputSchema: {
         query: z.string().describe('The search query'),
         type_filter: z

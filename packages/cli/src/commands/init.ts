@@ -31,6 +31,13 @@ Totem provides CLI commands that map to your development lifecycle. Use them at 
 2. **Before Implementation:** Run \`totem spec <issue-url-or-topic>\` to generate an architectural plan and review related context before writing code.
 3. **Before PR/Push:** Run \`totem shield\` to analyze uncommitted changes against project knowledge — catches architectural drift and pattern violations.
 4. **End of Session:** Run \`totem handoff\` to generate a snapshot for the next agent session with current progress and open threads.
+
+### Cloud / PR Review Bots
+[FOR CLOUD BOTS ONLY — e.g., Gemini Code Assist, GitHub Copilot PR Review]
+You do NOT have access to the local CLI. Instead, use the Totem MCP tools directly:
+1. **Before reviewing a PR:** Call \`search_knowledge\` with queries about the files and patterns being changed to check for known traps and architectural constraints.
+2. **Before suggesting changes:** Call \`search_knowledge\` to verify your suggestion aligns with established project patterns and past lessons.
+3. **When you spot a recurring issue:** Call \`add_lesson\` to persist the trap so future reviews catch it automatically.
 `;
 
 interface DetectedProject {
@@ -44,11 +51,18 @@ interface DetectedProject {
 
 type AiTool = 'Claude Code' | 'Gemini CLI' | 'Cursor';
 
+export interface HookInstallerResult {
+  file: string;
+  action: 'created' | 'exists' | 'skipped' | 'merged';
+  err?: string;
+}
+
 interface AiToolInfo {
   name: AiTool;
   mcpPath: string;
   reflexFile: string | null;
   serverEntry: Record<string, unknown>;
+  hookInstaller?: (cwd: string) => Promise<HookInstallerResult[]>;
 }
 
 export function buildNpxCommand(isWin: boolean): { command: string; args: string[] } {
@@ -57,7 +71,203 @@ export function buildNpxCommand(isWin: boolean): { command: string; args: string
     : { command: 'npx', args: ['-y', '@mmnto/mcp'] };
 }
 
+const TOTEM_FILE_MARKER = '// [totem] auto-generated';
+
+/**
+ * Scaffold a file with idempotency — skips if the marker is already present.
+ * Creates parent directories as needed.
+ */
+export function scaffoldFile(
+  filePath: string,
+  content: string,
+  marker: string = TOTEM_FILE_MARKER,
+): { action: 'created' | 'exists' | 'skipped'; err?: string } {
+  try {
+    if (fs.existsSync(filePath)) {
+      const existing = fs.readFileSync(filePath, 'utf-8');
+      if (existing.includes(marker)) {
+        return { action: 'exists' };
+      }
+      return { action: 'skipped' };
+    }
+
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    fs.writeFileSync(filePath, content, 'utf-8');
+    return { action: 'created' };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { action: 'skipped', err: `[Totem Error] ${message}` };
+  }
+}
+
 const { command: npxCmd, args: npxArgs } = buildNpxCommand(IS_WIN);
+
+// --- Gemini CLI hook templates ---
+
+const GEMINI_SESSION_START = `// [totem] auto-generated — Gemini CLI SessionStart hook
+// Runs \`totem briefing\` at the start of every Gemini CLI session.
+const { execSync } = require('child_process');
+
+try {
+  const output = execSync('totem briefing', {
+    encoding: 'utf-8',
+    timeout: 30000,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  process.stderr.write(output);
+} catch (err) {
+  process.stderr.write('[Totem Error] Briefing unavailable: ' + (err instanceof Error ? err.message : String(err)) + '\\n');
+}
+`;
+
+const GEMINI_BEFORE_TOOL = `// [totem] auto-generated — Gemini CLI BeforeTool hook
+// Intercepts git push/commit to run \`totem shield\` before proceeding.
+const { execSync } = require('child_process');
+
+module.exports = function beforeTool(toolName, toolInput) {
+  if (toolName !== 'run_shell_command') return;
+  const cmd = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput);
+  if (!/git\\s+(push|commit)/.test(cmd) && !/["']git["'].*["'](push|commit)["']/.test(cmd)) return;
+
+  try {
+    execSync('totem shield', { encoding: 'utf-8', timeout: 60000, stdio: 'inherit' });
+  } catch (err) {
+    throw new Error('[Totem Error] Shield check failed. Fix violations before pushing.\\n' + err.message);
+  }
+};
+`;
+
+const GEMINI_SKILL = `<!-- [totem] auto-generated — Totem Architect skill -->
+# Totem Architect
+
+Before designing, planning, or implementing features, query the project's memory index for relevant context:
+
+1. Use the \`search_knowledge\` MCP tool with a query describing what you're about to build.
+2. Review returned lessons, specs, and code patterns before writing any code.
+3. If you discover a trap or architectural constraint, factor it into your design.
+
+This ensures you build on existing knowledge rather than repeating past mistakes.
+`;
+
+async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
+  const results: HookInstallerResult[] = [];
+  const files: Array<{ rel: string; content: string; marker: string }> = [
+    {
+      rel: '.gemini/hooks/SessionStart.js',
+      content: GEMINI_SESSION_START,
+      marker: TOTEM_FILE_MARKER,
+    },
+    { rel: '.gemini/hooks/BeforeTool.js', content: GEMINI_BEFORE_TOOL, marker: TOTEM_FILE_MARKER },
+    {
+      rel: '.gemini/skills/totem.md',
+      content: GEMINI_SKILL,
+      marker: '<!-- [totem] auto-generated — Totem Architect skill -->',
+    },
+  ];
+
+  for (const { rel, content, marker } of files) {
+    const filePath = path.join(cwd, rel);
+    const result = scaffoldFile(filePath, content, marker);
+    results.push({ file: rel, ...result });
+  }
+
+  return results;
+}
+
+// --- Claude Code hook installer ---
+
+const CLAUDE_PRETOOLUSE_ENTRY = {
+  matcher: 'Bash',
+  hooks: [
+    'if printf "%s" "$TOOL_INPUT" | grep -q "git" && printf "%s" "$TOOL_INPUT" | grep -qE "(push|commit)"; then totem shield; fi',
+  ],
+};
+
+/**
+ * Merge Totem hooks into .claude/settings.local.json without overwriting
+ * existing user-defined hooks.
+ */
+export function scaffoldClaudeHooks(filePath: string): {
+  action: 'created' | 'merged' | 'skipped';
+  err?: string;
+} {
+  try {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    const fullConfig = { hooks: { PreToolUse: [CLAUDE_PRETOOLUSE_ENTRY] } };
+
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, JSON.stringify(fullConfig, null, 2) + '\n', 'utf-8');
+      return { action: 'created' };
+    }
+
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(raw) as Record<string, unknown>;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        action: 'skipped',
+        err: `[Totem Error] Could not parse settings.local.json (invalid JSON): ${message}`,
+      };
+    }
+
+    // Deep merge: check if PreToolUse already has a totem entry
+    const hooksUntyped = (parsed as { hooks?: unknown }).hooks;
+    if (
+      hooksUntyped !== undefined &&
+      (typeof hooksUntyped !== 'object' || hooksUntyped === null || Array.isArray(hooksUntyped))
+    ) {
+      return {
+        action: 'skipped',
+        err: '[Totem Error] Could not merge config: "hooks" in settings.local.json must be an object.',
+      };
+    }
+    const hooks = (hooksUntyped ?? {}) as Record<string, unknown>;
+    if (hooks.PreToolUse !== undefined && !Array.isArray(hooks.PreToolUse)) {
+      return {
+        action: 'skipped',
+        err: '[Totem Error] Could not merge config: "hooks.PreToolUse" in settings.local.json must be an array.',
+      };
+    }
+    const preToolUse = (hooks.PreToolUse ?? []) as Array<{ matcher?: string }>;
+
+    if (
+      preToolUse.some(
+        (h: { matcher?: string; hooks?: string[] }) =>
+          h &&
+          h.matcher === 'Bash' &&
+          Array.isArray(h.hooks) &&
+          h.hooks.some((cmd) => typeof cmd === 'string' && cmd.includes('totem shield')),
+      )
+    ) {
+      return { action: 'skipped' };
+    }
+
+    hooks.PreToolUse = [...preToolUse, CLAUDE_PRETOOLUSE_ENTRY];
+    parsed.hooks = hooks;
+    fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
+    return { action: 'merged' };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { action: 'skipped', err: `[Totem Error] ${message}` };
+  }
+}
+
+async function installClaudeHooks(cwd: string): Promise<HookInstallerResult[]> {
+  const rel = '.claude/settings.local.json';
+  const filePath = path.join(cwd, rel);
+  const result = scaffoldClaudeHooks(filePath);
+  return [{ file: rel, ...result }];
+}
 
 const AI_TOOLS: AiToolInfo[] = [
   {
@@ -65,12 +275,14 @@ const AI_TOOLS: AiToolInfo[] = [
     mcpPath: '.mcp.json',
     reflexFile: 'CLAUDE.md',
     serverEntry: { type: 'stdio', command: npxCmd, args: npxArgs },
+    hookInstaller: installClaudeHooks,
   },
   {
     name: 'Gemini CLI',
     mcpPath: '.gemini/settings.json',
     reflexFile: '.gemini/gemini.md',
     serverEntry: { command: npxCmd, args: npxArgs },
+    hookInstaller: installGeminiHooks,
   },
   {
     name: 'Cursor',
@@ -430,6 +642,24 @@ export async function initCommand(): Promise<void> {
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           log.error('Totem', `Failed to inject reflexes into ${tool.reflexFile}: ${message}`);
+        }
+      }
+
+      // --- Hook installation for selected tools ---
+      for (const tool of selectedTools) {
+        if (!tool.hookInstaller) continue;
+        const results = await tool.hookInstaller(cwd);
+        for (const result of results) {
+          if (result.err) {
+            log.error('Totem', `Hook scaffolding failed for ${result.file}: ${result.err}`);
+          } else if (result.action === 'created') {
+            summary.push({ file: result.file, action: `Scaffolded ${tool.name} hook` });
+          } else if (result.action === 'merged') {
+            summary.push({
+              file: result.file,
+              action: `Merged ${tool.name} hook into existing config`,
+            });
+          }
         }
       }
     }
