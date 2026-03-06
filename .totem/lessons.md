@@ -214,3 +214,21 @@ When evaluating features for Totem, remember its origin: it is a bootstrapped, m
 **Tags:** architecture, product-strategy, archeology, orchestration
 
 A core insight extracted from the legacy 'mmnto-ai' platform is the "Design-Execute" multi-model protocol. In the past, the human acted as the manual router (using Claude to design, Gemini to analyze, Copilot to execute), passing 'initiation-request.json' files between them. Totem's true value proposition is automating this exact routing layer via the CLI. Totem is the realization of the "Unified Protocol" document, but implemented as an autonomous 'totem spec' and 'totem shield' pipeline instead of a manual human workflow.
+
+## Lesson — 2026-03-06T03:34:53.287Z
+
+**Tags:** architecture, product-strategy, archeology, pragmatism
+
+The legacy 'memento-platform' and 'mmnto-ai' repositories contain the core theoretical models for multi-agent coordination (e.g., 'AriadneOrchestrator', 'GospelComplianceEngine'). These are valuable conceptual resources to reference when designing advanced Totem workflows. However, NEVER attempt to port their technical implementations (Kafka, Kubernetes, Firestore, massive cloud architectures) into Totem. Totem's architectural success relies entirely on translating those massive cloud concepts into local, pragmatic CLI primitives (e.g., LanceDB instead of Firestore, local terminal execution instead of Kafka queues).
+
+## Lesson — 2026-03-06T03:36:17.521Z
+
+**Tags:** lancedb, datafusion, sql, trap, quoting, case-sensitivity
+
+LanceDB's DataFusion SQL backend uses **backticks** (`` `filePath` ``) for case-sensitive column identifier quoting, NOT SQL-standard double quotes (`"filePath"`). Double-quoted identifiers silently produce zero matches without throwing any error — making it an extremely nasty silent failure mode. Always use backticks when referencing camelCase column names in LanceDB filter strings (e.g., `delete()`, `where()`).
+
+## Lesson — 2026-03-06T03:43:04.312Z
+
+**Tags:** motivation, velocity, solo-developer
+
+As a solo developer augmented by AI, your primary constraint is not engineering hours, but _context retention_ and _architectural discipline_. By aggressively dogfooding Totem to handle the context (Shield reviews, Spec generations, and persistent memory), you can scale your output to match a multi-person team. The goal is to offload the repetitive cognitive burden of "remembering how the system works" to the LanceDB index, allowing you to operate purely as the "Human Sovereign" making high-level product decisions.
