@@ -6,6 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 import { getContext, reconnectStore } from '../context.js';
+import { formatXmlResponse } from '../xml-format.js';
 
 /**
  * Detect the correct package-manager command for running `totem sync`.
@@ -98,7 +99,10 @@ export function registerAddLesson(server: McpServer): void {
           content: [
             {
               type: 'text' as const,
-              text: `Lesson saved to ${config.totemDir}/lessons.md. Background re-index triggered — it will be searchable shortly.`,
+              text: formatXmlResponse(
+                'lesson_added',
+                `Lesson saved to ${config.totemDir}/lessons.md. Background re-index triggered — it will be searchable shortly.`,
+              ),
             },
           ],
         };
