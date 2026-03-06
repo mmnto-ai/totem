@@ -218,6 +218,11 @@ describe('scaffoldClaudeHooks', () => {
     expect(content.hooks).toBeDefined();
     expect(content.hooks.PreToolUse).toHaveLength(1);
     expect(content.hooks.PreToolUse[0].matcher).toBe('Bash');
+    // Verify object format (not bare strings) — #153
+    expect(content.hooks.PreToolUse[0].hooks[0]).toEqual({
+      type: 'command',
+      command: expect.stringContaining('shield-gate'),
+    });
   });
 
   it('creates parent directories as needed', () => {
@@ -255,15 +260,36 @@ describe('scaffoldClaudeHooks', () => {
     expect(content.hooks.PreToolUse[0].matcher).toBe('custom');
     // Appends totem entry
     expect(content.hooks.PreToolUse[1].matcher).toBe('Bash');
-    expect(JSON.stringify(content.hooks.PreToolUse[1])).toContain('totem shield');
+    expect(JSON.stringify(content.hooks.PreToolUse[1])).toContain('shield-gate');
   });
 
-  it('skips when totem shield hook already exists', () => {
+  it('skips when totem shield hook exists (bare string format — legacy)', () => {
     const dir = path.join(tmpDir, '.claude');
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, 'settings.local.json');
     const existing = {
       hooks: { PreToolUse: [{ matcher: 'Bash', hooks: ['totem shield'] }] },
+    };
+    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeHooks(filePath);
+
+    expect(result).toEqual({ action: 'skipped' });
+  });
+
+  it('skips when totem shield hook exists (object format)', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.local.json');
+    const existing = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: 'Bash',
+            hooks: [{ type: 'command', command: 'node .totem/hooks/shield-gate.js' }],
+          },
+        ],
+      },
     };
     fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
 
@@ -282,6 +308,18 @@ describe('scaffoldClaudeHooks', () => {
 
     expect(result.action).toBe('skipped');
     expect(result.err).toContain('invalid JSON');
+  });
+
+  it('returns error when hooks has unexpected shape', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.local.json');
+    fs.writeFileSync(filePath, JSON.stringify({ hooks: 'not-an-object' }, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeHooks(filePath);
+
+    expect(result.action).toBe('skipped');
+    expect(result.err).toContain('unexpected shape');
   });
 
   it('is idempotent — double invoke does not duplicate', () => {
