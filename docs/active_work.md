@@ -1,22 +1,18 @@
 # Active Work
 
-## Current Focus: Security Hardening & Stability
+## Current Focus: UX Polish & Ecosystem Expansion
 
-**v0.7.0 published** — Phase 2 refactor (unified gh-utils, PrAdapter, 103+ tests) shipped.
+**v0.7.0 published** — Phase 2 refactor + security hardening complete (118 tests passing).
 
-Our immediate priority is security hardening (#111 learn command prompt injection), followed by stability fixes and onboarding polish.
+Security hardening is done: terminal sanitization (#116), learn confirmation (#115), stale LanceDB handles (#106), embedder backoff (#105), streaming sync (#104).
 
 ### Active Tasks
 
-1. **PR #115** — Confirmation prompt for `learn` command (#111). Mitigates indirect prompt injection from untrusted PR comments.
-2. **#106 Fix Stale LanceDB Handles:** Re-initialize store on error instead of brittle regex heuristic.
-3. **#104 Stream chunks to LanceDB:** Fix the ingestion pipeline to prevent OOM crashes on large repos.
-4. **#105 OpenAI Rate Limit Resilience:** Add exponential backoff to the embedder.
+1. **PR #118** — Stability hardening batch (#116, #106, #105, #104).
 
 ### Open PRs
 
-- **#115** — `feat: add confirmation prompt to learn command` (branch: `feat/learn-confirmation`)
-- **#114** — `docs: update README, roadmap, and lessons for v0.7.0` (branch: `chore/docs-update`)
+- **#118** — `feat: stability hardening — sanitize, retry, backoff, streaming` (branch: `feat/stability-hardening`)
 
 ## Dogfooding: Session Start Hooks
 
@@ -80,8 +76,9 @@ Add a `hooks` section alongside existing MCP server config:
 
 ## Next Up
 
-After security hardening is complete, we will return to expanding the ecosystem:
-
-1. **Epic #86 Seamless Host Integration** (Gemini/Claude extensions)
-2. **#21 CLI UI/UX Polish** (adding `@clack/prompts` and spinners)
-3. **#12 Cross-platform onboarding** (Windows/macOS docs)
+1. **#107 MCP progress events** for background sync visibility
+2. **#108 Clean up orphaned temp files**
+3. **#109 Condense context payloads** for fast-boot commands
+4. **Epic #86 Seamless Host Integration** (Gemini/Claude extensions)
+5. **#21 CLI UI/UX Polish** (adding `@clack/prompts` and spinners)
+6. **#12 Cross-platform onboarding** (Windows/macOS docs)

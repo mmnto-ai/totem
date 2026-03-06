@@ -62,19 +62,21 @@ export function registerSearchKnowledge(server: McpServer): void {
     async ({ query, type_filter, max_results }) => {
       try {
         return await performSearch(query, type_filter, max_results);
-      } catch {
+      } catch (originalErr) {
         // Any LanceDB error could indicate a stale handle (e.g. files deleted
         // during a full sync rebuild). Reconnect and retry once before failing.
         try {
           await reconnectStore();
           return await performSearch(query, type_filter, max_results);
-        } catch (retryErr) {
-          const retryMessage = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        } catch {
+          // Retry failed — report the original error as it's likely the root cause
+          const originalMessage =
+            originalErr instanceof Error ? originalErr.message : String(originalErr);
           return {
             content: [
               {
                 type: 'text' as const,
-                text: `[Totem Error] Failed to search knowledge after reconnect: ${retryMessage}`,
+                text: `[Totem Error] Search failed, even after reconnect. Initial error: ${originalMessage}`,
               },
             ],
             isError: true,
