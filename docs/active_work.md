@@ -6,6 +6,7 @@
 
 ### Recently Merged
 
+- **PR #142** — Gemini CLI & Claude Code seamless host integration hooks (#138, #139, #140)
 - **PR #133** — Custom prompt overrides (#120) + multi-arg spec/learn (#117)
 - **PR #134** — Recovered roadmap/strategy docs
 
@@ -76,7 +77,7 @@ Add a `hooks` section alongside existing MCP server config:
 ## Next Up
 
 1. **Publish v0.8.0** after #21 merges
-2. **Epic #86 Seamless Host Integration** (Gemini/Claude extensions)
-3. **#12 Cross-platform onboarding** (Windows/macOS docs)
-4. **#107 MCP progress events** for background sync visibility
-5. **#126 Epic: Gamification** (streak tracking, achievement badges)
+2. **#12 Cross-platform onboarding** (Windows/macOS docs)
+3. **#107 MCP progress events** for background sync visibility
+4. **#126 Epic: Gamification** (streak tracking, achievement badges)
+5. **#143 `totem wrap` command** to chain post-merge workflow
