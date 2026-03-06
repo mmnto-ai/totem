@@ -87,6 +87,7 @@ export function resolveFiles(
 
 /**
  * Get files changed since a given git ref (e.g., HEAD~1 or a commit SHA).
+ * Also includes untracked files so new files are picked up on incremental sync.
  * Used for incremental sync.
  */
 export function getChangedFiles(
@@ -95,19 +96,52 @@ export function getChangedFiles(
   onWarn?: (msg: string) => void,
 ): string[] | null {
   try {
-    const output = execSync(`git diff --name-only ${sinceRef}`, {
+    const diffOutput = execSync(`git diff --name-only ${sinceRef}`, {
       cwd: projectRoot,
       encoding: 'utf-8',
     });
-    return output
-      .split('\n')
-      .map((line) => line.trim().replace(/\\/g, '/'))
-      .filter(Boolean);
+
+    // Also pick up untracked files (new files not yet committed)
+    let untrackedOutput = '';
+    try {
+      untrackedOutput = execSync('git ls-files --others --exclude-standard', {
+        cwd: projectRoot,
+        encoding: 'utf-8',
+      });
+    } catch {
+      // Non-fatal — untracked files are a bonus
+    }
+
+    const paths = new Set<string>();
+    for (const line of diffOutput.split('\n')) {
+      const trimmed = line.trim().replace(/\\/g, '/');
+      if (trimmed) paths.add(trimmed);
+    }
+    for (const line of untrackedOutput.split('\n')) {
+      const trimmed = line.trim().replace(/\\/g, '/');
+      if (trimmed) paths.add(trimmed);
+    }
+
+    return [...paths];
   } catch (err) {
     const msg = `Failed to get changed files from git. Error: ${err instanceof Error ? err.message : String(err)}`;
     if (onWarn) {
       onWarn(msg);
     }
+    return null;
+  }
+}
+
+/**
+ * Get the current HEAD SHA for sync state tracking.
+ */
+export function getHeadSha(projectRoot: string): string | null {
+  try {
+    return execSync('git rev-parse HEAD', {
+      cwd: projectRoot,
+      encoding: 'utf-8',
+    }).trim();
+  } catch {
     return null;
   }
 }

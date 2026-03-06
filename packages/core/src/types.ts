@@ -81,6 +81,14 @@ export interface SyncOptions {
 }
 
 /**
+ * Persisted state for incremental sync tracking.
+ */
+export interface SyncState {
+  lastSyncSha: string;
+  timestamp: number;
+}
+
+/**
  * Options for search queries.
  */
 export interface SearchOptions {

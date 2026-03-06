@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import { z } from 'zod';
 
 import type { SearchResult, TotemConfig } from '@mmnto/totem';
-import { TotemConfigSchema } from '@mmnto/totem';
+import { TotemConfigSchema, wrapXml } from '@mmnto/totem';
 
 import { bold, log } from './ui.js';
 
@@ -264,19 +264,8 @@ export function sanitize(text: string): string {
 
 // ─── XML delimiting ─────────────────────────────────────
 
-/**
- * Wrap external/user-supplied content in XML tags to create a clear boundary
- * between system instructions and passive data. Escapes matching closing tags
- * in the content to prevent breakout.
- */
-export function wrapXml(tag: string, content: string): string {
-  const safeTag = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const escaped = content.replace(
-    new RegExp('<\\/\\s*' + safeTag + '\\s*>', 'gi'),
-    `&lt;/${tag}&gt;`,
-  );
-  return `<${tag}>\n${escaped}\n</${tag}>`;
-}
+// Re-export from core — unified XML escaping (#158)
+export { wrapXml } from '@mmnto/totem';
 
 // ─── Context formatting ─────────────────────────────────
 

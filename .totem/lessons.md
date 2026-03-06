@@ -388,3 +388,21 @@ Treat environment variables provided by the host AI (such as `$TOOL_INPUT` in Cl
 **Tags:** nodejs, configuration, idempotency
 
 When scaffolding configuration files that store settings in JSON arrays (like `.claude/settings.local.json`), implement deep merging to append entries rather than overwriting the entire key. This allows the tool to maintain idempotency while preserving existing user-defined hooks.
+
+## Lesson — 2026-03-06T18:48:00.895Z
+
+**Tags:** security, prompt-injection, xml, regex
+
+When escaping closing XML tags to prevent prompt injection, use a case-insensitive regex that accounts for optional internal whitespace (e.g., `</ tag>`). Literal matches are easily bypassed because LLMs and parsers often interpret these variants as valid tag closures.
+
+## Lesson — 2026-03-06T18:48:00.895Z
+
+**Tags:** nodejs, esm, compatibility, hooks
+
+Use the `.cjs` extension for utility scripts and host integration hooks in ESM-first projects. This ensures compatibility with external tools that may not support ESM loaders, preventing module resolution errors during tool-triggered execution.
+
+## Lesson — 2026-03-06T18:48:00.895Z
+
+**Tags:** architecture, configuration, integration, trap
+
+Always verify the specific object schema required by host tools (like Claude Code's `{type: "command", command: "..."}`) instead of assuming a primitive string format. Mismatched configuration schemas often fail silently, leading to broken integrations that are difficult to debug.

@@ -21,7 +21,14 @@ export {
 } from './config-schema.js';
 
 // Types
-export type { Chunk, SearchOptions, SearchResult, StoredChunk, SyncOptions } from './types.js';
+export type {
+  Chunk,
+  SearchOptions,
+  SearchResult,
+  StoredChunk,
+  SyncOptions,
+  SyncState,
+} from './types.js';
 
 // Chunkers
 export type { Chunker } from './chunkers/chunker.js';
@@ -37,4 +44,7 @@ export { LanceStore } from './store/lance-store.js';
 
 // Pipeline
 export type { ResolvedFile } from './ingest/sync.js';
-export { getChangedFiles, resolveFiles, runSync } from './ingest/sync.js';
+export { getChangedFiles, getHeadSha, resolveFiles, runSync } from './ingest/sync.js';
+
+// Utilities
+export { wrapXml } from './xml-format.js';
