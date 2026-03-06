@@ -166,3 +166,9 @@ Always incorporate random jitter into exponential backoff calculations to stagge
 **Tags:** architecture, readability, simplicity
 
 Prioritize standard inline idioms (like error message extraction) over creating dedicated helper functions for very few call sites to minimize indirection. Avoid "over-DRYing" code when the resulting abstraction adds more complexity than the repetition it replaces.
+
+## Lesson — 2026-03-06T02:40:46.658Z
+
+**Tags:** architecture, testing, lancedb, core
+
+The '@mmnto/totem' core package (which handles the ingestion pipeline, syntactic chunkers, embedders, and LanceDB store) currently has zero test coverage. Since this package manages the stateful local database and complex parsing logic (e.g., Markdown/AST chunking), bugs here are difficult to debug (e.g., LanceDB stale handles or datafusion case-sensitivity issues). Integration tests running 'totem sync' against a real LanceDB instance and unit tests for the chunkers are the highest priority for technical debt remediation.

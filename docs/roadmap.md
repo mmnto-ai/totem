@@ -31,6 +31,8 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 **Goal:** Before ingesting enterprise databases, the local vector index and LLM prompts must be bulletproof across all environments.
 
+- [ ] **#121 Bug: LanceDB `deleteByFile`** edge cases causing silent incremental sync failures.
+- [ ] **#122 Core Tests:** Backfill unit and integration tests for `@mmnto/totem` core database and chunking logic.
 - [x] **#80 Security: Add XML delimiting:** Close the prompt injection gap in orchestrator commands.
 - [x] **#111 Security:** Mitigate indirect prompt injection in `learn` command via PR comments.
 - [x] **#116 Security:** Sanitize CLI output streams to prevent terminal injection attacks.
