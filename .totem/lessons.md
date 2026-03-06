@@ -232,3 +232,9 @@ LanceDB's DataFusion SQL backend uses **backticks** (`` `filePath` ``) for case-
 **Tags:** motivation, velocity, solo-developer
 
 As a solo developer augmented by AI, your primary constraint is not engineering hours, but _context retention_ and _architectural discipline_. By aggressively dogfooding Totem to handle the context (Shield reviews, Spec generations, and persistent memory), you can scale your output to match a multi-person team. The goal is to offload the repetitive cognitive burden of "remembering how the system works" to the LanceDB index, allowing you to operate purely as the "Human Sovereign" making high-level product decisions.
+
+## Lesson — 2026-03-06T03:48:40.291Z
+
+**Tags:** product-strategy, onboarding, developer-experience, invisible-orchestration
+
+Core Product Philosophy: 'Invisible Orchestration'. Totem must scale down to solo developers seamlessly. The ultimate goal of 'totem init' is that a junior developer never has to manually run a 'totem' command again. We must leverage Git hooks (pre-push, post-merge), AI agent system prompts (auto-triggering tools via MCP), and background processes to make the learning loop and quality gates happen automagically. Totem should feel like an invisible 'Git for AI Memory', not a heavy CLI that requires constant manual execution.
