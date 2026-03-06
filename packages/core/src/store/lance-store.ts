@@ -90,7 +90,7 @@ export class LanceStore {
   /** Delete all chunks from a specific file (for incremental re-index). */
   async deleteByFile(filePath: string): Promise<void> {
     if (!this.table) return;
-    await this.table.delete(`filePath = '${filePath.replace(/'/g, "''")}'`);
+    await this.table.delete(`\`filePath\` = '${filePath.replace(/'/g, "''")}'`);
   }
 
   /** Drop the entire table. Used for full re-index. */

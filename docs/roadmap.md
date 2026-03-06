@@ -23,6 +23,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 - [x] **#87 Auto-configure AI tools:** `totem init` scaffolds `.gemini/settings.json`, `CLAUDE.md`, and `.cursorrules` automatically.
 - [x] **#89 UX Polish for `totem init`:** Fix double-prompting and print clean success summaries so developers trust the onboarding.
+- [ ] **#125 Epic: Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically, achieving a "run `init` and forget" workflow.
 - [ ] **#86 Seamless Host Integration:** Build the `SessionStart` hooks, Claude custom commands, and `Totem Architect` skills that #87 installs.
 - [ ] **#21 CLI UI/UX Polish:** Swap generic `console.log` for `@clack/prompts` and `ora` spinners.
 - [ ] **#12 Cross-platform onboarding:** Ensure docs and installers work flawlessly across Windows (PowerShell) and macOS.
@@ -60,6 +61,8 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 **Goal:** Scale Totem from individual developers to entire organizations by ingesting third-party data sources.
 
+- [ ] **#124 Epic: Automated Onboarding:** Build `totem onboard <issue>` to generate contextual Day 1 briefings (architecture + traps) tailored to a new developer's first assigned ticket.
+- [ ] **#123 Epic: Federated Memory:** Allow `totem.config.ts` to declare external/upstream LanceDB indexes (The Mothership Pattern) to inherit meta-lessons or team-wide policies.
 - [ ] **#84 Issue Tracking Adapters:** Implement Jira and Linear adapters using the interface built in Phase 2.
 - [ ] **#79 Documentation Ingestion Pipeline:** Build Pull/Push models for Notion, Confluence, or internal wikis.
 - [ ] **#34 Configurable Governance:** Let enterprise teams configure AI review loops (`auditLoopLimit`, `shieldSeverityThreshold`).
