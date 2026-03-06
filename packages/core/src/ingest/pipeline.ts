@@ -105,8 +105,10 @@ export async function runSync(
     try {
       await store.deleteByFile(deletedPath);
       log(`  Purged chunks for deleted file: ${deletedPath}`);
-    } catch {
-      // Graceful: file may not have been in the index (Bug #121)
+    } catch (err) {
+      log(
+        `  Warning: failed to purge ${deletedPath}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -163,7 +165,7 @@ export async function runSync(
   log(`Sync complete: ${totalChunks} chunks from ${filesToProcess.length} files`);
 
   // Persist sync state so next incremental sync knows where to diff from
-  const headSha = getHeadSha(projectRoot);
+  const headSha = getHeadSha(projectRoot, log);
   if (headSha) {
     writeSyncState(totemDir, { lastSyncSha: headSha, timestamp: Date.now() });
   }

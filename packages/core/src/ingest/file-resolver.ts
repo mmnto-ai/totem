@@ -108,8 +108,12 @@ export function getChangedFiles(
         cwd: projectRoot,
         encoding: 'utf-8',
       });
-    } catch {
-      // Non-fatal — untracked files are a bonus
+    } catch (err) {
+      if (onWarn) {
+        onWarn(
+          `Failed to list untracked files: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
 
     const paths = new Set<string>();
@@ -135,13 +139,16 @@ export function getChangedFiles(
 /**
  * Get the current HEAD SHA for sync state tracking.
  */
-export function getHeadSha(projectRoot: string): string | null {
+export function getHeadSha(projectRoot: string, onWarn?: (msg: string) => void): string | null {
   try {
     return execSync('git rev-parse HEAD', {
       cwd: projectRoot,
       encoding: 'utf-8',
     }).trim();
-  } catch {
+  } catch (err) {
+    if (onWarn) {
+      onWarn(`Failed to read HEAD SHA: ${err instanceof Error ? err.message : String(err)}`);
+    }
     return null;
   }
 }
