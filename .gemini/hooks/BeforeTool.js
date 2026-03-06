@@ -10,6 +10,8 @@ module.exports = function beforeTool(toolName, toolInput) {
   try {
     execSync('totem shield', { encoding: 'utf-8', timeout: 60000, stdio: 'inherit' });
   } catch (err) {
-    throw new Error('[totem] Shield check failed. Fix violations before pushing.\n' + err.message);
+    throw new Error(
+      '[Totem Error] Shield check failed. Fix violations before pushing.\n' + err.message,
+    );
   }
 };

@@ -53,7 +53,7 @@ type AiTool = 'Claude Code' | 'Gemini CLI' | 'Cursor';
 
 export interface HookInstallerResult {
   file: string;
-  action: 'created' | 'exists' | 'skipped';
+  action: 'created' | 'exists' | 'skipped' | 'merged';
   err?: string;
 }
 
@@ -136,7 +136,7 @@ module.exports = function beforeTool(toolName, toolInput) {
   try {
     execSync('totem shield', { encoding: 'utf-8', timeout: 60000, stdio: 'inherit' });
   } catch (err) {
-    throw new Error('[totem] Shield check failed. Fix violations before pushing.\\n' + err.message);
+    throw new Error('[Totem Error] Shield check failed. Fix violations before pushing.\\n' + err.message);
   }
 };
 `;
@@ -221,7 +221,13 @@ export function scaffoldClaudeHooks(filePath: string): {
     }
 
     // Deep merge: check if PreToolUse already has a totem entry
-    const hooks = (parsed.hooks ?? {}) as Record<string, unknown[]>;
+    const hooks = (parsed.hooks ?? {}) as Record<string, unknown>;
+    if (hooks.PreToolUse !== undefined && !Array.isArray(hooks.PreToolUse)) {
+      return {
+        action: 'skipped',
+        err: 'Could not merge config: "hooks.PreToolUse" in settings.local.json must be an array.',
+      };
+    }
     const preToolUse = (hooks.PreToolUse ?? []) as Array<{ matcher?: string }>;
 
     if (
@@ -244,9 +250,7 @@ async function installClaudeHooks(cwd: string): Promise<HookInstallerResult[]> {
   const rel = '.claude/settings.local.json';
   const filePath = path.join(cwd, rel);
   const result = scaffoldClaudeHooks(filePath);
-  return [
-    { file: rel, action: result.action === 'merged' ? 'created' : result.action, err: result.err },
-  ];
+  return [{ file: rel, ...result }];
 }
 
 const AI_TOOLS: AiToolInfo[] = [
@@ -634,6 +638,11 @@ export async function initCommand(): Promise<void> {
             log.error('Totem', `Hook scaffolding failed for ${result.file}: ${result.err}`);
           } else if (result.action === 'created') {
             summary.push({ file: result.file, action: `Scaffolded ${tool.name} hook` });
+          } else if (result.action === 'merged') {
+            summary.push({
+              file: result.file,
+              action: `Merged ${tool.name} hook into existing config`,
+            });
           }
         }
       }
