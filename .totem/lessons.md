@@ -238,3 +238,9 @@ As a solo developer augmented by AI, your primary constraint is not engineering 
 **Tags:** product-strategy, onboarding, developer-experience, invisible-orchestration
 
 Core Product Philosophy: 'Invisible Orchestration'. Totem must scale down to solo developers seamlessly. The ultimate goal of 'totem init' is that a junior developer never has to manually run a 'totem' command again. We must leverage Git hooks (pre-push, post-merge), AI agent system prompts (auto-triggering tools via MCP), and background processes to make the learning loop and quality gates happen automagically. Totem should feel like an invisible 'Git for AI Memory', not a heavy CLI that requires constant manual execution.
+
+## Lesson — 2026-03-06T04:05:18.718Z
+
+**Tags:** architecture, product-strategy, roadmap, missing-pieces
+
+Roadmap gap analysis: The current roadmap is heavily indexed on *text/code* orchestration but misses the *observability/state* layer. Developers will quickly lose trust in a vector database if they cannot 'see' what is inside it or how it is parsing their files. We need a 'totem inspect' or local dashboard UI (Phase 3) that allows users to visualize their chunks, see what files were ignored, and delete bad lessons manually. Additionally, Phase 2 is missing a formal 'Ejection/Uninstall' command to remove all injected hooks and prompts gracefully.

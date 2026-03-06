@@ -34,6 +34,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 - [ ] **#121 Bug: LanceDB `deleteByFile`** edge cases causing silent incremental sync failures.
 - [ ] **#122 Core Tests:** Backfill unit and integration tests for `@mmnto/totem` core database and chunking logic.
+- [ ] **#131 Clean Ejection:** Build `totem eject` to safely remove git hooks, prompt injections, and database artifacts if a user uninstalls.
 - [x] **#80 Security: Add XML delimiting:** Close the prompt injection gap in orchestrator commands.
 - [x] **#111 Security:** Mitigate indirect prompt injection in `learn` command via PR comments.
 - [x] **#116 Security:** Sanitize CLI output streams to prevent terminal injection attacks.
@@ -49,6 +50,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 **Goal:** Give existing users more ways to interact with their data locally and visualize their usage.
 
+- [ ] **#130 Epic: Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks, index health, and ignored files to build trust in the "black box".
 - [ ] **#119 `totem run <workflow>`:** Introduce a custom AI task runner to execute user-defined markdown workflows via the orchestrator.
 - [ ] **#120 Custom Prompt Overrides:** Allow users to override the hardcoded personas for built-in commands (`spec`, `shield`, etc.) via `.totem/prompts/`.
 - [ ] **#44 `totem bridge`:** Build a mid-session context compaction tool to clear token windows without losing place.
