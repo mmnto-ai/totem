@@ -196,3 +196,21 @@ When designing Phase 4 (Enterprise Expansion), avoid building Totem as a 'mesh c
 **Tags:** architecture, enterprise, status, workflow
 
 To support team-wide status querying without a centralized server (Phase 4), leverage the existing PR and branch infrastructure. Instead of having Totem instances ping each other, developers should push their 'session-handoff.md' and 'active_work.md' to draft PRs or remote branches at the end of the day. A team lead's Totem can then run a workflow that clones/fetches those branches and aggregates the markdown files into a single context for the orchestrator LLM to summarize.
+
+## Lesson — 2026-03-06T03:15:12.458Z
+
+**Tags:** architecture, future-ideas, team-workflow, enterprise
+
+Future feature consideration for team workflows: 'Automated Onboarding Protocols'. If Totem aggregates lessons, architecture docs, and 'session-handoff' states, a new developer's first 'totem init' could automatically generate a personalized 'Day One Briefing' tailored to their first assigned issue, pulling relevant architectural traps and avoiding the need for a senior dev to spend 3 hours explaining the repo history.
+
+## Lesson — 2026-03-06T03:27:22.818Z
+
+**Tags:** architecture, product-strategy, archeology, antigravity
+
+When evaluating features for Totem, remember its origin: it is a bootstrapped, minimalist tool built from the lessons of failed, overly-complex previous iterations (the 'mmnto-ai' platform and 'thread agents'). Totem exists to solve immediate, practical AI-assisted development friction (like context window bloat and PR learning loops). Treat previous repositories as 'archaeology assets'—extract their ideas (like workflow topologies), but do not port their heavy infrastructure or try to rebuild Google's 'antigravity'. Keep Totem focused on the local developer.
+
+## Lesson — 2026-03-06T03:31:34.777Z
+
+**Tags:** architecture, product-strategy, archeology, orchestration
+
+A core insight extracted from the legacy 'mmnto-ai' platform is the "Design-Execute" multi-model protocol. In the past, the human acted as the manual router (using Claude to design, Gemini to analyze, Copilot to execute), passing 'initiation-request.json' files between them. Totem's true value proposition is automating this exact routing layer via the CLI. Totem is the realization of the "Unified Protocol" document, but implemented as an autonomous 'totem spec' and 'totem shield' pipeline instead of a manual human workflow.
