@@ -352,3 +352,9 @@ Avoid using `${err}` in logging template literals as it relies on a generic `toS
 **Tags:** totem, workflow, spec, optimization
 
 When using 'totem spec', it is most valuable for exploring unfamiliar territory or framing large epics. For well-scoped sub-tasks where the developer has already read the code and written detailed descriptions, running 'totem spec' adds marginal value and wastes time/quota. The optimal pattern is to 'spec the epic, skip specs on sub-tasks you scoped yourself'.
+
+## Lesson — 2026-03-06T09:08:26.567Z
+
+**Tags:** architecture, hooks, json, shell
+
+When scaffolding agent hooks (like Claude's PreToolUse) or background git hooks, avoid embedding complex shell pipelines (e.g., grep chains, escaping quotes) directly inline within JSON configuration files. It is fragile and hard to test. Long-term architectural rule: Extract hook logic into dedicated, version-controlled executable scripts (e.g., \`.totem/hooks/shield-gate.js\` or \`.gemini/hooks/BeforeTool.js\`) and have the JSON config simply invoke the script.

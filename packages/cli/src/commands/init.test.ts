@@ -293,15 +293,23 @@ describe('scaffoldClaudeHooks', () => {
     const second = scaffoldClaudeHooks(filePath);
     expect(second).toEqual({ action: 'skipped' });
   });
+});
 
-  it('Gemini hooks scaffold all three files', () => {
-    const geminiDir = path.join(tmpDir, '.gemini');
-    fs.mkdirSync(geminiDir, { recursive: true });
+describe('Gemini hook scaffolding', () => {
+  let tmpDir: string;
 
-    const hooksDir = path.join(geminiDir, 'hooks');
-    const skillsDir = path.join(geminiDir, 'skills');
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gemini-'));
+  });
 
-    // Scaffold using scaffoldFile directly (same as installGeminiHooks internally)
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('scaffolds all three files', () => {
+    const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
+    const skillsDir = path.join(tmpDir, '.gemini', 'skills');
+
     const sessionStart = scaffoldFile(
       path.join(hooksDir, 'SessionStart.js'),
       '// [totem] auto-generated\ntest\n',
@@ -328,7 +336,7 @@ describe('scaffoldClaudeHooks', () => {
     expect(sessionStart2).toEqual({ action: 'exists' });
   });
 
-  it('Gemini hooks skip user-customized files', () => {
+  it('skips user-customized files', () => {
     const hooksDir = path.join(tmpDir, '.gemini', 'hooks');
     fs.mkdirSync(hooksDir, { recursive: true });
     fs.writeFileSync(
