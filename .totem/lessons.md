@@ -136,3 +136,9 @@ Scaffolding command best practices for `totem init` and similar commands that mo
 **Tags:** security, cli, sanitization, output
 
 When writing CLI output streams (like summaries or logs), ensure all content derived from external or potentially untrusted sources is sanitized to strip control characters. Even if the primary payload is sanitized before storage, unsanitized summary outputs piped to other tools can be used for terminal injection attacks.
+
+## Lesson — 2026-03-06T00:17:02.961Z
+
+**Tags:** architecture, product-strategy, dsl, scope-creep
+
+When designing user-extensible CLI tools (like 'totem run'), avoid prematurely building DSLs or plugin systems for data fetching (e.g., git diffs, issue trackers). Start by exposing simple prompt overrides (e.g., checking for '.totem/prompts/shield.md' before using a hardcoded string). Only build an execution runner once the limitations of simple overrides are empirically proven. Building a workflow schema before user demand exists is a classic trap for over-engineering.
