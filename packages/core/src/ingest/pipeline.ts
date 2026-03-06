@@ -12,7 +12,7 @@ import { getChangedFiles, getHeadSha, resolveFiles } from './file-resolver.js';
 const EMBED_BATCH_SIZE = 100;
 const SYNC_STATE_FILE = 'cache/sync-state.json';
 
-function readSyncState(totemDir: string): SyncState | null {
+function readSyncState(totemDir: string, onProgress?: (msg: string) => void): SyncState | null {
   const statePath = path.join(totemDir, SYNC_STATE_FILE);
   try {
     const raw = fs.readFileSync(statePath, 'utf-8');
@@ -24,8 +24,16 @@ function readSyncState(totemDir: string): SyncState | null {
     ) {
       return parsed;
     }
+    onProgress?.(`Warning: Ignoring malformed sync state file at ${statePath}.`);
     return null;
-  } catch {
+  } catch (err) {
+    // ENOENT is expected on first run — don't warn
+    if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null;
+    }
+    onProgress?.(
+      `Warning: Failed to read sync state: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return null;
   }
 }
@@ -75,7 +83,7 @@ export async function runSync(
     // Determine the ref to diff against: saved sync state > fallback HEAD~1
     let sinceRef = 'HEAD~1';
     if (!options.changedFiles) {
-      const syncState = readSyncState(totemDir);
+      const syncState = readSyncState(totemDir, log);
       if (syncState) {
         sinceRef = syncState.lastSyncSha;
         log(`Resuming from last sync at ${sinceRef.slice(0, 8)}...`);
