@@ -31,3 +31,14 @@ A stdio-based server for LLM integration. Provides two tools:
 ## The `.totem/` Directory
 
 The `lessons.md` file within `.totem/` is meant to be version-controlled (committed to git). It acts as the explicit, human-readable ledger of traps and architectural decisions. When updated, `totem sync` re-indexes it.
+
+## Phase 4 Vision: Federated Memory & Swarm Intelligence
+
+Because Totem treats memory as static files (`.totem/lessons.md`, `session-handoff.md`, `active_work.md`), we can unlock "Swarm Intelligence" across a team without inventing a complex peer-to-peer mesh network.
+
+By configuring `totem.config.ts` to read upstream or aggregated LanceDB indexes, an enterprise team can achieve:
+1. **Platform Policy Inheritance:** Local agents query a central platform database to inherit security and architectural rules before writing code.
+2. **Zero-Friction Standups:** A central AI aggregates local `handoff.md` and `active_work.md` artifacts from developer branches to synthesize team status without Jira.
+3. **Collision Detection:** Developers can query if an uncommitted architectural change exists in a teammate's active work tree.
+
+The core philosophy remains: **Keep the infrastructure dumb (static files and LanceDB), and the queries smart.**
