@@ -286,3 +286,9 @@ Lateral Architecture Concept: The Totem infrastructure (local LanceDB + Git-nati
 **Tags:** architecture, error-handling, orchestrator, design-decision
 
 When designing multi-input orchestrator commands (like 'totem spec' or 'totem learn' handling arrays of IDs), strictly enforce the 'Fail Fast' principle over graceful degradation. A partial context assembly (e.g., fetching PR 1 and 2, but silently failing on PR 3) is highly dangerous because the LLM will confidently generate a response based on incomplete information. It is better for the CLI to crash loudly than for the AI to hallucinate silently.
+
+## Lesson — 2026-03-06T05:41:19.122Z
+
+**Tags:** ux, cli, product-strategy
+
+When implementing CLI UX polish (Issue #21), adopt the '@clack/prompts' library. It provides a distinct, vertical-line connecting visual style that feels significantly more modern and premium than older libraries like 'inquirer'. This directly supports the 'Magic Onboarding' goal of making the CLI feel less like a barebones script and more like a high-end developer product.
