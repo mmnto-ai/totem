@@ -1,6 +1,6 @@
 ---
-"@mmnto/cli": minor
-"@mmnto/mcp": patch
+'@mmnto/cli': minor
+'@mmnto/mcp': patch
 ---
 
 feat: seamless host integration — Gemini CLI & Claude Code hooks
