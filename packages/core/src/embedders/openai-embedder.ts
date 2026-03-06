@@ -65,6 +65,8 @@ export class OpenAIEmbedder implements Embedder {
       }
     }
     const message = lastErr instanceof Error ? lastErr.message : String(lastErr);
-    throw new Error(`[Totem Error] OpenAI embedding failed after ${MAX_RETRIES + 1} attempts: ${message}`);
+    throw new Error(
+      `[Totem Error] OpenAI embedding failed after ${MAX_RETRIES + 1} attempts: ${message}`,
+    );
   }
 }
