@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { getGitBranch, getGitDiff, getGitDiffStat, getGitStatus } from '../git.js';
+import { log } from '../ui.js';
 import {
   getSystemPrompt,
   loadConfig,
@@ -130,39 +131,37 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
   const config = await loadConfig(configPath);
 
   // Gather git state
-  console.error(`[${TAG}] Gathering git state...`);
+  log.info(TAG, 'Gathering git state...');
   const branch = getGitBranch(cwd);
   const status = getGitStatus(cwd);
-  console.error(`[${TAG}] Branch: ${branch}`);
+  log.info(TAG, `Branch: ${branch}`);
 
   // Get diff
-  console.error(`[${TAG}] Getting uncommitted diff...`);
+  log.info(TAG, 'Getting uncommitted diff...');
   const diff = getGitDiff('all', cwd);
   const diffStat = diff.trim() ? getGitDiffStat(cwd) : '';
 
   if (diff.trim()) {
-    console.error(`[${TAG}] Diff: ${(diff.length / 1024).toFixed(0)}KB`);
+    log.info(TAG, `Diff: ${(diff.length / 1024).toFixed(0)}KB`);
   } else {
-    console.error(`[${TAG}] Working tree is clean.`);
+    log.dim(TAG, 'Working tree is clean.');
   }
 
   // Read recent lessons
-  console.error(`[${TAG}] Reading recent lessons...`);
+  log.info(TAG, 'Reading recent lessons...');
   const lessons = readRecentLessons(cwd, config.totemDir);
-  console.error(
-    `[${TAG}] Lessons: ${lessons ? `${lessons.split('\n').length} lines` : 'none found'}`,
-  );
+  log.info(TAG, `Lessons: ${lessons ? `${lessons.split('\n').length} lines` : 'none found'}`);
 
   // Resolve system prompt (allow .totem/prompts/handoff.md override)
   const systemPrompt = getSystemPrompt('handoff', SYSTEM_PROMPT, cwd, config.totemDir);
 
   // Assemble prompt
   const prompt = assemblePrompt(branch, status, diff, diffStat, lessons, systemPrompt);
-  console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
+  log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd });
   if (content != null) {
     writeOutput(content, options.out);
-    if (options.out) console.error(`[${TAG}] Written to ${options.out}`);
+    if (options.out) log.success(TAG, `Written to ${options.out}`);
   }
 }

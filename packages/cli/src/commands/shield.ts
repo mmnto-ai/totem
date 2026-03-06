@@ -4,6 +4,7 @@ import type { ContentType, SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore } from '@mmnto/totem';
 
 import { extractChangedFiles, getDefaultBranch, getGitBranchDiff, getGitDiff } from '../git.js';
+import { bold, error as errorColor, log, success as successColor } from '../ui.js';
 import {
   formatResults,
   getSystemPrompt,
@@ -167,24 +168,22 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
 
   // Get git diff — try uncommitted/staged first, fall back to branch diff vs main
   const mode = options.staged ? 'staged' : 'all';
-  console.error(`[${TAG}] Getting ${mode === 'staged' ? 'staged' : 'uncommitted'} diff...`);
+  log.info(TAG, `Getting ${mode === 'staged' ? 'staged' : 'uncommitted'} diff...`);
   let diff = getGitDiff(mode, cwd);
 
   if (!diff.trim()) {
     const base = getDefaultBranch(cwd);
-    console.error(
-      `[${TAG}] No uncommitted changes. Falling back to branch diff (${base}...HEAD)...`,
-    );
+    log.dim(TAG, `No uncommitted changes. Falling back to branch diff (${base}...HEAD)...`);
     diff = getGitBranchDiff(cwd, base);
   }
 
   if (!diff.trim()) {
-    console.error(`[${TAG}] No changes detected. Nothing to review.`);
+    log.warn(TAG, 'No changes detected. Nothing to review.');
     return;
   }
 
   const changedFiles = extractChangedFiles(diff);
-  console.error(`[${TAG}] Changed files (${changedFiles.length}): ${changedFiles.join(', ')}`);
+  log.info(TAG, `Changed files (${changedFiles.length}): ${changedFiles.join(', ')}`);
 
   // Connect to LanceDB
   const embedder = createEmbedder(config.embedding);
@@ -193,11 +192,12 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
 
   // Retrieve context from LanceDB
   const query = buildSearchQuery(changedFiles, diff);
-  console.error(`[${TAG}] Querying Totem index...`);
+  log.info(TAG, 'Querying Totem index...');
   const context = await retrieveContext(query, store);
   const totalResults = context.specs.length + context.sessions.length + context.code.length;
-  console.error(
-    `[${TAG}] Found: ${context.specs.length} specs, ${context.sessions.length} sessions, ${context.code.length} code chunks`,
+  log.info(
+    TAG,
+    `Found: ${context.specs.length} specs, ${context.sessions.length} sessions, ${context.code.length} code chunks`,
   );
 
   // Resolve system prompt (allow .totem/prompts/shield.md override)
@@ -205,23 +205,23 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
 
   // Assemble prompt
   const prompt = assemblePrompt(diff, changedFiles, context, systemPrompt);
-  console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
+  log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });
   if (content != null) {
     writeOutput(content, options.out);
-    if (options.out) console.error(`[${TAG}] Written to ${options.out}`);
+    if (options.out) log.success(TAG, `Written to ${options.out}`);
 
     // Parse verdict and gate on failure (skip in --raw mode — no LLM output)
     if (!options.raw) {
       const verdict = parseVerdict(content);
       if (verdict) {
-        console.error(
-          `[${TAG}] Verdict: ${verdict.pass ? 'PASS' : 'FAIL'}${verdict.reason ? ` — ${verdict.reason}` : ''}`,
-        );
+        const verdictLabel = verdict.pass ? successColor(bold('PASS')) : errorColor(bold('FAIL'));
+        const reason = verdict.reason ? ` — ${verdict.reason}` : '';
+        log.info(TAG, `Verdict: ${verdictLabel}${reason}`);
         if (!verdict.pass) process.exit(1);
       } else {
-        console.error(`[${TAG}] Verdict: not found (defaulting to FAIL — fix LLM output format)`);
+        log.error(TAG, 'Verdict: not found (defaulting to FAIL — fix LLM output format)');
         process.exit(1);
       }
     }

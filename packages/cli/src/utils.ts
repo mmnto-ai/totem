@@ -8,6 +8,8 @@ import { z } from 'zod';
 import type { SearchResult, TotemConfig } from '@mmnto/totem';
 import { TotemConfigSchema } from '@mmnto/totem';
 
+import { bold, dim, error as errorColor, log, success as successColor } from './ui.js';
+
 // ─── Shared constants ────────────────────────────────────
 
 const LLM_TIMEOUT_MS = 180_000;
@@ -90,7 +92,7 @@ function appendTelemetry(entry: TelemetryEntry, cwd: string, totemDir: string): 
   } catch (err) {
     // Telemetry is best-effort — never block the command, but warn on failure
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[Totem Warning] Failed to write telemetry: ${msg}`);
+    log.warn('Totem', `Failed to write telemetry: ${msg}`);
   }
 }
 
@@ -159,7 +161,7 @@ export function invokeShellOrchestrator(
       : `'${tempPath.replace(/'/g, "'\\''")}'`;
     const resolvedCmd = command.replace(/\{file\}/g, quotedPath).replace(/\{model\}/g, model);
 
-    console.error(`[${tag}] Invoking orchestrator (this may take 15-60 seconds)...`);
+    log.info(tag, 'Invoking orchestrator (this may take 15-60 seconds)...');
 
     const startMs = Date.now();
     const raw = execSync(resolvedCmd, {
@@ -331,7 +333,7 @@ export function runOrchestrator(opts: {
   if (options.raw) {
     writeOutput(prompt, options.out);
     const suffix = opts.totalResults != null ? ` (${opts.totalResults} chunks)` : '';
-    console.error(`[${tag}] Raw context output complete${suffix}.`);
+    log.dim(tag, `Raw context output complete${suffix}.`);
     return undefined;
   }
 
@@ -362,7 +364,7 @@ export function runOrchestrator(opts: {
       `[Totem Error] Invalid model name '${model}'. Model names may not start with a hyphen and may only contain word characters, dots, slashes, colons, underscores, and hyphens.`,
     );
   }
-  console.error(`[${tag}] Model: ${model}`);
+  log.info(tag, `Model: ${bold(model)}`);
 
   const ttlSeconds = config.orchestrator.cacheTtls?.[tagKey] ?? DEFAULT_TTLS[tagKey] ?? 0;
   const useCache = ttlSeconds > 0 && !options.fresh;
@@ -383,7 +385,7 @@ export function runOrchestrator(opts: {
         const cacheData = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
         const ageMs = Date.now() - cacheData.timestamp;
         if (ageMs < ttlSeconds * 1000) {
-          console.error(`[${tag}] Result loaded from cache (TTL: ${ttlSeconds}s)`);
+          log.dim(tag, `Result loaded from cache (TTL: ${ttlSeconds}s)`);
           return cacheData.content;
         }
       } catch {
@@ -406,8 +408,9 @@ export function runOrchestrator(opts: {
     if (err instanceof Error && err.name === 'QuotaError') {
       const fallback = config.orchestrator.fallbackModel;
       if (fallback && model !== fallback) {
-        console.error(
-          `[${tag}] Quota exhausted for ${model}. Retrying with fallback model: ${fallback}...`,
+        log.warn(
+          tag,
+          `Quota exhausted for ${model}. Retrying with fallback model: ${bold(fallback)}...`,
         );
         try {
           result = invokeShellOrchestrator(
@@ -490,9 +493,9 @@ export function runOrchestrator(opts: {
   if (result.inputTokens != null && result.outputTokens != null) {
     const inTok = result.inputTokens.toLocaleString();
     const outTok = result.outputTokens.toLocaleString();
-    console.error(`[${tag}] Done: ${secs}s | ${inTok} in | ${outTok} out`);
+    log.success(tag, `Done: ${secs}s | ${inTok} in | ${outTok} out`);
   } else {
-    console.error(`[${tag}] Done: ${secs}s | ${(prompt.length / 1024).toFixed(0)}KB prompt`);
+    log.success(tag, `Done: ${secs}s | ${(prompt.length / 1024).toFixed(0)}KB prompt`);
   }
 
   return result.content;

@@ -5,6 +5,7 @@ import { createEmbedder, LanceStore } from '@mmnto/totem';
 
 import { GitHubCliAdapter } from '../adapters/github-cli.js';
 import type { StandardIssue } from '../adapters/issue-adapter.js';
+import { log } from '../ui.js';
 import {
   formatResults,
   getSystemPrompt,
@@ -176,13 +177,13 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
         : null;
 
     if (issueNumber) {
-      console.error(`[${TAG}] Fetching issue #${issueNumber}...`);
+      log.info(TAG, `Fetching issue #${issueNumber}...`);
       const issue = adapter.fetchIssue(issueNumber);
-      console.error(`[${TAG}] Title: ${issue.title}`);
+      log.info(TAG, `Title: ${issue.title}`);
       parsed.push({ issue, freeText: null });
       queryParts.push(buildSearchQuery(issue));
     } else {
-      console.error(`[${TAG}] Topic: ${input}`);
+      log.info(TAG, `Topic: ${input}`);
       parsed.push({ issue: null, freeText: input });
       queryParts.push(input);
     }
@@ -190,11 +191,12 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
 
   // Retrieve context from LanceDB
   const query = queryParts.join(' ');
-  console.error(`[${TAG}] Querying Totem index...`);
+  log.info(TAG, 'Querying Totem index...');
   const context = await retrieveContext(query, store);
   const totalResults = context.specs.length + context.sessions.length + context.code.length;
-  console.error(
-    `[${TAG}] Found: ${context.specs.length} specs, ${context.sessions.length} sessions, ${context.code.length} code chunks`,
+  log.info(
+    TAG,
+    `Found: ${context.specs.length} specs, ${context.sessions.length} sessions, ${context.code.length} code chunks`,
   );
 
   // Resolve system prompt (allow .totem/prompts/spec.md override)
@@ -202,11 +204,11 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
 
   // Assemble prompt
   const prompt = assemblePrompt(parsed, context, systemPrompt);
-  console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
+  log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });
   if (content != null) {
     writeOutput(content, options.out);
-    if (options.out) console.error(`[${TAG}] Written to ${options.out}`);
+    if (options.out) log.success(TAG, `Written to ${options.out}`);
   }
 }

@@ -6,6 +6,7 @@ import { createEmbedder, LanceStore } from '@mmnto/totem';
 import { GitHubCliPrAdapter } from '../adapters/github-cli-pr.js';
 import type { StandardPrListItem } from '../adapters/pr-adapter.js';
 import { getGitBranch, getGitStatus } from '../git.js';
+import { log } from '../ui.js';
 import {
   formatResults,
   getSystemPrompt,
@@ -132,16 +133,16 @@ export async function briefingCommand(options: BriefingOptions): Promise<void> {
   const config = await loadConfig(configPath);
 
   // Gather git state
-  console.error(`[${TAG}] Gathering git state...`);
+  log.info(TAG, 'Gathering git state...');
   const branch = getGitBranch(cwd);
   const status = getGitStatus(cwd);
-  console.error(`[${TAG}] Branch: ${branch}`);
+  log.info(TAG, `Branch: ${branch}`);
 
   // Fetch open PRs
-  console.error(`[${TAG}] Fetching open PRs...`);
+  log.info(TAG, 'Fetching open PRs...');
   const adapter = new GitHubCliPrAdapter(cwd);
   const prs = adapter.fetchOpenPRs();
-  console.error(`[${TAG}] Found ${prs.length} open PRs.`);
+  log.info(TAG, `Found ${prs.length} open PRs.`);
 
   // Connect to LanceDB
   const embedder = createEmbedder(config.embedding);
@@ -150,23 +151,21 @@ export async function briefingCommand(options: BriefingOptions): Promise<void> {
 
   // Retrieve context from LanceDB
   const query = `${branch} active work session priorities`;
-  console.error(`[${TAG}] Querying Totem index...`);
+  log.info(TAG, 'Querying Totem index...');
   const context = await retrieveContext(query, store);
   const totalResults = context.specs.length + context.sessions.length;
-  console.error(
-    `[${TAG}] Found: ${context.specs.length} specs, ${context.sessions.length} sessions`,
-  );
+  log.info(TAG, `Found: ${context.specs.length} specs, ${context.sessions.length} sessions`);
 
   // Resolve system prompt (allow .totem/prompts/briefing.md override)
   const systemPrompt = getSystemPrompt('briefing', SYSTEM_PROMPT, cwd, config.totemDir);
 
   // Assemble prompt
   const prompt = assemblePrompt(branch, status, prs, context, systemPrompt);
-  console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
+  log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });
   if (content != null) {
     writeOutput(content, options.out);
-    if (options.out) console.error(`[${TAG}] Written to ${options.out}`);
+    if (options.out) log.success(TAG, `Written to ${options.out}`);
   }
 }

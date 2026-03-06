@@ -5,6 +5,7 @@ import * as readline from 'node:readline/promises';
 
 import type { IngestTarget } from '@mmnto/totem';
 
+import { bold, brand, dim, log, printBanner, success } from '../ui.js';
 import { IS_WIN } from '../utils.js';
 import { installPostMergeHook } from './install-hooks.js';
 
@@ -292,9 +293,11 @@ export async function initCommand(): Promise<void> {
   const summary: InitSummaryEntry[] = [];
 
   try {
+    printBanner();
+
     if (!configExists) {
       // --- Fresh install: generate config ---
-      console.log('[Totem] Scanning project...');
+      log.info('Totem', 'Scanning project...');
       const detected = detectProject(cwd);
 
       const detections: string[] = [];
@@ -306,9 +309,9 @@ export async function initCommand(): Promise<void> {
       if (detected.hasSessions) detections.push('session logs');
 
       if (detections.length > 0) {
-        console.log(`[Totem] Detected: ${detections.join(', ')}`);
+        log.info('Totem', `Detected: ${bold(detections.join(', '))}`);
       } else {
-        console.log('[Totem] No specific project structure detected. Using markdown defaults.');
+        log.dim('Totem', 'No specific project structure detected. Using markdown defaults.');
       }
 
       const targets = buildTargets(detected);

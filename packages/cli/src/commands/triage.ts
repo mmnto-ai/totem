@@ -5,6 +5,7 @@ import { createEmbedder, LanceStore } from '@mmnto/totem';
 
 import { GitHubCliAdapter } from '../adapters/github-cli.js';
 import type { StandardIssueListItem } from '../adapters/issue-adapter.js';
+import { log } from '../ui.js';
 import {
   formatResults,
   getSystemPrompt,
@@ -136,16 +137,16 @@ export async function triageCommand(options: TriageOptions): Promise<void> {
   const config = await loadConfig(configPath);
 
   // Fetch open issues
-  console.error(`[${TAG}] Fetching open issues...`);
+  log.info(TAG, 'Fetching open issues...');
   const adapter = new GitHubCliAdapter(cwd);
   const issues = adapter.fetchOpenIssues(GH_ISSUE_LIMIT);
 
   if (issues.length === 0) {
-    console.error(`[${TAG}] No open issues found. Nothing to triage.`);
+    log.warn(TAG, 'No open issues found. Nothing to triage.');
     return;
   }
 
-  console.error(`[${TAG}] Found ${issues.length} open issues.`);
+  log.info(TAG, `Found ${issues.length} open issues.`);
 
   // Connect to LanceDB
   const embedder = createEmbedder(config.embedding);
@@ -154,23 +155,21 @@ export async function triageCommand(options: TriageOptions): Promise<void> {
 
   // Retrieve context from LanceDB
   const query = buildSearchQuery(issues);
-  console.error(`[${TAG}] Querying Totem index...`);
+  log.info(TAG, 'Querying Totem index...');
   const context = await retrieveContext(query, store);
   const totalResults = context.specs.length + context.sessions.length;
-  console.error(
-    `[${TAG}] Found: ${context.specs.length} specs, ${context.sessions.length} sessions`,
-  );
+  log.info(TAG, `Found: ${context.specs.length} specs, ${context.sessions.length} sessions`);
 
   // Resolve system prompt (allow .totem/prompts/triage.md override)
   const systemPrompt = getSystemPrompt('triage', SYSTEM_PROMPT, cwd, config.totemDir);
 
   // Assemble prompt
   const prompt = assemblePrompt(issues, context, systemPrompt);
-  console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
+  log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });
   if (content != null) {
     writeOutput(content, options.out);
-    if (options.out) console.error(`[${TAG}] Written to ${options.out}`);
+    if (options.out) log.success(TAG, `Written to ${options.out}`);
   }
 }

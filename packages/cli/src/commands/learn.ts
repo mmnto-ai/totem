@@ -7,6 +7,7 @@ import { createEmbedder, LanceStore, runSync } from '@mmnto/totem';
 
 import { GitHubCliPrAdapter } from '../adapters/github-cli-pr.js';
 import type { StandardPr, StandardReviewComment } from '../adapters/pr-adapter.js';
+import { log, warn as warnColor } from '../ui.js';
 import {
   formatResults,
   getSystemPrompt,
@@ -306,9 +307,9 @@ export async function learnCommand(prNumbers: string[], options: LearnOptions): 
   const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
   await store.connect();
 
-  console.error(`[${TAG}] Querying existing lessons for dedup...`);
+  log.info(TAG, 'Querying existing lessons for dedup...');
   const existingLessons = await retrieveExistingLessons(store);
-  console.error(`[${TAG}] Found ${existingLessons.length} existing lessons for context`);
+  log.info(TAG, `Found ${existingLessons.length} existing lessons for context`);
 
   // Resolve system prompt (allow .totem/prompts/learn.md override)
   const systemPrompt = getSystemPrompt('learn', SYSTEM_PROMPT, cwd, config.totemDir);
@@ -319,14 +320,14 @@ export async function learnCommand(prNumbers: string[], options: LearnOptions): 
 
   for (const num of nums) {
     // Fetch PR data
-    console.error(`[${TAG}] Fetching PR #${num}...`);
+    log.info(TAG, `Fetching PR #${num}...`);
     const pr = adapter.fetchPr(num);
-    console.error(`[${TAG}] Title: ${pr.title}`);
+    log.info(TAG, `Title: ${pr.title}`);
 
     // Fetch inline review comments
-    console.error(`[${TAG}] Fetching review comments...`);
+    log.info(TAG, 'Fetching review comments...');
     const reviewComments = adapter.fetchReviewComments(num);
-    console.error(`[${TAG}] Found ${reviewComments.length} inline review comments`);
+    log.info(TAG, `Found ${reviewComments.length} inline review comments`);
 
     // Filter GCA boilerplate from inline comments
     const filteredComments = reviewComments.filter((c) => !isGcaBoilerplate(c.body));
@@ -338,17 +339,17 @@ export async function learnCommand(prNumbers: string[], options: LearnOptions): 
       filteredComments.length > 0;
 
     if (!hasReviewContent) {
-      console.error(`[${TAG}] No review content found in PR #${num}. Skipping.`);
+      log.dim(TAG, `No review content found in PR #${num}. Skipping.`);
       continue;
     }
 
     // Group inline comments into threads
     const threads = groupIntoThreads(filteredComments);
-    console.error(`[${TAG}] Grouped into ${threads.length} review threads`);
+    log.info(TAG, `Grouped into ${threads.length} review threads`);
 
     // Assemble prompt
     const prompt = assemblePrompt(pr, threads, existingLessons, systemPrompt);
-    console.error(`[${TAG}] Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
+    log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
     // Run orchestrator (handles --raw mode, validation, invocation, telemetry)
     const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd });
@@ -358,9 +359,9 @@ export async function learnCommand(prNumbers: string[], options: LearnOptions): 
     const lessons = parseLessons(content);
 
     if (lessons.length === 0) {
-      console.error(`[${TAG}] No lessons extracted from PR #${num}.`);
+      log.dim(TAG, `No lessons extracted from PR #${num}.`);
     } else {
-      console.error(`[${TAG}] Extracted ${lessons.length} lesson(s) from PR #${num}`);
+      log.success(TAG, `Extracted ${lessons.length} lesson(s) from PR #${num}`);
       allLessons.push(...lessons);
     }
   }
@@ -369,18 +370,21 @@ export async function learnCommand(prNumbers: string[], options: LearnOptions): 
   if (options.raw) return;
 
   if (allLessons.length === 0) {
-    console.error(`[${TAG}] No lessons extracted from any PR.`);
+    log.dim(TAG, 'No lessons extracted from any PR.');
     return;
   }
 
-  console.error(`[${TAG}] Total: ${allLessons.length} lesson(s) from ${nums.length} PR(s)`);
+  log.success(TAG, `Total: ${allLessons.length} lesson(s) from ${nums.length} PR(s)`);
 
   // Display extracted lessons for review
   console.error('');
-  console.error(
-    `[${TAG}] ⚠ WARNING: These lessons were extracted from PR comments, which may include content from untrusted contributors.`,
+  log.warn(
+    TAG,
+    warnColor(
+      'WARNING: These lessons were extracted from PR comments, which may include content from untrusted contributors.',
+    ),
   );
-  console.error(`[${TAG}] Review each lesson carefully before accepting.\n`);
+  log.warn(TAG, 'Review each lesson carefully before accepting.\n');
 
   for (let i = 0; i < allLessons.length; i++) {
     const lesson = allLessons[i]!;
@@ -391,7 +395,7 @@ export async function learnCommand(prNumbers: string[], options: LearnOptions): 
 
   // --dry-run mode: preview lessons to stdout (pipeable) without writing
   if (options.dryRun) {
-    console.error(`[${TAG}] Dry run — lessons not written.`);
+    log.dim(TAG, 'Dry run — lessons not written.');
     for (const lesson of allLessons) {
       console.log(`\n  Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`);
       console.log(`  ${sanitize(lesson.text).replace(/\n/g, '\n  ')}`);
@@ -405,7 +409,7 @@ export async function learnCommand(prNumbers: string[], options: LearnOptions): 
     isTTY: !!process.stdin.isTTY,
   });
   if (!confirmed) {
-    console.error(`[${TAG}] Aborted — no lessons written.`);
+    log.dim(TAG, 'Aborted — no lessons written.');
     return;
   }
 
@@ -418,19 +422,18 @@ export async function learnCommand(prNumbers: string[], options: LearnOptions): 
   // Append lessons to .totem/lessons.md
   const lessonsPath = path.join(cwd, config.totemDir, 'lessons.md');
   appendLessons(sanitizedLessons, lessonsPath);
-  console.error(
-    `[${TAG}] Appended ${allLessons.length} lesson(s) to ${config.totemDir}/lessons.md`,
-  );
+  log.success(TAG, `Appended ${allLessons.length} lesson(s) to ${config.totemDir}/lessons.md`);
 
   // Run incremental sync so lessons are immediately searchable
-  console.error(`[${TAG}] Running incremental sync...`);
+  log.info(TAG, 'Running incremental sync...');
   const syncResult = await runSync(config, {
     projectRoot: cwd,
     incremental: true,
-    onProgress: (msg) => console.error(`[${TAG}] ${msg}`),
+    onProgress: (msg) => log.dim(TAG, msg),
   });
-  console.error(
-    `[${TAG}] Sync complete: ${syncResult.chunksProcessed} chunks from ${syncResult.filesProcessed} files`,
+  log.success(
+    TAG,
+    `Sync complete: ${syncResult.chunksProcessed} chunks from ${syncResult.filesProcessed} files`,
   );
 
   // Print summary
