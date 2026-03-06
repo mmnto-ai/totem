@@ -224,9 +224,6 @@ export function appendLessons(lessons: ExtractedLesson[], lessonsPath: string): 
   fs.appendFileSync(lessonsPath, entries, 'utf-8');
 }
 
-// sanitize is imported from ../utils.js and re-exported for test compatibility
-export { sanitize };
-
 // ─── Confirmation gate ──────────────────────────────────
 
 /**
