@@ -1,18 +1,17 @@
 # Active Work
 
-## Current Focus: UX Polish & Ecosystem Expansion
+## Current Focus: v0.8.0 Release
 
-**v0.7.0 published** — Phase 2 refactor + security hardening complete (118 tests passing).
+**v0.7.0 published** — Phase 2 refactor + security hardening complete (132 tests passing).
 
-Security hardening is done: terminal sanitization (#116), learn confirmation (#115), stale LanceDB handles (#106), embedder backoff (#105), streaming sync (#104).
+### Recently Merged
 
-### Active Tasks
+- **PR #133** — Custom prompt overrides (#120) + multi-arg spec/learn (#117)
+- **PR #134** — Recovered roadmap/strategy docs
 
-1. **PR #118** — Stability hardening batch (#116, #106, #105, #104).
+### In Progress
 
-### Open PRs
-
-- **#118** — `feat: stability hardening — sanitize, retry, backoff, streaming` (branch: `feat/stability-hardening`)
+- **#21 CLI UI/UX Polish** — Branded colors (picocolors), ora spinners, ASCII banner (branch: `feat/cli-ux-polish`)
 
 ## Dogfooding: Session Start Hooks
 
@@ -76,9 +75,8 @@ Add a `hooks` section alongside existing MCP server config:
 
 ## Next Up
 
-1. **#107 MCP progress events** for background sync visibility
-2. **#108 Clean up orphaned temp files**
-3. **#109 Condense context payloads** for fast-boot commands
-4. **Epic #86 Seamless Host Integration** (Gemini/Claude extensions)
-5. **#21 CLI UI/UX Polish** (adding `@clack/prompts` and spinners)
-6. **#12 Cross-platform onboarding** (Windows/macOS docs)
+1. **Publish v0.8.0** after #21 merges
+2. **Epic #86 Seamless Host Integration** (Gemini/Claude extensions)
+3. **#12 Cross-platform onboarding** (Windows/macOS docs)
+4. **#107 MCP progress events** for background sync visibility
+5. **#126 Epic: Gamification** (streak tracking, achievement badges)
