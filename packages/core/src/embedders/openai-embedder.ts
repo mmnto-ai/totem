@@ -64,6 +64,7 @@ export class OpenAIEmbedder implements Embedder {
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
-    throw lastErr;
+    const message = lastErr instanceof Error ? lastErr.message : String(lastErr);
+    throw new Error(`[Totem Error] OpenAI embedding failed after ${MAX_RETRIES + 1} attempts: ${message}`);
   }
 }

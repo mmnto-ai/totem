@@ -73,13 +73,14 @@ export function registerSearchKnowledge(server: McpServer): void {
           const originalMessage =
             originalErr instanceof Error ? originalErr.message : String(originalErr);
           const retryMessage = retryErr instanceof Error ? retryErr.message : String(retryErr);
+
+          const text =
+            originalMessage === retryMessage
+              ? `[Totem Error] Search failed: ${originalMessage}`
+              : `[Totem Error] Search failed. Initial error: ${originalMessage}. Retry after reconnect also failed: ${retryMessage}`;
+
           return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `[Totem Error] Search failed. Initial error: ${originalMessage}. Retry after reconnect also failed: ${retryMessage}`,
-              },
-            ],
+            content: [{ type: 'text' as const, text }],
             isError: true,
           };
         }
