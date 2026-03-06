@@ -31,12 +31,16 @@ export class MarkdownChunker implements Chunker {
     const chunks: Chunk[] = [];
     const lines = content.split('\n');
 
-    let currentHeading: string | null = null;
+    // Heading breadcrumb stack: index = depth-1, value = heading text.
+    // When we encounter a heading of depth N, we set that slot and truncate deeper levels.
+    const breadcrumbs: string[] = [];
     let sectionNodes: Content[] = [];
     let sectionStartLine = 1;
 
+    const getBreadcrumb = (): string => breadcrumbs.filter(Boolean).join(' > ');
+
     const flush = () => {
-      if (sectionNodes.length === 0 && !currentHeading) return;
+      if (sectionNodes.length === 0 && breadcrumbs.filter(Boolean).length === 0) return;
 
       const sectionText = sectionNodes
         .map((n) => nodeToSourceText(n, lines))
@@ -45,7 +49,7 @@ export class MarkdownChunker implements Chunker {
 
       if (!sectionText.trim()) return;
 
-      const label = currentHeading ?? filePath;
+      const label = getBreadcrumb() || filePath;
       const contextPrefix = `File: ${filePath} | Section: ${label}`;
       const endLine =
         sectionNodes.length > 0
@@ -74,7 +78,9 @@ export class MarkdownChunker implements Chunker {
         // Only split on headings up to depth 3
         if (h.depth <= MAX_SPLIT_DEPTH) {
           flush();
-          currentHeading = extractPlainText(h.children);
+          const text = extractPlainText(h.children);
+          breadcrumbs[h.depth - 1] = text;
+          breadcrumbs.length = h.depth; // truncate deeper levels
           sectionNodes = [];
           sectionStartLine = h.position?.start.line ?? 1;
           continue;
