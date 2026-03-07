@@ -1,34 +1,49 @@
 ### Active Work Summary
 
-The project is currently focused on "Phase 2: Core Stability & Data Safety," prioritizing the robustness of LLM prompts and the local vector index before expanding to enterprise data ingestion. Recent momentum centers on stabilizing CLI orchestration, refining background sync mechanisms, and ensuring secure context delivery to the AI.
+Totem is currently in a Developer Preview / Early Alpha state, with the immediate strategic focus centered on "Phase 1: The 'Magic' Onboarding & Polish." The primary goal is to ensure users can easily install, configure, and trust the system before the project shifts focus to advanced workflow expansions or enterprise features like federated memory and multi-language support.
 
 ### Prioritized Roadmap
 
-**Do Next (Core Stability & Security)**
+**Do Next (Phase 1: Onboarding & Polish)**
 
-1. #180 — Feature: Shield GitHub Action — (This is our #1 priority for workflow lock-in).
-2. #121 — bug: LanceDB `deleteByFile` edge cases causing silent incremental sync failures — Data integrity prerequisite for trustworthy CI enforcement.
-3. #122 — test: Backfill unit and integration tests for `@mmnto/totem` core database and chunking logic — Ensures core pipeline stability.
+- **#187** — RFC: Minimum Viable Configuration (MVC) — tiered setup for different user profiles — _Critical first step to reduce installation friction and establish a baseline user experience._
+- **#128** — Epic: Ship "Universal Lessons" baseline during `totem init` — _Provides immediate, tangible value the moment a user completes installation._
+- **#129** — Epic: Interactive CLI Tutorial & Conversational Onboarding — _Guides users through the initial learning curve to build trust in the tool._
+- **#12** — Cross-platform onboarding: support Windows (PowerShell) & macOS in all docs — _Ensures the onboarding process is seamless regardless of the user's operating system._
+- **#108** — UX: Clean up orphaned temporary prompt files — _Essential DX polish to prevent workspace clutter during initial evaluations._
 
-**Up Next (Workflow & CLI Enhancements)**
+**Up Next (Core Workflows & Usability)**
 
-4. #168 — UX: Interactive multi-select pruning for `totem extract` — Allows human-in-the-loop filtering of AI-extracted lessons.
-5. #126 — Epic: Invisible Orchestration & Auto-Triggering (The 'Init and Forget' Protocol) — Core to the project's foundational vision of automated workflows.
+- **#126** — Epic: Invisible Orchestration & Auto-Triggering (The 'Init and Forget' Protocol) — _Automates the core value loop once the user is successfully onboarded._
+- **#178** — Epic: Clipboard/Export UI for "Freemium Hoppers" — _Broadens accessibility for users who aren't ready to fully integrate MCP or local agents._
+- **#110** — Enhancement: Make markdown chunker MAX*SPLIT_DEPTH configurable — \_A straightforward core configurability win.*
+- **#179** — Epic: Markdown/Document-Only Mode — _Expands the addressable market to non-code use cases._
 
-**Backlog (Phase 3: Power User Tools & Observability)**
+**Backlog (Phase 3 & 5: Advanced, Enterprise, & Scaling)**
 
-6. #119 — Epic: Custom Workflow Runner (`totem run <workflow>`) — Key Phase 3 goal for workflow expansion.
-7. #130 — Epic: Database Observability & Management (`totem inspect`) — Key Phase 3 goal to visualize index health and build trust.
+- **#181** — Feature: Drift Detection (Self-Cleaning Memory) — _Advanced core feature for long-term state management._
+- **#183** — RFC: Cross-File Knowledge Graph (Symbol Resolution) — _Complex architectural enhancement for deeper context._
+- **#182** — RFC: Tree-sitter Multi-Language Support (Python/Rust) — _Slated for Phase 5 Enterprise Expansion._
+- **#123** — Epic: Federated Memory (Mothership Pattern) — _Slated for Phase 5 Enterprise Expansion._
+- **#175** — Epic: Multiplayer Cache Syncing — _Depends on the completion of earlier federated architecture._
 
 ### Next Issue (User Story & Scope)
 
-**#180 — Feature: Shield GitHub Action**
+**#187 — RFC: Minimum Viable Configuration (MVC) — tiered setup for different user profiles**
 
-- **User Story:** As an engineering lead, I want the `totem shield` command to run automatically in CI/CD against pull requests, so that any code changes that violate our local architectural constraints and lessons are automatically blocked from merging.
-- **Scope Boundaries:** Create a standalone GitHub Action (`action.yml`) that can be used in any repository. The action should execute `totem shield` on the PR diff, and if a violation occurs, post a blocking comment on the PR indicating the specific lesson violated with a non-zero exit code.
-- **Why Next:** This is our #1 priority for workflow lock-in. Ensuring that architectural constraints stored in local memory are strictly enforced at the PR level provides immediate, tangible value for teams adopting Totem.
+**User Story:** As a new user evaluating Totem, I want to initialize the system with a minimal, sensible default configuration so that I can immediately experience its core value without getting bogged down in complex setup decisions.
+
+**Scope Boundaries:**
+
+- **DO:** Define the exact configuration tiers (e.g., Zero-Config, Advanced, Enterprise).
+- **DO:** Specify the default values for the baseline MVC setup.
+- **DO:** Outline the user prompts/decisions required during `totem init`.
+- **DO NOT:** Write the implementation code for the setup wizard.
+- **DO NOT:** Modify existing configuration schemas until the RFC is approved.
+
+**Why Next:** The roadmap explicitly dictates that Phase 1 must solve installation friction and build user trust. We cannot successfully build interactive tutorials (#129) or ship baseline lessons (#128) until we have defined the minimum viable configuration state the user is starting from.
 
 ### Blocked / Needs Input
 
-- **#4** — Validate OpenAI Embedding Provider (Happy Path) (P1, blocked)
-- **#8** — Validate dogfood sync with OpenAI embeddings (P1, blocked)
+- **#4** — Validate OpenAI Embedding Provider (Happy Path) — _Marked as Blocked (P1)._
+- **#8** — Validate dogfood sync with OpenAI embeddings — _Marked as Blocked (P1)._

@@ -472,3 +472,27 @@ Avoid using generic line-matching patterns (like `line.startsWith('(')`) when sc
 **Tags:** typescript, trap, json
 
 Always combine `typeof val === 'object'` with a truthiness check (`val && ...`) when traversing untyped JSON or `unknown` structures. Since `typeof null` returns `'object'`, omitting the null check will lead to runtime crashes when attempting to access properties on a null value.
+
+## Lesson — 2026-03-07T21:45:57.754Z
+
+**Tags:** github-actions, security, trap
+
+Use intermediate environment variables to map GitHub Action `inputs` before using them in `run` steps. Directly expanding `${{ inputs.key }}` in shell scripts creates high-severity command injection vulnerabilities by allowing untrusted input to be executed as code.
+
+## Lesson — 2026-03-07T21:45:57.754Z
+
+**Tags:** shell, security, trap
+
+Always quote shell variables when passing them as arguments to commands to prevent word-splitting and argument injection. Unquoted variables allow malicious inputs to break command logic or inject arbitrary CLI flags.
+
+## Lesson — 2026-03-07T21:45:57.754Z
+
+**Tags:** cli, security, terminal-injection, trap
+
+Sanitize text derived from untrusted sources (like LLM outputs or PR comments) before displaying it in interactive CLI components. Malicious ANSI escape sequences in the text can lead to terminal injection, compromising the user's terminal session.
+
+## Lesson — 2026-03-07T21:45:57.754Z
+
+**Tags:** cli, ux, ci
+
+Wrap interactive-only previews and manual review warnings inside a conditional check for non-automated/interactive modes. This keeps CI logs clean and avoids printing redundant noise that cannot be acted upon in non-interactive environments.

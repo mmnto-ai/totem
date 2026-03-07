@@ -18,10 +18,17 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 - `totem init` / `totem eject`: Scaffolds or safely removes `totem.config.ts`, git hooks, and AI memory reflexes.
 - `totem sync`: Crawls target directories defined in `totem.config.ts`, chunks, embeds, and updates the LanceDB index.
 - `totem search`: Direct debug query interface.
-- `totem spec` / `totem shield`: Standardized workflow orchestration commands.
+- `totem spec` / `totem shield` / `totem triage`: Standardized workflow orchestration commands (spec planning, pre-push review, issue prioritization).
+- `totem briefing` / `totem handoff`: Session start/end context snapshots.
+- `totem extract`: Batch lesson extraction from PR review threads with interactive multi-select curation.
+- `totem add-lesson`: Inline lesson capture (also exposed as MCP tool `add_lesson`).
 - `totem bridge` / `totem wrap`: Mid-session context resets and end-of-task workflow automation.
 
-### 3. The MCP Server (`@mmnto/mcp`)
+### 3. Shield GitHub Action (`action.yml`)
+
+A composite GitHub Action that runs `totem sync` + `totem shield` as a pass/fail CI quality gate on pull requests. Gate-only (no PR commenting) — complements conversational review bots like Gemini Code Assist.
+
+### 4. The MCP Server (`@mmnto/mcp`)
 
 A stdio-based server for LLM integration. Provides two tools:
 
