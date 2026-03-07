@@ -1,5 +1,17 @@
 # @mmnto/mcp
 
+## 0.11.0
+
+### Minor Changes
+
+- Await sync in `add_lesson` with 60s timeout, output cap, and process tree kill
+- `search_knowledge` appends `<totem_system_warning>` when payload exceeds `contextWarningThreshold`
+
+### Patch Changes
+
+- Updated dependencies
+  - @mmnto/totem@0.11.0
+
 ## 0.10.0
 
 ### Patch Changes

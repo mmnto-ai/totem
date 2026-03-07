@@ -1,5 +1,19 @@
 # @mmnto/cli
 
+## 0.11.0
+
+### Minor Changes
+
+- Await sync in `add_lesson` with timeout for definitive success/failure confirmation
+- Configurable `contextWarningThreshold` with system warnings on large payloads
+- Condensed context for fast-boot commands (`briefing`, `triage`)
+- Context Management Guardrail injected via `totem init` reflex templates
+
+### Patch Changes
+
+- Updated dependencies
+  - @mmnto/totem@0.11.0
+
 ## 0.10.0
 
 ### Patch Changes

@@ -406,3 +406,27 @@ Use the `.cjs` extension for utility scripts and host integration hooks in ESM-f
 **Tags:** architecture, configuration, integration, trap
 
 Always verify the specific object schema required by host tools (like Claude Code's `{type: "command", command: "..."}`) instead of assuming a primitive string format. Mismatched configuration schemas often fail silently, leading to broken integrations that are difficult to debug.
+
+## Lesson — 2026-03-07T00:44:37.037Z
+
+**Tags:** observability, llm-ux, sync
+
+Always await side-effect operations like indexing during tool execution to provide the LLM with definitive success or failure confirmation. Fire-and-forget patterns prevent the model from identifying state failures, leading to hallucinations about persisted knowledge.
+
+## Lesson — 2026-03-07T00:44:37.037Z
+
+**Tags:** context-management, observability, guardrail
+
+Implement a `contextWarningThreshold` to append a system warning block when tool payloads exceed safe token limits (e.g., 40k chars). This prompts agents to proactively suggest context hygiene maneuvers, such as bridging, before hitting hard window constraints.
+
+## Lesson — 2026-03-07T00:44:37.037Z
+
+**Tags:** token-optimization, ux, discovery
+
+Differentiate context verbosity by using truncated snippets for high-frequency discovery commands (like `briefing`) and full content for deep-analysis commands (like `spec`). This balances token efficiency during exploration with the need for high-fidelity data during execution.
+
+## Lesson — 2026-03-07T00:44:37.037Z
+
+**Tags:** reliability, agent-ux, automation
+
+Call internal scripts directly within agent-facing tools rather than relying on shell aliases or complex wrappers. Direct execution reduces the surface area for environment-specific failures and ensures reliable operation in automated workflows.

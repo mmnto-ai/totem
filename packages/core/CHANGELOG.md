@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 0.11.0
+
+### Minor Changes
+
+- Configurable `contextWarningThreshold` in `TotemConfigSchema` (default: 40,000 chars)
+
 ## 0.10.0
 
 ### Minor Changes
