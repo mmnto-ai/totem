@@ -197,8 +197,13 @@ function deleteArtifacts(cwd: string, summary: EjectSummary): void {
   for (const dir of artifacts) {
     const dirPath = path.join(cwd, dir);
     if (fs.existsSync(dirPath)) {
-      fs.rmSync(dirPath, { recursive: true, force: true });
-      summary.removed.push(`${dir}/`);
+      try {
+        fs.rmSync(dirPath, { recursive: true, force: true });
+        summary.removed.push(`${dir}/`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        summary.skipped.push(`${dir}/ (could not delete: ${msg})`);
+      }
     } else {
       summary.skipped.push(`${dir}/ (not found)`);
     }
@@ -265,6 +270,12 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
     log.info(TAG, 'Scrubbed (Totem content removed, file preserved):');
     for (const item of summary.scrubbed) {
       log.success(TAG, `  ${item}`);
+    }
+  }
+  if (summary.skipped.length > 0) {
+    log.dim(TAG, 'Skipped:');
+    for (const item of summary.skipped) {
+      log.dim(TAG, `  ${item}`);
     }
   }
   if (summary.removed.length === 0 && summary.scrubbed.length === 0) {
