@@ -209,25 +209,28 @@ pnpm dev                  # Watch mode
 
 ## Implementation Phases
 
-### Phases 1–3: Complete
+Phase numbering follows `docs/roadmap.md` (the canonical source of truth).
+
+### Foundations + Phase 1 (Onboarding) + Phase 2 (Core Stability): Complete
 
 - Turborepo monorepo with three packages (core, cli, mcp)
 - Syntax-aware chunkers (TypeScript AST, Markdown headings, session logs, schema files, test files)
 - `totem sync` (full + incremental), OpenAI and Ollama providers
 - MCP server with `search_knowledge` and `add_lesson`
 - CLI orchestrator commands: `spec`, `shield`, `triage`, `briefing`, `handoff`, `extract`, `bridge`, `wrap`, `eject`
+- Shield GitHub Action for CI/CD enforcement (#180)
+- Interactive multi-select for `totem extract` (#168)
+- CLI command renames: `learn` → `extract`, remove `anchor` alias (#185)
 - Published on npm, dogfooded in satur8d
 
-### Phase 4: Polish & Defensibility (current)
+### Phase 3: Workflow Expansion (current)
 
-- ~~Shield GitHub Action for CI/CD enforcement (#180)~~ — done (v0.13.0)
-- ~~Interactive multi-select for `totem extract` (#168)~~ — done (v0.13.0)
-- ~~CLI command renames: `learn` → `extract`, remove `anchor` alias (#185)~~ — done (v0.13.0)
 - Minimum Viable Configuration tiers (#187)
+- Automated doc sync (#190)
 - Drift Detection for self-cleaning memory (#181)
 - See `docs/roadmap.md` and `docs/active_work.md` for full priority list
 
-### Phase 5 (Future): Enterprise Expansion
+### Phase 4 (Future): Enterprise Expansion
 
 - Federated Memory / Mothership Pattern (#123)
 - Tree-sitter multi-language chunking (#182)
