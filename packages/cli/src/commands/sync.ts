@@ -1,7 +1,7 @@
 import { runSync } from '@mmnto/totem';
 
 import { createSpinner } from '../ui.js';
-import { loadConfig, loadEnv, resolveConfigPath } from '../utils.js';
+import { loadConfig, loadEnv, requireEmbedding, resolveConfigPath } from '../utils.js';
 
 const TAG = 'Sync';
 
@@ -12,6 +12,7 @@ export async function syncCommand(options: { full?: boolean }): Promise<void> {
   loadEnv(cwd);
 
   const config = await loadConfig(configPath);
+  requireEmbedding(config);
   const incremental = !options.full;
 
   const spinner = await createSpinner(

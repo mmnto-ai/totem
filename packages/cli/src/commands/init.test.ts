@@ -4,7 +4,14 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { buildNpxCommand, scaffoldClaudeHooks, scaffoldFile, scaffoldMcpConfig } from './init.js';
+import {
+  buildNpxCommand,
+  detectEmbeddingTier,
+  generateConfig,
+  scaffoldClaudeHooks,
+  scaffoldFile,
+  scaffoldMcpConfig,
+} from './init.js';
 
 const SERVER_ENTRY = { type: 'stdio', command: 'npx', args: ['-y', '@mmnto/mcp'] };
 
@@ -421,5 +428,85 @@ describe('Gemini hook scaffolding', () => {
       '// [totem] auto-generated\ntest\n',
     );
     expect(result).toEqual({ action: 'skipped' });
+  });
+});
+
+describe('detectEmbeddingTier', () => {
+  let tmpDir: string;
+  const SAVED_KEY = process.env['OPENAI_API_KEY'];
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-detect-'));
+    delete process.env['OPENAI_API_KEY'];
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    if (SAVED_KEY !== undefined) {
+      process.env['OPENAI_API_KEY'] = SAVED_KEY;
+    } else {
+      delete process.env['OPENAI_API_KEY'];
+    }
+  });
+
+  it('returns openai when OPENAI_API_KEY is in env', () => {
+    process.env['OPENAI_API_KEY'] = 'sk-test123';
+    expect(detectEmbeddingTier(tmpDir)).toBe('openai');
+  });
+
+  it('returns openai when OPENAI_API_KEY is in .env file', () => {
+    fs.writeFileSync(path.join(tmpDir, '.env'), 'OPENAI_API_KEY=sk-test456\n', 'utf-8');
+    expect(detectEmbeddingTier(tmpDir)).toBe('openai');
+  });
+
+  it('returns none when no API key is available', () => {
+    expect(detectEmbeddingTier(tmpDir)).toBe('none');
+  });
+
+  it('returns none when .env exists but has no API key', () => {
+    fs.writeFileSync(path.join(tmpDir, '.env'), 'OTHER_VAR=value\n', 'utf-8');
+    expect(detectEmbeddingTier(tmpDir)).toBe('none');
+  });
+
+  it('returns none when OPENAI_API_KEY is empty in .env', () => {
+    fs.writeFileSync(path.join(tmpDir, '.env'), 'OPENAI_API_KEY=\n', 'utf-8');
+    expect(detectEmbeddingTier(tmpDir)).toBe('none');
+  });
+
+  it('returns none when OPENAI_API_KEY is whitespace-only in .env', () => {
+    fs.writeFileSync(path.join(tmpDir, '.env'), 'OPENAI_API_KEY=   \n', 'utf-8');
+    expect(detectEmbeddingTier(tmpDir)).toBe('none');
+  });
+});
+
+describe('generateConfig', () => {
+  const targets = [
+    { glob: 'src/**/*.ts', type: 'code' as const, strategy: 'typescript-ast' as const },
+  ];
+
+  it('generates config with openai embedding', () => {
+    const config = generateConfig(targets, 'openai');
+    expect(config).toContain("provider: 'openai'");
+    expect(config).toContain('text-embedding-3-small');
+    expect(config).not.toContain('// embedding:');
+  });
+
+  it('generates config with ollama embedding', () => {
+    const config = generateConfig(targets, 'ollama');
+    expect(config).toContain("provider: 'ollama'");
+    expect(config).toContain('nomic-embed-text');
+  });
+
+  it('generates Lite config with commented-out embedding', () => {
+    const config = generateConfig(targets, 'none');
+    expect(config).toContain('// embedding:');
+    expect(config).toContain('Lite tier');
+  });
+
+  it('always includes orchestrator block', () => {
+    for (const tier of ['openai', 'ollama', 'none'] as const) {
+      const config = generateConfig(targets, tier);
+      expect(config).toContain("provider: 'shell'");
+    }
   });
 });

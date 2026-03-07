@@ -56,12 +56,15 @@ export const ShellOrchestratorSchema = z.object({
 
 export const OrchestratorSchema = z.discriminatedUnion('provider', [ShellOrchestratorSchema]);
 
+export const ConfigTierSchema = z.enum(['lite', 'standard', 'full']);
+export type ConfigTier = z.infer<typeof ConfigTierSchema>;
+
 export const TotemConfigSchema = z.object({
   /** Glob patterns and chunking strategies for each ingest target */
   targets: z.array(IngestTargetSchema).min(1),
 
-  /** Embedding provider configuration */
-  embedding: EmbeddingProviderSchema,
+  /** Embedding provider configuration (optional for Lite tier) */
+  embedding: EmbeddingProviderSchema.optional(),
 
   /** Optional: LLM orchestrator for spec/triage/shield commands */
   orchestrator: OrchestratorSchema.optional(),
@@ -85,3 +88,30 @@ export type IngestTarget = z.infer<typeof IngestTargetSchema>;
 export type EmbeddingProvider = z.infer<typeof EmbeddingProviderSchema>;
 export type Orchestrator = z.infer<typeof OrchestratorSchema>;
 export type TotemConfig = z.infer<typeof TotemConfigSchema>;
+
+/**
+ * Determine the configuration tier based on what's configured.
+ * - lite: no embedding, no orchestrator (memory-only features)
+ * - standard: embedding configured (sync, search, stats)
+ * - full: embedding + orchestrator (all commands)
+ */
+export function getConfigTier(config: TotemConfig): ConfigTier {
+  if (!config.embedding) return 'lite';
+  if (!config.orchestrator) return 'standard';
+  return 'full';
+}
+
+/**
+ * Assert that an embedding provider is configured. Throws a friendly error
+ * directing the user to configure one via `totem init` or `totem.config.ts`.
+ */
+export function requireEmbedding(config: TotemConfig): EmbeddingProvider {
+  if (!config.embedding) {
+    throw new Error(
+      `[Totem Error] No embedding provider configured.\n` +
+        `This command requires embeddings (Lite tier does not support it).\n` +
+        `Set OPENAI_API_KEY in your .env and re-run \`totem init\`, or add an 'embedding' block to totem.config.ts.`,
+    );
+  }
+  return config.embedding;
+}

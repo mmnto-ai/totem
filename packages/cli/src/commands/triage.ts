@@ -11,6 +11,7 @@ import {
   getSystemPrompt,
   loadConfig,
   loadEnv,
+  requireEmbedding,
   resolveConfigPath,
   runOrchestrator,
   wrapXml,
@@ -149,7 +150,8 @@ export async function triageCommand(options: TriageOptions): Promise<void> {
   log.info(TAG, `Found ${issues.length} open issues.`);
 
   // Connect to LanceDB
-  const embedder = createEmbedder(config.embedding);
+  const embedding = requireEmbedding(config);
+  const embedder = createEmbedder(embedding);
   const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
   await store.connect();
 

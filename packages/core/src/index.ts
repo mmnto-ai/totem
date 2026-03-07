@@ -1,6 +1,7 @@
 // Config schemas
 export type {
   ChunkStrategy,
+  ConfigTier,
   ContentType,
   EmbeddingProvider,
   IngestTarget,
@@ -9,10 +10,13 @@ export type {
 } from './config-schema.js';
 export {
   ChunkStrategySchema,
+  ConfigTierSchema,
   ContentTypeSchema,
   DEFAULT_IGNORE_PATTERNS,
   EmbeddingProviderSchema,
+  getConfigTier,
   IngestTargetSchema,
+  requireEmbedding,
   OllamaProviderSchema,
   OpenAIProviderSchema,
   OrchestratorSchema,

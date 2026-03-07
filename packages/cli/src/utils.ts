@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import { z } from 'zod';
 
 import type { SearchResult, TotemConfig } from '@mmnto/totem';
-import { TotemConfigSchema } from '@mmnto/totem';
+import { requireEmbedding, TotemConfigSchema } from '@mmnto/totem';
 
 import { bold, log } from './ui.js';
 
@@ -64,6 +64,9 @@ export function resolveConfigPath(cwd: string): string {
   }
   return configPath;
 }
+
+// Re-export from core — unified embedding guard (#187)
+export { requireEmbedding } from '@mmnto/totem';
 
 // ─── Telemetry ──────────────────────────────────────────
 

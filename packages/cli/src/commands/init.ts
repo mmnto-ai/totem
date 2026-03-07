@@ -504,11 +504,21 @@ function formatTargets(targets: IngestTarget[]): string {
   return lines.join('\n');
 }
 
-function generateConfig(targets: IngestTarget[], provider: 'openai' | 'ollama'): string {
-  const embeddingBlock =
-    provider === 'openai'
-      ? `  embedding: { provider: 'openai', model: 'text-embedding-3-small' },`
-      : `  embedding: { provider: 'ollama', model: 'nomic-embed-text', baseUrl: 'http://localhost:11434' },`;
+type EmbeddingTier = 'openai' | 'ollama' | 'none';
+
+export function generateConfig(targets: IngestTarget[], embeddingTier: EmbeddingTier): string {
+  let embeddingBlock: string;
+  switch (embeddingTier) {
+    case 'openai':
+      embeddingBlock = `  embedding: { provider: 'openai', model: 'text-embedding-3-small' },`;
+      break;
+    case 'ollama':
+      embeddingBlock = `  embedding: { provider: 'ollama', model: 'nomic-embed-text', baseUrl: 'http://localhost:11434' },`;
+      break;
+    case 'none':
+      embeddingBlock = `  // embedding: { provider: 'openai', model: 'text-embedding-3-small' },\n  // Lite tier — set OPENAI_API_KEY and re-run \`totem init\` to enable sync/search.`;
+      break;
+  }
 
   return `import type { TotemConfig } from '@mmnto/totem';
 
@@ -533,6 +543,24 @@ ${embeddingBlock}
 
 export default config;
 `;
+}
+
+/**
+ * Auto-detect the best embedding tier from the environment.
+ * Checks for API keys in env and .env, and optionally for a running Ollama instance.
+ */
+export function detectEmbeddingTier(cwd: string): EmbeddingTier {
+  // Check env (including already-loaded .env)
+  if (process.env['OPENAI_API_KEY']) return 'openai';
+
+  // Check .env file directly (loadEnv may not have run yet)
+  const envPath = path.join(cwd, '.env');
+  if (fs.existsSync(envPath)) {
+    const content = fs.readFileSync(envPath, 'utf-8');
+    if (/^\s*OPENAI_API_KEY\s*=\s*\S+/m.test(content)) return 'openai';
+  }
+
+  return 'none';
 }
 
 /** Inject reflex block into an AI context file if not already present. */
@@ -585,43 +613,67 @@ export async function initCommand(): Promise<void> {
 
       const targets = buildTargets(detected);
 
-      let provider: 'openai' | 'ollama' = 'openai';
-      const answer = await rl.question(
-        'Enter your OpenAI API key (or press Enter to configure local Ollama later): ',
-      );
+      // Auto-detect embedding tier from environment
+      let embeddingTier = detectEmbeddingTier(cwd);
 
-      const apiKey = answer.trim().replace(/[\r\n]/g, '');
-      if (apiKey) {
-        if (!/^sk-[a-zA-Z0-9_-]+$/.test(apiKey)) {
-          log.warn(
-            'Totem',
-            'API key does not look like a valid OpenAI key (expected sk-...). Skipping.',
-          );
-          provider = 'ollama';
-        } else {
-          const envPath = path.join(cwd, '.env');
-          const envLine = `OPENAI_API_KEY="${apiKey}"\n`;
-
-          if (fs.existsSync(envPath)) {
-            const existing = fs.readFileSync(envPath, 'utf-8');
-            if (!/^\s*OPENAI_API_KEY\s*=/m.test(existing)) {
-              const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
-              fs.appendFileSync(envPath, prefix + envLine);
-            }
-          } else {
-            fs.writeFileSync(envPath, envLine);
-          }
-
-          summary.push({ file: '.env', action: 'Saved OpenAI API key' });
-        }
+      if (embeddingTier === 'openai') {
+        log.info(
+          'Totem',
+          `Detected ${bold('OPENAI_API_KEY')} in environment. Using OpenAI embeddings.`,
+        );
       } else {
-        provider = 'ollama';
-        log.info('Totem', 'Configured for Ollama. Make sure it is running locally.');
+        // No key detected — prompt the user
+        const answer = await rl.question(
+          'Enter your OpenAI API key (or press Enter for Lite tier — no embeddings): ',
+        );
+
+        const apiKey = answer.trim().replace(/[\r\n]/g, '');
+        if (apiKey) {
+          if (!/^sk-[a-zA-Z0-9_-]+$/.test(apiKey)) {
+            log.warn(
+              'Totem',
+              'API key does not look like a valid OpenAI key (expected sk-...). Starting in Lite tier.',
+            );
+          } else {
+            const envPath = path.join(cwd, '.env');
+            const envLine = `OPENAI_API_KEY="${apiKey}"\n`;
+
+            if (fs.existsSync(envPath)) {
+              const existing = fs.readFileSync(envPath, 'utf-8');
+              if (!/^\s*OPENAI_API_KEY\s*=/m.test(existing)) {
+                const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+                fs.appendFileSync(envPath, prefix + envLine);
+              }
+            } else {
+              fs.writeFileSync(envPath, envLine);
+            }
+
+            embeddingTier = 'openai';
+            summary.push({ file: '.env', action: 'Saved OpenAI API key' });
+          }
+        }
       }
 
-      const configContent = generateConfig(targets, provider);
+      if (embeddingTier === 'none') {
+        log.info('Totem', `Starting in ${bold('Lite')} tier (add-lesson, bridge, eject only).`);
+        log.dim(
+          'Totem',
+          'Set OPENAI_API_KEY and re-run `totem init` to unlock sync/search/shield.',
+        );
+      }
+
+      const configContent = generateConfig(targets, embeddingTier);
       fs.writeFileSync(configPath, configContent, 'utf-8');
-      summary.push({ file: 'totem.config.ts', action: 'Created with auto-detected targets' });
+      const tierLabel =
+        embeddingTier === 'none'
+          ? 'Lite'
+          : embeddingTier === 'openai'
+            ? 'Standard'
+            : 'Standard (Ollama)';
+      summary.push({
+        file: 'totem.config.ts',
+        action: `Created with auto-detected targets (${tierLabel} tier)`,
+      });
     } else {
       log.dim('Totem', 'totem.config.ts already exists. Checking reflexes and hooks...');
     }
