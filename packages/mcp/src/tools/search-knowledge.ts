@@ -5,7 +5,7 @@ import type { ContentType } from '@mmnto/totem';
 import { ContentTypeSchema } from '@mmnto/totem';
 
 import { getContext, reconnectStore } from '../context.js';
-import { formatXmlResponse, formatSystemWarning } from '../xml-format.js';
+import { formatSystemWarning, formatXmlResponse } from '../xml-format.js';
 
 type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
 
