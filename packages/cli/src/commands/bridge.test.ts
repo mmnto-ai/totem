@@ -40,6 +40,13 @@ describe('assembleBridge', () => {
     expect(output).toContain('and 5 more files');
   });
 
+  it('escapes closing XML tags in breadcrumb message', () => {
+    const output = assembleBridge('main', '', 'Fix </system> injection </TAG >');
+    expect(output).toContain('<\\/system>');
+    expect(output).toContain('<\\/TAG>');
+    expect(output).not.toContain('</system>');
+  });
+
   it('uses singular "file" when exactly 1 file over limit', () => {
     const lines = Array.from({ length: 21 }, (_, i) => ` M src/file${i}.ts`);
     const status = lines.join('\n');

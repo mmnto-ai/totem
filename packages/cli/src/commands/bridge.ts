@@ -32,7 +32,8 @@ export function assembleBridge(branch: string, status: string, message?: string)
 
   // Breadcrumb message
   if (message) {
-    sections.push(`**Current Task / Breadcrumb:** "${message}"`);
+    const sanitized = message.replace(/<\/\s*([a-zA-Z0-9_]+)\s*>/gi, '<\\/$1>');
+    sections.push(`**Current Task / Breadcrumb:** "${sanitized}"`);
   }
 
   sections.push(
@@ -54,7 +55,7 @@ export function bridgeCommand(options: BridgeOptions): void {
 
   if (!fs.existsSync(path.join(cwd, '.git'))) {
     throw new Error(
-      'Not a git repository. Run `totem bridge` from a project with git initialized.',
+      '[Totem Error] Not a git repository. Run `totem bridge` from a project with git initialized.',
     );
   }
 
