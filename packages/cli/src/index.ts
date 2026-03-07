@@ -229,6 +229,34 @@ program
   );
 
 program
+  .command('eject')
+  .description('Remove all Totem hooks, config, and data from this project')
+  .option('--force', 'Skip confirmation prompt')
+  .action(async (opts: { force?: boolean }) => {
+    try {
+      const { ejectCommand } = await import('./commands/eject.js');
+      await ejectCommand(opts);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
+  .command('wrap <pr-numbers...>')
+  .description('Post-merge workflow: learn from PR(s), sync index, then triage')
+  .option('--model <name>', 'Override the default model for the orchestrator')
+  .option('--fresh', 'Bypass cache and force fresh LLM calls')
+  .option('--yes', 'Skip confirmation prompt for lesson extraction')
+  .action(async (prNumbers: string[], opts: { model?: string; fresh?: boolean; yes?: boolean }) => {
+    try {
+      const { wrapCommand } = await import('./commands/wrap.js');
+      await wrapCommand(prNumbers, opts);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('install-hooks')
   .description('Install post-merge git hook for automatic Totem sync')
   .action(async () => {
