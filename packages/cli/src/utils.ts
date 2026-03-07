@@ -281,15 +281,18 @@ export function formatResults(
   const maxLen = condensed ? CONDENSED_CONTENT_LENGTH : MAX_RESULT_CONTENT_LENGTH;
   const items = results
     .map((r) => {
-      const snippet = r.content.slice(0, maxLen).replace(/\n/g, ' ');
       const ellipsis = r.content.length > maxLen ? '...' : '';
+      const truncated = r.content.slice(0, maxLen);
+
       if (condensed) {
-        const tags = r.filePath;
-        return `- **${r.label}** (${tags}) ${snippet}${ellipsis}`;
+        const snippet = truncated.replace(/\n/g, ' ');
+        return `- **${r.label}** (${r.filePath}) ${snippet}${ellipsis}`;
       }
+
+      const snippet = truncated.replace(/\n/g, '\n  ');
       return (
         `- **${r.label}** (${r.filePath}, score: ${r.score.toFixed(3)})\n  ` +
-        `${r.content.slice(0, maxLen).replace(/\n/g, '\n  ')}${ellipsis}`
+        `${snippet}${ellipsis}`
       );
     })
     .join('\n\n');
