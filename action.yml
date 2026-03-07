@@ -27,8 +27,8 @@ runs:
       env:
         MODEL: ${{ inputs.model }}
       run: |
-        SHIELD_ARGS=""
         if [ -n "$MODEL" ]; then
-          SHIELD_ARGS="--model $MODEL"
+          npx @mmnto/cli shield --model "$MODEL"
+        else
+          npx @mmnto/cli shield
         fi
-        npx @mmnto/cli shield $SHIELD_ARGS
