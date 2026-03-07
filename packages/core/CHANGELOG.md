@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 0.11.0
+
+### Minor Changes
+
+- Observability & context hygiene: await sync in add_lesson with timeout, configurable contextWarningThreshold with system warnings, condensed context for fast-boot commands
+
 ## 0.10.0
 
 ### Minor Changes
