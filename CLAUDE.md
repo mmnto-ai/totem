@@ -218,8 +218,9 @@ Phase numbering follows `docs/roadmap.md` (the canonical source of truth).
 - `totem sync` (full + incremental), OpenAI and Ollama providers
 - MCP server with `search_knowledge` and `add_lesson`
 - CLI orchestrator commands: `spec`, `shield`, `triage`, `briefing`, `handoff`, `extract`, `bridge`, `wrap`, `eject`
-- Shield GitHub Action for CI/CD enforcement (`action.yml`)
-- Interactive multi-select for `totem extract` (@clack/prompts)
+- Shield GitHub Action for CI/CD enforcement (#180)
+- Interactive multi-select for `totem extract` (#168)
+- CLI command renames: `learn` → `extract`, remove `anchor` alias (#185)
 - Published on npm, dogfooded in satur8d
 
 ### Phase 3: Workflow Expansion (current)
