@@ -24,11 +24,11 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 - `totem add-lesson`: Inline lesson capture (also exposed as MCP tool `add_lesson`).
 - `totem bridge` / `totem wrap`: Mid-session context resets and end-of-task workflow automation.
 
-### 4. Shield GitHub Action (`action.yml`)
+### 3. Shield GitHub Action (`action.yml`)
 
 A composite GitHub Action that runs `totem sync` + `totem shield` as a pass/fail CI quality gate on pull requests. Gate-only (no PR commenting) — complements conversational review bots like Gemini Code Assist.
 
-### 3. The MCP Server (`@mmnto/mcp`)
+### 4. The MCP Server (`@mmnto/mcp`)
 
 A stdio-based server for LLM integration. Provides two tools:
 
