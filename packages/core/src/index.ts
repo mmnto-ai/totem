@@ -16,10 +16,10 @@ export {
   EmbeddingProviderSchema,
   getConfigTier,
   IngestTargetSchema,
-  requireEmbedding,
   OllamaProviderSchema,
   OpenAIProviderSchema,
   OrchestratorSchema,
+  requireEmbedding,
   ShellOrchestratorSchema,
   TotemConfigSchema,
 } from './config-schema.js';

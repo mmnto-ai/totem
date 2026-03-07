@@ -2,8 +2,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { createChunker } from '../chunkers/chunker.js';
-import { requireEmbedding } from '../config-schema.js';
 import type { TotemConfig } from '../config-schema.js';
+import { requireEmbedding } from '../config-schema.js';
 import { createEmbedder } from '../embedders/embedder.js';
 import { LanceStore } from '../store/lance-store.js';
 import type { Chunk, SyncOptions, SyncState } from '../types.js';
