@@ -16,7 +16,7 @@ Totem is currently in a Developer Preview / Early Alpha state, with the immediat
 
 - **#126** — Epic: Invisible Orchestration & Auto-Triggering (The 'Init and Forget' Protocol) — _Automates the core value loop once the user is successfully onboarded._
 - **#178** — Epic: Clipboard/Export UI for "Freemium Hoppers" — _Broadens accessibility for users who aren't ready to fully integrate MCP or local agents._
-- **#110** — Enhancement: Make markdown chunker MAX_SPLIT_DEPTH configurable — _A straightforward core configurability win._
+- **#110** — Enhancement: Make markdown chunker MAX*SPLIT_DEPTH configurable — \_A straightforward core configurability win.*
 - **#179** — Epic: Markdown/Document-Only Mode — _Expands the addressable market to non-code use cases._
 
 **Backlog (Phase 3 & 5: Advanced, Enterprise, & Scaling)**
