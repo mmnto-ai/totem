@@ -133,7 +133,12 @@ function scrubClaudeSettings(cwd: string, summary: EjectSummary): void {
     if (entry.matcher !== 'Bash') return true;
     const entryHooks = entry.hooks ?? [];
     return !entryHooks.some((h) => {
-      const cmd = typeof h === 'string' ? h : ((h as { command?: string }).command ?? '');
+      const cmd =
+        typeof h === 'string'
+          ? h
+          : h && typeof h === 'object'
+            ? ((h as { command?: string }).command ?? '')
+            : '';
       return cmd.includes('shield-gate') || cmd.includes('totem shield');
     });
   });
@@ -171,20 +176,20 @@ function scrubReflexFiles(cwd: string, summary: EjectSummary): void {
 
     const content = fs.readFileSync(filePath, 'utf-8');
     // Match the block from the heading to end of file (init always appends at the end)
-    const marker = /\n*## Totem AI Integration \(Auto-Generated\)[\s\S]*$/;
-    if (!marker.test(content)) {
-      // Also check for older marker name
-      const altMarker = /\n*## Totem Memory Reflexes[\s\S]*$/;
-      if (!altMarker.test(content)) {
-        summary.skipped.push(`${rel} (no Totem block)`);
-        continue;
-      }
-      const scrubbed = content.replace(altMarker, '\n');
-      fs.writeFileSync(filePath, scrubbed, 'utf-8');
-    } else {
-      const scrubbed = content.replace(marker, '\n');
-      fs.writeFileSync(filePath, scrubbed, 'utf-8');
+    const primaryMarker = /\n*## Totem AI Integration \(Auto-Generated\)[\s\S]*$/;
+    const altMarker = /\n*## Totem Memory Reflexes[\s\S]*$/;
+    const activeMarker = primaryMarker.test(content)
+      ? primaryMarker
+      : altMarker.test(content)
+        ? altMarker
+        : null;
+
+    if (!activeMarker) {
+      summary.skipped.push(`${rel} (no Totem block)`);
+      continue;
     }
+
+    fs.writeFileSync(filePath, content.replace(activeMarker, '\n'), 'utf-8');
     summary.scrubbed.push(rel);
   }
 }
