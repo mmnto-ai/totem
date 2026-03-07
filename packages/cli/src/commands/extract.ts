@@ -394,21 +394,21 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
     return;
   }
 
-  // Display full text of each lesson for review before prompting
-  console.error('');
   if (!options.yes) {
+    // Display full text of each lesson for review before prompting
+    console.error('');
     log.warn(
       TAG,
       'WARNING: These lessons were extracted from PR comments, which may include content from untrusted contributors.',
     );
     log.warn(TAG, 'Review each lesson carefully before accepting.\n');
-  }
 
-  for (let i = 0; i < allLessons.length; i++) {
-    const lesson = allLessons[i]!;
-    console.error(`  [${i + 1}] Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`);
-    console.error(`      ${sanitize(lesson.text).replace(/\n/g, '\n      ')}`);
-    console.error('');
+    for (let i = 0; i < allLessons.length; i++) {
+      const lesson = allLessons[i]!;
+      console.error(`  [${i + 1}] Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`);
+      console.error(`      ${sanitize(lesson.text).replace(/\n/g, '\n      ')}`);
+      console.error('');
+    }
   }
 
   // Interactive multi-select (or --yes bypass)
