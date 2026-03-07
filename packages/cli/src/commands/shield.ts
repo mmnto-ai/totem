@@ -10,6 +10,7 @@ import {
   getSystemPrompt,
   loadConfig,
   loadEnv,
+  requireEmbedding,
   resolveConfigPath,
   runOrchestrator,
   wrapXml,
@@ -186,7 +187,8 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   log.info(TAG, `Changed files (${changedFiles.length}): ${changedFiles.join(', ')}`);
 
   // Connect to LanceDB
-  const embedder = createEmbedder(config.embedding);
+  const embedding = requireEmbedding(config);
+  const embedder = createEmbedder(embedding);
   const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
   await store.connect();
 

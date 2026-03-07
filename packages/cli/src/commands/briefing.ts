@@ -12,6 +12,7 @@ import {
   getSystemPrompt,
   loadConfig,
   loadEnv,
+  requireEmbedding,
   resolveConfigPath,
   runOrchestrator,
   wrapXml,
@@ -145,7 +146,8 @@ export async function briefingCommand(options: BriefingOptions): Promise<void> {
   log.info(TAG, `Found ${prs.length} open PRs.`);
 
   // Connect to LanceDB
-  const embedder = createEmbedder(config.embedding);
+  const embedding = requireEmbedding(config);
+  const embedder = createEmbedder(embedding);
   const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
   await store.connect();
 

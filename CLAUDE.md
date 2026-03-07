@@ -39,13 +39,15 @@ packages/
 
 The `anchor/spin/kick` metaphor from the Inception-inspired philosophy lives in docs only. All shipped interfaces use standard, self-documenting names:
 
-| Concept                  | Shipped Name                                          |
-| ------------------------ | ----------------------------------------------------- |
-| Query the index          | `search_knowledge(query, type_filter?, max_results?)` |
-| Persist a lesson         | `add_lesson(lesson, context_tags)`                    |
-| Reset context            | `reset()` — deferred to Phase 2                       |
-| Re-index from source     | `totem sync`                                          |
-| First-time project setup | `totem init`                                          |
+| Concept                  | Shipped Name                                               |
+| ------------------------ | ---------------------------------------------------------- |
+| Query the index          | `search_knowledge(query, type_filter?, max_results?)`      |
+| Persist a lesson         | `add_lesson(lesson, context_tags)`                         |
+| Reset context            | `reset()` — deferred to Phase 2                            |
+| Re-index from source     | `totem sync`                                               |
+| First-time project setup | `totem init`                                               |
+| Detect config tier       | `getConfigTier(config)` → `'lite' \| 'standard' \| 'full'` |
+| Guard embedding access   | `requireEmbedding(config)` → throws friendly error         |
 
 ### MCP Interface (Phase 1 — two tools only)
 
@@ -99,7 +101,18 @@ Lives at the root of the **consuming project** (not in this repo). Defines:
 
 - Glob patterns for ingest targets
 - Chunking strategy per file type
-- Embedding provider (openai or ollama)
+- Embedding provider (openai or ollama) — **optional** (omitted in Lite tier)
+- Orchestrator (shell) — **optional** (omitted in Standard/Lite tiers)
+
+### Configuration Tiers
+
+| Tier         | Requirements                     | Available Commands                      |
+| ------------ | -------------------------------- | --------------------------------------- |
+| **Lite**     | Zero API keys                    | `init`, `add-lesson`, `bridge`, `eject` |
+| **Standard** | Embedding key (OpenAI or Ollama) | Lite + `sync`, `search`, `stats`        |
+| **Full**     | Embedding + Orchestrator         | All commands                            |
+
+Tier is determined by `getConfigTier(config)` from `@mmnto/totem`. Commands that require embeddings call `requireEmbedding(config)` which throws a friendly error directing users to upgrade.
 
 ### `totem init`
 
@@ -107,7 +120,8 @@ Auto-scaffolds a `totem.config.ts` by scanning the target repo:
 
 - Detects `tsconfig.json` → sets TypeScript glob
 - Detects `docs/`, `specs/`, `context/` → sets markdown globs
-- Prompts: "Enter your OpenAI API key (or press Enter to configure local Ollama later)"
+- **Auto-detects `OPENAI_API_KEY`** in env or `.env` → skips prompt, uses OpenAI embeddings
+- Falls back to prompting for API key; pressing Enter generates a Lite tier config
 - Generates a working config with zero manual editing required
 
 ### `.totem/` Directory (in consuming project)
@@ -149,11 +163,12 @@ The highest-value differentiator. Closes the gap where AI makes the same mistake
 
 ### Error Handling
 
-If `totem sync` runs without a configured provider:
+If any command requiring embeddings runs without a configured provider, `requireEmbedding()` throws:
 
 ```
 [Totem Error] No embedding provider configured.
-Set OPENAI_API_KEY in your .env or configure 'ollama' in totem.config.ts.
+This command requires embeddings (Lite tier does not support it).
+Set OPENAI_API_KEY in your .env and re-run `totem init`, or add an 'embedding' block to totem.config.ts.
 ```
 
 ### Provider Config (in totem.config.ts)
@@ -225,7 +240,7 @@ Phase numbering follows `docs/roadmap.md` (the canonical source of truth).
 
 ### Phase 3: Workflow Expansion (current)
 
-- Minimum Viable Configuration tiers (#187)
+- ~~Minimum Viable Configuration tiers (#187)~~ — **Done.** Lite/Standard/Full tiers with env auto-detection.
 - Automated doc sync (#190)
 - Drift Detection for self-cleaning memory (#181)
 - See `docs/roadmap.md` and `docs/active_work.md` for full priority list

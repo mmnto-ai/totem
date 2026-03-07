@@ -60,7 +60,15 @@ This will auto-detect your project structure, generate a `totem.config.ts`, inst
 
 ### 2. Configure your Embedding Provider
 
-Totem defaults to OpenAI's `text-embedding-3-small` for a zero-friction start. You can configure this, or switch to a local Ollama model (`nomic-embed-text`), in `totem.config.ts`. Ensure your `.env` contains an `OPENAI_API_KEY` if using the default.
+Totem auto-detects your environment during `totem init` and picks the best configuration tier:
+
+| Tier         | What you need                                | What you get                              |
+| ------------ | -------------------------------------------- | ----------------------------------------- |
+| **Lite**     | Nothing (zero API keys)                      | Lesson capture, bridge, eject             |
+| **Standard** | `OPENAI_API_KEY` in `.env` (or Ollama)       | Lite + sync, search, stats                |
+| **Full**     | Standard + an orchestrator (e.g. Gemini CLI) | All commands (spec, shield, triage, etc.) |
+
+If `OPENAI_API_KEY` is already set in your environment or `.env`, `totem init` will detect it automatically and skip the prompt. You can always upgrade from Lite by setting your key and re-running `totem init`.
 
 > [!TIP]
 > **OpenAI Rate Limits:**

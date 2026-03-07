@@ -4,6 +4,10 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import type { TotemConfig } from '../config-schema.js';
+import { TotemConfigSchema } from '../config-schema.js';
+import { runSync } from './pipeline.js';
+
 // Import the internal helpers via a workaround — we test the state file contract
 // since readSyncState/writeSyncState are not exported directly.
 
@@ -97,5 +101,17 @@ describe('deleted file partitioning', () => {
 
     expect(filesToProcess).toEqual(['src/new-name.ts']);
     expect(deletedPaths).toEqual(['src/old-name.ts']);
+  });
+});
+
+describe('runSync embedding guard', () => {
+  it('throws when embedding is not configured (Lite tier)', async () => {
+    const config: TotemConfig = TotemConfigSchema.parse({
+      targets: [{ glob: '**/*.md', type: 'spec', strategy: 'markdown-heading' }],
+    });
+
+    await expect(runSync(config, { projectRoot: os.tmpdir(), incremental: false })).rejects.toThrow(
+      'No embedding provider configured',
+    );
   });
 });

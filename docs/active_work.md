@@ -6,7 +6,7 @@ Totem is currently in a Developer Preview / Early Alpha state, with the immediat
 
 **Do Next (Phase 1: Onboarding & Polish)**
 
-- **#187** — RFC: Minimum Viable Configuration (MVC) — tiered setup for different user profiles — _Critical first step to reduce installation friction and establish a baseline user experience._
+- **#187** — ~~RFC: Minimum Viable Configuration (MVC)~~ — **Implemented.** Tiered config (Lite/Standard/Full) with env auto-detection. Embedding is optional; `totem init` auto-detects `OPENAI_API_KEY`.
 - **#128** — Epic: Ship "Universal Lessons" baseline during `totem init` — _Provides immediate, tangible value the moment a user completes installation._
 - **#129** — Epic: Interactive CLI Tutorial & Conversational Onboarding — _Guides users through the initial learning curve to build trust in the tool._
 - **#12** — Cross-platform onboarding: support Windows (PowerShell) & macOS in all docs — _Ensures the onboarding process is seamless regardless of the user's operating system._
@@ -29,19 +29,19 @@ Totem is currently in a Developer Preview / Early Alpha state, with the immediat
 
 ### Next Issue (User Story & Scope)
 
-**#187 — RFC: Minimum Viable Configuration (MVC) — tiered setup for different user profiles**
+**#128 — Epic: Ship "Universal Lessons" baseline during `totem init`**
 
-**User Story:** As a new user evaluating Totem, I want to initialize the system with a minimal, sensible default configuration so that I can immediately experience its core value without getting bogged down in complex setup decisions.
+**User Story:** As a new user completing `totem init`, I want to receive a curated set of foundational AI security and architectural lessons so that my agents have useful knowledge from Day 1 without needing to build up lessons organically.
 
 **Scope Boundaries:**
 
-- **DO:** Define the exact configuration tiers (e.g., Zero-Config, Advanced, Enterprise).
-- **DO:** Specify the default values for the baseline MVC setup.
-- **DO:** Outline the user prompts/decisions required during `totem init`.
-- **DO NOT:** Write the implementation code for the setup wizard.
-- **DO NOT:** Modify existing configuration schemas until the RFC is approved.
+- **DO:** Curate an initial set of universal lessons (prompt injection prevention, common framework traps, security baselines).
+- **DO:** Add an opt-in prompt during `totem init` to install these baseline lessons.
+- **DO:** Write the lessons to `.totem/lessons.md` so they are version-controlled and reviewable.
+- **DO NOT:** Auto-install without user consent — these should be opt-in.
+- **DO NOT:** Include project-specific or opinionated framework recommendations.
 
-**Why Next:** The roadmap explicitly dictates that Phase 1 must solve installation friction and build user trust. We cannot successfully build interactive tutorials (#129) or ship baseline lessons (#128) until we have defined the minimum viable configuration state the user is starting from.
+**Why Next:** Now that #187 (MVC tiers) defines the configuration baseline, we can ship universal lessons that provide immediate value on first install. This solves the cold-start problem where a fresh Totem install has no knowledge to retrieve.
 
 ### Blocked / Needs Input
 

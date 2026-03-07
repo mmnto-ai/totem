@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { Embedder, TotemConfig } from '@mmnto/totem';
-import { createEmbedder, LanceStore, TotemConfigSchema } from '@mmnto/totem';
+import { createEmbedder, LanceStore, requireEmbedding, TotemConfigSchema } from '@mmnto/totem';
 
 export interface ServerContext {
   projectRoot: string;
@@ -73,7 +73,8 @@ export async function getContext(): Promise<ServerContext> {
   loadEnv(projectRoot);
 
   const config = await loadConfig(configPath);
-  const embedder = createEmbedder(config.embedding);
+  const embedding = requireEmbedding(config);
+  const embedder = createEmbedder(embedding);
   const storePath = path.join(projectRoot, config.lanceDir);
   const store = new LanceStore(storePath, embedder);
   await store.connect();

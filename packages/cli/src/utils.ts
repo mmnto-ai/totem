@@ -65,6 +65,9 @@ export function resolveConfigPath(cwd: string): string {
   return configPath;
 }
 
+// Re-export from core — unified embedding guard (#187)
+export { requireEmbedding } from '@mmnto/totem';
+
 // ─── Telemetry ──────────────────────────────────────────
 
 interface TelemetryEntry {

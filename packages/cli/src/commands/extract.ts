@@ -14,6 +14,7 @@ import {
   getSystemPrompt,
   loadConfig,
   loadEnv,
+  requireEmbedding,
   resolveConfigPath,
   runOrchestrator,
   sanitize,
@@ -311,7 +312,8 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
   const config = await loadConfig(configPath);
 
   // Connect to LanceDB for dedup context
-  const embedder = createEmbedder(config.embedding);
+  const embedding = requireEmbedding(config);
+  const embedder = createEmbedder(embedding);
   const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
   await store.connect();
 

@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import type { ContentType } from '@mmnto/totem';
 import { ContentTypeSchema, createEmbedder, LanceStore } from '@mmnto/totem';
 
-import { loadConfig, loadEnv, resolveConfigPath, sanitize } from '../utils.js';
+import { loadConfig, loadEnv, requireEmbedding, resolveConfigPath, sanitize } from '../utils.js';
 
 export async function searchCommand(
   query: string,
@@ -15,7 +15,8 @@ export async function searchCommand(
   loadEnv(cwd);
 
   const config = await loadConfig(configPath);
-  const embedder = createEmbedder(config.embedding);
+  const embedding = requireEmbedding(config);
+  const embedder = createEmbedder(embedding);
   const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
   await store.connect();
 

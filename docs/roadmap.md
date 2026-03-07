@@ -73,7 +73,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [ ] **#92 Telemetry Logging & Dashboard:** Persist token stats to `.totem/telemetry.jsonl` and build `totem stats` to track API quota usage.
 - [x] **#83 Support GitHub issue URLs:** Allow users to paste full URLs in addition to issue numbers for `totem spec` and `triage`.
 - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
-- [ ] **#187 Minimum Viable Configuration:** Tiered setup (Lite/Standard/Team) for different user profiles. Lite tier works with zero API keys.
+- [x] **#187 Minimum Viable Configuration:** Tiered config (Lite/Standard/Full) with auto-detection. Embedding is optional; Lite tier works with zero API keys.
 - [ ] **#190 Automated Doc Sync:** `totem docs` command to keep project docs updated via per-doc LLM passes with `preferredModel` config.
 - [ ] **#181 Drift Detection:** Self-cleaning memory — detect and prune stale lessons automatically.
 

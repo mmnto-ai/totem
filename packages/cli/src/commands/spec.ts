@@ -11,6 +11,7 @@ import {
   getSystemPrompt,
   loadConfig,
   loadEnv,
+  requireEmbedding,
   resolveConfigPath,
   runOrchestrator,
   wrapXml,
@@ -159,7 +160,8 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   const config = await loadConfig(configPath);
 
   // Connect to LanceDB
-  const embedder = createEmbedder(config.embedding);
+  const embedding = requireEmbedding(config);
+  const embedder = createEmbedder(embedding);
   const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
   await store.connect();
 

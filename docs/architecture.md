@@ -35,6 +35,18 @@ A stdio-based server for LLM integration. Provides two tools:
 - `search_knowledge(query)`: Semantic retrieval of codebase context and lessons.
 - `add_lesson(lesson, tags)`: Appends human-readable architectural lessons to `.totem/lessons.md`.
 
+## Configuration Tiers
+
+Totem supports three configuration tiers, auto-detected from the environment during `totem init`:
+
+| Tier         | Requirements                               | Available Commands                                                                  |
+| ------------ | ------------------------------------------ | ----------------------------------------------------------------------------------- |
+| **Lite**     | Zero API keys                              | `init`, `add-lesson`, `bridge`, `eject`                                             |
+| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`                                                    |
+| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `shield`, `triage`, `briefing`, `handoff`, `extract`, `wrap`) |
+
+The `embedding` field in `totem.config.ts` is optional. When omitted, Totem operates in Lite tier — users can still capture lessons and manage hooks, but cannot index or search. The `getConfigTier()` helper and `requireEmbedding()` guard enforce these boundaries at runtime with clear upgrade instructions.
+
 ## The `.totem/` Directory
 
 The `lessons.md` file within `.totem/` is meant to be version-controlled (committed to git). It acts as the explicit, human-readable ledger of traps and architectural decisions. When updated, `totem sync` re-indexes it.

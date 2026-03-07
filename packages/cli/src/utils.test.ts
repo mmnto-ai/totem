@@ -4,12 +4,13 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { SearchResult } from '@mmnto/totem';
+import type { SearchResult, TotemConfig } from '@mmnto/totem';
 
 import {
   formatResults,
   getSystemPrompt,
   loadEnv,
+  requireEmbedding,
   resolveConfigPath,
   sanitize,
   tryParseGeminiJson,
@@ -414,5 +415,36 @@ describe('getSystemPrompt', () => {
     // Create a directory with the same name as the expected file — reading it will throw
     fs.mkdirSync(path.join(promptsDir, 'extract.md'));
     expect(getSystemPrompt('extract', DEFAULT_PROMPT, tmpDir, '.totem')).toBe(DEFAULT_PROMPT);
+  });
+});
+
+// ─── requireEmbedding ────────────────────────────────
+
+describe('requireEmbedding', () => {
+  const BASE_CONFIG: TotemConfig = {
+    targets: [{ glob: '**/*.md', type: 'spec', strategy: 'markdown-heading' }],
+    totemDir: '.totem',
+    lanceDir: '.lancedb',
+    ignorePatterns: [],
+    contextWarningThreshold: 40_000,
+  };
+
+  it('returns embedding provider when configured', () => {
+    const embedding = { provider: 'openai' as const, model: 'text-embedding-3-small' };
+    const config = { ...BASE_CONFIG, embedding };
+    const result = requireEmbedding(config);
+    expect(result).toEqual(embedding);
+  });
+
+  it('throws when embedding is undefined', () => {
+    expect(() => requireEmbedding(BASE_CONFIG)).toThrow('No embedding provider configured');
+  });
+
+  it('error message mentions Lite tier', () => {
+    expect(() => requireEmbedding(BASE_CONFIG)).toThrow('Lite tier');
+  });
+
+  it('error message mentions totem init', () => {
+    expect(() => requireEmbedding(BASE_CONFIG)).toThrow('totem init');
   });
 });

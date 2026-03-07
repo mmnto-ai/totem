@@ -3,6 +3,7 @@ import * as path from 'node:path';
 
 import { createChunker } from '../chunkers/chunker.js';
 import type { TotemConfig } from '../config-schema.js';
+import { requireEmbedding } from '../config-schema.js';
 import { createEmbedder } from '../embedders/embedder.js';
 import { LanceStore } from '../store/lance-store.js';
 import type { Chunk, SyncOptions, SyncState } from '../types.js';
@@ -57,8 +58,9 @@ export async function runSync(
   const headSha = getHeadSha(projectRoot, log);
 
   // 1. Create embedder
+  const embedding = requireEmbedding(config);
   log('Initializing embedding provider...');
-  const embedder = createEmbedder(config.embedding);
+  const embedder = createEmbedder(embedding);
 
   // 2. Connect to store
   const storePath = path.join(projectRoot, config.lanceDir);
