@@ -5,7 +5,7 @@ import type { ContentType } from '@mmnto/totem';
 import { ContentTypeSchema } from '@mmnto/totem';
 
 import { getContext, reconnectStore } from '../context.js';
-import { formatXmlResponse } from '../xml-format.js';
+import { formatSystemWarning, formatXmlResponse } from '../xml-format.js';
 
 type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
 
@@ -14,7 +14,7 @@ async function performSearch(
   typeFilter?: ContentType,
   maxResults?: number,
 ): Promise<ToolResult> {
-  const { store } = await getContext();
+  const { store, config } = await getContext();
   const results = await store.search({
     query,
     typeFilter,
@@ -38,7 +38,19 @@ async function performSearch(
     )
     .join('\n\n---\n\n');
 
-  return { content: [{ type: 'text' as const, text: formatXmlResponse('knowledge', formatted) }] };
+  let text = formatXmlResponse('knowledge', formatted);
+
+  // Append a system warning when the payload is large enough to risk context pressure
+  if (text.length > config.contextWarningThreshold) {
+    text +=
+      '\n\n' +
+      formatSystemWarning(
+        'You just ingested a large amount of context. You may be at risk of forgetting earlier instructions. ' +
+          'Consider warning the user about context pressure and suggest running `totem bridge` to consolidate.',
+      );
+  }
+
+  return { content: [{ type: 'text' as const, text }] };
 }
 
 export function registerSearchKnowledge(server: McpServer): void {

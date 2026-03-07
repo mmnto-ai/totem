@@ -104,9 +104,9 @@ function assemblePrompt(
   sections.push('\n=== OPEN PULL REQUESTS ===');
   sections.push(formatPRList(prs));
 
-  // Totem knowledge
-  const specSection = formatResults(context.specs, 'RECENT SPECS & ADRs');
-  const sessionSection = formatResults(context.sessions, 'RECENT SESSION HISTORY');
+  // Totem knowledge (condensed — fast-boot command, minimize token usage)
+  const specSection = formatResults(context.specs, 'RECENT SPECS & ADRs', true);
+  const sessionSection = formatResults(context.sessions, 'RECENT SESSION HISTORY', true);
 
   if (specSection || sessionSection) {
     sections.push('\n=== TOTEM KNOWLEDGE ===');

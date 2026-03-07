@@ -270,14 +270,31 @@ export { wrapXml } from '@mmnto/totem';
 // ─── Context formatting ─────────────────────────────────
 
 const MAX_RESULT_CONTENT_LENGTH = 300;
+const CONDENSED_CONTENT_LENGTH = 80;
 
-export function formatResults(results: SearchResult[], heading: string): string {
+export function formatResults(
+  results: SearchResult[],
+  heading: string,
+  condensed?: boolean,
+): string {
   if (results.length === 0) return '';
+  const maxLen = condensed ? CONDENSED_CONTENT_LENGTH : MAX_RESULT_CONTENT_LENGTH;
   const items = results
-    .map(
-      (r) =>
-        `- **${r.label}** (${r.filePath}, score: ${r.score.toFixed(3)})\n  ${r.content.slice(0, MAX_RESULT_CONTENT_LENGTH).replace(/\n/g, '\n  ')}`,
-    )
+    .map((r) => {
+      const ellipsis = r.content.length > maxLen ? '...' : '';
+      const truncated = r.content.slice(0, maxLen);
+
+      if (condensed) {
+        const snippet = truncated.replace(/\n/g, ' ');
+        return `- **${r.label}** (${r.filePath}) ${snippet}${ellipsis}`;
+      }
+
+      const snippet = truncated.replace(/\n/g, '\n  ');
+      return (
+        `- **${r.label}** (${r.filePath}, score: ${r.score.toFixed(3)})\n  ` +
+        `${snippet}${ellipsis}`
+      );
+    })
     .join('\n\n');
   return `\n=== ${heading} ===\n${items}\n`;
 }

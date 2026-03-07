@@ -41,6 +41,9 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#158 Chore:** Unify XML escaping utilities across MCP and CLI.
 - [x] **#156 Core:** Incremental sync now removes deleted files from LanceDB.
 - [x] **#155 Core:** Stateful incremental sync via `.totem/cache/sync-state.json`.
+- [x] **#160 Security:** Defensive Context Management Reflexes (Auto-Warnings).
+- [x] **#109 Performance:** Condense context payloads for fast-boot commands.
+- [x] **#107 UX:** Emit background sync logs via MCP progress events.
 - [x] **#149 Security:** XML-delimit MCP tool responses to mitigate indirect prompt injection.
 - [x] **#148 Config:** Add Zod schema validation for Claude settings.local.json.
 - [x] **#147 Core:** Extract inline shell hooks into dedicated Node.js scripts.

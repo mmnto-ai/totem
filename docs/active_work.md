@@ -6,22 +6,21 @@ The project is currently focused on "Phase 2: Core Stability & Data Safety," pri
 
 **Do Next (Core Stability & Security)**
 
-1. #127 — feat: Add heading hierarchy breadcrumbs to MarkdownChunker labels — Enhances vector index chunking quality and retrieval context.
-2. #160 — feat: Defensive Context Management Reflexes (Auto-Warnings) — Promotes safety by warning the AI about approaching context limits and proposing `totem bridge`.
-3. #122 — test: Backfill unit and integration tests for `@mmnto/totem` core database and chunking logic — Ensures core pipeline stability.
-4. #121 — bug: LanceDB `deleteByFile` edge cases causing silent incremental sync failures.
+1. #122 — test: Backfill unit and integration tests for `@mmnto/totem` core database and chunking logic — Ensures core pipeline stability.
+2. #121 — bug: LanceDB `deleteByFile` edge cases causing silent incremental sync failures.
+3. #131 — feat: Clean Ejection Path (`totem eject`) — Safely remove git hooks and prompts.
 
-**Up Next (Workflow & CLI Enhancements)** 5. #107 — UX: Emit background sync logs via MCP progress events — Improves observability and user trust during black-box sync operations. 6. #143 — feat(cli): add `totem wrap` command to chain post-merge workflow — Directly extends the orchestrator's workflow capabilities. 7. #126 — Epic: Invisible Orchestration & Auto-Triggering (The 'Init and Forget' Protocol) — Core to the project's foundational vision of automated workflows. 8. #44 — Feature: Add `totem bridge` command for mid-session context compaction — Addresses immediate workflow friction regarding token bloat.
+**Up Next (Workflow & CLI Enhancements)** 4. #143 — feat(cli): add `totem wrap` command to chain post-merge workflow — Directly extends the orchestrator's workflow capabilities. 5. #126 — Epic: Invisible Orchestration & Auto-Triggering (The 'Init and Forget' Protocol) — Core to the project's foundational vision of automated workflows. 6. #44 — Feature: Add `totem bridge` command for mid-session context compaction — Addresses immediate workflow friction regarding token bloat.
 
-**Backlog (Phase 3: Power User Tools & Observability)** 9. #119 — Epic: Custom Workflow Runner (`totem run <workflow>`) — Key Phase 3 goal for workflow expansion. 10. #130 — Epic: Database Observability & Management (`totem inspect`) — Key Phase 3 goal to visualize index health and build trust.
+**Backlog (Phase 3: Power User Tools & Observability)** 7. #119 — Epic: Custom Workflow Runner (`totem run <workflow>`) — Key Phase 3 goal for workflow expansion. 8. #130 — Epic: Database Observability & Management (`totem inspect`) — Key Phase 3 goal to visualize index health and build trust.
 
 ### Next Issue (User Story & Scope)
 
-**#127 — feat: Add heading hierarchy breadcrumbs to MarkdownChunker labels**
+**#122 — test: Backfill unit and integration tests for core database and chunking logic**
 
-- **User Story:** As an AI querying the vector index, I need markdown chunks to include their full heading hierarchy (e.g., `[Session 142 > Traps > Next.js]`) in the `contextPrefix` so I don't lose the structural context of isolated paragraphs.
-- **Scope Boundaries:** Update `MarkdownChunker` and `SessionLogChunker` to track heading depth during AST traversal and prepend the breadcrumb trail to the chunk's label/prefix. Do not modify the underlying `remark` parsing or Zod schemas.
-- **Why Next:** Without structural breadcrumbs, retrieved markdown paragraphs often lack enough context for the AI to understand _what_ the paragraph is describing, reducing the quality of `totem spec` and `totem shield` outputs.
+- **User Story:** As a maintainer, I need comprehensive tests around the LanceDB index and syntactic chunkers so I can safely iterate on Phase 2 core stability features without fear of regressions.
+- **Scope Boundaries:** Implement unit tests for `TypeScriptChunker` and ensure it handles AST failures gracefully. Write an integration test for `LanceStore` that spins up a test `.lancedb/` directory, inserts chunks, performs vector searches, and verifies `deleteByFile`.
+- **Why Next:** Without core test coverage, further optimizations to the ingestion pipeline (like fixing the `deleteByFile` bug) are too risky to merge.
 
 ### Blocked / Needs Input
 

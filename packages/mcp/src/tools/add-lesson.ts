@@ -21,17 +21,89 @@ function detectSyncCommand(projectRoot: string): { cmd: string; args: string[] }
   return { cmd: 'npx', args: ['totem', 'sync', '--incremental'] };
 }
 
-const RECONNECT_DELAY_MS = 5_000;
+const SYNC_TIMEOUT_MS = 60_000;
+const MAX_OUTPUT_BYTES = 10_000;
 
 /** Debounce guard — prevents concurrent sync processes. */
 let syncPending = false;
+
+/**
+ * Kill a child process tree. With `shell: true`, child.kill() only kills the
+ * shell — we need to kill the process group to prevent orphaned children.
+ */
+function killTree(child: ReturnType<typeof spawn>): void {
+  if (child.pid == null) return;
+  try {
+    // Negative PID kills the process group on Unix; on Windows, taskkill /T handles the tree
+    if (process.platform === 'win32') {
+      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+    } else {
+      process.kill(-child.pid, 'SIGTERM');
+    }
+  } catch {
+    // Best-effort — process may have already exited
+    child.kill();
+  }
+}
+
+/**
+ * Spawn `totem sync --incremental` and await its completion (up to SYNC_TIMEOUT_MS).
+ * Returns { success, output } with captured stdout/stderr (capped at MAX_OUTPUT_BYTES).
+ */
+function runSync(projectRoot: string): Promise<{ success: boolean; output: string }> {
+  return new Promise((resolve) => {
+    const { cmd, args } = detectSyncCommand(projectRoot);
+    const chunks: string[] = [];
+    let totalBytes = 0;
+    let capped = false;
+
+    const child = spawn(cmd, args, {
+      cwd: projectRoot,
+      detached: process.platform !== 'win32', // enables process group kill on Unix
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: true,
+      windowsHide: true,
+    });
+
+    const capture = (data: Buffer) => {
+      if (capped) return;
+      const str = data.toString();
+      totalBytes += str.length;
+      if (totalBytes > MAX_OUTPUT_BYTES) {
+        chunks.push(str.slice(0, MAX_OUTPUT_BYTES - (totalBytes - str.length)));
+        chunks.push('\n... (output truncated)');
+        capped = true;
+      } else {
+        chunks.push(str);
+      }
+    };
+
+    child.stdout?.on('data', capture);
+    child.stderr?.on('data', capture);
+
+    const timer = setTimeout(() => {
+      killTree(child);
+      resolve({ success: false, output: 'Sync timed out after 60s.' });
+    }, SYNC_TIMEOUT_MS);
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ success: code === 0, output: chunks.join('') });
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      resolve({ success: false, output: `Spawn error: ${err.message}` });
+    });
+  });
+}
 
 export function registerAddLesson(server: McpServer): void {
   server.registerTool(
     'add_lesson',
     {
       description:
-        'Persist a lesson learned to .totem/lessons.md. An incremental re-index is automatically triggered in the background.',
+        'Persist a lesson learned to .totem/lessons.md. An incremental re-index runs automatically and the result is returned.',
       inputSchema: {
         lesson: z.string().describe('The lesson text to persist'),
         context_tags: z
@@ -57,42 +129,30 @@ export function registerAddLesson(server: McpServer): void {
 
         await fs.promises.appendFile(lessonsPath, entry, 'utf-8');
 
-        // Fire-and-forget: spawn background incremental sync so the lesson
-        // is searchable within this session (Issue #22).
+        // Await sync so the LLM gets definitive success/failure confirmation.
         // Debounce: skip if a sync is already in flight.
-        if (!syncPending) {
+        let syncMessage: string;
+        if (syncPending) {
+          syncMessage =
+            'A sync is already in progress — this lesson will be indexed when it completes.';
+        } else {
           syncPending = true;
-          const { cmd, args } = detectSyncCommand(projectRoot);
-          const logPath = path.join(totemDir, 'mcp-sync.log');
-          const logFd = fs.openSync(logPath, 'a');
           try {
-            const child = spawn(cmd, args, {
-              cwd: projectRoot,
-              detached: true,
-              stdio: ['ignore', logFd, logFd],
-              shell: true,
-              windowsHide: true,
-            });
-            child.unref();
-          } finally {
-            fs.closeSync(logFd);
-          }
+            const { success, output } = await runSync(projectRoot);
 
-          // Reconnect the store after the sync has had time to finish,
-          // so the next search_knowledge call sees the new data.
-          const errLogPath = path.join(totemDir, 'mcp-errors.log');
-          setTimeout(() => {
-            reconnectStore()
-              .catch((err: unknown) => {
-                const msg = `[${new Date().toISOString()}] Store reconnect failed: ${err instanceof Error ? err.message : String(err)}\n`;
-                fs.promises.appendFile(errLogPath, msg, 'utf-8').catch(() => {
-                  // Last-resort: file logging failed — nothing left to do.
-                });
-              })
-              .finally(() => {
-                syncPending = false;
-              });
-          }, RECONNECT_DELAY_MS);
+            // Reconnect so the next search_knowledge call sees new data.
+            try {
+              await reconnectStore();
+            } catch {
+              // Non-fatal — store will reconnect on next search
+            }
+
+            syncMessage = success
+              ? `Sync completed successfully. ${output.trim()}`
+              : `Sync failed: ${output.trim()}`;
+          } finally {
+            syncPending = false;
+          }
         }
 
         return {
@@ -101,7 +161,7 @@ export function registerAddLesson(server: McpServer): void {
               type: 'text' as const,
               text: formatXmlResponse(
                 'lesson_added',
-                `Lesson saved to ${config.totemDir}/lessons.md. Background re-index triggered — it will be searchable shortly.`,
+                `Lesson saved to ${config.totemDir}/lessons.md. ${syncMessage}`,
               ),
             },
           ],

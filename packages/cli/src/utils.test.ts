@@ -150,6 +150,35 @@ describe('formatResults', () => {
     expect(output).toContain('**first**');
     expect(output).toContain('**second**');
   });
+
+  it('condensed mode truncates content at 80 chars', () => {
+    const longContent = 'x'.repeat(200);
+    const results = [
+      makeResult({ label: 'test', filePath: 'test.ts', score: 0.5, content: longContent }),
+    ];
+    const output = formatResults(results, 'TEST', true);
+    expect(output).toContain('x'.repeat(80));
+    expect(output).not.toContain('x'.repeat(81));
+    expect(output).toContain('...');
+  });
+
+  it('condensed mode omits score', () => {
+    const results = [
+      makeResult({ label: 'my-func', filePath: 'src/foo.ts', score: 0.9, content: 'hello' }),
+    ];
+    const output = formatResults(results, 'CODE', true);
+    expect(output).toContain('**my-func**');
+    expect(output).not.toContain('0.900');
+  });
+
+  it('condensed mode replaces newlines with spaces', () => {
+    const results = [
+      makeResult({ label: 'multi', filePath: 'a.ts', score: 0.5, content: 'line1\nline2\nline3' }),
+    ];
+    const output = formatResults(results, 'TEST', true);
+    expect(output).toContain('line1 line2 line3');
+    expect(output).not.toContain('line1\n');
+  });
 });
 
 // ─── writeOutput ────────────────────────────────────────
