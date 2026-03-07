@@ -468,6 +468,16 @@ describe('detectEmbeddingTier', () => {
     expect(detectEmbeddingTier(tmpDir)).toBe('none');
   });
 
+  it('returns none when OPENAI_API_KEY is empty in env', () => {
+    process.env['OPENAI_API_KEY'] = '';
+    expect(detectEmbeddingTier(tmpDir)).toBe('none');
+  });
+
+  it('returns none when OPENAI_API_KEY is whitespace-only in env', () => {
+    process.env['OPENAI_API_KEY'] = '   ';
+    expect(detectEmbeddingTier(tmpDir)).toBe('none');
+  });
+
   it('returns none when OPENAI_API_KEY is empty in .env', () => {
     fs.writeFileSync(path.join(tmpDir, '.env'), 'OPENAI_API_KEY=\n', 'utf-8');
     expect(detectEmbeddingTier(tmpDir)).toBe('none');

@@ -551,7 +551,7 @@ export default config;
  */
 export function detectEmbeddingTier(cwd: string): EmbeddingTier {
   // Check env (including already-loaded .env)
-  if (process.env['OPENAI_API_KEY']) return 'openai';
+  if (process.env['OPENAI_API_KEY'] && /\S/.test(process.env['OPENAI_API_KEY'])) return 'openai';
 
   // Check .env file directly (loadEnv may not have run yet)
   const envPath = path.join(cwd, '.env');
