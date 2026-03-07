@@ -220,10 +220,11 @@ pnpm dev                  # Watch mode
 
 ### Phase 4: Polish & Defensibility (current)
 
-- Shield GitHub Action for CI/CD enforcement (#180)
+- ~~Shield GitHub Action for CI/CD enforcement (#180)~~ — done (v0.13.0)
+- ~~Interactive multi-select for `totem extract` (#168)~~ — done (v0.13.0)
+- ~~CLI command renames: `learn` → `extract`, remove `anchor` alias (#185)~~ — done (v0.13.0)
+- Minimum Viable Configuration tiers (#187)
 - Drift Detection for self-cleaning memory (#181)
-- Core test backfill (#122)
-- Interactive multi-select for `totem extract` (#168)
 - See `docs/roadmap.md` and `docs/active_work.md` for full priority list
 
 ### Phase 5 (Future): Enterprise Expansion
