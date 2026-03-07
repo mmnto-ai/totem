@@ -172,6 +172,20 @@ program
   });
 
 program
+  .command('bridge')
+  .description('Generate a lightweight context bridge for mid-session compaction')
+  .option('-m, --message <text>', 'Breadcrumb message describing current task state')
+  .option('--out <path>', 'Write output to a file instead of stdout')
+  .action(async (opts: { message?: string; out?: string }) => {
+    try {
+      const { bridgeCommand } = await import('./commands/bridge.js');
+      bridgeCommand(opts);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('add-lesson [lesson]')
   .alias('anchor')
   .description('Interactively add a lesson to project memory (or pass string as argument)')
