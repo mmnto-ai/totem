@@ -624,19 +624,22 @@ export async function initCommand(): Promise<void> {
       } else {
         // No key detected — prompt the user
         const answer = await rl.question(
-          'Enter your OpenAI API key (or press Enter for Lite tier — no embeddings): ',
+          'Enter your OpenAI API key, type "ollama" for a local model, or press Enter for Lite tier: ',
         );
 
-        const apiKey = answer.trim().replace(/[\r\n]/g, '');
-        if (apiKey) {
-          if (!/^sk-[a-zA-Z0-9_-]+$/.test(apiKey)) {
+        const input = answer.trim().replace(/[\r\n]/g, '');
+        if (input.toLowerCase() === 'ollama') {
+          embeddingTier = 'ollama';
+          log.info('Totem', 'Configured for Ollama. Make sure it is running locally.');
+        } else if (input) {
+          if (!/^sk-[a-zA-Z0-9_-]+$/.test(input)) {
             log.warn(
               'Totem',
               'API key does not look like a valid OpenAI key (expected sk-...). Starting in Lite tier.',
             );
           } else {
             const envPath = path.join(cwd, '.env');
-            const envLine = `OPENAI_API_KEY="${apiKey}"\n`;
+            const envLine = `OPENAI_API_KEY="${input}"\n`;
 
             if (fs.existsSync(envPath)) {
               const existing = fs.readFileSync(envPath, 'utf-8');
