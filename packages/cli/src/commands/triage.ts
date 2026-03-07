@@ -108,9 +108,9 @@ function assemblePrompt(
   sections.push(`Total: ${issues.length} open issues\n`);
   sections.push(wrapXml('issue_list', formatIssueInventory(issues)));
 
-  // Totem knowledge
-  const specSection = formatResults(context.specs, 'RECENT SPECS & ADRs');
-  const sessionSection = formatResults(context.sessions, 'RECENT SESSION HISTORY');
+  // Totem knowledge (condensed — fast-boot command, minimize token usage)
+  const specSection = formatResults(context.specs, 'RECENT SPECS & ADRs', true);
+  const sessionSection = formatResults(context.sessions, 'RECENT SESSION HISTORY', true);
 
   if (specSection || sessionSection) {
     sections.push('\n=== TOTEM KNOWLEDGE ===');

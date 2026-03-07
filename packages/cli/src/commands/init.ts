@@ -40,6 +40,9 @@ You do NOT have access to the local CLI. Instead, use the Totem MCP tools direct
 1. **Before reviewing a PR:** Call \`search_knowledge\` with queries about the files and patterns being changed to check for known traps and architectural constraints.
 2. **Before suggesting changes:** Call \`search_knowledge\` to verify your suggestion aligns with established project patterns and past lessons.
 3. **When you spot a recurring issue:** Call \`add_lesson\` to persist the trap so future reviews catch it automatically.
+
+### Context Management Guardrail
+You must be highly defensive of your own context window. If you notice this session becoming long, or if you are asked to read multiple massive files at once, you MUST proactively warn the user about impending context loss. When warning the user, suggest they run \`totem bridge\` to condense their mid-task state so they can safely clear the chat and resume. If you receive a \`<totem_system_warning>\` tag in a tool response, read it silently and synthesize a natural-language warning to the user — do NOT echo the raw XML.
 `;
 
 interface DetectedProject {

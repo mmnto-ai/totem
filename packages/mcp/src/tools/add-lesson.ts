@@ -21,17 +21,53 @@ function detectSyncCommand(projectRoot: string): { cmd: string; args: string[] }
   return { cmd: 'npx', args: ['totem', 'sync', '--incremental'] };
 }
 
-const RECONNECT_DELAY_MS = 5_000;
+const SYNC_TIMEOUT_MS = 60_000;
 
 /** Debounce guard — prevents concurrent sync processes. */
 let syncPending = false;
+
+/**
+ * Spawn `totem sync --incremental` and await its completion (up to SYNC_TIMEOUT_MS).
+ * Returns { success, output } with captured stdout/stderr.
+ */
+function runSync(projectRoot: string): Promise<{ success: boolean; output: string }> {
+  return new Promise((resolve) => {
+    const { cmd, args } = detectSyncCommand(projectRoot);
+    const chunks: string[] = [];
+
+    const child = spawn(cmd, args, {
+      cwd: projectRoot,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: true,
+      windowsHide: true,
+    });
+
+    child.stdout?.on('data', (data: Buffer) => chunks.push(data.toString()));
+    child.stderr?.on('data', (data: Buffer) => chunks.push(data.toString()));
+
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve({ success: false, output: 'Sync timed out after 60s.' });
+    }, SYNC_TIMEOUT_MS);
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ success: code === 0, output: chunks.join('') });
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      resolve({ success: false, output: `Spawn error: ${err.message}` });
+    });
+  });
+}
 
 export function registerAddLesson(server: McpServer): void {
   server.registerTool(
     'add_lesson',
     {
       description:
-        'Persist a lesson learned to .totem/lessons.md. An incremental re-index is automatically triggered in the background.',
+        'Persist a lesson learned to .totem/lessons.md. An incremental re-index runs automatically and the result is returned.',
       inputSchema: {
         lesson: z.string().describe('The lesson text to persist'),
         context_tags: z
@@ -57,42 +93,30 @@ export function registerAddLesson(server: McpServer): void {
 
         await fs.promises.appendFile(lessonsPath, entry, 'utf-8');
 
-        // Fire-and-forget: spawn background incremental sync so the lesson
-        // is searchable within this session (Issue #22).
+        // Await sync so the LLM gets definitive success/failure confirmation.
         // Debounce: skip if a sync is already in flight.
-        if (!syncPending) {
+        let syncMessage: string;
+        if (syncPending) {
+          syncMessage =
+            'A sync is already in progress — this lesson will be indexed when it completes.';
+        } else {
           syncPending = true;
-          const { cmd, args } = detectSyncCommand(projectRoot);
-          const logPath = path.join(totemDir, 'mcp-sync.log');
-          const logFd = fs.openSync(logPath, 'a');
           try {
-            const child = spawn(cmd, args, {
-              cwd: projectRoot,
-              detached: true,
-              stdio: ['ignore', logFd, logFd],
-              shell: true,
-              windowsHide: true,
-            });
-            child.unref();
-          } finally {
-            fs.closeSync(logFd);
-          }
+            const { success, output } = await runSync(projectRoot);
 
-          // Reconnect the store after the sync has had time to finish,
-          // so the next search_knowledge call sees the new data.
-          const errLogPath = path.join(totemDir, 'mcp-errors.log');
-          setTimeout(() => {
-            reconnectStore()
-              .catch((err: unknown) => {
-                const msg = `[${new Date().toISOString()}] Store reconnect failed: ${err instanceof Error ? err.message : String(err)}\n`;
-                fs.promises.appendFile(errLogPath, msg, 'utf-8').catch(() => {
-                  // Last-resort: file logging failed — nothing left to do.
-                });
-              })
-              .finally(() => {
-                syncPending = false;
-              });
-          }, RECONNECT_DELAY_MS);
+            // Reconnect so the next search_knowledge call sees new data.
+            try {
+              await reconnectStore();
+            } catch {
+              // Non-fatal — store will reconnect on next search
+            }
+
+            syncMessage = success
+              ? `Sync completed successfully. ${output.trim()}`
+              : `Sync failed: ${output.trim()}`;
+          } finally {
+            syncPending = false;
+          }
         }
 
         return {
@@ -101,7 +125,7 @@ export function registerAddLesson(server: McpServer): void {
               type: 'text' as const,
               text: formatXmlResponse(
                 'lesson_added',
-                `Lesson saved to ${config.totemDir}/lessons.md. Background re-index triggered — it will be searchable shortly.`,
+                `Lesson saved to ${config.totemDir}/lessons.md. ${syncMessage}`,
               ),
             },
           ],

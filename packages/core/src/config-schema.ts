@@ -74,6 +74,9 @@ export const TotemConfigSchema = z.object({
 
   /** Optional: glob patterns to exclude from indexing */
   ignorePatterns: z.array(z.string()).default(DEFAULT_IGNORE_PATTERNS),
+
+  /** Character count threshold for MCP context payload warnings (~4 chars ≈ 1 token). Default: 40,000 (~10k tokens). */
+  contextWarningThreshold: z.number().int().positive().default(40_000),
 });
 
 export type ChunkStrategy = z.infer<typeof ChunkStrategySchema>;
