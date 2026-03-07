@@ -34,7 +34,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 **Goal:** Before ingesting enterprise databases, the local vector index and LLM prompts must be bulletproof across all environments.
 
-- [ ] **#121 Bug: LanceDB `deleteByFile`** edge cases causing silent incremental sync failures.  
+- [ ] **#121 Bug: LanceDB `deleteByFile`** edge cases causing silent incremental sync failures.
 - [ ] **#122 Core Tests:** Backfill unit and integration tests for `@mmnto/totem` core database and chunking logic.
 - [x] **#131 Clean Ejection:** Build `totem eject` to safely remove git hooks, prompt injections, and database artifacts if a user uninstalls.
 - [x] **#127 Core:** Add heading hierarchy breadcrumbs to MarkdownChunker labels.
