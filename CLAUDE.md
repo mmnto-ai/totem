@@ -39,15 +39,15 @@ packages/
 
 The `anchor/spin/kick` metaphor from the Inception-inspired philosophy lives in docs only. All shipped interfaces use standard, self-documenting names:
 
-| Concept                  | Shipped Name                                          |
-| ------------------------ | ----------------------------------------------------- |
-| Query the index          | `search_knowledge(query, type_filter?, max_results?)` |
-| Persist a lesson         | `add_lesson(lesson, context_tags)`                    |
-| Reset context            | `reset()` — deferred to Phase 2                       |
-| Re-index from source     | `totem sync`                                          |
-| First-time project setup | `totem init`                                          |
+| Concept                  | Shipped Name                                               |
+| ------------------------ | ---------------------------------------------------------- |
+| Query the index          | `search_knowledge(query, type_filter?, max_results?)`      |
+| Persist a lesson         | `add_lesson(lesson, context_tags)`                         |
+| Reset context            | `reset()` — deferred to Phase 2                            |
+| Re-index from source     | `totem sync`                                               |
+| First-time project setup | `totem init`                                               |
 | Detect config tier       | `getConfigTier(config)` → `'lite' \| 'standard' \| 'full'` |
-| Guard embedding access   | `requireEmbedding(config)` → throws friendly error    |
+| Guard embedding access   | `requireEmbedding(config)` → throws friendly error         |
 
 ### MCP Interface (Phase 1 — two tools only)
 
@@ -106,11 +106,11 @@ Lives at the root of the **consuming project** (not in this repo). Defines:
 
 ### Configuration Tiers
 
-| Tier | Requirements | Available Commands |
-|------|-------------|-------------------|
-| **Lite** | Zero API keys | `init`, `add-lesson`, `bridge`, `eject` |
-| **Standard** | Embedding key (OpenAI or Ollama) | Lite + `sync`, `search`, `stats` |
-| **Full** | Embedding + Orchestrator | All commands |
+| Tier         | Requirements                     | Available Commands                      |
+| ------------ | -------------------------------- | --------------------------------------- |
+| **Lite**     | Zero API keys                    | `init`, `add-lesson`, `bridge`, `eject` |
+| **Standard** | Embedding key (OpenAI or Ollama) | Lite + `sync`, `search`, `stats`        |
+| **Full**     | Embedding + Orchestrator         | All commands                            |
 
 Tier is determined by `getConfigTier(config)` from `@mmnto/totem`. Commands that require embeddings call `requireEmbedding(config)` which throws a friendly error directing users to upgrade.
 
