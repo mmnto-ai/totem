@@ -260,7 +260,7 @@ export async function selectLessons(
     message: `Select lessons to persist (${lessons.length} extracted):`,
     options: lessons.map((lesson, i) => ({
       value: i,
-      label: truncateLabel(lesson.text),
+      label: truncateLabel(sanitize(lesson.text)),
       hint: sanitize(lesson.tags.join(', ')),
     })),
     initialValues: lessons.map((_, i) => i),

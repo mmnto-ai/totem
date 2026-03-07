@@ -24,9 +24,11 @@ runs:
     - name: Run Totem Shield
       shell: bash
       working-directory: ${{ inputs.working-directory }}
+      env:
+        MODEL: ${{ inputs.model }}
       run: |
         SHIELD_ARGS=""
-        if [ -n "${{ inputs.model }}" ]; then
-          SHIELD_ARGS="--model ${{ inputs.model }}"
+        if [ -n "$MODEL" ]; then
+          SHIELD_ARGS="--model $MODEL"
         fi
         npx @mmnto/cli shield $SHIELD_ARGS
