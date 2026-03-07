@@ -7,8 +7,8 @@ The project is currently focused on "Phase 2: Core Stability & Data Safety," pri
 **Do Next (Core Stability & Security)**
 
 1. #180 — Feature: Shield GitHub Action — (This is our #1 priority for workflow lock-in).
-2. #122 — test: Backfill unit and integration tests for `@mmnto/totem` core database and chunking logic — Ensures core pipeline stability.
-3. #121 — bug: LanceDB `deleteByFile` edge cases causing silent incremental sync failures.
+2. #121 — bug: LanceDB `deleteByFile` edge cases causing silent incremental sync failures — Data integrity prerequisite for trustworthy CI enforcement.
+3. #122 — test: Backfill unit and integration tests for `@mmnto/totem` core database and chunking logic — Ensures core pipeline stability.
 
 **Up Next (Workflow & CLI Enhancements)**
 
