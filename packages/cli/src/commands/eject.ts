@@ -216,8 +216,13 @@ function deleteArtifacts(cwd: string, summary: EjectSummary): void {
 
   const configPath = path.join(cwd, 'totem.config.ts');
   if (fs.existsSync(configPath)) {
-    fs.unlinkSync(configPath);
-    summary.removed.push('totem.config.ts');
+    try {
+      fs.unlinkSync(configPath);
+      summary.removed.push('totem.config.ts');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      summary.skipped.push(`totem.config.ts (could not delete: ${msg})`);
+    }
   } else {
     summary.skipped.push('totem.config.ts (not found)');
   }
