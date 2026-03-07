@@ -19,12 +19,12 @@ Totem is currently in a Developer Preview / Early Alpha state, with the immediat
 - **#110** — Enhancement: Make markdown chunker MAX*SPLIT_DEPTH configurable — \_A straightforward core configurability win.*
 - **#179** — Epic: Markdown/Document-Only Mode — _Expands the addressable market to non-code use cases._
 
-**Backlog (Phase 3 & 5: Advanced, Enterprise, & Scaling)**
+**Backlog (Phase 3 & 4: Advanced, Enterprise, & Scaling)**
 
 - **#181** — Feature: Drift Detection (Self-Cleaning Memory) — _Advanced core feature for long-term state management._
 - **#183** — RFC: Cross-File Knowledge Graph (Symbol Resolution) — _Complex architectural enhancement for deeper context._
-- **#182** — RFC: Tree-sitter Multi-Language Support (Python/Rust) — _Slated for Phase 5 Enterprise Expansion._
-- **#123** — Epic: Federated Memory (Mothership Pattern) — _Slated for Phase 5 Enterprise Expansion._
+- **#182** — RFC: Tree-sitter Multi-Language Support (Python/Rust) — _Slated for Phase 4 Enterprise Expansion._
+- **#123** — Epic: Federated Memory (Mothership Pattern) — _Slated for Phase 4 Enterprise Expansion._
 - **#175** — Epic: Multiplayer Cache Syncing — _Depends on the completion of earlier federated architecture._
 
 ### Next Issue (User Story & Scope)

@@ -27,7 +27,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [ ] **#129 Epic: Interactive CLI Tutorial:** Build an animated, interactive CLI tutorial (`totem tutorial`) that allows users to pause the walkthrough, ask the LLM contextual questions about their codebase, and resume seamlessly.
 - [ ] **#125 Epic: Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically, achieving a "run `init` and forget" workflow.
 - [x] **#86 Seamless Host Integration:** Build the `SessionStart` hooks, Claude custom commands, and `Totem Architect` skills that #87 installs.
-- [x] **#21 CLI UI/UX Polish:** Branded colors (picocolors), ora spinners, ASCII banner. @clack/prompts deferred to follow-up.
+- [x] **#21 CLI UI/UX Polish:** Branded colors (picocolors), ora spinners, ASCII banner. @clack/prompts multiselect shipped in v0.13.0 (#168).
 - [ ] **#12 Cross-platform onboarding:** Ensure docs and installers work flawlessly across Windows (PowerShell) and macOS.
 
 ## Phase 2: Core Stability & Data Safety
@@ -73,6 +73,9 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [ ] **#92 Telemetry Logging & Dashboard:** Persist token stats to `.totem/telemetry.jsonl` and build `totem stats` to track API quota usage.
 - [x] **#83 Support GitHub issue URLs:** Allow users to paste full URLs in addition to issue numbers for `totem spec` and `triage`.
 - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
+- [ ] **#187 Minimum Viable Configuration:** Tiered setup (Lite/Standard/Team) for different user profiles. Lite tier works with zero API keys.
+- [ ] **#190 Automated Doc Sync:** `totem docs` command to keep project docs updated via per-doc LLM passes with `preferredModel` config.
+- [ ] **#181 Drift Detection:** Self-cleaning memory — detect and prune stale lessons automatically.
 
 ## Phase 4: Enterprise Expansion
 
