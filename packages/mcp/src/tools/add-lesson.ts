@@ -22,31 +22,67 @@ function detectSyncCommand(projectRoot: string): { cmd: string; args: string[] }
 }
 
 const SYNC_TIMEOUT_MS = 60_000;
+const MAX_OUTPUT_BYTES = 10_000;
 
 /** Debounce guard — prevents concurrent sync processes. */
 let syncPending = false;
 
 /**
+ * Kill a child process tree. With `shell: true`, child.kill() only kills the
+ * shell — we need to kill the process group to prevent orphaned children.
+ */
+function killTree(child: ReturnType<typeof spawn>): void {
+  if (child.pid == null) return;
+  try {
+    // Negative PID kills the process group on Unix; on Windows, taskkill /T handles the tree
+    if (process.platform === 'win32') {
+      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+    } else {
+      process.kill(-child.pid, 'SIGTERM');
+    }
+  } catch {
+    // Best-effort — process may have already exited
+    child.kill();
+  }
+}
+
+/**
  * Spawn `totem sync --incremental` and await its completion (up to SYNC_TIMEOUT_MS).
- * Returns { success, output } with captured stdout/stderr.
+ * Returns { success, output } with captured stdout/stderr (capped at MAX_OUTPUT_BYTES).
  */
 function runSync(projectRoot: string): Promise<{ success: boolean; output: string }> {
   return new Promise((resolve) => {
     const { cmd, args } = detectSyncCommand(projectRoot);
     const chunks: string[] = [];
+    let totalBytes = 0;
+    let capped = false;
 
     const child = spawn(cmd, args, {
       cwd: projectRoot,
+      detached: process.platform !== 'win32', // enables process group kill on Unix
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: true,
       windowsHide: true,
     });
 
-    child.stdout?.on('data', (data: Buffer) => chunks.push(data.toString()));
-    child.stderr?.on('data', (data: Buffer) => chunks.push(data.toString()));
+    const capture = (data: Buffer) => {
+      if (capped) return;
+      const str = data.toString();
+      totalBytes += str.length;
+      if (totalBytes > MAX_OUTPUT_BYTES) {
+        chunks.push(str.slice(0, MAX_OUTPUT_BYTES - (totalBytes - str.length)));
+        chunks.push('\n... (output truncated)');
+        capped = true;
+      } else {
+        chunks.push(str);
+      }
+    };
+
+    child.stdout?.on('data', capture);
+    child.stderr?.on('data', capture);
 
     const timer = setTimeout(() => {
-      child.kill();
+      killTree(child);
       resolve({ success: false, output: 'Sync timed out after 60s.' });
     }, SYNC_TIMEOUT_MS);
 
