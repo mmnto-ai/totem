@@ -10,17 +10,17 @@ The project is currently focused on "Phase 2: Core Stability & Data Safety," pri
 2. #121 — bug: LanceDB `deleteByFile` edge cases causing silent incremental sync failures.
 3. #131 — feat: Clean Ejection Path (`totem eject`) — Safely remove git hooks and prompts.
 
-**Up Next (Workflow & CLI Enhancements)** 4. #143 — feat(cli): add `totem wrap` command to chain post-merge workflow — Directly extends the orchestrator's workflow capabilities. 5. #126 — Epic: Invisible Orchestration & Auto-Triggering (The 'Init and Forget' Protocol) — Core to the project's foundational vision of automated workflows. 6. #44 — Feature: Add `totem bridge` command for mid-session context compaction — Addresses immediate workflow friction regarding token bloat.
+**Up Next (Workflow & CLI Enhancements)** 4. #143 — feat(cli): add `totem wrap` command to chain post-merge workflow — Directly extends the orchestrator's workflow capabilities. 5. #126 — Epic: Invisible Orchestration & Auto-Triggering (The 'Init and Forget' Protocol) — Core to the project's foundational vision of automated workflows. 6. #168 — UX: Interactive multi-select pruning for `totem learn` — Allows human-in-the-loop filtering of AI-extracted lessons.
 
 **Backlog (Phase 3: Power User Tools & Observability)** 7. #119 — Epic: Custom Workflow Runner (`totem run <workflow>`) — Key Phase 3 goal for workflow expansion. 8. #130 — Epic: Database Observability & Management (`totem inspect`) — Key Phase 3 goal to visualize index health and build trust.
 
 ### Next Issue (User Story & Scope)
 
-**#122 — test: Backfill unit and integration tests for core database and chunking logic**
+**#143 — feat(cli): add `totem wrap` command to chain post-merge workflow**
 
-- **User Story:** As a maintainer, I need comprehensive tests around the LanceDB index and syntactic chunkers so I can safely iterate on Phase 2 core stability features without fear of regressions.
-- **Scope Boundaries:** Implement unit tests for `TypeScriptChunker` and ensure it handles AST failures gracefully. Write an integration test for `LanceStore` that spins up a test `.lancedb/` directory, inserts chunks, performs vector searches, and verifies `deleteByFile`.
-- **Why Next:** Without core test coverage, further optimizations to the ingestion pipeline (like fixing the `deleteByFile` bug) are too risky to merge.
+- **User Story:** As a developer finishing a feature, I want a single command (`totem wrap`) that automatically triggers the `learn` extraction loop, syncs the database, and generates a `handoff` briefing, so I don't have to manually execute 3 distinct commands.
+- **Scope Boundaries:** Create a new CLI command `packages/cli/src/commands/wrap.ts` that sequentially invokes the logic of `learn`, `sync`, and `handoff`. Do not rewrite the underlying logic of those commands; just compose them.
+- **Why Next:** With `totem bridge` complete for mid-task context resets, `totem wrap` is the logical next step to provide a frictionless end-of-task experience.
 
 ### Blocked / Needs Input
 

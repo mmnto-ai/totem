@@ -65,7 +65,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [ ] **#130 Epic: Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks, index health, and ignored files to build trust in the "black box".
 - [ ] **#119 `totem run <workflow>`:** Introduce a custom AI task runner to execute user-defined markdown workflows via the orchestrator.
 - [x] **#120 Custom Prompt Overrides:** Allow users to override the hardcoded personas for built-in commands (`spec`, `shield`, etc.) via `.totem/prompts/`.
-- [ ] **#44 `totem bridge`:** Build a mid-session context compaction tool to clear token windows without losing place.
+- [x] **#44 `totem bridge`:** Build a mid-session context compaction tool to clear token windows without losing place.
 - [ ] **#74 `totem oracle`:** Add a frictionless Q&A command to query LanceDB without strict personas.
 - [ ] **#92 Telemetry Logging & Dashboard:** Persist token stats to `.totem/telemetry.jsonl` and build `totem stats` to track API quota usage.
 - [x] **#83 Support GitHub issue URLs:** Allow users to paste full URLs in addition to issue numbers for `totem spec` and `triage`.
