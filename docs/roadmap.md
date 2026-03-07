@@ -56,7 +56,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#91 Normalize LanceDB paths:** Fix Windows backslash issues before users share `.lancedb` folders across OS boundaries.
 - [x] **#90 Refactor to `IssueAdapter` / `PrAdapter`:** Extract `gh` CLI logic into interfaces to decouple from GitHub.
 - [x] **#77 Test audit:** Backfill CLI unit tests using the newly added Vitest infrastructure. (103+ tests passing)
-- [ ] **#78 Shell escaping edge cases:** Validate `execSync` safety with PowerShell as default shell.
+- [x] **#78 Shell escaping edge cases:** Validate `execSync` safety with PowerShell as default shell. (No changes needed — `execSync` always uses `cmd.exe` on Windows.)
 
 ## Phase 3: Workflow Expansion (Power User Tools)
 

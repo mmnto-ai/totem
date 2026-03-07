@@ -430,3 +430,45 @@ Differentiate context verbosity by using truncated snippets for high-frequency d
 **Tags:** reliability, agent-ux, automation
 
 Call internal scripts directly within agent-facing tools rather than relying on shell aliases or complex wrappers. Direct execution reduces the surface area for environment-specific failures and ensures reliable operation in automated workflows.
+
+## Lesson — 2026-03-07T06:05:56.069Z
+
+**Tags:** security, prompts, xml
+
+For LLM prompts, escape closing XML tags using backslash escaping (e.g., `<\/tag>`) rather than HTML entities to prevent prompt injection while minimizing parsing noise. Use a case-insensitive regex that accounts for optional whitespace to ensure robustness against variants like `</TAG >`.
+
+## Lesson — 2026-03-07T06:05:56.069Z
+
+**Tags:** security, cli, prompts
+
+Differentiate between terminal sanitization (stripping ANSI/control characters) and prompt sanitization (XML escaping); do not apply terminal sanitization to data intended for LLM prompts as it can degrade code fidelity. Terminal injection is a presentation-layer concern for the CLI, while prompt injection is a data payload concern for the LLM.
+
+## Lesson — 2026-03-07T06:05:56.069Z
+
+**Tags:** security, prompts, design-decision
+
+Only apply prompt injection sanitization to truly external, untrusted user-supplied content; do not sanitize constrained or semi-trusted metadata like branch names or git file paths to maintain prompt readability and avoid unnecessary clutter.
+
+## Lesson — 2026-03-07T06:05:56.069Z
+
+**Tags:** cli, performance, architecture
+
+Prefer dynamic imports inside command function bodies rather than hoisting them to the module scope for CLI tools. This pattern preserves lazy loading, ensuring the CLI starts quickly by only loading the specific dependencies required for the command being executed.
+
+## Lesson — 2026-03-07T06:05:56.069Z
+
+**Tags:** cli, error-handling, scaffolding
+
+When implementing "eject" or cleanup routines, wrap file deletions in try/catch blocks and report failures as "skipped" items. This graceful degradation prevents a single permission error or missing file from crashing the entire uninstall process, providing a better user experience.
+
+## Lesson — 2026-03-07T06:05:56.069Z
+
+**Tags:** git, scaffolding, trap
+
+Avoid using generic line-matching patterns (like `line.startsWith('(')`) when scrubbing auto-generated sections from shared files like git hooks. Use precise line matches or unique block markers to prevent accidental removal of user-added logic that may coincidentally match a broad pattern.
+
+## Lesson — 2026-03-07T06:05:56.069Z
+
+**Tags:** typescript, trap, json
+
+Always combine `typeof val === 'object'` with a truthiness check (`val && ...`) when traversing untyped JSON or `unknown` structures. Since `typeof null` returns `'object'`, omitting the null check will lead to runtime crashes when attempting to access properties on a null value.

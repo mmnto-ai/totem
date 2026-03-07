@@ -209,38 +209,29 @@ pnpm dev                  # Watch mode
 
 ## Implementation Phases
 
-### Phase 1: Scaffold (current)
+### Phases 1–3: Complete
 
-- Set up Turborepo with three packages (core, cli, mcp)
-- Define `totem.config.ts` schema and types
-- Implement `totem init` with project auto-detection
-- Configure `.gitignore` for `.lancedb`
+- Turborepo monorepo with three packages (core, cli, mcp)
+- Syntax-aware chunkers (TypeScript AST, Markdown headings, session logs, schema files, test files)
+- `totem sync` (full + incremental), OpenAI and Ollama providers
+- MCP server with `search_knowledge` and `add_lesson`
+- CLI orchestrator commands: `spec`, `shield`, `triage`, `briefing`, `handoff`, `learn`, `bridge`, `wrap`, `eject`
+- Published on npm, dogfooded in satur8d
 
-### Phase 2: Ingest Pipeline
+### Phase 4: Polish & Defensibility (current)
 
-- Build Breadcrumb Injector for session logs **first** (most critical)
-- Build TypeScript AST chunker
-- Build Markdown heading chunker with frontmatter metadata
-- Build schema file and test file chunkers
-- Implement `totem sync` (full + incremental)
-- Support both OpenAI and Ollama providers
+- Shield GitHub Action for CI/CD enforcement (#180)
+- Drift Detection for self-cleaning memory (#181)
+- Core test backfill (#122)
+- Interactive multi-select for `totem learn` (#168)
+- See `docs/roadmap.md` and `docs/active_work.md` for full priority list
 
-### Phase 3: MCP Server
+### Phase 5 (Future): Enterprise Expansion
 
-- Implement `search_knowledge` and `add_lesson` tools
-- Expose over stdio
-- Test retrieval quality
-
-### Phase 4: satur8d Integration (happens in satur8d repo)
-
-- `pnpm link` totem into satur8d
-- Upgrade oracle, spec, shield to use Totem
-- Set up post-merge git hook
-
-### Phase 5 (Future): reset() + Ephemeral Memory
-
-- Add TTL/ephemeral flags to stored entries
-- Implement `reset()` MCP tool
+- Federated Memory / Mothership Pattern (#123)
+- Tree-sitter multi-language chunking (#182)
+- Cross-file Knowledge Graph (#183)
+- Automated onboarding (`totem onboard`) (#124)
 
 ---
 

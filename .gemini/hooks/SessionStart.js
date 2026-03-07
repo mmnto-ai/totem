@@ -3,7 +3,7 @@
 const { execSync } = require('child_process');
 
 try {
-  const output = execSync('totem briefing', {
+  const output = execSync('node packages/cli/dist/index.js briefing', {
     encoding: 'utf-8',
     timeout: 30000,
     stdio: ['ignore', 'pipe', 'pipe'],

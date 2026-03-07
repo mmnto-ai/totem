@@ -18,7 +18,6 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 - `totem init` / `totem eject`: Scaffolds or safely removes `totem.config.ts`, git hooks, and AI memory reflexes.
 - `totem sync`: Crawls target directories defined in `totem.config.ts`, chunks, embeds, and updates the LanceDB index.
 - `totem search`: Direct debug query interface.
-- `totem run <workflow>`: A custom AI task runner that executes user-defined markdown workflows using the orchestrator.
 - `totem spec` / `totem shield`: Standardized workflow orchestration commands.
 - `totem bridge` / `totem wrap`: Mid-session context resets and end-of-task workflow automation.
 
