@@ -4,7 +4,10 @@
 
 ### Minor Changes
 
-- Observability & context hygiene: await sync in add_lesson with timeout, configurable contextWarningThreshold with system warnings, condensed context for fast-boot commands
+- Await sync in `add_lesson` with timeout for definitive success/failure confirmation
+- Configurable `contextWarningThreshold` with system warnings on large payloads
+- Condensed context for fast-boot commands (`briefing`, `triage`)
+- Context Management Guardrail injected via `totem init` reflex templates
 
 ### Patch Changes
 

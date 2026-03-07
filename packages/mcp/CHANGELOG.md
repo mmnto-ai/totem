@@ -4,7 +4,8 @@
 
 ### Minor Changes
 
-- Observability & context hygiene: await sync in add_lesson with timeout, configurable contextWarningThreshold with system warnings, condensed context for fast-boot commands
+- Await sync in `add_lesson` with 60s timeout, output cap, and process tree kill
+- `search_knowledge` appends `<totem_system_warning>` when payload exceeds `contextWarningThreshold`
 
 ### Patch Changes
 
