@@ -1,3 +1,6 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
 import { getGitBranch, getGitStatus } from '../git.js';
 import { log } from '../ui.js';
 import { writeOutput } from '../utils.js';
@@ -20,7 +23,7 @@ export function assembleBridge(branch: string, status: string, message?: string)
     const fileList = lines.slice(0, MAX_STATUS_FILES).join('\n');
     const summary =
       lines.length > MAX_STATUS_FILES
-        ? `${fileList}\n... and ${lines.length - MAX_STATUS_FILES} more files`
+        ? `${fileList}\n... and ${lines.length - MAX_STATUS_FILES} more file${lines.length - MAX_STATUS_FILES === 1 ? '' : 's'}`
         : fileList;
     sections.push(`**Modified Files:**\n${summary}`);
   } else {
@@ -48,6 +51,12 @@ export interface BridgeOptions {
 
 export function bridgeCommand(options: BridgeOptions): void {
   const cwd = process.cwd();
+
+  if (!fs.existsSync(path.join(cwd, '.git'))) {
+    throw new Error(
+      'Not a git repository. Run `totem bridge` from a project with git initialized.',
+    );
+  }
 
   log.info(TAG, 'Capturing workspace state...');
   const branch = getGitBranch(cwd);

@@ -39,4 +39,12 @@ describe('assembleBridge', () => {
     expect(output).not.toContain('src/file20.ts');
     expect(output).toContain('and 5 more files');
   });
+
+  it('uses singular "file" when exactly 1 file over limit', () => {
+    const lines = Array.from({ length: 21 }, (_, i) => ` M src/file${i}.ts`);
+    const status = lines.join('\n');
+    const output = assembleBridge('main', status);
+    expect(output).toContain('and 1 more file');
+    expect(output).not.toContain('and 1 more files');
+  });
 });
