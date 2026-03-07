@@ -187,19 +187,18 @@ program
 
 program
   .command('add-lesson [lesson]')
-  .alias('anchor')
   .description('Interactively add a lesson to project memory (or pass string as argument)')
   .action(async (lesson?: string) => {
     try {
-      const { anchorCommand } = await import('./commands/anchor.js');
-      await anchorCommand(lesson);
+      const { addLessonCommand } = await import('./commands/add-lesson.js');
+      await addLessonCommand(lesson);
     } catch (err) {
       handleError(err);
     }
   });
 
 program
-  .command('learn <pr-numbers...>')
+  .command('extract <pr-numbers...>')
   .description('Extract lessons from PR review(s) into .totem/lessons.md')
   .option('--raw', 'Output assembled prompt without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
@@ -220,8 +219,8 @@ program
       },
     ) => {
       try {
-        const { learnCommand } = await import('./commands/learn.js');
-        await learnCommand(prNumbers, opts);
+        const { extractCommand } = await import('./commands/extract.js');
+        await extractCommand(prNumbers, opts);
       } catch (err) {
         handleError(err);
       }

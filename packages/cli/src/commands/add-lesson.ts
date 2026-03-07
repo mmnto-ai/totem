@@ -17,7 +17,7 @@ function detectSyncCommand(cwd: string): { cmd: string; args: string[] } {
   return { cmd: IS_WIN ? 'npx.cmd' : 'npx', args: ['totem', 'sync', '--incremental'] };
 }
 
-export async function anchorCommand(lessonArg?: string): Promise<void> {
+export async function addLessonCommand(lessonArg?: string): Promise<void> {
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);

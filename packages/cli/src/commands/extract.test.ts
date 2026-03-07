@@ -1,11 +1,10 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { Readable, Writable } from 'node:stream';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { appendLessons, confirmLessons, parseLessons } from './learn.js';
+import { appendLessons, parseLessons, selectLessons } from './extract.js';
 
 // ─── parseLessons ───────────────────────────────────────
 
@@ -85,7 +84,7 @@ describe('appendLessons', () => {
   let lessonsPath: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-learn-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-extract-'));
     lessonsPath = path.join(tmpDir, '.totem', 'lessons.md');
   });
 
@@ -134,69 +133,23 @@ describe('appendLessons', () => {
   });
 });
 
-// ─── confirmLessons ─────────────────────────────────────
+// ─── selectLessons ──────────────────────────────────────
 
-function makeInput(response: string): Readable {
-  const input = new Readable({ read() {} });
-  // Push response after a tick so readline can consume it
-  setImmediate(() => {
-    input.push(response + '\n');
-    input.push(null);
-  });
-  return input;
-}
+const sampleLessons = [
+  { tags: ['git', 'trap'], text: 'Always check ENOENT separately.' },
+  { tags: ['security'], text: 'Sanitize all user input before writing.' },
+  { tags: ['arch'], text: 'Extract shared fetch logic into a helper.' },
+];
 
-const nullOutput = new Writable({
-  write(_chunk, _enc, cb) {
-    cb();
-  },
-});
-
-describe('confirmLessons', () => {
-  it('returns true when --yes is set', async () => {
-    const result = await confirmLessons(3, { yes: true, isTTY: false });
-    expect(result).toBe(true);
+describe('selectLessons', () => {
+  it('returns all lessons when --yes is set', async () => {
+    const result = await selectLessons(sampleLessons, { yes: true, isTTY: false });
+    expect(result).toEqual(sampleLessons);
   });
 
   it('throws in non-TTY without --yes', async () => {
-    await expect(confirmLessons(3, { isTTY: false })).rejects.toThrow(
+    await expect(selectLessons(sampleLessons, { isTTY: false })).rejects.toThrow(
       '[Totem Error] Refusing to write lessons in non-interactive mode. Use --yes to bypass confirmation.',
     );
-  });
-
-  it('returns true when user confirms with empty input (default Y)', async () => {
-    const result = await confirmLessons(2, {
-      isTTY: true,
-      input: makeInput(''),
-      output: nullOutput,
-    });
-    expect(result).toBe(true);
-  });
-
-  it('returns true when user types y', async () => {
-    const result = await confirmLessons(2, {
-      isTTY: true,
-      input: makeInput('y'),
-      output: nullOutput,
-    });
-    expect(result).toBe(true);
-  });
-
-  it('returns false when user types n', async () => {
-    const result = await confirmLessons(2, {
-      isTTY: true,
-      input: makeInput('n'),
-      output: nullOutput,
-    });
-    expect(result).toBe(false);
-  });
-
-  it('returns false when user types N', async () => {
-    const result = await confirmLessons(1, {
-      isTTY: true,
-      input: makeInput('N'),
-      output: nullOutput,
-    });
-    expect(result).toBe(false);
   });
 });

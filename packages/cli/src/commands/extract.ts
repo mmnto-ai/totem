@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as readline from 'node:readline/promises';
+
+import { isCancel, multiselect } from '@clack/prompts';
 
 import type { SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore, runSync } from '@mmnto/totem';
@@ -21,7 +22,7 @@ import {
 
 // ─── Constants ──────────────────────────────────────────
 
-const TAG = 'Learn';
+const TAG = 'Extract';
 const MAX_EXISTING_LESSONS = 10;
 const MAX_REVIEW_BODY_CHARS = 50_000;
 const MAX_INPUTS = 5;
@@ -228,22 +229,26 @@ export function appendLessons(lessons: ExtractedLesson[], lessonsPath: string): 
   fs.appendFileSync(lessonsPath, entries, 'utf-8');
 }
 
-// ─── Confirmation gate ──────────────────────────────────
+// ─── Lesson selection ───────────────────────────────────
+
+const LABEL_MAX_CHARS = 70;
+
+function truncateLabel(text: string): string {
+  const oneLine = text.replace(/\n/g, ' ');
+  if (oneLine.length <= LABEL_MAX_CHARS) return oneLine;
+  return oneLine.slice(0, LABEL_MAX_CHARS - 1) + '…';
+}
 
 /**
- * Returns true if lessons should be written, false to abort.
+ * Prompts the user to select which lessons to keep via multi-select.
+ * Returns the selected lessons, or all lessons if --yes is set.
  * Throws in non-interactive environments without --yes.
  */
-export async function confirmLessons(
-  count: number,
-  opts: {
-    yes?: boolean;
-    isTTY?: boolean;
-    input?: NodeJS.ReadableStream;
-    output?: NodeJS.WritableStream;
-  },
-): Promise<boolean> {
-  if (opts.yes) return true;
+export async function selectLessons(
+  lessons: ExtractedLesson[],
+  opts: { yes?: boolean; isTTY?: boolean },
+): Promise<ExtractedLesson[]> {
+  if (opts.yes) return lessons;
 
   if (!opts.isTTY) {
     throw new Error(
@@ -251,24 +256,27 @@ export async function confirmLessons(
     );
   }
 
-  const rl = readline.createInterface({
-    input: opts.input ?? process.stdin,
-    output: opts.output ?? process.stderr,
+  const result = await multiselect({
+    message: `Select lessons to persist (${lessons.length} extracted):`,
+    options: lessons.map((lesson, i) => ({
+      value: i,
+      label: truncateLabel(lesson.text),
+      hint: sanitize(lesson.tags.join(', ')),
+    })),
+    initialValues: lessons.map((_, i) => i),
+    required: false,
   });
-  try {
-    const answer = await rl.question(`[${TAG}] Write ${count} lesson(s) to lessons.md? [Y/n] `);
-    if (answer.trim().toLowerCase() === 'n') {
-      return false;
-    }
-    return true;
-  } finally {
-    rl.close();
+
+  if (isCancel(result)) {
+    return [];
   }
+
+  return (result as number[]).map((i) => lessons[i]!);
 }
 
 // ─── Main command ───────────────────────────────────────
 
-export interface LearnOptions {
+export interface ExtractOptions {
   raw?: boolean;
   out?: string;
   model?: string;
@@ -277,7 +285,7 @@ export interface LearnOptions {
   yes?: boolean;
 }
 
-export async function learnCommand(prNumbers: string[], options: LearnOptions): Promise<void> {
+export async function extractCommand(prNumbers: string[], options: ExtractOptions): Promise<void> {
   // Validate and deduplicate PR numbers
   const unique = [...new Set(prNumbers)];
   if (unique.length > MAX_INPUTS) {
@@ -311,8 +319,8 @@ export async function learnCommand(prNumbers: string[], options: LearnOptions): 
   const existingLessons = await retrieveExistingLessons(store);
   log.info(TAG, `Found ${existingLessons.length} existing lessons for context`);
 
-  // Resolve system prompt (allow .totem/prompts/learn.md override)
-  const systemPrompt = getSystemPrompt('learn', SYSTEM_PROMPT, cwd, config.totemDir);
+  // Resolve system prompt (allow .totem/prompts/extract.md override)
+  const systemPrompt = getSystemPrompt('extract', SYSTEM_PROMPT, cwd, config.totemDir);
 
   // Process each PR sequentially, accumulating lessons
   const allLessons: ExtractedLesson[] = [];
@@ -376,21 +384,6 @@ export async function learnCommand(prNumbers: string[], options: LearnOptions): 
 
   log.success(TAG, `Total: ${allLessons.length} lesson(s) from ${nums.length} PR(s)`);
 
-  // Display extracted lessons for review
-  console.error('');
-  log.warn(
-    TAG,
-    'WARNING: These lessons were extracted from PR comments, which may include content from untrusted contributors.',
-  );
-  log.warn(TAG, 'Review each lesson carefully before accepting.\n');
-
-  for (let i = 0; i < allLessons.length; i++) {
-    const lesson = allLessons[i]!;
-    console.error(`  [${i + 1}] Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`);
-    console.error(`      ${sanitize(lesson.text).replace(/\n/g, '\n      ')}`);
-    console.error('');
-  }
-
   // --dry-run mode: preview lessons to stdout (pipeable) without writing
   if (options.dryRun) {
     log.dim(TAG, 'Dry run — lessons not written.');
@@ -401,18 +394,36 @@ export async function learnCommand(prNumbers: string[], options: LearnOptions): 
     return;
   }
 
-  // Confirmation gate
-  const confirmed = await confirmLessons(allLessons.length, {
+  // Display full text of each lesson for review before prompting
+  console.error('');
+  if (!options.yes) {
+    log.warn(
+      TAG,
+      'WARNING: These lessons were extracted from PR comments, which may include content from untrusted contributors.',
+    );
+    log.warn(TAG, 'Review each lesson carefully before accepting.\n');
+  }
+
+  for (let i = 0; i < allLessons.length; i++) {
+    const lesson = allLessons[i]!;
+    console.error(`  [${i + 1}] Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`);
+    console.error(`      ${sanitize(lesson.text).replace(/\n/g, '\n      ')}`);
+    console.error('');
+  }
+
+  // Interactive multi-select (or --yes bypass)
+  const selected = await selectLessons(allLessons, {
     yes: options.yes,
     isTTY: !!process.stdin.isTTY,
   });
-  if (!confirmed) {
-    log.dim(TAG, 'Aborted — no lessons written.');
+
+  if (selected.length === 0) {
+    log.dim(TAG, 'No lessons selected — nothing written.');
     return;
   }
 
   // Sanitize before persisting — strip any terminal injection from stored lessons
-  const sanitizedLessons = allLessons.map((l) => ({
+  const sanitizedLessons = selected.map((l) => ({
     tags: l.tags.map((t) => sanitize(t)),
     text: sanitize(l.text),
   }));
@@ -420,7 +431,10 @@ export async function learnCommand(prNumbers: string[], options: LearnOptions): 
   // Append lessons to .totem/lessons.md
   const lessonsPath = path.join(cwd, config.totemDir, 'lessons.md');
   appendLessons(sanitizedLessons, lessonsPath);
-  log.success(TAG, `Appended ${allLessons.length} lesson(s) to ${config.totemDir}/lessons.md`);
+  log.success(
+    TAG,
+    `Appended ${sanitizedLessons.length} lesson(s) to ${config.totemDir}/lessons.md`,
+  );
 
   // Run incremental sync so lessons are immediately searchable
   log.info(TAG, 'Running incremental sync...');

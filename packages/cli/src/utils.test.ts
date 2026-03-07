@@ -412,7 +412,7 @@ describe('getSystemPrompt', () => {
     const promptsDir = path.join(tmpDir, '.totem', 'prompts');
     fs.mkdirSync(promptsDir, { recursive: true });
     // Create a directory with the same name as the expected file — reading it will throw
-    fs.mkdirSync(path.join(promptsDir, 'learn.md'));
-    expect(getSystemPrompt('learn', DEFAULT_PROMPT, tmpDir, '.totem')).toBe(DEFAULT_PROMPT);
+    fs.mkdirSync(path.join(promptsDir, 'extract.md'));
+    expect(getSystemPrompt('extract', DEFAULT_PROMPT, tmpDir, '.totem')).toBe(DEFAULT_PROMPT);
   });
 });

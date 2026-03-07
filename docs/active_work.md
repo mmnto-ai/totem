@@ -12,7 +12,7 @@ The project is currently focused on "Phase 2: Core Stability & Data Safety," pri
 
 **Up Next (Workflow & CLI Enhancements)**
 
-4. #168 — UX: Interactive multi-select pruning for `totem learn` — Allows human-in-the-loop filtering of AI-extracted lessons.
+4. #168 — UX: Interactive multi-select pruning for `totem extract` — Allows human-in-the-loop filtering of AI-extracted lessons.
 5. #126 — Epic: Invisible Orchestration & Auto-Triggering (The 'Init and Forget' Protocol) — Core to the project's foundational vision of automated workflows.
 
 **Backlog (Phase 3: Power User Tools & Observability)**

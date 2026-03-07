@@ -22,6 +22,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@clack/prompts": "^1.1.0",
     "@mmnto/totem": "workspace:*",
     "commander": "^13.1.0",
     "jiti": "^2.4.0",

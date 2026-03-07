@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./learn.js', () => ({
-  learnCommand: vi.fn().mockResolvedValue(undefined),
+vi.mock('./extract.js', () => ({
+  extractCommand: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('./sync.js', () => ({
   syncCommand: vi.fn().mockResolvedValue(undefined),
@@ -10,7 +10,7 @@ vi.mock('./triage.js', () => ({
   triageCommand: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { learnCommand } from './learn.js';
+import { extractCommand } from './extract.js';
 import { syncCommand } from './sync.js';
 import { triageCommand } from './triage.js';
 import { wrapCommand } from './wrap.js';
@@ -20,10 +20,10 @@ describe('wrapCommand', () => {
     vi.clearAllMocks();
   });
 
-  it('calls learn, sync, and triage in sequence', async () => {
+  it('calls extract, sync, and triage in sequence', async () => {
     const callOrder: string[] = [];
-    vi.mocked(learnCommand).mockImplementation(async () => {
-      callOrder.push('learn');
+    vi.mocked(extractCommand).mockImplementation(async () => {
+      callOrder.push('extract');
     });
     vi.mocked(syncCommand).mockImplementation(async () => {
       callOrder.push('sync');
@@ -34,8 +34,8 @@ describe('wrapCommand', () => {
 
     await wrapCommand(['142'], {});
 
-    expect(callOrder).toEqual(['learn', 'sync', 'triage']);
-    expect(learnCommand).toHaveBeenCalledWith(['142'], {
+    expect(callOrder).toEqual(['extract', 'sync', 'triage']);
+    expect(extractCommand).toHaveBeenCalledWith(['142'], {
       model: undefined,
       fresh: undefined,
       yes: undefined,
@@ -50,7 +50,7 @@ describe('wrapCommand', () => {
   it('passes model and fresh options through', async () => {
     await wrapCommand(['100', '101'], { model: 'gemini-3-flash', fresh: true, yes: true });
 
-    expect(learnCommand).toHaveBeenCalledWith(['100', '101'], {
+    expect(extractCommand).toHaveBeenCalledWith(['100', '101'], {
       model: 'gemini-3-flash',
       fresh: true,
       yes: true,
@@ -61,8 +61,8 @@ describe('wrapCommand', () => {
     });
   });
 
-  it('aborts chain if learn throws', async () => {
-    vi.mocked(learnCommand).mockRejectedValueOnce(new Error('User aborted'));
+  it('aborts chain if extract throws', async () => {
+    vi.mocked(extractCommand).mockRejectedValueOnce(new Error('User aborted'));
 
     await expect(wrapCommand(['142'], {})).rejects.toThrow('User aborted');
     expect(syncCommand).not.toHaveBeenCalled();

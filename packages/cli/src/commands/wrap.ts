@@ -15,8 +15,8 @@ export interface WrapOptions {
 export async function wrapCommand(prNumbers: string[], options: WrapOptions): Promise<void> {
   // Step 1: Learn from PR(s)
   log.info(TAG, `Step 1/3 — Extracting lessons from PR ${prNumbers.join(', ')}...`);
-  const { learnCommand } = await import('./learn.js');
-  await learnCommand(prNumbers, {
+  const { extractCommand } = await import('./extract.js');
+  await extractCommand(prNumbers, {
     model: options.model,
     fresh: options.fresh,
     yes: options.yes,

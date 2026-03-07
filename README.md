@@ -42,7 +42,7 @@ This is a Turborepo monorepo consisting of:
 ## Security & Privacy
 
 - **100% Local Privacy:** Totem's vector database (`.lancedb/`) lives entirely within your local repository. Your codebase is never uploaded to a centralized SaaS platform or external memory service.
-- **Injection Hardening:** Totem actively sanitizes untrusted inputs (like PR comments fetched during `totem learn` and external GitHub issues) before persisting them and before writing to terminal output streams. This prevents indirect prompt injection and terminal injection attacks.
+- **Injection Hardening:** Totem actively sanitizes untrusted inputs (like PR comments fetched during `totem extract` and external GitHub issues) before persisting them and before writing to terminal output streams. This prevents indirect prompt injection and terminal injection attacks.
 
 ## Getting Started
 
@@ -96,7 +96,7 @@ Add Totem to your AI agent's configuration (e.g., Claude Desktop or Gemini):
 ### 5. The Workflow Orchestrator
 
 > [!NOTE]
-> **Prerequisite:** Currently, all orchestrator commands that fetch remote issue or PR data (like `spec`, `triage`, and `learn`) require the [GitHub CLI (`gh`)](https://cli.github.com/) to be installed and authenticated on your machine. Adapters for Jira, Linear, and others are on the roadmap.
+> **Prerequisite:** Currently, all orchestrator commands that fetch remote issue or PR data (like `spec`, `triage`, and `extract`) require the [GitHub CLI (`gh`)](https://cli.github.com/) to be installed and authenticated on your machine. Adapters for Jira, Linear, and others are on the roadmap.
 
 Totem ships with native CLI commands that orchestrate your entire shift-left workflow by querying LanceDB and invoking your AI to make project-aware decisions.
 
@@ -163,10 +163,10 @@ npx @mmnto/cli triage --out docs/active_work.md
 
 _(Totem fetches your open GitHub issues, reads recent session momentum, and generates a prioritized roadmap for your next task. The AI strictly acts as a **Product Manager**, setting scope boundaries and prioritizing work based on momentum)._
 
-**Proactive Anchoring (`anchor` / `add-lesson`)**
+**Add Lesson (`add-lesson`)**
 
 ```bash
-npx @mmnto/cli anchor
+npx @mmnto/cli add-lesson
 ```
 
 _(Totem interactively prompts you to document a context, symptom, and fix/rule. It saves the lesson to `.totem/lessons.md` and automatically triggers a background re-index so the new knowledge is instantly available to your AI agents)._
@@ -177,12 +177,12 @@ _(Totem interactively prompts you to document a context, symptom, and fix/rule. 
 npx @mmnto/cli wrap
 ```
 
-_(Totem sequentially runs the `learn` extraction loop on your recent changes, syncs the vector database, and generates an end-of-session `handoff` briefing in one command)._
+_(Totem sequentially runs the `extract` lesson loop on your recent changes, syncs the vector database, and generates an end-of-session `handoff` briefing in one command)._
 
-**PR Learning Loop (`learn`)**
+**PR Lesson Extraction (`extract`)**
 
 ```bash
-npx @mmnto/cli learn 101 102
+npx @mmnto/cli extract 101 102
 ```
 
 _(Totem fetches one or more recently merged PRs, reads the review comments, and extracts systemic architectural traps or rules. It interactively asks you to confirm the extracted rules before appending them to your project's memory)._
@@ -206,6 +206,42 @@ _(Safely removes all Totem git hooks, generated configuration files, AI agent pr
 > [!TIP]
 > **Custom Prompt Overrides**
 > By default, the orchestrator uses highly opinionated personas (like the "Red Team Architect" in `shield`). If you want to customize these, simply create a markdown file in `.totem/prompts/<command>.md` (e.g., `.totem/prompts/shield.md`). Totem will automatically detect your file and use your custom rules instead of the built-in system prompt.
+
+### 6. Shield GitHub Action (CI/CD)
+
+Enforce Totem's quality gate automatically on every pull request. The action syncs the index and runs `totem shield` — if a violation is detected, the workflow fails with the full report in the Actions log.
+
+```yaml
+# .github/workflows/shield.yml
+name: Totem Shield
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  shield:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: mmnto-ai/totem@main
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+```
+
+This complements your existing review bot (like Gemini Code Assist) — the bot handles conversational review while Shield enforces your project's LanceDB lessons as a hard gate.
 
 ## Strategic Roadmap
 

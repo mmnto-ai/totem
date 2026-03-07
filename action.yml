@@ -1,0 +1,32 @@
+name: 'Totem Shield'
+description: 'Run Totem Shield quality gate on PR diffs — enforce architectural lessons in CI'
+branding:
+  icon: 'shield'
+  color: 'purple'
+
+inputs:
+  model:
+    description: 'Override the orchestrator model for shield analysis'
+    required: false
+  working-directory:
+    description: 'Directory to run shield in (defaults to repository root)'
+    required: false
+    default: '.'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Sync Totem index
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: npx @mmnto/cli sync
+
+    - name: Run Totem Shield
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        SHIELD_ARGS=""
+        if [ -n "${{ inputs.model }}" ]; then
+          SHIELD_ARGS="--model ${{ inputs.model }}"
+        fi
+        npx @mmnto/cli shield $SHIELD_ARGS

@@ -10,8 +10,8 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] Syntax-aware chunkers and LanceDB store with incremental `totem sync`
 - [x] MCP Server with `search_knowledge` and `add_lesson`
 - [x] Auto-Injection of memory reflexes into `CLAUDE.md`, `.cursorrules`, and `.gemini/`
-- [x] Ported native `@mmnto/cli` orchestrator commands (`spec`, `shield`, `triage`, `briefing`, `handoff`, `learn`)
-- [x] **PR Learning Loop:** `totem learn <pr-number>` parses reviews to extract architectural lessons.
+- [x] Ported native `@mmnto/cli` orchestrator commands (`spec`, `shield`, `triage`, `briefing`, `handoff`, `extract`)
+- [x] **PR Learning Loop:** `totem extract <pr-number>` parses reviews to extract architectural lessons.
 - [x] **Evidence-Based Quality Gate:** `totem shield` enforces test coverage and returns exit codes.
 - [ ] Validate OpenAI Happy Path (Issue #4 / #8)
 
@@ -48,7 +48,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#148 Config:** Add Zod schema validation for Claude settings.local.json.
 - [x] **#147 Core:** Extract inline shell hooks into dedicated Node.js scripts.
 - [x] **#80 Security: Add XML delimiting:** Close the prompt injection gap in orchestrator commands.
-- [x] **#111 Security:** Mitigate indirect prompt injection in `learn` command via PR comments.
+- [x] **#111 Security:** Mitigate indirect prompt injection in `extract` command via PR comments.
 - [x] **#116 Security:** Sanitize CLI output streams to prevent terminal injection attacks.
 - [x] **#106 Robustness:** Prevent stale LanceDB handles by re-initializing store on error.
 - [x] **#105 Resilience:** Add exponential backoff to OpenAI embedder for rate limits.

@@ -215,7 +215,7 @@ pnpm dev                  # Watch mode
 - Syntax-aware chunkers (TypeScript AST, Markdown headings, session logs, schema files, test files)
 - `totem sync` (full + incremental), OpenAI and Ollama providers
 - MCP server with `search_knowledge` and `add_lesson`
-- CLI orchestrator commands: `spec`, `shield`, `triage`, `briefing`, `handoff`, `learn`, `bridge`, `wrap`, `eject`
+- CLI orchestrator commands: `spec`, `shield`, `triage`, `briefing`, `handoff`, `extract`, `bridge`, `wrap`, `eject`
 - Published on npm, dogfooded in satur8d
 
 ### Phase 4: Polish & Defensibility (current)
@@ -223,7 +223,7 @@ pnpm dev                  # Watch mode
 - Shield GitHub Action for CI/CD enforcement (#180)
 - Drift Detection for self-cleaning memory (#181)
 - Core test backfill (#122)
-- Interactive multi-select for `totem learn` (#168)
+- Interactive multi-select for `totem extract` (#168)
 - See `docs/roadmap.md` and `docs/active_work.md` for full priority list
 
 ### Phase 5 (Future): Enterprise Expansion
