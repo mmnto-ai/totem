@@ -131,6 +131,14 @@ npx @mmnto/cli briefing
 
 _(Totem fetches your current git branch, uncommitted changes, open PRs, and recent session momentum to generate a startup briefing for your AI)._
 
+**Mid-Session Context Reset (`bridge`)**
+
+```bash
+npx @mmnto/cli bridge
+```
+
+_(Totem assesses your current mid-task state and creates a lightweight breadcrumb file. Use this when your AI agent's context window gets too full and you need to clear the chat without losing your place)._
+
 **Pre-Work Briefings (`spec`)**
 
 ```bash
@@ -163,6 +171,14 @@ npx @mmnto/cli anchor
 
 _(Totem interactively prompts you to document a context, symptom, and fix/rule. It saves the lesson to `.totem/lessons.md` and automatically triggers a background re-index so the new knowledge is instantly available to your AI agents)._
 
+**End-of-Task Automation (`wrap`)**
+
+```bash
+npx @mmnto/cli wrap
+```
+
+_(Totem sequentially runs the `learn` extraction loop on your recent changes, syncs the vector database, and generates an end-of-session `handoff` briefing in one command)._
+
 **PR Learning Loop (`learn`)**
 
 ```bash
@@ -178,6 +194,14 @@ npx @mmnto/cli handoff --out session-handoff.md
 ```
 
 _(Totem captures your uncommitted git changes and any lessons learned today, synthesizing a tactical snapshot so your next session doesn't start cold)._
+
+**Clean Ejection (`eject`)**
+
+```bash
+npx @mmnto/cli eject
+```
+
+_(Safely removes all Totem git hooks, generated configuration files, AI agent prompt injections, and the local `.lancedb/` vector index, cleanly uninstalling Totem from your repository)._
 
 > [!TIP]
 > **Custom Prompt Overrides**
