@@ -188,10 +188,7 @@ export function detectDrift(lessons: ParsedLesson[], projectRoot: string): Drift
  * Rewrite lessons.md content, removing lessons at the specified indices.
  * Returns the new file content.
  */
-export function rewriteLessonsFile(
-  content: string,
-  indicesToRemove: Set<number>,
-): string {
+export function rewriteLessonsFile(content: string, indicesToRemove: Set<number>): string {
   if (indicesToRemove.size === 0) return content;
 
   // Split on lesson headings to preserve the file header
