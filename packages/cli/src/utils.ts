@@ -13,6 +13,7 @@ import { bold, log } from './ui.js';
 // ─── Shared constants ────────────────────────────────────
 
 const LLM_TIMEOUT_MS = 180_000;
+const LLM_MAX_BUFFER = 10 * 1024 * 1024; // 10MB — Gemini JSON responses can exceed Node's 1MB default
 const TEMP_ID_BYTES = 4;
 const MODEL_NAME_RE = /^[\w./:_-]+$/;
 const TELEMETRY_FILE = 'telemetry.jsonl';
@@ -173,6 +174,7 @@ export function invokeShellOrchestrator(
       cwd,
       encoding: 'utf-8',
       timeout: LLM_TIMEOUT_MS,
+      maxBuffer: LLM_MAX_BUFFER,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     const wallMs = Date.now() - startMs;
@@ -189,10 +191,25 @@ export function invokeShellOrchestrator(
 
     return { content: raw.trim(), inputTokens: null, outputTokens: null, durationMs: wallMs };
   } catch (err: unknown) {
-    const execErr = err as { stderr?: Buffer | string };
+    const execErr = err as { stderr?: Buffer | string; killed?: boolean; code?: string | number };
     const stderr = execErr.stderr ? execErr.stderr.toString() : '';
     const msg = err instanceof Error ? err.message : String(err);
     const fullError = `${msg}\n${stderr}`;
+
+    // Detect buffer overflow — Node kills the process when stdout exceeds maxBuffer
+    if (execErr.code === 'ENOBUFS') {
+      throw new Error(
+        `[Totem Error] Orchestrator response exceeded the ${LLM_MAX_BUFFER / 1024 / 1024}MB output buffer.\n` +
+          `This usually means the LLM produced an unexpectedly large response.\n${stderr}`,
+      );
+    }
+
+    // Detect timeout
+    if (execErr.code === 'ETIMEDOUT') {
+      throw new Error(
+        `[Totem Error] Orchestrator timed out after ${LLM_TIMEOUT_MS / 1000}s.\n${stderr}`,
+      );
+    }
 
     const lowerMsg = fullError.toLowerCase();
     if (

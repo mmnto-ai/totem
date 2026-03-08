@@ -123,4 +123,34 @@ describe('invokeShellOrchestrator', () => {
       invokeShellOrchestrator('prompt', 'cmd', 'model', tmpDir, 'Test', totemDir),
     ).toThrow('[Totem Error] Shell orchestrator command failed');
   });
+
+  it('throws descriptive error for buffer overflow (ENOBUFS)', () => {
+    mockedExec.mockImplementation(() => {
+      const err = new Error('spawnSync cmd ENOBUFS') as Error & {
+        code?: string;
+        stderr?: Buffer;
+      };
+      err.code = 'ENOBUFS';
+      err.stderr = Buffer.from('');
+      throw err;
+    });
+    expect(() =>
+      invokeShellOrchestrator('prompt', 'cmd', 'model', tmpDir, 'Test', totemDir),
+    ).toThrow('exceeded the 10MB output buffer');
+  });
+
+  it('throws descriptive error for timeout (ETIMEDOUT)', () => {
+    mockedExec.mockImplementation(() => {
+      const err = new Error('spawnSync cmd ETIMEDOUT') as Error & {
+        code?: string;
+        stderr?: Buffer;
+      };
+      err.code = 'ETIMEDOUT';
+      err.stderr = Buffer.from('');
+      throw err;
+    });
+    expect(() =>
+      invokeShellOrchestrator('prompt', 'cmd', 'model', tmpDir, 'Test', totemDir),
+    ).toThrow('timed out after 180s');
+  });
 });
