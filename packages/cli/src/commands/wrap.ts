@@ -46,8 +46,7 @@ export async function wrapCommand(prNumbers: string[], options: WrapOptions): Pr
     });
   } catch (err) {
     // Don't fail wrap if docs aren't configured — it's optional
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('No docs configured')) {
+    if (err instanceof Error && err.name === 'NoDocsConfiguredError') {
       log.dim(TAG, 'No docs configured — skipping doc sync.');
     } else {
       throw err;

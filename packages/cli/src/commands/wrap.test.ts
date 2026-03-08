@@ -79,7 +79,9 @@ describe('wrapCommand', () => {
   });
 
   it('gracefully skips docs step when no docs configured', async () => {
-    vi.mocked(docsCommand).mockRejectedValueOnce(new Error('[Totem Error] No docs configured.'));
+    const err = new Error('[Totem Error] No docs configured.');
+    err.name = 'NoDocsConfiguredError';
+    vi.mocked(docsCommand).mockRejectedValueOnce(err);
 
     await wrapCommand(['142'], {});
 

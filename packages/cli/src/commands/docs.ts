@@ -174,13 +174,15 @@ export async function docsCommand(options: DocsOptions): Promise<void> {
 
   // Validate docs are configured
   if (!config.docs || config.docs.length === 0) {
-    throw new Error(
+    const err = new Error(
       `[Totem Error] No docs configured.\n` +
         `Add a 'docs' array to totem.config.ts. Example:\n` +
         `  docs: [\n` +
         `    { path: 'README.md', description: 'Public-facing README', trigger: 'post-release' },\n` +
         `  ]`,
     );
+    err.name = 'NoDocsConfiguredError';
+    throw err;
   }
 
   // Filter by --only
