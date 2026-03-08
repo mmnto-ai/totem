@@ -10,6 +10,7 @@ import {
   formatResults,
   getSystemPrompt,
   loadEnv,
+  reapOrphanedTempFiles,
   requireEmbedding,
   resolveConfigPath,
   sanitize,
@@ -446,5 +447,72 @@ describe('requireEmbedding', () => {
 
   it('error message mentions totem init', () => {
     expect(() => requireEmbedding(BASE_CONFIG)).toThrow('totem init');
+  });
+});
+
+describe('reapOrphanedTempFiles', () => {
+  let tmpRoot: string;
+
+  beforeEach(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-reap-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  function writeTempFile(name: string, ageMs: number): string {
+    const tempDir = path.join(tmpRoot, '.totem', 'temp');
+    fs.mkdirSync(tempDir, { recursive: true });
+    const filePath = path.join(tempDir, name);
+    fs.writeFileSync(filePath, 'prompt content');
+    const past = new Date(Date.now() - ageMs);
+    fs.utimesSync(filePath, past, past);
+    return filePath;
+  }
+
+  it('removes temp files older than maxAge', async () => {
+    const old = writeTempFile('totem-shield-abc123.md', 25 * 60 * 60 * 1000);
+    const removed = await reapOrphanedTempFiles(tmpRoot, '.totem', 24 * 60 * 60 * 1000);
+    expect(removed).toBe(1);
+    expect(fs.existsSync(old)).toBe(false);
+  });
+
+  it('keeps temp files younger than maxAge', async () => {
+    const recent = writeTempFile('totem-spec-def456.md', 1 * 60 * 60 * 1000);
+    const removed = await reapOrphanedTempFiles(tmpRoot, '.totem', 24 * 60 * 60 * 1000);
+    expect(removed).toBe(0);
+    expect(fs.existsSync(recent)).toBe(true);
+  });
+
+  it('ignores non-totem files', async () => {
+    const other = writeTempFile('random-notes.txt', 48 * 60 * 60 * 1000);
+    const removed = await reapOrphanedTempFiles(tmpRoot, '.totem', 24 * 60 * 60 * 1000);
+    expect(removed).toBe(0);
+    expect(fs.existsSync(other)).toBe(true);
+  });
+
+  it('returns 0 when temp directory does not exist', async () => {
+    const removed = await reapOrphanedTempFiles(tmpRoot, '.totem');
+    expect(removed).toBe(0);
+  });
+
+  it('handles mixed old and new files', async () => {
+    const old1 = writeTempFile('totem-shield-aaa.md', 30 * 60 * 60 * 1000);
+    const old2 = writeTempFile('totem-triage-bbb.md', 48 * 60 * 60 * 1000);
+    const recent = writeTempFile('totem-spec-ccc.md', 2 * 60 * 60 * 1000);
+    const removed = await reapOrphanedTempFiles(tmpRoot, '.totem', 24 * 60 * 60 * 1000);
+    expect(removed).toBe(2);
+    expect(fs.existsSync(old1)).toBe(false);
+    expect(fs.existsSync(old2)).toBe(false);
+    expect(fs.existsSync(recent)).toBe(true);
+  });
+
+  it('swallows errors from already-deleted files gracefully', async () => {
+    const filePath = writeTempFile('totem-shield-race.md', 48 * 60 * 60 * 1000);
+    // Simulate race: delete before reaper runs
+    fs.unlinkSync(filePath);
+    const removed = await reapOrphanedTempFiles(tmpRoot, '.totem', 24 * 60 * 60 * 1000);
+    expect(removed).toBe(0);
   });
 });

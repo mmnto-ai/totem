@@ -213,6 +213,51 @@ export function invokeShellOrchestrator(
   }
 }
 
+// ─── Orphaned temp file cleanup ──────────────────────────
+
+const TEMP_FILE_RE = /^totem-.*\.md$/;
+const TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * Reap orphaned temp files older than `maxAgeMs` from `.totem/temp/`.
+ * Fire-and-forget — never blocks the CLI critical path.
+ */
+export async function reapOrphanedTempFiles(
+  cwd: string,
+  totemDir: string,
+  maxAgeMs: number = TEMP_MAX_AGE_MS,
+): Promise<number> {
+  const tempDir = path.join(cwd, totemDir, 'temp');
+  const { readdir, stat, unlink } = await import('node:fs/promises');
+
+  let entries: string[];
+  try {
+    entries = await readdir(tempDir);
+  } catch {
+    return 0; // Directory doesn't exist yet — nothing to clean
+  }
+
+  let removed = 0;
+  const now = Date.now();
+
+  for (const entry of entries) {
+    if (!TEMP_FILE_RE.test(entry)) continue;
+
+    const filePath = path.join(tempDir, entry);
+    try {
+      const info = await stat(filePath);
+      if (now - info.mtimeMs > maxAgeMs) {
+        await unlink(filePath);
+        removed++;
+      }
+    } catch {
+      // ENOENT (race), EACCES/EPERM (permissions) — swallow silently
+    }
+  }
+
+  return removed;
+}
+
 // ─── System prompt overrides ─────────────────────────────
 
 const SAFE_COMMAND_NAME_RE = /^[a-z][a-z0-9_-]{0,30}$/;
