@@ -1,5 +1,20 @@
 # @mmnto/cli
 
+## 0.17.0
+
+### Minor Changes
+
+- 03372b4: feat: drift detection for self-cleaning memory (#181)
+
+  Adds `totem sync --prune` to detect and interactively remove lessons with stale file references. The drift detector scans `.totem/lessons.md` for backtick-wrapped file paths that no longer exist in the project, then presents an interactive multi-select for pruning. After pruning, the vector index is automatically re-synced.
+
+  New core exports: `parseLessonsFile`, `extractFileReferences`, `detectDrift`, `rewriteLessonsFile`.
+
+### Patch Changes
+
+- Updated dependencies [03372b4]
+  - @mmnto/totem@0.17.0
+
 ## 0.16.1
 
 ### Patch Changes
