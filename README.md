@@ -205,9 +205,11 @@ jobs:
 - **Path separators:** `totem.config.ts` uses forward slashes (`src/**/*.ts`) on all platforms. Do not use backslashes in glob patterns.
 - **Environment variables:** `totem init` writes your `OPENAI_API_KEY` to a `.env` file, so no need to set `export` or `$env:` manually.
 
-### macOS
+### macOS / Linux
 
-- If using Ollama for embeddings, install via `brew install ollama` and ensure it is running (`ollama serve`) before running `totem sync`.
+- **Ollama:** If using Ollama for embeddings, ensure it is installed and running (`ollama serve`) before `totem sync`.
+  - **macOS:** Install with `brew install ollama`.
+  - **Linux:** Follow the [official Ollama installation guide](https://github.com/ollama/ollama/blob/main/docs/linux.md).
 
 ## Strategic Roadmap
 
