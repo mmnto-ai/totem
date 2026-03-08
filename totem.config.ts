@@ -27,7 +27,10 @@ const config: TotemConfig = {
   },
 
   docs: [
-    { path: 'README.md', description: 'Public-facing README with install, usage, and feature overview' },
+    {
+      path: 'README.md',
+      description: 'Public-facing README with install, usage, and feature overview',
+    },
     { path: 'docs/roadmap.md', description: 'Strategic roadmap with phase progress' },
     { path: 'docs/active_work.md', description: 'Current priorities and next issue triage' },
     { path: 'docs/architecture.md', description: 'Technical architecture and system design' },
