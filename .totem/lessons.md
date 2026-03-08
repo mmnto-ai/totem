@@ -598,3 +598,25 @@ Prioritize codebase-wide consistency for established utility patterns (like `she
 **Tags:** pragmatism, design-decision, logging
 
 Avoid over-engineering cosmetic log summaries, such as using frequency maps for a simple `+N/-M` line-change count, if basic `Set`-based logic provides sufficient visual feedback. Prioritize simplicity and functional correctness over perfect accuracy for non-critical console output.
+
+## Lesson — Reply to GCA with a single structured PR comment
+
+**Tags:** gca, pr-review, workflow, dx
+
+**Context:** Responding to GCA (Gemini Code Assist) PR review comments.
+**Symptom:** Individual thread replies waste quota (100/day) and produce generic "thanks" responses from GCA.
+**Fix/Rule:** Reply with a single PR comment containing a numbered list that matches GCA's comments 1:1, with explicit accept/decline per item and a commit SHA reference. This gives GCA structured feedback — it confirms each fix individually and produces a higher-quality acknowledgment response.
+
+## Lesson — Custom .env parsers must strip CRLF and quotes
+
+**Tags:** windows, dotenv, parsing, environment, trap
+
+**Context:** Windows .env file parsing in Node.js CLI tools.
+**Symptom:** `loadEnv` failed to parse keys correctly — values included literal quote characters (`"sk-..."` instead of `sk-...`) and Windows CRLF line endings caused regex match failures.
+**Fix/Rule:** Always strip `\r` from lines before parsing (`line.replace(/\r$/, '')`), and strip surrounding quotes with `raw.replace(/^(['"])(.*)(\1)$/, '$2')`. System env vars take precedence over .env — `loadEnv` should never override existing `process.env` keys.
+
+## Lesson — Sanitize user-provided text before persisting to files
+
+**Tags:** security, terminal-injection, cli
+
+Sanitize ANSI escape sequences from user-provided text before persisting it to local Markdown files or logs (like `lessons.md`). This prevents terminal injection vulnerabilities where viewing the file with tools like `cat` could execute malicious or disruptive control sequences in the user's terminal environment.

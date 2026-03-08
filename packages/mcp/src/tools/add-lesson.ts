@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-import { generateLessonHeading } from '@mmnto/totem';
+import { generateLessonHeading, sanitize } from '@mmnto/totem';
 
 import { getContext, reconnectStore } from '../context.js';
 import { formatXmlResponse } from '../xml-format.js';
@@ -124,10 +124,15 @@ export function registerAddLesson(server: McpServer): void {
         await fs.promises.mkdir(totemDir, { recursive: true });
 
         const lessonsPath = path.join(totemDir, 'lessons.md');
-        const heading = generateLessonHeading(lesson);
-        const tags = context_tags.join(', ');
+        const safeLesson = sanitize(lesson);
+        const safeTags =
+          context_tags.length > 0
+            ? context_tags.map((t) => sanitize(t).replace(/\n/g, ' ')).join(', ')
+            : 'manual';
+        const heading = generateLessonHeading(safeLesson);
 
-        const entry = `\n## Lesson — ${heading}\n\n` + `**Tags:** ${tags}\n\n` + `${lesson}\n`;
+        const entry =
+          `\n## Lesson — ${heading}\n\n` + `**Tags:** ${safeTags}\n\n` + `${safeLesson.trim()}\n`;
 
         await fs.promises.appendFile(lessonsPath, entry, 'utf-8');
 

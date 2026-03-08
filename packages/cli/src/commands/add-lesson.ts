@@ -70,7 +70,8 @@ export async function addLessonCommand(lessonArg?: string): Promise<void> {
   }
 
   const safeLesson = sanitize(lessonText);
-  const safeTagString = tags.length > 0 ? tags.map((t) => sanitize(t)).join(', ') : 'manual';
+  const safeTagString =
+    tags.length > 0 ? tags.map((t) => sanitize(t).replace(/\n/g, ' ')).join(', ') : 'manual';
   const heading = generateLessonHeading(safeLesson);
 
   const entry = `\n## Lesson — ${heading}\n\n**Tags:** ${safeTagString}\n\n${safeLesson.trim()}\n`;
