@@ -52,6 +52,15 @@ export { LanceStore } from './store/lance-store.js';
 export type { ResolvedFile } from './ingest/sync.js';
 export { getChangedFiles, getHeadSha, resolveFiles, runSync } from './ingest/sync.js';
 
+// Drift detection
+export type { DriftResult, ParsedLesson } from './drift-detector.js';
+export {
+  detectDrift,
+  extractFileReferences,
+  parseLessonsFile,
+  rewriteLessonsFile,
+} from './drift-detector.js';
+
 // Utilities
 export { generateLessonHeading } from './lesson-format.js';
 export { sanitize } from './sanitize.js';
