@@ -44,6 +44,14 @@ This is a Turborepo monorepo consisting of:
 - **100% Local Privacy:** Totem's vector database (`.lancedb/`) lives entirely within your local repository. Your codebase is never uploaded to a centralized SaaS platform or external memory service.
 - **Injection Hardening:** Totem actively sanitizes untrusted inputs (like PR comments fetched during `totem extract` and external GitHub issues) and **XML-delimits MCP responses** (#149) to mitigate indirect prompt injection and terminal injection attacks.
 
+## Prerequisites
+
+- **Node.js 20+** — [nodejs.org](https://nodejs.org/) (or use a version manager like `nvm`/`fnm`)
+- **pnpm** _(recommended)_ — `npm install -g pnpm` or see [pnpm.io/installation](https://pnpm.io/installation)
+- **GitHub CLI (`gh`)** _(optional, for orchestrator commands)_ — [cli.github.com](https://cli.github.com/)
+
+Totem works on **Windows**, **macOS**, and **Linux**. On Windows, Git Bash (bundled with [Git for Windows](https://gitforwindows.org/)) is recommended but not required — PowerShell and CMD work too.
+
 ## Getting Started
 
 ### 1. Initialize Totem
@@ -86,7 +94,9 @@ _(Note: If you accepted the git hook installation during `init`, Totem will auto
 
 ### 4. Connect the MCP Server
 
-Add Totem to your AI agent's configuration (e.g., Claude Desktop or Gemini):
+Add Totem to your AI agent's configuration (e.g., Claude Desktop, Claude Code, or Gemini).
+
+**macOS / Linux:**
 
 ```json
 {
@@ -98,6 +108,22 @@ Add Totem to your AI agent's configuration (e.g., Claude Desktop or Gemini):
   }
 }
 ```
+
+**Windows:**
+
+```json
+{
+  "mcpServers": {
+    "totem": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@mmnto/mcp"]
+    }
+  }
+}
+```
+
+> [!NOTE]
+> On Windows, `npx` is a `.cmd` script that tools like Claude Code cannot invoke directly as a subprocess. The `cmd /c` wrapper resolves this. If you use Git Bash as your shell, the macOS/Linux format may also work.
 
 ### 5. The Workflow Orchestrator
 
@@ -165,11 +191,23 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - uses: mmnto-ai/totem@main
+      - uses: mmnto-ai/totem@v0
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 ```
+
+## Platform Notes
+
+### Windows
+
+- **Git hooks** installed by `totem init` run via Git for Windows' bundled shell (MinGW/bash) and work transparently regardless of your primary terminal (PowerShell, CMD, or Windows Terminal).
+- **Path separators:** `totem.config.ts` uses forward slashes (`src/**/*.ts`) on all platforms. Do not use backslashes in glob patterns.
+- **Environment variables:** `totem init` writes your `OPENAI_API_KEY` to a `.env` file, so no need to set `export` or `$env:` manually.
+
+### macOS
+
+- If using Ollama for embeddings, install via `brew install ollama` and ensure it is running (`ollama serve`) before running `totem sync`.
 
 ## Strategic Roadmap
 
