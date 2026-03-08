@@ -205,6 +205,16 @@ jobs:
 - **Path separators:** `totem.config.ts` uses forward slashes (`src/**/*.ts`) on all platforms. Do not use backslashes in glob patterns.
 - **Environment variables:** `totem init` writes your `OPENAI_API_KEY` to a `.env` file, so no need to set `export` or `$env:` manually.
 
+### Advanced: Pinning the MCP Server Version
+
+The default `npx -y @mmnto/mcp` setup always uses the latest version. For teams that need deterministic builds, you can pin the version by installing it as a dev dependency:
+
+```bash
+pnpm add -D @mmnto/mcp
+```
+
+Then remove the `-y` flag from your MCP config — `npx` will use the locally installed version instead of fetching from the registry.
+
 ### macOS / Linux
 
 - **Ollama:** If using Ollama for embeddings, ensure it is installed and running (`ollama serve`) before `totem sync`.
