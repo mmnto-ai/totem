@@ -51,6 +51,8 @@ The `embedding` field in `totem.config.ts` is optional. When omitted, Totem oper
 
 The `lessons.md` file within `.totem/` is meant to be version-controlled (committed to git). It acts as the explicit, human-readable ledger of traps and architectural decisions. When updated, `totem sync` re-indexes it.
 
+During `totem init`, users are offered an optional **Universal Baseline** — a curated set of foundational AI developer lessons (security, hallucination traps, architecture rules). These are appended to `lessons.md` with a `<!-- totem:baseline -->` marker for idempotency. The baseline solves the cold-start problem where a fresh install has no knowledge to retrieve.
+
 ## Phase 4 Vision: Federated Memory & Swarm Intelligence
 
 Because Totem treats memory as static files (`.totem/lessons.md`, `session-handoff.md`, `active_work.md`), we can unlock "Swarm Intelligence" across a team without inventing a complex peer-to-peer mesh network.

@@ -23,7 +23,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 - [x] **#87 Auto-configure AI tools:** `totem init` scaffolds `.gemini/settings.json`, `CLAUDE.md`, and `.cursorrules` automatically.
 - [x] **#89 UX Polish for `totem init`:** Fix double-prompting and print clean success summaries so developers trust the onboarding.
-- [ ] **#128 Epic: Universal Baselines:** Ship a curated list of foundational AI security/architectural lessons that users can optionally install during `totem init` to solve the "cold start" problem.
+- [x] **#128 Epic: Universal Baselines:** Ship a curated list of foundational AI security/architectural lessons that users can optionally install during `totem init` to solve the "cold start" problem.
 - [ ] **#129 Epic: Interactive CLI Tutorial:** Build an animated, interactive CLI tutorial (`totem tutorial`) that allows users to pause the walkthrough, ask the LLM contextual questions about their codebase, and resume seamlessly.
 - [ ] **#125 Epic: Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically, achieving a "run `init` and forget" workflow.
 - [x] **#86 Seamless Host Integration:** Build the `SessionStart` hooks, Claude custom commands, and `Totem Architect` skills that #87 installs.
