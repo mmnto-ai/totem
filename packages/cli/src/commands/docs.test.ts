@@ -36,8 +36,8 @@ vi.mock('../adapters/github-cli.js', () => ({
   })),
 }));
 
-import { loadConfig, runOrchestrator } from '../utils.js';
 import { isFileDirty } from '../git.js';
+import { loadConfig, runOrchestrator } from '../utils.js';
 
 // ─── Helpers ────────────────────────────────────────────
 

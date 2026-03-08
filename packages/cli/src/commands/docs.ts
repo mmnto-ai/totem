@@ -3,8 +3,8 @@ import * as path from 'node:path';
 
 import type { DocTarget } from '@mmnto/totem';
 
-import { getGitLogSince, getLatestTag, isFileDirty } from '../git.js';
 import { GitHubCliAdapter } from '../adapters/github-cli.js';
+import { getGitLogSince, getLatestTag, isFileDirty } from '../git.js';
 import { log } from '../ui.js';
 import {
   getSystemPrompt,
