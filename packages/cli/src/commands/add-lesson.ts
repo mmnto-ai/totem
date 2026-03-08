@@ -4,9 +4,9 @@ import * as path from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
 import * as readline from 'node:readline/promises';
 
-import { log } from '../ui.js';
 import { generateLessonHeading } from '@mmnto/totem';
 
+import { log } from '../ui.js';
 import { IS_WIN, loadConfig, loadEnv, resolveConfigPath } from '../utils.js';
 
 function detectSyncCommand(cwd: string): { cmd: string; args: string[] } {
