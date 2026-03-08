@@ -1,17 +1,17 @@
 ### Active Work Summary
 
-Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete, establishing the Turborepo architecture, syntax-aware chunking (now powered by Tree-sitter #173), and local data stores. Recent momentum has delivered the Shield GitHub Action (#180), Drift Detection (#177, #211), Automated Doc Sync (#190), MVC Configuration Tiers (#187), a "Universal Lessons" baseline (#128), and Cross-Platform Onboarding (#210). Focus is now shifting toward validating the core OpenAI embedding pipeline (#4) to enable internal dogfooding (#8) and completing interactive onboarding polish before scaling Phase 3 workflow expansions.
+Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete, establishing the Turborepo architecture, syntax-aware chunking (now powered by Tree-sitter #173), and local data stores. Recent momentum has delivered the Shield GitHub Action (#180), Drift Detection (#177, #211), Automated Doc Sync (#190), MVC Configuration Tiers (#187), a "Universal Lessons" baseline (#128), Cross-Platform Onboarding (#210), OpenAI Embedding validation (#4), and a deterministic lesson compiler with zero-LLM shield mode (#213). Focus is now on internal dogfooding (#8) and expanding the deterministic compiler before scaling Phase 3 workflow expansions.
 
 ### Prioritized Roadmap
 
 **Do Next (Critical Path & Validation)**
 
-- #4 — Validate OpenAI Embedding Provider (Happy Path) — P1 validation required to ensure core embedding functionality is actually working for end users.
 - #8 — Validate dogfood sync with OpenAI embeddings — P1 dogfooding necessary to prove out the system's core value proposition and ingestion stability.
 
-**Up Next (Adoption & Polish)**
+**Up Next (NASA-Grade Moat & Adoption)**
 
-- #129 — Epic: Interactive CLI Tutorial & Conversational Onboarding — Specifically flagged in the active work roadmap to finish Phase 1 polish.
+- #213 — Deterministic Compiler iteration — Expand regex-only MVP to cover more lesson patterns; evaluate ESLint AST selectors as a future engine.
+- #129 — Epic: Interactive CLI Tutorial & Conversational Onboarding — Finish Phase 1 polish.
 
 **Backlog (Phase 3 Workflow Expansion)**
 
@@ -21,11 +21,11 @@ Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally
 
 ### Next Issue (User Story & Scope)
 
-**#4 — Validate OpenAI Embedding Provider (Happy Path)**
+**#8 — Validate dogfood sync with OpenAI embeddings**
 
-- **User Story:** As an end user, I want the default OpenAI embedding provider to work flawlessly upon initial setup so that my codebase is successfully ingested and searchable without silent failures.
-- **Scope:** Strictly test and fix the happy-path execution of the existing `openai-embedder.ts`. Ensure environment variables are read correctly, payload requests succeed, and vectors are returned properly to the chunker. Although exponential backoff was added in #105, the end-to-end ingestion flow still requires verification. DO NOT add support for new models and DO NOT refactor the LanceDB storage layer.
-- **Why Next:** Core embedding stability is a prerequisite for all advanced features and internal dogfooding. We cannot proceed to Phase 3 if the foundational pipeline is unverified.
+- **User Story:** As a developer using Totem in a real project (satur8d), I want to run `totem sync` + `search_knowledge` end-to-end with OpenAI embeddings to verify the full pipeline works reliably.
+- **Scope:** Switch the satur8d consumer project from Ollama to OpenAI, run a clean sync, and validate search results. Document any UX friction.
+- **Why Next:** #4 (OpenAI validation) is complete. Dogfooding in a real consumer project is the final prerequisite before Phase 3 expansion.
 
 ### Blocked / Needs Input
 

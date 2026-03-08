@@ -48,6 +48,8 @@ The `anchor/spin/kick` metaphor from the Inception-inspired philosophy lives in 
 | First-time project setup | `totem init`                                               |
 | Detect config tier       | `getConfigTier(config)` → `'lite' \| 'standard' \| 'full'` |
 | Guard embedding access   | `requireEmbedding(config)` → throws friendly error         |
+| Compile lessons to rules | `totem compile` → `.totem/compiled-rules.json`             |
+| Deterministic CI gate    | `totem shield --deterministic` → zero-LLM enforcement      |
 
 ### MCP Interface (Phase 1 — two tools only)
 

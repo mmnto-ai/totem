@@ -13,7 +13,8 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] Ported native `@mmnto/cli` orchestrator commands (`spec`, `shield`, `triage`, `briefing`, `handoff`, `extract`)
 - [x] **PR Learning Loop:** `totem extract <pr-number>` parses reviews to extract architectural lessons.
 - [x] **Evidence-Based Quality Gate:** `totem shield` enforces test coverage and returns exit codes.
-- [ ] Validate OpenAI Happy Path (Issue #4 / #8)
+- [x] Validate OpenAI Happy Path (Issue #4)
+- [ ] Validate dogfood sync with OpenAI embeddings (Issue #8)
 
 ---
 
@@ -28,7 +29,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [ ] **#125 Epic: Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically, achieving a "run `init` and forget" workflow.
 - [x] **#86 Seamless Host Integration:** Build the `SessionStart` hooks, Claude custom commands, and `Totem Architect` skills that #87 installs.
 - [x] **#21 CLI UI/UX Polish:** Branded colors (picocolors), ora spinners, ASCII banner. @clack/prompts multiselect shipped in v0.13.0 (#168).
-- [x] **#12 Cross-platform onboarding:** Ensure docs and installers work flawlessly across Windows (PowerShell), macOS, and Linux.
+- [x] **#12 / #210 Cross-platform onboarding:** Ensure docs and installers work flawlessly across Windows (PowerShell), macOS, and Linux.
 
 ## Phase 2: Core Stability & Data Safety (Functionally Complete)
 
@@ -69,7 +70,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 - [ ] **#130 Epic: Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks, index health, and ignored files to build trust in the "black box".
 - [ ] **#119 `totem run <workflow>`:** Introduce a custom AI task runner to execute user-defined markdown workflows via the orchestrator.
-- [x] **#181 Drift Detection (#177):** Self-cleaning memory — detect and prune stale lessons automatically.
+- [x] **#181 Drift Detection (#177, #211):** Self-cleaning memory — detect and prune stale lessons automatically.
 - [x] **#120 Custom Prompt Overrides:** Allow users to override the hardcoded personas for built-in commands (`spec`, `shield`, etc.) via `.totem/prompts/`.
 - [x] **#44 `totem bridge`:** Build a mid-session context compaction tool to clear token windows without losing place.
 - [ ] **#74 `totem oracle`:** Add a frictionless Q&A command to query LanceDB without strict personas.
@@ -78,6 +79,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
 - [x] **#187 Minimum Viable Configuration:** Tiered config (Lite/Standard/Full) with auto-detection. Embedding is optional; Lite tier works with zero API keys.
 - [x] **#190 Automated Doc Sync:** `totem docs` command to keep project docs updated via per-doc LLM passes. Integrated into `totem wrap` as Step 4/4 (#143).
+- [x] **#213 Zero-LLM Shield Mode:** Deterministic lesson compiler and zero-LLM shield mode.
 - [ ] **#176 Agent-Optimized MCP:** Dynamic token budgeting and write access for deeper agent-to-agent interactions.
 - [ ] **#183 Cross-File Knowledge Graph:** Implement symbol resolution to enable multi-file architectural reasoning.
 
@@ -91,4 +93,5 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [ ] **#79 Documentation Ingestion Pipeline:** Build Pull/Push models for Notion, Confluence, or internal wikis.
 - [ ] **#34 Configurable Governance:** Let enterprise teams configure AI review loops (`auditLoopLimit`, `shieldSeverityThreshold`).
 - [ ] **#42 Universal AI DevEx:** Evolve `totem init` to inject "Best Practices" guardrails (Anti-Refactor, Test Coverage triggers).
+- [ ] **#198 RFC: Open Core & Defensive Licensing Strategy:** Evaluate MIT vs. Fair Source licensing strategy.
 - [x] Implement Changesets and npm publishing (Issue #5 / #46)
