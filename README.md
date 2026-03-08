@@ -19,7 +19,7 @@ When you're three levels deep in a debugging session, you need to know if the co
 - **Local-First & Git-Native:** Memory shouldn't be locked in a cloud SaaS. Totem compiles an embedded LanceDB vector index right inside your project (`.lancedb/`). The actual knowledge is stored in a human-readable, version-controlled `.totem/lessons.md` file. Review your AI's memory in your PRs.
 - **The Reflex Engine:** Totem doesn't just give your AI a database; it gives them _reflexes_. `totem init` auto-injects behavioral triggers and **Defensive Context Management Reflexes** (#160) into your AI's system prompts (`CLAUDE.md`, `.cursorrules`), forcing them to autonomously document traps, query architecture, and issue warnings before they write code.
 - **Multi-Agent Orchestration:** Use Claude to write code, Gemini to review PRs, and a local DeepSeek model for fast checks. Totem acts as the "Shared Brain" and workflow orchestrator (via `totem spec`) for your entire AI org chart.
-- **Built for Enterprise Scale:** The ingestion pipeline streams chunks in batches directly to the local vector store (#104), maintaining a flat memory footprint regardless of how massive your monorepo gets. Features like **Drift Detection** (#177) ensure your memory stays self-cleaning and relevant as the codebase evolves.
+- **Built for Enterprise Scale:** The ingestion pipeline streams chunks in batches directly to the local vector store (#104), maintaining a flat memory footprint regardless of how massive your monorepo gets. Features like **Drift Detection** (#177, #211) ensure your memory stays self-cleaning and relevant as the codebase evolves.
 
 ## Philosophy: The Unix Approach to AI
 
@@ -50,7 +50,7 @@ This is a Turborepo monorepo consisting of:
 - **pnpm** _(recommended)_ — `corepack enable` or see other methods at [pnpm.io/installation](https://pnpm.io/installation)
 - **GitHub CLI (`gh`)** _(optional, for orchestrator commands)_ — [cli.github.com](https://cli.github.com/)
 
-Totem works on **Windows**, **macOS**, and **Linux**. On Windows, Git Bash (bundled with [Git for Windows](https://gitforwindows.org/)) is recommended but not required — PowerShell and CMD work too.
+Totem works on **Windows**, **macOS**, and **Linux** (#210). On Windows, Git Bash (bundled with [Git for Windows](https://gitforwindows.org/)) is recommended but not required — PowerShell and CMD work too.
 
 ## Getting Started
 
@@ -94,7 +94,7 @@ _(Note: If you accepted the git hook installation during `init`, Totem will auto
 
 #### Drift Detection (Self-Cleaning Memory)
 
-Over time, lessons in `.totem/lessons.md` can reference files or paths that no longer exist. Use `--prune` to detect and interactively remove stale lessons:
+Over time, lessons in `.totem/lessons.md` can reference files or paths that no longer exist. Use `--prune` to detect and interactively remove stale lessons (#211):
 
 ```bash
 npx @mmnto/cli sync --prune
@@ -235,9 +235,9 @@ Then remove the `-y` flag from your MCP config — `npx` will use the locally in
 
 Totem is evolving from a memory database into a full Shift-Left orchestrator.
 
-- [x] **Pillar 1: The Memory Layer** - Local vector DB, tree-sitter syntax-aware chunking, and MCP interface.
-- [x] **Pillar 2: The Reflex Engine** - Auto-injection of AI prompts, proactive learning triggers, and background git hooks.
-- [x] **Pillar 3: The Workflow Orchestrator** - Native CLI commands (`spec`, `shield`, `triage`, `docs`, `wrap`) for pre-work briefings and local PR reviews.
-- [ ] **Pillar 4: Polish** - OpenAI embedding validation (#4), interactive tutorials (#129), cross-platform stability (Windows/macOS), and automated memory consolidation. Drift Detection (`sync --prune`) for self-cleaning memory (#181).
+- [x] **Foundations & Phase 1 (Onboarding):** Local vector DB, MCP interface, MVC Configuration Tiers (#187), "Universal Lessons" baseline (#128), and cross-platform docs (#210).
+- [x] **Phase 2 (Core Stability):** Tree-sitter Universal AST Parsing (#173), Shield GitHub Action (#180), Automated Doc Sync (#190), and Drift Detection for self-cleaning memory (#177, #211).
+- [ ] **Validation & Polish:** OpenAI embedding validation (#4), internal dogfooding (#8), and interactive CLI tutorials (#129).
+- [ ] **Phase 3 (Workflow Expansion):** Custom Workflow Runner (#119), Agent-Optimized MCP (#176), and Cross-File Knowledge Graph (#183).
 
 For a deeper dive into the system design, see `docs/architecture.md`.
