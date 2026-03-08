@@ -1,15 +1,18 @@
 ### Active Work Summary
+
 Totem is currently focused on "Phase 1: The 'Magic' Onboarding & Polish," following extensive Phase 2 stability improvements and the implementation of Minimum Viable Configuration (MVC tiers). Recent completions like "Universal Baselines" (Issue #128) have solved the cold-start problem, so momentum is directed entirely at making the initial installation and first-run experience frictionless before expanding to advanced workflows.
 
 ### Prioritized Roadmap
 
 **Do Next (Phase 1: Onboarding & Polish)**
+
 - #129 — Epic: Interactive CLI Tutorial & Conversational Onboarding — Crucial next step for guiding users through the initial learning curve to build trust.
 - #126 — Epic: Invisible Orchestration & Auto-Triggering (The 'Init and Forget' Protocol) — Automates the core value loop immediately after onboarding.
 - #12 — Cross-platform onboarding: support Windows (PowerShell) & macOS in all docs — Ensures the onboarding process is seamless regardless of the user's OS.
 - #108 — UX: Clean up orphaned temporary prompt files — Essential developer experience polish to prevent workspace clutter during initial evaluations.
 
 **Up Next (Phase 3: Core Workflows & Usability)**
+
 - #178 — Epic: Clipboard/Export UI for "Freemium Hoppers" — Broadens accessibility for users who aren't ready to fully integrate MCP.
 - #179 — Epic: Markdown/Document-Only Mode — Expands the addressable market to non-code, documentation-only use cases.
 - #110 — Enhancement: Make markdown chunker MAX_SPLIT_DEPTH configurable — A straightforward configurability win for core functionality.
@@ -22,6 +25,7 @@ Totem is currently focused on "Phase 1: The 'Magic' Onboarding & Polish," follow
 - #181 — Feature: Drift Detection (Self-Cleaning Memory) — Detects and prunes stale lessons automatically to maintain memory quality.
 
 **Backlog (Phase 4: Enterprise Expansion & Advanced Architecture)**
+
 - #198 — RFC: Open Core & Defensive Licensing Strategy (MIT vs. Fair Source) — Strategic foundation for open-source and enterprise scaling.
 - #195 — Epic: Model Compatibility & Auditing Strategy — Framework for supporting diverse AI models and tracking their performance.
 - #196 — Build Adversarial Evaluation Harness for CI (Model Drift Mitigation) — Advanced CI workflow for testing model stability.
@@ -46,6 +50,7 @@ Totem is currently focused on "Phase 1: The 'Magic' Onboarding & Polish," follow
 **User Story:** As a new user installing Totem, I want an interactive, animated CLI tutorial so that I can immediately understand the core workflows and how to ask contextual questions without needing to read external documentation.
 
 **Scope Boundaries:**
+
 - **DO:** Build an interactive, step-by-step CLI tutorial (`totem tutorial`).
 - **DO:** Allow users to pause the walkthrough, ask the LLM contextual questions about their codebase, and resume seamlessly.
 - **DO NOT:** Introduce any new core CLI commands or concepts that aren't already part of the Phase 1 MVP.
@@ -53,5 +58,6 @@ Totem is currently focused on "Phase 1: The 'Magic' Onboarding & Polish," follow
 - **Why Next:** With "Universal Baselines" shipped, the interactive tutorial is the critical missing piece of the "Magic" onboarding experience. It bridges the gap between installation and confident daily use, ensuring users don't abandon the tool immediately after `totem init`.
 
 ### Blocked / Needs Input
+
 - #4 — Validate OpenAI Embedding Provider (Happy Path) — Pending validation steps for OpenAI embedding integration.
 - #8 — Validate dogfood sync with OpenAI embeddings — Pending validation steps, heavily dependent on the completion of #4.
