@@ -92,6 +92,16 @@ _(Note: If you accepted the git hook installation during `init`, Totem will auto
 > **Troubleshooting Index Issues:**
 > Anytime you manually delete the `.lancedb` folder, always run `pnpm exec totem sync --full`. The `--full` flag drops the old index and recreates it from scratch, avoiding potential LanceDB case-sensitivity or parsing edge cases during deletions.
 
+#### Drift Detection (Self-Cleaning Memory)
+
+Over time, lessons in `.totem/lessons.md` can reference files or paths that no longer exist. Use `--prune` to detect and interactively remove stale lessons:
+
+```bash
+npx @mmnto/cli sync --prune
+```
+
+Totem scans each lesson for backtick-wrapped file paths, checks if they still exist on disk, and presents a multi-select prompt to prune orphaned entries. The vector index is automatically re-synced after pruning.
+
 ### 4. Connect the MCP Server
 
 Add Totem to your AI agent's configuration (e.g., Claude Desktop, Claude Code, or Gemini).
@@ -228,6 +238,6 @@ Totem is evolving from a memory database into a full Shift-Left orchestrator.
 - [x] **Pillar 1: The Memory Layer** - Local vector DB, tree-sitter syntax-aware chunking, and MCP interface.
 - [x] **Pillar 2: The Reflex Engine** - Auto-injection of AI prompts, proactive learning triggers, and background git hooks.
 - [x] **Pillar 3: The Workflow Orchestrator** - Native CLI commands (`spec`, `shield`, `triage`, `docs`, `wrap`) for pre-work briefings and local PR reviews.
-- [ ] **Pillar 4: Polish** - OpenAI embedding validation (#4), interactive tutorials (#129), cross-platform stability (Windows/macOS), and automated memory consolidation.
+- [ ] **Pillar 4: Polish** - OpenAI embedding validation (#4), interactive tutorials (#129), cross-platform stability (Windows/macOS), and automated memory consolidation. Drift Detection (`sync --prune`) for self-cleaning memory (#181).
 
 For a deeper dive into the system design, see `docs/architecture.md`.
