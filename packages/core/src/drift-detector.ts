@@ -190,7 +190,6 @@ export function detectDrift(lessons: ParsedLesson[], projectRoot: string): Drift
  */
 export function rewriteLessonsFile(
   content: string,
-  lessons: ParsedLesson[],
   indicesToRemove: Set<number>,
 ): string {
   if (indicesToRemove.size === 0) return content;

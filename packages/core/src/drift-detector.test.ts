@@ -276,8 +276,7 @@ Body three.
 `;
 
   it('removes specified lessons by index', () => {
-    const lessons = parseLessonsFile(SAMPLE);
-    const result = rewriteLessonsFile(SAMPLE, lessons, new Set([1]));
+    const result = rewriteLessonsFile(SAMPLE, new Set([1]));
 
     expect(result).toContain('## Lesson — First');
     expect(result).not.toContain('## Lesson — Second');
@@ -285,8 +284,7 @@ Body three.
   });
 
   it('removes multiple lessons', () => {
-    const lessons = parseLessonsFile(SAMPLE);
-    const result = rewriteLessonsFile(SAMPLE, lessons, new Set([0, 2]));
+    const result = rewriteLessonsFile(SAMPLE, new Set([0, 2]));
 
     expect(result).not.toContain('## Lesson — First');
     expect(result).toContain('## Lesson — Second');
@@ -294,8 +292,7 @@ Body three.
   });
 
   it('preserves the file header', () => {
-    const lessons = parseLessonsFile(SAMPLE);
-    const result = rewriteLessonsFile(SAMPLE, lessons, new Set([0, 1, 2]));
+    const result = rewriteLessonsFile(SAMPLE, new Set([0, 1, 2]));
 
     expect(result).toContain('# Totem Lessons');
     expect(result).toContain('Lessons learned.');
@@ -303,14 +300,12 @@ Body three.
   });
 
   it('returns unchanged content when no indices to remove', () => {
-    const lessons = parseLessonsFile(SAMPLE);
-    const result = rewriteLessonsFile(SAMPLE, lessons, new Set());
+    const result = rewriteLessonsFile(SAMPLE, new Set());
     expect(result).toBe(SAMPLE);
   });
 
   it('ends with a single newline', () => {
-    const lessons = parseLessonsFile(SAMPLE);
-    const result = rewriteLessonsFile(SAMPLE, lessons, new Set([2]));
+    const result = rewriteLessonsFile(SAMPLE, new Set([2]));
     expect(result.endsWith('\n')).toBe(true);
     expect(result.endsWith('\n\n')).toBe(false);
   });

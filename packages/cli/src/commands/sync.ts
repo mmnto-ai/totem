@@ -98,7 +98,7 @@ async function runPrune(cwd: string, config: TotemConfig): Promise<void> {
 
   // Atomic write: write to temp file, then rename
   const indicesToRemove = new Set(selected.map((d) => d.lesson.index));
-  const newContent = rewriteLessonsFile(content, lessons, indicesToRemove);
+  const newContent = rewriteLessonsFile(content, indicesToRemove);
   const tmpPath = lessonsPath + '.tmp';
   fs.writeFileSync(tmpPath, newContent, 'utf-8');
   fs.renameSync(tmpPath, lessonsPath);
