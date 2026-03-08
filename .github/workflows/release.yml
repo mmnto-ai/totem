@@ -33,9 +33,16 @@ jobs:
       - run: pnpm build
 
       - name: Create Release PR or Publish
+        id: changesets
         uses: changesets/action@v1
         with:
           version: pnpm run version
           publish: pnpm run release
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Update Action v0 Tag
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          git tag -f v0
+          git push origin refs/tags/v0 --force
