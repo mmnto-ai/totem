@@ -620,3 +620,27 @@ Avoid over-engineering cosmetic log summaries, such as using frequency maps for 
 **Tags:** security, terminal-injection, cli
 
 Sanitize ANSI escape sequences from user-provided text before persisting it to local Markdown files or logs (like `lessons.md`). This prevents terminal injection vulnerabilities where viewing the file with tools like `cat` could execute malicious or disruptive control sequences in the user's terminal environment.
+
+## Lesson — Sanitize all strings extracted from files before displaying…
+
+**Tags:** security, terminal, cli
+
+Sanitize all strings extracted from files before displaying them in terminal outputs or interactive prompts. This prevents terminal injection attacks where malicious ANSI escape sequences in the source file could be used to spoof the UI or trick the user.
+
+## Lesson — When extracting patterns like file paths from Markdown…
+
+**Tags:** regex, markdown, parsing, trap
+
+When extracting patterns like file paths from Markdown content, explicitly filter out triple-backtick code blocks before running the extraction logic. This prevents false positives by ensuring the parser does not mistake code examples or documentation within the body for active file references.
+
+## Lesson — For machine-generated files with a strictly controlled…
+
+**Tags:** parsing, architecture, design-decision
+
+For machine-generated files with a strictly controlled schema, prefer strict positional parsing over global scanning. Strict parsing is more resilient than "fuzzy" scanning because it avoids accidental matches of keywords (like "Tags:") that may legitimately appear inside the body text of a lesson.
+
+## Lesson — When re-throwing errors in a CLI orchestrator, always…
+
+**Tags:** error-handling, style-guide
+
+When re-throwing errors in a CLI orchestrator, always include the project's standard error prefix (e.g., `[Totem Error]`) in the message. This ensures a consistent user experience and allows the system to clearly distinguish between internal application errors and raw system/library failures.
