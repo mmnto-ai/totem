@@ -13,7 +13,7 @@ const config: TotemConfig = {
     { glob: '.totem/**/*.md', type: 'spec', strategy: 'markdown-heading' },
   ],
 
-  embedding: { provider: 'ollama', model: 'nomic-embed-text', baseUrl: 'http://localhost:11434' },
+  embedding: { provider: 'openai', model: 'text-embedding-3-small' },
 
   orchestrator: {
     provider: 'shell',
