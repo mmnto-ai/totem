@@ -538,7 +538,7 @@ describe('Universal Lessons baseline', () => {
     const tags = UNIVERSAL_LESSONS_MARKDOWN.match(/^\*\*Tags:\*\* /gm);
     expect(headings).not.toBeNull();
     expect(tags).not.toBeNull();
-    expect(headings!.length).toBeGreaterThanOrEqual(5);
+    expect(headings!.length).toBe(10);
     expect(headings!.length).toBe(tags!.length);
   });
 
