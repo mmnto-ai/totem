@@ -124,6 +124,7 @@ program
   .option('--model <name>', 'Override the default model for the orchestrator')
   .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
   .option('--staged', 'Review only staged changes (default: all uncommitted)')
+  .option('--deterministic', 'Use compiled rules only — no LLM, no embeddings')
   .action(
     async (opts: {
       raw?: boolean;
@@ -131,6 +132,7 @@ program
       model?: string;
       fresh?: boolean;
       staged?: boolean;
+      deterministic?: boolean;
     }) => {
       try {
         const { shieldCommand } = await import('./commands/shield.js');
@@ -198,6 +200,31 @@ program
       handleError(err);
     }
   });
+
+program
+  .command('compile')
+  .description('Compile lessons into deterministic regex rules for zero-LLM shield checks')
+  .option('--raw', 'Output compiler prompts without LLM synthesis')
+  .option('--out <path>', 'Write output to a file instead of stdout')
+  .option('--model <name>', 'Override the default model for the orchestrator')
+  .option('--fresh', 'Bypass cache and force a fresh LLM call')
+  .option('--force', 'Recompile all lessons (ignore existing compiled rules)')
+  .action(
+    async (opts: {
+      raw?: boolean;
+      out?: string;
+      model?: string;
+      fresh?: boolean;
+      force?: boolean;
+    }) => {
+      try {
+        const { compileCommand } = await import('./commands/compile.js');
+        await compileCommand(opts);
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
 
 program
   .command('extract <pr-numbers...>')

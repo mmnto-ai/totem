@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 
 import type { ContentType, SearchResult } from '@mmnto/totem';
-import { createEmbedder, LanceStore } from '@mmnto/totem';
+import { applyRules, createEmbedder, LanceStore, loadCompiledRules } from '@mmnto/totem';
 
 import { extractChangedFiles, getDefaultBranch, getGitBranchDiff, getGitDiff } from '../git.js';
 import { bold, errorColor, log, success as successColor } from '../ui.js';
@@ -159,7 +159,72 @@ export interface ShieldOptions {
   model?: string;
   fresh?: boolean;
   staged?: boolean;
+  deterministic?: boolean;
 }
+
+// ─── Deterministic mode ─────────────────────────────
+
+const COMPILED_RULES_FILE = 'compiled-rules.json';
+
+async function runDeterministicShield(
+  diff: string,
+  cwd: string,
+  totemDir: string,
+  outPath?: string,
+): Promise<void> {
+  const rulesPath = path.join(cwd, totemDir, COMPILED_RULES_FILE);
+  const rules = loadCompiledRules(rulesPath);
+
+  if (rules.length === 0) {
+    log.warn(
+      TAG,
+      `No compiled rules found at ${totemDir}/${COMPILED_RULES_FILE}. Run \`totem compile\` first.`,
+    );
+    return;
+  }
+
+  log.info(TAG, `Running ${rules.length} deterministic rules (zero LLM)...`);
+
+  const violations = applyRules(rules, diff);
+
+  // Build output
+  const lines: string[] = [];
+
+  if (violations.length === 0) {
+    lines.push('### Verdict');
+    lines.push(`**PASS** — All ${rules.length} deterministic rules passed.`);
+    lines.push('');
+    lines.push('### Details');
+    lines.push('No violations detected against compiled lesson rules.');
+  } else {
+    lines.push('### Verdict');
+    lines.push(`**FAIL** — ${violations.length} violation(s) found across ${rules.length} rules.`);
+    lines.push('');
+    lines.push('### Violations');
+    for (const v of violations) {
+      lines.push(`- **${v.file}:${v.lineNumber}** — ${v.rule.message}`);
+      lines.push(`  Pattern: \`/${v.rule.pattern}/\``);
+      lines.push(`  Lesson: "${v.rule.lessonHeading}"`);
+      lines.push(`  Line: \`${v.line.trim()}\``);
+      lines.push('');
+    }
+  }
+
+  const output = lines.join('\n');
+  writeOutput(output, outPath);
+  if (outPath) log.success(TAG, `Written to ${outPath}`);
+
+  if (violations.length > 0) {
+    const verdictLabel = errorColor(bold('FAIL'));
+    log.info(TAG, `Verdict: ${verdictLabel} — ${violations.length} violation(s)`);
+    process.exit(1);
+  } else {
+    const verdictLabel = successColor(bold('PASS'));
+    log.info(TAG, `Verdict: ${verdictLabel} — ${rules.length} rules, 0 violations`);
+  }
+}
+
+// ─── Main command ───────────────────────────────────
 
 export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const cwd = process.cwd();
@@ -185,6 +250,12 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
 
   const changedFiles = extractChangedFiles(diff);
   log.info(TAG, `Changed files (${changedFiles.length}): ${changedFiles.join(', ')}`);
+
+  // Deterministic mode — use compiled rules, no LLM, no embeddings
+  if (options.deterministic) {
+    await runDeterministicShield(diff, cwd, config.totemDir, options.out);
+    return;
+  }
 
   // Connect to LanceDB
   const embedding = requireEmbedding(config);

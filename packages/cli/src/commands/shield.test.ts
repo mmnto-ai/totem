@@ -1,4 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { type CompiledRule, loadCompiledRules, saveCompiledRules } from '@mmnto/totem';
 
 import { parseVerdict } from './shield.js';
 
@@ -109,5 +115,114 @@ describe('parseVerdict', () => {
   it('handles verdict without any heading markers', () => {
     const content = 'Verdict\nPASS — All good without hashes.';
     expect(parseVerdict(content)).toEqual({ pass: true, reason: 'All good without hashes.' });
+  });
+});
+
+// ─── Deterministic shield (compiled rules) ──────────
+
+describe('deterministic shield integration', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-shield-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const makeRule = (pattern: string, message: string, heading: string): CompiledRule => ({
+    lessonHash: 'abc123',
+    lessonHeading: heading,
+    pattern,
+    message,
+    engine: 'regex',
+    compiledAt: new Date().toISOString(),
+  });
+
+  it('loadCompiledRules returns empty array for missing file', async () => {
+    const { loadCompiledRules } = await import('@mmnto/totem');
+    const rules = loadCompiledRules(path.join(tmpDir, 'nonexistent.json'));
+    expect(rules).toEqual([]);
+  });
+
+  it('loadCompiledRules returns empty array for malformed JSON', async () => {
+    const { loadCompiledRules } = await import('@mmnto/totem');
+    const rulesPath = path.join(tmpDir, 'bad.json');
+    fs.writeFileSync(rulesPath, '{invalid json!!!');
+    expect(loadCompiledRules(rulesPath)).toEqual([]);
+  });
+
+  it('loadCompiledRules returns empty array for empty file', async () => {
+    const { loadCompiledRules } = await import('@mmnto/totem');
+    const rulesPath = path.join(tmpDir, 'empty.json');
+    fs.writeFileSync(rulesPath, '');
+    expect(loadCompiledRules(rulesPath)).toEqual([]);
+  });
+
+  it('applyRules detects violations in a realistic diff', async () => {
+    const { applyRules } = await import('@mmnto/totem');
+
+    const rules = [
+      makeRule(
+        'catch\\s*\\(\\s*error\\s*[\\):]',
+        'Use err, not error, in catch blocks',
+        'Use err not error',
+      ),
+      makeRule('\\bnpm\\s+(install|run|exec)\\b', 'Use pnpm instead of npm', 'Never use npm'),
+    ];
+
+    const diff = `diff --git a/src/handler.ts b/src/handler.ts
+--- a/src/handler.ts
++++ b/src/handler.ts
+@@ -1,5 +1,8 @@
+ export function handler() {
+   try {
+     doWork();
+-  } catch (err) {
+-    console.error(err);
++  } catch (error) {
++    console.error(error);
++  }
++}
+`;
+
+    const violations = applyRules(rules, diff);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]!.rule.message).toBe('Use err, not error, in catch blocks');
+    expect(violations[0]!.file).toBe('src/handler.ts');
+  });
+
+  it('applyRules passes clean diff with no violations', async () => {
+    const { applyRules } = await import('@mmnto/totem');
+
+    const rules = [
+      makeRule('\\bnpm\\s+(install|run|exec)\\b', 'Use pnpm instead of npm', 'Never use npm'),
+    ];
+
+    const diff = `diff --git a/src/app.ts b/src/app.ts
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -1,3 +1,4 @@
+ import { foo } from './foo';
++import { bar } from './bar';
+ export default foo;
+`;
+
+    const violations = applyRules(rules, diff);
+    expect(violations).toHaveLength(0);
+  });
+
+  it('round-trips rules through save and load for shield consumption', () => {
+    const rulesPath = path.join(tmpDir, 'compiled-rules.json');
+
+    const rules = [
+      makeRule('console\\.log', 'Remove debug logging before commit', 'No console.log'),
+    ];
+
+    saveCompiledRules(rulesPath, rules);
+    const loaded = loadCompiledRules(rulesPath);
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0]!.pattern).toBe('console\\.log');
   });
 });

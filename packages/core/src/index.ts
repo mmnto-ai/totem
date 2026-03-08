@@ -61,6 +61,21 @@ export {
   rewriteLessonsFile,
 } from './drift-detector.js';
 
+// Compiler
+export type { CompiledRule, CompiledRulesFile, CompilerOutput, Violation } from './compiler.js';
+export {
+  applyRules,
+  CompiledRuleSchema,
+  CompiledRulesFileSchema,
+  CompilerOutputSchema,
+  extractAddedLines,
+  hashLesson,
+  loadCompiledRules,
+  parseCompilerResponse,
+  saveCompiledRules,
+  validateRegex,
+} from './compiler.js';
+
 // Utilities
 export { generateLessonHeading } from './lesson-format.js';
 export { sanitize } from './sanitize.js';
