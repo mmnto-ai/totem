@@ -13,18 +13,29 @@ const config: TotemConfig = {
     { glob: '.totem/**/*.md', type: 'spec', strategy: 'markdown-heading' },
   ],
 
-  embedding: { provider: 'ollama', model: 'nomic-embed-text', baseUrl: 'http://localhost:11434' },
+  embedding: { provider: 'openai', model: 'text-embedding-3-small' },
 
   orchestrator: {
     provider: 'shell',
     command: 'gemini --model {model} -o json -e none < {file}',
     defaultModel: 'gemini-3-flash-preview',
     overrides: {
+      docs: 'gemini-3.1-pro-preview',
       spec: 'gemini-3.1-pro-preview',
       shield: 'gemini-3.1-pro-preview',
       triage: 'gemini-3.1-pro-preview',
     },
   },
+
+  docs: [
+    {
+      path: 'README.md',
+      description: 'Public-facing README with install, usage, and feature overview',
+    },
+    { path: 'docs/roadmap.md', description: 'Strategic roadmap with phase progress' },
+    { path: 'docs/active_work.md', description: 'Current priorities and next issue triage' },
+    { path: 'docs/architecture.md', description: 'Technical architecture and system design' },
+  ],
 
   ignorePatterns: [
     '**/node_modules/**',

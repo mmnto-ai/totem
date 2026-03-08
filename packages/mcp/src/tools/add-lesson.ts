@@ -5,6 +5,8 @@ import * as path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
+import { generateLessonHeading } from '@mmnto/totem';
+
 import { getContext, reconnectStore } from '../context.js';
 import { formatXmlResponse } from '../xml-format.js';
 
@@ -122,10 +124,10 @@ export function registerAddLesson(server: McpServer): void {
         await fs.promises.mkdir(totemDir, { recursive: true });
 
         const lessonsPath = path.join(totemDir, 'lessons.md');
-        const timestamp = new Date().toISOString();
+        const heading = generateLessonHeading(lesson);
         const tags = context_tags.join(', ');
 
-        const entry = `\n## Lesson — ${timestamp}\n\n` + `**Tags:** ${tags}\n\n` + `${lesson}\n`;
+        const entry = `\n## Lesson — ${heading}\n\n` + `**Tags:** ${tags}\n\n` + `${lesson}\n`;
 
         await fs.promises.appendFile(lessonsPath, entry, 'utf-8');
 
