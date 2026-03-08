@@ -2,7 +2,7 @@
 
 > [!WARNING]
 > **Developer Preview / Early Alpha**
-> Totem is currently in early alpha. While Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete—including our move to **Tree-sitter for Universal AST Parsing** (#173)—we are still polishing the "Magic Onboarding" experience (interactive tutorials, seamless host integration) and validating the core OpenAI embedding pipeline. If you encounter friction during `totem init`, please bear with us!
+> Totem is currently in early alpha. While Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete—including our move to **Tree-sitter for Universal AST Parsing** (#173)—we are still polishing the "Magic Onboarding" experience (interactive tutorials) and validating the core OpenAI embedding pipeline. If you encounter friction during `totem init`, please bear with us!
 
 **Your AI team forgets. Totem remembers.**
 

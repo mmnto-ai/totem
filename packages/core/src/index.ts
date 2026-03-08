@@ -54,4 +54,5 @@ export { getChangedFiles, getHeadSha, resolveFiles, runSync } from './ingest/syn
 
 // Utilities
 export { generateLessonHeading } from './lesson-format.js';
+export { sanitize } from './sanitize.js';
 export { wrapXml } from './xml-format.js';
