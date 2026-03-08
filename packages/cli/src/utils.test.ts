@@ -368,6 +368,30 @@ describe('loadEnv', () => {
     loadEnv(tmpDir); // should not throw
     expect(process.env[TEST_KEY]).toBeUndefined();
   });
+
+  it('strips surrounding double quotes from values', () => {
+    fs.writeFileSync(path.join(tmpDir, '.env'), `${TEST_KEY}="quoted-value"`, 'utf-8');
+    loadEnv(tmpDir);
+    expect(process.env[TEST_KEY]).toBe('quoted-value');
+  });
+
+  it('strips surrounding single quotes from values', () => {
+    fs.writeFileSync(path.join(tmpDir, '.env'), `${TEST_KEY}='single-quoted'`, 'utf-8');
+    loadEnv(tmpDir);
+    expect(process.env[TEST_KEY]).toBe('single-quoted');
+  });
+
+  it('handles Windows CRLF line endings', () => {
+    fs.writeFileSync(path.join(tmpDir, '.env'), `${TEST_KEY}=crlfval\r\n`, 'utf-8');
+    loadEnv(tmpDir);
+    expect(process.env[TEST_KEY]).toBe('crlfval');
+  });
+
+  it('handles quoted values with CRLF line endings', () => {
+    fs.writeFileSync(path.join(tmpDir, '.env'), `${TEST_KEY}="quoted-crlf"\r\n`, 'utf-8');
+    loadEnv(tmpDir);
+    expect(process.env[TEST_KEY]).toBe('quoted-crlf');
+  });
 });
 
 // ─── getSystemPrompt ──────────────────────────────────
