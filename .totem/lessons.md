@@ -538,3 +538,63 @@ Verify fixed collections of assets with exact count assertions (e.g., `toBe(10)`
 **Tags:** clean-code, design-decision
 
 For static, small sets of string comparisons (like 'y/n' prompt responses), explicit boolean `OR` checks are often more idiomatic and readable than `[].includes()` patterns. Avoid over-engineering simple branching logic if the set of possible values is not expected to grow.
+
+## Lesson — 2026-03-08T02:39:04.901Z
+
+**Tags:** scaffolding, error-handling, architecture
+
+Prefer graceful degradation with a warning over halting for non-critical scaffolding tasks during initialization. Unlike core orchestrator commands where partial failure is risky, setup steps should be resilient to recoverable environment issues like file permissions to ensure a smooth onboarding experience.
+
+## Lesson — 2026-03-08T02:39:04.901Z
+
+**Tags:** search, indexing, documentation
+
+Avoid generic headings for knowledge chunks as they result in indistinguishable labels in search results and UI components. Use descriptive, unique headings to ensure both humans and AI can differentiate between related lessons during context assembly.
+
+## Lesson — 2026-03-08T02:39:04.901Z
+
+**Tags:** testing, quality-assurance
+
+Use exact count assertions rather than "greater than" checks when verifying fixed sets of assets or features. Precise assertions detect accidental deletions that range-based checks would miss, ensuring the integrity of curated content.
+
+## Lesson — 2026-03-08T02:39:04.901Z
+
+**Tags:** windows, shell, performance
+
+Use temporary files instead of CLI arguments or environment variables when passing large data (like prompts) to sub-processes on Windows to avoid "argument list too long" errors.
+
+## Lesson — 2026-03-08T02:39:04.901Z
+
+**Tags:** async, performance, error-handling
+
+For background maintenance tasks with small expected workloads (e.g., cleaning 0-5 files), prefer sequential `for...of` loops over `Promise.all`. Sequential processing simplifies error isolation, allowing you to "swallow and continue" on a per-item basis without the complexity of `Promise.allSettled`.
+
+## Lesson — 2026-03-08T02:39:04.901Z
+
+**Tags:** architecture, configuration, cli
+
+Avoid introducing asynchronous configuration loading or complex resolution logic into non-critical fire-and-forget utilities if those parameters are not yet user-configurable. Keeping background tasks hardcoded and "best-effort" prevents over-engineering and ensures the CLI startup path remains lean and fast.
+
+## Lesson — 2026-03-08T02:39:04.901Z
+
+**Tags:** security, git, trap
+
+Always use the `--` separator before positional arguments in git commands (e.g., `git log -- <ref>`) to protect against argument injection. This ensures that potentially untrusted strings, such as branch or tag names, are never interpreted as command-line flags.
+
+## Lesson — 2026-03-08T02:39:04.901Z
+
+**Tags:** error-handling, architecture, design-decision
+
+Use named error objects (e.g., `err.name = 'NoDocsConfiguredError'`) instead of string matching to handle expected "graceful skip" conditions in orchestrators. This creates a stable contract between modules that remains robust even if the user-facing error message is updated for better readability.
+
+## Lesson — 2026-03-08T02:39:04.901Z
+
+**Tags:** architecture, consistency, design-decision
+
+Prioritize codebase-wide consistency for established utility patterns (like `shell: IS_WIN` for Windows execution) over local "fixes" in a single PR. Core architectural or security shifts should be handled as dedicated global refactors to avoid fragmented and confusing helper implementations across the codebase.
+
+## Lesson — 2026-03-08T02:39:04.901Z
+
+**Tags:** pragmatism, design-decision, logging
+
+Avoid over-engineering cosmetic log summaries, such as using frequency maps for a simple `+N/-M` line-change count, if basic `Set`-based logic provides sufficient visual feedback. Prioritize simplicity and functional correctness over perfect accuracy for non-critical console output.
