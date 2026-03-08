@@ -125,7 +125,7 @@ export function registerAddLesson(server: McpServer): void {
 
         const lessonsPath = path.join(totemDir, 'lessons.md');
         const safeLesson = sanitize(lesson);
-        const safeTags = context_tags.map((t) => sanitize(t)).join(', ');
+        const safeTags = context_tags.map((t) => sanitize(t).replace(/\n/g, ' ')).join(', ');
         const heading = generateLessonHeading(safeLesson);
 
         const entry =
