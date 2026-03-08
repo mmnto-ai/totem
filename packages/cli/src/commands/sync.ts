@@ -82,7 +82,7 @@ async function runPrune(cwd: string, config: TotemConfig): Promise<void> {
   // Display each stale lesson with its orphaned refs
   for (const result of drift) {
     const heading = sanitize(result.lesson.heading).replace(/\n/g, ' ');
-    const refs = result.orphanedRefs.map((r) => `    → ${r}`).join('\n');
+    const refs = result.orphanedRefs.map((r) => `    → ${sanitize(r)}`).join('\n');
     console.error(`  [${result.lesson.index + 1}] ${heading}`);
     console.error(refs);
     console.error('');
@@ -140,7 +140,7 @@ async function selectLessonsToPrune(drift: DriftResult[]): Promise<DriftResult[]
     options: drift.map((d) => ({
       value: d.lesson.index,
       label: truncateLabel(sanitize(d.lesson.heading)),
-      hint: d.orphanedRefs.join(', '),
+      hint: d.orphanedRefs.map((r) => sanitize(r)).join(', '),
     })),
     initialValues: drift.map((d) => d.lesson.index),
     required: false,
