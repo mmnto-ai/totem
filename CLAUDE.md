@@ -103,6 +103,7 @@ Lives at the root of the **consuming project** (not in this repo). Defines:
 - Chunking strategy per file type
 - Embedding provider (openai or ollama) — **optional** (omitted in Lite tier)
 - Orchestrator (shell) — **optional** (omitted in Standard/Lite tiers)
+- Docs array for `totem docs` auto-update targets — **optional**
 
 ### Configuration Tiers
 
@@ -232,7 +233,7 @@ Phase numbering follows `docs/roadmap.md` (the canonical source of truth).
 - Syntax-aware chunkers (TypeScript AST, Markdown headings, session logs, schema files, test files)
 - `totem sync` (full + incremental), OpenAI and Ollama providers
 - MCP server with `search_knowledge` and `add_lesson`
-- CLI orchestrator commands: `spec`, `shield`, `triage`, `briefing`, `handoff`, `extract`, `bridge`, `wrap`, `eject`
+- CLI orchestrator commands: `spec`, `shield`, `triage`, `briefing`, `handoff`, `extract`, `bridge`, `wrap`, `docs`, `eject`
 - Shield GitHub Action for CI/CD enforcement (#180)
 - Interactive multi-select for `totem extract` (#168)
 - CLI command renames: `learn` → `extract`, remove `anchor` alias (#185)
@@ -241,7 +242,7 @@ Phase numbering follows `docs/roadmap.md` (the canonical source of truth).
 ### Phase 3: Workflow Expansion (current)
 
 - ~~Minimum Viable Configuration tiers (#187)~~ — **Done.** Lite/Standard/Full tiers with env auto-detection.
-- Automated doc sync (#190)
+- ~~Automated doc sync (#190)~~ — **Done.** `totem docs` command with per-doc LLM passes, integrated into `totem wrap` as Step 4/4.
 - Drift Detection for self-cleaning memory (#181)
 - See `docs/roadmap.md` and `docs/active_work.md` for full priority list
 

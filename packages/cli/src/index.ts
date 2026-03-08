@@ -257,6 +257,35 @@ program
   });
 
 program
+  .command('docs')
+  .description('Auto-update registered project docs using LLM synthesis')
+  .option('--raw', 'Output assembled prompt without LLM synthesis')
+  .option('--out <path>', 'Write output to a file instead of stdout')
+  .option('--model <name>', 'Override the default model for the orchestrator')
+  .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
+  .option('--only <names>', 'Comma-separated filter for doc names (e.g., --only roadmap,readme)')
+  .option('--dry-run', 'Preview changes without writing files')
+  .option('--yes', 'Skip confirmation prompt (use in scripts/CI)')
+  .action(
+    async (opts: {
+      raw?: boolean;
+      out?: string;
+      model?: string;
+      fresh?: boolean;
+      only?: string;
+      dryRun?: boolean;
+      yes?: boolean;
+    }) => {
+      try {
+        const { docsCommand } = await import('./commands/docs.js');
+        await docsCommand(opts);
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
+
+program
   .command('install-hooks')
   .description('Install post-merge git hook for automatic Totem sync')
   .action(async () => {

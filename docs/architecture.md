@@ -22,6 +22,7 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 - `totem briefing` / `totem handoff`: Session start/end context snapshots.
 - `totem extract`: Batch lesson extraction from PR review threads with interactive multi-select curation.
 - `totem add-lesson`: Inline lesson capture (also exposed as MCP tool `add_lesson`).
+- `totem docs`: Automated per-document LLM passes to keep project documentation in sync with the codebase.
 - `totem bridge` / `totem wrap`: Mid-session context resets and end-of-task workflow automation.
 
 ### 3. Shield GitHub Action (`action.yml`)
@@ -39,11 +40,11 @@ A stdio-based server for LLM integration. Provides two tools:
 
 Totem supports three configuration tiers, auto-detected from the environment during `totem init`:
 
-| Tier         | Requirements                               | Available Commands                                                                  |
-| ------------ | ------------------------------------------ | ----------------------------------------------------------------------------------- |
-| **Lite**     | Zero API keys                              | `init`, `add-lesson`, `bridge`, `eject`                                             |
-| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`                                                    |
-| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `shield`, `triage`, `briefing`, `handoff`, `extract`, `wrap`) |
+| Tier         | Requirements                               | Available Commands                                                                          |
+| ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| **Lite**     | Zero API keys                              | `init`, `add-lesson`, `bridge`, `eject`                                                     |
+| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`                                                            |
+| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `shield`, `triage`, `briefing`, `handoff`, `extract`, `wrap`, `docs`) |
 
 The `embedding` field in `totem.config.ts` is optional. When omitted, Totem operates in Lite tier — users can still capture lessons and manage hooks, but cannot index or search. The `getConfigTier()` helper and `requireEmbedding()` guard enforce these boundaries at runtime with clear upgrade instructions.
 

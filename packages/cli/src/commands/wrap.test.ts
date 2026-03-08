@@ -9,7 +9,11 @@ vi.mock('./sync.js', () => ({
 vi.mock('./triage.js', () => ({
   triageCommand: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock('./docs.js', () => ({
+  docsCommand: vi.fn().mockResolvedValue(undefined),
+}));
 
+import { docsCommand } from './docs.js';
 import { extractCommand } from './extract.js';
 import { syncCommand } from './sync.js';
 import { triageCommand } from './triage.js';
@@ -20,7 +24,7 @@ describe('wrapCommand', () => {
     vi.clearAllMocks();
   });
 
-  it('calls extract, sync, and triage in sequence', async () => {
+  it('calls extract, sync, triage, and docs in sequence', async () => {
     const callOrder: string[] = [];
     vi.mocked(extractCommand).mockImplementation(async () => {
       callOrder.push('extract');
@@ -31,10 +35,13 @@ describe('wrapCommand', () => {
     vi.mocked(triageCommand).mockImplementation(async () => {
       callOrder.push('triage');
     });
+    vi.mocked(docsCommand).mockImplementation(async () => {
+      callOrder.push('docs');
+    });
 
     await wrapCommand(['142'], {});
 
-    expect(callOrder).toEqual(['extract', 'sync', 'triage']);
+    expect(callOrder).toEqual(['extract', 'sync', 'triage', 'docs']);
     expect(extractCommand).toHaveBeenCalledWith(['142'], {
       model: undefined,
       fresh: undefined,
@@ -44,6 +51,11 @@ describe('wrapCommand', () => {
     expect(triageCommand).toHaveBeenCalledWith({
       model: undefined,
       fresh: undefined,
+    });
+    expect(docsCommand).toHaveBeenCalledWith({
+      model: undefined,
+      fresh: undefined,
+      yes: undefined,
     });
   });
 
@@ -59,6 +71,24 @@ describe('wrapCommand', () => {
       model: 'gemini-3-flash',
       fresh: true,
     });
+    expect(docsCommand).toHaveBeenCalledWith({
+      model: 'gemini-3-flash',
+      fresh: true,
+      yes: true,
+    });
+  });
+
+  it('gracefully skips docs step when no docs configured', async () => {
+    const err = new Error('[Totem Error] No docs configured.');
+    err.name = 'NoDocsConfiguredError';
+    vi.mocked(docsCommand).mockRejectedValueOnce(err);
+
+    await wrapCommand(['142'], {});
+
+    expect(extractCommand).toHaveBeenCalled();
+    expect(syncCommand).toHaveBeenCalled();
+    expect(triageCommand).toHaveBeenCalled();
+    expect(docsCommand).toHaveBeenCalled();
   });
 
   it('aborts chain if extract throws', async () => {
@@ -67,5 +97,6 @@ describe('wrapCommand', () => {
     await expect(wrapCommand(['142'], {})).rejects.toThrow('User aborted');
     expect(syncCommand).not.toHaveBeenCalled();
     expect(triageCommand).not.toHaveBeenCalled();
+    expect(docsCommand).not.toHaveBeenCalled();
   });
 });

@@ -29,7 +29,7 @@ Developers hate black boxes.
 
 Totem applies the **Unix Philosophy** to AI orchestration. We believe AI models are just standard IO processes. You don't need a heavy web UI to orchestrate them; you just need a CLI.
 
-By building our orchestrator as discrete, composable commands (`spec`, `shield`, `triage`), we keep the developer in the terminal. You define the "Traction Points." If an AI generates a bad plan, you can run `totem spec --raw` to debug the context, edit the markdown, and fix it yourself. We don't replace your editor; we provide the invisible, configurable plumbing that connects your local agents together.
+By building our orchestrator as discrete, composable commands (`spec`, `shield`, `triage`, `docs`), we keep the developer in the terminal. You define the "Traction Points." If an AI generates a bad plan, you can run `totem spec --raw` to debug the context, edit the markdown, and fix it yourself. We don't replace your editor; we provide the invisible, configurable plumbing that connects your local agents together.
 
 ## Architecture
 
@@ -64,11 +64,11 @@ This will auto-detect your project structure, generate a `totem.config.ts`, inst
 
 Totem auto-detects your environment during `totem init` and picks the best configuration tier:
 
-| Tier         | What you need                                | What you get                              |
-| ------------ | -------------------------------------------- | ----------------------------------------- |
-| **Lite**     | Nothing (zero API keys)                      | Lesson capture, bridge, eject             |
-| **Standard** | `OPENAI_API_KEY` in `.env` (or Ollama)       | Lite + sync, search, stats                |
-| **Full**     | Standard + an orchestrator (e.g. Gemini CLI) | All commands (spec, shield, triage, etc.) |
+| Tier         | What you need                                | What you get                                    |
+| ------------ | -------------------------------------------- | ----------------------------------------------- |
+| **Lite**     | Nothing (zero API keys)                      | Lesson capture, bridge, eject                   |
+| **Standard** | `OPENAI_API_KEY` in `.env` (or Ollama)       | Lite + sync, search, stats                      |
+| **Full**     | Standard + an orchestrator (e.g. Gemini CLI) | All commands (spec, shield, triage, docs, etc.) |
 
 If `OPENAI_API_KEY` is already set in your environment or `.env`, `totem init` will detect it automatically and skip the prompt. You can always upgrade from Lite by setting your key and re-running `totem init`.
 
@@ -181,13 +181,22 @@ npx @mmnto/cli add-lesson
 
 _(Totem interactively prompts you to document a context, symptom, and fix/rule. It saves the lesson to `.totem/lessons.md` and automatically triggers a background re-index so the new knowledge is instantly available to your AI agents)._
 
+**Documentation Sync (`docs`)**
+
+```bash
+npx @mmnto/cli docs
+npx @mmnto/cli docs --only roadmap,readme --dry-run
+```
+
+_(Totem reads each registered doc from your `totem.config.ts`, gathers git log and closed issues since your last release tag, and runs a per-doc LLM pass to generate updated content. Use `--dry-run` to preview changes, `--only` to target specific docs, and `--yes` to skip confirmation in scripts)._
+
 **End-of-Task Automation (`wrap`)**
 
 ```bash
 npx @mmnto/cli wrap
 ```
 
-_(Totem sequentially runs the `extract` lesson loop on your recent changes, syncs the vector database, and generates an end-of-session `handoff` briefing in one command)._
+_(Totem sequentially runs the `extract` lesson loop on your recent changes, syncs the vector database, generates a triage roadmap, and updates registered docs — all in one command)._
 
 **PR Lesson Extraction (`extract`)**
 

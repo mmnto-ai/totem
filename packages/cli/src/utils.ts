@@ -360,6 +360,7 @@ const DEFAULT_TTLS: Record<string, number> = {
   triage: 3600, // 1 hour
   briefing: 1800, // 30 min
   spec: 3600, // 1 hour
+  docs: 0, // No cache — each run should reflect latest state
   shield: 0,
   handoff: 0,
   learn: 0,

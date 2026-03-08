@@ -74,7 +74,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#83 Support GitHub issue URLs:** Allow users to paste full URLs in addition to issue numbers for `totem spec` and `triage`.
 - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
 - [x] **#187 Minimum Viable Configuration:** Tiered config (Lite/Standard/Full) with auto-detection. Embedding is optional; Lite tier works with zero API keys.
-- [ ] **#190 Automated Doc Sync:** `totem docs` command to keep project docs updated via per-doc LLM passes with `preferredModel` config.
+- [x] **#190 Automated Doc Sync:** `totem docs` command to keep project docs updated via per-doc LLM passes. Integrated into `totem wrap` as Step 4/4.
 - [ ] **#181 Drift Detection:** Self-cleaning memory — detect and prune stale lessons automatically.
 
 ## Phase 4: Enterprise Expansion
