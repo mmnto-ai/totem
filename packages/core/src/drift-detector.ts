@@ -123,34 +123,39 @@ export function parseLessonsFile(content: string): ParsedLesson[] {
 export function extractFileReferences(body: string): string[] {
   const refs = new Set<string>();
 
-  // Match content inside single backticks (not code blocks)
-  const inlineCodeRe = /(?<!`)`([^`\n]+)`(?!`)/g;
-  let match: RegExpExecArray | null;
+  // Split by code fences and only process content outside them (even-indexed parts)
+  const segments = body.split('```');
 
-  while ((match = inlineCodeRe.exec(body)) !== null) {
-    const candidate = match[1]!.trim();
+  for (let i = 0; i < segments.length; i += 2) {
+    const segment = segments[i]!;
+    const inlineCodeRe = /(?<!`)`([^`\n]+)`(?!`)/g;
+    let match: RegExpExecArray | null;
 
-    // Must contain a forward slash (path separator)
-    if (!candidate.includes('/')) continue;
+    while ((match = inlineCodeRe.exec(segment)) !== null) {
+      const candidate = match[1]!.trim();
 
-    // Exclude URLs
-    if (candidate.startsWith('http://') || candidate.startsWith('https://')) continue;
+      // Must contain a forward slash (path separator)
+      if (!candidate.includes('/')) continue;
 
-    // Exclude glob patterns
-    if (candidate.includes('*') || candidate.includes('?')) continue;
+      // Exclude URLs
+      if (candidate.startsWith('http://') || candidate.startsWith('https://')) continue;
 
-    // Exclude npm package names (@scope/name)
-    if (candidate.startsWith('@') && !candidate.startsWith('.')) continue;
+      // Exclude glob patterns
+      if (candidate.includes('*') || candidate.includes('?')) continue;
 
-    // Exclude shell commands with flags
-    if (candidate.includes(' -') || candidate.includes(' --')) continue;
+      // Exclude npm package names (@scope/name)
+      if (candidate.startsWith('@') && !candidate.startsWith('.')) continue;
 
-    // Must have a recognized file extension
-    const ext = path.extname(candidate).toLowerCase();
-    if (!ext || !FILE_EXTENSIONS.has(ext)) continue;
+      // Exclude shell commands with flags
+      if (candidate.includes(' -') || candidate.includes(' --')) continue;
 
-    // Normalize path separators
-    refs.add(candidate.replace(/\\/g, '/'));
+      // Must have a recognized file extension
+      const ext = path.extname(candidate).toLowerCase();
+      if (!ext || !FILE_EXTENSIONS.has(ext)) continue;
+
+      // Normalize path separators
+      refs.add(candidate.replace(/\\/g, '/'));
+    }
   }
 
   return [...refs];

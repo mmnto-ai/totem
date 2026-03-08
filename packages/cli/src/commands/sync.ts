@@ -45,8 +45,9 @@ export async function syncCommand(options: { full?: boolean; prune?: boolean }):
     try {
       await runPrune(cwd, config);
     } catch (err) {
-      log.error(TAG, `Prune failed: ${err instanceof Error ? err.message : String(err)}`);
-      throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      log.error(TAG, `Prune failed: ${message}`);
+      throw new Error(`[Totem Error] Prune failed: ${message}`);
     }
   }
 }

@@ -153,6 +153,7 @@ describe('extractFileReferences', () => {
     const body = 'The path `src/real.ts` is referenced but ```\n`src/fake.ts`\n``` is in a block.';
     const refs = extractFileReferences(body);
     expect(refs).toContain('src/real.ts');
+    expect(refs).not.toContain('src/fake.ts');
   });
 
   it('handles paths without leading directory', () => {
