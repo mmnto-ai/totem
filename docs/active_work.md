@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete, establishing the Turborepo architecture, syntax-aware chunking, and local data stores. Recent momentum has shifted toward validating the core embedding pipeline (OpenAI) to enable internal dogfooding and wrapping up remaining interactive onboarding tasks before moving into Phase 3 workflow expansions.
+Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete, establishing the Turborepo architecture, syntax-aware chunking (now powered by Tree-sitter #173), and local data stores. Recent momentum has delivered the Shield GitHub Action (#180), Drift Detection (#177), and a "Universal Lessons" baseline (#128). Focus is now shifting toward validating the core OpenAI embedding pipeline (#4) to enable internal dogfooding (#8) and completing interactive onboarding polish before scaling Phase 3 workflow expansions.
 
 ### Prioritized Roadmap
 
@@ -25,7 +25,7 @@ Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally
 **#4 — Validate OpenAI Embedding Provider (Happy Path)**
 
 - **User Story:** As an end user, I want the default OpenAI embedding provider to work flawlessly upon initial setup so that my codebase is successfully ingested and searchable without silent failures.
-- **Scope:** Strictly test and fix the happy-path execution of the existing `openai-embedder.ts`. Ensure environment variables are read correctly, payload requests succeed, and vectors are returned properly to the chunker. DO NOT add support for new models, DO NOT refactor the LanceDB storage layer, and DO NOT build advanced retry mechanisms yet.
+- **Scope:** Strictly test and fix the happy-path execution of the existing `openai-embedder.ts`. Ensure environment variables are read correctly, payload requests succeed, and vectors are returned properly to the chunker. Although exponential backoff was added in #105, the end-to-end ingestion flow still requires verification. DO NOT add support for new models and DO NOT refactor the LanceDB storage layer.
 - **Why Next:** Core embedding stability is a prerequisite for all advanced features and internal dogfooding. We cannot proceed to Phase 3 if the foundational pipeline is unverified.
 
 ### Blocked / Needs Input

@@ -34,6 +34,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 **Goal:** Before ingesting enterprise databases, the local vector index and LLM prompts must be bulletproof across all environments.
 
+- [x] **#173 Universal AST Parsing:** Implement Tree-sitter for robust, language-agnostic code chunking.
 - [x] **#121 Bug: LanceDB `deleteByFile`** edge cases causing silent incremental sync failures.
 - [x] **#122 Core Tests:** Backfill unit and integration tests for `@mmnto/totem` core database and chunking logic.
 - [x] **#180 Shield GitHub Action:** `action.yml` composite action for CI/CD enforcement — pass/fail quality gate on PRs.
@@ -41,6 +42,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#185 CLI command renames:** `learn` → `extract`, removed `anchor` alias (use `add-lesson`).
 - [x] **#131 Clean Ejection:** Build `totem eject` to safely remove git hooks, prompt injections, and database artifacts if a user uninstalls.
 - [x] **#127 Core:** Add heading hierarchy breadcrumbs to MarkdownChunker labels.
+- [x] **#203 UX:** Descriptive headings for extracted lessons to improve search relevance.
 - [x] **#158 Chore:** Unify XML escaping utilities across MCP and CLI.
 - [x] **#156 Core:** Incremental sync now removes deleted files from LanceDB.
 - [x] **#155 Core:** Stateful incremental sync via `.totem/cache/sync-state.json`.
@@ -59,7 +61,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#91 Normalize LanceDB paths:** Fix Windows backslash issues before users share `.lancedb` folders across OS boundaries.
 - [x] **#90 Refactor to `IssueAdapter` / `PrAdapter`:** Extract `gh` CLI logic into interfaces to decouple from GitHub.
 - [x] **#77 Test audit:** Backfill CLI unit tests using the newly added Vitest infrastructure. (103+ tests passing)
-- [x] **#78 Shell escaping edge cases:** Validate `execSync` safety with PowerShell as default shell. (No changes needed — `execSync` always uses `cmd.exe` on Windows.)
+- [x] **#78 Shell escaping edge cases:** Validate `execSync` safety with PowerShell as default shell.
 
 ## Phase 3: Workflow Expansion (Power User Tools)
 
@@ -67,6 +69,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 - [ ] **#130 Epic: Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks, index health, and ignored files to build trust in the "black box".
 - [ ] **#119 `totem run <workflow>`:** Introduce a custom AI task runner to execute user-defined markdown workflows via the orchestrator.
+- [x] **#181 Drift Detection:** Self-cleaning memory — detect and prune stale lessons automatically.
 - [x] **#120 Custom Prompt Overrides:** Allow users to override the hardcoded personas for built-in commands (`spec`, `shield`, etc.) via `.totem/prompts/`.
 - [x] **#44 `totem bridge`:** Build a mid-session context compaction tool to clear token windows without losing place.
 - [ ] **#74 `totem oracle`:** Add a frictionless Q&A command to query LanceDB without strict personas.
@@ -75,7 +78,8 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
 - [x] **#187 Minimum Viable Configuration:** Tiered config (Lite/Standard/Full) with auto-detection. Embedding is optional; Lite tier works with zero API keys.
 - [x] **#190 Automated Doc Sync:** `totem docs` command to keep project docs updated via per-doc LLM passes. Integrated into `totem wrap` as Step 4/4.
-- [ ] **#181 Drift Detection:** Self-cleaning memory — detect and prune stale lessons automatically.
+- [ ] **#176 Agent-Optimized MCP:** Dynamic token budgeting and write access for deeper agent-to-agent interactions.
+- [ ] **#183 Cross-File Knowledge Graph:** Implement symbol resolution to enable multi-file architectural reasoning.
 
 ## Phase 4: Enterprise Expansion
 
