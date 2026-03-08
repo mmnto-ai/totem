@@ -154,7 +154,7 @@ on:
 
 jobs:
   shield:
-    runs-runs-on: ubuntu-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
