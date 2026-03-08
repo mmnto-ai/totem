@@ -599,23 +599,7 @@ Prioritize codebase-wide consistency for established utility patterns (like `she
 
 Avoid over-engineering cosmetic log summaries, such as using frequency maps for a simple `+N/-M` line-change count, if basic `Set`-based logic provides sufficient visual feedback. Prioritize simplicity and functional correctness over perfect accuracy for non-critical console output.
 
-## Lesson — 2026-03-08T04:01:14.778Z
-
-**Tags:** gca, pr-review, workflow, dx
-
-**Context:** Responding to GCA (Gemini Code Assist) PR review comments.
-**Symptom:** Previous replies were scattered across individual threads, burning quota (100/day) and getting generic "thanks" responses from GCA.
-**Fix/Rule:** Reply to GCA with a single PR comment using a numbered list that matches its original comments 1:1. Include: explicit accept/decline status per item, commit SHA reference so GCA can verify changes. This produces a structured, confirmatory response from GCA that validates each fix individually.
-
-## Lesson — 2026-03-08T04:01:32.541Z
-
-**Tags:** windows, dotenv, parsing, trap
-
-**Context:** Windows .env file parsing in Node.js CLI tools.
-**Symptom:** `loadEnv` failed to parse keys correctly — values included literal quote characters (`"sk-..."` instead of `sk-...`) and Windows CRLF line endings caused regex match failures.
-**Fix/Rule:** Always strip `\r` from lines before parsing (`line.replace(/\r$/, '')`), and strip surrounding quotes with `raw.replace(/^(['"])(.*)(\1)$/, '$2')`. System env vars take precedence over .env — `loadEnv` should never override existing `process.env` keys.
-
-## Lesson — Reply with a single PR comment containing a numbered list…
+## Lesson — Reply to GCA with a single structured PR comment
 
 **Tags:** gca, pr-review, workflow, dx
 
@@ -623,32 +607,16 @@ Avoid over-engineering cosmetic log summaries, such as using frequency maps for 
 **Symptom:** Individual thread replies waste quota (100/day) and produce generic "thanks" responses from GCA.
 **Fix/Rule:** Reply with a single PR comment containing a numbered list that matches GCA's comments 1:1, with explicit accept/decline per item and a commit SHA reference. This gives GCA structured feedback — it confirms each fix individually and produces a higher-quality acknowledgment response.
 
-## Lesson — Custom .env loaders must strip carriage returns (\r) when…
+## Lesson — Custom .env parsers must strip CRLF and quotes
 
-**Tags:** environment, windows, regex, trap
+**Tags:** windows, dotenv, parsing, environment, trap
 
-Custom `.env` loaders must strip carriage returns (`\r`) when splitting lines to prevent Windows line endings from breaking regex matches or introducing invisible characters. This is a common root cause for silent failures and API errors when environment variables are processed on different operating systems.
+**Context:** Windows .env file parsing in Node.js CLI tools.
+**Symptom:** `loadEnv` failed to parse keys correctly — values included literal quote characters (`"sk-..."` instead of `sk-...`) and Windows CRLF line endings caused regex match failures.
+**Fix/Rule:** Always strip `\r` from lines before parsing (`line.replace(/\r$/, '')`), and strip surrounding quotes with `raw.replace(/^(['"])(.*)(\1)$/, '$2')`. System env vars take precedence over .env — `loadEnv` should never override existing `process.env` keys.
 
-## Lesson — Sanitize ANSI escape sequences from user-provided text…
-
-**Tags:** security, terminal-injection, cli
-
-Sanitize ANSI escape sequences from user-provided text before persisting it to local Markdown files or logs. This prevents terminal injection vulnerabilities where viewing the file with tools like `cat` could execute malicious or disruptive control sequences in the user's terminal environment.
-
-## Lesson — Bespoke environment parsers must explicitly strip…
-
-**Tags:** environment, configuration, trap
-
-Bespoke environment parsers must explicitly strip surrounding quotes from `.env` values (e.g., `KEY="value"`) to avoid including literal quotes in the variable. If not stripped, these literal characters will cause subtle failures, such as invalid token errors, when the variable is used in API requests.
-
-## Lesson — When manually parsing .env files, you must explicitly strip…
-
-**Tags:** env, windows, configuration, trap
-
-When manually parsing `.env` files, you must explicitly strip trailing `\r` characters and surrounding quotes from values. Failing to do so can break regex matching and lead to literal quotes being passed to SDKs, causing hard-to-debug authentication errors (e.g., invalid API keys).
-
-## Lesson — Sanitize user-provided text for ANSI escape sequences…
+## Lesson — Sanitize user-provided text before persisting to files
 
 **Tags:** security, terminal-injection, cli
 
-Sanitize user-provided text for ANSI escape sequences before persisting it to shared files or logs (like `lessons.md`) that are frequently viewed via terminal commands. This mitigates terminal injection risks where escape sequences could be used to execute commands or spoof terminal output when the file is displayed.
+Sanitize ANSI escape sequences from user-provided text before persisting it to local Markdown files or logs (like `lessons.md`). This prevents terminal injection vulnerabilities where viewing the file with tools like `cat` could execute malicious or disruptive control sequences in the user's terminal environment.
