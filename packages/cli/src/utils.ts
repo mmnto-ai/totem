@@ -197,7 +197,7 @@ export function invokeShellOrchestrator(
     const fullError = `${msg}\n${stderr}`;
 
     // Detect buffer overflow — Node kills the process when stdout exceeds maxBuffer
-    if (execErr.killed && msg.includes('maxBuffer')) {
+    if (execErr.code === 'ENOBUFS') {
       throw new Error(
         `[Totem Error] Orchestrator response exceeded the ${LLM_MAX_BUFFER / 1024 / 1024}MB output buffer.\n` +
           `This usually means the LLM produced an unexpectedly large response.\n${stderr}`,
@@ -205,7 +205,7 @@ export function invokeShellOrchestrator(
     }
 
     // Detect timeout
-    if (execErr.killed && msg.includes('ETIMEDOUT')) {
+    if (execErr.code === 'ETIMEDOUT') {
       throw new Error(
         `[Totem Error] Orchestrator timed out after ${LLM_TIMEOUT_MS / 1000}s.\n${stderr}`,
       );
