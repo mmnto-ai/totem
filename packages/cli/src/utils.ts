@@ -228,7 +228,7 @@ export async function reapOrphanedTempFiles(
   maxAgeMs: number = TEMP_MAX_AGE_MS,
 ): Promise<number> {
   const tempDir = path.join(cwd, totemDir, 'temp');
-  const { readdir, stat, unlink } = await import('node:fs/promises');
+  const { readdir, stat, unlink } = fs.promises;
 
   let entries: string[];
   try {
