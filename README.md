@@ -2,7 +2,7 @@
 
 > [!WARNING]
 > **Developer Preview / Early Alpha**
-> Totem is currently in early alpha. While Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete, we are still polishing the "Magic Onboarding" experience (interactive tutorials, seamless host integration) and validating the core embedding pipeline. If you encounter friction during `totem init`, please bear with us!
+> Totem is currently in early alpha. While Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete—including our move to **Tree-sitter for Universal AST Parsing** (#173)—we are still polishing the "Magic Onboarding" experience (interactive tutorials, seamless host integration) and validating the core OpenAI embedding pipeline. If you encounter friction during `totem init`, please bear with us!
 
 **Your AI team forgets. Totem remembers.**
 
@@ -17,9 +17,9 @@ When you're three levels deep in a debugging session, you need to know if the co
 ## Why Totem?
 
 - **Local-First & Git-Native:** Memory shouldn't be locked in a cloud SaaS. Totem compiles an embedded LanceDB vector index right inside your project (`.lancedb/`). The actual knowledge is stored in a human-readable, version-controlled `.totem/lessons.md` file. Review your AI's memory in your PRs.
-- **The Reflex Engine:** Totem doesn't just give your AI a database; it gives them _reflexes_. `totem init` auto-injects behavioral triggers and **Defensive Context Management Reflexes** into your AI's system prompts (`CLAUDE.md`, `.cursorrules`), forcing them to autonomously document traps, query architecture, and issue warnings before they write code.
+- **The Reflex Engine:** Totem doesn't just give your AI a database; it gives them _reflexes_. `totem init` auto-injects behavioral triggers and **Defensive Context Management Reflexes** (#160) into your AI's system prompts (`CLAUDE.md`, `.cursorrules`), forcing them to autonomously document traps, query architecture, and issue warnings before they write code.
 - **Multi-Agent Orchestration:** Use Claude to write code, Gemini to review PRs, and a local DeepSeek model for fast checks. Totem acts as the "Shared Brain" and workflow orchestrator (via `totem spec`) for your entire AI org chart.
-- **Built for Enterprise Scale:** The ingestion pipeline streams chunks in batches directly to the local vector store, maintaining a flat memory footprint regardless of how massive your monorepo gets. Features like **Drift Detection** ensure your memory stays self-cleaning and relevant as the codebase evolves.
+- **Built for Enterprise Scale:** The ingestion pipeline streams chunks in batches directly to the local vector store (#104), maintaining a flat memory footprint regardless of how massive your monorepo gets. Features like **Drift Detection** (#177) ensure your memory stays self-cleaning and relevant as the codebase evolves.
 
 ## Philosophy: The Unix Approach to AI
 
@@ -42,7 +42,7 @@ This is a Turborepo monorepo consisting of:
 ## Security & Privacy
 
 - **100% Local Privacy:** Totem's vector database (`.lancedb/`) lives entirely within your local repository. Your codebase is never uploaded to a centralized SaaS platform or external memory service.
-- **Injection Hardening:** Totem actively sanitizes untrusted inputs (like PR comments fetched during `totem extract` and external GitHub issues) and **XML-delimits MCP responses** to mitigate indirect prompt injection and terminal injection attacks.
+- **Injection Hardening:** Totem actively sanitizes untrusted inputs (like PR comments fetched during `totem extract` and external GitHub issues) and **XML-delimits MCP responses** (#149) to mitigate indirect prompt injection and terminal injection attacks.
 
 ## Getting Started
 
@@ -54,11 +54,11 @@ Run this inside your consuming project (e.g., your Next.js or Node app):
 npx @mmnto/cli init
 ```
 
-This will auto-detect your project structure, generate a `totem.config.ts` using **Minimum Viable Configuration (MVC) tiers**, install automated background git hooks, and inject the Proactive Memory Reflexes into your AI's system prompt.
+This will auto-detect your project structure, generate a `totem.config.ts` using **Minimum Viable Configuration (MVC) tiers** (#187), install automated background git hooks, and inject the Proactive Memory Reflexes into your AI's system prompt.
 
-**Universal Baseline:** During init, Totem offers to install a curated set of foundational AI developer lessons (prompt injection prevention, hallucination traps, dependency verification, etc.) so your agents have useful knowledge from Day 1.
+**Universal Baseline:** During init, Totem offers to install a curated set of foundational AI developer lessons (#128) (prompt injection prevention, hallucination traps, dependency verification, etc.) so your agents have useful knowledge from Day 1.
 
-**Seamless Host Integration:** If you are using Claude Code or Gemini CLI, `totem init` will automatically wire up agent hooks (including native `SessionStart` hooks) to run `totem briefing` and intercept `git commit`/`push` to run `totem shield` automatically.
+**Seamless Host Integration:** If you are using Claude Code or Gemini CLI, `totem init` will automatically wire up agent hooks (including native `SessionStart` hooks #95) to run `totem briefing` and intercept `git commit`/`push` to run `totem shield` automatically.
 
 ### 2. Configure your Embedding Provider
 
@@ -70,11 +70,7 @@ Totem auto-detects your environment during `totem init` and picks the best confi
 | **Standard** | `OPENAI_API_KEY` in `.env` (or Ollama)       | Lite + sync, search, stats                      |
 | **Full**     | Standard + an orchestrator (e.g. Gemini CLI) | All commands (spec, shield, triage, docs, etc.) |
 
-If `OPENAI_API_KEY` is already set in your environment or `.env`, `totem init` will detect it automatically. You can always upgrade from Lite by setting your key and re-running `totem init`.
-
-> [!TIP]
-> **Resilience & Performance:**
-> Totem uses exponential backoff to handle OpenAI rate limits and streams chunks during sync to prevent OOM errors on large repositories.
+If `OPENAI_API_KEY` is already set in your environment or `.env`, `totem init` will detect it automatically. Totem uses exponential backoff (#105) to handle API rate limits. You can always upgrade from Lite by setting your key and re-running `totem init`.
 
 ### 3. Sync the Index
 
@@ -132,22 +128,22 @@ orchestrator: {
 - **`briefing`**: Fetches your current git branch, uncommitted changes, open PRs, and recent session momentum to generate a startup briefing.
 - **`bridge`**: Assesses your current mid-task state and creates a lightweight breadcrumb file. Use this when your AI agent's context window gets too full.
 - **`spec <ids...>`**: Fetches GitHub Issues (supports URLs) and synthesizes a pre-work spec. The AI acts as a **Staff-Level Architect**, focusing on contracts and edge cases.
-- **`shield`**: Reads your uncommitted git diff, queries LanceDB for related traps, and performs a **hybrid zero-day + N-day architectural code review** before you push.
+- **`shield`**: Reads your uncommitted git diff, queries LanceDB for related traps, and performs a **hybrid zero-day + N-day architectural code review** (#98) before you push.
 - **`triage`**: Fetches open GitHub issues and generates a prioritized roadmap (e.g., `docs/active_work.md`) for your next task.
 - **`add-lesson`**: Interactively document a context, symptom, and fix. Saves to `.totem/lessons.md` and triggers a background re-index.
-- **`docs`**: Automatically syncs project documentation (README, Roadmap) by analyzing git logs and closed issues since the last release.
-- **`wrap`**: A post-merge workflow chain that runs `extract`, syncs the database, generates a roadmap, and updates docs in one command.
-- **`extract <ids...>`**: Fetches merged PRs, reads comments, and extracts systemic architectural traps with **descriptive headings**. Supports interactive multi-select pruning.
+- **`docs`**: Automatically syncs project documentation (README, Roadmap) by analyzing git logs and closed issues since the last release (#190).
+- **`wrap`**: A post-merge workflow chain that runs `extract`, syncs the database, generates a roadmap, and updates docs in one command (#143).
+- **`extract <ids...>`**: Fetches merged PRs, reads comments, and extracts systemic architectural traps with **descriptive headings** (#203). Supports interactive multi-select pruning.
 - **`handoff`**: Captures uncommitted changes and lessons learned today, synthesizing a tactical snapshot for your next session.
-- **`eject`**: Safely removes all Totem git hooks, configuration files, AI agent prompt injections, and the local `.lancedb/` index.
+- **`eject`**: Safely removes all Totem git hooks, configuration files, AI agent prompt injections, and the local `.lancedb/` index (#131).
 
 > [!TIP]
 > **Custom Prompt Overrides**
-> Customize any command by creating a markdown file in `.totem/prompts/<command>.md` (e.g., `.totem/prompts/shield.md`).
+> Customize any command by creating a markdown file in `.totem/prompts/<command>.md` (e.g., `.totem/prompts/shield.md`) (#120).
 
 ### 6. Shield GitHub Action (CI/CD)
 
-Enforce Totem's quality gate automatically on every pull request. The action syncs the index and runs `totem shield` — if a violation is detected, the workflow fails with the full report.
+Enforce Totem's quality gate automatically on every pull request (#180). The action syncs the index and runs `totem shield` — if a violation is detected, the workflow fails with the full report.
 
 ```yaml
 # .github/workflows/shield.yml
@@ -158,7 +154,7 @@ on:
 
 jobs:
   shield:
-    runs-on: ubuntu-latest
+    runs-runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -179,9 +175,9 @@ jobs:
 
 Totem is evolving from a memory database into a full Shift-Left orchestrator.
 
-- [x] **Pillar 1: The Memory Layer** - Local vector DB, syntax-aware chunking, and MCP interface.
+- [x] **Pillar 1: The Memory Layer** - Local vector DB, tree-sitter syntax-aware chunking, and MCP interface.
 - [x] **Pillar 2: The Reflex Engine** - Auto-injection of AI prompts, proactive learning triggers, and background git hooks.
-- [x] **Pillar 3: The Workflow Orchestrator** - Native CLI commands (`spec`, `shield`, `triage`, `docs`) for pre-work briefings and local PR reviews.
-- [ ] **Pillar 4: Polish** - OpenAI embedding validation, interactive tutorials, cross-platform stability (Windows/macOS), and automated memory consolidation.
+- [x] **Pillar 3: The Workflow Orchestrator** - Native CLI commands (`spec`, `shield`, `triage`, `docs`, `wrap`) for pre-work briefings and local PR reviews.
+- [ ] **Pillar 4: Polish** - OpenAI embedding validation (#4), interactive tutorials (#129), cross-platform stability (Windows/macOS), and automated memory consolidation.
 
 For a deeper dive into the system design, see `docs/architecture.md`.

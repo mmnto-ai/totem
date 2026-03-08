@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete, establishing the Turborepo architecture, syntax-aware chunking (now powered by Tree-sitter #173), and local data stores. Recent momentum has delivered the Shield GitHub Action (#180), Drift Detection (#177), and a "Universal Lessons" baseline (#128). Focus is now shifting toward validating the core OpenAI embedding pipeline (#4) to enable internal dogfooding (#8) and completing interactive onboarding polish before scaling Phase 3 workflow expansions.
+Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete, establishing the Turborepo architecture, syntax-aware chunking (now powered by Tree-sitter #173), and local data stores. Recent momentum has delivered the Shield GitHub Action (#180), Drift Detection (#177), Automated Doc Sync (#190), MVC Configuration Tiers (#187), and a "Universal Lessons" baseline (#128). Focus is now shifting toward validating the core OpenAI embedding pipeline (#4) to enable internal dogfooding (#8) and completing interactive onboarding polish before scaling Phase 3 workflow expansions.
 
 ### Prioritized Roadmap
 
