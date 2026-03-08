@@ -4,10 +4,12 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { BASELINE_MARKER, UNIVERSAL_LESSONS_MARKDOWN } from '../assets/universal-lessons.js';
 import {
   buildNpxCommand,
   detectEmbeddingTier,
   generateConfig,
+  installBaselineLessons,
   scaffoldClaudeHooks,
   scaffoldFile,
   scaffoldMcpConfig,
@@ -518,5 +520,123 @@ describe('generateConfig', () => {
       const config = generateConfig(targets, tier);
       expect(config).toContain("provider: 'shell'");
     }
+  });
+});
+
+describe('Universal Lessons baseline', () => {
+  it('BASELINE_MARKER is an HTML comment', () => {
+    expect(BASELINE_MARKER).toMatch(/^<!--.*-->$/);
+  });
+
+  it('UNIVERSAL_LESSONS_MARKDOWN contains the marker', () => {
+    expect(UNIVERSAL_LESSONS_MARKDOWN).toContain(BASELINE_MARKER);
+  });
+
+  it('lessons follow the expected format for markdown chunker', () => {
+    // Each lesson should have ## Lesson heading and **Tags:** line
+    const headings = UNIVERSAL_LESSONS_MARKDOWN.match(/^## Lesson — /gm);
+    const tags = UNIVERSAL_LESSONS_MARKDOWN.match(/^\*\*Tags:\*\* /gm);
+    expect(headings).not.toBeNull();
+    expect(tags).not.toBeNull();
+    expect(headings!.length).toBeGreaterThanOrEqual(5);
+    expect(headings!.length).toBe(tags!.length);
+  });
+
+  it('each lesson has non-empty content after the tags line', () => {
+    const sections = UNIVERSAL_LESSONS_MARKDOWN.split(/^## Lesson — /m).filter(Boolean);
+    for (const section of sections) {
+      // Skip the marker-only preamble
+      if (!section.includes('**Tags:**')) continue;
+      const afterTags = section.split('**Tags:**')[1]!;
+      const lines = afterTags.split('\n').filter((l) => l.trim());
+      // Should have the tag values line + at least one content line
+      expect(lines.length).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('baseline can be appended to existing lessons without duplication', () => {
+    const existing = `# Totem Lessons\n\n---\n\n## Lesson — custom\n\n**Tags:** custom\n\nMy lesson.\n`;
+    const combined = existing + UNIVERSAL_LESSONS_MARKDOWN;
+    // Marker appears exactly once
+    const markers = combined.match(
+      new RegExp(BASELINE_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+    );
+    expect(markers).toHaveLength(1);
+  });
+
+  it('marker check detects already-installed baseline', () => {
+    const withBaseline = `# Totem Lessons\n\n---\n${UNIVERSAL_LESSONS_MARKDOWN}`;
+    expect(withBaseline.includes(BASELINE_MARKER)).toBe(true);
+  });
+});
+
+describe('installBaselineLessons', () => {
+  let tmpDir: string;
+  let lessonsPath: string;
+  const savedIsTTY = process.stdin.isTTY;
+
+  const makeMockRl = (answer: string) =>
+    ({ question: async () => answer }) as unknown as import('node:readline/promises').Interface;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-baseline-'));
+    lessonsPath = path.join(tmpDir, 'lessons.md');
+    fs.writeFileSync(lessonsPath, '# Totem Lessons\n\n---\n', 'utf-8');
+    // Force non-TTY so prompt is skipped (default to install)
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    Object.defineProperty(process.stdin, 'isTTY', { value: savedIsTTY, configurable: true });
+  });
+
+  it('installs baseline into empty lessons file (non-TTY defaults to yes)', async () => {
+    const result = await installBaselineLessons(lessonsPath, makeMockRl(''));
+    expect(result).toBe('installed');
+    const content = fs.readFileSync(lessonsPath, 'utf-8');
+    expect(content).toContain(BASELINE_MARKER);
+    expect(content).toContain('prompt-injection');
+  });
+
+  it('returns exists when baseline is already present', async () => {
+    fs.appendFileSync(lessonsPath, UNIVERSAL_LESSONS_MARKDOWN, 'utf-8');
+    const result = await installBaselineLessons(lessonsPath, makeMockRl(''));
+    expect(result).toBe('exists');
+  });
+
+  it('does not duplicate baseline on second call', async () => {
+    await installBaselineLessons(lessonsPath, makeMockRl(''));
+    await installBaselineLessons(lessonsPath, makeMockRl(''));
+    const content = fs.readFileSync(lessonsPath, 'utf-8');
+    const matches = content.match(
+      new RegExp(BASELINE_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+    );
+    expect(matches).toHaveLength(1);
+  });
+
+  it('preserves existing user lessons when installing baseline', async () => {
+    const userLesson = '\n## Lesson — custom\n\n**Tags:** custom\n\nMy custom lesson.\n';
+    fs.appendFileSync(lessonsPath, userLesson, 'utf-8');
+    await installBaselineLessons(lessonsPath, makeMockRl(''));
+    const content = fs.readFileSync(lessonsPath, 'utf-8');
+    expect(content).toContain('My custom lesson.');
+    expect(content).toContain(BASELINE_MARKER);
+  });
+
+  it('skipped when user declines in TTY mode', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    const result = await installBaselineLessons(lessonsPath, makeMockRl('n'));
+    expect(result).toBe('skipped');
+    const content = fs.readFileSync(lessonsPath, 'utf-8');
+    expect(content).not.toContain(BASELINE_MARKER);
+  });
+
+  it('installs when user accepts in TTY mode', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    const result = await installBaselineLessons(lessonsPath, makeMockRl(''));
+    expect(result).toBe('installed');
+    const content = fs.readFileSync(lessonsPath, 'utf-8');
+    expect(content).toContain(BASELINE_MARKER);
   });
 });

@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import type { IngestTarget } from '@mmnto/totem';
 
+import { BASELINE_MARKER, UNIVERSAL_LESSONS_MARKDOWN } from '../assets/universal-lessons.js';
 import { bold, brand, dim, log, printBanner, success } from '../ui.js';
 import { IS_WIN } from '../utils.js';
 import { installPostMergeHook } from './install-hooks.js';
@@ -563,6 +564,32 @@ export function detectEmbeddingTier(cwd: string): EmbeddingTier {
   return 'none';
 }
 
+/**
+ * Install the Universal AI Developer Baseline lessons into the lessons file.
+ * Returns 'installed', 'exists' (already present), or 'skipped' (user declined).
+ * In non-TTY mode (CI), defaults to installing without prompting.
+ */
+export async function installBaselineLessons(
+  lessonsPath: string,
+  rl: readline.Interface,
+): Promise<'installed' | 'exists' | 'skipped'> {
+  const existing = fs.readFileSync(lessonsPath, 'utf-8');
+  if (existing.includes(BASELINE_MARKER)) return 'exists';
+
+  // In non-TTY mode (CI, piped input), default to installing
+  let declined = false;
+  if (process.stdin.isTTY) {
+    const answer = await rl.question('Install Universal AI Developer Baseline lessons? (Y/n): ');
+    declined = answer.trim().toLowerCase() === 'n' || answer.trim().toLowerCase() === 'no';
+  }
+
+  if (declined) return 'skipped';
+
+  const suffix = existing.endsWith('\n') ? '' : '\n';
+  fs.appendFileSync(lessonsPath, suffix + UNIVERSAL_LESSONS_MARKDOWN, 'utf-8');
+  return 'installed';
+}
+
 /** Inject reflex block into an AI context file if not already present. */
 function injectReflexes(filePath: string): 'injected' | 'exists' | 'missing' {
   if (!fs.existsSync(filePath)) return 'missing';
@@ -687,13 +714,20 @@ export async function initCommand(): Promise<void> {
     }
 
     const lessonsPath = path.join(totemDir, 'lessons.md');
-    if (!fs.existsSync(lessonsPath)) {
+    const lessonsExisted = fs.existsSync(lessonsPath);
+    if (!lessonsExisted) {
       fs.writeFileSync(
         lessonsPath,
         `# Totem Lessons\n\nLessons learned from PR reviews and Shield checks.\nThis file is version-controlled and reviewed in PR diffs.\n\n---\n`,
         'utf-8',
       );
       summary.push({ file: '.totem/lessons.md', action: 'Created lessons file' });
+    }
+
+    // --- Universal Lessons baseline ---
+    const baselineResult = await installBaselineLessons(lessonsPath, rl);
+    if (baselineResult === 'installed') {
+      summary.push({ file: '.totem/lessons.md', action: 'Installed Universal Baseline lessons' });
     }
 
     // --- Unified AI tool selection ---
