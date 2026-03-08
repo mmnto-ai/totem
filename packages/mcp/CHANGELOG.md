@@ -1,5 +1,16 @@
 # @mmnto/mcp
 
+## 0.15.0
+
+### Minor Changes
+
+- Universal baseline lessons during `totem init` (#128), orphaned temp file cleanup on CLI startup (#108), and automated doc sync via `totem docs` command (#190) integrated into `totem wrap` as Step 4/4.
+
+### Patch Changes
+
+- Updated dependencies
+  - @mmnto/totem@0.15.0
+
 ## 0.14.0
 
 ### Minor Changes
