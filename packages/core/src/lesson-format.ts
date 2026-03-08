@@ -1,4 +1,5 @@
 const HEADING_MAX_CHARS = 60;
+const MIN_WORD_BREAK = 20;
 
 /**
  * Generate a descriptive lesson heading from the lesson body.
@@ -18,7 +19,7 @@ export function generateLessonHeading(body: string): string {
     .trim();
 
   // If structured (Context/Symptom/Fix), prefer the Fix/Rule line
-  const fixMatch = text.match(/Fix\/Rule:\s*(.+)/i) ?? text.match(/Rule:\s*(.+)/i);
+  const fixMatch = text.match(/(?:Fix\/)?Rule:\s*(.+)/i);
   if (fixMatch) {
     text = fixMatch[1]!.trim();
   } else {
@@ -37,7 +38,7 @@ export function generateLessonHeading(body: string): string {
     // Break at last word boundary before limit
     const truncated = text.slice(0, HEADING_MAX_CHARS);
     const lastSpace = truncated.lastIndexOf(' ');
-    text = (lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated) + '…';
+    text = (lastSpace > MIN_WORD_BREAK ? truncated.slice(0, lastSpace) : truncated) + '…';
   }
 
   return text;

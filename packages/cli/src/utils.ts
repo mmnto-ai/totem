@@ -31,8 +31,8 @@ export function loadEnv(cwd: string): void {
   if (!fs.existsSync(envPath)) return;
 
   const content = fs.readFileSync(envPath, 'utf-8');
-  for (const raw_line of content.split('\n')) {
-    const line = raw_line.replace(/\r$/, '');
+  for (const rawLine of content.split('\n')) {
+    const line = rawLine.replace(/\r$/, '');
     const match = line.match(/^([^#=]+)=(.*)$/);
     if (match) {
       const key = match[1]!.trim();

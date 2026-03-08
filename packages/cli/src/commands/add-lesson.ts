@@ -7,7 +7,7 @@ import * as readline from 'node:readline/promises';
 import { generateLessonHeading } from '@mmnto/totem';
 
 import { log } from '../ui.js';
-import { IS_WIN, loadConfig, loadEnv, resolveConfigPath } from '../utils.js';
+import { IS_WIN, loadConfig, loadEnv, resolveConfigPath, sanitize } from '../utils.js';
 
 function detectSyncCommand(cwd: string): { cmd: string; args: string[] } {
   if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) {
@@ -69,10 +69,11 @@ export async function addLessonCommand(lessonArg?: string): Promise<void> {
     return;
   }
 
-  const heading = generateLessonHeading(lessonText);
-  const tagString = tags.length > 0 ? tags.join(', ') : 'manual';
+  const safeLesson = sanitize(lessonText);
+  const safeTagString = tags.length > 0 ? tags.map((t) => sanitize(t)).join(', ') : 'manual';
+  const heading = generateLessonHeading(safeLesson);
 
-  const entry = `\n## Lesson — ${heading}\n\n**Tags:** ${tagString}\n\n${lessonText.trim()}\n`;
+  const entry = `\n## Lesson — ${heading}\n\n**Tags:** ${safeTagString}\n\n${safeLesson.trim()}\n`;
 
   fs.appendFileSync(lessonsPath, entry, 'utf-8');
   log.success('Totem', `Lesson saved to ${config.totemDir}/lessons.md`);
