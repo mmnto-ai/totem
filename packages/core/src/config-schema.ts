@@ -56,6 +56,15 @@ export const ShellOrchestratorSchema = z.object({
 
 export const OrchestratorSchema = z.discriminatedUnion('provider', [ShellOrchestratorSchema]);
 
+export const DocTargetSchema = z.object({
+  /** Relative path to the document */
+  path: z.string(),
+  /** Description of the document's purpose (included in the LLM prompt) */
+  description: z.string(),
+  /** When to remind/auto-run: 'post-release' or 'on-change' */
+  trigger: z.enum(['post-release', 'on-change']).default('post-release'),
+});
+
 export const ConfigTierSchema = z.enum(['lite', 'standard', 'full']);
 export type ConfigTier = z.infer<typeof ConfigTierSchema>;
 
@@ -80,6 +89,9 @@ export const TotemConfigSchema = z.object({
 
   /** Character count threshold for MCP context payload warnings (~4 chars ≈ 1 token). Default: 40,000 (~10k tokens). */
   contextWarningThreshold: z.number().int().positive().default(40_000),
+
+  /** Optional: documents to auto-update via `totem docs` */
+  docs: z.array(DocTargetSchema).optional(),
 });
 
 export type ChunkStrategy = z.infer<typeof ChunkStrategySchema>;
@@ -87,6 +99,7 @@ export type ContentType = z.infer<typeof ContentTypeSchema>;
 export type IngestTarget = z.infer<typeof IngestTargetSchema>;
 export type EmbeddingProvider = z.infer<typeof EmbeddingProviderSchema>;
 export type Orchestrator = z.infer<typeof OrchestratorSchema>;
+export type DocTarget = z.infer<typeof DocTargetSchema>;
 export type TotemConfig = z.infer<typeof TotemConfigSchema>;
 
 /**

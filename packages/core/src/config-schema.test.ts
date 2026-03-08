@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TotemConfig } from './config-schema.js';
-import { getConfigTier, requireEmbedding, TotemConfigSchema } from './config-schema.js';
+import {
+  DocTargetSchema,
+  getConfigTier,
+  requireEmbedding,
+  TotemConfigSchema,
+} from './config-schema.js';
 
 const BASE_TARGETS = [
   { glob: '**/*.md', type: 'spec' as const, strategy: 'markdown-heading' as const },
@@ -40,6 +45,80 @@ describe('TotemConfigSchema', () => {
 
   it('rejects config with no targets', () => {
     const result = TotemConfigSchema.safeParse({ targets: [] });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts config with docs array', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      docs: [
+        { path: 'README.md', description: 'Public README', trigger: 'post-release' },
+        { path: 'docs/roadmap.md', description: 'Roadmap' },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.docs).toHaveLength(2);
+      expect(result.data.docs![1].trigger).toBe('post-release'); // default
+    }
+  });
+
+  it('accepts config without docs (optional)', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.docs).toBeUndefined();
+    }
+  });
+});
+
+describe('DocTargetSchema', () => {
+  it('parses valid doc target', () => {
+    const result = DocTargetSchema.safeParse({
+      path: 'README.md',
+      description: 'Public README',
+      trigger: 'post-release',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('defaults trigger to post-release', () => {
+    const result = DocTargetSchema.parse({
+      path: 'README.md',
+      description: 'Public README',
+    });
+    expect(result.trigger).toBe('post-release');
+  });
+
+  it('accepts on-change trigger', () => {
+    const result = DocTargetSchema.safeParse({
+      path: 'docs/architecture.md',
+      description: 'Architecture',
+      trigger: 'on-change',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects invalid trigger', () => {
+    const result = DocTargetSchema.safeParse({
+      path: 'README.md',
+      description: 'test',
+      trigger: 'invalid',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects missing path', () => {
+    const result = DocTargetSchema.safeParse({
+      description: 'test',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects missing description', () => {
+    const result = DocTargetSchema.safeParse({
+      path: 'README.md',
+    });
     expect(result.success).toBe(false);
   });
 });

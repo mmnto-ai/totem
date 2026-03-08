@@ -1,7 +1,14 @@
 import { z } from 'zod';
 
+import { getTagDate } from '../git.js';
 import { ghFetchAndParse } from './gh-utils.js';
 import type { IssueAdapter, StandardIssue, StandardIssueListItem } from './issue-adapter.js';
+
+export interface ClosedIssueListItem {
+  number: number;
+  title: string;
+  closedAt: string;
+}
 
 // ─── Zod schemas for GitHub CLI JSON output ─────────────
 
@@ -18,6 +25,12 @@ const GhIssueListItemSchema = z.object({
   title: z.string(),
   labels: z.array(z.object({ name: z.string() })),
   updatedAt: z.string().datetime(),
+});
+
+const GhClosedIssueListItemSchema = z.object({
+  number: z.number(),
+  title: z.string(),
+  closedAt: z.string().datetime(),
 });
 
 // ─── Adapter implementation ─────────────────────────────
@@ -41,6 +54,42 @@ export class GitHubCliAdapter implements IssueAdapter {
       state: issue.state,
       labels: issue.labels.map((l) => l.name),
     };
+  }
+
+  /**
+   * Fetch recently closed issues, optionally filtered by search query (e.g., "closed:>2026-01-01").
+   */
+  fetchClosedIssues(limit: number = DEFAULT_ISSUE_LIMIT, sinceTag?: string): ClosedIssueListItem[] {
+    const args = [
+      'issue',
+      'list',
+      '--state',
+      'closed',
+      '--json',
+      'number,title,closedAt',
+      '--limit',
+      String(limit),
+    ];
+
+    // If we have a tag, use --search to filter by close date
+    if (sinceTag) {
+      const tagDate = getTagDate(this.cwd, sinceTag);
+      if (tagDate) {
+        args.push('--search', `closed:>=${tagDate}`);
+      }
+    }
+
+    const issues = ghFetchAndParse(
+      args,
+      z.array(GhClosedIssueListItemSchema),
+      'closed issues',
+      this.cwd,
+    );
+    return issues.map((i) => ({
+      number: i.number,
+      title: i.title,
+      closedAt: i.closedAt,
+    }));
   }
 
   fetchOpenIssues(limit: number = DEFAULT_ISSUE_LIMIT): StandardIssueListItem[] {

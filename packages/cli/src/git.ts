@@ -123,6 +123,80 @@ export function getGitBranchDiff(cwd: string, base?: string): string {
   }
 }
 
+/**
+ * Get the author date of a tag in YYYY-MM-DD format.
+ * Returns null if tag doesn't exist or lookup fails.
+ */
+export function getTagDate(cwd: string, tag: string): string | null {
+  try {
+    const date = execFileSync('git', ['log', '-1', '--format=%aI', '--', tag], {
+      cwd,
+      encoding: 'utf-8',
+      timeout: GIT_COMMAND_TIMEOUT_MS,
+      shell: IS_WIN,
+    }).trim();
+    return date.slice(0, 10) || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get the most recent semver tag (e.g., "v0.14.0").
+ * Returns null if no tags exist.
+ */
+export function getLatestTag(cwd: string): string | null {
+  try {
+    return (
+      execFileSync('git', ['describe', '--tags', '--abbrev=0'], {
+        cwd,
+        encoding: 'utf-8',
+        timeout: GIT_COMMAND_TIMEOUT_MS,
+        shell: IS_WIN,
+      }).trim() || null
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get git log since a ref (tag or commit), or last N commits as fallback.
+ * Returns one-line-per-commit format: "hash subject".
+ */
+export function getGitLogSince(cwd: string, since?: string, maxCommits = 50): string {
+  const args = since
+    ? ['log', `${since}..HEAD`, '--oneline', `--max-count=${maxCommits}`]
+    : ['log', '--oneline', `-${maxCommits}`];
+  try {
+    return execFileSync('git', args, {
+      cwd,
+      encoding: 'utf-8',
+      timeout: GIT_COMMAND_TIMEOUT_MS,
+      shell: IS_WIN,
+    }).trim();
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Check if a specific file has uncommitted changes (staged or unstaged).
+ */
+export function isFileDirty(cwd: string, filePath: string): boolean {
+  try {
+    const output = execFileSync('git', ['status', '--porcelain', '--', filePath], {
+      cwd,
+      encoding: 'utf-8',
+      timeout: GIT_COMMAND_TIMEOUT_MS,
+      shell: IS_WIN,
+    }).trim();
+    return output.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export function extractChangedFiles(diff: string): string[] {
   const files: string[] = [];
   for (const line of diff.split('\n')) {
