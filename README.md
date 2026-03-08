@@ -47,7 +47,7 @@ This is a Turborepo monorepo consisting of:
 ## Prerequisites
 
 - **Node.js 20+** — [nodejs.org](https://nodejs.org/) (or use a version manager like `nvm`/`fnm`)
-- **pnpm** _(recommended)_ — `npm install -g pnpm` or see [pnpm.io/installation](https://pnpm.io/installation)
+- **pnpm** _(recommended)_ — `corepack enable` or see other methods at [pnpm.io/installation](https://pnpm.io/installation)
 - **GitHub CLI (`gh`)** _(optional, for orchestrator commands)_ — [cli.github.com](https://cli.github.com/)
 
 Totem works on **Windows**, **macOS**, and **Linux**. On Windows, Git Bash (bundled with [Git for Windows](https://gitforwindows.org/)) is recommended but not required — PowerShell and CMD work too.
