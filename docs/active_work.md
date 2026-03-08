@@ -1,18 +1,18 @@
 ### Active Work Summary
 
-Totem is currently focused on "Phase 1: The 'Magic' Onboarding & Polish," following extensive Phase 2 stability improvements and the implementation of Minimum Viable Configuration (MVC tiers). Recent completions like "Universal Baselines" (Issue #128) have solved the cold-start problem, so momentum is directed entirely at making the initial installation and first-run experience frictionless before expanding to advanced workflows.
+Totem has completed Phase 2 (Core Stability), Minimum Viable Configuration tiers (#187), Universal Baselines (#128), temp file cleanup (#108), and automated doc sync (#190). The project is now in Phase 3 (Workflow Expansion), focused on power-user tools and usability improvements. A v0.15.0 release is imminent, bundling all three recent features.
 
 ### Prioritized Roadmap
 
-**Do Next (Phase 1: Onboarding & Polish)**
+**Do Next (Phase 1: Onboarding & Polish — remaining items)**
 
 - #129 — Epic: Interactive CLI Tutorial & Conversational Onboarding — Crucial next step for guiding users through the initial learning curve to build trust.
 - #126 — Epic: Invisible Orchestration & Auto-Triggering (The 'Init and Forget' Protocol) — Automates the core value loop immediately after onboarding.
 - #12 — Cross-platform onboarding: support Windows (PowerShell) & macOS in all docs — Ensures the onboarding process is seamless regardless of the user's OS.
-- #108 — UX: Clean up orphaned temporary prompt files — Essential developer experience polish to prevent workspace clutter during initial evaluations.
 
 **Up Next (Phase 3: Core Workflows & Usability)**
 
+- #181 — Feature: Drift Detection (Self-Cleaning Memory) — Detects and prunes stale lessons automatically to maintain memory quality.
 - #178 — Epic: Clipboard/Export UI for "Freemium Hoppers" — Broadens accessibility for users who aren't ready to fully integrate MCP.
 - #179 — Epic: Markdown/Document-Only Mode — Expands the addressable market to non-code, documentation-only use cases.
 - #110 — Enhancement: Make markdown chunker MAX_SPLIT_DEPTH configurable — A straightforward configurability win for core functionality.
@@ -21,8 +21,6 @@ Totem is currently focused on "Phase 1: The 'Magic' Onboarding & Polish," follow
 - #92 — Feature: Telemetry Logging and Local Dashboard (`totem stats`) — Tracks API quota usage locally.
 - #74 — Feature: Add `totem oracle` command for general knowledge querying — Frictionless Q&A against the vector database.
 - #23 — Feature: Automated Memory Consolidation (`totem consolidate`) — Provides a command to clean up and merge old lessons.
-- #190 — feat: automated doc sync — keep project docs updated without manual effort — Keeps project documentation in sync with codebase changes automatically.
-- #181 — Feature: Drift Detection (Self-Cleaning Memory) — Detects and prunes stale lessons automatically to maintain memory quality.
 
 **Backlog (Phase 4: Enterprise Expansion & Advanced Architecture)**
 
