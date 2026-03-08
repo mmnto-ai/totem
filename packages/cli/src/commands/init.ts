@@ -573,21 +573,29 @@ export async function installBaselineLessons(
   lessonsPath: string,
   rl: readline.Interface,
 ): Promise<'installed' | 'exists' | 'skipped'> {
-  const existing = fs.readFileSync(lessonsPath, 'utf-8');
-  if (existing.includes(BASELINE_MARKER)) return 'exists';
+  try {
+    const existing = fs.readFileSync(lessonsPath, 'utf-8');
+    if (existing.includes(BASELINE_MARKER)) return 'exists';
 
-  // In non-TTY mode (CI, piped input), default to installing
-  let declined = false;
-  if (process.stdin.isTTY) {
-    const answer = await rl.question('Install Universal AI Developer Baseline lessons? (Y/n): ');
-    declined = answer.trim().toLowerCase() === 'n' || answer.trim().toLowerCase() === 'no';
+    // In non-TTY mode (CI, piped input), default to installing
+    let declined = false;
+    if (process.stdin.isTTY) {
+      const answer = await rl.question('Install Universal AI Developer Baseline lessons? (Y/n): ');
+      declined = answer.trim().toLowerCase() === 'n' || answer.trim().toLowerCase() === 'no';
+    }
+
+    if (declined) return 'skipped';
+
+    const suffix = existing.endsWith('\n') ? '' : '\n';
+    fs.appendFileSync(lessonsPath, suffix + UNIVERSAL_LESSONS_MARKDOWN, 'utf-8');
+    return 'installed';
+  } catch (err) {
+    log.warn(
+      'Totem',
+      `Could not install baseline lessons: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return 'skipped';
   }
-
-  if (declined) return 'skipped';
-
-  const suffix = existing.endsWith('\n') ? '' : '\n';
-  fs.appendFileSync(lessonsPath, suffix + UNIVERSAL_LESSONS_MARKDOWN, 'utf-8');
-  return 'installed';
 }
 
 /** Inject reflex block into an AI context file if not already present. */
