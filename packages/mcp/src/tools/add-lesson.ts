@@ -125,11 +125,14 @@ export function registerAddLesson(server: McpServer): void {
 
         const lessonsPath = path.join(totemDir, 'lessons.md');
         const safeLesson = sanitize(lesson);
-        const safeTags = context_tags.map((t) => sanitize(t).replace(/\n/g, ' ')).join(', ');
+        const safeTags =
+          context_tags.length > 0
+            ? context_tags.map((t) => sanitize(t).replace(/\n/g, ' ')).join(', ')
+            : 'manual';
         const heading = generateLessonHeading(safeLesson);
 
         const entry =
-          `\n## Lesson — ${heading}\n\n` + `**Tags:** ${safeTags}\n\n` + `${safeLesson}\n`;
+          `\n## Lesson — ${heading}\n\n` + `**Tags:** ${safeTags}\n\n` + `${safeLesson.trim()}\n`;
 
         await fs.promises.appendFile(lessonsPath, entry, 'utf-8');
 
