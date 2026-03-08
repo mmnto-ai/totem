@@ -56,6 +56,8 @@ npx @mmnto/cli init
 
 This will auto-detect your project structure, generate a `totem.config.ts`, install automated background git hooks, and inject the Proactive Memory Reflexes into your AI's system prompt.
 
+**Universal Baseline:** During init, Totem offers to install a curated set of foundational AI developer lessons (prompt injection prevention, hallucination traps, dependency verification, etc.) so your agents have useful knowledge from Day 1 — no manual setup required.
+
 **Seamless Host Integration:** If you are using Claude Code or Gemini CLI, `totem init` will automatically wire up agent hooks to run `totem briefing` at the start of your session and intercept `git commit`/`push` to run `totem shield` automatically.
 
 ### 2. Configure your Embedding Provider

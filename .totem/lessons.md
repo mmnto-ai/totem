@@ -496,3 +496,21 @@ Sanitize text derived from untrusted sources (like LLM outputs or PR comments) b
 **Tags:** cli, ux, ci
 
 Wrap interactive-only previews and manual review warnings inside a conditional check for non-automated/interactive modes. This keeps CI logs clean and avoids printing redundant noise that cannot be acted upon in non-interactive environments.
+
+## Lesson — 2026-03-08T00:11:33.219Z
+
+**Tags:** cli, scaffolding, discovery
+
+When introducing a "Lite" tier or optional mode to an interactive scaffold, ensure that previous default options remain explicitly discoverable; replacing a provider-default with a "nothing" default on the "Enter" key can accidentally hide valid configuration paths from users.
+
+## Lesson — 2026-03-08T00:11:33.219Z
+
+**Tags:** environment, configuration, trap
+
+Environment variable checks for a "configured" state must validate that the value contains non-whitespace characters (`/\S/`) to ensure consistency with `.env` file parsing and prevent false positives from variables exported as empty strings or whitespace.
+
+## Lesson — 2026-03-08T00:11:33.219Z
+
+**Tags:** cli, onboarding, scaffolding
+
+Scaffolding and `init` commands should prioritize graceful degradation (warnings and fallbacks) over hard errors for non-critical configuration failures, ensuring users can always reach a functional "Lite" state instead of being blocked by invalid credentials.
