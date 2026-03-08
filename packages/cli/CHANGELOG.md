@@ -1,5 +1,12 @@
 # @mmnto/cli
 
+## 0.16.1
+
+### Patch Changes
+
+- c3a76cc: Fix `totem docs` aborting on large responses by adding maxBuffer (10MB) to execSync, matching the existing GitHub CLI adapter pattern. Adds descriptive error messages for buffer overflow and timeout failures.
+  - @mmnto/totem@0.16.1
+
 ## 0.16.0
 
 ### Minor Changes
