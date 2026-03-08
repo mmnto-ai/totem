@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { isCancel, multiselect } from '@clack/prompts';
 
 import type { SearchResult } from '@mmnto/totem';
-import { createEmbedder, LanceStore, runSync } from '@mmnto/totem';
+import { createEmbedder, generateLessonHeading, LanceStore, runSync } from '@mmnto/totem';
 
 import { GitHubCliPrAdapter } from '../adapters/github-cli-pr.js';
 import type { StandardPr, StandardReviewComment } from '../adapters/pr-adapter.js';
@@ -221,9 +221,9 @@ export function appendLessons(lessons: ExtractedLesson[], lessonsPath: string): 
 
   const entries = lessons
     .map((l) => {
-      const timestamp = new Date().toISOString();
+      const heading = generateLessonHeading(l.text);
       const tags = l.tags.join(', ');
-      return `\n## Lesson — ${timestamp}\n\n**Tags:** ${tags}\n\n${l.text}\n`;
+      return `\n## Lesson — ${heading}\n\n**Tags:** ${tags}\n\n${l.text}\n`;
     })
     .join('');
 

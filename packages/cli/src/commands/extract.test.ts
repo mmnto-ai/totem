@@ -125,11 +125,10 @@ describe('appendLessons', () => {
     expect(content).toContain('Second.');
   });
 
-  it('includes ISO timestamp in heading', () => {
+  it('uses descriptive heading derived from lesson text', () => {
     appendLessons([{ tags: ['test'], text: 'Timestamped.' }], lessonsPath);
     const content = fs.readFileSync(lessonsPath, 'utf-8');
-    // Match ISO 8601 pattern in heading
-    expect(content).toMatch(/## Lesson — \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+    expect(content).toContain('## Lesson — Timestamped.');
   });
 });
 

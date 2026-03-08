@@ -53,4 +53,5 @@ export type { ResolvedFile } from './ingest/sync.js';
 export { getChangedFiles, getHeadSha, resolveFiles, runSync } from './ingest/sync.js';
 
 // Utilities
+export { generateLessonHeading } from './lesson-format.js';
 export { wrapXml } from './xml-format.js';

@@ -5,6 +5,8 @@ import { stdin as input, stdout as output } from 'node:process';
 import * as readline from 'node:readline/promises';
 
 import { log } from '../ui.js';
+import { generateLessonHeading } from '@mmnto/totem';
+
 import { IS_WIN, loadConfig, loadEnv, resolveConfigPath } from '../utils.js';
 
 function detectSyncCommand(cwd: string): { cmd: string; args: string[] } {
@@ -67,10 +69,10 @@ export async function addLessonCommand(lessonArg?: string): Promise<void> {
     return;
   }
 
-  const timestamp = new Date().toISOString();
+  const heading = generateLessonHeading(lessonText);
   const tagString = tags.length > 0 ? tags.join(', ') : 'manual';
 
-  const entry = `\n## Lesson — ${timestamp}\n\n**Tags:** ${tagString}\n\n${lessonText.trim()}\n`;
+  const entry = `\n## Lesson — ${heading}\n\n**Tags:** ${tagString}\n\n${lessonText.trim()}\n`;
 
   fs.appendFileSync(lessonsPath, entry, 'utf-8');
   log.success('Totem', `Lesson saved to ${config.totemDir}/lessons.md`);
