@@ -514,3 +514,27 @@ Environment variable checks for a "configured" state must validate that the valu
 **Tags:** cli, onboarding, scaffolding
 
 Scaffolding and `init` commands should prioritize graceful degradation (warnings and fallbacks) over hard errors for non-critical configuration failures, ensuring users can always reach a functional "Lite" state instead of being blocked by invalid credentials.
+
+## Lesson — 2026-03-08T00:56:41.780Z
+
+**Tags:** architecture, scaffolding, error-handling
+
+Scaffolding commands should wrap non-critical file system operations in `try/catch` blocks to log warnings instead of crashing the process. This ensures the primary setup flow completes even if a secondary feature fails due to environment-specific issues like file permissions.
+
+## Lesson — 2026-03-08T00:56:41.780Z
+
+**Tags:** ai-behavior, rag, search
+
+When generating multiple markdown chunks for AI indexing, assign each a unique, descriptive heading rather than a generic shared label. Identical headings make search results and context summaries indistinguishable for the user, significantly degrading RAG utility.
+
+## Lesson — 2026-03-08T00:56:41.780Z
+
+**Tags:** testing, quality-assurance
+
+Verify fixed collections of assets with exact count assertions (e.g., `toBe(10)`) rather than weak bounds (e.g., `toBeGreaterThanOrEqual(5)`). This prevents regression errors where individual items are accidentally deleted but the test continues to pass.
+
+## Lesson — 2026-03-08T00:56:41.781Z
+
+**Tags:** clean-code, design-decision
+
+For static, small sets of string comparisons (like 'y/n' prompt responses), explicit boolean `OR` checks are often more idiomatic and readable than `[].includes()` patterns. Avoid over-engineering simple branching logic if the set of possible values is not expected to grow.

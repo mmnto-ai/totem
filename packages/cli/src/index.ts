@@ -6,6 +6,7 @@ import { Command } from 'commander';
 import { z } from 'zod';
 
 import { initCommand } from './commands/init.js';
+import { reapOrphanedTempFiles } from './utils.js';
 
 const require = createRequire(import.meta.url);
 const { version } = z.object({ version: z.string() }).parse(require('../package.json'));
@@ -266,5 +267,8 @@ program
       handleError(err);
     }
   });
+
+// Fire-and-forget: reap orphaned temp files from previous crashed runs
+reapOrphanedTempFiles(process.cwd(), '.totem').catch(() => {});
 
 program.parse();
