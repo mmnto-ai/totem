@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 0.14.0
+
+### Minor Changes
+
+- 171a810: Minimum viable configuration tiers (Lite/Standard/Full). Embedding is now optional — Lite tier works with zero API keys. Auto-detects OPENAI_API_KEY during `totem init`.
+
 ## 0.13.0
 
 ## 0.12.0
