@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -44,7 +45,7 @@ import { loadConfig, runOrchestrator } from '../utils.js';
 let tmpDir: string;
 
 function setupTmpDir(): string {
-  const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'totem-docs-test-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-docs-test-'));
   // Create docs directory and active_work.md
   fs.mkdirSync(path.join(dir, 'docs'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'docs', 'active_work.md'), '# Active Work\n', 'utf-8');

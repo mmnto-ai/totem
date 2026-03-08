@@ -129,7 +129,7 @@ export function getGitBranchDiff(cwd: string, base?: string): string {
  */
 export function getTagDate(cwd: string, tag: string): string | null {
   try {
-    const date = execFileSync('git', ['log', '-1', '--format=%aI', tag], {
+    const date = execFileSync('git', ['log', '-1', '--format=%aI', '--', tag], {
       cwd,
       encoding: 'utf-8',
       timeout: GIT_COMMAND_TIMEOUT_MS,
