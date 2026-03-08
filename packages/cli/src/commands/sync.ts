@@ -3,8 +3,8 @@ import * as path from 'node:path';
 
 import { isCancel, multiselect } from '@clack/prompts';
 
-import { detectDrift, parseLessonsFile, rewriteLessonsFile, runSync } from '@mmnto/totem';
 import type { DriftResult, TotemConfig } from '@mmnto/totem';
+import { detectDrift, parseLessonsFile, rewriteLessonsFile, runSync } from '@mmnto/totem';
 
 import { createSpinner, log } from '../ui.js';
 import { loadConfig, loadEnv, requireEmbedding, resolveConfigPath, sanitize } from '../utils.js';
