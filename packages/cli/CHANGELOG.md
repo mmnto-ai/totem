@@ -1,5 +1,16 @@
 # @mmnto/cli
 
+## 0.16.0
+
+### Minor Changes
+
+- 76b4cf4: Minimum viable configuration tiers (Lite/Standard/Full). Embedding is now optional — Lite tier works with zero API keys. Auto-detects OPENAI_API_KEY during `totem init`.
+
+### Patch Changes
+
+- Updated dependencies [76b4cf4]
+  - @mmnto/totem@0.16.0
+
 ## 0.15.0
 
 ### Minor Changes
