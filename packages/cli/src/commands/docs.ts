@@ -39,7 +39,14 @@ Given a documentation file, its purpose, and recent project changes (git log, cl
 - **Evidence-Based:** Only update information that is supported by the provided git log, closed issues, or active work context. Do NOT invent features or status changes.
 - **Phase Numbering:** If the document references phases, use ONLY the phase numbering from the provided active_work.md context. Do NOT change or renumber phases.
 - **Conservative Updates:** When in doubt, keep the existing text. Only change what the evidence supports.
-- **No Preamble:** Output ONLY the updated file content. No commentary, no explanation, no markdown code fences wrapping the output.
+- **XML Wrapper (MANDATORY):** Wrap your ENTIRE output inside \`<updated_document>\` and \`</updated_document>\` tags. No text before or after the tags. No markdown code fences. Example:
+
+\`\`\`
+<updated_document>
+# My Document
+Updated content here...
+</updated_document>
+\`\`\`
 `;
 
 // ─── Release context gathering ──────────────────────────
@@ -123,6 +130,19 @@ function assemblePrompt(
   }
 
   return sections.join('\n');
+}
+
+// ─── Response extraction ─────────────────────────────────
+
+const UPDATED_DOC_RE = /^\s*<updated_document>\s*\n?([\s\S]*?)\n?\s*<\/updated_document>\s*$/;
+
+/**
+ * Extract the file content from the LLM's `<updated_document>` wrapper.
+ * Returns null if the closing tag is missing (truncated or malformed response).
+ */
+export function extractUpdatedDocument(response: string): string | null {
+  const match = UPDATED_DOC_RE.exec(response);
+  return match ? match[1]! : null;
 }
 
 // ─── Diff display ───────────────────────────────────────
@@ -269,8 +289,19 @@ export async function docsCommand(options: DocsOptions): Promise<void> {
 
     if (content == null) continue; // --raw mode
 
+    // Extract content from <updated_document> wrapper — structural integrity check
+    const extracted = extractUpdatedDocument(content);
+    if (extracted == null) {
+      log.error(
+        TAG,
+        `Failed to process ${doc.path} — response missing <updated_document> wrapper (truncated or malformed). Skipping.`,
+      );
+      failed++;
+      continue;
+    }
+
     // Check if anything changed
-    const trimmedContent = content.trimEnd() + '\n';
+    const trimmedContent = extracted.trimEnd() + '\n';
     const hasChanges = showDiff(doc.path, currentContent, trimmedContent);
     if (!hasChanges) continue;
 

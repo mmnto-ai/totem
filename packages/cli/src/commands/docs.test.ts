@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { docsCommand } from './docs.js';
+import { docsCommand, extractUpdatedDocument } from './docs.js';
 
 // ─── Mocks ──────────────────────────────────────────────
 
@@ -15,7 +15,11 @@ vi.mock('../utils.js', async (importOriginal) => {
     resolveConfigPath: vi.fn().mockReturnValue('/fake/totem.config.ts'),
     loadEnv: vi.fn(),
     loadConfig: vi.fn(),
-    runOrchestrator: vi.fn().mockResolvedValue('# Updated README\n\nNew content here.\n'),
+    runOrchestrator: vi
+      .fn()
+      .mockResolvedValue(
+        '<updated_document>\n# Updated README\n\nNew content here.\n</updated_document>',
+      ),
     getSystemPrompt: vi.fn().mockReturnValue('system prompt'),
     writeOutput: vi.fn(),
   };
@@ -65,7 +69,9 @@ describe('docsCommand', () => {
     vi.clearAllMocks();
     // Reset return values (clearAllMocks only clears call records, not implementations)
     vi.mocked(isFileDirty).mockReturnValue(false);
-    vi.mocked(runOrchestrator).mockResolvedValue('# Updated README\n\nNew content here.\n');
+    vi.mocked(runOrchestrator).mockResolvedValue(
+      '<updated_document>\n# Updated README\n\nNew content here.\n</updated_document>',
+    );
     tmpDir = setupTmpDir();
     vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
   });
@@ -226,5 +232,49 @@ describe('docsCommand', () => {
     await docsCommand({});
 
     expect(runOrchestrator).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects response missing closing updated_document tag', async () => {
+    vi.mocked(loadConfig).mockResolvedValue({
+      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+      docs: [{ path: 'README.md', description: 'readme', trigger: 'post-release' }],
+      totemDir: '.totem',
+      lanceDir: '.lancedb',
+      ignorePatterns: [],
+      contextWarningThreshold: 40_000,
+    });
+
+    writeDoc(tmpDir, 'README.md', '# Old README\n');
+
+    // Simulate truncated response — opening tag but no closing tag
+    vi.mocked(runOrchestrator).mockResolvedValue('<updated_document>\n# Truncated content');
+
+    await docsCommand({});
+
+    // File should NOT be modified
+    const content = fs.readFileSync(path.join(tmpDir, 'README.md'), 'utf-8');
+    expect(content).toBe('# Old README\n');
+  });
+});
+
+// ─── extractUpdatedDocument ─────────────────────────────
+
+describe('extractUpdatedDocument', () => {
+  it('extracts content from valid wrapper', () => {
+    const input = '<updated_document>\n# Hello\nWorld\n</updated_document>';
+    expect(extractUpdatedDocument(input)).toBe('# Hello\nWorld');
+  });
+
+  it('returns null when closing tag is missing', () => {
+    expect(extractUpdatedDocument('<updated_document>\n# Truncated')).toBeNull();
+  });
+
+  it('returns null when wrapper is absent', () => {
+    expect(extractUpdatedDocument('# Just plain markdown')).toBeNull();
+  });
+
+  it('handles extra whitespace around tags', () => {
+    const input = '  <updated_document>\n# Content\n  </updated_document>  ';
+    expect(extractUpdatedDocument(input)).toBe('# Content');
   });
 });

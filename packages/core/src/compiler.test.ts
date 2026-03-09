@@ -231,6 +231,79 @@ describe('applyRules', () => {
     const violations = applyRules(rules, diff, ['other-file.ts']);
     expect(violations).toHaveLength(1);
   });
+
+  // ─── fileGlobs scoping ─────────────────────────────
+
+  // Build test data from array join to avoid embedded diff headers
+  // (+++, ---) being parsed as real file boundaries by the shield.
+  const multiFileDiff = [
+    'diff --git a/deploy.sh b/deploy.sh',
+    '--- a/deploy.sh',
+    '+++ b/deploy.sh',
+    '@@ -1,2 +1,3 @@',
+    ' #!/bin/bash',
+    '+echo $UNQUOTED_VAR',
+    ' exit 0',
+    'diff --git a/src/utils.ts b/src/utils.ts',
+    '--- a/src/utils.ts',
+    '+++ b/src/utils.ts',
+    '@@ -1,2 +1,3 @@',
+    ' const x = 1;',
+    "+const msg = $name + ' hello';",
+    ' export default x;',
+  ].join('\n');
+
+  it('applies rule to all files when fileGlobs is absent', () => {
+    const rules = [makeRule('\\$\\w+', 'Found a dollar-sign variable')];
+    const violations = applyRules(rules, multiFileDiff);
+    expect(violations).toHaveLength(2); // matches in both .sh and .ts
+  });
+
+  it('restricts rule to matching file types via fileGlobs', () => {
+    const rules: CompiledRule[] = [
+      {
+        ...makeRule('\\$\\w+', 'Quote shell variables'),
+        fileGlobs: ['*.sh', '*.bash'],
+      },
+    ];
+    const violations = applyRules(rules, multiFileDiff);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]!.file).toBe('deploy.sh');
+  });
+
+  it('skips rule entirely when no files match fileGlobs', () => {
+    const rules: CompiledRule[] = [
+      {
+        ...makeRule('\\$\\w+', 'Quote shell variables'),
+        fileGlobs: ['*.py'],
+      },
+    ];
+    const violations = applyRules(rules, multiFileDiff);
+    expect(violations).toHaveLength(0);
+  });
+
+  it('handles **/*.ext glob pattern', () => {
+    const rules: CompiledRule[] = [
+      {
+        ...makeRule('\\$\\w+', 'Found dollar variable'),
+        fileGlobs: ['**/*.ts'],
+      },
+    ];
+    const violations = applyRules(rules, multiFileDiff);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]!.file).toBe('src/utils.ts');
+  });
+
+  it('applies rule when fileGlobs is empty array (treated as no restriction)', () => {
+    const rules: CompiledRule[] = [
+      {
+        ...makeRule('\\$\\w+', 'Found dollar variable'),
+        fileGlobs: [],
+      },
+    ];
+    const violations = applyRules(rules, multiFileDiff);
+    expect(violations).toHaveLength(2);
+  });
 });
 
 // ─── loadCompiledRules / saveCompiledRules ───────────
@@ -325,5 +398,22 @@ describe('parseCompilerResponse', () => {
   it('returns null for JSON with wrong schema', () => {
     const response = JSON.stringify({ foo: 'bar' });
     expect(parseCompilerResponse(response)).toBeNull();
+  });
+
+  it('parses a response with fileGlobs', () => {
+    const response = JSON.stringify({
+      compilable: true,
+      pattern: '\\$[a-zA-Z_]+',
+      message: 'Quote shell variables',
+      fileGlobs: ['*.sh', '*.bash', '*.yml'],
+    });
+
+    const result = parseCompilerResponse(response);
+    expect(result).toEqual({
+      compilable: true,
+      pattern: '\\$[a-zA-Z_]+',
+      message: 'Quote shell variables',
+      fileGlobs: ['*.sh', '*.bash', '*.yml'],
+    });
   });
 });

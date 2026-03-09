@@ -19,6 +19,8 @@ export const CompiledRuleSchema = z.object({
   engine: z.literal('regex'),
   /** ISO timestamp of when this rule was compiled */
   compiledAt: z.string(),
+  /** Optional file glob patterns — rule only applies to matching files (e.g., ["*.sh", "*.yml"]) */
+  fileGlobs: z.array(z.string()).optional(),
 });
 
 export type CompiledRule = z.infer<typeof CompiledRuleSchema>;
@@ -143,6 +145,33 @@ export function extractAddedLines(diff: string): DiffAddition[] {
 
 // ─── Rule execution ──────────────────────────────────
 
+// ─── File glob matching ─────────────────────────────
+
+/**
+ * Check if a file path matches any of the given glob patterns.
+ * Supports simple patterns: `*.ext`, `**\/*.ext`, literal filenames.
+ */
+function matchesGlob(filePath: string, glob: string): boolean {
+  // Normalize separators
+  const normalized = filePath.replace(/\\/g, '/');
+  // *.ext — match file extension anywhere
+  if (glob.startsWith('*.')) {
+    return normalized.endsWith(glob.slice(1));
+  }
+  // **/*.ext — same as *.ext (match extension anywhere in path)
+  if (glob.startsWith('**/')) {
+    return matchesGlob(normalized, glob.slice(3));
+  }
+  // Literal filename match (e.g., "Dockerfile")
+  return normalized === glob || normalized.endsWith('/' + glob);
+}
+
+function fileMatchesGlobs(filePath: string, globs: string[]): boolean {
+  return globs.some((g) => matchesGlob(filePath, g));
+}
+
+// ─── Rule execution ──────────────────────────────────
+
 /**
  * Apply compiled rules against added lines from a diff.
  * Returns all violations found.
@@ -173,6 +202,11 @@ export function applyRules(
     }
 
     for (const addition of additions) {
+      // Skip if rule has fileGlobs and this file doesn't match
+      if (rule.fileGlobs && rule.fileGlobs.length > 0) {
+        if (!fileMatchesGlobs(addition.file, rule.fileGlobs)) continue;
+      }
+
       if (re.test(addition.line)) {
         violations.push({
           rule,
@@ -218,6 +252,7 @@ export const CompilerOutputSchema = z.object({
   compilable: z.boolean(),
   pattern: z.string().optional(),
   message: z.string().optional(),
+  fileGlobs: z.array(z.string()).optional(),
 });
 
 export type CompilerOutput = z.infer<typeof CompilerOutputSchema>;

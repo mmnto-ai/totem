@@ -33,8 +33,19 @@ You are a deterministic rule compiler. Your job is to read a single natural-lang
 - Use JavaScript RegExp syntax.
 - Keep patterns simple and precise — avoid overly broad matches that cause false positives.
 - If the lesson describes an architectural principle, design philosophy, or conceptual guideline that cannot be expressed as a line-level regex, set \`compilable\` to \`false\`.
+- **File scoping:** If the rule only applies to specific file types (e.g., shell scripts, YAML configs, markdown), include a \`fileGlobs\` array. Omit \`fileGlobs\` if the rule applies to all file types.
 
 ## Output Schema
+\`\`\`json
+{
+  "compilable": true,
+  "pattern": "regex pattern here",
+  "message": "human-readable violation message",
+  "fileGlobs": ["*.sh", "*.yml"]
+}
+\`\`\`
+
+Or if the rule applies to all file types, omit fileGlobs:
 \`\`\`json
 {
   "compilable": true,
@@ -60,6 +71,9 @@ Output: {"compilable": false}
 
 Lesson: "Never use npm in this pnpm monorepo — always use pnpm"
 Output: {"compilable": true, "pattern": "\\\\bnpm\\\\s+(install|run|exec|ci|test)\\\\b", "message": "Use pnpm instead of npm in this monorepo"}
+
+Lesson: "Always quote shell variables to prevent word-splitting"
+Output: {"compilable": true, "pattern": "(^|\\\\s)\\\\$[a-zA-Z_]+", "message": "Quote shell variables to prevent word-splitting", "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml"]}
 `;
 
 // ─── Main command ───────────────────────────────────
@@ -187,6 +201,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
       message: parsed.message,
       engine: 'regex',
       compiledAt: new Date().toISOString(),
+      ...(parsed.fileGlobs && parsed.fileGlobs.length > 0 ? { fileGlobs: parsed.fileGlobs } : {}),
     });
     compiled++;
     log.success(TAG, `[${lesson.heading}] Compiled: /${parsed.pattern}/`);
