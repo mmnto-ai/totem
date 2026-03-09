@@ -70,7 +70,7 @@ export async function invokeAnthropicOrchestrator(
     };
   } catch (err) {
     if (isQuotaError(err)) {
-      const quotaErr = new Error(err instanceof Error ? err.message : String(err));
+      const quotaErr = new Error((err as Error).message);
       quotaErr.name = 'QuotaError';
       throw quotaErr;
     }

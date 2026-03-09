@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import { log } from '../ui.js';
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
+import { isQuotaError } from './orchestrator.js';
 
 // ─── Constants ───────────────────────────────────────
 
@@ -133,18 +134,12 @@ export async function invokeShellOrchestrator(
         }
 
         if (code !== 0) {
-          const fullError = `Process exited with code ${code}\n${stderr}`;
-          const lowerMsg = fullError.toLowerCase();
-          if (
-            lowerMsg.includes('quota') ||
-            lowerMsg.includes('429') ||
-            lowerMsg.includes('too many requests')
-          ) {
-            const quotaErr = new Error(fullError);
-            quotaErr.name = 'QuotaError';
-            reject(quotaErr);
+          const fullError = new Error(`Process exited with code ${code}\n${stderr}`);
+          if (isQuotaError(fullError)) {
+            fullError.name = 'QuotaError';
+            reject(fullError);
           } else {
-            reject(new Error(`[Totem Error] Shell orchestrator command failed: ${fullError}`));
+            reject(new Error(`[Totem Error] Shell orchestrator command failed: ${fullError.message}`));
           }
           return;
         }
