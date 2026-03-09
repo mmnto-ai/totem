@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { type CompiledRule, loadCompiledRules, saveCompiledRules } from '@mmnto/totem';
+import { applyRules, type CompiledRule, loadCompiledRules, saveCompiledRules } from '@mmnto/totem';
 
 import { parseVerdict } from './shield.js';
 
@@ -140,29 +140,24 @@ describe('deterministic shield integration', () => {
     compiledAt: new Date().toISOString(),
   });
 
-  it('loadCompiledRules returns empty array for missing file', async () => {
-    const { loadCompiledRules } = await import('@mmnto/totem');
+  it('loadCompiledRules returns empty array for missing file', () => {
     const rules = loadCompiledRules(path.join(tmpDir, 'nonexistent.json'));
     expect(rules).toEqual([]);
   });
 
-  it('loadCompiledRules returns empty array for malformed JSON', async () => {
-    const { loadCompiledRules } = await import('@mmnto/totem');
+  it('loadCompiledRules returns empty array for malformed JSON', () => {
     const rulesPath = path.join(tmpDir, 'bad.json');
     fs.writeFileSync(rulesPath, '{invalid json!!!');
     expect(loadCompiledRules(rulesPath)).toEqual([]);
   });
 
-  it('loadCompiledRules returns empty array for empty file', async () => {
-    const { loadCompiledRules } = await import('@mmnto/totem');
+  it('loadCompiledRules returns empty array for empty file', () => {
     const rulesPath = path.join(tmpDir, 'empty.json');
     fs.writeFileSync(rulesPath, '');
     expect(loadCompiledRules(rulesPath)).toEqual([]);
   });
 
-  it('applyRules detects violations in a realistic diff', async () => {
-    const { applyRules } = await import('@mmnto/totem');
-
+  it('applyRules detects violations in a realistic diff', () => {
     const rules = [
       makeRule(
         'catch\\s*\\(\\s*error\\s*[\\):]',
@@ -193,9 +188,7 @@ describe('deterministic shield integration', () => {
     expect(violations[0]!.file).toBe('src/handler.ts');
   });
 
-  it('applyRules passes clean diff with no violations', async () => {
-    const { applyRules } = await import('@mmnto/totem');
-
+  it('applyRules passes clean diff with no violations', () => {
     const rules = [
       makeRule('\\bnpm\\s+(install|run|exec)\\b', 'Use pnpm instead of npm', 'Never use npm'),
     ];

@@ -86,12 +86,15 @@ export function extractAddedLines(diff: string): DiffAddition[] {
 
   for (const rawLine of diff.split('\n')) {
     // Track current file from diff headers
-    if (rawLine.startsWith('+++ b/')) {
-      currentFile = rawLine.slice(6);
-      continue;
-    }
-    if (rawLine.startsWith('+++ ')) {
-      currentFile = rawLine.slice(4);
+    // git quotes paths containing spaces: +++ "b/path with spaces/file.ts"
+    if (rawLine.startsWith('+++')) {
+      let pathPart = rawLine.slice(4); // strip "+++ "
+      // Strip surrounding quotes (git adds them for paths with spaces)
+      if (pathPart.startsWith('"') && pathPart.endsWith('"')) {
+        pathPart = pathPart.slice(1, -1);
+      }
+      // Strip the "b/" prefix git uses for the destination file
+      currentFile = pathPart.startsWith('b/') ? pathPart.slice(2) : pathPart;
       continue;
     }
 

@@ -105,6 +105,21 @@ diff --git a/b.ts b/b.ts
     expect(extractAddedLines('')).toEqual([]);
   });
 
+  it('handles quoted filenames with spaces', () => {
+    const diff = `diff --git "a/path with spaces/file.ts" "b/path with spaces/file.ts"
+--- "a/path with spaces/file.ts"
++++ "b/path with spaces/file.ts"
+@@ -1,2 +1,3 @@
+ line1
++added line
+ line2
+`;
+
+    const additions = extractAddedLines(diff);
+    expect(additions).toHaveLength(1);
+    expect(additions[0]!.file).toBe('path with spaces/file.ts');
+  });
+
   it('returns empty array for deletion-only diff', () => {
     const diff = `diff --git a/foo.ts b/foo.ts
 --- a/foo.ts
