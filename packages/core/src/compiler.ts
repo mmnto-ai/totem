@@ -148,7 +148,7 @@ export function extractAddedLines(diff: string): DiffAddition[] {
     } else {
       // Context line (no prefix or space prefix) — in new file
       lineNum++;
-      prevLineContent = rawLine.startsWith(' ') ? rawLine.slice(1) : rawLine;
+      prevLineContent = rawLine.slice(1);
     }
   }
 
@@ -204,7 +204,8 @@ const SUPPRESS_NEXT_LINE_MARKER = 'totem-ignore-next-line';
  * Syntax-agnostic: works with any comment style (//, #, HTML comments, block comments).
  */
 function isSuppressed(line: string, precedingLine: string | null): boolean {
-  // Same-line: also matches totem-ignore-next-line (the directive line itself never triggers)
+  // Same-line: 'totem-ignore' substring also matches 'totem-ignore-next-line',
+  // so directive lines themselves are inherently suppressed.
   if (line.includes(SUPPRESS_MARKER)) return true;
 
   // Next-line: preceding line (context or added) contains the next-line directive
