@@ -27,7 +27,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#128 Epic: Universal Baselines:** Ship a curated list of foundational AI security/architectural lessons that users can optionally install during `totem init` to solve the "cold start" problem.
 - [ ] **#129 Epic: Interactive CLI Tutorial:** Build an animated, interactive CLI tutorial (`totem tutorial`) that allows users to pause the walkthrough, ask the LLM contextual questions about their codebase, and resume seamlessly.
 - [ ] **#125 Epic: Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically, achieving a "run `init` and forget" workflow.
-- [x] **#86 Seamless Host Integration:** Build the `SessionStart` hooks, Claude custom commands, and `Totem Architect` skills that #87 installs.
+- [x] **#86 Seamless Host Integration (#138, #139, #140):** Build the `SessionStart` hooks, Claude custom commands (Claude Code), and Totem Architect skills (Gemini CLI) that #87 installs.
 - [x] **#21 CLI UI/UX Polish:** Branded colors (picocolors), ora spinners, ASCII banner. @clack/prompts multiselect shipped in v0.13.0 (#168).
 - [x] **#12 / #210 Cross-platform onboarding:** Ensure docs and installers work flawlessly across Windows (PowerShell), macOS, and Linux.
 
@@ -36,7 +36,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 **Goal:** Before ingesting enterprise databases, the local vector index and LLM prompts must be bulletproof across all environments.
 
 - [x] **#218 Security:** Add ReDoS protection to compiled regex rules.
-- [x] **#206 Robustness:** Refactor orchestrator from `execSync` to async `spawn` to prevent aborts on large files.
+- [x] **#206 / #224 Robustness:** Refactor orchestrator from `execSync` to async `spawn` and fix `node-fetch` aborts on large files like `architecture.md` via Gemini CLI.
 - [x] **#173 Epic: Universal AST Parsing:** Implement Tree-sitter for robust, language-agnostic code chunking.
 - [x] **#121 Bug: LanceDB `deleteByFile`** edge cases causing silent incremental sync failures.
 - [x] **#122 Core Tests:** Backfill unit and integration tests for `@mmnto/totem` core database and chunking logic.
@@ -51,7 +51,9 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#156 Core:** Incremental sync now removes deleted files from LanceDB.
 - [x] **#155 Core:** Stateful incremental sync via `.totem/cache/sync-state.json`.
 - [x] **#160 Security:** Defensive Context Management Reflexes (Auto-Warnings).
+- [x] **#117 UX:** Allow `spec` and `extract` commands to accept multiple arguments.
 - [x] **#109 Performance:** Condense context payloads for fast-boot commands.
+- [x] **#108 UX:** Clean up orphaned temporary prompt files.
 - [x] **#107 UX:** Emit background sync logs via MCP progress events.
 - [x] **#149 Security:** XML-delimit MCP tool responses to mitigate indirect prompt injection.
 - [x] **#148 Config:** Add Zod schema validation for Claude settings.local.json.
@@ -81,7 +83,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#83 Support GitHub issue URLs:** Allow users to paste full URLs in addition to issue numbers for `totem spec` and `triage`.
 - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
 - [x] **#187 Minimum Viable Configuration:** Tiered config (Lite/Standard/Full) with auto-detection. Embedding is optional; Lite tier works with zero API keys.
-- [x] **#190 Automated Doc Sync:** `totem docs` command to keep project docs updated via per-doc LLM passes. Integrated into `totem wrap` as Step 4/4 (#143).
+- [x] **#190 / #238 / #241 Automated Doc Sync:** `totem docs` command to keep project docs updated via per-doc LLM passes, now supporting individual doc targeting and path fixes. Integrated into `totem wrap` as Step 4/4 (#143).
 - [x] **#213 / #216 Zero-LLM Shield Mode:** Deterministic lesson compiler and zero-LLM shield mode.
 - [x] **#229 Epic: Native API Orchestrator (#230–#234, #236, #237):** Replace CLI shell-spawning with direct SDK calls to Gemini (`@google/genai`) and Anthropic (`@anthropic-ai/sdk`). BYOSD pattern with optional peer dependencies, discriminated union config, and package manager auto-detection for install prompts.
 - [ ] **#176 Agent-Optimized MCP:** Dynamic token budgeting and write access for deeper agent-to-agent interactions.

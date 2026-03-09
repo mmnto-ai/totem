@@ -24,7 +24,7 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 - `totem extract`: Batch lesson extraction from PR review threads with interactive multi-select curation.
 - `totem add-lesson`: Inline lesson capture (also exposed as MCP tool `add_lesson`).
 - `totem compile`: Translates natural-language lessons into deterministic regex rules via constrained LLM prompt at compile-time.
-- `totem docs`: Automated per-document LLM passes to keep project documentation in sync with the codebase (safeguarded by XML sentinels for reliable output extraction).
+- `totem docs`: Automated per-document LLM passes to keep project documentation in sync with the codebase. Supports targeting individual documents for precision updates (safeguarded by XML sentinels for reliable output extraction).
 - `totem bridge` / `totem wrap`: Mid-session context resets and end-of-task workflow automation.
 
 ### 3. Deterministic Compiler & Zero-LLM Shield
@@ -100,7 +100,7 @@ orchestrator: {
 
 ### Shared Configuration
 
-All providers support: `defaultModel`, `fallbackModel`, `overrides` (per-command model), and `cacheTtls` (per-command cache TTL in seconds). Each command resolves its model via: `--model` flag > `overrides[command]` > `defaultModel`. Quota-exhaustion (429/rate-limit) triggers automatic fallback to `fallbackModel` if configured. Legacy configs without a `provider` field are auto-migrated to `provider: 'shell'`.
+All providers support: `defaultModel`, `fallbackModel`, `overrides` (per-command model), `systemPrompts` (per-command custom system prompt overrides), and `cacheTtls` (per-command cache TTL in seconds). Each command resolves its model via: `--model` flag > `overrides[command]` > `defaultModel`. Quota-exhaustion (429/rate-limit) triggers automatic fallback to `fallbackModel` if configured. Legacy configs without a `provider` field are auto-migrated to `provider: 'shell'`.
 
 ## The `.totem/` Directory
 

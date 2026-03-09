@@ -740,3 +740,21 @@ Avoid refactoring synchronous factory functions to `async` just to hoist dynamic
 **Tags:** dry, error-handling, shell, llm
 
 Centralize error signature detection (such as 429 status codes or "rate limit" strings) into a shared utility that also covers legacy shell-based execution paths. This ensures that manually-parsed stderr from CLI tools benefits from the same robust detection logic used for native SDKs, preventing subtle omissions in fallback or retry behaviors.
+
+## Lesson — Perform path normalization—such as resolving ./…
+
+**Tags:** nodejs, cli, path-processing
+
+Perform path normalization—such as resolving `./` prefixes—before deduplication to prevent redundant processing of the same file represented by different string formats. This avoids wasted resources, like redundant LLM token usage, when the same target is resolved multiple times from varied inputs.
+
+## Lesson — When positional arguments and CLI flags offer overlapping…
+
+**Tags:** cli, ux, error-handling
+
+When positional arguments and CLI flags offer overlapping or conflicting functionality, explicitly fail-fast with an error if both are provided instead of silently prioritizing one. This ensures user intent is unambiguous and prevents unexpected behavior from shadowed configuration flags.
+
+## Lesson — Use path.relative(process.cwd(),…
+
+**Tags:** nodejs, path-processing, trap
+
+Use `path.relative(process.cwd(), path.resolve(process.cwd(), input))` for robust path normalization instead of simple string replacements. This approach correctly handles shell-expanded absolute paths (e.g., from tab-completion) so they match relative paths defined in application configuration.

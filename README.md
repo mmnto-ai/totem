@@ -175,7 +175,7 @@ orchestrator: {
 - **`shield`**: Reads your uncommitted git diff, queries LanceDB for related traps, and performs a **hybrid zero-day + N-day architectural code review** (#98) before you push. Supports **zero-LLM shield mode** (#216) for lightning-fast deterministic checks using compiled rules (#226).
 - **`triage`**: Fetches open GitHub issues and generates a prioritized roadmap (e.g., `docs/active_work.md`) for your next task.
 - **`add-lesson`**: Interactively document a context, symptom, and fix. Saves to `.totem/lessons.md` and triggers a background re-index.
-- **`docs`**: Automatically syncs project documentation (README, Roadmap) by analyzing git logs and closed issues since the last release (#190).
+- **`docs`**: Automatically syncs project documentation (README, Roadmap) by analyzing git logs and closed issues since the last release (#190). Supports targeting individual files (e.g., `totem docs README.md`) with path fixes (#238, #241).
 - **`wrap`**: A post-merge workflow chain that runs `extract`, syncs the database, generates a roadmap, and updates docs in one command (#143).
 - **`extract <ids...>`**: Fetches merged PRs, reads comments, and extracts systemic architectural traps with **descriptive headings** (#203). Supports interactive multi-select pruning.
 - **`handoff`**: Captures uncommitted changes and lessons learned today, synthesizing a tactical snapshot for your next session.
