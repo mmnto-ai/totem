@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -6,13 +7,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { invokeShellOrchestrator } from './utils.js';
 
+// ─── Mock spawn ──────────────────────────────────────
+
+type MockChild = EventEmitter & {
+  stdout: EventEmitter;
+  stderr: EventEmitter;
+  kill: ReturnType<typeof vi.fn>;
+};
+
+function createMockChild(): MockChild {
+  const child = new EventEmitter() as MockChild;
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.kill = vi.fn();
+  return child;
+}
+
+let mockChild: MockChild;
+
 vi.mock('node:child_process', () => ({
-  execSync: vi.fn(),
-  execFileSync: vi.fn(),
+  spawn: vi.fn(() => mockChild),
 }));
 
-const { execSync } = await import('node:child_process');
-const mockedExec = vi.mocked(execSync);
+const { spawn } = await import('node:child_process');
+const mockedSpawn = vi.mocked(spawn);
+
+// ─── Tests ───────────────────────────────────────────
 
 describe('invokeShellOrchestrator', () => {
   let tmpDir: string;
@@ -21,7 +41,8 @@ describe('invokeShellOrchestrator', () => {
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-orch-'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    mockedExec.mockReset();
+    mockChild = createMockChild();
+    mockedSpawn.mockClear();
   });
 
   afterEach(() => {
@@ -29,9 +50,25 @@ describe('invokeShellOrchestrator', () => {
     vi.restoreAllMocks();
   });
 
-  it('returns raw content when output is not Gemini JSON', () => {
-    mockedExec.mockReturnValue('  The answer is 42.  ');
-    const result = invokeShellOrchestrator(
+  /** Emit stdout data and close with success */
+  function emitSuccess(data: string) {
+    process.nextTick(() => {
+      mockChild.stdout.emit('data', Buffer.from(data));
+      mockChild.emit('close', 0);
+    });
+  }
+
+  /** Emit close with non-zero exit code and optional stderr */
+  function emitFailure(code: number, stderr = '') {
+    process.nextTick(() => {
+      if (stderr) mockChild.stderr.emit('data', Buffer.from(stderr));
+      mockChild.emit('close', code);
+    });
+  }
+
+  it('returns raw content when output is not Gemini JSON', async () => {
+    emitSuccess('  The answer is 42.  ');
+    const result = await invokeShellOrchestrator(
       'prompt text',
       'echo {file}',
       'test-model',
@@ -45,7 +82,7 @@ describe('invokeShellOrchestrator', () => {
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
   });
 
-  it('parses Gemini JSON output and returns structured result', () => {
+  it('parses Gemini JSON output and returns structured result', async () => {
     const geminiOutput = JSON.stringify({
       response: 'Gemini says hello.',
       stats: {
@@ -57,8 +94,8 @@ describe('invokeShellOrchestrator', () => {
         },
       },
     });
-    mockedExec.mockReturnValue(geminiOutput);
-    const result = invokeShellOrchestrator(
+    emitSuccess(geminiOutput);
+    const result = await invokeShellOrchestrator(
       'prompt',
       'gemini -e none < {file}',
       'gemini-2.5-pro',
@@ -72,9 +109,9 @@ describe('invokeShellOrchestrator', () => {
     expect(result.durationMs).toBe(2000);
   });
 
-  it('substitutes {file} and {model} in command', () => {
-    mockedExec.mockReturnValue('ok');
-    invokeShellOrchestrator(
+  it('substitutes {file} and {model} in command', async () => {
+    emitSuccess('ok');
+    await invokeShellOrchestrator(
       'prompt',
       'llm --model {model} < {file}',
       'my-model',
@@ -82,15 +119,22 @@ describe('invokeShellOrchestrator', () => {
       'Test',
       totemDir,
     );
-    const cmd = mockedExec.mock.calls[0]![0] as string;
+    const cmd = mockedSpawn.mock.calls[0]![0] as string;
     expect(cmd).toContain('my-model');
     expect(cmd).not.toContain('{model}');
     expect(cmd).not.toContain('{file}');
   });
 
-  it('writes prompt to temp file and cleans up after', () => {
-    mockedExec.mockReturnValue('result');
-    invokeShellOrchestrator('my prompt content', 'cat {file}', 'model', tmpDir, 'Test', totemDir);
+  it('writes prompt to temp file and cleans up after', async () => {
+    emitSuccess('result');
+    await invokeShellOrchestrator(
+      'my prompt content',
+      'cat {file}',
+      'model',
+      tmpDir,
+      'Test',
+      totemDir,
+    );
     // Temp file should be cleaned up
     const tempDir = path.join(tmpDir, totemDir, 'temp');
     if (fs.existsSync(tempDir)) {
@@ -99,58 +143,52 @@ describe('invokeShellOrchestrator', () => {
     }
   });
 
-  it('throws QuotaError for quota-related failures', () => {
-    mockedExec.mockImplementation(() => {
-      const err = new Error('429 Too Many Requests') as Error & { stderr?: Buffer };
-      err.stderr = Buffer.from('quota exceeded');
-      throw err;
-    });
-    expect(() =>
-      invokeShellOrchestrator('prompt', 'cmd', 'model', tmpDir, 'Test', totemDir),
-    ).toThrow();
+  it('throws QuotaError for quota-related failures', async () => {
+    emitFailure(1, '429 Too Many Requests quota exceeded');
     try {
-      invokeShellOrchestrator('prompt', 'cmd', 'model', tmpDir, 'Test', totemDir);
+      await invokeShellOrchestrator('prompt', 'cmd', 'model', tmpDir, 'Test', totemDir);
+      expect.fail('Should have thrown');
     } catch (err) {
       expect((err as Error).name).toBe('QuotaError');
     }
   });
 
-  it('throws generic error for non-quota failures', () => {
-    mockedExec.mockImplementation(() => {
-      throw new Error('command not found');
-    });
-    expect(() =>
+  it('throws generic error for non-zero exit code', async () => {
+    emitFailure(1, 'something went wrong');
+    await expect(
       invokeShellOrchestrator('prompt', 'cmd', 'model', tmpDir, 'Test', totemDir),
-    ).toThrow('[Totem Error] Shell orchestrator command failed');
+    ).rejects.toThrow('[Totem Error] Shell orchestrator command failed');
   });
 
-  it('throws descriptive error for buffer overflow (ENOBUFS)', () => {
-    mockedExec.mockImplementation(() => {
-      const err = new Error('spawnSync cmd ENOBUFS') as Error & {
-        code?: string;
-        stderr?: Buffer;
-      };
-      err.code = 'ENOBUFS';
-      err.stderr = Buffer.from('');
-      throw err;
+  it('throws error on spawn error event', async () => {
+    process.nextTick(() => {
+      mockChild.emit('error', new Error('command not found'));
     });
-    expect(() =>
+    await expect(
       invokeShellOrchestrator('prompt', 'cmd', 'model', tmpDir, 'Test', totemDir),
-    ).toThrow('exceeded the 10MB output buffer');
+    ).rejects.toThrow('command not found');
   });
 
-  it('throws descriptive error for timeout (ETIMEDOUT)', () => {
-    mockedExec.mockImplementation(() => {
-      const err = new Error('spawnSync cmd ETIMEDOUT') as Error & {
-        code?: string;
-        stderr?: Buffer;
-      };
-      err.code = 'ETIMEDOUT';
-      err.stderr = Buffer.from('');
-      throw err;
-    });
-    expect(() =>
-      invokeShellOrchestrator('prompt', 'cmd', 'model', tmpDir, 'Test', totemDir),
-    ).toThrow('timed out after 180s');
+  it('throws descriptive error for timeout', async () => {
+    vi.useFakeTimers();
+
+    // Capture the rejection before advancing timers
+    const promise = invokeShellOrchestrator(
+      'prompt',
+      'cmd',
+      'model',
+      tmpDir,
+      'Test',
+      totemDir,
+    ).catch((err: Error) => err);
+
+    await vi.advanceTimersByTimeAsync(180_001);
+
+    const err = await promise;
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toContain('timed out after 180s');
+    expect(mockChild.kill).toHaveBeenCalled();
+
+    vi.useRealTimers();
   });
 });

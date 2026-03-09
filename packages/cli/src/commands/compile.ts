@@ -140,7 +140,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
   for (const lesson of toCompile) {
     const prompt = `${COMPILER_SYSTEM_PROMPT}\n\n## Lesson to Compile\n\nHeading: ${lesson.heading}\n\n${lesson.body}`;
 
-    const response = runOrchestrator({
+    const response = await runOrchestrator({
       prompt,
       tag: TAG,
       options,

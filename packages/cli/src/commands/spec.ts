@@ -208,7 +208,7 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   const prompt = assemblePrompt(parsed, context, systemPrompt);
   log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
-  const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });
+  const content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });
   if (content != null) {
     writeOutput(content, options.out);
     if (options.out) log.success(TAG, `Written to ${options.out}`);

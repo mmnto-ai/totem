@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -13,7 +13,6 @@ import { bold, log } from './ui.js';
 // ─── Shared constants ────────────────────────────────────
 
 const LLM_TIMEOUT_MS = 180_000;
-const LLM_MAX_BUFFER = 10 * 1024 * 1024; // 10MB — Gemini JSON responses can exceed Node's 1MB default
 const TEMP_ID_BYTES = 4;
 const MODEL_NAME_RE = /^[\w./:_-]+$/;
 const TELEMETRY_FILE = 'telemetry.jsonl';
@@ -146,37 +145,94 @@ export function tryParseGeminiJson(
 
 // ─── Shell orchestrator ─────────────────────────────────
 
-export function invokeShellOrchestrator(
+export async function invokeShellOrchestrator(
   prompt: string,
   command: string,
   model: string,
   cwd: string,
   tag: string,
   totemDir: string,
-): OrchestratorResult {
+): Promise<OrchestratorResult> {
   const tmpName = `totem-${tag.toLowerCase()}-${crypto.randomBytes(TEMP_ID_BYTES).toString('hex')}.md`;
   const tempDir = path.join(cwd, totemDir, 'temp');
   fs.mkdirSync(tempDir, { recursive: true });
   const tempPath = path.join(tempDir, tmpName);
 
+  fs.writeFileSync(tempPath, prompt, { encoding: 'utf-8', mode: 0o600 });
+
+  const quotedPath = IS_WIN
+    ? `"${tempPath.replace(/"/g, '""')}"`
+    : `'${tempPath.replace(/'/g, "'\\''")}'`;
+  const resolvedCmd = command.replace(/\{file\}/g, quotedPath).replace(/\{model\}/g, model);
+
+  log.info(tag, 'Invoking orchestrator (this may take 15-60 seconds)...');
+
+  const startMs = Date.now();
+
   try {
-    fs.writeFileSync(tempPath, prompt, { encoding: 'utf-8', mode: 0o600 });
+    const raw = await new Promise<string>((resolve, reject) => {
+      const child = spawn(resolvedCmd, {
+        cwd,
+        shell: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
 
-    const quotedPath = IS_WIN
-      ? `"${tempPath.replace(/"/g, '""')}"`
-      : `'${tempPath.replace(/'/g, "'\\''")}'`;
-    const resolvedCmd = command.replace(/\{file\}/g, quotedPath).replace(/\{model\}/g, model);
+      let stdout = '';
+      let stderr = '';
+      let timedOut = false;
 
-    log.info(tag, 'Invoking orchestrator (this may take 15-60 seconds)...');
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
 
-    const startMs = Date.now();
-    const raw = execSync(resolvedCmd, {
-      cwd,
-      encoding: 'utf-8',
-      timeout: LLM_TIMEOUT_MS,
-      maxBuffer: LLM_MAX_BUFFER,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      const timer = setTimeout(() => {
+        timedOut = true;
+        child.kill();
+        reject(
+          Object.assign(
+            new Error(
+              `[Totem Error] Orchestrator timed out after ${LLM_TIMEOUT_MS / 1000}s.\n${stderr}`,
+            ),
+            { code: 'ETIMEDOUT' },
+          ),
+        );
+      }, LLM_TIMEOUT_MS);
+
+      child.on('error', (err) => {
+        clearTimeout(timer);
+        reject(
+          new Error(`[Totem Error] Shell orchestrator command failed: ${err.message}\n${stderr}`),
+        );
+      });
+
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        if (timedOut) return; // already rejected
+
+        if (code !== 0) {
+          const fullError = `Process exited with code ${code}\n${stderr}`;
+          const lowerMsg = fullError.toLowerCase();
+          if (
+            lowerMsg.includes('quota') ||
+            lowerMsg.includes('429') ||
+            lowerMsg.includes('too many requests')
+          ) {
+            const quotaErr = new Error(fullError);
+            quotaErr.name = 'QuotaError';
+            reject(quotaErr);
+          } else {
+            reject(new Error(`[Totem Error] Shell orchestrator command failed: ${fullError}`));
+          }
+          return;
+        }
+
+        resolve(stdout);
+      });
     });
+
     const wallMs = Date.now() - startMs;
 
     const gemini = tryParseGeminiJson(raw);
@@ -190,39 +246,6 @@ export function invokeShellOrchestrator(
     }
 
     return { content: raw.trim(), inputTokens: null, outputTokens: null, durationMs: wallMs };
-  } catch (err: unknown) {
-    const execErr = err as { stderr?: Buffer | string; killed?: boolean; code?: string | number };
-    const stderr = execErr.stderr ? execErr.stderr.toString() : '';
-    const msg = err instanceof Error ? err.message : String(err);
-    const fullError = `${msg}\n${stderr}`;
-
-    // Detect buffer overflow — Node kills the process when stdout exceeds maxBuffer
-    if (execErr.code === 'ENOBUFS') {
-      throw new Error(
-        `[Totem Error] Orchestrator response exceeded the ${LLM_MAX_BUFFER / 1024 / 1024}MB output buffer.\n` +
-          `This usually means the LLM produced an unexpectedly large response.\n${stderr}`,
-      );
-    }
-
-    // Detect timeout
-    if (execErr.code === 'ETIMEDOUT') {
-      throw new Error(
-        `[Totem Error] Orchestrator timed out after ${LLM_TIMEOUT_MS / 1000}s.\n${stderr}`,
-      );
-    }
-
-    const lowerMsg = fullError.toLowerCase();
-    if (
-      lowerMsg.includes('quota') ||
-      lowerMsg.includes('429') ||
-      lowerMsg.includes('too many requests')
-    ) {
-      const quotaErr = new Error(fullError);
-      quotaErr.name = 'QuotaError';
-      throw quotaErr;
-    }
-
-    throw new Error(`[Totem Error] Shell orchestrator command failed: ${fullError}`);
   } finally {
     try {
       fs.unlinkSync(tempPath);
@@ -388,14 +411,14 @@ const DEFAULT_TTLS: Record<string, number> = {
  * Returns the LLM response content string otherwise.
  * Callers are responsible for writing output via `writeOutput()`.
  */
-export function runOrchestrator(opts: {
+export async function runOrchestrator(opts: {
   prompt: string;
   tag: string;
   options: OrchestratorRunOptions;
   config: TotemConfig;
   cwd: string;
   totalResults?: number;
-}): string | undefined {
+}): Promise<string | undefined> {
   const { prompt, tag, options, config, cwd } = opts;
 
   // --raw mode: output context only
@@ -465,7 +488,7 @@ export function runOrchestrator(opts: {
 
   let result: OrchestratorResult;
   try {
-    result = invokeShellOrchestrator(
+    result = await invokeShellOrchestrator(
       prompt,
       config.orchestrator.command,
       model,
@@ -482,7 +505,7 @@ export function runOrchestrator(opts: {
           `Quota exhausted for ${model}. Retrying with fallback model: ${bold(fallback)}...`,
         );
         try {
-          result = invokeShellOrchestrator(
+          result = await invokeShellOrchestrator(
             prompt,
             config.orchestrator.command,
             fallback,

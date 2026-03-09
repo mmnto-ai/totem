@@ -23,14 +23,19 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 - `totem briefing` / `totem handoff`: Session start/end context snapshots.
 - `totem extract`: Batch lesson extraction from PR review threads with interactive multi-select curation.
 - `totem add-lesson`: Inline lesson capture (also exposed as MCP tool `add_lesson`).
+- `totem compile`: Translates natural-language lessons into deterministic regex rules via constrained LLM prompt at compile-time.
 - `totem docs`: Automated per-document LLM passes to keep project documentation in sync with the codebase.
 - `totem bridge` / `totem wrap`: Mid-session context resets and end-of-task workflow automation.
 
-### 3. Shield GitHub Action (`action.yml`)
+### 3. Deterministic Compiler & Zero-LLM Shield
+
+`totem compile` reads `.totem/lessons.md` and translates each lesson into a regex rule (or marks it as non-compilable). Rules are stored in `.totem/compiled-rules.json` and validated at compile-time. `totem shield --deterministic` applies these rules against `git diff` additions with zero LLM calls — ideal for CI enforcement without API keys or quota.
+
+### 4. Shield GitHub Action (`action.yml`)
 
 A composite GitHub Action that runs `totem sync` + `totem shield` as a pass/fail CI quality gate on pull requests. Gate-only (no PR commenting) — complements conversational review bots like Gemini Code Assist.
 
-### 4. The MCP Server (`@mmnto/mcp`)
+### 5. The MCP Server (`@mmnto/mcp`)
 
 A stdio-based server for LLM integration. Provides two tools:
 
