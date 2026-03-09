@@ -142,7 +142,7 @@ Add Totem to your AI agent's configuration (e.g., Claude Desktop, Claude Code, o
 
 Totem ships with native CLI commands that orchestrate your entire shift-left workflow by querying LanceDB and invoking your AI to make project-aware decisions.
 
-First, configure your orchestrator in `totem.config.ts`. Totem supports **Native API Orchestrators** (#229) for direct integrations (Anthropic, Gemini) and a generic `shell` adapter. 
+First, configure your orchestrator in `totem.config.ts`. Totem supports **Native API Orchestrators** (#229) for direct integrations (Anthropic, Gemini) and a generic `shell` adapter.
 
 To keep the core CLI lightweight, Totem uses a **"Bring Your Own SDK" (BYOSD)** pattern. If you choose a native API provider, you must install its corresponding SDK as a dev dependency.
 
