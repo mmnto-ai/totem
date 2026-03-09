@@ -33,7 +33,9 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 
 ### 4. Shield GitHub Action (`action.yml`)
 
-A composite GitHub Action that runs `totem sync` + `totem shield` as a pass/fail CI quality gate on pull requests. Gate-only (no PR commenting) — complements conversational review bots like Gemini Code Assist.
+A composite GitHub Action that runs `totem shield --deterministic` as a pass/fail CI quality gate on pull requests. It uses compiled AST/regex rules from `.totem/compiled-rules.json` to physically block known architectural traps from merging.
+
+Because it operates in `--deterministic` mode, it requires **zero LLM API calls**, eliminating statistical hallucinations in CI and maintaining a strict, air-gapped security posture for enterprise environments.
 
 ### 5. The MCP Server (`@mmnto/mcp`)
 

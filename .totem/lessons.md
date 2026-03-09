@@ -716,3 +716,27 @@ Always fall back to resolving Git references against `origin/<branch>` in CI env
 **Tags:** architecture, ci, design-decision
 
 Employ a two-layer validation model by running fast, deterministic regex-based checks in CI while reserving expensive or stochastic LLM reviews for local developer workflows to maintain rapid CI feedback loops without sacrificing deep analysis.
+
+## Lesson — When using the @google/genai SDK (v1+), the constructor…
+
+**Tags:** gemini, sdk, nodejs, trap
+
+When using the `@google/genai` SDK (v1+), the constructor requires an options object `{ apiKey }` rather than a raw string. This is a common point of confusion because the older `@google/generative-ai` package used a string-only constructor, leading to runtime instantiation errors if the packages are conflated.
+
+## Lesson — When normalizing diverse SDK errors for internal retry…
+
+**Tags:** error-handling, nodejs, debugging, architecture
+
+When normalizing diverse SDK errors for internal retry logic (e.g., tagging a `QuotaError`), mutate the original error's `.name` property and re-throw it instead of creating a new `Error` instance. This preserves the original stack trace and provider-specific metadata which are critical for debugging failures in external service integrations.
+
+## Lesson — Avoid refactoring synchronous factory functions to async…
+
+**Tags:** nodejs, performance, architecture, factory-pattern
+
+Avoid refactoring synchronous factory functions to `async` just to hoist dynamic `import()` calls for perceived performance gains. Node.js natively caches the results of dynamic imports after the first invocation, so keeping the factory synchronous avoids adding `await` boilerplate to the entire call chain without any measurable runtime penalty.
+
+## Lesson — Centralize error signature detection (such as 429 status…
+
+**Tags:** dry, error-handling, shell, llm
+
+Centralize error signature detection (such as 429 status codes or "rate limit" strings) into a shared utility that also covers legacy shell-based execution paths. This ensures that manually-parsed stderr from CLI tools benefits from the same robust detection logic used for native SDKs, preventing subtle omissions in fallback or retry behaviors.

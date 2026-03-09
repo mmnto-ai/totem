@@ -2,7 +2,7 @@
 
 > [!WARNING]
 > **Developer Preview / Early Alpha**
-> Totem is currently in early alpha. While Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete—including our move to **Tree-sitter for Universal AST Parsing** (#173), the **Deterministic Lesson Compiler / Zero-LLM Shield** (#213, #216), and **Native API Orchestrators** (#229)—we are still polishing the "Magic Onboarding" experience (interactive tutorials) and validating internal dogfooding with OpenAI embeddings (#8). If you encounter friction during `totem init`, please bear with us!
+> Totem is currently in early alpha. While Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete—including our move to **Tree-sitter for Universal AST Parsing** (#173), the **Deterministic Lesson Compiler / Zero-LLM Shield** (#213, #216), and **Native API Orchestrators** (#229)—we are still polishing the "Magic Onboarding" experience (interactive tutorials). If you encounter friction during `totem init`, please bear with us!
 
 **Your AI team forgets. Totem remembers.**
 
@@ -142,12 +142,22 @@ Add Totem to your AI agent's configuration (e.g., Claude Desktop, Claude Code, o
 
 Totem ships with native CLI commands that orchestrate your entire shift-left workflow by querying LanceDB and invoking your AI to make project-aware decisions.
 
-First, configure your orchestrator in `totem.config.ts`. Totem supports **Native API Orchestrators** (#229) for direct integrations (Anthropic, Gemini) and a generic shell adapter:
+First, configure your orchestrator in `totem.config.ts`. Totem supports **Native API Orchestrators** (#229) for direct integrations (Anthropic, Gemini) and a generic `shell` adapter.
+
+To keep the core CLI lightweight, Totem uses a **"Bring Your Own SDK" (BYOSD)** pattern. If you choose a native API provider, you must install its corresponding SDK as a dev dependency.
+
+```bash
+# If using provider: 'gemini'
+pnpm add -D @google/genai
+
+# If using provider: 'anthropic'
+pnpm add -D @anthropic-ai/sdk
+```
 
 ```typescript
-// Use a native API orchestrator (gemini, anthropic) or the generic 'shell' adapter
+// totem.config.ts
 orchestrator: {
-  provider: 'gemini',
+  provider: 'gemini', // Requires @google/genai to be installed
   defaultModel: 'gemini-3-flash-preview',
   overrides: {
     spec: 'gemini-3.1-pro-preview',
@@ -177,7 +187,7 @@ orchestrator: {
 
 ### 6. Shield GitHub Action (CI/CD)
 
-Enforce Totem's quality gate automatically on every pull request (#180). The action syncs the index and runs `totem shield` — if a violation is detected, the workflow fails with the full report.
+Enforce Totem's deterministic quality gate automatically on every pull request (#180, #222). The action runs `totem shield --deterministic` using your compiled rules. It requires **zero API keys** and executes in milliseconds, providing an air-gapped architectural safety net for your repository.
 
 ```yaml
 # .github/workflows/shield.yml
@@ -187,22 +197,19 @@ on:
     branches: [main]
 
 jobs:
-  shield:
+  deterministic-shield:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - uses: mmnto-ai/totem@v0
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      - run: pnpm build # (Or whatever command builds your project)
+      - name: Run deterministic shield
+        run: npx @mmnto/cli shield --deterministic
 ```
 
 ## Platform Notes
@@ -235,7 +242,7 @@ Totem is evolving from a memory database into a full Shift-Left orchestrator.
 
 - [x] **Foundations & Phase 1 (Onboarding):** Local vector DB, MCP interface, MVC Configuration Tiers (#187), "Universal Lessons" baseline (#128), and cross-platform docs (#210).
 - [x] **Phase 2 (Core Stability):** Tree-sitter Universal AST Parsing (#173), Shield GitHub Action (#180), Automated Doc Sync (#190), Drift Detection for self-cleaning memory (#177, #211), Deterministic Lesson Compiler / Zero-LLM Shield (#213, #216) backed by regex ReDoS protection (#218), Native API Orchestrators for Gemini and Anthropic (#229) with BYOSD support (#236), and OpenAI embedding validation (#4).
-- [ ] **Validation & Polish:** Internal dogfooding (#8) and interactive CLI tutorials (#129).
-- [ ] **Phase 3 (Workflow Expansion):** Custom Workflow Runner (#119), Agent-Optimized MCP (#176), and Cross-File Knowledge Graph (#183).
+- [x] **Validation:** Internal dogfooding (#8) across multiple real-world repositories.
+- [ ] **Phase 3 (Workflow Expansion):** Interactive CLI tutorials (#129), Custom Workflow Runner (#119), Agent-Optimized MCP (#176), and Cross-File Knowledge Graph (#183).
 
 For a deeper dive into the system design, see `docs/architecture.md`.

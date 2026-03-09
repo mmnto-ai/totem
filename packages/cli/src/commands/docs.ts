@@ -186,7 +186,7 @@ export interface DocsOptions {
   yes?: boolean;
 }
 
-export async function docsCommand(options: DocsOptions): Promise<void> {
+export async function docsCommand(inputs: string[], options: DocsOptions): Promise<void> {
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);
@@ -205,9 +205,43 @@ export async function docsCommand(options: DocsOptions): Promise<void> {
     throw err;
   }
 
-  // Filter by --only
+  // Resolve targets from positional args, --only, or all docs
   let targets = config.docs;
-  if (options.only) {
+
+  // Fail-fast: conflicting targeting flags
+  if (inputs.length > 0 && options.only) {
+    throw new Error(
+      `[Totem Error] Cannot combine positional doc paths with --only flag.\n` +
+        `Use one or the other: \`totem docs README.md\` OR \`totem docs --only readme\`.`,
+    );
+  }
+
+  if (inputs.length > 0) {
+    // Positional path targeting — fail-fast validation
+    const normalize = (p: string) => path.relative(cwd, path.resolve(cwd, p)).replace(/\\/g, '/');
+    const configPaths = new Map(config.docs.map((d) => [normalize(d.path), d]));
+
+    const resolved = new Set<DocTarget>();
+    const invalid: string[] = [];
+    for (const input of inputs) {
+      const normalized = normalize(input);
+      const match = configPaths.get(normalized);
+      if (match) {
+        resolved.add(match);
+      } else {
+        invalid.push(input);
+      }
+    }
+
+    if (invalid.length > 0) {
+      throw new Error(
+        `[Totem Error] Unknown doc path(s): ${invalid.join(', ')}\n` +
+          `Available: ${config.docs.map((d) => d.path).join(', ')}`,
+      );
+    }
+    targets = Array.from(resolved);
+  } else if (options.only) {
+    // Legacy --only filter
     const onlyNames = options.only.split(',').map((s) => s.trim().toLowerCase());
     targets = config.docs.filter((d) => {
       const basename = path.basename(d.path, path.extname(d.path)).toLowerCase();
