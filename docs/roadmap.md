@@ -86,6 +86,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#190 / #238 / #241 Automated Doc Sync:** `totem docs` command to keep project docs updated via per-doc LLM passes, now supporting individual doc targeting and path fixes. Integrated into `totem wrap` as Step 4/4 (#143).
 - [x] **#213 / #216 Zero-LLM Shield Mode:** Deterministic lesson compiler and zero-LLM shield mode.
 - [x] **#229 Epic: Native API Orchestrator (#230–#234, #236, #237):** Replace CLI shell-spawning with direct SDK calls to Gemini (`@google/genai`) and Anthropic (`@anthropic-ai/sdk`). BYOSD pattern with optional peer dependencies, discriminated union config, and package manager auto-detection for install prompts.
+- [x] **#243 / #246 Multi-Model Orchestration (#235):** Enable cross-provider routing in orchestrator overrides using `provider:model` syntax with negated glob support.
 - [ ] **#176 Agent-Optimized MCP:** Dynamic token budgeting and write access for deeper agent-to-agent interactions.
 - [ ] **#183 Cross-File Knowledge Graph (Blocked):** Implement symbol resolution to enable multi-file architectural reasoning.
 

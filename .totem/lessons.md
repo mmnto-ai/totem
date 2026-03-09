@@ -758,3 +758,39 @@ When positional arguments and CLI flags offer overlapping or conflicting functio
 **Tags:** nodejs, path-processing, trap
 
 Use `path.relative(process.cwd(), path.resolve(process.cwd(), input))` for robust path normalization instead of simple string replacements. This approach correctly handles shell-expanded absolute paths (e.g., from tab-completion) so they match relative paths defined in application configuration.
+
+## Lesson — Beware of dismissing structural abstractions as 'premature'…
+
+**Tags:** architecture, refactoring, DRY, local-scope-bias
+
+When a structural review suggests extracting a helper for duplicated logic, beware of dismissing it as "premature abstraction" simply because the duplication is currently limited (e.g., only two instances). Local agents (and developers) often suffer from "local scope bias," prioritizing immediate efficiency over systemic patterns. If the abstraction is deferred, future implementations may fail to recognize the pattern entirely, resulting in fragmented logic that never reaches the "rule of three" threshold required to justify a refactor later.
+
+## Lesson — Always use fully qualified identifiers (e.g.,…
+
+**Tags:** caching, telemetry, architecture
+
+Always use fully qualified identifiers (e.g., `provider:model`) for cache hashing and telemetry instead of just the model name. This prevents cross-provider cache collisions in environments where different backends happen to share identical model naming conventions.
+
+## Lesson — Ensure validation checks are applied symmetrically to both…
+
+**Tags:** validation, error-handling, fallback
+
+Ensure validation checks are applied symmetrically to both primary and fallback execution paths. Relying on primary-path validation alone creates a trap where invalid configuration only triggers a failure during error recovery (e.g., a quota retry), making the resulting failure much harder to debug.
+
+## Lesson — When mocking modules, use vi.importActual to maintain the…
+
+**Tags:** testing, vitest, mocks
+
+When mocking modules, use `vi.importActual` to maintain the real implementation of pure utility functions while mocking only the side-effect-heavy factories. Re-implementing utility logic inside a mock makes tests brittle and allows them to pass even if the actual implementation changes and breaks.
+
+## Lesson — Avoid extracting a shared helper for minor duplication…
+
+**Tags:** refactoring, clean-code, design-decision
+
+Avoid extracting a shared helper for minor duplication (e.g., exactly two call sites) if a planned feature will fundamentally change the logic's complexity in the near future. Deferring the abstraction until the requirements are fully known (e.g., moving from 1:1 fallback to N-model consensus) prevents premature and potentially incorrect abstractions.
+
+## Lesson — Explicitly block cross-provider routing into specialized…
+
+**Tags:** architecture, shell-provider, validation
+
+Explicitly block cross-provider routing into specialized providers (like `shell`) that require unique configuration templates not present in the source provider's setup. Failing fast at the routing layer prevents cryptic runtime errors when an orchestrator attempts to execute a prompt without the necessary provider-specific execution context.

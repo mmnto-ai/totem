@@ -154,13 +154,15 @@ pnpm add -D @google/genai
 pnpm add -D @anthropic-ai/sdk
 ```
 
+Overrides support **cross-provider routing** (using the `provider:model` syntax) and negated glob patterns for fine-grained model selection (#243, #246).
+
 ```typescript
 // totem.config.ts
 orchestrator: {
   provider: 'gemini', // Requires @google/genai to be installed
   defaultModel: 'gemini-3-flash-preview',
   overrides: {
-    spec: 'gemini-3.1-pro-preview',
+    spec: 'anthropic:claude-3-7-sonnet-latest', // Cross-provider routing (#246)
     shield: 'gemini-3.1-pro-preview',
     triage: 'gemini-3.1-pro-preview'
   }
@@ -176,7 +178,7 @@ orchestrator: {
 - **`triage`**: Fetches open GitHub issues and generates a prioritized roadmap (e.g., `docs/active_work.md`) for your next task.
 - **`add-lesson`**: Interactively document a context, symptom, and fix. Saves to `.totem/lessons.md` and triggers a background re-index.
 - **`docs`**: Automatically syncs project documentation (README, Roadmap) by analyzing git logs and closed issues since the last release (#190). Supports targeting individual files (e.g., `totem docs README.md`) with path fixes (#238, #241).
-- **`wrap`**: A post-merge workflow chain that runs `extract`, syncs the database, generates a roadmap, and updates docs in one command (#143).
+- **`wrap`**: A post-merge workflow chain that runs `extract`, syncs the database, generates a roadmap, and updates docs in one command (#143, #242).
 - **`extract <ids...>`**: Fetches merged PRs, reads comments, and extracts systemic architectural traps with **descriptive headings** (#203). Supports interactive multi-select pruning.
 - **`handoff`**: Captures uncommitted changes and lessons learned today, synthesizing a tactical snapshot for your next session.
 - **`eject`**: Safely removes all Totem git hooks, configuration files, AI agent prompt injections, and the local `.lancedb/` index (#131).
