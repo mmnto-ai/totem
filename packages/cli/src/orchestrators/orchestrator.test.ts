@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Orchestrator as OrchestratorConfig } from '@mmnto/totem';
 
-import { createOrchestrator, detectPackageManager, isQuotaError } from './orchestrator.js';
+import {
+  createOrchestrator,
+  detectPackageManager,
+  isQuotaError,
+  parseModelString,
+} from './orchestrator.js';
 
 // ─── Mock provider modules ──────────────────────────
 
@@ -149,5 +154,65 @@ describe('isQuotaError', () => {
   it('returns false for non-Error values', () => {
     expect(isQuotaError('some string')).toBe(false);
     expect(isQuotaError(null)).toBe(false);
+  });
+});
+
+// ─── parseModelString (#243) ────────────────────────
+
+describe('parseModelString', () => {
+  it('parses anthropic:model into provider and model', () => {
+    expect(parseModelString('anthropic:claude-sonnet-4-20250514', 'gemini')).toEqual({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-20250514',
+    });
+  });
+
+  it('parses gemini:model into provider and model', () => {
+    expect(parseModelString('gemini:gemini-3.1-pro-preview', 'anthropic')).toEqual({
+      provider: 'gemini',
+      model: 'gemini-3.1-pro-preview',
+    });
+  });
+
+  it('parses shell:model into provider and model', () => {
+    expect(parseModelString('shell:my-model', 'gemini')).toEqual({
+      provider: 'shell',
+      model: 'my-model',
+    });
+  });
+
+  it('returns default provider for plain model string', () => {
+    expect(parseModelString('gemini-3-flash-preview', 'gemini')).toEqual({
+      provider: 'gemini',
+      model: 'gemini-3-flash-preview',
+    });
+  });
+
+  it('returns default provider for unknown prefix (not a known provider)', () => {
+    expect(parseModelString('unknown:my-model:v1', 'gemini')).toEqual({
+      provider: 'gemini',
+      model: 'unknown:my-model:v1',
+    });
+  });
+
+  it('returns default provider for org/namespace:model patterns', () => {
+    expect(parseModelString('myorg/namespace:model-v1', 'anthropic')).toEqual({
+      provider: 'anthropic',
+      model: 'myorg/namespace:model-v1',
+    });
+  });
+
+  it('parses empty model after colon (caller should validate)', () => {
+    expect(parseModelString('anthropic:', 'gemini')).toEqual({
+      provider: 'anthropic',
+      model: '',
+    });
+  });
+
+  it('does not split on leading colon', () => {
+    expect(parseModelString(':some-model', 'gemini')).toEqual({
+      provider: 'gemini',
+      model: ':some-model',
+    });
   });
 });

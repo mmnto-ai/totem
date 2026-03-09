@@ -57,6 +57,29 @@ export function isQuotaError(err: unknown): boolean {
   );
 }
 
+// ─── Model string parsing (#243) ─────────────────────
+
+const KNOWN_PROVIDERS = ['gemini', 'anthropic', 'shell'] as const;
+
+/**
+ * Parse a `provider:model` string into its components.
+ * If the prefix before the first colon is a known provider, splits it out.
+ * Otherwise, returns the full string as the model with the default provider.
+ */
+export function parseModelString(
+  value: string,
+  defaultProvider: string,
+): { provider: string; model: string } {
+  const colonIdx = value.indexOf(':');
+  if (colonIdx > 0) {
+    const prefix = value.slice(0, colonIdx);
+    if ((KNOWN_PROVIDERS as readonly string[]).includes(prefix)) {
+      return { provider: prefix, model: value.slice(colonIdx + 1) };
+    }
+  }
+  return { provider: defaultProvider, model: value };
+}
+
 // ─── Factory ─────────────────────────────────────────
 
 /**

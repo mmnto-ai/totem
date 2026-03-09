@@ -13,6 +13,7 @@ import {
   reapOrphanedTempFiles,
   requireEmbedding,
   resolveConfigPath,
+  runOrchestrator,
   sanitize,
   wrapXml,
   writeOutput,
@@ -448,5 +449,216 @@ describe('reapOrphanedTempFiles', () => {
     fs.unlinkSync(filePath);
     const removed = await reapOrphanedTempFiles(tmpRoot, '.totem', 24 * 60 * 60 * 1000);
     expect(removed).toBe(0);
+  });
+});
+
+// ─── runOrchestrator (#243 — cross-provider routing) ──
+
+vi.mock('./orchestrators/orchestrator.js', () => {
+  const mockInvoke = vi.fn().mockResolvedValue({
+    content: 'mock result',
+    inputTokens: 100,
+    outputTokens: 50,
+    durationMs: 500,
+  });
+  return {
+    createOrchestrator: vi.fn().mockReturnValue(mockInvoke),
+    parseModelString: vi.fn().mockImplementation((value: string, defaultProvider: string) => {
+      const colonIdx = value.indexOf(':');
+      if (colonIdx > 0) {
+        const prefix = value.slice(0, colonIdx);
+        if (['gemini', 'anthropic', 'shell'].includes(prefix)) {
+          return { provider: prefix, model: value.slice(colonIdx + 1) };
+        }
+      }
+      return { provider: defaultProvider, model: value };
+    }),
+  };
+});
+
+import { createOrchestrator } from './orchestrators/orchestrator.js';
+
+const mockedCreateOrchestrator = vi.mocked(createOrchestrator);
+
+function baseConfig(overrides?: Partial<TotemConfig>): TotemConfig {
+  return {
+    targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+    orchestrator: {
+      provider: 'gemini',
+      defaultModel: 'gemini-3-flash-preview',
+    },
+    totemDir: '.totem',
+    lanceDir: '.lancedb',
+    ignorePatterns: [],
+    contextWarningThreshold: 40_000,
+    ...overrides,
+  } as TotemConfig;
+}
+
+describe('runOrchestrator', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-orch-test-'));
+    vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
+    // Re-set the mock return value after clearAllMocks
+    const mockInvoke = vi.fn().mockResolvedValue({
+      content: 'mock result',
+      inputTokens: 100,
+      outputTokens: 50,
+      durationMs: 500,
+    });
+    mockedCreateOrchestrator.mockReturnValue(mockInvoke);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('uses default provider and model when no overrides', async () => {
+    const result = await runOrchestrator({
+      prompt: 'test prompt',
+      tag: 'Spec',
+      options: {},
+      config: baseConfig(),
+      cwd: tmpDir,
+    });
+
+    expect(result).toBe('mock result');
+    expect(mockedCreateOrchestrator).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'gemini' }),
+    );
+  });
+
+  it('uses per-command override from config', async () => {
+    const config = baseConfig({
+      orchestrator: {
+        provider: 'gemini',
+        defaultModel: 'gemini-3-flash-preview',
+        overrides: { spec: 'gemini-3.1-pro-preview' },
+      },
+    });
+
+    await runOrchestrator({
+      prompt: 'test',
+      tag: 'Spec',
+      options: {},
+      config,
+      cwd: tmpDir,
+    });
+
+    // The invoke should receive the override model
+    const invoke = mockedCreateOrchestrator.mock.results[0]!.value;
+    expect(invoke).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'gemini-3.1-pro-preview' }),
+    );
+  });
+
+  it('--model flag takes priority over overrides', async () => {
+    const config = baseConfig({
+      orchestrator: {
+        provider: 'gemini',
+        defaultModel: 'gemini-3-flash-preview',
+        overrides: { spec: 'gemini-3.1-pro-preview' },
+      },
+    });
+
+    await runOrchestrator({
+      prompt: 'test',
+      tag: 'Spec',
+      options: { model: 'custom-model' },
+      config,
+      cwd: tmpDir,
+    });
+
+    const invoke = mockedCreateOrchestrator.mock.results[0]!.value;
+    expect(invoke).toHaveBeenCalledWith(expect.objectContaining({ model: 'custom-model' }));
+  });
+
+  it('creates a new orchestrator for cross-provider override', async () => {
+    const config = baseConfig({
+      orchestrator: {
+        provider: 'gemini',
+        defaultModel: 'gemini-3-flash-preview',
+        overrides: { shield: 'anthropic:claude-sonnet-4-20250514' },
+      },
+    });
+
+    await runOrchestrator({
+      prompt: 'test',
+      tag: 'Shield',
+      options: {},
+      config,
+      cwd: tmpDir,
+    });
+
+    // Should create two orchestrators: one for base config, one for cross-provider
+    expect(mockedCreateOrchestrator).toHaveBeenCalledTimes(2);
+    expect(mockedCreateOrchestrator).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'anthropic' }),
+    );
+  });
+
+  it('throws when cross-routing to shell from an API provider', async () => {
+    const config = baseConfig({
+      orchestrator: {
+        provider: 'gemini',
+        defaultModel: 'gemini-3-flash-preview',
+        overrides: { spec: 'shell:my-model' },
+      },
+    });
+
+    await expect(
+      runOrchestrator({ prompt: 'test', tag: 'Spec', options: {}, config, cwd: tmpDir }),
+    ).rejects.toThrow("Cannot route to 'shell' provider");
+  });
+
+  it('throws when model portion is empty (anthropic:)', async () => {
+    await expect(
+      runOrchestrator({
+        prompt: 'test',
+        tag: 'Spec',
+        options: { model: 'anthropic:' },
+        config: baseConfig(),
+        cwd: tmpDir,
+      }),
+    ).rejects.toThrow('must not be empty');
+  });
+
+  it('throws when model portion starts with hyphen', async () => {
+    await expect(
+      runOrchestrator({
+        prompt: 'test',
+        tag: 'Spec',
+        options: { model: 'anthropic:-bad' },
+        config: baseConfig(),
+        cwd: tmpDir,
+      }),
+    ).rejects.toThrow('must not be empty or start with a hyphen');
+  });
+
+  it('throws when no model is specified anywhere', async () => {
+    const config = baseConfig({
+      orchestrator: { provider: 'gemini' },
+    });
+
+    await expect(
+      runOrchestrator({ prompt: 'test', tag: 'Spec', options: {}, config, cwd: tmpDir }),
+    ).rejects.toThrow('No model specified');
+  });
+
+  it('returns undefined in --raw mode without invoking orchestrator', async () => {
+    const result = await runOrchestrator({
+      prompt: 'test',
+      tag: 'Spec',
+      options: { raw: true },
+      config: baseConfig(),
+      cwd: tmpDir,
+    });
+
+    expect(result).toBeUndefined();
+    expect(mockedCreateOrchestrator).not.toHaveBeenCalled();
   });
 });
