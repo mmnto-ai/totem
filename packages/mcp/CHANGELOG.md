@@ -1,5 +1,19 @@
 # @mmnto/mcp
 
+## 0.18.0
+
+### Minor Changes
+
+- feat: async orchestrator and ReDoS protection
+  - Refactored shell orchestrator from `execSync` to async `spawn` with streaming stdout/stderr, 50MB safety cap, and proper timeout handling (#206)
+  - Added compile-time ReDoS static analysis via `safe-regex2` — vulnerable regex patterns are rejected during `totem compile` with diagnostic reasons (#218)
+  - Graceful per-doc error handling in `totem docs` — a single doc failure no longer aborts the entire batch
+
+### Patch Changes
+
+- Updated dependencies
+  - @mmnto/totem@0.18.0
+
 ## 0.17.0
 
 ### Patch Changes
