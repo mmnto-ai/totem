@@ -285,7 +285,7 @@ program
   });
 
 program
-  .command('docs')
+  .command('docs [paths...]')
   .description('Auto-update registered project docs using LLM synthesis')
   .option('--raw', 'Output assembled prompt without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
@@ -295,18 +295,21 @@ program
   .option('--dry-run', 'Preview changes without writing files')
   .option('--yes', 'Skip confirmation prompt (use in scripts/CI)')
   .action(
-    async (opts: {
-      raw?: boolean;
-      out?: string;
-      model?: string;
-      fresh?: boolean;
-      only?: string;
-      dryRun?: boolean;
-      yes?: boolean;
-    }) => {
+    async (
+      paths: string[],
+      opts: {
+        raw?: boolean;
+        out?: string;
+        model?: string;
+        fresh?: boolean;
+        only?: string;
+        dryRun?: boolean;
+        yes?: boolean;
+      },
+    ) => {
       try {
         const { docsCommand } = await import('./commands/docs.js');
-        await docsCommand(opts);
+        await docsCommand(paths, opts);
       } catch (err) {
         handleError(err);
       }

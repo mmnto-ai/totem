@@ -39,7 +39,7 @@ export async function wrapCommand(prNumbers: string[], options: WrapOptions): Pr
   log.info(TAG, 'Step 4/4 — Updating project docs...');
   try {
     const { docsCommand } = await import('./docs.js');
-    await docsCommand({
+    await docsCommand([], {
       model: options.model,
       fresh: options.fresh,
       yes: options.yes,

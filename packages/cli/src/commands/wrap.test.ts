@@ -52,7 +52,7 @@ describe('wrapCommand', () => {
       model: undefined,
       fresh: undefined,
     });
-    expect(docsCommand).toHaveBeenCalledWith({
+    expect(docsCommand).toHaveBeenCalledWith([], {
       model: undefined,
       fresh: undefined,
       yes: undefined,
@@ -71,7 +71,7 @@ describe('wrapCommand', () => {
       model: 'gemini-3-flash',
       fresh: true,
     });
-    expect(docsCommand).toHaveBeenCalledWith({
+    expect(docsCommand).toHaveBeenCalledWith([], {
       model: 'gemini-3-flash',
       fresh: true,
       yes: true,

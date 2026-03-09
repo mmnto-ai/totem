@@ -90,7 +90,7 @@ describe('docsCommand', () => {
       contextWarningThreshold: 40_000,
     });
 
-    await expect(docsCommand({})).rejects.toThrow('No docs configured');
+    await expect(docsCommand([], {})).rejects.toThrow('No docs configured');
   });
 
   it('throws when docs array is empty', async () => {
@@ -103,7 +103,7 @@ describe('docsCommand', () => {
       contextWarningThreshold: 40_000,
     });
 
-    await expect(docsCommand({})).rejects.toThrow('No docs configured');
+    await expect(docsCommand([], {})).rejects.toThrow('No docs configured');
   });
 
   it('throws when --only matches no docs', async () => {
@@ -116,7 +116,7 @@ describe('docsCommand', () => {
       contextWarningThreshold: 40_000,
     });
 
-    await expect(docsCommand({ only: 'nonexistent' })).rejects.toThrow(
+    await expect(docsCommand([], { only: 'nonexistent' })).rejects.toThrow(
       "--only 'nonexistent' matched no configured docs",
     );
   });
@@ -137,7 +137,7 @@ describe('docsCommand', () => {
     writeDoc(tmpDir, 'README.md', '# Old README\n');
     writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
 
-    await docsCommand({ only: 'readme' });
+    await docsCommand([], { only: 'readme' });
 
     // Only one orchestrator call (for README.md)
     expect(runOrchestrator).toHaveBeenCalledTimes(1);
@@ -155,7 +155,7 @@ describe('docsCommand', () => {
 
     vi.mocked(isFileDirty).mockReturnValue(true);
 
-    await expect(docsCommand({})).rejects.toThrow('uncommitted changes');
+    await expect(docsCommand([], {})).rejects.toThrow('uncommitted changes');
   });
 
   it('allows dirty files in --dry-run mode', async () => {
@@ -172,7 +172,7 @@ describe('docsCommand', () => {
     writeDoc(tmpDir, 'README.md', '# Old README\n');
 
     // Should not throw
-    await docsCommand({ dryRun: true });
+    await docsCommand([], { dryRun: true });
     expect(runOrchestrator).toHaveBeenCalledTimes(1);
 
     // File should NOT be modified in dry-run
@@ -192,7 +192,7 @@ describe('docsCommand', () => {
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
 
-    await docsCommand({});
+    await docsCommand([], {});
 
     const content = fs.readFileSync(path.join(tmpDir, 'README.md'), 'utf-8');
     expect(content).toContain('Updated README');
@@ -209,7 +209,7 @@ describe('docsCommand', () => {
     });
 
     // Should not throw — just skip
-    await docsCommand({});
+    await docsCommand([], {});
     expect(runOrchestrator).not.toHaveBeenCalled();
   });
 
@@ -229,7 +229,7 @@ describe('docsCommand', () => {
     writeDoc(tmpDir, 'README.md', '# Old README\n');
     writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
 
-    await docsCommand({});
+    await docsCommand([], {});
 
     expect(runOrchestrator).toHaveBeenCalledTimes(2);
   });
@@ -249,11 +249,133 @@ describe('docsCommand', () => {
     // Simulate truncated response — opening tag but no closing tag
     vi.mocked(runOrchestrator).mockResolvedValue('<updated_document>\n# Truncated content');
 
-    await docsCommand({});
+    await docsCommand([], {});
 
     // File should NOT be modified
     const content = fs.readFileSync(path.join(tmpDir, 'README.md'), 'utf-8');
     expect(content).toBe('# Old README\n');
+  });
+
+  // ─── Positional path targeting ───────────────────────────
+
+  it('targets a single doc by path', async () => {
+    vi.mocked(loadConfig).mockResolvedValue({
+      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+      docs: [
+        { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
+        { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
+      ],
+      totemDir: '.totem',
+      lanceDir: '.lancedb',
+      ignorePatterns: [],
+      contextWarningThreshold: 40_000,
+    });
+
+    writeDoc(tmpDir, 'README.md', '# Old README\n');
+    writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
+
+    await docsCommand(['README.md'], {});
+
+    expect(runOrchestrator).toHaveBeenCalledTimes(1);
+  });
+
+  it('targets multiple docs by path', async () => {
+    vi.mocked(loadConfig).mockResolvedValue({
+      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+      docs: [
+        { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
+        { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
+        { path: 'docs/architecture.md', description: 'arch', trigger: 'post-release' as const },
+      ],
+      totemDir: '.totem',
+      lanceDir: '.lancedb',
+      ignorePatterns: [],
+      contextWarningThreshold: 40_000,
+    });
+
+    writeDoc(tmpDir, 'README.md', '# Old README\n');
+    writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
+    writeDoc(tmpDir, 'docs/architecture.md', '# Old Arch\n');
+
+    await docsCommand(['README.md', 'docs/roadmap.md'], {});
+
+    expect(runOrchestrator).toHaveBeenCalledTimes(2);
+  });
+
+  it('normalizes ./prefix in positional paths', async () => {
+    vi.mocked(loadConfig).mockResolvedValue({
+      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+      docs: [
+        { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
+        { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
+      ],
+      totemDir: '.totem',
+      lanceDir: '.lancedb',
+      ignorePatterns: [],
+      contextWarningThreshold: 40_000,
+    });
+
+    writeDoc(tmpDir, 'README.md', '# Old README\n');
+
+    await docsCommand(['./README.md'], {});
+
+    expect(runOrchestrator).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws for unknown positional paths (fail-fast)', async () => {
+    vi.mocked(loadConfig).mockResolvedValue({
+      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+      docs: [{ path: 'README.md', description: 'readme', trigger: 'post-release' as const }],
+      totemDir: '.totem',
+      lanceDir: '.lancedb',
+      ignorePatterns: [],
+      contextWarningThreshold: 40_000,
+    });
+
+    await expect(docsCommand(['nonexistent.md'], {})).rejects.toThrow(
+      'Unknown doc path(s): nonexistent.md',
+    );
+  });
+
+  it('deduplicates positional paths', async () => {
+    vi.mocked(loadConfig).mockResolvedValue({
+      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+      docs: [{ path: 'README.md', description: 'readme', trigger: 'post-release' as const }],
+      totemDir: '.totem',
+      lanceDir: '.lancedb',
+      ignorePatterns: [],
+      contextWarningThreshold: 40_000,
+    });
+
+    writeDoc(tmpDir, 'README.md', '# Old README\n');
+
+    await docsCommand(['README.md', 'README.md'], {});
+
+    expect(runOrchestrator).toHaveBeenCalledTimes(1);
+  });
+
+  it('scopes dirty check to targeted docs only', async () => {
+    vi.mocked(loadConfig).mockResolvedValue({
+      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+      docs: [
+        { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
+        { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
+      ],
+      totemDir: '.totem',
+      lanceDir: '.lancedb',
+      ignorePatterns: [],
+      contextWarningThreshold: 40_000,
+    });
+
+    // Only roadmap is dirty, but we're targeting README
+    vi.mocked(isFileDirty).mockImplementation((_cwd, filePath) => filePath === 'docs/roadmap.md');
+    writeDoc(tmpDir, 'README.md', '# Old README\n');
+    writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
+
+    // Should succeed — README is not dirty
+    await docsCommand(['README.md'], {});
+
+    expect(runOrchestrator).toHaveBeenCalledTimes(1);
   });
 });
 
