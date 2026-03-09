@@ -759,12 +759,6 @@ When positional arguments and CLI flags offer overlapping or conflicting functio
 
 Use `path.relative(process.cwd(), path.resolve(process.cwd(), input))` for robust path normalization instead of simple string replacements. This approach correctly handles shell-expanded absolute paths (e.g., from tab-completion) so they match relative paths defined in application configuration.
 
-## Lesson — Beware of dismissing structural abstractions as 'premature'
-
-**Tags:** architecture, refactoring, DRY, local-scope-bias
-
-When a structural review suggests extracting a helper for duplicated logic, beware of dismissing it as "premature abstraction" simply because the duplication is currently limited (e.g., only two instances). Local agents (and developers) often suffer from "local scope bias," prioritizing immediate efficiency over systemic patterns. If the abstraction is deferred, future implementations may fail to recognize the pattern entirely, resulting in fragmented logic that never reaches the "rule of three" threshold required to justify a refactor later.
-
 ## Lesson — Always use fully qualified identifiers for caching and telemetry
 
 **Tags:** caching, telemetry, architecture
@@ -782,12 +776,6 @@ Ensure validation checks are applied symmetrically to both primary and fallback 
 **Tags:** testing, vitest, mocks
 
 When mocking modules, use `vi.importActual` to maintain the real implementation of pure utility functions while mocking only the side-effect-heavy factories. Re-implementing utility logic inside a mock makes tests brittle and allows them to pass even if the actual implementation changes and breaks.
-
-## Lesson — Avoid premature abstraction when requirements are in flux
-
-**Tags:** refactoring, clean-code, design-decision
-
-Avoid extracting a shared helper for minor duplication (e.g., exactly two call sites) if a planned feature will fundamentally change the logic's complexity in the near future. Deferring the abstraction until the requirements are fully known (e.g., moving from 1:1 fallback to N-model consensus) prevents premature and potentially incorrect abstractions.
 
 ## Lesson — Block cross-provider routing into specialized providers
 
