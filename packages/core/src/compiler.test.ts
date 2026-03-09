@@ -101,8 +101,8 @@ index abc1234..def5678 100644
 
     const additions = extractAddedLines(diff);
     expect(additions).toHaveLength(2);
-    expect(additions[0]).toEqual({ file: 'src/foo.ts', line: 'const b = 3;', lineNumber: 2 });
-    expect(additions[1]).toEqual({ file: 'src/foo.ts', line: 'const c = 4;', lineNumber: 3 });
+    expect(additions[0]).toMatchObject({ file: 'src/foo.ts', line: 'const b = 3;', lineNumber: 2 });
+    expect(additions[1]).toMatchObject({ file: 'src/foo.ts', line: 'const c = 4;', lineNumber: 3 });
   });
 
   it('handles multiple files', () => {
@@ -315,6 +315,144 @@ describe('applyRules', () => {
     const violations = applyRules(rules, multiFileDiff);
     expect(violations).toHaveLength(1);
     expect(violations[0]!.file).toBe('src/utils.ts');
+  });
+
+  // ─── Inline suppression (totem-ignore) ─────────────
+
+  it('suppresses same-line violation with totem-ignore', () => {
+    const suppressedDiff = [
+      'diff --git a/src/app.ts b/src/app.ts',
+      '--- a/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -1,2 +1,3 @@',
+      ' const x = 1;',
+      '+const result = npm.install("pkg"); // totem-ignore',
+      ' export default x;',
+    ].join('\n');
+
+    const rules = [makeRule('\\bnpm\\.install\\b', 'Do not call npm.install directly')];
+    const violations = applyRules(rules, suppressedDiff);
+    expect(violations).toHaveLength(0);
+  });
+
+  it('suppresses next-line violation with totem-ignore-next-line (both added)', () => {
+    const suppressedDiff = [
+      'diff --git a/src/app.ts b/src/app.ts',
+      '--- a/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -1,2 +1,4 @@',
+      ' const x = 1;',
+      '+// totem-ignore-next-line',
+      '+const result = npm.install("pkg");',
+      ' export default x;',
+    ].join('\n');
+
+    const rules = [makeRule('\\bnpm\\.install\\b', 'Do not call npm.install directly')];
+    const violations = applyRules(rules, suppressedDiff);
+    expect(violations).toHaveLength(0);
+  });
+
+  it('suppresses next-line violation when directive is a context line', () => {
+    // The totem-ignore-next-line comment already existed (context line ' ')
+    // and the user adds a new violating line below it
+    const suppressedDiff = [
+      'diff --git a/src/app.ts b/src/app.ts',
+      '--- a/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -1,3 +1,4 @@',
+      ' const x = 1;',
+      ' // totem-ignore-next-line',
+      '+const result = npm.install("pkg");',
+      ' export default x;',
+    ].join('\n');
+
+    const rules = [makeRule('\\bnpm\\.install\\b', 'Do not call npm.install directly')];
+    const violations = applyRules(rules, suppressedDiff);
+    expect(violations).toHaveLength(0);
+  });
+
+  it('does not suppress when there is no directive', () => {
+    const plainDiff = [
+      'diff --git a/src/app.ts b/src/app.ts',
+      '--- a/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -1,2 +1,3 @@',
+      ' const x = 1;',
+      '+const result = npm.install("pkg");',
+      ' export default x;',
+    ].join('\n');
+
+    const rules = [makeRule('\\bnpm\\.install\\b', 'Do not call npm.install directly')];
+    const violations = applyRules(rules, plainDiff);
+    expect(violations).toHaveLength(1);
+  });
+
+  it('supports hash-style comment suppression', () => {
+    const suppressedDiff = [
+      'diff --git a/deploy.sh b/deploy.sh',
+      '--- a/deploy.sh',
+      '+++ b/deploy.sh',
+      '@@ -1,2 +1,4 @@',
+      ' #!/bin/bash',
+      '+# totem-ignore-next-line',
+      '+echo $UNQUOTED_VAR',
+      ' exit 0',
+    ].join('\n');
+
+    const rules = [makeRule('\\$[A-Z_]+', 'Quote shell variables')];
+    const violations = applyRules(rules, suppressedDiff);
+    expect(violations).toHaveLength(0);
+  });
+
+  it('supports HTML comment suppression', () => {
+    const suppressedDiff = [
+      'diff --git a/docs/index.md b/docs/index.md',
+      '--- a/docs/index.md',
+      '+++ b/docs/index.md',
+      '@@ -1,2 +1,3 @@',
+      ' # Title',
+      '+<!-- totem-ignore --> Use npm.install for setup',
+      ' More text',
+    ].join('\n');
+
+    const rules = [makeRule('\\bnpm\\.install\\b', 'Do not call npm.install')];
+    const violations = applyRules(rules, suppressedDiff);
+    expect(violations).toHaveLength(0);
+  });
+
+  it('suppresses all rule violations on a single ignored line', () => {
+    const suppressedDiff = [
+      'diff --git a/src/app.ts b/src/app.ts',
+      '--- a/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -1,2 +1,3 @@',
+      ' const x = 1;',
+      '+const error = npm.install("pkg"); // totem-ignore',
+      ' export default x;',
+    ].join('\n');
+
+    const rules = [
+      makeRule('\\bnpm\\.install\\b', 'Do not call npm.install'),
+      makeRule('\\berror\\b', 'Use err, not error'),
+    ];
+    const violations = applyRules(rules, suppressedDiff);
+    expect(violations).toHaveLength(0);
+  });
+
+  it('handles suppression at first line of hunk (no preceding line)', () => {
+    const suppressedDiff = [
+      'diff --git a/src/app.ts b/src/app.ts',
+      '--- a/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -1,2 +1,3 @@',
+      '+const result = npm.install("pkg"); // totem-ignore',
+      ' const x = 1;',
+      ' export default x;',
+    ].join('\n');
+
+    const rules = [makeRule('\\bnpm\\.install\\b', 'Do not call npm.install')];
+    const violations = applyRules(rules, suppressedDiff);
+    expect(violations).toHaveLength(0);
   });
 
   it('excludes test files with negated glob while matching source files', () => {
