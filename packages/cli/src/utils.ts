@@ -5,8 +5,8 @@ import * as path from 'node:path';
 import type { SearchResult, TotemConfig } from '@mmnto/totem';
 import { TotemConfigSchema } from '@mmnto/totem';
 
-import { createOrchestrator } from './orchestrators/orchestrator.js';
 import type { OrchestratorResult } from './orchestrators/orchestrator.js';
+import { createOrchestrator } from './orchestrators/orchestrator.js';
 import { bold, log } from './ui.js';
 
 // ─── Shared constants ────────────────────────────────────
