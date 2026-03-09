@@ -139,7 +139,9 @@ export async function invokeShellOrchestrator(
             fullError.name = 'QuotaError';
             reject(fullError);
           } else {
-            reject(new Error(`[Totem Error] Shell orchestrator command failed: ${fullError.message}`));
+            reject(
+              new Error(`[Totem Error] Shell orchestrator command failed: ${fullError.message}`),
+            );
           }
           return;
         }
