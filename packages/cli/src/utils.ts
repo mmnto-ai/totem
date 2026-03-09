@@ -1,20 +1,16 @@
-import { spawn } from 'node:child_process';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { z } from 'zod';
-
 import type { SearchResult, TotemConfig } from '@mmnto/totem';
 import { TotemConfigSchema } from '@mmnto/totem';
 
+import { createOrchestrator } from './orchestrators/orchestrator.js';
+import type { OrchestratorResult } from './orchestrators/orchestrator.js';
 import { bold, log } from './ui.js';
 
 // ─── Shared constants ────────────────────────────────────
 
-const LLM_TIMEOUT_MS = 180_000;
-const LLM_MAX_OUTPUT = 50 * 1024 * 1024; // 50 MB — safety cap on streamed output
-const TEMP_ID_BYTES = 4;
 const MODEL_NAME_RE = /^[\w./:_-]+$/;
 const TELEMETRY_FILE = 'telemetry.jsonl';
 
@@ -83,13 +79,6 @@ interface TelemetryEntry {
   durationMs: number;
 }
 
-export interface OrchestratorResult {
-  content: string;
-  inputTokens: number | null;
-  outputTokens: number | null;
-  durationMs: number;
-}
-
 function appendTelemetry(entry: TelemetryEntry, cwd: string, totemDir: string): void {
   try {
     const tempDir = path.join(cwd, totemDir, 'temp');
@@ -99,162 +88,6 @@ function appendTelemetry(entry: TelemetryEntry, cwd: string, totemDir: string): 
     // Telemetry is best-effort — never block the command, but warn on failure
     const msg = err instanceof Error ? err.message : String(err);
     log.warn('Totem', `Failed to write telemetry: ${msg}`);
-  }
-}
-
-const GeminiModelStatsSchema = z.object({
-  tokens: z.object({ input: z.number(), candidates: z.number() }).optional(),
-  api: z.object({ totalLatencyMs: z.number() }).optional(),
-});
-
-const GeminiOutputSchema = z.object({
-  response: z.string(),
-  stats: z.object({ models: z.record(GeminiModelStatsSchema) }),
-});
-
-/**
- * Try to parse Gemini CLI JSON output. Returns extracted data or null if
- * the output is not valid Gemini JSON (e.g. raw text from a non-Gemini orchestrator).
- */
-export function tryParseGeminiJson(
-  raw: string,
-): { content: string; inputTokens: number; outputTokens: number; latencyMs: number | null } | null {
-  let data: unknown;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-
-  const result = GeminiOutputSchema.safeParse(data);
-  if (!result.success) return null;
-
-  const allModelStats = Object.values(result.data.stats.models);
-  if (allModelStats.length === 0) return null;
-
-  const inputTokens = allModelStats.reduce((sum, s) => sum + (s.tokens?.input ?? 0), 0);
-  const outputTokens = allModelStats.reduce((sum, s) => sum + (s.tokens?.candidates ?? 0), 0);
-  const latencyMs = allModelStats.reduce((sum, s) => sum + (s.api?.totalLatencyMs ?? 0), 0) || null;
-
-  return {
-    content: result.data.response,
-    inputTokens,
-    outputTokens,
-    latencyMs,
-  };
-}
-
-// ─── Shell orchestrator ─────────────────────────────────
-
-export async function invokeShellOrchestrator(
-  prompt: string,
-  command: string,
-  model: string,
-  cwd: string,
-  tag: string,
-  totemDir: string,
-): Promise<OrchestratorResult> {
-  const tmpName = `totem-${tag.toLowerCase()}-${crypto.randomBytes(TEMP_ID_BYTES).toString('hex')}.md`;
-  const tempDir = path.join(cwd, totemDir, 'temp');
-  fs.mkdirSync(tempDir, { recursive: true });
-  const tempPath = path.join(tempDir, tmpName);
-
-  fs.writeFileSync(tempPath, prompt, { encoding: 'utf-8', mode: 0o600 });
-
-  const quotedPath = IS_WIN
-    ? `"${tempPath.replace(/"/g, '""')}"`
-    : `'${tempPath.replace(/'/g, "'\\''")}'`;
-  const resolvedCmd = command.replace(/\{file\}/g, quotedPath).replace(/\{model\}/g, model);
-
-  log.info(tag, 'Invoking orchestrator (this may take 15-60 seconds)...');
-
-  const startMs = Date.now();
-
-  try {
-    const raw = await new Promise<string>((resolve, reject) => {
-      const child = spawn(resolvedCmd, {
-        cwd,
-        shell: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-
-      let stdout = '';
-      let stderr = '';
-      let timedOut = false;
-
-      child.stdout.on('data', (chunk: Buffer) => {
-        if (stdout.length < LLM_MAX_OUTPUT) stdout += chunk.toString();
-      });
-      child.stderr.on('data', (chunk: Buffer) => {
-        if (stderr.length < LLM_MAX_OUTPUT) stderr += chunk.toString();
-      });
-
-      const timer = setTimeout(() => {
-        timedOut = true;
-        child.kill();
-      }, LLM_TIMEOUT_MS);
-
-      child.on('error', (err) => {
-        clearTimeout(timer);
-        reject(
-          new Error(`[Totem Error] Shell orchestrator command failed: ${err.message}\n${stderr}`),
-        );
-      });
-
-      child.on('close', (code) => {
-        clearTimeout(timer);
-        if (timedOut) {
-          reject(
-            Object.assign(
-              new Error(
-                `[Totem Error] Orchestrator timed out after ${LLM_TIMEOUT_MS / 1000}s.\n${stderr}`,
-              ),
-              { code: 'ETIMEDOUT' },
-            ),
-          );
-          return;
-        }
-
-        if (code !== 0) {
-          const fullError = `Process exited with code ${code}\n${stderr}`;
-          const lowerMsg = fullError.toLowerCase();
-          if (
-            lowerMsg.includes('quota') ||
-            lowerMsg.includes('429') ||
-            lowerMsg.includes('too many requests')
-          ) {
-            const quotaErr = new Error(fullError);
-            quotaErr.name = 'QuotaError';
-            reject(quotaErr);
-          } else {
-            reject(new Error(`[Totem Error] Shell orchestrator command failed: ${fullError}`));
-          }
-          return;
-        }
-
-        resolve(stdout);
-      });
-    });
-
-    const wallMs = Date.now() - startMs;
-
-    const gemini = tryParseGeminiJson(raw);
-    if (gemini) {
-      return {
-        content: gemini.content,
-        inputTokens: gemini.inputTokens,
-        outputTokens: gemini.outputTokens,
-        durationMs: gemini.latencyMs ?? wallMs,
-      };
-    }
-
-    return { content: raw.trim(), inputTokens: null, outputTokens: null, durationMs: wallMs };
-  } finally {
-    try {
-      fs.unlinkSync(tempPath);
-    } catch {
-      // Temp cleanup is best-effort
-    }
   }
 }
 
@@ -408,7 +241,7 @@ const DEFAULT_TTLS: Record<string, number> = {
 
 /**
  * Validate orchestrator config, then either output raw context (--raw) or
- * invoke the shell orchestrator and return the LLM content.
+ * invoke the configured orchestrator provider and return the LLM content.
  *
  * Returns `undefined` in --raw mode (prompt already written to output).
  * Returns the LLM response content string otherwise.
@@ -440,11 +273,7 @@ export async function runOrchestrator(opts: {
     );
   }
 
-  if (config.orchestrator.provider !== 'shell') {
-    throw new Error(
-      `[Totem Error] Unsupported orchestrator provider: '${config.orchestrator.provider}'. Only 'shell' is supported.`,
-    );
-  }
+  const invoke = createOrchestrator(config.orchestrator);
 
   const tagKey = tag.toLowerCase();
   let model =
@@ -491,14 +320,7 @@ export async function runOrchestrator(opts: {
 
   let result: OrchestratorResult;
   try {
-    result = await invokeShellOrchestrator(
-      prompt,
-      config.orchestrator.command,
-      model,
-      cwd,
-      tag,
-      config.totemDir,
-    );
+    result = await invoke({ prompt, model, cwd, tag, totemDir: config.totemDir });
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'QuotaError') {
       const fallback = config.orchestrator.fallbackModel;
@@ -508,14 +330,7 @@ export async function runOrchestrator(opts: {
           `Quota exhausted for ${model}. Retrying with fallback model: ${bold(fallback)}...`,
         );
         try {
-          result = await invokeShellOrchestrator(
-            prompt,
-            config.orchestrator.command,
-            fallback,
-            cwd,
-            tag,
-            config.totemDir,
-          );
+          result = await invoke({ prompt, model: fallback, cwd, tag, totemDir: config.totemDir });
           // Note: we update `model` to the fallback so telemetry logs the correct one
           model = fallback;
         } catch (fallbackErr: unknown) {

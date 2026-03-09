@@ -40,21 +40,59 @@ export const EmbeddingProviderSchema = z.discriminatedUnion('provider', [
 
 export const DEFAULT_IGNORE_PATTERNS = ['**/node_modules/**', '**/.lancedb/**', '**/dist/**'];
 
+// ─── Orchestrator schemas ────────────────────────────
+
+/** Fields shared across all orchestrator providers */
+const BaseOrchestratorFields = {
+  /** Default model name if --model is not passed */
+  defaultModel: z.string().optional(),
+  /** Fallback model used automatically if the primary model fails due to quota/rate limits */
+  fallbackModel: z.string().optional(),
+  /** Per-command model overrides (e.g., { 'spec': 'gemini-3.1-pro-preview' }) */
+  overrides: z.record(z.string()).optional(),
+  /** Per-command cache TTLs in seconds (e.g., { 'triage': 3600, 'shield': 0 }) */
+  cacheTtls: z.record(z.number()).optional(),
+};
+
 export const ShellOrchestratorSchema = z.object({
   provider: z.literal('shell'),
   /** Shell command with {file} and {model} placeholders */
   command: z.string(),
-  /** Default model name substituted for {model} if --model is not passed */
-  defaultModel: z.string().optional(),
-  /** Optional fallback model used automatically if the primary model fails due to quota/rate limits */
-  fallbackModel: z.string().optional(),
-  /** Optional per-command model overrides (e.g., { 'spec': 'gemini-3.1-pro-preview' }) */
-  overrides: z.record(z.string()).optional(),
-  /** Optional per-command cache TTLs in seconds (e.g., { 'triage': 3600, 'shield': 0 }) */
-  cacheTtls: z.record(z.number()).optional(),
+  ...BaseOrchestratorFields,
 });
 
-export const OrchestratorSchema = z.discriminatedUnion('provider', [ShellOrchestratorSchema]);
+export const GeminiOrchestratorSchema = z.object({
+  provider: z.literal('gemini'),
+  ...BaseOrchestratorFields,
+});
+
+export const AnthropicOrchestratorSchema = z.object({
+  provider: z.literal('anthropic'),
+  ...BaseOrchestratorFields,
+});
+
+export const OrchestratorSchema = z.discriminatedUnion('provider', [
+  ShellOrchestratorSchema,
+  GeminiOrchestratorSchema,
+  AnthropicOrchestratorSchema,
+]);
+
+/**
+ * Auto-migrate legacy orchestrator configs that lack a `provider` field.
+ * If `command` is present without `provider`, injects `provider: 'shell'`.
+ */
+function autoMigrateOrchestrator(val: unknown): unknown {
+  if (
+    val &&
+    typeof val === 'object' &&
+    !Array.isArray(val) &&
+    'command' in val &&
+    !('provider' in val)
+  ) {
+    return { ...(val as Record<string, unknown>), provider: 'shell' };
+  }
+  return val;
+}
 
 export const DocTargetSchema = z.object({
   /** Relative path to the document */
@@ -76,7 +114,7 @@ export const TotemConfigSchema = z.object({
   embedding: EmbeddingProviderSchema.optional(),
 
   /** Optional: LLM orchestrator for spec/triage/shield commands */
-  orchestrator: OrchestratorSchema.optional(),
+  orchestrator: z.preprocess(autoMigrateOrchestrator, OrchestratorSchema).optional(),
 
   /** Optional: override the .totem/ directory path */
   totemDir: z.string().default('.totem'),

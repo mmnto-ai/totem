@@ -4,6 +4,7 @@ import type { TotemConfig } from './config-schema.js';
 import {
   DocTargetSchema,
   getConfigTier,
+  OrchestratorSchema,
   requireEmbedding,
   TotemConfigSchema,
 } from './config-schema.js';
@@ -18,6 +19,16 @@ const SHELL_ORCHESTRATOR = {
   provider: 'shell' as const,
   command: 'echo {file}',
   defaultModel: 'test-model',
+};
+
+const GEMINI_ORCHESTRATOR = {
+  provider: 'gemini' as const,
+  defaultModel: 'gemini-2.5-flash',
+};
+
+const ANTHROPIC_ORCHESTRATOR = {
+  provider: 'anthropic' as const,
+  defaultModel: 'claude-sonnet-4-5-20250514',
 };
 
 describe('TotemConfigSchema', () => {
@@ -69,6 +80,134 @@ describe('TotemConfigSchema', () => {
     if (result.success) {
       expect(result.data.docs).toBeUndefined();
     }
+  });
+});
+
+// ─── Orchestrator schema ─────────────────────────────
+
+describe('OrchestratorSchema', () => {
+  it('accepts shell provider with command', () => {
+    const result = OrchestratorSchema.safeParse(SHELL_ORCHESTRATOR);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.provider).toBe('shell');
+    }
+  });
+
+  it('accepts gemini provider', () => {
+    const result = OrchestratorSchema.safeParse(GEMINI_ORCHESTRATOR);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.provider).toBe('gemini');
+    }
+  });
+
+  it('accepts anthropic provider', () => {
+    const result = OrchestratorSchema.safeParse(ANTHROPIC_ORCHESTRATOR);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.provider).toBe('anthropic');
+    }
+  });
+
+  it('accepts shared fields on all providers', () => {
+    const geminiWithShared = {
+      provider: 'gemini' as const,
+      defaultModel: 'gemini-2.5-flash',
+      fallbackModel: 'gemini-2.5-pro',
+      overrides: { spec: 'gemini-2.5-pro' },
+      cacheTtls: { triage: 3600 },
+    };
+    const result = OrchestratorSchema.safeParse(geminiWithShared);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.defaultModel).toBe('gemini-2.5-flash');
+      expect(result.data.fallbackModel).toBe('gemini-2.5-pro');
+    }
+  });
+
+  it('rejects unknown provider', () => {
+    const result = OrchestratorSchema.safeParse({ provider: 'openai' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects shell provider without command', () => {
+    const result = OrchestratorSchema.safeParse({ provider: 'shell', defaultModel: 'test' });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ─── Backwards compatibility ─────────────────────────
+
+describe('orchestrator backwards compatibility', () => {
+  it('auto-migrates legacy config without provider to shell', () => {
+    const legacyConfig = {
+      targets: BASE_TARGETS,
+      orchestrator: {
+        command: 'gemini -e none < {file}',
+        defaultModel: 'gemini-2.5-flash',
+      },
+    };
+    const result = TotemConfigSchema.safeParse(legacyConfig);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.orchestrator!.provider).toBe('shell');
+    }
+  });
+
+  it('preserves all legacy fields after migration', () => {
+    const legacyConfig = {
+      targets: BASE_TARGETS,
+      orchestrator: {
+        command: 'gemini -e none < {file}',
+        defaultModel: 'gemini-2.5-flash',
+        fallbackModel: 'gemini-2.5-pro',
+        overrides: { spec: 'gemini-2.5-pro' },
+        cacheTtls: { triage: 3600 },
+      },
+    };
+    const result = TotemConfigSchema.safeParse(legacyConfig);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const orch = result.data.orchestrator!;
+      expect(orch.provider).toBe('shell');
+      expect(orch.defaultModel).toBe('gemini-2.5-flash');
+      expect(orch.fallbackModel).toBe('gemini-2.5-pro');
+    }
+  });
+
+  it('does not inject provider when it is already present', () => {
+    const explicitConfig = {
+      targets: BASE_TARGETS,
+      orchestrator: GEMINI_ORCHESTRATOR,
+    };
+    const result = TotemConfigSchema.safeParse(explicitConfig);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.orchestrator!.provider).toBe('gemini');
+    }
+  });
+});
+
+// ─── Config with API orchestrators ───────────────────
+
+describe('TotemConfigSchema with API orchestrators', () => {
+  it('accepts config with gemini orchestrator (Full tier)', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      embedding: OPENAI_EMBEDDING,
+      orchestrator: GEMINI_ORCHESTRATOR,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts config with anthropic orchestrator (Full tier)', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      embedding: OPENAI_EMBEDDING,
+      orchestrator: ANTHROPIC_ORCHESTRATOR,
+    });
+    expect(result.success).toBe(true);
   });
 });
 
@@ -143,6 +282,16 @@ describe('getConfigTier', () => {
   it('returns lite when orchestrator is present but embedding is not', () => {
     const config = { ...base, orchestrator: SHELL_ORCHESTRATOR };
     expect(getConfigTier(config)).toBe('lite');
+  });
+
+  it('returns full for gemini API orchestrator', () => {
+    const config = { ...base, embedding: OPENAI_EMBEDDING, orchestrator: GEMINI_ORCHESTRATOR };
+    expect(getConfigTier(config)).toBe('full');
+  });
+
+  it('returns full for anthropic API orchestrator', () => {
+    const config = { ...base, embedding: OPENAI_EMBEDDING, orchestrator: ANTHROPIC_ORCHESTRATOR };
+    expect(getConfigTier(config)).toBe('full');
   });
 });
 

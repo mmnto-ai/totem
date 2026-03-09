@@ -5,7 +5,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { invokeShellOrchestrator } from './utils.js';
+import { invokeShellOrchestrator, tryParseGeminiJson } from './shell-orchestrator.js';
 
 // ─── Mock spawn ──────────────────────────────────────
 
@@ -32,7 +32,7 @@ vi.mock('node:child_process', () => ({
 const { spawn } = await import('node:child_process');
 const mockedSpawn = vi.mocked(spawn);
 
-// ─── Tests ───────────────────────────────────────────
+// ─── invokeShellOrchestrator ─────────────────────────
 
 describe('invokeShellOrchestrator', () => {
   let tmpDir: string;
@@ -68,14 +68,14 @@ describe('invokeShellOrchestrator', () => {
 
   it('returns raw content when output is not Gemini JSON', async () => {
     emitSuccess('  The answer is 42.  ');
-    const result = await invokeShellOrchestrator(
-      'prompt text',
-      'echo {file}',
-      'test-model',
-      tmpDir,
-      'Test',
+    const result = await invokeShellOrchestrator({
+      prompt: 'prompt text',
+      command: 'echo {file}',
+      model: 'test-model',
+      cwd: tmpDir,
+      tag: 'Test',
       totemDir,
-    );
+    });
     expect(result.content).toBe('The answer is 42.');
     expect(result.inputTokens).toBeNull();
     expect(result.outputTokens).toBeNull();
@@ -95,14 +95,14 @@ describe('invokeShellOrchestrator', () => {
       },
     });
     emitSuccess(geminiOutput);
-    const result = await invokeShellOrchestrator(
-      'prompt',
-      'gemini -e none < {file}',
-      'gemini-2.5-pro',
-      tmpDir,
-      'Test',
+    const result = await invokeShellOrchestrator({
+      prompt: 'prompt',
+      command: 'gemini -e none < {file}',
+      model: 'gemini-2.5-pro',
+      cwd: tmpDir,
+      tag: 'Test',
       totemDir,
-    );
+    });
     expect(result.content).toBe('Gemini says hello.');
     expect(result.inputTokens).toBe(100);
     expect(result.outputTokens).toBe(50);
@@ -111,14 +111,14 @@ describe('invokeShellOrchestrator', () => {
 
   it('substitutes {file} and {model} in command', async () => {
     emitSuccess('ok');
-    await invokeShellOrchestrator(
-      'prompt',
-      'llm --model {model} < {file}',
-      'my-model',
-      tmpDir,
-      'Test',
+    await invokeShellOrchestrator({
+      prompt: 'prompt',
+      command: 'llm --model {model} < {file}',
+      model: 'my-model',
+      cwd: tmpDir,
+      tag: 'Test',
       totemDir,
-    );
+    });
     const cmd = mockedSpawn.mock.calls[0]![0] as string;
     expect(cmd).toContain('my-model');
     expect(cmd).not.toContain('{model}');
@@ -127,14 +127,14 @@ describe('invokeShellOrchestrator', () => {
 
   it('writes prompt to temp file and cleans up after', async () => {
     emitSuccess('result');
-    await invokeShellOrchestrator(
-      'my prompt content',
-      'cat {file}',
-      'model',
-      tmpDir,
-      'Test',
+    await invokeShellOrchestrator({
+      prompt: 'my prompt content',
+      command: 'cat {file}',
+      model: 'model',
+      cwd: tmpDir,
+      tag: 'Test',
       totemDir,
-    );
+    });
     // Temp file should be cleaned up
     const tempDir = path.join(tmpDir, totemDir, 'temp');
     if (fs.existsSync(tempDir)) {
@@ -146,7 +146,14 @@ describe('invokeShellOrchestrator', () => {
   it('throws QuotaError for quota-related failures', async () => {
     emitFailure(1, '429 Too Many Requests quota exceeded');
     try {
-      await invokeShellOrchestrator('prompt', 'cmd', 'model', tmpDir, 'Test', totemDir);
+      await invokeShellOrchestrator({
+        prompt: 'prompt',
+        command: 'cmd',
+        model: 'model',
+        cwd: tmpDir,
+        tag: 'Test',
+        totemDir,
+      });
       expect.fail('Should have thrown');
     } catch (err) {
       expect((err as Error).name).toBe('QuotaError');
@@ -156,7 +163,14 @@ describe('invokeShellOrchestrator', () => {
   it('throws generic error for non-zero exit code', async () => {
     emitFailure(1, 'something went wrong');
     await expect(
-      invokeShellOrchestrator('prompt', 'cmd', 'model', tmpDir, 'Test', totemDir),
+      invokeShellOrchestrator({
+        prompt: 'prompt',
+        command: 'cmd',
+        model: 'model',
+        cwd: tmpDir,
+        tag: 'Test',
+        totemDir,
+      }),
     ).rejects.toThrow('[Totem Error] Shell orchestrator command failed');
   });
 
@@ -165,7 +179,14 @@ describe('invokeShellOrchestrator', () => {
       mockChild.emit('error', new Error('command not found'));
     });
     await expect(
-      invokeShellOrchestrator('prompt', 'cmd', 'model', tmpDir, 'Test', totemDir),
+      invokeShellOrchestrator({
+        prompt: 'prompt',
+        command: 'cmd',
+        model: 'model',
+        cwd: tmpDir,
+        tag: 'Test',
+        totemDir,
+      }),
     ).rejects.toThrow('command not found');
   });
 
@@ -178,14 +199,14 @@ describe('invokeShellOrchestrator', () => {
     });
 
     // Capture the rejection before advancing timers
-    const promise = invokeShellOrchestrator(
-      'prompt',
-      'cmd',
-      'model',
-      tmpDir,
-      'Test',
+    const promise = invokeShellOrchestrator({
+      prompt: 'prompt',
+      command: 'cmd',
+      model: 'model',
+      cwd: tmpDir,
+      tag: 'Test',
       totemDir,
-    ).catch((err: Error) => err);
+    }).catch((err: Error) => err);
 
     await vi.advanceTimersByTimeAsync(180_001);
 
@@ -195,5 +216,94 @@ describe('invokeShellOrchestrator', () => {
     expect(mockChild.kill).toHaveBeenCalled();
 
     vi.useRealTimers();
+  });
+});
+
+// ─── tryParseGeminiJson ──────────────────────────────
+
+describe('tryParseGeminiJson', () => {
+  it('returns null for non-JSON input', () => {
+    expect(tryParseGeminiJson('plain text output')).toBeNull();
+  });
+
+  it('returns null for JSON that does not match Gemini schema', () => {
+    expect(tryParseGeminiJson('{"foo": "bar"}')).toBeNull();
+  });
+
+  it('returns null when stats.models is empty', () => {
+    const input = JSON.stringify({
+      response: 'hello',
+      stats: { models: {} },
+    });
+    expect(tryParseGeminiJson(input)).toBeNull();
+  });
+
+  it('parses valid Gemini output with token stats', () => {
+    const input = JSON.stringify({
+      response: 'The answer is 42.',
+      stats: {
+        models: {
+          'gemini-2.5-pro': {
+            tokens: { input: 500, candidates: 200 },
+            api: { totalLatencyMs: 3000 },
+          },
+        },
+      },
+    });
+    const result = tryParseGeminiJson(input);
+    expect(result).toEqual({
+      content: 'The answer is 42.',
+      inputTokens: 500,
+      outputTokens: 200,
+      latencyMs: 3000,
+    });
+  });
+
+  it('aggregates stats across multiple models', () => {
+    const input = JSON.stringify({
+      response: 'multi-model',
+      stats: {
+        models: {
+          'model-a': { tokens: { input: 100, candidates: 50 }, api: { totalLatencyMs: 1000 } },
+          'model-b': { tokens: { input: 200, candidates: 75 }, api: { totalLatencyMs: 2000 } },
+        },
+      },
+    });
+    const result = tryParseGeminiJson(input);
+    expect(result).toEqual({
+      content: 'multi-model',
+      inputTokens: 300,
+      outputTokens: 125,
+      latencyMs: 3000,
+    });
+  });
+
+  it('returns latencyMs null when api stats are missing', () => {
+    const input = JSON.stringify({
+      response: 'no api stats',
+      stats: {
+        models: {
+          'gemini-flash': { tokens: { input: 10, candidates: 5 } },
+        },
+      },
+    });
+    const result = tryParseGeminiJson(input);
+    expect(result).not.toBeNull();
+    expect(result!.latencyMs).toBeNull();
+  });
+
+  it('defaults missing token counts to zero', () => {
+    const input = JSON.stringify({
+      response: 'no tokens key',
+      stats: {
+        models: {
+          'gemini-flash': { api: { totalLatencyMs: 500 } },
+        },
+      },
+    });
+    const result = tryParseGeminiJson(input);
+    expect(result).not.toBeNull();
+    expect(result!.inputTokens).toBe(0);
+    expect(result!.outputTokens).toBe(0);
   });
 });

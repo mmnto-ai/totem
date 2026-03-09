@@ -10,12 +10,14 @@ export type {
   TotemConfig,
 } from './config-schema.js';
 export {
+  AnthropicOrchestratorSchema,
   ChunkStrategySchema,
   ConfigTierSchema,
   ContentTypeSchema,
   DEFAULT_IGNORE_PATTERNS,
   DocTargetSchema,
   EmbeddingProviderSchema,
+  GeminiOrchestratorSchema,
   getConfigTier,
   IngestTargetSchema,
   OllamaProviderSchema,

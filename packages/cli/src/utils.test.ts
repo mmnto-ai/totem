@@ -14,7 +14,6 @@ import {
   requireEmbedding,
   resolveConfigPath,
   sanitize,
-  tryParseGeminiJson,
   wrapXml,
   writeOutput,
 } from './utils.js';
@@ -213,95 +212,6 @@ describe('writeOutput', () => {
     writeOutput('stdout content');
     expect(spy).toHaveBeenCalledWith('stdout content');
     spy.mockRestore();
-  });
-});
-
-// ─── tryParseGeminiJson ──────────────────────────────
-
-describe('tryParseGeminiJson', () => {
-  it('returns null for non-JSON input', () => {
-    expect(tryParseGeminiJson('plain text output')).toBeNull();
-  });
-
-  it('returns null for JSON that does not match Gemini schema', () => {
-    expect(tryParseGeminiJson('{"foo": "bar"}')).toBeNull();
-  });
-
-  it('returns null when stats.models is empty', () => {
-    const input = JSON.stringify({
-      response: 'hello',
-      stats: { models: {} },
-    });
-    expect(tryParseGeminiJson(input)).toBeNull();
-  });
-
-  it('parses valid Gemini output with token stats', () => {
-    const input = JSON.stringify({
-      response: 'The answer is 42.',
-      stats: {
-        models: {
-          'gemini-2.5-pro': {
-            tokens: { input: 500, candidates: 200 },
-            api: { totalLatencyMs: 3000 },
-          },
-        },
-      },
-    });
-    const result = tryParseGeminiJson(input);
-    expect(result).toEqual({
-      content: 'The answer is 42.',
-      inputTokens: 500,
-      outputTokens: 200,
-      latencyMs: 3000,
-    });
-  });
-
-  it('aggregates stats across multiple models', () => {
-    const input = JSON.stringify({
-      response: 'multi-model',
-      stats: {
-        models: {
-          'model-a': { tokens: { input: 100, candidates: 50 }, api: { totalLatencyMs: 1000 } },
-          'model-b': { tokens: { input: 200, candidates: 75 }, api: { totalLatencyMs: 2000 } },
-        },
-      },
-    });
-    const result = tryParseGeminiJson(input);
-    expect(result).toEqual({
-      content: 'multi-model',
-      inputTokens: 300,
-      outputTokens: 125,
-      latencyMs: 3000,
-    });
-  });
-
-  it('returns latencyMs null when api stats are missing', () => {
-    const input = JSON.stringify({
-      response: 'no api stats',
-      stats: {
-        models: {
-          'gemini-flash': { tokens: { input: 10, candidates: 5 } },
-        },
-      },
-    });
-    const result = tryParseGeminiJson(input);
-    expect(result).not.toBeNull();
-    expect(result!.latencyMs).toBeNull();
-  });
-
-  it('defaults missing token counts to zero', () => {
-    const input = JSON.stringify({
-      response: 'no tokens key',
-      stats: {
-        models: {
-          'gemini-flash': { api: { totalLatencyMs: 500 } },
-        },
-      },
-    });
-    const result = tryParseGeminiJson(input);
-    expect(result).not.toBeNull();
-    expect(result!.inputTokens).toBe(0);
-    expect(result!.outputTokens).toBe(0);
   });
 });
 
