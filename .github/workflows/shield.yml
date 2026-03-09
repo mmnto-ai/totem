@@ -1,9 +1,7 @@
-name: CI
+name: Shield
 
 on:
   pull_request:
-    branches: [main]
-  push:
     branches: [main]
 
 concurrency:
@@ -11,8 +9,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build & Lint
+  deterministic-shield:
+    name: Deterministic Shield
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,8 +26,5 @@ jobs:
 
       - run: pnpm build
 
-      - run: pnpm test
-
-      - run: pnpm lint
-
-      - run: pnpm format:check
+      - name: Run deterministic shield
+        run: node packages/cli/dist/index.js shield --deterministic

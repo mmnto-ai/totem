@@ -1,0 +1,197 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "lessonHash": "1bd32906a5067397",
+      "lessonHeading": "2026-03-02T09:18:21.092Z",
+      "pattern": "\\bos\\.tmpdir\\(\\)",
+      "message": "Do not use os.tmpdir() for agent-readable files; use workspace-local paths (e.g., '.totem/temp/') to satisfy MCP boundary restrictions.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T02:47:42.931Z"
+    },
+    {
+      "lessonHash": "4683affcdc295f53",
+      "lessonHeading": "2026-03-03T02:16:24.772Z",
+      "pattern": "\\bstdio\\s*:\\s*.*\\.\\bfd\\b",
+      "message": "Use fs.openSync() instead of fs.createWriteStream() for spawn() stdio. WriteStream.fd is null until the 'open' event fires, which will cause spawn() to fail.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T02:50:03.081Z"
+    },
+    {
+      "lessonHash": "ebe45f00165fbe3f",
+      "lessonHeading": "2026-03-03T03:20:15.923Z",
+      "pattern": "\\b(latency|tokens?|duration|ms|count)\\b\\s*\\|\\|",
+      "message": "Use nullish coalescing (??) instead of logical OR (||) for numeric metrics to prevent valid '0' values (like cached latency or token counts) from incorrectly triggering the fallback.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T02:50:47.381Z"
+    },
+    {
+      "lessonHash": "cda917668c8a5a13",
+      "lessonHeading": "2026-03-05T04:05:19.420Z",
+      "pattern": "const\\s+\\w+\\s*=\\s*/(?![\\^])https\\?:",
+      "message": "Anchor input regexes with '^' and include 'https?://' protocol to avoid substring matches in CLI input.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T02:53:05.481Z"
+    },
+    {
+      "lessonHash": "90b042b866aefa9d",
+      "lessonHeading": "2026-03-06T03:36:17.521Z",
+      "pattern": "\\.(where|delete)\\s*\\(\\s*(?:'[^']*\"[^\"]+\"[^']*'|\"[^\"]*\\\\\"[^\"]+\\\\\"[^\"]*\"|`[^`]*\"[^\"]+\"[^`]*`)\\s*\\)",
+      "message": "Use backticks (`) for column identifiers in LanceDB filters; double quotes (\") cause silent failures in DataFusion.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T02:57:21.498Z"
+    },
+    {
+      "lessonHash": "2e8fe8d7c8458aae",
+      "lessonHeading": "2026-03-06T05:41:19.122Z",
+      "pattern": "(import\\s+.*from\\s+['\"]inquirer['\"]|require\\(['\"]inquirer['\"]\\)|\\\"inquirer\\\"\\s*:)",
+      "message": "Use '@clack/prompts' instead of 'inquirer' for a more modern CLI UX (Issue #21)",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T02:59:47.145Z"
+    },
+    {
+      "lessonHash": "e18b9f81eef4cd6a",
+      "lessonHeading": "2026-03-06T06:25:26.036Z",
+      "pattern": "\\b(console\\.(log|info)|process\\.stdout\\.write)\\s*\\(.*(\\[Totem\\]|\\b(brand|success|warn|errorColor|dim|bold|BANNER)\\b|pc\\.)",
+      "message": "Decorative UI (branding tags, colors, banners) must be routed to stderr. Use the log.* helpers or console.error to reserve stdout for pipeable data.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:02:19.676Z"
+    },
+    {
+      "lessonHash": "b8763e4bd93c7314",
+      "lessonHeading": "2026-03-06T06:25:26.036Z",
+      "pattern": "(\\bimport\\s+[^()]*\\bfrom\\s+['\"]ora['\"]|\\brequire\\s*\\(\\s*['\"]ora['\"]\\s*\\))",
+      "message": "Use dynamic imports for heavy dependencies like 'ora' within the specific functions that require them to avoid startup performance tax.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:02:59.361Z"
+    },
+    {
+      "lessonHash": "e02e064077d533d6",
+      "lessonHeading": "2026-03-06T06:25:26.036Z",
+      "pattern": "\\$\\{\\s*err\\s*\\}",
+      "message": "Avoid interpolating the raw 'err' object in template literals; use 'err.message' or 'err.stack' for informative logging.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:03:11.054Z"
+    },
+    {
+      "lessonHash": "f498a9c76b1dfe74",
+      "lessonHeading": "2026-03-06T09:08:26.567Z",
+      "pattern": "\"command\":\\s*\"[^ \"]*\\s+(grep|sed|awk|&&|\\|)\\s*[^\"]*\"",
+      "message": "Avoid embedding complex shell pipelines or grep chains directly in hook configuration; extract logic into a dedicated script in .totem/hooks/ or .gemini/hooks/.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:03:36.486Z"
+    },
+    {
+      "lessonHash": "4cb12ed837adf07a",
+      "lessonHeading": "2026-03-06T10:00:40.352Z",
+      "pattern": "console\\.(log|info|dir|table)\\s*\\(",
+      "message": "Route host hook output to stderr (console.error or console.warn) rather than stdout (console.log) to prevent AI tool pollution.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:03:48.432Z"
+    },
+    {
+      "lessonHash": "40b5659a75c42e0d",
+      "lessonHeading": "2026-03-06T10:00:40.352Z",
+      "pattern": "text:\\s*(?!(?:formatXmlResponse|wrapXml|formatSystemWarning)\\b|['\"`\\[\\{]|err|error|message|text\\b)\\b\\w+",
+      "message": "MCP tool returns must be wrapped in XML tags (use formatXmlResponse) to prevent Indirect Prompt Injection from untrusted content.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:04:58.554Z"
+    },
+    {
+      "lessonHash": "637e8994d7866e10",
+      "lessonHeading": "2026-03-06T10:00:40.352Z",
+      "pattern": "\\b(echo|run_shell_command|exec|sh|bash)\\b.*\\$TOOL_INPUT",
+      "message": "Potential command injection: AI-provided environment variables (like $TOOL_INPUT) must be handled safely (e.g., quoting or escaping) when used in shell commands.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:05:23.884Z"
+    },
+    {
+      "lessonHash": "4d63af6631a6ddf7",
+      "lessonHeading": "2026-03-07T06:05:56.069Z",
+      "pattern": "<\\\\/[a-zA-Z0-9_-]+\\s*>",
+      "message": "Escape closing XML tags in prompts using backslash (e.g., <\\/tag>) to prevent injection.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:08:14.389Z"
+    },
+    {
+      "lessonHash": "b6c47924514dc4da",
+      "lessonHeading": "2026-03-07T06:05:56.069Z",
+      "pattern": "\\b(wrapXml|sanitize)\\s*\\(\\s*([^,)]*?\\b(branch|filePath|path|cwd)\\b[^,)]*?)\\s*[\\),]",
+      "message": "Do not sanitize or XML-wrap semi-trusted metadata like branch names or git file paths in prompts to avoid unnecessary clutter (Totem principle).",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:09:49.306Z"
+    },
+    {
+      "lessonHash": "2d364f952af19014",
+      "lessonHeading": "2026-03-07T06:05:56.069Z",
+      "pattern": "typeof\\s+[^\\s!&|=]+\\s*===\\s*['\"]object['\"](?!\\s*&&\\s*[^\\s!&|=]+)",
+      "message": "Always combine 'typeof val === \"object\"' with a truthiness check (e.g., 'val && typeof val === \"object\"') because 'typeof null' is 'object'.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:11:02.522Z"
+    },
+    {
+      "lessonHash": "dfd58fda9e518754",
+      "lessonHeading": "2026-03-07T21:45:57.754Z",
+      "pattern": "(^|\\s)\\$([a-zA-Z_0-9*@#?!\\-]+\\b|\\{[a-zA-Z_0-9*@#?!\\-]+\\})",
+      "message": "Always quote shell variables (e.g., \"$VAR\") to prevent word-splitting and argument injection.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:13:51.536Z"
+    },
+    {
+      "lessonHash": "7e9b6b44a2d8ff77",
+      "lessonHeading": "2026-03-07T21:45:57.754Z",
+      "pattern": "\\b(console\\.(log|error)|log\\.(info|success|warn|error|dim)|spinner\\.(update|succeed|fail))\\s*\\((?!.*sanitize\\().*\\b(lesson|snippet|result|body|comment|response|output)s?\\b",
+      "message": "Untrusted text (LLM/PR content) must be wrapped in `sanitize()` before display in CLI to prevent terminal injection.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:15:36.127Z"
+    },
+    {
+      "lessonHash": "f14881a4daf28160",
+      "lessonHeading": "2026-03-08T00:11:33.219Z",
+      "pattern": "process\\.env\\.[A-Z0-9_]+\\s*(?:!==|!=)\\s*(?:undefined|null|['\"]['\"])",
+      "message": "Environment variable checks must validate non-whitespace characters (/\\S/.test()) to prevent false positives from empty strings.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:16:20.241Z"
+    },
+    {
+      "lessonHash": "faeae7a9e495c145",
+      "lessonHeading": "2026-03-08T00:56:41.780Z",
+      "pattern": "expect\\(.*\\.length\\)\\.(toBeGreaterThan|toBeLessThan)(OrEqual)?\\(\\d+\\)",
+      "message": "Use exact count assertions (e.g., toBe(10)) for fixed asset collections instead of weak bounds.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:17:16.714Z"
+    },
+    {
+      "lessonHash": "5da43ea60b66e96e",
+      "lessonHeading": "2026-03-08T02:39:04.901Z",
+      "pattern": "\\bgit\\s+(?:log|checkout|diff|show|reset|revert|add|restore)\\s+(?!--)[^- \\s]",
+      "message": "Always use the '--' separator before positional arguments in git commands (e.g., 'git log -- <ref>') to protect against argument injection.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:20:47.247Z"
+    },
+    {
+      "lessonHash": "5027e14f29c36b6e",
+      "lessonHeading": "When re-throwing errors in a CLI orchestrator, always…",
+      "pattern": "\\bthrow\\s+new\\s+\\w*Error\\s*\\(\\s*['\"`](?!\\[Totem Error\\])",
+      "message": "Error messages in the CLI orchestrator must include the '[Totem Error]' prefix for consistency.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:23:59.501Z"
+    },
+    {
+      "lessonHash": "fbe68c1ecae18ea2",
+      "lessonHeading": "When refactoring from execSync to spawn to avoid fixed…",
+      "pattern": "spawn\\([^)]*\\)\\s*(?!.*\\.on\\(['\"]data['\"],\\s*(?:[^}]*limit|[^}]*Max|[^}]*size))",
+      "message": "When using 'spawn' to accumulate output, you must implement a manual safety cap (e.g., 50MB) on stdout/stderr strings to prevent memory exhaustion.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:25:12.464Z"
+    },
+    {
+      "lessonHash": "c1d184481d67ae8d",
+      "lessonHeading": "Synchronous execSync with piped stdio can cause the parent…",
+      "pattern": "\\bexecSync\\s*\\([^)]*stdio\\s*:\\s*['\"]pipe['\"]",
+      "message": "Use asynchronous 'spawn' instead of 'execSync' with piped stdio to prevent silent hangs and pipe limit issues.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:25:49.090Z"
+    }
+  ]
+}
