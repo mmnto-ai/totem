@@ -216,6 +216,14 @@ export async function invokeShellOrchestrator(
         }
 
         if (code !== 0) {
+          // Gemini CLI bug: AbortError during cleanup after a successful response.
+          // If stdout has content and stderr only shows AbortError, rescue the response.
+          if (stdout.trim() && stderr.includes('AbortError')) {
+            log.dim(tag, 'Gemini CLI AbortError on cleanup — rescuing valid response.');
+            resolve(stdout);
+            return;
+          }
+
           const fullError = `Process exited with code ${code}\n${stderr}`;
           const lowerMsg = fullError.toLowerCase();
           if (
