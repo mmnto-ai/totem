@@ -87,18 +87,20 @@ export function getDefaultBranch(cwd: string): string {
   } catch (err) {
     throwIfGitMissing(err);
 
-    // Fallback: check if 'main' exists, then 'master'
+    // Fallback: check local then remote refs for 'main' / 'master'
     for (const branch of ['main', 'master']) {
-      try {
-        execFileSync('git', ['rev-parse', '--verify', branch], {
-          cwd,
-          encoding: 'utf-8',
-          timeout: GIT_COMMAND_TIMEOUT_MS,
-          shell: IS_WIN,
-        });
-        return branch;
-      } catch {
-        // Try next candidate
+      for (const ref of [branch, `origin/${branch}`]) {
+        try {
+          execFileSync('git', ['rev-parse', '--verify', ref], {
+            cwd,
+            encoding: 'utf-8',
+            timeout: GIT_COMMAND_TIMEOUT_MS,
+            shell: IS_WIN,
+          });
+          return branch;
+        } catch {
+          // Try next candidate
+        }
       }
     }
     throw new Error(
@@ -109,18 +111,27 @@ export function getDefaultBranch(cwd: string): string {
 
 export function getGitBranchDiff(cwd: string, base?: string): string {
   const baseBranch = base ?? getDefaultBranch(cwd);
-  try {
-    return execFileSync('git', ['diff', `${baseBranch}...HEAD`], {
-      cwd,
-      encoding: 'utf-8',
-      timeout: GIT_COMMAND_TIMEOUT_MS,
-      shell: IS_WIN,
-    });
-  } catch (err) {
-    throwIfGitMissing(err);
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`[Totem Error] Failed to get branch diff (${baseBranch}...HEAD): ${msg}`);
+  // Try local ref first, then remote — CI may only have origin/<branch>
+  const refs = [baseBranch, `origin/${baseBranch}`];
+  for (const ref of refs) {
+    try {
+      return execFileSync('git', ['diff', `${ref}...HEAD`], {
+        cwd,
+        encoding: 'utf-8',
+        timeout: GIT_COMMAND_TIMEOUT_MS,
+        shell: IS_WIN,
+      });
+    } catch (err) {
+      throwIfGitMissing(err);
+      // If this was the last ref, throw
+      if (ref === refs[refs.length - 1]) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`[Totem Error] Failed to get branch diff (${baseBranch}...HEAD): ${msg}`);
+      }
+    }
   }
+  // Unreachable — loop always returns or throws
+  return '';
 }
 
 /**
