@@ -234,8 +234,8 @@ describe('applyRules', () => {
 
   // ─── fileGlobs scoping ─────────────────────────────
 
-  // Build test diff from array to prevent the outer git diff parser
-  // from interpreting embedded diff headers (+++, ---) as real file boundaries.
+  // Build test data from array join to avoid embedded diff headers
+  // (+++, ---) being parsed as real file boundaries by the shield.
   const multiFileDiff = [
     'diff --git a/deploy.sh b/deploy.sh',
     '--- a/deploy.sh',
