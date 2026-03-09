@@ -62,6 +62,17 @@ function writeDoc(dir: string, relPath: string, content: string): void {
   fs.writeFileSync(fullPath, content, 'utf-8');
 }
 
+function mockConfig(docs?: any[]): void {
+  vi.mocked(loadConfig).mockResolvedValue({
+    targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+    ...(docs !== undefined ? { docs } : {}),
+    totemDir: '.totem',
+    lanceDir: '.lancedb',
+    ignorePatterns: [],
+    contextWarningThreshold: 40_000,
+  } as any);
+}
+
 // ─── Tests ──────────────────────────────────────────────
 
 describe('docsCommand', () => {
@@ -82,39 +93,19 @@ describe('docsCommand', () => {
   });
 
   it('throws when no docs configured', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig();
 
     await expect(docsCommand([], {})).rejects.toThrow('No docs configured');
   });
 
   it('throws when docs array is empty', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([]);
 
     await expect(docsCommand([], {})).rejects.toThrow('No docs configured');
   });
 
   it('throws when --only matches no docs', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [{ path: 'README.md', description: 'readme', trigger: 'post-release' }],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([{ path: 'README.md', description: 'readme', trigger: 'post-release' }]);
 
     await expect(docsCommand([], { only: 'nonexistent' })).rejects.toThrow(
       "--only 'nonexistent' matched no configured docs",
@@ -122,17 +113,10 @@ describe('docsCommand', () => {
   });
 
   it('filters docs with --only', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [
-        { path: 'README.md', description: 'readme', trigger: 'post-release' },
-        { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' },
-      ],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([
+      { path: 'README.md', description: 'readme', trigger: 'post-release' },
+      { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' },
+    ]);
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
     writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
@@ -144,14 +128,7 @@ describe('docsCommand', () => {
   });
 
   it('throws when target file has uncommitted changes', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [{ path: 'README.md', description: 'readme', trigger: 'post-release' }],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([{ path: 'README.md', description: 'readme', trigger: 'post-release' }]);
 
     vi.mocked(isFileDirty).mockReturnValue(true);
 
@@ -159,14 +136,7 @@ describe('docsCommand', () => {
   });
 
   it('allows dirty files in --dry-run mode', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [{ path: 'README.md', description: 'readme', trigger: 'post-release' }],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([{ path: 'README.md', description: 'readme', trigger: 'post-release' }]);
 
     vi.mocked(isFileDirty).mockReturnValue(true);
     writeDoc(tmpDir, 'README.md', '# Old README\n');
@@ -181,14 +151,7 @@ describe('docsCommand', () => {
   });
 
   it('writes updated content to disk', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [{ path: 'README.md', description: 'readme', trigger: 'post-release' }],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([{ path: 'README.md', description: 'readme', trigger: 'post-release' }]);
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
 
@@ -199,14 +162,7 @@ describe('docsCommand', () => {
   });
 
   it('skips files that do not exist', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [{ path: 'nonexistent.md', description: 'missing', trigger: 'post-release' }],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([{ path: 'nonexistent.md', description: 'missing', trigger: 'post-release' }]);
 
     // Should not throw — just skip
     await docsCommand([], {});
@@ -214,17 +170,10 @@ describe('docsCommand', () => {
   });
 
   it('processes multiple docs sequentially', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [
-        { path: 'README.md', description: 'readme', trigger: 'post-release' },
-        { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' },
-      ],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([
+      { path: 'README.md', description: 'readme', trigger: 'post-release' },
+      { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' },
+    ]);
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
     writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
@@ -235,14 +184,7 @@ describe('docsCommand', () => {
   });
 
   it('rejects response missing closing updated_document tag', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [{ path: 'README.md', description: 'readme', trigger: 'post-release' }],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([{ path: 'README.md', description: 'readme', trigger: 'post-release' }]);
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
 
@@ -259,17 +201,10 @@ describe('docsCommand', () => {
   // ─── Positional path targeting ───────────────────────────
 
   it('targets a single doc by path', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [
-        { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
-        { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
-      ],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([
+      { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
+      { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
+    ]);
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
     writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
@@ -280,18 +215,11 @@ describe('docsCommand', () => {
   });
 
   it('targets multiple docs by path', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [
-        { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
-        { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
-        { path: 'docs/architecture.md', description: 'arch', trigger: 'post-release' as const },
-      ],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([
+      { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
+      { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
+      { path: 'docs/architecture.md', description: 'arch', trigger: 'post-release' as const },
+    ]);
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
     writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
@@ -303,17 +231,10 @@ describe('docsCommand', () => {
   });
 
   it('normalizes ./prefix in positional paths', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [
-        { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
-        { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
-      ],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([
+      { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
+      { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
+    ]);
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
 
@@ -323,14 +244,7 @@ describe('docsCommand', () => {
   });
 
   it('throws for unknown positional paths (fail-fast)', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [{ path: 'README.md', description: 'readme', trigger: 'post-release' as const }],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([{ path: 'README.md', description: 'readme', trigger: 'post-release' as const }]);
 
     await expect(docsCommand(['nonexistent.md'], {})).rejects.toThrow(
       'Unknown doc path(s): nonexistent.md',
@@ -338,14 +252,7 @@ describe('docsCommand', () => {
   });
 
   it('deduplicates positional paths', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [{ path: 'README.md', description: 'readme', trigger: 'post-release' as const }],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([{ path: 'README.md', description: 'readme', trigger: 'post-release' as const }]);
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
 
@@ -355,14 +262,7 @@ describe('docsCommand', () => {
   });
 
   it('deduplicates normalization-equivalent paths (README.md vs ./README.md)', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [{ path: 'README.md', description: 'readme', trigger: 'post-release' as const }],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([{ path: 'README.md', description: 'readme', trigger: 'post-release' as const }]);
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
 
@@ -372,17 +272,10 @@ describe('docsCommand', () => {
   });
 
   it('throws when both positional paths and --only are provided', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [
-        { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
-        { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
-      ],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([
+      { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
+      { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
+    ]);
 
     await expect(docsCommand(['README.md'], { only: 'roadmap' })).rejects.toThrow(
       'Cannot combine positional doc paths with --only flag',
@@ -390,14 +283,7 @@ describe('docsCommand', () => {
   });
 
   it('resolves absolute paths against cwd', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [{ path: 'README.md', description: 'readme', trigger: 'post-release' as const }],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([{ path: 'README.md', description: 'readme', trigger: 'post-release' as const }]);
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
 
@@ -408,17 +294,10 @@ describe('docsCommand', () => {
   });
 
   it('scopes dirty check to targeted docs only', async () => {
-    vi.mocked(loadConfig).mockResolvedValue({
-      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
-      docs: [
-        { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
-        { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
-      ],
-      totemDir: '.totem',
-      lanceDir: '.lancedb',
-      ignorePatterns: [],
-      contextWarningThreshold: 40_000,
-    });
+    mockConfig([
+      { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
+      { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
+    ]);
 
     // Only roadmap is dirty, but we're targeting README
     vi.mocked(isFileDirty).mockImplementation((_cwd, filePath) => filePath === 'docs/roadmap.md');

@@ -221,16 +221,13 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
     const normalize = (p: string) => path.relative(cwd, path.resolve(cwd, p)).replace(/\\/g, '/');
     const configPaths = new Map(config.docs.map((d) => [normalize(d.path), d]));
 
-    const seen = new Set<string>();
-    const resolved: DocTarget[] = [];
+    const resolved = new Set<DocTarget>();
     const invalid: string[] = [];
     for (const input of inputs) {
       const normalized = normalize(input);
-      if (seen.has(normalized)) continue;
-      seen.add(normalized);
       const match = configPaths.get(normalized);
       if (match) {
-        resolved.push(match);
+        resolved.add(match);
       } else {
         invalid.push(input);
       }
@@ -242,7 +239,7 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
           `Available: ${config.docs.map((d) => d.path).join(', ')}`,
       );
     }
-    targets = resolved;
+    targets = Array.from(resolved);
   } else if (options.only) {
     // Legacy --only filter
     const onlyNames = options.only.split(',').map((s) => s.trim().toLowerCase());
