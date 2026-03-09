@@ -234,21 +234,24 @@ describe('applyRules', () => {
 
   // ─── fileGlobs scoping ─────────────────────────────
 
-  const multiFileDiff = `diff --git a/deploy.sh b/deploy.sh
---- a/deploy.sh
-+++ b/deploy.sh
-@@ -1,2 +1,3 @@
- #!/bin/bash
-+echo $UNQUOTED_VAR
- exit 0
-diff --git a/src/utils.ts b/src/utils.ts
---- a/src/utils.ts
-+++ b/src/utils.ts
-@@ -1,2 +1,3 @@
- const x = 1;
-+const msg = $name + ' hello';
- export default x;
-`;
+  // Build test diff from array to prevent the outer git diff parser
+  // from interpreting embedded diff headers (+++, ---) as real file boundaries.
+  const multiFileDiff = [
+    'diff --git a/deploy.sh b/deploy.sh',
+    '--- a/deploy.sh',
+    '+++ b/deploy.sh',
+    '@@ -1,2 +1,3 @@',
+    ' #!/bin/bash',
+    '+echo $UNQUOTED_VAR',
+    ' exit 0',
+    'diff --git a/src/utils.ts b/src/utils.ts',
+    '--- a/src/utils.ts',
+    '+++ b/src/utils.ts',
+    '@@ -1,2 +1,3 @@',
+    ' const x = 1;',
+    "+const msg = $name + ' hello';",
+    ' export default x;',
+  ].join('\n');
 
   it('applies rule to all files when fileGlobs is absent', () => {
     const rules = [makeRule('\\$\\w+', 'Found a dollar-sign variable')];
