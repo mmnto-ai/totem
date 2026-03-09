@@ -358,6 +358,11 @@ export async function runOrchestrator(opts: {
               `The shell provider requires a 'command' template in the orchestrator config.`,
           );
         }
+        if (!fallbackParsed.model || fallbackParsed.model.startsWith('-')) {
+          throw new Error(
+            `[Totem Error] Invalid fallback model name in '${rawFallback}'. The model portion must not be empty or start with a hyphen.`,
+          );
+        }
         const fallbackInvoke =
           fallbackParsed.provider === baseProvider
             ? baseInvoke

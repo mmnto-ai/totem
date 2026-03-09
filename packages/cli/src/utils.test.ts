@@ -454,7 +454,8 @@ describe('reapOrphanedTempFiles', () => {
 
 // ─── runOrchestrator (#243 — cross-provider routing) ──
 
-vi.mock('./orchestrators/orchestrator.js', () => {
+vi.mock('./orchestrators/orchestrator.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./orchestrators/orchestrator.js')>();
   const mockInvoke = vi.fn().mockResolvedValue({
     content: 'mock result',
     inputTokens: 100,
@@ -462,17 +463,8 @@ vi.mock('./orchestrators/orchestrator.js', () => {
     durationMs: 500,
   });
   return {
+    ...actual,
     createOrchestrator: vi.fn().mockReturnValue(mockInvoke),
-    parseModelString: vi.fn().mockImplementation((value: string, defaultProvider: string) => {
-      const colonIdx = value.indexOf(':');
-      if (colonIdx > 0) {
-        const prefix = value.slice(0, colonIdx);
-        if (['gemini', 'anthropic', 'shell'].includes(prefix)) {
-          return { provider: prefix, model: value.slice(colonIdx + 1) };
-        }
-      }
-      return { provider: defaultProvider, model: value };
-    }),
   };
 });
 
