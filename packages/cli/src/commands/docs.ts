@@ -134,7 +134,7 @@ function assemblePrompt(
 
 // ─── Response extraction ─────────────────────────────────
 
-const UPDATED_DOC_RE = /<updated_document>\s*\n?([\s\S]*?)\n?\s*<\/updated_document>/;
+const UPDATED_DOC_RE = /^\s*<updated_document>\s*\n?([\s\S]*?)\n?\s*<\/updated_document>\s*$/;
 
 /**
  * Extract the file content from the LLM's `<updated_document>` wrapper.
