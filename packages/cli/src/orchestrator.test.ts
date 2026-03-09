@@ -172,6 +172,11 @@ describe('invokeShellOrchestrator', () => {
   it('throws descriptive error for timeout', async () => {
     vi.useFakeTimers();
 
+    // Simulate kill → close (rejection now happens in the close handler)
+    mockChild.kill = vi.fn(() => {
+      process.nextTick(() => mockChild.emit('close', null));
+    });
+
     // Capture the rejection before advancing timers
     const promise = invokeShellOrchestrator(
       'prompt',

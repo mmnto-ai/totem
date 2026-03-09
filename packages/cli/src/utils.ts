@@ -192,14 +192,6 @@ export async function invokeShellOrchestrator(
       const timer = setTimeout(() => {
         timedOut = true;
         child.kill();
-        reject(
-          Object.assign(
-            new Error(
-              `[Totem Error] Orchestrator timed out after ${LLM_TIMEOUT_MS / 1000}s.\n${stderr}`,
-            ),
-            { code: 'ETIMEDOUT' },
-          ),
-        );
       }, LLM_TIMEOUT_MS);
 
       child.on('error', (err) => {
@@ -211,7 +203,17 @@ export async function invokeShellOrchestrator(
 
       child.on('close', (code) => {
         clearTimeout(timer);
-        if (timedOut) return; // already rejected
+        if (timedOut) {
+          reject(
+            Object.assign(
+              new Error(
+                `[Totem Error] Orchestrator timed out after ${LLM_TIMEOUT_MS / 1000}s.\n${stderr}`,
+              ),
+              { code: 'ETIMEDOUT' },
+            ),
+          );
+          return;
+        }
 
         if (code !== 0) {
           const fullError = `Process exited with code ${code}\n${stderr}`;
