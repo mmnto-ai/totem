@@ -35,10 +35,10 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 **Goal:** Before ingesting enterprise databases, the local vector index and LLM prompts must be bulletproof across all environments.
 
-- [x] **#173 Universal AST Parsing:** Implement Tree-sitter for robust, language-agnostic code chunking.
+- [x] **#173 Epic: Universal AST Parsing:** Implement Tree-sitter for robust, language-agnostic code chunking.
 - [x] **#121 Bug: LanceDB `deleteByFile`** edge cases causing silent incremental sync failures.
 - [x] **#122 Core Tests:** Backfill unit and integration tests for `@mmnto/totem` core database and chunking logic.
-- [x] **#180 Shield GitHub Action:** `action.yml` composite action for CI/CD enforcement — pass/fail quality gate on PRs.
+- [x] **#174 / #180 Shield GitHub Action:** `action.yml` composite action for CI/CD enforcement — pass/fail quality gate on PRs.
 - [x] **#168 Interactive multi-select:** `totem extract` uses `@clack/prompts` multiselect for cherry-picking lessons.
 - [x] **#185 CLI command renames:** `learn` → `extract`, removed `anchor` alias (use `add-lesson`).
 - [x] **#131 Clean Ejection:** Build `totem eject` to safely remove git hooks, prompt injections, and database artifacts if a user uninstalls.
@@ -79,7 +79,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
 - [x] **#187 Minimum Viable Configuration:** Tiered config (Lite/Standard/Full) with auto-detection. Embedding is optional; Lite tier works with zero API keys.
 - [x] **#190 Automated Doc Sync:** `totem docs` command to keep project docs updated via per-doc LLM passes. Integrated into `totem wrap` as Step 4/4 (#143).
-- [x] **#213 Zero-LLM Shield Mode:** Deterministic lesson compiler and zero-LLM shield mode.
+- [x] **#213 / #216 Zero-LLM Shield Mode:** Deterministic lesson compiler and zero-LLM shield mode.
 - [ ] **#176 Agent-Optimized MCP:** Dynamic token budgeting and write access for deeper agent-to-agent interactions.
 - [ ] **#183 Cross-File Knowledge Graph:** Implement symbol resolution to enable multi-file architectural reasoning.
 

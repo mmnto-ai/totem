@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete, establishing the Turborepo architecture, syntax-aware chunking (now powered by Tree-sitter #173), and local data stores. Recent momentum has delivered the Shield GitHub Action (#180), Drift Detection (#177, #211), Automated Doc Sync (#190), MVC Configuration Tiers (#187), a "Universal Lessons" baseline (#128), Cross-Platform Onboarding (#210), OpenAI Embedding validation (#4), and a deterministic lesson compiler with zero-LLM shield mode (#213). Focus is now on internal dogfooding (#8) and expanding the deterministic compiler before scaling Phase 3 workflow expansions.
+Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete, establishing the Turborepo architecture, syntax-aware chunking (now powered by Tree-sitter #173), and local data stores. Recent momentum has delivered the Shield GitHub Action (#180), Drift Detection (#177, #211), Automated Doc Sync (#190), MVC Configuration Tiers (#187), a "Universal Lessons" baseline (#128), Cross-Platform Onboarding (#210), OpenAI Embedding validation (#4), and a deterministic lesson compiler with zero-LLM shield mode (#213, #216). Focus is now on internal dogfooding (#8) before scaling Phase 3 workflow expansions.
 
 ### Prioritized Roadmap
 
@@ -10,7 +10,6 @@ Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally
 
 **Up Next (NASA-Grade Moat & Adoption)**
 
-- #213 — Deterministic Compiler iteration — Expand regex-only MVP to cover more lesson patterns; evaluate ESLint AST selectors as a future engine.
 - #129 — Epic: Interactive CLI Tutorial & Conversational Onboarding — Finish Phase 1 polish.
 
 **Backlog (Phase 3 Workflow Expansion)**
