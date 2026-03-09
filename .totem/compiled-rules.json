@@ -130,14 +130,6 @@
       "compiledAt": "2026-03-09T03:11:02.522Z"
     },
     {
-      "lessonHash": "dfd58fda9e518754",
-      "lessonHeading": "2026-03-07T21:45:57.754Z",
-      "pattern": "(^|\\s)\\$([a-zA-Z_0-9*@#?!\\-]+\\b|\\{[a-zA-Z_0-9*@#?!\\-]+\\})",
-      "message": "Always quote shell variables (e.g., \"$VAR\") to prevent word-splitting and argument injection.",
-      "engine": "regex",
-      "compiledAt": "2026-03-09T03:13:51.536Z"
-    },
-    {
       "lessonHash": "7e9b6b44a2d8ff77",
       "lessonHeading": "2026-03-07T21:45:57.754Z",
       "pattern": "\\b(console\\.(log|error)|log\\.(info|success|warn|error|dim)|spinner\\.(update|succeed|fail))\\s*\\((?!.*sanitize\\().*\\b(lesson|snippet|result|body|comment|response|output)s?\\b",
