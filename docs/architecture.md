@@ -55,9 +55,13 @@ Totem supports three configuration tiers, auto-detected from the environment dur
 
 The `embedding` field in `totem.config.ts` is optional. When omitted, Totem operates in Lite tier — users can still capture lessons and manage hooks, but cannot index or search. The `getConfigTier()` helper and `requireEmbedding()` guard enforce these boundaries at runtime with clear upgrade instructions.
 
-## Orchestrator Model Configuration
+## Orchestrator Providers
 
-The CLI orchestrator supports per-command model overrides via `totem.config.ts`:
+The CLI orchestrator supports three provider types via a discriminated union config (`provider` field). SDKs for native API providers are **optional peer dependencies** — loaded via dynamic `import()` at runtime with friendly install prompts if missing (BYOSD: "Bring Your Own SDK").
+
+### Shell Provider (default)
+
+Pipes prompts to any CLI tool via `{file}` and `{model}` placeholders:
 
 ```typescript
 orchestrator: {
@@ -65,16 +69,36 @@ orchestrator: {
   command: 'gemini --model {model} -o json -e none < {file}',
   defaultModel: 'gemini-3-flash-preview',
   fallbackModel: 'gemini-2.5-flash',
-  overrides: {
-    docs: 'gemini-3.1-pro-preview',
-    spec: 'gemini-3.1-pro-preview',
-    shield: 'gemini-3.1-pro-preview',
-    triage: 'gemini-3.1-pro-preview',
-  },
+  overrides: { spec: 'gemini-3.1-pro-preview' },
 }
 ```
 
-Each command resolves its model via: `--model` flag > `overrides[command]` > `defaultModel`. Quota-exhaustion triggers automatic fallback to `fallbackModel` if configured.
+### Gemini Provider (native API)
+
+Direct SDK calls via `@google/genai`. Requires `GEMINI_API_KEY` (or `GOOGLE_API_KEY`):
+
+```typescript
+orchestrator: {
+  provider: 'gemini',
+  defaultModel: 'gemini-2.5-flash',
+  fallbackModel: 'gemini-2.5-pro',
+}
+```
+
+### Anthropic Provider (native API)
+
+Direct SDK calls via `@anthropic-ai/sdk`. Requires `ANTHROPIC_API_KEY`:
+
+```typescript
+orchestrator: {
+  provider: 'anthropic',
+  defaultModel: 'claude-sonnet-4-5-20250514',
+}
+```
+
+### Shared Configuration
+
+All providers support: `defaultModel`, `fallbackModel`, `overrides` (per-command model), and `cacheTtls` (per-command cache TTL in seconds). Each command resolves its model via: `--model` flag > `overrides[command]` > `defaultModel`. Quota-exhaustion (429/rate-limit) triggers automatic fallback to `fallbackModel` if configured. Legacy configs without a `provider` field are auto-migrated to `provider: 'shell'`.
 
 ## The `.totem/` Directory
 

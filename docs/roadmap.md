@@ -83,6 +83,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#187 Minimum Viable Configuration:** Tiered config (Lite/Standard/Full) with auto-detection. Embedding is optional; Lite tier works with zero API keys.
 - [x] **#190 Automated Doc Sync:** `totem docs` command to keep project docs updated via per-doc LLM passes. Integrated into `totem wrap` as Step 4/4 (#143).
 - [x] **#213 / #216 Zero-LLM Shield Mode:** Deterministic lesson compiler and zero-LLM shield mode.
+- [x] **#229 Epic: Native API Orchestrator (#230–#234, #236):** Replace CLI shell-spawning with direct SDK calls to Gemini (`@google/genai`) and Anthropic (`@anthropic-ai/sdk`). BYOSD pattern with optional peer dependencies, discriminated union config, and package manager auto-detection for install prompts.
 - [ ] **#176 Agent-Optimized MCP:** Dynamic token budgeting and write access for deeper agent-to-agent interactions.
 - [ ] **#183 Cross-File Knowledge Graph:** Implement symbol resolution to enable multi-file architectural reasoning.
 

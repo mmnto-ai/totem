@@ -1,6 +1,7 @@
 import { log } from '../ui.js';
 
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
+import { detectPackageManager } from './orchestrator.js';
 
 // ─── Constants ───────────────────────────────────────
 
@@ -14,7 +15,7 @@ async function importAnthropicSdk() {
   } catch {
     throw new Error(
       '[Totem Error] Anthropic SDK (@anthropic-ai/sdk) is not installed.\n' +
-        'Install it with: pnpm add @anthropic-ai/sdk\n' +
+        `Install it with: ${detectPackageManager()} add @anthropic-ai/sdk\n` +
         "Or use provider: 'shell' in your orchestrator config.",
     );
   }

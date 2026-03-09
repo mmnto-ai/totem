@@ -104,7 +104,7 @@ Lives at the root of the **consuming project** (not in this repo). Defines:
 - Glob patterns for ingest targets
 - Chunking strategy per file type
 - Embedding provider (openai or ollama) — **optional** (omitted in Lite tier)
-- Orchestrator (shell) — **optional** (omitted in Standard/Lite tiers)
+- Orchestrator (shell, gemini, or anthropic) — **optional** (omitted in Standard/Lite tiers)
 - Docs array for `totem docs` auto-update targets — **optional**
 
 ### Configuration Tiers
@@ -245,7 +245,8 @@ Phase numbering follows `docs/roadmap.md` (the canonical source of truth).
 
 - ~~Minimum Viable Configuration tiers (#187)~~ — **Done.** Lite/Standard/Full tiers with env auto-detection.
 - ~~Automated doc sync (#190)~~ — **Done.** `totem docs` command with per-doc LLM passes, integrated into `totem wrap` as Step 4/4.
-- Drift Detection for self-cleaning memory (#181)
+- ~~Drift Detection for self-cleaning memory (#181)~~ — **Done.**
+- ~~Native API Orchestrator (#229)~~ — **Done.** Gemini + Anthropic direct SDK calls with BYOSD optional peer deps.
 - See `docs/roadmap.md` and `docs/active_work.md` for full priority list
 
 ### Phase 4 (Future): Enterprise Expansion

@@ -1,8 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Orchestrator as OrchestratorConfig } from '@mmnto/totem';
 
-import { createOrchestrator } from './orchestrator.js';
+import { createOrchestrator, detectPackageManager } from './orchestrator.js';
 
 // ─── Mock provider modules ──────────────────────────
 
@@ -80,5 +80,44 @@ describe('createOrchestrator', () => {
     });
     expect(result.content).toBe('anthropic result');
     expect(result.inputTokens).toBe(200);
+  });
+});
+
+// ─── detectPackageManager ───────────────────────────
+
+describe('detectPackageManager', () => {
+  const originalUa = process.env['npm_config_user_agent'];
+
+  afterEach(() => {
+    if (originalUa !== undefined) {
+      process.env['npm_config_user_agent'] = originalUa;
+    } else {
+      delete process.env['npm_config_user_agent'];
+    }
+  });
+
+  it('detects pnpm', () => {
+    process.env['npm_config_user_agent'] = 'pnpm/9.15.0 npm/? node/v22.0.0';
+    expect(detectPackageManager()).toBe('pnpm');
+  });
+
+  it('detects yarn', () => {
+    process.env['npm_config_user_agent'] = 'yarn/4.0.0 npm/? node/v22.0.0';
+    expect(detectPackageManager()).toBe('yarn');
+  });
+
+  it('detects bun', () => {
+    process.env['npm_config_user_agent'] = 'bun/1.0.0';
+    expect(detectPackageManager()).toBe('bun');
+  });
+
+  it('defaults to npm when env var is missing', () => {
+    delete process.env['npm_config_user_agent'];
+    expect(detectPackageManager()).toBe('npm');
+  });
+
+  it('defaults to npm for unknown user agent', () => {
+    process.env['npm_config_user_agent'] = 'npm/10.0.0 node/v22.0.0';
+    expect(detectPackageManager()).toBe('npm');
   });
 });

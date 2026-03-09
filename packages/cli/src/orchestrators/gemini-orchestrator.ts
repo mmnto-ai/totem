@@ -1,6 +1,7 @@
 import { log } from '../ui.js';
 
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
+import { detectPackageManager } from './orchestrator.js';
 
 // ─── Constants ───────────────────────────────────────
 
@@ -14,7 +15,7 @@ async function importGeminiSdk() {
   } catch {
     throw new Error(
       '[Totem Error] Gemini SDK (@google/genai) is not installed.\n' +
-        'Install it with: pnpm add @google/genai\n' +
+        `Install it with: ${detectPackageManager()} add @google/genai\n` +
         "Or use provider: 'shell' in your orchestrator config.",
     );
   }

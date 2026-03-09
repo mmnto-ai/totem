@@ -25,6 +25,20 @@ export type InvokeOrchestrator = (
   options: OrchestratorInvokeOptions,
 ) => Promise<OrchestratorResult>;
 
+// ─── Package manager detection (#236) ───────────────
+
+/**
+ * Detect the active package manager from the `npm_config_user_agent` env var
+ * (set by npm, pnpm, yarn, and bun when running scripts). Falls back to `npm`.
+ */
+export function detectPackageManager(): string {
+  const ua = process.env['npm_config_user_agent'] ?? '';
+  if (ua.startsWith('pnpm')) return 'pnpm';
+  if (ua.startsWith('yarn')) return 'yarn';
+  if (ua.startsWith('bun')) return 'bun';
+  return 'npm';
+}
+
 // ─── Factory ─────────────────────────────────────────
 
 /**
