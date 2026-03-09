@@ -304,6 +304,47 @@ describe('applyRules', () => {
     const violations = applyRules(rules, multiFileDiff);
     expect(violations).toHaveLength(2);
   });
+
+  it('excludes files matching negated glob patterns', () => {
+    const rules: CompiledRule[] = [
+      {
+        ...makeRule('\\$\\w+', 'Found dollar variable'),
+        fileGlobs: ['*.sh', '*.ts', '!*.sh'],
+      },
+    ];
+    const violations = applyRules(rules, multiFileDiff);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]!.file).toBe('src/utils.ts');
+  });
+
+  it('excludes test files with negated glob while matching source files', () => {
+    const testFileDiff = [
+      'diff --git a/src/utils.ts b/src/utils.ts',
+      '--- a/src/utils.ts',
+      '+++ b/src/utils.ts',
+      '@@ -1,2 +1,3 @@',
+      ' const x = 1;',
+      '+const tmp = os.tmpdir();',
+      ' export default x;',
+      'diff --git a/src/utils.test.ts b/src/utils.test.ts',
+      '--- a/src/utils.test.ts',
+      '+++ b/src/utils.test.ts',
+      '@@ -1,2 +1,3 @@',
+      " import { describe } from 'vitest';",
+      '+const tmp = os.tmpdir();',
+      ' describe(x);',
+    ].join('\n');
+
+    const rules: CompiledRule[] = [
+      {
+        ...makeRule('\\bos\\.tmpdir\\(\\)', 'Use workspace-local paths'),
+        fileGlobs: ['*.ts', '!*.test.ts', '!*.spec.ts'],
+      },
+    ];
+    const violations = applyRules(rules, testFileDiff);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]!.file).toBe('src/utils.ts');
+  });
 });
 
 // ─── loadCompiledRules / saveCompiledRules ───────────

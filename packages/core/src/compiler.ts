@@ -148,7 +148,7 @@ export function extractAddedLines(diff: string): DiffAddition[] {
 // ─── File glob matching ─────────────────────────────
 
 /**
- * Check if a file path matches any of the given glob patterns.
+ * Check if a file path matches a single glob pattern.
  * Supports simple patterns: `*.ext`, `**\/*.ext`, literal filenames.
  */
 function matchesGlob(filePath: string, glob: string): boolean {
@@ -167,7 +167,13 @@ function matchesGlob(filePath: string, glob: string): boolean {
 }
 
 function fileMatchesGlobs(filePath: string, globs: string[]): boolean {
-  return globs.some((g) => matchesGlob(filePath, g));
+  const positive = globs.filter((g) => !g.startsWith('!'));
+  const negative = globs.filter((g) => g.startsWith('!')).map((g) => g.slice(1));
+
+  const positiveMatch = positive.length === 0 || positive.some((g) => matchesGlob(filePath, g));
+  const negativeMatch = negative.some((g) => matchesGlob(filePath, g));
+
+  return positiveMatch && !negativeMatch;
 }
 
 // ─── Rule execution ──────────────────────────────────
