@@ -29,7 +29,7 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 
 ### 3. Deterministic Compiler & Zero-LLM Shield
 
-`totem compile` reads `.totem/lessons.md` and translates each lesson into a regex rule (or marks it as non-compilable). Rules are stored in `.totem/compiled-rules.json` and validated at compile-time. `totem shield --deterministic` applies these rules against `git diff` additions with zero LLM calls — ideal for CI enforcement without API keys or quota.
+`totem compile` reads `.totem/lessons.md` and translates each lesson into a regex rule (or marks it as non-compilable). Rules are stored in `.totem/compiled-rules.json` and validated at compile-time with both syntax checking and ReDoS static analysis (`safe-regex2`). Vulnerable patterns (nested quantifiers, star height > 1) are rejected and fall back to LLM evaluation. `totem shield --deterministic` applies these rules against `git diff` additions with zero LLM calls — ideal for CI enforcement without API keys or quota.
 
 ### 4. Shield GitHub Action (`action.yml`)
 

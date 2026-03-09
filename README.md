@@ -42,7 +42,7 @@ This is a Turborepo monorepo consisting of:
 ## Security & Privacy
 
 - **100% Local Privacy:** Totem's vector database (`.lancedb/`) lives entirely within your local repository. Your codebase is never uploaded to a centralized SaaS platform or external memory service.
-- **Injection Hardening:** Totem actively sanitizes untrusted inputs (like PR comments fetched during `totem extract` and external GitHub issues) and **XML-delimits MCP responses** (#149) to mitigate indirect prompt injection and terminal injection attacks.
+- **Injection & ReDoS Hardening:** Totem actively sanitizes untrusted inputs (like PR comments fetched during `totem extract` and external GitHub issues), applies **ReDoS protection to compiled regex rules** (#218), and **XML-delimits MCP responses** (#149) to mitigate indirect prompt injection and terminal injection attacks.
 
 ## Prerequisites
 
