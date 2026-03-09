@@ -35,6 +35,8 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 **Goal:** Before ingesting enterprise databases, the local vector index and LLM prompts must be bulletproof across all environments.
 
+- [x] **#218 Security:** Add ReDoS protection to compiled regex rules.
+- [x] **#206 Robustness:** Refactor orchestrator from `execSync` to async `spawn` to prevent aborts on large files.
 - [x] **#173 Epic: Universal AST Parsing:** Implement Tree-sitter for robust, language-agnostic code chunking.
 - [x] **#121 Bug: LanceDB `deleteByFile`** edge cases causing silent incremental sync failures.
 - [x] **#122 Core Tests:** Backfill unit and integration tests for `@mmnto/totem` core database and chunking logic.
