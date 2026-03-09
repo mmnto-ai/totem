@@ -176,11 +176,11 @@ async function runDeterministicShield(
   const rules = loadCompiledRules(rulesPath);
 
   if (rules.length === 0) {
-    log.warn(
+    log.error(
       TAG,
       `No compiled rules found at ${totemDir}/${COMPILED_RULES_FILE}. Run \`totem compile\` first.`,
     );
-    return;
+    process.exit(1);
   }
 
   log.info(TAG, `Running ${rules.length} deterministic rules (zero LLM)...`);
