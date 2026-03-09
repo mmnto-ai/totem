@@ -1,6 +1,6 @@
 import { log } from '../ui.js';
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
-import { detectPackageManager } from './orchestrator.js';
+import { detectPackageManager, isQuotaError } from './orchestrator.js';
 
 // ─── Constants ───────────────────────────────────────
 
@@ -69,12 +69,8 @@ export async function invokeAnthropicOrchestrator(
       finishReason: response.stop_reason ?? undefined,
     };
   } catch (err) {
-    if (
-      err instanceof Error &&
-      'status' in err &&
-      (err as Record<string, unknown>).status === 429
-    ) {
-      const quotaErr = new Error(err.message);
+    if (isQuotaError(err)) {
+      const quotaErr = new Error(err instanceof Error ? err.message : String(err));
       quotaErr.name = 'QuotaError';
       throw quotaErr;
     }

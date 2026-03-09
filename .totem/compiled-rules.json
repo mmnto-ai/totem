@@ -92,7 +92,7 @@
     {
       "lessonHash": "40b5659a75c42e0d",
       "lessonHeading": "2026-03-06T10:00:40.352Z",
-      "pattern": "text:\\s*(?!(?:formatXmlResponse|wrapXml|formatSystemWarning)\\b|['\"`\\[\\{]|err|error|message|text\\b)\\b\\w+",
+      "pattern": "text:\\s*(?!(?:formatXmlResponse|wrapXml|formatSystemWarning)\\b|['\"`\\[\\{]|err|error|message|text|undefined|null\\b)\\b\\w+",
       "message": "MCP tool returns must be wrapped in XML tags (use formatXmlResponse) to prevent Indirect Prompt Injection from untrusted content.",
       "engine": "regex",
       "compiledAt": "2026-03-09T03:04:58.554Z"
@@ -116,7 +116,7 @@
     {
       "lessonHash": "2d364f952af19014",
       "lessonHeading": "2026-03-07T06:05:56.069Z",
-      "pattern": "typeof\\s+[^\\s!&|=]+\\s*===\\s*['\"]object['\"](?!\\s*&&\\s*[^\\s!&|=]+)",
+      "pattern": "typeof\\s+[^\\s!&|=]+\\s*===\\s*['\"]object['\"](?!\\s*&&)",
       "message": "Always combine 'typeof val === \"object\"' with a truthiness check (e.g., 'val && typeof val === \"object\"') because 'typeof null' is 'object'.",
       "engine": "regex",
       "compiledAt": "2026-03-09T03:11:02.522Z"

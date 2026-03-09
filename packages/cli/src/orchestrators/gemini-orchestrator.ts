@@ -1,6 +1,6 @@
 import { log } from '../ui.js';
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
-import { detectPackageManager } from './orchestrator.js';
+import { detectPackageManager, isQuotaError } from './orchestrator.js';
 
 // ─── Constants ───────────────────────────────────────
 
@@ -18,20 +18,6 @@ async function importGeminiSdk() {
         "Or use provider: 'shell' in your orchestrator config.",
     );
   }
-}
-
-// ─── Quota detection ─────────────────────────────────
-
-function isQuotaError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  if ('status' in err && (err as Record<string, unknown>).status === 429) return true;
-  const msg = err.message.toLowerCase();
-  return (
-    msg.includes('429') ||
-    msg.includes('quota') ||
-    msg.includes('rate limit') ||
-    msg.includes('too many requests')
-  );
 }
 
 // ─── Gemini API orchestrator ─────────────────────────

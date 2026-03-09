@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Orchestrator as OrchestratorConfig } from '@mmnto/totem';
 
-import { createOrchestrator, detectPackageManager } from './orchestrator.js';
+import { createOrchestrator, detectPackageManager, isQuotaError } from './orchestrator.js';
 
 // ─── Mock provider modules ──────────────────────────
 
@@ -119,5 +119,35 @@ describe('detectPackageManager', () => {
   it('defaults to npm for unknown user agent', () => {
     process.env['npm_config_user_agent'] = 'npm/10.0.0 node/v22.0.0';
     expect(detectPackageManager()).toBe('npm');
+  });
+});
+
+// ─── isQuotaError ───────────────────────────────────
+
+describe('isQuotaError', () => {
+  it('detects 429 status errors', () => {
+    const err = Object.assign(new Error('rate limit'), { status: 429 });
+    expect(isQuotaError(err)).toBe(true);
+  });
+
+  it('detects quota keyword in message', () => {
+    expect(isQuotaError(new Error('quota exceeded'))).toBe(true);
+  });
+
+  it('detects rate limit keyword in message', () => {
+    expect(isQuotaError(new Error('rate limit reached'))).toBe(true);
+  });
+
+  it('detects too many requests keyword', () => {
+    expect(isQuotaError(new Error('Too Many Requests'))).toBe(true);
+  });
+
+  it('returns false for non-quota errors', () => {
+    expect(isQuotaError(new Error('Model not found'))).toBe(false);
+  });
+
+  it('returns false for non-Error values', () => {
+    expect(isQuotaError('some string')).toBe(false);
+    expect(isQuotaError(null)).toBe(false);
   });
 });

@@ -39,6 +39,24 @@ export function detectPackageManager(): string {
   return 'npm';
 }
 
+// ─── Quota detection (shared) ────────────────────────
+
+/**
+ * Detect whether an error is a rate-limit / quota-exhaustion response.
+ * Used by both Gemini and Anthropic orchestrators to normalize QuotaError.
+ */
+export function isQuotaError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if ('status' in err && (err as Record<string, unknown>).status === 429) return true;
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes('429') ||
+    msg.includes('quota') ||
+    msg.includes('rate limit') ||
+    msg.includes('too many requests')
+  );
+}
+
 // ─── Factory ─────────────────────────────────────────
 
 /**
