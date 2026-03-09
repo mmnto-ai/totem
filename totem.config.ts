@@ -16,8 +16,7 @@ const config: TotemConfig = {
   embedding: { provider: 'openai', model: 'text-embedding-3-small' },
 
   orchestrator: {
-    provider: 'shell',
-    command: 'gemini --model {model} -o json -e none < {file}',
+    provider: 'gemini',
     defaultModel: 'gemini-3-flash-preview',
     overrides: {
       docs: 'gemini-3.1-pro-preview',

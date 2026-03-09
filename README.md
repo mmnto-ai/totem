@@ -2,7 +2,7 @@
 
 > [!WARNING]
 > **Developer Preview / Early Alpha**
-> Totem is currently in early alpha. While Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete—including our move to **Tree-sitter for Universal AST Parsing** (#173) and the **Deterministic Lesson Compiler / Zero-LLM Shield** (#213, #216)—we are still polishing the "Magic Onboarding" experience (interactive tutorials) and validating internal dogfooding with OpenAI embeddings (#8). If you encounter friction during `totem init`, please bear with us!
+> Totem is currently in early alpha. While Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete—including our move to **Tree-sitter for Universal AST Parsing** (#173), the **Deterministic Lesson Compiler / Zero-LLM Shield** (#213, #216), and **Native API Orchestrators** (#229)—we are still polishing the "Magic Onboarding" experience (interactive tutorials) and validating internal dogfooding with OpenAI embeddings (#8). If you encounter friction during `totem init`, please bear with us!
 
 **Your AI team forgets. Totem remembers.**
 
@@ -62,7 +62,7 @@ Run this inside your consuming project (e.g., your Next.js or Node app):
 npx @mmnto/cli init
 ```
 
-This will auto-detect your project structure, generate a `totem.config.ts` using **Minimum Viable Configuration (MVC) tiers** (#187), install automated background git hooks, and inject the Proactive Memory Reflexes into your AI's system prompt.
+This will auto-detect your project structure and package manager (#236), generate a `totem.config.ts` using **Minimum Viable Configuration (MVC) tiers** (#187), install automated background git hooks, and inject the Proactive Memory Reflexes into your AI's system prompt.
 
 **Universal Baseline:** During init, Totem offers to install a curated set of foundational AI developer lessons (#128) (prompt injection prevention, hallucination traps, dependency verification, etc.) so your agents have useful knowledge from Day 1.
 
@@ -142,19 +142,18 @@ Add Totem to your AI agent's configuration (e.g., Claude Desktop, Claude Code, o
 
 Totem ships with native CLI commands that orchestrate your entire shift-left workflow by querying LanceDB and invoking your AI to make project-aware decisions.
 
-First, configure your orchestrator in `totem.config.ts`:
+First, configure your orchestrator in `totem.config.ts`. Totem supports **Native API Orchestrators** (#229) for direct integrations (Anthropic, Gemini) and a generic shell adapter:
 
 ```typescript
-// Use the Gemini CLI as your orchestrator
+// Use a native API orchestrator (Anthropic or Gemini) or fallback to 'shell'
 orchestrator: {
-  provider: 'shell',
-  command: 'gemini --model {model} --prompt "{file}"',
-  defaultModel: 'gemini-3-flash-preview',
-  fallbackModel: 'gemini-2.5-flash',
+  provider: 'anthropic',
+  defaultModel: 'claude-3-7-sonnet-latest',
+  fallbackModel: 'claude-3-5-haiku-latest',
   overrides: {
-    spec: 'gemini-3.1-pro-preview',
-    shield: 'gemini-3.1-pro-preview',
-    triage: 'gemini-3.1-pro-preview'
+    spec: 'claude-3-7-sonnet-latest',
+    shield: 'claude-3-7-sonnet-latest',
+    triage: 'claude-3-7-sonnet-latest'
   }
 }
 ```
@@ -236,7 +235,7 @@ Then remove the `-y` flag from your MCP config — `npx` will use the locally in
 Totem is evolving from a memory database into a full Shift-Left orchestrator.
 
 - [x] **Foundations & Phase 1 (Onboarding):** Local vector DB, MCP interface, MVC Configuration Tiers (#187), "Universal Lessons" baseline (#128), and cross-platform docs (#210).
-- [x] **Phase 2 (Core Stability):** Tree-sitter Universal AST Parsing (#173), Shield GitHub Action (#180), Automated Doc Sync (#190), Drift Detection for self-cleaning memory (#177, #211), Deterministic Lesson Compiler / Zero-LLM Shield (#213, #216) backed by regex ReDoS protection (#218), and OpenAI embedding validation (#4).
+- [x] **Phase 2 (Core Stability):** Tree-sitter Universal AST Parsing (#173), Shield GitHub Action (#180), Automated Doc Sync (#190), Drift Detection for self-cleaning memory (#177, #211), Deterministic Lesson Compiler / Zero-LLM Shield (#213, #216) backed by regex ReDoS protection (#218), Native API Orchestrators for Gemini and Anthropic (#229) with BYOSD support (#236), and OpenAI embedding validation (#4).
 - [ ] **Validation & Polish:** Internal dogfooding (#8) and interactive CLI tutorials (#129).
 - [ ] **Phase 3 (Workflow Expansion):** Custom Workflow Runner (#119), Agent-Optimized MCP (#176), and Cross-File Knowledge Graph (#183).
 

@@ -11,7 +11,7 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 - **Engine:** LanceDB (embedded, in-process Node.js).
 - **Storage:** Creates a `.lancedb/` folder in the consumer's root. This folder is gitignored and treated as a replaceable build artifact.
 - **Embeddings:** Supports OpenAI (`text-embedding-3-small`) by default, with Ollama (`nomic-embed-text`) as an offline fallback.
-- **Chunking:** Syntax-aware chunking (TypeScript Compiler API for code, heading hierarchy for Markdown, hierarchical breadcrumbs for session logs). No blind character splitting.
+- **Chunking:** Syntax-aware chunking (Tree-sitter for universal AST parsing of code, heading hierarchy for Markdown, hierarchical breadcrumbs for session logs). No blind character splitting.
 - **Drift Detection:** Self-cleaning sync engine that purges orphaned vectors when source files are deleted or renamed, keeping the index in sync with the physical codebase.
 
 ### 2. The CLI (`@mmnto/cli`)
@@ -24,12 +24,12 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 - `totem extract`: Batch lesson extraction from PR review threads with interactive multi-select curation.
 - `totem add-lesson`: Inline lesson capture (also exposed as MCP tool `add_lesson`).
 - `totem compile`: Translates natural-language lessons into deterministic regex rules via constrained LLM prompt at compile-time.
-- `totem docs`: Automated per-document LLM passes to keep project documentation in sync with the codebase.
+- `totem docs`: Automated per-document LLM passes to keep project documentation in sync with the codebase (safeguarded by XML sentinels for reliable output extraction).
 - `totem bridge` / `totem wrap`: Mid-session context resets and end-of-task workflow automation.
 
 ### 3. Deterministic Compiler & Zero-LLM Shield
 
-`totem compile` reads `.totem/lessons.md` and translates each lesson into a regex rule (or marks it as non-compilable). Rules are stored in `.totem/compiled-rules.json` and validated at compile-time with both syntax checking and ReDoS static analysis (`safe-regex2`). Vulnerable patterns (nested quantifiers, star height > 1) are rejected, leaving them to be handled by the standard LLM-based shield. `totem shield --deterministic` applies these rules against `git diff` additions with zero LLM calls — ideal for CI enforcement without API keys or quota.
+`totem compile` reads `.totem/lessons.md` and translates each lesson into a regex rule (or marks it as non-compilable). Rules are stored in `.totem/compiled-rules.json` (with support for `fileGlobs` scoping to target specific files) and validated at compile-time with both syntax checking and ReDoS static analysis (`safe-regex2`). Vulnerable patterns (nested quantifiers, star height > 1) are rejected, leaving them to be handled by the standard LLM-based shield. `totem shield --deterministic` applies these rules against `git diff` additions with zero LLM calls — ideal for CI enforcement without API keys or quota.
 
 ### 4. Shield GitHub Action (`action.yml`)
 
@@ -57,7 +57,7 @@ The `embedding` field in `totem.config.ts` is optional. When omitted, Totem oper
 
 ## Orchestrator Providers
 
-The CLI orchestrator supports three provider types via a discriminated union config (`provider` field). SDKs for native API providers are **optional peer dependencies** — loaded via dynamic `import()` at runtime with friendly install prompts if missing (BYOSD: "Bring Your Own SDK").
+The CLI orchestrator supports three provider types via a discriminated union config (`provider` field). SDKs for native API providers are **optional peer dependencies** — loaded via dynamic `import()` at runtime with friendly install prompts (featuring package manager auto-detection) if missing (BYOSD: "Bring Your Own SDK").
 
 ### Shell Provider (default)
 
