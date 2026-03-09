@@ -176,6 +176,24 @@
       "message": "Use asynchronous 'spawn' instead of 'execSync' with piped stdio to prevent silent hangs and pipe limit issues.",
       "engine": "regex",
       "compiledAt": "2026-03-09T03:25:49.090Z"
+    },
+    {
+      "lessonHash": "dfd58fda9e518754",
+      "lessonHeading": "2026-03-07T21:45:57.754Z",
+      "pattern": "(^|\\s)\\$([a-zA-Z_0-9*@#?!\\-]+\\b|\\{[a-zA-Z_0-9*@#?!\\-]+\\})",
+      "message": "Always quote shell variables (e.g., \"$VAR\") to prevent word-splitting and argument injection.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:13:51.536Z",
+      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml"]
+    },
+    {
+      "lessonHash": "4d63af6631a6ddf7",
+      "lessonHeading": "2026-03-07T06:05:56.069Z",
+      "pattern": "<\\\\/[a-zA-Z0-9_-]+\\s*>",
+      "message": "Escape closing XML tags in prompts using backslash (e.g., <\\/tag>) to prevent injection.",
+      "engine": "regex",
+      "compiledAt": "2026-03-09T03:08:14.389Z",
+      "fileGlobs": ["*.md", "*.txt", "*.html", "*.xml"]
     }
   ]
 }
