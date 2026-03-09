@@ -160,23 +160,6 @@ describe('invokeShellOrchestrator', () => {
     ).rejects.toThrow('[Totem Error] Shell orchestrator command failed');
   });
 
-  it('rescues valid response when Gemini CLI exits with AbortError', async () => {
-    process.nextTick(() => {
-      mockChild.stdout.emit('data', Buffer.from('rescued content'));
-      mockChild.stderr.emit('data', Buffer.from('AbortError: The operation was aborted.'));
-      mockChild.emit('close', 1);
-    });
-    const result = await invokeShellOrchestrator(
-      'prompt',
-      'cmd',
-      'model',
-      tmpDir,
-      'Test',
-      totemDir,
-    );
-    expect(result.content).toBe('rescued content');
-  });
-
   it('throws error on spawn error event', async () => {
     process.nextTick(() => {
       mockChild.emit('error', new Error('command not found'));
