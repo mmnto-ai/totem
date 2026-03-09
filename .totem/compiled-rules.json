@@ -106,14 +106,6 @@
       "compiledAt": "2026-03-09T03:05:23.884Z"
     },
     {
-      "lessonHash": "4d63af6631a6ddf7",
-      "lessonHeading": "2026-03-07T06:05:56.069Z",
-      "pattern": "<\\\\/[a-zA-Z0-9_-]+\\s*>",
-      "message": "Escape closing XML tags in prompts using backslash (e.g., <\\/tag>) to prevent injection.",
-      "engine": "regex",
-      "compiledAt": "2026-03-09T03:08:14.389Z"
-    },
-    {
       "lessonHash": "b6c47924514dc4da",
       "lessonHeading": "2026-03-07T06:05:56.069Z",
       "pattern": "\\b(wrapXml|sanitize)\\s*\\(\\s*([^,)]*?\\b(branch|filePath|path|cwd)\\b[^,)]*?)\\s*[\\),]",
