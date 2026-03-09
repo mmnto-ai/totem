@@ -235,6 +235,7 @@ export async function docsCommand(options: DocsOptions): Promise<void> {
 
   // Process each doc sequentially (separate orchestrator call per doc)
   let updated = 0;
+  let failed = 0;
   for (const doc of targets) {
     const filePath = path.join(cwd, doc.path);
 
@@ -253,7 +254,18 @@ export async function docsCommand(options: DocsOptions): Promise<void> {
     const prompt = assemblePrompt(doc, currentContent, releaseContext, activeWork, systemPrompt);
     log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
-    const content = runOrchestrator({ prompt, tag: TAG, options, config, cwd });
+    let content: string | undefined;
+    try {
+      content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd });
+    } catch (err) {
+      const msg = (err instanceof Error ? err.message : String(err)).replace(
+        /^\s*\[Totem Error\]\s*/,
+        '',
+      );
+      log.error(TAG, `Failed to process ${doc.path} — skipping. ${msg}`);
+      failed++;
+      continue;
+    }
 
     if (content == null) continue; // --raw mode
 
@@ -281,5 +293,9 @@ export async function docsCommand(options: DocsOptions): Promise<void> {
     log.success(TAG, `Done — ${updated} doc(s) updated.`);
   } else if (!options.raw && !options.dryRun) {
     log.dim(TAG, 'No docs needed updating.');
+  }
+
+  if (failed > 0) {
+    log.warn(TAG, `${failed} doc(s) failed to process. See errors above.`);
   }
 }

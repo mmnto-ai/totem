@@ -15,7 +15,7 @@ vi.mock('../utils.js', async (importOriginal) => {
     resolveConfigPath: vi.fn().mockReturnValue('/fake/totem.config.ts'),
     loadEnv: vi.fn(),
     loadConfig: vi.fn(),
-    runOrchestrator: vi.fn().mockReturnValue('# Updated README\n\nNew content here.\n'),
+    runOrchestrator: vi.fn().mockResolvedValue('# Updated README\n\nNew content here.\n'),
     getSystemPrompt: vi.fn().mockReturnValue('system prompt'),
     writeOutput: vi.fn(),
   };
@@ -65,7 +65,7 @@ describe('docsCommand', () => {
     vi.clearAllMocks();
     // Reset return values (clearAllMocks only clears call records, not implementations)
     vi.mocked(isFileDirty).mockReturnValue(false);
-    vi.mocked(runOrchestrator).mockReturnValue('# Updated README\n\nNew content here.\n');
+    vi.mocked(runOrchestrator).mockResolvedValue('# Updated README\n\nNew content here.\n');
     tmpDir = setupTmpDir();
     vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
   });
