@@ -64,9 +64,8 @@ export async function invokeGeminiOrchestrator(
     };
   } catch (err) {
     if (isQuotaError(err)) {
-      const quotaErr = new Error((err as Error).message);
-      quotaErr.name = 'QuotaError';
-      throw quotaErr;
+      (err as Error).name = 'QuotaError';
+      throw err;
     }
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`[Totem Error] Gemini API call failed: ${msg}`);
