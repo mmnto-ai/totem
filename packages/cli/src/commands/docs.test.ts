@@ -354,6 +354,59 @@ describe('docsCommand', () => {
     expect(runOrchestrator).toHaveBeenCalledTimes(1);
   });
 
+  it('deduplicates normalization-equivalent paths (README.md vs ./README.md)', async () => {
+    vi.mocked(loadConfig).mockResolvedValue({
+      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+      docs: [{ path: 'README.md', description: 'readme', trigger: 'post-release' as const }],
+      totemDir: '.totem',
+      lanceDir: '.lancedb',
+      ignorePatterns: [],
+      contextWarningThreshold: 40_000,
+    });
+
+    writeDoc(tmpDir, 'README.md', '# Old README\n');
+
+    await docsCommand(['README.md', './README.md'], {});
+
+    expect(runOrchestrator).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws when both positional paths and --only are provided', async () => {
+    vi.mocked(loadConfig).mockResolvedValue({
+      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+      docs: [
+        { path: 'README.md', description: 'readme', trigger: 'post-release' as const },
+        { path: 'docs/roadmap.md', description: 'roadmap', trigger: 'post-release' as const },
+      ],
+      totemDir: '.totem',
+      lanceDir: '.lancedb',
+      ignorePatterns: [],
+      contextWarningThreshold: 40_000,
+    });
+
+    await expect(docsCommand(['README.md'], { only: 'roadmap' })).rejects.toThrow(
+      'Cannot combine positional doc paths with --only flag',
+    );
+  });
+
+  it('resolves absolute paths against cwd', async () => {
+    vi.mocked(loadConfig).mockResolvedValue({
+      targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+      docs: [{ path: 'README.md', description: 'readme', trigger: 'post-release' as const }],
+      totemDir: '.totem',
+      lanceDir: '.lancedb',
+      ignorePatterns: [],
+      contextWarningThreshold: 40_000,
+    });
+
+    writeDoc(tmpDir, 'README.md', '# Old README\n');
+
+    // Absolute path should resolve to the same relative config key
+    await docsCommand([path.join(tmpDir, 'README.md')], {});
+
+    expect(runOrchestrator).toHaveBeenCalledTimes(1);
+  });
+
   it('scopes dirty check to targeted docs only', async () => {
     vi.mocked(loadConfig).mockResolvedValue({
       targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],

@@ -207,17 +207,27 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
 
   // Resolve targets from positional args, --only, or all docs
   let targets = config.docs;
-  const dedupedInputs = [...new Set(inputs)];
 
-  if (dedupedInputs.length > 0) {
+  // Fail-fast: conflicting targeting flags
+  if (inputs.length > 0 && options.only) {
+    throw new Error(
+      `[Totem Error] Cannot combine positional doc paths with --only flag.\n` +
+        `Use one or the other: \`totem docs README.md\` OR \`totem docs --only readme\`.`,
+    );
+  }
+
+  if (inputs.length > 0) {
     // Positional path targeting — fail-fast validation
-    const normalize = (p: string) => path.normalize(p).replace(/\\/g, '/').replace(/^\.\//, '');
+    const normalize = (p: string) => path.relative(cwd, path.resolve(cwd, p)).replace(/\\/g, '/');
     const configPaths = new Map(config.docs.map((d) => [normalize(d.path), d]));
 
+    const seen = new Set<string>();
     const resolved: DocTarget[] = [];
     const invalid: string[] = [];
-    for (const input of dedupedInputs) {
+    for (const input of inputs) {
       const normalized = normalize(input);
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
       const match = configPaths.get(normalized);
       if (match) {
         resolved.push(match);
