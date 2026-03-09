@@ -185,7 +185,9 @@ async function runDeterministicShield(
 
   log.info(TAG, `Running ${rules.length} deterministic rules (zero LLM)...`);
 
-  const violations = applyRules(rules, diff);
+  // Exclude the compiled rules file itself — it will always self-match
+  const rulesRelPath = path.join(totemDir, COMPILED_RULES_FILE).replace(/\\/g, '/');
+  const violations = applyRules(rules, diff, [rulesRelPath]);
 
   // Build output
   const lines: string[] = [];

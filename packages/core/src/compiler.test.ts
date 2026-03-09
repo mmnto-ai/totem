@@ -219,6 +219,18 @@ describe('applyRules', () => {
   it('returns empty for empty rules', () => {
     expect(applyRules([], diff)).toEqual([]);
   });
+
+  it('excludes files listed in excludeFiles', () => {
+    const rules = [makeRule('\\bnpm\\.install\\b', 'Do not call npm.install directly')];
+    const violations = applyRules(rules, diff, ['src/app.ts']);
+    expect(violations).toHaveLength(0);
+  });
+
+  it('still detects violations in non-excluded files', () => {
+    const rules = [makeRule('\\bnpm\\.install\\b', 'Do not call npm.install directly')];
+    const violations = applyRules(rules, diff, ['other-file.ts']);
+    expect(violations).toHaveLength(1);
+  });
 });
 
 // ─── loadCompiledRules / saveCompiledRules ───────────

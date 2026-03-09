@@ -146,10 +146,20 @@ export function extractAddedLines(diff: string): DiffAddition[] {
 /**
  * Apply compiled rules against added lines from a diff.
  * Returns all violations found.
+ * @param excludeFiles — file paths to skip (e.g., compiled-rules.json to avoid self-matches)
  */
-export function applyRules(rules: CompiledRule[], diff: string): Violation[] {
-  const additions = extractAddedLines(diff);
+export function applyRules(
+  rules: CompiledRule[],
+  diff: string,
+  excludeFiles?: string[],
+): Violation[] {
+  let additions = extractAddedLines(diff);
   if (additions.length === 0 || rules.length === 0) return [];
+
+  if (excludeFiles && excludeFiles.length > 0) {
+    const excluded = new Set(excludeFiles);
+    additions = additions.filter((a) => !excluded.has(a.file));
+  }
 
   const violations: Violation[] = [];
 
