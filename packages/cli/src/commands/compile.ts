@@ -173,8 +173,9 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
       continue;
     }
 
-    if (!validateRegex(parsed.pattern)) {
-      log.warn(TAG, `[${lesson.heading}] Invalid regex: ${parsed.pattern} — skipping`);
+    const validation = validateRegex(parsed.pattern);
+    if (!validation.valid) {
+      log.warn(TAG, `[${lesson.heading}] Rejected regex: ${validation.reason} — skipping`);
       failed++;
       continue;
     }
