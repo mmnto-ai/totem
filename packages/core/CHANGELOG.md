@@ -1,5 +1,16 @@
 # @mmnto/totem
 
+## 0.19.0
+
+### Minor Changes
+
+- feat: native API orchestrators for Gemini and Anthropic SDKs
+  - Add `gemini` and `anthropic` orchestrator providers for direct SDK calls (BYOSD)
+  - Extract shared orchestrator interface with discriminated union config
+  - Add `isQuotaError` shared utility and `detectPackageManager` for BYOSD prompts
+  - Add `fileGlobs` scoping for compiled shield rules
+  - Add XML sentinel validation for `totem docs` responses
+
 ## 0.18.0
 
 ### Minor Changes
