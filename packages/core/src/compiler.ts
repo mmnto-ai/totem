@@ -145,11 +145,12 @@ export function extractAddedLines(diff: string): DiffAddition[] {
       prevLineContent = lineContent;
     } else if (rawLine.startsWith('-')) {
       // Deleted line — NOT in new file, don't update prevLineContent or lineNum
-    } else {
-      // Context line (no prefix or space prefix) — in new file
+    } else if (rawLine.startsWith(' ')) {
+      // Context line — in new file
       lineNum++;
       prevLineContent = rawLine.slice(1);
     }
+    // Ignore other lines (e.g., '\ No newline at end of file')
   }
 
   return additions;
