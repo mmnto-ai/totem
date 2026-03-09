@@ -782,3 +782,9 @@ When mocking modules, use `vi.importActual` to maintain the real implementation 
 **Tags:** architecture, shell-provider, validation
 
 Explicitly block cross-provider routing into specialized providers (like `shell`) that require unique configuration templates not present in the source provider's setup. Failing fast at the routing layer prevents cryptic runtime errors when an orchestrator attempts to execute a prompt without the necessary provider-specific execution context.
+
+## Lesson — When parsing unified diff hunks, explicitly match context…
+
+**Tags:** git, diff-parsing, trap
+
+When parsing unified diff hunks, explicitly match context lines (prefixed with a space) rather than using a catch-all `else` block. Unified diffs often contain meta-information lines, such as `\ No newline at end of file`, which are neither additions nor context; treating these as file content can corrupt line tracking and metadata for subsequent lines.

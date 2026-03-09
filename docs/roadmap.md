@@ -2,7 +2,7 @@
 
 This document outlines the strategic phases for the Totem project, focusing on moving from a solid architectural foundation to frictionless user adoption, and eventually enterprise scale.
 
-## Foundations (Mostly Complete)
+## Foundations (Functionally Complete)
 
 The core embedded vector database, MCP server, and baseline CLI commands have been implemented.
 
@@ -14,7 +14,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **PR Learning Loop:** `totem extract <pr-number>` parses reviews to extract architectural lessons.
 - [x] **Evidence-Based Quality Gate:** `totem shield` enforces test coverage and returns exit codes.
 - [x] Validate OpenAI Happy Path (Issue #4)
-- [ ] Validate dogfood sync with OpenAI embeddings (Issue #8)
+- [x] Validate dogfood sync with OpenAI embeddings (Issue #8)
 
 ---
 
@@ -83,8 +83,8 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#83 Support GitHub issue URLs:** Allow users to paste full URLs in addition to issue numbers for `totem spec` and `triage`.
 - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
 - [x] **#187 Minimum Viable Configuration:** Tiered config (Lite/Standard/Full) with auto-detection. Embedding is optional; Lite tier works with zero API keys.
-- [x] **#190 / #238 / #241 Automated Doc Sync:** `totem docs` command to keep project docs updated via per-doc LLM passes, now supporting individual doc targeting and path fixes. Integrated into `totem wrap` as Step 4/4 (#143).
-- [x] **#213 / #216 Zero-LLM Shield Mode:** Deterministic lesson compiler and zero-LLM shield mode.
+- [x] **#190 / #228 / #238 / #241 Automated Doc Sync:** `totem docs` command to keep project docs updated via per-doc LLM passes, now supporting individual doc targeting, path fixes, and XML sentinels. Integrated into `totem wrap` as Step 4/4 (#143).
+- [x] **#213 / #216 / #255 Zero-LLM Shield Mode:** Deterministic lesson compiler, zero-LLM shield mode, and inline suppression directives.
 - [x] **#229 Epic: Native API Orchestrator (#230–#234, #236, #237):** Replace CLI shell-spawning with direct SDK calls to Gemini (`@google/genai`) and Anthropic (`@anthropic-ai/sdk`). BYOSD pattern with optional peer dependencies, discriminated union config, and package manager auto-detection for install prompts.
 - [x] **#243 / #246 Multi-Model Orchestration (#235):** Enable cross-provider routing in orchestrator overrides using `provider:model` syntax with negated glob support.
 - [ ] **#176 Agent-Optimized MCP:** Dynamic token budgeting and write access for deeper agent-to-agent interactions.

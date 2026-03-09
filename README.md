@@ -174,7 +174,7 @@ orchestrator: {
 - **`briefing`**: Fetches your current git branch, uncommitted changes, open PRs, and recent session momentum to generate a startup briefing.
 - **`bridge`**: Assesses your current mid-task state and creates a lightweight breadcrumb file. Use this when your AI agent's context window gets too full.
 - **`spec <ids...>`**: Fetches GitHub Issues (supports URLs) and synthesizes a pre-work spec. The AI acts as a **Staff-Level Architect**, focusing on contracts and edge cases.
-- **`shield`**: Reads your uncommitted git diff, queries LanceDB for related traps, and performs a **hybrid zero-day + N-day architectural code review** (#98) before you push. Supports **zero-LLM shield mode** (#216) for lightning-fast deterministic checks using compiled rules (#226).
+- **`shield`**: Reads your uncommitted git diff, queries LanceDB for related traps, and performs a **hybrid zero-day + N-day architectural code review** (#98) before you push. Supports **zero-LLM shield mode** (#216) for lightning-fast deterministic checks using compiled rules (#226) and inline suppression directives (#255).
 - **`triage`**: Fetches open GitHub issues and generates a prioritized roadmap (e.g., `docs/active_work.md`) for your next task.
 - **`add-lesson`**: Interactively document a context, symptom, and fix. Saves to `.totem/lessons.md` and triggers a background re-index.
 - **`docs`**: Automatically syncs project documentation (README, Roadmap) by analyzing git logs and closed issues since the last release (#190). Supports targeting individual files (e.g., `totem docs README.md`) with path fixes (#238, #241).
@@ -189,7 +189,7 @@ orchestrator: {
 
 ### 6. Shield GitHub Action (CI/CD)
 
-Enforce Totem's deterministic quality gate automatically on every pull request (#180, #222). The action runs `totem shield --deterministic` using your compiled rules. It requires **zero API keys** and executes in milliseconds, providing an air-gapped architectural safety net for your repository.
+Enforce Totem's deterministic quality gate automatically on every pull request (#180, #222). The action runs `totem shield --deterministic` using your compiled rules. It requires **zero API keys** and executes in milliseconds, providing an air-gapped architectural safety net for your repository. False positives can be bypassed using inline suppression directives (#255).
 
 ```yaml
 # .github/workflows/shield.yml
@@ -243,7 +243,7 @@ Then remove the `-y` flag from your MCP config — `npx` will use the locally in
 Totem is evolving from a memory database into a full Shift-Left orchestrator.
 
 - [x] **Foundations & Phase 1 (Onboarding):** Local vector DB, MCP interface, MVC Configuration Tiers (#187), "Universal Lessons" baseline (#128), and cross-platform docs (#210).
-- [x] **Phase 2 (Core Stability):** Tree-sitter Universal AST Parsing (#173), Shield GitHub Action (#180), Automated Doc Sync (#190), Drift Detection for self-cleaning memory (#177, #211), Deterministic Lesson Compiler / Zero-LLM Shield (#213, #216) backed by regex ReDoS protection (#218), Native API Orchestrators for Gemini and Anthropic (#229) with BYOSD support (#236), and OpenAI embedding validation (#4).
+- [x] **Phase 2 (Core Stability):** Tree-sitter Universal AST Parsing (#173), Shield GitHub Action (#180), Automated Doc Sync with XML sentinels and individual document targeting (#190, #228, #238, #241), Drift Detection for self-cleaning memory (#177, #211), Deterministic Lesson Compiler / Zero-LLM Shield (#213, #216) backed by regex ReDoS protection (#218) and inline suppression directives (#255), Native API Orchestrators for Gemini and Anthropic (#229) with BYOSD package manager auto-detection (#236), cross-provider routing with negated glob support (#243, #246), and OpenAI embedding validation (#4).
 - [x] **Validation:** Internal dogfooding (#8) across multiple real-world repositories.
 - [ ] **Phase 3 (Workflow Expansion):** Interactive CLI tutorials (#129), Custom Workflow Runner (#119), Agent-Optimized MCP (#176), and Cross-File Knowledge Graph (#183).
 

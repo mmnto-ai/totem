@@ -29,7 +29,7 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 
 ### 3. Deterministic Compiler & Zero-LLM Shield
 
-`totem compile` reads `.totem/lessons.md` and translates each lesson into a regex rule (or marks it as non-compilable). Rules are stored in `.totem/compiled-rules.json` (with support for `fileGlobs` scoping to target specific files) and validated at compile-time with both syntax checking and ReDoS static analysis (`safe-regex2`). Vulnerable patterns (nested quantifiers, star height > 1) are rejected, leaving them to be handled by the standard LLM-based shield. `totem shield --deterministic` applies these rules against `git diff` additions with zero LLM calls — ideal for CI enforcement without API keys or quota.
+`totem compile` reads `.totem/lessons.md` and translates each lesson into a regex rule (or marks it as non-compilable). Rules are stored in `.totem/compiled-rules.json` (with support for `fileGlobs` scoping to target specific files) and validated at compile-time with both syntax checking and ReDoS static analysis (`safe-regex2`). Developers can bypass specific false positives using **inline suppression directives** (`totem-ignore` / `totem-ignore-next-line`), and `fileGlobs` support negated patterns (e.g., `!*.test.ts`) to exclude file types. Vulnerable patterns (nested quantifiers, star height > 1) are rejected, leaving them to be handled by the standard LLM-based shield. `totem shield --deterministic` applies these rules against `git diff` additions with zero LLM calls — ideal for CI enforcement without API keys or quota.
 
 ### 4. Shield GitHub Action (`action.yml`)
 
@@ -100,7 +100,7 @@ orchestrator: {
 
 ### Shared Configuration
 
-All providers support: `defaultModel`, `fallbackModel`, `overrides` (per-command model routing, supporting `provider:model` syntax for cross-provider routing), `systemPrompts` (per-command custom system prompt overrides), and `cacheTtls` (per-command cache TTL in seconds). Each command resolves its model via: `--model` flag > `overrides[command]` > `defaultModel`. Quota-exhaustion (429/rate-limit) triggers automatic fallback to `fallbackModel` if configured. Legacy configs without a `provider` field are auto-migrated to `provider: 'shell'`.
+All providers support: `defaultModel`, `fallbackModel`, `overrides` (per-command and glob-based model routing, supporting negated globs and `provider:model` syntax for cross-provider routing), `systemPrompts` (per-command custom system prompt overrides), and `cacheTtls` (per-command cache TTL in seconds). Each command resolves its model via: `--model` flag > `overrides[command]` > `defaultModel`. Quota-exhaustion (429/rate-limit) triggers automatic fallback to `fallbackModel` if configured. Legacy configs without a `provider` field are auto-migrated to `provider: 'shell'`.
 
 ## The `.totem/` Directory
 
