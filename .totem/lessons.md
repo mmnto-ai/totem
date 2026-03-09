@@ -692,3 +692,27 @@ Synchronous `execSync` with piped stdio can cause the parent process to hang or 
 **Tags:** logging, ux, error-handling
 
 When catching and re-logging errors that originate from internal utilities with standardized prefixes (e.g., `[Totem Error]`), strip the redundant prefix from the message before outputting. This prevents cluttered logs like `[Docs] ... [Totem Error] ...` and maintains a clean user interface.
+
+## Lesson — Do not manually edit machine-generated artifacts like…
+
+**Tags:** architecture, devops, toolchain
+
+Do not manually edit machine-generated artifacts like `compiled-rules.json`; fixes must be applied to the source lessons or the compiler logic to ensure they persist and aren't overwritten during the next build cycle.
+
+## Lesson — The Git -- separator treats all subsequent arguments as…
+
+**Tags:** git, security, shell
+
+The Git `--` separator treats all subsequent arguments as file paths, meaning revision specifiers (like `branch...HEAD`) must appear before it to be correctly resolved rather than misinterpreted as filenames.
+
+## Lesson — Always fall back to resolving Git references against…
+
+**Tags:** git, ci, devops
+
+Always fall back to resolving Git references against `origin/<branch>` in CI environments, as local branch pointers are often missing or detached in the shallow clones typical of automated runners.
+
+## Lesson — Employ a two-layer validation model by running fast,…
+
+**Tags:** architecture, ci, design-decision
+
+Employ a two-layer validation model by running fast, deterministic regex-based checks in CI while reserving expensive or stochastic LLM reviews for local developer workflows to maintain rapid CI feedback loops without sacrificing deep analysis.

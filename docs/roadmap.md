@@ -41,6 +41,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#121 Bug: LanceDB `deleteByFile`** edge cases causing silent incremental sync failures.
 - [x] **#122 Core Tests:** Backfill unit and integration tests for `@mmnto/totem` core database and chunking logic.
 - [x] **#174 / #180 Shield GitHub Action:** `action.yml` composite action for CI/CD enforcement — pass/fail quality gate on PRs.
+- [x] **#222 / #226 CI Workflows:** Implement deterministic shield workflow, linting, tests, and compiled rules enforcement into the Totem repository CI pipeline.
 - [x] **#168 Interactive multi-select:** `totem extract` uses `@clack/prompts` multiselect for cherry-picking lessons.
 - [x] **#185 CLI command renames:** `learn` → `extract`, removed `anchor` alias (use `add-lesson`).
 - [x] **#131 Clean Ejection:** Build `totem eject` to safely remove git hooks, prompt injections, and database artifacts if a user uninstalls.
