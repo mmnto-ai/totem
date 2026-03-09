@@ -13,6 +13,7 @@ import { bold, log } from './ui.js';
 // ─── Shared constants ────────────────────────────────────
 
 const LLM_TIMEOUT_MS = 180_000;
+const LLM_MAX_OUTPUT = 50 * 1024 * 1024; // 50 MB — safety cap on streamed output
 const TEMP_ID_BYTES = 4;
 const MODEL_NAME_RE = /^[\w./:_-]+$/;
 const TELEMETRY_FILE = 'telemetry.jsonl';
@@ -182,10 +183,10 @@ export async function invokeShellOrchestrator(
       let timedOut = false;
 
       child.stdout.on('data', (chunk: Buffer) => {
-        stdout += chunk.toString();
+        if (stdout.length < LLM_MAX_OUTPUT) stdout += chunk.toString();
       });
       child.stderr.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString();
+        if (stderr.length < LLM_MAX_OUTPUT) stderr += chunk.toString();
       });
 
       const timer = setTimeout(() => {

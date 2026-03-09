@@ -258,7 +258,10 @@ export async function docsCommand(options: DocsOptions): Promise<void> {
     try {
       content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = (err instanceof Error ? err.message : String(err)).replace(
+        /^\s*\[Totem Error\]\s*/,
+        '',
+      );
       log.error(TAG, `Failed to process ${doc.path} — skipping. ${msg}`);
       failed++;
       continue;
