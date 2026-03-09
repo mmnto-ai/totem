@@ -148,10 +148,10 @@ To keep the core CLI lightweight, Totem uses a **"Bring Your Own SDK" (BYOSD)** 
 
 ```bash
 # If using provider: 'gemini'
-npm install -D @google/genai
+pnpm add -D @google/genai
 
 # If using provider: 'anthropic'
-npm install -D @anthropic-ai/sdk
+pnpm add -D @anthropic-ai/sdk
 ```
 
 ```typescript
