@@ -145,15 +145,14 @@ Totem ships with native CLI commands that orchestrate your entire shift-left wor
 First, configure your orchestrator in `totem.config.ts`. Totem supports **Native API Orchestrators** (#229) for direct integrations (Anthropic, Gemini) and a generic shell adapter:
 
 ```typescript
-// Use a native API orchestrator (Anthropic or Gemini) or fallback to 'shell'
+// Use a native API orchestrator (gemini, anthropic) or the generic 'shell' adapter
 orchestrator: {
-  provider: 'anthropic',
-  defaultModel: 'claude-3-7-sonnet-latest',
-  fallbackModel: 'claude-3-5-haiku-latest',
+  provider: 'gemini',
+  defaultModel: 'gemini-3-flash-preview',
   overrides: {
-    spec: 'claude-3-7-sonnet-latest',
-    shield: 'claude-3-7-sonnet-latest',
-    triage: 'claude-3-7-sonnet-latest'
+    spec: 'gemini-3.1-pro-preview',
+    shield: 'gemini-3.1-pro-preview',
+    triage: 'gemini-3.1-pro-preview'
   }
 }
 ```
