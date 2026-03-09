@@ -1,6 +1,7 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 
+import safeRegex from 'safe-regex2';
 import { z } from 'zod';
 
 // ─── Schemas ─────────────────────────────────────────
@@ -57,14 +58,27 @@ export function hashLesson(heading: string, body: string): string {
 
 // ─── Regex validation ────────────────────────────────
 
-/** Validate that a pattern string is a syntactically valid RegExp. */
-export function validateRegex(pattern: string): boolean {
+export interface RegexValidation {
+  valid: boolean;
+  reason?: string;
+}
+
+/**
+ * Validate that a pattern string is a syntactically valid RegExp
+ * and is not vulnerable to ReDoS (catastrophic backtracking).
+ */
+export function validateRegex(pattern: string): RegexValidation {
   try {
     new RegExp(pattern);
-    return true;
   } catch {
-    return false;
+    return { valid: false, reason: 'invalid syntax' };
   }
+
+  if (!safeRegex(pattern)) {
+    return { valid: false, reason: 'ReDoS vulnerability detected' };
+  }
+
+  return { valid: true };
 }
 
 // ─── Diff parsing ────────────────────────────────────

@@ -40,19 +40,46 @@ describe('hashLesson', () => {
 
 describe('validateRegex', () => {
   it('accepts a valid regex', () => {
-    expect(validateRegex('\\bfoo\\b')).toBe(true);
+    expect(validateRegex('\\bfoo\\b')).toEqual({ valid: true });
   });
 
   it('accepts a simple string pattern', () => {
-    expect(validateRegex('console.log')).toBe(true);
+    expect(validateRegex('console.log')).toEqual({ valid: true });
+  });
+
+  it('accepts a complex but safe pattern', () => {
+    // Anchored API key format — complex but not vulnerable
+    expect(validateRegex('^[A-Za-z0-9]{32,}$')).toEqual({ valid: true });
   });
 
   it('rejects an invalid regex', () => {
-    expect(validateRegex('[invalid')).toBe(false);
+    const result = validateRegex('[invalid');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toBe('invalid syntax');
   });
 
   it('rejects unbalanced parentheses', () => {
-    expect(validateRegex('(unclosed')).toBe(false);
+    const result = validateRegex('(unclosed');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toBe('invalid syntax');
+  });
+
+  it('rejects ReDoS pattern: nested quantifiers (a+)+', () => {
+    const result = validateRegex('(a+)+$');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toBe('ReDoS vulnerability detected');
+  });
+
+  it('rejects ReDoS pattern: nested character class quantifiers ([a-zA-Z]+)*', () => {
+    const result = validateRegex('([a-zA-Z]+)*');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toBe('ReDoS vulnerability detected');
+  });
+
+  it('rejects ReDoS pattern: nested repetition (.*a){10}', () => {
+    const result = validateRegex('(.*a){10}');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toBe('ReDoS vulnerability detected');
   });
 });
 

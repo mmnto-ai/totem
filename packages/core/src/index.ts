@@ -72,6 +72,7 @@ export {
   hashLesson,
   loadCompiledRules,
   parseCompilerResponse,
+  type RegexValidation,
   saveCompiledRules,
   validateRegex,
 } from './compiler.js';
