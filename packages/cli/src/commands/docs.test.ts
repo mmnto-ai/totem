@@ -4,6 +4,8 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { DocTarget } from '@mmnto/totem';
+
 import { docsCommand, extractUpdatedDocument } from './docs.js';
 
 // ─── Mocks ──────────────────────────────────────────────
@@ -62,7 +64,7 @@ function writeDoc(dir: string, relPath: string, content: string): void {
   fs.writeFileSync(fullPath, content, 'utf-8');
 }
 
-function mockConfig(docs?: any[]): void {
+function mockConfig(docs?: DocTarget[]): void {
   vi.mocked(loadConfig).mockResolvedValue({
     targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
     ...(docs !== undefined ? { docs } : {}),
@@ -70,7 +72,7 @@ function mockConfig(docs?: any[]): void {
     lanceDir: '.lancedb',
     ignorePatterns: [],
     contextWarningThreshold: 40_000,
-  } as any);
+  });
 }
 
 // ─── Tests ──────────────────────────────────────────────
