@@ -108,6 +108,11 @@ describe('injectSentinelBlock', () => {
     const result = injectSentinelBlock('', 'BLOCK');
     expect(result).toContain('BLOCK');
   });
+
+  it('does not modify content if generated block is empty and no sentinels exist', () => {
+    const result = injectSentinelBlock('# My Config', '');
+    expect(result).toBe('# My Config');
+  });
 });
 
 // ─── exportLessons (integration) ──────────────────

@@ -59,9 +59,10 @@ export function injectSentinelBlock(existingContent: string, generatedBlock: str
     return before + generatedBlock + after;
   }
 
-  // No sentinels — append to end
-  const needsNewline = existingContent.length > 0 && !existingContent.endsWith('\n');
-  const separator = needsNewline ? '\n\n' : '\n';
+  // No sentinels — append to end (no-op if nothing to inject)
+  if (generatedBlock === '') return existingContent;
+  if (existingContent.trim() === '') return generatedBlock + '\n';
+  const separator = existingContent.endsWith('\n') ? '\n' : '\n\n';
   return existingContent + separator + generatedBlock + '\n';
 }
 
