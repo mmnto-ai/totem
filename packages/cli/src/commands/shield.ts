@@ -2,7 +2,6 @@ import * as path from 'node:path';
 
 import type { ContentType, SearchResult } from '@mmnto/totem';
 import {
-  applyRules,
   applyRulesToAdditions,
   createEmbedder,
   enrichWithAstContext,
@@ -266,7 +265,7 @@ async function runDeterministicShield(
   // Extract additions, exclude compiled rules file (would self-match)
   const rulesRelPath = path.join(totemDir, COMPILED_RULES_FILE).replace(/\\/g, '/');
   const excluded = new Set([rulesRelPath]);
-  let additions = extractAddedLines(diff).filter((a) => !excluded.has(a.file));
+  const additions = extractAddedLines(diff).filter((a) => !excluded.has(a.file));
 
   // Enrich with AST context — skips strings/comments/regex during rule matching
   try {
