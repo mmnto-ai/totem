@@ -387,7 +387,7 @@ Treat environment variables provided by the host AI (such as `$TOOL_INPUT` in Cl
 
 **Tags:** nodejs, configuration, idempotency
 
-When scaffolding configuration files that store settings in JSON arrays (like `.claude/settings.local.json`), implement deep merging to append entries rather than overwriting the entire key. This allows the tool to maintain idempotency while preserving existing user-defined hooks.
+When scaffolding configuration files that store settings in JSON arrays, implement deep merging to append entries rather than overwriting the entire key. This allows the tool to maintain idempotency while preserving existing user-defined hooks.
 
 ## Lesson — 2026-03-06T18:48:00.895Z
 
