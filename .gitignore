@@ -40,3 +40,6 @@ session-handoff.md
 .totem/temp/
 .totem/cache/
 .totem/*.log
+
+# Developer Journal
+.journal/

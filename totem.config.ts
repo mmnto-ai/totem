@@ -10,6 +10,7 @@ const config: TotemConfig = {
     { glob: 'docs/**/*.md', type: 'spec', strategy: 'markdown-heading' },
     { glob: 'specs/**/*.md', type: 'spec', strategy: 'markdown-heading' },
     { glob: '.strategy/**/*.md', type: 'spec', strategy: 'markdown-heading' },
+    { glob: '.journal/**/*.md', type: 'spec', strategy: 'markdown-heading' },
     { glob: '.totem/**/*.md', type: 'spec', strategy: 'markdown-heading' },
   ],
 
