@@ -51,6 +51,12 @@ export function injectSentinelBlock(existingContent: string, generatedBlock: str
     );
   }
 
+  if (startIdx !== -1 && endIdx !== -1 && endIdx < startIdx) {
+    throw new Error(
+      `[Totem Error] Found ${SENTINEL_END} before ${SENTINEL_START}. Fix the target file manually.`,
+    );
+  }
+
   if (startIdx !== -1 && endIdx !== -1) {
     const before = existingContent.slice(0, startIdx);
     const after = existingContent.slice(endIdx + SENTINEL_END.length);

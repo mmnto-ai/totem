@@ -102,6 +102,11 @@ describe('injectSentinelBlock', () => {
     expect(() => injectSentinelBlock(existing, 'NEW')).toThrow('[Totem Error]');
   });
 
+  it('throws when end sentinel appears before start sentinel', () => {
+    const existing = `${SENTINEL_END}\nstuff\n${SENTINEL_START}`;
+    expect(() => injectSentinelBlock(existing, 'NEW')).toThrow('[Totem Error]');
+  });
+
   it('preserves content before and after sentinels', () => {
     const existing = `BEFORE\n${SENTINEL_START}\nold\n${SENTINEL_END}\nAFTER`;
     const result = injectSentinelBlock(existing, 'REPLACED');
