@@ -10,6 +10,9 @@
 ## Operational Rules
 
 - **Branch Protection:** The `main` branch is formally protected. NEVER commit or push directly to `main`. Always create a feature branch and open a Pull Request.
+- **Explicit Consent:** NEVER stage, commit, create branches, or execute file migrations unless the user explicitly instructs you to do so. Discussing a change, answering a question about a change, or planning a change does NOT mean "execute it."
+- **Never Merge PRs:** NEVER merge pull requests automatically. Merging requires explicit user approval, every time.
+- **Never Run Destructive Git Commands:** NEVER run `git reset --hard`, `git checkout --`, `git clean`, or `git push --force` without explicit user instruction. If you made a mistake, tell the user and let them decide how to fix it.
 
 ## Totem AI Integration (Auto-Generated)
 
