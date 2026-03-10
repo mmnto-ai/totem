@@ -169,13 +169,16 @@ export function extractFileReferences(body: string): string[] {
  */
 export function detectDrift(lessons: ParsedLesson[], projectRoot: string): DriftResult[] {
   const results: DriftResult[] = [];
+  const resolvedRoot = path.resolve(projectRoot) + path.sep;
 
   for (const lesson of lessons) {
     const refs = extractFileReferences(lesson.body);
     if (refs.length === 0) continue;
 
     const orphaned = refs.filter((ref) => {
-      const absPath = path.join(projectRoot, ref);
+      const absPath = path.resolve(projectRoot, ref);
+      // Path containment: skip refs that escape the project root
+      if (!absPath.startsWith(resolvedRoot)) return false;
       return !fs.existsSync(absPath);
     });
 

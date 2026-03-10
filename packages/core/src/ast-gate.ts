@@ -64,6 +64,13 @@ async function classifyFile(
 ): Promise<void> {
   const fullPath = path.resolve(cwd, file);
 
+  // Path containment: skip files that escape the working directory
+  const resolvedCwd = path.resolve(cwd) + path.sep;
+  if (!fullPath.startsWith(resolvedCwd)) {
+    onWarn?.(`AST gate: ${file} escapes project root, skipping`);
+    return;
+  }
+
   let content: string;
   try {
     content = fs.readFileSync(fullPath, 'utf-8');

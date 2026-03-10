@@ -175,18 +175,27 @@ program
 program
   .command('handoff')
   .description('Generate an end-of-session handoff snapshot for the next session')
+  .option('--lite', 'Zero-LLM deterministic snapshot (git state + lessons, no API key needed)')
   .option('--raw', 'Output retrieved context without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
   .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
-  .action(async (opts: { raw?: boolean; out?: string; model?: string; fresh?: boolean }) => {
-    try {
-      const { handoffCommand } = await import('./commands/handoff.js');
-      await handoffCommand(opts);
-    } catch (err) {
-      handleError(err);
-    }
-  });
+  .action(
+    async (opts: {
+      lite?: boolean;
+      raw?: boolean;
+      out?: string;
+      model?: string;
+      fresh?: boolean;
+    }) => {
+      try {
+        const { handoffCommand } = await import('./commands/handoff.js');
+        await handoffCommand(opts);
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
 
 program
   .command('bridge')

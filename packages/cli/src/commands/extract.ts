@@ -129,10 +129,10 @@ function assemblePrompt(
 ): string {
   const sections: string[] = [systemPrompt];
 
-  // PR metadata
+  // PR metadata — sanitize untrusted fields (title, state come from PR author)
   sections.push('=== PR METADATA ===');
-  sections.push(`PR #${pr.number}: ${pr.title}`);
-  sections.push(`State: ${pr.state}`);
+  sections.push(`PR #${pr.number}: ${sanitize(pr.title)}`);
+  sections.push(`State: ${sanitize(pr.state)}`);
   if (pr.body) {
     sections.push('');
     sections.push(wrapXml('pr_body', pr.body));
@@ -143,7 +143,7 @@ function assemblePrompt(
   if (reviewBodies.length > 0) {
     sections.push('\n=== REVIEW SUMMARIES ===');
     for (const r of reviewBodies) {
-      sections.push(`[${r.author} — ${r.state}]`);
+      sections.push(`[${sanitize(r.author)} — ${sanitize(r.state)}]`);
       sections.push(wrapXml('review_body', r.body));
       sections.push('');
     }
@@ -154,7 +154,7 @@ function assemblePrompt(
   if (prComments.length > 0) {
     sections.push('\n=== PR COMMENTS ===');
     for (const c of prComments) {
-      sections.push(`[${c.author}]`);
+      sections.push(`[${sanitize(c.author)}]`);
       sections.push(wrapXml('comment_body', c.body));
       sections.push('');
     }
@@ -164,10 +164,10 @@ function assemblePrompt(
   if (threads.length > 0) {
     sections.push('\n=== INLINE REVIEW THREADS ===');
     for (const thread of threads) {
-      sections.push(`--- ${thread.path} ---`);
+      sections.push(`--- ${sanitize(thread.path)} ---`); // totem-ignore — thread.path is untrusted PR data, not local git
       sections.push(wrapXml('diff_hunk', thread.diffHunk));
       for (const c of thread.comments) {
-        sections.push(`[${c.author}]:\n${wrapXml('comment_body', c.body)}`);
+        sections.push(`[${sanitize(c.author)}]:\n${wrapXml('comment_body', c.body)}`);
       }
       sections.push('');
     }

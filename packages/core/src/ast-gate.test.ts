@@ -110,4 +110,19 @@ describe('enrichWithAstContext', () => {
     expect(additions[1]!.astContext).toBe('code');
     expect(additions[2]!.astContext).toBeUndefined(); // JSON not supported
   });
+
+  it('rejects path traversal attempts (fail-open)', async () => {
+    const warnings: string[] = [];
+    const additions: DiffAddition[] = [
+      { file: '../../../etc/passwd.ts', line: 'root:x:0:0', lineNumber: 1, precedingLine: null },
+    ];
+
+    await enrichWithAstContext(additions, {
+      cwd: tmpDir,
+      onWarn: (msg) => warnings.push(msg),
+    });
+
+    expect(additions[0]!.astContext).toBeUndefined();
+    expect(warnings.some((w) => w.includes('escapes project root'))).toBe(true);
+  });
 });

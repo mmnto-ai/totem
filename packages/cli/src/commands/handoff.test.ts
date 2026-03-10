@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { readRecentLessons } from './handoff.js';
+import { buildLiteHandoff, readRecentLessons } from './handoff.js';
 
 describe('readRecentLessons', () => {
   let tmpDir: string;
@@ -39,5 +39,46 @@ describe('readRecentLessons', () => {
     expect(result).toContain('Line 200');
     expect(result).toContain('Line 101');
     expect(result).not.toContain('Line 100\n');
+  });
+});
+
+// ─── buildLiteHandoff ───────────────────────────────
+
+describe('buildLiteHandoff', () => {
+  it('generates clean working tree snapshot', () => {
+    const output = buildLiteHandoff(
+      'main',
+      '',
+      '',
+      'abc1234 initial commit',
+      '## Lesson 1\nContent',
+    );
+    expect(output).toContain('main; clean working tree');
+    expect(output).toContain('Working tree is clean.');
+    expect(output).toContain('abc1234 initial commit');
+    expect(output).toContain('lines in lessons file'); // totem-ignore
+  });
+
+  it('generates dirty working tree snapshot', () => {
+    const output = buildLiteHandoff(
+      'feat/test',
+      ' M src/app.ts\n?? new-file.ts',
+      ' src/app.ts | 5 ++---',
+      'def5678 second commit\nabc1234 first commit',
+      '',
+    );
+    expect(output).toContain('feat/test; dirty working tree');
+    expect(output).toContain('M src/app.ts');
+    expect(output).toContain('new-file.ts');
+    expect(output).toContain('5 ++---');
+    expect(output).toContain('def5678 second commit');
+    expect(output).toContain('No lessons file found.');
+  });
+
+  it('handles empty commits and lessons', () => {
+    const output = buildLiteHandoff('main', '', '', '', '');
+    expect(output).toContain('clean working tree');
+    expect(output).toContain('No commits found.');
+    expect(output).toContain('No lessons file found.');
   });
 });

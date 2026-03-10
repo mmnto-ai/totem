@@ -230,6 +230,23 @@ Always use \`const\` instead of \`let\` when possible.
     expect(drift).toHaveLength(0);
   });
 
+  it('ignores path traversal references that escape project root', () => {
+    const lessons = parseLessonsFile(`# Header
+
+---
+
+## Lesson — Traversal
+
+**Tags:** security
+
+The file \`../../../etc/passwd.config\` should be ignored.
+`);
+
+    const drift = detectDrift(lessons, tmpDir);
+    // Should NOT report as orphaned — the reference escapes the project root
+    expect(drift).toHaveLength(0);
+  });
+
   it('reports only orphaned refs, not valid ones', () => {
     const lessons = parseLessonsFile(`# Header
 

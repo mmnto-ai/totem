@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { getGitBranch, getGitDiff, getGitDiffStat, getGitStatus } from '../git.js';
+import { getGitBranch, getGitDiff, getGitDiffStat, getGitLogSince, getGitStatus } from '../git.js';
 import { log } from '../ui.js';
 import {
   getSystemPrompt,
@@ -122,7 +122,64 @@ export interface HandoffOptions {
   out?: string;
   model?: string;
   fresh?: boolean;
+  lite?: boolean;
 }
+
+// ─── Lite handoff (zero LLM) ────────────────────────────
+
+const RECENT_COMMITS_COUNT = 10;
+
+export function buildLiteHandoff(
+  branch: string,
+  status: string,
+  diffStat: string,
+  recentCommits: string,
+  lessons: string,
+): string {
+  const lines: string[] = [];
+
+  lines.push('### Branch & State');
+  lines.push(`${branch}; ${status.trim() ? 'dirty working tree' : 'clean working tree'}.`);
+  lines.push('');
+
+  lines.push('### Uncommitted Changes');
+  if (status.trim()) {
+    lines.push('```');
+    lines.push(status.trim());
+    lines.push('```');
+    if (diffStat.trim()) {
+      lines.push('');
+      lines.push('```');
+      lines.push(diffStat.trim());
+      lines.push('```');
+    }
+  } else {
+    lines.push('Working tree is clean.');
+  }
+  lines.push('');
+
+  lines.push('### Recent Commits');
+  if (recentCommits.trim()) {
+    lines.push('```');
+    lines.push(recentCommits.trim());
+    lines.push('```');
+  } else {
+    lines.push('No commits found.');
+  }
+  lines.push('');
+
+  lines.push('### Lessons');
+  if (lessons.trim()) {
+    const lessonLines = lessons.split('\n');
+    lines.push(`${lessonLines.length} lines in lessons file (last ${LESSONS_TAIL_LINES} shown).`);
+  } else {
+    lines.push('No lessons file found.');
+  }
+
+  return lines.join('\n');
+}
+
+// ─── Main command ───────────────────────────────────────
 
 export async function handoffCommand(options: HandoffOptions): Promise<void> {
   const cwd = process.cwd();
@@ -151,6 +208,16 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
   log.info(TAG, 'Reading recent lessons...');
   const lessons = readRecentLessons(cwd, config.totemDir);
   log.info(TAG, `Lessons: ${lessons ? `${lessons.split('\n').length} lines` : 'none found'}`);
+
+  // Lite mode — deterministic, zero LLM
+  if (options.lite) {
+    const recentCommits = getGitLogSince(cwd, undefined, RECENT_COMMITS_COUNT);
+    const output = buildLiteHandoff(branch, status, diffStat, recentCommits, lessons);
+    writeOutput(output, options.out);
+    if (options.out) log.success(TAG, `Written to ${options.out}`);
+    log.dim(TAG, 'Lite handoff complete (zero LLM).');
+    return;
+  }
 
   // Resolve system prompt (allow .totem/prompts/handoff.md override)
   const systemPrompt = getSystemPrompt('handoff', SYSTEM_PROMPT, cwd, config.totemDir);
