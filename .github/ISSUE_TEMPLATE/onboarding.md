@@ -27,7 +27,10 @@ pnpm install
 # 4. Build the core, CLI, and MCP packages
 pnpm build
 
-# 5. Verify everything is working by running the tests
+# 5. Build your local AI vector index (creates the .lancedb directory)
+node packages/cli/dist/index.js sync
+
+# 6. Verify everything is working by running the tests
 pnpm test
 ```
 
