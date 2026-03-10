@@ -24,7 +24,7 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 - `totem extract`: Batch lesson extraction from PR review threads with interactive multi-select curation (supported by the `--pick` flag for selective lesson acceptance). Generated lessons use concise, highly descriptive, content-derived headings. The extraction engine incorporates **suspicious lesson detection** (optimized to minimize false positives) to filter out bad rules, which actively blocks suspicious lessons even in `--yes` bypass mode. It is further hardened against prompt injection from untrusted PR comments via strict XML tagging and explicit system prompt security notices.
 - `totem add-lesson`: Inline lesson capture (also exposed as MCP tool `add_lesson`).
 - `totem compile`: Translates natural-language lessons into deterministic regex rules via constrained LLM prompt at compile-time. Supports an `--export` flag for cross-model lesson export targets (such as GitHub Copilot instructions).
-- `totem docs`: Automated per-document LLM passes to keep project documentation in sync with the codebase. Supports targeting individual documents via explicit path arguments (with automatic path fixes) for precision updates (saf safeguarded by XML sentinels for reliable output extraction).
+- `totem docs`: Automated per-document LLM passes to keep project documentation in sync with the codebase. Supports targeting individual documents via explicit path arguments (with automatic path fixes) for precision updates (safeguarded by XML sentinels for reliable output extraction).
 - `totem bridge` / `totem wrap`: Mid-session context resets and end-of-task workflow automation.
 
 ### 3. Deterministic Compiler & Zero-LLM Shield
