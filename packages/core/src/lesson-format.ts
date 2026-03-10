@@ -1,5 +1,25 @@
-const HEADING_MAX_CHARS = 60;
+export const HEADING_MAX_CHARS = 60;
 const MIN_WORD_BREAK = 20;
+
+/**
+ * Truncate a heading string to HEADING_MAX_CHARS at a word boundary.
+ * Strips trailing ellipsis/periods added by LLMs before enforcing the limit.
+ */
+export function truncateHeading(heading: string): string {
+  // Strip trailing ellipsis (…) or triple-dot (...) that LLMs love to add
+  let text = heading
+    .replace(/[…]+$/, '')
+    .replace(/\.{3,}$/, '')
+    .trim();
+
+  if (text.length <= HEADING_MAX_CHARS) return text;
+
+  const truncated = text.slice(0, HEADING_MAX_CHARS);
+  const lastSpace = truncated.lastIndexOf(' ');
+  text = (lastSpace > MIN_WORD_BREAK ? truncated.slice(0, lastSpace) : truncated).trimEnd();
+
+  return text;
+}
 
 /**
  * Generate a descriptive lesson heading from the lesson body.

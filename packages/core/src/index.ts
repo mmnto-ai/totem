@@ -89,6 +89,6 @@ export {
 } from './exporter.js';
 
 // Utilities
-export { generateLessonHeading } from './lesson-format.js';
+export { generateLessonHeading, HEADING_MAX_CHARS, truncateHeading } from './lesson-format.js';
 export { sanitize } from './sanitize.js';
 export { wrapXml } from './xml-format.js';
