@@ -243,7 +243,8 @@ export function parseLessons(llmOutput: string): ExtractedLesson[] {
 
 const MAX_SUSPICIOUS_HEADING_LENGTH = 60;
 const INSTRUCTIONAL_LEAKAGE_RE = /(?:ignore previous|system prompt|you are|disregard)/i;
-const XML_TAG_LEAKAGE_RE = /<\/?(?:pr_body|system|instructions|lessons|untrusted_content)[^>]*>/i;
+const XML_TAG_LEAKAGE_RE =
+  /<\/?(?:pr_body|comment_body|diff_hunk|review_body|system|untrusted_content)[^>]*>/i;
 const BASE64_BLOB_RE = /(?:[A-Za-z0-9+/]{4}){15,}/; // 60+ contiguous base64-alphabet chars
 const UNICODE_ESCAPE_RE = /(?:\\u[0-9a-fA-F]{4}){5,}/; // 5+ consecutive unicode escapes
 
@@ -270,11 +271,11 @@ export function flagSuspiciousLessons(lessons: ExtractedLesson[]): ExtractedLess
       flags.push('Contains system XML tags');
     }
 
-    if (BASE64_BLOB_RE.test(lesson.text)) {
+    if (BASE64_BLOB_RE.test(combined)) {
       flags.push('Contains potential Base64 payload');
     }
 
-    if (UNICODE_ESCAPE_RE.test(lesson.text)) {
+    if (UNICODE_ESCAPE_RE.test(combined)) {
       flags.push('Contains excessive unicode escapes');
     }
 

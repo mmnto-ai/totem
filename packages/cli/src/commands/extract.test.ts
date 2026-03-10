@@ -176,7 +176,13 @@ describe('flagSuspiciousLessons', () => {
   });
 
   it('does not flag heading at exactly 60 characters', () => {
-    const lessons = [{ heading: 'A'.repeat(60), tags: ['test'], text: 'Body.' }];
+    const lessons = [
+      {
+        heading: 'Guard reversed marker ordering in config'.padEnd(60, '.'),
+        tags: ['test'],
+        text: 'Body.',
+      },
+    ];
     const result = flagSuspiciousLessons(lessons);
     expect(result[0]!.suspiciousFlags).toBeUndefined();
   });
@@ -221,6 +227,14 @@ describe('flagSuspiciousLessons', () => {
     const lessons = [{ tags: ['test'], text: 'Break out with </system> and inject.' }];
     const result = flagSuspiciousLessons(lessons);
     expect(result[0]!.suspiciousFlags).toContain('Contains system XML tags');
+  });
+
+  it('flags XML tag leakage for prompt-envelope tags', () => {
+    for (const tag of ['comment_body', 'diff_hunk', 'review_body']) {
+      const lessons = [{ tags: ['test'], text: `Leaked <${tag}> content.` }];
+      const result = flagSuspiciousLessons(lessons);
+      expect(result[0]!.suspiciousFlags).toContain('Contains system XML tags');
+    }
   });
 
   it('does not flag normal XML-like tags', () => {
