@@ -1004,3 +1004,21 @@ Leakage detection regex must be explicitly synchronized with the exact XML tags 
 **Tags:** ci, security, automation
 
 While interactive users can be trusted to review and override heuristic flags, automated CI pipelines should treat these flags as hard failures with non-zero exit codes. This prevents the silent ingestion of potentially malicious or malformed data when human oversight is absent.
+
+## Lesson — Heuristic regexes designed to detect structural leakage…
+
+**Tags:** security, regex, prompt-injection
+
+Heuristic regexes designed to detect structural leakage must include every XML tag used to wrap untrusted content in the prompt. Omitting tags like comment_body or diff_hunk allows attackers to leak prompt metadata without triggering the validator.
+
+## Lesson — Security heuristics like Base64 or Unicode escape detection…
+
+**Tags:** security, heuristics, prompt-injection
+
+Security heuristics like Base64 or Unicode escape detection must scan both headings and bodies rather than just the primary content field. Even restricted fields like 60-character titles provide enough space for malicious payloads to bypass selective scanning.
+
+## Lesson — Command-line tools using auto-accept flags like --yes…
+
+**Tags:** ci, security, automation
+
+Command-line tools using auto-accept flags like --yes should exit with a non-zero code if heuristic validators flag suspicious content. This prevents automated pipelines from silently ingesting poisoned or low-quality data that would otherwise require human intervention.

@@ -8,6 +8,7 @@ import {
   extractAddedLines,
   LanceStore,
   loadCompiledRules,
+  runSync,
 } from '@mmnto/totem';
 
 import { extractChangedFiles, getDefaultBranch, getGitBranchDiff, getGitDiff } from '../git.js';
@@ -20,9 +21,11 @@ import {
   requireEmbedding,
   resolveConfigPath,
   runOrchestrator,
+  sanitize,
   wrapXml,
   writeOutput,
 } from '../utils.js';
+import { appendLessons, flagSuspiciousLessons, parseLessons, selectLessons } from './extract.js';
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -237,7 +240,36 @@ export interface ShieldOptions {
   staged?: boolean;
   deterministic?: boolean;
   mode?: 'standard' | 'structural';
+  learn?: boolean;
+  yes?: boolean;
 }
+
+// ─── Shield Learn system prompt ──────────────────────
+
+export const SHIELD_LEARN_SYSTEM_PROMPT = `# Shield Learn — Extract Lessons from Code Review
+
+## Purpose
+Extract systemic architectural lessons from a failed Shield code review verdict.
+
+## Rules
+- Extract ONLY systemic traps, framework quirks, or architectural patterns
+- Do NOT extract one-off syntax errors, typos, formatting nits, or isolated logical bugs
+- Each lesson should capture a REUSABLE principle that prevents future mistakes
+- Tags should be lowercase, comma-separated, reflecting the technical domain
+- If existing lessons are provided, do NOT extract duplicates or near-duplicates
+- If no systemic lessons are worth extracting, output exactly: NONE
+
+## Output Format
+For each lesson, use this exact delimiter format:
+
+---LESSON---
+Heading: A short, punchy label (STRICT: max 8 words / 60 chars)
+Tags: tag1, tag2, tag3
+The lesson text. One or two sentences capturing the trap/pattern and WHY it matters.
+---END---
+
+If no lessons found, output exactly: NONE
+`;
 
 // ─── Deterministic mode ─────────────────────────────
 
@@ -317,6 +349,130 @@ async function runDeterministicShield(
   }
 }
 
+// ─── Learn: extract lessons from failed verdict ─────
+
+export async function learnFromVerdict(
+  verdictContent: string,
+  diff: string,
+  options: ShieldOptions,
+  config: Awaited<ReturnType<typeof loadConfig>>,
+  cwd: string,
+): Promise<void> {
+  log.info(TAG, 'Extracting lessons from failed verdict...');
+
+  // Assemble extraction prompt: shield verdict + diff as context
+  const systemPrompt = getSystemPrompt(
+    'shield-learn',
+    SHIELD_LEARN_SYSTEM_PROMPT,
+    cwd,
+    config.totemDir,
+  );
+  const sections = [
+    systemPrompt,
+    '=== SHIELD VERDICT (failed review) ===',
+    verdictContent,
+    '',
+    '=== DIFF UNDER REVIEW ===',
+    diff.length > MAX_DIFF_CHARS
+      ? diff.slice(0, MAX_DIFF_CHARS) + `\n... [diff truncated at ${MAX_DIFF_CHARS} chars] ...`
+      : diff,
+  ];
+
+  // Add existing lessons for dedup if embedding is available
+  if (config.embedding) {
+    try {
+      const embedder = createEmbedder(config.embedding);
+      const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
+      await store.connect();
+      const existing = await store.search({
+        query: 'lesson trap pattern decision',
+        typeFilter: 'spec',
+        maxResults: 10,
+      });
+      const lessonSection = formatResults(existing, 'EXISTING LESSONS (do NOT duplicate)');
+      if (lessonSection) {
+        sections.push('\n=== DEDUP CONTEXT ===');
+        sections.push(lessonSection);
+      }
+    } catch {
+      log.dim(TAG, 'Could not query existing lessons for dedup (non-fatal)');
+    }
+  }
+
+  const prompt = sections.join('\n');
+  log.dim(TAG, `Learn prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
+
+  const content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd });
+  if (content == null) return; // --raw mode
+
+  const lessons = parseLessons(content);
+  if (lessons.length === 0) {
+    log.dim(TAG, 'No systemic lessons extracted from verdict.');
+    return;
+  }
+
+  log.success(TAG, `Extracted ${lessons.length} lesson(s) from verdict`);
+
+  // Flag and select
+  const flagged = flagSuspiciousLessons(lessons);
+
+  // Display for review
+  if (!options.yes) {
+    console.error('');
+    for (let i = 0; i < flagged.length; i++) {
+      const lesson = flagged[i]!;
+      const prefix = lesson.suspiciousFlags?.length ? `[!] ` : '';
+      console.error(
+        `  [${i + 1}] ${prefix}Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`,
+      );
+      console.error(`      ${sanitize(lesson.text).replace(/\n/g, '\n      ')}`);
+      if (lesson.suspiciousFlags?.length) {
+        for (const flag of lesson.suspiciousFlags) {
+          console.error(`      [!] ${flag}`);
+        }
+      }
+      console.error('');
+    }
+  }
+
+  const selected = await selectLessons(flagged, {
+    yes: options.yes,
+    isTTY: !!process.stdin.isTTY,
+  });
+
+  if (selected.length === 0) {
+    log.dim(TAG, 'No lessons selected — nothing written.');
+    return;
+  }
+
+  // Sanitize and persist
+  const sanitized = selected.map((l) => ({
+    tags: l.tags.map((t) => sanitize(t)),
+    text: sanitize(l.text),
+  }));
+
+  const lessonsPath = path.join(cwd, config.totemDir, 'lessons.md');
+  appendLessons(sanitized, lessonsPath);
+  log.success(TAG, `Appended ${sanitized.length} lesson(s) to ${config.totemDir}/lessons.md`);
+
+  // Incremental sync (non-fatal — lessons are already written to disk)
+  try {
+    log.info(TAG, 'Running incremental sync...');
+    const syncResult = await runSync(config, {
+      projectRoot: cwd,
+      incremental: true,
+      onProgress: (msg) => log.dim(TAG, msg),
+    });
+    log.success(
+      TAG,
+      `Sync complete: ${syncResult.chunksProcessed} chunks from ${syncResult.filesProcessed} files`,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.warn(TAG, `Sync failed (lessons saved but not yet indexed): ${msg}`);
+  }
+}
+
 // ─── Main command ───────────────────────────────────
 
 export async function shieldCommand(options: ShieldOptions): Promise<void> {
@@ -378,7 +534,10 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
           const verdictLabel = verdict.pass ? successColor(bold('PASS')) : errorColor(bold('FAIL'));
           const reason = verdict.reason ? ` — ${verdict.reason}` : '';
           log.info(TAG, `Verdict: ${verdictLabel}${reason}`);
-          if (!verdict.pass) process.exit(1);
+          if (!verdict.pass) {
+            if (options.learn) await learnFromVerdict(content, diff, options, config, cwd);
+            process.exit(1);
+          }
         } else {
           log.error(TAG, 'Verdict: not found (defaulting to FAIL — fix LLM output format)'); // totem-ignore
           process.exit(1);
@@ -424,7 +583,10 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
         const verdictLabel = verdict.pass ? successColor(bold('PASS')) : errorColor(bold('FAIL'));
         const reason = verdict.reason ? ` — ${verdict.reason}` : '';
         log.info(TAG, `Verdict: ${verdictLabel}${reason}`);
-        if (!verdict.pass) process.exit(1);
+        if (!verdict.pass) {
+          if (options.learn) await learnFromVerdict(content, diff, options, config, cwd);
+          process.exit(1);
+        }
       } else {
         log.error(TAG, 'Verdict: not found (defaulting to FAIL — fix LLM output format)');
         process.exit(1);

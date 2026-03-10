@@ -11,6 +11,7 @@ import {
   assembleStructuralPrompt,
   MAX_DIFF_CHARS,
   parseVerdict,
+  SHIELD_LEARN_SYSTEM_PROMPT,
   STRUCTURAL_SYSTEM_PROMPT,
 } from './shield.js';
 
@@ -288,3 +289,31 @@ describe('structural mode', () => {
     expect(prompt).toContain(`diff truncated at ${MAX_DIFF_CHARS} chars`);
   });
 });
+
+// ─── Shield Learn (--learn) ──────────────────────────
+
+describe('shield learn system prompt', () => {
+  it('instructs extraction of systemic lessons only', () => {
+    expect(SHIELD_LEARN_SYSTEM_PROMPT).toContain('systemic');
+    expect(SHIELD_LEARN_SYSTEM_PROMPT).toContain('Do NOT extract one-off syntax errors');
+  });
+
+  it('uses the same lesson delimiter format as extract', () => {
+    expect(SHIELD_LEARN_SYSTEM_PROMPT).toContain('---LESSON---');
+    expect(SHIELD_LEARN_SYSTEM_PROMPT).toContain('---END---');
+    expect(SHIELD_LEARN_SYSTEM_PROMPT).toContain('NONE');
+  });
+
+  it('enforces heading constraints', () => {
+    expect(SHIELD_LEARN_SYSTEM_PROMPT).toContain('max 8 words / 60 chars');
+  });
+
+  it('includes dedup instruction', () => {
+    expect(SHIELD_LEARN_SYSTEM_PROMPT).toContain('do NOT extract duplicates');
+  });
+});
+
+// ─── learnFromVerdict ────────────────────────────────
+
+// These tests go in a separate file to avoid mock contamination with the pure tests above.
+// See shield-learn.test.ts for learnFromVerdict functional tests.

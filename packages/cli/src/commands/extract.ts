@@ -242,7 +242,10 @@ export function parseLessons(llmOutput: string): ExtractedLesson[] {
 // ─── Suspicious lesson detection ────────────────────────
 
 const MAX_SUSPICIOUS_HEADING_LENGTH = 60;
-const INSTRUCTIONAL_LEAKAGE_RE = /(?:ignore previous|system prompt|you are|disregard)/i;
+// Require an attack verb in proximity to a sensitive target — prevents false positives
+// on educational lessons that merely *discuss* system prompts or instructions.
+const INSTRUCTIONAL_LEAKAGE_RE =
+  /(?:ignore|override|bypass|disregard|forget|print|output|reveal|leak|dump|repeat|show)[\s\S]{0,50}?(?:system prompt|previous instructions|above instructions|prior instructions|your instructions)/i;
 const XML_TAG_LEAKAGE_RE =
   /<\/?(?:pr_body|comment_body|diff_hunk|review_body|system|untrusted_content)[^>]*>/i;
 const BASE64_BLOB_RE = /(?:[A-Za-z0-9+/]{4}){15,}/; // 60+ contiguous base64-alphabet chars

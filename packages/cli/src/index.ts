@@ -129,6 +129,8 @@ program
     '--mode <mode>',
     'Review mode: standard (default, with Totem knowledge) or structural (context-blind paranoia)',
   )
+  .option('--learn', 'Extract lessons from failed verdicts into .totem/lessons.md')
+  .option('--yes', 'Auto-accept extracted lessons (for CI; suspicious lessons are dropped)')
   .action(
     async (opts: {
       raw?: boolean;
@@ -138,6 +140,8 @@ program
       staged?: boolean;
       deterministic?: boolean;
       mode?: string;
+      learn?: boolean;
+      yes?: boolean;
     }) => {
       try {
         if (opts.mode && opts.mode !== 'standard' && opts.mode !== 'structural') {
