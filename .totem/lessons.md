@@ -812,3 +812,15 @@ Avoid adding explicit runtime checks or redundant error branches for logic paths
 **Tags:** llm, prompt-engineering, sanitization
 
 Requesting explicit metadata tokens (e.g., `Heading:`) from LLMs is more reliable than using heuristic truncation of the first line of output. Sanitize these explicit tokens to remove markdown artifacts and prefixes that LLMs frequently include despite instructions.
+
+## Lesson — Prefer Vitest's expect().rejects.toHaveProperty()…
+
+**Tags:** testing, vitest, patterns
+
+Prefer Vitest's `expect().rejects.toHaveProperty()` assertions over manual `try/catch` blocks with `expect.fail()`. This pattern is more concise and prevents tests from accidentally passing if the code fails to throw as expected.
+
+## Lesson — Ensure all thrown errors, including those for missing…
+
+**Tags:** error-handling, style-guide, consistency
+
+Ensure all thrown errors, including those for missing environment variables or configuration, strictly include the `[Totem Error]` prefix. Maintaining this prefix even in low-level setup code ensures consistent error reporting for users and automated monitoring.
