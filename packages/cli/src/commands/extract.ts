@@ -51,6 +51,7 @@ You are a knowledge curator analyzing a PR's review threads. Your job is to dist
 For each lesson, use this exact delimiter format:
 
 ---LESSON---
+Heading: A concise title for this lesson (max 60 chars, no markdown formatting, no "Lesson" prefix)
 Tags: tag1, tag2, tag3
 The lesson text. One or two sentences capturing the trap/pattern and WHY it matters.
 ---END---
@@ -185,11 +186,20 @@ function assemblePrompt(
 // ─── Lesson parser ──────────────────────────────────────
 
 export interface ExtractedLesson {
+  heading?: string;
   tags: string[];
   text: string;
 }
 
-const LESSON_RE = /---LESSON---\s*\nTags:\s*(.+)\n([\s\S]+?)---END---/g;
+const LESSON_RE = /---LESSON---\s*\n(?:Heading:\s*(.+)\n)?Tags:\s*(.+)\n([\s\S]+?)---END---/g;
+
+/** Strip markdown heading markers and "Lesson —" prefixes from LLM-generated headings. */
+function sanitizeHeading(heading: string): string {
+  return heading
+    .replace(/^#+\s*/, '')
+    .replace(/^Lesson\s*[-—:]\s*/i, '')
+    .trim();
+}
 
 export function parseLessons(llmOutput: string): ExtractedLesson[] {
   if (llmOutput.trim() === 'NONE') return [];
@@ -198,13 +208,15 @@ export function parseLessons(llmOutput: string): ExtractedLesson[] {
   let match: RegExpExecArray | null;
 
   while ((match = LESSON_RE.exec(llmOutput)) !== null) {
-    const tags = match[1]!
+    const rawHeading = match[1]; // undefined if Heading: line was absent
+    const tags = match[2]!
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean);
-    const text = match[2]!.trim();
+    const text = match[3]!.trim();
     if (text) {
-      lessons.push({ tags, text });
+      const heading = rawHeading ? sanitizeHeading(rawHeading) : undefined;
+      lessons.push({ ...(heading && { heading }), tags, text });
     }
   }
 
@@ -221,7 +233,7 @@ export function appendLessons(lessons: ExtractedLesson[], lessonsPath: string): 
 
   const entries = lessons
     .map((l) => {
-      const heading = generateLessonHeading(l.text);
+      const heading = l.heading || generateLessonHeading(l.text);
       const tags = l.tags.join(', ');
       return `\n## Lesson — ${heading}\n\n**Tags:** ${tags}\n\n${l.text}\n`;
     })

@@ -73,6 +73,58 @@ Tags: empty
     const lessons = parseLessons(output);
     expect(lessons).toEqual([]);
   });
+
+  it('extracts heading when provided', () => {
+    const output = `---LESSON---
+Heading: Check ENOENT separately
+Tags: git, cli, trap
+Always check for ENOENT separately from other errors.
+---END---`;
+    const lessons = parseLessons(output);
+    expect(lessons).toHaveLength(1);
+    expect(lessons[0]).toEqual({
+      heading: 'Check ENOENT separately',
+      tags: ['git', 'cli', 'trap'],
+      text: 'Always check for ENOENT separately from other errors.',
+    });
+  });
+
+  it('strips markdown heading markers from LLM heading', () => {
+    const output = `---LESSON---
+Heading: ### My heading
+Tags: test
+Lesson body.
+---END---`;
+    const lessons = parseLessons(output);
+    expect(lessons[0]!.heading).toBe('My heading');
+  });
+
+  it('strips "Lesson —" prefix from LLM heading', () => {
+    const output = `---LESSON---
+Heading: Lesson — My heading
+Tags: test
+Lesson body.
+---END---`;
+    const lessons = parseLessons(output);
+    expect(lessons[0]!.heading).toBe('My heading');
+  });
+
+  it('handles mix of lessons with and without headings', () => {
+    const output = `---LESSON---
+Heading: Explicit heading
+Tags: a
+First lesson.
+---END---
+
+---LESSON---
+Tags: b
+Second lesson without heading.
+---END---`;
+    const lessons = parseLessons(output);
+    expect(lessons).toHaveLength(2);
+    expect(lessons[0]!.heading).toBe('Explicit heading');
+    expect(lessons[1]!.heading).toBeUndefined();
+  });
 });
 
 // sanitize tests are in utils.test.ts (sanitize now lives in utils.ts)
@@ -125,10 +177,19 @@ describe('appendLessons', () => {
     expect(content).toContain('Second.');
   });
 
-  it('uses descriptive heading derived from lesson text', () => {
+  it('uses descriptive heading derived from lesson text when no heading provided', () => {
     appendLessons([{ tags: ['test'], text: 'Timestamped.' }], lessonsPath);
     const content = fs.readFileSync(lessonsPath, 'utf-8');
     expect(content).toContain('## Lesson — Timestamped.');
+  });
+
+  it('uses LLM-provided heading when available', () => {
+    appendLessons(
+      [{ heading: 'Check ENOENT separately', tags: ['test'], text: 'A detailed lesson body.' }],
+      lessonsPath,
+    );
+    const content = fs.readFileSync(lessonsPath, 'utf-8');
+    expect(content).toContain('## Lesson — Check ENOENT separately');
   });
 });
 
