@@ -35,7 +35,7 @@
   "files": [
     "dist"
   ],
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "mmnto-ai",
   "repository": {
     "type": "git",
