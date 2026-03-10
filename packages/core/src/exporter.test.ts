@@ -27,8 +27,12 @@ const makeLessons = (count: number): ParsedLesson[] =>
 // ─── formatLessonsAsMarkdown ────────────────────────
 
 describe('formatLessonsAsMarkdown', () => {
-  it('returns empty string for empty lessons', () => {
-    expect(formatLessonsAsMarkdown([])).toBe('');
+  it('returns sentinel block with no rules for empty lessons', () => {
+    const result = formatLessonsAsMarkdown([]);
+    expect(result).toContain(SENTINEL_START);
+    expect(result).toContain(SENTINEL_END);
+    expect(result).toContain('## Totem Project Rules');
+    expect(result).not.toContain('- **');
   });
 
   it('formats lessons as bulleted list with sentinels', () => {
