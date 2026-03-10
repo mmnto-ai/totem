@@ -1,5 +1,33 @@
 # @mmnto/cli
 
+## 0.23.0
+
+### Minor Changes
+
+- 83923f0: Add native Ollama orchestrator provider with dynamic `num_ctx` support
+  - New `provider: 'ollama'` orchestrator config hits Ollama's native `/api/chat` endpoint directly via fetch (no SDK required)
+  - Supports `numCtx` option to dynamically control context length and VRAM usage per-command
+  - VRAM-friendly error messages on 500 errors suggest lowering `numCtx`
+  - Connection errors suggest running `ollama serve`
+  - Mirrors the existing `ollama-embedder` pattern (plain fetch, baseUrl defaulting)
+
+- 53eda11: feat: `shield --learn` extracts lessons from failed verdicts (#303) and reduces false positives in suspicious lesson detection (#302)
+
+  **Shield --learn:** When a Shield LLM verdict fails, passing `--learn` runs a second extraction pass to distill systemic architectural lessons from the review. Supports `--yes` for unattended CI use (suspicious lessons are auto-dropped). Lessons are appended to `.totem/lessons.md` and immediately re-indexed.
+
+  **False positive reduction:** The instructional leakage heuristic now requires an attack verb (ignore, disregard, reveal, etc.) in proximity to a sensitive target (system prompt, previous instructions, etc.), preventing false positives on educational lessons that merely discuss security patterns.
+
+- 5418aae: Add suspicious lesson detection to `totem extract` with `--yes` mode blocking
+  - New `flagSuspiciousLessons()` heuristic validator detects prompt injection indicators: instructional leakage, XML tag leakage, Base64 payloads, excessive unicode escapes, and overly long headings
+  - Interactive UI marks suspicious lessons with `[!]` prefix and deselects them by default
+  - `--yes` mode automatically blocks suspicious lessons with warnings and exits non-zero for CI pipelines
+  - Dry-run mode surfaces suspicious flags in preview output
+
+### Patch Changes
+
+- Updated dependencies [83923f0]
+  - @mmnto/totem@0.23.0
+
 ## 0.22.0
 
 ### Minor Changes
