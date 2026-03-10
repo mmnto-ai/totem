@@ -9,6 +9,7 @@ import { applyRules, type CompiledRule, loadCompiledRules, saveCompiledRules } f
 import {
   assemblePrompt,
   assembleStructuralPrompt,
+  MAX_DIFF_CHARS,
   parseVerdict,
   STRUCTURAL_SYSTEM_PROMPT,
 } from './shield.js';
@@ -282,8 +283,8 @@ describe('structural mode', () => {
   });
 
   it('structural prompt truncates large diffs', () => {
-    const largeDiff = 'x'.repeat(60_000);
+    const largeDiff = 'x'.repeat(MAX_DIFF_CHARS + 10_000);
     const prompt = assembleStructuralPrompt(largeDiff, ['big.ts'], STRUCTURAL_SYSTEM_PROMPT);
-    expect(prompt).toContain('diff truncated at 50000 chars');
+    expect(prompt).toContain(`diff truncated at ${MAX_DIFF_CHARS} chars`);
   });
 });

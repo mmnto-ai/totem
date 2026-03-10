@@ -20,7 +20,7 @@ import {
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Shield';
-const MAX_DIFF_CHARS = 50_000;
+export const MAX_DIFF_CHARS = 50_000;
 const QUERY_DIFF_TRUNCATE = 2_000;
 const MAX_SPEC_RESULTS = 3;
 const MAX_SESSION_RESULTS = 5;
@@ -188,7 +188,9 @@ export function assembleStructuralPrompt(
   const sections: string[] = [systemPrompt];
 
   sections.push('=== DIFF ===');
-  sections.push(`Changed files: ${changedFiles.join(', ')}`);
+  if (changedFiles.length > 0) {
+    sections.push(`Changed files: ${changedFiles.join(', ')}`);
+  }
   sections.push('');
   if (diff.length > MAX_DIFF_CHARS) {
     sections.push(
@@ -341,6 +343,10 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
     const content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd });
+    if (content == null && !options.raw) {
+      log.error(TAG, 'Orchestrator returned no content (defaulting to FAIL)'); // totem-ignore
+      process.exit(1);
+    }
     if (content != null) {
       writeOutput(content, options.out);
       if (options.out) log.success(TAG, `Written to ${options.out}`);
