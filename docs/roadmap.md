@@ -26,7 +26,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#89 UX Polish for `totem init`:** Fix double-prompting and print clean success summaries so developers trust the onboarding.
 - [x] **#128 Epic: Universal Baselines:** Ship a curated list of foundational AI security/architectural lessons that users can optionally install during `totem init` to solve the "cold start" problem.
 - [ ] **#129 Epic: Interactive CLI Tutorial:** Build an animated, interactive CLI tutorial (`totem tutorial`) that allows users to pause the walkthrough, ask the LLM contextual questions about their codebase, and resume seamlessly.
-- [ ] **#125 Epic: Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically, achieving a "run `init` and forget" workflow.
+- [ ] **#125 Epic: Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically, achieving a "run `init` and forget" workflow (Git hook enforcement and deterministic shield gate implemented via #310, #318).
 - [x] **#86 Seamless Host Integration (#138, #139, #140):** Build the `SessionStart` hooks, Claude custom commands (Claude Code), and Totem Architect skills (Gemini CLI) that #87 installs.
 - [x] **#21 CLI UI/UX Polish:** Branded colors (picocolors), ora spinners, ASCII banner. @clack/prompts multiselect shipped in v0.13.0 (#168).
 - [x] **#12 / #210 Cross-platform onboarding:** Ensure docs and installers work flawlessly across Windows (PowerShell), macOS, and Linux.
@@ -35,6 +35,8 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 **Goal:** Before ingesting enterprise databases, the local vector index and LLM prompts must be bulletproof across all environments.
 
+- [x] **#310 / #318 Git Hook Enforcement:** Block direct `main` commits and enforce deterministic shield gate locally via git hooks, including memory classification.
+- [x] **#309 / #311 Security:** Restructure `GEMINI.md` for stronger rule compliance, explicit consent, and safety rules.
 - [x] **#267 / #272 Security:** Configure Dependabot for automated security vulnerability scanning.
 - [x] **#218 Security:** Add ReDoS protection to compiled regex rules.
 - [x] **#206 / #224 Robustness:** Refactor orchestrator from `execSync` to async `spawn` and fix `node-fetch` aborts on large files like `architecture.md` via Gemini CLI.
