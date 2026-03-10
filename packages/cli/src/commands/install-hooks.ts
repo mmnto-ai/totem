@@ -4,17 +4,19 @@ import { stdin as input, stdout as output } from 'node:process';
 import * as readline from 'node:readline/promises';
 
 const TOTEM_HOOK_MARKER = '[totem] post-merge hook';
+export const TOTEM_PRECOMMIT_MARKER = '[totem] pre-commit hook';
+export const TOTEM_PREPUSH_MARKER = '[totem] pre-push hook';
 
 type HookManager = 'husky' | 'lefthook' | 'simple-git-hooks';
 
+function detectTotemPrefix(cwd: string): string {
+  if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) return 'pnpm exec totem';
+  if (fs.existsSync(path.join(cwd, 'yarn.lock'))) return 'yarn totem';
+  return 'npx totem';
+}
+
 function detectSyncCommand(cwd: string): string {
-  if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) {
-    return 'pnpm exec totem sync --incremental';
-  }
-  if (fs.existsSync(path.join(cwd, 'yarn.lock'))) {
-    return 'yarn totem sync --incremental';
-  }
-  return 'npx totem sync --incremental';
+  return `${detectTotemPrefix(cwd)} sync --incremental`;
 }
 
 function buildHookContent(syncCmd: string): string {
@@ -52,15 +54,36 @@ function detectHookManager(cwd: string): HookManager | null {
   return null;
 }
 
-function printHookManagerGuidance(manager: HookManager, syncCmd: string): void {
+function printHookManagerGuidance(manager: HookManager, syncCmd: string, shieldCmd: string): void {
   switch (manager) {
     case 'husky':
-      console.log('[Totem] Detected husky. Add Totem to your post-merge hook:');
+      console.log('[Totem] Detected husky. Add Totem hooks manually:');
+      console.log('');
+      console.log('  # Pre-commit: block direct commits to main/master');
+      console.log(
+        '  echo \'branch=$(git rev-parse --abbrev-ref HEAD); [ "$branch" = main ] || [ "$branch" = master ] && echo "[Totem] Direct commits to $branch blocked." && exit 1; exit 0\' > .husky/pre-commit',
+      );
+      console.log('');
+      console.log('  # Pre-push: deterministic shield gate');
+      console.log(
+        `  echo '[ ! -f ".totem/compiled-rules.json" ] && exit 0; ${shieldCmd}' > .husky/pre-push`,
+      );
+      console.log('');
+      console.log('  # Post-merge: background re-index');
       console.log(`  echo '${syncCmd}' >> .husky/post-merge`);
-      console.log('  chmod +x .husky/post-merge');
       break;
     case 'lefthook':
       console.log('[Totem] Detected lefthook. Add to your lefthook.yml:');
+      console.log('  pre-commit:');
+      console.log('    commands:');
+      console.log('      totem-block-main:');
+      console.log(
+        '        run: branch=$(git rev-parse --abbrev-ref HEAD); [ "$branch" = main ] || [ "$branch" = master ] && echo "[Totem] Direct commits to $branch blocked." && exit 1; exit 0',
+      );
+      console.log('  pre-push:');
+      console.log('    commands:');
+      console.log('      totem-shield:');
+      console.log(`        run: '[ ! -f ".totem/compiled-rules.json" ] && exit 0; ${shieldCmd}'`);
       console.log('  post-merge:');
       console.log('    commands:');
       console.log('      totem-sync:');
@@ -69,6 +92,12 @@ function printHookManagerGuidance(manager: HookManager, syncCmd: string): void {
     case 'simple-git-hooks':
       console.log('[Totem] Detected simple-git-hooks. Add to your package.json:');
       console.log('  "simple-git-hooks": {');
+      console.log(
+        '    "pre-commit": "branch=$(git rev-parse --abbrev-ref HEAD); [ \\"$branch\\" = main ] || [ \\"$branch\\" = master ] && echo \\"[Totem] Direct commits to $branch blocked.\\" && exit 1",',
+      );
+      console.log(
+        `    "pre-push": "[ ! -f \\".totem/compiled-rules.json\\" ] && exit 0; ${shieldCmd}",`,
+      );
       console.log(`    "post-merge": "${syncCmd}"`);
       console.log('  }');
       break;
@@ -83,10 +112,11 @@ export async function installPostMergeHook(cwd: string, rl: readline.Interface):
   }
 
   const syncCmd = detectSyncCommand(cwd);
+  const shieldCmd = `${detectTotemPrefix(cwd)} shield --deterministic`;
   const manager = detectHookManager(cwd);
 
   if (manager) {
-    printHookManagerGuidance(manager, syncCmd);
+    printHookManagerGuidance(manager, syncCmd, shieldCmd);
     return;
   }
 
@@ -135,11 +165,139 @@ echo "[totem] Triggering background re-index..."
   console.log('[Totem] Installed post-merge hook.');
 }
 
+// ─── Enforcement hooks (pre-commit + pre-push) ──────────
+
+export function buildPreCommitHook(): string {
+  return `#!/bin/sh
+# ${TOTEM_PRECOMMIT_MARKER} — block direct commits to protected branches.
+# Override with: git commit --no-verify
+
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
+  echo "[Totem] ERROR: Direct commits to '$branch' are blocked."
+  echo "[Totem] Create a feature branch: git checkout -b feat/my-feature"
+  echo "[Totem] Override with: git commit --no-verify"
+  exit 1
+fi
+`;
+}
+
+export function buildPrePushHook(shieldCmd: string): string {
+  return `#!/bin/sh
+# ${TOTEM_PREPUSH_MARKER} — deterministic shield gate.
+# Override with: git push --no-verify
+
+# Bail instantly if no compiled rules (zero Node startup penalty)
+[ ! -f ".totem/compiled-rules.json" ] && exit 0
+
+${shieldCmd}
+`;
+}
+
+/**
+ * Install a single git hook with idempotency and chain preservation.
+ * Returns the action taken.
+ */
+export function installGitHook(
+  hooksDir: string,
+  hookName: string,
+  hookContent: string,
+  marker: string,
+): 'installed' | 'exists' | 'appended' {
+  const hookPath = path.join(hooksDir, hookName);
+
+  if (fs.existsSync(hookPath)) {
+    const existing = fs.readFileSync(hookPath, 'utf-8');
+    if (existing.includes(marker)) {
+      return 'exists';
+    }
+
+    // Append to existing hook — preserve user's existing hooks
+    const separator = existing.endsWith('\n') ? '\n' : '\n\n';
+    const appendBlock = hookContent
+      .replace(/^#!\/bin\/sh\n/, '') // Strip shebang when appending
+      .trimStart();
+    fs.appendFileSync(hookPath, separator + appendBlock);
+    return 'appended';
+  }
+
+  // Create new hook
+  fs.mkdirSync(hooksDir, { recursive: true });
+  fs.writeFileSync(hookPath, hookContent);
+
+  // Make executable (no-op on Windows, git bash handles it)
+  try {
+    fs.chmodSync(hookPath, 0o755);
+  } catch {
+    // chmod may fail on Windows — hooks still work via git bash
+  }
+
+  return 'installed';
+}
+
+export interface EnforcementHookResult {
+  preCommit: 'installed' | 'exists' | 'appended' | 'skipped';
+  prePush: 'installed' | 'exists' | 'appended' | 'skipped';
+}
+
+/**
+ * Install pre-commit (block main) and pre-push (deterministic shield) hooks.
+ * Respects hook managers by printing guidance instead of writing raw hooks.
+ * Returns actions taken for reporting in init summary.
+ */
+export async function installEnforcementHooks(
+  cwd: string,
+  rl: readline.Interface,
+): Promise<EnforcementHookResult> {
+  const skip: EnforcementHookResult = { preCommit: 'skipped', prePush: 'skipped' };
+
+  // Guard: must be a git repo
+  if (!fs.existsSync(path.join(cwd, '.git'))) {
+    return skip;
+  }
+
+  // Hook managers handle their own installation — print guidance only
+  const manager = detectHookManager(cwd);
+  if (manager) {
+    // Guidance is printed by installPostMergeHook which runs next
+    return skip;
+  }
+
+  // Ask user — default to yes for safety
+  const answer = await rl.question(
+    '\nInstall git enforcement hooks (block main commits + deterministic shield)? (Y/n): ',
+  );
+
+  if (answer.trim().toLowerCase() === 'n' || answer.trim().toLowerCase() === 'no') {
+    return skip;
+  }
+
+  const hooksDir = path.join(cwd, '.git', 'hooks');
+  const shieldCmd = `${detectTotemPrefix(cwd)} shield --deterministic`;
+
+  const preCommit = installGitHook(
+    hooksDir,
+    'pre-commit',
+    buildPreCommitHook(),
+    TOTEM_PRECOMMIT_MARKER,
+  );
+
+  const prePush = installGitHook(
+    hooksDir,
+    'pre-push',
+    buildPrePushHook(shieldCmd),
+    TOTEM_PREPUSH_MARKER,
+  );
+
+  return { preCommit, prePush };
+}
+
 export async function installHooksCommand(): Promise<void> {
   const cwd = process.cwd();
   const rl = readline.createInterface({ input, output });
 
   try {
+    await installEnforcementHooks(cwd, rl);
     await installPostMergeHook(cwd, rl);
   } finally {
     rl.close();

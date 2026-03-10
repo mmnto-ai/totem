@@ -10,7 +10,7 @@ import type { IngestTarget } from '@mmnto/totem';
 import { BASELINE_MARKER, UNIVERSAL_LESSONS_MARKDOWN } from '../assets/universal-lessons.js';
 import { bold, brand, dim, log, printBanner, success } from '../ui.js';
 import { IS_WIN } from '../utils.js';
-import { installPostMergeHook } from './install-hooks.js';
+import { installEnforcementHooks, installPostMergeHook } from './install-hooks.js';
 
 const AI_PROMPT_BLOCK = `
 
@@ -816,6 +816,21 @@ export async function initCommand(): Promise<void> {
           }
         }
       }
+    }
+
+    // --- Always run: enforcement hooks (pre-commit + pre-push) ---
+    const enforcement = await installEnforcementHooks(cwd, rl);
+    if (enforcement.preCommit === 'installed' || enforcement.preCommit === 'appended') {
+      summary.push({
+        file: '.git/hooks/pre-commit',
+        action: `${enforcement.preCommit === 'installed' ? 'Installed' : 'Appended'} main-branch protection`,
+      });
+    }
+    if (enforcement.prePush === 'installed' || enforcement.prePush === 'appended') {
+      summary.push({
+        file: '.git/hooks/pre-push',
+        action: `${enforcement.prePush === 'installed' ? 'Installed' : 'Appended'} deterministic shield gate`,
+      });
     }
 
     // --- Always run: post-merge git hook ---

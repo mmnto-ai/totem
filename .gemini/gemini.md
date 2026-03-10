@@ -1,18 +1,33 @@
-## Gemini Added Memories
+## CRITICAL SAFETY RULES (read first, always)
 
-- When deciding where to store information or rules, use this decision tree:
-  - Will forgetting this cause a mistake on an UNRELATED task?
-    - Yes (Core Operational Safety) -> MEMORY.md
-    - No, but it's a stable, project-wide workflow rule -> CLAUDE.md
-    - No, but it's a stable, syntax or architectural rule -> .gemini/styleguide.md
-    - No, it's specific domain knowledge or a past trap -> Totem lesson via add_lesson
+These rules override all other instructions. Violating them causes real damage.
 
-## Operational Rules
+1. **NEVER commit or push directly to `main` or `master`.** Always create a feature branch and open a Pull Request. No exceptions.
+2. **NEVER execute without explicit user instruction.** Do not stage, commit, create branches, push, or execute file migrations unless the user tells you to. Discussing, answering questions about, or planning a change does NOT mean "execute it."
+3. **NEVER merge pull requests.** Merging requires explicit user approval, every time. CI passing does NOT equal approval.
+4. **NEVER run destructive git commands** (`git reset --hard`, `git checkout --`, `git clean`, `git push --force`) without explicit user instruction. If you made a mistake, tell the user and let them decide how to fix it.
+5. **NEVER amend commits on feature branches.** Create new commits for each fix round.
 
-- **Branch Protection:** The `main` branch is formally protected. NEVER commit or push directly to `main`. Always create a feature branch and open a Pull Request.
-- **Explicit Consent:** NEVER stage, commit, create branches, or execute file migrations unless the user explicitly instructs you to do so. Discussing a change, answering a question about a change, or planning a change does NOT mean "execute it."
-- **Never Merge PRs:** NEVER merge pull requests automatically. Merging requires explicit user approval, every time.
-- **Never Run Destructive Git Commands:** NEVER run `git reset --hard`, `git checkout --`, `git clean`, or `git push --force` without explicit user instruction. If you made a mistake, tell the user and let them decide how to fix it.
+## STOP AND ASK (these always need user confirmation)
+
+Before taking ANY of these actions, state what you plan to do and wait for explicit approval:
+
+- Creating or switching branches
+- Staging or committing files
+- Pushing to any remote
+- Creating, closing, or commenting on issues/PRs
+- Running any git command that modifies history
+- Deleting files, branches, or any persistent state
+- Running migrations or data-modifying scripts
+
+## Memory Decision Tree
+
+When deciding where to store information or rules:
+
+- Will forgetting this cause a mistake on an UNRELATED task? → MEMORY.md
+- Stable, project-wide workflow rule? → CLAUDE.md
+- Stable syntax or architectural rule? → .gemini/styleguide.md
+- Specific domain knowledge or a past trap? → Totem lesson via `add_lesson`
 
 ## Totem AI Integration (Auto-Generated)
 
