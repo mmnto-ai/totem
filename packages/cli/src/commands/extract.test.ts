@@ -109,6 +109,26 @@ Lesson body.
     expect(lessons[0]!.heading).toBe('My heading');
   });
 
+  it('truncates overly long LLM-generated headings', () => {
+    const output = `---LESSON---
+Heading: When a configuration file is an executed script like totem config it has arbitrary code execution
+Tags: security, config
+Trust the config file entirely.
+---END---`;
+    const lessons = parseLessons(output);
+    expect(lessons[0]!.heading!.length).toBeLessThanOrEqual(60); // totem-ignore
+  });
+
+  it('strips trailing ellipsis from LLM-generated headings', () => {
+    const output = `---LESSON---
+Heading: Sentinel-based injection systems should always…
+Tags: architecture
+Always emit sentinels.
+---END---`;
+    const lessons = parseLessons(output);
+    expect(lessons[0]!.heading).not.toContain('…');
+  });
+
   it('handles mix of lessons with and without headings', () => {
     const output = `---LESSON---
 Heading: Explicit heading

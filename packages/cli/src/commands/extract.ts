@@ -4,7 +4,13 @@ import * as path from 'node:path';
 import { isCancel, multiselect } from '@clack/prompts';
 
 import type { SearchResult } from '@mmnto/totem';
-import { createEmbedder, generateLessonHeading, LanceStore, runSync } from '@mmnto/totem';
+import {
+  createEmbedder,
+  generateLessonHeading,
+  LanceStore,
+  runSync,
+  truncateHeading,
+} from '@mmnto/totem';
 
 import { GitHubCliPrAdapter } from '../adapters/github-cli-pr.js';
 import type { StandardPr, StandardReviewComment } from '../adapters/pr-adapter.js';
@@ -51,7 +57,7 @@ You are a knowledge curator analyzing a PR's review threads. Your job is to dist
 For each lesson, use this exact delimiter format:
 
 ---LESSON---
-Heading: A concise title for this lesson (max 60 chars, no markdown formatting, no "Lesson" prefix)
+Heading: A short, punchy label for this lesson (STRICT: max 8 words / 60 chars, imperative or noun-phrase style like "Guard reversed marker ordering" or "Config-as-code trust boundary", NO trailing ellipsis, NO markdown, NO "Lesson" prefix)
 Tags: tag1, tag2, tag3
 The lesson text. One or two sentences capturing the trap/pattern and WHY it matters.
 ---END---
@@ -193,12 +199,13 @@ export interface ExtractedLesson {
 
 const LESSON_RE = /---LESSON---\s*\n(?:Heading:\s*(.+)\n)?Tags:\s*(.+)\n([\s\S]+?)---END---/g;
 
-/** Strip markdown heading markers and "Lesson —" prefixes from LLM-generated headings. */
+/** Strip markdown heading markers and "Lesson —" prefixes, then enforce max length. */
 function sanitizeHeading(heading: string): string {
-  return heading
+  const cleaned = heading
     .replace(/^#+\s*/, '')
     .replace(/^Lesson\s*[-—:]\s*/i, '')
     .trim();
+  return truncateHeading(cleaned);
 }
 
 export function parseLessons(llmOutput: string): ExtractedLesson[] {

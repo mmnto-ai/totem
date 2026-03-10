@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { generateLessonHeading } from './lesson-format.js';
+import { generateLessonHeading, HEADING_MAX_CHARS, truncateHeading } from './lesson-format.js';
 
 describe('generateLessonHeading', () => {
   it('extracts first sentence from plain text', () => {
@@ -62,5 +62,44 @@ describe('generateLessonHeading', () => {
 
   it('strips list markers', () => {
     expect(generateLessonHeading('- Always validate input')).toBe('Always validate input');
+  });
+});
+
+describe('truncateHeading', () => {
+  it('returns short headings unchanged', () => {
+    expect(truncateHeading('Guard reversed marker ordering')).toBe(
+      'Guard reversed marker ordering',
+    );
+  });
+
+  it('strips trailing ellipsis from LLM output', () => {
+    expect(truncateHeading('Config-as-code trust boundary…')).toBe('Config-as-code trust boundary');
+  });
+
+  it('strips trailing triple-dot from LLM output', () => {
+    expect(truncateHeading('Sentinel-based injection systems should always...')).toBe(
+      'Sentinel-based injection systems should always',
+    );
+  });
+
+  it('truncates long headings at word boundary without ellipsis', () => {
+    const long =
+      'When a configuration file is an executed script like totem config it has arbitrary code execution';
+    const result = truncateHeading(long);
+    expect(result.length).toBeLessThanOrEqual(HEADING_MAX_CHARS);
+    expect(result).not.toContain('…');
+    // Should break cleanly — no partial words
+    expect(long.startsWith(result)).toBe(true);
+    expect(result).toBe('When a configuration file is an executed script like totem');
+  });
+
+  it('enforces HEADING_MAX_CHARS limit', () => {
+    const long = 'a '.repeat(40); // 80 chars
+    expect(truncateHeading(long).length).toBeLessThanOrEqual(HEADING_MAX_CHARS);
+  });
+
+  it('handles heading that is exactly at the limit', () => {
+    const exact = 'x'.repeat(HEADING_MAX_CHARS);
+    expect(truncateHeading(exact)).toBe(exact);
   });
 });
