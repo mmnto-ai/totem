@@ -1,5 +1,13 @@
 # @mmnto/mcp
 
+## 0.20.0
+
+### Patch Changes
+
+- fff1f27: Relicense to Apache 2.0.
+- Updated dependencies [fff1f27]
+  - @mmnto/totem@0.20.0
+
 ## 0.19.0
 
 ### Patch Changes

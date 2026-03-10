@@ -1,5 +1,16 @@
 # @mmnto/cli
 
+## 0.20.0
+
+### Minor Changes
+
+- fff1f27: Individual document targeting for `totem docs`, centralized `resolveOrchestrator()` with model name security validation, fix for truncated lesson extraction headings, cross-provider routing support, docs pipeline stability fixes, and relicense to Apache 2.0.
+
+### Patch Changes
+
+- Updated dependencies [fff1f27]
+  - @mmnto/totem@0.20.0
+
 ## 0.19.0
 
 ### Minor Changes
