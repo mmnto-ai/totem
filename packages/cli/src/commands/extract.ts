@@ -36,7 +36,7 @@ const MAX_INPUTS = 5;
 
 // ─── System prompt ──────────────────────────────────────
 
-const SYSTEM_PROMPT = `# Learn System Prompt — PR Lesson Extraction
+export const SYSTEM_PROMPT = `# Learn System Prompt — PR Lesson Extraction
 
 ## Purpose
 Extract tactical lessons from a pull request's review comments and discussion.
@@ -129,7 +129,7 @@ function isGcaBoilerplate(body: string): boolean {
   return GCA_MARKERS.some((marker) => body.includes(marker));
 }
 
-function assemblePrompt(
+export function assemblePrompt(
   pr: StandardPr,
   threads: CommentThread[],
   existingLessons: SearchResult[],
