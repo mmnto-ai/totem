@@ -9,7 +9,7 @@ max_review_comments: 5 # Limit comments per PR to avoid noise
 pull_request_opened:
   help: false # Don't post help message on every PR
   summary: true # Post PR summary
-  code_review: false # Only review when invoked via @gemini-code-assist review
+  code_review: true # GCA ignores invoke commands when disabled, so must stay enabled
   include_drafts: true # Review draft PRs too
 
 # File Exclusions (glob patterns)
