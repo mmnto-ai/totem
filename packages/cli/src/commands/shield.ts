@@ -67,6 +67,47 @@ Example: "FAIL — New functionality in utils.ts lacks corresponding test update
 [Specific past traps, lessons, or decisions from Totem knowledge that apply to this diff. If none, say "No relevant history found."]
 `;
 
+// ─── Structural system prompt ────────────────────────────
+
+export const STRUCTURAL_SYSTEM_PROMPT = `# Structural Shield — Context-Blind Code Review
+
+## Identity & Role
+You are a paranoid structural code reviewer. You have ZERO knowledge of the project's architecture, goals, or history. You review code as a pure syntax/pattern analysis machine, catching the class of bugs that the code's author is blind to because they are anchored on intent.
+
+## Core Mission
+Perform a context-blind structural review of a git diff. You do not care what the feature does or why it exists. You only care about whether the code is internally consistent, correctly handles edge cases, and follows sound engineering practices.
+
+## What You Look For
+1. **Asymmetric Validation:** If the same validation or transformation is applied in multiple code paths, verify every path does it identically. Flag any path that is missing a step (e.g., a duplicated function that omits an input check).
+2. **Copy-Paste Drift:** Detect blocks of similar code where one copy has been updated but the others have not. Look for renamed variables that are used inconsistently.
+3. **Brittle Test Patterns:** Flag tests that re-implement production logic in mocks instead of using \`importActual\` or equivalent. Flag tests that assert on implementation details rather than behavior.
+4. **Missing Edge Cases:** For every conditional branch, ask: "What about the inverse? What about null/undefined/empty? What about the boundary value?"
+5. **Error Handling Gaps:** Flag \`catch\` blocks that swallow errors silently. Flag async functions without error handling. Flag type assertions without runtime guards at system boundaries.
+6. **Off-By-One and Ordering Bugs:** In string slicing, array indexing, and marker-based replacements, verify start/end indices are correct and handle the empty/single-element case.
+7. **Resource Leaks:** File handles, database connections, or event listeners that are opened but never closed in error paths.
+
+## What You Do NOT Do
+- Do NOT comment on architecture, design philosophy, or naming conventions.
+- Do NOT suggest refactors, abstractions, or "improvements."
+- Do NOT reference any external documentation, project history, or lessons.
+- Do NOT praise the code. Only flag problems.
+
+## Output Format
+Respond with ONLY the sections below. No preamble, no closing remarks.
+
+### Verdict
+[Exactly one line: PASS or FAIL followed by " — " and a one-line reason.]
+
+### Critical Issues (Must Fix)
+[Structural bugs that WILL cause incorrect behavior. If none, say "None found."]
+
+### Warnings (Should Fix)
+[Patterns that are fragile or likely to cause future bugs. If none, say "None found."]
+
+### Structural Observations
+[Up to 3 observations about internal consistency, error path coverage, or test quality. If none, say "None found."]
+`;
+
 // ─── LanceDB retrieval ─────────────────────────────────
 
 interface RetrievedContext {
@@ -96,7 +137,7 @@ function buildSearchQuery(changedFiles: string[], diff: string): string {
 
 // ─── Prompt assembly ────────────────────────────────────
 
-function assemblePrompt(
+export function assemblePrompt(
   diff: string,
   changedFiles: string[],
   context: RetrievedContext,
@@ -137,6 +178,32 @@ function assemblePrompt(
   return sections.join('\n');
 }
 
+// ─── Structural prompt assembly ──────────────────────────
+
+export function assembleStructuralPrompt(
+  diff: string,
+  changedFiles: string[],
+  systemPrompt: string,
+): string {
+  const sections: string[] = [systemPrompt];
+
+  sections.push('=== DIFF ===');
+  sections.push(`Changed files: ${changedFiles.join(', ')}`);
+  sections.push('');
+  if (diff.length > MAX_DIFF_CHARS) {
+    sections.push(
+      wrapXml(
+        'git_diff',
+        diff.slice(0, MAX_DIFF_CHARS) + `\n... [diff truncated at ${MAX_DIFF_CHARS} chars] ...`,
+      ),
+    );
+  } else {
+    sections.push(wrapXml('git_diff', diff));
+  }
+
+  return sections.join('\n');
+}
+
 // ─── Verdict parsing ────────────────────────────────────
 
 // Matches "### Verdict" at the START of output (no /m flag — anchored to string start to
@@ -160,6 +227,7 @@ export interface ShieldOptions {
   fresh?: boolean;
   staged?: boolean;
   deterministic?: boolean;
+  mode?: 'standard' | 'structural';
 }
 
 // ─── Deterministic mode ─────────────────────────────
@@ -259,6 +327,41 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     return;
   }
 
+  // Structural mode — context-blind LLM review, no embeddings, no Totem knowledge
+  if (options.mode === 'structural') {
+    log.info(TAG, 'Running structural review (context-blind, no Totem knowledge)...');
+
+    const systemPrompt = getSystemPrompt(
+      'shield-structural',
+      STRUCTURAL_SYSTEM_PROMPT,
+      cwd,
+      config.totemDir,
+    );
+    const prompt = assembleStructuralPrompt(diff, changedFiles, systemPrompt);
+    log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
+
+    const content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd });
+    if (content != null) {
+      writeOutput(content, options.out);
+      if (options.out) log.success(TAG, `Written to ${options.out}`);
+
+      if (!options.raw) {
+        const verdict = parseVerdict(content);
+        if (verdict) {
+          const verdictLabel = verdict.pass ? successColor(bold('PASS')) : errorColor(bold('FAIL'));
+          const reason = verdict.reason ? ` — ${verdict.reason}` : '';
+          log.info(TAG, `Verdict: ${verdictLabel}${reason}`);
+          if (!verdict.pass) process.exit(1);
+        } else {
+          log.error(TAG, 'Verdict: not found (defaulting to FAIL — fix LLM output format)'); // totem-ignore
+          process.exit(1);
+        }
+      }
+    }
+    return;
+  }
+
+  // Standard mode — full Totem knowledge retrieval + LLM review
   // Connect to LanceDB
   const embedding = requireEmbedding(config);
   const embedder = createEmbedder(embedding);

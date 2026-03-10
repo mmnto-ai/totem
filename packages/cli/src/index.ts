@@ -125,6 +125,10 @@ program
   .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
   .option('--staged', 'Review only staged changes (default: all uncommitted)')
   .option('--deterministic', 'Use compiled rules only — no LLM, no embeddings')
+  .option(
+    '--mode <mode>',
+    'Review mode: standard (default, with Totem knowledge) or structural (context-blind paranoia)',
+  )
   .action(
     async (opts: {
       raw?: boolean;
@@ -133,10 +137,19 @@ program
       fresh?: boolean;
       staged?: boolean;
       deterministic?: boolean;
+      mode?: string;
     }) => {
       try {
+        if (opts.mode && opts.mode !== 'standard' && opts.mode !== 'structural') {
+          throw new Error(
+            `[Totem Error] Invalid --mode "${opts.mode}". Use "standard" or "structural".`,
+          );
+        }
         const { shieldCommand } = await import('./commands/shield.js');
-        await shieldCommand(opts);
+        await shieldCommand({
+          ...opts,
+          mode: opts.mode as 'standard' | 'structural' | undefined,
+        });
       } catch (err) {
         handleError(err);
       }

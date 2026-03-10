@@ -6,7 +6,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { applyRules, type CompiledRule, loadCompiledRules, saveCompiledRules } from '@mmnto/totem';
 
-import { parseVerdict } from './shield.js';
+import {
+  assemblePrompt,
+  assembleStructuralPrompt,
+  parseVerdict,
+  STRUCTURAL_SYSTEM_PROMPT,
+} from './shield.js';
 
 describe('parseVerdict', () => {
   it('parses a clean PASS with em-dash', () => {
@@ -217,5 +222,68 @@ describe('deterministic shield integration', () => {
     const loaded = loadCompiledRules(rulesPath);
     expect(loaded).toHaveLength(1);
     expect(loaded[0]!.pattern).toBe('console\\.log');
+  });
+});
+
+// ─── Structural mode ──────────────────────────────────
+
+describe('structural mode', () => {
+  const sampleDiff = `diff --git a/src/foo.ts b/src/foo.ts
+--- a/src/foo.ts
++++ b/src/foo.ts
+@@ -1,3 +1,4 @@
+ export function foo() {
++  return 42;
+ }
+`;
+  const changedFiles = ['src/foo.ts'];
+
+  it('structural prompt contains diff but no Totem knowledge sections', () => {
+    const prompt = assembleStructuralPrompt(sampleDiff, changedFiles, STRUCTURAL_SYSTEM_PROMPT);
+    expect(prompt).toContain('Structural Shield');
+    expect(prompt).toContain('context-blind');
+    expect(prompt).toContain('=== DIFF ===');
+    expect(prompt).toContain('return 42');
+    expect(prompt).not.toContain('TOTEM KNOWLEDGE');
+    expect(prompt).not.toContain('RELATED SPECS');
+    expect(prompt).not.toContain('LESSONS & SESSION HISTORY');
+    expect(prompt).not.toContain('RELATED CODE PATTERNS');
+  });
+
+  it('standard prompt includes Totem knowledge sections when context is provided', () => {
+    const context = {
+      specs: [
+        {
+          content: 'spec content',
+          contextPrefix: '',
+          filePath: 'docs/spec.md',
+          type: 'spec' as const,
+          label: 'Test spec',
+          score: 0.9,
+          metadata: {},
+        },
+      ],
+      sessions: [],
+      code: [],
+    };
+    const prompt = assemblePrompt(sampleDiff, changedFiles, context, 'SYSTEM PROMPT');
+    expect(prompt).toContain('=== DIFF ===');
+    expect(prompt).toContain('TOTEM KNOWLEDGE');
+    expect(prompt).toContain('RELATED SPECS');
+  });
+
+  it('structural system prompt focuses on syntax patterns not architecture', () => {
+    expect(STRUCTURAL_SYSTEM_PROMPT).toContain('Asymmetric Validation');
+    expect(STRUCTURAL_SYSTEM_PROMPT).toContain('Copy-Paste Drift');
+    expect(STRUCTURAL_SYSTEM_PROMPT).toContain('Brittle Test Patterns');
+    expect(STRUCTURAL_SYSTEM_PROMPT).toContain('Off-By-One');
+    expect(STRUCTURAL_SYSTEM_PROMPT).not.toContain('Totem knowledge');
+    expect(STRUCTURAL_SYSTEM_PROMPT).not.toContain('past sessions');
+  });
+
+  it('structural prompt truncates large diffs', () => {
+    const largeDiff = 'x'.repeat(60_000);
+    const prompt = assembleStructuralPrompt(largeDiff, ['big.ts'], STRUCTURAL_SYSTEM_PROMPT);
+    expect(prompt).toContain('diff truncated at 50000 chars');
   });
 });

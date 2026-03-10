@@ -824,3 +824,27 @@ Prefer Vitest's `expect().rejects.toHaveProperty()` assertions over manual `try/
 **Tags:** error-handling, style-guide, consistency
 
 Ensure all thrown errors, including those for missing environment variables or configuration, strictly include the `[Totem Error]` prefix. Maintaining this prefix even in low-level setup code ensures consistent error reporting for users and automated monitoring.
+
+## Lesson — When a configuration file is an executed script (like…
+
+**Tags:** security, architecture, configuration
+
+When a configuration file is an executed script (like TypeScript), individual field validation for path traversal is redundant because the file itself already has arbitrary code execution privileges. The security boundary in this model is the version control and PR review process rather than runtime input sanitization.
+
+## Lesson — Sentinel-based injection systems should always generate…
+
+**Tags:** idempotency, file-io, automation
+
+Sentinel-based injection systems should always generate markers even when the content is empty to ensure subsequent runs can still locate the injection point. Removing the markers when there is no content breaks idempotency, as future updates will fail to find the target and may append duplicate blocks elsewhere.
+
+## Lesson — Logic that replaces content between markers must explicitly…
+
+**Tags:** file-io, parsing, robustness
+
+Logic that replaces content between markers must explicitly verify that the start sentinel precedes the end sentinel to avoid scrambling the file. If markers appear in reverse order, standard string slicing will produce incorrect segments that corrupt the file upon write.
+
+## Lesson — File-appending logic should implement an early return for…
+
+**Tags:** file-io, dx
+
+File-appending logic should implement an early return for empty input to prevent the unintended accumulation of trailing newlines or separators. Without this check, repeated executions with no content can cause "blank line drift," where target files grow unnecessarily with every run.
