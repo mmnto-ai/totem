@@ -78,11 +78,21 @@ export const OpenAIOrchestratorSchema = z.object({
   ...BaseOrchestratorFields,
 });
 
+export const OllamaOrchestratorSchema = z.object({
+  provider: z.literal('ollama'),
+  /** Base URL for the Ollama server */
+  baseUrl: z.string().default('http://localhost:11434'),
+  /** Context length passed to Ollama as num_ctx (controls KV cache / VRAM usage) */
+  numCtx: z.number().int().positive().optional(),
+  ...BaseOrchestratorFields,
+});
+
 export const OrchestratorSchema = z.discriminatedUnion('provider', [
   ShellOrchestratorSchema,
   GeminiOrchestratorSchema,
   AnthropicOrchestratorSchema,
   OpenAIOrchestratorSchema,
+  OllamaOrchestratorSchema,
 ]);
 
 /**

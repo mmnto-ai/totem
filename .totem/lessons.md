@@ -986,3 +986,21 @@ Sanitize git-sourced metadata like branch names, status, and diff statistics to 
 **Tags:** ollama, orchestrator, vram, num_ctx, performance, hardware
 
 Ollama `num_ctx` and VRAM: The OpenAI-compatible API adapter does not support passing `num_ctx` to Ollama, so context length defaults to the model's built-in default (often 2-8k). Ollama's native `/api/chat` endpoint accepts `options: { num_ctx }` for dynamic context sizing. On consumer GPUs (16GB VRAM), a 27B model fills VRAM with weights alone — any KV cache beyond ~8k spills to system RAM and significantly slows inference. Different Totem commands have different context needs (triage: 4-8k, shield/spec: 16-32k), making dynamic `num_ctx` sizing valuable. See issue #298.
+
+## Lesson — When scanning for malicious payloads like Base64 or Unicode…
+
+**Tags:** security, prompt-injection, validation
+
+When scanning for malicious payloads like Base64 or Unicode escapes, ensure checks cover all user-controllable fields, including headings or metadata. Neglecting these fields allows attackers to bypass security heuristics by smuggling payloads in smaller, less-scrutinized buffers.
+
+## Lesson — Leakage detection regex must be explicitly synchronized…
+
+**Tags:** security, regex, prompt-engineering
+
+Leakage detection regex must be explicitly synchronized with the exact XML tags used to wrap untrusted content in the prompt. Missing specific delimiters like `comment_body` or `diff_hunk` in the detection logic creates blind spots where internal prompt structures can leak without being flagged.
+
+## Lesson — While interactive users can be trusted to review and…
+
+**Tags:** ci, security, automation
+
+While interactive users can be trusted to review and override heuristic flags, automated CI pipelines should treat these flags as hard failures with non-zero exit codes. This prevents the silent ingestion of potentially malicious or malformed data when human oversight is absent.
