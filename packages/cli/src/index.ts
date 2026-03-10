@@ -335,6 +335,18 @@ program
   );
 
 program
+  .command('drift')
+  .description('Check lessons for stale file references (CI gate)')
+  .action(async () => {
+    try {
+      const { driftCommand } = await import('./commands/drift.js');
+      await driftCommand();
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('install-hooks')
   .description('Install post-merge git hook for automatic Totem sync')
   .action(async () => {

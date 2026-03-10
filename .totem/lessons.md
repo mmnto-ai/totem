@@ -357,7 +357,7 @@ When using 'totem spec', it is most valuable for exploring unfamiliar territory 
 
 **Tags:** architecture, hooks, json, shell
 
-When scaffolding agent hooks (like Claude's PreToolUse) or background git hooks, avoid embedding complex shell pipelines (e.g., grep chains, escaping quotes) directly inline within JSON configuration files. It is fragile and hard to test. Long-term architectural rule: Extract hook logic into dedicated, version-controlled executable scripts (e.g., \`.totem/hooks/shield-gate.js\` or \`.gemini/hooks/BeforeTool.js\`) and have the JSON config simply invoke the script.
+When scaffolding agent hooks (like Claude's PreToolUse) or background git hooks, avoid embedding complex shell pipelines (e.g., grep chains, escaping quotes) directly inline within JSON configuration files. It is fragile and hard to test. Long-term architectural rule: Extract hook logic into dedicated, version-controlled executable scripts (e.g., \`.gemini/hooks/BeforeTool.js\`) and have the JSON config simply invoke the script.
 
 ## Lesson — 2026-03-06T10:00:40.352Z
 
@@ -387,7 +387,7 @@ Treat environment variables provided by the host AI (such as `$TOOL_INPUT` in Cl
 
 **Tags:** nodejs, configuration, idempotency
 
-When scaffolding configuration files that store settings in JSON arrays (like `.claude/settings.local.json`), implement deep merging to append entries rather than overwriting the entire key. This allows the tool to maintain idempotency while preserving existing user-defined hooks.
+When scaffolding configuration files that store settings in JSON arrays, implement deep merging to append entries rather than overwriting the entire key. This allows the tool to maintain idempotency while preserving existing user-defined hooks.
 
 ## Lesson — 2026-03-06T18:48:00.895Z
 
