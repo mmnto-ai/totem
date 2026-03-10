@@ -4,7 +4,13 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { appendLessons, parseLessons, selectLessons } from './extract.js';
+import {
+  appendLessons,
+  assemblePrompt,
+  parseLessons,
+  selectLessons,
+  SYSTEM_PROMPT,
+} from './extract.js';
 
 // ─── parseLessons ───────────────────────────────────────
 
@@ -220,6 +226,38 @@ const sampleLessons = [
   { tags: ['security'], text: 'Sanitize all user input before writing.' },
   { tags: ['arch'], text: 'Extract shared fetch logic into a helper.' },
 ];
+
+// ─── assemblePrompt ─────────────────────────────────────
+
+describe('assemblePrompt', () => {
+  const minimalPr = {
+    number: 1,
+    title: 'Test PR',
+    state: 'closed',
+    body: 'PR body',
+    reviews: [] as { author: string; state: string; body: string }[],
+    comments: [] as { author: string; body: string }[],
+  };
+
+  it('includes security notice marking untrusted XML tags', () => {
+    const prompt = assemblePrompt(minimalPr, [], [], SYSTEM_PROMPT);
+    expect(prompt).toContain('## Security');
+    expect(prompt).toContain('UNTRUSTED');
+    expect(prompt).toContain('<pr_body>');
+    expect(prompt).toContain('<comment_body>');
+    expect(prompt).toContain('<diff_hunk>');
+    expect(prompt).toContain('<review_body>');
+  });
+
+  it('sanitizes PR title and state in output', () => {
+    const pr = { ...minimalPr, title: 'Evil\x1b[31m title', state: 'open\x1b[0m' };
+    const prompt = assemblePrompt(pr, [], [], SYSTEM_PROMPT);
+    expect(prompt).not.toContain('\x1b[');
+    expect(prompt).toContain('Evil title');
+  });
+});
+
+// ─── selectLessons ──────────────────────────────────────
 
 describe('selectLessons', () => {
   it('returns all lessons when --yes is set', async () => {

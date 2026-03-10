@@ -81,4 +81,18 @@ describe('buildLiteHandoff', () => {
     expect(output).toContain('No commits found.');
     expect(output).toContain('No lessons file found.');
   });
+
+  it('strips ANSI escape sequences from git output', () => {
+    const output = buildLiteHandoff(
+      '\x1b[32mmain\x1b[0m',
+      ' \x1b[31mM\x1b[0m src/app.ts',
+      ' src/app.ts | 5 \x1b[32m++\x1b[31m---\x1b[0m',
+      '\x1b[33mabc1234\x1b[0m initial commit',
+      '',
+    );
+    expect(output).not.toContain('\x1b[');
+    expect(output).toContain('main; dirty working tree');
+    expect(output).toContain('M src/app.ts');
+    expect(output).toContain('abc1234 initial commit');
+  });
 });
