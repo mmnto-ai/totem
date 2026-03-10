@@ -114,23 +114,13 @@ describe('adversarial evaluation harness', () => {
     const diff = `diff --git a/src/utils.ts b/src/utils.ts
 --- a/src/utils.ts
 +++ b/src/utils.ts
-@@ -1,3 +1,5 @@
- export function tryParse(json: string) {
-+  try { return JSON.parse(json); }
-+  catch (() => {})
-   return null;
-`;
-    // The pattern matches .catch(() => {}) — let's use a more realistic diff
-    const diff2 = `diff --git a/src/utils.ts b/src/utils.ts
---- a/src/utils.ts
-+++ b/src/utils.ts
 @@ -1,3 +1,4 @@
  export function tryParse(json: string) {
 -  return JSON.parse(json);
 +  return fetchData().catch(() => {})
  }
 `;
-    const violations = applyRules(ADVERSARIAL_RULES, diff2);
+    const violations = applyRules(ADVERSARIAL_RULES, diff);
     expect(violations.some((v) => v.rule.lessonHeading === 'No empty catch blocks')).toBe(true);
   });
 
