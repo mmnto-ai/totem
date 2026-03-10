@@ -130,12 +130,13 @@ export async function classifyLines(
 
     try {
       const rootNode = tree.rootNode;
+      const lines = content.split('\n');
 
       for (const lineNum of lineNumbers) {
         // Tree-sitter uses 0-based rows
         const row = lineNum - 1;
         // Get the named node at the start of this line (skip leading whitespace)
-        const lineText = content.split('\n')[row];
+        const lineText = lines[row];
         if (lineText === undefined) continue;
 
         const col = lineText.length - lineText.trimStart().length;
