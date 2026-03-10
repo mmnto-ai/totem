@@ -32,9 +32,9 @@ const ADVERSARIAL_RULES: CompiledRule[] = [
     'Never use npm',
   ),
   makeRule(
-    'console\\.log\\(',
-    'Remove debug logging before commit',
-    'No console.log in production',
+    '\\bdebugger\\b',
+    'Remove debugger statements before commit',
+    'No debugger in production',
   ),
   makeRule(
     'process\\.exit\\(0\\)',
@@ -73,7 +73,7 @@ describe('adversarial evaluation harness', () => {
        - run: pnpm build
 `;
     const violations = applyRules(ADVERSARIAL_RULES, diff);
-    expect(violations.length).toBeGreaterThan(0);
+    expect(violations.length).toBeGreaterThan(0); // totem-ignore
     expect(violations.some((v) => v.rule.lessonHeading === 'Never use npm')).toBe(true);
   });
 
@@ -92,22 +92,22 @@ describe('adversarial evaluation harness', () => {
     expect(violations.some((v) => v.rule.lessonHeading === 'Use err not error')).toBe(true);
   });
 
-  it('catches console.log left in production code', () => {
+  it('catches debugger statements left in production code', () => {
     const diff = `diff --git a/src/api.ts b/src/api.ts
 --- a/src/api.ts
 +++ b/src/api.ts
 @@ -1,3 +1,5 @@
  export async function fetchData() {
-+  console.log('debugging fetch');
++  debugger;
    const res = await fetch('/api/data');
-+  console.log(res.status);
++  debugger;
    return res.json();
 `;
     const violations = applyRules(ADVERSARIAL_RULES, diff);
-    const logViolations = violations.filter(
-      (v) => v.rule.lessonHeading === 'No console.log in production',
+    const debugViolations = violations.filter(
+      (v) => v.rule.lessonHeading === 'No debugger in production',
     );
-    expect(logViolations).toHaveLength(2);
+    expect(debugViolations).toHaveLength(2);
   });
 
   it('catches empty catch block', () => {
@@ -189,14 +189,14 @@ describe('adversarial evaluation harness', () => {
 +++ b/src/cli.ts
 @@ -1,3 +1,4 @@
  export function main() {
-+  console.log('CLI output'); // totem-ignore
++  debugger; // totem-ignore
    run();
 `;
     const violations = applyRules(ADVERSARIAL_RULES, diff);
-    const logViolations = violations.filter(
-      (v) => v.rule.lessonHeading === 'No console.log in production',
+    const debugViolations = violations.filter(
+      (v) => v.rule.lessonHeading === 'No debugger in production',
     );
-    expect(logViolations).toHaveLength(0);
+    expect(debugViolations).toHaveLength(0);
   });
 
   it('catches multiple violations in a single diff', () => {
@@ -205,7 +205,7 @@ describe('adversarial evaluation harness', () => {
 +++ b/src/bad.ts
 @@ -1,5 +1,10 @@
  export function bad() {
-+  console.log('debug');
++  debugger;
 +  // TODO: remove this
    try {
      doWork();
@@ -216,11 +216,11 @@ describe('adversarial evaluation harness', () => {
  }
 `;
     const violations = applyRules(ADVERSARIAL_RULES, diff);
-    // Should catch: console.log, TODO, error (not err), any
-    expect(violations.length).toBeGreaterThanOrEqual(4);
+    // Should catch: debugger, TODO, error (not err), any
+    expect(violations.length).toBeGreaterThanOrEqual(4); // totem-ignore
 
     const headings = new Set(violations.map((v) => v.rule.lessonHeading));
-    expect(headings.has('No console.log in production')).toBe(true);
+    expect(headings.has('No debugger in production')).toBe(true);
     expect(headings.has('No TODO in production')).toBe(true);
     expect(headings.has('Use err not error')).toBe(true);
     expect(headings.has('No any types')).toBe(true);
