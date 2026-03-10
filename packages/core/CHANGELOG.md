@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 0.20.0
+
+### Minor Changes
+
+- fff1f27: Inline suppression directives (`totem-ignore` / `totem-ignore-next-line`) for deterministic shield, cross-provider `provider:model` routing with negated glob support, and relicense to Apache 2.0.
+
 ## 0.19.0
 
 ### Minor Changes
