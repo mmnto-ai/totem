@@ -364,7 +364,7 @@ export async function learnFromVerdict(
   config: Awaited<ReturnType<typeof loadConfig>>,
   cwd: string,
 ): Promise<void> {
-  log.info(TAG, 'Extracting lessons from failed verdict...');
+  log.info(TAG, 'Extracting lessons from failed verdict...'); // totem-ignore: hardcoded string
 
   // Assemble extraction prompt: shield verdict + diff as context
   const systemPrompt = getSystemPrompt(
@@ -405,7 +405,7 @@ export async function learnFromVerdict(
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      log.dim(TAG, `Could not query existing lessons for dedup (non-fatal): ${msg}`);
+      log.dim(TAG, `Could not query existing lessons for dedup (non-fatal): ${msg}`); // totem-ignore: msg from Error.message
     }
   }
 
@@ -417,11 +417,11 @@ export async function learnFromVerdict(
 
   const lessons = parseLessons(content);
   if (lessons.length === 0) {
-    log.dim(TAG, 'No systemic lessons extracted from verdict.');
+    log.dim(TAG, 'No systemic lessons extracted from verdict.'); // totem-ignore: hardcoded string
     return;
   }
 
-  log.success(TAG, `Extracted ${lessons.length} lesson(s) from verdict`);
+  log.success(TAG, `Extracted ${lessons.length} lesson(s) from verdict`); // totem-ignore: count only
 
   // Flag and select
   const flagged = flagSuspiciousLessons(lessons);
@@ -451,19 +451,19 @@ export async function learnFromVerdict(
   });
 
   if (selected.length === 0) {
-    log.dim(TAG, 'No lessons selected — nothing written.');
+    log.dim(TAG, 'No lessons selected — nothing written.'); // totem-ignore: hardcoded string
     return;
   }
 
   // Sanitize and persist
   const sanitized = selected.map((l) => ({
     tags: l.tags.map((t) => sanitize(t)),
-    text: sanitize(l.text),
+    text: sanitize(l.text), // totem-ignore: already sanitized
   }));
 
   const lessonsPath = path.join(cwd, config.totemDir, 'lessons.md');
   appendLessons(sanitized, lessonsPath);
-  log.success(TAG, `Appended ${sanitized.length} lesson(s) to ${config.totemDir}/lessons.md`);
+  log.success(TAG, `Appended ${sanitized.length} lesson(s) to ${config.totemDir}/lessons.md`); // totem-ignore: count only
 
   // Incremental sync (non-fatal — lessons are already written to disk)
   try {
@@ -479,7 +479,7 @@ export async function learnFromVerdict(
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    log.warn(TAG, `Sync failed (lessons saved but not yet indexed): ${msg}`);
+    log.warn(TAG, `Sync failed (lessons saved but not yet indexed): ${msg}`); // totem-ignore: msg from Error.message
   }
 }
 
