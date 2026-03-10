@@ -281,6 +281,15 @@ You have access to the Totem MCP for long-term project memory. You MUST operate 
 
 Lessons are automatically re-indexed in the background after each `add_lesson` call — no manual sync needed.
 
+### Memory Classification
+
+When deciding where to store information or rules, use this decision tree:
+
+- If forgetting this causes a mistake on an UNRELATED task (Core Safety): Store in your root agent memory file (e.g., CLAUDE.md or .gemini/gemini.md).
+- If it's a stable, project-wide workflow rule: Store in project config (e.g., CLAUDE.md).
+- If it's a stable syntax/style pattern: Store in the project's styleguide or linter rules.
+- If it's domain knowledge, an edge case, or a past trap: You MUST use the Totem `add_lesson` tool to anchor it into the project's LanceDB.
+
 ### Workflow Orchestrator Rituals
 
 [FOR LOCAL CLI/TERMINAL AGENTS ONLY] Do not attempt to run these commands if you are a headless bot or operating in a cloud PR environment (e.g., Gemini Code Assist on GitHub).
