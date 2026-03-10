@@ -35,6 +35,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 **Goal:** Before ingesting enterprise databases, the local vector index and LLM prompts must be bulletproof across all environments.
 
+- [x] **#267 / #272 Security:** Configure Dependabot for automated security vulnerability scanning.
 - [x] **#218 Security:** Add ReDoS protection to compiled regex rules.
 - [x] **#206 / #224 Robustness:** Refactor orchestrator from `execSync` to async `spawn` and fix `node-fetch` aborts on large files like `architecture.md` via Gemini CLI.
 - [x] **#173 Epic: Universal AST Parsing:** Implement Tree-sitter for robust, language-agnostic code chunking.
@@ -42,7 +43,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#122 Core Tests:** Backfill unit and integration tests for `@mmnto/totem` core database and chunking logic.
 - [x] **#174 / #180 Shield GitHub Action:** `action.yml` composite action for CI/CD enforcement — pass/fail quality gate on PRs.
 - [x] **#222 / #226 CI Workflows:** Implement deterministic shield workflow, linting, tests, and compiled rules enforcement into the Totem repository CI pipeline.
-- [x] **#168 Interactive multi-select:** `totem extract` uses `@clack/prompts` multiselect for cherry-picking lessons.
+- [x] **#168 / #265 Interactive multi-select:** `totem extract` uses `@clack/prompts` multiselect for cherry-picking lessons and supports selective acceptance via the `--pick` flag.
 - [x] **#185 CLI command renames:** `learn` → `extract`, removed `anchor` alias (use `add-lesson`).
 - [x] **#131 Clean Ejection:** Build `totem eject` to safely remove git hooks, prompt injections, and database artifacts if a user uninstalls.
 - [x] **#127 Core:** Add heading hierarchy breadcrumbs to MarkdownChunker labels.
@@ -84,14 +85,15 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
 - [x] **#187 Minimum Viable Configuration:** Tiered config (Lite/Standard/Full) with auto-detection. Embedding is optional; Lite tier works with zero API keys.
 - [x] **#190 / #228 / #238 / #241 Automated Doc Sync (#249, #250):** `totem docs` command to keep project docs updated via per-doc LLM passes, now supporting individual doc targeting, path fixes, hallucination fixes, and XML sentinels. Integrated into `totem wrap` as Step 4/4 (#143).
-- [x] **#213 / #216 / #255 Zero-LLM Shield Mode (#251):** Deterministic lesson compiler, zero-LLM shield mode, false-positive resolution, and inline suppression directives.
+- [x] **#213 / #216 / #255 Zero-LLM Shield Mode (#251, #270):** Deterministic lesson compiler, zero-LLM shield mode (including `--mode=structural` context-blind review), false-positive resolution, and inline suppression directives.
 - [x] **#229 Epic: Native API Orchestrator (#230–#234, #236, #237):** Replace CLI shell-spawning with direct SDK calls to Gemini (`@google/genai`) and Anthropic (`@anthropic-ai/sdk`). BYOSD pattern with optional peer dependencies, discriminated union config, and package manager auto-detection for install prompts.
 - [x] **#243 / #246 Multi-Model Orchestration (#235):** Enable cross-provider routing in orchestrator overrides using `provider:model` syntax with negated glob support.
 - [x] **#248 Orchestrator Refactoring:** Extract `resolveOrchestrator()` helper to deduplicate model resolution.
 - [x] **#144 Epic: AI PR Review Posture & Noise Reduction:** Refine AI PR review posture to reduce noise.
-- [ ] **#244 / #245 Provider Conformance Suite:** Build conformance suite and nightly integration smoke tests to ensure all orchestrator models behave consistently.
+- [x] **#264 / #269 Cross-Model Enforcement:** Enable cross-model lesson export via `totem compile --export`.
+- [x] **#244 / #245 Provider Conformance Suite (#263):** Build conformance suite and nightly integration smoke tests to ensure all orchestrator models behave consistently.
 - [ ] **#195 / #196 / #214 Epic: Shift-Left AI Verification:** Define model compatibility strategy, build adversarial evaluation harness for CI (Model Drift Mitigation), and implement CI Drift Gate.
-- [ ] **#247 Analysis: Multi-Agent Code Review:** Research multi-agent code review and the Three-Lens Model for automated PR review workflows.
+- [x] **#247 Analysis: Multi-Agent Code Review:** Research multi-agent code review and the Three-Lens Model for automated PR review workflows.
 - [ ] **#176 Agent-Optimized MCP:** Dynamic token budgeting and write access for deeper agent-to-agent interactions.
 - [ ] **#183 Cross-File Knowledge Graph (Blocked):** Implement symbol resolution to enable multi-file architectural reasoning.
 
@@ -109,3 +111,4 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [ ] **#198 RFC: Open Core & Defensive Licensing Strategy (Blocked):** Evaluate MIT vs. Fair Source licensing strategy.
 - [x] Implement Changesets and npm publishing (Issue #5 / #46)
 - [x] Chore: Relicense project from MIT to Apache 2.0
+- [x] **#258 / #266 Governance:** Implement Contributor License Agreement (CLA) automation and CONTRIBUTING.md.

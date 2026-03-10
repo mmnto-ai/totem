@@ -866,3 +866,45 @@ Omit defensive XML escaping for prompt injection when processing trusted local d
 **Tags:** llm, code-review, prompting
 
 Deliberately excluding project context in "structural" review modes prevents the LLM from anchoring on developer intent, which can mask syntax-level bugs. Restricting the model's view to raw diffs forces it to identify logic errors and resource leaks that global project context might otherwise rationalize.
+
+## Lesson — Always generate sentinel markers even when the internal…
+
+**Tags:** idempotency, file-io, markdown
+
+Always generate sentinel markers even when the internal content is empty. Returning an empty string instead of empty markers causes the replacement logic to delete the markers from the target file, leading to redundant appends in subsequent runs.
+
+## Lesson — If a configuration file is a locally-authored script (e.g.,…
+
+**Tags:** security, configuration, trust-model
+
+If a configuration file is a locally-authored script (e.g., totem.config.ts) that the tool imports, the user already has arbitrary code execution. Validating individual path fields for traversal in this context adds no security value as the configuration itself is already a trusted input boundary.
+
+## Lesson — When performing string-slice replacements based on start…
+
+**Tags:** file-io, error-handling, robustness
+
+When performing string-slice replacements based on start and end markers, explicitly throw an error if the end marker appears before the start marker. Failing to check this relative ordering can result in incorrect slices that silently scramble or corrupt the target file's content.
+
+## Lesson — Runtime escaping and sanitization are unnecessary for…
+
+**Tags:** security, prompt-injection, workflow
+
+Runtime escaping and sanitization are unnecessary for content sourced from version-controlled files that undergo PR review. In these cases, the project's development workflow and human review process serve as the primary security boundary against malicious input like prompt injection or sentinel breakage.
+
+## Lesson — In local-first development tools, escaping XML tags in git…
+
+**Tags:** security, llm, git
+
+In local-first development tools, escaping XML tags in git diffs to prevent prompt injection is often unnecessary because the user already controls the input source. Avoiding redundant sanitization on trusted local data reduces prompt noise and prevents unnecessary token consumption.
+
+## Lesson — Resist merging similar orchestrator output handling and…
+
+**Tags:** design-decision, clean-code, architecture
+
+Resist merging similar orchestrator output handling and verdict parsing logic until at least three distinct modes exist. Keeping these paths separate during early feature development prevents premature coupling of specialized modes that might later diverge in requirements.
+
+## Lesson — Setting open-pull-requests-limit to 0 in dependabot.yml…
+
+**Tags:** dependabot, security, configuration
+
+Setting open-pull-requests-limit to 0 in dependabot.yml suppresses routine version bumps while still allowing critical security patches to trigger PRs via GitHub's repo-level security settings. This distinction allows for a security-only automated update policy that prevents noise and maintenance fatigue.

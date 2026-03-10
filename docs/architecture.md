@@ -19,17 +19,21 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 - `totem init` / `totem eject`: Scaffolds or safely removes `totem.config.ts`, git hooks, and AI memory reflexes.
 - `totem sync`: Crawls target directories defined in `totem.config.ts`, chunks, embeds, and updates the LanceDB index.
 - `totem search`: Direct debug query interface.
-- `totem spec` / `totem shield` / `totem triage`: Standardized workflow orchestration commands (spec planning, pre-push review, issue prioritization).
+- `totem spec` / `totem shield` / `totem triage`: Standardized workflow orchestration commands (spec planning, pre-push review, issue prioritization). `totem shield` includes options like `--mode=structural` for context-blind architectural review.
 - `totem briefing` / `totem handoff`: Session start/end context snapshots.
-- `totem extract`: Batch lesson extraction from PR review threads with interactive multi-select curation.
+- `totem extract`: Batch lesson extraction from PR review threads with interactive multi-select curation (supported by the `--pick` flag for selective lesson acceptance). Generated lessons use highly descriptive, content-derived headings.
 - `totem add-lesson`: Inline lesson capture (also exposed as MCP tool `add_lesson`).
-- `totem compile`: Translates natural-language lessons into deterministic regex rules via constrained LLM prompt at compile-time.
+- `totem compile`: Translates natural-language lessons into deterministic regex rules via constrained LLM prompt at compile-time. Supports an `--export` flag for cross-model lesson export targets.
 - `totem docs`: Automated per-document LLM passes to keep project documentation in sync with the codebase. Supports targeting individual documents via explicit path arguments (with automatic path fixes) for precision updates (safeguarded by XML sentinels for reliable output extraction).
 - `totem bridge` / `totem wrap`: Mid-session context resets and end-of-task workflow automation.
 
 ### 3. Deterministic Compiler & Zero-LLM Shield
 
-`totem compile` reads `.totem/lessons.md` and translates each lesson into a regex rule (or marks it as non-compilable). Rules are stored in `.totem/compiled-rules.json` (with support for `fileGlobs` scoping to target specific files) and validated at compile-time with both syntax checking and ReDoS static analysis (`safe-regex2`). Developers can bypass specific false positives using **inline suppression directives** (`totem-ignore` / `totem-ignore-next-line`), and `fileGlobs` support negated patterns (e.g., `!*.test.ts`) to exclude file types. Vulnerable patterns (nested quantifiers, star height > 1) are rejected, leaving them to be handled by the standard LLM-based shield. `totem shield --deterministic` applies these rules against `git diff` additions with zero LLM calls — ideal for CI enforcement without API keys or quota.
+`totem compile` reads `.totem/lessons.md` and translates each lesson into a regex rule (or marks it as non-compilable). Rules are stored in `.totem/compiled-rules.json` (with support for `fileGlobs` scoping to target specific files) and validated at compile-time with both syntax checking and ReDoS static analysis (`safe-regex2`). The compilation process is context-aware to prevent false positives within string literals and non-code contexts.
+
+Developers can further bypass specific false positives using **inline suppression directives** (`totem-ignore` / `totem-ignore-next-line`), and `fileGlobs` support negated patterns (e.g., `!*.test.ts`) to exclude file types. Vulnerable patterns (nested quantifiers, star height > 1) are rejected, leaving them to be handled by the standard LLM-based shield.
+
+`totem shield --deterministic` applies these compiled rules against `git diff` additions with zero LLM calls — ideal for CI enforcement without API keys or quota. Compiled rules can also be adapted to external systems via `totem compile --export` for cross-model lesson enforcement.
 
 ### 4. Shield GitHub Action (`action.yml`)
 
@@ -43,7 +47,7 @@ A stdio-based server for LLM integration. Provides two tools:
 
 - `search_knowledge(query)`: Semantic retrieval of codebase context and lessons.
 - `add_lesson(lesson, tags)`: Appends human-readable architectural lessons to `.totem/lessons.md` with descriptive content-derived headings.
-- **Security:** XML-delimits all MCP responses (#149) and sanitizes persisted content to mitigate prompt injection and terminal injection attacks.
+- **Security:** XML-delimits all MCP responses and sanitizes persisted content to mitigate prompt injection and terminal injection attacks.
 
 ## Configuration Tiers
 
