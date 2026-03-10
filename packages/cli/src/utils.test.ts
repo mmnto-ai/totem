@@ -473,6 +473,11 @@ vi.mock('./orchestrators/orchestrator.js', async (importOriginal) => {
       baseProvider: string,
       baseInvoke: typeof mockInvoke,
     ) => {
+      if (rawModel.startsWith('-') || !/^[\w./:_-]+$/.test(rawModel)) {
+        throw new Error(
+          `[Totem Error] Invalid model name '${rawModel}'. Model names may only contain word characters, dots, slashes, colons, underscores, and hyphens.`,
+        );
+      }
       const parsed = actual.parseModelString(rawModel, baseProvider);
       if (parsed.provider === 'shell' && baseProvider !== 'shell') {
         throw new Error(

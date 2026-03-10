@@ -11,7 +11,6 @@ import { bold, log } from './ui.js';
 
 // ─── Shared constants ────────────────────────────────────
 
-const MODEL_NAME_RE = /^[\w./:_-]+$/;
 const TELEMETRY_FILE = 'telemetry.jsonl';
 
 /** execFileSync on Windows can't resolve executables without `shell: true`. */
@@ -282,11 +281,6 @@ export async function runOrchestrator(opts: {
   if (!rawModel) {
     throw new Error(
       `[Totem Error] No model specified. Provide one with --model, set a command-specific model in 'overrides', or set a 'defaultModel' in your orchestrator config.`,
-    );
-  }
-  if (rawModel.startsWith('-') || !MODEL_NAME_RE.test(rawModel)) {
-    throw new Error(
-      `[Totem Error] Invalid model name '${rawModel}'. Model names may not start with a hyphen and may only contain word characters, dots, slashes, colons, underscores, and hyphens.`,
     );
   }
 

@@ -210,6 +210,15 @@ describe('resolveOrchestrator', () => {
     const result = resolveOrchestrator('gemini:gemini-3.1-pro-preview', 'anthropic', mockInvoke);
     expect(result.qualifiedModel).toBe('gemini:gemini-3.1-pro-preview');
   });
+
+  it('rejects model names with shell metacharacters', () => {
+    expect(() => resolveOrchestrator('$(touch /tmp/pwned)', 'shell', mockInvoke)).toThrow(
+      'Invalid model name',
+    );
+    expect(() => resolveOrchestrator('model;rm -rf /', 'shell', mockInvoke)).toThrow(
+      'Invalid model name',
+    );
+  });
 });
 
 // ─── parseModelString (#243) ────────────────────────

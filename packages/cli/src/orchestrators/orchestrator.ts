@@ -82,6 +82,9 @@ export function parseModelString(
 
 // ─── Centralized model resolution (#248) ────────────
 
+/** Characters allowed in model names — restricts shell metacharacters. */
+const MODEL_NAME_RE = /^[\w./:_-]+$/;
+
 export interface ResolvedOrchestrator {
   parsed: { provider: string; model: string };
   invoke: InvokeOrchestrator;
@@ -98,6 +101,12 @@ export function resolveOrchestrator(
   baseProvider: string,
   baseInvoke: InvokeOrchestrator,
 ): ResolvedOrchestrator {
+  if (rawModel.startsWith('-') || !MODEL_NAME_RE.test(rawModel)) {
+    throw new Error(
+      `[Totem Error] Invalid model name '${rawModel}'. Model names may only contain word characters, dots, slashes, colons, underscores, and hyphens.`,
+    );
+  }
+
   const parsed = parseModelString(rawModel, baseProvider);
 
   if (parsed.provider === 'shell' && baseProvider !== 'shell') {
