@@ -174,12 +174,12 @@ orchestrator: {
 - **`briefing`**: Fetches your current git branch, uncommitted changes, open PRs, and recent session momentum to generate a startup briefing.
 - **`bridge`**: Assesses your current mid-task state and creates a lightweight breadcrumb file. Use this when your AI agent's context window gets too full.
 - **`spec <ids...>`**: Fetches GitHub Issues (supports URLs) and synthesizes a pre-work spec. The AI acts as a **Staff-Level Architect**, focusing on contracts and edge cases.
-- **`shield`**: Reads your uncommitted git diff, queries LanceDB for related traps, and performs a **hybrid zero-day + N-day architectural code review** (#98) before you push. Supports **zero-LLM shield mode** (#216) for lightning-fast deterministic checks using compiled rules (#226) and inline suppression directives (#255).
+- **`shield`**: Reads your uncommitted git diff, queries LanceDB for related traps, and performs a **hybrid zero-day + N-day architectural code review** (#98) before you push. Supports **zero-LLM shield mode** (#216) for lightning-fast deterministic checks using compiled rules (#226), false-positive mitigation for non-code contexts (#251), and inline suppression directives (#255).
 - **`triage`**: Fetches open GitHub issues and generates a prioritized roadmap (e.g., `docs/active_work.md`) for your next task.
 - **`add-lesson`**: Interactively document a context, symptom, and fix. Saves to `.totem/lessons.md` and triggers a background re-index.
-- **`docs`**: Automatically syncs project documentation (README, Roadmap) by analyzing git logs and closed issues since the last release (#190). Supports targeting individual files (e.g., `totem docs README.md`) with path fixes (#238, #241).
+- **`docs`**: Automatically syncs project documentation (README, Roadmap) by analyzing git logs and closed issues since the last release (#190). Supports targeting individual files (e.g., `totem docs README.md`) with path fixes and strict state preservation to prevent hallucination (#238, #241, #249).
 - **`wrap`**: A post-merge workflow chain that runs `extract`, syncs the database, generates a roadmap, and updates docs in one command (#143, #242).
-- **`extract <ids...>`**: Fetches merged PRs, reads comments, and extracts systemic architectural traps with **descriptive headings** (#203). Supports interactive multi-select pruning.
+- **`extract <ids...>`**: Fetches merged PRs, reads comments, and extracts systemic architectural traps with **descriptive headings** (#203, #253). Supports interactive multi-select pruning.
 - **`handoff`**: Captures uncommitted changes and lessons learned today, synthesizing a tactical snapshot for your next session.
 - **`eject`**: Safely removes all Totem git hooks, configuration files, AI agent prompt injections, and the local `.lancedb/` index (#131).
 
@@ -243,8 +243,12 @@ Then remove the `-y` flag from your MCP config — `npx` will use the locally in
 Totem is evolving from a memory database into a full Shift-Left orchestrator.
 
 - [x] **Foundations & Phase 1 (Onboarding):** Local vector DB, MCP interface, MVC Configuration Tiers (#187), "Universal Lessons" baseline (#128), and cross-platform docs (#210).
-- [x] **Phase 2 (Core Stability):** Tree-sitter Universal AST Parsing (#173), Shield GitHub Action (#180), Automated Doc Sync with XML sentinels and individual document targeting (#190, #228, #238, #241), Drift Detection for self-cleaning memory (#177, #211), Deterministic Lesson Compiler / Zero-LLM Shield (#213, #216) backed by regex ReDoS protection (#218) and inline suppression directives (#255), Native API Orchestrators for Gemini and Anthropic (#229) with BYOSD package manager auto-detection (#236), cross-provider routing with negated glob support (#243, #246), and OpenAI embedding validation (#4).
+- [x] **Phase 2 (Core Stability):** Tree-sitter Universal AST Parsing (#173), Shield GitHub Action (#180), Automated Doc Sync with XML sentinels, individual document targeting, and stability/hallucination fixes (#190, #206, #224, #228, #238, #241, #249, #250), Drift Detection for self-cleaning memory (#177, #211), Deterministic Lesson Compiler / Zero-LLM Shield (#213, #216) backed by regex ReDoS protection (#218), false-positive mitigation (#251), and inline suppression directives (#255), Native API Orchestrators for Gemini and Anthropic (#229) with BYOSD package manager auto-detection (#236), cross-provider routing with negated glob support (#243, #246), and OpenAI embedding validation (#4).
 - [x] **Validation:** Internal dogfooding (#8) across multiple real-world repositories.
 - [ ] **Phase 3 (Workflow Expansion):** Interactive CLI tutorials (#129), Custom Workflow Runner (#119), Agent-Optimized MCP (#176), and Cross-File Knowledge Graph (#183).
 
 For a deeper dive into the system design, see `docs/architecture.md`.
+
+## License
+
+Licensed under the Apache 2.0 License.

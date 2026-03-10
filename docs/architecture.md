@@ -2,7 +2,7 @@
 
 ## The Vision
 
-Totem is designed as a **Shared Brain** and **Orchestrator** for a team of autonomous AI agents. It operates completely locally within the consuming project.
+Totem is designed as a **Shared Brain** and **Orchestrator** for a team of autonomous AI agents. Licensed under Apache 2.0, it operates completely locally within the consuming project.
 
 ## Core Components
 
@@ -100,11 +100,11 @@ orchestrator: {
 
 ### Shared Configuration
 
-All providers support: `defaultModel`, `fallbackModel`, `overrides` (per-command and glob-based model routing, supporting negated globs and `provider:model` syntax for cross-provider routing), `systemPrompts` (per-command custom system prompt overrides), and `cacheTtls` (per-command cache TTL in seconds). Each command resolves its model via: `--model` flag > `overrides[command]` > `defaultModel`. Quota-exhaustion (429/rate-limit) triggers automatic fallback to `fallbackModel` if configured. Legacy configs without a `provider` field are auto-migrated to `provider: 'shell'`.
+All providers support: `defaultModel`, `fallbackModel`, `overrides` (per-command and glob-based model routing, supporting negated globs and `provider:model` syntax for cross-provider routing), `systemPrompts` (per-command custom system prompt overrides), and `cacheTtls` (per-command cache TTL in seconds). Model resolution is handled centrally via the `resolveOrchestrator()` helper to deduplicate logic and ensure consistent routing behavior. Each command resolves its model via: `--model` flag > `overrides[command]` > `defaultModel`. Quota-exhaustion (429/rate-limit) triggers automatic fallback to `fallbackModel` if configured. Legacy configs without a `provider` field are auto-migrated to `provider: 'shell'`.
 
 ## The `.totem/` Directory
 
-The `lessons.md` file within `.totem/` is meant to be version-controlled (committed to git). It acts as the explicit, human-readable ledger of traps and architectural decisions. Lesson headings are derived from content (not timestamps) for scannable PR diffs. When updated, `totem sync` re-indexes it.
+The `lessons.md` file within `.totem/` is meant to be version-controlled (committed to git). It acts as the explicit, human-readable ledger of traps and architectural decisions. Lesson headings are fully derived from content context (avoiding generic timestamps or truncated text) for highly descriptive, scannable PR diffs. When updated, `totem sync` re-indexes it.
 
 During `totem init`, users are offered an optional **Universal Baseline** — a curated set of foundational AI developer lessons (security, hallucination traps, architecture rules). These are appended to `lessons.md` with a `<!-- totem:baseline -->` marker for idempotency. The baseline solves the cold-start problem where a fresh install has no knowledge to retrieve.
 

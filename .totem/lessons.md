@@ -788,3 +788,27 @@ Explicitly block cross-provider routing into specialized providers (like `shell`
 **Tags:** git, diff-parsing, trap
 
 When parsing unified diff hunks, explicitly match context lines (prefixed with a space) rather than using a catch-all `else` block. Unified diffs often contain meta-information lines, such as `\ No newline at end of file`, which are neither additions nor context; treating these as file content can corrupt line tracking and metadata for subsequent lines.
+
+## Lesson — When centralizing logic into a "choke point" helper for…
+
+**Tags:** security, refactoring, validation
+
+When centralizing logic into a "choke point" helper for both primary and fallback paths, ensure all security-critical validations (like shell metacharacter checks) are migrated. Missing checks in the centralized helper can create injection vulnerabilities if fallback paths previously relied on guards only present in the primary path.
+
+## Lesson — Adding factory parameters to functions solely to facilitate…
+
+**Tags:** testing, design-decision, mocking
+
+Adding factory parameters to functions solely to facilitate mocking can lead to over-engineered production signatures. For internal module logic, standard ESM mocking patterns or well-commented test mocks are often preferable to polluting public APIs with test-only dependencies.
+
+## Lesson — Avoid adding explicit runtime checks or redundant error…
+
+**Tags:** typescript, defensive-programming, design-decision
+
+Avoid adding explicit runtime checks or redundant error branches for logic paths that are already unreachable due to upstream guards or exhaustive type-system enforcements. Relying on established guards keeps the implementation focused and prevents the accumulation of defensive code noise.
+
+## Lesson — Requesting explicit metadata tokens (e.g., Heading:) from…
+
+**Tags:** llm, prompt-engineering, sanitization
+
+Requesting explicit metadata tokens (e.g., `Heading:`) from LLMs is more reliable than using heuristic truncation of the first line of output. Sanitize these explicit tokens to remove markdown artifacts and prefixes that LLMs frequently include despite instructions.

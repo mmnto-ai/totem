@@ -46,7 +46,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#185 CLI command renames:** `learn` → `extract`, removed `anchor` alias (use `add-lesson`).
 - [x] **#131 Clean Ejection:** Build `totem eject` to safely remove git hooks, prompt injections, and database artifacts if a user uninstalls.
 - [x] **#127 Core:** Add heading hierarchy breadcrumbs to MarkdownChunker labels.
-- [x] **#203 UX:** Descriptive headings for extracted lessons to improve search relevance.
+- [x] **#203 UX:** Descriptive headings for extracted lessons to improve search relevance (Fixed truncation in #253).
 - [x] **#158 Chore:** Unify XML escaping utilities across MCP and CLI.
 - [x] **#156 Core:** Incremental sync now removes deleted files from LanceDB.
 - [x] **#155 Core:** Stateful incremental sync via `.totem/cache/sync-state.json`.
@@ -83,10 +83,15 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#83 Support GitHub issue URLs:** Allow users to paste full URLs in addition to issue numbers for `totem spec` and `triage`.
 - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
 - [x] **#187 Minimum Viable Configuration:** Tiered config (Lite/Standard/Full) with auto-detection. Embedding is optional; Lite tier works with zero API keys.
-- [x] **#190 / #228 / #238 / #241 Automated Doc Sync:** `totem docs` command to keep project docs updated via per-doc LLM passes, now supporting individual doc targeting, path fixes, and XML sentinels. Integrated into `totem wrap` as Step 4/4 (#143).
-- [x] **#213 / #216 / #255 Zero-LLM Shield Mode:** Deterministic lesson compiler, zero-LLM shield mode, and inline suppression directives.
+- [x] **#190 / #228 / #238 / #241 Automated Doc Sync (#249, #250):** `totem docs` command to keep project docs updated via per-doc LLM passes, now supporting individual doc targeting, path fixes, hallucination fixes, and XML sentinels. Integrated into `totem wrap` as Step 4/4 (#143).
+- [x] **#213 / #216 / #255 Zero-LLM Shield Mode (#251):** Deterministic lesson compiler, zero-LLM shield mode, false-positive resolution, and inline suppression directives.
 - [x] **#229 Epic: Native API Orchestrator (#230–#234, #236, #237):** Replace CLI shell-spawning with direct SDK calls to Gemini (`@google/genai`) and Anthropic (`@anthropic-ai/sdk`). BYOSD pattern with optional peer dependencies, discriminated union config, and package manager auto-detection for install prompts.
 - [x] **#243 / #246 Multi-Model Orchestration (#235):** Enable cross-provider routing in orchestrator overrides using `provider:model` syntax with negated glob support.
+- [x] **#248 Orchestrator Refactoring:** Extract `resolveOrchestrator()` helper to deduplicate model resolution.
+- [x] **#144 Epic: AI PR Review Posture & Noise Reduction:** Refine AI PR review posture to reduce noise.
+- [ ] **#244 / #245 Provider Conformance Suite:** Build conformance suite and nightly integration smoke tests to ensure all orchestrator models behave consistently.
+- [ ] **#195 / #196 / #214 Epic: Shift-Left AI Verification:** Define model compatibility strategy, build adversarial evaluation harness for CI (Model Drift Mitigation), and implement CI Drift Gate.
+- [ ] **#247 Analysis: Multi-Agent Code Review:** Research multi-agent code review and the Three-Lens Model for automated PR review workflows.
 - [ ] **#176 Agent-Optimized MCP:** Dynamic token budgeting and write access for deeper agent-to-agent interactions.
 - [ ] **#183 Cross-File Knowledge Graph (Blocked):** Implement symbol resolution to enable multi-file architectural reasoning.
 
@@ -96,9 +101,11 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 - [ ] **#124 Epic: Automated Onboarding:** Build `totem onboard <issue>` to generate contextual Day 1 briefings (architecture + traps) tailored to a new developer's first assigned ticket.
 - [ ] **#123 Epic: Federated Memory:** Allow `totem.config.ts` to declare external/upstream LanceDB indexes (The Mothership Pattern) to inherit meta-lessons or team-wide policies.
+- [ ] **#175 Epic: Multiplayer Cache Syncing:** Phase 4 enterprise/team scaling capability.
 - [ ] **#84 Issue Tracking Adapters:** Implement Jira and Linear adapters using the interface built in Phase 2.
 - [ ] **#79 Documentation Ingestion Pipeline:** Build Pull/Push models for Notion, Confluence, or internal wikis.
 - [ ] **#34 Configurable Governance:** Let enterprise teams configure AI review loops (`auditLoopLimit`, `shieldSeverityThreshold`).
 - [ ] **#42 Universal AI DevEx:** Evolve `totem init` to inject "Best Practices" guardrails (Anti-Refactor, Test Coverage triggers).
 - [ ] **#198 RFC: Open Core & Defensive Licensing Strategy (Blocked):** Evaluate MIT vs. Fair Source licensing strategy.
 - [x] Implement Changesets and npm publishing (Issue #5 / #46)
+- [x] Chore: Relicense project from MIT to Apache 2.0
