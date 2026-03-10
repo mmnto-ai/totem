@@ -57,51 +57,51 @@ function detectHookManager(cwd: string): HookManager | null {
 function printHookManagerGuidance(manager: HookManager, syncCmd: string, shieldCmd: string): void {
   switch (manager) {
     case 'husky':
-      console.log('[Totem] Detected husky. Add the following to your hook files:');
-      console.log('');
-      console.log('  # .husky/pre-commit — block direct commits to main/master');
-      console.log('  branch=$(git rev-parse --abbrev-ref HEAD)');
-      console.log('  if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then');
-      console.log('    echo "[Totem] Direct commits to $branch blocked."');
-      console.log('    exit 1');
-      console.log('  fi');
-      console.log('');
-      console.log('  # .husky/pre-push — deterministic shield gate');
-      console.log('  if [ -f ".totem/compiled-rules.json" ]; then');
-      console.log(`    ${shieldCmd}`);
-      console.log('  fi');
-      console.log('');
-      console.log('  # .husky/post-merge — background re-index');
-      console.log(`  ${syncCmd}`);
+      console.error('[Totem] Detected husky. Add the following to your hook files:');
+      console.error('');
+      console.error('  # .husky/pre-commit — block direct commits to main/master');
+      console.error('  branch=$(git rev-parse --abbrev-ref HEAD)');
+      console.error('  if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then');
+      console.error('    echo "[Totem] Direct commits to $branch blocked."');
+      console.error('    exit 1');
+      console.error('  fi');
+      console.error('');
+      console.error('  # .husky/pre-push — deterministic shield gate');
+      console.error('  if [ -f ".totem/compiled-rules.json" ]; then');
+      console.error(`    ${shieldCmd}`);
+      console.error('  fi');
+      console.error('');
+      console.error('  # .husky/post-merge — background re-index');
+      console.error(`  ${syncCmd}`);
       break;
     case 'lefthook':
-      console.log('[Totem] Detected lefthook. Add to your lefthook.yml:');
-      console.log('  pre-commit:');
-      console.log('    commands:');
-      console.log('      totem-block-main:');
-      console.log(
+      console.error('[Totem] Detected lefthook. Add to your lefthook.yml:');
+      console.error('  pre-commit:');
+      console.error('    commands:');
+      console.error('      totem-block-main:');
+      console.error(
         '        run: branch=$(git rev-parse --abbrev-ref HEAD); if [ "$branch" = main ] || [ "$branch" = master ]; then echo "[Totem] Direct commits to $branch blocked." && exit 1; fi',
       );
-      console.log('  pre-push:');
-      console.log('    commands:');
-      console.log('      totem-shield:');
-      console.log(`        run: 'if [ -f ".totem/compiled-rules.json" ]; then ${shieldCmd}; fi'`);
-      console.log('  post-merge:');
-      console.log('    commands:');
-      console.log('      totem-sync:');
-      console.log(`        run: ${syncCmd}`);
+      console.error('  pre-push:');
+      console.error('    commands:');
+      console.error('      totem-shield:');
+      console.error(`        run: 'if [ -f ".totem/compiled-rules.json" ]; then ${shieldCmd}; fi'`);
+      console.error('  post-merge:');
+      console.error('    commands:');
+      console.error('      totem-sync:');
+      console.error(`        run: ${syncCmd}`);
       break;
     case 'simple-git-hooks':
-      console.log('[Totem] Detected simple-git-hooks. Add to your package.json:');
-      console.log('  "simple-git-hooks": {');
-      console.log(
+      console.error('[Totem] Detected simple-git-hooks. Add to your package.json:');
+      console.error('  "simple-git-hooks": {');
+      console.error(
         '    "pre-commit": "branch=$(git rev-parse --abbrev-ref HEAD); if [ \\"$branch\\" = main ] || [ \\"$branch\\" = master ]; then echo \\"[Totem] Direct commits to $branch blocked.\\" && exit 1; fi",',
       );
-      console.log(
+      console.error(
         `    "pre-push": "if [ -f \\".totem/compiled-rules.json\\" ]; then ${shieldCmd}; fi",`,
       );
-      console.log(`    "post-merge": "${syncCmd}"`);
-      console.log('  }');
+      console.error(`    "post-merge": "${syncCmd}"`);
+      console.error('  }');
       break;
   }
 }
