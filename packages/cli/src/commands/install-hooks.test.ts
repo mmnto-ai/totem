@@ -172,7 +172,7 @@ describe('installGitHook', () => {
   it('returns skipped-non-shell for Node hook (does not corrupt file)', () => {
     fs.mkdirSync(hooksDir, { recursive: true });
     const hookPath = path.join(hooksDir, 'pre-commit');
-    const nodeHook = '#!/usr/bin/env node\nconsole.log("lint");\n';
+    const nodeHook = '#!/usr/bin/env node\nconsole.log("lint");\n'; // totem-ignore — test fixture, not real logging
     fs.writeFileSync(hookPath, nodeHook);
 
     const result = installGitHook(
