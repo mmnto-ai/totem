@@ -1,0 +1,40 @@
+name: Integration Smoke Tests
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # 6 AM UTC daily
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: Smoke (${{ matrix.provider }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [gemini, anthropic]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Install optional peer deps needed for SDK smoke tests
+      - run: pnpm --filter @mmnto/cli add @google/genai @anthropic-ai/sdk
+
+      - run: pnpm build
+
+      - name: Run integration smoke tests
+        run: pnpm --filter @mmnto/cli vitest run --config vitest.integration.config.ts
+        env:
+          CI_INTEGRATION: 'true'
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
