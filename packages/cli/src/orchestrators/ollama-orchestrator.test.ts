@@ -161,4 +161,25 @@ describe('invokeOllamaOrchestrator', () => {
       '[Totem Error] Ollama API error (404)',
     );
   });
+
+  it('throws friendly error on non-JSON response body', async () => {
+    mockFetch.mockResolvedValueOnce(new Response('not json at all', { status: 200 }));
+
+    await expect(invokeOllamaOrchestrator(baseOpts)).rejects.toThrow(
+      'Ollama returned invalid JSON',
+    );
+  });
+
+  it('throws friendly error on malformed JSON response', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify([{ unexpected: 'array' }]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await expect(invokeOllamaOrchestrator(baseOpts)).rejects.toThrow(
+      'Unexpected response from Ollama API',
+    );
+  });
 });

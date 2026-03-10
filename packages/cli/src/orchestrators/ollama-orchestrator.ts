@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import { log } from '../ui.js';
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
 import { isQuotaError } from './orchestrator.js';
@@ -8,13 +10,13 @@ const DEFAULT_BASE_URL = 'http://localhost:11434';
 
 // ─── Response schema ────────────────────────────────
 
-interface OllamaChatResponse {
-  message?: { content?: string };
-  prompt_eval_count?: number;
-  eval_count?: number;
-  done?: boolean;
-  done_reason?: string;
-}
+const OllamaChatResponseSchema = z.object({
+  message: z.object({ content: z.string().optional() }).optional(),
+  prompt_eval_count: z.number().optional(),
+  eval_count: z.number().optional(),
+  done: z.boolean().optional(),
+  done_reason: z.string().optional(),
+});
 
 // ─── Native Ollama orchestrator ─────────────────────
 
@@ -89,7 +91,21 @@ export async function invokeOllamaOrchestrator(
     throw new Error(`[Totem Error] Ollama API error (${response.status}): ${errorBody}`);
   }
 
-  const data = (await response.json()) as OllamaChatResponse;
+  let raw: unknown;
+  try {
+    raw = await response.json();
+  } catch {
+    throw new Error(`[Totem Error] Ollama returned invalid JSON. Is the model loaded?`);
+  }
+
+  const parsed = OllamaChatResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(
+      `[Totem Error] Unexpected response from Ollama API.\n` +
+        `Validation: ${parsed.error.issues.map((i) => i.message).join(', ')}`,
+    );
+  }
+  const data = parsed.data;
   const durationMs = Date.now() - startMs;
 
   return {
