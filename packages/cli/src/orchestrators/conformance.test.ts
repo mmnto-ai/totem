@@ -158,7 +158,7 @@ describe.each(sdkFixtures)('$name provider conformance', (fixture) => {
 
   it('throws descriptive error when API key is missing', async () => {
     delete process.env[fixture.envKey];
-    await expect(fixture.invoke()).rejects.toThrow(/No .+ API key found/);
+    await expect(fixture.invoke()).rejects.toThrow(/\[Totem Error\].*No .+ API key found/);
   });
 
   it('converts quota/429 errors to QuotaError', async () => {
