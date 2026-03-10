@@ -203,6 +203,7 @@ export interface ExtractedLesson {
   heading?: string;
   tags: string[];
   text: string;
+  suspiciousFlags?: string[];
 }
 
 const LESSON_RE = /---LESSON---\s*\n(?:Heading:\s*(.+)\n)?Tags:\s*(.+)\n([\s\S]+?)---END---/g;
@@ -238,6 +239,50 @@ export function parseLessons(llmOutput: string): ExtractedLesson[] {
   return lessons;
 }
 
+// ─── Suspicious lesson detection ────────────────────────
+
+const MAX_SUSPICIOUS_HEADING_LENGTH = 60;
+const INSTRUCTIONAL_LEAKAGE_RE = /(?:ignore previous|system prompt|you are|disregard)/i;
+const XML_TAG_LEAKAGE_RE =
+  /<\/?(?:pr_body|comment_body|diff_hunk|review_body|system|untrusted_content)[^>]*>/i;
+const BASE64_BLOB_RE = /(?:[A-Za-z0-9+/]{4}){15,}/; // 60+ contiguous base64-alphabet chars
+const UNICODE_ESCAPE_RE = /(?:\\u[0-9a-fA-F]{4}){5,}/; // 5+ consecutive unicode escapes
+
+/**
+ * Scans extracted lessons for heuristic indicators of prompt injection or
+ * LLM constraint violations. Returns a new array with `suspiciousFlags`
+ * populated on any lesson that triggers one or more checks.
+ */
+export function flagSuspiciousLessons(lessons: ExtractedLesson[]): ExtractedLesson[] {
+  return lessons.map((lesson) => {
+    const flags: string[] = [];
+    const heading = lesson.heading ?? '';
+    const combined = `${heading} ${lesson.text}`;
+
+    if (heading.length > MAX_SUSPICIOUS_HEADING_LENGTH) {
+      flags.push('Heading exceeds 60 characters');
+    }
+
+    if (INSTRUCTIONAL_LEAKAGE_RE.test(combined)) {
+      flags.push('Contains potential instructional leakage');
+    }
+
+    if (XML_TAG_LEAKAGE_RE.test(combined)) {
+      flags.push('Contains system XML tags');
+    }
+
+    if (BASE64_BLOB_RE.test(combined)) {
+      flags.push('Contains potential Base64 payload');
+    }
+
+    if (UNICODE_ESCAPE_RE.test(combined)) {
+      flags.push('Contains excessive unicode escapes');
+    }
+
+    return flags.length > 0 ? { ...lesson, suspiciousFlags: flags } : lesson;
+  });
+}
+
 // ─── Lesson writer ──────────────────────────────────────
 
 export function appendLessons(lessons: ExtractedLesson[], lessonsPath: string): void {
@@ -269,14 +314,28 @@ function truncateLabel(text: string): string {
 
 /**
  * Prompts the user to select which lessons to keep via multi-select.
- * Returns the selected lessons, or all lessons if --yes is set.
+ * In --yes mode, suspicious lessons are blocked (dropped with warnings).
+ * Returns the selected lessons.
  * Throws in non-interactive environments without --yes.
  */
 export async function selectLessons(
   lessons: ExtractedLesson[],
   opts: { yes?: boolean; isTTY?: boolean },
 ): Promise<ExtractedLesson[]> {
-  if (opts.yes) return lessons;
+  if (opts.yes) {
+    // --yes mode: block suspicious lessons (#291)
+    const clean = lessons.filter((l) => !l.suspiciousFlags?.length);
+    const dropped = lessons.filter((l) => l.suspiciousFlags?.length);
+    if (dropped.length > 0) {
+      for (const l of dropped) {
+        log.warn(TAG, `Blocked suspicious lesson: ${truncateLabel(sanitize(l.text))}`);
+        for (const flag of l.suspiciousFlags!) {
+          log.warn(TAG, `  - ${flag}`);
+        }
+      }
+    }
+    return clean;
+  }
 
   if (!opts.isTTY) {
     throw new Error(
@@ -288,10 +347,17 @@ export async function selectLessons(
     message: `Select lessons to persist (${lessons.length} extracted):`,
     options: lessons.map((lesson, i) => ({
       value: i,
-      label: truncateLabel(sanitize(lesson.text)),
-      hint: sanitize(lesson.tags.join(', ')),
+      label: lesson.suspiciousFlags?.length
+        ? `[!] ${truncateLabel(sanitize(lesson.text))}`
+        : truncateLabel(sanitize(lesson.text)),
+      hint: lesson.suspiciousFlags?.length
+        ? `${sanitize(lesson.tags.join(', '))} -- ${lesson.suspiciousFlags.join('; ')}`
+        : sanitize(lesson.tags.join(', ')),
     })),
-    initialValues: lessons.map((_, i) => i),
+    // Pre-select only non-suspicious lessons
+    initialValues: lessons
+      .map((l, i) => (l.suspiciousFlags?.length ? null : i))
+      .filter((i): i is number => i !== null),
     required: false,
   });
 
@@ -411,14 +477,31 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
     return;
   }
 
-  log.success(TAG, `Total: ${allLessons.length} lesson(s) from ${nums.length} PR(s)`);
+  // Flag suspicious lessons before review (#290)
+  const flaggedLessons = flagSuspiciousLessons(allLessons);
+  const suspiciousCount = flaggedLessons.filter((l) => l.suspiciousFlags?.length).length;
+  if (suspiciousCount > 0) {
+    log.warn(TAG, `${suspiciousCount} lesson(s) flagged as suspicious`); // totem-ignore — count only, no untrusted content
+  }
+
+  log.success(TAG, `Total: ${flaggedLessons.length} lesson(s) from ${nums.length} PR(s)`); // totem-ignore — count only, no untrusted content
 
   // --dry-run mode: preview lessons to stdout (pipeable) without writing
   if (options.dryRun) {
     log.dim(TAG, 'Dry run — lessons not written.');
-    for (const lesson of allLessons) {
-      console.log(`\n  Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`);
-      console.log(`  ${sanitize(lesson.text).replace(/\n/g, '\n  ')}`);
+    for (const lesson of flaggedLessons) {
+      const prefix = lesson.suspiciousFlags?.length ? '[!] ' : '';
+      console.log(`\n  ${prefix}Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`); // totem-ignore — stdout for piping
+      console.log(`  ${sanitize(lesson.text).replace(/\n/g, '\n  ')}`); // totem-ignore — stdout for piping
+      if (lesson.suspiciousFlags?.length) {
+        for (const flag of lesson.suspiciousFlags) {
+          console.log(`  [!] ${flag}`); // totem-ignore — stdout for piping
+        }
+      }
+    }
+    // Exit non-zero if suspicious lessons detected in --yes mode (#291)
+    if (options.yes && suspiciousCount > 0) {
+      process.exitCode = 1;
     }
     return;
   }
@@ -432,16 +515,24 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
     );
     log.warn(TAG, 'Review each lesson carefully before accepting.\n');
 
-    for (let i = 0; i < allLessons.length; i++) {
-      const lesson = allLessons[i]!;
-      console.error(`  [${i + 1}] Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`);
+    for (let i = 0; i < flaggedLessons.length; i++) {
+      const lesson = flaggedLessons[i]!;
+      const prefix = lesson.suspiciousFlags?.length ? `[!] ` : '';
+      console.error(
+        `  [${i + 1}] ${prefix}Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`,
+      );
       console.error(`      ${sanitize(lesson.text).replace(/\n/g, '\n      ')}`);
+      if (lesson.suspiciousFlags?.length) {
+        for (const flag of lesson.suspiciousFlags) {
+          console.error(`      [!] ${flag}`);
+        }
+      }
       console.error('');
     }
   }
 
-  // Interactive multi-select (or --yes bypass)
-  const selected = await selectLessons(allLessons, {
+  // Interactive multi-select (or --yes bypass with suspicious blocking)
+  const selected = await selectLessons(flaggedLessons, {
     yes: options.yes,
     isTTY: !!process.stdin.isTTY,
   });
@@ -483,5 +574,10 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
   for (const lesson of sanitizedLessons) {
     console.log(`\n  Tags: ${lesson.tags.join(', ').replace(/\n/g, ' ')}`);
     console.log(`  ${lesson.text.replace(/\n/g, '\n  ')}`);
+  }
+
+  // Exit non-zero if --yes mode dropped suspicious lessons (#291)
+  if (options.yes && suspiciousCount > 0) {
+    process.exitCode = 1;
   }
 }
