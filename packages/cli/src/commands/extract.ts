@@ -241,9 +241,9 @@ export function parseLessons(llmOutput: string): ExtractedLesson[] {
 
 // ─── Suspicious lesson detection ────────────────────────
 
-const SUSPICIOUS_HEADING_MAX = 60;
+const MAX_SUSPICIOUS_HEADING_LENGTH = 60;
 const INSTRUCTIONAL_LEAKAGE_RE = /(?:ignore previous|system prompt|you are|disregard)/i;
-const XML_TAG_LEAKAGE_RE = /<(?:pr_body|system|instructions|lessons|untrusted_content)[^>]*>/i;
+const XML_TAG_LEAKAGE_RE = /<\/?(?:pr_body|system|instructions|lessons|untrusted_content)[^>]*>/i;
 const BASE64_BLOB_RE = /(?:[A-Za-z0-9+/]{4}){15,}/; // 60+ contiguous base64-alphabet chars
 const UNICODE_ESCAPE_RE = /(?:\\u[0-9a-fA-F]{4}){5,}/; // 5+ consecutive unicode escapes
 
@@ -258,7 +258,7 @@ export function flagSuspiciousLessons(lessons: ExtractedLesson[]): ExtractedLess
     const heading = lesson.heading ?? '';
     const combined = `${heading} ${lesson.text}`;
 
-    if (heading.length > SUSPICIOUS_HEADING_MAX) {
+    if (heading.length > MAX_SUSPICIOUS_HEADING_LENGTH) {
       flags.push('Heading exceeds 60 characters');
     }
 
@@ -490,13 +490,17 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
     log.dim(TAG, 'Dry run — lessons not written.');
     for (const lesson of flaggedLessons) {
       const prefix = lesson.suspiciousFlags?.length ? '[!] ' : '';
-      console.error(`\n  ${prefix}Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`);
-      console.error(`  ${sanitize(lesson.text).replace(/\n/g, '\n  ')}`);
+      console.log(`\n  ${prefix}Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`); // totem-ignore — stdout for piping
+      console.log(`  ${sanitize(lesson.text).replace(/\n/g, '\n  ')}`); // totem-ignore — stdout for piping
       if (lesson.suspiciousFlags?.length) {
         for (const flag of lesson.suspiciousFlags) {
-          console.error(`  [!] ${flag}`);
+          console.log(`  [!] ${flag}`); // totem-ignore — stdout for piping
         }
       }
+    }
+    // Exit non-zero if suspicious lessons detected in --yes mode (#291)
+    if (options.yes && suspiciousCount > 0) {
+      process.exitCode = 1;
     }
     return;
   }

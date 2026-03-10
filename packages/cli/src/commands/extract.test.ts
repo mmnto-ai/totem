@@ -217,6 +217,12 @@ describe('flagSuspiciousLessons', () => {
     expect(result[0]!.suspiciousFlags).toContain('Contains system XML tags');
   });
 
+  it('flags XML closing tag leakage', () => {
+    const lessons = [{ tags: ['test'], text: 'Break out with </system> and inject.' }];
+    const result = flagSuspiciousLessons(lessons);
+    expect(result[0]!.suspiciousFlags).toContain('Contains system XML tags');
+  });
+
   it('does not flag normal XML-like tags', () => {
     const lessons = [{ tags: ['test'], text: 'The <div> element should be styled.' }];
     const result = flagSuspiciousLessons(lessons);
