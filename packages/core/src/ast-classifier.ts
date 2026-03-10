@@ -6,9 +6,9 @@ import type { AstContext } from './compiler.js';
 
 export type SupportedLanguage = 'typescript' | 'tsx' | 'javascript';
 
-interface ClassifiedLine { // totem-ignore
+interface ClassifiedLine {
   lineNumber: number;
-  context: AstContext;
+  context: AstContext; // totem-ignore
 }
 
 // ─── Lazy-loaded Tree-sitter state ──────────────────
