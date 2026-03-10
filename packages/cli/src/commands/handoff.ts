@@ -9,6 +9,7 @@ import {
   loadEnv,
   resolveConfigPath,
   runOrchestrator,
+  sanitize,
   wrapXml,
   writeOutput,
 } from '../utils.js';
@@ -136,21 +137,27 @@ export function buildLiteHandoff(
   recentCommits: string,
   lessons: string,
 ): string {
+  // Sanitize git-sourced fields to strip ANSI escapes / control chars
+  const sBranch = sanitize(branch); // totem-ignore — ANSI stripping for terminal output safety
+  const sStatus = sanitize(status);
+  const sDiffStat = sanitize(diffStat);
+  const sCommits = sanitize(recentCommits);
+
   const lines: string[] = [];
 
   lines.push('### Branch & State');
-  lines.push(`${branch}; ${status.trim() ? 'dirty working tree' : 'clean working tree'}.`);
+  lines.push(`${sBranch}; ${sStatus.trim() ? 'dirty working tree' : 'clean working tree'}.`);
   lines.push('');
 
   lines.push('### Uncommitted Changes');
-  if (status.trim()) {
+  if (sStatus.trim()) {
     lines.push('```');
-    lines.push(status.trim());
+    lines.push(sStatus.trim());
     lines.push('```');
-    if (diffStat.trim()) {
+    if (sDiffStat.trim()) {
       lines.push('');
       lines.push('```');
-      lines.push(diffStat.trim());
+      lines.push(sDiffStat.trim());
       lines.push('```');
     }
   } else {
@@ -159,9 +166,9 @@ export function buildLiteHandoff(
   lines.push('');
 
   lines.push('### Recent Commits');
-  if (recentCommits.trim()) {
+  if (sCommits.trim()) {
     lines.push('```');
-    lines.push(recentCommits.trim());
+    lines.push(sCommits.trim());
     lines.push('```');
   } else {
     lines.push('No commits found.');
