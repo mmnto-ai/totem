@@ -49,9 +49,12 @@ describe('buildPrePushHook', () => {
     expect(hook).toContain(TOTEM_PREPUSH_MARKER);
   });
 
-  it('bails instantly when compiled-rules.json is missing', () => {
+  it('only runs shield when compiled-rules.json exists (if/fi, safe for appending)', () => {
     const hook = buildPrePushHook(shieldCmd);
-    expect(hook).toContain('[ ! -f ".totem/compiled-rules.json" ] && exit 0');
+    expect(hook).toContain('if [ -f ".totem/compiled-rules.json" ]; then');
+    expect(hook).toContain('fi');
+    // Must use if/fi guard, NOT `&& exit 0` which would terminate appended hooks early
+    expect(hook).not.toContain('&& exit 0');
   });
 
   it('runs the shield command when rules exist', () => {

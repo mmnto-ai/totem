@@ -57,20 +57,22 @@ function detectHookManager(cwd: string): HookManager | null {
 function printHookManagerGuidance(manager: HookManager, syncCmd: string, shieldCmd: string): void {
   switch (manager) {
     case 'husky':
-      console.log('[Totem] Detected husky. Add Totem hooks manually:');
+      console.log('[Totem] Detected husky. Add the following to your hook files:');
       console.log('');
-      console.log('  # Pre-commit: block direct commits to main/master');
-      console.log(
-        '  echo \'branch=$(git rev-parse --abbrev-ref HEAD); [ "$branch" = main ] || [ "$branch" = master ] && echo "[Totem] Direct commits to $branch blocked." && exit 1; exit 0\' > .husky/pre-commit',
-      );
+      console.log('  # .husky/pre-commit — block direct commits to main/master');
+      console.log('  branch=$(git rev-parse --abbrev-ref HEAD)');
+      console.log('  if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then');
+      console.log('    echo "[Totem] Direct commits to $branch blocked."');
+      console.log('    exit 1');
+      console.log('  fi');
       console.log('');
-      console.log('  # Pre-push: deterministic shield gate');
-      console.log(
-        `  echo '[ ! -f ".totem/compiled-rules.json" ] && exit 0; ${shieldCmd}' > .husky/pre-push`,
-      );
+      console.log('  # .husky/pre-push — deterministic shield gate');
+      console.log('  if [ -f ".totem/compiled-rules.json" ]; then');
+      console.log(`    ${shieldCmd}`);
+      console.log('  fi');
       console.log('');
-      console.log('  # Post-merge: background re-index');
-      console.log(`  echo '${syncCmd}' >> .husky/post-merge`);
+      console.log('  # .husky/post-merge — background re-index');
+      console.log(`  ${syncCmd}`);
       break;
     case 'lefthook':
       console.log('[Totem] Detected lefthook. Add to your lefthook.yml:');
@@ -78,12 +80,12 @@ function printHookManagerGuidance(manager: HookManager, syncCmd: string, shieldC
       console.log('    commands:');
       console.log('      totem-block-main:');
       console.log(
-        '        run: branch=$(git rev-parse --abbrev-ref HEAD); [ "$branch" = main ] || [ "$branch" = master ] && echo "[Totem] Direct commits to $branch blocked." && exit 1; exit 0',
+        '        run: branch=$(git rev-parse --abbrev-ref HEAD); if [ "$branch" = main ] || [ "$branch" = master ]; then echo "[Totem] Direct commits to $branch blocked." && exit 1; fi',
       );
       console.log('  pre-push:');
       console.log('    commands:');
       console.log('      totem-shield:');
-      console.log(`        run: '[ ! -f ".totem/compiled-rules.json" ] && exit 0; ${shieldCmd}'`);
+      console.log(`        run: 'if [ -f ".totem/compiled-rules.json" ]; then ${shieldCmd}; fi'`);
       console.log('  post-merge:');
       console.log('    commands:');
       console.log('      totem-sync:');
@@ -93,10 +95,10 @@ function printHookManagerGuidance(manager: HookManager, syncCmd: string, shieldC
       console.log('[Totem] Detected simple-git-hooks. Add to your package.json:');
       console.log('  "simple-git-hooks": {');
       console.log(
-        '    "pre-commit": "branch=$(git rev-parse --abbrev-ref HEAD); [ \\"$branch\\" = main ] || [ \\"$branch\\" = master ] && echo \\"[Totem] Direct commits to $branch blocked.\\" && exit 1",',
+        '    "pre-commit": "branch=$(git rev-parse --abbrev-ref HEAD); if [ \\"$branch\\" = main ] || [ \\"$branch\\" = master ]; then echo \\"[Totem] Direct commits to $branch blocked.\\" && exit 1; fi",',
       );
       console.log(
-        `    "pre-push": "[ ! -f \\".totem/compiled-rules.json\\" ] && exit 0; ${shieldCmd}",`,
+        `    "pre-push": "if [ -f \\".totem/compiled-rules.json\\" ]; then ${shieldCmd}; fi",`,
       );
       console.log(`    "post-merge": "${syncCmd}"`);
       console.log('  }');
@@ -187,10 +189,11 @@ export function buildPrePushHook(shieldCmd: string): string {
 # ${TOTEM_PREPUSH_MARKER} — deterministic shield gate.
 # Override with: git push --no-verify
 
-# Bail instantly if no compiled rules (zero Node startup penalty)
-[ ! -f ".totem/compiled-rules.json" ] && exit 0
-
-${shieldCmd}
+# Only run shield when compiled rules exist (zero Node startup penalty otherwise).
+# Uses if/fi block so this is safe to append to existing hooks without early termination.
+if [ -f ".totem/compiled-rules.json" ]; then
+  ${shieldCmd}
+fi
 `;
 }
 
