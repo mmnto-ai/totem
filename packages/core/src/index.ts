@@ -64,9 +64,17 @@ export {
 } from './drift-detector.js';
 
 // Compiler
-export type { CompiledRule, CompiledRulesFile, CompilerOutput, Violation } from './compiler.js';
+export type {
+  AstContext,
+  CompiledRule,
+  CompiledRulesFile,
+  CompilerOutput,
+  DiffAddition,
+  Violation,
+} from './compiler.js';
 export {
   applyRules,
+  applyRulesToAdditions,
   CompiledRuleSchema,
   CompiledRulesFileSchema,
   CompilerOutputSchema,
@@ -78,6 +86,12 @@ export {
   saveCompiledRules,
   validateRegex,
 } from './compiler.js';
+
+// AST classification
+export type { SupportedLanguage } from './ast-classifier.js';
+export { classifyLines, extensionToLanguage } from './ast-classifier.js';
+export type { AstGateOptions } from './ast-gate.js';
+export { enrichWithAstContext } from './ast-gate.js';
 
 // Exporter
 export {

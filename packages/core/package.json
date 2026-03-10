@@ -26,8 +26,11 @@
     "remark-frontmatter": "^5.0.0",
     "remark-parse": "^11.0.0",
     "safe-regex2": "^5.0.0",
+    "tree-sitter-javascript": "^0.25.0",
+    "tree-sitter-typescript": "^0.23.2",
     "typescript": "^5.7.0",
     "unified": "^11.0.0",
+    "web-tree-sitter": "^0.26.6",
     "yaml": "^2.4.0",
     "zod": "^3.24.0"
   },

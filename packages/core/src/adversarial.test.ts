@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyRules, type CompiledRule } from './compiler.js';
+import {
+  applyRules,
+  applyRulesToAdditions,
+  type CompiledRule,
+  type DiffAddition,
+} from './compiler.js';
 
 // ─── Adversarial Evaluation Harness ─────────────────
 //
@@ -224,5 +229,95 @@ describe('adversarial evaluation harness', () => {
     expect(headings.has('No TODO in production')).toBe(true);
     expect(headings.has('Use err not error')).toBe(true);
     expect(headings.has('No any types')).toBe(true);
+  });
+});
+
+// ─── AST gating: false-positive suppression ─────────
+
+describe('AST gating suppresses false positives', () => {
+  it('skips violations in string-context additions', () => {
+    const rules = ADVERSARIAL_RULES;
+
+    // Simulate additions where AST gate has classified lines as string
+    // (e.g., inside a template literal test fixture)
+    const additions: DiffAddition[] = [
+      {
+        file: 'src/test.ts',
+        line: '  debugger;',
+        lineNumber: 3,
+        precedingLine: null,
+        astContext: 'string', // inside template literal
+      },
+      {
+        file: 'src/test.ts',
+        line: '  // TODO: remove this',
+        lineNumber: 4,
+        precedingLine: '  debugger;',
+        astContext: 'string',
+      },
+      {
+        file: 'src/test.ts',
+        line: '  password: "hunter2",',
+        lineNumber: 5,
+        precedingLine: '  // TODO: remove this',
+        astContext: 'string',
+      },
+    ];
+
+    const violations = applyRulesToAdditions(rules, additions);
+    expect(violations).toHaveLength(0);
+  });
+
+  it('skips violations in comment-context additions', () => {
+    const rules = ADVERSARIAL_RULES;
+
+    const additions: DiffAddition[] = [
+      {
+        file: 'src/app.ts',
+        line: '// npm install is required for setup',
+        lineNumber: 1,
+        precedingLine: null,
+        astContext: 'comment',
+      },
+    ];
+
+    const violations = applyRulesToAdditions(rules, additions);
+    expect(violations).toHaveLength(0);
+  });
+
+  it('still catches violations in code-context additions', () => {
+    const rules = ADVERSARIAL_RULES;
+
+    const additions: DiffAddition[] = [
+      {
+        file: 'src/app.ts',
+        line: '  debugger;',
+        lineNumber: 5,
+        precedingLine: null,
+        astContext: 'code',
+      },
+    ];
+
+    const violations = applyRulesToAdditions(rules, additions);
+    expect(violations.length).toBeGreaterThan(0); // totem-ignore
+    expect(violations.some((v) => v.rule.lessonHeading === 'No debugger in production')).toBe(true);
+  });
+
+  it('still catches violations when astContext is undefined (fail-open)', () => {
+    const rules = ADVERSARIAL_RULES;
+
+    // No astContext = not classified = treated as code (fail-open)
+    const additions: DiffAddition[] = [
+      {
+        file: 'src/app.ts',
+        line: '  debugger;',
+        lineNumber: 5,
+        precedingLine: null,
+        // astContext is undefined
+      },
+    ];
+
+    const violations = applyRulesToAdditions(rules, additions);
+    expect(violations.length).toBeGreaterThan(0); // totem-ignore
   });
 });

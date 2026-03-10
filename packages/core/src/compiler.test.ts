@@ -158,6 +158,32 @@ diff --git a/b.ts b/b.ts
 `;
     expect(extractAddedLines(diff)).toEqual([]);
   });
+
+  it('does not treat +++ inside a hunk as a file header', () => {
+    // When a test file contains template literal diffs with "+++ b/file.ts",
+    // git shows that added line as "++++ b/file.ts" in the outer diff.
+    // The parser must NOT interpret this as a new file header.
+    const diff = [
+      'diff --git a/src/test.ts b/src/test.ts',
+      '--- a/src/test.ts',
+      '+++ b/src/test.ts',
+      '@@ -1,3 +1,8 @@',
+      ' const fixture = `',
+      '+--- a/src/api.ts',
+      '++++ b/src/api.ts',
+      '+@@ -1,3 +1,5 @@',
+      '+ export async function fetchData() {',
+      '+  debugger;',
+      ' `;',
+    ].join('\n');
+
+    const additions = extractAddedLines(diff);
+    // All 5 added lines should belong to src/test.ts, not "src/api.ts"
+    expect(additions).toHaveLength(5);
+    for (const a of additions) {
+      expect(a.file).toBe('src/test.ts');
+    }
+  });
 });
 
 // ─── applyRules ──────────────────────────────────────
