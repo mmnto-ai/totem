@@ -6,7 +6,7 @@ import type { SearchResult, TotemConfig } from '@mmnto/totem';
 import { TotemConfigSchema } from '@mmnto/totem';
 
 import type { OrchestratorResult } from './orchestrators/orchestrator.js';
-import { createOrchestrator, parseModelString } from './orchestrators/orchestrator.js';
+import { createOrchestrator, resolveOrchestrator } from './orchestrators/orchestrator.js';
 import { bold, log } from './ui.js';
 
 // ─── Shared constants ────────────────────────────────────
@@ -290,26 +290,10 @@ export async function runOrchestrator(opts: {
     );
   }
 
-  let parsed = parseModelString(rawModel, baseProvider);
-  if (parsed.provider === 'shell' && baseProvider !== 'shell') {
-    throw new Error(
-      `[Totem Error] Cannot route to 'shell' provider from a '${baseProvider}' config.\n` +
-        `The shell provider requires a 'command' template in the orchestrator config.`,
-    );
-  }
-  if (!parsed.model || parsed.model.startsWith('-')) {
-    throw new Error(
-      `[Totem Error] Invalid model name in '${rawModel}'. The model portion must not be empty or start with a hyphen.`,
-    );
-  }
-  let model = parsed.model;
-  let qualifiedModel = rawModel; // Preserve provider:model for cache keys and telemetry
-  let invoke =
-    parsed.provider === baseProvider
-      ? baseInvoke
-      : createOrchestrator({ provider: parsed.provider } as Parameters<
-          typeof createOrchestrator
-        >[0]);
+  let resolved = resolveOrchestrator(rawModel, baseProvider, baseInvoke);
+  let model = resolved.parsed.model;
+  let qualifiedModel = resolved.qualifiedModel;
+  let invoke = resolved.invoke;
   log.info(tag, `Model: ${bold(rawModel)}`);
 
   const ttlSeconds = config.orchestrator.cacheTtls?.[tagKey] ?? DEFAULT_TTLS[tagKey] ?? 0;
@@ -351,37 +335,20 @@ export async function runOrchestrator(opts: {
           tag,
           `Quota exhausted for ${rawModel}. Retrying with fallback model: ${bold(rawFallback)}...`,
         );
-        const fallbackParsed = parseModelString(rawFallback, baseProvider);
-        if (fallbackParsed.provider === 'shell' && baseProvider !== 'shell') {
-          throw new Error(
-            `[Totem Error] Cannot route fallback to 'shell' provider from a '${baseProvider}' config.\n` +
-              `The shell provider requires a 'command' template in the orchestrator config.`,
-          );
-        }
-        if (!fallbackParsed.model || fallbackParsed.model.startsWith('-')) {
-          throw new Error(
-            `[Totem Error] Invalid fallback model name in '${rawFallback}'. The model portion must not be empty or start with a hyphen.`,
-          );
-        }
-        const fallbackInvoke =
-          fallbackParsed.provider === baseProvider
-            ? baseInvoke
-            : createOrchestrator({ provider: fallbackParsed.provider } as Parameters<
-                typeof createOrchestrator
-              >[0]);
+        const fallbackResolved = resolveOrchestrator(rawFallback, baseProvider, baseInvoke);
         try {
-          result = await fallbackInvoke({
+          result = await fallbackResolved.invoke({
             prompt,
-            model: fallbackParsed.model,
+            model: fallbackResolved.parsed.model,
             cwd,
             tag,
             totemDir: config.totemDir,
           });
           // Update model/invoke so telemetry and cache log the correct values
-          model = fallbackParsed.model;
-          qualifiedModel = rawFallback!;
-          parsed = fallbackParsed;
-          invoke = fallbackInvoke;
+          model = fallbackResolved.parsed.model;
+          qualifiedModel = fallbackResolved.qualifiedModel;
+          resolved = fallbackResolved;
+          invoke = fallbackResolved.invoke;
         } catch (fallbackErr: unknown) {
           const originalMsg = err.message;
           const fallbackMsg =

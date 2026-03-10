@@ -462,9 +462,35 @@ vi.mock('./orchestrators/orchestrator.js', async (importOriginal) => {
     outputTokens: 50,
     durationMs: 500,
   });
+  const mockedCreate = vi.fn().mockReturnValue(mockInvoke);
   return {
     ...actual,
-    createOrchestrator: vi.fn().mockReturnValue(mockInvoke),
+    createOrchestrator: mockedCreate,
+    // Re-bind resolveOrchestrator to use the mocked createOrchestrator
+    // (the real impl captures a closure over the real factory)
+    resolveOrchestrator: (
+      rawModel: string,
+      baseProvider: string,
+      baseInvoke: typeof mockInvoke,
+    ) => {
+      const parsed = actual.parseModelString(rawModel, baseProvider);
+      if (parsed.provider === 'shell' && baseProvider !== 'shell') {
+        throw new Error(
+          `[Totem Error] Cannot route to 'shell' provider from a '${baseProvider}' config.\n` +
+            `The shell provider requires a 'command' template in the orchestrator config.`,
+        );
+      }
+      if (!parsed.model || parsed.model.startsWith('-')) {
+        throw new Error(
+          `[Totem Error] Invalid model name in '${rawModel}'. The model portion must not be empty or start with a hyphen.`,
+        );
+      }
+      const invoke =
+        parsed.provider === baseProvider
+          ? baseInvoke
+          : mockedCreate({ provider: parsed.provider } as Parameters<typeof mockedCreate>[0]);
+      return { parsed, invoke, qualifiedModel: rawModel };
+    },
   };
 });
 

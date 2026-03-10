@@ -7,6 +7,7 @@ import {
   detectPackageManager,
   isQuotaError,
   parseModelString,
+  resolveOrchestrator,
 } from './orchestrator.js';
 
 // ─── Mock provider modules ──────────────────────────
@@ -154,6 +155,60 @@ describe('isQuotaError', () => {
   it('returns false for non-Error values', () => {
     expect(isQuotaError('some string')).toBe(false);
     expect(isQuotaError(null)).toBe(false);
+  });
+});
+
+// ─── resolveOrchestrator (#248) ─────────────────────
+
+describe('resolveOrchestrator', () => {
+  const mockInvoke = vi.fn().mockResolvedValue({
+    content: 'mock result',
+    inputTokens: 100,
+    outputTokens: 50,
+    durationMs: 500,
+  });
+
+  it('reuses baseInvoke for same-provider resolution', () => {
+    const result = resolveOrchestrator('gemini-3-flash-preview', 'gemini', mockInvoke);
+    expect(result.invoke).toBe(mockInvoke);
+    expect(result.parsed).toEqual({ provider: 'gemini', model: 'gemini-3-flash-preview' });
+    expect(result.qualifiedModel).toBe('gemini-3-flash-preview');
+  });
+
+  it('creates new invoker for cross-provider resolution', () => {
+    const result = resolveOrchestrator('anthropic:claude-sonnet-4-20250514', 'gemini', mockInvoke);
+    expect(result.invoke).not.toBe(mockInvoke);
+    expect(result.parsed).toEqual({ provider: 'anthropic', model: 'claude-sonnet-4-20250514' });
+    expect(result.qualifiedModel).toBe('anthropic:claude-sonnet-4-20250514');
+  });
+
+  it('throws on empty model string (provider:)', () => {
+    expect(() => resolveOrchestrator('anthropic:', 'gemini', mockInvoke)).toThrow(
+      'must not be empty or start with a hyphen',
+    );
+  });
+
+  it('throws on model starting with hyphen', () => {
+    expect(() => resolveOrchestrator('anthropic:-bad', 'gemini', mockInvoke)).toThrow(
+      'must not be empty or start with a hyphen',
+    );
+  });
+
+  it('throws when cross-routing to shell from API provider', () => {
+    expect(() => resolveOrchestrator('shell:my-model', 'gemini', mockInvoke)).toThrow(
+      "Cannot route to 'shell' provider",
+    );
+  });
+
+  it('allows shell-to-shell routing', () => {
+    const result = resolveOrchestrator('shell:my-model', 'shell', mockInvoke);
+    expect(result.invoke).toBe(mockInvoke);
+    expect(result.parsed).toEqual({ provider: 'shell', model: 'my-model' });
+  });
+
+  it('preserves provider:model as qualifiedModel for cross-route', () => {
+    const result = resolveOrchestrator('gemini:gemini-3.1-pro-preview', 'anthropic', mockInvoke);
+    expect(result.qualifiedModel).toBe('gemini:gemini-3.1-pro-preview');
   });
 });
 
