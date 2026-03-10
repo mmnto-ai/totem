@@ -9,9 +9,10 @@ import type { OrchestratorResult } from './orchestrator.js';
 
 // ─── Mock SDKs ──────────────────────────────────────
 
-const { mockGenerateContent, mockCreate } = vi.hoisted(() => ({
+const { mockGenerateContent, mockCreate, mockChatCreate } = vi.hoisted(() => ({
   mockGenerateContent: vi.fn(),
   mockCreate: vi.fn(),
+  mockChatCreate: vi.fn(),
 }));
 
 vi.mock('@google/genai', () => ({
@@ -23,6 +24,12 @@ vi.mock('@google/genai', () => ({
 vi.mock('@anthropic-ai/sdk', () => ({
   default: class {
     messages = { create: mockCreate };
+  },
+}));
+
+vi.mock('openai', () => ({
+  default: class {
+    chat = { completions: { create: mockChatCreate } };
   },
 }));
 
@@ -56,6 +63,7 @@ vi.mock('node:child_process', () => ({
 
 import { invokeAnthropicOrchestrator } from './anthropic-orchestrator.js';
 import { invokeGeminiOrchestrator } from './gemini-orchestrator.js';
+import { invokeOpenAIOrchestrator } from './openai-orchestrator.js';
 import { invokeShellOrchestrator } from './shell-orchestrator.js';
 
 // ─── Shared test opts ───────────────────────────────
@@ -133,6 +141,23 @@ const sdkFixtures: SdkFixture[] = [
       mockCreate.mockRejectedValueOnce(new Error('invalid_api_key'));
     },
     invoke: () => invokeAnthropicOrchestrator(baseOpts),
+  },
+  {
+    name: 'openai',
+    envKey: 'OPENAI_API_KEY',
+    setupHappy: () => {
+      mockChatCreate.mockResolvedValueOnce({
+        choices: [{ message: { content: 'conformance-ok' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 10, completion_tokens: 5 },
+      });
+    },
+    setupQuota: () => {
+      mockChatCreate.mockRejectedValueOnce(Object.assign(new Error('rate limit'), { status: 429 }));
+    },
+    setupGenericError: () => {
+      mockChatCreate.mockRejectedValueOnce(new Error('invalid_api_key'));
+    },
+    invoke: () => invokeOpenAIOrchestrator(baseOpts),
   },
 ];
 

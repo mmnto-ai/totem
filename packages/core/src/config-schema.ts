@@ -71,10 +71,18 @@ export const AnthropicOrchestratorSchema = z.object({
   ...BaseOrchestratorFields,
 });
 
+export const OpenAIOrchestratorSchema = z.object({
+  provider: z.literal('openai'),
+  /** Optional base URL for OpenAI-compatible servers (Ollama, LM Studio, etc.) */
+  baseUrl: z.string().url().optional(),
+  ...BaseOrchestratorFields,
+});
+
 export const OrchestratorSchema = z.discriminatedUnion('provider', [
   ShellOrchestratorSchema,
   GeminiOrchestratorSchema,
   AnthropicOrchestratorSchema,
+  OpenAIOrchestratorSchema,
 ]);
 
 /**

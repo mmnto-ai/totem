@@ -126,8 +126,22 @@ describe('OrchestratorSchema', () => {
     }
   });
 
-  it('rejects unknown provider', () => {
+  it('accepts openai provider', () => {
     const result = OrchestratorSchema.safeParse({ provider: 'openai' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts openai provider with baseUrl', () => {
+    const result = OrchestratorSchema.safeParse({
+      provider: 'openai',
+      baseUrl: 'http://localhost:11434/v1',
+      defaultModel: 'llama3.1',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects unknown provider', () => {
+    const result = OrchestratorSchema.safeParse({ provider: 'cohere' });
     expect(result.success).toBe(false);
   });
 

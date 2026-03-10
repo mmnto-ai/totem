@@ -33,19 +33,24 @@
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@google/genai": "^1.44.0",
+    "openai": "^4.77.0",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
     "vitest": "^4.0.18"
   },
   "peerDependencies": {
     "@anthropic-ai/sdk": ">=0.50.0",
-    "@google/genai": ">=1.0.0"
+    "@google/genai": ">=1.0.0",
+    "openai": ">=4.0.0"
   },
   "peerDependenciesMeta": {
     "@anthropic-ai/sdk": {
       "optional": true
     },
     "@google/genai": {
+      "optional": true
+    },
+    "openai": {
       "optional": true
     }
   },

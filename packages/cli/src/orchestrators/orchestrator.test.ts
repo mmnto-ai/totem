@@ -30,6 +30,15 @@ vi.mock('./anthropic-orchestrator.js', () => ({
   }),
 }));
 
+vi.mock('./openai-orchestrator.js', () => ({
+  invokeOpenAIOrchestrator: vi.fn().mockResolvedValue({
+    content: 'openai result',
+    inputTokens: 150,
+    outputTokens: 60,
+    durationMs: 1500,
+  }),
+}));
+
 // ─── Tests ──────────────────────────────────────────
 
 describe('createOrchestrator', () => {
@@ -86,6 +95,29 @@ describe('createOrchestrator', () => {
     });
     expect(result.content).toBe('anthropic result');
     expect(result.inputTokens).toBe(200);
+  });
+
+  it('returns a function for openai provider', () => {
+    const config: OrchestratorConfig = {
+      provider: 'openai',
+      defaultModel: 'gpt-4o',
+    };
+    const invoke = createOrchestrator(config);
+    expect(typeof invoke).toBe('function');
+  });
+
+  it('openai invoker dispatches to openai-orchestrator module', async () => {
+    const config: OrchestratorConfig = { provider: 'openai' };
+    const invoke = createOrchestrator(config);
+    const result = await invoke({
+      prompt: 'test',
+      model: 'gpt-4o',
+      cwd: '.',
+      tag: 'Test',
+      totemDir: '.totem',
+    });
+    expect(result.content).toBe('openai result');
+    expect(result.inputTokens).toBe(150);
   });
 });
 
@@ -235,6 +267,13 @@ describe('parseModelString', () => {
     expect(parseModelString('gemini:gemini-3.1-pro-preview', 'anthropic')).toEqual({
       provider: 'gemini',
       model: 'gemini-3.1-pro-preview',
+    });
+  });
+
+  it('parses openai:model into provider and model', () => {
+    expect(parseModelString('openai:gpt-4o', 'gemini')).toEqual({
+      provider: 'openai',
+      model: 'gpt-4o',
     });
   });
 
