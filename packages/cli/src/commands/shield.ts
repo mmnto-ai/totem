@@ -1,7 +1,15 @@
 import * as path from 'node:path';
 
 import type { ContentType, SearchResult } from '@mmnto/totem';
-import { applyRules, createEmbedder, LanceStore, loadCompiledRules } from '@mmnto/totem';
+import {
+  applyRules,
+  applyRulesToAdditions,
+  createEmbedder,
+  enrichWithAstContext,
+  extractAddedLines,
+  LanceStore,
+  loadCompiledRules,
+} from '@mmnto/totem';
 
 import { extractChangedFiles, getDefaultBranch, getGitBranchDiff, getGitDiff } from '../git.js';
 import { bold, errorColor, log, success as successColor } from '../ui.js';
@@ -255,9 +263,23 @@ async function runDeterministicShield(
 
   log.info(TAG, `Running ${rules.length} deterministic rules (zero LLM)...`);
 
-  // Exclude the compiled rules file itself — it will always self-match
+  // Extract additions, exclude compiled rules file (would self-match)
   const rulesRelPath = path.join(totemDir, COMPILED_RULES_FILE).replace(/\\/g, '/');
-  const violations = applyRules(rules, diff, [rulesRelPath]);
+  const excluded = new Set([rulesRelPath]);
+  let additions = extractAddedLines(diff).filter((a) => !excluded.has(a.file));
+
+  // Enrich with AST context — skips strings/comments/regex during rule matching
+  try {
+    await enrichWithAstContext(additions, { cwd });
+    const classified = additions.filter((a) => a.astContext !== undefined).length;
+    if (classified > 0) {
+      log.dim(TAG, `AST classified ${classified}/${additions.length} additions`);
+    }
+  } catch {
+    log.dim(TAG, 'AST classification unavailable, falling back to raw matching');
+  }
+
+  const violations = applyRulesToAdditions(rules, additions);
 
   // Build output
   const lines: string[] = [];

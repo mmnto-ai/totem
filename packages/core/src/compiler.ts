@@ -85,12 +85,17 @@ export function validateRegex(pattern: string): RegexValidation {
 
 // ─── Diff parsing ────────────────────────────────────
 
-interface DiffAddition {
+/** Syntactic context of a diff line, determined by AST analysis. */
+export type AstContext = 'code' | 'string' | 'comment' | 'regex';
+
+export interface DiffAddition {
   file: string;
   line: string;
   lineNumber: number;
   /** Content of the preceding line in the new file (context or added), null if first in hunk */
   precedingLine: string | null;
+  /** Syntactic context from AST analysis — undefined means not classified (fail-open as code) */
+  astContext?: AstContext;
 }
 
 /**
@@ -103,11 +108,20 @@ export function extractAddedLines(diff: string): DiffAddition[] {
   let currentFile = '';
   let lineNum = 0;
   let prevLineContent: string | null = null;
+  let insideHunk = false;
 
   for (const rawLine of diff.split('\n')) {
-    // Track current file from diff headers
-    // git quotes paths containing spaces: +++ "b/path with spaces/file.ts"
-    if (rawLine.startsWith('+++')) {
+    // New file block — reset hunk state
+    if (rawLine.startsWith('diff ')) {
+      insideHunk = false;
+      continue;
+    }
+
+    // Track current file from diff headers — only BEFORE the first hunk.
+    // Inside a hunk, a line starting with +++ is an added line whose
+    // content happens to start with ++ (e.g., template literal test fixtures
+    // containing embedded diff headers like "+++ b/some-file.ts").
+    if (!insideHunk && rawLine.startsWith('+++')) {
       let pathPart = rawLine.slice(4); // strip "+++ "
       // Strip surrounding quotes (git adds them for paths with spaces)
       if (pathPart.startsWith('"') && pathPart.endsWith('"')) {
@@ -122,13 +136,14 @@ export function extractAddedLines(diff: string): DiffAddition[] {
     // Parse hunk header for line numbers: @@ -X,Y +Z,W @@
     const hunkMatch = rawLine.match(/^@@ -\d+(?:,\d+)? \+(\d+)/);
     if (hunkMatch) {
+      insideHunk = true;
       lineNum = parseInt(hunkMatch[1]!, 10) - 1; // will be incremented on first line
       prevLineContent = null;
       continue;
     }
 
     // Skip diff metadata lines
-    if (rawLine.startsWith('---') || rawLine.startsWith('diff ') || rawLine.startsWith('index ')) {
+    if (rawLine.startsWith('---') || rawLine.startsWith('index ')) {
       continue;
     }
 
@@ -216,22 +231,14 @@ function isSuppressed(line: string, precedingLine: string | null): boolean {
 }
 
 /**
- * Apply compiled rules against added lines from a diff.
- * Returns all violations found.
- * @param excludeFiles — file paths to skip (e.g., compiled-rules.json to avoid self-matches)
+ * Apply compiled rules against pre-extracted diff additions.
+ * Skips additions with non-code AST context (strings, comments, regex).
  */
-export function applyRules(
+export function applyRulesToAdditions(
   rules: CompiledRule[],
-  diff: string,
-  excludeFiles?: string[],
+  additions: DiffAddition[],
 ): Violation[] {
-  let additions = extractAddedLines(diff);
   if (additions.length === 0 || rules.length === 0) return [];
-
-  if (excludeFiles && excludeFiles.length > 0) {
-    const excluded = new Set(excludeFiles);
-    additions = additions.filter((a) => !excluded.has(a.file));
-  }
 
   const violations: Violation[] = [];
 
@@ -245,6 +252,9 @@ export function applyRules(
     }
 
     for (const addition of additions) {
+      // Skip non-code lines when AST context is available
+      if (addition.astContext && addition.astContext !== 'code') continue;
+
       // Skip if rule has fileGlobs and this file doesn't match
       if (rule.fileGlobs && rule.fileGlobs.length > 0) {
         if (!fileMatchesGlobs(addition.file, rule.fileGlobs)) continue;
@@ -265,6 +275,27 @@ export function applyRules(
   }
 
   return violations;
+}
+
+/**
+ * Apply compiled rules against added lines from a diff.
+ * Returns all violations found.
+ * @param excludeFiles — file paths to skip (e.g., compiled-rules.json to avoid self-matches)
+ */
+export function applyRules(
+  rules: CompiledRule[],
+  diff: string,
+  excludeFiles?: string[],
+): Violation[] {
+  let additions = extractAddedLines(diff);
+  if (additions.length === 0 || rules.length === 0) return [];
+
+  if (excludeFiles && excludeFiles.length > 0) {
+    const excluded = new Set(excludeFiles);
+    additions = additions.filter((a) => !excluded.has(a.file));
+  }
+
+  return applyRulesToAdditions(rules, additions);
 }
 
 // ─── File I/O ────────────────────────────────────────
