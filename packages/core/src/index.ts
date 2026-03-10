@@ -79,6 +79,15 @@ export {
   validateRegex,
 } from './compiler.js';
 
+// Exporter
+export {
+  exportLessons,
+  formatLessonsAsMarkdown,
+  injectSentinelBlock,
+  SENTINEL_END,
+  SENTINEL_START,
+} from './exporter.js';
+
 // Utilities
 export { generateLessonHeading } from './lesson-format.js';
 export { sanitize } from './sanitize.js';

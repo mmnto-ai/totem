@@ -209,6 +209,10 @@ program
   .option('--model <name>', 'Override the default model for the orchestrator')
   .option('--fresh', 'Bypass cache and force a fresh LLM call')
   .option('--force', 'Recompile all lessons (ignore existing compiled rules)')
+  .option(
+    '--export',
+    'Export lessons as rules to AI assistant config files (uses exports from config)',
+  )
   .action(
     async (opts: {
       raw?: boolean;
@@ -216,6 +220,7 @@ program
       model?: string;
       fresh?: boolean;
       force?: boolean;
+      export?: boolean;
     }) => {
       try {
         const { compileCommand } = await import('./commands/compile.js');
@@ -228,7 +233,7 @@ program
 
 program
   .command('extract <pr-numbers...>')
-  .description('Extract lessons from PR review(s) into .totem/lessons.md')
+  .description('Extract lessons from PR review(s) into .totem/lessons.md (interactive cherry-pick)')
   .option('--raw', 'Output assembled prompt without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')

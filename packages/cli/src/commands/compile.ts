@@ -3,6 +3,7 @@ import * as path from 'node:path';
 
 import {
   type CompiledRule,
+  exportLessons,
   hashLesson,
   loadCompiledRules,
   parseCompilerResponse,
@@ -84,6 +85,7 @@ export interface CompileOptions {
   model?: string;
   fresh?: boolean;
   force?: boolean;
+  export?: boolean;
 }
 
 export async function compileCommand(options: CompileOptions): Promise<void> {
@@ -111,112 +113,129 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
 
   log.info(TAG, `Found ${lessons.length} lessons in lessons.md`);
 
-  // Load existing compiled rules
-  const existingRules = options.force ? [] : loadCompiledRules(rulesPath);
-  const existingByHash = new Map(existingRules.map((r) => [r.lessonHash, r]));
+  // ─── Phase 1: Regex compilation (requires orchestrator) ──
+  if (config.orchestrator) {
+    const existingRules = options.force ? [] : loadCompiledRules(rulesPath);
+    const existingByHash = new Map(existingRules.map((r) => [r.lessonHash, r]));
 
-  // Determine which lessons need compilation
-  const toCompile: Array<{ index: number; heading: string; body: string; hash: string }> = [];
+    const toCompile: Array<{ index: number; heading: string; body: string; hash: string }> = [];
 
-  for (const lesson of lessons) {
-    const hash = hashLesson(lesson.heading, lesson.body);
-    if (!existingByHash.has(hash)) {
-      toCompile.push({ index: lesson.index, heading: lesson.heading, body: lesson.body, hash });
-    }
-  }
-
-  if (toCompile.length === 0) {
-    log.success(TAG, `All ${lessons.length} lessons already compiled. Use --force to recompile.`);
-    return;
-  }
-
-  log.info(
-    TAG,
-    `${toCompile.length} lessons need compilation (${existingRules.length} already compiled)`,
-  );
-
-  // Compile each lesson
-  let compiled = 0;
-  let skipped = 0;
-  let failed = 0;
-  const newRules: CompiledRule[] = [...existingRules];
-
-  // Remove stale rules (lessons that no longer exist)
-  const currentHashes = new Set(lessons.map((l) => hashLesson(l.heading, l.body)));
-  const freshRules = newRules.filter((r) => currentHashes.has(r.lessonHash));
-  const pruned = newRules.length - freshRules.length;
-  if (pruned > 0) {
-    log.dim(TAG, `Pruned ${pruned} stale rules (lessons edited or removed)`);
-  }
-  newRules.length = 0;
-  newRules.push(...freshRules);
-
-  for (const lesson of toCompile) {
-    const prompt = `${COMPILER_SYSTEM_PROMPT}\n\n## Lesson to Compile\n\nHeading: ${lesson.heading}\n\n${lesson.body}`;
-
-    const response = await runOrchestrator({
-      prompt,
-      tag: TAG,
-      options,
-      config,
-      cwd,
-    });
-
-    if (response == null) {
-      // --raw mode — prompt was output, nothing to parse
-      continue;
+    for (const lesson of lessons) {
+      const hash = hashLesson(lesson.heading, lesson.body);
+      if (!existingByHash.has(hash)) {
+        toCompile.push({ index: lesson.index, heading: lesson.heading, body: lesson.body, hash });
+      }
     }
 
-    const parsed = parseCompilerResponse(response);
+    if (toCompile.length === 0) {
+      log.success(TAG, `All ${lessons.length} lessons already compiled. Use --force to recompile.`); // totem-ignore
+    } else {
+      log.info(
+        TAG,
+        `${toCompile.length} lessons need compilation (${existingRules.length} already compiled)`,
+      );
 
-    if (!parsed) {
-      log.warn(TAG, `[${lesson.heading}] Failed to parse LLM response — skipping`);
-      failed++;
-      continue;
+      let compiled = 0;
+      let skipped = 0;
+      let failed = 0;
+      const newRules: CompiledRule[] = [...existingRules];
+
+      const currentHashes = new Set(lessons.map((l) => hashLesson(l.heading, l.body)));
+      const freshRules = newRules.filter((r) => currentHashes.has(r.lessonHash));
+      const pruned = newRules.length - freshRules.length;
+      if (pruned > 0) {
+        log.dim(TAG, `Pruned ${pruned} stale rules (lessons edited or removed)`); // totem-ignore
+      }
+      newRules.length = 0;
+      newRules.push(...freshRules);
+
+      for (const lesson of toCompile) {
+        const prompt = `${COMPILER_SYSTEM_PROMPT}\n\n## Lesson to Compile\n\nHeading: ${lesson.heading}\n\n${lesson.body}`;
+
+        const response = await runOrchestrator({
+          prompt,
+          tag: TAG,
+          options,
+          config,
+          cwd,
+        });
+
+        if (response == null) {
+          continue;
+        }
+
+        const parsed = parseCompilerResponse(response);
+
+        if (!parsed) {
+          log.warn(TAG, `[${lesson.heading}] Failed to parse LLM response — skipping`); // totem-ignore
+          failed++;
+          continue;
+        }
+
+        if (!parsed.compilable) {
+          log.dim(TAG, `[${lesson.heading}] Not compilable (conceptual/architectural) — skipping`); // totem-ignore
+          skipped++;
+          continue;
+        }
+
+        if (!parsed.pattern || !parsed.message) {
+          log.warn(TAG, `[${lesson.heading}] Missing pattern or message — skipping`); // totem-ignore
+          failed++;
+          continue;
+        }
+
+        const validation = validateRegex(parsed.pattern);
+        if (!validation.valid) {
+          log.warn(TAG, `[${lesson.heading}] Rejected regex: ${validation.reason} — skipping`); // totem-ignore
+          failed++;
+          continue;
+        }
+
+        newRules.push({
+          lessonHash: lesson.hash,
+          lessonHeading: lesson.heading,
+          pattern: parsed.pattern,
+          message: parsed.message,
+          engine: 'regex',
+          compiledAt: new Date().toISOString(),
+          ...(parsed.fileGlobs && parsed.fileGlobs.length > 0
+            ? { fileGlobs: parsed.fileGlobs }
+            : {}),
+        });
+        compiled++;
+        log.success(TAG, `[${lesson.heading}] Compiled: /${parsed.pattern}/`); // totem-ignore
+      }
+
+      if (!options.raw) {
+        saveCompiledRules(rulesPath, newRules);
+        log.info(
+          TAG,
+          `Results: ${compiled} compiled, ${skipped} skipped (conceptual), ${failed} failed`,
+        );
+        log.success(
+          TAG,
+          `${newRules.length} total rules saved to ${config.totemDir}/${COMPILED_RULES_FILE}`,
+        );
+      }
     }
-
-    if (!parsed.compilable) {
-      log.dim(TAG, `[${lesson.heading}] Not compilable (conceptual/architectural) — skipping`);
-      skipped++;
-      continue;
-    }
-
-    if (!parsed.pattern || !parsed.message) {
-      log.warn(TAG, `[${lesson.heading}] Missing pattern or message — skipping`);
-      failed++;
-      continue;
-    }
-
-    const validation = validateRegex(parsed.pattern);
-    if (!validation.valid) {
-      log.warn(TAG, `[${lesson.heading}] Rejected regex: ${validation.reason} — skipping`);
-      failed++;
-      continue;
-    }
-
-    newRules.push({
-      lessonHash: lesson.hash,
-      lessonHeading: lesson.heading,
-      pattern: parsed.pattern,
-      message: parsed.message,
-      engine: 'regex',
-      compiledAt: new Date().toISOString(),
-      ...(parsed.fileGlobs && parsed.fileGlobs.length > 0 ? { fileGlobs: parsed.fileGlobs } : {}),
-    });
-    compiled++;
-    log.success(TAG, `[${lesson.heading}] Compiled: /${parsed.pattern}/`);
-  }
-
-  // Save results
-  if (!options.raw) {
-    saveCompiledRules(rulesPath, newRules);
-    log.info(
-      TAG,
-      `Results: ${compiled} compiled, ${skipped} skipped (conceptual), ${failed} failed`,
+  } else if (!options.export) {
+    throw new Error(
+      '[Totem Error] No orchestrator configured. Regex compilation requires a Full-tier config.\n' +
+        'Use --export to export lessons to AI config files without an orchestrator.',
     );
-    log.success(
-      TAG,
-      `${newRules.length} total rules saved to ${config.totemDir}/${COMPILED_RULES_FILE}`,
-    );
+  }
+
+  // ─── Phase 2: Export to AI config files (deterministic, no LLM) ──
+  if (options.export) {
+    if (!config.exports || Object.keys(config.exports).length === 0) {
+      log.warn(TAG, 'No export targets configured in totem.config.ts. Add an `exports` field.');
+      return;
+    }
+
+    for (const [name, filePath] of Object.entries(config.exports)) {
+      const absPath = path.join(cwd, filePath);
+      exportLessons(lessons, absPath);
+      log.success(TAG, `Exported ${lessons.length} rules to ${filePath} (${name})`); // totem-ignore
+    }
   }
 }
