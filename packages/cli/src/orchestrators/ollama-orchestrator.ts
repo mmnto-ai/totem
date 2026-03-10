@@ -70,9 +70,7 @@ export async function invokeOllamaOrchestrator(
   if (!response.ok) {
     const errorBody = await response.text();
 
-    if (
-      isQuotaError(Object.assign(new Error(errorBody), { status: response.status }))
-    ) {
+    if (isQuotaError(Object.assign(new Error(errorBody), { status: response.status }))) {
       const err = new Error(`Ollama rate limit: ${errorBody}`);
       err.name = 'QuotaError';
       throw err;
