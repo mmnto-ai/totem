@@ -848,3 +848,21 @@ Logic that replaces content between markers must explicitly verify that the star
 **Tags:** file-io, dx
 
 File-appending logic should implement an early return for empty input to prevent the unintended accumulation of trailing newlines or separators. Without this check, repeated executions with no content can cause "blank line drift," where target files grow unnecessarily with every run.
+
+## Lesson — Intentionally duplicating prompt assembly logic is…
+
+**Tags:** architecture, llm, dry, prompting
+
+Intentionally duplicating prompt assembly logic is preferable to unified helpers when architectural boundaries require strict context isolation. DRYing these functions risks "context bleed" where specialized modes, such as structural reviews, accidentally inherit project knowledge that biases the model.
+
+## Lesson — Omit defensive XML escaping for prompt injection when…
+
+**Tags:** security, prompting, cli
+
+Omit defensive XML escaping for prompt injection when processing trusted local data, such as a developer's own git diffs in a CLI tool. In local-only threat models, the noise and prompt clutter introduced by aggressive escaping often outweigh the security benefit.
+
+## Lesson — Deliberately excluding project context in "structural"…
+
+**Tags:** llm, code-review, prompting
+
+Deliberately excluding project context in "structural" review modes prevents the LLM from anchoring on developer intent, which can mask syntax-level bugs. Restricting the model's view to raw diffs forces it to identify logic errors and resource leaks that global project context might otherwise rationalize.

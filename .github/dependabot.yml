@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # npm/pnpm: security updates only (no version bumps)
+  # Dependabot security updates are handled automatically via repo settings.
+  # This entry ensures Dependabot can resolve the pnpm lockfile structure,
+  # but we set open-pull-requests-limit to 0 to suppress version update PRs.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 0
+
+  # GitHub Actions: keep actions pinned to latest for security
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
