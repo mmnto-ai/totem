@@ -980,3 +980,9 @@ Wrap user-controlled fields like PR descriptions or comments in XML tags explici
 **Tags:** git, sanitization, security
 
 Sanitize git-sourced metadata like branch names, status, and diff statistics to remove ANSI escape sequences and control characters. This prevents formatting corruption and parsing errors when passing terminal-sourced data to downstream tools or LLM contexts.
+
+## Lesson — Ollama num_ctx and VRAM: The OpenAI-compatible API adapter…
+
+**Tags:** ollama, orchestrator, vram, num_ctx, performance, hardware
+
+Ollama `num_ctx` and VRAM: The OpenAI-compatible API adapter does not support passing `num_ctx` to Ollama, so context length defaults to the model's built-in default (often 2-8k). Ollama's native `/api/chat` endpoint accepts `options: { num_ctx }` for dynamic context sizing. On consumer GPUs (16GB VRAM), a 27B model fills VRAM with weights alone — any KV cache beyond ~8k spills to system RAM and significantly slows inference. Different Totem commands have different context needs (triage: 4-8k, shield/spec: 16-32k), making dynamic `num_ctx` sizing valuable. See issue #298.
