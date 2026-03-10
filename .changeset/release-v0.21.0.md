@@ -15,3 +15,4 @@
 - CLA automation via `contributor-assistant/github-action` (#266)
 - Dependabot configured for security-only npm scanning and GitHub Actions version pinning (#272)
 - GitHub Actions updated: `actions/checkout` v4→v6, `actions/setup-node` v4→v6 (#273, #274)
+- Project docs and lessons synced via `totem wrap` (#275)
