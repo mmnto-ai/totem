@@ -42,7 +42,7 @@ This is a Turborepo monorepo consisting of:
 ## Security & Privacy
 
 - **100% Local Privacy:** Totem's vector database (`.lancedb/`) lives entirely within your local repository. Your codebase is never uploaded to a centralized SaaS platform or external memory service.
-- **Injection & ReDoS Hardening:** Totem actively sanitizes untrusted inputs (applying strict SECURITY NOTICES to PR comments during `totem extract` #279, #289), enforces path containment checks in drift detection (#284), neutralizes ANSI terminal injection in Git outputs (#292), applies **ReDoS protection to compiled regex rules** (#218), and **XML-delimits MCP responses** (#149) to mitigate indirect prompt injection and terminal injection attacks.
+- **Injection & ReDoS Hardening:** Totem actively sanitizes untrusted inputs (applying strict SECURITY NOTICES to PR comments during `totem extract` #279, #289), enforces path containment checks in drift detection (#284), neutralizes ANSI terminal injection in Git outputs (#292), applies **ReDoS protection to compiled regex rules** (#218), actively detects and blocks suspicious lessons even in bypass modes (#290, #291, #299), and **XML-delimits MCP responses** (#149) to mitigate indirect prompt injection and terminal injection attacks.
 - **Continuous Auditing:** The repository utilizes Dependabot for automated security vulnerability scanning (#267, #272) to ensure dependencies remain secure.
 
 ## Prerequisites
@@ -143,7 +143,7 @@ Add Totem to your AI agent's configuration (e.g., Claude Desktop, Claude Code, o
 
 Totem ships with native CLI commands that orchestrate your entire shift-left workflow by querying LanceDB and invoking your AI to make project-aware decisions.
 
-First, configure your orchestrator in `totem.config.ts`. Totem supports **Native API Orchestrators** (#229) for direct integrations (Anthropic, Gemini), a **generic OpenAI-compatible orchestrator** for local models and Ollama (#285, #293), and a generic `shell` adapter.
+First, configure your orchestrator in `totem.config.ts`. Totem supports **Native API Orchestrators** (#229) for direct integrations (Anthropic, Gemini), a **generic OpenAI-compatible orchestrator** for local models (#285, #293), a **native Ollama orchestrator** with dynamic context length (`num_ctx` #298, #306), and a generic `shell` adapter.
 
 To keep the core CLI lightweight, Totem uses a **"Bring Your Own SDK" (BYOSD)** pattern. If you choose a native API provider, you must install its corresponding SDK as a dev dependency.
 
@@ -163,7 +163,7 @@ Overrides support **cross-provider routing** (using the `provider:model` syntax)
 ```typescript
 // totem.config.ts
 orchestrator: {
-  provider: 'gemini', // Requires @google/genai (or 'openai' for local/Ollama)
+  provider: 'gemini', // Requires @google/genai (or 'openai' / 'ollama' for local setups)
   defaultModel: 'gemini-3-flash-preview',
   overrides: {
     spec: 'anthropic:claude-3-7-sonnet-latest', // Cross-provider routing (#246)
@@ -178,13 +178,13 @@ orchestrator: {
 - **`briefing`**: Fetches your current git branch, uncommitted changes, open PRs, and recent session momentum to generate a startup briefing.
 - **`bridge`**: Assesses your current mid-task state and creates a lightweight breadcrumb file. Use this when your AI agent's context window gets too full.
 - **`spec <ids...>`**: Fetches GitHub Issues (supports URLs) and synthesizes a pre-work spec. The AI acts as a **Staff-Level Architect**, focusing on contracts and edge cases.
-- **`shield`**: Reads your uncommitted git diff, queries LanceDB for related traps, and performs a **hybrid zero-day + N-day architectural code review** (#98) before you push. Supports **zero-LLM shield mode** (#216) for lightning-fast deterministic checks using compiled rules and **Tree-sitter AST gating** (#287), false-positive mitigation for non-code contexts (#251), inline suppression directives (#255), and **context-blind structural review** (`--mode=structural` #270).
+- **`shield`**: Reads your uncommitted git diff, queries LanceDB for related traps, and performs a **hybrid zero-day + N-day architectural code review** (#98) before you push. Supports **zero-LLM shield mode** (#216) for lightning-fast deterministic checks using compiled rules and **Tree-sitter AST gating** (#287), false-positive mitigation for non-code contexts (#251), inline suppression directives (#255), **context-blind structural review** (`--mode=structural` #270), and optional lesson extraction from LLM verdicts (`--learn` #303, #307).
 - **`triage`**: Fetches open GitHub issues and generates a prioritized roadmap (e.g., `docs/active_work.md`) for your next task.
 - **`compile`**: Compiles `.totem/lessons.md` into deterministic regex/AST rules for zero-LLM checks. Supports **cross-model lesson export** (`--export`) to enforce architectural constraints across different agent environments and external tools (including **GitHub Copilot instructions** #269, #294).
 - **`add-lesson`**: Interactively document a context, symptom, and fix. Saves to `.totem/lessons.md` and triggers a background re-index.
 - **`docs`**: Automatically syncs project documentation (README, Roadmap) by analyzing git logs and closed issues since the last release (#190). Supports targeting individual files (e.g., `totem docs README.md`) with path fixes and strict state preservation to prevent hallucination (#238, #241, #249).
 - **`wrap`**: A post-merge workflow chain that runs `extract`, syncs the database, generates a roadmap, and updates docs in one command (#143, #242).
-- **`extract <ids...>`**: Fetches merged PRs, reads comments, and extracts systemic architectural traps with **concise, descriptive headings** (#203, #253, #271, #278) while strictly hardening against prompt injection (#279, #289). Supports interactive multi-select pruning and the `--pick` flag for selective lesson acceptance (#265).
+- **`extract <ids...>`**: Fetches merged PRs, reads comments, and extracts systemic architectural traps with **concise, descriptive headings** (#203, #253, #271, #278) while strictly hardening against prompt injection (#279, #289) and actively detecting and blocking suspicious lessons to prevent poisoned extractions (#290, #291, #299, #302). Supports interactive multi-select pruning and the `--pick` flag for selective lesson acceptance (#265).
 - **`handoff`**: Captures uncommitted changes and lessons learned today, synthesizing a tactical snapshot for your next session. Supports a `--lite` flag for rapid, zero-LLM session snapshots with ANSI-sanitized git outputs (#281, #288, #292).
 - **`eject`**: Safely removes all Totem git hooks, configuration files, AI agent prompt injections, and the local `.lancedb/` index (#131).
 
@@ -248,7 +248,7 @@ Then remove the `-y` flag from your MCP config — `npx` will use the locally in
 Totem is evolving from a memory database into a full Shift-Left orchestrator.
 
 - [x] **Foundations & Phase 1 (Onboarding):** Local vector DB, MCP interface, MVC Configuration Tiers (#187), "Universal Lessons" baseline (#128), and cross-platform docs (#210).
-- [x] **Phase 2 (Core Stability):** Tree-sitter Universal AST Parsing (#173), Shield GitHub Action (#180), Automated Doc Sync with XML sentinels, individual document targeting, and stability/hallucination fixes (#190, #206, #224, #228, #238, #241, #249, #250), Drift Detection for self-cleaning memory (#177, #211), Deterministic Lesson Compiler / Zero-LLM Shield (#213, #216) backed by regex ReDoS protection (#218) and Tree-sitter AST gating (#287), false-positive mitigation (#251), inline suppression directives (#255), structural context-blind review (#270), cross-model lesson export targets including GitHub Copilot (#264, #269, #294), selective lesson acceptance (#265), Native API Orchestrators for Gemini, Anthropic, and generic OpenAI/Ollama providers (#229, #285, #293) with BYOSD package manager auto-detection (#236), centralized orchestrator resolution (#248), cross-provider routing with negated glob support (#243, #246), Provider Conformance test suites (#244, #263), OpenAI embedding validation (#4), zero-LLM handoff snapshots with ANSI sanitization (#281, #288, #292), extract prompt security hardening (#279, #289) with concise headings (#271, #278), and CI drift gating with adversarial evaluation harnesses (#214, #280).
+- [x] **Phase 2 (Core Stability):** Tree-sitter Universal AST Parsing (#173), Shield GitHub Action (#180), Automated Doc Sync with XML sentinels, individual document targeting, and stability/hallucination fixes (#190, #206, #224, #228, #238, #241, #249, #250), Drift Detection for self-cleaning memory (#177, #211), Deterministic Lesson Compiler / Zero-LLM Shield (#213, #216) backed by regex ReDoS protection (#218) and Tree-sitter AST gating (#287), false-positive mitigation (#251), inline suppression directives (#255), structural context-blind review (#270), cross-model lesson export targets including GitHub Copilot (#264, #269, #294), selective lesson acceptance (#265), Native API Orchestrators for Gemini, Anthropic, and generic OpenAI/Ollama providers (#229, #285, #293), native Ollama orchestrator with dynamic context length (#298, #306) with BYOSD package manager auto-detection (#236), centralized orchestrator resolution (#248), cross-provider routing with negated glob support (#243, #246), Provider Conformance test suites (#244, #263), OpenAI embedding validation (#4), zero-LLM handoff snapshots with ANSI sanitization (#281, #288, #292), extract prompt security hardening (#279, #289) and suspicious lesson detection with `--yes` bypass blocking (#290, #291, #299, #302), concise lesson extraction headings (#271, #278), optional lesson extraction from shield verdicts (`--learn` #303, #307), and CI drift gating with adversarial evaluation harnesses (#214, #280).
 - [x] **Validation:** Internal dogfooding (#8) across multiple real-world repositories.
 - [ ] **Phase 3 (Workflow Expansion):** Interactive CLI tutorials (#129), Custom Workflow Runner (#119), Agent-Optimized MCP (#176), and Cross-File Knowledge Graph (#183).
 

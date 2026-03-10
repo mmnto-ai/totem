@@ -61,6 +61,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#147 Core:** Extract inline shell hooks into dedicated Node.js scripts.
 - [x] **#80 Security: Add XML delimiting:** Close the prompt injection gap in orchestrator commands.
 - [x] **#111 Security:** Mitigate indirect prompt injection in `extract` command via PR comments (Further hardened with SECURITY NOTICE via #279, #289, #295).
+- [x] **#290 / #299 Security:** Post-extraction suspicious lesson detection with `--yes` mode blocking and false-positive reduction (#291, #302).
 - [x] **#116 Security:** Sanitize CLI output streams to prevent terminal injection attacks.
 - [x] **#106 Robustness:** Prevent stale LanceDB handles by re-initializing store on error.
 - [x] **#105 Resilience:** Add exponential backoff to OpenAI embedder for rate limits.
@@ -87,7 +88,8 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#187 Minimum Viable Configuration:** Tiered config (Lite/Standard/Full) with auto-detection. Embedding is optional; Lite tier works with zero API keys.
 - [x] **#190 / #228 / #238 / #241 Automated Doc Sync (#249, #250):** `totem docs` command to keep project docs updated via per-doc LLM passes, now supporting individual doc targeting, path fixes, hallucination fixes, and XML sentinels. Integrated into `totem wrap` as Step 4/4 (#143).
 - [x] **#213 / #216 / #255 Zero-LLM Shield Mode (#251, #270, #287):** Deterministic lesson compiler, zero-LLM shield mode (including `--mode=structural` context-blind review), false-positive resolution, inline suppression directives, and Tree-sitter AST gating (#287).
-- [x] **#229 Epic: Native API Orchestrator (#230–#234, #236, #237, #285, #293):** Replace CLI shell-spawning with direct SDK calls to Gemini (`@google/genai`) and Anthropic (`@anthropic-ai/sdk`). BYOSD pattern with optional peer dependencies, discriminated union config, package manager auto-detection for install prompts, and generic OpenAI-compatible orchestrator support (Ollama / local).
+- [x] **#303 / #307 Shield Learning Loop:** Optional lesson extraction from LLM verdicts via `totem shield --learn`, integrated with false-positive reduction.
+- [x] **#229 Epic: Native API Orchestrator (#230–#234, #236, #237, #285, #293, #298, #306):** Replace CLI shell-spawning with direct SDK calls to Gemini (`@google/genai`) and Anthropic (`@anthropic-ai/sdk`). BYOSD pattern with optional peer dependencies, discriminated union config, package manager auto-detection for install prompts, generic OpenAI-compatible orchestrator support (Ollama / local), and a native Ollama orchestrator with dynamic `num_ctx`.
 - [x] **#243 / #246 Multi-Model Orchestration (#235):** Enable cross-provider routing in orchestrator overrides using `provider:model` syntax with negated glob support.
 - [x] **#248 Orchestrator Refactoring:** Extract `resolveOrchestrator()` helper to deduplicate model resolution.
 - [x] **#144 Epic: AI PR Review Posture & Noise Reduction:** Refine AI PR review posture to reduce noise (Includes GCA on-demand reviews and configuration fixes via #278, #282).
@@ -113,3 +115,4 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] Implement Changesets and npm publishing (Issue #5 / #46)
 - [x] Chore: Relicense project from MIT to Apache 2.0
 - [x] **#258 / #266 Governance:** Implement Contributor License Agreement (CLA) automation and CONTRIBUTING.md.
+- [x] **#300 Governance & Security:** Migrate `.strategy` directory to a private submodule for secure collaboration.

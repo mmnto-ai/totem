@@ -19,9 +19,9 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 - `totem init` / `totem eject`: Scaffolds or safely removes `totem.config.ts`, git hooks, and AI memory reflexes.
 - `totem sync`: Crawls target directories defined in `totem.config.ts`, chunks, embeds, and updates the LanceDB index.
 - `totem search`: Direct debug query interface.
-- `totem spec` / `totem shield` / `totem triage`: Standardized workflow orchestration commands (spec planning, pre-push review, issue prioritization). `totem shield` includes options like `--mode=structural` for context-blind architectural review.
+- `totem spec` / `totem shield` / `totem triage`: Standardized workflow orchestration commands (spec planning, pre-push review, issue prioritization). `totem shield` includes options like `--mode=structural` for context-blind architectural review, and `--learn` for optional lesson extraction directly from LLM verdicts.
 - `totem briefing` / `totem handoff`: Session start/end context snapshots. `totem handoff` supports a `--lite` flag for zero-LLM state capture, which includes robust ANSI output sanitization to prevent terminal injection.
-- `totem extract`: Batch lesson extraction from PR review threads with interactive multi-select curation (supported by the `--pick` flag for selective lesson acceptance). Generated lessons use concise, highly descriptive, content-derived headings. The extraction engine is hardened against prompt injection from untrusted PR comments via strict XML tagging and explicit system prompt security notices.
+- `totem extract`: Batch lesson extraction from PR review threads with interactive multi-select curation (supported by the `--pick` flag for selective lesson acceptance). Generated lessons use concise, highly descriptive, content-derived headings. The extraction engine incorporates **suspicious lesson detection** (optimized to minimize false positives) to filter out bad rules, which actively blocks suspicious lessons even in `--yes` bypass mode. It is further hardened against prompt injection from untrusted PR comments via strict XML tagging and explicit system prompt security notices.
 - `totem add-lesson`: Inline lesson capture (also exposed as MCP tool `add_lesson`).
 - `totem compile`: Translates natural-language lessons into deterministic regex rules via constrained LLM prompt at compile-time. Supports an `--export` flag for cross-model lesson export targets (such as GitHub Copilot instructions).
 - `totem docs`: Automated per-document LLM passes to keep project documentation in sync with the codebase. Supports targeting individual documents via explicit path arguments (with automatic path fixes) for precision updates (safeguarded by XML sentinels for reliable output extraction).
@@ -81,15 +81,26 @@ orchestrator: {
 }
 ```
 
-### Generic OpenAI / Local Provider (native API)
+### Generic OpenAI Provider (native API)
 
-Direct SDK calls using the standard OpenAI-compatible format. Ideal for official OpenAI models or local/offline orchestration via Ollama:
+Direct SDK calls using the standard OpenAI-compatible format. Ideal for official OpenAI models or compatible custom endpoints (like LM Studio):
 
 ```typescript
 orchestrator: {
   provider: 'openai',
-  defaultModel: 'gpt-4o', // or e.g. 'llama3' for local Ollama
-  // Supports custom endpoints for local Ollama / LM Studio
+  defaultModel: 'gpt-4o',
+  // Supports custom endpoints via standard OpenAI configuration
+}
+```
+
+### Ollama Provider (native API)
+
+Direct SDK integration for local, offline orchestration via Ollama. This native provider supports dynamic context length management (`num_ctx`), automatically adjusting to optimize context windows for large payloads:
+
+```typescript
+orchestrator: {
+  provider: 'ollama',
+  defaultModel: 'llama3', // or qwen2.5, phi3, etc.
 }
 ```
 

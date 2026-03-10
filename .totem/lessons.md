@@ -1022,3 +1022,51 @@ Security heuristics like Base64 or Unicode escape detection must scan both headi
 **Tags:** ci, security, automation
 
 Command-line tools using auto-accept flags like --yes should exit with a non-zero code if heuristic validators flag suspicious content. This prevents automated pipelines from silently ingesting poisoned or low-quality data that would otherwise require human intervention.
+
+## Lesson — Heuristic validators designed to detect tag leakage must…
+
+**Tags:** security, regex, prompt-engineering
+
+Heuristic validators designed to detect tag leakage must explicitly include every XML tag used in the system prompts (e.g., `diff_hunk`, `comment_body`). Failing to mirror the exact set of delimiters creates blind spots that attackers can exploit to break out of the intended LLM context.
+
+## Lesson — Heuristic checks for malicious patterns like Base64 blobs…
+
+**Tags:** security, validation, prompt-injection
+
+Heuristic checks for malicious patterns like Base64 blobs or Unicode escapes must be applied to all fields influenced by the LLM (like headings), not just the primary text body. Metadata fields often have enough character capacity to smuggle payloads that bypass detection logic focused only on the main content.
+
+## Lesson — Casting an object literal to an Error type does not satisfy…
+
+**Tags:** typescript, error-handling, trap
+
+Casting an object literal to an Error type does not satisfy `instanceof Error` checks because the prototype chain is missing at runtime. Use `Object.assign(new Error(message), properties)` to ensure objects pass both TypeScript validation and runtime prototype inspections.
+
+## Lesson — Avoid using Zod's .url() validator for configurations where…
+
+**Tags:** zod, validation, dx, ollama
+
+Avoid using Zod's `.url()` validator for configurations where users frequently provide bare hostnames or `host:port` without protocols. Strict URL validation requires a protocol prefix (e.g., `http://`), which can break the developer experience for common local service configurations like Ollama.
+
+## Lesson — For local LLM providers, 500 Internal Server Errors often…
+
+**Tags:** error-handling, ollama, ux
+
+For local LLM providers, 500 Internal Server Errors often indicate VRAM or context exhaustion rather than generic software bugs. Providing specific guidance to adjust hardware-steering parameters like `numCtx` in the error message helps users resolve resource-constrained failures immediately.
+
+## Lesson — Wrap untrusted content like code diffs in XML delimiters…
+
+**Tags:** security, prompting, llm
+
+Wrap untrusted content like code diffs in XML delimiters and provide explicit security instructions in the system prompt. This prevents prompt injection where malicious comments within the diff could hijack the LLM's instructions.
+
+## Lesson — Sanitize LLM-generated content before persisting it to…
+
+**Tags:** security, sanitization, persistence
+
+Sanitize LLM-generated content before persisting it to version-controlled files if the source material is untrusted. This creates a security boundary that prevents persisting malicious payloads, such as ANSI escape sequences, which could trigger terminal injection when developers view the files.
+
+## Lesson — Prefer auto-generating headings at the storage layer rather…
+
+**Tags:** architecture, consistency, automation
+
+Prefer auto-generating headings at the storage layer rather than persisting LLM-provided headings when multiple extraction paths exist. This ensures the knowledge base maintains a uniform format regardless of whether lessons are extracted via manual commands or automated review passes.
