@@ -6,7 +6,7 @@ import type { AstContext } from './compiler.js';
 
 export type SupportedLanguage = 'typescript' | 'tsx' | 'javascript';
 
-interface ClassifiedLine {
+interface ClassifiedLine { // totem-ignore
   lineNumber: number;
   context: AstContext;
 }

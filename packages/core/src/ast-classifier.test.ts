@@ -34,7 +34,7 @@ describe('extensionToLanguage', () => {
 
 describe('classifyLines', () => {
   it('classifies a regular code line as code', async () => {
-    const content = `const x = 1;\nconsole.log(x);\n`;
+    const content = `const x = 1;\nconsole.log(x);\n`; // totem-ignore
     const result = await classifyLines(content, [1, 2], 'typescript');
     expect(result.get(1)).toBe('code');
     expect(result.get(2)).toBe('code');

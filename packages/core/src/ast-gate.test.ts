@@ -24,13 +24,13 @@ describe('enrichWithAstContext', () => {
   it('classifies code lines in a TypeScript file', async () => {
     fs.writeFileSync(
       path.join(tmpDir, 'src', 'app.ts'),
-      ['const x = 1;', 'console.log(x);', '// a comment'].join('\n'),
+      ['const x = 1;', 'console.log(x);', '// a comment'].join('\n'), // totem-ignore
     );
 
     const additions: DiffAddition[] = [
       { file: 'src/app.ts', line: 'const x = 1;', lineNumber: 1, precedingLine: null },
-      { file: 'src/app.ts', line: 'console.log(x);', lineNumber: 2, precedingLine: 'const x = 1;' },
-      { file: 'src/app.ts', line: '// a comment', lineNumber: 3, precedingLine: 'console.log(x);' },
+      { file: 'src/app.ts', line: 'console.log(x);', lineNumber: 2, precedingLine: 'const x = 1;' }, // totem-ignore
+      { file: 'src/app.ts', line: '// a comment', lineNumber: 3, precedingLine: 'console.log(x);' }, // totem-ignore
     ];
 
     await enrichWithAstContext(additions, { cwd: tmpDir });
@@ -43,13 +43,13 @@ describe('enrichWithAstContext', () => {
   it('classifies template literal content as string', async () => {
     fs.writeFileSync(
       path.join(tmpDir, 'src', 'test.ts'),
-      ['const fixture = `', '  console.log("inside template");', '  debugger;', '`;'].join('\n'),
+      ['const fixture = `', '  console.log("inside template");', '  debugger;', '`;'].join('\n'), // totem-ignore
     );
 
     const additions: DiffAddition[] = [
       {
         file: 'src/test.ts',
-        line: '  console.log("inside template");',
+        line: '  console.log("inside template");', // totem-ignore
         lineNumber: 2,
         precedingLine: null,
       },
@@ -57,7 +57,7 @@ describe('enrichWithAstContext', () => {
         file: 'src/test.ts',
         line: '  debugger;',
         lineNumber: 3,
-        precedingLine: '  console.log("inside template");',
+        precedingLine: '  console.log("inside template");', // totem-ignore
       },
     ];
 
@@ -91,7 +91,7 @@ describe('enrichWithAstContext', () => {
     });
 
     expect(additions[0]!.astContext).toBeUndefined();
-    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings.length).toBeGreaterThan(0); // totem-ignore
   });
 
   it('handles mixed file types in one batch', async () => {

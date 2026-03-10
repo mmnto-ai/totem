@@ -299,7 +299,7 @@ describe('AST gating suppresses false positives', () => {
     ];
 
     const violations = applyRulesToAdditions(rules, additions);
-    expect(violations.length).toBeGreaterThan(0);
+    expect(violations.length).toBeGreaterThan(0); // totem-ignore
     expect(violations.some((v) => v.rule.lessonHeading === 'No debugger in production')).toBe(true);
   });
 
@@ -318,6 +318,6 @@ describe('AST gating suppresses false positives', () => {
     ];
 
     const violations = applyRulesToAdditions(rules, additions);
-    expect(violations.length).toBeGreaterThan(0);
+    expect(violations.length).toBeGreaterThan(0); // totem-ignore
   });
 });
