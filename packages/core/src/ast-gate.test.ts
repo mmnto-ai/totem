@@ -4,8 +4,8 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { DiffAddition } from './compiler.js';
 import { enrichWithAstContext } from './ast-gate.js';
+import type { DiffAddition } from './compiler.js';
 
 // ─── enrichWithAstContext ───────────────────────────
 

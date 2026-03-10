@@ -6,11 +6,6 @@ import type { AstContext } from './compiler.js';
 
 export type SupportedLanguage = 'typescript' | 'tsx' | 'javascript';
 
-interface ClassifiedLine {
-  lineNumber: number;
-  context: AstContext; // totem-ignore
-}
-
 // ─── Lazy-loaded Tree-sitter state ──────────────────
 
 let Parser: typeof import('web-tree-sitter').Parser | null = null;

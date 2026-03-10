@@ -90,8 +90,8 @@ export {
 // AST classification
 export type { SupportedLanguage } from './ast-classifier.js';
 export { classifyLines, extensionToLanguage } from './ast-classifier.js';
-export { enrichWithAstContext } from './ast-gate.js';
 export type { AstGateOptions } from './ast-gate.js';
+export { enrichWithAstContext } from './ast-gate.js';
 
 // Exporter
 export {
