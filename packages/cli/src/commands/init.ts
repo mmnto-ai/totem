@@ -832,11 +832,21 @@ export async function initCommand(): Promise<void> {
         file: '.git/hooks/pre-commit',
         action: `${enforcement.preCommit === 'installed' ? 'Installed' : 'Appended'} main-branch protection`,
       });
+    } else if (enforcement.preCommit === 'skipped-non-shell') {
+      summary.push({
+        file: '.git/hooks/pre-commit',
+        action: 'Skipped — non-shell hook detected (manual integration needed)',
+      });
     }
     if (enforcement.prePush === 'installed' || enforcement.prePush === 'appended') {
       summary.push({
         file: '.git/hooks/pre-push',
         action: `${enforcement.prePush === 'installed' ? 'Installed' : 'Appended'} deterministic shield gate`,
+      });
+    } else if (enforcement.prePush === 'skipped-non-shell') {
+      summary.push({
+        file: '.git/hooks/pre-push',
+        action: 'Skipped — non-shell hook detected (manual integration needed)',
       });
     }
 

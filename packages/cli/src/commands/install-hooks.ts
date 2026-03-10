@@ -197,6 +197,8 @@ fi
 `;
 }
 
+const SHELL_SHEBANG_RE = /^#!\/bin\/(ba)?sh|^#!\/usr\/bin\/env\s+(ba)?sh/;
+
 /**
  * Install a single git hook with idempotency and chain preservation.
  * Returns the action taken.
@@ -206,13 +208,19 @@ export function installGitHook(
   hookName: string,
   hookContent: string,
   marker: string,
-): 'installed' | 'exists' | 'appended' {
+): 'installed' | 'exists' | 'appended' | 'skipped-non-shell' {
   const hookPath = path.join(hooksDir, hookName);
 
   if (fs.existsSync(hookPath)) {
     const existing = fs.readFileSync(hookPath, 'utf-8');
     if (existing.includes(marker)) {
       return 'exists';
+    }
+
+    // Guard: do not append bash syntax to non-shell hooks (Node, Python, etc.)
+    const firstLine = existing.split('\n')[0] ?? '';
+    if (firstLine.startsWith('#!') && !SHELL_SHEBANG_RE.test(firstLine)) {
+      return 'skipped-non-shell';
     }
 
     // Append to existing hook — preserve user's existing hooks
@@ -239,8 +247,8 @@ export function installGitHook(
 }
 
 export interface EnforcementHookResult {
-  preCommit: 'installed' | 'exists' | 'appended' | 'skipped';
-  prePush: 'installed' | 'exists' | 'appended' | 'skipped';
+  preCommit: 'installed' | 'exists' | 'appended' | 'skipped' | 'skipped-non-shell';
+  prePush: 'installed' | 'exists' | 'appended' | 'skipped' | 'skipped-non-shell';
 }
 
 /**
@@ -291,6 +299,18 @@ export async function installEnforcementHooks(
     buildPrePushHook(shieldCmd),
     TOTEM_PREPUSH_MARKER,
   );
+
+  // Warn about non-shell hooks that Totem cannot safely append to
+  if (preCommit === 'skipped-non-shell') {
+    console.error(
+      '[Totem] Warning: pre-commit hook uses a non-shell interpreter. Manually integrate branch protection into your existing hook.',
+    );
+  }
+  if (prePush === 'skipped-non-shell') {
+    console.error(
+      '[Totem] Warning: pre-push hook uses a non-shell interpreter. Manually add: ' + shieldCmd,
+    );
+  }
 
   return { preCommit, prePush };
 }

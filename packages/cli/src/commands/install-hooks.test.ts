@@ -169,6 +169,102 @@ describe('installGitHook', () => {
     expect(matches).toHaveLength(1);
   });
 
+  it('returns skipped-non-shell for Node hook (does not corrupt file)', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    const nodeHook = '#!/usr/bin/env node\nconsole.log("lint");\n';
+    fs.writeFileSync(hookPath, nodeHook);
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-commit',
+      buildPreCommitHook(),
+      TOTEM_PRECOMMIT_MARKER,
+    );
+
+    expect(result).toBe('skipped-non-shell');
+    const written = fs.readFileSync(hookPath, 'utf-8');
+    expect(written).toBe(nodeHook); // File untouched
+  });
+
+  it('returns skipped-non-shell for Python hook', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-push');
+    const pythonHook = '#!/usr/bin/env python3\nimport subprocess\n';
+    fs.writeFileSync(hookPath, pythonHook);
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-push',
+      buildPrePushHook('npx totem shield --deterministic'),
+      TOTEM_PREPUSH_MARKER,
+    );
+
+    expect(result).toBe('skipped-non-shell');
+    const written = fs.readFileSync(hookPath, 'utf-8');
+    expect(written).toBe(pythonHook); // File untouched
+  });
+
+  it('appends normally to sh hooks', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    fs.writeFileSync(hookPath, '#!/bin/sh\necho "existing"\n');
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-commit',
+      buildPreCommitHook(),
+      TOTEM_PRECOMMIT_MARKER,
+    );
+
+    expect(result).toBe('appended');
+  });
+
+  it('appends normally to bash hooks', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    fs.writeFileSync(hookPath, '#!/bin/bash\necho "existing"\n');
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-commit',
+      buildPreCommitHook(),
+      TOTEM_PRECOMMIT_MARKER,
+    );
+
+    expect(result).toBe('appended');
+  });
+
+  it('appends normally to env bash hooks', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    fs.writeFileSync(hookPath, '#!/usr/bin/env bash\necho "existing"\n');
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-commit',
+      buildPreCommitHook(),
+      TOTEM_PRECOMMIT_MARKER,
+    );
+
+    expect(result).toBe('appended');
+  });
+
+  it('appends to hooks without a shebang (plain text)', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    fs.writeFileSync(hookPath, 'echo "no shebang"\n');
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-commit',
+      buildPreCommitHook(),
+      TOTEM_PRECOMMIT_MARKER,
+    );
+
+    expect(result).toBe('appended');
+  });
+
   it('handles pre-commit and pre-push independently', () => {
     installGitHook(hooksDir, 'pre-commit', buildPreCommitHook(), TOTEM_PRECOMMIT_MARKER);
     installGitHook(
