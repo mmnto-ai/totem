@@ -908,3 +908,75 @@ Resist merging similar orchestrator output handling and verdict parsing logic un
 **Tags:** dependabot, security, configuration
 
 Setting open-pull-requests-limit to 0 in dependabot.yml suppresses routine version bumps while still allowing critical security patches to trigger PRs via GitHub's repo-level security settings. This distinction allows for a security-only automated update policy that prevents noise and maintenance fatigue.
+
+## Lesson — Performing content.split('\n') inside a loop over line…
+
+**Tags:** performance, nodejs, security
+
+Performing `content.split('\n')` inside a loop over line numbers creates quadratic $O(N \times M)$ complexity. Hoisting the split ensures linear performance and prevents potential Denial of Service (DoS) when processing large files.
+
+## Lesson — Synchronous file operations are often preferable in CLI…
+
+**Tags:** nodejs, architecture, performance
+
+Synchronous file operations are often preferable in CLI tools for simplicity, as blocking the event loop is not a concern for short-lived, single-user processes. This differs from server-side environments where async I/O is mandatory to maintain responsiveness.
+
+## Lesson — Diff parsing state machines must track hunk status to…
+
+**Tags:** parsing, git, state-machine
+
+Diff parsing state machines must track hunk status to prevent embedded `+++` or `---` markers (e.g., in test fixtures or template literals) from being misread as file headers. Without this tracking, embedded diff content can prematurely terminate file context and corrupt rule application.
+
+## Lesson — Local git metadata like branch names, commit messages, and…
+
+**Tags:** security, git, terminal-injection
+
+Local git metadata like branch names, commit messages, and diff stats can contain malicious ANSI escape sequences. Sanitize these strings before printing them to the terminal to prevent terminal injection attacks when running commands in untrusted repositories.
+
+## Lesson — Lite versions of commands should prioritize concise…
+
+**Tags:** design-decision, ux
+
+Lite versions of commands should prioritize concise metadata, such as line counts, over full content dumps to remain fast and deterministic. This maintains a clear functional distinction between a high-level status snapshot and a context-heavy LLM operation.
+
+## Lesson — When resolving file paths extracted from untrusted sources…
+
+**Tags:** security, filesystem, path-traversal
+
+When resolving file paths extracted from untrusted sources like git diffs, explicitly verify that the resolved path resides within the project root. This prevents directory traversal attacks where malicious input could force the tool to access files outside the intended repository boundary.
+
+## Lesson — Warning messages triggered by security violations must…
+
+**Tags:** security, error-handling, terminal-injection
+
+Warning messages triggered by security violations must sanitize the offending input before display. Printing a raw malicious string (like a filename containing escape sequences) within a warning can inadvertently execute the very attack the system is alerting the user about.
+
+## Lesson — Implement provider-specific libraries as optional peer…
+
+**Tags:** architecture, performance, dependencies
+
+Implement provider-specific libraries as optional peer dependencies and load them lazily at runtime to keep the core package size small. This "Bring Your Own Software Driver" pattern prevents users from being forced to install every supported SDK for providers they do not use.
+
+## Lesson — Provide a dummy fallback API key (e.g., 'local-only') when…
+
+**Tags:** openai, orchestrator, local-llm
+
+Provide a dummy fallback API key (e.g., 'local-only') when targeting OpenAI-compatible local endpoints to bypass client-side SDK validation. Many local servers like Ollama do not require authentication, but official client SDKs often throw validation errors if the key field is left empty.
+
+## Lesson — Treat usage and token statistics as optional fields when…
+
+**Tags:** openai, defensive-programming, api-design
+
+Treat usage and token statistics as optional fields when implementing OpenAI-compatible orchestrators. Third-party implementations often omit usage metadata that is guaranteed by the official OpenAI API, which can lead to runtime crashes during result processing if not handled defensively.
+
+## Lesson — Wrap user-controlled fields like PR descriptions or…
+
+**Tags:** security, prompting, llm
+
+Wrap user-controlled fields like PR descriptions or comments in XML tags explicitly labeled as "untrusted content" within system prompts. This provides a defense-in-depth layer that helps the LLM distinguish between developer instructions and potentially malicious external data.
+
+## Lesson — Sanitize git-sourced metadata like branch names, status,…
+
+**Tags:** git, sanitization, security
+
+Sanitize git-sourced metadata like branch names, status, and diff statistics to remove ANSI escape sequences and control characters. This prevents formatting corruption and parsing errors when passing terminal-sourced data to downstream tools or LLM contexts.

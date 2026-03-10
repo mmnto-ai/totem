@@ -12,7 +12,7 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 - **Storage:** Creates a `.lancedb/` folder in the consumer's root. This folder is gitignored and treated as a replaceable build artifact.
 - **Embeddings:** Supports OpenAI (`text-embedding-3-small`) by default, with Ollama (`nomic-embed-text`) as an offline fallback.
 - **Chunking:** Syntax-aware chunking (Tree-sitter for universal AST parsing of code, heading hierarchy for Markdown, hierarchical breadcrumbs for session logs). No blind character splitting.
-- **Drift Detection:** Self-cleaning sync engine that purges orphaned vectors when source files are deleted or renamed, keeping the index in sync with the physical codebase.
+- **Drift Detection:** Self-cleaning sync engine that purges orphaned vectors when source files are deleted or renamed, keeping the index in sync with the physical codebase. It is reinforced by strict path containment checks to prevent directory traversal and unauthorized access out-of-bounds.
 
 ### 2. The CLI (`@mmnto/cli`)
 
@@ -20,26 +20,28 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 - `totem sync`: Crawls target directories defined in `totem.config.ts`, chunks, embeds, and updates the LanceDB index.
 - `totem search`: Direct debug query interface.
 - `totem spec` / `totem shield` / `totem triage`: Standardized workflow orchestration commands (spec planning, pre-push review, issue prioritization). `totem shield` includes options like `--mode=structural` for context-blind architectural review.
-- `totem briefing` / `totem handoff`: Session start/end context snapshots.
-- `totem extract`: Batch lesson extraction from PR review threads with interactive multi-select curation (supported by the `--pick` flag for selective lesson acceptance). Generated lessons use highly descriptive, content-derived headings.
+- `totem briefing` / `totem handoff`: Session start/end context snapshots. `totem handoff` supports a `--lite` flag for zero-LLM state capture, which includes robust ANSI output sanitization to prevent terminal injection.
+- `totem extract`: Batch lesson extraction from PR review threads with interactive multi-select curation (supported by the `--pick` flag for selective lesson acceptance). Generated lessons use concise, highly descriptive, content-derived headings. The extraction engine is hardened against prompt injection from untrusted PR comments via strict XML tagging and explicit system prompt security notices.
 - `totem add-lesson`: Inline lesson capture (also exposed as MCP tool `add_lesson`).
-- `totem compile`: Translates natural-language lessons into deterministic regex rules via constrained LLM prompt at compile-time. Supports an `--export` flag for cross-model lesson export targets.
+- `totem compile`: Translates natural-language lessons into deterministic regex rules via constrained LLM prompt at compile-time. Supports an `--export` flag for cross-model lesson export targets (such as GitHub Copilot instructions).
 - `totem docs`: Automated per-document LLM passes to keep project documentation in sync with the codebase. Supports targeting individual documents via explicit path arguments (with automatic path fixes) for precision updates (safeguarded by XML sentinels for reliable output extraction).
 - `totem bridge` / `totem wrap`: Mid-session context resets and end-of-task workflow automation.
 
 ### 3. Deterministic Compiler & Zero-LLM Shield
 
-`totem compile` reads `.totem/lessons.md` and translates each lesson into a regex rule (or marks it as non-compilable). Rules are stored in `.totem/compiled-rules.json` (with support for `fileGlobs` scoping to target specific files) and validated at compile-time with both syntax checking and ReDoS static analysis (`safe-regex2`). The compilation process is context-aware to prevent false positives within string literals and non-code contexts.
+`totem compile` reads `.totem/lessons.md` and translates each lesson into a regex rule (or marks it as non-compilable). Rules are stored in `.totem/compiled-rules.json` (with support for `fileGlobs` scoping to target specific files) and validated at compile-time with both syntax checking and ReDoS static analysis (`safe-regex2`). The compilation process is context-aware (leveraging Tree-sitter AST gating) to prevent false positives within string literals and non-code contexts.
 
 Developers can further bypass specific false positives using **inline suppression directives** (`totem-ignore` / `totem-ignore-next-line`), and `fileGlobs` support negated patterns (e.g., `!*.test.ts`) to exclude file types. Vulnerable patterns (nested quantifiers, star height > 1) are rejected, leaving them to be handled by the standard LLM-based shield.
 
 `totem shield --deterministic` applies these compiled rules against `git diff` additions with zero LLM calls — ideal for CI enforcement without API keys or quota. Compiled rules can also be adapted to external systems via `totem compile --export` for cross-model lesson enforcement.
 
-### 4. Shield GitHub Action (`action.yml`)
+### 4. Shield GitHub Action & CI Drift Gate
 
-A composite GitHub Action that runs `totem shield --deterministic` as a pass/fail CI quality gate on pull requests. It uses compiled AST/regex rules from `.totem/compiled-rules.json` to physically block known architectural traps from merging.
+A composite GitHub Action (`action.yml`) that runs `totem shield --deterministic` as a pass/fail CI quality gate on pull requests. It uses compiled AST/regex rules from `.totem/compiled-rules.json` to physically block known architectural traps from merging.
 
-Because it operates in `--deterministic` mode, it requires **zero LLM API calls**, eliminating statistical hallucinations in CI and maintaining a strict, air-gapped security posture for enterprise environments.
+The CI pipeline also features a structural CI drift gate and an adversarial evaluation harness to perform structural integrity checks and mitigate model drift. Automated bot reviews can be configured to run on-demand or as auto-reviews within these workflows.
+
+Because it operates in `--deterministic` mode, the shield requires **zero LLM API calls**, eliminating statistical hallucinations in CI and maintaining a strict, air-gapped security posture for enterprise environments.
 
 ### 5. The MCP Server (`@mmnto/mcp`)
 
@@ -55,7 +57,7 @@ Totem supports three configuration tiers, auto-detected from the environment dur
 
 | Tier         | Requirements                               | Available Commands                                                                          |
 | ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| **Lite**     | Zero API keys                              | `init`, `add-lesson`, `bridge`, `eject`                                                     |
+| **Lite**     | Zero API keys                              | `init`, `add-lesson`, `bridge`, `eject`, `handoff --lite`                                   |
 | **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`                                                            |
 | **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `shield`, `triage`, `briefing`, `handoff`, `extract`, `wrap`, `docs`) |
 
@@ -63,7 +65,7 @@ The `embedding` field in `totem.config.ts` is optional. When omitted, Totem oper
 
 ## Orchestrator Providers
 
-The CLI orchestrator supports three provider types via a discriminated union config (`provider` field). SDKs for native API providers are **optional peer dependencies** — loaded via dynamic `import()` at runtime with friendly install prompts (featuring package manager auto-detection) if missing (BYOSD: "Bring Your Own SDK").
+The CLI orchestrator supports multiple provider types via a discriminated union config (`provider` field). SDKs for native API providers are **optional peer dependencies** — loaded via dynamic `import()` at runtime with friendly install prompts (featuring package manager auto-detection) if missing (BYOSD: "Bring Your Own SDK").
 
 ### Shell Provider (default)
 
@@ -76,6 +78,18 @@ orchestrator: {
   defaultModel: 'gemini-3-flash-preview',
   fallbackModel: 'gemini-2.5-flash',
   overrides: { spec: 'gemini-3.1-pro-preview' },
+}
+```
+
+### Generic OpenAI / Local Provider (native API)
+
+Direct SDK calls using the standard OpenAI-compatible format. Ideal for official OpenAI models or local/offline orchestration via Ollama:
+
+```typescript
+orchestrator: {
+  provider: 'openai',
+  defaultModel: 'gpt-4o', // or e.g. 'llama3' for local Ollama
+  // Supports custom endpoints for local Ollama / LM Studio
 }
 ```
 
