@@ -16,7 +16,6 @@ const TIMEOUT_MS = 90_000; // generous — cold starts can be slow
 
 function assertSmokeResult(result: OrchestratorResult): void {
   expect(result.content).toBeTruthy();
-  expect(result.content.length).toBeGreaterThan(0);
   expect(result.durationMs).toBeGreaterThan(0);
   expect(typeof result.inputTokens).toBe('number');
   expect(typeof result.outputTokens).toBe('number');

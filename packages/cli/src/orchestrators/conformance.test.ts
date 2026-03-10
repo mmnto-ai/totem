@@ -163,12 +163,7 @@ describe.each(sdkFixtures)('$name provider conformance', (fixture) => {
 
   it('converts quota/429 errors to QuotaError', async () => {
     fixture.setupQuota();
-    try {
-      await fixture.invoke();
-      expect.fail('Should have thrown');
-    } catch (err) {
-      expect((err as Error).name).toBe('QuotaError');
-    }
+    await expect(fixture.invoke()).rejects.toHaveProperty('name', 'QuotaError');
   });
 
   it('wraps generic API errors with [Totem Error] prefix', async () => {
@@ -257,12 +252,7 @@ describe('shell provider conformance', () => {
 
   it('converts quota errors to QuotaError', async () => {
     emitFailure(1, '429 Too Many Requests quota exceeded');
-    try {
-      await invokeShellOrchestrator(shellOpts());
-      expect.fail('Should have thrown');
-    } catch (err) {
-      expect((err as Error).name).toBe('QuotaError');
-    }
+    await expect(invokeShellOrchestrator(shellOpts())).rejects.toHaveProperty('name', 'QuotaError');
   });
 
   it('wraps generic errors with [Totem Error] prefix', async () => {
