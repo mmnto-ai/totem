@@ -132,6 +132,14 @@ describe('invokeOllamaOrchestrator', () => {
     );
   });
 
+  it('throws QuotaError on 429 responses', async () => {
+    mockFetch.mockResolvedValueOnce(new Response('too many requests', { status: 429 }));
+
+    await expect(invokeOllamaOrchestrator(baseOpts)).rejects.toSatisfy((err: Error) => {
+      return err.name === 'QuotaError' && err.message.includes('Ollama rate limit');
+    });
+  });
+
   it('throws VRAM-friendly error on 500 without numCtx', async () => {
     mockFetch.mockResolvedValueOnce(new Response('out of memory', { status: 500 }));
 
