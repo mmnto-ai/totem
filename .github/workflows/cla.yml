@@ -28,7 +28,7 @@ jobs:
           path-to-signatures: signatures/cla.json
           path-to-document: https://github.com/mmnto-ai/totem/blob/main/.github/CLA.md
           branch: cla-signatures
-          allowlist: dependabot[bot],github-actions[bot],renovate[bot],mmnto-bot
+          allowlist: satur8d,dependabot[bot],github-actions[bot],renovate[bot],mmnto-bot
           custom-notsigned-prcomment: >-
             Thank you for your contribution! Before we can merge this PR, we need you to sign our
             [Contributor License Agreement]($CLA_DOCUMENT).
