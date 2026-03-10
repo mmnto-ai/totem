@@ -59,7 +59,7 @@ export function isQuotaError(err: unknown): boolean {
 
 // ─── Model string parsing (#243) ─────────────────────
 
-const KNOWN_PROVIDERS = ['gemini', 'anthropic', 'openai', 'shell'] as const;
+const KNOWN_PROVIDERS = ['gemini', 'anthropic', 'openai', 'ollama', 'shell'] as const;
 
 /**
  * Parse a `provider:model` string into its components.
@@ -156,6 +156,15 @@ export function createOrchestrator(config: OrchestratorConfig): InvokeOrchestrat
       return async (opts) => {
         const { invokeOpenAIOrchestrator } = await import('./openai-orchestrator.js');
         return invokeOpenAIOrchestrator({ ...opts, baseUrl: config.baseUrl });
+      };
+    case 'ollama':
+      return async (opts) => {
+        const { invokeOllamaOrchestrator } = await import('./ollama-orchestrator.js');
+        return invokeOllamaOrchestrator({
+          ...opts,
+          baseUrl: config.baseUrl,
+          numCtx: config.numCtx,
+        });
       };
   }
 }
