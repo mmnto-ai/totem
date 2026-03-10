@@ -54,8 +54,8 @@ vi.mock('node:child_process', () => ({
 
 // ─── Import orchestrators ───────────────────────────
 
-import { invokeGeminiOrchestrator } from './gemini-orchestrator.js';
 import { invokeAnthropicOrchestrator } from './anthropic-orchestrator.js';
+import { invokeGeminiOrchestrator } from './gemini-orchestrator.js';
 import { invokeShellOrchestrator } from './shell-orchestrator.js';
 
 // ─── Shared test opts ───────────────────────────────
