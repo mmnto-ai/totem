@@ -3,6 +3,8 @@ import * as path from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
 import * as readline from 'node:readline/promises';
 
+import { resolveGitRoot } from '../git.js';
+
 const TOTEM_HOOK_MARKER = '[totem] post-merge hook';
 export const TOTEM_PRECOMMIT_MARKER = '[totem] pre-commit hook';
 export const TOTEM_PREPUSH_MARKER = '[totem] pre-push hook';
@@ -109,15 +111,16 @@ function printHookManagerGuidance(manager: HookManager, syncCmd: string, shieldC
 }
 
 export async function installPostMergeHook(cwd: string, rl: readline.Interface): Promise<void> {
-  // Guard: must be a git repo
-  if (!fs.existsSync(path.join(cwd, '.git'))) {
+  // Guard: must be a git repo — resolve root from any subdirectory
+  const gitRoot = resolveGitRoot(cwd);
+  if (!gitRoot) {
     console.log('[Totem] Not a git repository — skipping hook installation.');
     return;
   }
 
-  const syncCmd = detectSyncCommand(cwd);
-  const shieldCmd = `${detectTotemPrefix(cwd)} shield --deterministic`;
-  const manager = detectHookManager(cwd);
+  const syncCmd = detectSyncCommand(gitRoot);
+  const shieldCmd = `${detectTotemPrefix(gitRoot)} shield --deterministic`;
+  const manager = detectHookManager(gitRoot);
 
   if (manager) {
     printHookManagerGuidance(manager, syncCmd, shieldCmd);
@@ -132,7 +135,7 @@ export async function installPostMergeHook(cwd: string, rl: readline.Interface):
     return;
   }
 
-  const hooksDir = path.join(cwd, '.git', 'hooks');
+  const hooksDir = path.join(gitRoot, '.git', 'hooks');
   const hookPath = path.join(hooksDir, 'post-merge');
 
   // Idempotency: check if already installed
@@ -264,13 +267,14 @@ export async function installEnforcementHooks(
 ): Promise<EnforcementHookResult> {
   const skip: EnforcementHookResult = { preCommit: 'skipped', prePush: 'skipped' };
 
-  // Guard: must be a git repo
-  if (!fs.existsSync(path.join(cwd, '.git'))) {
+  // Guard: must be a git repo — resolve root from any subdirectory
+  const gitRoot = resolveGitRoot(cwd);
+  if (!gitRoot) {
     return skip;
   }
 
   // Hook managers handle their own installation — print guidance only
-  const manager = detectHookManager(cwd);
+  const manager = detectHookManager(gitRoot);
   if (manager) {
     // Guidance is printed by installPostMergeHook which runs next
     return skip;
@@ -285,8 +289,8 @@ export async function installEnforcementHooks(
     return skip;
   }
 
-  const hooksDir = path.join(cwd, '.git', 'hooks');
-  const shieldCmd = `${detectTotemPrefix(cwd)} shield --deterministic`;
+  const hooksDir = path.join(gitRoot, '.git', 'hooks');
+  const shieldCmd = `${detectTotemPrefix(gitRoot)} shield --deterministic`;
 
   const preCommit = installGitHook(
     hooksDir,
@@ -342,24 +346,25 @@ export interface HooksCommandResult {
  * Installs pre-commit, pre-push, and post-merge hooks without prompting.
  */
 export function installHooksNonInteractive(cwd: string): HooksCommandResult | null {
-  // Guard: must be a git repo
-  if (!fs.existsSync(path.join(cwd, '.git'))) {
+  // Guard: must be a git repo — resolve root from any subdirectory
+  const gitRoot = resolveGitRoot(cwd);
+  if (!gitRoot) {
     return null;
   }
 
   // Hook managers handle their own installation — print guidance only
-  const manager = detectHookManager(cwd);
+  const manager = detectHookManager(gitRoot);
   if (manager) {
-    const syncCmd = detectSyncCommand(cwd);
-    const shieldCmd = `${detectTotemPrefix(cwd)} shield --deterministic`;
+    const syncCmd = detectSyncCommand(gitRoot);
+    const shieldCmd = `${detectTotemPrefix(gitRoot)} shield --deterministic`;
     printHookManagerGuidance(manager, syncCmd, shieldCmd);
     return null;
   }
 
-  const hooksDir = path.join(cwd, '.git', 'hooks');
-  const prefix = detectTotemPrefix(cwd);
+  const hooksDir = path.join(gitRoot, '.git', 'hooks');
+  const prefix = detectTotemPrefix(gitRoot);
   const shieldCmd = `${prefix} shield --deterministic`;
-  const syncCmd = detectSyncCommand(cwd);
+  const syncCmd = detectSyncCommand(gitRoot);
 
   const preCommit = installGitHook(
     hooksDir,
@@ -385,7 +390,12 @@ export function installHooksNonInteractive(cwd: string): HooksCommandResult | nu
  * Check that all Totem hooks are installed. Returns true if all present.
  */
 export function checkHooksInstalled(cwd: string): boolean {
-  const hooksDir = path.join(cwd, '.git', 'hooks');
+  const gitRoot = resolveGitRoot(cwd);
+  if (!gitRoot) {
+    console.error('[Totem] Not a git repository.');
+    return false;
+  }
+  const hooksDir = path.join(gitRoot, '.git', 'hooks');
 
   const markers = [
     { file: 'pre-commit', marker: TOTEM_PRECOMMIT_MARKER },
@@ -431,7 +441,7 @@ export function hooksCommand(opts: { check?: boolean }): void {
   const result = installHooksNonInteractive(cwd);
 
   if (!result) {
-    if (!fs.existsSync(path.join(cwd, '.git'))) {
+    if (!resolveGitRoot(cwd)) {
       console.error('[Totem] Not a git repository — skipping hook installation.');
     }
     // Hook manager detected — guidance already printed by installHooksNonInteractive

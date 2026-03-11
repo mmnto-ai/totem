@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -357,7 +358,7 @@ describe('installHooksNonInteractive', () => {
   });
 
   it('installs all three hooks in a git repo', () => {
-    fs.mkdirSync(path.join(tmpDir, '.git'), { recursive: true });
+    execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
     fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
 
     const result = installHooksNonInteractive(tmpDir);
@@ -375,7 +376,7 @@ describe('installHooksNonInteractive', () => {
   });
 
   it('is idempotent — second call returns exists for all hooks', () => {
-    fs.mkdirSync(path.join(tmpDir, '.git'), { recursive: true });
+    execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
     fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
 
     installHooksNonInteractive(tmpDir);
@@ -388,15 +389,46 @@ describe('installHooksNonInteractive', () => {
   });
 
   it('returns null when hook manager is detected', () => {
-    fs.mkdirSync(path.join(tmpDir, '.git'), { recursive: true });
+    execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
     fs.mkdirSync(path.join(tmpDir, '.husky'), { recursive: true });
 
     const result = installHooksNonInteractive(tmpDir);
     expect(result).toBeNull();
   });
 
+  it('installs hooks at git root when run from a subdirectory', () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+    const subDir = path.join(tmpDir, 'packages', 'cli');
+    fs.mkdirSync(subDir, { recursive: true });
+
+    const result = installHooksNonInteractive(subDir);
+
+    expect(result).not.toBeNull();
+    expect(result!.preCommit).toBe('installed');
+    expect(result!.prePush).toBe('installed');
+    expect(result!.postMerge).toBe('installed');
+
+    // Hooks should be at git root, not in the subdirectory
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    expect(fs.existsSync(path.join(hooksDir, 'pre-commit'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'pre-push'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'post-merge'))).toBe(true);
+    expect(fs.existsSync(path.join(subDir, '.git'))).toBe(false);
+  });
+
+  it('check passes from subdirectory after install', () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+    const subDir = path.join(tmpDir, 'packages', 'cli');
+    fs.mkdirSync(subDir, { recursive: true });
+
+    installHooksNonInteractive(subDir);
+    expect(checkHooksInstalled(subDir)).toBe(true);
+  });
+
   it('appends to existing hooks without clobbering', () => {
-    fs.mkdirSync(path.join(tmpDir, '.git', 'hooks'), { recursive: true });
+    execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
     fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
     fs.writeFileSync(path.join(tmpDir, '.git', 'hooks', 'pre-push'), '#!/bin/sh\nrun_my_tests\n');
 
@@ -416,7 +448,7 @@ describe('checkHooksInstalled', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hooks-check-'));
-    fs.mkdirSync(path.join(tmpDir, '.git'), { recursive: true });
+    execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
     fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
   });
 

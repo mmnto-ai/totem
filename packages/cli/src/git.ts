@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import * as path from 'node:path';
 
 import { IS_WIN } from './utils.js';
 
@@ -205,6 +206,25 @@ export function isFileDirty(cwd: string, filePath: string): boolean {
     return output.length > 0;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Resolve the git repository root from any subdirectory.
+ * Returns the normalized absolute path, or null if not in a git repo.
+ */
+export function resolveGitRoot(cwd: string): string | null {
+  try {
+    const root = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      cwd,
+      encoding: 'utf-8',
+      timeout: GIT_COMMAND_TIMEOUT_MS,
+      shell: IS_WIN,
+    }).trim();
+    // git returns forward slashes even on Windows — normalize for fs operations
+    return path.normalize(root);
+  } catch {
+    return null;
   }
 }
 
