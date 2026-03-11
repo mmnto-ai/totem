@@ -420,7 +420,7 @@ export function hooksCommand(opts: { check?: boolean }): void {
   if (opts.check) {
     const ok = checkHooksInstalled(cwd);
     if (ok) {
-      console.log('[Totem] All hooks installed.');
+      console.error('[Totem] All hooks installed.');
     } else {
       console.error('[Totem] Some hooks are missing. Run `totem hooks` to install.');
       process.exit(1);
@@ -432,7 +432,7 @@ export function hooksCommand(opts: { check?: boolean }): void {
 
   if (!result) {
     if (!fs.existsSync(path.join(cwd, '.git'))) {
-      console.log('[Totem] Not a git repository — skipping hook installation.');
+      console.error('[Totem] Not a git repository — skipping hook installation.');
     }
     // Hook manager detected — guidance already printed by installHooksNonInteractive
     return;
@@ -447,13 +447,13 @@ export function hooksCommand(opts: { check?: boolean }): void {
   for (const { name, status } of actions) {
     switch (status) {
       case 'installed':
-        console.log(`[Totem] Installed ${name} hook.`);
+        console.error(`[Totem] Installed ${name} hook.`);
         break;
       case 'appended':
-        console.log(`[Totem] Appended Totem to existing ${name} hook.`);
+        console.error(`[Totem] Appended Totem to existing ${name} hook.`);
         break;
       case 'exists':
-        console.log(`[Totem] ${name} hook already installed.`);
+        console.error(`[Totem] ${name} hook already installed.`);
         break;
       case 'skipped-non-shell':
         console.error(
