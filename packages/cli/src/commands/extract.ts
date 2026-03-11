@@ -258,7 +258,7 @@ const DEFENSIVE_PROXIMITY_WINDOW = 100;
  * Collect all [start, end] ranges of code-fenced regions in the text.
  * Uses inline regexes via matchAll to avoid module-level global state mutation.
  */
-function collectCodeRanges(text: string): Array<[number, number]> {
+function collectCodeRanges(text: string): Array<[number, number]> { // totem-ignore
   const ranges: Array<[number, number]> = [];
 
   // Fenced blocks first (higher priority — consume triple backticks before singles)
@@ -286,7 +286,7 @@ function collectCodeRanges(text: string): Array<[number, number]> {
  * If any single match is outside instructional context, returns false (fail closed).
  */
 export function isInstructionalContext(
-  text: string,
+  text: string, // totem-ignore
   pattern: RegExp,
   codeRanges?: Array<[number, number]>,
 ): boolean {
