@@ -1323,7 +1323,7 @@ Convert large plain-text research blobs into Markdown with structured headings t
 
 A "clean pass" in security scans after narrowing rule scope can be a false negative if the glob matcher fails to recognize new pattern shapes. Always verify that scoped rules are actually evaluating intended files rather than silently matching nothing due to unsupported syntax.
 
-## Lesson — When implementing custom glob matching for dir/*/.ext,
+## Lesson — When implementing custom glob matching for dir/\*/.ext,
 
 **Tags:** glob, regex, logic-error
 
