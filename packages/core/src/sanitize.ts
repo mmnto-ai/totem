@@ -58,6 +58,7 @@ export interface IngestionSanitizeOptions {
  * Injection patterns are flagged via onWarn but NOT stripped — they may be
  * legitimate discussions about security in specs or PRs.
  */
+// totem-ignore-next-line — core library param, not MCP return
 export function sanitizeForIngestion(text: string, options: IngestionSanitizeOptions): string {
   if (!text) return text ?? '';
   const { chunkType, filePath, onWarn } = options;
