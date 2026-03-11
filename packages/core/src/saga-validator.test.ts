@@ -84,6 +84,15 @@ describe('checkbox mutation detection', () => {
     expect(violations).toHaveLength(1);
     expect(violations[0]!.type).toBe('checkbox_mutation');
   });
+
+  it('matches checkboxes with markdown link changes', () => {
+    const original = '- [x] Implement [feature A](http://example.com)\n';
+    const updated = '- [ ] Implement [feature A](http://other.com/updated)\n';
+
+    const violations = validateDocUpdate(original, updated);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]!.type).toBe('checkbox_mutation');
+  });
 });
 
 // ─── Sentinel corruption ────────────────────────────────
@@ -106,6 +115,15 @@ describe('sentinel corruption detection', () => {
     const violations = validateDocUpdate(original, updated);
     const sentinelViolations = violations.filter((v) => v.type === 'sentinel_corruption');
     expect(sentinelViolations).toHaveLength(0);
+  });
+
+  it('detects unclosed sentinel when mixed with closed on same line', () => {
+    const original = '<!-- totem-start --> <!-- totem-ignore -->\n';
+    const updated = '<!-- totem-start --> <!-- totem-ignore\n';
+
+    const violations = validateDocUpdate(original, updated);
+    const sentinelViolations = violations.filter((v) => v.type === 'sentinel_corruption');
+    expect(sentinelViolations).toHaveLength(1);
   });
 
   it('passes with no sentinels', () => {

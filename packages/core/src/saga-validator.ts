@@ -53,6 +53,7 @@ function extractCheckboxes(content: string): CheckboxEntry[] {
  */
 function normalizeCheckboxText(text: string): string {
   return text
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // strip markdown links, keep text
     .replace(/\*\*|__|~~|`/g, '') // strip inline formatting
     .replace(/\s+/g, ' ')
     .trim()
@@ -98,7 +99,9 @@ function detectSentinelCorruption(updated: string): SagaViolation[] {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
     // Check for totem sentinels that are not properly closed
-    if (line.includes('<!-- totem-') && !line.includes('-->')) {
+    const openCount = (line.match(/<!-- totem-/g) || []).length;
+    const closeCount = (line.match(/-->/g) || []).length;
+    if (openCount > closeCount) {
       violations.push({
         type: 'sentinel_corruption',
         message: `Unclosed totem sentinel on line ${i + 1}`,

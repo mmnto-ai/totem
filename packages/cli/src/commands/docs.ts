@@ -351,10 +351,10 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
     let violations: SagaViolation[];
     try {
       violations = validateDocUpdate(currentContent, trimmedContent);
-    } catch {
+    } catch (err) {
       log.warn(
         TAG,
-        `${doc.path}: Saga validator threw unexpectedly — proceeding without validation.`,
+        `${doc.path}: Saga validator threw unexpectedly — proceeding without validation. ${err instanceof Error ? err.message : String(err)}`,
       );
       violations = [];
     }
