@@ -124,4 +124,100 @@ describe('classifyLines', () => {
     // Should not throw, and should classify as code (fail-open)
     expect(result.get(1)).toBe('code');
   });
+
+  it('correctly classifies lines in files larger than 32KB (#354)', async () => {
+    // Generate a valid TypeScript file well over 32KB.
+    // Strategy: emit many exported functions, each with a block comment,
+    // a string literal line, and a code line. Track which line numbers
+    // correspond to which classification.
+    const lines: string[] = [];
+
+    // Track line numbers (1-based) for assertions
+    const codeLines: number[] = [];
+    const commentLines: number[] = [];
+    const stringLines: number[] = [];
+
+    const functionCount = 300; // ~110 bytes per function → ~33KB+
+
+    for (let i = 0; i < functionCount; i++) {
+      // Block comment (2 lines)
+      const commentStart = lines.length + 1;
+      lines.push(`/** Documentation for function_${i} */`);
+      commentLines.push(commentStart);
+
+      // Function declaration (code line)
+      const fnLine = lines.length + 1;
+      lines.push(`export function function_${i}(): string {`);
+      codeLines.push(fnLine);
+
+      // String literal return (the line starts with `return` — leftmost token is code,
+      // but the string itself is on a separate continuation line for a cleaner test)
+      lines.push(`  const value =`);
+      const strLine = lines.length + 1;
+      lines.push(`    "padding_${i}_${'x'.repeat(40)}";`);
+      // leftmost token on strLine is the opening quote → string
+      stringLines.push(strLine);
+
+      // Return + close brace (code lines)
+      lines.push(`  return value;`);
+      lines.push(`}`);
+      lines.push('');
+    }
+
+    const content = lines.join('\n');
+    const sizeKB = Buffer.byteLength(content, 'utf-8') / 1024;
+
+    // Sanity: confirm the file is actually >32KB
+    expect(sizeKB).toBeGreaterThan(32);
+
+    // Pick lines from the beginning, middle, and end of the file
+    const pickFromBeginning = {
+      code: codeLines[0],
+      comment: commentLines[0],
+      string: stringLines[0],
+    };
+    const midIdx = Math.floor(functionCount / 2);
+    const pickFromMiddle = {
+      code: codeLines[midIdx],
+      comment: commentLines[midIdx],
+      string: stringLines[midIdx],
+    };
+    const pickFromEnd = {
+      code: codeLines[functionCount - 1],
+      comment: commentLines[functionCount - 1],
+      string: stringLines[functionCount - 1],
+    };
+
+    const allLineNumbers = [
+      pickFromBeginning.code,
+      pickFromBeginning.comment,
+      pickFromBeginning.string,
+      pickFromMiddle.code,
+      pickFromMiddle.comment,
+      pickFromMiddle.string,
+      pickFromEnd.code,
+      pickFromEnd.comment,
+      pickFromEnd.string,
+    ];
+
+    const result = await classifyLines(content, allLineNumbers, 'typescript');
+
+    // Verify the map has entries for all requested lines (parse did not silently fail)
+    expect(result.size).toBe(allLineNumbers.length);
+
+    // Beginning of file
+    expect(result.get(pickFromBeginning.code)).toBe('code');
+    expect(result.get(pickFromBeginning.comment)).toBe('comment');
+    expect(result.get(pickFromBeginning.string)).toBe('string');
+
+    // Middle of file (past the 32KB boundary)
+    expect(result.get(pickFromMiddle.code)).toBe('code');
+    expect(result.get(pickFromMiddle.comment)).toBe('comment');
+    expect(result.get(pickFromMiddle.string)).toBe('string');
+
+    // End of file
+    expect(result.get(pickFromEnd.code)).toBe('code');
+    expect(result.get(pickFromEnd.comment)).toBe('comment');
+    expect(result.get(pickFromEnd.string)).toBe('string');
+  });
 });

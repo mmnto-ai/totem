@@ -1298,3 +1298,9 @@ Identify larger or more specific text markers (like triple backticks) before sma
 **Tags:** maintenance, automation, data-integrity
 
 Fixes to automated extraction logic, such as resolving truncated headings, typically do not retroactively update existing records. Legacy data requires manual intervention or targeted re-syncing to align with updated formatting or validation rules.
+
+## Lesson — FSL intelligence layer licensing is a decided-but-deferred
+
+**Tags:** licensing, strategy, v1.0, fsl, architecture
+
+FSL intelligence layer licensing is a decided-but-deferred strategic decision (#353). Apache 2.0 stays everywhere until v1.0. At v1.0, split @mmnto/core into @mmnto/totem (Apache 2.0, commodity: chunkers, store, config) and @mmnto/totem-engine (FSL 1.1, moat: compiler, drift detector, sanitizer, AST gate). CLA is already in place as the insurance policy. Emergency trigger: execute split immediately if a hyperscaler forks the intelligence layer pre-v1.0.
