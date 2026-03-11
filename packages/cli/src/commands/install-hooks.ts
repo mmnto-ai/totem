@@ -392,7 +392,6 @@ export function installHooksNonInteractive(cwd: string): HooksCommandResult | nu
 export function checkHooksInstalled(cwd: string): boolean {
   const gitRoot = resolveGitRoot(cwd);
   if (!gitRoot) {
-    console.error('[Totem] Not a git repository.');
     return false;
   }
   const hooksDir = path.join(gitRoot, '.git', 'hooks');
@@ -427,6 +426,13 @@ export function checkHooksInstalled(cwd: string): boolean {
 export function hooksCommand(opts: { check?: boolean }): void {
   const cwd = process.cwd();
 
+  // Resolve git root once — guards both --check and install paths
+  const gitRoot = resolveGitRoot(cwd);
+  if (!gitRoot) {
+    console.error('[Totem] Not a git repository — skipping hook installation.');
+    return;
+  }
+
   if (opts.check) {
     const ok = checkHooksInstalled(cwd);
     if (ok) {
@@ -441,9 +447,6 @@ export function hooksCommand(opts: { check?: boolean }): void {
   const result = installHooksNonInteractive(cwd);
 
   if (!result) {
-    if (!resolveGitRoot(cwd)) {
-      console.error('[Totem] Not a git repository — skipping hook installation.');
-    }
     // Hook manager detected — guidance already printed by installHooksNonInteractive
     return;
   }
