@@ -32,9 +32,9 @@ const BIDI_OVERRIDE_RE = /[\u202A-\u202E\u2066-\u2069]/g;
 export const INSTRUCTIONAL_LEAKAGE_RE =
   /(?:ignore|override|bypass|disregard|forget|print|output|reveal|leak|dump|repeat|show)[\s\S]{0,50}?(?:system prompt|previous instructions|above instructions|prior instructions|your instructions)/i;
 
-/** System XML tags that shouldn't appear in user content. */
+/** System XML tags that shouldn't appear in user content. Accounts for optional whitespace (e.g. `</ system>`). */
 export const XML_TAG_LEAKAGE_RE =
-  /<\/?(?:pr_body|comment_body|diff_hunk|review_body|system|untrusted_content)[^>]*>/i;
+  /<\/?\s*(?:pr_body|comment_body|diff_hunk|review_body|system|untrusted_content)[^>]*>/i;
 
 /** Suspicious Base64 blobs (60+ contiguous chars). */
 export const BASE64_BLOB_RE = /(?:[A-Za-z0-9+/]{4}){15,}/;

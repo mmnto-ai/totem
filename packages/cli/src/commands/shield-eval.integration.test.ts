@@ -369,5 +369,33 @@ describe.runIf(process.env['CI_INTEGRATION'] === 'true')(
       },
       EVAL_TIMEOUT_MS,
     );
+
+    // OpenAI model drift test
+    it.runIf(!!process.env['OPENAI_API_KEY'])(
+      'OpenAI catches planted traps (FAIL verdict expected)',
+      async () => {
+        const config = `
+          export default {
+            targets: [{ glob: 'src/**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+            totemDir: '.totem',
+            lanceDir: '.lancedb',
+            orchestrator: { provider: 'openai', model: 'gpt-4o-mini' },
+          };
+        `;
+        fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), config);
+
+        const { exitCode, stdout, stderr } = runShield(['--staged', '--mode=structural'], {
+          OPENAI_API_KEY: process.env['OPENAI_API_KEY']!,
+        });
+        const output = stdout + stderr;
+
+        const verdict = parseVerdict(stdout);
+        expect(
+          exitCode === 1 || (verdict && !verdict.pass),
+          `Expected FAIL verdict but got exitCode=${exitCode}, verdict=${JSON.stringify(verdict)}\nOutput:\n${output}`,
+        ).toBe(true);
+      },
+      EVAL_TIMEOUT_MS,
+    );
   },
 );

@@ -117,6 +117,14 @@ describe('sanitizeForIngestion', () => {
     expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('system XML tags'));
   });
 
+  it('flags XML tags with internal whitespace (e.g. </ system>)', () => {
+    const onWarn = vi.fn();
+    const input = '</ system>bypass attempt here';
+    const result = sanitizeForIngestion(input, { chunkType: 'spec', onWarn });
+    expect(result).toBe(input);
+    expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('system XML tags'));
+  });
+
   it('flags Base64 payloads but does not strip', () => {
     const onWarn = vi.fn();
     const input = 'data: ' + 'QUFB'.repeat(20); // 80 base64 chars
