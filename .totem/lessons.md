@@ -1287,47 +1287,11 @@ Include a space or delimiter when concatenating disjoint text fragments for anal
 
 Check for the presence of the global ('g') flag before appending it when dynamically constructing a new RegExp from an existing one. Re-adding a global flag to a pattern that already includes it will trigger a runtime SyntaxError in JavaScript environments.
 
-## Lesson — Prefer specific substring assertions over snapshot testing
-
-**Tags:** testing, llm, prompt-engineering
-
-Prefer specific substring assertions over snapshot testing for LLM prompts to ensure tests remain expressive about required constraints. Snapshots are overly sensitive to minor wording tweaks and fail to explicitly document which functional rules are mandatory for the prompt's logic.
-
-## Lesson — Employ semantic constraints like "two short sentences"
-
-**Tags:** prompt-engineering, llm, formatting
-
-Employ semantic constraints like "two short sentences" instead of numeric character or word counts to guide LLM output length. Since LLMs cannot reliably count characters or tokens, semantic boundaries provide much higher adherence to formatting requirements.
-
-## Lesson — Always validate every match of a pattern in an input rather
-
-**Tags:** security, validation, regex
-
-Always validate every match of a pattern in an input rather than stopping after the first safe occurrence. This prevents "shadowing attacks" where a compliant match at the start of a string hides a malicious injection occurring later.
-
-## Lesson — Insert a space or delimiter when concatenating disjoint
-
-**Tags:** security, regex, string-manipulation
-
-Insert a space or delimiter when concatenating disjoint text windows for keyword analysis. This prevents characters at segment boundaries from accidentally forming a keyword that did not exist in the source text.
-
-## Lesson — When creating a global version of an existing RegExp, check
-
-**Tags:** javascript, regex, trap
-
-When creating a global version of an existing RegExp, check if the "g" flag is already present before appending it. Providing a duplicate global flag to the RegExp constructor will throw a TypeError if the source pattern is already global.
-
 ## Lesson — Identify larger or more specific text markers (like triple
 
 **Tags:** parsing, regex, string-manipulation
 
 Identify larger or more specific text markers (like triple backticks) before smaller ones (single backticks) during range collection. This allows subsequent passes to skip smaller markers that fall within already-claimed ranges, ensuring correct block isolation.
-
-## Lesson — Use os.tmpdir() to isolate integration tests for CLI tools
-
-**Tags:** testing, git, integration-tests
-
-Use `os.tmpdir()` to isolate integration tests for CLI tools that resolve Git roots or configuration. This prevents utilities from climbing out of the test environment and accidentally discovering the host repository's `.git` directory, which can lead to false positives.
 
 ## Lesson — Fixes to automated extraction logic, such as resolving
 
