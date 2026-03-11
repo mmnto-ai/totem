@@ -192,7 +192,7 @@ function matchesGlob(filePath: string, glob: string): boolean {
   }
   // dir/**/*.ext or dir/** — directory-prefixed recursive glob
   const dstarIdx = glob.indexOf('/**/');
-  if (dstarIdx !== -1) {
+  if (dstarIdx > 0) {
     const prefix = glob.slice(0, dstarIdx);
     const suffix = glob.slice(dstarIdx + 4); // after "/**/"
     if (!normalized.startsWith(prefix + '/')) return false;
