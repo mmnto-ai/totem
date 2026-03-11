@@ -17,6 +17,7 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 ### 2. The CLI (`@mmnto/cli`)
 
 - `totem init` / `totem eject`: Scaffolds or safely removes `totem.config.ts`, git hooks (which enforce memory classification, deterministic shield gating, and actively block direct commits to `main`), and AI memory reflexes. Git hook installation features robust package manager auto-detection (including **Bun support**) and safely handles non-bash environments before appending hook blocks.
+- `totem hooks`: Explicitly installs or updates git hooks (auto-installable via npm `prepare` scripts) and enforces dogfooding workflows. It is monorepo-aware, automatically walking up to the git root from sub-packages to ensure hooks are applied correctly at the repository level.
 - `totem sync`: Crawls target directories defined in `totem.config.ts`, chunks, embeds, and updates the LanceDB index.
 - `totem search`: Direct debug query interface.
 - `totem spec` / `totem shield` / `totem triage`: Standardized workflow orchestration commands (spec planning, pre-push review, issue prioritization). `totem shield` includes options like `--mode=structural` for context-blind architectural review, and `--learn` for optional lesson extraction directly from LLM verdicts.
@@ -39,7 +40,7 @@ Developers can further bypass specific false positives using **inline suppressio
 
 A composite GitHub Action (`action.yml`) that runs `totem shield --deterministic` as a pass/fail CI quality gate on pull requests. It uses compiled AST/regex rules from `.totem/compiled-rules.json` to physically block known architectural traps from merging.
 
-The CI pipeline also features a structural CI drift gate and an adversarial evaluation harness to perform structural integrity checks and mitigate model drift. Automated bot reviews can be configured to run on-demand or as auto-reviews within these workflows.
+The CI pipeline also features a structural CI drift gate and an adversarial evaluation harness to perform structural integrity checks and mitigate model drift. Automated bot reviews can be configured to run on-demand or as auto-reviews within these workflows. To prevent pipeline lockouts, the local pre-push shield gate is securely guarded against missing CLI installations in CI environments.
 
 Because it operates in `--deterministic` mode, the shield requires **zero LLM API calls**, eliminating statistical hallucinations in CI and maintaining a strict, air-gapped security posture for enterprise environments.
 
@@ -57,7 +58,7 @@ Totem supports three configuration tiers, auto-detected from the environment dur
 
 | Tier         | Requirements                               | Available Commands                                                                          |
 | ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| **Lite**     | Zero API keys                              | `init`, `add-lesson`, `bridge`, `eject`, `handoff --lite`                                   |
+| **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `bridge`, `eject`, `handoff --lite`                          |
 | **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`                                                            |
 | **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `shield`, `triage`, `briefing`, `handoff`, `extract`, `wrap`, `docs`) |
 
@@ -139,7 +140,7 @@ During `totem init`, users are offered an optional **Universal Baseline** — a 
 
 ## The `.strategy/` Submodule
 
-For secure collaboration, particularly in enterprise or distributed environments, proprietary project guidelines and sensitive AI orchestration instructions are managed in an isolated `.strategy/` directory. By maintaining `.strategy` as a private git submodule, teams ensure that confidential architectural playbooks and workflows remain strictly access-controlled, while the core codebase and universal baseline lessons remain independently distributable.
+For secure collaboration, particularly in enterprise or distributed environments, proprietary project guidelines and sensitive AI orchestration instructions are managed in an isolated `.strategy/` directory. By properly setting up and maintaining `.strategy` as a private git submodule (including actively managed submodule pointers), teams ensure that confidential architectural playbooks and workflows remain strictly access-controlled, while the core codebase and universal baseline lessons remain independently distributable.
 
 ## Phase 4 Vision: Federated Memory & Swarm Intelligence
 
