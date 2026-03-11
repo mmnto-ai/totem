@@ -1,5 +1,16 @@
 # @mmnto/cli
 
+## 0.26.0
+
+### Minor Changes
+
+- ac9f37e: Add `totem hooks` command for non-interactive hook installation with `--check` validation. Dogfood enforcement hooks in this repo: pre-commit blocks main/master, pre-push runs deterministic shield. Hooks auto-install on `pnpm install` via prepare script.
+
+### Patch Changes
+
+- 16849b4: fix: `totem hooks` now walks up to git root in monorepo sub-packages
+  - @mmnto/totem@0.26.0
+
 ## 0.25.0
 
 ### Minor Changes
