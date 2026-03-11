@@ -258,7 +258,8 @@ const DEFENSIVE_PROXIMITY_WINDOW = 100;
  * Collect all [start, end] ranges of code-fenced regions in the text.
  * Uses inline regexes via matchAll to avoid module-level global state mutation.
  */
-function collectCodeRanges(text: string): Array<[number, number]> { // totem-ignore
+// totem-ignore-next-line
+function collectCodeRanges(text: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
 
   // Fenced blocks first (higher priority — consume triple backticks before singles)
