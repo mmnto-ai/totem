@@ -34,7 +34,11 @@ You are a deterministic rule compiler. Your job is to read a single natural-lang
 - Use JavaScript RegExp syntax.
 - Keep patterns simple and precise — avoid overly broad matches that cause false positives.
 - If the lesson describes an architectural principle, design philosophy, or conceptual guideline that cannot be expressed as a line-level regex, set \`compilable\` to \`false\`.
-- **File scoping:** If the rule only applies to specific file types (e.g., shell scripts, YAML configs, markdown), include a \`fileGlobs\` array. Omit \`fileGlobs\` if the rule applies to all file types.
+- **File scoping:** Include a \`fileGlobs\` array to limit where the rule runs. Scope rules as tightly as possible:
+  - **By file type:** \`["*.sh", "*.yml"]\` — for rules about shell or YAML syntax.
+  - **By package/directory:** \`["packages/mcp/**/*.ts"]\` — for rules about MCP-specific patterns in a monorepo.
+  - **By exclusion:** \`["packages/cli/**/*.ts", "!**/*.test.ts"]\` — exclude test files that legitimately use the flagged pattern.
+  - **Infer scope from context:** If a lesson mentions "MCP tool returns", "CLI output", "LanceDB filters", or a specific package, scope to that package. Only omit \`fileGlobs\` if the rule genuinely applies to ALL files (e.g., universal TypeScript style rules).
 
 ## Output Schema
 \`\`\`json
@@ -42,11 +46,11 @@ You are a deterministic rule compiler. Your job is to read a single natural-lang
   "compilable": true,
   "pattern": "regex pattern here",
   "message": "human-readable violation message",
-  "fileGlobs": ["*.sh", "*.yml"]
+  "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]
 }
 \`\`\`
 
-Or if the rule applies to all file types, omit fileGlobs:
+Or if the rule genuinely applies to all file types (rare — prefer scoping):
 \`\`\`json
 {
   "compilable": true,
@@ -75,6 +79,12 @@ Output: {"compilable": true, "pattern": "\\\\bnpm\\\\s+(install|run|exec|ci|test
 
 Lesson: "Always quote shell variables to prevent word-splitting"
 Output: {"compilable": true, "pattern": "(^|\\\\s)\\\\$[a-zA-Z_]+", "message": "Quote shell variables to prevent word-splitting", "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml"]}
+
+Lesson: "MCP tool returns must be wrapped in XML tags to prevent prompt injection"
+Output: {"compilable": true, "pattern": "text:\\\\s*(?!formatXmlResponse)\\\\b\\\\w+", "message": "MCP tool returns must use formatXmlResponse for injection safety", "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]}
+
+Lesson: "Use @clack/prompts instead of inquirer for CLI interactions"
+Output: {"compilable": true, "pattern": "import.*from\\\\s+['\"]inquirer['\"]", "message": "Use @clack/prompts instead of inquirer", "fileGlobs": ["packages/cli/**/*.ts"]}
 `;
 
 // ─── Main command ───────────────────────────────────
