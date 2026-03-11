@@ -7,8 +7,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   buildPreCommitHook,
   buildPrePushHook,
+  checkHooksInstalled,
   detectTotemPrefix,
   installGitHook,
+  installHooksNonInteractive,
   TOTEM_PRECOMMIT_MARKER,
   TOTEM_PREPUSH_MARKER,
 } from './install-hooks.js';
@@ -333,5 +335,118 @@ describe('installGitHook', () => {
     expect(preCommit).not.toContain(TOTEM_PREPUSH_MARKER);
     expect(prePush).toContain(TOTEM_PREPUSH_MARKER);
     expect(prePush).not.toContain(TOTEM_PRECOMMIT_MARKER);
+  });
+});
+
+// ─── installHooksNonInteractive ─────────────────────
+
+describe('installHooksNonInteractive', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hooks-ni-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns null when not a git repo', () => {
+    const result = installHooksNonInteractive(tmpDir);
+    expect(result).toBeNull();
+  });
+
+  it('installs all three hooks in a git repo', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+
+    const result = installHooksNonInteractive(tmpDir);
+
+    expect(result).not.toBeNull();
+    expect(result!.preCommit).toBe('installed');
+    expect(result!.prePush).toBe('installed');
+    expect(result!.postMerge).toBe('installed');
+
+    // Verify files exist
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    expect(fs.existsSync(path.join(hooksDir, 'pre-commit'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'pre-push'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'post-merge'))).toBe(true);
+  });
+
+  it('is idempotent — second call returns exists for all hooks', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+
+    installHooksNonInteractive(tmpDir);
+    const result = installHooksNonInteractive(tmpDir);
+
+    expect(result).not.toBeNull();
+    expect(result!.preCommit).toBe('exists');
+    expect(result!.prePush).toBe('exists');
+    expect(result!.postMerge).toBe('exists');
+  });
+
+  it('returns null when hook manager is detected', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, '.husky'), { recursive: true });
+
+    const result = installHooksNonInteractive(tmpDir);
+    expect(result).toBeNull();
+  });
+
+  it('appends to existing hooks without clobbering', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git', 'hooks'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+    fs.writeFileSync(path.join(tmpDir, '.git', 'hooks', 'pre-push'), '#!/bin/sh\nrun_my_tests\n');
+
+    const result = installHooksNonInteractive(tmpDir);
+
+    expect(result!.prePush).toBe('appended');
+    const content = fs.readFileSync(path.join(tmpDir, '.git', 'hooks', 'pre-push'), 'utf-8');
+    expect(content).toContain('run_my_tests');
+    expect(content).toContain(TOTEM_PREPUSH_MARKER);
+  });
+});
+
+// ─── checkHooksInstalled ────────────────────────────
+
+describe('checkHooksInstalled', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hooks-check-'));
+    fs.mkdirSync(path.join(tmpDir, '.git'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns false when no hooks are installed', () => {
+    expect(checkHooksInstalled(tmpDir)).toBe(false);
+  });
+
+  it('returns true when all hooks are installed', () => {
+    installHooksNonInteractive(tmpDir);
+    expect(checkHooksInstalled(tmpDir)).toBe(true);
+  });
+
+  it('returns false when only some hooks are installed', () => {
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    installGitHook(hooksDir, 'pre-commit', buildPreCommitHook(), TOTEM_PRECOMMIT_MARKER);
+    // Missing pre-push and post-merge
+    expect(checkHooksInstalled(tmpDir)).toBe(false);
+  });
+
+  it('returns false when hook file exists but missing marker', () => {
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, 'pre-commit'), '#!/bin/sh\necho "no marker"\n');
+    fs.writeFileSync(path.join(hooksDir, 'pre-push'), '#!/bin/sh\necho "no marker"\n');
+    fs.writeFileSync(path.join(hooksDir, 'post-merge'), '#!/bin/sh\necho "no marker"\n');
+    expect(checkHooksInstalled(tmpDir)).toBe(false);
   });
 });

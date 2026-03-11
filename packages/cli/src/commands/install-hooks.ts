@@ -328,3 +328,138 @@ export async function installHooksCommand(): Promise<void> {
     rl.close();
   }
 }
+
+// ─── Non-interactive hooks command ───────────────────
+
+export interface HooksCommandResult {
+  preCommit: 'installed' | 'exists' | 'appended' | 'skipped-non-shell';
+  prePush: 'installed' | 'exists' | 'appended' | 'skipped-non-shell';
+  postMerge: 'installed' | 'exists' | 'appended' | 'skipped-non-shell';
+}
+
+/**
+ * Non-interactive hook installer for `totem hooks` and `prepare` scripts.
+ * Installs pre-commit, pre-push, and post-merge hooks without prompting.
+ */
+export function installHooksNonInteractive(cwd: string): HooksCommandResult | null {
+  // Guard: must be a git repo
+  if (!fs.existsSync(path.join(cwd, '.git'))) {
+    return null;
+  }
+
+  // Hook managers handle their own installation — print guidance only
+  const manager = detectHookManager(cwd);
+  if (manager) {
+    const syncCmd = detectSyncCommand(cwd);
+    const shieldCmd = `${detectTotemPrefix(cwd)} shield --deterministic`;
+    printHookManagerGuidance(manager, syncCmd, shieldCmd);
+    return null;
+  }
+
+  const hooksDir = path.join(cwd, '.git', 'hooks');
+  const prefix = detectTotemPrefix(cwd);
+  const shieldCmd = `${prefix} shield --deterministic`;
+  const syncCmd = detectSyncCommand(cwd);
+
+  const preCommit = installGitHook(
+    hooksDir,
+    'pre-commit',
+    buildPreCommitHook(),
+    TOTEM_PRECOMMIT_MARKER,
+  );
+
+  const prePush = installGitHook(
+    hooksDir,
+    'pre-push',
+    buildPrePushHook(shieldCmd),
+    TOTEM_PREPUSH_MARKER,
+  );
+
+  const postMergeContent = buildHookContent(syncCmd);
+  const postMerge = installGitHook(hooksDir, 'post-merge', postMergeContent, TOTEM_HOOK_MARKER);
+
+  return { preCommit, prePush, postMerge };
+}
+
+/**
+ * Check that all Totem hooks are installed. Returns true if all present.
+ */
+export function checkHooksInstalled(cwd: string): boolean {
+  const hooksDir = path.join(cwd, '.git', 'hooks');
+
+  const markers = [
+    { file: 'pre-commit', marker: TOTEM_PRECOMMIT_MARKER },
+    { file: 'pre-push', marker: TOTEM_PREPUSH_MARKER },
+    { file: 'post-merge', marker: TOTEM_HOOK_MARKER },
+  ];
+
+  let allPresent = true;
+  for (const { file, marker } of markers) {
+    const hookPath = path.join(hooksDir, file);
+    if (!fs.existsSync(hookPath)) {
+      console.error(`[Totem] Missing hook: ${file}`);
+      allPresent = false;
+      continue;
+    }
+    const content = fs.readFileSync(hookPath, 'utf-8');
+    if (!content.includes(marker)) {
+      console.error(`[Totem] Hook ${file} exists but missing Totem marker`);
+      allPresent = false;
+    }
+  }
+
+  return allPresent;
+}
+
+/**
+ * CLI entrypoint for `totem hooks [--check]`.
+ */
+export function hooksCommand(opts: { check?: boolean }): void {
+  const cwd = process.cwd();
+
+  if (opts.check) {
+    const ok = checkHooksInstalled(cwd);
+    if (ok) {
+      console.log('[Totem] All hooks installed.');
+    } else {
+      console.error('[Totem] Some hooks are missing. Run `totem hooks` to install.');
+      process.exit(1);
+    }
+    return;
+  }
+
+  const result = installHooksNonInteractive(cwd);
+
+  if (!result) {
+    if (!fs.existsSync(path.join(cwd, '.git'))) {
+      console.log('[Totem] Not a git repository — skipping hook installation.');
+    }
+    // Hook manager detected — guidance already printed by installHooksNonInteractive
+    return;
+  }
+
+  const actions = [
+    { name: 'pre-commit', status: result.preCommit },
+    { name: 'pre-push', status: result.prePush },
+    { name: 'post-merge', status: result.postMerge },
+  ];
+
+  for (const { name, status } of actions) {
+    switch (status) {
+      case 'installed':
+        console.log(`[Totem] Installed ${name} hook.`);
+        break;
+      case 'appended':
+        console.log(`[Totem] Appended Totem to existing ${name} hook.`);
+        break;
+      case 'exists':
+        console.log(`[Totem] ${name} hook already installed.`);
+        break;
+      case 'skipped-non-shell':
+        console.error(
+          `[Totem] Warning: ${name} hook uses a non-shell interpreter. Integrate manually.`,
+        );
+        break;
+    }
+  }
+}

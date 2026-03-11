@@ -1,5 +1,5 @@
 #!/bin/sh
-# Pre-push hook — runs format check, lint, and tests before pushing.
+# [totem] pre-push hook — runs format check, lint, tests, and deterministic shield.
 
 echo "[totem] Running pre-push checks..."
 
@@ -25,3 +25,15 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "[totem] ✅ All pre-push checks passed."
+
+# Deterministic shield gate — only runs when compiled rules exist.
+if [ -f ".totem/compiled-rules.json" ]; then
+  echo "[totem] Running deterministic shield..."
+  pnpm exec totem shield --deterministic
+  if [ $? -ne 0 ]; then
+    echo "[totem] ❌ Deterministic shield found violations. Fix before pushing."
+    echo "[totem] Override with: git push --no-verify"
+    exit 1
+  fi
+  echo "[totem] ✅ Deterministic shield passed."
+fi

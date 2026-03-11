@@ -360,8 +360,21 @@ program
   });
 
 program
+  .command('hooks')
+  .description('Install git hooks (pre-commit, pre-push, post-merge) non-interactively')
+  .option('--check', 'Verify hooks are installed (exit 1 if missing)')
+  .action(async (opts: { check?: boolean }) => {
+    try {
+      const { hooksCommand } = await import('./commands/install-hooks.js');
+      hooksCommand(opts);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('install-hooks')
-  .description('Install post-merge git hook for automatic Totem sync')
+  .description('Install git hooks interactively (legacy — prefer `totem hooks`)')
   .action(async () => {
     try {
       const { installHooksCommand } = await import('./commands/install-hooks.js');

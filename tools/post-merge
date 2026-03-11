@@ -1,5 +1,5 @@
 #!/bin/sh
-# Post-merge hook — re-indexes Totem in the background after pull/merge.
+# [totem] post-merge hook — re-indexes Totem in the background after pull/merge.
 
 echo "[totem] Triggering background re-index..."
 

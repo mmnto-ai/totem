@@ -1,0 +1,11 @@
+#!/bin/sh
+# [totem] pre-commit hook — block direct commits to protected branches.
+# Override with: git commit --no-verify
+
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
+  echo "[totem] ERROR: Direct commits to '$branch' are blocked."
+  echo "[totem] Create a feature branch: git checkout -b feat/my-feature"
+  echo "[totem] Override with: git commit --no-verify"
+  exit 1
+fi

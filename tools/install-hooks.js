@@ -12,7 +12,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 const hooksDir = join(rootDir, '.git', 'hooks');
 
-const hooks = ['pre-push', 'post-merge'];
+const hooks = ['pre-commit', 'pre-push', 'post-merge'];
 
 if (!existsSync(join(rootDir, '.git'))) {
   console.log('[totem] Not a git repository — skipping hook installation.');
