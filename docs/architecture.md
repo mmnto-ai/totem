@@ -11,12 +11,12 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 - **Engine:** LanceDB (embedded, in-process Node.js).
 - **Storage:** Creates a `.lancedb/` folder in the consumer's root. This folder is gitignored and treated as a replaceable build artifact.
 - **Embeddings:** Supports OpenAI (`text-embedding-3-small`) by default, with Ollama (`nomic-embed-text`) as an offline fallback.
-- **Chunking:** Syntax-aware chunking (Tree-sitter for universal AST parsing of code, heading hierarchy for Markdown, hierarchical breadcrumbs for session logs). No blind character splitting.
+- **Chunking & Ingestion:** Syntax-aware chunking (Tree-sitter for universal AST parsing of code, heading hierarchy for Markdown, hierarchical breadcrumbs for session logs). No blind character splitting. The ingestion pipeline features **adversarial content scrubbing** to bulletproof the system against malicious or malformed payloads.
 - **Drift Detection:** Self-cleaning sync engine that purges orphaned vectors when source files are deleted or renamed, keeping the index in sync with the physical codebase. It is reinforced by strict path containment checks to prevent directory traversal and unauthorized access out-of-bounds.
 
 ### 2. The CLI (`@mmnto/cli`)
 
-- `totem init` / `totem eject`: Scaffolds or safely removes `totem.config.ts`, git hooks (which enforce memory classification, deterministic shield gating, and actively block direct commits to `main`), and AI memory reflexes.
+- `totem init` / `totem eject`: Scaffolds or safely removes `totem.config.ts`, git hooks (which enforce memory classification, deterministic shield gating, and actively block direct commits to `main`), and AI memory reflexes. Git hook installation features robust package manager auto-detection (including **Bun support**) and safely handles non-bash environments before appending hook blocks.
 - `totem sync`: Crawls target directories defined in `totem.config.ts`, chunks, embeds, and updates the LanceDB index.
 - `totem search`: Direct debug query interface.
 - `totem spec` / `totem shield` / `totem triage`: Standardized workflow orchestration commands (spec planning, pre-push review, issue prioritization). `totem shield` includes options like `--mode=structural` for context-blind architectural review, and `--learn` for optional lesson extraction directly from LLM verdicts.
@@ -65,7 +65,7 @@ The `embedding` field in `totem.config.ts` is optional. When omitted, Totem oper
 
 ## Orchestrator Providers
 
-The CLI orchestrator supports multiple provider types via a discriminated union config (`provider` field). SDKs for native API providers are **optional peer dependencies** — loaded via dynamic `import()` at runtime with friendly install prompts (featuring package manager auto-detection) if missing (BYOSD: "Bring Your Own SDK").
+The CLI orchestrator supports multiple provider types via a discriminated union config (`provider` field). SDKs for native API providers are **optional peer dependencies** — loaded via dynamic `import()` at runtime with friendly install prompts (featuring package manager auto-detection) if missing (BYOSD: "Bring Your Own SDK"). Default model IDs across all providers are regularly audited and updated. A dedicated supported models reference document is available to track compatibility.
 
 ### Shell Provider (default)
 

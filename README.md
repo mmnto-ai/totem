@@ -42,8 +42,8 @@ This is a Turborepo monorepo consisting of:
 ## Security & Privacy
 
 - **100% Local Privacy:** Totem's vector database (`.lancedb/`) lives entirely within your local repository. Your codebase is never uploaded to a centralized SaaS platform or external memory service.
-- **Injection & ReDoS Hardening:** Totem actively sanitizes untrusted inputs (applying strict SECURITY NOTICES to PR comments during `totem extract` #279, #289), enforces path containment checks in drift detection (#284), neutralizes ANSI terminal injection in Git outputs (#292), applies **ReDoS protection to compiled regex rules** (#218), actively detects and blocks suspicious lessons even in bypass modes (#290, #291, #299), and **XML-delimits MCP responses** (#149) to mitigate indirect prompt injection and terminal injection attacks. Safety rules and explicit consent models have also been formalized for specific providers like Gemini (#309, #311).
-- **Continuous Auditing:** The repository utilizes Dependabot for automated security vulnerability scanning (#267, #272) to ensure dependencies remain secure. Internal strategies and sensitive planning are isolated in a private submodule for secure collaboration (#300).
+- **Injection & ReDoS Hardening:** Totem actively sanitizes untrusted inputs (applying strict SECURITY NOTICES to PR comments during `totem extract` #279, #289), enforces path containment checks in drift detection (#284), neutralizes ANSI terminal injection in Git outputs (#292), applies **ReDoS protection to compiled regex rules** (#218), implements **adversarial content scrubbing in the ingestion pipeline** (#315, #323), actively detects and blocks suspicious lessons even in bypass modes (#290, #291, #299), and **XML-delimits MCP responses** (#149) to mitigate indirect prompt injection and terminal injection attacks. Safety rules and explicit consent models have also been formalized for specific providers like Gemini (#309, #311).
+- **Continuous Auditing:** The repository utilizes Dependabot for automated security vulnerability scanning (#267, #272) to ensure dependencies remain secure. Internal strategies and sensitive planning are isolated in a properly configured private submodule for secure collaboration (#300, #321).
 
 ## Prerequisites
 
@@ -63,11 +63,11 @@ Run this inside your consuming project (e.g., your Next.js or Node app):
 npx @mmnto/cli init
 ```
 
-This will auto-detect your project structure and package manager (#236), generate a `totem.config.ts` using **Minimum Viable Configuration (MVC) tiers** (#187), install automated background git hooks, and inject the Proactive Memory Reflexes into your AI's system prompt.
+This will auto-detect your project structure and package manager (including Bun #316, #323), generate a `totem.config.ts` using **Minimum Viable Configuration (MVC) tiers** (#187), install automated background git hooks, and inject the Proactive Memory Reflexes into your AI's system prompt.
 
 **Universal Baseline:** During init, Totem offers to install a curated set of foundational AI developer lessons (#128) (prompt injection prevention, hallucination traps, dependency verification, etc.) so your agents have useful knowledge from Day 1.
 
-**Seamless Host Integration:** If you are using Claude Code or Gemini CLI, `totem init` will automatically wire up agent hooks (including native `SessionStart` hooks #95) to run `totem briefing` and intercept `git commit`/`push` to run `totem shield` automatically, incorporating **git hook enforcement** that can block direct commits to `main` and execute deterministic shield gates (#310, #318).
+**Seamless Host Integration:** If you are using Claude Code or Gemini CLI, `totem init` will automatically wire up agent hooks (including native `SessionStart` hooks #95) to run `totem briefing` and intercept `git commit`/`push` to run `totem shield` automatically, incorporating **git hook enforcement** (safely detecting non-bash hooks before appending #317) that can block direct commits to `main` and execute deterministic shield gates (#310, #318).
 
 ### 2. Configure your Embedding Provider
 
@@ -173,6 +173,8 @@ orchestrator: {
 }
 ```
 
+Totem continuously audits default model IDs across all providers (#324). For a complete list of verified models and configuration routing strings, consult the supported models reference document (#325, #327).
+
 **Workflow Commands:**
 
 - **`briefing`**: Fetches your current git branch, uncommitted changes, open PRs, and recent session momentum to generate a startup briefing.
@@ -248,7 +250,7 @@ Then remove the `-y` flag from your MCP config — `npx` will use the locally in
 Totem is evolving from a memory database into a full Shift-Left orchestrator.
 
 - [x] **Foundations & Phase 1 (Onboarding):** Local vector DB, MCP interface, MVC Configuration Tiers (#187), "Universal Lessons" baseline (#128), and cross-platform docs (#210).
-- [x] **Phase 2 (Core Stability):** Tree-sitter Universal AST Parsing (#173), Shield GitHub Action (#180), Automated Doc Sync with XML sentinels, individual document targeting, and stability/hallucination fixes (#190, #206, #224, #228, #238, #241, #249, #250), Drift Detection for self-cleaning memory (#177, #211), Deterministic Lesson Compiler / Zero-LLM Shield (#213, #216) backed by regex ReDoS protection (#218) and Tree-sitter AST gating (#287), false-positive mitigation (#251), inline suppression directives (#255), structural context-blind review (#270), cross-model lesson export targets including GitHub Copilot (#264, #269, #294), selective lesson acceptance (#265), Native API Orchestrators for Gemini, Anthropic, and generic OpenAI/Ollama providers (#229, #285, #293), native Ollama orchestrator with dynamic context length (#298, #306) with BYOSD package manager auto-detection (#236), centralized orchestrator resolution (#248), cross-provider routing with negated glob support (#243, #246), Provider Conformance test suites (#244, #263), OpenAI embedding validation (#4), zero-LLM handoff snapshots with ANSI sanitization (#281, #288, #292), extract prompt security hardening (#279, #289) and suspicious lesson detection with `--yes` bypass blocking (#290, #291, #299, #302), concise lesson extraction headings (#271, #278), CI drift gating with adversarial evaluation harnesses (#214, #280), `shield --learn` for optional lesson extraction from LLM verdicts (#303, #307), secure collaboration via `.strategy` private submodule migration (#300), explicit consent and safety rules for Gemini (#309, #311), and git hook enforcement with deterministic shield gates blocking main commits (#310, #318).
+- [x] **Phase 2 (Core Stability):** Tree-sitter Universal AST Parsing (#173), Shield GitHub Action (#180), Automated Doc Sync with XML sentinels, individual document targeting, and stability/hallucination fixes (#190, #206, #224, #228, #238, #241, #249, #250), Drift Detection for self-cleaning memory (#177, #211), Deterministic Lesson Compiler / Zero-LLM Shield (#213, #216) backed by regex ReDoS protection (#218) and Tree-sitter AST gating (#287), false-positive mitigation (#251), inline suppression directives (#255), structural context-blind review (#270), cross-model lesson export targets including GitHub Copilot (#264, #269, #294), selective lesson acceptance (#265), Native API Orchestrators for Gemini, Anthropic, and generic OpenAI/Ollama providers (#229, #285, #293), native Ollama orchestrator with dynamic context length (#298, #306) with BYOSD package manager auto-detection (#236), centralized orchestrator resolution (#248), cross-provider routing with negated glob support (#243, #246), Provider Conformance test suites (#244, #263), OpenAI embedding validation (#4), zero-LLM handoff snapshots with ANSI sanitization (#281, #288, #292), extract prompt security hardening (#279, #289) and suspicious lesson detection with `--yes` bypass blocking (#290, #291, #299, #302), concise lesson extraction headings (#271, #278), CI drift gating with adversarial evaluation harnesses (#214, #280), `shield --learn` for optional lesson extraction from LLM verdicts (#303, #307), secure collaboration via `.strategy` private submodule migration and setup (#300, #321), explicit consent and safety rules for Gemini (#309, #311), git hook enforcement with deterministic shield gates blocking main commits and non-bash hook detection (#310, #317, #318), Bun support (#316, #323), adversarial content scrubbing in the ingestion pipeline (#315, #323), and default model ID audits mapped to a supported models reference doc (#324, #325, #327).
 - [x] **Validation:** Internal dogfooding (#8) across multiple real-world repositories.
 - [ ] **Phase 3 (Workflow Expansion):** Interactive CLI tutorials (#129), Custom Workflow Runner (#119), Agent-Optimized MCP (#176), and Cross-File Knowledge Graph (#183).
 
@@ -256,7 +258,7 @@ For a deeper dive into the system design, see `docs/architecture.md`.
 
 ## Contributing
 
-We welcome community contributions! Please review our `CONTRIBUTING.md` guidelines. Note that all external contributions require signing our automated Contributor License Agreement (CLA) (#258, #266), and internal strategy discussions have been migrated to a private submodule for secure collaboration (#300).
+We welcome community contributions! Please review our `CONTRIBUTING.md` guidelines. Note that all external contributions require signing our automated Contributor License Agreement (CLA) (#258, #266), and internal strategy discussions have been migrated to a properly configured private submodule for secure collaboration (#300, #321).
 
 ## License
 
