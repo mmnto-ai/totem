@@ -104,5 +104,13 @@ export {
 
 // Utilities
 export { generateLessonHeading, HEADING_MAX_CHARS, truncateHeading } from './lesson-format.js';
-export { sanitize } from './sanitize.js';
+export {
+  BASE64_BLOB_RE,
+  INSTRUCTIONAL_LEAKAGE_RE,
+  sanitize,
+  sanitizeForIngestion,
+  UNICODE_ESCAPE_RE,
+  XML_TAG_LEAKAGE_RE,
+} from './sanitize.js';
+export type { IngestionSanitizeOptions } from './sanitize.js';
 export { wrapXml } from './xml-format.js';

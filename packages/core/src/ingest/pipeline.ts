@@ -5,6 +5,7 @@ import { createChunker } from '../chunkers/chunker.js';
 import type { TotemConfig } from '../config-schema.js';
 import { requireEmbedding } from '../config-schema.js';
 import { createEmbedder } from '../embedders/embedder.js';
+import { sanitizeForIngestion } from '../sanitize.js';
 import { LanceStore } from '../store/lance-store.js';
 import type { Chunk, SyncOptions, SyncState } from '../types.js';
 import type { ResolvedFile } from './file-resolver.js';
@@ -165,6 +166,28 @@ export async function runSync(
     // For incremental: delete old chunks for this file before inserting new ones
     if (incremental) {
       await store.deleteByFile(file.relativePath);
+    }
+
+    // Sanitize chunk content before embedding (adversarial ingestion scrubbing)
+    // Deduplicate warnings per file to avoid log spam on files with widespread issues
+    const warnedMessages = new Set<string>();
+    const dedupeWarn = (msg: string) => {
+      if (!warnedMessages.has(msg)) {
+        warnedMessages.add(msg);
+        log(msg);
+      }
+    };
+    for (const chunk of chunks) {
+      chunk.content = sanitizeForIngestion(chunk.content, {
+        chunkType: chunk.type,
+        filePath: file.relativePath,
+        onWarn: dedupeWarn,
+      });
+      chunk.contextPrefix = sanitizeForIngestion(chunk.contextPrefix, {
+        chunkType: chunk.type,
+        filePath: file.relativePath,
+        onWarn: dedupeWarn,
+      });
     }
 
     buffer.push(...chunks);
