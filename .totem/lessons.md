@@ -1202,3 +1202,45 @@ Always resolve the git repository root via "git rev-parse --show-toplevel" inste
 **Tags:** windows, security, git
 
 Using "shell: true" in execFileSync is often required on Windows to resolve the git binary correctly across different environments. While this presents a theoretical binary hijacking risk, the pattern is often acceptable if the threat model already assumes an attacker with local file system access.
+
+## Lesson — LLMs are notoriously poor at character counting; use
+
+**Tags:** prompting, llm, formatting
+
+LLMs are notoriously poor at character counting; use semantic constraints like "one to two short sentences" rather than numeric character limits to ensure reliable adherence to length requirements.
+
+## Lesson — Use granular assertions rather than snapshots for testing
+
+**Tags:** testing, llm, prompt-engineering
+
+Use granular assertions rather than snapshots for testing system prompts to verify specific functional constraints while preventing tests from breaking on minor, non-functional prose changes.
+
+## Lesson — Inserting new formatting rules can inadvertently sever
+
+**Tags:** prompting, llm, automated-testing
+
+Inserting new formatting rules can inadvertently sever example blocks or break the logical structure of a system prompt; implement tests that verify the presence of key sections to catch these regressions.
+
+## Lesson — Always iterate through all regex matches (e.g., via
+
+**Tags:** security, regex, validation
+
+Always iterate through all regex matches (e.g., via `matchAll`) when performing security validations rather than just checking the first. Relying on the first match allows "shadowing" where an attacker prefixes a payload with a safe match to hide a malicious one later in the same text.
+
+## Lesson — Include a space or delimiter when concatenating disjoint
+
+**Tags:** regex, security, text-processing
+
+Include a space or delimiter when concatenating disjoint text fragments for context analysis. This prevents "keyword synthesis," where separate text segments accidentally form a protected keyword and bypass security filters.
+
+## Lesson — Check for the presence of the 'g' flag before appending it
+
+**Tags:** javascript, regex, typescript
+
+Check for the presence of the 'g' flag before appending it when dynamically constructing a new RegExp from an existing one. Re-adding a global flag to a pattern that already includes it will cause a runtime SyntaxError.
+
+## Lesson — Favor semantically clear naming like
+
+**Tags:** clean-code, design-decision
+
+Favor semantically clear naming like `!isInstructionalContext()` over specialized alternatives even if they introduce redundant checks. In non-critical paths, logical clarity and code maintainability are more valuable than the negligible performance gain of micro-optimizing a simple regex test.
