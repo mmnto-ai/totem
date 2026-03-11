@@ -19,30 +19,38 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 
 ### 2. The CLI (`@mmnto/cli`)
 
-- `totem init` / `totem eject`: Scaffolds or safely removes `totem.config.ts`, git hooks, and AI memory reflexes. Package manager auto-detection gracefully handles Bun and non-bash environments.
-- `totem hooks`: Explicitly installs or updates git hooks and is auto-installable via npm `prepare` scripts. It is monorepo-aware, automatically walking up to the git root from sub-packages.
-- `totem sync`: Crawls target directories defined in `totem.config.ts`, chunks, embeds, and updates the LanceDB index.
-- `totem search`: Direct debug query interface.
-- `totem spec` / `totem shield` / `totem triage`: Standardized workflow orchestration commands. `totem shield` includes `--mode=structural` for context-blind architectural review and `--learn` for lesson extraction.
-- `totem briefing` / `totem handoff`: Session start/end context snapshots. `totem handoff` supports a `--lite` flag for zero-LLM state capture, featuring robust ANSI output sanitization against terminal injection.
-- `totem extract`:
-  - Batch lesson extraction from PR reviews with interactive multi-select curation via the `--pick` flag.
-  - **Formatting:** Generated lessons use concise, highly descriptive, content-derived headings.
-  - **Security:** Context-aware heuristics minimize false positives in suspicious lesson detection and actively block bad rules (#344).
-  - **Protection:** Strict XML tagging and explicit system prompt notices guard against prompt injection from untrusted PR comments.
-- `totem add-lesson`: Inline lesson capture (also exposed as MCP tool `add_lesson`).
-- `totem compile`: Translates natural-language lessons into deterministic regex rules at compile-time. Supports an `--export` flag for cross-model lesson targets (like GitHub Copilot instructions).
-- `totem docs`:
-  - Automated per-document LLM passes to keep project documentation in sync with the codebase.
-  - **Precision:** Targets individual documents via explicit path arguments and XML sentinel safeguards.
-  - **Formatting:** Enforces strict sub-bullet thresholds and line-length limits during generation (#342).
-- `totem bridge` / `totem wrap`: Mid-session context resets and end-of-task workflow automation.
+- **Setup & Infrastructure:**
+  - `totem init` / `totem eject`: Scaffolds or safely removes config, hooks, and memory. Package manager auto-detection gracefully handles Bun and non-bash environments.
+  - `totem hooks`: Installs or updates git hooks and supports npm `prepare` auto-install. It is monorepo-aware, automatically walking up to the git root from sub-packages.
+- **Data & Context Management:**
+  - `totem sync`: Crawls target directories defined in `totem.config.ts`, chunks, embeds, and updates the LanceDB index.
+  - `totem search`: Direct debug query interface.
+  - `totem briefing` / `totem handoff`: Session start/end context snapshots. The `handoff --lite` flag enables zero-LLM state capture with robust ANSI output sanitization.
+  - `totem bridge` / `totem wrap`: Mid-session context resets and end-of-task workflow automation.
+- **Workflow & Evaluation:**
+  - `totem spec` / `totem triage`: Standardized workflow orchestration commands.
+  - `totem shield`: Includes `--mode=structural` for context-blind architectural review and `--learn` for lesson extraction.
+  - `totem docs`:
+    - Automated per-document LLM passes to keep project documentation in sync with the codebase.
+    - **Precision:** Targets individual documents via explicit path arguments and XML sentinel safeguards.
+    - **Formatting:** Enforces strict sub-bullet thresholds and line-length limits during generation.
+    - **Transactional Safety:** Employs a Saga validator for checkpoints and rollbacks, preventing partial or corrupted updates (#356).
+- **Lesson Extraction & Compilation:**
+  - `totem add-lesson`: Inline lesson capture (also exposed as MCP tool `add_lesson`).
+  - `totem extract`:
+    - Batch lesson extraction from PR reviews with interactive multi-select curation via `--pick`.
+    - **Formatting:** Generated lessons use concise, highly descriptive, content-derived headings.
+    - **Security:** Context-aware heuristics minimize false positives in suspicious lesson detection and actively block bad rules.
+    - **Protection:** Strict XML tagging and explicit system prompt notices guard against prompt injection from untrusted PR comments.
+  - `totem compile`:
+    - Translates natural-language lessons into deterministic regex rules at compile-time.
+    - Supports an `--export` flag for cross-model lesson targets (like GitHub Copilot instructions).
 
 ### 3. Deterministic Compiler & Zero-LLM Shield
 
 `totem compile` reads `.totem/lessons.md` and translates each lesson into a regex rule (or marks it as non-compilable). Rules are stored in `.totem/compiled-rules.json` and validated at compile-time with syntax checking and ReDoS static analysis (`safe-regex2`). The compilation process is context-aware, leveraging Tree-sitter AST gating to prevent false positives within string literals.
 
-Developers can bypass false positives using inline suppression directives (`totem-ignore` / `totem-ignore-next-line`) or negated patterns in `fileGlobs` (e.g., `!*.test.ts`). Vulnerable patterns (nested quantifiers, star height > 1) are rejected and left to be handled by the standard LLM-based shield.
+Developers can bypass false positives using inline suppression directives (`totem-ignore` / `totem-ignore-next-line`) or negated patterns in `fileGlobs` (e.g., `!*.test.ts`). Rules are strictly scoped using anchored glob matching to ensure precision (#357). Vulnerable patterns (nested quantifiers, star height > 1) are rejected and left to be handled by the standard LLM-based shield.
 
 `totem shield --deterministic` applies these compiled rules against `git diff` additions with zero LLM calls. This is used for local git hook enforcement (blocking pre-commit/pre-push violations) and CI quality gating, eliminating API key dependency and quota exhaustion.
 
@@ -72,7 +80,7 @@ Totem supports three configuration tiers, auto-detected from the environment dur
 | **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`                                                            |
 | **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `shield`, `triage`, `briefing`, `handoff`, `extract`, `wrap`, `docs`) |
 
-The `embedding` field in `totem.config.ts` is optional. When omitted, Totem operates in Lite tier. The `getConfigTier()` helper and `requireEmbedding()` guard enforce these boundaries at runtime with clear upgrade instructions.
+The `embedding` field in `totem.config.ts` is optional; when omitted, Totem operates in the Lite tier. The `getConfigTier()` helper and `requireEmbedding()` guard enforce these boundaries at runtime with clear upgrade instructions.
 
 ## Orchestrator Providers
 
@@ -154,7 +162,7 @@ During `totem init`, users are offered an optional **Universal Baseline** — a 
 
 ## The `.strategy/` Submodule
 
-For secure collaboration in enterprise environments, proprietary project guidelines and sensitive orchestration instructions are isolated in a `.strategy/` directory. By managing `.strategy` as a private git submodule, teams ensure confidential workflows remain strictly access-controlled while the core codebase remains distributable.
+For secure collaboration in enterprise environments, proprietary project guidelines, markdown research documents (#350), and sensitive orchestration instructions are isolated in a `.strategy/` directory. By managing `.strategy` as a private git submodule, teams ensure confidential workflows remain strictly access-controlled while the core codebase remains distributable.
 
 ## Phase 4 Vision: Federated Memory & Swarm Intelligence
 

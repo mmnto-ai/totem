@@ -43,11 +43,11 @@ This is a Turborepo monorepo consisting of:
 
 - **100% Local Privacy:** Totem's vector database (`.lancedb/`) lives entirely within your local repository. Your codebase is never uploaded to a centralized SaaS platform or external memory service.
 - **Injection & ReDoS Hardening:** Totem actively sanitizes untrusted inputs and neutralizes terminal injection attacks.
-  - **Prompt Security:** Applies SECURITY NOTICES to PR comments during extraction and XML-delimits MCP responses to mitigate indirect prompt injection (#149, #279).
+  - **Prompt Security:** Applies SECURITY NOTICES to PR comments during extraction and XML-delimits MCP responses to mitigate indirect prompt injection (#279, #289).
   - **Adversarial Defense:** Implements adversarial content scrubbing in the ingestion pipeline and neutralizes ANSI terminal injection in Git outputs (#292, #315).
-  - **Lesson Sandboxing:** Actively detects and blocks suspicious lessons even in bypass modes, minimizing false positives while applying ReDoS protection to compiled rules (#218, #326).
+  - **Lesson Sandboxing:** Actively detects and blocks suspicious lessons even in bypass modes, minimizing false positives while applying ReDoS protection to compiled rules (#302, #326).
   - **System Integrity:** Enforces path containment checks in drift detection and formalizes explicit consent models for specific providers (#284, #311).
-- **Continuous Auditing:** The repository utilizes Dependabot for automated security vulnerability scanning to ensure dependencies remain secure (#267). Internal strategies and sensitive planning are isolated in a properly configured private submodule for secure collaboration (#300).
+- **Continuous Auditing:** The repository utilizes Dependabot for automated security vulnerability scanning to ensure dependencies remain secure (#267). Internal strategies and sensitive planning are isolated in a properly configured private markdown-formatted submodule for secure collaboration (#300, #350).
 
 ## Prerequisites
 
@@ -190,16 +190,18 @@ Totem continuously audits default model IDs across all providers (#324). For a c
 - **`bridge`**: Assesses your current mid-task state and creates a lightweight breadcrumb file. Use this when your AI agent's context window gets too full.
 - **`spec <ids...>`**: Fetches GitHub Issues (supports URLs) and synthesizes a pre-work spec. The AI acts as a **Staff-Level Architect**, focusing on contracts and edge cases.
 - **`shield`**: Reads your uncommitted diff and queries LanceDB for related traps to perform an architectural code review before you push. <!-- totem-ignore -->
-  - **Zero-LLM Mode:** Lightning-fast deterministic checks using compiled rules, Tree-sitter AST gating, and structural review (#216, #287).
+  - **Zero-LLM Mode:** Lightning-fast deterministic checks using compiled rules, Tree-sitter AST gating, and structural review scoped with fileGlobs (#287, #357).
   - **False-Positive Mitigation:** Handles non-code contexts smartly and supports inline suppression directives (#251, #255).
   - **Workflow Integration:** Local git hooks enforce rules by blocking direct commits to main, and supports optional lesson extraction from verdicts (#303, #310).
 - **`triage`**: Fetches open GitHub issues and generates a prioritized roadmap (e.g., `docs/active_work.md`) for your next task.
 - **`compile`**: Compiles `.totem/lessons.md` into deterministic regex/AST rules for zero-LLM checks. Supports cross-model lesson export to enforce architectural constraints across different agent environments, including GitHub Copilot instructions (#269, #294).
 - **`add-lesson`**: Interactively document a context, symptom, and fix. Saves to `.totem/lessons.md` and triggers a background re-index.
-- **`docs`**: Automatically syncs project documentation by analyzing git logs and closed issues since the last release (#190). Supports targeting individual files with path fixes and strict state preservation to prevent hallucination (#238, #249).
+- **`docs`**: Automatically syncs project documentation by analyzing git logs and closed issues.
+  - **Precision:** Targets individual files with path fixes and strict state preservation to prevent hallucination (#238, #249).
+  - **Reliability:** Uses a Saga-based transactional validator for safe checkpoints and rollbacks (#351, #356).
 - **`wrap`**: A post-merge workflow chain that runs `extract`, syncs the database, generates a roadmap, and updates docs in one command (#143).
 - **`extract <ids...>`**: Fetches merged PRs, reads comments, and extracts systemic architectural traps with concise, descriptive headings (#203, #271).
-  - **Security Hardening:** Strictly hardens against prompt injection and actively blocks suspicious lessons to prevent poisoned extractions (#279, #290).
+  - **Security Hardening:** Strictly hardens against prompt injection via XML boundaries and actively blocks suspicious lessons in all bypass modes (#289, #291).
   - **Curation:** Supports interactive multi-select pruning and the `--pick` flag for selective lesson acceptance (#265).
 - **`handoff`**: Captures uncommitted changes and lessons learned today, synthesizing a tactical snapshot for your next session. Supports a `--lite` flag for rapid, zero-LLM session snapshots with ANSI-sanitized git outputs (#281, #292).
 - **`hooks`**: Installs or updates background git hooks, automatically resolving the git root in monorepo sub-packages (#333). Ideal for wiring into `prepare` scripts to auto-install enforcement hooks across your team (#332).
@@ -270,20 +272,44 @@ Totem is evolving from a memory database into a full Shift-Left orchestrator.
 
 - [x] **Foundations & Phase 1 (Onboarding):** Established the local vector DB, MCP interface, and MVC Configuration Tiers. Includes the "Universal Lessons" baseline and cross-platform docs.
 - [x] **Phase 2 (Core Stability):** Delivered 60+ improvements across six capability areas. See `CHANGELOG.md` for the full list.
-  - **AST & Chunking:** Tree-sitter universal parsing, deterministic lesson compiler, and AST gating.
-  - **Orchestration:** Native API providers (Gemini, Anthropic, OpenAI, Ollama), cross-provider routing, and conformance suites.
-  - **Doc Sync & Memory:** Automated doc sync, drift detection, and cross-model lesson export (including Copilot).
-  - **Shield & CI:** Shield GitHub Action, structural review, inline suppression, and CI drift gates.
-  - **Security:** Adversarial ingestion scrubbing, extract prompt hardening, and ANSI sanitization.
-  - **DX & Hooks:** Git hook enforcement, monorepo-aware `hooks` command, and CI environment guards.
-- [x] **Validation:** Internal dogfooding (#8) across multiple real-world repositories.
-- [ ] **Phase 3 (Workflow Expansion):** Interactive CLI tutorials (#129), Custom Workflow Runner (#119), Agent-Optimized MCP (#176), and Cross-File Knowledge Graph (#183).
+  - **AST & Chunking:**
+    - Tree-sitter universal parsing
+    - Deterministic lesson compiler
+    - Zero-LLM shield with AST gating
+  - **Orchestration:**
+    - Native providers (Gemini, Anthropic, OpenAI, Ollama) with BYOSD
+    - Cross-provider routing
+    - Conformance suites
+  - **Doc Sync & Memory:**
+    - Automated doc sync with XML sentinels
+    - Drift detection
+    - Cross-model lesson export (including Copilot)
+  - **Shield & CI:**
+    - Shield GitHub Action
+    - Inline suppression
+    - Structural review
+    - `--learn` mode
+    - CI drift gate
+  - **Security:**
+    - Adversarial ingestion scrubbing
+    - Extract prompt hardening
+    - Suspicious lesson detection
+    - ANSI sanitization
+  - **DX & Hooks:**
+    - Git hook enforcement
+    - `totem hooks` command with monorepo support
+    - Bun support
+    - CI guard
+- [ ] **Phase 3 (Workflow Expansion):** Focus is now on shift-left CI integration and power-user workflows.
+  - **Adoption:** Interactive CLI tutorials (#129) and Custom Workflow Runner (#119).
+  - **Enterprise:** Agent-Optimized MCP with dynamic token budgeting (#176) and Federated Memory (#123).
+  - **Intelligence:** Cross-File Knowledge Graph for symbol resolution (#183).
 
 For a deeper dive into the system design, see `docs/architecture.md`.
 
 ## Contributing
 
-We welcome community contributions! Please review our `CONTRIBUTING.md` guidelines. Note that all external contributions require signing our automated Contributor License Agreement (CLA) (#258), and internal strategy discussions have been migrated to a properly configured private submodule for secure collaboration (#300).
+We welcome community contributions! Please review our `CONTRIBUTING.md` guidelines. Note that all external contributions require signing our automated Contributor License Agreement (CLA) (#258), and internal strategy discussions have been migrated to a properly configured private markdown-formatted submodule for secure collaboration (#300, #350).
 
 ## License
 

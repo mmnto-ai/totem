@@ -28,14 +28,26 @@ This phase delivered seamless cross-platform onboarding, automated AI tool confi
 
 **Goal:** Before ingesting enterprise databases, the local vector index and LLM prompts must be bulletproof across all environments.
 
-This phase fortified the core architecture, shifting focus to native orchestration, zero-LLM gating, and rigorous security measures.
+This phase fortified the core architecture, delivering native orchestration, zero-LLM gating, and rigorous security measures.
 
-- **AST & Chunking:** Implemented Tree-sitter universal parsing, deterministic lesson compiler, and zero-LLM shield with AST gating (#173, #213).
-- **Orchestration:** Integrated native API providers (Gemini, Anthropic, Ollama) and generic OpenAI-compatible models (#229, #298). Enabled cross-provider routing, audited default model IDs, and built conformance suites (#243, #324).
-- **Doc Sync & Memory:** Delivered automated doc sync targeting individual files, drift detection with path containment, and cross-model Copilot export (#190, #284, #294).
-- **Shield & CI:** Built the Shield GitHub Action, inline suppression, `--learn` mode for lesson extraction, and laid the foundation for CI drift gating (#174, #303).
-- **Security:** Added adversarial ingestion scrubbing, suspicious lesson detection with context-aware false positive reduction, and ANSI sanitization (#315, #344). Hardened prompts with XML delimiting and SECURITY NOTICE blocks to mitigate prompt injection (#289).
-- **DX & Hooks:** Enforced git hooks natively with monorepo root traversal, non-bash hook detection, and Bun support (#310, #317). Shipped `totem hooks` auto-installation backed by integration tests (#332, #345).
+- **AST & Chunking:**
+  - Implemented Tree-sitter universal parsing and a deterministic lesson compiler.
+  - Delivered a zero-LLM shield with AST gating (#173, #213).
+- **Orchestration:**
+  - Integrated native API providers (Gemini, Anthropic, OpenAI, Ollama) and generic OpenAI-compatible models (#232, #285).
+  - Enabled cross-provider routing, audited default model IDs, and built conformance suites (#243, #324).
+- **Doc Sync & Memory:**
+  - Delivered automated doc sync targeting individual files and drift detection with path containment (#238, #284).
+  - Added Saga-based transactional docs and cross-model Copilot export (#294, #356).
+- **Shield & CI:**
+  - Built the Shield GitHub Action, inline suppression, and `--learn` mode for lesson extraction (#303).
+  - Scoped deterministic shield rules with fileGlobs and laid the foundation for CI drift gating (#357).
+- **Security:**
+  - Added adversarial ingestion scrubbing and ANSI sanitization to prevent terminal injection (#292, #315).
+  - Hardened prompts with XML delimiting and implemented suspicious lesson detection (#289, #326).
+- **DX & Hooks:**
+  - Enforced git hooks natively with monorepo root traversal, non-bash detection, and Bun support (#316, #333).
+  - Shipped `totem hooks` auto-installation backed by integration tests (#332, #334).
 
 ## Phase 3: Workflow Expansion (Power User Tools)
 
@@ -49,7 +61,7 @@ This phase fortified the core architecture, shifting focus to native orchestrati
   - [ ] **#119 `totem run <workflow>`:** Introduce a custom AI task runner to execute user-defined markdown workflows via the orchestrator.
   - [ ] **#74 `totem oracle`:** Add a frictionless Q&A command to query LanceDB without strict personas.
 - **Shift-Left & Advanced Intelligence:**
-  - [ ] **#195 / #196 / #214 Epic: Shift-Left AI Verification:** Define model compatibility and auditing strategy to systematically verify models. Build adversarial evaluation harness for CI and implement CI Drift Gate.
+  - [ ] **#195 / #196 / #214 Epic: Shift-Left AI Verification:** Define model compatibility and auditing strategy to systematically verify models (supported models reference established #325). Build adversarial evaluation harness for CI and implement CI Drift Gate.
   - [ ] **#176 Agent-Optimized MCP:** Dynamic token budgeting and write access for deeper agent-to-agent interactions.
   - [ ] **#183 Cross-File Knowledge Graph (Blocked):** Implement symbol resolution to enable multi-file architectural reasoning.
 
@@ -71,4 +83,4 @@ This phase fortified the core architecture, shifting focus to native orchestrati
   - [x] Implement Changesets and npm publishing (Issue #5 / #46)
   - [x] Chore: Relicense project from MIT to Apache 2.0
   - [x] **#258 / #266 Governance:** Implement Contributor License Agreement (CLA) automation and CONTRIBUTING.md.
-  - [x] **#300 / #321 Governance & Security:** Migrate `.strategy` directory to a private submodule for secure collaboration and ensure proper git submodule setup and pointer tracking (#331).
+  - [x] **#300 / #321 Governance & Security:** Migrate `.strategy` directory to a private submodule for secure collaboration and ensure proper git submodule setup and pointer tracking (#331, #350).

@@ -33,7 +33,7 @@ Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are complete. Th
   - Bun support
   - CI guard
 
-Focus is now on **Phase 3 (Workflow Expansion)** and shift-left CI integration.
+Focus is now on **Phase 3 (Workflow Expansion)** and shift-left CI integration. Recent progress includes saga-based transactional docs with rollback support (#351, #356), deterministic shield rules scoped by file globs (#357), and web-tree-sitter WASM file size investigations (#354).
 
 ### Prioritized Roadmap
 

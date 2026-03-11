@@ -1310,3 +1310,45 @@ FSL intelligence layer licensing is a decided-but-deferred strategic decision (#
 **Tags:** shield, glob-matching, compiler, false-positive, trap
 
 Custom glob matching functions must be tested against the actual glob patterns used in configuration. When adding new glob pattern shapes (e.g., directory-prefixed like packages/cli/\*_/_.ts), verify the matcher supports them — a silent no-match produces a false sense of security (rules appear to pass but are actually skipped). GCA caught this in PR #357.
+
+## Lesson — Convert large plain-text research blobs into Markdown with
+
+**Tags:** semantic-search, indexing, documentation, markdown
+
+Convert large plain-text research blobs into Markdown with structured headings to ensure semantic search chunkers can index content effectively. Plain text often fails to chunk correctly, resulting in poor retrieval performance or indexing failures for RAG systems.
+
+## Lesson — A "clean pass" in security scans after narrowing rule scope
+
+**Tags:** testing, security, glob
+
+A "clean pass" in security scans after narrowing rule scope can be a false negative if the glob matcher fails to recognize new pattern shapes. Always verify that scoped rules are actually evaluating intended files rather than silently matching nothing due to unsupported syntax.
+
+## Lesson — When implementing custom glob matching for dir/*/.ext,
+
+**Tags:** glob, regex, logic-error
+
+When implementing custom glob matching for `dir/**/*.ext`, ensure the index check for the double-wildcard separator excludes the start of the string. This prevents repo-relative paths from being misinterpreted as root-anchored and ensures directory-specific logic doesn't conflict with universal patterns.
+
+## Lesson — In core packages, a small, tested custom implementation is
+
+**Tags:** design-decision, dependency-management, architecture
+
+In core packages, a small, tested custom implementation is often preferable to adding external libraries like `micromatch` when only a few specific pattern shapes are required. This keeps the dependency graph lean and reduces the maintenance surface for limited, well-defined use cases.
+
+## Lesson — Design safety-net validators, such as LLM hallucination
+
+**Tags:** architecture, error-handling, design-decision
+
+Design safety-net validators, such as LLM hallucination checks, to fail-open with a warning rather than blocking the primary workflow. This prevents internal validator bugs from stopping user actions in scenarios where the tool is a helper rather than a strict security gatekeeper.
+
+## Lesson — When comparing checkbox states for mutations, strip
+
+**Tags:** markdown, regex, llm-hallucination
+
+When comparing checkbox states for mutations, strip markdown links to prevent false positives. LLMs often modify link structures while preserving text, which can incorrectly trigger "deleted" or "added" item detections if the raw markdown is used for matching.
+
+## Lesson — Use occurrence counts of opening and closing markers on a
+
+**Tags:** regex, validation, parsing
+
+Use occurrence counts of opening and closing markers on a per-line basis rather than simple string inclusion checks. This accurately detects corruption in lines containing multiple tags or partial markers that would otherwise pass a basic presence check.
