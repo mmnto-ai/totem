@@ -32,9 +32,10 @@ jobs:
 
       - run: pnpm build
 
-      - name: Run integration smoke tests
+      - name: Run integration smoke tests + adversarial eval harness
         run: pnpm --filter @mmnto/cli vitest run --config vitest.integration.config.ts
         env:
           CI_INTEGRATION: 'true'
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
