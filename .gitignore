@@ -29,10 +29,6 @@ design/
 .DS_Store
 Thumbs.db
 
-# Strategy & Private Docs
-.strategy/
-.analysis/
-
 # CLI Dogfooding Artifacts
 specs/
 handoff.md
