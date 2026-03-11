@@ -189,7 +189,7 @@ Totem continuously audits default model IDs across all providers (#324). For a c
 - **`briefing`**: Fetches your current git branch, uncommitted changes, open PRs, and recent session momentum to generate a startup briefing.
 - **`bridge`**: Assesses your current mid-task state and creates a lightweight breadcrumb file. Use this when your AI agent's context window gets too full.
 - **`spec <ids...>`**: Fetches GitHub Issues (supports URLs) and synthesizes a pre-work spec. The AI acts as a **Staff-Level Architect**, focusing on contracts and edge cases.
-- **`shield`**: Reads your uncommitted git diff and queries LanceDB for related traps to perform an architectural code review before you push.
+- **`shield`**: Reads your uncommitted diff and queries LanceDB for related traps to perform an architectural code review before you push. <!-- totem-ignore -->
   - **Zero-LLM Mode:** Lightning-fast deterministic checks using compiled rules, Tree-sitter AST gating, and structural review (#216, #287).
   - **False-Positive Mitigation:** Handles non-code contexts smartly and supports inline suppression directives (#251, #255).
   - **Workflow Integration:** Local git hooks enforce rules by blocking direct commits to main, and supports optional lesson extraction from verdicts (#303, #310).
