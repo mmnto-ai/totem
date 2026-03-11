@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DocTarget } from '@mmnto/totem';
 
-import { docsCommand, extractUpdatedDocument } from './docs.js';
+import { DOCS_SYSTEM_PROMPT, docsCommand, extractUpdatedDocument } from './docs.js';
 
 // ─── Mocks ──────────────────────────────────────────────
 
@@ -310,6 +310,34 @@ describe('docsCommand', () => {
     await docsCommand(['README.md'], {});
 
     expect(runOrchestrator).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── DOCS_SYSTEM_PROMPT ─────────────────────────────────
+
+describe('DOCS_SYSTEM_PROMPT', () => {
+  it('includes formatting rules section', () => {
+    expect(DOCS_SYSTEM_PROMPT).toContain('## Formatting Rules');
+  });
+
+  it('enforces sub-bullet threshold', () => {
+    expect(DOCS_SYSTEM_PROMPT).toContain('Sub-Bullet Threshold');
+    expect(DOCS_SYSTEM_PROMPT).toContain('nested sub-bullets');
+  });
+
+  it('enforces completed phase summary rule', () => {
+    expect(DOCS_SYSTEM_PROMPT).toContain('Completed Phase Summary');
+    expect(DOCS_SYSTEM_PROMPT).toContain('summarized in 1-2 sentences max');
+  });
+
+  it('enforces line length via semantic limit (not character counting)', () => {
+    expect(DOCS_SYSTEM_PROMPT).toContain('two short sentences');
+    expect(DOCS_SYSTEM_PROMPT).not.toMatch(/\d+ characters/);
+  });
+
+  it('limits PR reference density', () => {
+    expect(DOCS_SYSTEM_PROMPT).toContain('PR References');
+    expect(DOCS_SYSTEM_PROMPT).toContain('1-3 per sub-bullet');
   });
 });
 

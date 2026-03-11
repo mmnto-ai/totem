@@ -25,7 +25,7 @@ const GH_CLOSED_ISSUE_LIMIT = 50;
 
 // ─── System prompt ──────────────────────────────────────
 
-const SYSTEM_PROMPT = `# Docs System Prompt — Automated Documentation Sync
+export const DOCS_SYSTEM_PROMPT = `# Docs System Prompt — Automated Documentation Sync
 
 ## Identity & Role
 You are a meticulous Technical Writer responsible for keeping project documentation accurate and up-to-date. You rewrite documentation files to reflect the latest project state.
@@ -48,6 +48,12 @@ Given a documentation file, its purpose, and recent project changes (git log, cl
 Updated content here...
 </updated_document>
 \`\`\`
+
+## Formatting Rules
+- **Sub-Bullet Threshold:** When a feature list exceeds 3 items, use nested sub-bullets instead of comma-separated inline lists. Group related items into named categories (e.g., "Security:", "DX:", "Orchestration:").
+- **Completed Phase Summary:** Phases marked \`[x]\` should be summarized in 1-2 sentences max. Do NOT expand completed phases with every PR number — use categorized sub-bullets for the key capability areas only.
+- **Line Length:** No single bullet point should exceed two short sentences. If it does, break it into sub-bullets or summarize. Readability is more important than completeness.
+- **PR References:** Reference PR numbers sparingly — only for the most significant items (1-3 per sub-bullet). Do NOT list every PR number for a capability area.
 `;
 
 // ─── Release context gathering ──────────────────────────
@@ -286,7 +292,7 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
   }
 
   // Resolve system prompt (allow .totem/prompts/docs.md override)
-  const systemPrompt = getSystemPrompt('docs', SYSTEM_PROMPT, cwd, config.totemDir);
+  const systemPrompt = getSystemPrompt('docs', DOCS_SYSTEM_PROMPT, cwd, config.totemDir);
 
   // Process each doc sequentially (separate orchestrator call per doc)
   let updated = 0;
