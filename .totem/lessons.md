@@ -1304,3 +1304,9 @@ Fixes to automated extraction logic, such as resolving truncated headings, typic
 **Tags:** licensing, strategy, v1.0, fsl, architecture
 
 FSL intelligence layer licensing is a decided-but-deferred strategic decision (#353). Apache 2.0 stays everywhere until v1.0. At v1.0, split @mmnto/core into @mmnto/totem (Apache 2.0, commodity: chunkers, store, config) and @mmnto/totem-engine (FSL 1.1, moat: compiler, drift detector, sanitizer, AST gate). CLA is already in place as the insurance policy. Emergency trigger: execute split immediately if a hyperscaler forks the intelligence layer pre-v1.0.
+
+## Lesson — Custom glob matching functions must be tested against the
+
+**Tags:** shield, glob-matching, compiler, false-positive, trap
+
+Custom glob matching functions must be tested against the actual glob patterns used in configuration. When adding new glob pattern shapes (e.g., directory-prefixed like packages/cli/\*_/_.ts), verify the matcher supports them — a silent no-match produces a false sense of security (rules appear to pass but are actually skipped). GCA caught this in PR #357.
