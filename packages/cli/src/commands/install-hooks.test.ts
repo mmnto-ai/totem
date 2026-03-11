@@ -358,7 +358,7 @@ describe('installHooksNonInteractive', () => {
   });
 
   it('installs all three hooks in a git repo', () => {
-    execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
 
     const result = installHooksNonInteractive(tmpDir);
@@ -376,7 +376,7 @@ describe('installHooksNonInteractive', () => {
   });
 
   it('is idempotent — second call returns exists for all hooks', () => {
-    execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
 
     installHooksNonInteractive(tmpDir);
@@ -389,7 +389,7 @@ describe('installHooksNonInteractive', () => {
   });
 
   it('returns null when hook manager is detected', () => {
-    execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     fs.mkdirSync(path.join(tmpDir, '.husky'), { recursive: true });
 
     const result = installHooksNonInteractive(tmpDir);
@@ -397,7 +397,7 @@ describe('installHooksNonInteractive', () => {
   });
 
   it('installs hooks at git root when run from a subdirectory', () => {
-    execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
     const subDir = path.join(tmpDir, 'packages', 'cli');
     fs.mkdirSync(subDir, { recursive: true });
@@ -418,7 +418,7 @@ describe('installHooksNonInteractive', () => {
   });
 
   it('check passes from subdirectory after install', () => {
-    execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
     const subDir = path.join(tmpDir, 'packages', 'cli');
     fs.mkdirSync(subDir, { recursive: true });
@@ -428,7 +428,7 @@ describe('installHooksNonInteractive', () => {
   });
 
   it('appends to existing hooks without clobbering', () => {
-    execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
     fs.writeFileSync(path.join(tmpDir, '.git', 'hooks', 'pre-push'), '#!/bin/sh\nrun_my_tests\n');
 
@@ -448,7 +448,7 @@ describe('checkHooksInstalled', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hooks-check-'));
-    execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
   });
 
