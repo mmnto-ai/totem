@@ -16,7 +16,8 @@
       "pattern": "\\bstdio\\s*:\\s*.*\\.\\bfd\\b",
       "message": "Use fs.openSync() instead of fs.createWriteStream() for spawn() stdio. WriteStream.fd is null until the 'open' event fires, which will cause spawn() to fail.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T02:50:03.081Z"
+      "compiledAt": "2026-03-09T02:50:03.081Z",
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "ebe45f00165fbe3f",
@@ -32,7 +33,8 @@
       "pattern": "const\\s+\\w+\\s*=\\s*/(?![\\^])https\\?:",
       "message": "Anchor input regexes with '^' and include 'https?://' protocol to avoid substring matches in CLI input.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T02:53:05.481Z"
+      "compiledAt": "2026-03-09T02:53:05.481Z",
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "90b042b866aefa9d",
@@ -40,7 +42,8 @@
       "pattern": "\\.(where|delete)\\s*\\(\\s*(?:'[^']*\"[^\"]+\"[^']*'|\"[^\"]*\\\\\"[^\"]+\\\\\"[^\"]*\"|`[^`]*\"[^\"]+\"[^`]*`)\\s*\\)",
       "message": "Use backticks (`) for column identifiers in LanceDB filters; double quotes (\") cause silent failures in DataFusion.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T02:57:21.498Z"
+      "compiledAt": "2026-03-09T02:57:21.498Z",
+      "fileGlobs": ["packages/core/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "2e8fe8d7c8458aae",
@@ -48,7 +51,8 @@
       "pattern": "(import\\s+.*from\\s+['\"]inquirer['\"]|require\\(['\"]inquirer['\"]\\)|\\\"inquirer\\\"\\s*:)",
       "message": "Use '@clack/prompts' instead of 'inquirer' for a more modern CLI UX (Issue #21)",
       "engine": "regex",
-      "compiledAt": "2026-03-09T02:59:47.145Z"
+      "compiledAt": "2026-03-09T02:59:47.145Z",
+      "fileGlobs": ["packages/cli/**/*.ts"]
     },
     {
       "lessonHash": "e18b9f81eef4cd6a",
@@ -56,7 +60,8 @@
       "pattern": "\\b(console\\.(log|info)|process\\.stdout\\.write)\\s*\\(.*(\\[Totem\\]|\\b(brand|success|warn|errorColor|dim|bold|BANNER)\\b|pc\\.)",
       "message": "Decorative UI (branding tags, colors, banners) must be routed to stderr. Use the log.* helpers or console.error to reserve stdout for pipeable data.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T03:02:19.676Z"
+      "compiledAt": "2026-03-09T03:02:19.676Z",
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "b8763e4bd93c7314",
@@ -64,7 +69,8 @@
       "pattern": "(\\bimport\\s+[^()]*\\bfrom\\s+['\"]ora['\"]|\\brequire\\s*\\(\\s*['\"]ora['\"]\\s*\\))",
       "message": "Use dynamic imports for heavy dependencies like 'ora' within the specific functions that require them to avoid startup performance tax.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T03:02:59.361Z"
+      "compiledAt": "2026-03-09T03:02:59.361Z",
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "e02e064077d533d6",
@@ -80,7 +86,8 @@
       "pattern": "\"command\":\\s*\"[^ \"]*\\s+(grep|sed|awk|&&|\\|)\\s*[^\"]*\"",
       "message": "Avoid embedding complex shell pipelines or grep chains directly in hook configuration; extract logic into a dedicated script in .totem/hooks/ or .gemini/hooks/.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T03:03:36.486Z"
+      "compiledAt": "2026-03-09T03:03:36.486Z",
+      "fileGlobs": ["*.json", "*.yml", "*.yaml"]
     },
     {
       "lessonHash": "4cb12ed837adf07a",
@@ -88,7 +95,8 @@
       "pattern": "console\\.(log|info|dir|table)\\s*\\(",
       "message": "Route host hook output to stderr (console.error or console.warn) rather than stdout (console.log) to prevent AI tool pollution.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T03:03:48.432Z"
+      "compiledAt": "2026-03-09T03:03:48.432Z",
+      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "40b5659a75c42e0d",
@@ -96,7 +104,8 @@
       "pattern": "text:\\s*(?!(?:formatXmlResponse|wrapXml|formatSystemWarning)\\b|['\"`\\[\\{]|err|error|message|text|undefined|null\\b)\\b\\w+",
       "message": "MCP tool returns must be wrapped in XML tags (use formatXmlResponse) to prevent Indirect Prompt Injection from untrusted content.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T03:04:58.554Z"
+      "compiledAt": "2026-03-09T03:04:58.554Z",
+      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "637e8994d7866e10",
@@ -104,7 +113,8 @@
       "pattern": "\\b(echo|run_shell_command|exec|sh|bash)\\b.*\\$TOOL_INPUT",
       "message": "Potential command injection: AI-provided environment variables (like $TOOL_INPUT) must be handled safely (e.g., quoting or escaping) when used in shell commands.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T03:05:23.884Z"
+      "compiledAt": "2026-03-09T03:05:23.884Z",
+      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml"]
     },
     {
       "lessonHash": "b6c47924514dc4da",
@@ -112,7 +122,8 @@
       "pattern": "\\b(wrapXml|sanitize)\\s*\\(\\s*([^,)]*?\\b(branch|filePath|path|cwd)\\b[^,)]*?)\\s*[\\),]",
       "message": "Do not sanitize or XML-wrap semi-trusted metadata like branch names or git file paths in prompts to avoid unnecessary clutter (Totem principle).",
       "engine": "regex",
-      "compiledAt": "2026-03-09T03:09:49.306Z"
+      "compiledAt": "2026-03-09T03:09:49.306Z",
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "2d364f952af19014",
@@ -128,7 +139,8 @@
       "pattern": "\\b(console\\.(log|error)|log\\.(info|success|warn|error|dim)|spinner\\.(update|succeed|fail))\\s*\\((?!.*sanitize\\().*\\b(lesson|snippet|result|body|comment|response|output)s?\\b",
       "message": "Untrusted text (LLM/PR content) must be wrapped in `sanitize()` before display in CLI to prevent terminal injection.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T03:15:36.127Z"
+      "compiledAt": "2026-03-09T03:15:36.127Z",
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "f14881a4daf28160",
@@ -144,7 +156,8 @@
       "pattern": "expect\\(.*\\.length\\)\\.(toBeGreaterThan|toBeLessThan)(OrEqual)?\\(\\d+\\)",
       "message": "Use exact count assertions (e.g., toBe(10)) for fixed asset collections instead of weak bounds.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T03:17:16.714Z"
+      "compiledAt": "2026-03-09T03:17:16.714Z",
+      "fileGlobs": ["*.test.ts", "*.spec.ts"]
     },
     {
       "lessonHash": "5da43ea60b66e96e",
@@ -152,7 +165,8 @@
       "pattern": "\\bgit\\s+(?:log|checkout|diff|show|reset|revert|add|restore)\\s+(?!--)[^- \\s]",
       "message": "Always use the '--' separator before positional arguments in git commands (e.g., 'git log -- <ref>') to protect against argument injection.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T03:20:47.247Z"
+      "compiledAt": "2026-03-09T03:20:47.247Z",
+      "fileGlobs": ["*.sh", "*.bash", "packages/cli/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "5027e14f29c36b6e",
@@ -160,7 +174,8 @@
       "pattern": "\\bthrow\\s+new\\s+\\w*Error\\s*\\(\\s*['\"`](?!\\[Totem Error\\])",
       "message": "Error messages in the CLI orchestrator must include the '[Totem Error]' prefix for consistency.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T03:23:59.501Z"
+      "compiledAt": "2026-03-09T03:23:59.501Z",
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "fbe68c1ecae18ea2",
@@ -168,7 +183,8 @@
       "pattern": "spawn\\([^)]*\\)\\s*(?!.*\\.on\\(['\"]data['\"],\\s*(?:[^}]*limit|[^}]*Max|[^}]*size))",
       "message": "When using 'spawn' to accumulate output, you must implement a manual safety cap (e.g., 50MB) on stdout/stderr strings to prevent memory exhaustion.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T03:25:12.464Z"
+      "compiledAt": "2026-03-09T03:25:12.464Z",
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "c1d184481d67ae8d",
@@ -176,7 +192,8 @@
       "pattern": "\\bexecSync\\s*\\([^)]*stdio\\s*:\\s*['\"]pipe['\"]",
       "message": "Use asynchronous 'spawn' instead of 'execSync' with piped stdio to prevent silent hangs and pipe limit issues.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T03:25:49.090Z"
+      "compiledAt": "2026-03-09T03:25:49.090Z",
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "dfd58fda9e518754",
