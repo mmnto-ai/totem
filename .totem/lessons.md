@@ -1160,3 +1160,51 @@ Ensure model name validation regexes explicitly allow character delimiters like 
 **Tags:** architecture, configuration, auditing
 
 Audit initialization files and configuration schemas during model updates to ensure that secondary provider IDs do not leak into logic reserved for the primary orchestrator. This practice preserves architectural boundaries and keeps the core system decoupled from specific external vendor versions.
+
+## Lesson — Use pnpm exec instead of pnpm bin when checking for or
+
+**Tags:** pnpm, monorepo, turborepo, automation
+
+Use `pnpm exec` instead of `pnpm bin` when checking for or executing binaries that might be internal workspace packages. In Turborepo environments, `pnpm exec` reliably handles workspace package resolution whereas `pnpm bin` often fails to locate binaries that aren't installed as standard root dependencies.
+
+## Lesson — Implement a lightweight static installer to manage git
+
+**Tags:** git-hooks, dev-experience, bootstrapping
+
+Implement a lightweight static installer to manage git hooks during initial project setup before the primary CLI is built. Using consistent markers across both static scripts and the dynamic CLI allows for unified validation and prevents the "chicken and egg" dependency on the tool itself.
+
+## Lesson — Expose a non-interactive --check flag in hook management
+
+**Tags:** git-hooks, ci, automation
+
+Expose a non-interactive `--check` flag in hook management commands that scans for specific markers and exits with a non-zero code if they are missing. This allows CI pipelines to enforce hook adoption and ensure developers haven't bypassed local quality gates.
+
+## Lesson — Use pnpm exec instead of pnpm bin when invoking or checking
+
+**Tags:** monorepo, pnpm, shell-scripting
+
+Use `pnpm exec` instead of `pnpm bin` when invoking or checking for the existence of workspace-local binaries in a monorepo. `pnpm exec` correctly handles workspace package resolution while `pnpm bin` may fail to locate binaries for internal packages that aren't standard installed dependencies.
+
+## Lesson — Verify CLI availability in shared git hooks (e.g., using
+
+**Tags:** git-hooks, ci, shell-scripting
+
+Verify CLI availability in shared git hooks (e.g., using `command --version`) before execution to prevent brittle CI failures. This is critical in environments where dev-only tools might be missing or purged during specific lifecycle phases like release workflows.
+
+## Lesson — Top-level CLI handlers should use guards or catch blocks to
+
+**Tags:** error-handling, cli, ux
+
+Top-level CLI handlers should use guards or catch blocks to print clean, user-friendly messages and exit gracefully instead of throwing errors. Throwing should be reserved for internal library functions where callers must handle specific failure states programmatically.
+
+## Lesson — Always resolve the git repository root via "git rev-parse
+
+**Tags:** git, monorepo, nodejs
+
+Always resolve the git repository root via "git rev-parse --show-toplevel" instead of checking for a .git directory in the current path. This ensures tools work correctly inside monorepo sub-packages, submodules, and git worktrees.
+
+## Lesson — Using "shell: true" in execFileSync is often required on
+
+**Tags:** windows, security, git
+
+Using "shell: true" in execFileSync is often required on Windows to resolve the git binary correctly across different environments. While this presents a theoretical binary hijacking risk, the pattern is often acceptable if the threat model already assumes an attacker with local file system access.

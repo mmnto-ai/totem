@@ -26,7 +26,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#89 UX Polish for `totem init`:** Fix double-prompting and print clean success summaries so developers trust the onboarding.
 - [x] **#128 Epic: Universal Baselines:** Ship a curated list of foundational AI security/architectural lessons that users can optionally install during `totem init` to solve the "cold start" problem.
 - [ ] **#129 Epic: Interactive CLI Tutorial:** Build an animated, interactive CLI tutorial (`totem tutorial`) that allows users to pause the walkthrough, ask the LLM contextual questions about their codebase, and resume seamlessly.
-- [ ] **#125 Epic: Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically, achieving a "run `init` and forget" workflow (Git hook enforcement and deterministic shield gate implemented via #310, #318).
+- [ ] **#125 Epic: Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically, achieving a "run `init` and forget" workflow (Git hook enforcement, `totem hooks` auto-install, and deterministic shield gate implemented via #310, #318, #332, #335).
 - [x] **#86 Seamless Host Integration (#138, #139, #140):** Build the `SessionStart` hooks, Claude custom commands (Claude Code), and Totem Architect skills (Gemini CLI) that #87 installs.
 - [x] **#21 CLI UI/UX Polish:** Branded colors (picocolors), ora spinners, ASCII banner. @clack/prompts multiselect shipped in v0.13.0 (#168).
 - [x] **#12 / #210 Cross-platform onboarding:** Ensure docs and installers work flawlessly across Windows (PowerShell), macOS, and Linux.
@@ -35,7 +35,7 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 **Goal:** Before ingesting enterprise databases, the local vector index and LLM prompts must be bulletproof across all environments.
 
-- [x] **#310 / #318 / #316 / #317 Git Hook Enforcement:** Block direct `main` commits and enforce deterministic shield gate locally via git hooks, including memory classification, non-bash hook detection, and Bun support.
+- [x] **#310 / #318 / #316 / #317 Git Hook Enforcement:** Block direct `main` commits and enforce deterministic shield gate locally via git hooks, including memory classification, non-bash hook detection, Bun support, `totem hooks` auto-install (#332, #335), and monorepo/CI guards (#336, #338).
 - [x] **#309 / #311 Security:** Restructure `GEMINI.md` for stronger rule compliance, explicit consent, and safety rules.
 - [x] **#315 / #323 Security:** Bulletproof ingestion pipeline with adversarial content scrubbing, evaluation harness, and Bun support.
 - [x] **#267 / #272 Security:** Configure Dependabot for automated security vulnerability scanning.
@@ -118,4 +118,4 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] Implement Changesets and npm publishing (Issue #5 / #46)
 - [x] Chore: Relicense project from MIT to Apache 2.0
 - [x] **#258 / #266 Governance:** Implement Contributor License Agreement (CLA) automation and CONTRIBUTING.md.
-- [x] **#300 / #321 Governance & Security:** Migrate `.strategy` directory to a private submodule for secure collaboration and ensure proper git submodule setup.
+- [x] **#300 / #321 Governance & Security:** Migrate `.strategy` directory to a private submodule for secure collaboration and ensure proper git submodule setup and pointer tracking (#331).
