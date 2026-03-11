@@ -60,7 +60,7 @@ export interface IngestionSanitizeOptions {
  */
 // totem-ignore-next-line — core library param, not MCP return
 export function sanitizeForIngestion(text: string, options: IngestionSanitizeOptions): string {
-  if (!text) return text ?? '';
+  if (!text) return '';
   const { chunkType, filePath, onWarn } = options;
   let result = text;
 
