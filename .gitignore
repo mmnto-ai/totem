@@ -29,6 +29,9 @@ design/
 .DS_Store
 Thumbs.db
 
+# Legacy directory (now lives inside .strategy submodule)
+.analysis/
+
 # CLI Dogfooding Artifacts
 specs/
 handoff.md
