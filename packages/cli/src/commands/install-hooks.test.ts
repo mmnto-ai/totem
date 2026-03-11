@@ -7,10 +7,59 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   buildPreCommitHook,
   buildPrePushHook,
+  detectTotemPrefix,
   installGitHook,
   TOTEM_PRECOMMIT_MARKER,
   TOTEM_PREPUSH_MARKER,
 } from './install-hooks.js';
+
+describe('detectTotemPrefix', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-detect-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns pnpm exec when pnpm-lock.yaml exists', () => {
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+    expect(detectTotemPrefix(tmpDir)).toBe('pnpm exec totem');
+  });
+
+  it('returns yarn when yarn.lock exists', () => {
+    fs.writeFileSync(path.join(tmpDir, 'yarn.lock'), '');
+    expect(detectTotemPrefix(tmpDir)).toBe('yarn totem');
+  });
+
+  it('returns bunx when bun.lockb exists (legacy)', () => {
+    fs.writeFileSync(path.join(tmpDir, 'bun.lockb'), '');
+    expect(detectTotemPrefix(tmpDir)).toBe('bunx totem');
+  });
+
+  it('returns bunx when bun.lock exists (Bun >= 1.2)', () => {
+    fs.writeFileSync(path.join(tmpDir, 'bun.lock'), '');
+    expect(detectTotemPrefix(tmpDir)).toBe('bunx totem');
+  });
+
+  it('falls back to npx when no lockfile exists', () => {
+    expect(detectTotemPrefix(tmpDir)).toBe('npx totem');
+  });
+
+  it('prefers pnpm over bun when both lockfiles exist', () => {
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+    fs.writeFileSync(path.join(tmpDir, 'bun.lock'), '');
+    expect(detectTotemPrefix(tmpDir)).toBe('pnpm exec totem');
+  });
+
+  it('prefers yarn over bun when both lockfiles exist', () => {
+    fs.writeFileSync(path.join(tmpDir, 'yarn.lock'), '');
+    fs.writeFileSync(path.join(tmpDir, 'bun.lockb'), '');
+    expect(detectTotemPrefix(tmpDir)).toBe('yarn totem');
+  });
+});
 
 describe('buildPreCommitHook', () => {
   it('contains the marker for idempotency', () => {
