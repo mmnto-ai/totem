@@ -35,8 +35,9 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 
 **Goal:** Before ingesting enterprise databases, the local vector index and LLM prompts must be bulletproof across all environments.
 
-- [x] **#310 / #318 Git Hook Enforcement:** Block direct `main` commits and enforce deterministic shield gate locally via git hooks, including memory classification.
+- [x] **#310 / #318 / #316 / #317 Git Hook Enforcement:** Block direct `main` commits and enforce deterministic shield gate locally via git hooks, including memory classification, non-bash hook detection, and Bun support.
 - [x] **#309 / #311 Security:** Restructure `GEMINI.md` for stronger rule compliance, explicit consent, and safety rules.
+- [x] **#315 / #323 Security:** Bulletproof ingestion pipeline with adversarial content scrubbing, evaluation harness, and Bun support.
 - [x] **#267 / #272 Security:** Configure Dependabot for automated security vulnerability scanning.
 - [x] **#218 Security:** Add ReDoS protection to compiled regex rules.
 - [x] **#206 / #224 Robustness:** Refactor orchestrator from `execSync` to async `spawn` and fix `node-fetch` aborts on large files like `architecture.md` via Gemini CLI.
@@ -92,12 +93,12 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] **#213 / #216 / #255 Zero-LLM Shield Mode (#251, #270, #287):** Deterministic lesson compiler, zero-LLM shield mode (including `--mode=structural` context-blind review), false-positive resolution, inline suppression directives, and Tree-sitter AST gating (#287).
 - [x] **#303 / #307 Shield Learning Loop:** Optional lesson extraction from LLM verdicts via `totem shield --learn`, integrated with false-positive reduction.
 - [x] **#229 Epic: Native API Orchestrator (#230–#234, #236, #237, #285, #293, #298, #306):** Replace CLI shell-spawning with direct SDK calls to Gemini (`@google/genai`) and Anthropic (`@anthropic-ai/sdk`). BYOSD pattern with optional peer dependencies, discriminated union config, package manager auto-detection for install prompts, generic OpenAI-compatible orchestrator support (Ollama / local), and a native Ollama orchestrator with dynamic `num_ctx`.
-- [x] **#243 / #246 Multi-Model Orchestration (#235):** Enable cross-provider routing in orchestrator overrides using `provider:model` syntax with negated glob support.
+- [x] **#243 / #246 Multi-Model Orchestration (#235, #324, #325, #327):** Enable cross-provider routing in orchestrator overrides using `provider:model` syntax with negated glob support, audited default model IDs, and a supported models reference document.
 - [x] **#248 Orchestrator Refactoring:** Extract `resolveOrchestrator()` helper to deduplicate model resolution.
 - [x] **#144 Epic: AI PR Review Posture & Noise Reduction:** Refine AI PR review posture to reduce noise (Includes GCA on-demand reviews and configuration fixes via #278, #282).
 - [x] **#264 / #269 Cross-Model Enforcement:** Enable cross-model lesson export via `totem compile --export` and GitHub Copilot instructions (#294).
 - [x] **#244 / #245 Provider Conformance Suite (#263):** Build conformance suite and nightly integration smoke tests to ensure all orchestrator models behave consistently.
-- [ ] **#195 / #196 / #214 Epic: Shift-Left AI Verification:** Define model compatibility strategy, build adversarial evaluation harness for CI (Model Drift Mitigation), and implement CI Drift Gate (Harness and Drift Gate implemented via #280).
+- [ ] **#195 / #196 / #214 Epic: Shift-Left AI Verification:** Define model compatibility strategy, build adversarial evaluation harness for CI (Model Drift Mitigation), and implement CI Drift Gate (Harness and Drift Gate implemented via #280, adversarial eval harness updated via #323).
 - [x] **#247 Analysis: Multi-Agent Code Review:** Research multi-agent code review and the Three-Lens Model for automated PR review workflows.
 - [ ] **#176 Agent-Optimized MCP:** Dynamic token budgeting and write access for deeper agent-to-agent interactions.
 - [ ] **#183 Cross-File Knowledge Graph (Blocked):** Implement symbol resolution to enable multi-file architectural reasoning.
@@ -117,4 +118,4 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 - [x] Implement Changesets and npm publishing (Issue #5 / #46)
 - [x] Chore: Relicense project from MIT to Apache 2.0
 - [x] **#258 / #266 Governance:** Implement Contributor License Agreement (CLA) automation and CONTRIBUTING.md.
-- [x] **#300 Governance & Security:** Migrate `.strategy` directory to a private submodule for secure collaboration.
+- [x] **#300 / #321 Governance & Security:** Migrate `.strategy` directory to a private submodule for secure collaboration and ensure proper git submodule setup.

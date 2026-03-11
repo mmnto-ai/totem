@@ -1130,3 +1130,33 @@ Implement an adversarial evaluation harness with planted architectural violation
 **Tags:** security, regex, refactoring
 
 Moving security-sensitive regexes (like BiDi stripping or XML bypass defense) from CLI tools to core packages ensures consistent adversarial scrubbing across both ingestion pipelines and runtime shields. Hardening these patterns against whitespace bypasses (e.g., optional whitespace after closing slash in tags) prevents common prompt injection evasion techniques.
+
+## Lesson — Automated code reviewers often flag bleeding-edge model
+
+**Tags:** llm, testing, integration
+
+Automated code reviewers often flag bleeding-edge model identifiers (like `gemini-2.5-flash`) as typos due to stale training data. Always prioritize the project's verified configuration or official provider documentation over AI-suggested "corrections" to model names.
+
+## Lesson — Do not add runtime undefined guards for properties
+
+**Tags:** typescript, refactoring
+
+Do not add runtime `undefined` guards for properties explicitly typed as non-optional (e.g., `string` vs `string | undefined`) in the shared interface. Trusting the established type contract reduces code noise and prevents redundant defensive logic.
+
+## Lesson — When detecting Bun environments, check for both bun.lockb
+
+**Tags:** bun, devops, nodejs
+
+When detecting Bun environments, check for both `bun.lockb` (legacy) and `bun.lock` (Bun >= 1.2) to ensure compatibility. Priority for package manager detection should be explicitly defined (e.g., pnpm > yarn > bun > npx) to handle hybrid environments.
+
+## Lesson — Ensure model name validation regexes explicitly allow
+
+**Tags:** validation, regex, llm-providers
+
+Ensure model name validation regexes explicitly allow character delimiters like dots to accommodate newer naming schemes such as `gpt-5.4`. This prevents runtime failures or schema validation errors when migrating to next-generation identifiers from external providers.
+
+## Lesson — Audit initialization files and configuration schemas during
+
+**Tags:** architecture, configuration, auditing
+
+Audit initialization files and configuration schemas during model updates to ensure that secondary provider IDs do not leak into logic reserved for the primary orchestrator. This practice preserves architectural boundaries and keeps the core system decoupled from specific external vendor versions.
