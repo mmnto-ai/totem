@@ -177,7 +177,7 @@ export function extractAddedLines(diff: string): DiffAddition[] {
 
 /**
  * Check if a file path matches a single glob pattern.
- * Supports simple patterns: `*.ext`, `**\/*.ext`, literal filenames.
+ * Supports: `*.ext`, `**\/*.ext`, `dir/**\/*.ext`, `dir/**`, literal filenames.
  */
 function matchesGlob(filePath: string, glob: string): boolean {
   // Normalize separators
@@ -189,6 +189,20 @@ function matchesGlob(filePath: string, glob: string): boolean {
   // **/*.ext — same as *.ext (match extension anywhere in path)
   if (glob.startsWith('**/')) {
     return matchesGlob(normalized, glob.slice(3));
+  }
+  // dir/**/*.ext or dir/** — directory-prefixed recursive glob
+  const dstarIdx = glob.indexOf('/**/');
+  if (dstarIdx !== -1) {
+    const prefix = glob.slice(0, dstarIdx);
+    const suffix = glob.slice(dstarIdx + 4); // after "/**/"
+    if (!normalized.startsWith(prefix + '/')) return false;
+    const rest = normalized.slice(prefix.length + 1);
+    return suffix === '' || matchesGlob(rest, suffix);
+  }
+  // dir/** — match anything under directory (no trailing pattern)
+  if (glob.endsWith('/**')) {
+    const prefix = glob.slice(0, -3);
+    return normalized.startsWith(prefix + '/');
   }
   // Literal filename match (e.g., "Dockerfile")
   return normalized === glob || normalized.endsWith('/' + glob);

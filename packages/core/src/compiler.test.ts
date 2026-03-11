@@ -343,6 +343,67 @@ describe('applyRules', () => {
     expect(violations[0]!.file).toBe('src/utils.ts');
   });
 
+  // ─── Directory-prefixed glob patterns ──────────────
+
+  const monorepoMultiFileDiff = [
+    'diff --git a/packages/mcp/src/server.ts b/packages/mcp/src/server.ts',
+    '--- a/packages/mcp/src/server.ts',
+    '+++ b/packages/mcp/src/server.ts',
+    '@@ -1,2 +1,3 @@',
+    ' const x = 1;',
+    '+text: rawResult',
+    ' export default x;',
+    'diff --git a/packages/core/src/validator.ts b/packages/core/src/validator.ts',
+    '--- a/packages/core/src/validator.ts',
+    '+++ b/packages/core/src/validator.ts',
+    '@@ -1,2 +1,3 @@',
+    ' const y = 2;',
+    '+text: someValue',
+    ' export default y;',
+    'diff --git a/packages/mcp/src/tools.test.ts b/packages/mcp/src/tools.test.ts',
+    '--- a/packages/mcp/src/tools.test.ts',
+    '+++ b/packages/mcp/src/tools.test.ts',
+    '@@ -1,2 +1,3 @@',
+    " it('works', () => {",
+    '+text: testFixture',
+    ' });',
+  ].join('\n');
+
+  it('matches directory-prefixed glob (packages/mcp/**/*.ts)', () => {
+    const rules: CompiledRule[] = [
+      {
+        ...makeRule('text:\\s*\\w+', 'MCP rule'),
+        fileGlobs: ['packages/mcp/**/*.ts'],
+      },
+    ];
+    const violations = applyRules(rules, monorepoMultiFileDiff);
+    expect(violations).toHaveLength(2); // server.ts + tools.test.ts
+    expect(violations.every((v) => v.file!.startsWith('packages/mcp/'))).toBe(true);
+  });
+
+  it('combines directory-prefix with test exclusion', () => {
+    const rules: CompiledRule[] = [
+      {
+        ...makeRule('text:\\s*\\w+', 'MCP rule'),
+        fileGlobs: ['packages/mcp/**/*.ts', '!**/*.test.ts'],
+      },
+    ];
+    const violations = applyRules(rules, monorepoMultiFileDiff);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]!.file).toBe('packages/mcp/src/server.ts');
+  });
+
+  it('does not match files outside directory prefix', () => {
+    const rules: CompiledRule[] = [
+      {
+        ...makeRule('text:\\s*\\w+', 'CLI rule'),
+        fileGlobs: ['packages/cli/**/*.ts'],
+      },
+    ];
+    const violations = applyRules(rules, monorepoMultiFileDiff);
+    expect(violations).toHaveLength(0);
+  });
+
   // ─── Inline suppression (totem-ignore) ─────────────
 
   it('suppresses same-line violation with totem-ignore', () => {
