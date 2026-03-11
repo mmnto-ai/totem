@@ -59,7 +59,7 @@ describe('totem hooks CLI entrypoint', () => {
     expect(result.exitCode).toBe(0);
   });
 
-  it('--check exits 1 outside a git repo', () => {
+  it('--check exits 0 outside a git repo', () => {
     const result = runHooks(tmpDir, ['--check']);
     expect(result.stderr).toContain('Not a git repository');
     expect(result.exitCode).toBe(0);
