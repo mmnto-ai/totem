@@ -1,5 +1,13 @@
 # @mmnto/cli
 
+## 0.26.1
+
+### Patch Changes
+
+- 8c7cda9: Add formatting rules to totem docs system prompt to prevent monster single-line phase summaries
+- c67495e: Fix false positives in suspicious lesson detection for security-related lessons
+  - @mmnto/totem@0.26.1
+
 ## 0.26.0
 
 ### Minor Changes
