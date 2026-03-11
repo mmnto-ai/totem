@@ -178,16 +178,13 @@ export async function runSync(
       }
     };
     for (const chunk of chunks) {
-      chunk.content = sanitizeForIngestion(chunk.content, {
+      const sanitizeOpts = {
         chunkType: chunk.type,
         filePath: file.relativePath,
         onWarn: dedupeWarn,
-      });
-      chunk.contextPrefix = sanitizeForIngestion(chunk.contextPrefix, {
-        chunkType: chunk.type,
-        filePath: file.relativePath,
-        onWarn: dedupeWarn,
-      });
+      };
+      chunk.content = sanitizeForIngestion(chunk.content, sanitizeOpts);
+      chunk.contextPrefix = sanitizeForIngestion(chunk.contextPrefix, sanitizeOpts);
     }
 
     buffer.push(...chunks);
