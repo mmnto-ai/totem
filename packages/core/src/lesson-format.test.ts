@@ -13,12 +13,12 @@ describe('generateLessonHeading', () => {
     expect(generateLessonHeading('Use strict mode')).toBe('Use strict mode');
   });
 
-  it('truncates long text at word boundary with ellipsis', () => {
+  it('truncates long text at word boundary without ellipsis', () => {
     const long =
       'This is a very long lesson that goes on and on and on without any sentence boundary for quite a while';
     const heading = generateLessonHeading(long);
-    expect(heading.length).toBeLessThanOrEqual(65); // 60 + ellipsis + possible word
-    expect(heading).toContain('…');
+    expect(heading.length).toBeLessThanOrEqual(HEADING_MAX_CHARS);
+    expect(heading).not.toContain('…');
   });
 
   it('strips markdown bold formatting', () => {

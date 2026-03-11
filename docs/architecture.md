@@ -16,7 +16,7 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 
 ### 2. The CLI (`@mmnto/cli`)
 
-- `totem init` / `totem eject`: Scaffolds or safely removes `totem.config.ts`, git hooks, and AI memory reflexes.
+- `totem init` / `totem eject`: Scaffolds or safely removes `totem.config.ts`, git hooks (which enforce memory classification, deterministic shield gating, and actively block direct commits to `main`), and AI memory reflexes.
 - `totem sync`: Crawls target directories defined in `totem.config.ts`, chunks, embeds, and updates the LanceDB index.
 - `totem search`: Direct debug query interface.
 - `totem spec` / `totem shield` / `totem triage`: Standardized workflow orchestration commands (spec planning, pre-push review, issue prioritization). `totem shield` includes options like `--mode=structural` for context-blind architectural review, and `--learn` for optional lesson extraction directly from LLM verdicts.
@@ -33,7 +33,7 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 
 Developers can further bypass specific false positives using **inline suppression directives** (`totem-ignore` / `totem-ignore-next-line`), and `fileGlobs` support negated patterns (e.g., `!*.test.ts`) to exclude file types. Vulnerable patterns (nested quantifiers, star height > 1) are rejected, leaving them to be handled by the standard LLM-based shield.
 
-`totem shield --deterministic` applies these compiled rules against `git diff` additions with zero LLM calls — ideal for CI enforcement without API keys or quota. Compiled rules can also be adapted to external systems via `totem compile --export` for cross-model lesson enforcement.
+`totem shield --deterministic` applies these compiled rules against `git diff` additions with zero LLM calls. This is used for both local git hook enforcement (evaluating pre-commit/pre-push stages and blocking violations) and CI quality gating, eliminating API key dependency and quota exhaustion. Compiled rules can also be adapted to external systems via `totem compile --export` for cross-model lesson enforcement.
 
 ### 4. Shield GitHub Action & CI Drift Gate
 
@@ -106,7 +106,7 @@ orchestrator: {
 
 ### Gemini Provider (native API)
 
-Direct SDK calls via `@google/genai`. Requires `GEMINI_API_KEY` (or `GOOGLE_API_KEY`):
+Direct SDK calls via `@google/genai`. Requires `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) and adheres to explicitly bound consent and safety rules for model usage:
 
 ```typescript
 orchestrator: {
@@ -136,6 +136,10 @@ All providers support: `defaultModel`, `fallbackModel`, `overrides` (per-command
 The `lessons.md` file within `.totem/` is meant to be version-controlled (committed to git). It acts as the explicit, human-readable ledger of traps and architectural decisions. Lesson headings are fully derived from content context (avoiding generic timestamps or truncated text) for highly descriptive, scannable PR diffs. When updated, `totem sync` re-indexes it.
 
 During `totem init`, users are offered an optional **Universal Baseline** — a curated set of foundational AI developer lessons (security, hallucination traps, architecture rules). These are appended to `lessons.md` with a `<!-- totem:baseline -->` marker for idempotency. The baseline solves the cold-start problem where a fresh install has no knowledge to retrieve.
+
+## The `.strategy/` Submodule
+
+For secure collaboration, particularly in enterprise or distributed environments, proprietary project guidelines and sensitive AI orchestration instructions are managed in an isolated `.strategy/` directory. By maintaining `.strategy` as a private git submodule, teams ensure that confidential architectural playbooks and workflows remain strictly access-controlled, while the core codebase and universal baseline lessons remain independently distributable.
 
 ## Phase 4 Vision: Federated Memory & Swarm Intelligence
 

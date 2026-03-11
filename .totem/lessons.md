@@ -1070,3 +1070,27 @@ Sanitize LLM-generated content before persisting it to version-controlled files 
 **Tags:** architecture, consistency, automation
 
 Prefer auto-generating headings at the storage layer rather than persisting LLM-provided headings when multiple extraction paths exist. This ensures the knowledge base maintains a uniform format regardless of whether lessons are extracted via manual commands or automated review passes.
+
+## Lesson — Avoid using exit 0 inside git hooks intended for chaining
+
+**Tags:** git, shell, automation
+
+Avoid using `exit 0` inside git hooks intended for chaining, as it terminates the entire shell process and prevents subsequent appended hooks from executing. Wrapping logic in `if/fi` blocks ensures the hook script can continue to other contributors' logic.
+
+## Lesson — Perform shell-level existence checks before invoking CLI tools
+
+**Tags:** performance, git, shell
+
+Perform shell-level existence checks (e.g., `if [ -f config.json ]`) in git hooks before invoking heavy CLI tools. This prevents the performance overhead of starting a Node.js runtime in environments where the tool is not configured or required.
+
+## Lesson — Detect existing hook managers and provide manual guidance
+
+**Tags:** git, dx, automation
+
+Detect existing hook managers like Husky or Lefthook and provide manual integration guidance instead of writing directly to `.git/hooks`. This avoids clobbering developer workflows and prevents configuration conflicts between multiple management tools.
+
+## Lesson — Validate that an existing git hook is a shell script before appending
+
+**Tags:** git, safety, automation
+
+Validate that an existing git hook is a shell script (e.g., by checking for a shebang) before attempting to append automated logic. This prevents the corruption of binary or specialized hooks that cannot handle string-based appends.
