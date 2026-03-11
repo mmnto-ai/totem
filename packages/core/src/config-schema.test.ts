@@ -28,7 +28,7 @@ const GEMINI_ORCHESTRATOR = {
 
 const ANTHROPIC_ORCHESTRATOR = {
   provider: 'anthropic' as const,
-  defaultModel: 'claude-sonnet-4-5-20250514',
+  defaultModel: 'claude-sonnet-4-6',
 };
 
 describe('TotemConfigSchema', () => {

@@ -88,7 +88,7 @@ Direct SDK calls using the standard OpenAI-compatible format. Ideal for official
 ```typescript
 orchestrator: {
   provider: 'openai',
-  defaultModel: 'gpt-4o',
+  defaultModel: 'gpt-5.4',
   // Supports custom endpoints via standard OpenAI configuration
 }
 ```
@@ -123,7 +123,7 @@ Direct SDK calls via `@anthropic-ai/sdk`. Requires `ANTHROPIC_API_KEY`:
 ```typescript
 orchestrator: {
   provider: 'anthropic',
-  defaultModel: 'claude-sonnet-4-5-20250514',
+  defaultModel: 'claude-sonnet-4-6',
 }
 ```
 

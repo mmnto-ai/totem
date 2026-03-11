@@ -23,7 +23,7 @@ vi.mock('../ui.js', () => ({
 describe('invokeAnthropicOrchestrator', () => {
   const baseOpts = {
     prompt: 'test prompt',
-    model: 'claude-sonnet-4-5-20250514',
+    model: 'claude-sonnet-4-6',
     cwd: '.',
     tag: 'Test',
     totemDir: '.totem',
@@ -65,7 +65,7 @@ describe('invokeAnthropicOrchestrator', () => {
 
     expect(mockCreate).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: 'claude-sonnet-4-5-20250514',
+        model: 'claude-sonnet-4-6',
         messages: [{ role: 'user', content: 'test prompt' }],
       }),
     );

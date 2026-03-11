@@ -1,0 +1,139 @@
+# Supported Models Reference
+
+> **Last validated:** 2026-03-10
+
+Totem supports four AI provider families. This document tracks the current
+recommended model IDs for each and how to programmatically discover new ones.
+
+---
+
+## Orchestrator Models (LLM Calls)
+
+Used by `totem shield`, `totem spec`, `totem triage`, `totem extract`, etc.
+
+### Google Gemini
+
+| Role                | Model ID                 | Notes                                           |
+| ------------------- | ------------------------ | ----------------------------------------------- |
+| Default (fast)      | `gemini-3-flash-preview` | Preview — current Totem default                 |
+| Pro (complex tasks) | `gemini-3.1-pro-preview` | Preview — used for spec/shield/triage overrides |
+| Stable fast         | `gemini-2.5-flash`       | GA release, used in smoke/eval tests            |
+| Stable pro          | `gemini-2.5-pro`         | GA release                                      |
+| Ultra-cheap         | `gemini-2.5-flash-lite`  | Minimal cost                                    |
+
+**Listing API:** `GET https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY`
+
+- Auth: API key as query parameter
+- Docs: https://ai.google.dev/api/models
+
+### Anthropic (Claude)
+
+| Role              | Model ID            | Dated Snapshot               |
+| ----------------- | ------------------- | ---------------------------- |
+| Flagship          | `claude-opus-4-6`   | Latest Opus                  |
+| Fast/balanced     | `claude-sonnet-4-6` | Latest Sonnet                |
+| Cheapest          | `claude-haiku-4-5`  | `claude-haiku-4-5-20251001`  |
+| Legacy Sonnet 4.5 | `claude-sonnet-4-5` | `claude-sonnet-4-5-20250929` |
+| Legacy Sonnet 4   | `claude-sonnet-4-0` | `claude-sonnet-4-20250514`   |
+
+**Listing API:** `GET https://api.anthropic.com/v1/models`
+
+- Auth: `X-Api-Key` header + `anthropic-version: 2023-06-01`
+- Docs: https://docs.anthropic.com/en/docs/about-claude/models
+- Note: Anthropic does **not** offer an embedding model.
+
+### OpenAI
+
+| Role                 | Model ID                  | Notes                    |
+| -------------------- | ------------------------- | ------------------------ |
+| Flagship             | `gpt-5.4`                 | Latest                   |
+| Pro (higher compute) | `gpt-5.4-pro`             | Higher token limits      |
+| Fast/cheap           | `gpt-5-mini`              | Cost-optimized           |
+| Ultra-cheap          | `gpt-5-nano`              | Smallest                 |
+| Reasoning (best)     | `o3-pro`                  | Slow but powerful        |
+| Reasoning (fast)     | `o4-mini`                 | Cost-efficient reasoning |
+| Previous gen         | `gpt-4o`, `gpt-4o-mini`   | Legacy, still available  |
+| Previous gen         | `gpt-4.1`, `gpt-4.1-mini` | Still available          |
+
+**Listing API:** `GET https://api.openai.com/v1/models`
+
+- Auth: `Authorization: Bearer $OPENAI_API_KEY`
+- Docs: https://platform.openai.com/docs/models
+
+### Ollama (Local)
+
+Ollama runs models locally. Any model from the [Ollama library](https://ollama.com/search)
+can be used as an orchestrator. Popular choices:
+
+| Model           | Parameters  | Notes                  |
+| --------------- | ----------- | ---------------------- |
+| `llama3.1`      | 8B/70B/405B | Meta's flagship        |
+| `qwen2.5-coder` | 7B/32B      | Code-specialized       |
+| `phi3`          | 3.8B/14B    | Microsoft, lightweight |
+
+**Listing API (local):** `GET http://localhost:11434/api/tags`
+
+- Auth: None (local server)
+- Lists only downloaded models. Browse full library at https://ollama.com/search
+- Docs: https://github.com/ollama/ollama/blob/main/docs/api.md
+
+---
+
+## Embedding Models (Vector Search)
+
+Used by `totem sync` for indexing chunks into LanceDB.
+
+| Provider             | Model ID                 | Dimensions | Notes                          |
+| -------------------- | ------------------------ | ---------- | ------------------------------ |
+| **OpenAI** (default) | `text-embedding-3-small` | 1536       | Lowest onboarding friction     |
+| OpenAI (large)       | `text-embedding-3-large` | 3072       | Higher quality, higher cost    |
+| **Ollama** (offline) | `nomic-embed-text`       | 768        | 56M+ pulls, most popular local |
+| Ollama               | `mxbai-embed-large`      | 1024       | BERT-large class SOTA          |
+| Ollama               | `qwen3-embedding`        | varies     | Newest, fast-growing           |
+| Gemini               | `gemini-embedding-001`   | —          | Not yet supported in Totem     |
+
+---
+
+## Totem Defaults
+
+Current defaults configured in `totem.config.ts` and `packages/cli/src/commands/init.ts`:
+
+```
+Embedding:    OpenAI text-embedding-3-small  (or Ollama nomic-embed-text)
+Orchestrator: Gemini gemini-3-flash-preview  (overrides: gemini-3.1-pro-preview for spec/shield/triage)
+```
+
+### Updating Defaults
+
+When a provider releases new stable models, update these locations:
+
+1. `packages/core/src/config-schema.ts` — Zod schema defaults (embeddings only)
+2. `packages/core/src/embedders/openai-embedder.ts` — constructor default
+3. `packages/core/src/embedders/ollama-embedder.ts` — constructor default
+4. `packages/cli/src/commands/init.ts` — config generation templates
+5. `docs/architecture.md` — documentation examples
+6. `totem.config.ts` — project root config (this repo's own config)
+7. Test files — smoke, integration, and unit tests referencing specific model IDs
+
+---
+
+## Model Discovery Scripts
+
+Quick one-liners to check available models from each provider:
+
+```bash
+# Gemini — list all models
+curl -s "https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY" | jq '.models[].name'
+
+# Anthropic — list all models
+curl -s https://api.anthropic.com/v1/models \
+  -H "X-Api-Key: $ANTHROPIC_API_KEY" \
+  -H "anthropic-version: 2023-06-01" | jq '.data[].id'
+
+# OpenAI — list all models
+curl -s https://api.openai.com/v1/models \
+  -H "Authorization: Bearer $OPENAI_API_KEY" | jq '.data[].id' | sort
+
+# Ollama — list locally downloaded models
+curl -s http://localhost:11434/api/tags | jq '.models[].name'
+```

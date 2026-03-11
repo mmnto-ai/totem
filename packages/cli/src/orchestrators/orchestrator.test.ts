@@ -63,7 +63,7 @@ describe('createOrchestrator', () => {
   it('returns a function for anthropic provider', () => {
     const config: OrchestratorConfig = {
       provider: 'anthropic',
-      defaultModel: 'claude-sonnet-4-5-20250514',
+      defaultModel: 'claude-sonnet-4-6',
     };
     const invoke = createOrchestrator(config);
     expect(typeof invoke).toBe('function');
@@ -88,7 +88,7 @@ describe('createOrchestrator', () => {
     const invoke = createOrchestrator(config);
     const result = await invoke({
       prompt: 'test',
-      model: 'claude-sonnet-4-5-20250514',
+      model: 'claude-sonnet-4-6',
       cwd: '.',
       tag: 'Test',
       totemDir: '.totem',
@@ -100,7 +100,7 @@ describe('createOrchestrator', () => {
   it('returns a function for openai provider', () => {
     const config: OrchestratorConfig = {
       provider: 'openai',
-      defaultModel: 'gpt-4o',
+      defaultModel: 'gpt-5.4',
     };
     const invoke = createOrchestrator(config);
     expect(typeof invoke).toBe('function');
@@ -111,7 +111,7 @@ describe('createOrchestrator', () => {
     const invoke = createOrchestrator(config);
     const result = await invoke({
       prompt: 'test',
-      model: 'gpt-4o',
+      model: 'gpt-5.4',
       cwd: '.',
       tag: 'Test',
       totemDir: '.totem',
@@ -271,9 +271,9 @@ describe('parseModelString', () => {
   });
 
   it('parses openai:model into provider and model', () => {
-    expect(parseModelString('openai:gpt-4o', 'gemini')).toEqual({
+    expect(parseModelString('openai:gpt-5.4', 'gemini')).toEqual({
       provider: 'openai',
-      model: 'gpt-4o',
+      model: 'gpt-5.4',
     });
   });
 

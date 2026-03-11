@@ -379,7 +379,7 @@ describe.runIf(process.env['CI_INTEGRATION'] === 'true')(
             targets: [{ glob: 'src/**/*.ts', type: 'code', strategy: 'typescript-ast' }],
             totemDir: '.totem',
             lanceDir: '.lancedb',
-            orchestrator: { provider: 'openai', model: 'gpt-4o-mini' },
+            orchestrator: { provider: 'openai', model: 'gpt-5-mini' },
           };
         `;
         fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), config);

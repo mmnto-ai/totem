@@ -1094,3 +1094,39 @@ Detect existing hook managers like Husky or Lefthook and provide manual integrat
 **Tags:** git, safety, automation
 
 Validate that an existing git hook is a shell script (e.g., by checking for a shebang) before attempting to append automated logic. This prevents the corruption of binary or specialized hooks that cannot handle string-based appends.
+
+## Lesson — Automated review tools often have stale knowledge of the
+
+**Tags:** llm, testing, integration
+
+Automated review tools often have stale knowledge of the latest or experimental model identifiers (e.g., `gemini-2.5-flash`). Prioritize model IDs proven to work in existing smoke tests over AI suggestions that flag them as typos.
+
+## Lesson — Avoid adding explicit runtime guards for conditions that
+
+**Tags:** typescript, refactoring
+
+Avoid adding explicit runtime guards for conditions that are already prohibited by strict TypeScript interfaces. Redundant checks for "cannot happen" states like `undefined` on a required property add clutter without improving safety when the design contract is already enforced.
+
+## Lesson — During data ingestion, strip high-risk security threats
+
+**Tags:** security, ingestion
+
+During data ingestion, strip high-risk security threats like BiDi overrides (Trojan Source) but only flag patterns like XML tags or Base64 via warnings. This prevents malicious injection while preserving the integrity of legitimate content that happens to use those formats.
+
+## Lesson — When detecting project environments, use a consistent
+
+**Tags:** bun, nodejs, devops
+
+When detecting project environments, use a consistent priority order (e.g., pnpm > yarn > bun > npx) to ensure specific lockfiles are honored. This includes checking for both legacy (`bun.lockb`) and modern (`bun.lock`) versions to maintain compatibility across tool versions.
+
+## Lesson — Implement an adversarial evaluation harness with planted
+
+**Tags:** testing, llm, quality-assurance
+
+Implement an adversarial evaluation harness with planted architectural violations to monitor LLM performance over time. Combining deterministic regex-based tests with gated LLM integration tests ensures that model drift is caught when reasoning fails to identify known traps.
+
+## Lesson — Moving security-sensitive regexes (like BiDi stripping or…
+
+**Tags:** security, regex, refactoring
+
+Moving security-sensitive regexes (like BiDi stripping or XML bypass defense) from CLI tools to core packages ensures consistent adversarial scrubbing across both ingestion pipelines and runtime shields. Hardening these patterns against whitespace bypasses (e.g., optional whitespace after closing slash in tags) prevents common prompt injection evasion techniques.

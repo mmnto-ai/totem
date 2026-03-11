@@ -23,7 +23,7 @@ vi.mock('../ui.js', () => ({
 describe('invokeOpenAIOrchestrator', () => {
   const baseOpts = {
     prompt: 'test prompt',
-    model: 'gpt-4o',
+    model: 'gpt-5.4',
     cwd: '.',
     tag: 'Test',
     totemDir: '.totem',
@@ -63,7 +63,7 @@ describe('invokeOpenAIOrchestrator', () => {
 
     expect(mockCreate).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: 'gpt-4o',
+        model: 'gpt-5.4',
         messages: [{ role: 'user', content: 'test prompt' }],
       }),
     );
