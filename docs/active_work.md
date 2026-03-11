@@ -4,12 +4,34 @@ Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are complete. Th
 
 **Key capabilities shipped in Phase 2:**
 
-- **AST & Chunking:** Tree-sitter universal parsing, deterministic lesson compiler, zero-LLM shield with AST gating
-- **Orchestration:** Native providers (Gemini, Anthropic, OpenAI, Ollama) with BYOSD, cross-provider routing, conformance suites
-- **Doc Sync & Memory:** Automated doc sync with XML sentinels, drift detection, cross-model lesson export (including Copilot)
-- **Shield & CI:** Shield GitHub Action, inline suppression, structural review, `--learn` mode, CI drift gate
-- **Security:** Adversarial ingestion scrubbing, extract prompt hardening, suspicious lesson detection, ANSI sanitization
-- **DX & Hooks:** Git hook enforcement, `totem hooks` command with monorepo support, Bun support, CI guard
+- **AST & Chunking:**
+  - Tree-sitter universal parsing
+  - Deterministic lesson compiler
+  - Zero-LLM shield with AST gating
+- **Orchestration:**
+  - Native providers (Gemini, Anthropic, OpenAI, Ollama) with BYOSD
+  - Cross-provider routing
+  - Conformance suites
+- **Doc Sync & Memory:**
+  - Automated doc sync with XML sentinels
+  - Drift detection
+  - Cross-model lesson export (including Copilot)
+- **Shield & CI:**
+  - Shield GitHub Action
+  - Inline suppression
+  - Structural review
+  - `--learn` mode
+  - CI drift gate
+- **Security:**
+  - Adversarial ingestion scrubbing
+  - Extract prompt hardening
+  - Suspicious lesson detection
+  - ANSI sanitization
+- **DX & Hooks:**
+  - Git hook enforcement
+  - `totem hooks` command with monorepo support
+  - Bun support
+  - CI guard
 
 Focus is now on **Phase 3 (Workflow Expansion)** and shift-left CI integration.
 
@@ -31,6 +53,7 @@ Focus is now on **Phase 3 (Workflow Expansion)** and shift-left CI integration.
 
 - **User Story:** As a maintainer, I want a defined model compatibility and auditing strategy so that we can systematically verify how different models are supported and audited following the shift to centralized orchestration.
 - **Scope:** Define how models are audited for compatibility, providing the strategic foundation to support the newly implemented adversarial evaluation harness in CI.
+- **Progress:** Initial foundation established by adding a supported models reference document (#325) and auditing default model IDs across all providers (#324).
 - **Why Next:** With orchestrator providers stabilized through the conformance suite and nightly smoke tests (#244, #245), the foundation is ready to formalize the model compatibility strategy as we move toward shift-left CI integrations.
 
 ### Blocked / Needs Input

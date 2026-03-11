@@ -2,7 +2,7 @@
 
 > [!WARNING]
 > **Developer Preview / Early Alpha**
-> Totem is currently in early alpha. While Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete—including our move to **Tree-sitter for Universal AST Parsing** (#173), the **Deterministic Lesson Compiler / Zero-LLM Shield** (#213, #216), and **Native API Orchestrators** (#229)—we are still polishing the "Magic Onboarding" experience (interactive tutorials). If you encounter friction during `totem init`, please bear with us!
+> Totem is currently in early alpha. While Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete, we are still polishing the "Magic Onboarding" experience (interactive tutorials). If you encounter friction during `totem init`, please bear with us!
 
 **Your AI team forgets. Totem remembers.**
 
@@ -16,10 +16,10 @@ When you're three levels deep in a debugging session, you need to know if the co
 
 ## Why Totem?
 
-- **Local-First & Git-Native:** Memory shouldn't be locked in a cloud SaaS. Totem compiles an embedded LanceDB vector index right inside your project (`.lancedb/`). The actual knowledge is stored in a human-readable, version-controlled `.totem/lessons.md` file. Review your AI's memory in your PRs.
-- **The Reflex Engine:** Totem doesn't just give your AI a database; it gives them _reflexes_. `totem init` auto-injects behavioral triggers and **Defensive Context Management Reflexes** (#160) into your AI's system prompts (`CLAUDE.md`, `.cursorrules`), forcing them to autonomously document traps, query architecture, and issue warnings before they write code.
-- **Multi-Agent Orchestration:** Use Claude to write code, Gemini to review PRs, and a local DeepSeek model for fast checks. Totem acts as the "Shared Brain" and workflow orchestrator (via `totem spec`) for your entire AI org chart.
-- **Built for Enterprise Scale:** The ingestion pipeline streams chunks in batches directly to the local vector store (#104), maintaining a flat memory footprint regardless of how massive your monorepo gets. Features like **Drift Detection** (#177, #211) ensure your memory stays self-cleaning and relevant as the codebase evolves.
+- **Local-First & Git-Native:** Totem compiles an embedded LanceDB vector index directly inside your project, storing actual knowledge in a human-readable, version-controlled `.totem/lessons.md` file. Review your AI's memory locally in your PRs instead of locking it in a cloud SaaS.
+- **The Reflex Engine:** Totem gives your AI reflexes by auto-injecting behavioral triggers and Defensive Context Management Reflexes into system prompts. This forces them to autonomously document traps, query architecture, and issue warnings before writing code (#160).
+- **Multi-Agent Orchestration:** Use Claude to write code, Gemini to review PRs, and a local DeepSeek model for fast checks. Totem acts as the "Shared Brain" and workflow orchestrator for your entire AI org chart.
+- **Built for Enterprise Scale:** The ingestion pipeline streams chunks in batches, maintaining a flat memory footprint regardless of monorepo size (#104). Features like Drift Detection ensure your memory stays self-cleaning and relevant as the codebase evolves (#211).
 
 ## Philosophy: The Unix Approach to AI
 
@@ -35,15 +35,19 @@ By building our orchestrator as discrete, composable commands (`spec`, `shield`,
 
 This is a Turborepo monorepo consisting of:
 
-- **`@mmnto/totem`**: The core logic using **Tree-sitter for Universal AST Parsing**, syntax-aware chunking (with heading hierarchy breadcrumbs), and the LanceDB interface. Includes a deterministic lesson compiler (#213, #216) backed by compiled rules (#226) and cross-model export targets (#269).
+- **`@mmnto/totem`**: The core logic using **Tree-sitter for Universal AST Parsing**, syntax-aware chunking, and the LanceDB interface. Includes a deterministic lesson compiler backed by compiled rules and cross-model export targets (#213, #269).
 - **`@mmnto/cli`**: The executable interface (`totem init`, `totem sync`).
 - **`@mmnto/mcp`**: The standard I/O Model Context Protocol (MCP) server that exposes the `search_knowledge` and `add_lesson` tools to your AI.
 
 ## Security & Privacy
 
 - **100% Local Privacy:** Totem's vector database (`.lancedb/`) lives entirely within your local repository. Your codebase is never uploaded to a centralized SaaS platform or external memory service.
-- **Injection & ReDoS Hardening:** Totem actively sanitizes untrusted inputs (applying strict SECURITY NOTICES to PR comments during `totem extract` #279, #289), enforces path containment checks in drift detection (#284), neutralizes ANSI terminal injection in Git outputs (#292), applies **ReDoS protection to compiled regex rules** (#218), implements **adversarial content scrubbing in the ingestion pipeline** (#315, #323), actively detects and blocks suspicious lessons even in bypass modes (#290, #291, #299), and **XML-delimits MCP responses** (#149) to mitigate indirect prompt injection and terminal injection attacks. Safety rules and explicit consent models have also been formalized for specific providers like Gemini (#309, #311).
-- **Continuous Auditing:** The repository utilizes Dependabot for automated security vulnerability scanning (#267, #272) to ensure dependencies remain secure. Internal strategies and sensitive planning are isolated in a properly configured private submodule for secure collaboration (#300, #321, #331).
+- **Injection & ReDoS Hardening:** Totem actively sanitizes untrusted inputs and neutralizes terminal injection attacks.
+  - **Prompt Security:** Applies SECURITY NOTICES to PR comments during extraction and XML-delimits MCP responses to mitigate indirect prompt injection (#149, #279).
+  - **Adversarial Defense:** Implements adversarial content scrubbing in the ingestion pipeline and neutralizes ANSI terminal injection in Git outputs (#292, #315).
+  - **Lesson Sandboxing:** Actively detects and blocks suspicious lessons even in bypass modes, minimizing false positives while applying ReDoS protection to compiled rules (#218, #326).
+  - **System Integrity:** Enforces path containment checks in drift detection and formalizes explicit consent models for specific providers (#284, #311).
+- **Continuous Auditing:** The repository utilizes Dependabot for automated security vulnerability scanning to ensure dependencies remain secure (#267). Internal strategies and sensitive planning are isolated in a properly configured private submodule for secure collaboration (#300).
 
 ## Prerequisites
 
@@ -63,11 +67,13 @@ Run this inside your consuming project (e.g., your Next.js or Node app):
 npx @mmnto/cli init
 ```
 
-This will auto-detect your project structure and package manager (including Bun #316, #323), generate a `totem.config.ts` using **Minimum Viable Configuration (MVC) tiers** (#187), install automated background git hooks, and inject the Proactive Memory Reflexes into your AI's system prompt.
+This will auto-detect your project structure and package manager (including Bun #316), generate a `totem.config.ts` using **Minimum Viable Configuration (MVC) tiers**, and inject the Proactive Memory Reflexes into your AI's system prompt.
 
-**Universal Baseline:** During init, Totem offers to install a curated set of foundational AI developer lessons (#128) (prompt injection prevention, hallucination traps, dependency verification, etc.) so your agents have useful knowledge from Day 1.
-
-**Seamless Host Integration:** If you are using Claude Code or Gemini CLI, `totem init` will automatically wire up agent hooks (including native `SessionStart` hooks #95) to run `totem briefing` and intercept `git commit`/`push` to run `totem shield` automatically, incorporating **git hook enforcement** (safely detecting non-bash hooks before appending #317, automatically navigating to the git root in monorepo sub-packages #333, #338, and guarding against missing CLI in CI #336) that can block direct commits to `main` and execute deterministic shield gates (#310, #318).
+- **Universal Baseline:** During init, Totem offers to install a curated set of foundational AI developer lessons. This includes prompt injection prevention, hallucination traps, and dependency verification so agents have useful knowledge from Day 1 (#128).
+- **Seamless Host Integration:** If you are using Claude Code or Gemini CLI, `totem init` automatically wires up agent hooks (including native `SessionStart` hooks #95) to run `totem briefing`.
+  - **Git Hook Enforcement:** Safely detects non-bash hooks before appending, seamlessly navigating to the git root in monorepo sub-packages (#317, #333).
+  - **Commit Gates:** Intercepts pushes to run `totem shield` automatically, and can block direct commits to `main` while executing deterministic shield gates (#310).
+  - **CI Safety:** Guards against missing CLI execution environments in CI pipelines to keep workflows unblocked (#336).
 
 ### 2. Configure your Embedding Provider
 
@@ -101,7 +107,7 @@ Over time, lessons in `.totem/lessons.md` can reference files or paths that no l
 npx @mmnto/cli sync --prune
 ```
 
-Totem scans each lesson for backtick-wrapped file paths, checks if they still exist on disk (with strict path containment #284), and presents a multi-select prompt to prune orphaned entries. The vector index is automatically re-synced after pruning.
+Totem scans each lesson for backtick-wrapped file paths and checks if they still exist on disk with strict path containment (#284). It then presents a multi-select prompt to prune orphaned entries, automatically re-syncing the vector index afterward.
 
 ### 4. Connect the MCP Server
 
@@ -143,9 +149,12 @@ Add Totem to your AI agent's configuration (e.g., Claude Desktop, Claude Code, o
 
 Totem ships with native CLI commands that orchestrate your entire shift-left workflow by querying LanceDB and invoking your AI to make project-aware decisions.
 
-First, configure your orchestrator in `totem.config.ts`. Totem supports **Native API Orchestrators** (#229) for direct integrations (Anthropic, Gemini), a **generic OpenAI-compatible orchestrator** for local models (#285, #293), a **native Ollama orchestrator** with dynamic context length (`num_ctx` #298, #306), and a generic `shell` adapter.
+First, configure your orchestrator in `totem.config.ts`. To keep the core CLI lightweight, Totem uses a **"Bring Your Own SDK" (BYOSD)** pattern. If you choose a native API provider, you must install its corresponding SDK as a dev dependency.
 
-To keep the core CLI lightweight, Totem uses a **"Bring Your Own SDK" (BYOSD)** pattern. If you choose a native API provider, you must install its corresponding SDK as a dev dependency.
+- **Native Providers:** Direct integrations for Anthropic and Gemini (#229).
+- **OpenAI-Compatible:** Generic orchestrator for local and OpenAI API models (#285).
+- **Ollama Native:** Dedicated Ollama orchestrator with dynamic context length support (`num_ctx` #298).
+- **Generic Shell:** Fallback command line adapter.
 
 ```bash
 # If using provider: 'gemini'
@@ -166,29 +175,34 @@ orchestrator: {
   provider: 'gemini', // Requires @google/genai (or 'openai' / 'ollama' for local setups)
   defaultModel: 'gemini-3-flash-preview',
   overrides: {
-    spec: 'anthropic:claude-3-7-sonnet-latest', // Cross-provider routing (#246)
+    spec: 'anthropic:claude-3-7-sonnet-latest', // Cross-provider routing
     shield: 'gemini-3.1-pro-preview',
     triage: 'gemini-3.1-pro-preview'
   }
 }
 ```
 
-Totem continuously audits default model IDs across all providers (#324). For a complete list of verified models and configuration routing strings, consult the supported models reference document (#325, #327).
+Totem continuously audits default model IDs across all providers (#324). For a complete list of verified models and configuration routing strings, consult the supported models reference document (#325).
 
 **Workflow Commands:**
 
 - **`briefing`**: Fetches your current git branch, uncommitted changes, open PRs, and recent session momentum to generate a startup briefing.
 - **`bridge`**: Assesses your current mid-task state and creates a lightweight breadcrumb file. Use this when your AI agent's context window gets too full.
 - **`spec <ids...>`**: Fetches GitHub Issues (supports URLs) and synthesizes a pre-work spec. The AI acts as a **Staff-Level Architect**, focusing on contracts and edge cases.
-- **`shield`**: Reads your uncommitted git diff, queries LanceDB for related traps, and performs a **hybrid zero-day + N-day architectural code review** (#98) before you push. Supports **zero-LLM shield mode** (#216) for lightning-fast deterministic checks using compiled rules and **Tree-sitter AST gating** (#287), false-positive mitigation for non-code contexts (#251), inline suppression directives (#255), **context-blind structural review** (`--mode=structural` #270), and optional lesson extraction from LLM verdicts (`--learn` #303, #307). Additionally, local git hooks enforce these rules by **blocking direct commits to main** and gating commits behind deterministic shield checks (#310, #318).
+- **`shield`**: Reads your uncommitted diff and queries LanceDB for related traps to perform an architectural code review before you push. <!-- totem-ignore -->
+  - **Zero-LLM Mode:** Lightning-fast deterministic checks using compiled rules, Tree-sitter AST gating, and structural review (#216, #287).
+  - **False-Positive Mitigation:** Handles non-code contexts smartly and supports inline suppression directives (#251, #255).
+  - **Workflow Integration:** Local git hooks enforce rules by blocking direct commits to main, and supports optional lesson extraction from verdicts (#303, #310).
 - **`triage`**: Fetches open GitHub issues and generates a prioritized roadmap (e.g., `docs/active_work.md`) for your next task.
-- **`compile`**: Compiles `.totem/lessons.md` into deterministic regex/AST rules for zero-LLM checks. Supports **cross-model lesson export** (`--export`) to enforce architectural constraints across different agent environments and external tools (including **GitHub Copilot instructions** #269, #294).
+- **`compile`**: Compiles `.totem/lessons.md` into deterministic regex/AST rules for zero-LLM checks. Supports cross-model lesson export to enforce architectural constraints across different agent environments, including GitHub Copilot instructions (#269, #294).
 - **`add-lesson`**: Interactively document a context, symptom, and fix. Saves to `.totem/lessons.md` and triggers a background re-index.
-- **`docs`**: Automatically syncs project documentation (README, Roadmap) by analyzing git logs and closed issues since the last release (#190). Supports targeting individual files (e.g., `totem docs README.md`) with path fixes and strict state preservation to prevent hallucination (#238, #241, #249).
-- **`wrap`**: A post-merge workflow chain that runs `extract`, syncs the database, generates a roadmap, and updates docs in one command (#143, #242).
-- **`extract <ids...>`**: Fetches merged PRs, reads comments, and extracts systemic architectural traps with **concise, descriptive headings** (#203, #253, #271, #278) while strictly hardening against prompt injection (#279, #289) and actively detecting and blocking suspicious lessons to prevent poisoned extractions (#290, #291, #299, #302). Supports interactive multi-select pruning and the `--pick` flag for selective lesson acceptance (#265).
-- **`handoff`**: Captures uncommitted changes and lessons learned today, synthesizing a tactical snapshot for your next session. Supports a `--lite` flag for rapid, zero-LLM session snapshots with ANSI-sanitized git outputs (#281, #288, #292).
-- **`hooks`**: Installs or updates background git hooks, automatically resolving the git root in monorepo sub-packages (#333, #338). Ideal for wiring into `prepare` scripts to auto-install enforcement hooks across your team (#332, #335).
+- **`docs`**: Automatically syncs project documentation by analyzing git logs and closed issues since the last release (#190). Supports targeting individual files with path fixes and strict state preservation to prevent hallucination (#238, #249).
+- **`wrap`**: A post-merge workflow chain that runs `extract`, syncs the database, generates a roadmap, and updates docs in one command (#143).
+- **`extract <ids...>`**: Fetches merged PRs, reads comments, and extracts systemic architectural traps with concise, descriptive headings (#203, #271).
+  - **Security Hardening:** Strictly hardens against prompt injection and actively blocks suspicious lessons to prevent poisoned extractions (#279, #290).
+  - **Curation:** Supports interactive multi-select pruning and the `--pick` flag for selective lesson acceptance (#265).
+- **`handoff`**: Captures uncommitted changes and lessons learned today, synthesizing a tactical snapshot for your next session. Supports a `--lite` flag for rapid, zero-LLM session snapshots with ANSI-sanitized git outputs (#281, #292).
+- **`hooks`**: Installs or updates background git hooks, automatically resolving the git root in monorepo sub-packages (#333). Ideal for wiring into `prepare` scripts to auto-install enforcement hooks across your team (#332).
 - **`eject`**: Safely removes all Totem git hooks, configuration files, AI agent prompt injections, and the local `.lancedb/` index (#131).
 
 > [!TIP]
@@ -197,7 +211,11 @@ Totem continuously audits default model IDs across all providers (#324). For a c
 
 ### 6. Shield GitHub Action (CI/CD)
 
-Enforce Totem's deterministic quality gate automatically on every pull request (#180, #222). The action runs `totem shield --deterministic` using your compiled rules. It requires **zero API keys** and executes in milliseconds, providing an air-gapped architectural safety net for your repository. False positives can be bypassed using inline suppression directives (#255). You can also leverage the **CI Drift Gate** (#214, #280) alongside adversarial evaluation harnesses to prevent structural regressions. The local pre-push shield gates are safely guarded against missing CLI execution environments in CI (#336), ensuring your automated pipelines remain unblocked.
+Enforce Totem's deterministic quality gate automatically on every pull request to maintain an air-gapped architectural safety net.
+
+- **Performance:** Requires zero API keys and executes in milliseconds using your compiled rules (#180).
+- **Flexibility:** False positives can be easily bypassed using standard inline suppression directives (#255).
+- **Reliability:** CI Drift Gate prevents structural regressions, and local pre-push gates gracefully bypass if the CLI is missing in CI environments (#214, #336).
 
 ```yaml
 # .github/workflows/shield.yml
@@ -250,14 +268,14 @@ Then remove the `-y` flag from your MCP config — `npx` will use the locally in
 
 Totem is evolving from a memory database into a full Shift-Left orchestrator.
 
-- [x] **Foundations & Phase 1 (Onboarding):** Local vector DB, MCP interface, MVC Configuration Tiers (#187), "Universal Lessons" baseline (#128), and cross-platform docs (#210).
-- [x] **Phase 2 (Core Stability):** 60+ improvements across six capability areas. See `CHANGELOG.md` for the full list.
-  - **AST & Chunking:** Tree-sitter universal parsing (#173), deterministic lesson compiler with zero-LLM shield (#213, #216), AST gating (#287)
-  - **Orchestration:** Native providers for Gemini, Anthropic, OpenAI, and Ollama (#229, #293) with BYOSD, cross-provider routing (#246), conformance suites (#244)
-  - **Doc Sync & Memory:** Automated doc sync with XML sentinels (#190, #228), drift detection (#177, #211), cross-model lesson export (#264, #269, #294)
-  - **Shield & CI:** Shield GitHub Action (#180), inline suppression (#255), structural review (#270), `--learn` mode (#303), CI drift gate (#214, #280)
-  - **Security:** Adversarial ingestion scrubbing (#315, #323), extract prompt hardening (#279, #289), suspicious lesson detection (#290, #299), ANSI sanitization (#292)
-  - **DX & Hooks:** Git hook enforcement (#310, #318), `totem hooks` command (#332, #335, #338), Bun support (#316), CI guard (#336)
+- [x] **Foundations & Phase 1 (Onboarding):** Established the local vector DB, MCP interface, and MVC Configuration Tiers. Includes the "Universal Lessons" baseline and cross-platform docs.
+- [x] **Phase 2 (Core Stability):** Delivered 60+ improvements across six capability areas. See `CHANGELOG.md` for the full list.
+  - **AST & Chunking:** Tree-sitter universal parsing, deterministic lesson compiler, and AST gating.
+  - **Orchestration:** Native API providers (Gemini, Anthropic, OpenAI, Ollama), cross-provider routing, and conformance suites.
+  - **Doc Sync & Memory:** Automated doc sync, drift detection, and cross-model lesson export (including Copilot).
+  - **Shield & CI:** Shield GitHub Action, structural review, inline suppression, and CI drift gates.
+  - **Security:** Adversarial ingestion scrubbing, extract prompt hardening, and ANSI sanitization.
+  - **DX & Hooks:** Git hook enforcement, monorepo-aware `hooks` command, and CI environment guards.
 - [x] **Validation:** Internal dogfooding (#8) across multiple real-world repositories.
 - [ ] **Phase 3 (Workflow Expansion):** Interactive CLI tutorials (#129), Custom Workflow Runner (#119), Agent-Optimized MCP (#176), and Cross-File Knowledge Graph (#183).
 
@@ -265,7 +283,7 @@ For a deeper dive into the system design, see `docs/architecture.md`.
 
 ## Contributing
 
-We welcome community contributions! Please review our `CONTRIBUTING.md` guidelines. Note that all external contributions require signing our automated Contributor License Agreement (CLA) (#258, #266), and internal strategy discussions have been migrated to a properly configured private submodule for secure collaboration (#300, #321, #331).
+We welcome community contributions! Please review our `CONTRIBUTING.md` guidelines. Note that all external contributions require signing our automated Contributor License Agreement (CLA) (#258), and internal strategy discussions have been migrated to a properly configured private submodule for secure collaboration (#300).
 
 ## License
 

@@ -1,6 +1,6 @@
 # Supported Models Reference
 
-> **Last validated:** 2026-03-10
+> **Last validated:** 2026-03-11
 
 Totem supports four AI provider families. This document tracks the current
 recommended model IDs for each and how to programmatically discover new ones.
@@ -13,13 +13,14 @@ Used by `totem shield`, `totem spec`, `totem triage`, `totem extract`, etc.
 
 ### Google Gemini
 
-| Role                | Model ID                 | Notes                                           |
-| ------------------- | ------------------------ | ----------------------------------------------- |
-| Default (fast)      | `gemini-3-flash-preview` | Preview — current Totem default                 |
-| Pro (complex tasks) | `gemini-3.1-pro-preview` | Preview — used for spec/shield/triage overrides |
-| Stable fast         | `gemini-2.5-flash`       | GA release, used in smoke/eval tests            |
-| Stable pro          | `gemini-2.5-pro`         | GA release                                      |
-| Ultra-cheap         | `gemini-2.5-flash-lite`  | Minimal cost                                    |
+| Role                | Model ID                 | Notes                                            |
+| ------------------- | ------------------------ | ------------------------------------------------ |
+| Default (fast)      | `gemini-3-flash-preview` | Preview — current Totem default                  |
+| Pro (complex tasks) | `gemini-3.1-pro-preview` | Preview — used for spec/shield/triage overrides  |
+| Stable fast         | `gemini-2.5-flash`       | GA release, used in smoke/eval tests             |
+| Stable pro          | `gemini-2.5-pro`         | GA release                                       |
+| Fast-lite (newest)  | `gemini-3.1-flash-lite`  | Released 2026-03-03, 2.5x faster TTFT than Flash |
+| Ultra-cheap         | `gemini-2.5-flash-lite`  | Minimal cost                                     |
 
 **Listing API:** `GET https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY`
 
@@ -83,14 +84,14 @@ can be used as an orchestrator. Popular choices:
 
 Used by `totem sync` for indexing chunks into LanceDB.
 
-| Provider             | Model ID                 | Dimensions | Notes                          |
-| -------------------- | ------------------------ | ---------- | ------------------------------ |
-| **OpenAI** (default) | `text-embedding-3-small` | 1536       | Lowest onboarding friction     |
-| OpenAI (large)       | `text-embedding-3-large` | 3072       | Higher quality, higher cost    |
-| **Ollama** (offline) | `nomic-embed-text`       | 768        | 56M+ pulls, most popular local |
-| Ollama               | `mxbai-embed-large`      | 1024       | BERT-large class SOTA          |
-| Ollama               | `qwen3-embedding`        | varies     | Newest, fast-growing           |
-| Gemini               | `gemini-embedding-001`   | —          | Not yet supported in Totem     |
+| Provider             | Model ID                 | Dimensions | Notes                                                  |
+| -------------------- | ------------------------ | ---------- | ------------------------------------------------------ |
+| **OpenAI** (default) | `text-embedding-3-small` | 1536       | Lowest onboarding friction                             |
+| OpenAI (large)       | `text-embedding-3-large` | 3072       | Higher quality, higher cost                            |
+| **Ollama** (offline) | `nomic-embed-text`       | 768        | 56M+ pulls, most popular local                         |
+| Ollama               | `mxbai-embed-large`      | 1024       | BERT-large class SOTA                                  |
+| Ollama               | `qwen3-embedding`        | varies     | Newest, fast-growing                                   |
+| Gemini               | `gemini-embedding-002`   | —          | Multimodal (text/image/video/audio), not yet supported |
 
 ---
 

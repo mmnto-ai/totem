@@ -1244,3 +1244,57 @@ Check for the presence of the 'g' flag before appending it when dynamically cons
 **Tags:** clean-code, design-decision
 
 Favor semantically clear naming like `!isInstructionalContext()` over specialized alternatives even if they introduce redundant checks. In non-critical paths, logical clarity and code maintainability are more valuable than the negligible performance gain of micro-optimizing a simple regex test.
+
+## Lesson — Run integration tests for CLI tools that interact with Git
+
+**Tags:** testing, git, integration-testing
+
+Run integration tests for CLI tools that interact with Git in temporary directories to prevent path resolution logic from climbing into the host repository. This ensures tests operate on a clean, controlled filesystem state rather than inadvertently interacting with the project's own git metadata.
+
+## Lesson — Use semantic constraints like "one to two short sentences"
+
+**Tags:** prompting, llm, formatting
+
+Use semantic constraints like "one to two short sentences" rather than numeric character limits to ensure reliable adherence to length requirements. LLMs are notoriously poor at exact character counting but respond effectively to qualitative, semantic boundaries.
+
+## Lesson — Use granular assertions rather than snapshots when testing
+
+**Tags:** testing, llm, prompt-engineering
+
+Use granular assertions rather than snapshots when testing system prompts to verify specific functional constraints while preventing tests from breaking on minor, non-functional prose changes. This maintains test stability without sacrificing the verification of critical logical requirements.
+
+## Lesson — Implement tests that verify the presence of key sections in
+
+**Tags:** prompting, llm, automated-testing
+
+Implement tests that verify the presence of key sections in system prompts when modifying formatting rules to catch structural regressions. Changes to prompt structure can inadvertently sever example blocks or break the logical flow, which simple existence checks help identify.
+
+## Lesson — Always iterate through all regex matches (e.g., via
+
+**Tags:** security, regex, validation
+
+Always iterate through all regex matches (e.g., via `matchAll`) when performing security validations rather than checking only the first match. Relying on the first match allows "shadowing" where an attacker prefixes a payload with a safe match to hide a malicious one later in the string.
+
+## Lesson — Include a space or delimiter when concatenating disjoint
+
+**Tags:** regex, security, text-processing
+
+Include a space or delimiter when concatenating disjoint text fragments for analysis to prevent "keyword synthesis." Without delimiters, separate segments can accidentally form protected keywords that bypass security filters or trigger false positives.
+
+## Lesson — Check for the presence of the global ('g') flag before
+
+**Tags:** javascript, regex, typescript
+
+Check for the presence of the global ('g') flag before appending it when dynamically constructing a new RegExp from an existing one. Re-adding a global flag to a pattern that already includes it will trigger a runtime SyntaxError in JavaScript environments.
+
+## Lesson — Identify larger or more specific text markers (like triple
+
+**Tags:** parsing, regex, string-manipulation
+
+Identify larger or more specific text markers (like triple backticks) before smaller ones (single backticks) during range collection. This allows subsequent passes to skip smaller markers that fall within already-claimed ranges, ensuring correct block isolation.
+
+## Lesson — Fixes to automated extraction logic, such as resolving
+
+**Tags:** maintenance, automation, data-integrity
+
+Fixes to automated extraction logic, such as resolving truncated headings, typically do not retroactively update existing records. Legacy data requires manual intervention or targeted re-syncing to align with updated formatting or validation rules.
