@@ -58,7 +58,7 @@ export function generateLessonHeading(body: string): string {
     // Break at last word boundary before limit
     const truncated = text.slice(0, HEADING_MAX_CHARS);
     const lastSpace = truncated.lastIndexOf(' ');
-    text = (lastSpace > MIN_WORD_BREAK ? truncated.slice(0, lastSpace) : truncated) + '…';
+    text = (lastSpace > MIN_WORD_BREAK ? truncated.slice(0, lastSpace) : truncated).trimEnd();
   }
 
   return text;
