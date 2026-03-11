@@ -185,6 +185,42 @@ describe('docsCommand', () => {
     expect(runOrchestrator).toHaveBeenCalledTimes(2);
   });
 
+  it('rejects update when saga validator detects checkbox mutation', async () => {
+    mockConfig([{ path: 'README.md', description: 'readme', trigger: 'post-release' }]);
+
+    // Original has a checked checkbox
+    writeDoc(tmpDir, 'README.md', '# Roadmap\n\n- [x] Phase 1 complete\n- [ ] Phase 2\n');
+
+    // LLM unchecks it — saga validator should reject
+    vi.mocked(runOrchestrator).mockResolvedValue(
+      '<updated_document>\n# Roadmap\n\n- [ ] Phase 1 complete\n- [ ] Phase 2\n</updated_document>',
+    );
+
+    await docsCommand([], {});
+
+    // File should NOT be modified — original preserved
+    const content = fs.readFileSync(path.join(tmpDir, 'README.md'), 'utf-8');
+    expect(content).toContain('- [x] Phase 1 complete');
+  });
+
+  it('rejects update when saga validator detects excessive deletion', async () => {
+    mockConfig([{ path: 'README.md', description: 'readme', trigger: 'post-release' }]);
+
+    // Original is substantial
+    writeDoc(tmpDir, 'README.md', '# Big Doc\n\n' + 'Content line.\n'.repeat(100));
+
+    // LLM returns a tiny replacement
+    vi.mocked(runOrchestrator).mockResolvedValue(
+      '<updated_document>\n# Big Doc\n\nTiny.\n</updated_document>',
+    );
+
+    await docsCommand([], {});
+
+    // File should NOT be modified — original preserved
+    const content = fs.readFileSync(path.join(tmpDir, 'README.md'), 'utf-8');
+    expect(content).toContain('Content line.');
+  });
+
   it('rejects response missing closing updated_document tag', async () => {
     mockConfig([{ path: 'README.md', description: 'readme', trigger: 'post-release' }]);
 

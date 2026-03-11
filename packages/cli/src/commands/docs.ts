@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import type { DocTarget } from '@mmnto/totem';
+import type { DocTarget, SagaViolation } from '@mmnto/totem';
+import { validateDocUpdate } from '@mmnto/totem';
 
 import { GitHubCliAdapter } from '../adapters/github-cli.js';
 import { getGitLogSince, getLatestTag, isFileDirty } from '../git.js';
@@ -345,6 +346,30 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
     const trimmedContent = extracted.trimEnd() + '\n';
     const hasChanges = showDiff(doc.path, currentContent, trimmedContent);
     if (!hasChanges) continue;
+
+    // Saga checkpoint — validate before writing (#351)
+    let violations: SagaViolation[];
+    try {
+      violations = validateDocUpdate(currentContent, trimmedContent);
+    } catch {
+      log.warn(
+        TAG,
+        `${doc.path}: Saga validator threw unexpectedly — proceeding without validation.`,
+      );
+      violations = [];
+    }
+    if (violations.length > 0) {
+      log.error(
+        TAG,
+        `${doc.path}: Saga validator rejected update (${violations.length} violation(s)):`,
+      );
+      for (const v of violations) {
+        log.error(TAG, `  [${v.type}]${v.line ? ` line ${v.line}:` : ''} ${v.message}`);
+      }
+      log.warn(TAG, `${doc.path}: Original preserved — skipping.`);
+      failed++;
+      continue;
+    }
 
     if (options.dryRun) {
       log.dim(TAG, `[dry-run] Would update ${doc.path}`);
