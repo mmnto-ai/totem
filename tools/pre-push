@@ -26,8 +26,8 @@ fi
 
 echo "[totem] ✅ All pre-push checks passed."
 
-# Deterministic shield gate — only runs when compiled rules exist.
-if [ -f ".totem/compiled-rules.json" ]; then
+# Deterministic shield gate — only runs when compiled rules exist AND CLI is available.
+if [ -f ".totem/compiled-rules.json" ] && pnpm exec totem --version > /dev/null 2>&1; then
   echo "[totem] Running deterministic shield..."
   pnpm exec totem shield --deterministic
   if [ $? -ne 0 ]; then
