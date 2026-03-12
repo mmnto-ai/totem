@@ -1,5 +1,5 @@
 ### Active Work Summary
-No recent session history available. However, based on the recent strategic roadmap and ADR updates, current momentum is heavily focused on evolving Totem from a memory database into a full "Shift-Left orchestrator" utilizing an embedded LanceDB vector index.
+Current momentum is heavily focused on evolving Totem from a memory database into a full "Shift-Left orchestrator" utilizing an embedded LanceDB vector index. Recent work delivered the `@mmnto/cli@0.28.0` release, significantly advancing this goal by injecting vectordb lessons across all orchestrator commands (including `totem spec` and the newly introduced `totem audit` command). Additional improvements include establishing versioned reflex upgrade paths for `totem init` and adding support for JetBrains Junie integration.
 
 ### Prioritized Roadmap
 **Do Next (Tier-1 Core & Shift-Left Foundation)**
