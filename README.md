@@ -144,6 +144,28 @@ Add Totem to your AI agent's configuration (e.g., Claude Desktop, Claude Code, G
 > [!NOTE]
 > On Windows, `npx` is a `.cmd` script that tools like Claude Code cannot invoke directly as a subprocess. The `cmd /c` wrapper resolves this. If you use Git Bash as your shell, the macOS/Linux format may also work.
 
+**JetBrains Junie** — Add to `.mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "totem": {
+      "command": "npx",
+      "args": ["-y", "@mmnto/mcp"]
+    }
+  }
+}
+```
+
+To export compiled lessons to Junie's guidelines file, add an export target in `totem.config.ts`:
+
+```typescript
+// in totem.config.ts
+exports: {
+  junie: '.junie/guidelines.md';
+}
+```
+
 ### 5. The Workflow Orchestrator
 
 > [!NOTE]

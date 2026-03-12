@@ -7,9 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SearchResult, TotemConfig } from '@mmnto/totem';
 
 import {
+  formatLessonSection,
   formatResults,
   getSystemPrompt,
   loadEnv,
+  partitionLessons,
   reapOrphanedTempFiles,
   requireEmbedding,
   resolveConfigPath,
@@ -683,5 +685,115 @@ describe('runOrchestrator', () => {
 
     expect(result).toBeUndefined();
     expect(mockedCreateOrchestrator).not.toHaveBeenCalled();
+  });
+});
+
+// ─── partitionLessons ────────────────────────────────────
+
+describe('partitionLessons', () => {
+  const makeResult = (filePath: string, label: string): SearchResult => ({
+    content: `content for ${label}`,
+    contextPrefix: '',
+    filePath,
+    type: 'spec',
+    label,
+    score: 0.9,
+    metadata: {},
+  });
+
+  it('separates lessons.md results from other specs', () => {
+    const allSpecs = [
+      makeResult('.totem/lessons.md', 'Lesson A'),
+      makeResult('docs/spec.md', 'Spec B'),
+      makeResult('.totem/lessons.md', 'Lesson C'),
+      makeResult('docs/architecture.md', 'Arch D'),
+    ];
+    const { lessons, specs } = partitionLessons(allSpecs, 10, 10);
+    expect(lessons).toHaveLength(2);
+    expect(specs).toHaveLength(2);
+    expect(lessons[0]!.label).toBe('Lesson A');
+    expect(specs[0]!.label).toBe('Spec B');
+  });
+
+  it('respects maxLessons cap', () => {
+    const allSpecs = [
+      makeResult('.totem/lessons.md', 'L1'),
+      makeResult('.totem/lessons.md', 'L2'),
+      makeResult('.totem/lessons.md', 'L3'),
+    ];
+    const { lessons } = partitionLessons(allSpecs, 2, 5);
+    expect(lessons).toHaveLength(2);
+  });
+
+  it('respects maxSpecs cap', () => {
+    const allSpecs = [
+      makeResult('docs/a.md', 'A'),
+      makeResult('docs/b.md', 'B'),
+      makeResult('docs/c.md', 'C'),
+    ];
+    const { specs } = partitionLessons(allSpecs, 5, 2);
+    expect(specs).toHaveLength(2);
+  });
+
+  it('returns empty arrays when no results', () => {
+    const { lessons, specs } = partitionLessons([], 10, 10);
+    expect(lessons).toHaveLength(0);
+    expect(specs).toHaveLength(0);
+  });
+});
+
+// ─── formatLessonSection ─────────────────────────────────
+
+describe('formatLessonSection', () => {
+  const makeLesson = (label: string, content: string): SearchResult => ({
+    content,
+    contextPrefix: '',
+    filePath: '.totem/lessons.md',
+    type: 'spec',
+    label,
+    score: 0.9,
+    metadata: {},
+  });
+
+  it('returns empty string when no lessons', () => {
+    expect(formatLessonSection([])).toBe('');
+  });
+
+  it('formats lessons with full bodies and scores', () => {
+    const result = formatLessonSection([makeLesson('Test trap', 'Never do X in Y context')]);
+    expect(result).toContain('RELEVANT LESSONS (HARD CONSTRAINTS)');
+    expect(result).toContain('**Test trap**');
+    expect(result).toContain('score: 0.900');
+    expect(result).toContain('Never do X in Y context');
+  });
+
+  it('skips lessons that exceed remaining char budget', () => {
+    const huge = makeLesson('Huge', 'X'.repeat(5000));
+    const small = makeLesson('Small', 'A small lesson');
+    const result = formatLessonSection([huge, small], 4000);
+    expect(result).not.toContain('Huge');
+    expect(result).toContain('Small');
+  });
+
+  it('returns empty string when all lessons exceed budget', () => {
+    const huge = makeLesson('Huge', 'X'.repeat(10000));
+    expect(formatLessonSection([huge], 100)).toBe('');
+  });
+
+  it('condensed mode truncates content and omits scores', () => {
+    const longContent = 'A'.repeat(200);
+    const result = formatLessonSection([makeLesson('Trap', longContent)], undefined, true);
+    expect(result).toContain('RELEVANT LESSONS (HARD CONSTRAINTS)');
+    expect(result).toContain('**Trap**');
+    expect(result).toContain('...');
+    expect(result).not.toContain('score:');
+    // Content should be truncated to ~120 chars, not the full 200
+    expect(result.length).toBeLessThan(250);
+  });
+
+  it('condensed mode shows full content for short lessons', () => {
+    const result = formatLessonSection([makeLesson('Short', 'A tiny lesson')], undefined, true);
+    expect(result).toContain('A tiny lesson');
+    expect(result).not.toContain('...');
   });
 });

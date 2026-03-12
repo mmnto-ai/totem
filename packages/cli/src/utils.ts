@@ -219,6 +219,59 @@ export function formatResults(
   return `\n=== ${heading} ===\n${items}\n`;
 }
 
+// ─── Lesson formatting ───────────────────────────────────
+
+/** Default character budget for lesson sections across orchestrator commands. */
+export const DEFAULT_MAX_LESSON_CHARS = 8_000;
+
+/**
+ * Partition search results into lessons (from lessons.md) and non-lesson specs.
+ */
+export function partitionLessons(
+  allSpecs: SearchResult[],
+  maxLessons: number,
+  maxSpecs: number,
+): { lessons: SearchResult[]; specs: SearchResult[] } {
+  const lessons = allSpecs.filter((r) => r.filePath.endsWith('lessons.md')).slice(0, maxLessons);
+  const specs = allSpecs.filter((r) => !r.filePath.endsWith('lessons.md')).slice(0, maxSpecs);
+  return { lessons, specs };
+}
+
+/** Max content length for condensed lesson snippets. */
+const CONDENSED_LESSON_LENGTH = 120;
+
+/**
+ * Format lessons as a prompt section with character budgeting.
+ * Use `condensed` for high-frequency commands (briefing, triage) to save tokens.
+ * Returns empty string if no lessons fit within the budget.
+ */
+export function formatLessonSection(
+  lessons: SearchResult[],
+  maxChars: number = DEFAULT_MAX_LESSON_CHARS,
+  condensed?: boolean,
+): string {
+  if (lessons.length === 0) return '';
+
+  const lessonLines: string[] = [];
+  let charBudget = maxChars;
+  for (const lesson of lessons) {
+    let entry: string;
+    if (condensed) {
+      const snippet = lesson.content.slice(0, CONDENSED_LESSON_LENGTH).replace(/\n/g, ' ');
+      const ellipsis = lesson.content.length > CONDENSED_LESSON_LENGTH ? '...' : '';
+      entry = `- **${lesson.label}** ${snippet}${ellipsis}`;
+    } else {
+      entry = `- **${lesson.label}** (score: ${lesson.score.toFixed(3)})\n  ${lesson.content.replace(/\n/g, '\n  ')}`;
+    }
+    if (entry.length > charBudget) continue;
+    lessonLines.push(entry);
+    charBudget -= entry.length;
+  }
+
+  if (lessonLines.length === 0) return '';
+  return `\n=== RELEVANT LESSONS (HARD CONSTRAINTS) ===\n${lessonLines.join('\n\n')}\n`;
+}
+
 // ─── Orchestrator runner ─────────────────────────────────
 
 export interface OrchestratorRunOptions {

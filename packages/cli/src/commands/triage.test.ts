@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import type { SearchResult } from '@mmnto/totem';
+
 import type { StandardIssueListItem } from '../adapters/issue-adapter.js';
-import { formatIssueInventory } from './triage.js';
+import { assemblePrompt, formatIssueInventory } from './triage.js';
 
 describe('formatIssueInventory', () => {
   it('renders a markdown table with header', () => {
@@ -33,5 +35,38 @@ describe('formatIssueInventory', () => {
     const output = formatIssueInventory([]);
     const lines = output.split('\n');
     expect(lines).toHaveLength(2); // header + separator
+  });
+});
+
+// ─── assemblePrompt ──────────────────────────────────────
+
+describe('assemblePrompt', () => {
+  const issues: StandardIssueListItem[] = [
+    { number: 1, title: 'Fix bug', labels: ['bug'], updatedAt: '2026-03-01T00:00:00Z' },
+  ];
+
+  const makeLesson = (label: string): SearchResult => ({
+    content: 'Lesson content here',
+    contextPrefix: '',
+    filePath: '.totem/lessons.md',
+    type: 'spec',
+    label,
+    score: 0.9,
+    metadata: {},
+  });
+
+  it('includes condensed lesson section when lessons are present', () => {
+    const context = { specs: [], sessions: [], lessons: [makeLesson('Test trap')] };
+    const result = assemblePrompt(issues, context, 'SYSTEM');
+    expect(result).toContain('RELEVANT LESSONS (HARD CONSTRAINTS)');
+    expect(result).toContain('Test trap');
+    // Condensed mode: no score display
+    expect(result).not.toContain('score:');
+  });
+
+  it('omits lesson section when no lessons', () => {
+    const context = { specs: [], sessions: [], lessons: [] };
+    const result = assemblePrompt(issues, context, 'SYSTEM');
+    expect(result).not.toContain('RELEVANT LESSONS');
   });
 });

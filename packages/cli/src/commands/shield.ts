@@ -14,10 +14,12 @@ import {
 import { extractChangedFiles, getDefaultBranch, getGitBranchDiff, getGitDiff } from '../git.js';
 import { bold, errorColor, log, success as successColor } from '../ui.js';
 import {
+  formatLessonSection,
   formatResults,
   getSystemPrompt,
   loadConfig,
   loadEnv,
+  partitionLessons,
   requireEmbedding,
   resolveConfigPath,
   runOrchestrator,
@@ -32,7 +34,9 @@ import { appendLessons, flagSuspiciousLessons, parseLessons, selectLessons } fro
 const TAG = 'Shield';
 export const MAX_DIFF_CHARS = 50_000;
 const QUERY_DIFF_TRUNCATE = 2_000;
+const SPEC_SEARCH_POOL = 15;
 const MAX_SPEC_RESULTS = 3;
+const MAX_LESSONS = 10;
 const MAX_SESSION_RESULTS = 5;
 const MAX_CODE_RESULTS = 5;
 
@@ -124,19 +128,22 @@ interface RetrievedContext {
   specs: SearchResult[];
   sessions: SearchResult[];
   code: SearchResult[];
+  lessons: SearchResult[];
 }
 
 async function retrieveContext(query: string, store: LanceStore): Promise<RetrievedContext> {
   const search = (typeFilter: ContentType, maxResults: number) =>
     store.search({ query, typeFilter, maxResults });
 
-  const [specs, sessions, code] = await Promise.all([
-    search('spec', MAX_SPEC_RESULTS),
+  const [allSpecs, sessions, code] = await Promise.all([
+    search('spec', SPEC_SEARCH_POOL),
     search('session_log', MAX_SESSION_RESULTS),
     search('code', MAX_CODE_RESULTS),
   ]);
 
-  return { specs, sessions, code };
+  const { lessons, specs } = partitionLessons(allSpecs, MAX_LESSONS, MAX_SPEC_RESULTS);
+
+  return { specs, sessions, code, lessons };
 }
 
 function buildSearchQuery(changedFiles: string[], diff: string): string {
@@ -184,6 +191,10 @@ export function assemblePrompt(
     if (sessionSection) sections.push(sessionSection);
     if (codeSection) sections.push(codeSection);
   }
+
+  // Lessons — full bodies for strict enforcement
+  const lessonSection = formatLessonSection(context.lessons);
+  if (lessonSection) sections.push(lessonSection);
 
   return sections.join('\n');
 }
@@ -568,10 +579,11 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const query = buildSearchQuery(changedFiles, diff);
   log.info(TAG, 'Querying Totem index...');
   const context = await retrieveContext(query, store);
-  const totalResults = context.specs.length + context.sessions.length + context.code.length;
+  const totalResults =
+    context.specs.length + context.sessions.length + context.code.length + context.lessons.length;
   log.info(
     TAG,
-    `Found: ${context.specs.length} specs, ${context.sessions.length} sessions, ${context.code.length} code chunks`,
+    `Found: ${context.specs.length} specs, ${context.sessions.length} sessions, ${context.code.length} code, ${context.lessons.length} lessons`,
   );
 
   // Resolve system prompt (allow .totem/prompts/shield.md override)
