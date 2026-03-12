@@ -214,6 +214,7 @@ Totem continuously audits default model IDs across all providers (#324). For a c
 **Context & Discovery:**
 
 - **`briefing`**: Fetches your current git branch, uncommitted changes, open PRs, and recent session momentum. Generates a startup briefing for your AI.
+<!-- totem-ignore-next-line -->
 - **`triage`**: Fetches open GitHub issues and generates a prioritized roadmap. Ideal for planning your next task in `docs/active_work.md`.
 - **`audit`**: Performs a strategic backlog audit with a human approval gate. Synthesizes task dependencies with injected vector DB lessons (#362, #389).
 
@@ -230,7 +231,9 @@ Totem continuously audits default model IDs across all providers (#324). For a c
 - **`extract <ids...>`**: Fetches merged PRs, reads comments, and extracts systemic architectural traps.
   - **Security Hardening:** Strictly hardens against prompt injection via XML boundaries. Actively blocks suspicious lessons in all bypass modes (#289, #291).
   - **Curation:** Exact deduplication prevents redundant rules (#347, #348). Supports interactive multi-select pruning (#265).
+  <!-- totem-ignore-next-line -->
 - **`compile`**: Compiles `.totem/lessons.md` into deterministic regex/AST rules for zero-LLM checks. Supports cross-model export targets like GitHub Copilot and JetBrains Junie (#269, #294).
+<!-- totem-ignore-next-line -->
 - **`add-lesson`**: Interactively documents a context, symptom, and fix. Saves to `.totem/lessons.md` and triggers a background re-index.
 - **`docs`**: Automatically syncs project documentation by analyzing git logs and closed issues.
   - **Reliability:** Uses a Saga-based transactional validator for safe checkpoints and automatic rollbacks (#351, #356).
