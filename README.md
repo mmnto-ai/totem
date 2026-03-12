@@ -70,6 +70,7 @@ npx @mmnto/cli init
 This will auto-detect your project structure and package manager (including Bun #316), generate a `totem.config.ts` using **Minimum Viable Configuration (MVC) tiers**, and inject the Proactive Memory Reflexes into your AI's system prompt.
 
 - **Universal Baseline:** During init, Totem offers to install a curated set of foundational AI developer lessons. This includes prompt injection prevention, hallucination traps, and dependency verification so agents have useful knowledge from Day 1 (#128).
+- **Versioned Upgrades:** Provides a versioned reflex upgrade path for existing consumers. Strengthens AI prompt blocks with harder vector DB reflexes seamlessly (#372, #376).
 - **Seamless Host Integration:** If you are using Claude Code or Gemini CLI, `totem init` automatically wires up agent hooks (including native `SessionStart` hooks #95) to run `totem briefing`.
   - **Git Hook Enforcement:** Safely detects non-bash hooks before appending, seamlessly navigating to the git root in monorepo sub-packages (#317, #333).
   - **Commit Gates:** Intercepts pushes to run `totem shield` automatically. It can also block direct commits to `main` while executing deterministic shield gates (#310).
@@ -95,7 +96,7 @@ npx @mmnto/cli sync
 
 _(Note: If you accepted the git hook installation during `init`, Totem will automatically run incremental background syncs after every `git pull` or `git merge`)._
 
-The file resolver natively scopes across your repository and correctly indexes files located within git submodules (#363).
+The file resolver natively scopes across your repository and correctly indexes files located within git submodules (#363). You can precisely filter knowledge by querying specifically for the `lesson` ContentType (#377).
 
 > [!TIP]
 > **Troubleshooting Index Issues:**
@@ -171,7 +172,7 @@ exports: {
 > [!NOTE]
 > **Prerequisite:** Currently, all orchestrator commands that fetch remote data (like `spec`, `triage`, and `extract`) require the [GitHub CLI (`gh`)](https://cli.github.com/) to be installed. Adapters for other platforms are on the roadmap.
 
-Totem ships with native CLI commands that orchestrate your entire shift-left workflow by querying LanceDB and invoking your AI to make project-aware decisions. All commands include proper `--help` output detailing flags and usage (#358).
+Totem ships with native CLI commands that orchestrate your entire shift-left workflow by querying LanceDB and invoking your AI to make project-aware decisions. All orchestrator commands automatically inject relevant vector DB lessons directly into the prompt context to ensure strictly project-aligned execution (#370, #391). Every command includes proper `--help` output detailing flags and usage (#358).
 
 First, configure your orchestrator in `totem.config.ts`. To keep the core CLI lightweight, Totem uses a **"Bring Your Own SDK" (BYOSD)** pattern. If you choose a native API provider, you must install its corresponding SDK as a dev dependency.
 
@@ -212,7 +213,8 @@ Totem continuously audits default model IDs across all providers (#324). For a c
 
 - **`briefing`**: Fetches your current git branch, uncommitted changes, open PRs, and recent session momentum to generate a startup briefing.
 - **`bridge`**: Assesses your current mid-task state and creates a lightweight breadcrumb file. Use this when your AI agent's context window gets too full.
-- **`spec <ids...>`**: Fetches GitHub Issues (supports URLs) and synthesizes a pre-work spec. The AI acts as a **Staff-Level Architect**, focusing on contracts and edge cases.
+- **`spec <ids...>`**: Fetches GitHub Issues (supports URLs) and synthesizes a pre-work spec. The AI acts as a **Staff-Level Architect**, enriched by context from auto-injected vector DB lessons (#366).
+- **`audit`**: Performs a strategic backlog audit with a human approval gate. Synthesizes task dependencies with injected vector DB lessons for precise project alignment (#362, #389).
 - **`shield`**: Reads your uncommitted diff and queries LanceDB for related traps to perform an architectural code review before you push. <!-- totem-ignore -->
   - **Zero-LLM Mode:** Lightning-fast deterministic checks using compiled rules and Tree-sitter AST gating. Structural review is safely scoped with fileGlobs (#287, #357).
   - **False-Positive Mitigation:** Handles non-code contexts smartly and supports inline suppression directives (#251, #255).
@@ -295,17 +297,13 @@ Then remove the `-y` flag from your MCP config — `npx` will use the locally in
 Totem is evolving from a memory database into a full Shift-Left orchestrator.
 
 - [x] **Foundations & Phase 1 (Onboarding):** Established the local vector DB, MCP interface, and MVC Configuration Tiers. Includes the "Universal Lessons" baseline and cross-platform docs.
-- [x] **Phase 2 (Core Stability):** Delivered 60+ improvements across six capability areas including universal AST parsing, native orchestrators, automated doc sync, and robust security hardening.
-  - **AST & Chunking:** Tree-sitter universal parsing, deterministic lesson compiler, and zero-LLM shield.
-  - **Orchestration:** Native providers (Gemini, Anthropic, OpenAI, Ollama) and cross-provider routing.
-  - **Doc Sync & Memory:** Automated doc sync, drift detection, and cross-model Copilot export.
-  - **Shield & CI:** Shield action, inline suppression, `--learn` mode, and CI drift gates.
-  - **Security:** Adversarial scrubbing, extract prompt hardening, and ANSI sanitization.
-  - **DX & Hooks:** Git hook enforcement, `totem hooks` command, and Bun support.
-- [ ] **Phase 3 (Workflow Expansion):** Focus is now on shift-left CI integration and power-user workflows. Recent progress includes saga-based transactional docs and file-glob deterministic shield rules.
-  - **Adoption:** Interactive CLI tutorials (#129) and Custom Workflow Runner (#119).
-  - **Enterprise:** Agent-Optimized MCP with dynamic token budgeting (#176) and Federated Memory (#123).
-  - **Intelligence:** Cross-File Knowledge Graph for symbol resolution (#183).
+- [x] **Phase 2 (Core Stability):** Delivered 60+ improvements across core parsing, native orchestration, automated doc sync, and security hardening. Successfully transitioned from a simple memory database to a reliable local AI orchestrator (#340).
+- [ ] **Phase 3 (Workflow Expansion):** Focus is now on shift-left CI integration, adaptive agent governance, and power-user workflows.
+  - **Core Orchestration:** Develop the Codebase Immune System and equip agents with Enforcement Sidecar MCP tools for self-correction (#176, #314).
+  - **Data Layer:** Research strictly defined multi-type LanceDB schema to prevent context collision during retrieval (#364).
+  - **Adoption & UX:** Polish frictionless init, deliver interactive CLI tutorials, and launch v1.0 docs (#124, #128, #283).
+  - **Telemetry:** Implement local tracking and dashboards to monitor local-first adoption and agent performance (#92).
+  - **Future Integrations:** Evaluate full codebase reviews (`totem review`) and standard CI/CD rule exports like SARIF (#387, #392).
 
 For a deeper dive into the system design, see `docs/architecture.md`.
 

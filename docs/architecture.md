@@ -8,46 +8,37 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 
 ### 1. Vector Database (`@mmnto/totem`)
 
-- **Engine:** LanceDB (embedded, in-process Node.js).
-- **Storage:** Creates a `.lancedb/` folder in the consumer's root. This folder is gitignored and treated as a replaceable build artifact.
-- **Embeddings:** Supports OpenAI (`text-embedding-3-small`) by default, with Ollama (`nomic-embed-text`) as an offline fallback.
-- **Chunking & Ingestion:**
+- **Storage & Engine:**
+  - **Database:** LanceDB (embedded, in-process Node.js).
+  - **Artifacts:** Creates a gitignored `.lancedb/` folder in the consumer's root, treated as a replaceable build artifact.
+- **Data Processing:**
+  - **Embeddings:** Supports OpenAI (`text-embedding-3-small`) by default, with Ollama (`nomic-embed-text`) as an offline fallback.
   - **Context Parsing:** Uses syntax-aware chunking via Tree-sitter AST parsing. It seamlessly indexes both standard files and git submodules (#363).
-  - **Data Integrity:** Completely avoids blind character splitting by leveraging Markdown hierarchy and session breadcrumbs. A web-tree-sitter WASM investigation ensures robust handling of files exceeding 32KB (#354).
-  - **Security:** The ingestion pipeline includes adversarial content scrubbing to bulletproof against malicious payloads (#315).
-- **Drift Detection:** Self-cleaning sync engine purges orphaned vectors when source files are deleted or renamed. It is reinforced by strict path containment checks to prevent directory traversal out-of-bounds (#284).
+  - **Integrity:** Avoids blind character splitting by leveraging Markdown hierarchy and session breadcrumbs. A web-tree-sitter WASM investigation ensures robust handling of files exceeding 32KB (#354).
+- **Security & Maintenance:**
+  - **Filtering:** Includes adversarial content scrubbing and a dedicated `lesson` ContentType for highly precise vector retrieval (#315, #377).
+  - **Drift Detection:** Self-cleaning sync engine purges orphaned vectors when source files are deleted. It is reinforced by strict path containment checks to prevent directory traversal (#284).
 
 ### 2. The CLI (`@mmnto/cli`)
 
 All commands feature proper `--help` output documentation (#358).
 
 - **Setup & Infrastructure:**
-  - `totem init` / `totem eject`: Scaffolds or safely removes config, hooks, and memory.
-  - `totem hooks`: Installs or updates git hooks, and supports npm `prepare` auto-install (#332). It is monorepo-aware, automatically walking up to the git root from sub-packages (#333).
-  - **Environment Support:** Package manager auto-detection fully supports Bun (#316). It also gracefully detects and handles non-bash hook environments (#317).
+  - `totem init` / `totem eject`: Scaffolds or safely removes config, hooks, and memory. It features a versioned reflex upgrade path and hardened vector DB prompts (#372, #376).
+  - `totem hooks`: Installs git hooks and supports npm `prepare` auto-install (#332). It automatically walks up to the git root from monorepo sub-packages (#333).
+  - **Environment Support:** Package manager auto-detection fully supports Bun (#316). It gracefully detects and handles non-bash hook environments (#317).
 - **Data & Context Management:**
-  - `totem sync`: Crawls target directories defined in `totem.config.ts`, chunks, embeds, and updates the LanceDB index.
-  - `totem search`: Direct debug query interface.
-  - `totem briefing` / `totem handoff`: Session start/end context snapshots. The `handoff --lite` flag enables zero-LLM state capture with robust ANSI output sanitization (#292).
-  - `totem bridge` / `totem wrap`: Mid-session context resets and end-of-task workflow automation.
+  - **Indexing:** `totem sync` crawls target directories, chunks, embeds, and updates the LanceDB index. `totem search` provides a direct debug query interface.
+  - **Session Management:** `totem briefing` and `totem handoff` capture session state snapshots. The `handoff --lite` flag enables zero-LLM capture with robust ANSI sanitization (#292).
+  - **Workflow Resets:** `totem bridge` and `totem wrap` automate mid-session context resets and end-of-task workflows.
 - **Workflow & Evaluation:**
-  - `totem spec` / `totem triage`: Standardized workflow orchestration commands.
-  - `totem shield`: Includes `--mode=structural` for context-blind architectural review and `--learn` for inline lesson extraction (#303).
-  - `totem docs`:
-    - Automated per-document LLM passes to keep project documentation in sync with the codebase.
-    - **Precision:** Targets individual documents via explicit path arguments and XML sentinel safeguards.
-    - **Formatting:** Enforces strict sub-bullet thresholds for long feature lists (#341) and strict line-length limits.
-    - **Transactional Safety:** Employs a Saga validator for checkpoints and rollbacks. This definitively prevents partial or corrupted updates (#351, #356).
+  - **Planning & Orchestration:** `totem spec`, `totem triage`, and `totem audit` orchestrate workflows and backlog strategies with human approval gates (#362). Relevant vector DB lessons are dynamically injected into all command outputs (#370, #391).
+  - **Review & Quality:** `totem shield` enforces context-blind architectural reviews and inline lesson extraction (#303).
+  - **Documentation:** `totem docs` automates transactional document syncs with strict sub-bullet thresholds and line-length limits (#341). It employs a Saga validator to definitively prevent partial or corrupted updates (#351, #356).
 - **Lesson Extraction & Compilation:**
-  - `totem add-lesson`: Inline lesson capture (also exposed as MCP tool `add_lesson`).
-  - `totem extract`:
-    - Batch lesson extraction from PR reviews with interactive multi-select curation via `--pick` (#265). It actively deduplicates semantically identical lessons (#347).
-    - **Formatting:** Generated lessons use concise, highly descriptive, content-derived headings without mid-sentence truncation (#348).
-    - **Security:** Context-aware heuristics minimize false positives in suspicious lesson detection and actively block bad rules (#302, #326).
-    - **Protection:** Strict XML tagging and explicit system prompt notices guard against prompt injection from untrusted PR comments (#279, #289).
-  - `totem compile`:
-    - Translates natural-language lessons into deterministic regex rules at compile-time.
-    - Supports an `--export` flag for cross-model lesson targets, like GitHub Copilot instructions and JetBrains Junie guidelines (#294).
+  - **Capture & Extraction:** `totem add-lesson` enables inline capture, while `totem extract` handles batch PR reviews with interactive multi-select curation (#265). It deduplicates identical lessons and uses concise, content-derived headings without mid-sentence truncation (#347, #348).
+  - **Security:** Context-aware heuristics minimize false positives and actively block bad rules (#326). Strict XML tagging guards against prompt injection from untrusted PR comments (#279).
+  - **Compilation:** `totem compile` translates lessons into deterministic regex rules at compile-time. It supports cross-model exports for targets like GitHub Copilot and JetBrains Junie (#294, #371).
 
 ### 3. Deterministic Compiler & Zero-LLM Shield
 
@@ -67,22 +58,26 @@ Because it operates in `--deterministic` mode, the shield requires **zero LLM AP
 
 ### 5. The MCP Server (`@mmnto/mcp`)
 
-A stdio-based server for LLM integration providing two primary tools:
+A stdio-based server for LLM integration providing primary tools and strict access boundaries:
 
-- `search_knowledge(query)`: Semantic retrieval of codebase context and lessons.
-- `add_lesson(lesson, tags)`: Appends architectural lessons to `.totem/lessons.md` with descriptive content-derived headings.
-- **Security:** XML-delimits all MCP responses and sanitizes persisted content to mitigate prompt and terminal injection attacks.
-- **Access Control:** Implements multi-agent permissions and role-based access control (RBAC) to safely restrict tool execution boundaries (#312).
+- **Core Tools:**
+  - `search_knowledge(query)`: Semantic retrieval of codebase context and lessons.
+  - `add_lesson(lesson, tags)`: Appends architectural lessons to `.totem/lessons.md` with descriptive content-derived headings.
+- **Security & Permissions:**
+  - **Sanitization:** XML-delimits all MCP responses and sanitizes persisted content to mitigate prompt injection attacks.
+  - **Access Control:** Implements multi-agent permissions and role-based access control (RBAC) to safely restrict execution boundaries (#312).
+- **Session Management:**
+  - **Lifecycle Rules:** Utilizes dedicated MCP lifecycle lessons for improved session consistency and lifecycle boundary management (#384).
 
 ## Configuration Tiers
 
 Totem supports three configuration tiers, auto-detected from the environment during `totem init`:
 
-| Tier         | Requirements                               | Available Commands                                                                          |
-| ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `bridge`, `eject`, `handoff --lite`                          |
-| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`                                                            |
-| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `shield`, `triage`, `briefing`, `handoff`, `extract`, `wrap`, `docs`) |
+| Tier         | Requirements                               | Available Commands                                                                                   |
+| ------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `bridge`, `eject`, `handoff --lite`                                   |
+| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`                                                                     |
+| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `shield`, `triage`, `audit`, `briefing`, `handoff`, `extract`, `wrap`, `docs`) |
 
 The `embedding` field in `totem.config.ts` is optional; when omitted, Totem operates in the Lite tier. The `getConfigTier()` helper and `requireEmbedding()` guard enforce these boundaries at runtime with clear upgrade instructions.
 
@@ -153,10 +148,11 @@ orchestrator: {
 
 All orchestrator providers support standardizing complex configurations via centralized logic:
 
-- **Routing & Overrides:** Supports `defaultModel`, `fallbackModel`, and `overrides` (including `provider:model` syntax for cross-provider routing and negated globs).
-- **Resolution Engine:** Centralized via the `resolveOrchestrator()` helper, resolving models in order: `--model` flag > `overrides[command]` > `defaultModel`.
+- **Routing & Resolution:**
+  - Centralized via `resolveOrchestrator()`, prioritizing `--model` over `overrides` and `defaultModel`.
+  - Supports `fallbackModel` and cross-provider `overrides` using `provider:model` syntax.
 - **Customization:** Supports `systemPrompts` for per-command custom instructions and `cacheTtls` for performance tuning.
-- **Resilience:** Quota-exhaustion (429 errors) triggers automatic fallback, while legacy configs gracefully auto-migrate to the shell provider.
+- **Resilience:** Quota-exhaustion (429 errors) triggers automatic fallback. Legacy configs gracefully auto-migrate to the shell provider.
 
 ## The `.totem/` Directory
 
