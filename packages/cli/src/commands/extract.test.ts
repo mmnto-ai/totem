@@ -511,6 +511,26 @@ describe('assemblePrompt', () => {
   });
 });
 
+// ─── SYSTEM_PROMPT structural assertions ────────────────
+
+describe('SYSTEM_PROMPT', () => {
+  it('contains heading format constraint for complete phrases', () => {
+    expect(SYSTEM_PROMPT).toContain('COMPLETE phrase');
+    expect(SYSTEM_PROMPT).toContain('Must NOT end with a preposition, article, or conjunction');
+  });
+
+  it('contains output format delimiters', () => {
+    expect(SYSTEM_PROMPT).toContain('---LESSON---');
+    expect(SYSTEM_PROMPT).toContain('---END---');
+    expect(SYSTEM_PROMPT).toContain('Heading:');
+    expect(SYSTEM_PROMPT).toContain('Tags:');
+  });
+
+  it('contains duplicate prevention instruction', () => {
+    expect(SYSTEM_PROMPT).toContain('do NOT extract duplicates');
+  });
+});
+
 // ─── selectLessons ──────────────────────────────────────
 
 describe('selectLessons', () => {
