@@ -16,7 +16,7 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
   - **Context Parsing:** Uses syntax-aware chunking via Tree-sitter AST parsing. It seamlessly indexes both standard files and git submodules (#363).
   - **Integrity:** Avoids blind character splitting by leveraging Markdown hierarchy and session breadcrumbs. A web-tree-sitter WASM investigation ensures robust handling of files exceeding 32KB (#354).
 - **Security & Maintenance:**
-  - **Filtering:** Includes adversarial content scrubbing and a dedicated `lesson` ContentType for highly precise vector retrieval (#315, #386).
+  - **Filtering:** Includes adversarial content scrubbing and a dedicated `lesson` ContentType for highly precise vector retrieval (#315, #377).
   - **Drift Detection:** Self-cleaning sync engine purges orphaned vectors when source files are deleted. It is reinforced by strict path containment checks to prevent directory traversal (#284).
 
 ### 2. The CLI (`@mmnto/cli`)
@@ -32,7 +32,7 @@ All commands feature proper `--help` output documentation (#358).
   - **Session Management:** `totem briefing` and `totem handoff` capture session state snapshots. The `handoff --lite` flag enables zero-LLM capture with robust ANSI sanitization (#292).
   - **Workflow Resets:** `totem bridge` and `totem wrap` automate mid-session context resets and end-of-task workflows.
 - **Workflow & Evaluation:**
-  - **Planning & Orchestration:** `totem spec`, `totem triage`, and `totem audit` orchestrate workflows and backlog strategies with human approval gates (#362). Relevant vector DB lessons are dynamically injected into all command outputs (#369, #391).
+  - **Planning & Orchestration:** `totem spec`, `totem triage`, and `totem audit` orchestrate workflows and backlog strategies with human approval gates (#362). Relevant vector DB lessons are dynamically injected into all command outputs (#370, #391).
   - **Review & Quality:** `totem shield` enforces context-blind architectural reviews and inline lesson extraction (#303).
   - **Documentation:** `totem docs` automates transactional document syncs with strict sub-bullet thresholds and line-length limits (#341). It employs a Saga validator to definitively prevent partial or corrupted updates (#351, #356).
 - **Lesson Extraction & Compilation:**

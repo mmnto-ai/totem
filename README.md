@@ -96,7 +96,7 @@ npx @mmnto/cli sync
 
 _(Note: If you accepted the git hook installation during `init`, Totem will automatically run incremental background syncs after every `git pull` or `git merge`)._
 
-The file resolver natively scopes across your repository and correctly indexes files located within git submodules (#363). You can precisely filter knowledge by querying specifically for the `lesson` ContentType (#379).
+The file resolver natively scopes across your repository and correctly indexes files located within git submodules (#363). You can precisely filter knowledge by querying specifically for the `lesson` ContentType (#377).
 
 > [!TIP]
 > **Troubleshooting Index Issues:**
