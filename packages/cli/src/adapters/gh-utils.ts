@@ -30,6 +30,25 @@ export function handleGhError(err: unknown, context: string): never {
 }
 
 /**
+ * Execute a `gh` CLI command that does not return JSON (mutations like close, comment, edit).
+ * Throws on failure with a friendly error message.
+ */
+export function ghExec(args: string[], cwd: string): void {
+  try {
+    execFileSync('gh', args, {
+      cwd,
+      encoding: 'utf-8',
+      timeout: GH_TIMEOUT_MS,
+      shell: IS_WIN,
+      stdio: 'pipe',
+    });
+  } catch (err) {
+    const context = args.slice(0, 3).join(' ');
+    handleGhError(err, context);
+  }
+}
+
+/**
  * Shared fetch → JSON.parse → Zod validate utility for all `gh` CLI calls.
  */
 export function ghFetchAndParse<T>(
