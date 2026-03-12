@@ -9,14 +9,14 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 ### 1. Vector Database (`@mmnto/totem`)
 
 - **Storage & Engine:**
-  - **Database:** LanceDB (embedded, in-process Node.js).
+  - **Database:** LanceDB (embedded, in-process Node.js). It supports multi-type knowledge retrieval to cleanly separate invariants from general context (#364).
   - **Artifacts:** Creates a gitignored `.lancedb/` folder in the consumer's root, treated as a replaceable build artifact.
 - **Data Processing:**
   - **Embeddings:** Supports OpenAI (`text-embedding-3-small`) by default, with Ollama (`nomic-embed-text`) as an offline fallback.
   - **Context Parsing:** Uses syntax-aware chunking via Tree-sitter AST parsing. It seamlessly indexes both standard files and git submodules (#363).
   - **Integrity:** Avoids blind character splitting by leveraging Markdown hierarchy and session breadcrumbs. A web-tree-sitter WASM investigation ensures robust handling of files exceeding 32KB (#354).
 - **Security & Maintenance:**
-  - **Filtering:** Includes adversarial content scrubbing and a dedicated `lesson` ContentType for highly precise vector retrieval (#315, #377).
+  - **Filtering:** Includes adversarial content scrubbing and a dedicated `lesson` ContentType for highly precise vector retrieval (#315, #379).
   - **Drift Detection:** Self-cleaning sync engine purges orphaned vectors when source files are deleted. It is reinforced by strict path containment checks to prevent directory traversal (#284).
 
 ### 2. The CLI (`@mmnto/cli`)
@@ -24,17 +24,17 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 All commands feature proper `--help` output documentation (#358).
 
 - **Setup & Infrastructure:**
-  - `totem init` / `totem eject`: Scaffolds or safely removes config, hooks, and memory. It features a versioned reflex upgrade path and hardened vector DB prompts (#372, #376).
+  - `totem init` / `totem eject`: Scaffolds or safely removes config, hooks, and memory. It features a versioned reflex upgrade path and hardened vector DB prompts (#372, #375).
   - `totem hooks`: Installs git hooks and supports npm `prepare` auto-install (#332). It automatically walks up to the git root from monorepo sub-packages (#333).
   - **Environment Support:** Package manager auto-detection fully supports Bun (#316). It gracefully detects and handles non-bash hook environments (#317).
 - **Data & Context Management:**
   - **Indexing:** `totem sync` crawls target directories, chunks, embeds, and updates the LanceDB index. `totem search` provides a direct debug query interface.
   - **Session Management:** `totem briefing` and `totem handoff` capture session state snapshots. The `handoff --lite` flag enables zero-LLM capture with robust ANSI sanitization (#292).
-  - **Workflow Resets:** `totem bridge` and `totem wrap` automate mid-session context resets and end-of-task workflows.
+  - **Workflow Resets:** `totem bridge` and `totem wrap` automate mid-session context resets and end-of-task workflows. Wrap integration cleanly aborts via `NoLessonsError` if compilation requirements are missing (#409).
 - **Workflow & Evaluation:**
-  - **Planning & Orchestration:** `totem spec`, `totem triage`, and `totem audit` orchestrate workflows and backlog strategies with human approval gates (#362). Relevant vector DB lessons are dynamically injected into all command outputs (#370, #391).
+  - **Planning & Orchestration:** `totem spec`, `totem triage`, and `totem audit` orchestrate workflows and backlog strategies with human approval gates (#362). Relevant vector DB lessons are dynamically injected into all orchestrator outputs (#366, #370).
   - **Review & Quality:** `totem shield` enforces context-blind architectural reviews and inline lesson extraction (#303).
-  - **Documentation:** `totem docs` automates transactional document syncs with strict sub-bullet thresholds and line-length limits (#341). It employs a Saga validator to definitively prevent partial or corrupted updates (#351, #356).
+  - **Documentation:** `totem docs` automates transactional document syncs with strict sub-bullet thresholds and line-length limits (#341). It employs a Saga validator to definitively prevent partial or corrupted updates (#351).
 - **Lesson Extraction & Compilation:**
   - **Capture & Extraction:** `totem add-lesson` enables inline capture, while `totem extract` handles batch PR reviews with interactive multi-select curation (#265). It deduplicates identical lessons and uses concise, content-derived headings without mid-sentence truncation (#347, #348).
   - **Security:** Context-aware heuristics minimize false positives and actively block bad rules (#326). Strict XML tagging guards against prompt injection from untrusted PR comments (#279).
@@ -156,7 +156,7 @@ All orchestrator providers support standardizing complex configurations via cent
 
 ## The `.totem/` Directory
 
-The `lessons.md` file within `.totem/` acts as an explicit, version-controlled ledger of architectural decisions. Lesson headings are derived directly from content context for highly descriptive, scannable PR diffs. When updated, `totem sync` re-indexes it.
+The `lessons.md` file within `.totem/` acts as an explicit, version-controlled ledger of architectural decisions. Local AI memory is actively audited to promote contributor knowledge to these version-controlled surfaces (#402). Lesson headings are derived directly from content context for highly descriptive, scannable PR diffs. When updated, `totem sync` re-indexes it.
 
 During `totem init`, users are offered an optional **Universal Baseline** — a curated set of foundational AI developer lessons. Appended with a `<!-- totem:baseline -->` marker for idempotency, it solves the cold-start problem where a fresh install has no knowledge to retrieve.
 

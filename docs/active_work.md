@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-Current momentum is heavily focused on evolving Totem from a memory database into a full "Shift-Left orchestrator" utilizing an embedded LanceDB vector index. The `@mmnto/cli@0.29.0` release significantly advances this goal by injecting vector DB lessons across all orchestrator commands (including `totem spec` and the newly introduced `totem audit` command). Additional improvements include establishing versioned reflex upgrade paths for `totem init` and adding support for JetBrains Junie integration.
+Current momentum is heavily focused on evolving Totem from a memory database into a full "Shift-Left orchestrator" utilizing an embedded LanceDB vector index. The `@mmnto/cli@0.29.0` release significantly advances this goal by injecting vector DB lessons across all orchestrator commands (including `totem spec` and the newly introduced `totem audit` command). Additional improvements include establishing versioned reflex upgrade paths for `totem init` and adding support for JetBrains Junie integration. Recent post-release efforts have focused on deep review follow-ups, specifically auditing local AI memory to promote contributor knowledge to version-controlled surfaces and resolving shield integration fixes (#402, #408).
 
 ### Prioritized Roadmap
 
