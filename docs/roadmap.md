@@ -57,7 +57,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
 - **Workflow & Execution:**
   - [x] **#362 Strategic Backlog Audit:** Added `totem audit` for backlog auditing with a human approval gate (#362, #389).
-  - [x] **Context Injection:** Embedded relevant vectordb lessons into all orchestrator commands and `totem spec` output (#366, #391).
+  - [x] **Context Injection:** Embedded relevant vector DB lessons into all orchestrator commands and `totem spec` output (#366, #391).
   - [ ] **#119 `totem run <workflow>`:** Introduce a custom AI task runner to execute user-defined markdown workflows via the orchestrator.
   - [ ] **#74 `totem oracle`:** Add a frictionless Q&A command to query LanceDB without strict personas.
 - **Shift-Left & Advanced Intelligence:**

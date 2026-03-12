@@ -172,7 +172,7 @@ exports: {
 > [!NOTE]
 > **Prerequisite:** Currently, all orchestrator commands that fetch remote data (like `spec`, `triage`, and `extract`) require the [GitHub CLI (`gh`)](https://cli.github.com/) to be installed. Adapters for other platforms are on the roadmap.
 
-Totem ships with native CLI commands that orchestrate your entire shift-left workflow by querying LanceDB and invoking your AI to make project-aware decisions. All orchestrator commands automatically inject relevant vectordb lessons directly into the prompt context to ensure strictly project-aligned execution (#370, #391). Every command includes proper `--help` output detailing flags and usage (#358).
+Totem ships with native CLI commands that orchestrate your entire shift-left workflow by querying LanceDB and invoking your AI to make project-aware decisions. All orchestrator commands automatically inject relevant vector DB lessons directly into the prompt context to ensure strictly project-aligned execution (#370, #391). Every command includes proper `--help` output detailing flags and usage (#358).
 
 First, configure your orchestrator in `totem.config.ts`. To keep the core CLI lightweight, Totem uses a **"Bring Your Own SDK" (BYOSD)** pattern. If you choose a native API provider, you must install its corresponding SDK as a dev dependency.
 
@@ -214,7 +214,7 @@ Totem continuously audits default model IDs across all providers (#324). For a c
 - **`briefing`**: Fetches your current git branch, uncommitted changes, open PRs, and recent session momentum to generate a startup briefing.
 - **`bridge`**: Assesses your current mid-task state and creates a lightweight breadcrumb file. Use this when your AI agent's context window gets too full.
 - **`spec <ids...>`**: Fetches GitHub Issues (supports URLs) and synthesizes a pre-work spec. The AI acts as a **Staff-Level Architect**, enriched by context from auto-injected vector DB lessons (#366).
-- **`audit`**: Performs a strategic backlog audit with a human approval gate. Synthesizes task dependencies with injected vectordb lessons for precise project alignment (#362, #389).
+- **`audit`**: Performs a strategic backlog audit with a human approval gate. Synthesizes task dependencies with injected vector DB lessons for precise project alignment (#362, #389).
 - **`shield`**: Reads your uncommitted diff and queries LanceDB for related traps to perform an architectural code review before you push. <!-- totem-ignore -->
   - **Zero-LLM Mode:** Lightning-fast deterministic checks using compiled rules and Tree-sitter AST gating. Structural review is safely scoped with fileGlobs (#287, #357).
   - **False-Positive Mitigation:** Handles non-code contexts smartly and supports inline suppression directives (#251, #255).
