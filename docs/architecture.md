@@ -47,7 +47,7 @@ All commands feature proper `--help` output documentation (#358).
     - **Protection:** Strict XML tagging and explicit system prompt notices guard against prompt injection from untrusted PR comments (#279, #289).
   - `totem compile`:
     - Translates natural-language lessons into deterministic regex rules at compile-time.
-    - Supports an `--export` flag for cross-model lesson targets, like GitHub Copilot instructions (#294).
+    - Supports an `--export` flag for cross-model lesson targets, like GitHub Copilot instructions and JetBrains Junie guidelines (#294).
 
 ### 3. Deterministic Compiler & Zero-LLM Shield
 

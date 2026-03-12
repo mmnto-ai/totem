@@ -12,18 +12,32 @@ import { bold, brand, dim, log, printBanner, success } from '../ui.js';
 import { IS_WIN } from '../utils.js';
 import { installEnforcementHooks, installPostMergeHook } from './install-hooks.js';
 
+// ─── Reflex versioning ────────────────────────────────────
+// Bump REFLEX_VERSION whenever the AI_PROMPT_BLOCK content changes materially.
+// This allows `totem init` to detect stale blocks and offer upgrades.
+
+export const REFLEX_VERSION = 2;
+const REFLEX_START = '<!-- totem:reflexes:start -->';
+const REFLEX_END = '<!-- totem:reflexes:end -->';
+const REFLEX_VERSION_RE = /<!-- totem:reflexes:version:(\d+) -->/;
+const LEGACY_SENTINEL = '## Totem AI Integration (Auto-Generated)';
+
 const AI_PROMPT_BLOCK = `
+${REFLEX_START}
+<!-- totem:reflexes:version:${REFLEX_VERSION} -->
 
 ## Totem AI Integration (Auto-Generated)
 You have access to the Totem MCP for long-term project memory. You MUST operate with the following reflexes:
 
 ### Memory Reflexes
-1. **Pull Before Planning:** Before writing specs, architecture, or fixing complex bugs, use \`search_knowledge\` to retrieve domain constraints and past traps.
-2. **Proactive Anchoring (The 3 Triggers):** You must autonomously call \`add_lesson\` when any of the following occur — do NOT wait for the user to ask:
+1. **BLOCKING — Pull Before Coding:** Before writing or modifying code that touches more than one file, you MUST call \`search_knowledge\` with a query describing what you're about to change. This is not optional. The vector DB contains traps, edge cases, and architectural constraints that prevent rework. Skip this and you risk repeating a mistake that's already been solved.
+2. **Pull Before Planning:** Before writing specs, architecture, or fixing complex bugs, use \`search_knowledge\` to retrieve domain constraints and past traps.
+3. **Pull on Session Start:** At the beginning of every session, call \`search_knowledge\` with a broad query about the current task or area of work. The vector DB is your institutional memory — use it before relying on your own context window.
+4. **Proactive Anchoring (The 3 Triggers):** You must autonomously call \`add_lesson\` when any of the following occur — do NOT wait for the user to ask:
    - **The Trap Trigger:** If you spend >2 turns fixing a bug caused by a framework quirk, unexpected API response, or edge case. (Anchor the symptom + fix).
    - **The Pivot Trigger:** If the user introduces a new architectural pattern or deprecates an old one. (Anchor the rule).
    - **The Handoff Trigger:** At the end of a session or when wrapping up a complex feature, extract the non-obvious lessons learned and anchor them.
-3. **Tool Preference (MCP over CLI):** Always prioritize using dedicated MCP tools (e.g., GitHub, Supabase, Vercel) over executing generic shell commands (like \`gh issue view\` or \`curl\`). MCP tools provide structured, un-truncated data optimized for your context window. Only fall back to bash execution if an MCP tool is unavailable or fails.
+5. **Tool Preference (MCP over CLI):** Always prioritize using dedicated MCP tools (e.g., GitHub, Supabase, Vercel) over executing generic shell commands (like \`gh issue view\` or \`curl\`). MCP tools provide structured, un-truncated data optimized for your context window. Only fall back to bash execution if an MCP tool is unavailable or fails.
 
 Lessons are automatically re-indexed in the background after each \`add_lesson\` call — no manual sync needed.
 
@@ -51,6 +65,7 @@ You do NOT have access to the local CLI. Instead, use the Totem MCP tools direct
 
 ### Context Management Guardrail
 You must be highly defensive of your own context window. If you notice this session becoming long, or if you are asked to read multiple massive files at once, you MUST proactively warn the user about impending context loss. When warning the user, suggest they run \`totem bridge\` to condense their mid-task state so they can safely clear the chat and resume. If you receive a \`<totem_system_warning>\` tag in a tool response, read it silently and synthesize a natural-language warning to the user — do NOT echo the raw XML.
+${REFLEX_END}
 `;
 
 interface DetectedProject {
@@ -605,16 +620,94 @@ export async function installBaselineLessons(
   }
 }
 
-/** Inject reflex block into an AI context file if not already present. */
-function injectReflexes(filePath: string): 'injected' | 'exists' | 'missing' {
+// ─── Reflex detection & upgrade ──────────────────────────
+
+export type ReflexStatus = 'current' | 'outdated' | 'missing';
+
+/** Detect whether the reflex block in a file is current, outdated, or missing. */
+export function detectReflexStatus(content: string): ReflexStatus {
+  // Check for versioned sentinel first
+  const versionMatch = content.match(REFLEX_VERSION_RE);
+  if (versionMatch) {
+    const version = parseInt(versionMatch[1]!, 10);
+    return version >= REFLEX_VERSION ? 'current' : 'outdated';
+  }
+
+  // Legacy sentinel — injected by older totem versions without version markers
+  if (content.includes(LEGACY_SENTINEL) || content.includes('Totem Memory Reflexes')) {
+    return 'outdated';
+  }
+
+  return 'missing';
+}
+
+/**
+ * Upgrade a reflex block from legacy (v1, no boundaries) or older versioned
+ * blocks to the current version. Returns the updated file content.
+ *
+ * Strategy:
+ * - If start/end boundaries exist, replace between them (clean swap).
+ * - If only the legacy sentinel exists (v1), find the block start and
+ *   look for the next user-owned `## ` heading or EOF as the boundary.
+ * - If the boundary can't be determined cleanly, append the new block
+ *   and set `clean: false` so the caller can warn about manual cleanup.
+ */
+export function upgradeReflexes(content: string): { content: string; clean: boolean } {
+  // Case 1: Has start/end boundaries (versioned block from a previous version)
+  const startIdx = content.indexOf(REFLEX_START);
+  const endIdx = content.indexOf(REFLEX_END);
+
+  if (startIdx !== -1 && endIdx !== -1 && startIdx < endIdx) {
+    const before = content.slice(0, startIdx).replace(/\n+$/, '\n');
+    const after = content.slice(endIdx + REFLEX_END.length);
+    return { content: before + AI_PROMPT_BLOCK + after, clean: true };
+  }
+
+  // Case 2: Legacy block (v1) — no boundaries, appended at end of file
+  const legacyIdx = content.indexOf(LEGACY_SENTINEL);
+  if (legacyIdx !== -1) {
+    // Walk backwards to include any leading whitespace before the heading
+    let blockStart = legacyIdx;
+    while (blockStart > 0 && content[blockStart - 1] === '\n') blockStart--;
+
+    // Find the end: the next ## heading that isn't part of the Totem block, or EOF
+    const afterLegacy = content.slice(legacyIdx);
+    // Match a `\n## ` followed by text that is NOT "Totem AI" (user content after the block)
+    const nextH2 = afterLegacy.match(/\r?\n## (?!Totem AI Integration)/);
+    const blockEnd = nextH2?.index !== undefined ? legacyIdx + nextH2.index : content.length;
+
+    const before = content.slice(0, blockStart);
+    const after = content.slice(blockEnd);
+    return { content: before + AI_PROMPT_BLOCK + after, clean: true };
+  }
+
+  // Case 3: Has "Totem Memory Reflexes" text but not the standard heading — can't locate cleanly
+  return { content: content + '\n' + AI_PROMPT_BLOCK, clean: false };
+}
+
+/** Inject or upgrade reflex block in an AI context file. */
+function injectReflexes(filePath: string): 'injected' | 'current' | 'missing' | 'outdated' {
   if (!fs.existsSync(filePath)) return 'missing';
 
   const content = fs.readFileSync(filePath, 'utf-8');
-  if (content.includes('Totem AI Integration') || content.includes('Totem Memory Reflexes')) {
-    return 'exists';
+  const status = detectReflexStatus(content);
+
+  if (status === 'current') return 'current';
+  if (status === 'missing') {
+    fs.appendFileSync(filePath, AI_PROMPT_BLOCK);
+    return 'injected';
   }
-  fs.appendFileSync(filePath, AI_PROMPT_BLOCK);
-  return 'injected';
+
+  // 'outdated' — defer to caller for user confirmation
+  return 'outdated';
+}
+
+/** Apply the reflex upgrade to a file. Returns true if clean, false if manual cleanup needed. */
+function applyReflexUpgrade(filePath: string): boolean {
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const { content: updated, clean } = upgradeReflexes(content);
+  fs.writeFileSync(filePath, updated, 'utf-8');
+  return clean;
 }
 
 interface InitSummaryEntry {
@@ -791,18 +884,72 @@ export async function initCommand(): Promise<void> {
         }
       }
 
-      // --- Reflex injection for selected tools ---
+      // --- Reflex injection & upgrade for selected tools ---
+      const outdatedFiles: Array<{ tool: AiToolInfo; filePath: string }> = [];
+
       for (const tool of selectedTools) {
         if (!tool.reflexFile) continue;
         const filePath = path.join(cwd, tool.reflexFile);
         try {
           const result = injectReflexes(filePath);
           if (result === 'injected') {
-            summary.push({ file: tool.reflexFile, action: 'Injected memory reflexes' });
+            summary.push({ file: tool.reflexFile, action: 'Injected memory reflexes (v2)' });
+          } else if (result === 'outdated') {
+            outdatedFiles.push({ tool, filePath });
           }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           log.error('Totem', `Failed to inject reflexes into ${tool.reflexFile}: ${message}`);
+        }
+      }
+
+      // Prompt once for all outdated reflex files
+      if (outdatedFiles.length > 0) {
+        const fileList = outdatedFiles.map((f) => f.tool.reflexFile).join(', ');
+        log.warn('Totem', `Outdated reflexes found in: ${bold(fileList)}`);
+
+        let shouldUpgrade = false;
+        if (process.stdin.isTTY) {
+          const answer = await rl.question(`Upgrade reflexes to v${REFLEX_VERSION}? (Y/n): `);
+          shouldUpgrade =
+            answer.trim().toLowerCase() !== 'n' && answer.trim().toLowerCase() !== 'no';
+        } else {
+          // Non-TTY (CI/scripted): auto-upgrade to match baseline lessons behavior
+          shouldUpgrade = true;
+          log.info('Totem', 'Non-interactive mode — auto-upgrading reflexes.');
+        }
+
+        if (shouldUpgrade) {
+          for (const { tool, filePath } of outdatedFiles) {
+            try {
+              const clean = applyReflexUpgrade(filePath);
+              if (clean) {
+                summary.push({
+                  file: tool.reflexFile!,
+                  action: `Upgraded reflexes to v${REFLEX_VERSION}`,
+                });
+              } else {
+                summary.push({
+                  file: tool.reflexFile!,
+                  action: `Appended v${REFLEX_VERSION} reflexes (manual cleanup needed — remove old block)`,
+                });
+                log.warn(
+                  'Totem',
+                  `Could not cleanly replace old reflexes in ${tool.reflexFile}. New block appended — please remove the old one manually.`,
+                );
+              }
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              log.error('Totem', `Failed to upgrade reflexes in ${tool.reflexFile}: ${message}`);
+            }
+          }
+        } else {
+          for (const { tool } of outdatedFiles) {
+            summary.push({
+              file: tool.reflexFile!,
+              action: 'Outdated reflexes — upgrade declined',
+            });
+          }
         }
       }
 

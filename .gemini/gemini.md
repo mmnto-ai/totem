@@ -35,12 +35,14 @@ You have access to the Totem MCP for long-term project memory. You MUST operate 
 
 ### Memory Reflexes
 
-1. **Pull Before Planning:** Before writing specs, architecture, or fixing complex bugs, use `search_knowledge` to retrieve domain constraints and past traps.
-2. **Proactive Anchoring (The 3 Triggers):** You must autonomously call `add_lesson` when any of the following occur — do NOT wait for the user to ask:
+1. **BLOCKING — Pull Before Coding:** Before writing or modifying code that touches more than one file, you MUST call `search_knowledge` with a query describing what you're about to change. This is not optional. The vector DB contains traps, edge cases, and architectural constraints that prevent rework. Skip this and you risk repeating a mistake that's already been solved.
+2. **Pull Before Planning:** Before writing specs, architecture, or fixing complex bugs, use `search_knowledge` to retrieve domain constraints and past traps. For `totem spec`, this happens automatically via lesson pre-injection — but for ad-hoc planning, you must call it manually.
+3. **Pull on Session Start:** At the beginning of every session, call `search_knowledge` with a broad query about the current task or area of work. The vector DB is your institutional memory — use it before relying on your own context window.
+4. **Proactive Anchoring (The 3 Triggers):** You must autonomously call `add_lesson` when any of the following occur — do NOT wait for the user to ask:
    - **The Trap Trigger:** If you spend >2 turns fixing a bug caused by a framework quirk, unexpected API response, or edge case. (Anchor the symptom + fix).
    - **The Pivot Trigger:** If the user introduces a new architectural pattern or deprecates an old one. (Anchor the rule).
    - **The Handoff Trigger:** At the end of a session or when wrapping up a complex feature, extract the non-obvious lessons learned and anchor them.
-3. **Tool Preference (MCP over CLI):** Always prioritize using dedicated MCP tools (e.g., GitHub, Supabase, Vercel) over executing generic shell commands (like `gh issue view` or `curl`). MCP tools provide structured, un-truncated data optimized for your context window. Only fall back to bash execution if an MCP tool is unavailable or fails.
+5. **Tool Preference (MCP over CLI):** Always prioritize using dedicated MCP tools (e.g., GitHub, Supabase, Vercel) over executing generic shell commands (like `gh issue view` or `curl`). MCP tools provide structured, un-truncated data optimized for your context window. Only fall back to bash execution if an MCP tool is unavailable or fails.
 
 Lessons are automatically re-indexed in the background after each `add_lesson` call — no manual sync needed.
 

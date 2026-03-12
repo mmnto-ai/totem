@@ -1376,3 +1376,21 @@ Implement a minimum character length guard when recursively stripping trailing a
 **Tags:** git, devops, file-system
 
 Use the `--recurse-submodules` flag with `git ls-files` to ensure that files located within submodules are included in project scans. Standard Git listing commands often ignore these directories by default, which can cause tools to miss relevant configuration or logic files.
+
+## Lesson — When injecting vectordb lessons into orchestrator prompts
+
+**Tags:** vectordb, spec, lessons, architecture, pattern
+
+When injecting vectordb lessons into orchestrator prompts (like `totem spec`), use a single broadened search pool (e.g., 20 results) and partition by filePath rather than running multiple redundant searches. The `lessons.md` filePath convention is the reliable partition key. Use `continue` not `break` in character budget loops so oversized items are skipped but smaller ones still fit.
+
+## Lesson — Changesets interactive CLI (pnpm changeset) crashes when
+
+**Tags:** changesets, release, ci, trap
+
+Changesets interactive CLI (`pnpm changeset`) crashes when stdin is piped or non-TTY. For automated releases, write changeset files manually to `.changeset/` with frontmatter listing package names and bump types. The `fixed` group in changeset config means all packages bump together.
+
+## Lesson — JetBrains Junie is a complementary coding agent, not a
+
+**Tags:** competitive, junie, jetbrains, mcp, strategy
+
+JetBrains Junie is a complementary coding agent, not a Totem competitor. It consumes MCP servers (potential Totem customer), uses static `.junie/guidelines.md` for context (no enforcement, no learning loop, no deterministic rules). Totem's sentinel-based export already supports Junie via `config.exports: { junie: '.junie/guidelines.md' }` — zero code needed.

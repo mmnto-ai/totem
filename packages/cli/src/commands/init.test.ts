@@ -8,11 +8,14 @@ import { BASELINE_MARKER, UNIVERSAL_LESSONS_MARKDOWN } from '../assets/universal
 import {
   buildNpxCommand,
   detectEmbeddingTier,
+  detectReflexStatus,
   generateConfig,
   installBaselineLessons,
+  REFLEX_VERSION,
   scaffoldClaudeHooks,
   scaffoldFile,
   scaffoldMcpConfig,
+  upgradeReflexes,
 } from './init.js';
 
 const SERVER_ENTRY = { type: 'stdio', command: 'npx', args: ['-y', '@mmnto/mcp'] };
@@ -638,5 +641,165 @@ describe('installBaselineLessons', () => {
     expect(result).toBe('installed');
     const content = fs.readFileSync(lessonsPath, 'utf-8');
     expect(content).toContain(BASELINE_MARKER);
+  });
+});
+
+// ─── Reflex versioning ──────────────────────────────────────
+
+const LEGACY_BLOCK = `
+## Totem AI Integration (Auto-Generated)
+You have access to the Totem MCP for long-term project memory. You MUST operate with the following reflexes:
+
+### Memory Reflexes
+1. **Pull Before Planning:** Before writing specs, architecture, or fixing complex bugs, use \`search_knowledge\` to retrieve domain constraints and past traps.
+2. **Proactive Anchoring (The 3 Triggers):** You must autonomously call \`add_lesson\` when any of the following occur — do NOT wait for the user to ask:
+   - **The Trap Trigger:** If you spend >2 turns fixing a bug caused by a framework quirk, unexpected API response, or edge case. (Anchor the symptom + fix).
+   - **The Pivot Trigger:** If the user introduces a new architectural pattern or deprecates an old one. (Anchor the rule).
+   - **The Handoff Trigger:** At the end of a session or when wrapping up a complex feature, extract the non-obvious lessons learned and anchor them.
+3. **Tool Preference (MCP over CLI):** Always prioritize using dedicated MCP tools (e.g., GitHub, Supabase, Vercel) over executing generic shell commands.
+
+Lessons are automatically re-indexed in the background after each \`add_lesson\` call — no manual sync needed.
+
+### Memory Classification
+When deciding where to store information or rules, use this decision tree:
+- If forgetting this causes a mistake on an UNRELATED task: Store in your root agent memory file.
+- If it's a stable syntax/style pattern: Store in the project's styleguide or linter rules.
+- If it's domain knowledge or a past trap: You MUST use the Totem \`add_lesson\` tool.
+
+### Context Management Guardrail
+You must be highly defensive of your own context window. If you notice this session becoming long, you MUST proactively warn the user about impending context loss.
+`;
+
+describe('detectReflexStatus', () => {
+  it('returns "current" when version matches REFLEX_VERSION', () => {
+    const content =
+      '# CLAUDE.md\n\n<!-- totem:reflexes:start -->\n<!-- totem:reflexes:version:' +
+      REFLEX_VERSION +
+      ' -->\nsome content\n<!-- totem:reflexes:end -->';
+    expect(detectReflexStatus(content)).toBe('current');
+  });
+
+  it('returns "current" when version is higher than REFLEX_VERSION', () => {
+    const content = '<!-- totem:reflexes:version:' + (REFLEX_VERSION + 1) + ' -->';
+    expect(detectReflexStatus(content)).toBe('current');
+  });
+
+  it('returns "outdated" when version is lower than REFLEX_VERSION', () => {
+    const content = '<!-- totem:reflexes:version:1 -->\nold content';
+    expect(detectReflexStatus(content)).toBe('outdated');
+  });
+
+  it('returns "outdated" for legacy sentinel without version tag', () => {
+    const content = '# My Project\n\n## Totem AI Integration (Auto-Generated)\nold reflexes here';
+    expect(detectReflexStatus(content)).toBe('outdated');
+  });
+
+  it('returns "outdated" for alternate legacy sentinel', () => {
+    const content = '# My Project\n\nTotem Memory Reflexes\nold reflexes here';
+    expect(detectReflexStatus(content)).toBe('outdated');
+  });
+
+  it('returns "missing" when no sentinel is present', () => {
+    const content = '# My Project\n\nSome project documentation.\n';
+    expect(detectReflexStatus(content)).toBe('missing');
+  });
+
+  it('returns "missing" for empty file', () => {
+    expect(detectReflexStatus('')).toBe('missing');
+  });
+});
+
+describe('upgradeReflexes', () => {
+  const versionTag = '<!-- totem:reflexes:version:' + REFLEX_VERSION + ' -->';
+
+  it('replaces a versioned block cleanly using start/end boundaries', () => {
+    const oldBlock =
+      '<!-- totem:reflexes:start -->\n<!-- totem:reflexes:version:1 -->\nOld reflexes\n<!-- totem:reflexes:end -->';
+    const content =
+      '# CLAUDE.md\n\nMy custom rules.\n\n' + oldBlock + '\n\n## My Section\nUser content\n';
+
+    const { content: updated, clean } = upgradeReflexes(content);
+
+    expect(clean).toBe(true);
+    expect(updated).toContain(versionTag);
+    expect(updated).toContain('<!-- totem:reflexes:start -->');
+    expect(updated).toContain('<!-- totem:reflexes:end -->');
+    expect(updated).toContain('My custom rules.');
+    expect(updated).toContain('## My Section');
+    expect(updated).toContain('User content');
+    expect(updated).not.toContain('Old reflexes');
+  });
+
+  it('replaces a legacy v1 block at end of file', () => {
+    const content = '# CLAUDE.md\n\nMy custom rules.' + LEGACY_BLOCK;
+
+    const { content: updated, clean } = upgradeReflexes(content);
+
+    expect(clean).toBe(true);
+    expect(updated).toContain('My custom rules.');
+    expect(updated).toContain(versionTag);
+    expect(updated).toContain('BLOCKING — Pull Before Coding');
+    // Legacy block had "Pull Before Planning" as item 1; new block has it as item 2
+    expect(updated).not.toContain('1. **Pull Before Planning:**');
+  });
+
+  it('preserves user content after a legacy v1 block', () => {
+    const content =
+      '# CLAUDE.md\n' + LEGACY_BLOCK + '\n## My Custom Section\n\nDo not delete this!\n';
+
+    const { content: updated, clean } = upgradeReflexes(content);
+
+    expect(clean).toBe(true);
+    expect(updated).toContain('## My Custom Section');
+    expect(updated).toContain('Do not delete this!');
+    expect(updated).toContain(versionTag);
+  });
+
+  it('preserves user content before a legacy v1 block', () => {
+    const content =
+      '# CLAUDE.md\n\n## Architecture Decisions\n\nImportant stuff here.\n' + LEGACY_BLOCK;
+
+    const { content: updated, clean } = upgradeReflexes(content);
+
+    expect(clean).toBe(true);
+    expect(updated).toContain('## Architecture Decisions');
+    expect(updated).toContain('Important stuff here.');
+    expect(updated).toContain(versionTag);
+  });
+
+  it('falls back to append when legacy sentinel is not found but alternate sentinel exists', () => {
+    const content = '# CLAUDE.md\n\nTotem Memory Reflexes\n\nSome custom stuff.\n';
+
+    const { content: updated, clean } = upgradeReflexes(content);
+
+    expect(clean).toBe(false);
+    expect(updated).toContain('Totem Memory Reflexes'); // original preserved
+    expect(updated).toContain(versionTag); // new appended
+  });
+
+  it('upgraded content is idempotent via detectReflexStatus', () => {
+    const content = '# CLAUDE.md\n' + LEGACY_BLOCK;
+    const { content: upgraded } = upgradeReflexes(content);
+
+    expect(detectReflexStatus(upgraded)).toBe('current');
+
+    // Second upgrade should still be clean
+    const { content: doubleUpgraded, clean } = upgradeReflexes(upgraded);
+    expect(clean).toBe(true);
+    expect(detectReflexStatus(doubleUpgraded)).toBe('current');
+  });
+
+  it('includes start and end boundaries in the upgraded block', () => {
+    const content = '# CLAUDE.md\n' + LEGACY_BLOCK;
+    const { content: updated } = upgradeReflexes(content);
+
+    expect(updated).toContain('<!-- totem:reflexes:start -->');
+    expect(updated).toContain('<!-- totem:reflexes:end -->');
+  });
+});
+
+describe('REFLEX_VERSION', () => {
+  it('is at least 2', () => {
+    expect(REFLEX_VERSION).toBeGreaterThanOrEqual(2);
   });
 });
