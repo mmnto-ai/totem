@@ -601,6 +601,10 @@ describe('cosineSimilarity', () => {
     const b = [1, 1];
     expect(cosineSimilarity(a, b)).toBeCloseTo(Math.SQRT1_2, 4);
   });
+
+  it('throws on mismatched vector lengths', () => {
+    expect(() => cosineSimilarity([1, 2], [1, 2, 3])).toThrow('different lengths');
+  });
 });
 
 // ─── deduplicateLessons ────────────────────────────────

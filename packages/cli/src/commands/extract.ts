@@ -457,6 +457,11 @@ export async function selectLessons(
 
 /** Cosine similarity between two vectors of equal length. */
 export function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) {
+    throw new Error(
+      '[Totem Error] Cannot compute cosine similarity for vectors of different lengths.',
+    );
+  }
   let dot = 0;
   let magA = 0;
   let magB = 0;
