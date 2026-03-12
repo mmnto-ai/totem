@@ -227,7 +227,6 @@ vi.mock('../adapters/gh-utils.js', () => ({
   ghExec: vi.fn(),
 }));
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { ghExec: mockGhExec } =
   await vi.importMock<typeof import('../adapters/gh-utils.js')>('../adapters/gh-utils.js');
 

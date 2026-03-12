@@ -109,16 +109,18 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
   const rulesPath = path.join(totemDir, COMPILED_RULES_FILE);
 
   if (!fs.existsSync(lessonsPath)) {
-    log.warn(TAG, 'No lessons.md found. Nothing to compile.');
-    return;
+    const err = new Error('No lessons.md found. Nothing to compile.');
+    err.name = 'NoLessonsError';
+    throw err;
   }
 
   const content = fs.readFileSync(lessonsPath, 'utf-8');
   const lessons = parseLessonsFile(content);
 
   if (lessons.length === 0) {
-    log.warn(TAG, 'No lessons found in lessons.md.');
-    return;
+    const err = new Error('No lessons found in lessons.md.');
+    err.name = 'NoLessonsError';
+    throw err;
   }
 
   log.info(TAG, `Found ${lessons.length} lessons in lessons.md`);
