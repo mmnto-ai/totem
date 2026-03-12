@@ -490,8 +490,7 @@ export async function deduplicateLessons(
 
   for (const candidate of candidates) {
     // Check against existing LanceDB lessons
-    let isDuplicate = false;
-
+    let isDbDuplicate = false;
     try {
       const results = await store.search({
         query: candidate.text,
@@ -500,35 +499,32 @@ export async function deduplicateLessons(
       });
 
       if (results.length > 0 && results[0]!.score >= threshold) {
-        isDuplicate = true;
+        isDbDuplicate = true;
       }
     } catch {
       // Empty DB or no table — no existing lessons to dedup against
     }
 
-    if (!isDuplicate && batchVectors.length > 0) {
-      // Check against already-accepted candidates in this batch
-      const [candidateVector] = await embedder.embed([candidate.text]);
-      for (const batchVec of batchVectors) {
-        if (cosineSimilarity(candidateVector!, batchVec) >= threshold) {
-          isDuplicate = true;
-          break;
-        }
-      }
+    if (isDbDuplicate) {
+      dropped.push(candidate);
+      continue;
+    }
 
-      if (!isDuplicate) {
-        kept.push(candidate);
-        batchVectors.push(candidateVector!);
-      } else {
-        dropped.push(candidate);
+    // Check against already-accepted candidates in this batch
+    const [candidateVector] = await embedder.embed([candidate.text]);
+    let isIntraBatchDuplicate = false;
+    for (const batchVec of batchVectors) {
+      if (cosineSimilarity(candidateVector!, batchVec) >= threshold) {
+        isIntraBatchDuplicate = true;
+        break;
       }
-    } else if (!isDuplicate) {
-      // First candidate in batch or no intra-batch dedup needed
-      const [candidateVector] = await embedder.embed([candidate.text]);
+    }
+
+    if (isIntraBatchDuplicate) {
+      dropped.push(candidate);
+    } else {
       kept.push(candidate);
       batchVectors.push(candidateVector!);
-    } else {
-      dropped.push(candidate);
     }
   }
 
