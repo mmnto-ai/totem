@@ -249,7 +249,7 @@ export async function selectProposals(
  * to a temp file and using --body-file sidesteps this entirely.
  */
 function ghComment(issueNumber: number, body: string, cwd: string): void {
-  const tmpFile = path.join(os.tmpdir(), `totem-audit-comment-${crypto.randomUUID()}.md`);
+  const tmpFile = path.join(os.tmpdir(), `totem-audit-comment-${crypto.randomUUID()}.md`); // totem-ignore — ephemeral temp file, deleted in finally block
   try {
     fs.writeFileSync(tmpFile, body, 'utf-8');
     ghExec(['issue', 'comment', String(issueNumber), '--body-file', tmpFile], cwd);
@@ -494,7 +494,7 @@ export async function auditCommand(options: AuditOptions): Promise<void> {
   const mergeErrors = validateMergeTargets(selected, issueNumbers);
   if (mergeErrors.length > 0) {
     for (const err of mergeErrors) {
-      log.warn(TAG, `Invalid merge target: ${err}`);
+      log.warn(TAG, `Invalid merge target: ${err}`); // totem-ignore — err is our own validation string, not an Error object
     }
     selected = selected.filter(
       (p) => !(p.action === 'MERGE' && p.mergeInto && !issueNumbers.has(p.mergeInto)),
@@ -509,7 +509,7 @@ export async function auditCommand(options: AuditOptions): Promise<void> {
   log.info(TAG, `Executing ${selected.length} proposal(s)...`);
   const result = executeProposals(selected, cwd);
   if (result.failed > 0) {
-    log.warn(TAG, `${result.failed} proposal(s) failed. See errors above.`);
+    log.warn(TAG, `${result.failed} proposal(s) failed. See errors above.`); // totem-ignore — result is our own counter
   }
-  log.success(TAG, `Done — ${result.succeeded} issue(s) updated.`);
+  log.success(TAG, `Done — ${result.succeeded} issue(s) updated.`); // totem-ignore — result is our own counter
 }
