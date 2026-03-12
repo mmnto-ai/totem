@@ -13,30 +13,56 @@ export interface ResolvedFile {
 }
 
 /**
+ * Parse null-delimited git output into normalized forward-slash paths.
+ */
+function parseGitPaths(output: string): string[] {
+  return output
+    .split('\0')
+    .filter(Boolean)
+    .map((f) => f.replace(/\\/g, '/'));
+}
+
+/**
  * Get the set of non-gitignored files in the project.
+ * Includes files inside git submodules via --recurse-submodules.
  * Returns null if git is unavailable or the project is not a git repo.
  */
 function getGitNonIgnoredFiles(
   projectRoot: string,
   onWarn?: (msg: string) => void,
 ): Set<string> | null {
+  const execOpts = {
+    cwd: projectRoot,
+    encoding: 'utf-8' as const,
+    maxBuffer: 10 * 1024 * 1024,
+    shell: process.platform === 'win32',
+  };
+
   try {
+    // Parent repo: tracked + untracked (non-ignored) files
     const output = execFileSync(
       'git',
       ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
-      {
-        cwd: projectRoot,
-        encoding: 'utf-8',
-        maxBuffer: 10 * 1024 * 1024,
-        shell: process.platform === 'win32',
-      },
+      execOpts,
     );
-    return new Set(
-      output
-        .split('\0')
-        .filter(Boolean)
-        .map((f) => f.replace(/\\/g, '/')),
-    );
+    const files = new Set(parseGitPaths(output));
+
+    // Submodules: --recurse-submodules only supports --cached,
+    // but submodule files we care about are always committed.
+    try {
+      const subOutput = execFileSync(
+        'git',
+        ['ls-files', '-z', '--cached', '--recurse-submodules'],
+        execOpts,
+      );
+      for (const f of parseGitPaths(subOutput)) {
+        files.add(f);
+      }
+    } catch {
+      // --recurse-submodules unsupported or no submodules — ignore
+    }
+
+    return files;
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     const msg =

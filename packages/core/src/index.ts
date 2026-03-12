@@ -107,7 +107,12 @@ export type { SagaViolation, ViolationType } from './saga-validator.js';
 export { validateDocUpdate } from './saga-validator.js';
 
 // Utilities
-export { generateLessonHeading, HEADING_MAX_CHARS, truncateHeading } from './lesson-format.js';
+export {
+  generateLessonHeading,
+  HEADING_MAX_CHARS,
+  rewriteLessonHeadings,
+  truncateHeading,
+} from './lesson-format.js';
 export type { IngestionSanitizeOptions } from './sanitize.js';
 export {
   BASE64_BLOB_RE,
