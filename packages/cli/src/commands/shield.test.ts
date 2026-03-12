@@ -267,11 +267,35 @@ describe('structural mode', () => {
       ],
       sessions: [],
       code: [],
+      lessons: [],
     };
     const prompt = assemblePrompt(sampleDiff, changedFiles, context, 'SYSTEM PROMPT');
     expect(prompt).toContain('=== DIFF ===');
     expect(prompt).toContain('TOTEM KNOWLEDGE');
     expect(prompt).toContain('RELATED SPECS');
+  });
+
+  it('includes lesson section when lessons are present', () => {
+    const context = {
+      specs: [],
+      sessions: [],
+      code: [],
+      lessons: [
+        {
+          content: 'Never use console.log in MCP package',
+          contextPrefix: '',
+          filePath: '.totem/lessons.md',
+          type: 'spec' as const,
+          label: 'MCP stdio safety',
+          score: 0.95,
+          metadata: {},
+        },
+      ],
+    };
+    const prompt = assemblePrompt(sampleDiff, changedFiles, context, 'SYSTEM PROMPT');
+    expect(prompt).toContain('RELEVANT LESSONS (HARD CONSTRAINTS)');
+    expect(prompt).toContain('MCP stdio safety');
+    expect(prompt).toContain('Never use console.log in MCP package');
   });
 
   it('structural system prompt focuses on syntax patterns not architecture', () => {

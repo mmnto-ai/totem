@@ -7,10 +7,12 @@ import { GitHubCliAdapter } from '../adapters/github-cli.js';
 import type { StandardIssue } from '../adapters/issue-adapter.js';
 import { log } from '../ui.js';
 import {
+  formatLessonSection,
   formatResults,
   getSystemPrompt,
   loadConfig,
   loadEnv,
+  partitionLessons,
   requireEmbedding,
   resolveConfigPath,
   runOrchestrator,
@@ -94,8 +96,7 @@ export async function retrieveContext(query: string, store: LanceStore): Promise
   ]);
 
   // Partition: lessons come from lessons.md, everything else is a spec/ADR
-  const lessons = allSpecs.filter((r) => r.filePath.endsWith('lessons.md')).slice(0, MAX_LESSONS);
-  const specs = allSpecs.filter((r) => !r.filePath.endsWith('lessons.md')).slice(0, MAX_SPECS);
+  const { lessons, specs } = partitionLessons(allSpecs, MAX_LESSONS, MAX_SPECS);
 
   return { specs, sessions, code, lessons };
 }
@@ -152,20 +153,8 @@ export function assemblePrompt(
   }
 
   // Lessons — full bodies, capped by total character budget
-  if (context.lessons.length > 0) {
-    const lessonLines: string[] = [];
-    let charBudget = MAX_LESSON_CHARS;
-    for (const lesson of context.lessons) {
-      const entry = `- **${lesson.label}** (score: ${lesson.score.toFixed(3)})\n  ${lesson.content.replace(/\n/g, '\n  ')}`;
-      if (entry.length > charBudget) continue;
-      lessonLines.push(entry);
-      charBudget -= entry.length;
-    }
-    if (lessonLines.length > 0) {
-      sections.push(`\n=== RELEVANT LESSONS (HARD CONSTRAINTS) ===`);
-      sections.push(lessonLines.join('\n\n'));
-    }
-  }
+  const lessonSection = formatLessonSection(context.lessons, MAX_LESSON_CHARS);
+  if (lessonSection) sections.push(lessonSection);
 
   return sections.join('\n');
 }

@@ -7,10 +7,12 @@ import { GitHubCliAdapter } from '../adapters/github-cli.js';
 import type { StandardIssueListItem } from '../adapters/issue-adapter.js';
 import { log } from '../ui.js';
 import {
+  formatLessonSection,
   formatResults,
   getSystemPrompt,
   loadConfig,
   loadEnv,
+  partitionLessons,
   requireEmbedding,
   resolveConfigPath,
   runOrchestrator,
@@ -21,7 +23,9 @@ import {
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Triage';
+const SPEC_SEARCH_POOL = 20;
 const MAX_SPEC_RESULTS = 5;
+const MAX_LESSONS = 5;
 const MAX_SESSION_RESULTS = 5;
 const QUERY_TITLES_TRUNCATE = 2_000;
 const GH_ISSUE_LIMIT = 100;
@@ -41,6 +45,7 @@ Produce a prioritized roadmap from the project's open GitHub issues, strictly in
 - **Be Opinionated:** Give a single, clear recommendation for the next task. No wishy-washy lists.
 - **Momentum:** Use recent session history to understand what was just finished and what is in progress.
 - **Clarity:** Reference issues by number (#NNN) and title. Consider labels and issue age.
+- **Enforce Lessons:** If RELEVANT LESSONS are provided, treat them as hard constraints on prioritization. Issues that conflict with lessons should be deprioritized or flagged.
 
 ## Output Format
 Respond with ONLY the sections below. No preamble, no closing remarks.
@@ -65,18 +70,21 @@ Respond with ONLY the sections below. No preamble, no closing remarks.
 interface RetrievedContext {
   specs: SearchResult[];
   sessions: SearchResult[];
+  lessons: SearchResult[];
 }
 
 async function retrieveContext(query: string, store: LanceStore): Promise<RetrievedContext> {
   const search = (typeFilter: ContentType, maxResults: number) =>
     store.search({ query, typeFilter, maxResults });
 
-  const [specs, sessions] = await Promise.all([
-    search('spec', MAX_SPEC_RESULTS),
+  const [allSpecs, sessions] = await Promise.all([
+    search('spec', SPEC_SEARCH_POOL),
     search('session_log', MAX_SESSION_RESULTS),
   ]);
 
-  return { specs, sessions };
+  const { lessons, specs } = partitionLessons(allSpecs, MAX_LESSONS, MAX_SPEC_RESULTS);
+
+  return { specs, sessions, lessons };
 }
 
 function buildSearchQuery(issues: StandardIssueListItem[]): string {
@@ -97,7 +105,7 @@ export function formatIssueInventory(issues: StandardIssueListItem[]): string {
   return ['| Issue | Title | Labels | Updated |', '|---|---|---|---|', ...rows].join('\n');
 }
 
-function assemblePrompt(
+export function assemblePrompt(
   issues: StandardIssueListItem[],
   context: RetrievedContext,
   systemPrompt: string,
@@ -118,6 +126,10 @@ function assemblePrompt(
     if (specSection) sections.push(specSection);
     if (sessionSection) sections.push(sessionSection);
   }
+
+  // Lessons — condensed snippets for fast-boot command
+  const lessonSection = formatLessonSection(context.lessons, undefined, true);
+  if (lessonSection) sections.push(lessonSection);
 
   return sections.join('\n');
 }
@@ -159,8 +171,11 @@ export async function triageCommand(options: TriageOptions): Promise<void> {
   const query = buildSearchQuery(issues);
   log.info(TAG, 'Querying Totem index...');
   const context = await retrieveContext(query, store);
-  const totalResults = context.specs.length + context.sessions.length;
-  log.info(TAG, `Found: ${context.specs.length} specs, ${context.sessions.length} sessions`);
+  const totalResults = context.specs.length + context.sessions.length + context.lessons.length;
+  log.info(
+    TAG,
+    `Found: ${context.specs.length} specs, ${context.sessions.length} sessions, ${context.lessons.length} lessons`,
+  );
 
   // Resolve system prompt (allow .totem/prompts/triage.md override)
   const systemPrompt = getSystemPrompt('triage', SYSTEM_PROMPT, cwd, config.totemDir);

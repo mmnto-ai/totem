@@ -8,10 +8,12 @@ import type { StandardPrListItem } from '../adapters/pr-adapter.js';
 import { getGitBranch, getGitStatus } from '../git.js';
 import { log } from '../ui.js';
 import {
+  formatLessonSection,
   formatResults,
   getSystemPrompt,
   loadConfig,
   loadEnv,
+  partitionLessons,
   requireEmbedding,
   resolveConfigPath,
   runOrchestrator,
@@ -22,7 +24,9 @@ import {
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Briefing';
+const SPEC_SEARCH_POOL = 20;
 const MAX_SPEC_RESULTS = 5;
+const MAX_LESSONS = 5;
 const MAX_SESSION_RESULTS = 5;
 
 // ─── System prompt ──────────────────────────────────────
@@ -64,18 +68,21 @@ Respond with ONLY the sections below. No preamble, no closing remarks.
 interface RetrievedContext {
   specs: SearchResult[];
   sessions: SearchResult[];
+  lessons: SearchResult[];
 }
 
 async function retrieveContext(query: string, store: LanceStore): Promise<RetrievedContext> {
   const search = (typeFilter: ContentType, maxResults: number) =>
     store.search({ query, typeFilter, maxResults });
 
-  const [specs, sessions] = await Promise.all([
-    search('spec', MAX_SPEC_RESULTS),
+  const [allSpecs, sessions] = await Promise.all([
+    search('spec', SPEC_SEARCH_POOL),
     search('session_log', MAX_SESSION_RESULTS),
   ]);
 
-  return { specs, sessions };
+  const { lessons, specs } = partitionLessons(allSpecs, MAX_LESSONS, MAX_SPEC_RESULTS);
+
+  return { specs, sessions, lessons };
 }
 
 // ─── Prompt assembly ────────────────────────────────────
@@ -85,7 +92,7 @@ export function formatPRList(prs: StandardPrListItem[]): string {
   return prs.map((pr) => `- #${pr.number} — ${pr.title} (branch: ${pr.headRefName})`).join('\n');
 }
 
-function assemblePrompt(
+export function assemblePrompt(
   branch: string,
   status: string,
   prs: StandardPrListItem[],
@@ -114,6 +121,10 @@ function assemblePrompt(
     if (specSection) sections.push(specSection);
     if (sessionSection) sections.push(sessionSection);
   }
+
+  // Lessons — condensed snippets for fast-boot command
+  const lessonSection = formatLessonSection(context.lessons, undefined, true);
+  if (lessonSection) sections.push(lessonSection);
 
   return sections.join('\n');
 }
@@ -155,8 +166,11 @@ export async function briefingCommand(options: BriefingOptions): Promise<void> {
   const query = `${branch} active work session priorities`;
   log.info(TAG, 'Querying Totem index...');
   const context = await retrieveContext(query, store);
-  const totalResults = context.specs.length + context.sessions.length;
-  log.info(TAG, `Found: ${context.specs.length} specs, ${context.sessions.length} sessions`);
+  const totalResults = context.specs.length + context.sessions.length + context.lessons.length;
+  log.info(
+    TAG,
+    `Found: ${context.specs.length} specs, ${context.sessions.length} sessions, ${context.lessons.length} lessons`,
+  );
 
   // Resolve system prompt (allow .totem/prompts/briefing.md override)
   const systemPrompt = getSystemPrompt('briefing', SYSTEM_PROMPT, cwd, config.totemDir);
