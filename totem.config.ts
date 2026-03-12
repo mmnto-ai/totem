@@ -43,6 +43,7 @@ const config: TotemConfig = {
     '**/dist/**',
     '**/__tests__/**',
     '**/*.test.ts',
+    '.strategy/archive/**',
   ],
 };
 
