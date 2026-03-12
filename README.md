@@ -10,7 +10,7 @@ Right now, AI development is where code versioning was before Git. Every time yo
 
 **Totem is the state manager for your AI's brain.**
 
-It is an **AI Control Plane for Local Development**. Instead of uploading your proprietary codebase to a cloud SaaS platform, Totem compiles a syntax-aware, embedded vector index (LanceDB) right inside your project. It acts as an **Architectural Linter**, using the standard Model Context Protocol (MCP) to force your local agents (Claude, Gemini, Cursor) to read your project's constraints, decisions, and trap-logs _before_ they write a single line of code.
+It is an **AI Control Plane for Local Development**. Instead of uploading your proprietary codebase to a cloud SaaS platform, Totem compiles a syntax-aware, embedded vector index (LanceDB) right inside your project. It acts as an **Architectural Linter**, using the standard Model Context Protocol (MCP) to force your local agents (Claude, Gemini, Cursor, Junie) to read your project's constraints, decisions, and trap-logs _before_ they write a single line of code.
 
 When you're three levels deep in a debugging session, you need to know if the code you are writing is real, or just an AI hallucinating an anti-pattern you banned three months ago. You need a totem.
 
@@ -113,7 +113,7 @@ Totem scans each lesson for backtick-wrapped file paths and checks if they still
 
 ### 4. Connect the MCP Server
 
-Add Totem to your AI agent's configuration (e.g., Claude Desktop, Claude Code, or Gemini).
+Add Totem to your AI agent's configuration (e.g., Claude Desktop, Claude Code, Gemini, Cursor, or JetBrains Junie).
 
 **macOS / Linux:**
 
@@ -196,7 +196,7 @@ Totem continuously audits default model IDs across all providers (#324). For a c
   - **False-Positive Mitigation:** Handles non-code contexts smartly and supports inline suppression directives (#251, #255).
   - **Workflow Integration:** Local git hooks enforce rules by blocking direct commits to main. Supports optional lesson extraction from verdicts via `--learn` (#303, #310).
 - **`triage`**: Fetches open GitHub issues and generates a prioritized roadmap (e.g., `docs/active_work.md`) for your next task.
-- **`compile`**: Compiles `.totem/lessons.md` into deterministic regex/AST rules for zero-LLM checks. Supports cross-model lesson export to enforce architectural constraints across different agent environments, including GitHub Copilot instructions (#269, #294).
+- **`compile`**: Compiles `.totem/lessons.md` into deterministic regex/AST rules for zero-LLM checks. Supports cross-model lesson export to enforce architectural constraints across different agent environments, including GitHub Copilot instructions and JetBrains Junie guidelines (#269, #294).
 - **`add-lesson`**: Interactively document a context, symptom, and fix. Saves to `.totem/lessons.md` and triggers a background re-index.
 - **`docs`**: Automatically syncs project documentation by analyzing git logs and closed issues.
   - **Precision:** Targets individual files with path fixes and strict state preservation to prevent hallucination (#238, #249).
