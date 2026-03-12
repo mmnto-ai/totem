@@ -14,7 +14,7 @@ export interface WrapOptions {
 
 export async function wrapCommand(prNumbers: string[], options: WrapOptions): Promise<void> {
   // Step 1: Learn from PR(s)
-  log.info(TAG, `Step 1/5 — Extracting lessons from PR ${prNumbers.join(', ')}...`);
+  log.info(TAG, `Step 1/5 — Extracting from PR ${prNumbers.join(', ')}...`);
   const { extractCommand } = await import('./extract.js');
   await extractCommand(prNumbers, {
     model: options.model,
@@ -64,8 +64,8 @@ export async function wrapCommand(prNumbers: string[], options: WrapOptions): Pr
     });
   } catch (err) {
     // Don't fail wrap if compile has nothing to do
-    if (err instanceof Error && err.message.includes('No lessons')) {
-      log.dim(TAG, 'No lessons to compile — skipping.');
+    if (err instanceof Error && err.name === 'NoLessonsError') {
+      log.dim(TAG, 'Nothing to compile — skipping.');
     } else {
       throw err;
     }
