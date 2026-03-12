@@ -177,6 +177,35 @@ program
   });
 
 program
+  .command('audit')
+  .description('Audit the open issue backlog against strategic context')
+  .option('--raw', 'Output retrieved context without LLM synthesis')
+  .option('--out <path>', 'Write output to a file instead of stdout')
+  .option('--model <name>', 'Override the default model for the orchestrator')
+  .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
+  .option('--dry-run', 'Show proposals without prompting for execution')
+  .option('--yes', 'Auto-accept all actionable proposals without interactive confirmation')
+  .option('--context <lens>', 'Strategic lens to guide the audit (e.g., "speed to 1.0")')
+  .action(
+    async (opts: {
+      raw?: boolean;
+      out?: string;
+      model?: string;
+      fresh?: boolean;
+      dryRun?: boolean;
+      yes?: boolean;
+      context?: string;
+    }) => {
+      try {
+        const { auditCommand } = await import('./commands/audit.js');
+        await auditCommand(opts);
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
+
+program
   .command('handoff')
   .description('Generate an end-of-session handoff snapshot for the next session')
   .option('--lite', 'Zero-LLM deterministic snapshot (git state + lessons, no API key needed)')
