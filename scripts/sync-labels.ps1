@@ -1,6 +1,11 @@
 # Scripts requires GitHub CLI (gh) installed and authenticated.
 # Run with: pwsh scripts/sync-labels.ps1
 
+if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+    Write-Host "[Error] GitHub CLI (gh) not found. Install from https://cli.github.com/ and authenticate." -ForegroundColor Red
+    exit 1
+}
+
 $REPO = "mmnto-ai/totem"
 
 function Merge-Label {
