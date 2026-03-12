@@ -25,6 +25,10 @@ const QUERY_BODY_TRUNCATE = 500;
 const MAX_INPUTS = 5;
 export const MAX_LESSONS = 10;
 export const MAX_LESSON_CHARS = 8_000;
+const SPEC_SEARCH_POOL = 20;
+const MAX_SPECS = 5;
+const MAX_SESSIONS = 5;
+const MAX_CODE_RESULTS = 3;
 
 // ─── System prompt ──────────────────────────────────────
 
@@ -84,14 +88,14 @@ export async function retrieveContext(query: string, store: LanceStore): Promise
 
   // Fetch a larger pool of specs to accommodate both regular specs and lessons
   const [allSpecs, sessions, code] = await Promise.all([
-    search('spec', 20),
-    search('session_log', 5),
-    search('code', 3),
+    search('spec', SPEC_SEARCH_POOL),
+    search('session_log', MAX_SESSIONS),
+    search('code', MAX_CODE_RESULTS),
   ]);
 
   // Partition: lessons come from lessons.md, everything else is a spec/ADR
   const lessons = allSpecs.filter((r) => r.filePath.endsWith('lessons.md')).slice(0, MAX_LESSONS);
-  const specs = allSpecs.filter((r) => !r.filePath.endsWith('lessons.md')).slice(0, 5);
+  const specs = allSpecs.filter((r) => !r.filePath.endsWith('lessons.md')).slice(0, MAX_SPECS);
 
   return { specs, sessions, code, lessons };
 }
