@@ -11,8 +11,8 @@ import {
   deduplicateLessons,
   flagSuspiciousLessons,
   parseLessons,
-  SEMANTIC_DEDUP_THRESHOLD,
   selectLessons,
+  SEMANTIC_DEDUP_THRESHOLD,
   SYSTEM_PROMPT,
 } from './extract.js';
 
