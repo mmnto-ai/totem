@@ -1,4 +1,6 @@
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { isCancel, multiselect } from '@clack/prompts';
@@ -23,6 +25,8 @@ import {
 
 const TAG = 'Audit';
 const GH_ISSUE_LIMIT = 100;
+/** Max size for strategic context to avoid exceeding LLM context window (~100KB ≈ 25k tokens). */
+export const MAX_STRATEGIC_CONTEXT_CHARS = 100_000;
 
 /** Actions the LLM can propose for each issue. */
 const VALID_ACTIONS = ['KEEP', 'CLOSE', 'REPRIORITIZE', 'MERGE'] as const;
@@ -89,7 +93,7 @@ Example:
 
 // ─── Strategic context loading ──────────────────────────
 
-function loadStrategicDocs(cwd: string): string {
+export function loadStrategicDocs(cwd: string): string {
   const strategyDir = path.join(cwd, '.strategy');
   const docPaths = [path.join(cwd, 'docs', 'roadmap.md'), path.join(cwd, 'docs', 'active_work.md')];
 
@@ -115,7 +119,15 @@ function loadStrategicDocs(cwd: string): string {
     }
   }
 
-  return sections.join('\n\n---\n\n');
+  const combined = sections.join('\n\n---\n\n');
+  if (combined.length > MAX_STRATEGIC_CONTEXT_CHARS) {
+    log.warn(
+      TAG,
+      `Strategic context truncated from ${(combined.length / 1024).toFixed(0)}KB to ${(MAX_STRATEGIC_CONTEXT_CHARS / 1024).toFixed(0)}KB to stay within LLM limits.`,
+    );
+    return combined.slice(0, MAX_STRATEGIC_CONTEXT_CHARS);
+  }
+  return combined;
 }
 
 // ─── Response parsing ───────────────────────────────────
@@ -231,49 +243,112 @@ export async function selectProposals(
 
 // ─── Execution ──────────────────────────────────────────
 
-export function executeProposals(proposals: AuditProposal[], cwd: string): void {
+/**
+ * Post a comment on an issue using --body-file to avoid shell injection.
+ * LLM-generated rationale text could contain shell metacharacters; writing
+ * to a temp file and using --body-file sidesteps this entirely.
+ */
+function ghComment(issueNumber: number, body: string, cwd: string): void {
+  const tmpFile = path.join(os.tmpdir(), `totem-audit-comment-${crypto.randomUUID()}.md`);
+  try {
+    fs.writeFileSync(tmpFile, body, 'utf-8');
+    ghExec(['issue', 'comment', String(issueNumber), '--body-file', tmpFile], cwd);
+  } finally {
+    try {
+      fs.unlinkSync(tmpFile);
+    } catch {
+      // Best-effort cleanup
+    }
+  }
+}
+
+/**
+ * Validate that all MERGE targets reference issues that exist in the backlog.
+ */
+export function validateMergeTargets(
+  proposals: AuditProposal[],
+  issueNumbers: Set<number>,
+): string[] {
+  const errors: string[] = [];
   for (const p of proposals) {
-    switch (p.action) {
-      case 'CLOSE': {
-        const comment = `Closed via \`totem audit\` — ${p.rationale}`;
-        ghExec(['issue', 'comment', String(p.number), '--body', comment], cwd);
-        ghExec(['issue', 'close', String(p.number)], cwd);
-        log.success(TAG, `Closed #${p.number}`);
-        break;
-      }
-      case 'REPRIORITIZE': {
-        if (p.newTier) {
-          // Remove existing tier labels, add new one
+    if (p.action === 'MERGE' && p.mergeInto && !issueNumbers.has(p.mergeInto)) {
+      errors.push(`#${p.number} proposes MERGE into #${p.mergeInto} which is not in the backlog`);
+    }
+  }
+  return errors;
+}
+
+export interface ExecutionResult {
+  succeeded: number;
+  failed: number;
+  errors: string[];
+}
+
+export function executeProposals(proposals: AuditProposal[], cwd: string): ExecutionResult {
+  const result: ExecutionResult = { succeeded: 0, failed: 0, errors: [] };
+
+  for (const p of proposals) {
+    try {
+      switch (p.action) {
+        case 'CLOSE': {
+          ghComment(p.number, `Closed via \`totem audit\` — ${p.rationale}`, cwd);
+          ghExec(['issue', 'close', String(p.number)], cwd);
+          log.success(TAG, `Closed #${p.number}`);
+          result.succeeded++;
+          break;
+        }
+        case 'REPRIORITIZE': {
+          if (!p.newTier) {
+            const msg = `REPRIORITIZE proposal for #${p.number} missing newTier`;
+            log.warn(TAG, msg);
+            result.failed++;
+            result.errors.push(msg);
+            break;
+          }
           const removals = ['tier-1', 'tier-2', 'tier-3']
             .filter((t) => t !== p.newTier)
             .flatMap((t) => ['--remove-label', t]);
           ghExec(['issue', 'edit', String(p.number), '--add-label', p.newTier, ...removals], cwd);
-          const comment = `Reprioritized to ${p.newTier} via \`totem audit\` — ${p.rationale}`;
-          ghExec(['issue', 'comment', String(p.number), '--body', comment], cwd);
-          log.success(TAG, `Reprioritized #${p.number} → ${p.newTier}`);
-        }
-        break;
-      }
-      case 'MERGE': {
-        if (p.mergeInto) {
-          const comment = `Merged into #${p.mergeInto} via \`totem audit\` — ${p.rationale}`;
-          ghExec(['issue', 'comment', String(p.number), '--body', comment], cwd);
-          ghExec(['issue', 'close', String(p.number), '--reason', 'not planned'], cwd);
-          // Also comment on the target issue
-          const targetComment = `#${p.number} merged into this issue via \`totem audit\`.`;
-          ghExec(
-            ['issue', 'comment', String(p.mergeInto.toString()), '--body', targetComment],
+          ghComment(
+            p.number,
+            `Reprioritized to ${p.newTier} via \`totem audit\` — ${p.rationale}`,
             cwd,
           );
-          log.success(TAG, `Merged #${p.number} → #${p.mergeInto}`);
+          log.success(TAG, `Reprioritized #${p.number} → ${p.newTier}`);
+          result.succeeded++;
+          break;
         }
-        break;
+        case 'MERGE': {
+          if (!p.mergeInto) {
+            const msg = `MERGE proposal for #${p.number} missing mergeInto`;
+            log.warn(TAG, msg);
+            result.failed++;
+            result.errors.push(msg);
+            break;
+          }
+          ghComment(
+            p.number,
+            `Merged into #${p.mergeInto} via \`totem audit\` — ${p.rationale}`,
+            cwd,
+          );
+          ghExec(['issue', 'close', String(p.number), '--reason', 'not planned'], cwd);
+          ghComment(p.mergeInto, `#${p.number} merged into this issue via \`totem audit\`.`, cwd);
+          log.success(TAG, `Merged #${p.number} → #${p.mergeInto}`);
+          result.succeeded++;
+          break;
+        }
+        case 'KEEP':
+          break;
       }
-      case 'KEEP':
-        // No action needed
-        break;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.error('Totem Error', `Failed to execute proposal for #${p.number}: ${sanitize(msg)}`); // totem-ignore — sanitize wraps error
+      result.failed++;
+      result.errors.push(`#${p.number}: ${msg}`);
     }
   }
+
+  return result;
 }
 
 // ─── Prompt assembly ────────────────────────────────────
@@ -404,7 +479,7 @@ export async function auditCommand(options: AuditOptions): Promise<void> {
   }
 
   // Interactive approval
-  const selected = await selectProposals(proposals, {
+  let selected = await selectProposals(proposals, {
     yes: options.yes,
     isTTY: !!process.stdin.isTTY,
   });
@@ -414,8 +489,27 @@ export async function auditCommand(options: AuditOptions): Promise<void> {
     return;
   }
 
+  // Validate merge targets — filter out invalid ones
+  const issueNumbers = new Set(issues.map((i) => i.number));
+  const mergeErrors = validateMergeTargets(selected, issueNumbers);
+  if (mergeErrors.length > 0) {
+    for (const err of mergeErrors) {
+      log.warn(TAG, `Invalid merge target: ${err}`);
+    }
+    selected = selected.filter(
+      (p) => !(p.action === 'MERGE' && p.mergeInto && !issueNumbers.has(p.mergeInto)),
+    );
+    if (selected.length === 0) {
+      log.info(TAG, 'No valid proposals remaining after filtering. No changes made.');
+      return;
+    }
+  }
+
   // Execute
   log.info(TAG, `Executing ${selected.length} proposal(s)...`);
-  executeProposals(selected, cwd);
-  log.success(TAG, `Done — ${selected.length} issue(s) updated.`);
+  const result = executeProposals(selected, cwd);
+  if (result.failed > 0) {
+    log.warn(TAG, `${result.failed} proposal(s) failed. See errors above.`);
+  }
+  log.success(TAG, `Done — ${result.succeeded} issue(s) updated.`);
 }

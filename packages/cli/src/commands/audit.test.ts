@@ -1,7 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AuditProposal } from './audit.js';
-import { formatProposalTable, parseAuditResponse } from './audit.js';
+import {
+  executeProposals,
+  formatProposalTable,
+  loadStrategicDocs,
+  MAX_STRATEGIC_CONTEXT_CHARS,
+  parseAuditResponse,
+  selectProposals,
+  validateMergeTargets,
+} from './audit.js';
 
 // ─── parseAuditResponse ─────────────────────────────────
 
@@ -116,5 +128,169 @@ describe('formatProposalTable', () => {
     const table = formatProposalTable([]);
     const lines = table.split('\n');
     expect(lines).toHaveLength(2); // header + separator only
+  });
+});
+
+// ─── validateMergeTargets ───────────────────────────────
+
+describe('validateMergeTargets', () => {
+  it('returns empty array when all merge targets are valid', () => {
+    const proposals: AuditProposal[] = [
+      { number: 88, title: 'Colors', action: 'MERGE', mergeInto: 42, rationale: 'Subset.' },
+    ];
+    const errors = validateMergeTargets(proposals, new Set([42, 88, 99]));
+    expect(errors).toHaveLength(0);
+  });
+
+  it('returns errors for invalid merge targets', () => {
+    const proposals: AuditProposal[] = [
+      { number: 88, title: 'Colors', action: 'MERGE', mergeInto: 999, rationale: 'Bad.' },
+    ];
+    const errors = validateMergeTargets(proposals, new Set([42, 88]));
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('#999');
+    expect(errors[0]).toContain('not in the backlog');
+  });
+
+  it('ignores non-MERGE proposals', () => {
+    const proposals: AuditProposal[] = [
+      { number: 42, title: 'Widget', action: 'KEEP', rationale: 'Good.' },
+      { number: 99, title: 'Legacy', action: 'CLOSE', rationale: 'Old.' },
+    ];
+    const errors = validateMergeTargets(proposals, new Set([42]));
+    expect(errors).toHaveLength(0);
+  });
+});
+
+// ─── selectProposals ────────────────────────────────────
+
+describe('selectProposals', () => {
+  const proposals: AuditProposal[] = [
+    { number: 42, title: 'Widget', action: 'KEEP', rationale: 'Good.' },
+    { number: 99, title: 'Legacy', action: 'CLOSE', rationale: 'Obsolete.' },
+    { number: 55, title: 'Perf', action: 'REPRIORITIZE', newTier: 'tier-3', rationale: 'Defer.' },
+  ];
+
+  it('returns all actionable proposals in --yes mode', async () => {
+    const selected = await selectProposals(proposals, { yes: true, isTTY: false });
+    expect(selected).toHaveLength(2); // CLOSE + REPRIORITIZE, not KEEP
+    expect(selected.map((p) => p.number)).toEqual([99, 55]);
+  });
+
+  it('returns empty array when all proposals are KEEP', async () => {
+    const keepOnly: AuditProposal[] = [
+      { number: 1, title: 'A', action: 'KEEP', rationale: 'Good.' },
+      { number: 2, title: 'B', action: 'KEEP', rationale: 'Good.' },
+    ];
+    const selected = await selectProposals(keepOnly, { yes: true, isTTY: false });
+    expect(selected).toHaveLength(0);
+  });
+
+  it('throws in non-TTY without --yes', async () => {
+    await expect(selectProposals(proposals, { yes: false, isTTY: false })).rejects.toThrow(
+      'non-interactive mode',
+    );
+  });
+});
+
+// ─── executeProposals ───────────────────────────────────
+
+vi.mock('../adapters/gh-utils.js', () => ({
+  ghExec: vi.fn(),
+}));
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { ghExec: mockGhExec } =
+  await vi.importMock<typeof import('../adapters/gh-utils.js')>('../adapters/gh-utils.js');
+
+describe('executeProposals', () => {
+  beforeEach(() => {
+    vi.mocked(mockGhExec).mockReset();
+  });
+
+  it('closes issues with comment and close commands', () => {
+    const proposals: AuditProposal[] = [
+      { number: 99, title: 'Legacy', action: 'CLOSE', rationale: 'Done.' },
+    ];
+    const result = executeProposals(proposals, '/tmp/test');
+    expect(result.succeeded).toBe(1);
+    expect(result.failed).toBe(0);
+    // ghExec called for: comment (--body-file) + close
+    expect(vi.mocked(mockGhExec)).toHaveBeenCalledTimes(2);
+  });
+
+  it('continues on failure and reports errors', () => {
+    vi.mocked(mockGhExec).mockImplementationOnce(() => {
+      throw new Error('rate limit');
+    });
+    const proposals: AuditProposal[] = [
+      { number: 99, title: 'Legacy', action: 'CLOSE', rationale: 'Done.' },
+      { number: 55, title: 'Perf', action: 'CLOSE', rationale: 'Old.' },
+    ];
+    const result = executeProposals(proposals, '/tmp/test');
+    expect(result.failed).toBe(1);
+    expect(result.succeeded).toBe(1);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toContain('#99');
+  });
+
+  it('skips KEEP proposals', () => {
+    const proposals: AuditProposal[] = [
+      { number: 42, title: 'Widget', action: 'KEEP', rationale: 'Good.' },
+    ];
+    const result = executeProposals(proposals, '/tmp/test');
+    expect(result.succeeded).toBe(0);
+    expect(result.failed).toBe(0);
+    expect(vi.mocked(mockGhExec)).not.toHaveBeenCalled();
+  });
+
+  it('reports error when REPRIORITIZE missing newTier', () => {
+    const proposals: AuditProposal[] = [
+      { number: 55, title: 'Perf', action: 'REPRIORITIZE', rationale: 'Defer.' },
+    ];
+    const result = executeProposals(proposals, '/tmp/test');
+    expect(result.failed).toBe(1);
+    expect(result.succeeded).toBe(0);
+    expect(result.errors[0]).toContain('missing newTier');
+  });
+
+  it('reports error when MERGE missing mergeInto', () => {
+    const proposals: AuditProposal[] = [
+      { number: 88, title: 'Colors', action: 'MERGE', rationale: 'Subset.' },
+    ];
+    const result = executeProposals(proposals, '/tmp/test');
+    expect(result.failed).toBe(1);
+    expect(result.succeeded).toBe(0);
+    expect(result.errors[0]).toContain('missing mergeInto');
+  });
+});
+
+// ─── loadStrategicDocs ──────────────────────────────────
+
+describe('loadStrategicDocs', () => {
+  it('truncates when content exceeds MAX_STRATEGIC_CONTEXT_CHARS', () => {
+    // Create a temp dir with a massive file
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-audit-test-'));
+    const strategyDir = path.join(tmpDir, '.strategy');
+    fs.mkdirSync(strategyDir, { recursive: true });
+    const bigContent = 'x'.repeat(MAX_STRATEGIC_CONTEXT_CHARS + 10_000);
+    fs.writeFileSync(path.join(strategyDir, 'big.md'), bigContent);
+
+    try {
+      const result = loadStrategicDocs(tmpDir);
+      expect(result.length).toBeLessThanOrEqual(MAX_STRATEGIC_CONTEXT_CHARS);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns empty string when no strategic docs exist', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-audit-test-'));
+    try {
+      const result = loadStrategicDocs(tmpDir);
+      expect(result).toBe('');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
