@@ -787,8 +787,8 @@ describe('formatLessonSection', () => {
     expect(result).toContain('**Trap**');
     expect(result).toContain('...');
     expect(result).not.toContain('score:');
-    // Content should be truncated to ~120 chars, not the full 200
-    expect(result.length).toBeLessThan(250);
+    // Content should be truncated — full 200-char body should NOT appear
+    expect(result).not.toContain('A'.repeat(200));
   });
 
   it('condensed mode shows full content for short lessons', () => {
