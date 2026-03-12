@@ -89,6 +89,34 @@ describe('parseAuditResponse', () => {
 </audit_proposals>`;
     expect(() => parseAuditResponse(content)).toThrow('Invalid action "DELETE"');
   });
+
+  it('throws on missing issue number', () => {
+    const content = `<audit_proposals>
+[{ "title": "Test", "action": "KEEP", "rationale": "Good." }]
+</audit_proposals>`;
+    expect(() => parseAuditResponse(content)).toThrow('Invalid or missing "number"');
+  });
+
+  it('throws on MERGE without mergeInto', () => {
+    const content = `<audit_proposals>
+[{ "number": 88, "title": "Colors", "action": "MERGE", "rationale": "Subset." }]
+</audit_proposals>`;
+    expect(() => parseAuditResponse(content)).toThrow('Invalid or missing "mergeInto"');
+  });
+
+  it('throws on REPRIORITIZE with invalid tier', () => {
+    const content = `<audit_proposals>
+[{ "number": 55, "title": "Perf", "action": "REPRIORITIZE", "newTier": "urgent", "rationale": "Defer." }]
+</audit_proposals>`;
+    expect(() => parseAuditResponse(content)).toThrow('Invalid "newTier"');
+  });
+
+  it('throws on REPRIORITIZE without newTier', () => {
+    const content = `<audit_proposals>
+[{ "number": 55, "title": "Perf", "action": "REPRIORITIZE", "rationale": "Defer." }]
+</audit_proposals>`;
+    expect(() => parseAuditResponse(content)).toThrow('Invalid "newTier"');
+  });
 });
 
 // ─── formatProposalTable ────────────────────────────────
@@ -244,7 +272,9 @@ describe('executeProposals', () => {
     expect(vi.mocked(mockGhExec)).not.toHaveBeenCalled();
   });
 
-  it('reports error when REPRIORITIZE missing newTier', () => {
+  it('reports error when REPRIORITIZE missing newTier (defense-in-depth)', () => {
+    // parseAuditResponse catches this at parse time, but executeProposals
+    // still guards against it as defense-in-depth
     const proposals: AuditProposal[] = [
       { number: 55, title: 'Perf', action: 'REPRIORITIZE', rationale: 'Defer.' },
     ];
@@ -254,7 +284,7 @@ describe('executeProposals', () => {
     expect(result.errors[0]).toContain('missing newTier');
   });
 
-  it('reports error when MERGE missing mergeInto', () => {
+  it('reports error when MERGE missing mergeInto (defense-in-depth)', () => {
     const proposals: AuditProposal[] = [
       { number: 88, title: 'Colors', action: 'MERGE', rationale: 'Subset.' },
     ];

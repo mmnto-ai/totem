@@ -151,19 +151,35 @@ export function parseAuditResponse(content: string): AuditProposal[] {
     throw new Error('[Totem Error] Audit proposals must be a JSON array.');
   }
 
+  const VALID_TIERS = ['tier-1', 'tier-2', 'tier-3'];
+
   return (parsed as Record<string, unknown>[]).map((item, i) => {
+    if (typeof item.number !== 'number') {
+      throw new Error(`[Totem Error] Invalid or missing "number" for proposal ${i}.`);
+    }
     const action = String(item.action ?? '').toUpperCase() as AuditAction;
     if (!VALID_ACTIONS.includes(action)) {
       throw new Error(
         `[Totem Error] Invalid action "${item.action}" for proposal ${i}. Must be one of: ${VALID_ACTIONS.join(', ')}`,
       );
     }
+    if (action === 'MERGE' && typeof item.mergeInto !== 'number') {
+      throw new Error(`[Totem Error] Invalid or missing "mergeInto" for MERGE proposal ${i}.`);
+    }
+    if (
+      action === 'REPRIORITIZE' &&
+      (typeof item.newTier !== 'string' || !VALID_TIERS.includes(item.newTier))
+    ) {
+      throw new Error(
+        `[Totem Error] Invalid "newTier" for REPRIORITIZE proposal ${i}. Must be one of: ${VALID_TIERS.join(', ')}.`,
+      );
+    }
     return {
-      number: Number(item.number),
+      number: item.number,
       title: String(item.title ?? ''),
       action,
-      newTier: item.newTier ? String(item.newTier) : undefined,
-      mergeInto: item.mergeInto ? Number(item.mergeInto) : undefined,
+      newTier: item.newTier as string | undefined,
+      mergeInto: item.mergeInto as number | undefined,
       rationale: String(item.rationale ?? ''),
     };
   });
