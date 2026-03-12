@@ -226,7 +226,7 @@ Totem continuously audits default model IDs across all providers (#324). For a c
   - **Precision:** Targets individual files with path fixes and strict state preservation to prevent hallucination (#238, #249).
   - **Reliability:** Uses a Saga-based transactional validator for safe checkpoints and automatic rollbacks (#351, #356).
 - **`wrap`**: A post-merge workflow chain that runs `extract`, syncs the database, generates a roadmap, and updates docs in one command (#143).
-- **`extract <ids...>`**: Fetches merged PRs, reads comments, and extracts systemic architectural traps. Ensures concise lesson headings and exact deduplication to prevent redundant rules (#271, #347).
+- **`extract <ids...>`**: Fetches merged PRs, reads comments, and extracts systemic architectural traps. Ensures concise lesson headings and exact deduplication to prevent redundant rules (#271, #347, #348).
   - **Security Hardening:** Strictly hardens against prompt injection via XML boundaries and actively blocks suspicious lessons in all bypass modes (#289, #291).
   - **Curation:** Supports interactive multi-select pruning and the `--pick` flag for selective lesson acceptance (#265).
 - **`handoff`**: Captures uncommitted changes and lessons learned today, synthesizing a tactical snapshot for your next session. Supports a `--lite` flag for rapid, zero-LLM session snapshots with ANSI-sanitized git outputs (#281, #292).
