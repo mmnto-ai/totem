@@ -1,5 +1,16 @@
 # @mmnto/cli
 
+## 0.30.0
+
+### Minor Changes
+
+- d0be9c6: Add compile --export as Step 5 of totem wrap, exclude export targets from deterministic shield, throw NoLessonsError in compile command
+
+### Patch Changes
+
+- Updated dependencies [d0be9c6]
+  - @mmnto/totem@0.30.0
+
 ## 0.29.0
 
 ### Minor Changes
