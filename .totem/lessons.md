@@ -1394,3 +1394,9 @@ Changesets interactive CLI (`pnpm changeset`) crashes when stdin is piped or non
 **Tags:** competitive, junie, jetbrains, mcp, strategy
 
 JetBrains Junie is a complementary coding agent, not a Totem competitor. It consumes MCP servers (potential Totem customer), uses a static guidelines file for context (no enforcement, no learning loop, no deterministic rules). Totem's sentinel-based export already supports Junie via the config exports mechanism — zero code needed.
+
+## Lesson — MCP session lifecycle limitation
+
+**Tags:** mcp, handoff, lifecycle, blocked, platform-constraint
+
+MCP session lifecycle limitation: The MCP spec has no session lifecycle hooks (no session.start, session.end, or beforeDisconnect events). This means auto-triggering totem handoff when an agent session closes is not currently possible. The workaround is to use an "advisory reflex" in the agent's system prompt, instructing it to run `totem handoff` at the end of a session. However, this is not guaranteed as agents can ignore these instructions. Tracked in #383, blocked on upstream MCP spec evolution. Do not attempt to build auto-handoff via MCP — it will fail.
