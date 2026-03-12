@@ -1,61 +1,32 @@
 ### Active Work Summary
-
-Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are complete. The project has been relicensed to Apache 2.0 and is validated through internal dogfooding (#8). See `CHANGELOG.md` for the full Phase 2 delivery list.
-
-**Key capabilities shipped in Phase 2:**
-
-- **AST & Chunking:**
-  - Tree-sitter universal parsing
-  - Deterministic lesson compiler
-  - Zero-LLM shield with AST gating
-- **Orchestration:**
-  - Native providers (Gemini, Anthropic, OpenAI, Ollama) with BYOSD
-  - Cross-provider routing
-  - Conformance suites
-- **Doc Sync & Memory:**
-  - Automated doc sync with XML sentinels
-  - Drift detection
-  - Cross-model lesson export (including Copilot)
-- **Shield & CI:**
-  - Shield GitHub Action
-  - Inline suppression
-  - Structural review
-  - `--learn` mode
-  - CI drift gate
-- **Security:**
-  - Adversarial ingestion scrubbing
-  - Extract prompt hardening
-  - Suspicious lesson detection
-  - ANSI sanitization
-- **DX & Hooks:**
-  - Git hook enforcement
-  - `totem hooks` command with monorepo support
-  - Bun support
-  - CI guard
-
-Focus is now on **Phase 3 (Workflow Expansion)** and shift-left CI integration. Recent progress includes the 0.28.0 release featuring extraction hardening and deduplication (#347, #348), improved file resolving for git submodules (#363), saga-based transactional docs with rollback support (#351), and web-tree-sitter WASM file size investigations (#354).
+No recent session history available. However, based on the recent strategic roadmap and ADR updates, current momentum is heavily focused on evolving Totem from a memory database into a full "Shift-Left orchestrator" utilizing an embedded LanceDB vector index.
 
 ### Prioritized Roadmap
+**Do Next (Tier-1 Core & Shift-Left Foundation)**
+* #364 — research: vectordb structure for multi-type knowledge retrieval at scale — Critical data-model prerequisite for the LanceDB embedding architecture.
+* #314 — Epic: The Codebase Immune System — Adaptive Agent Governance — Establishes the core product requirements for the Shift-Left orchestrator transition.
+* #176 — Epic: Enforcement Sidecar MCP Tools — Directly equips AI agents with the tools to self-correct during active work.
+* #124 — Epic: Frictionless 10-Minute Init (totem init) — Required to ensure the new orchestration features are rapidly adoptable by new developers.
+* #128 — Epic: Ship "Universal Lessons" baseline during `totem init` — Pairs with #124 to provide immediate, out-of-the-box value.
 
-**Do Next (Shift-Left & CI Integration)**
+**Up Next (Tier-1 UX & Telemetry)**
+* #283 — Epic: v1.0 Documentation Site & README Minimization — Essential for the v1.0 launch and reducing cognitive load.
+* #92 — Feature: Telemetry Logging and Local Dashboard (`totem stats`) — Needed to track local-first adoption and agent performance metrics.
 
-- #195 — Epic: Model Compatibility & Auditing Strategy — Directly aligns with the shift toward orchestration by defining how models are audited for compatibility.
-
-**Backlog (Exploratory, Epics, & Phase 4)**
-
-- #176 — Epic: Agent-Optimized MCP (Dynamic Token Budgeting & Write Access) — Future foundation for power-user workflows.
-- #175 — Epic: Multiplayer Cache Syncing — Phase 4 enterprise/team scaling capability.
-- #123 — Epic: Federated Memory (Mothership Pattern) — Phase 4 architecture.
+**Backlog (Tier-2 / Tier-3 Integrations)**
+* #387 — feat: SARIF output for deterministic shield — Highly relevant for standardizing Shift-Left CI/CD output.
+* #385 — Export compiled rules to Semgrep YAML and ESLint configs — Excellent integration strategy, but deferred until the core agent governance (#314) is finalized.
+* #392 — feat: `totem review` — full codebase review powered by repomix + vectordb lessons — High-value Phase 3 power-user tool.
+* #79 — Epic: Documentation Ingestion Pipeline & Adapters — Core requirement for Enterprise scaling (Phase 4).
 
 ### Next Issue (User Story & Scope)
+**#364 — research: vectordb structure for multi-type knowledge retrieval at scale**
 
-**#195 — Epic: Model Compatibility & Auditing Strategy**
-
-- **User Story:** As a maintainer, I want a defined model compatibility and auditing strategy so that we can systematically verify how different models are supported and audited following the shift to centralized orchestration.
-- **Scope:** Define how models are audited for compatibility, providing the strategic foundation to support the newly implemented adversarial evaluation harness in CI.
-- **Progress:** Initial foundation established by adding a supported models reference document (#325) and auditing default model IDs across all providers (#324).
-- **Why Next:** With orchestrator providers stabilized through the conformance suite and nightly smoke tests (#244, #245), the foundation is ready to formalize the model compatibility strategy as we move toward shift-left CI integrations.
+* **User Story:** As an AI orchestrator, I need a strictly defined schema within the local LanceDB index so that I can accurately filter and retrieve specific knowledge types (e.g., architectural invariants vs. general context) without context collision.
+* **Scope Boundaries:** Deliver a written Architecture Decision Record (ADR) defining the LanceDB table structures, metadata schema, chunking strategy, and embedding dimensions required to support multi-type knowledge. **DO NOT** write database connection code, do not implement the LanceDB setup, and do not migrate any existing test data.
+* **Why it should be next:** The roadmap mandates an embedded LanceDB vector index to power the Shift-Left orchestrator. Foundational Epics (#314, #176) and high-value workflow tools (#392) cannot be built until the underlying multi-type vector database structure is locked in.
 
 ### Blocked / Needs Input
-
-- #183 — RFC: Cross-File Knowledge Graph (Symbol Resolution) — Blocked pending technical design approval and validation of the architectural approach.
+* #383 — Auto-handoff on MCP session lifecycle events (Explicitly marked as `blocked`).
+* #175 — Epic: Multiplayer Cache Syncing (Explicitly marked as `post-1.0`; do not engage until v1.0 ships).
+* #123 — Epic: Federated Memory (Mothership Pattern) (Explicitly marked as `post-1.0`; do not engage until v1.0 ships).
