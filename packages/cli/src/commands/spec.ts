@@ -82,28 +82,16 @@ export async function retrieveContext(query: string, store: LanceStore): Promise
   const search = (typeFilter: ContentType, maxResults: number) =>
     store.search({ query, typeFilter, maxResults });
 
-  // Two parallel spec searches: one broad for ADRs/docs, one targeted for lessons
+  // Fetch a larger pool of specs to accommodate both regular specs and lessons
   const [allSpecs, sessions, code] = await Promise.all([
-    search('spec', 10),
+    search('spec', 20),
     search('session_log', 5),
     search('code', 3),
   ]);
 
   // Partition: lessons come from lessons.md, everything else is a spec/ADR
-  const specs = allSpecs.filter((r) => !r.filePath.endsWith('lessons.md')).slice(0, 5);
   const lessons = allSpecs.filter((r) => r.filePath.endsWith('lessons.md')).slice(0, MAX_LESSONS);
-
-  // If the broad search didn't surface enough lessons, run a dedicated search
-  if (lessons.length < MAX_LESSONS) {
-    const dedicated = await search('spec', MAX_LESSONS);
-    const seen = new Set(lessons.map((l) => l.label));
-    for (const r of dedicated) {
-      if (r.filePath.endsWith('lessons.md') && !seen.has(r.label) && lessons.length < MAX_LESSONS) {
-        lessons.push(r);
-        seen.add(r.label);
-      }
-    }
-  }
+  const specs = allSpecs.filter((r) => !r.filePath.endsWith('lessons.md')).slice(0, 5);
 
   return { specs, sessions, code, lessons };
 }
