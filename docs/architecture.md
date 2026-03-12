@@ -73,10 +73,10 @@ A stdio-based server for LLM integration providing primary tools and strict acce
 
 Totem supports three configuration tiers, auto-detected from the environment during `totem init`:
 
-| Tier         | Requirements                               | Available Commands                                                                                 |
-| ------------ | ------------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `bridge`, `eject`, `handoff --lite`                                 |
-| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`                                                                   |
+| Tier         | Requirements                               | Available Commands                                                                                   |
+| ------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `bridge`, `eject`, `handoff --lite`                                   |
+| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`                                                                     |
 | **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `shield`, `triage`, `audit`, `briefing`, `handoff`, `extract`, `wrap`, `docs`) |
 
 The `embedding` field in `totem.config.ts` is optional; when omitted, Totem operates in the Lite tier. The `getConfigTier()` helper and `requireEmbedding()` guard enforce these boundaries at runtime with clear upgrade instructions.
