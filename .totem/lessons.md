@@ -1393,4 +1393,4 @@ Changesets interactive CLI (`pnpm changeset`) crashes when stdin is piped or non
 
 **Tags:** competitive, junie, jetbrains, mcp, strategy
 
-JetBrains Junie is a complementary coding agent, not a Totem competitor. It consumes MCP servers (potential Totem customer), uses static `.junie/guidelines.md` for context (no enforcement, no learning loop, no deterministic rules). Totem's sentinel-based export already supports Junie via `config.exports: { junie: '.junie/guidelines.md' }` — zero code needed.
+JetBrains Junie is a complementary coding agent, not a Totem competitor. It consumes MCP servers (potential Totem customer), uses a static guidelines file for context (no enforcement, no learning loop, no deterministic rules). Totem's sentinel-based export already supports Junie via the config exports mechanism — zero code needed.
