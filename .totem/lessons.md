@@ -1352,3 +1352,27 @@ When comparing checkbox states for mutations, strip markdown links to prevent fa
 **Tags:** regex, validation, parsing
 
 Use occurrence counts of opening and closing markers on a per-line basis rather than simple string inclusion checks. This accurately detects corruption in lines containing multiple tags or partial markers that would otherwise pass a basic presence check.
+
+## Lesson — Always verify that input vectors have identical lengths
+
+**Tags:** vector-math, validation, safety
+
+Always verify that input vectors have identical lengths before calculating cosine similarity. Differences in array length can lead to silent failures, NaN results, or incorrect scores because the loop boundary might not account for undefined elements in the shorter vector.
+
+## Lesson — When deduplicating batches of new content, perform database
+
+**Tags:** performance, optimization, llm
+
+When deduplicating batches of new content, perform database similarity lookups before generating embeddings for the candidates. This prevents wasting API credits or local compute on embedding items that are already identified as duplicates in the existing store.
+
+## Lesson — Implement a minimum character length guard when recursively
+
+**Tags:** heuristics, string-manipulation, ux
+
+Implement a minimum character length guard when recursively stripping trailing articles or prepositions from truncated headings. This safety net prevents malformed or short titles from being reduced to a single uninformative word after multiple passes of connector removal.
+
+## Lesson — Use the --recurse-submodules flag with git ls-files
+
+**Tags:** git, devops, file-system
+
+Use the `--recurse-submodules` flag with `git ls-files` to ensure that files located within submodules are included in project scans. Standard Git listing commands often ignore these directories by default, which can cause tools to miss relevant configuration or logic files.
