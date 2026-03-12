@@ -7,8 +7,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   appendLessons,
   assemblePrompt,
+  cosineSimilarity,
+  deduplicateLessons,
   flagSuspiciousLessons,
   parseLessons,
+  SEMANTIC_DEDUP_THRESHOLD,
   selectLessons,
   SYSTEM_PROMPT,
 } from './extract.js';
@@ -543,5 +546,198 @@ describe('selectLessons', () => {
     await expect(selectLessons(sampleLessons, { isTTY: false })).rejects.toThrow(
       '[Totem Error] Refusing to write lessons in non-interactive mode. Use --yes to bypass confirmation.',
     );
+  });
+});
+
+// ─── cosineSimilarity ──────────────────────────────────
+
+describe('cosineSimilarity', () => {
+  it('returns 1.0 for identical vectors', () => {
+    const v = [1, 2, 3];
+    expect(cosineSimilarity(v, v)).toBeCloseTo(1.0);
+  });
+
+  it('returns 0 for orthogonal vectors', () => {
+    expect(cosineSimilarity([1, 0], [0, 1])).toBeCloseTo(0);
+  });
+
+  it('returns -1 for opposite vectors', () => {
+    expect(cosineSimilarity([1, 0], [-1, 0])).toBeCloseTo(-1);
+  });
+
+  it('returns 0 when a vector is all zeros', () => {
+    expect(cosineSimilarity([0, 0, 0], [1, 2, 3])).toBe(0);
+  });
+
+  it('is insensitive to magnitude', () => {
+    const a = [1, 2, 3];
+    const b = [2, 4, 6]; // same direction, 2x magnitude
+    expect(cosineSimilarity(a, b)).toBeCloseTo(1.0);
+  });
+
+  it('computes correctly for known angle', () => {
+    // cos(45°) ≈ 0.707
+    const a = [1, 0];
+    const b = [1, 1];
+    expect(cosineSimilarity(a, b)).toBeCloseTo(Math.SQRT1_2, 4);
+  });
+});
+
+// ─── deduplicateLessons ────────────────────────────────
+
+describe('deduplicateLessons', () => {
+  // Helper to create a mock embedder that returns deterministic vectors
+  function mockEmbedder(vectorMap: Record<string, number[]>) {
+    return {
+      embed: async (texts: string[]) => texts.map((t) => vectorMap[t] ?? [0, 0, 0]),
+    };
+  }
+
+  // Helper to create a mock store
+  function mockStore(results: { score: number }[] = []) {
+    return {
+      search: async () =>
+        results.map((r) => ({
+          ...r,
+          content: '',
+          contextPrefix: '',
+          filePath: '',
+          type: 'spec' as const,
+          label: '',
+        })),
+    };
+  }
+
+  it('keeps all candidates when DB is empty (cold start)', async () => {
+    const candidates = [
+      { tags: ['a'], text: 'Lesson about error handling.' },
+      { tags: ['b'], text: 'Lesson about git hooks.' },
+    ];
+    const embedder = mockEmbedder({
+      'Lesson about error handling.': [1, 0, 0],
+      'Lesson about git hooks.': [0, 1, 0],
+    });
+    const store = mockStore(); // empty results
+    store.search = async () => {
+      throw new Error('table not found');
+    };
+
+    const { kept, dropped } = await deduplicateLessons(
+      candidates,
+      store as never,
+      embedder as never,
+    );
+    expect(kept).toHaveLength(2);
+    expect(dropped).toHaveLength(0);
+  });
+
+  it('drops candidate that matches existing lesson in DB', async () => {
+    const candidates = [{ tags: ['a'], text: 'Always check ENOENT separately.' }];
+    const embedder = mockEmbedder({
+      'Always check ENOENT separately.': [1, 0, 0],
+    });
+    // DB returns a high-similarity match
+    const store = mockStore([{ score: 0.95 }]);
+
+    const { kept, dropped } = await deduplicateLessons(
+      candidates,
+      store as never,
+      embedder as never,
+    );
+    expect(kept).toHaveLength(0);
+    expect(dropped).toHaveLength(1);
+    expect(dropped[0]!.text).toBe('Always check ENOENT separately.');
+  });
+
+  it('keeps candidate when DB match is below threshold', async () => {
+    const candidates = [{ tags: ['a'], text: 'A distinct lesson about something new.' }];
+    const embedder = mockEmbedder({
+      'A distinct lesson about something new.': [1, 0, 0],
+    });
+    // DB returns a low-similarity match
+    const store = mockStore([{ score: 0.45 }]);
+
+    const { kept, dropped } = await deduplicateLessons(
+      candidates,
+      store as never,
+      embedder as never,
+    );
+    expect(kept).toHaveLength(1);
+    expect(dropped).toHaveLength(0);
+  });
+
+  it('deduplicates within the same batch (intra-batch)', async () => {
+    // Two candidates that are semantically equivalent
+    const candidates = [
+      { tags: ['a'], text: 'Always validate user input before writing.' },
+      { tags: ['b'], text: 'Validate user input before file writes.' },
+    ];
+    // Vectors are nearly identical (cos sim ≈ 0.999)
+    const embedder = mockEmbedder({
+      'Always validate user input before writing.': [0.9, 0.1, 0],
+      'Validate user input before file writes.': [0.89, 0.11, 0],
+    });
+    const store = { search: async () => [] };
+
+    const { kept, dropped } = await deduplicateLessons(
+      candidates,
+      store as never,
+      embedder as never,
+    );
+    // First survives, second dropped as intra-batch duplicate
+    expect(kept).toHaveLength(1);
+    expect(kept[0]!.text).toBe('Always validate user input before writing.');
+    expect(dropped).toHaveLength(1);
+    expect(dropped[0]!.text).toBe('Validate user input before file writes.');
+  });
+
+  it('keeps distinct lessons in same batch', async () => {
+    const candidates = [
+      { tags: ['a'], text: 'Error handling lesson.' },
+      { tags: ['b'], text: 'Security validation lesson.' },
+    ];
+    // Orthogonal vectors → low similarity
+    const embedder = mockEmbedder({
+      'Error handling lesson.': [1, 0, 0],
+      'Security validation lesson.': [0, 1, 0],
+    });
+    const store = { search: async () => [] };
+
+    const { kept, dropped } = await deduplicateLessons(
+      candidates,
+      store as never,
+      embedder as never,
+    );
+    expect(kept).toHaveLength(2);
+    expect(dropped).toHaveLength(0);
+  });
+
+  it('returns empty arrays for empty input', async () => {
+    const embedder = mockEmbedder({});
+    const store = mockStore();
+
+    const { kept, dropped } = await deduplicateLessons([], store as never, embedder as never);
+    expect(kept).toHaveLength(0);
+    expect(dropped).toHaveLength(0);
+  });
+
+  it('respects custom threshold', async () => {
+    const candidates = [{ tags: ['a'], text: 'Lesson A' }];
+    const embedder = mockEmbedder({ 'Lesson A': [1, 0, 0] });
+    // Score of 0.85 — below default 0.92 but above 0.80
+    const store = mockStore([{ score: 0.85 }]);
+
+    // With default threshold (0.92): kept
+    const result1 = await deduplicateLessons(candidates, store as never, embedder as never);
+    expect(result1.kept).toHaveLength(1);
+
+    // With lower threshold (0.80): dropped
+    const result2 = await deduplicateLessons(candidates, store as never, embedder as never, 0.8);
+    expect(result2.kept).toHaveLength(0);
+    expect(result2.dropped).toHaveLength(1);
+  });
+
+  it('exports threshold constant at 0.92', () => {
+    expect(SEMANTIC_DEDUP_THRESHOLD).toBe(0.92);
   });
 });

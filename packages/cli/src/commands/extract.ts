@@ -3,7 +3,7 @@ import * as path from 'node:path';
 
 import { isCancel, multiselect } from '@clack/prompts';
 
-import type { SearchResult } from '@mmnto/totem';
+import type { Embedder, SearchResult } from '@mmnto/totem';
 import {
   BASE64_BLOB_RE,
   createEmbedder,
@@ -37,6 +37,7 @@ const TAG = 'Extract';
 const MAX_EXISTING_LESSONS = 10;
 const MAX_REVIEW_BODY_CHARS = 50_000;
 const MAX_INPUTS = 5;
+export const SEMANTIC_DEDUP_THRESHOLD = 0.92;
 
 // ─── System prompt ──────────────────────────────────────
 
@@ -452,6 +453,88 @@ export async function selectLessons(
   return (result as number[]).map((i) => lessons[i]!);
 }
 
+// ─── Semantic deduplication ──────────────────────────────
+
+/** Cosine similarity between two vectors of equal length. */
+export function cosineSimilarity(a: number[], b: number[]): number {
+  let dot = 0;
+  let magA = 0;
+  let magB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i]! * b[i]!;
+    magA += a[i]! * a[i]!;
+    magB += b[i]! * b[i]!;
+  }
+  const denom = Math.sqrt(magA) * Math.sqrt(magB);
+  return denom === 0 ? 0 : dot / denom;
+}
+
+/**
+ * Remove semantically duplicate lessons by checking against both the LanceDB
+ * index and already-accepted candidates in the current batch.
+ *
+ * Uses embedding cosine similarity with a configurable threshold (default 0.92).
+ * Returns only the lessons that are sufficiently novel.
+ */
+export async function deduplicateLessons(
+  candidates: ExtractedLesson[],
+  store: LanceStore,
+  embedder: Embedder,
+  threshold: number = SEMANTIC_DEDUP_THRESHOLD,
+): Promise<{ kept: ExtractedLesson[]; dropped: ExtractedLesson[] }> {
+  if (candidates.length === 0) return { kept: [], dropped: [] };
+
+  const kept: ExtractedLesson[] = [];
+  const dropped: ExtractedLesson[] = [];
+  const batchVectors: number[][] = [];
+
+  for (const candidate of candidates) {
+    // Check against existing LanceDB lessons
+    let isDuplicate = false;
+
+    try {
+      const results = await store.search({
+        query: candidate.text,
+        typeFilter: 'spec',
+        maxResults: 1,
+      });
+
+      if (results.length > 0 && results[0]!.score >= threshold) {
+        isDuplicate = true;
+      }
+    } catch {
+      // Empty DB or no table — no existing lessons to dedup against
+    }
+
+    if (!isDuplicate && batchVectors.length > 0) {
+      // Check against already-accepted candidates in this batch
+      const [candidateVector] = await embedder.embed([candidate.text]);
+      for (const batchVec of batchVectors) {
+        if (cosineSimilarity(candidateVector!, batchVec) >= threshold) {
+          isDuplicate = true;
+          break;
+        }
+      }
+
+      if (!isDuplicate) {
+        kept.push(candidate);
+        batchVectors.push(candidateVector!);
+      } else {
+        dropped.push(candidate);
+      }
+    } else if (!isDuplicate) {
+      // First candidate in batch or no intra-batch dedup needed
+      const [candidateVector] = await embedder.embed([candidate.text]);
+      kept.push(candidate);
+      batchVectors.push(candidateVector!);
+    } else {
+      dropped.push(candidate);
+    }
+  }
+
+  return { kept, dropped };
+}
+
 // ─── Main command ───────────────────────────────────────
 
 export interface ExtractOptions {
@@ -561,8 +644,24 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
     return;
   }
 
+  // Semantic dedup against existing lessons and intra-batch (#347)
+  log.info(TAG, 'Deduplicating against existing lessons...');
+  const { kept: novelLessons, dropped: dupLessons } = await deduplicateLessons(
+    allLessons,
+    store,
+    embedder,
+  );
+  if (dupLessons.length > 0) {
+    log.dim(TAG, `Dropped ${dupLessons.length} semantically duplicate lesson(s)`);
+  }
+
+  if (novelLessons.length === 0) {
+    log.dim(TAG, 'All extracted lessons are duplicates of existing ones.');
+    return;
+  }
+
   // Flag suspicious lessons before review (#290)
-  const flaggedLessons = flagSuspiciousLessons(allLessons);
+  const flaggedLessons = flagSuspiciousLessons(novelLessons);
   const suspiciousCount = flaggedLessons.filter((l) => l.suspiciousFlags?.length).length;
   if (suspiciousCount > 0) {
     log.warn(TAG, `${suspiciousCount} lesson(s) flagged as suspicious`); // totem-ignore — count only, no untrusted content
