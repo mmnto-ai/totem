@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatProposalTable, parseAuditResponse } from './audit.js';
 import type { AuditProposal } from './audit.js';
+import { formatProposalTable, parseAuditResponse } from './audit.js';
 
 // ─── parseAuditResponse ─────────────────────────────────
 

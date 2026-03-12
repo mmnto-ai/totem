@@ -2,11 +2,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { isCancel, multiselect } from '@clack/prompts';
+
 import { sanitize } from '@mmnto/totem';
 
+import { ghExec } from '../adapters/gh-utils.js';
 import { GitHubCliAdapter } from '../adapters/github-cli.js';
 import type { StandardIssueListItem } from '../adapters/issue-adapter.js';
-import { ghExec } from '../adapters/gh-utils.js';
 import { log } from '../ui.js';
 import {
   getSystemPrompt,
