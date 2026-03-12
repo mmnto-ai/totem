@@ -12,7 +12,7 @@ export const ChunkStrategySchema = z.enum([
   'test-file',
 ]);
 
-export const ContentTypeSchema = z.enum(['code', 'session_log', 'spec']);
+export const ContentTypeSchema = z.enum(['code', 'session_log', 'spec', 'lesson']);
 
 export const IngestTargetSchema = z.object({
   glob: z.string(),
