@@ -192,11 +192,13 @@ embedding: { provider: 'ollama', model: 'nomic-embed-text', baseUrl: 'http://loc
 
 - **Branch Protection:** The `main` branch is formally protected. NEVER commit or push directly to `main`.
 - **Workflow:** Always create a feature branch, commit your changes there, and open a Pull Request. Direct pushes to `main` bypass the Shift-Left safety checks (Pre-Push CI and PR Review Bots).
+- **Never amend commits** on feature branches — create new commits for each fix round.
+- **Use `Closes #NNN`** in PR descriptions to auto-close issues on merge.
 
 ### Environment
 
 - **Platform:** Windows 11 + Git Bash
-- **Package manager:** pnpm (ALWAYS — never npm or yarn)
+- **Package manager:** pnpm (ALWAYS — never npm or yarn). **Never use `npx`** — use `pnpm dlx` instead.
 - **Monorepo tool:** Turborepo
 - **Language:** TypeScript (strict mode)
 
@@ -217,6 +219,13 @@ pnpm dev                  # Watch mode
 - Extract magic numbers into named constants
 - No empty catch blocks — always log or throw
 - Zod for runtime validation at boundaries
+- Always run `pnpm run format` before committing new files
+
+### Contributor Principles
+
+- **Consumer-first thinking:** Changes to AI reflexes, hooks, or prompts must update the `AI_PROMPT_BLOCK` template in `init.ts` — not just the local dev environment. Consumers must get updates out of the box.
+- **GCA decline → lesson reflex:** When declining a recurring GCA review suggestion, add a lesson with the `review-guidance` tag and update `.gemini/styleguide.md` §6 on the same PR. This keeps the styleguide current without manual maintenance.
+- **Publishing:** Changesets + npm OIDC trusted publishing. Use `RELEASE_TOKEN` PAT for PRs (org blocks `GITHUB_TOKEN` from creating PRs). Use `pnpm run version` (never bare `pnpm version` — resolves to pnpm built-in). Changeset interactive CLI doesn't work with piped stdin — write files manually to `.changeset/`.
 
 ### npm Scope
 

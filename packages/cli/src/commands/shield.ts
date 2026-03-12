@@ -297,6 +297,7 @@ async function runDeterministicShield(
   cwd: string,
   totemDir: string,
   outPath?: string,
+  exportPaths?: string[],
 ): Promise<void> {
   const rulesPath = path.join(cwd, totemDir, COMPILED_RULES_FILE);
   const rules = loadCompiledRules(rulesPath);
@@ -311,9 +312,14 @@ async function runDeterministicShield(
 
   log.info(TAG, `Running ${rules.length} deterministic rules (zero LLM)...`);
 
-  // Extract additions, exclude compiled rules file (would self-match)
+  // Extract additions, exclude compiled rules file and export targets (would self-match)
   const rulesRelPath = path.join(totemDir, COMPILED_RULES_FILE).replace(/\\/g, '/');
   const excluded = new Set([rulesRelPath]);
+  if (exportPaths) {
+    for (const ep of exportPaths) {
+      excluded.add(ep.replace(/\\/g, '/'));
+    }
+  }
   const additions = extractAddedLines(diff).filter((a) => !excluded.has(a.file));
 
   // Enrich with AST context — skips strings/comments/regex during rule matching
@@ -523,7 +529,8 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
 
   // Deterministic mode — use compiled rules, no LLM, no embeddings
   if (options.deterministic) {
-    await runDeterministicShield(diff, cwd, config.totemDir, options.out);
+    const exportPaths = config.exports ? Object.values(config.exports) : undefined;
+    await runDeterministicShield(diff, cwd, config.totemDir, options.out, exportPaths);
     return;
   }
 

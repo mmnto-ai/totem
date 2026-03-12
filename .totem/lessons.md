@@ -1448,3 +1448,51 @@ Apply condensed lesson snippets for high-frequency, shallow commands (like triag
 **Tags:** llm, search, vector-db
 
 Increase search pool sizes (e.g., to 20 results) when retrieving architectural lessons to ensure that critical constraints are not crowded out by lower-scoring but relevant matches. Smaller default pools risk "search starvation" where vital project-specific traps are missed as the knowledge base grows.
+
+## Lesson — GCA flags valid model IDs as typos
+
+**Tags:** review-guidance, audience:contributor
+
+GCA (Gemini Code Assist) has stale model knowledge and repeatedly flags valid model identifiers like `gemini-2.5-flash`, `claude-haiku-4-5-20251001`, and `gemini-3-flash-preview` as typos or non-existent models. These are verified in smoke tests. Decline firmly with a link to `docs/supported-models.md`.
+
+## Lesson — ESM intra-module mock requires re-binding
+
+**Tags:** testing, vitest, audience:contributor
+
+In vitest with ESM modules, using `...await vi.importActual()` spread retains closure references to real exports. If `resolveOrchestrator` internally calls `createOrchestrator`, mocking `createOrchestrator` alone won't work — you must re-bind `resolveOrchestrator` to use the mocked factory. See `packages/cli/src/utils.test.ts` for the working pattern.
+
+## Lesson — TypeScript chunker uses TS compiler API
+
+**Tags:** architecture, chunking, audience:contributor
+
+The TypeScript chunker in `packages/core` uses the real TypeScript compiler API for proper AST parsing — NOT regex-based heuristics. Do not propose replacing it with regex or simpler string splitting. The AST approach handles edge cases (nested functions, decorators, overloads) that regex cannot.
+
+## Lesson — Drift detector flags lesson file path mentions
+
+**Tags:** drift-detection, false-positive, audience:contributor
+
+Lessons that mention file paths (e.g., discussing config file locations) get flagged by the drift detector as stale references when those files don't exist in the current repo. Reword lessons to describe concepts instead of citing literal paths. For example, write "the Junie guidelines file" instead of the literal path.
+
+## Lesson — Suspicious lesson detector flags security discussions
+
+**Tags:** security, false-positive, audience:contributor
+
+Lessons that discuss security patterns (XML injection, BiDi attacks, prompt injection) contain the exact strings that the suspicious lesson detector's regex patterns are designed to catch. The detector flags its own training data. Workaround: reword lessons to describe attack classes without including literal trigger patterns. Proper fix tracked as context-aware classification (tier-3).
+
+## Lesson — Git hooks enforce what prompt rules cannot
+
+**Tags:** agent-governance, audience:contributor
+
+Gemini CLI (and other autonomous agents) frequently ignores advisory rules in system prompts (e.g., "never merge PRs automatically"). Git hooks (pre-commit blocking main, pre-push running shield) are the real enforcement layer. Treat prompt-based rules as advisory and hooks as mandatory guardrails.
+
+## Lesson — GitHub Actions shell injection via template expressions
+
+**Tags:** security, ci-cd, audience:contributor
+
+Never use `${{ inputs.* }}` or `${{ github.event.* }}` directly in `run:` blocks in GitHub Actions workflows — this enables command injection. Always map untrusted inputs to `env:` variables first, then reference them as `"$VAR"` (quoted) in the shell script. Also always quote shell variables to prevent word-splitting.
+
+## Lesson — npm OIDC trusted publishing prerequisites
+
+**Tags:** ci-cd, publishing, audience:contributor
+
+npm OIDC trusted publishing requires three things simultaneously: (1) `id-token: write` permission in the workflow, (2) `registry-url` set in the `setup-node` action, and (3) npm >= 11.5.1. Missing any one causes silent auth failures. Additionally, trusted publishers can only be configured AFTER the first manual publish — chicken-and-egg problem documented in npm/cli#8544.

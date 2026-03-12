@@ -1,9 +1,10 @@
-# Supported Models Reference
+# Supported Models & AI Tools Reference
 
-> **Last validated:** 2026-03-11
+> **Last validated:** 2026-03-12
 
-Totem supports four AI provider families. This document tracks the current
-recommended model IDs for each and how to programmatically discover new ones.
+Totem supports four LLM provider families for orchestration, and exports project
+knowledge to all major AI coding tools. This document tracks model IDs, tool
+config paths, and strategies for keeping everything current.
 
 ---
 
@@ -115,6 +116,52 @@ When a provider releases new stable models, update these locations:
 5. `docs/architecture.md` — documentation examples
 6. `totem.config.ts` — project root config (this repo's own config)
 7. Test files — smoke, integration, and unit tests referencing specific model IDs
+
+---
+
+## AI Coding Tools (Export Targets)
+
+Totem exports compiled lessons to AI coding tool config files via `totem compile --export`
+(also runs automatically as Step 5 of `totem wrap`). Each tool reads its own file on startup.
+
+| Tool                   | Config File                       | Export Key | Totem Support           |
+| ---------------------- | --------------------------------- | ---------- | ----------------------- |
+| **Claude Code**        | `CLAUDE.md`                       | `claude`   | Native (reads directly) |
+| **Gemini / GCA**       | `.gemini/styleguide.md`           | —          | Native (reads directly) |
+| **GitHub Copilot**     | `.github/copilot-instructions.md` | `copilot`  | Exporter                |
+| **JetBrains Junie**    | `.junie/guidelines.md`            | `junie`    | Exporter                |
+| **Cursor**             | `.cursorrules`                    | `cursor`   | Planned (#406)          |
+| **Windsurf (Codeium)** | `.windsurfrules`                  | `windsurf` | Planned (#407)          |
+| **Cline**              | `.clinerules`                     | —          | Not yet supported       |
+| **Aider**              | `.aider.conf.yml`                 | —          | Not yet supported       |
+| **Amazon Q**           | IDE-native                        | —          | Not yet supported       |
+| **Continue.dev**       | `.continuerc.json`                | —          | Not yet supported       |
+
+### Config Example
+
+```typescript
+// in totem.config.ts
+exports: {
+  copilot: '.github/copilot-instructions.md',
+  junie: '.junie/guidelines.md',
+  cursor: '.cursorrules',      // after #406
+  windsurf: '.windsurfrules',  // after #407
+}
+```
+
+### OpenAI-Compatible Providers
+
+Any LLM provider with an OpenAI-compatible API can be used as an orchestrator
+without explicit Totem support. Set `provider: 'openai'` with a custom `baseUrl`:
+
+| Provider                | Base URL                                | Notes              |
+| ----------------------- | --------------------------------------- | ------------------ |
+| Groq                    | `https://api.groq.com/openai/v1`        | Fast inference     |
+| Together AI             | `https://api.together.xyz/v1`           | Open-source models |
+| Fireworks AI            | `https://api.fireworks.ai/inference/v1` | Low latency        |
+| DeepSeek                | `https://api.deepseek.com/v1`           | Code-specialized   |
+| Mistral                 | `https://api.mistral.ai/v1`             | EU-hosted          |
+| Local (LM Studio, etc.) | `http://localhost:1234/v1`              | Any local server   |
 
 ---
 
