@@ -3,7 +3,7 @@
 
 # Review Settings
 comment_severity_threshold: HIGH # Only HIGH severity issues trigger comments (not MEDIUM/LOW)
-max_review_comments: 5 # Limit comments per PR to avoid noise
+max_review_comments: 3 # Limit comments per PR to reduce noise
 
 # Pull Request Behavior
 pull_request_opened:
