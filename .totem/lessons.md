@@ -1496,3 +1496,21 @@ Never use `${{ inputs.* }}` or `${{ github.event.* }}` directly in `run:` blocks
 **Tags:** ci-cd, publishing, audience:contributor
 
 npm OIDC trusted publishing requires three things simultaneously: (1) `id-token: write` permission in the workflow, (2) `registry-url` set in the `setup-node` action, and (3) npm >= 11.5.1. Missing any one causes silent auth failures. Additionally, trusted publishers can only be configured AFTER the first manual publish — chicken-and-egg problem documented in npm/cli#8544.
+
+## Lesson — Exclude auto-generated configuration files
+
+**Tags:** shield, cli, false-positives
+
+Exclude auto-generated configuration files from deterministic scans to prevent the tool from flagging its own output as a violation. This avoids "self-match" false positives where the scanner detects the rules it just exported.
+
+## Lesson — Manually suppress "unused export" errors in styleguide
+
+**Tags:** gca, styleguide, linting
+
+Manually suppress "unused export" errors in styleguide files that provide context to AI tools. Since these exports are consumed by the LLM or external processes rather than imports, standard linters will flag them as false positives.
+
+## Lesson — Integrate the generation of AI tool configuration files
+
+**Tags:** automation, workflow, dx
+
+Integrate the generation of AI tool configuration files directly into the primary CLI wrap command as a final step. This ensures that downstream AI agents always operate on the most recent project-specific knowledge without requiring manual export actions.

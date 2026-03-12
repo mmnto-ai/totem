@@ -813,6 +813,123 @@
       "engine": "regex",
       "compiledAt": "2026-03-12T10:36:00.971Z",
       "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml"]
+    },
+    {
+      "lessonHash": "b2266f6438d481d0",
+      "lessonHeading": "2026-03-05T04:05:14.473Z",
+      "pattern": "JSON\\.parse\\(.*(exec|spawn|stdout|stderr)",
+      "message": "Extract the shared exec → JSON.parse → schema.validate pattern into a private helper method to avoid duplicating boilerplate in CLI adapters.",
+      "engine": "regex",
+      "compiledAt": "2026-03-12T11:24:12.010Z",
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"]
+    },
+    {
+      "lessonHash": "afc7179714d64317",
+      "lessonHeading": "2026-03-06T05:32:34.074Z",
+      "pattern": "Promise\\.allSettled",
+      "message": "Strictly enforce 'Fail Fast' for multi-input orchestrator commands. Use Promise.all instead of Promise.allSettled; partial context assembly (e.g., missing one of several PRs) can lead to LLM hallucinations based on incomplete information.",
+      "engine": "regex",
+      "compiledAt": "2026-03-12T11:26:16.241Z",
+      "fileGlobs": ["**/cli/**/*.ts", "**/totem/**/*.ts", "**/orchestrator/**/*.ts"]
+    },
+    {
+      "lessonHash": "11f05825133933e7",
+      "lessonHeading": "Custom .env parsers must strip CRLF and quotes",
+      "pattern": "\\bprocess\\.env\\[[^\\]]+\\]\\s*=\\s*(?![^;\\n]*(\\?\\?|\\|\\||process\\.env))",
+      "message": "Custom .env parsers must not override existing process.env keys (use ??= or ||=). Ensure you also strip CRLF (\\r) and surrounding quotes from values.",
+      "engine": "regex",
+      "compiledAt": "2026-03-12T11:30:21.712Z",
+      "fileGlobs": ["**/cli/**/*.ts", "**/cli/**/*.js", "!**/*.test.ts"]
+    },
+    {
+      "lessonHash": "116cb61013507812",
+      "lessonHeading": "When re-throwing errors in a CLI orchestrator, always",
+      "pattern": "throw\\s+new\\s+Error\\(\\s*['\"\\`](?![^'\"\\`]*\\[Totem Error\\])",
+      "message": "Include the '[Totem Error]' prefix in re-thrown error messages to maintain consistent CLI reporting.",
+      "engine": "regex",
+      "compiledAt": "2026-03-12T11:31:03.928Z",
+      "fileGlobs": ["packages/cli/**/*.ts"]
+    },
+    {
+      "lessonHash": "8969d8bc95c3864b",
+      "lessonHeading": "Git diff headers wrap file paths containing spaces",
+      "pattern": "(['\"\\/])\\^?\\+\\+\\+\\s+b\\\\?\\/",
+      "message": "Git diff headers wrap paths with spaces in quotes (e.g., +++ \"b/path\"). Update logic to handle optional quotes before the 'b/' prefix to ensure files with spaces are processed correctly.",
+      "engine": "regex",
+      "compiledAt": "2026-03-12T11:31:45.504Z",
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh", "**/*.go", "**/*.rs"]
+    },
+    {
+      "lessonHash": "4fab6d3fd93f1a87",
+      "lessonHeading": "Wrap user-controlled fields like PR descriptions",
+      "pattern": "(?=.*\\$\\{.*(?:description|comment|body|user_?input|userInput).*\\})(?!.*untrusted[ _-]content)",
+      "message": "User-controlled fields (like PR descriptions or comments) must be wrapped in XML tags explicitly labeled as 'untrusted content' to prevent prompt injection.",
+      "engine": "regex",
+      "compiledAt": "2026-03-12T11:37:34.822Z",
+      "fileGlobs": ["**/prompts/**/*", "**/ai/**/*", "**/llm/**/*", "**/*prompt*"]
+    },
+    {
+      "lessonHash": "a8ade9d9b017f7b3",
+      "lessonHeading": "Sanitize git-sourced metadata like branch names, status,",
+      "pattern": "\\bgit\\s+(?:branch|status|diff|log|describe|show)\\b(?!.*(?:stripAnsi|replace|sed|tr|\\|))",
+      "message": "Sanitize git-sourced metadata (branch, status, diff) to remove ANSI escape sequences and control characters.",
+      "engine": "regex",
+      "compiledAt": "2026-03-12T11:37:51.849Z",
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh", "**/*.bash"]
+    },
+    {
+      "lessonHash": "c6bb187bdd6dd8f7",
+      "lessonHeading": "For local LLM providers, 500 Internal Server Errors often",
+      "pattern": "^(?!.*(numCtx|context|VRAM|exhaustion))(?=.*500)(?=.*Internal\\s+Server\\s+Error).*$",
+      "message": "Local LLM 500 errors often indicate VRAM or context exhaustion. Include specific guidance to adjust hardware-steering parameters like 'numCtx' in the error message to help users resolve failures immediately.",
+      "engine": "regex",
+      "compiledAt": "2026-03-12T11:39:36.248Z",
+      "fileGlobs": ["**/{llm,providers}/**/*.ts", "!**/*.test.ts"]
+    },
+    {
+      "lessonHash": "1cc6a460ad508b68",
+      "lessonHeading": "Verify CLI availability in shared git hooks before execution",
+      "pattern": "^[ \\t]*(?!(?:if|command|type|hash|\\[|&&|\\|\\|)\\b)\\s*(npx|pnpm|npm|yarn|eslint|prettier|lint-staged|tsc|vitest|jest|oxlint|biome|stylelint)\\b",
+      "message": "Verify CLI availability (e.g., using 'command -v' or 'tool --version') before execution in git hooks to prevent brittle CI failures.",
+      "engine": "regex",
+      "compiledAt": "2026-03-12T11:42:55.298Z",
+      "fileGlobs": [".husky/**/*", ".githooks/**/*", "scripts/hooks/**/*", "**/*.sh", "**/*.bash"]
+    },
+    {
+      "lessonHash": "741493a88528e2b8",
+      "lessonHeading": "Include a space or delimiter when concatenating disjoint",
+      "pattern": "\\$\\{[^}]+\\}\\$\\{[^}]+\\}",
+      "message": "Include a space or delimiter between concatenated fragments (e.g., '${a} ${b}') to prevent 'keyword synthesis' and bypass security filters.",
+      "engine": "regex",
+      "compiledAt": "2026-03-12T11:43:36.197Z",
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.sh", "**/*.bash"]
+    },
+    {
+      "lessonHash": "ce4240d622c53f8e",
+      "lessonHeading": "ESM intra-module mock requires re-binding",
+      "pattern": "\\.\\.\\.\\s*await\\s+vi\\.importActual\\(",
+      "message": "ESM intra-module mocks require re-binding: spreading vi.importActual() retains closure references to real exports. Re-bind callers to use the mocked factory instead.",
+      "engine": "regex",
+      "compiledAt": "2026-03-12T11:46:14.525Z",
+      "fileGlobs": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
+    },
+    {
+      "lessonHash": "bd31e87e32cfeefd",
+      "lessonHeading": "Drift detector flags lesson file path mentions",
+      "pattern": "\\b[\\w.-]+\\/[\\w.-]+\\.[a-z0-9]{2,}\\b",
+      "message": "Avoid using literal file paths in lessons (e.g., 'src/config.ts'). Use conceptual descriptions instead (e.g., 'the configuration file') to prevent drift detector errors when files are moved or renamed.",
+      "engine": "regex",
+      "compiledAt": "2026-03-12T11:46:43.434Z",
+      "fileGlobs": ["**/*.md", "**/lessons/**", ".github/junie/lessons/**/*"]
+    },
+    {
+      "lessonHash": "5d622e22e4b8f281",
+      "lessonHeading": "Manually suppress \"unused export\" errors in styleguide",
+      "pattern": "^\\+?\\s*export\\b(?!.*eslint-disable)",
+      "message": "Manually suppress 'unused export' errors in styleguide files (e.g., using // eslint-disable-line) as these are consumed by AI tools and not internal imports.",
+      "engine": "regex",
+      "compiledAt": "2026-03-12T11:48:26.594Z",
+      "fileGlobs": ["**/styleguide/**/*.{ts,tsx,js,jsx}", "**/*.styleguide.{ts,tsx,js,jsx}"]
     }
   ]
 }

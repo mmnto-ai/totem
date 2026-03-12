@@ -6,10 +6,18 @@ This document outlines the strategic phases for the Totem project, focusing on m
 
 The core embedded vector database, MCP server, and baseline CLI commands have been successfully implemented. This established the foundational architecture and validation workflows.
 
-- **Core Architecture:** Turborepo scaffolding and syntax-aware LanceDB store with incremental `totem sync`.
-- **Integrations:** MCP Server implementation and auto-injection of memory reflexes into AI tools.
-- **CLI & Workflows:** Ported native orchestrator commands, PR Learning Loop (`extract`), and Evidence-Based Quality Gate (`shield`).
-- **Validation:** Validated OpenAI happy path and dogfood sync with embeddings (#4, #8).
+- **Core Architecture:**
+  - Turborepo scaffolding and syntax-aware LanceDB store.
+  - Incremental synchronization capabilities via `totem sync`.
+- **Integrations:**
+  - MCP Server implementation.
+  - Auto-injection of memory reflexes into AI tools.
+- **CLI & Workflows:**
+  - Ported native orchestrator commands.
+  - PR Learning Loop (`extract`) and Evidence-Based Quality Gate (`shield`).
+- **Validation:**
+  - Validated OpenAI happy path.
+  - Dogfood synchronization with embeddings.
 
 ---
 
@@ -20,15 +28,15 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 This phase delivered seamless cross-platform onboarding, automated AI tool configuration, and universal baseline lessons.
 
 - **Onboarding & UX:**
-  - Auto-configured AI tools with JetBrains Junie support (`totem init`) (#371).
-  - Versioned reflex upgrade paths for existing consumers (#375, #376).
-  - Cross-platform installers and proper `--help` output (#210, #358).
-  - Premium CLI UI polish (#21, #89).
+  - Auto-configured AI tools with JetBrains Junie support.
+  - Versioned reflex upgrade paths for existing consumers.
+  - Cross-platform installers and proper CLI `--help` output.
+  - Premium CLI UI polish.
 - **Host Integration:**
-  - Seamless host integration hooks for Claude and Gemini (#86).
-  - Universal baseline lessons injected with harder vector DB reflexes (#372).
+  - Seamless host integration hooks for Claude and Gemini.
+  - Universal baseline lessons injected with harder vector DB reflexes.
 - [ ] **#129 Epic: Interactive CLI Tutorial:** Build an animated, interactive CLI tutorial (`totem tutorial`). This allows users to pause the walkthrough, ask the LLM contextual questions, and resume seamlessly.
-- [ ] **#125 Epic: Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically. Achieves a "run `init` and forget" workflow via deterministic shield gates and auto-installs (#310, #332, #355).
+- [ ] **#125 Epic: Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically. Achieves a "run `init` and forget" workflow via deterministic shield gates and auto-installs.
 
 ## Phase 2: Core Stability & Data Safety (Functionally Complete)
 
@@ -40,12 +48,14 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - Universal Tree-sitter parsing and AST gating for zero-LLM shielding.
   - Cross-provider routing across Gemini, Anthropic, OpenAI, and Ollama.
 - **Data Safety & Memory:**
-  - Saga-based transactional docs and cross-model export (#351).
-  - Automated document synchronization, drift detection, and zero-LLM session snapshots.
+  - Saga-based transactional document checkpoints and rollbacks.
+  - Automated document synchronization with drift detection.
+  - Zero-LLM session snapshots via `totem handoff --lite`.
+  - Cross-model document export support.
 - **Security & DX:**
   - Adversarial ingestion scrubbing, extraction hardening, and suspicious lesson detection.
   - Native Git hook enforcement with monorepo and Bun support.
-  - `totem hooks` auto-installation and CI drift gating foundations.
+  - Auto-installation of `totem hooks` and CI drift gating foundations.
 
 ## Phase 3: Workflow Expansion (Power User Tools)
 
@@ -57,13 +67,20 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
 - **Workflow & Execution:**
   - [x] **#362 Strategic Backlog Audit:** Added `totem audit` for backlog auditing with a human approval gate (#362, #389).
-  - [x] **Context Injection:** Embedded relevant vector DB lessons into all orchestrator commands and `totem spec` output (#366, #391).
+  - [x] **Context Injection:** Embedded relevant vector DB lessons into all orchestrator commands and `totem spec` output (#366, #370).
+  - [x] **Knowledge Promotion:** Audited local AI memory and promoted contributor knowledge to version-controlled surfaces (#402, #408).
+  - [x] **Toolchain Exports:** Exported compiled lessons to GitHub Copilot instructions (#294).
   - [ ] **#119 `totem run <workflow>`:** Introduce a custom AI task runner to execute user-defined markdown workflows via the orchestrator.
   - [ ] **#74 `totem oracle`:** Add a frictionless Q&A command to query LanceDB without strict personas.
+  - [ ] **#392 `totem review`:** Implement full codebase review powered by repomix and vectordb lessons.
 - **Shift-Left & Advanced Intelligence:**
-  - [ ] **#195 / #196 / #214 Epic: Shift-Left AI Verification:** Define model compatibility and auditing strategy to systematically verify models. Build adversarial evaluation harness for CI and implement CI Drift Gate.
+  - [ ] **#195 / #196 / #214 Epic: Shift-Left AI Verification:** Define model compatibility and auditing strategy to systematically verify models. Build adversarial evaluation harness for CI.
+  - [ ] **#314 Epic: Adaptive Agent Governance:** Establish the Codebase Immune System. This provides adaptive agent governance and foundational shift-left orchestration capabilities.
   - [ ] **#176 Agent-Optimized MCP:** Dynamic token budgeting and write access for deeper agent-to-agent interactions. Includes multi-agent permissions and role-based access control (#312).
   - [ ] **#183 Cross-File Knowledge Graph (Blocked):** Implement symbol resolution to enable multi-file architectural reasoning.
+  - [ ] **#364 VectorDB Structure:** Research and define multi-type knowledge retrieval schemas for the local LanceDB index.
+  - [ ] **#387 SARIF Output:** Standardize deterministic shield output for CI/CD integration.
+  - [ ] **#385 Rule Exports:** Export compiled rules to Semgrep YAML and ESLint configurations.
 
 ## Phase 4: Enterprise Expansion
 
