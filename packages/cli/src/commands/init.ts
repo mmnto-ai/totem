@@ -461,6 +461,14 @@ function detectProject(cwd: string): DetectedProject {
 function buildTargets(detected: DetectedProject): IngestTarget[] {
   const targets: IngestTarget[] = [];
 
+  // Lessons target first — must precede broader .totem/**/*.md globs
+  // so file-resolver's dedup assigns type 'lesson' (first match wins)
+  targets.push({
+    glob: '.totem/lessons.md',
+    type: 'lesson',
+    strategy: 'markdown-heading',
+  });
+
   if (detected.hasTypeScript) {
     targets.push(
       { glob: 'src/**/*.ts', type: 'code', strategy: 'typescript-ast' },
@@ -508,8 +516,8 @@ function buildTargets(detected: DetectedProject): IngestTarget[] {
     });
   }
 
-  // Fallback: if nothing detected, add a sensible default
-  if (targets.length === 0) {
+  // Fallback: if nothing else detected (besides the lessons target), add a sensible default
+  if (targets.length <= 1) {
     targets.push({
       glob: '**/*.md',
       type: 'spec',
@@ -872,7 +880,7 @@ export async function initCommand(): Promise<void> {
         const result = scaffoldMcpConfig(filePath, tool.serverEntry);
 
         if (result.err) {
-          log.error('Totem', result.err);
+          log.error('Totem Error', result.err); // totem-ignore — result.err is internal scaffolding error, not LLM output
           console.error(
             `To fix this, add the following manually to your ${tool.mcpPath} under "mcpServers":\n`,
           );
@@ -899,7 +907,7 @@ export async function initCommand(): Promise<void> {
           }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          log.error('Totem', `Failed to inject reflexes into ${tool.reflexFile}: ${message}`);
+          log.error('Totem Error', `Failed to inject reflexes into ${tool.reflexFile}: ${message}`);
         }
       }
 
@@ -940,7 +948,10 @@ export async function initCommand(): Promise<void> {
               }
             } catch (err) {
               const message = err instanceof Error ? err.message : String(err);
-              log.error('Totem', `Failed to upgrade reflexes in ${tool.reflexFile}: ${message}`);
+              log.error(
+                'Totem Error',
+                `Failed to upgrade reflexes in ${tool.reflexFile}: ${message}`,
+              );
             }
           }
         } else {
@@ -959,7 +970,7 @@ export async function initCommand(): Promise<void> {
         const results = await tool.hookInstaller(cwd);
         for (const result of results) {
           if (result.err) {
-            log.error('Totem', `Hook scaffolding failed for ${result.file}: ${result.err}`);
+            log.error('Totem Error', `Hook scaffolding failed for ${result.file}: ${result.err}`); // totem-ignore — internal hook installer error
           } else if (result.action === 'created') {
             summary.push({ file: result.file, action: `Scaffolded ${tool.name} hook` });
           } else if (result.action === 'merged') {

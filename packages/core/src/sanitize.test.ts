@@ -174,7 +174,7 @@ describe('sanitizeForIngestion', () => {
 
   // --- Content type coverage ---
 
-  it.each(['code', 'spec', 'session_log'] satisfies ContentType[])(
+  it.each(['code', 'spec', 'session_log', 'lesson'] satisfies ContentType[])(
     'handles %s content type without throwing',
     (type) => {
       expect(() => sanitizeForIngestion('normal text', { chunkType: type })).not.toThrow();
