@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 0.28.0
+
+### Minor Changes
+
+- d221d54: Extraction Hardening: semantic dedup for `totem extract`, dangling-tail heading cleanup, submodule-aware file resolver, and CLI `--help` fix.
+
 ## 0.27.0
 
 ### Minor Changes
