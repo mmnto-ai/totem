@@ -23,6 +23,8 @@ import {
 const TAG = 'Spec';
 const QUERY_BODY_TRUNCATE = 500;
 const MAX_INPUTS = 5;
+export const MAX_LESSONS = 10;
+export const MAX_LESSON_CHARS = 8_000;
 
 // ─── System prompt ──────────────────────────────────────
 
@@ -39,6 +41,7 @@ Produce a structured, highly technical pre-work briefing for a task before imple
 - **Define Contracts:** Explicitly define data contracts (e.g., Zod schemas, DB migrations, API interfaces) needed for the feature.
 - **Pessimistic Edge Cases:** Actively search for edge cases the issue description failed to mention (e.g., race conditions, missing indexes).
 - **Grounded Reality:** File paths must reference actual files from the context provided. When multiple approaches exist, list trade-offs with a firm recommendation.
+- **Lessons Are Law:** If RELEVANT LESSONS are provided, treat each lesson as a hard architectural constraint. Your plan MUST account for every relevant lesson. Call out which lessons influenced your approach in the Architectural Context section.
 
 ## Output Format
 Respond with ONLY the sections below. No preamble, no closing remarks.
@@ -66,23 +69,43 @@ Respond with ONLY the sections below. No preamble, no closing remarks.
 
 // ─── LanceDB retrieval ─────────────────────────────────
 
-interface RetrievedContext {
+export { SYSTEM_PROMPT as SPEC_SYSTEM_PROMPT };
+
+export interface RetrievedContext {
   specs: SearchResult[];
   sessions: SearchResult[];
   code: SearchResult[];
+  lessons: SearchResult[];
 }
 
-async function retrieveContext(query: string, store: LanceStore): Promise<RetrievedContext> {
+export async function retrieveContext(query: string, store: LanceStore): Promise<RetrievedContext> {
   const search = (typeFilter: ContentType, maxResults: number) =>
     store.search({ query, typeFilter, maxResults });
 
-  const [specs, sessions, code] = await Promise.all([
-    search('spec', 5),
+  // Two parallel spec searches: one broad for ADRs/docs, one targeted for lessons
+  const [allSpecs, sessions, code] = await Promise.all([
+    search('spec', 10),
     search('session_log', 5),
     search('code', 3),
   ]);
 
-  return { specs, sessions, code };
+  // Partition: lessons come from lessons.md, everything else is a spec/ADR
+  const specs = allSpecs.filter((r) => !r.filePath.endsWith('lessons.md')).slice(0, 5);
+  const lessons = allSpecs.filter((r) => r.filePath.endsWith('lessons.md')).slice(0, MAX_LESSONS);
+
+  // If the broad search didn't surface enough lessons, run a dedicated search
+  if (lessons.length < MAX_LESSONS) {
+    const dedicated = await search('spec', MAX_LESSONS);
+    const seen = new Set(lessons.map((l) => l.label));
+    for (const r of dedicated) {
+      if (r.filePath.endsWith('lessons.md') && !seen.has(r.label) && lessons.length < MAX_LESSONS) {
+        lessons.push(r);
+        seen.add(r.label);
+      }
+    }
+  }
+
+  return { specs, sessions, code, lessons };
 }
 
 function buildSearchQuery(issue: StandardIssue): string {
@@ -100,7 +123,7 @@ interface ParsedInput {
 
 // ─── Prompt assembly ────────────────────────────────────
 
-function assemblePrompt(
+export function assemblePrompt(
   inputs: ParsedInput[],
   context: RetrievedContext,
   systemPrompt: string,
@@ -134,6 +157,22 @@ function assemblePrompt(
     if (specSection) sections.push(specSection);
     if (sessionSection) sections.push(sessionSection);
     if (codeSection) sections.push(codeSection);
+  }
+
+  // Lessons — full bodies, capped by total character budget
+  if (context.lessons.length > 0) {
+    const lessonLines: string[] = [];
+    let charBudget = MAX_LESSON_CHARS;
+    for (const lesson of context.lessons) {
+      const entry = `- **${lesson.label}** (score: ${lesson.score.toFixed(3)})\n  ${lesson.content.replace(/\n/g, '\n  ')}`;
+      if (entry.length > charBudget) continue;
+      lessonLines.push(entry);
+      charBudget -= entry.length;
+    }
+    if (lessonLines.length > 0) {
+      sections.push(`\n=== RELEVANT LESSONS (HARD CONSTRAINTS) ===`);
+      sections.push(lessonLines.join('\n\n'));
+    }
   }
 
   return sections.join('\n');
@@ -195,10 +234,11 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   const query = queryParts.join(' ');
   log.info(TAG, 'Querying Totem index...');
   const context = await retrieveContext(query, store);
-  const totalResults = context.specs.length + context.sessions.length + context.code.length;
+  const totalResults =
+    context.specs.length + context.sessions.length + context.code.length + context.lessons.length;
   log.info(
     TAG,
-    `Found: ${context.specs.length} specs, ${context.sessions.length} sessions, ${context.code.length} code chunks`,
+    `Found: ${context.specs.length} specs, ${context.sessions.length} sessions, ${context.code.length} code, ${context.lessons.length} lessons`,
   );
 
   // Resolve system prompt (allow .totem/prompts/spec.md override)

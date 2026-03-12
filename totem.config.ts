@@ -44,6 +44,7 @@ const config: TotemConfig = {
     '**/__tests__/**',
     '**/*.test.ts',
     '.strategy/archive/**',
+    '.strategy/deep-research/**',
   ],
 };
 
