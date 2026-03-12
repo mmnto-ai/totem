@@ -645,18 +645,18 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
   }
 
   // Semantic dedup against existing lessons and intra-batch (#347)
-  log.info(TAG, 'Deduplicating against existing lessons...');
+  log.info(TAG, 'Deduplicating against existing lessons...'); // totem-ignore — static string
   const { kept: novelLessons, dropped: dupLessons } = await deduplicateLessons(
     allLessons,
     store,
     embedder,
   );
   if (dupLessons.length > 0) {
-    log.dim(TAG, `Dropped ${dupLessons.length} semantically duplicate lesson(s)`);
+    log.dim(TAG, `Dropped ${dupLessons.length} semantically duplicate lesson(s)`); // totem-ignore — integer count
   }
 
   if (novelLessons.length === 0) {
-    log.dim(TAG, 'All extracted lessons are duplicates of existing ones.');
+    log.dim(TAG, 'All extracted lessons are duplicates of existing ones.'); // totem-ignore — static string
     return;
   }
 
