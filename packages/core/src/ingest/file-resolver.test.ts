@@ -1,11 +1,16 @@
 import * as childProcess from 'node:child_process';
 
+import { globSync } from 'glob';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getChangedFiles, getHeadSha } from './file-resolver.js';
+import { getChangedFiles, getHeadSha, resolveFiles } from './file-resolver.js';
 
 vi.mock('node:child_process', () => ({
   execFileSync: vi.fn(),
+}));
+
+vi.mock('glob', () => ({
+  globSync: vi.fn(() => []),
 }));
 
 afterEach(() => {
@@ -94,5 +99,73 @@ describe('getChangedFiles', () => {
     vi.mocked(childProcess.execFileSync).mockReturnValue('');
     const result = getChangedFiles('/project', 'abc123def456');
     expect(result).toEqual([]);
+  });
+});
+
+describe('resolveFiles — submodule support', () => {
+  it('includes submodule files from --recurse-submodules call', () => {
+    vi.mocked(childProcess.execFileSync).mockImplementation(
+      (_cmd: string, args?: readonly string[]) => {
+        if (args && args.includes('--recurse-submodules')) {
+          return 'src/a.ts\0.strategy/north-star.md\0';
+        }
+        // Parent repo ls-files: does NOT include submodule files
+        return 'src/a.ts\0';
+      },
+    );
+    vi.mocked(globSync).mockReturnValue(['.strategy/north-star.md'] as unknown as string[] & {
+      [Symbol.iterator]: () => IterableIterator<string>;
+    });
+
+    const result = resolveFiles(
+      [{ glob: '.strategy/**/*.md', type: 'spec', strategy: 'markdown-heading' }],
+      '/project',
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].relativePath).toBe('.strategy/north-star.md');
+  });
+
+  it('excludes submodule files not matched by glob', () => {
+    vi.mocked(childProcess.execFileSync).mockImplementation(
+      (_cmd: string, args?: readonly string[]) => {
+        if (args && args.includes('--recurse-submodules')) {
+          return '.strategy/north-star.md\0.strategy/archive/old.md\0';
+        }
+        return '';
+      },
+    );
+    // Glob only matches the non-archived file (archive excluded via ignorePatterns)
+    vi.mocked(globSync).mockReturnValue(['.strategy/north-star.md'] as unknown as string[] & {
+      [Symbol.iterator]: () => IterableIterator<string>;
+    });
+
+    const result = resolveFiles(
+      [{ glob: '.strategy/**/*.md', type: 'spec', strategy: 'markdown-heading' }],
+      '/project',
+      ['.strategy/archive/**'],
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].relativePath).toBe('.strategy/north-star.md');
+  });
+
+  it('works when --recurse-submodules is unsupported', () => {
+    vi.mocked(childProcess.execFileSync).mockImplementation(
+      (_cmd: string, args?: readonly string[]) => {
+        if (args && args.includes('--recurse-submodules')) {
+          throw new Error('unknown option');
+        }
+        return 'src/a.ts\0';
+      },
+    );
+    vi.mocked(globSync).mockReturnValue(['src/a.ts'] as unknown as string[] & {
+      [Symbol.iterator]: () => IterableIterator<string>;
+    });
+
+    const result = resolveFiles(
+      [{ glob: 'src/**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+      '/project',
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].relativePath).toBe('src/a.ts');
   });
 });
