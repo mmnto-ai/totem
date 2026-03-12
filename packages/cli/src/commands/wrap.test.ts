@@ -12,7 +12,11 @@ vi.mock('./triage.js', () => ({
 vi.mock('./docs.js', () => ({
   docsCommand: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock('./compile.js', () => ({
+  compileCommand: vi.fn().mockResolvedValue(undefined),
+}));
 
+import { compileCommand } from './compile.js';
 import { docsCommand } from './docs.js';
 import { extractCommand } from './extract.js';
 import { syncCommand } from './sync.js';
@@ -24,7 +28,7 @@ describe('wrapCommand', () => {
     vi.clearAllMocks();
   });
 
-  it('calls extract, sync, triage, and docs in sequence', async () => {
+  it('calls extract, sync, triage, docs, and compile in sequence', async () => {
     const callOrder: string[] = [];
     vi.mocked(extractCommand).mockImplementation(async () => {
       callOrder.push('extract');
@@ -38,10 +42,13 @@ describe('wrapCommand', () => {
     vi.mocked(docsCommand).mockImplementation(async () => {
       callOrder.push('docs');
     });
+    vi.mocked(compileCommand).mockImplementation(async () => {
+      callOrder.push('compile');
+    });
 
     await wrapCommand(['142'], {});
 
-    expect(callOrder).toEqual(['extract', 'sync', 'triage', 'docs']);
+    expect(callOrder).toEqual(['extract', 'sync', 'triage', 'docs', 'compile']);
     expect(extractCommand).toHaveBeenCalledWith(['142'], {
       model: undefined,
       fresh: undefined,
@@ -76,6 +83,11 @@ describe('wrapCommand', () => {
       fresh: true,
       yes: true,
     });
+    expect(compileCommand).toHaveBeenCalledWith({
+      model: 'gemini-3-flash',
+      fresh: true,
+      export: true,
+    });
   });
 
   it('gracefully skips docs step when no docs configured', async () => {
@@ -89,6 +101,7 @@ describe('wrapCommand', () => {
     expect(syncCommand).toHaveBeenCalled();
     expect(triageCommand).toHaveBeenCalled();
     expect(docsCommand).toHaveBeenCalled();
+    expect(compileCommand).toHaveBeenCalled();
   });
 
   it('aborts chain if extract throws', async () => {

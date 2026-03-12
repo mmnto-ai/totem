@@ -27,6 +27,11 @@ const config: TotemConfig = {
     },
   },
 
+  exports: {
+    copilot: '.github/copilot-instructions.md',
+    junie: '.junie/guidelines.md',
+  },
+
   docs: [
     {
       path: 'README.md',
