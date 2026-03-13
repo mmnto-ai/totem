@@ -38,7 +38,6 @@ async function importGeminiSdk(): Promise<{
 }> {
   try {
     // Dynamic import — @google/genai is an optional peer dep
-    // @ts-expect-error — module only available when consumer installs it
     return await import('@google/genai');
   } catch {
     throw new Error(
