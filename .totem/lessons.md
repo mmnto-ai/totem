@@ -1527,7 +1527,7 @@ MCP is an IDE bridge, not a load-bearing orchestration layer. Perplexity (March 
 
 The opening two paragraphs of the telemetry research response (deep research topic #14, telemetry patterns) are standalone positioning copy for Totem's local-first privacy narrative. Extract them for landing page / marketing use when the time comes. Key line: "Traditional telemetry models, which rely on the continuous transmission of granular usage data to centralized cloud-based collectors, are increasingly viewed as incompatible with the security mandates and data sovereignty requirements of modern enterprise development."
 
-## Lesson — Deferred research topic: Local-First SLM (Small Language
+## Lesson — Deferred research topic: Local-First SLM (Small Language Model) Viability for Governance
 
 **Tags:** research-backlog, slm, local-first, governance, post-1.0, deferred
 
