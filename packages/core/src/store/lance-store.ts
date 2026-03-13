@@ -23,10 +23,12 @@ export class LanceStore {
   private dbPath: string;
   private embedder: Embedder;
   private hasFtsIndex = false;
+  private onWarn: (msg: string) => void;
 
-  constructor(dbPath: string, embedder: Embedder) {
+  constructor(dbPath: string, embedder: Embedder, onWarn?: (msg: string) => void) {
     this.dbPath = dbPath;
     this.embedder = embedder;
+    this.onWarn = onWarn ?? (() => {});
   }
 
   /** Connect to LanceDB. Must be called before any other operations. */
@@ -90,7 +92,7 @@ export class LanceStore {
     } catch (err) {
       // Non-fatal: hybrid search degrades to vector-only
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[Totem] Warning: FTS index creation failed: ${msg}`);
+      this.onWarn(`FTS index creation failed: ${msg}`);
       this.hasFtsIndex = false;
     }
   }
@@ -106,7 +108,9 @@ export class LanceStore {
       this.hasFtsIndex = indices.some(
         (idx) => idx.indexType === 'FTS' || idx.name === 'content_idx',
       );
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.onWarn(`FTS index detection failed: ${msg}`);
       this.hasFtsIndex = false;
     }
   }
