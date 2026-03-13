@@ -124,8 +124,24 @@ async function runPrune(cwd: string, config: TotemConfig): Promise<void> {
       fs.renameSync(tmpPath, sourcePath);
       prunedCount += driftResults.length;
     } else {
-      // Directory file: each file is one lesson — delete the file
-      fs.unlinkSync(sourcePath);
+      // Directory file: may contain one or more lessons — rewrite or delete
+      const content = fs.readFileSync(sourcePath, 'utf-8');
+      const fileLessons = parseLessonsFile(content);
+      const rawContentToRemove = new Set(driftResults.map((d) => d.lesson.raw));
+      const fileIndicesToRemove = new Set(
+        fileLessons.filter((l) => rawContentToRemove.has(l.raw)).map((l) => l.index),
+      );
+
+      if (fileIndicesToRemove.size >= fileLessons.length) {
+        // All lessons removed — delete the file
+        fs.unlinkSync(sourcePath);
+      } else {
+        // Rewrite with stale lessons removed
+        const newContent = rewriteLessonsFile(content, fileIndicesToRemove);
+        const tmpPath = sourcePath + '.tmp';
+        fs.writeFileSync(tmpPath, newContent, 'utf-8');
+        fs.renameSync(tmpPath, sourcePath);
+      }
       prunedCount += driftResults.length;
     }
   }
