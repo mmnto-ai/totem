@@ -115,12 +115,12 @@ export class GeminiEmbedder implements Embedder {
 
         if (!response.embeddings || response.embeddings.length !== batch.length) {
           throw new Error(
-            `Expected ${batch.length} embeddings, got ${response.embeddings?.length ?? 0}`,
+            `[Totem Error] Expected ${batch.length} embeddings, got ${response.embeddings?.length ?? 0}`,
           );
         }
 
         return response.embeddings.map((e: { values?: number[] }) => {
-          if (!e.values) throw new Error('Embedding response missing values');
+          if (!e.values) throw new Error('[Totem Error] Embedding response missing values');
           return e.values;
         });
       } catch (err) {
