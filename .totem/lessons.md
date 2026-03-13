@@ -1532,3 +1532,9 @@ The opening two paragraphs of the telemetry research response (deep research top
 **Tags:** research-backlog, slm, local-first, governance, post-1.0, deferred
 
 Deferred research topic: Local-First SLM (Small Language Model) Viability for Governance. The concept: ship a custom, highly-quantized .gguf model (3B-8B params, e.g., Qwen-Coder or Llama-3-8B) specifically trained to evaluate compiled-rules.json, running locally at ~100 tokens/sec. This would sever the dependency on cloud providers for semantic rule enforcement. Deferred because: fine-tuning infrastructure, model distribution, and quality benchmarking are massive; Ollama already supports small models for basic use. Revisit post-1.0 when the governance eval harness (ADR-008) can measure whether small models match large model quality for rule enforcement tasks.
+
+## Lesson — GCA may suggest reverting dynamic imports back to static
+
+**Tags:** review-guidance, gca, shield, cli-performance, dynamic-import
+
+GCA may suggest reverting dynamic imports back to static top-level imports for "simplicity", contradicting its own earlier DRY suggestion and conflicting with the shield rule that enforces lazy loading in CLI command files. When GCA's simplicity suggestion conflicts with a compiled shield rule, the shield rule wins — it exists to protect CLI startup performance. Dynamic imports inside command function bodies are the correct pattern for importing from @mmnto/totem in CLI command files.
