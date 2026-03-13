@@ -461,13 +461,11 @@ function detectProject(cwd: string): DetectedProject {
 function buildTargets(detected: DetectedProject): IngestTarget[] {
   const targets: IngestTarget[] = [];
 
-  // Lessons target first — must precede broader .totem/**/*.md globs
-  // so file-resolver's dedup assigns type 'lesson' (first match wins)
-  targets.push({
-    glob: '.totem/lessons.md',
-    type: 'lesson',
-    strategy: 'markdown-heading',
-  });
+  // Lessons targets — directory glob first, legacy glob for backward compat
+  targets.push(
+    { glob: '.totem/lessons/*.md', type: 'lesson', strategy: 'markdown-heading' },
+    { glob: '.totem/lessons.md', type: 'lesson', strategy: 'markdown-heading' },
+  );
 
   if (detected.hasTypeScript) {
     targets.push(
@@ -619,12 +617,14 @@ export function detectEmbeddingTier(cwd: string): EmbeddingTier {
  * In non-TTY mode (CI), defaults to installing without prompting.
  */
 export async function installBaselineLessons(
-  lessonsPath: string,
+  baselinePath: string,
   rl: readline.Interface,
 ): Promise<'installed' | 'exists' | 'skipped'> {
   try {
-    const existing = fs.readFileSync(lessonsPath, 'utf-8');
-    if (existing.includes(BASELINE_MARKER)) return 'exists';
+    if (fs.existsSync(baselinePath)) {
+      const existing = fs.readFileSync(baselinePath, 'utf-8');
+      if (existing.includes(BASELINE_MARKER)) return 'exists';
+    }
 
     // In non-TTY mode (CI, piped input), default to installing
     let declined = false;
@@ -635,8 +635,11 @@ export async function installBaselineLessons(
 
     if (declined) return 'skipped';
 
-    const suffix = existing.endsWith('\n') ? '' : '\n';
-    fs.appendFileSync(lessonsPath, suffix + UNIVERSAL_LESSONS_MARKDOWN, 'utf-8');
+    const dir = path.dirname(baselinePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(baselinePath, UNIVERSAL_LESSONS_MARKDOWN, 'utf-8');
     return 'installed';
   } catch (err) {
     log.warn(
@@ -853,21 +856,25 @@ export async function initCommand(): Promise<void> {
       fs.mkdirSync(totemDir, { recursive: true });
     }
 
-    const lessonsPath = path.join(totemDir, 'lessons.md');
-    const lessonsExisted = fs.existsSync(lessonsPath);
-    if (!lessonsExisted) {
-      fs.writeFileSync(
-        lessonsPath,
-        `# Totem Lessons\n\nLessons learned from PR reviews and Shield checks.\nThis file is version-controlled and reviewed in PR diffs.\n\n---\n`,
-        'utf-8',
-      );
-      summary.push({ file: '.totem/lessons.md', action: 'Created lessons file' });
+    const lessonsDir = path.join(totemDir, 'lessons');
+    if (!fs.existsSync(lessonsDir)) {
+      fs.mkdirSync(lessonsDir, { recursive: true });
+      // .gitkeep for git tracking of empty directory
+      const gitkeepPath = path.join(lessonsDir, '.gitkeep');
+      if (!fs.existsSync(gitkeepPath)) {
+        fs.writeFileSync(gitkeepPath, '', 'utf-8');
+      }
+      summary.push({ file: '.totem/lessons/', action: 'Created lessons directory' });
     }
 
     // --- Universal Lessons baseline ---
-    const baselineResult = await installBaselineLessons(lessonsPath, rl);
+    const baselinePath = path.join(lessonsDir, 'baseline.md');
+    const baselineResult = await installBaselineLessons(baselinePath, rl);
     if (baselineResult === 'installed') {
-      summary.push({ file: '.totem/lessons.md', action: 'Installed Universal Baseline lessons' });
+      summary.push({
+        file: '.totem/lessons/baseline.md',
+        action: 'Installed Universal Baseline lessons',
+      });
     }
 
     // --- Unified AI tool selection ---

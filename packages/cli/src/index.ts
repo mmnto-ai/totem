@@ -377,6 +377,18 @@ program
   );
 
 program
+  .command('migrate-lessons')
+  .description('Migrate .totem/lessons.md to .totem/lessons/ directory (one file per lesson)')
+  .action(async () => {
+    try {
+      const { migrateLessonsCommand } = await import('./commands/migrate-lessons.js');
+      await migrateLessonsCommand();
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('drift')
   .description('Check lessons for stale file references (CI gate)')
   .action(async () => {

@@ -413,44 +413,61 @@ describe('flagSuspiciousLessons', () => {
 
 describe('appendLessons', () => {
   let tmpDir: string;
-  let lessonsPath: string;
+  let lessonsDir: string;
+
+  /** Read all .md files in lessonsDir and concatenate their contents. */
+  function readAllFiles(): string {
+    if (!fs.existsSync(lessonsDir)) return '';
+    const files = fs
+      .readdirSync(lessonsDir)
+      .filter((f) => f.endsWith('.md'))
+      .sort();
+    return files.map((f) => fs.readFileSync(path.join(lessonsDir, f), 'utf-8')).join('\n');
+  }
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-extract-'));
-    lessonsPath = path.join(tmpDir, '.totem', 'lessons.md');
+    lessonsDir = path.join(tmpDir, '.totem', 'lessons');
   });
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('creates directory and file if they do not exist', () => {
-    appendLessons([{ tags: ['test'], text: 'A test lesson.' }], lessonsPath);
-    expect(fs.existsSync(lessonsPath)).toBe(true);
-    const content = fs.readFileSync(lessonsPath, 'utf-8');
+  it('creates directory and files if they do not exist', () => {
+    appendLessons([{ tags: ['test'], text: 'A test lesson.' }], lessonsDir);
+    expect(fs.existsSync(lessonsDir)).toBe(true);
+    const files = fs.readdirSync(lessonsDir).filter((f) => f.endsWith('.md'));
+    expect(files).toHaveLength(1);
+    const content = readAllFiles();
     expect(content).toContain('**Tags:** test');
     expect(content).toContain('A test lesson.');
   });
 
-  it('appends to existing file', () => {
-    fs.mkdirSync(path.dirname(lessonsPath), { recursive: true });
-    fs.writeFileSync(lessonsPath, '# Existing content\n');
+  it('writes to directory even when files already exist', () => {
+    fs.mkdirSync(lessonsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(lessonsDir, 'existing.md'),
+      '## Lesson — Existing\n\n**Tags:** old\n\nExisting content.\n',
+    );
 
-    appendLessons([{ tags: ['new'], text: 'New lesson.' }], lessonsPath);
-    const content = fs.readFileSync(lessonsPath, 'utf-8');
-    expect(content).toContain('# Existing content');
+    appendLessons([{ tags: ['new'], text: 'New lesson.' }], lessonsDir);
+    const content = readAllFiles();
+    expect(content).toContain('Existing content.');
     expect(content).toContain('New lesson.');
   });
 
-  it('writes multiple lessons', () => {
+  it('writes multiple lessons as separate files', () => {
     appendLessons(
       [
         { tags: ['a', 'b'], text: 'First.' },
         { tags: ['c'], text: 'Second.' },
       ],
-      lessonsPath,
+      lessonsDir,
     );
-    const content = fs.readFileSync(lessonsPath, 'utf-8');
+    const files = fs.readdirSync(lessonsDir).filter((f) => f.endsWith('.md'));
+    expect(files).toHaveLength(2);
+    const content = readAllFiles();
     expect(content).toContain('**Tags:** a, b');
     expect(content).toContain('First.');
     expect(content).toContain('**Tags:** c');
@@ -458,17 +475,17 @@ describe('appendLessons', () => {
   });
 
   it('uses descriptive heading derived from lesson text when no heading provided', () => {
-    appendLessons([{ tags: ['test'], text: 'Timestamped.' }], lessonsPath);
-    const content = fs.readFileSync(lessonsPath, 'utf-8');
+    appendLessons([{ tags: ['test'], text: 'Timestamped.' }], lessonsDir);
+    const content = readAllFiles();
     expect(content).toContain('## Lesson — Timestamped.');
   });
 
   it('uses LLM-provided heading when available', () => {
     appendLessons(
       [{ heading: 'Check ENOENT separately', tags: ['test'], text: 'A detailed lesson body.' }],
-      lessonsPath,
+      lessonsDir,
     );
-    const content = fs.readFileSync(lessonsPath, 'utf-8');
+    const content = readAllFiles();
     expect(content).toContain('## Lesson — Check ENOENT separately');
   });
 });

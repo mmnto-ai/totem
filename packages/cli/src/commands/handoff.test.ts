@@ -18,27 +18,53 @@ describe('readRecentLessons', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('returns empty string when lessons.md does not exist', () => {
+  it('returns empty string when no lessons exist', () => {
     expect(readRecentLessons(tmpDir, totemDir)).toBe('');
   });
 
-  it('returns full content when file is short', () => {
-    const lessonsDir = path.join(tmpDir, totemDir);
-    fs.mkdirSync(lessonsDir, { recursive: true });
-    fs.writeFileSync(path.join(lessonsDir, 'lessons.md'), '## Lesson\nSome content', 'utf-8');
-    expect(readRecentLessons(tmpDir, totemDir)).toBe('## Lesson\nSome content');
+  it('returns full content when lessons are short', () => {
+    const totemPath = path.join(tmpDir, totemDir);
+    fs.mkdirSync(totemPath, { recursive: true });
+    fs.writeFileSync(
+      path.join(totemPath, 'lessons.md'),
+      '## Lesson — Test\n\n**Tags:** test\n\nSome content\n',
+      'utf-8',
+    );
+    const result = readRecentLessons(tmpDir, totemDir);
+    expect(result).toContain('## Lesson — Test');
+    expect(result).toContain('Some content');
   });
 
-  it('returns only the last 100 lines for long files', () => {
-    const lessonsDir = path.join(tmpDir, totemDir);
+  it('returns content from directory lessons', () => {
+    const lessonsDir = path.join(tmpDir, totemDir, 'lessons');
     fs.mkdirSync(lessonsDir, { recursive: true });
-    const lines = Array.from({ length: 200 }, (_, i) => `Line ${i + 1}`);
-    fs.writeFileSync(path.join(lessonsDir, 'lessons.md'), lines.join('\n'), 'utf-8');
-
+    fs.writeFileSync(
+      path.join(lessonsDir, 'lesson-abc.md'),
+      '## Lesson — From directory\n\n**Tags:** dir\n\nDirectory lesson content\n',
+      'utf-8',
+    );
     const result = readRecentLessons(tmpDir, totemDir);
-    expect(result).toContain('Line 200');
-    expect(result).toContain('Line 101');
-    expect(result).not.toContain('Line 100\n');
+    expect(result).toContain('From directory');
+    expect(result).toContain('Directory lesson content');
+  });
+
+  it('truncates to last 100 lines for many lessons', () => {
+    const lessonsDir = path.join(tmpDir, totemDir, 'lessons');
+    fs.mkdirSync(lessonsDir, { recursive: true });
+    // Generate enough lessons to exceed 100 lines (30 lessons × 5 lines each = 150 lines)
+    for (let i = 0; i < 30; i++) {
+      const content = `## Lesson — Lesson ${i}\n\n**Tags:** bulk\n\nContent for lesson ${i}.\n`;
+      fs.writeFileSync(
+        path.join(lessonsDir, `lesson-${String(i).padStart(3, '0')}.md`),
+        content,
+        'utf-8',
+      );
+    }
+    const result = readRecentLessons(tmpDir, totemDir);
+    // Should contain later lessons but not the earliest (truncated)
+    expect(result).toContain('Lesson 29');
+    expect(result).toContain('Lesson 20');
+    expect(result).not.toContain('Lesson 0\n');
   });
 });
 

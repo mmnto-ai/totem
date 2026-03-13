@@ -232,8 +232,8 @@ export function partitionLessons(
   maxLessons: number,
   maxSpecs: number,
 ): { lessons: SearchResult[]; specs: SearchResult[] } {
-  const lessons = allSpecs.filter((r) => r.filePath.endsWith('lessons.md')).slice(0, maxLessons);
-  const specs = allSpecs.filter((r) => !r.filePath.endsWith('lessons.md')).slice(0, maxSpecs);
+  const lessons = allSpecs.filter((r) => r.type === 'lesson').slice(0, maxLessons);
+  const specs = allSpecs.filter((r) => r.type !== 'lesson').slice(0, maxSpecs);
   return { lessons, specs };
 }
 

@@ -1,7 +1,6 @@
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { detectDrift, parseLessonsFile } from '@mmnto/totem';
+import { detectDrift, readAllLessons } from '@mmnto/totem'; // totem-ignore
 
 import { bold, errorColor, log, success as successColor } from '../ui.js';
 import { loadConfig, resolveConfigPath, sanitize } from '../utils.js';
@@ -17,15 +16,8 @@ export async function driftCommand(): Promise<void> {
   const configPath = resolveConfigPath(cwd);
   const config = await loadConfig(configPath);
 
-  const lessonsPath = path.join(cwd, config.totemDir, 'lessons.md');
-
-  if (!fs.existsSync(lessonsPath)) {
-    log.dim(TAG, 'No lessons file found — nothing to check.'); // totem-ignore
-    return;
-  }
-
-  const content = fs.readFileSync(lessonsPath, 'utf-8');
-  const lessons = parseLessonsFile(content);
+  const totemDir = path.join(cwd, config.totemDir);
+  const lessons = readAllLessons(totemDir);
 
   if (lessons.length === 0) {
     log.dim(TAG, 'No lessons found — nothing to check.'); // totem-ignore

@@ -478,9 +478,9 @@ export async function learnFromVerdict(
     text: sanitize(l.text), // totem-ignore: already sanitized
   }));
 
-  const lessonsPath = path.join(cwd, config.totemDir, 'lessons.md');
-  appendLessons(sanitized, lessonsPath);
-  log.success(TAG, `Appended ${sanitized.length} lesson(s) to ${config.totemDir}/lessons.md`); // totem-ignore: count only
+  const lessonsDir = path.join(cwd, config.totemDir, 'lessons');
+  appendLessons(sanitized, lessonsDir);
+  log.success(TAG, `Appended ${sanitized.length} lesson(s) to ${config.totemDir}/lessons/`); // totem-ignore: count only
 
   // Incremental sync (non-fatal — lessons are already written to disk)
   try {

@@ -14,6 +14,8 @@ export interface ParsedLesson {
   raw: string;
   /** 0-based index in the parsed lessons array */
   index: number;
+  /** Source file path this lesson was read from (for prune operations) */
+  sourcePath?: string;
 }
 
 export interface DriftResult {

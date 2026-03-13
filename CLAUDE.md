@@ -54,7 +54,7 @@ The `anchor/spin/kick` metaphor from the Inception-inspired philosophy lives in 
 ### MCP Interface (Phase 1 — two tools only)
 
 - `search_knowledge(query, type_filter?, max_results?)` — read path
-- `add_lesson(lesson, context_tags)` — write path (appends to `.totem/lessons.md` in the consuming project)
+- `add_lesson(lesson, context_tags)` — write path (writes to `.totem/lessons/` in the consuming project)
 - `sync` and `stats` are CLI-only — no MCP exposure
 
 ---
@@ -129,9 +129,13 @@ Auto-scaffolds a `totem.config.ts` by scanning the target repo:
 
 ### `.totem/` Directory (in consuming project)
 
-- `.totem/lessons.md` — version-controlled lessons from the learning loop
+- `.totem/lessons/` — directory of per-lesson files (one lesson per `.md` file)
+  - `baseline.md` — Universal AI Developer Baseline lessons (installed by `totem init`)
+  - `lesson-<hash>.md` — individual lessons (deterministic filenames via SHA-256)
+- `.totem/lessons.md` — **legacy** single-file format (read during deprecation, new writes go to `lessons/`) <!-- totem-ignore -->
 - Committed to git, reviewed in PR diffs
 - Re-indexed by `totem sync`
+- Run `totem migrate-lessons` to convert legacy `lessons.md` to the directory format
 
 ### `.lancedb/` (in consuming project)
 
@@ -155,7 +159,7 @@ Auto-scaffolds a `totem.config.ts` by scanning the target repo:
 The highest-value differentiator. Closes the gap where AI makes the same mistake across multiple PRs.
 
 1. **Claude auto-extracts lessons** from failed PR reviews / Shield checks
-2. **`add_lesson`** appends the lesson to `.totem/lessons.md` (a committed file in the consuming project)
+2. **`add_lesson`** writes the lesson to `.totem/lessons/` (a committed directory in the consuming project)
 3. **Human reviews** the lesson in the PR diff — delete bad lessons before merge
 4. **`totem sync`** re-indexes after merge — bad lessons erased, good lessons persisted
 5. **Shield queries Totem** before next push: "What traps exist for this type of code?"

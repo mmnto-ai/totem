@@ -64,6 +64,14 @@ export {
   rewriteLessonsFile,
 } from './drift-detector.js';
 
+// Lesson I/O (directory-based)
+export {
+  lessonFileName,
+  readAllLessons,
+  writeLessonFile,
+  writeLessonFileAsync,
+} from './lesson-io.js';
+
 // Compiler
 export type {
   AstContext,
