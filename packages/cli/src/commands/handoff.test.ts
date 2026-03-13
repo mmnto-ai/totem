@@ -47,6 +47,25 @@ describe('readRecentLessons', () => {
     expect(result).toContain('From directory');
     expect(result).toContain('Directory lesson content');
   });
+
+  it('truncates to last 100 lines for many lessons', () => {
+    const lessonsDir = path.join(tmpDir, totemDir, 'lessons');
+    fs.mkdirSync(lessonsDir, { recursive: true });
+    // Generate enough lessons to exceed 100 lines (30 lessons × 5 lines each = 150 lines)
+    for (let i = 0; i < 30; i++) {
+      const content = `## Lesson — Lesson ${i}\n\n**Tags:** bulk\n\nContent for lesson ${i}.\n`;
+      fs.writeFileSync(
+        path.join(lessonsDir, `lesson-${String(i).padStart(3, '0')}.md`),
+        content,
+        'utf-8',
+      );
+    }
+    const result = readRecentLessons(tmpDir, totemDir);
+    // Should contain later lessons but not the earliest (truncated)
+    expect(result).toContain('Lesson 29');
+    expect(result).toContain('Lesson 20');
+    expect(result).not.toContain('Lesson 0\n');
+  });
 });
 
 // ─── buildLiteHandoff ───────────────────────────────
