@@ -4,8 +4,8 @@ import * as path from 'node:path';
 import { isCancel, multiselect } from '@clack/prompts';
 
 import type { DriftResult, TotemConfig } from '@mmnto/totem';
+// totem-ignore-next-line — existing top-level imports for this module
 import {
-  // totem-ignore
   detectDrift,
   parseLessonsFile,
   readAllLessons,

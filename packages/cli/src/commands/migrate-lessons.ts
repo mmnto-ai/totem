@@ -51,10 +51,8 @@ export async function migrateLessonsCommand(): Promise<void> {
   let baselineCount = 0;
   let lessonCount = 0;
 
-  const markerMatch = content.match(
-    // totem-ignore — only one baseline marker expected per file
-    new RegExp(`^${BASELINE_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'm'),
-  );
+  const baselineRe = new RegExp(`^${BASELINE_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'm');
+  const markerMatch = baselineRe.exec(content); // totem-ignore — only one baseline marker expected
   if (markerMatch && markerMatch.index != null) {
     // Extract baseline section: everything from the line-start marker to end of file
     const markerIdx = markerMatch.index;
