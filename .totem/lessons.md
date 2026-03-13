@@ -1538,3 +1538,9 @@ Deferred research topic: Local-First SLM (Small Language Model) Viability for Go
 **Tags:** review-guidance, gca, shield, cli-performance, dynamic-import
 
 GCA may suggest reverting dynamic imports back to static top-level imports for "simplicity", contradicting its own earlier DRY suggestion and conflicting with the shield rule that enforces lazy loading in CLI command files. When GCA's simplicity suggestion conflicts with a compiled shield rule, the shield rule wins — it exists to protect CLI startup performance. Dynamic imports inside command function bodies are the correct pattern for importing from @mmnto/totem in CLI command files.
+
+## Lesson — When Gemini proposes elevating post-1.0 infrastructure
+
+**Tags:** strategy, prioritization, gemini-guidance, nasa-grade, review-guidance
+
+When Gemini proposes elevating post-1.0 infrastructure features (symbol graph, cross-file resolution, monorepo optimization) to Tier-1 based on "enterprise-grade" or "NASA-grade" framing, push back. The governance-os thesis already evaluated these and deferred them for good reason: current chunking works for the 1.0 audience (solo devs, small teams), and the symbol graph is expensive engineering with no immediate user-facing payoff. "NASA-grade" means the things you ship are tested, deterministic, and trustworthy — not that you build everything to infinite scale before launch. Prioritize making existing features trustworthy (Rule Testing Harness, SARIF, AST compilation) over adding new enterprise capabilities.
