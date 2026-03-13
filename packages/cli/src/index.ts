@@ -130,8 +130,8 @@ program
     'Review mode: standard (default, with Totem knowledge) or structural (context-blind paranoia)',
   )
   .option('--format <format>', 'Output format: text (default), sarif, or json (deterministic only)')
-  .option('--learn', 'Extract lessons from failed verdicts into .totem/lessons.md') // totem-ignore
-  .option('--yes', 'Auto-accept extracted lessons (for CI; suspicious lessons are dropped)') // totem-ignore
+  .option('--learn', 'Extract lessons from failed verdicts into .totem/lessons/')
+  .option('--yes', 'Auto-accept extracted lessons (for CI; suspicious lessons are dropped)')
   .action(
     async (opts: {
       raw?: boolean;
@@ -153,13 +153,11 @@ program
         }
         const VALID_FORMATS = ['text', 'sarif', 'json'];
         if (opts.format && !VALID_FORMATS.includes(opts.format)) {
-          // totem-ignore-next-line — inside try/catch with handleError, same as mode validation above
           throw new Error(
             `[Totem Error] Invalid --format "${opts.format}". Use "text", "sarif", or "json".`,
           );
         }
         if (opts.format && opts.format !== 'text' && !opts.deterministic) {
-          // totem-ignore-next-line — inside try/catch with handleError, same as mode validation above
           throw new Error(
             '[Totem Error] --format sarif/json is only supported with --deterministic.',
           );
@@ -304,12 +302,12 @@ program
 
 program
   .command('extract <pr-numbers...>')
-  .description('Extract lessons from PR review(s) into .totem/lessons.md (interactive cherry-pick)')
+  .description('Extract lessons from PR review(s) into .totem/lessons/ (interactive cherry-pick)')
   .option('--raw', 'Output assembled prompt without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
   .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
-  .option('--dry-run', 'Show extracted lessons without writing to lessons.md')
+  .option('--dry-run', 'Show extracted lessons without writing to disk')
   .option('--yes', 'Skip confirmation prompt (use in scripts/CI)')
   .action(
     async (

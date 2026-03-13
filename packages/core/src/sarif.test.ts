@@ -16,12 +16,12 @@ const RULE_A: CompiledRule = {
 
 const RULE_B: CompiledRule = {
   lessonHash: 'cafebabe12345678',
-  lessonHeading: 'Use exact test assertions',
-  pattern: 'toBeGreaterThan',
-  message: 'Prefer exact count assertions over range checks.',
+  lessonHeading: 'Avoid deprecated substr method',
+  pattern: '\\.substr\\(',
+  message: 'Use .substring() or .slice() instead of deprecated .substr().',
   engine: 'regex',
   compiledAt: '2026-03-14T00:00:00Z',
-  fileGlobs: ['*.test.ts'],
+  fileGlobs: ['*.ts'],
 };
 
 const VIOLATION_A: Violation = {
@@ -33,8 +33,8 @@ const VIOLATION_A: Violation = {
 
 const VIOLATION_B: Violation = {
   rule: RULE_B,
-  file: 'src/app.test.ts',
-  line: '  expect(count).toBeGreaterThan(5);',
+  file: 'src/utils.ts',
+  line: '  const slug = title.substr(0, 10);',
   lineNumber: 17,
 };
 
@@ -100,7 +100,7 @@ describe('buildSarifLog', () => {
   it('includes fileGlobs in rule properties when present', () => {
     const sarif = buildSarifLog([], [RULE_B], { version: '0.31.0' });
     const ruleProps = sarif.runs[0]!.tool.driver.rules[0]!.properties;
-    expect(ruleProps).toHaveProperty('fileGlobs', ['*.test.ts']);
+    expect(ruleProps).toHaveProperty('fileGlobs', ['*.ts']);
   });
 
   it('deduplicates rules by lessonHash', () => {

@@ -1,14 +1,11 @@
 import * as path from 'node:path';
 
 import type { ContentType, SearchResult } from '@mmnto/totem';
-// totem-ignore-next-line — existing top-level imports for this module
 import {
   applyRulesToAdditions,
-  buildSarifLog,
   createEmbedder,
   enrichWithAstContext,
   extractAddedLines,
-  getHeadSha,
   LanceStore,
   loadCompiledRules,
   runSync,
@@ -346,6 +343,7 @@ async function runDeterministicShield(
   let output: string;
 
   if (format === 'sarif') {
+    const { buildSarifLog, getHeadSha } = await import('@mmnto/totem');
     const { createRequire } = await import('node:module');
     const req = createRequire(import.meta.url);
     const version = (req('../../package.json') as { version: string }).version;
