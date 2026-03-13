@@ -137,7 +137,7 @@ export function buildSarifLog(
           {
             executionSuccessful: violations.length === 0,
             properties: {
-              rules_enforced: rules.length,
+              rules_enforced: uniqueRules.length,
               violations_found: violations.length,
             },
           },

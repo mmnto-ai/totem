@@ -530,6 +530,11 @@ export async function learnFromVerdict(
 const VALID_FORMATS: ShieldFormat[] = ['text', 'sarif', 'json'];
 
 export async function shieldCommand(options: ShieldOptions): Promise<void> {
+  if (options.mode && options.mode !== 'standard' && options.mode !== 'structural') {
+    throw new Error(
+      `[Totem Error] Invalid --mode "${options.mode}". Use "standard" or "structural".`,
+    );
+  }
   if (options.format && !VALID_FORMATS.includes(options.format)) {
     throw new Error(
       `[Totem Error] Invalid --format "${options.format}". Use "text", "sarif", or "json".`,
