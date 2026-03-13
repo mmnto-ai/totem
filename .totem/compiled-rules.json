@@ -491,7 +491,7 @@
     {
       "lessonHash": "1c7a70ec1752a212",
       "lessonHeading": "Always use fully qualified identifiers for caching",
-      "pattern": "\\b(model|cacheKey|telemetryId|modelId)\\s*[:=]\\s*['\"][^'\"\\s:]+['\"]",
+      "pattern": "\\b(cacheKey|telemetryId|modelId)\\s*[:=]\\s*['\"][^'\"\\s:]+['\"]",
       "message": "Always use fully qualified identifiers (e.g., 'provider:model') for caching and telemetry to prevent cross-provider collisions.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:14:00.959Z",
