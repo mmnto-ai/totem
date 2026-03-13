@@ -1,5 +1,18 @@
 # @mmnto/mcp
 
+## 0.31.0
+
+### Minor Changes
+
+- feat: hybrid search (FTS + vector with RRF reranking), Gemini embedding provider, retrieval eval script
+- feat: lessons directory migration — dual-read/single-write (per-file lessons replace monolithic lessons file)
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @mmnto/totem@0.31.0
+
 ## 0.30.0
 
 ### Patch Changes
