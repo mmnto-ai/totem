@@ -26,8 +26,18 @@ function isRetryableGeminiError(err: unknown): boolean {
   return false;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type GeminiAI = any;
+/** Minimal interface for the subset of @google/genai SDK we use. */
+interface GeminiAI {
+  models: {
+    embedContent(req: {
+      model: string;
+      contents: { parts: { text: string }[] }[];
+      config: { taskType: string; outputDimensionality: number };
+    }): Promise<{
+      embeddings?: { values?: number[] }[];
+    }>;
+  };
+}
 
 /**
  * Dynamically import the @google/genai SDK.

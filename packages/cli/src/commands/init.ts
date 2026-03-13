@@ -595,21 +595,17 @@ export function detectEmbeddingTier(cwd: string): EmbeddingTier {
   // Check env (including already-loaded .env)
   if (process.env['OPENAI_API_KEY'] && /\S/.test(process.env['OPENAI_API_KEY'])) return 'openai';
 
-  // Check .env file directly (loadEnv may not have run yet)
+  // Read .env file once (loadEnv may not have run yet)
   const envPath = path.join(cwd, '.env');
-  if (fs.existsSync(envPath)) {
-    const content = fs.readFileSync(envPath, 'utf-8');
-    if (/^\s*OPENAI_API_KEY\s*=\s*\S+/m.test(content)) return 'openai';
-  }
+  const envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
+
+  if (/^\s*OPENAI_API_KEY\s*=\s*\S+/m.test(envContent)) return 'openai';
 
   // Gemini: single-key DX — GEMINI_API_KEY covers both orchestrator and embeddings
   if (process.env['GEMINI_API_KEY'] && /\S/.test(process.env['GEMINI_API_KEY'])) return 'gemini';
   if (process.env['GOOGLE_API_KEY'] && /\S/.test(process.env['GOOGLE_API_KEY'])) return 'gemini';
-  if (fs.existsSync(envPath)) {
-    const content = fs.readFileSync(envPath, 'utf-8');
-    if (/^\s*GEMINI_API_KEY\s*=\s*\S+/m.test(content)) return 'gemini';
-    if (/^\s*GOOGLE_API_KEY\s*=\s*\S+/m.test(content)) return 'gemini';
-  }
+  if (/^\s*GEMINI_API_KEY\s*=\s*\S+/m.test(envContent)) return 'gemini';
+  if (/^\s*GOOGLE_API_KEY\s*=\s*\S+/m.test(envContent)) return 'gemini';
 
   return 'none';
 }

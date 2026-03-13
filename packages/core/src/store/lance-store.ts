@@ -296,29 +296,16 @@ function rowToSearchResult(row: Record<string, unknown>): SearchResult {
 function rrfMerge(listA: RankedRow[], listB: RankedRow[], limit: number): SearchResult[] {
   const scores = new Map<string, { score: number; row: Record<string, unknown> }>();
 
-  for (const { row, rank, id } of listA) {
-    const entry = scores.get(id) ?? { score: 0, row };
-    entry.score += 1 / (RRF_K + rank);
-    entry.row = row;
-    scores.set(id, entry);
+  for (const list of [listA, listB]) {
+    for (const { row, rank, id } of list) {
+      const entry = scores.get(id) ?? { score: 0, row };
+      entry.score += 1 / (RRF_K + rank);
+      scores.set(id, entry);
+    }
   }
 
-  for (const { row, rank, id } of listB) {
-    const entry = scores.get(id) ?? { score: 0, row };
-    entry.score += 1 / (RRF_K + rank);
-    if (!scores.has(id)) entry.row = row;
-    scores.set(id, entry);
-  }
-
-  const sorted = [...scores.values()].sort((a, b) => b.score - a.score).slice(0, limit);
-
-  return sorted.map(({ score, row }) => ({
-    content: row['content'] as string,
-    contextPrefix: row['contextPrefix'] as string,
-    filePath: row['filePath'] as string,
-    type: row['type'] as ContentType,
-    label: row['label'] as string,
-    score,
-    metadata: JSON.parse((row['metadata'] as string) || '{}') as Record<string, string>,
-  }));
+  return [...scores.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(({ score, row }) => ({ ...rowToSearchResult(row), score }));
 }
