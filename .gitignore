@@ -4,6 +4,7 @@ node_modules/
 # Build artifacts
 dist/
 .lancedb/
+.lancedb-eval-*/
 .turbo/
 
 # Environment

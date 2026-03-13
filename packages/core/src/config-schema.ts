@@ -33,9 +33,16 @@ export const OllamaProviderSchema = z.object({
   dimensions: z.number().int().positive().optional(),
 });
 
+export const GeminiProviderSchema = z.object({
+  provider: z.literal('gemini'),
+  model: z.string().default('text-embedding-004'),
+  dimensions: z.number().int().positive().optional(),
+});
+
 export const EmbeddingProviderSchema = z.discriminatedUnion('provider', [
   OpenAIProviderSchema,
   OllamaProviderSchema,
+  GeminiProviderSchema,
 ]);
 
 export const DEFAULT_IGNORE_PATTERNS = [
@@ -191,7 +198,7 @@ export function requireEmbedding(config: TotemConfig): EmbeddingProvider {
     throw new Error(
       `[Totem Error] No embedding provider configured.\n` +
         `This command requires embeddings (Lite tier does not support it).\n` +
-        `Set OPENAI_API_KEY in your .env and re-run \`totem init\`, or add an 'embedding' block to totem.config.ts.`,
+        `Set OPENAI_API_KEY or GEMINI_API_KEY in your .env and re-run \`totem init\`, or add an 'embedding' block to totem.config.ts.`,
     );
   }
   return config.embedding;

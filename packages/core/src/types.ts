@@ -95,4 +95,6 @@ export interface SearchOptions {
   query: string;
   typeFilter?: ContentType;
   maxResults?: number;
+  /** When true, combines vector + FTS results using RRF reranking. Requires an FTS index. */
+  hybrid?: boolean;
 }

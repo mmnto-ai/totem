@@ -535,7 +535,7 @@ function formatTargets(targets: IngestTarget[]): string {
   return lines.join('\n');
 }
 
-type EmbeddingTier = 'openai' | 'ollama' | 'none';
+type EmbeddingTier = 'openai' | 'ollama' | 'gemini' | 'none';
 
 export async function generateConfig(
   targets: IngestTarget[],
@@ -549,6 +549,9 @@ export async function generateConfig(
       break;
     case 'ollama':
       embeddingBlock = `  embedding: { provider: 'ollama', model: 'nomic-embed-text', baseUrl: 'http://localhost:11434' },`;
+      break;
+    case 'gemini':
+      embeddingBlock = `  embedding: { provider: 'gemini', model: 'text-embedding-004' },`;
       break;
     case 'none':
       embeddingBlock = `  // embedding: { provider: 'openai', model: 'text-embedding-3-small' },\n  // Lite tier — set OPENAI_API_KEY and re-run \`totem init\` to enable sync/search.`;
@@ -592,11 +595,19 @@ export function detectEmbeddingTier(cwd: string): EmbeddingTier {
   // Check env (including already-loaded .env)
   if (process.env['OPENAI_API_KEY'] && /\S/.test(process.env['OPENAI_API_KEY'])) return 'openai';
 
-  // Check .env file directly (loadEnv may not have run yet)
+  // Read .env file once (loadEnv may not have run yet)
   const envPath = path.join(cwd, '.env');
-  if (fs.existsSync(envPath)) {
-    const content = fs.readFileSync(envPath, 'utf-8');
-    if (/^\s*OPENAI_API_KEY\s*=\s*\S+/m.test(content)) return 'openai';
+  const envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
+
+  if (/^\s*OPENAI_API_KEY\s*=\s*\S+/m.test(envContent)) return 'openai';
+
+  // Gemini: single-key DX — GEMINI_API_KEY covers both orchestrator and embeddings
+  if (
+    (process.env['GEMINI_API_KEY'] && /\S/.test(process.env['GEMINI_API_KEY'])) ||
+    (process.env['GOOGLE_API_KEY'] && /\S/.test(process.env['GOOGLE_API_KEY'])) ||
+    /^\s*(?:GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*\S+/m.test(envContent)
+  ) {
+    return 'gemini';
   }
 
   return 'none';
@@ -771,6 +782,11 @@ export async function initCommand(): Promise<void> {
         log.info(
           'Totem',
           `Detected ${bold('OPENAI_API_KEY')} in environment. Using OpenAI embeddings.`,
+        );
+      } else if (embeddingTier === 'gemini') {
+        log.info(
+          'Totem',
+          `Detected ${bold('GEMINI_API_KEY')} in environment. Using Gemini embeddings (single-key DX).`,
         );
       } else {
         // No key detected — prompt the user

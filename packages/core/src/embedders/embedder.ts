@@ -1,4 +1,5 @@
 import type { EmbeddingProvider } from '../config-schema.js';
+import { GeminiEmbedder } from './gemini-embedder.js';
 import { OllamaEmbedder } from './ollama-embedder.js';
 import { OpenAIEmbedder } from './openai-embedder.js';
 
@@ -22,5 +23,7 @@ export function createEmbedder(config: EmbeddingProvider): Embedder {
       return new OpenAIEmbedder(config.model, config.dimensions);
     case 'ollama':
       return new OllamaEmbedder(config.model, config.baseUrl, config.dimensions);
+    case 'gemini':
+      return new GeminiEmbedder(config.model, config.dimensions);
   }
 }
