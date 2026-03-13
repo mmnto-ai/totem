@@ -1,12 +1,17 @@
 ### Active Work Summary
 
-Current momentum is heavily focused on evolving Totem from a memory database into a full "Shift-Left orchestrator" utilizing an embedded LanceDB vector index. The `@mmnto/cli@0.29.0` release significantly advances this goal by injecting vector DB lessons across all orchestrator commands (including `totem spec` and the newly introduced `totem audit` command). Additional improvements include establishing versioned reflex upgrade paths for `totem init` and adding support for JetBrains Junie integration. Recent post-release efforts have focused on deep review follow-ups, specifically auditing local AI memory to promote contributor knowledge to version-controlled surfaces and resolving shield integration fixes (#402, #408).
+Current momentum is focused on implementing the Data Layer Foundation defined in ADR-024 (`.strategy/adr/adr-024-vectordb-multi-type-schema.md`). The ADR was accepted on 2026-03-13 after a joint Claude/Gemini research session that included LanceDB FTS capability research, a full blast radius audit of the `lessons.md` migration, and embedding provider evaluation planning. The work is split into two PRs to manage risk: PR 1 ships additive features (FTS hybrid search, Gemini embedding provider, retrieval eval), while PR 2 isolates the high-touch lessons directory migration.
 
 ### Prioritized Roadmap
 
+**In Progress (Tier-1 — ADR-024 Data Layer Foundation)**
+
+- #378 — Hybrid search: FTS + vector in LanceDB — Add BM25 full-text search alongside vector search using RRF reranking. Includes filter-first tiered retrieval (lessons prioritized over code). **PR 1.**
+- #380 — Gemini Embedding 2 provider with task-type awareness — Third embedding provider enabling single-key DX (`GEMINI_API_KEY` for both orchestrator + embeddings). Includes retrieval quality eval script. **PR 1.**
+- #428 — Lessons directory migration (dual-read/single-write) — Migrate from `.totem/lessons.md` to `.totem/lessons/*.md` directory. 12+ source files, 11+ test files affected. **PR 2, blocked by PR 1.**
+
 **Do Next (Tier-1 Core & Shift-Left Foundation)**
 
-- #364 — research: vectordb structure for multi-type knowledge retrieval at scale — Critical data-model prerequisite for the LanceDB embedding architecture.
 - #314 — Epic: The Codebase Immune System — Adaptive Agent Governance — Establishes the core product requirements for the Shift-Left orchestrator transition.
 - #176 — Epic: Enforcement Sidecar MCP Tools — Directly equips AI agents with the tools to self-correct during active work.
 - #124 — Epic: Frictionless 10-Minute Init (totem init) — Required to ensure the new orchestration features are rapidly adoptable by new developers.
@@ -15,7 +20,7 @@ Current momentum is heavily focused on evolving Totem from a memory database int
 **Up Next (Tier-1 UX & Telemetry)**
 
 - #283 — Epic: v1.0 Documentation Site & README Minimization — Essential for the v1.0 launch and reducing cognitive load.
-- #92 — Feature: Telemetry Logging and Local Dashboard (`totem stats`) — Needed to track local-first adoption and agent performance metrics.
+- #92 — Feature: Telemetry Logging and Local Dashboard (`totem stats`) — Needed to track local-first adoption and agent performance metrics. Should be instrumented after the data layer is stable, not before.
 
 **Backlog (Tier-2 / Tier-3 Integrations)**
 
@@ -26,11 +31,17 @@ Current momentum is heavily focused on evolving Totem from a memory database int
 
 ### Next Issue (User Story & Scope)
 
-**#364 — research: vectordb structure for multi-type knowledge retrieval at scale**
+**#378 + #380 — Data Layer Foundation (PR 1)**
 
-- **User Story:** As an AI orchestrator, I need a strictly defined schema within the local LanceDB index so that I can accurately filter and retrieve specific knowledge types (e.g., architectural invariants vs. general context) without context collision.
-- **Scope Boundaries:** Deliver a written Architecture Decision Record (ADR) defining the LanceDB table structures, metadata schema, chunking strategy, and embedding dimensions required to support multi-type knowledge. **DO NOT** write database connection code, do not implement the LanceDB setup, and do not migrate any existing test data.
-- **Why it should be next:** The roadmap mandates an embedded LanceDB vector index to power the Shift-Left orchestrator. Foundational Epics (#314, #176) and high-value workflow tools (#392) cannot be built until the underlying multi-type vector database structure is locked in.
+- **User Story:** As a Totem user, I need hybrid search (FTS + vector) so that exact keyword matches aren't missed by semantic-only search, and I need a Gemini embedding provider so I can run the full Totem stack with a single API key.
+- **Scope Boundaries:** Implement FTS index creation in `LanceStore`, add hybrid search with RRF reranking, implement `GeminiEmbedder` with optional `@google/genai` peer dep in `packages/core`, build retrieval eval script comparing OpenAI vs Gemini on Totem's own corpus (10-15 queries). **No breaking changes for consumers.**
+- **Key decisions (ADR-024):** Filter-first tiered retrieval (query lessons first, fall back to broader search). RRF as default reranker. FTS index dropped and recreated after incremental sync (accepted temporary perf hit). Dimension flexibility via config-driven rebuild.
+- **Closes:** #378, #380
+
+### Completed (This Cycle)
+
+- #364 — research: vectordb structure for multi-type knowledge retrieval at scale — **Closed.** Delivered as ADR-024 (accepted 2026-03-13).
+- #379 — Add `lesson` as a ContentType for precise filtering — **Closed.** Already implemented in codebase.
 
 ### Blocked / Needs Input
 
