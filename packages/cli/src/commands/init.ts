@@ -5,7 +5,7 @@ import * as readline from 'node:readline/promises';
 
 import { z } from 'zod';
 
-import { DEFAULT_IGNORE_PATTERNS, type IngestTarget } from '@mmnto/totem';
+import type { IngestTarget } from '@mmnto/totem';
 
 import { BASELINE_MARKER, UNIVERSAL_LESSONS_MARKDOWN } from '../assets/universal-lessons.js';
 import { bold, brand, dim, log, printBanner, success } from '../ui.js';
@@ -537,7 +537,11 @@ function formatTargets(targets: IngestTarget[]): string {
 
 type EmbeddingTier = 'openai' | 'ollama' | 'none';
 
-export function generateConfig(targets: IngestTarget[], embeddingTier: EmbeddingTier): string {
+export async function generateConfig(
+  targets: IngestTarget[],
+  embeddingTier: EmbeddingTier,
+): Promise<string> {
+  const { DEFAULT_IGNORE_PATTERNS } = await import('@mmnto/totem');
   let embeddingBlock: string;
   switch (embeddingTier) {
     case 'openai':
@@ -812,7 +816,7 @@ export async function initCommand(): Promise<void> {
         );
       }
 
-      const configContent = generateConfig(targets, embeddingTier);
+      const configContent = await generateConfig(targets, embeddingTier);
       fs.writeFileSync(configPath, configContent, 'utf-8');
       const tierLabel =
         embeddingTier === 'none'
