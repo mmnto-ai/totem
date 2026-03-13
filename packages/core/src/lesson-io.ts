@@ -73,7 +73,6 @@ export function readAllLessons(totemDir: string): ParsedLesson[] {
       const lessons = parseLessonsFile(content);
       for (const lesson of lessons) {
         lesson.sourcePath = filePath;
-        lesson.index = allLessons.length;
       }
       allLessons.push(...lessons);
     }
