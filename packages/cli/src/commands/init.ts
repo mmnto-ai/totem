@@ -5,7 +5,7 @@ import * as readline from 'node:readline/promises';
 
 import { z } from 'zod';
 
-import type { IngestTarget } from '@mmnto/totem';
+import { DEFAULT_IGNORE_PATTERNS, type IngestTarget } from '@mmnto/totem';
 
 import { BASELINE_MARKER, UNIVERSAL_LESSONS_MARKDOWN } from '../assets/universal-lessons.js';
 import { bold, brand, dim, log, printBanner, success } from '../ui.js';
@@ -561,12 +561,7 @@ ${formatTargets(targets)}
 ${embeddingBlock}
 
   ignorePatterns: [
-    '**/node_modules/**',
-    '**/.lancedb/**',
-    '**/dist/**',
-    '**/__tests__/**',
-    '**/*.test.ts',
-    '**/*.spec.ts',
+${DEFAULT_IGNORE_PATTERNS.map(p => `    '${p}',`).join('\n')}
   ],
 
   orchestrator: {
