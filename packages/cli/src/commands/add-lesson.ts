@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
 import * as readline from 'node:readline/promises';
 
-import { generateLessonHeading } from '@mmnto/totem';
+import { generateLessonHeading, writeLessonFile } from '@mmnto/totem';
 
 import { log } from '../ui.js';
 import { IS_WIN, loadConfig, loadEnv, resolveConfigPath, sanitize } from '../utils.js';
@@ -30,7 +30,7 @@ export async function addLessonCommand(lessonArg?: string): Promise<void> {
     fs.mkdirSync(totemDir, { recursive: true });
   }
 
-  const lessonsPath = path.join(totemDir, 'lessons.md');
+  const lessonsDir = path.join(totemDir, 'lessons');
 
   let lessonText = lessonArg;
   const tags: string[] = [];
@@ -74,10 +74,11 @@ export async function addLessonCommand(lessonArg?: string): Promise<void> {
     tags.length > 0 ? tags.map((t) => sanitize(t).replace(/\n/g, ' ')).join(', ') : 'manual';
   const heading = generateLessonHeading(safeLesson);
 
-  const entry = `\n## Lesson — ${heading}\n\n**Tags:** ${safeTagString}\n\n${safeLesson.trim()}\n`;
+  const entry = `## Lesson — ${heading}\n\n**Tags:** ${safeTagString}\n\n${safeLesson.trim()}\n`;
 
-  fs.appendFileSync(lessonsPath, entry, 'utf-8');
-  log.success('Totem', `Lesson saved to ${config.totemDir}/lessons.md`);
+  const writtenPath = writeLessonFile(lessonsDir, entry);
+  const fileName = path.basename(writtenPath);
+  log.success('Totem', `Lesson saved to ${config.totemDir}/lessons/${fileName}`);
 
   const logPath = path.join(totemDir, 'mcp-sync.log');
   log.dim('Totem', 'Triggering background re-index...');

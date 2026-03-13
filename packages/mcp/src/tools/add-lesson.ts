@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-import { generateLessonHeading, sanitize } from '@mmnto/totem';
+import { generateLessonHeading, sanitize, writeLessonFileAsync } from '@mmnto/totem';
 
 import { getContext, reconnectStore } from '../context.js';
 import { formatXmlResponse } from '../xml-format.js';
@@ -105,7 +105,7 @@ export function registerAddLesson(server: McpServer): void {
     'add_lesson',
     {
       description:
-        'Persist a lesson learned to .totem/lessons.md. An incremental re-index runs automatically and the result is returned.',
+        'Persist a lesson learned to .totem/lessons/. An incremental re-index runs automatically and the result is returned.',
       inputSchema: {
         lesson: z.string().describe('The lesson text to persist'),
         context_tags: z
@@ -123,7 +123,7 @@ export function registerAddLesson(server: McpServer): void {
         const totemDir = path.join(projectRoot, config.totemDir);
         await fs.promises.mkdir(totemDir, { recursive: true });
 
-        const lessonsPath = path.join(totemDir, 'lessons.md');
+        const lessonsDir = path.join(totemDir, 'lessons');
         const safeLesson = sanitize(lesson);
         const safeTags =
           context_tags.length > 0
@@ -132,9 +132,10 @@ export function registerAddLesson(server: McpServer): void {
         const heading = generateLessonHeading(safeLesson);
 
         const entry =
-          `\n## Lesson — ${heading}\n\n` + `**Tags:** ${safeTags}\n\n` + `${safeLesson.trim()}\n`;
+          `## Lesson — ${heading}\n\n` + `**Tags:** ${safeTags}\n\n` + `${safeLesson.trim()}\n`;
 
-        await fs.promises.appendFile(lessonsPath, entry, 'utf-8');
+        const writtenPath = await writeLessonFileAsync(lessonsDir, entry);
+        const fileName = path.basename(writtenPath);
 
         // Await sync so the LLM gets definitive success/failure confirmation.
         // Debounce: skip if a sync is already in flight.
@@ -168,7 +169,7 @@ export function registerAddLesson(server: McpServer): void {
               type: 'text' as const,
               text: formatXmlResponse(
                 'lesson_added',
-                `Lesson saved to ${config.totemDir}/lessons.md. ${syncMessage}`,
+                `Lesson saved to ${config.totemDir}/lessons/${fileName}. ${syncMessage}`,
               ),
             },
           ],

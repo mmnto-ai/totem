@@ -13,6 +13,7 @@ import {
   runSync,
   truncateHeading,
   UNICODE_ESCAPE_RE,
+  writeLessonFile,
   XML_TAG_LEAKAGE_RE,
 } from '@mmnto/totem';
 
@@ -370,21 +371,13 @@ export function flagSuspiciousLessons(lessons: ExtractedLesson[]): ExtractedLess
 
 // ─── Lesson writer ──────────────────────────────────────
 
-export function appendLessons(lessons: ExtractedLesson[], lessonsPath: string): void {
-  const dir = path.dirname(lessonsPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+export function appendLessons(lessons: ExtractedLesson[], lessonsDir: string): void {
+  for (const l of lessons) {
+    const heading = l.heading || generateLessonHeading(l.text);
+    const tags = l.tags.join(', ');
+    const entry = `## Lesson — ${heading}\n\n**Tags:** ${tags}\n\n${l.text}\n`;
+    writeLessonFile(lessonsDir, entry);
   }
-
-  const entries = lessons
-    .map((l) => {
-      const heading = l.heading || generateLessonHeading(l.text);
-      const tags = l.tags.join(', ');
-      return `\n## Lesson — ${heading}\n\n**Tags:** ${tags}\n\n${l.text}\n`;
-    })
-    .join('');
-
-  fs.appendFileSync(lessonsPath, entries, 'utf-8');
 }
 
 // ─── Lesson selection ───────────────────────────────────
@@ -732,13 +725,10 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
     text: sanitize(l.text),
   }));
 
-  // Append lessons to .totem/lessons.md
-  const lessonsPath = path.join(cwd, config.totemDir, 'lessons.md');
-  appendLessons(sanitizedLessons, lessonsPath);
-  log.success(
-    TAG,
-    `Appended ${sanitizedLessons.length} lesson(s) to ${config.totemDir}/lessons.md`,
-  );
+  // Append lessons to .totem/lessons/
+  const lessonsDir = path.join(cwd, config.totemDir, 'lessons');
+  appendLessons(sanitizedLessons, lessonsDir);
+  log.success(TAG, `Appended ${sanitizedLessons.length} lesson(s) to ${config.totemDir}/lessons/`);
 
   // Run incremental sync so lessons are immediately searchable
   log.info(TAG, 'Running incremental sync...');

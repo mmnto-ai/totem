@@ -7,7 +7,7 @@ import {
   hashLesson,
   loadCompiledRules,
   parseCompilerResponse,
-  parseLessonsFile,
+  readAllLessons,
   saveCompiledRules,
   validateRegex,
 } from '@mmnto/totem';
@@ -105,25 +105,17 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
   const config = await loadConfig(configPath);
 
   const totemDir = path.join(cwd, config.totemDir);
-  const lessonsPath = path.join(totemDir, 'lessons.md');
   const rulesPath = path.join(totemDir, COMPILED_RULES_FILE);
 
-  if (!fs.existsSync(lessonsPath)) {
-    const err = new Error('No lessons.md found. Nothing to compile.');
-    err.name = 'NoLessonsError';
-    throw err;
-  }
-
-  const content = fs.readFileSync(lessonsPath, 'utf-8');
-  const lessons = parseLessonsFile(content);
+  const lessons = readAllLessons(totemDir);
 
   if (lessons.length === 0) {
-    const err = new Error('No lessons found in lessons.md.');
+    const err = new Error('No lessons found. Nothing to compile.');
     err.name = 'NoLessonsError';
     throw err;
   }
 
-  log.info(TAG, `Found ${lessons.length} lessons in lessons.md`);
+  log.info(TAG, `Found ${lessons.length} lessons`);
 
   // ─── Phase 1: Regex compilation (requires orchestrator) ──
   if (config.orchestrator) {

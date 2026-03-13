@@ -1,5 +1,6 @@
-import * as fs from 'node:fs';
 import * as path from 'node:path';
+
+import { readAllLessons } from '@mmnto/totem';
 
 import { getGitBranch, getGitDiff, getGitDiffStat, getGitLogSince, getGitStatus } from '../git.js';
 import { log } from '../ui.js';
@@ -60,13 +61,15 @@ Respond with ONLY the sections below. No preamble, no closing remarks.
 // ─── Lessons file reader ────────────────────────────────
 
 export function readRecentLessons(cwd: string, totemDir: string): string {
-  const lessonsPath = path.join(cwd, totemDir, 'lessons.md');
-  if (!fs.existsSync(lessonsPath)) return '';
+  const fullTotemDir = path.join(cwd, totemDir);
+  const lessons = readAllLessons(fullTotemDir);
+  if (lessons.length === 0) return '';
 
-  const content = fs.readFileSync(lessonsPath, 'utf-8');
-  const lines = content.split('\n');
+  // Combine all raw lesson text
+  const combined = lessons.map((l) => l.raw).join('\n');
+  const lines = combined.split('\n');
 
-  if (lines.length <= LESSONS_TAIL_LINES) return content.trim();
+  if (lines.length <= LESSONS_TAIL_LINES) return combined.trim();
 
   return lines.slice(-LESSONS_TAIL_LINES).join('\n').trim();
 }

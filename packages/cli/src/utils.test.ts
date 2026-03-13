@@ -701,11 +701,11 @@ describe('partitionLessons', () => {
     metadata: {},
   });
 
-  it('separates lessons.md results from other specs', () => {
+  it('separates lesson results from other specs', () => {
     const allSpecs = [
-      makeResult('.totem/lessons.md', 'Lesson A'),
+      { ...makeResult('.totem/lessons/lesson-abc.md', 'Lesson A'), type: 'lesson' as const },
       makeResult('docs/spec.md', 'Spec B'),
-      makeResult('.totem/lessons.md', 'Lesson C'),
+      { ...makeResult('.totem/lessons/lesson-def.md', 'Lesson C'), type: 'lesson' as const },
       makeResult('docs/architecture.md', 'Arch D'),
     ];
     const { lessons, specs } = partitionLessons(allSpecs, 10, 10);
@@ -717,9 +717,9 @@ describe('partitionLessons', () => {
 
   it('respects maxLessons cap', () => {
     const allSpecs = [
-      makeResult('.totem/lessons.md', 'L1'),
-      makeResult('.totem/lessons.md', 'L2'),
-      makeResult('.totem/lessons.md', 'L3'),
+      { ...makeResult('.totem/lessons/a.md', 'L1'), type: 'lesson' as const },
+      { ...makeResult('.totem/lessons/b.md', 'L2'), type: 'lesson' as const },
+      { ...makeResult('.totem/lessons/c.md', 'L3'), type: 'lesson' as const },
     ];
     const { lessons } = partitionLessons(allSpecs, 2, 5);
     expect(lessons).toHaveLength(2);

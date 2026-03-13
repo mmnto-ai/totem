@@ -11,6 +11,7 @@ const config: TotemConfig = {
     { glob: 'specs/**/*.md', type: 'spec', strategy: 'markdown-heading' },
     { glob: '.strategy/**/*.md', type: 'spec', strategy: 'markdown-heading' },
     { glob: '.journal/**/*.md', type: 'spec', strategy: 'markdown-heading' },
+    { glob: '.totem/lessons/*.md', type: 'lesson', strategy: 'markdown-heading' },
     { glob: '.totem/lessons.md', type: 'lesson', strategy: 'markdown-heading' },
   ],
 

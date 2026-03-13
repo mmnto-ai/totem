@@ -593,8 +593,7 @@ describe('installBaselineLessons', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-baseline-'));
-    lessonsPath = path.join(tmpDir, 'lessons.md');
-    fs.writeFileSync(lessonsPath, '# Totem Lessons\n\n---\n', 'utf-8');
+    lessonsPath = path.join(tmpDir, 'baseline.md');
     // Force non-TTY so prompt is skipped (default to install)
     Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
   });
@@ -613,7 +612,7 @@ describe('installBaselineLessons', () => {
   });
 
   it('returns exists when baseline is already present', async () => {
-    fs.appendFileSync(lessonsPath, UNIVERSAL_LESSONS_MARKDOWN, 'utf-8');
+    fs.writeFileSync(lessonsPath, UNIVERSAL_LESSONS_MARKDOWN, 'utf-8');
     const result = await installBaselineLessons(lessonsPath, makeMockRl(''));
     expect(result).toBe('exists');
   });
@@ -628,12 +627,12 @@ describe('installBaselineLessons', () => {
     expect(matches).toHaveLength(1);
   });
 
-  it('preserves existing user lessons when installing baseline', async () => {
-    const userLesson = '\n## Lesson — custom\n\n**Tags:** custom\n\nMy custom lesson.\n';
-    fs.appendFileSync(lessonsPath, userLesson, 'utf-8');
-    await installBaselineLessons(lessonsPath, makeMockRl(''));
+  it('writes baseline file even when it does not exist yet', async () => {
+    // Ensure the baseline file does not exist
+    if (fs.existsSync(lessonsPath)) fs.unlinkSync(lessonsPath);
+    const result = await installBaselineLessons(lessonsPath, makeMockRl(''));
+    expect(result).toBe('installed');
     const content = fs.readFileSync(lessonsPath, 'utf-8');
-    expect(content).toContain('My custom lesson.');
     expect(content).toContain(BASELINE_MARKER);
   });
 
@@ -641,8 +640,7 @@ describe('installBaselineLessons', () => {
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
     const result = await installBaselineLessons(lessonsPath, makeMockRl('n'));
     expect(result).toBe('skipped');
-    const content = fs.readFileSync(lessonsPath, 'utf-8');
-    expect(content).not.toContain(BASELINE_MARKER);
+    expect(fs.existsSync(lessonsPath)).toBe(false);
   });
 
   it('installs when user accepts in TTY mode', async () => {

@@ -4,7 +4,13 @@ import * as path from 'node:path';
 import { isCancel, multiselect } from '@clack/prompts';
 
 import type { DriftResult, TotemConfig } from '@mmnto/totem';
-import { detectDrift, parseLessonsFile, rewriteLessonsFile, runSync } from '@mmnto/totem';
+import {
+  detectDrift,
+  parseLessonsFile,
+  readAllLessons,
+  rewriteLessonsFile,
+  runSync,
+} from '@mmnto/totem';
 
 import { createSpinner, log } from '../ui.js';
 import { loadConfig, loadEnv, requireEmbedding, resolveConfigPath, sanitize } from '../utils.js';
@@ -55,15 +61,8 @@ export async function syncCommand(options: { full?: boolean; prune?: boolean }):
 // ─── Prune flow ──────────────────────────────────────
 
 async function runPrune(cwd: string, config: TotemConfig): Promise<void> {
-  const lessonsPath = path.join(cwd, config.totemDir, 'lessons.md');
-
-  if (!fs.existsSync(lessonsPath)) {
-    log.dim(TAG, 'No lessons file found — nothing to prune.');
-    return;
-  }
-
-  const content = fs.readFileSync(lessonsPath, 'utf-8');
-  const lessons = parseLessonsFile(content);
+  const totemDir = path.join(cwd, config.totemDir);
+  const lessons = readAllLessons(totemDir);
 
   if (lessons.length === 0) {
     log.dim(TAG, 'No lessons found — nothing to prune.');
@@ -97,14 +96,40 @@ async function runPrune(cwd: string, config: TotemConfig): Promise<void> {
     return;
   }
 
-  // Atomic write: write to temp file, then rename
-  const indicesToRemove = new Set(selected.map((d) => d.lesson.index));
-  const newContent = rewriteLessonsFile(content, indicesToRemove);
-  const tmpPath = lessonsPath + '.tmp';
-  fs.writeFileSync(tmpPath, newContent, 'utf-8');
-  fs.renameSync(tmpPath, lessonsPath);
+  // Group selected lessons by sourcePath
+  const legacyPath = path.join(totemDir, 'lessons.md');
+  const bySource = new Map<string, DriftResult[]>();
+  for (const d of selected) {
+    const src = d.lesson.sourcePath ?? legacyPath;
+    const group = bySource.get(src) ?? [];
+    group.push(d);
+    bySource.set(src, group);
+  }
 
-  log.success(TAG, `Pruned ${selected.length} stale lesson(s) from ${config.totemDir}/lessons.md`);
+  let prunedCount = 0;
+  for (const [sourcePath, driftResults] of bySource) {
+    if (sourcePath === legacyPath) {
+      // Legacy file: rewrite with lessons removed (same as before)
+      const content = fs.readFileSync(sourcePath, 'utf-8');
+      // Map global indices back to indices within this file
+      const fileLessons = parseLessonsFile(content);
+      const headingsToRemove = new Set(driftResults.map((d) => d.lesson.heading));
+      const fileIndicesToRemove = new Set(
+        fileLessons.filter((l) => headingsToRemove.has(l.heading)).map((l) => l.index),
+      );
+      const newContent = rewriteLessonsFile(content, fileIndicesToRemove);
+      const tmpPath = sourcePath + '.tmp';
+      fs.writeFileSync(tmpPath, newContent, 'utf-8');
+      fs.renameSync(tmpPath, sourcePath);
+      prunedCount += driftResults.length;
+    } else {
+      // Directory file: each file is one lesson — delete the file
+      fs.unlinkSync(sourcePath);
+      prunedCount += driftResults.length;
+    }
+  }
+
+  log.success(TAG, `Pruned ${prunedCount} stale lesson(s)`);
 
   // Re-sync so the vector index reflects the pruned lessons
   log.info(TAG, 'Re-indexing after prune...');
