@@ -38,7 +38,14 @@ export const EmbeddingProviderSchema = z.discriminatedUnion('provider', [
   OllamaProviderSchema,
 ]);
 
-export const DEFAULT_IGNORE_PATTERNS = ['**/node_modules/**', '**/.lancedb/**', '**/dist/**'];
+export const DEFAULT_IGNORE_PATTERNS = [
+  '**/node_modules/**',
+  '**/.lancedb/**',
+  '**/dist/**',
+  '**/__tests__/**',
+  '**/*.test.ts',
+  '**/*.spec.ts',
+];
 
 // ─── Orchestrator schemas ────────────────────────────
 

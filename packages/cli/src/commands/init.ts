@@ -560,6 +560,15 @@ ${formatTargets(targets)}
 
 ${embeddingBlock}
 
+  ignorePatterns: [
+    '**/node_modules/**',
+    '**/.lancedb/**',
+    '**/dist/**',
+    '**/__tests__/**',
+    '**/*.test.ts',
+    '**/*.spec.ts',
+  ],
+
   orchestrator: {
     provider: 'shell',
     command: 'gemini --model {model} -o json -e none < {file}',

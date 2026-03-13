@@ -524,6 +524,14 @@ describe('generateConfig', () => {
       expect(config).toContain("provider: 'shell'");
     }
   });
+
+  it('always includes ignorePatterns block', () => {
+    const config = generateConfig(targets, 'openai');
+    expect(config).toContain('ignorePatterns:');
+    expect(config).toContain('**/__tests__/**');
+    expect(config).toContain('**/*.test.ts');
+    expect(config).toContain('**/*.spec.ts');
+  });
 });
 
 describe('Universal Lessons baseline', () => {
