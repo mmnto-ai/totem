@@ -202,7 +202,7 @@ export class LanceStore {
     limit: number,
   ): Promise<RankedRow[]> {
     try {
-      let q = this.table!.search(query, 'fts', 'content');
+      let q = this.table!.search(query, 'fts', 'content').withRowId();
 
       if (whereClause) q = q.where(whereClause);
       q = q.limit(limit);
