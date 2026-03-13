@@ -561,7 +561,7 @@ ${formatTargets(targets)}
 ${embeddingBlock}
 
   ignorePatterns: [
-${DEFAULT_IGNORE_PATTERNS.map(p => `    '${p}',`).join('\n')}
+${DEFAULT_IGNORE_PATTERNS.map((p) => `    '${p}',`).join('\n')}
   ],
 
   orchestrator: {
