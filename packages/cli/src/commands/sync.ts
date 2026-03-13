@@ -113,9 +113,9 @@ async function runPrune(cwd: string, config: TotemConfig): Promise<void> {
       const content = fs.readFileSync(sourcePath, 'utf-8');
       // Map global indices back to indices within this file
       const fileLessons = parseLessonsFile(content);
-      const headingsToRemove = new Set(driftResults.map((d) => d.lesson.heading));
+      const rawContentToRemove = new Set(driftResults.map((d) => d.lesson.raw));
       const fileIndicesToRemove = new Set(
-        fileLessons.filter((l) => headingsToRemove.has(l.heading)).map((l) => l.index),
+        fileLessons.filter((l) => rawContentToRemove.has(l.raw)).map((l) => l.index),
       );
       const newContent = rewriteLessonsFile(content, fileIndicesToRemove);
       const tmpPath = sourcePath + '.tmp';

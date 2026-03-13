@@ -51,10 +51,12 @@ export async function migrateLessonsCommand(): Promise<void> {
   let baselineCount = 0;
   let lessonCount = 0;
 
-  if (content.includes(BASELINE_MARKER)) {
-    // Extract baseline section: everything from the marker to end of file or first non-baseline lesson
-    // Find the baseline marker position and collect all lessons that follow it
-    const markerIdx = content.indexOf(BASELINE_MARKER);
+  const markerMatch = content.match(
+    new RegExp(`^${BASELINE_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'm'),
+  );
+  if (markerMatch && markerMatch.index != null) {
+    // Extract baseline section: everything from the line-start marker to end of file
+    const markerIdx = markerMatch.index;
     const preMarker = content.slice(0, markerIdx);
     const baselineLessons = parseLessonsFile(content.slice(markerIdx));
     const nonBaselineLessons = parseLessonsFile(preMarker);
