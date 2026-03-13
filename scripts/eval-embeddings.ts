@@ -19,6 +19,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import type { ContentType } from '../packages/core/src/config-schema.js';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 
@@ -201,9 +203,7 @@ async function evalProvider(
   for (const eq of EVAL_QUERIES) {
     const results = await store.search({
       query: eq.query,
-      typeFilter: eq.typeFilter as
-        | import('../packages/core/src/config-schema.js').ContentType
-        | undefined,
+      typeFilter: eq.typeFilter as ContentType | undefined,
       maxResults: 10,
       hybrid: false, // Pure vector search for fair comparison
     });

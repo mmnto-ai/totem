@@ -213,8 +213,10 @@ export class LanceStore {
         rank: rank + 1,
         id: String(row['_rowid'] ?? row['id']),
       }));
-    } catch {
+    } catch (err) {
       // FTS leg failed — degrade gracefully
+      const msg = err instanceof Error ? err.message : String(err);
+      this.onWarn(`FTS search failed, falling back to vector-only: ${msg}`);
       return [];
     }
   }
