@@ -537,7 +537,11 @@ function formatTargets(targets: IngestTarget[]): string {
 
 type EmbeddingTier = 'openai' | 'ollama' | 'none';
 
-export function generateConfig(targets: IngestTarget[], embeddingTier: EmbeddingTier): string {
+export async function generateConfig(
+  targets: IngestTarget[],
+  embeddingTier: EmbeddingTier,
+): Promise<string> {
+  const { DEFAULT_IGNORE_PATTERNS } = await import('@mmnto/totem');
   let embeddingBlock: string;
   switch (embeddingTier) {
     case 'openai':
@@ -559,6 +563,10 @@ ${formatTargets(targets)}
   ],
 
 ${embeddingBlock}
+
+  ignorePatterns: [
+${DEFAULT_IGNORE_PATTERNS.map((p) => `    '${p}',`).join('\n')}
+  ],
 
   orchestrator: {
     provider: 'shell',
@@ -808,7 +816,7 @@ export async function initCommand(): Promise<void> {
         );
       }
 
-      const configContent = generateConfig(targets, embeddingTier);
+      const configContent = await generateConfig(targets, embeddingTier);
       fs.writeFileSync(configPath, configContent, 'utf-8');
       const tierLabel =
         embeddingTier === 'none'

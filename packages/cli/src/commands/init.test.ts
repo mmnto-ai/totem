@@ -499,29 +499,39 @@ describe('generateConfig', () => {
     { glob: 'src/**/*.ts', type: 'code' as const, strategy: 'typescript-ast' as const },
   ];
 
-  it('generates config with openai embedding', () => {
-    const config = generateConfig(targets, 'openai');
+  it('generates config with openai embedding', async () => {
+    const config = await generateConfig(targets, 'openai');
     expect(config).toContain("provider: 'openai'");
     expect(config).toContain('text-embedding-3-small');
     expect(config).not.toContain('// embedding:');
   });
 
-  it('generates config with ollama embedding', () => {
-    const config = generateConfig(targets, 'ollama');
+  it('generates config with ollama embedding', async () => {
+    const config = await generateConfig(targets, 'ollama');
     expect(config).toContain("provider: 'ollama'");
     expect(config).toContain('nomic-embed-text');
   });
 
-  it('generates Lite config with commented-out embedding', () => {
-    const config = generateConfig(targets, 'none');
+  it('generates Lite config with commented-out embedding', async () => {
+    const config = await generateConfig(targets, 'none');
     expect(config).toContain('// embedding:');
     expect(config).toContain('Lite tier');
   });
 
-  it('always includes orchestrator block', () => {
+  it('always includes orchestrator block', async () => {
     for (const tier of ['openai', 'ollama', 'none'] as const) {
-      const config = generateConfig(targets, tier);
+      const config = await generateConfig(targets, tier);
       expect(config).toContain("provider: 'shell'");
+    }
+  });
+
+  it('always includes ignorePatterns block', async () => {
+    for (const tier of ['openai', 'ollama', 'none'] as const) {
+      const config = await generateConfig(targets, tier);
+      expect(config).toContain('ignorePatterns:');
+      expect(config).toContain('**/__tests__/**');
+      expect(config).toContain('**/*.test.ts');
+      expect(config).toContain('**/*.spec.ts');
     }
   });
 });

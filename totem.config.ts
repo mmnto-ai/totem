@@ -50,6 +50,7 @@ const config: TotemConfig = {
     '**/*.test.ts',
     '.strategy/archive/**',
     '.strategy/deep-research/**',
+    '.strategy/governance-os-thesis/**',
   ],
 };
 
