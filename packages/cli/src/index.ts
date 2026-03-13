@@ -129,8 +129,9 @@ program
     '--mode <mode>',
     'Review mode: standard (default, with Totem knowledge) or structural (context-blind paranoia)',
   )
-  .option('--learn', 'Extract lessons from failed verdicts into .totem/lessons.md')
-  .option('--yes', 'Auto-accept extracted lessons (for CI; suspicious lessons are dropped)')
+  .option('--format <format>', 'Output format: text (default), sarif, or json (deterministic only)')
+  .option('--learn', 'Extract lessons from failed verdicts into .totem/lessons.md') // totem-ignore
+  .option('--yes', 'Auto-accept extracted lessons (for CI; suspicious lessons are dropped)') // totem-ignore
   .action(
     async (opts: {
       raw?: boolean;
@@ -140,6 +141,7 @@ program
       staged?: boolean;
       deterministic?: boolean;
       mode?: string;
+      format?: string;
       learn?: boolean;
       yes?: boolean;
     }) => {
@@ -149,10 +151,28 @@ program
             `[Totem Error] Invalid --mode "${opts.mode}". Use "standard" or "structural".`,
           );
         }
+        if (
+          opts.format &&
+          opts.format !== 'text' &&
+          opts.format !== 'sarif' &&
+          opts.format !== 'json'
+        ) {
+          // totem-ignore-next-line — inside try/catch with handleError, same as mode validation above
+          throw new Error(
+            `[Totem Error] Invalid --format "${opts.format}". Use "text", "sarif", or "json".`,
+          );
+        }
+        if (opts.format && opts.format !== 'text' && !opts.deterministic) {
+          // totem-ignore-next-line — inside try/catch with handleError, same as mode validation above
+          throw new Error(
+            '[Totem Error] --format sarif/json is only supported with --deterministic.',
+          );
+        }
         const { shieldCommand } = await import('./commands/shield.js');
         await shieldCommand({
           ...opts,
           mode: opts.mode as 'standard' | 'structural' | undefined,
+          format: (opts.format as 'text' | 'sarif' | 'json' | undefined) ?? undefined,
         });
       } catch (err) {
         handleError(err);

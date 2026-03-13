@@ -31,5 +31,16 @@ jobs:
       - name: Run deterministic shield
         run: node packages/cli/dist/index.js shield --deterministic
 
+      - name: Generate SARIF report
+        if: always()
+        run: node packages/cli/dist/index.js shield --deterministic --format sarif --out totem-shield.sarif
+
+      - name: Upload SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: totem-shield.sarif
+          category: totem-shield
+
       - name: Run drift check
         run: node packages/cli/dist/index.js drift
