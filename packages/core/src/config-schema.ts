@@ -44,7 +44,9 @@ export const DEFAULT_IGNORE_PATTERNS = [
   '**/dist/**',
   '**/__tests__/**',
   '**/*.test.ts',
+  '**/*.test.tsx',
   '**/*.spec.ts',
+  '**/*.spec.tsx',
 ];
 
 // ─── Orchestrator schemas ────────────────────────────

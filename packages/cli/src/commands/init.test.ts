@@ -526,11 +526,13 @@ describe('generateConfig', () => {
   });
 
   it('always includes ignorePatterns block', async () => {
-    const config = await generateConfig(targets, 'openai');
-    expect(config).toContain('ignorePatterns:');
-    expect(config).toContain('**/__tests__/**');
-    expect(config).toContain('**/*.test.ts');
-    expect(config).toContain('**/*.spec.ts');
+    for (const tier of ['openai', 'ollama', 'none'] as const) {
+      const config = await generateConfig(targets, tier);
+      expect(config).toContain('ignorePatterns:');
+      expect(config).toContain('**/__tests__/**');
+      expect(config).toContain('**/*.test.ts');
+      expect(config).toContain('**/*.spec.ts');
+    }
   });
 });
 
