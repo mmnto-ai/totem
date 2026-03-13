@@ -5,7 +5,7 @@
 ### Minor Changes
 
 - feat: hybrid search (FTS + vector with RRF reranking), Gemini embedding provider, retrieval eval script
-- feat: lessons directory migration — dual-read/single-write (.totem/lessons/ replaces .totem/lessons.md)
+- feat: lessons directory migration — dual-read/single-write (per-file lessons replace monolithic lessons file)
 
 ### Patch Changes
 
