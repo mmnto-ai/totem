@@ -1514,3 +1514,21 @@ Manually suppress "unused export" errors in styleguide files that provide contex
 **Tags:** automation, workflow, dx
 
 Integrate the generation of AI tool configuration files directly into the primary CLI wrap command as a final step. This ensures that downstream AI agents always operate on the most recent project-specific knowledge without requiring manual export actions.
+
+## Lesson — MCP is an IDE bridge, not a load-bearing orchestration
+
+**Tags:** architecture, mcp, strategy, industry-signal, adr-009
+
+MCP is an IDE bridge, not a load-bearing orchestration layer. Perplexity (March 2026) is dropping MCP internally due to token inefficiency in multi-step agent loops, training data deficit for MCP JSON-RPC schemas, and tool overload degrading agent reasoning. This validates Totem's architecture: (1) Keep MCP tools atomic and minimal (2-4 tools max, per ADR-009), (2) Never make MCP the only integration path — the CLI (`totem shield`, `totem search`) must always work as a standalone fallback for "Code Mode" agents that prefer shell execution, (3) MCP's unique value is IDE presence (Cursor, Windsurf, Claude Code) where there's no alternative channel — don't over-invest beyond that. Totem is correctly hedged: CLI is the primary product surface, MCP is the IDE bridge.
+
+## Lesson — The opening two paragraphs of the telemetry research
+
+**Tags:** marketing, positioning, telemetry, privacy, local-first, content-source
+
+The opening two paragraphs of the telemetry research response (`.strategy/deep-research/14-telemetry/response-telemetry-patterns.md`) are standalone positioning copy for Totem's local-first privacy narrative. Extract them for landing page / marketing use when the time comes. Key line: "Traditional telemetry models, which rely on the continuous transmission of granular usage data to centralized cloud-based collectors, are increasingly viewed as incompatible with the security mandates and data sovereignty requirements of modern enterprise development."
+
+## Lesson — Deferred research topic: Local-First SLM (Small Language
+
+**Tags:** research-backlog, slm, local-first, governance, post-1.0, deferred
+
+Deferred research topic: Local-First SLM (Small Language Model) Viability for Governance. The concept: ship a custom, highly-quantized .gguf model (3B-8B params, e.g., Qwen-Coder or Llama-3-8B) specifically trained to evaluate compiled-rules.json, running locally at ~100 tokens/sec. This would sever the dependency on cloud providers for semantic rule enforcement. Deferred because: fine-tuning infrastructure, model distribution, and quality benchmarking are massive; Ollama already supports small models for basic use. Revisit post-1.0 when the governance eval harness (ADR-008) can measure whether small models match large model quality for rule enforcement tasks.
