@@ -190,7 +190,9 @@ async function evalProvider(
 
   // Connect for querying
   const embedder = totem.createEmbedder(evalConfig.embedding!);
-  const store = new totem.LanceStore(evalDbPath, embedder);
+  const store = new totem.LanceStore(evalDbPath, embedder, (msg: string) =>
+    console.log(`  [${providerName}] WARN: ${msg}`),
+  );
   await store.connect();
 
   // Run eval queries

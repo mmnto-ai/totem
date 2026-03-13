@@ -602,10 +602,13 @@ export function detectEmbeddingTier(cwd: string): EmbeddingTier {
   if (/^\s*OPENAI_API_KEY\s*=\s*\S+/m.test(envContent)) return 'openai';
 
   // Gemini: single-key DX — GEMINI_API_KEY covers both orchestrator and embeddings
-  if (process.env['GEMINI_API_KEY'] && /\S/.test(process.env['GEMINI_API_KEY'])) return 'gemini';
-  if (process.env['GOOGLE_API_KEY'] && /\S/.test(process.env['GOOGLE_API_KEY'])) return 'gemini';
-  if (/^\s*GEMINI_API_KEY\s*=\s*\S+/m.test(envContent)) return 'gemini';
-  if (/^\s*GOOGLE_API_KEY\s*=\s*\S+/m.test(envContent)) return 'gemini';
+  if (
+    (process.env['GEMINI_API_KEY'] && /\S/.test(process.env['GEMINI_API_KEY'])) ||
+    (process.env['GOOGLE_API_KEY'] && /\S/.test(process.env['GOOGLE_API_KEY'])) ||
+    /^\s*(?:GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*\S+/m.test(envContent)
+  ) {
+    return 'gemini';
+  }
 
   return 'none';
 }
