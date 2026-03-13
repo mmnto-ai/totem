@@ -34,6 +34,14 @@
     "yaml": "^2.4.0",
     "zod": "^3.24.0"
   },
+  "peerDependencies": {
+    "@google/genai": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@google/genai": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@types/mdast": "^4.0.0",
     "vitest": "^3.0.0"

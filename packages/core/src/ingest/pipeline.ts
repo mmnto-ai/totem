@@ -201,6 +201,17 @@ export async function runSync(
 
   log(`Sync complete: ${totalChunks} chunks from ${filesToProcess.length} files`);
 
+  // Build/rebuild FTS index for hybrid search (FTS indexes don't auto-update on add)
+  if (totalChunks > 0) {
+    log('Building FTS index for hybrid search...');
+    await store.createFtsIndex();
+    log(
+      store.ftsIndexReady
+        ? 'FTS index ready.'
+        : 'FTS index skipped (hybrid search will use vector-only).',
+    );
+  }
+
   // Persist sync state so next incremental sync knows where to diff from
   if (headSha) {
     writeSyncState(totemDir, { lastSyncSha: headSha, timestamp: Date.now() });

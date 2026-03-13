@@ -18,6 +18,7 @@ export {
   DocTargetSchema,
   EmbeddingProviderSchema,
   GeminiOrchestratorSchema,
+  GeminiProviderSchema,
   getConfigTier,
   IngestTargetSchema,
   OllamaProviderSchema,
