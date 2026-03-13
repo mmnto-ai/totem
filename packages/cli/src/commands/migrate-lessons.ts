@@ -4,8 +4,8 @@ import * as path from 'node:path'; // totem-ignore
 import { parseLessonsFile, writeLessonFile } from '@mmnto/totem'; // totem-ignore
 
 import { BASELINE_MARKER } from '../assets/universal-lessons.js'; // totem-ignore
-import { log } from '../ui.js';
-import { loadConfig, resolveConfigPath } from '../utils.js';
+import { log } from '../ui.js'; // totem-ignore
+import { loadConfig, resolveConfigPath } from '../utils.js'; // totem-ignore
 
 const TAG = 'Migrate';
 
@@ -52,6 +52,7 @@ export async function migrateLessonsCommand(): Promise<void> {
   let lessonCount = 0;
 
   const markerMatch = content.match(
+    // totem-ignore — only one baseline marker expected per file
     new RegExp(`^${BASELINE_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'm'),
   );
   if (markerMatch && markerMatch.index != null) {

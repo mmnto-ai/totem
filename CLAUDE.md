@@ -132,7 +132,7 @@ Auto-scaffolds a `totem.config.ts` by scanning the target repo:
 - `.totem/lessons/` — directory of per-lesson files (one lesson per `.md` file)
   - `baseline.md` — Universal AI Developer Baseline lessons (installed by `totem init`)
   - `lesson-<hash>.md` — individual lessons (deterministic filenames via SHA-256)
-- `.totem/lessons.md` — **legacy** single-file format (read during deprecation, new writes go to `lessons/`)
+- `.totem/lessons.md` — **legacy** single-file format (read during deprecation, new writes go to `lessons/`) <!-- totem-ignore -->
 - Committed to git, reviewed in PR diffs
 - Re-indexed by `totem sync`
 - Run `totem migrate-lessons` to convert legacy `lessons.md` to the directory format

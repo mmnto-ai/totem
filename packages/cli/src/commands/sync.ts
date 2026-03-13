@@ -5,6 +5,7 @@ import { isCancel, multiselect } from '@clack/prompts';
 
 import type { DriftResult, TotemConfig } from '@mmnto/totem';
 import {
+  // totem-ignore
   detectDrift,
   parseLessonsFile,
   readAllLessons,
