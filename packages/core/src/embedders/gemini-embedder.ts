@@ -1,7 +1,7 @@
 import type { Embedder } from './embedder.js';
 
 const DEFAULT_DIMENSIONS = 768;
-const DEFAULT_MODEL = 'text-embedding-004';
+const DEFAULT_MODEL = 'gemini-embedding-001';
 const MAX_BATCH_SIZE = 100; // Gemini supports up to 100 texts per batch
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
