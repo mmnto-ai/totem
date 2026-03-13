@@ -6,6 +6,26 @@ const MAX_BATCH_SIZE = 100; // Gemini supports up to 100 texts per batch
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
 
+/** Status codes / error names that are safe to retry. */
+const RETRYABLE_STATUS_CODES = new Set([429, 503]);
+const RETRYABLE_ERROR_NAMES = new Set(['RESOURCE_EXHAUSTED', 'UNAVAILABLE', 'TOO_MANY_REQUESTS']);
+
+function isRetryableGeminiError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  // Check for structured status/code on the error object (Gemini SDK attaches these)
+  const errObj = err as unknown as Record<string, unknown>;
+  if (typeof errObj['status'] === 'number' && RETRYABLE_STATUS_CODES.has(errObj['status'])) {
+    return true;
+  }
+  if (typeof errObj['code'] === 'number' && RETRYABLE_STATUS_CODES.has(errObj['code'])) {
+    return true;
+  }
+  if (typeof errObj['name'] === 'string' && RETRYABLE_ERROR_NAMES.has(errObj['name'])) {
+    return true;
+  }
+  return false;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type GeminiAI = any;
 
@@ -96,12 +116,7 @@ export class GeminiEmbedder implements Embedder {
         });
       } catch (err) {
         lastErr = err;
-        const isRetryable =
-          err instanceof Error &&
-          (err.message.includes('429') ||
-            err.message.includes('503') ||
-            err.message.includes('RESOURCE_EXHAUSTED'));
-        if (!isRetryable || attempt === MAX_RETRIES) break;
+        if (!isRetryableGeminiError(err) || attempt === MAX_RETRIES) break;
         const delay = INITIAL_BACKOFF_MS * 2 ** attempt + Math.random() * 1000;
         await new Promise((resolve) => setTimeout(resolve, delay));
       }

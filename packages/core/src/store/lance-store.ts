@@ -144,7 +144,7 @@ export class LanceStore {
     let q = this.table!.vectorSearch(queryVector!).limit(maxResults);
 
     if (typeFilter) {
-      q = q.where(`type = '${typeFilter.replace(/'/g, "''")}'`);
+      q = q.where(`\`type\` = '${typeFilter.replace(/'/g, "''")}'`);
     }
 
     const results = await q.toArray();
@@ -162,7 +162,7 @@ export class LanceStore {
     maxResults: number,
   ): Promise<SearchResult[]> {
     const fetchCount = maxResults * HYBRID_OVERFETCH_FACTOR;
-    const whereClause = typeFilter ? `type = '${typeFilter.replace(/'/g, "''")}'` : undefined;
+    const whereClause = typeFilter ? `\`type\` = '${typeFilter.replace(/'/g, "''")}'` : undefined;
 
     const [queryVector] = await this.embedder.embed([query]);
 
