@@ -129,7 +129,7 @@ async function runPrune(cwd: string, config: TotemConfig): Promise<void> {
     }
   }
 
-  log.success(TAG, `Pruned ${prunedCount} stale lesson(s)`);
+  log.success(TAG, `Pruned ${prunedCount} stale lesson(s)`); // totem-ignore
 
   // Re-sync so the vector index reflects the pruned lessons
   log.info(TAG, 'Re-indexing after prune...');

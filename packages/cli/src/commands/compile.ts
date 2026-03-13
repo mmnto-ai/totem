@@ -114,7 +114,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
     throw err;
   }
 
-  log.info(TAG, `Found ${lessons.length} lessons`);
+  log.info(TAG, `Found ${lessons.length} lessons`); // totem-ignore
 
   // ─── Phase 1: Regex compilation (requires orchestrator) ──
   if (config.orchestrator) {

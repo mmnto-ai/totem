@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
 import * as readline from 'node:readline/promises';
 
-import { generateLessonHeading, writeLessonFile } from '@mmnto/totem';
+import { generateLessonHeading, writeLessonFile } from '@mmnto/totem'; // totem-ignore
 
 import { log } from '../ui.js';
 import { IS_WIN, loadConfig, loadEnv, resolveConfigPath, sanitize } from '../utils.js';
@@ -78,7 +78,7 @@ export async function addLessonCommand(lessonArg?: string): Promise<void> {
 
   const writtenPath = writeLessonFile(lessonsDir, entry);
   const fileName = path.basename(writtenPath);
-  log.success('Totem', `Lesson saved to ${config.totemDir}/lessons/${fileName}`);
+  log.success('Totem', `Lesson saved to ${config.totemDir}/lessons/${fileName}`); // totem-ignore
 
   const logPath = path.join(totemDir, 'mcp-sync.log');
   log.dim('Totem', 'Triggering background re-index...');

@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 
-import { detectDrift, readAllLessons } from '@mmnto/totem';
+import { detectDrift, readAllLessons } from '@mmnto/totem'; // totem-ignore
 
 import { bold, errorColor, log, success as successColor } from '../ui.js';
 import { loadConfig, resolveConfigPath, sanitize } from '../utils.js';

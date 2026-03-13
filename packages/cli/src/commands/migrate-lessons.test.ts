@@ -98,7 +98,7 @@ describe('migrateLessonsCommand', () => {
     const files = fs
       .readdirSync(lessonsDir)
       .filter((f) => f.endsWith('.md') && f !== 'baseline.md');
-    expect(files.length).toBeGreaterThanOrEqual(1);
+    expect(files).toHaveLength(1);
     const userContent = files
       .map((f) => fs.readFileSync(path.join(lessonsDir, f), 'utf-8'))
       .join('\n');

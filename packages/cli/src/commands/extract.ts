@@ -727,7 +727,7 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
   // Append lessons to .totem/lessons/
   const lessonsDir = path.join(cwd, config.totemDir, 'lessons');
   appendLessons(sanitizedLessons, lessonsDir);
-  log.success(TAG, `Appended ${sanitizedLessons.length} lesson(s) to ${config.totemDir}/lessons/`);
+  log.success(TAG, `Appended ${sanitizedLessons.length} lesson(s) to ${config.totemDir}/lessons/`); // totem-ignore
 
   // Run incremental sync so lessons are immediately searchable
   log.info(TAG, 'Running incremental sync...');

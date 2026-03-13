@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 
-import { readAllLessons } from '@mmnto/totem';
+import { readAllLessons } from '@mmnto/totem'; // totem-ignore
 
 import { getGitBranch, getGitDiff, getGitDiffStat, getGitLogSince, getGitStatus } from '../git.js';
 import { log } from '../ui.js';

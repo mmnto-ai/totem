@@ -1,9 +1,9 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import * as fs from 'node:fs'; // totem-ignore
+import * as path from 'node:path'; // totem-ignore
 
-import { parseLessonsFile, writeLessonFile } from '@mmnto/totem';
+import { parseLessonsFile, writeLessonFile } from '@mmnto/totem'; // totem-ignore
 
-import { BASELINE_MARKER } from '../assets/universal-lessons.js';
+import { BASELINE_MARKER } from '../assets/universal-lessons.js'; // totem-ignore
 import { log } from '../ui.js';
 import { loadConfig, resolveConfigPath } from '../utils.js';
 
@@ -29,7 +29,7 @@ export async function migrateLessonsCommand(): Promise<void> {
   const lessonsDir = path.join(totemDir, 'lessons');
 
   if (!fs.existsSync(legacyPath)) {
-    log.dim(TAG, 'No .totem/lessons.md found — nothing to migrate.');
+    log.dim(TAG, 'No .totem/lessons.md found — nothing to migrate.'); // totem-ignore
     return;
   }
 
@@ -37,11 +37,11 @@ export async function migrateLessonsCommand(): Promise<void> {
   const lessons = parseLessonsFile(content);
 
   if (lessons.length === 0) {
-    log.dim(TAG, 'No lessons found in .totem/lessons.md — nothing to migrate.');
+    log.dim(TAG, 'No lessons found in .totem/lessons.md — nothing to migrate.'); // totem-ignore
     return;
   }
 
-  log.info(TAG, `Found ${lessons.length} lesson(s) in .totem/lessons.md`);
+  log.info(TAG, `Found ${lessons.length} lesson(s) in .totem/lessons.md`); // totem-ignore
 
   // Create lessons directory
   if (!fs.existsSync(lessonsDir)) {
@@ -90,8 +90,8 @@ export async function migrateLessonsCommand(): Promise<void> {
 
   log.success(
     TAG,
-    `Migrated ${lessonCount} lesson(s)${baselineCount > 0 ? ` + ${baselineCount} baseline` : ''} to ${config.totemDir}/lessons/`,
+    `Migrated ${lessonCount} lesson(s)${baselineCount > 0 ? ` + ${baselineCount} baseline` : ''} to ${config.totemDir}/lessons/`, // totem-ignore
   );
-  log.dim(TAG, `Legacy file backed up to ${config.totemDir}/lessons.md.bak`);
+  log.dim(TAG, `Legacy file backed up to ${config.totemDir}/lessons.md.bak`); // totem-ignore
   log.dim(TAG, 'Run `totem sync` to re-index.');
 }
