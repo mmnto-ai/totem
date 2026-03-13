@@ -527,7 +527,18 @@ export async function learnFromVerdict(
 
 // ─── Main command ───────────────────────────────────
 
+const VALID_FORMATS: ShieldFormat[] = ['text', 'sarif', 'json'];
+
 export async function shieldCommand(options: ShieldOptions): Promise<void> {
+  if (options.format && !VALID_FORMATS.includes(options.format)) {
+    throw new Error(
+      `[Totem Error] Invalid --format "${options.format}". Use "text", "sarif", or "json".`,
+    );
+  }
+  if (options.format && options.format !== 'text' && !options.deterministic) {
+    throw new Error('[Totem Error] --format sarif/json is only supported with --deterministic.');
+  }
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);

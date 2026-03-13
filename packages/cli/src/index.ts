@@ -146,22 +146,6 @@ program
       yes?: boolean;
     }) => {
       try {
-        if (opts.mode && opts.mode !== 'standard' && opts.mode !== 'structural') {
-          throw new Error(
-            `[Totem Error] Invalid --mode "${opts.mode}". Use "standard" or "structural".`,
-          );
-        }
-        const VALID_FORMATS = ['text', 'sarif', 'json'];
-        if (opts.format && !VALID_FORMATS.includes(opts.format)) {
-          throw new Error(
-            `[Totem Error] Invalid --format "${opts.format}". Use "text", "sarif", or "json".`,
-          );
-        }
-        if (opts.format && opts.format !== 'text' && !opts.deterministic) {
-          throw new Error(
-            '[Totem Error] --format sarif/json is only supported with --deterministic.',
-          );
-        }
         const { shieldCommand } = await import('./commands/shield.js');
         await shieldCommand({
           ...opts,
