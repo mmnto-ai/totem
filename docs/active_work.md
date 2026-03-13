@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-Current momentum is focused on implementing the Data Layer Foundation defined in ADR-024 (`.strategy/adr/adr-024-vectordb-multi-type-schema.md`). The ADR was accepted on 2026-03-13 after a joint Claude/Gemini research session that included LanceDB FTS capability research, a full blast radius audit of the `lessons.md` migration, and embedding provider evaluation planning. The work is split into two PRs to manage risk: PR 1 ships additive features (FTS hybrid search, Gemini embedding provider, retrieval eval), while PR 2 isolates the high-touch lessons directory migration.
+Current momentum is focused on implementing the Data Layer Foundation defined in ADR-024 (see the strategy ADR directory). The ADR was accepted on 2026-03-13 after a joint Claude/Gemini research session that included LanceDB FTS capability research, a full blast radius audit of the lessons migration, and embedding provider evaluation planning. The work is split into two PRs to manage risk: PR 1 ships additive features (FTS hybrid search, Gemini embedding provider, retrieval eval), while PR 2 isolates the high-touch lessons directory migration.
 
 ### Prioritized Roadmap
 
@@ -8,7 +8,7 @@ Current momentum is focused on implementing the Data Layer Foundation defined in
 
 - #378 — Hybrid search: FTS + vector in LanceDB — Add BM25 full-text search alongside vector search using RRF reranking. Includes filter-first tiered retrieval (lessons prioritized over code). **PR 1.**
 - #380 — Gemini Embedding 2 provider with task-type awareness — Third embedding provider enabling single-key DX (`GEMINI_API_KEY` for both orchestrator + embeddings). Includes retrieval quality eval script. **PR 1.**
-- #428 — Lessons directory migration (dual-read/single-write) — Migrate from `.totem/lessons.md` to `.totem/lessons/*.md` directory. 12+ source files, 11+ test files affected. **PR 2, blocked by PR 1.**
+- #428 — Lessons directory migration (dual-read/single-write) — Migrate from single lessons file to per-lesson directory. 12+ source files, 11+ test files affected. **PR 2, blocked by PR 1.**
 
 **Do Next (Tier-1 Core & Shift-Left Foundation)**
 
