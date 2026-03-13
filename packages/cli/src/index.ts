@@ -151,12 +151,8 @@ program
             `[Totem Error] Invalid --mode "${opts.mode}". Use "standard" or "structural".`,
           );
         }
-        if (
-          opts.format &&
-          opts.format !== 'text' &&
-          opts.format !== 'sarif' &&
-          opts.format !== 'json'
-        ) {
+        const VALID_FORMATS = ['text', 'sarif', 'json'];
+        if (opts.format && !VALID_FORMATS.includes(opts.format)) {
           // totem-ignore-next-line — inside try/catch with handleError, same as mode validation above
           throw new Error(
             `[Totem Error] Invalid --format "${opts.format}". Use "text", "sarif", or "json".`,
@@ -172,7 +168,7 @@ program
         await shieldCommand({
           ...opts,
           mode: opts.mode as 'standard' | 'structural' | undefined,
-          format: (opts.format as 'text' | 'sarif' | 'json' | undefined) ?? undefined,
+          format: opts.format as 'text' | 'sarif' | 'json' | undefined,
         });
       } catch (err) {
         handleError(err);
