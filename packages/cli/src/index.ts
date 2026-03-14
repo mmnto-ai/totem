@@ -425,6 +425,19 @@ program
   });
 
 program
+  .command('demo')
+  .description('Show the Totem spinner with movie quotes')
+  .option('--duration <seconds>', 'How long to run (default: 6)', '6')
+  .action(async (opts: { duration: string }) => {
+    const { createSpinner } = await import('./ui.js');
+    const seconds = Math.max(1, Math.min(60, parseInt(opts.duration, 10) || 6));
+    const spinner = await createSpinner('Totem');
+    setTimeout(() => {
+      spinner.succeed(`Done — ${seconds}s of vibes`);
+    }, seconds * 1000);
+  });
+
+program
   .command('install-hooks')
   .description('Install git hooks interactively (legacy — prefer `totem hooks`)')
   .action(async () => {
