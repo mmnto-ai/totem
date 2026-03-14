@@ -344,10 +344,9 @@ async function runDeterministicShield(
 
   if (format === 'sarif') {
     const { buildSarifLog, getHeadSha } = await import('@mmnto/totem');
-    const { z } = await import('zod');
     const { createRequire } = await import('node:module');
     const req = createRequire(import.meta.url);
-    const version = z.object({ version: z.string() }).parse(req('../../package.json')).version;
+    const version = (req('../../package.json') as { version: string }).version;
     const commitHash = getHeadSha(cwd) ?? undefined;
     const sarif = buildSarifLog(violations, rules, { version, commitHash });
     output = JSON.stringify(sarif, null, 2);
