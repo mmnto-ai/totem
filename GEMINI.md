@@ -40,3 +40,5 @@
 - **Consumer-first:** Changes to AI reflexes, hooks, or prompts must update the `AI_PROMPT_BLOCK` template in `init.ts`. Consumers must get updates out of the box.
 <!-- totem-ignore-next-line -->
 - **GCA decline reflex:** When declining a recurring GCA suggestion, add a lesson with `review-guidance` tag and update `.gemini/styleguide.md` §6 on the same PR.
+- **No suppression without tickets:** Never add `totem-ignore`, `eslint-disable`, or skip tests without filing a follow-up ticket for the root cause.
+- **GCA replies:** Respond to GCA bot PR comments with ONE consolidated `@gemini-code-assist` comment — never reply to individual threads (triggers re-review loops).
