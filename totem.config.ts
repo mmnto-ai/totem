@@ -30,7 +30,7 @@ const config: TotemConfig = {
 
   exports: {
     copilot: '.github/copilot-instructions.md',
-    junie: '.junie/guidelines.md',
+    junie: '.junie/skills/totem-rules/rules.md',
   },
 
   docs: [
@@ -54,7 +54,7 @@ const config: TotemConfig = {
     '.strategy/governance-os-thesis/**',
   ],
 
-  shieldIgnorePatterns: ['.totem/lessons/**', 'docs/**'],
+  shieldIgnorePatterns: ['.totem/lessons/**', 'docs/**', '.changeset/**', '.junie/**', 'README.md'],
 };
 
 export default config;

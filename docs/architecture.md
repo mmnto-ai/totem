@@ -68,11 +68,15 @@ flowchart TD
 
 - **Storage & Engine:**
   - **Database:** LanceDB (embedded, in-process Node.js). It supports multi-type knowledge retrieval to cleanly separate invariants from general context (#364).
+  - **Health:** Incorporates `healthCheck()` to detect and handle broken indexes at startup (#439).
   - **Artifacts:** Creates a gitignored `.lancedb/` folder in the consumer's root, treated as a replaceable build artifact.
 - **Data Processing:**
-  - **Embeddings:** Supports OpenAI (`text-embedding-3-small`) by default, with Ollama (`nomic-embed-text`) as an offline fallback.
-  - **Context Parsing:** Uses syntax-aware chunking via Tree-sitter AST parsing. It seamlessly indexes both standard files and git submodules (#363).
-  - **Integrity:** Avoids blind character splitting by leveraging Markdown hierarchy and session breadcrumbs. A web-tree-sitter WASM investigation ensures robust handling of files exceeding 32KB (#354).
+  - **Extraction & Chunking:**
+    - _Context Parsing:_ Uses syntax-aware chunking via Tree-sitter AST parsing, seamlessly indexing both standard files and git submodules (#363).
+    - _Integrity:_ Avoids blind character splitting by leveraging Markdown hierarchy and session breadcrumbs. A web-tree-sitter WASM implementation ensures robust handling of files exceeding 32KB (#354).
+  - **Embedding & Retrieval:**
+    - _Embeddings:_ Supports OpenAI (`text-embedding-3-small`) by default, with Ollama (`nomic-embed-text`) and task-aware Gemini 2 as alternatives (#380).
+    - _Retrieval:_ Features hybrid search capabilities, combining Full-Text Search (FTS) and vector similarity with Reciprocal Rank Fusion (RRF) reranking (#378).
 - **Security & Maintenance:**
   - **Filtering:** Includes adversarial content scrubbing and a dedicated `lesson` ContentType for highly precise vector retrieval (#315, #379).
   - **Drift Detection:** Self-cleaning sync engine purges orphaned vectors when source files are deleted. It is reinforced by strict path containment checks to prevent directory traversal (#284).
@@ -82,7 +86,7 @@ flowchart TD
 All commands feature proper `--help` output documentation (#358).
 
 - **Setup & Infrastructure:**
-  - `totem init` / `totem eject`: Scaffolds or safely removes config, hooks, and memory. It features a versioned reflex upgrade path and hardened vector DB prompts (#372, #375).
+  - `totem init` / `totem eject`: Scaffolds or safely removes config, hooks, and memory. It features a versioned reflex upgrade path, emits sensible default `ignorePatterns` (#421), and includes hardened vector DB prompts (#372).
   - `totem hooks`: Installs git hooks and supports npm `prepare` auto-install (#332). It automatically walks up to the git root from monorepo sub-packages (#333).
   - **Environment Support:** Package manager auto-detection fully supports Bun (#316). It gracefully detects and handles non-bash hook environments (#317).
 - **Data & Context Management:**
@@ -100,17 +104,17 @@ All commands feature proper `--help` output documentation (#358).
 
 ### 3. Deterministic Compiler & Zero-LLM Shield
 
-`totem compile` reads `.totem/lessons.md` and translates each lesson into a regex rule (or marks it as non-compilable). Rules are stored in `.totem/compiled-rules.json` and validated at compile-time with syntax checking and ReDoS static analysis (`safe-regex2`). The compilation process is context-aware, leveraging Tree-sitter AST gating to prevent false positives within string literals (#251).
+`totem compile` reads architectural constraints and translates each lesson into a regex rule (or marks it as non-compilable). Rules are stored in `.totem/compiled-rules.json`—now extended with advanced telemetry fields (#415)—and validated at compile-time with syntax checking and ReDoS static analysis (`safe-regex2`). The compilation process is context-aware, leveraging Tree-sitter AST gating to prevent false positives within string literals (#251).
 
 Developers can bypass false positives using inline suppression directives (`totem-ignore` / `totem-ignore-next-line`) or negated patterns in `fileGlobs` (e.g., `!*.test.ts`). Rules are strictly scoped using anchored glob matching to ensure precision (#357). Vulnerable patterns (nested quantifiers, star height > 1) are rejected and left to be handled by the standard LLM-based shield.
 
-`totem shield --deterministic` applies these compiled rules against `git diff` additions with zero LLM calls. This is used for local git hook enforcement, physically blocking main branch commits and pre-push violations (#310). It acts as a CI quality gate while eliminating API key dependency and quota exhaustion.
+`totem shield --deterministic` applies these compiled rules against `git diff` additions with zero LLM calls. This is used for local git hook enforcement, physically blocking main branch commits and pre-push violations (#310). It now also generates standard SARIF 2.1.0 formatted outputs (`Violation[]`) to enable seamless enterprise security integration (#418, #437).
 
 ### 4. Shield GitHub Action & CI Drift Gate
 
-A composite GitHub Action (`action.yml`) runs `totem shield --deterministic` as a pass/fail CI quality gate on pull requests. It uses compiled AST/regex rules from `.totem/compiled-rules.json` to physically block known architectural traps from merging. Deterministic CI enforcement is further strengthened by evaluating sentinels like SonarQube Community Edition (#355), GitHub CodeQL (#268), and Dependabot (#267).
+A composite GitHub Action (`action.yml`) runs `totem shield --deterministic` as a pass/fail CI quality gate on pull requests. It uses compiled AST/regex rules from `.totem/compiled-rules.json` to physically block known architectural traps from merging. The newly introduced SARIF 2.1.0 output enables native integration with the GitHub Advanced Security tab, directly surfacing CISO-facing architectural violations (#387).
 
-The CI pipeline features a structural CI drift gate and an adversarial evaluation harness to perform integrity checks and mitigate model drift. To prevent pipeline lockouts, the local pre-push shield gate is securely guarded against missing CLI installations in CI environments.
+Deterministic CI enforcement is further strengthened by evaluating sentinels like SonarQube Community Edition (#355), GitHub CodeQL (#268), and Dependabot (#267). The CI pipeline features a structural CI drift gate and an adversarial evaluation harness to perform integrity checks and mitigate model drift. To prevent pipeline lockouts, the local pre-push shield gate is securely guarded against missing CLI installations in CI environments.
 
 Because it operates in `--deterministic` mode, the shield requires **zero LLM API calls**. This eliminates statistical hallucinations in CI and maintains a strict, air-gapped security posture for enterprise environments.
 
@@ -120,12 +124,14 @@ A stdio-based server for LLM integration providing primary tools and strict acce
 
 - **Core Tools:**
   - `search_knowledge(query)`: Semantic retrieval of codebase context and lessons.
-  - `add_lesson(lesson, tags)`: Appends architectural lessons to `.totem/lessons.md` with descriptive content-derived headings.
+  - `add_lesson(lesson, tags)`: Appends architectural lessons with descriptive content-derived headings.
+  - `get_rules_for_file` / `check_compliance`: Direct enforcement tools empowering agents to self-validate deterministic rules (#417).
 - **Security & Permissions:**
   - **Sanitization:** XML-delimits all MCP responses and sanitizes persisted content to mitigate prompt injection attacks.
   - **Access Control:** Implements multi-agent permissions and role-based access control (RBAC) to safely restrict execution boundaries (#312).
-- **Session Management:**
-  - **Lifecycle Rules:** Utilizes dedicated MCP lifecycle lessons for improved session consistency and lifecycle boundary management (#384).
+- **Integrations & Lifecycle:**
+  - **IDE Support:** JetBrains Junie is natively supported, exposing compiled rules directly as a skill using lean guidelines (#1305e8b).
+  - **Session Management:** Utilizes dedicated MCP lifecycle lessons for improved session consistency and boundary management (#384).
 
 ## Configuration Tiers
 
@@ -214,9 +220,9 @@ All orchestrator providers support standardizing complex configurations via cent
 
 ## The `.totem/` Directory
 
-The `lessons.md` file within `.totem/` acts as an explicit, version-controlled ledger of architectural decisions. Local AI memory is actively audited to promote contributor knowledge to these version-controlled surfaces (#402). Lesson headings are derived directly from content context for highly descriptive, scannable PR diffs. When updated, `totem sync` re-indexes it.
+The `.totem/lessons/` directory acts as an explicit, version-controlled ledger of architectural decisions. Local AI memory is actively audited to promote contributor knowledge to these version-controlled surfaces (#402). It uses a dual-read/single-write migration strategy to robustly transition away from legacy single-file storage patterns (#428). Lesson headings are derived directly from content context for highly descriptive, scannable PR diffs. When updated, `totem sync` automatically re-indexes them.
 
-During `totem init`, users are offered an optional **Universal Baseline** — a curated set of foundational AI developer lessons. Appended with a `<!-- totem:baseline -->` marker for idempotency, it solves the cold-start problem where a fresh install has no knowledge to retrieve.
+During `totem init`, users are offered an optional **Universal Baseline** — a curated dataset of foundational AI developer lessons (#419). Appended with a `<!-- totem:baseline -->` marker for idempotency, these lessons include specific audience tags (contributor vs. consumer) to properly scope knowledge (#404). This solves the cold-start problem where a fresh install has no knowledge to retrieve.
 
 ## The `.strategy/` Submodule
 

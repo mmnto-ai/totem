@@ -63,24 +63,29 @@ This phase fortified the core architecture, delivering native orchestration, zer
 
 - **Observability & Maintenance:**
   - [ ] **#130 Epic: Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks. This will track index health and ignored files.
-  - [ ] **#92 Telemetry Logging & Dashboard:** Persist token stats to `.totem/telemetry.jsonl` and build `totem stats` to track API quota usage.
+  - [ ] **#92 CLI Metrics & Observability:** Provide local CLI metrics (`totem stats`) for violation history and lesson coverage. Requires terminal output only for v1.0 without cloud or TUI dependencies.
   - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
+  - [ ] **#283 Epic: v1.0 Documentation:** Develop the v1.0 documentation site and minimize the core README.
 - **Workflow & Execution:**
-  - [x] **#362 Strategic Backlog Audit:** Added `totem audit` for backlog auditing with a human approval gate (#362, #389).
-  - [x] **Context Injection:** Embedded relevant vector DB lessons into all orchestrator commands and `totem spec` output (#366, #370).
-  - [x] **Knowledge Promotion:** Audited local AI memory and promoted contributor knowledge to version-controlled surfaces (#402, #408).
+  - [x] **#362 Strategic Backlog Audit:** Added `totem audit` for backlog auditing with a human approval gate (#362).
+  - [x] **Context Injection:** Embedded relevant vector DB lessons into all orchestrator commands and `totem spec` output (#370).
+  - [x] **Knowledge Promotion:** Audited local AI memory and promoted contributor knowledge to version-controlled surfaces (#408).
   - [x] **Toolchain Exports:** Exported compiled lessons to GitHub Copilot instructions (#294).
   - [ ] **#119 `totem run <workflow>`:** Introduce a custom AI task runner to execute user-defined markdown workflows via the orchestrator.
   - [ ] **#74 `totem oracle`:** Add a frictionless Q&A command to query LanceDB without strict personas.
   - [ ] **#392 `totem review`:** Implement full codebase review powered by repomix and vectordb lessons.
+  - [ ] **#430 Document Authority Modes:** Implement generated vs. assisted authority modes for `totem docs` to protect human-curated strategic decisions.
+  - [ ] **#435 PR Lesson Extraction:** Auto-extract lessons from PR review comments using `totem extract --from-pr`.
 - **Shift-Left & Advanced Intelligence:**
   - [ ] **#195 / #196 / #214 Epic: Shift-Left AI Verification:** Define model compatibility and auditing strategy to systematically verify models. Build adversarial evaluation harness for CI.
-  - [ ] **#314 Epic: Adaptive Agent Governance:** Establish the Codebase Immune System. This provides adaptive agent governance and foundational shift-left orchestration capabilities.
+  - [ ] **#314 Epic: Adaptive Agent Governance:** Establish the Codebase Immune System. Provides adaptive agent governance and AST compilation design capabilities.
   - [ ] **#176 Agent-Optimized MCP:** Dynamic token budgeting and write access for deeper agent-to-agent interactions. Includes multi-agent permissions and role-based access control (#312).
   - [ ] **#183 Cross-File Knowledge Graph (Blocked):** Implement symbol resolution to enable multi-file architectural reasoning.
-  - [ ] **#364 VectorDB Structure:** Research and define multi-type knowledge retrieval schemas for the local LanceDB index.
-  - [ ] **#387 SARIF Output:** Standardize deterministic shield output for CI/CD integration.
-  - [ ] **#385 Rule Exports:** Export compiled rules to Semgrep YAML and ESLint configurations.
+  - [x] **#364 VectorDB Structure:** Defined multi-type knowledge retrieval schemas for the local LanceDB index. Delivered hybrid search and Gemini embedding integration as ADR-024.
+  - [x] **#387 SARIF Output:** Standardized deterministic shield output for CI/CD integration. Enables GitHub Advanced Security tab integration (#418).
+  - [ ] **#385 Rule Exports:** Export compiled rules to Semgrep YAML and ESLint configurations. Deferred until core governance (#314) is finalized.
+  - [ ] **#434 Adversarial Trap Corpus:** Develop synthetic violations to measure precision and recall of the deterministic engine.
+  - [ ] **#433 Lesson Packs Prototype:** Mine OSS projects as a proof of concept for distributable rule sets.
 
 ## Phase 4: Enterprise Expansion
 
@@ -92,7 +97,8 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - [ ] **#79 Documentation Ingestion Pipeline:** Build Pull/Push models for Notion, Confluence, or internal wikis.
   - [x] **#286 Epic: Rust Core Extraction:** Evaluated `totem-core-rs` for enterprise-scale extraction performance.
 - **Integration & DevEx:**
-  - [ ] **#124 Epic: Automated Onboarding:** Build `totem onboard <issue>` to generate contextual Day 1 briefings. These will be tailored to a new developer's first assigned ticket.
+  - [ ] **#124 Epic: Frictionless 10-Minute Init:** Build `totem onboard <issue>` to generate contextual Day 1 briefings. These will be tailored to a new developer's first assigned ticket.
+  - [ ] **#128 Epic: Universal Lessons Baseline:** Ship baseline "Universal Lessons" dataset during initialization to bootstrap immediate value.
   - [ ] **#84 Issue Tracking Adapters:** Implement Jira and Linear adapters using the interface built in Phase 2.
   - [ ] **#42 Universal AI DevEx:** Evolve `totem init` to inject "Best Practices" guardrails like Anti-Refactor and Test Coverage triggers.
 - **Governance & Licensing:**

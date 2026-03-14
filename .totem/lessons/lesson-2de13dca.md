@@ -14,6 +14,6 @@ AI agent memory config architectures differ significantly across agents, and GCA
 
 **Copilot:** Uses `.github/copilot-instructions.md` (project only).
 
-**Junie:** Uses `.junie/guidelines.md` (project only).
+**Junie:** Uses .junie/guidelines.md or .junie/AGENTS.md for instructions (project only, loaded into every prompt). MCP config at .junie/mcp/mcp.json (NOT .mcp.json). Supports skills at .junie/skills/ with SKILL.md frontmatter. No global guidelines — only project-level. Same "keep it lean" principle applies.
 
 When scaffolding configs via totem init, each agent needs its own format but the instruction content should be identical and concise. IMPORTANT: .gemini/gemini.md (lowercase) is NOT read by either product with default settings.

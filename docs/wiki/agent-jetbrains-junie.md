@@ -1,21 +1,29 @@
 # JetBrains Junie
 
-Junie is JetBrains' integrated AI assistant, operating directly inside IDEs like IntelliJ or WebStorm.
+Junie is JetBrains' AI coding agent, available as an IDE plugin and a standalone CLI.
 
 ## 1. Config Surfaces
 
-- **Project Context:** `.junie/guidelines.md` — Instructions and rules specifically for the Junie assistant.
-- **MCP Servers:** `.mcp.json` — JetBrains IDEs are adding support for MCP, allowing Junie to interface with local tools.
+- **Project Context:** `.junie/guidelines.md` (or `.junie/AGENTS.md`) — Instructions loaded into every prompt. Keep lean (<50 lines) to reduce quota burn.
+- **MCP Servers:** `.junie/mcp/mcp.json` — Project-level MCP config. **Not** `.mcp.json` at project root.
+- **Global MCP:** `~/.junie/mcp/mcp.json` — User-level MCP servers.
+- **Skills:** `.junie/skills/<name>/SKILL.md` — Task-specific knowledge loaded on demand (progressive disclosure, not injected into every prompt).
+- **No global guidelines** — unlike Claude/Gemini, Junie has no `~/.junie/guidelines.md`. Only project-level.
 
 ## 2. Keeping Configs Lean
 
-As with all agents, `.junie/guidelines.md` should be strictly focused and concise to ensure Junie complies with core directives without being overwhelmed by boilerplate.
+Guidelines are injected into every prompt, so length directly impacts quota usage. JetBrains recommends keeping them short — "50 lines vs 100 lines won't make much difference, 100 vs 1000 will." This matches our lean CLAUDE.md approach.
+
+For compiled rules (which can be large), use a Junie **skill** instead of stuffing them into guidelines. Skills use progressive disclosure — Junie only loads them when the task matches the skill description.
 
 ## 3. Totem Integration
 
-Once MCP is fully configured via `.mcp.json`, Junie can leverage the `search_knowledge` tool similarly to Claude and Gemini CLI. The instructions in `.junie/guidelines.md` should instruct Junie to query the Totem DB before significant refactors.
+- **Guidelines:** `.junie/guidelines.md` contains the `search_knowledge` instruction (same content as CLAUDE.md/GEMINI.md)
+- **MCP:** `.junie/mcp/mcp.json` wires the Totem MCP server for `search_knowledge` and `add_lesson`
+- **Compiled Rules Export:** `totem compile --export` writes to `.junie/skills/totem-rules/rules.md` (configured in `totem.config.ts` exports)
 
 ## 4. Common Pitfalls
 
-- **Path Conflicts:** Forgetting to register Totem's MCP server in the correct `.mcp.json` format expected by JetBrains.
-- **Hardcoded Secrets:** Storing API keys in `.mcp.json` instead of relying on the environment.
+- **Wrong MCP path:** Junie uses `.junie/mcp/mcp.json`, NOT `.mcp.json`. The project root `.mcp.json` is for Claude Code.
+- **Guidelines bloat:** Don't dump compiled rules into `guidelines.md` — use a skill instead. 100KB of rules in guidelines burns massive quota on every prompt.
+- **Hardcoded secrets:** Never put tokens in `.junie/mcp/mcp.json`. Junie inherits env vars from the shell.
