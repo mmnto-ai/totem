@@ -110,14 +110,12 @@ Orchestrator: Gemini gemini-3-flash-preview  (overrides: gemini-3.1-pro-preview 
 
 When a provider releases new stable models, update these locations:
 
-1. `packages/core/src/config-schema.ts` — Zod schema defaults (embeddings only)
-2. `packages/core/src/embedders/gemini-embedder.ts` — constructor default
-3. `packages/core/src/embedders/openai-embedder.ts` — constructor default
-4. `packages/core/src/embedders/ollama-embedder.ts` — constructor default
-5. `packages/cli/src/commands/init.ts` — config generation templates
-6. `docs/architecture.md` — documentation examples
-7. `totem.config.ts` — project root config (this repo's own config)
-8. Test files — smoke, integration, and unit tests referencing specific model IDs
+1. Core config schema — Zod embedding defaults
+2. Embedder constructors — default model constant in each provider
+3. Init command — config generation templates
+4. Architecture docs — documentation examples
+5. Root totem config — this repo's own embedding config
+6. Test files — smoke, integration, and unit tests referencing specific model IDs
 
 ---
 
