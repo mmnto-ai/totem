@@ -285,6 +285,19 @@ program
   );
 
 program
+  .command('test')
+  .description('Run test fixtures against compiled rules (TDD for governance rules)')
+  .option('--filter <term>', 'Filter by rule hash or heading substring')
+  .action(async (opts: { filter?: string }) => {
+    try {
+      const { testRulesCommand } = await import('./commands/test-rules.js');
+      await testRulesCommand(opts);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('extract <pr-numbers...>')
   .description('Extract lessons from PR review(s) into .totem/lessons/ (interactive cherry-pick)')
   .option('--raw', 'Output assembled prompt without LLM synthesis')
