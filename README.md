@@ -30,9 +30,9 @@ By building our orchestrator as discrete, composable commands (`spec`, `shield`,
 
 Totem is architected for high-compliance enterprise sectors (defense, finance, healthcare) that operate in strict AI sandboxes. **We adhere to the Air-Gapped Doctrine (Zero-Telemetry Architecture).**
 
-- **Zero Default Telemetry:** The `totem` CLI will *never* transmit usage statistics, codebase contents, error logs, or rule evaluation metrics to a centralized server. Your codebase stays on your machine.
+- **Zero Default Telemetry:** The `totem` CLI will _never_ transmit usage statistics, codebase contents, error logs, or rule evaluation metrics to a centralized server. Your codebase stays on your machine.
 - **Pluggable Local Intelligence:** Every command that requires an AI model (`totem sync`, `totem shield`) natively supports local execution via Ollama or private VPC endpoints. You can run the entire Codebase Immune System without a public internet connection.
-- **Bounded MCP Boundaries:** The Totem MCP server is a strict read-only/append-only context provider. It will *never* expose destructive filesystem tools (e.g., `execute_command`, `delete_file`) to connected AI agents. This neutralizes the risk of agents executing malicious code via indirect prompt injection (e.g., if an agent reads a poisoned `README.md` from an npm package).
+- **Bounded MCP Boundaries:** The Totem MCP server is a strict read-only/append-only context provider. It will _never_ expose destructive filesystem tools (e.g., `execute_command`, `delete_file`) to connected AI agents. This neutralizes the risk of agents executing malicious code via indirect prompt injection (e.g., if an agent reads a poisoned `README.md` from an npm package).
 - **Injection & ReDoS Hardening:** Totem actively sanitizes untrusted inputs and neutralizes terminal injection attacks (ANSI escapes in Git outputs). We apply SECURITY NOTICES to PR comments during extraction to explicitly warn agents of untrusted text.
 
 ## Prerequisites
@@ -53,7 +53,7 @@ Run this inside your consuming project (e.g., your Next.js or Node app):
 npx @mmnto/cli init
 ```
 
-This will auto-detect your project structure and package manager. It generates a `totem.config.ts`, creates a `.totemignore` file, and injects **Proactive Memory Reflexes** into your AI agent's instruction files (like `CLAUDE.md`). It also installs a Curated Universal Baseline of AI traps to get you started on Day 1.
+This will auto-detect your project structure and package manager. It generates a `totem.config.ts` and injects **Proactive Memory Reflexes** into your AI agent's instruction files (like `CLAUDE.md`). It also installs a Curated Universal Baseline of AI traps to get you started on Day 1.
 
 ### 2. Configure your Embedding Provider
 
@@ -64,13 +64,15 @@ If `OPENAI_API_KEY` is already set in your environment or `.env`, `totem init` w
 ```bash
 npx @mmnto/cli sync
 ```
-This builds your local LanceDB vector index. *(Note: If you accepted the git hook installation during `init`, Totem will automatically run incremental background syncs after every `git pull` or `git merge`).*
+
+This builds your local LanceDB vector index. _(Note: If you accepted the git hook installation during `init`, Totem will automatically run incremental background syncs after every `git pull` or `git merge`)._
 
 ### 4. Connect the MCP Server
 
-Add Totem to your AI agent's configuration (e.g., Claude Desktop, Claude Code, Gemini, Cursor). This equips the agent with standard retrieval tools alongside robust enforcement hooks like `get_rules_for_file`.
+Add Totem to your AI agent's configuration (e.g., Claude Desktop, Claude Code, Gemini, Cursor). This equips the agent with `search_knowledge` for retrieval and `add_lesson` for anchoring new traps.
 
 **macOS / Linux:**
+
 ```json
 {
   "mcpServers": {
@@ -83,6 +85,7 @@ Add Totem to your AI agent's configuration (e.g., Claude Desktop, Claude Code, G
 ```
 
 **Windows:**
+
 ```json
 {
   "mcpServers": {
@@ -93,7 +96,8 @@ Add Totem to your AI agent's configuration (e.g., Claude Desktop, Claude Code, G
   }
 }
 ```
-*Note: For more details on IDE-specific wiring (like JetBrains Junie) or pinning MCP versions, see the [Advanced Configuration Wiki](./docs/wiki/advanced-configuration.md).*
+
+_Note: For more details on IDE-specific wiring (like JetBrains Junie) or pinning MCP versions, see the [Advanced Configuration Wiki](./docs/wiki/advanced-configuration.md)._
 
 ### 5. The Codebase Immune System
 
@@ -101,12 +105,13 @@ Once your index is built, Totem natively intercepts your git pushes to perform a
 
 **`totem shield`**
 Reads your uncommitted diff and queries LanceDB for related traps to perform a deterministic architectural code review.
+
 - Executes in milliseconds using compiled rules.
 - To integrate this into your CI/CD pipeline with SARIF support, see the [CI Integration Wiki](./docs/wiki/ci-integration.md).
 
 ## Core Command Index
 
-Totem ships with native CLI commands that orchestrate your entire shift-left workflow. 
+Totem ships with native CLI commands that orchestrate your entire shift-left workflow.
 
 - **Discovery:** `briefing`, `triage`, `audit`
 - **Architectural Control:** `spec`, `shield`, `test`
