@@ -42,7 +42,7 @@ export interface Spinner {
   stop(): void;
 }
 
-import { getRandomSpinnerQuote } from './ui/quotes.js';
+import { getRandomSpinnerQuote } from './ui/quotes.js'; // totem-ignore — ui.ts is a shared utility, not a command file
 
 /**
  * Custom spinner frame resembling an Inception spinning top wobbling.
