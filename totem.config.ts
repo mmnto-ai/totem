@@ -54,7 +54,7 @@ const config: TotemConfig = {
     '.strategy/governance-os-thesis/**',
   ],
 
-  shieldIgnorePatterns: ['.totem/lessons/**', 'docs/**', '.changeset/**', '.junie/**', 'README.md'],
+  shieldIgnorePatterns: ['.totem/lessons/**', 'docs/**', '.changeset/**', '.junie/**', 'README.md', '**/CHANGELOG.md'],
 };
 
 export default config;
