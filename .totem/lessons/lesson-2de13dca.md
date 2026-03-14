@@ -8,7 +8,7 @@ AI agent memory config architectures differ significantly across agents, and GCA
 
 **Gemini Code Assist (GCA):** Reads only `.gemini/config.yaml` (review settings) and `.gemini/styleguide.md` (review rules). Does NOT read GEMINI.md, settings.json, hooks/, or skills/.
 
-**Gemini CLI:** Reads `GEMINI.md` (uppercase only by default) from project root, current dir, or ancestor dirs up to git root. Also reads `.gemini/settings.json` (project-level), `~/.gemini/settings.json` (global), `.gemini/hooks/` (must be wired in settings.json), and `.gemini/skills/` (auto-discovered). Does NOT read config.yaml or styleguide.md. The context filename is configurable via `context.fileName` in settings.json.
+**Gemini CLI:** Reads GEMINI.md (uppercase only by default) from project root, current dir, or ancestor dirs up to git root. Also reads .gemini/settings.json (project-level), ~/.gemini/settings.json (global), .gemini/hooks/ (must be wired in settings.json), and .gemini/skills/ (auto-discovered). Does NOT read config.yaml or styleguide.md. The context filename is configurable via context.fileName in settings.json.
 
 **Claude Code:** Uses CLAUDE.md (project root) and ~/.claude/ (global). Keep CLAUDE.md lean (<~32 lines) — length kills instruction compliance.
 
@@ -16,4 +16,4 @@ AI agent memory config architectures differ significantly across agents, and GCA
 
 **Junie:** Uses `.junie/guidelines.md` (project only).
 
-When scaffolding configs via totem init, each agent needs its own format but the instruction content should be identical and concise. IMPORTANT: `.gemini/gemini.md` (lowercase) is NOT read by either product with default settings.
+When scaffolding configs via totem init, each agent needs its own format but the instruction content should be identical and concise. IMPORTANT: .gemini/gemini.md (lowercase) is NOT read by either product with default settings.
