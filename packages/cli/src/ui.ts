@@ -42,16 +42,28 @@ export interface Spinner {
   stop(): void;
 }
 
+import { getRandomSpinnerQuote } from './ui/quotes.js'; // totem-ignore — ui.ts is a shared utility, not a command file
+
+/**
+ * Custom spinner frame resembling an Inception spinning top wobbling.
+ */
+const INCEPTION_TOP = {
+  interval: 100,
+  frames: ['◐', '◓', '◑', '◒'],
+};
+
 /**
  * Create a spinner that writes to stderr.
  * Falls back to static log lines in non-TTY environments (CI, piped).
  */
-export async function createSpinner(tag: string, text: string): Promise<Spinner> {
+export async function createSpinner(tag: string, text?: string): Promise<Spinner> {
   const isTTY = !!process.stderr.isTTY;
+  const isQuoteMode = !text; // If no text provided, we cycle quotes
+  let currentText = text || getRandomSpinnerQuote();
 
   if (!isTTY) {
     // Non-interactive: static log lines
-    console.error(`${prefix(tag)} ${text}`);
+    console.error(`${prefix(tag)} ${currentText}`);
     return {
       update(newText: string) {
         console.error(`${prefix(tag)} ${newText}`);
@@ -69,21 +81,40 @@ export async function createSpinner(tag: string, text: string): Promise<Spinner>
   // Dynamic import to keep startup fast for non-spinner commands
   const ora = (await import('ora')).default;
   const spinner = ora({
-    text: `${prefix(tag)} ${text}`,
+    text: `${prefix(tag)} ${currentText}`,
     stream: process.stderr,
+    spinner: INCEPTION_TOP,
   }).start();
+
+  let quoteInterval: NodeJS.Timeout | null = null;
+
+  // Cycle quotes every 4 seconds if we are in quote mode
+  if (isQuoteMode) {
+    quoteInterval = setInterval(() => {
+      currentText = getRandomSpinnerQuote();
+      spinner.text = `${prefix(tag)} ${currentText}`;
+    }, 4000);
+  }
+
+  const cleanup = () => {
+    if (quoteInterval) clearInterval(quoteInterval);
+  };
 
   return {
     update(newText: string) {
+      if (isQuoteMode) return; // Don't let external progress updates overwrite our movie quotes if in quote mode
       spinner.text = `${prefix(tag)} ${newText}`;
     },
     succeed(doneText?: string) {
+      cleanup();
       spinner.succeed(doneText ? `${prefix(tag)} ${doneText}` : undefined);
     },
     fail(errText?: string) {
+      cleanup();
       spinner.fail(errText ? `${prefix(tag)} ${errText}` : undefined);
     },
     stop() {
+      cleanup();
       spinner.stop();
     },
   };
