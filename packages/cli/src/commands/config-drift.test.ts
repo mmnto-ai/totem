@@ -112,7 +112,7 @@ describe('CLAUDE.md and GEMINI.md share the same project rules', () => {
     '`err` (never `error`)',
     'No empty catch blocks',
     'Extract magic numbers into named constants',
-    'Zod for runtime validation',
+    'Zod for runtime validation at system boundaries',
     '`pnpm run format`',
     // Publishing
     'Changesets + npm OIDC trusted publishing',

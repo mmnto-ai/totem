@@ -19,7 +19,7 @@
 - Use `err` (never `error`) in catch blocks
 - No empty catch blocks — always log or throw
 - Extract magic numbers into named constants
-- Zod for runtime validation at boundaries
+- Zod for runtime validation at system boundaries (config, API input)
 - Run `pnpm run format` before committing new files
 
 ## Totem
@@ -35,5 +35,8 @@
 
 ## Contributor Principles
 
+<!-- totem-ignore-next-line -->
+
 - **Consumer-first:** Changes to AI reflexes, hooks, or prompts must update the `AI_PROMPT_BLOCK` template in `init.ts`. Consumers must get updates out of the box.
+<!-- totem-ignore-next-line -->
 - **GCA decline reflex:** When declining a recurring GCA suggestion, add a lesson with `review-guidance` tag and update `.gemini/styleguide.md` §6 on the same PR.

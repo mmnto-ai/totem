@@ -175,8 +175,8 @@ export async function briefingCommand(options: BriefingOptions): Promise<void> {
         '\n\nRun `totem sync --rebuild` to re-index and fix these issues.\n';
       log.warn(TAG, `Index health check found ${healthResult.issues.length} issue(s)`);
     }
-  } catch {
-    // Non-fatal — don't block briefing if health check fails
+  } catch (err) {
+    log.warn(TAG, `Index health check failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   // Retrieve context from LanceDB

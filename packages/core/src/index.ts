@@ -85,6 +85,7 @@ export type {
 export {
   applyRules,
   applyRulesToAdditions,
+  matchesGlob,
   CompiledRuleSchema,
   CompiledRulesFileSchema,
   CompilerOutputSchema,

@@ -217,7 +217,7 @@ describe('LanceStore', () => {
       expect(result.expectedDimensions).toBe(embedder.dimensions);
       expect(result.storedDimensions).toBe(embedder.dimensions);
       expect(result.issues).toEqual([]);
-      expect(result.durationMs).toBeGreaterThanOrEqual(0);
+      expect(result.durationMs).toBeGreaterThanOrEqual(0); // totem-ignore — timing floor check, not a set count
     });
 
     it('returns healthy with storedDimensions null for an empty index', async () => {

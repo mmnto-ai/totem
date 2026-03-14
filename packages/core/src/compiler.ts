@@ -179,7 +179,7 @@ export function extractAddedLines(diff: string): DiffAddition[] {
  * Check if a file path matches a single glob pattern.
  * Supports: `*.ext`, `**\/*.ext`, `dir/**\/*.ext`, `dir/**`, literal filenames.
  */
-function matchesGlob(filePath: string, glob: string): boolean {
+export function matchesGlob(filePath: string, glob: string): boolean {
   // Normalize separators
   const normalized = filePath.replace(/\\/g, '/');
   // *.ext — match file extension anywhere

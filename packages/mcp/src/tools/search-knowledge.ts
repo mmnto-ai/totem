@@ -179,7 +179,7 @@ export function registerSearchKnowledge(server: McpServer): void {
         if (healthWarning && result.content.length > 0) {
           result.content[0] = {
             type: 'text' as const,
-            text: healthWarning + '\n\n' + result.content[0]!.text,
+            text: healthWarning + '\n\n' + result.content[0]!.text, // totem-ignore — healthWarning is system-generated, text is already XML-wrapped
           };
         }
 
