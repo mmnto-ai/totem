@@ -12,9 +12,17 @@ import { registerSearchKnowledge } from './tools/search-knowledge.js';
 
 // Support --cwd flag to run against a different project root
 const cwdFlagIdx = process.argv.indexOf('--cwd');
-if (cwdFlagIdx !== -1 && process.argv[cwdFlagIdx + 1]) {
-  const targetDir = path.resolve(process.argv[cwdFlagIdx + 1]);
-  process.chdir(targetDir);
+if (cwdFlagIdx !== -1) {
+  const cwdValue = process.argv[cwdFlagIdx + 1];
+  if (!cwdValue || cwdValue.startsWith('-')) {
+    throw new Error('[Totem Error] --cwd flag requires a directory path argument.');
+  }
+  try {
+    process.chdir(path.resolve(cwdValue));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`[Totem Error] Failed to change directory to "${cwdValue}": ${message}`);
+  }
 }
 
 const require = createRequire(import.meta.url);
