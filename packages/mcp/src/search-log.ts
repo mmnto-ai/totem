@@ -8,7 +8,7 @@ export interface SearchLogEntry {
   resultCount: number;
   durationMs: number;
   topScore: number | null;
-  error?: string;
+  error?: string; // eslint-disable-line id-match -- interface property, not a catch binding
 }
 
 export interface SearchStats {
