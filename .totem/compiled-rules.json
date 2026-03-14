@@ -920,7 +920,7 @@
       "message": "Avoid using literal file paths in lessons (e.g., 'src/config.ts'). Use conceptual descriptions instead (e.g., 'the configuration file') to prevent drift detector errors when files are moved or renamed.",
       "engine": "regex",
       "compiledAt": "2026-03-12T11:46:43.434Z",
-      "fileGlobs": ["**/*.md", "**/lessons/**", ".github/junie/lessons/**/*"]
+      "fileGlobs": [".totem/lessons/**", ".totem/lessons.md"]
     },
     {
       "lessonHash": "5d622e22e4b8f281",
