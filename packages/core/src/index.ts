@@ -111,6 +111,10 @@ export {
   SENTINEL_START,
 } from './exporter.js';
 
+// SARIF output
+export type { SarifLog, SarifOptions, SarifResult, SarifRun } from './sarif.js';
+export { buildSarifLog, ruleId } from './sarif.js';
+
 // Saga validator
 export type { SagaViolation, ViolationType } from './saga-validator.js';
 export { validateDocUpdate } from './saga-validator.js';

@@ -129,7 +129,8 @@ program
     '--mode <mode>',
     'Review mode: standard (default, with Totem knowledge) or structural (context-blind paranoia)',
   )
-  .option('--learn', 'Extract lessons from failed verdicts into .totem/lessons.md')
+  .option('--format <format>', 'Output format: text (default), sarif, or json (deterministic only)')
+  .option('--learn', 'Extract lessons from failed verdicts into .totem/lessons/')
   .option('--yes', 'Auto-accept extracted lessons (for CI; suspicious lessons are dropped)')
   .action(
     async (opts: {
@@ -140,19 +141,16 @@ program
       staged?: boolean;
       deterministic?: boolean;
       mode?: string;
+      format?: string;
       learn?: boolean;
       yes?: boolean;
     }) => {
       try {
-        if (opts.mode && opts.mode !== 'standard' && opts.mode !== 'structural') {
-          throw new Error(
-            `[Totem Error] Invalid --mode "${opts.mode}". Use "standard" or "structural".`,
-          );
-        }
         const { shieldCommand } = await import('./commands/shield.js');
         await shieldCommand({
           ...opts,
           mode: opts.mode as 'standard' | 'structural' | undefined,
+          format: opts.format as 'text' | 'sarif' | 'json' | undefined,
         });
       } catch (err) {
         handleError(err);
@@ -288,12 +286,12 @@ program
 
 program
   .command('extract <pr-numbers...>')
-  .description('Extract lessons from PR review(s) into .totem/lessons.md (interactive cherry-pick)')
+  .description('Extract lessons from PR review(s) into .totem/lessons/ (interactive cherry-pick)')
   .option('--raw', 'Output assembled prompt without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
   .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
-  .option('--dry-run', 'Show extracted lessons without writing to lessons.md')
+  .option('--dry-run', 'Show extracted lessons without writing to disk')
   .option('--yes', 'Skip confirmation prompt (use in scripts/CI)')
   .action(
     async (

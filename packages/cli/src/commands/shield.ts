@@ -243,6 +243,8 @@ export function parseVerdict(content: string): { pass: boolean; reason: string }
 
 // ─── Main command ───────────────────────────────────────
 
+export type ShieldFormat = 'text' | 'sarif' | 'json';
+
 export interface ShieldOptions {
   raw?: boolean;
   out?: string;
@@ -251,6 +253,7 @@ export interface ShieldOptions {
   staged?: boolean;
   deterministic?: boolean;
   mode?: 'standard' | 'structural';
+  format?: ShieldFormat;
   learn?: boolean;
   yes?: boolean;
 }
@@ -298,6 +301,7 @@ async function runDeterministicShield(
   totemDir: string,
   outPath?: string,
   exportPaths?: string[],
+  format: ShieldFormat = 'text',
 ): Promise<void> {
   const rulesPath = path.join(cwd, totemDir, COMPILED_RULES_FILE);
   const rules = loadCompiledRules(rulesPath);
@@ -335,30 +339,51 @@ async function runDeterministicShield(
 
   const violations = applyRulesToAdditions(rules, additions);
 
-  // Build output
-  const lines: string[] = [];
+  // Build output based on format
+  let output: string;
 
-  if (violations.length === 0) {
-    lines.push('### Verdict');
-    lines.push(`**PASS** — All ${rules.length} deterministic rules passed.`);
-    lines.push('');
-    lines.push('### Details');
-    lines.push('No violations detected against compiled lesson rules.');
+  if (format === 'sarif') {
+    const { buildSarifLog, getHeadSha } = await import('@mmnto/totem');
+    const { createRequire } = await import('node:module');
+    const req = createRequire(import.meta.url);
+    const version = (req('../../package.json') as { version: string }).version;
+    const commitHash = getHeadSha(cwd) ?? undefined;
+    const sarif = buildSarifLog(violations, rules, { version, commitHash });
+    output = JSON.stringify(sarif, null, 2);
+  } else if (format === 'json') {
+    output = JSON.stringify(
+      { pass: violations.length === 0, rules: rules.length, violations },
+      null,
+      2,
+    );
   } else {
-    lines.push('### Verdict');
-    lines.push(`**FAIL** — ${violations.length} violation(s) found across ${rules.length} rules.`);
-    lines.push('');
-    lines.push('### Violations');
-    for (const v of violations) {
-      lines.push(`- **${v.file}:${v.lineNumber}** — ${v.rule.message}`);
-      lines.push(`  Pattern: \`/${v.rule.pattern}/\``);
-      lines.push(`  Lesson: "${v.rule.lessonHeading}"`);
-      lines.push(`  Line: \`${v.line.trim()}\``);
+    const lines: string[] = [];
+
+    if (violations.length === 0) {
+      lines.push('### Verdict');
+      lines.push(`**PASS** — All ${rules.length} deterministic rules passed.`);
       lines.push('');
+      lines.push('### Details');
+      lines.push('No violations detected against compiled lesson rules.');
+    } else {
+      lines.push('### Verdict');
+      lines.push(
+        `**FAIL** — ${violations.length} violation(s) found across ${rules.length} rules.`,
+      );
+      lines.push('');
+      lines.push('### Violations');
+      for (const v of violations) {
+        lines.push(`- **${v.file}:${v.lineNumber}** — ${v.rule.message}`);
+        lines.push(`  Pattern: \`/${v.rule.pattern}/\``);
+        lines.push(`  Lesson: "${v.rule.lessonHeading}"`);
+        lines.push(`  Line: \`${v.line.trim()}\``);
+        lines.push('');
+      }
     }
+
+    output = lines.join('\n');
   }
 
-  const output = lines.join('\n');
   writeOutput(output, outPath);
   if (outPath) log.success(TAG, `Written to ${outPath}`);
 
@@ -502,7 +527,23 @@ export async function learnFromVerdict(
 
 // ─── Main command ───────────────────────────────────
 
+const VALID_FORMATS: ShieldFormat[] = ['text', 'sarif', 'json'];
+
 export async function shieldCommand(options: ShieldOptions): Promise<void> {
+  if (options.mode && options.mode !== 'standard' && options.mode !== 'structural') {
+    throw new Error(
+      `[Totem Error] Invalid --mode "${options.mode}". Use "standard" or "structural".`,
+    );
+  }
+  if (options.format && !VALID_FORMATS.includes(options.format)) {
+    throw new Error(
+      `[Totem Error] Invalid --format "${options.format}". Use "text", "sarif", or "json".`,
+    );
+  }
+  if (options.format && options.format !== 'text' && !options.deterministic) {
+    throw new Error('[Totem Error] --format sarif/json is only supported with --deterministic.');
+  }
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);
@@ -530,7 +571,14 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   // Deterministic mode — use compiled rules, no LLM, no embeddings
   if (options.deterministic) {
     const exportPaths = config.exports ? Object.values(config.exports) : undefined;
-    await runDeterministicShield(diff, cwd, config.totemDir, options.out, exportPaths);
+    await runDeterministicShield(
+      diff,
+      cwd,
+      config.totemDir,
+      options.out,
+      exportPaths,
+      options.format,
+    );
     return;
   }
 

@@ -85,14 +85,15 @@ can be used as an orchestrator. Popular choices:
 
 Used by `totem sync` for indexing chunks into LanceDB.
 
-| Provider             | Model ID                 | Dimensions | Notes                                                  |
-| -------------------- | ------------------------ | ---------- | ------------------------------------------------------ |
-| **OpenAI** (default) | `text-embedding-3-small` | 1536       | Lowest onboarding friction                             |
-| OpenAI (large)       | `text-embedding-3-large` | 3072       | Higher quality, higher cost                            |
-| **Ollama** (offline) | `nomic-embed-text`       | 768        | 56M+ pulls, most popular local                         |
-| Ollama               | `mxbai-embed-large`      | 1024       | BERT-large class SOTA                                  |
-| Ollama               | `qwen3-embedding`        | varies     | Newest, fast-growing                                   |
-| Gemini               | `gemini-embedding-002`   | —          | Multimodal (text/image/video/audio), not yet supported |
+| Provider             | Model ID                     | Dimensions | Notes                                 |
+| -------------------- | ---------------------------- | ---------- | ------------------------------------- |
+| **Gemini** (default) | `gemini-embedding-2-preview` | 768        | Multimodal, task-type aware retrieval |
+| Gemini               | `gemini-embedding-001`       | 768        | Stable, text-only                     |
+| OpenAI               | `text-embedding-3-small`     | 1536       | Lowest onboarding friction            |
+| OpenAI (large)       | `text-embedding-3-large`     | 3072       | Higher quality, higher cost           |
+| **Ollama** (offline) | `nomic-embed-text`           | 768        | 56M+ pulls, most popular local        |
+| Ollama               | `mxbai-embed-large`          | 1024       | BERT-large class SOTA                 |
+| Ollama               | `qwen3-embedding`            | varies     | Newest, fast-growing                  |
 
 ---
 
@@ -101,7 +102,7 @@ Used by `totem sync` for indexing chunks into LanceDB.
 Current defaults configured in `totem.config.ts` and `packages/cli/src/commands/init.ts`:
 
 ```
-Embedding:    OpenAI text-embedding-3-small  (or Ollama nomic-embed-text)
+Embedding:    Gemini gemini-embedding-2-preview  (or OpenAI text-embedding-3-small, Ollama nomic-embed-text)
 Orchestrator: Gemini gemini-3-flash-preview  (overrides: gemini-3.1-pro-preview for spec/shield/triage)
 ```
 
@@ -109,13 +110,12 @@ Orchestrator: Gemini gemini-3-flash-preview  (overrides: gemini-3.1-pro-preview 
 
 When a provider releases new stable models, update these locations:
 
-1. `packages/core/src/config-schema.ts` — Zod schema defaults (embeddings only)
-2. `packages/core/src/embedders/openai-embedder.ts` — constructor default
-3. `packages/core/src/embedders/ollama-embedder.ts` — constructor default
-4. `packages/cli/src/commands/init.ts` — config generation templates
-5. `docs/architecture.md` — documentation examples
-6. `totem.config.ts` — project root config (this repo's own config)
-7. Test files — smoke, integration, and unit tests referencing specific model IDs
+1. Core config schema — Zod embedding defaults
+2. Embedder constructors — default model constant in each provider
+3. Init command — config generation templates
+4. Architecture docs — documentation examples
+5. Root totem config — this repo's own embedding config
+6. Test files — smoke, integration, and unit tests referencing specific model IDs
 
 ---
 
