@@ -98,6 +98,17 @@ export {
   validateRegex,
 } from './compiler.js';
 
+// Rule testing
+export {
+  loadFixtures,
+  parseFixture,
+  type RuleTestFixture,
+  type RuleTestResult,
+  type RuleTestSummary,
+  runRuleTests,
+  testRule,
+} from './rule-tester.js';
+
 // AST classification
 export type { SupportedLanguage } from './ast-classifier.js';
 export { classifyLines, extensionToLanguage } from './ast-classifier.js';

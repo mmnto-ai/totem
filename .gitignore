@@ -41,6 +41,11 @@ session-handoff.md
 .totem/temp/
 .totem/cache/
 .totem/*.log
+.totem/*.jsonl
+.totem/.search-called
+
+# Developer cheatsheets & local scratch
+dev-cheatsheet.txt
 
 # Developer Journal
 .journal/
