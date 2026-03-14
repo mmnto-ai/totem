@@ -4,8 +4,9 @@
 > **Developer Preview / Early Alpha**
 > Totem is currently in early alpha. While Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete, we are still polishing the "Magic Onboarding" experience (interactive tutorials). If you encounter friction during `totem init`, please bear with us!
 
-**Your AI team forgets. Totem remembers.**
-AI generates the code. You generate the rules.
+## Your AI team forgets. Totem remembers.
+
+**AI generates the code. You generate the rules.**
 Totem is the local-first governance compiler for AI agents — **deterministic, git-native, and trustworthy.**
 
 ## Why Totem?
@@ -139,7 +140,7 @@ Add Totem to your AI agent's configuration (e.g., Claude Desktop, Claude Code, G
 > [!NOTE]
 > On Windows, `npx` is a `.cmd` script that tools like Claude Code cannot invoke directly as a subprocess. The `cmd /c` wrapper resolves this. If you use Git Bash as your shell, the macOS/Linux format may also work.
 
-**JetBrains Junie** — Add to `.mcp.json` in your project root (#371):
+**JetBrains Junie** — Add to `.junie/mcp/mcp.json` in your project root:
 
 ```json
 {
@@ -152,12 +153,15 @@ Add Totem to your AI agent's configuration (e.g., Claude Desktop, Claude Code, G
 }
 ```
 
-To export compiled lessons to Junie's guidelines file, add an export target in `totem.config.ts`:
+> [!NOTE]
+> Junie uses `.junie/mcp/mcp.json` for MCP config, not `.mcp.json` (which is for Claude Code). On Windows, use the `cmd /c npx` wrapper shown above.
+
+To export compiled rules as a Junie skill (loaded on demand, not every prompt), add an export target in `totem.config.ts`:
 
 ```typescript
 // in totem.config.ts
 exports: {
-  junie: '.junie/guidelines.md';
+  junie: '.junie/skills/totem-rules/rules.md';
 }
 ```
 
