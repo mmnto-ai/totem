@@ -32,6 +32,7 @@ export {
 // Types
 export type {
   Chunk,
+  HealthCheckResult,
   SearchOptions,
   SearchResult,
   StoredChunk,

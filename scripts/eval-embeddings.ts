@@ -52,7 +52,7 @@ const EVAL_QUERIES: EvalQuery[] = [
   {
     query: 'LanceDB backtick quoting DataFusion case sensitive column',
     description: 'Find the backtick quoting trap lesson',
-    expectedMatches: ['lessons.md'],
+    expectedMatches: ['lessons'],
     typeFilter: 'lesson',
   },
   {
@@ -103,7 +103,7 @@ const EVAL_QUERIES: EvalQuery[] = [
   {
     query: 'retry error handling stale database handle reconnect',
     description: 'Find error handling lessons',
-    expectedMatches: ['lessons.md'],
+    expectedMatches: ['lessons'],
     typeFilter: 'lesson',
   },
   {
@@ -120,6 +120,79 @@ const EVAL_QUERIES: EvalQuery[] = [
     query: 'orchestrator gemini anthropic openai LLM provider',
     description: 'Find orchestrator implementations',
     expectedMatches: ['orchestrator.ts', 'gemini-orchestrator.ts'],
+  },
+  // ─── Lesson-specific queries (target .totem/lessons/*.md) ───
+  {
+    query: 'Gemini text-embedding-004 model unavailable API version fallback',
+    description: 'Find Gemini embedding model compatibility lesson',
+    expectedMatches: ['lesson-157700de.md'],
+    typeFilter: 'lesson',
+  },
+  {
+    query: 'migrating data sources unit tests edge case coverage accidentally deleted',
+    description: 'Find migration test coverage lesson',
+    expectedMatches: ['lesson-17d29908.md'],
+    typeFilter: 'lesson',
+  },
+  {
+    query: 'SARIF rule index mapping violation hard error silent fallback',
+    description: 'Find SARIF rule mapping lesson',
+    expectedMatches: ['lesson-572bbf2f.md'],
+    typeFilter: 'lesson',
+  },
+  {
+    query: 'full text search FTS vector embeddings reciprocal rank fusion RRF',
+    description: 'Find hybrid search RRF lesson',
+    expectedMatches: ['lesson-61ce93c4.md'],
+    typeFilter: 'lesson',
+  },
+  {
+    query: 'CLI validation error user-facing message instead of raw JavaScript throw',
+    description: 'Find CLI error handling lesson',
+    expectedMatches: ['lesson-8b82f874.md'],
+    typeFilter: 'lesson',
+  },
+  {
+    query: 'dynamic import lazy loading CLI startup performance heavy core package',
+    description: 'Find dynamic import performance lesson',
+    expectedMatches: ['lesson-8e9878b9.md'],
+    typeFilter: 'lesson',
+  },
+  {
+    query: 'regex line-start marker detection user file corruption migration',
+    description: 'Find regex marker detection lesson',
+    expectedMatches: ['lesson-925778cd.md'],
+    typeFilter: 'lesson',
+  },
+  {
+    query: 'type assertions versus Zod dependency overhead small data structures',
+    description: 'Find Zod vs type assertions lesson',
+    expectedMatches: ['lesson-9a6d19c8.md'],
+    typeFilter: 'lesson',
+  },
+  {
+    query: 'monolithic file directory migration dual-read single-write backward compatibility',
+    description: 'Find dual-read/single-write migration lesson',
+    expectedMatches: ['lesson-abfb2f24.md'],
+    typeFilter: 'lesson',
+  },
+  {
+    query: 'SARIF enforced rules count deduplicated tool driver metadata inconsistency',
+    description: 'Find SARIF rule count deduplication lesson',
+    expectedMatches: ['lesson-b94e5596.md'],
+    typeFilter: 'lesson',
+  },
+  {
+    query: 'non-unique heading field deletion pruning accidental data loss hash',
+    description: 'Find unique identification for pruning lesson',
+    expectedMatches: ['lesson-bb14eb70.md'],
+    typeFilter: 'lesson',
+  },
+  {
+    query: 'filename pattern distinguish item types explicit metadata field storage migration',
+    description: 'Find explicit metadata over filename pattern lesson',
+    expectedMatches: ['lesson-72222028.md'],
+    typeFilter: 'lesson',
   },
 ];
 
@@ -156,6 +229,7 @@ async function evalProvider(
       { glob: 'README.md', type: 'spec', strategy: 'markdown-heading' },
       { glob: 'CLAUDE.md', type: 'spec', strategy: 'markdown-heading' },
       { glob: 'docs/**/*.md', type: 'spec', strategy: 'markdown-heading' },
+      { glob: '.totem/lessons/*.md', type: 'lesson', strategy: 'markdown-heading' },
       { glob: '.totem/lessons.md', type: 'lesson', strategy: 'markdown-heading' },
     ],
     embedding: config,

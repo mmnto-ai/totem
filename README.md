@@ -16,7 +16,7 @@ When you're three levels deep in a debugging session, you need to know if the co
 
 ## Why Totem?
 
-- **Local-First & Git-Native:** Totem compiles an embedded LanceDB vector index directly inside your project, storing actual knowledge in a human-readable, version-controlled `.totem/lessons.md` file. Review your AI's memory locally in your PRs instead of locking it in a cloud SaaS.
+- **Local-First & Git-Native:** Totem compiles an embedded LanceDB vector index directly inside your project, storing actual knowledge in a human-readable, version-controlled `.totem/lessons/` directory. Review your AI's memory locally in your PRs instead of locking it in a cloud SaaS.
 - **The Reflex Engine:** Totem gives your AI reflexes by auto-injecting behavioral triggers and Defensive Context Management Reflexes into system prompts. This forces them to autonomously document traps, query architecture, and issue warnings before writing code (#160).
 - **Multi-Agent Orchestration:** Use Claude to write code, Gemini to review PRs, and a local DeepSeek model for fast checks. Totem acts as the "Shared Brain" orchestrator, supporting role-based access control (RBAC) across your entire AI org chart (#312).
 - **Built for Enterprise Scale:** The ingestion pipeline streams chunks in batches, maintaining a flat memory footprint regardless of monorepo size (#104). Drift Detection ensures your memory stays self-cleaning and relevant as the codebase evolves (#211).
@@ -104,7 +104,7 @@ The file resolver natively scopes across your repository and correctly indexes f
 
 #### Drift Detection (Self-Cleaning Memory)
 
-Over time, lessons in `.totem/lessons.md` can reference files or paths that no longer exist. Use `--prune` to detect and interactively remove stale lessons (#211):
+Over time, lessons in `.totem/lessons/` can reference files or paths that no longer exist. Use `--prune` to detect and interactively remove stale lessons (#211):
 
 ```bash
 npx @mmnto/cli sync --prune
