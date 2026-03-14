@@ -33,12 +33,12 @@ In a standard Totem-enabled repository, there are multiple distinct AI actors. E
 
 The `.gemini/` directory can be a source of confusion because it houses configurations for both the local Gemini CLI and the headless GCA bot.
 
-| File                        | Read By                            | Purpose                                                                                                                                                              |
-| :-------------------------- | :--------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`CLAUDE.md`**             | Claude Code                        | Project context, architectural rules, and Totem local reflexes.                                                                                                      |
-| **`.gemini/settings.json`** | Gemini CLI                         | CLI tool configuration, UI preferences, and model defaults.                                                                                                          |
-| **`.gemini/config.yaml`**   | GCA Bot                            | PR review settings (severity thresholds, file exclusions, max comments).                                                                                             |
-| **`.gemini/styleguide.md`** | GCA Bot & Gemini CLI *[needs verification]* | Syntactic rules, formatting, and coding standards.                                                                                                                   |
+| File                        | Read By                                     | Purpose                                                                  |
+| :-------------------------- | :------------------------------------------ | :----------------------------------------------------------------------- |
+| **`CLAUDE.md`**             | Claude Code                                 | Project context, architectural rules, and Totem local reflexes.          |
+| **`.gemini/settings.json`** | Gemini CLI                                  | CLI tool configuration, UI preferences, and model defaults.              |
+| **`.gemini/config.yaml`**   | GCA Bot                                     | PR review settings (severity thresholds, file exclusions, max comments). |
+| **`.gemini/styleguide.md`** | GCA Bot & Gemini CLI _[needs verification]_ | Syntactic rules, formatting, and coding standards.                       |
 
 ---
 

@@ -1,4 +1,3 @@
-
 # Totem — Development Rules
 
 ## Git

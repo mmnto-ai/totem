@@ -191,18 +191,13 @@ describe('totem init scaffolds correct paths for each agent', () => {
 // ─── Secrets hygiene ─────────────────────────────────
 
 describe('no secrets in tracked config files', () => {
-  const CONFIG_FILES = [
-    'CLAUDE.md',
-    'GEMINI.md',
-    '.gemini/config.yaml',
-    '.gemini/styleguide.md',
-  ];
+  const CONFIG_FILES = ['CLAUDE.md', 'GEMINI.md', '.gemini/config.yaml', '.gemini/styleguide.md'];
 
   const SECRET_PATTERNS = [
-    /ghp_[a-zA-Z0-9]{36}/,       // GitHub PAT (classic)
-    /github_pat_[a-zA-Z0-9_]+/,  // GitHub PAT (fine-grained)
-    /sk-[a-zA-Z0-9]{20,}/,       // OpenAI API key
-    /AIza[a-zA-Z0-9_-]{35}/,     // Google API key
+    /ghp_[a-zA-Z0-9]{36}/, // GitHub PAT (classic)
+    /github_pat_[a-zA-Z0-9_]+/, // GitHub PAT (fine-grained)
+    /sk-[a-zA-Z0-9]{20,}/, // OpenAI API key
+    /AIza[a-zA-Z0-9_-]{35}/, // Google API key
     /sk-ant-[a-zA-Z0-9_-]{20,}/, // Anthropic API key
   ];
 
