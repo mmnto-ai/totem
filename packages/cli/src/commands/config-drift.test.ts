@@ -96,6 +96,25 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
   });
 });
 
+// ─── Instruction file length limits (FR-C01) ─────────
+
+describe('agent instruction files stay under 50 lines (FMEA-001 / FR-C01)', () => {
+  const MAX_LINES = 50;
+
+  const files = [
+    { name: 'CLAUDE.md', content: readRoot('CLAUDE.md') },
+    { name: 'GEMINI.md', content: readRoot('GEMINI.md') },
+    { name: '.junie/guidelines.md', content: readRoot('.junie/guidelines.md') },
+  ];
+
+  for (const { name, content } of files) {
+    it(`${name} is under ${MAX_LINES} lines`, () => {
+      const lineCount = content.split('\n').length;
+      expect(lineCount).toBeLessThanOrEqual(MAX_LINES);
+    });
+  }
+});
+
 // ─── Cross-agent consistency ─────────────────────────
 
 describe('all agent instruction files share the same project rules', () => {
