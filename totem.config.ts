@@ -30,7 +30,7 @@ const config: TotemConfig = {
 
   exports: {
     copilot: '.github/copilot-instructions.md',
-    junie: '.junie/guidelines.md',
+    junie: '.junie/skills/totem-rules/rules.md',
   },
 
   docs: [

@@ -72,6 +72,7 @@ describe('dev hooks match consumer templates', () => {
 describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
   const claudeMd = readRoot('CLAUDE.md');
   const geminiMd = readRoot('GEMINI.md');
+  const junieGuidelines = readRoot('.junie/guidelines.md');
 
   it('CLAUDE.md contains the search_knowledge instruction', () => {
     expect(claudeMd).toContain('search_knowledge');
@@ -79,6 +80,10 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
 
   it('GEMINI.md contains the search_knowledge instruction', () => {
     expect(geminiMd).toContain('search_knowledge');
+  });
+
+  it('Junie guidelines.md contains the search_knowledge instruction', () => {
+    expect(junieGuidelines).toContain('search_knowledge');
   });
 
   it('AI_PROMPT_BLOCK contains the search_knowledge reflex', () => {
@@ -93,9 +98,10 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
 
 // ─── Cross-agent consistency ─────────────────────────
 
-describe('CLAUDE.md and GEMINI.md share the same project rules', () => {
+describe('all agent instruction files share the same project rules', () => {
   const claudeMd = readRoot('CLAUDE.md');
   const geminiMd = readRoot('GEMINI.md');
+  const junieGuidelines = readRoot('.junie/guidelines.md');
 
   const SHARED_RULES = [
     // Git
@@ -124,9 +130,10 @@ describe('CLAUDE.md and GEMINI.md share the same project rules', () => {
   ];
 
   for (const rule of SHARED_RULES) {
-    it(`both files contain: "${rule}"`, () => {
+    it(`all agent files contain: "${rule}"`, () => {
       expect(claudeMd).toContain(rule);
       expect(geminiMd).toContain(rule);
+      expect(junieGuidelines).toContain(rule);
     });
   }
 });
@@ -193,7 +200,13 @@ describe('totem init scaffolds correct paths for each agent', () => {
 // ─── Secrets hygiene ─────────────────────────────────
 
 describe('no secrets in tracked config files', () => {
-  const CONFIG_FILES = ['CLAUDE.md', 'GEMINI.md', '.gemini/config.yaml', '.gemini/styleguide.md'];
+  const CONFIG_FILES = [
+    'CLAUDE.md',
+    'GEMINI.md',
+    '.junie/guidelines.md',
+    '.gemini/config.yaml',
+    '.gemini/styleguide.md',
+  ];
 
   const SECRET_PATTERNS = [
     /ghp_[a-zA-Z0-9]{36}/, // GitHub PAT (classic)
