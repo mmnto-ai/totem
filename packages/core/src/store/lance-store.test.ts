@@ -200,4 +200,53 @@ describe('LanceStore', () => {
       expect(await store.isEmpty()).toBe(false);
     });
   });
+
+  describe('healthCheck', () => {
+    it('returns healthy for a populated index', async () => {
+      await store.insert([
+        makeChunk({ content: 'alpha content' }),
+        makeChunk({ content: 'beta content' }),
+      ]);
+
+      const result = await store.healthCheck();
+
+      expect(result.healthy).toBe(true);
+      expect(result.dimensionMatch).toBe(true);
+      expect(result.canarySearchOk).toBe(true);
+      expect(result.totalChunks).toBe(2);
+      expect(result.expectedDimensions).toBe(embedder.dimensions);
+      expect(result.storedDimensions).toBe(embedder.dimensions);
+      expect(result.issues).toEqual([]);
+      expect(result.durationMs).toBeGreaterThanOrEqual(0); // totem-ignore — timing floor check, not a set count
+    });
+
+    it('returns healthy with storedDimensions null for an empty index', async () => {
+      const result = await store.healthCheck();
+
+      expect(result.healthy).toBe(true);
+      expect(result.storedDimensions).toBeNull();
+      expect(result.dimensionMatch).toBe(true);
+      expect(result.canarySearchOk).toBe(true);
+      expect(result.totalChunks).toBe(0);
+      expect(result.issues).toEqual([]);
+    });
+
+    it('reports FTS availability', async () => {
+      await store.insert([makeChunk({ content: 'fts test content' })]);
+      await store.createFtsIndex();
+
+      const result = await store.healthCheck();
+
+      expect(result.healthy).toBe(true);
+      expect(result.ftsAvailable).toBe(true);
+    });
+
+    it('reports ftsAvailable false when no FTS index exists', async () => {
+      await store.insert([makeChunk({ content: 'no fts here' })]);
+
+      const result = await store.healthCheck();
+
+      expect(result.ftsAvailable).toBe(false);
+    });
+  });
 });

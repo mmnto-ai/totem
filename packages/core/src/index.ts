@@ -32,6 +32,7 @@ export {
 // Types
 export type {
   Chunk,
+  HealthCheckResult,
   SearchOptions,
   SearchResult,
   StoredChunk,
@@ -90,6 +91,7 @@ export {
   extractAddedLines,
   hashLesson,
   loadCompiledRules,
+  matchesGlob,
   parseCompilerResponse,
   type RegexValidation,
   saveCompiledRules,

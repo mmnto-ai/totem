@@ -162,6 +162,23 @@ export async function briefingCommand(options: BriefingOptions): Promise<void> {
   const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
   await store.connect();
 
+  // Run index health check — surface issues before the briefing content
+  let healthWarningSection = '';
+  try {
+    const healthResult = await store.healthCheck();
+    if (!healthResult.healthy) {
+      const issueLines = healthResult.issues.map((issue) => `- ${issue}`).join('\n');
+      healthWarningSection =
+        '\n### Index Health\n' +
+        '**Warning:** The Totem index has issues that may affect search quality:\n' +
+        issueLines +
+        '\n\nRun `totem sync --rebuild` to re-index and fix these issues.\n';
+      log.warn(TAG, `Index health check found ${healthResult.issues.length} issue(s)`);
+    }
+  } catch (err) {
+    log.warn(TAG, `Index health check failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   // Retrieve context from LanceDB
   const query = `${branch} active work session priorities`;
   log.info(TAG, 'Querying Totem index...');
@@ -181,7 +198,9 @@ export async function briefingCommand(options: BriefingOptions): Promise<void> {
 
   const content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });
   if (content != null) {
-    writeOutput(content, options.out);
+    // Append index health warning section if issues were found
+    const finalContent = healthWarningSection ? content + healthWarningSection : content;
+    writeOutput(finalContent, options.out);
     if (options.out) log.success(TAG, `Written to ${options.out}`);
   }
 }

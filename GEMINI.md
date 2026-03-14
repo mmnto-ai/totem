@@ -24,7 +24,7 @@
 
 ## Totem
 
-- Before writing code, you MUST call the `mcp__totem-dev__search_knowledge` tool with a query describing what you're about to change.
+- Before writing code, you MUST call the `search_knowledge` MCP tool with a query describing what you're about to change.
 
 ## Publishing
 

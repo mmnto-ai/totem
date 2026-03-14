@@ -6,6 +6,64 @@ Totem is designed as a **Shared Brain** and **Orchestrator** for a team of auton
 
 ## Core Components
 
+<!-- totem-preserve-start -->
+
+```mermaid
+flowchart TD
+    %% Define Styles
+    classDef agent fill:#1e1e1e,stroke:#4a4a4a,color:#fff
+    classDef memory fill:#2d3748,stroke:#63b3ed,color:#fff
+    classDef totem fill:#1a365d,stroke:#4299e1,color:#fff,stroke-width:2px
+    classDef core fill:#4a5568,stroke:#a0aec0,color:#fff
+
+    %% The Multi-Agent Layer
+    subgraph Agents [The Multi-Agent Execution Layer]
+        A1[Claude Code]:::agent
+        A2[Gemini CLI]:::agent
+        A3[Cursor / IDE]:::agent
+    end
+
+    %% The Workflow & Core Rules Layer
+    subgraph CoreMemory [Core Operational Memory]
+        M1(<b>MEMORY.md</b><br/><br/><i>Type: Global Safety</i><br/>- "Never amend commits"<br/>- "Only use pnpm"):::memory
+        M2(<b>CLAUDE.md</b><br/><br/><i>Type: Workflow Defaults</i><br/>- "Run totem shield before pushing"<br/>- List of MCP servers):::memory
+        M3(<b>.gemini/styleguide.md</b><br/><br/><i>Type: Syntax & Style</i><br/>- "Always use Drizzle eq()"<br/>- "Zod for boundaries"):::memory
+    end
+
+    %% The Totem Control Plane
+    subgraph TotemPlane [Totem: The Codebase Immune System]
+        direction TB
+        T1((<b>.totem/lessons/</b><br/><i>Domain Knowledge & Traps</i><br/>- "DraftKings prop IDs changed"<br/>- "RSC Context caching bugs")):::totem
+        T2[<b>totem compile</b><br/><i>Natural Language to Regex/AST</i>]:::core
+        T3((<b>compiled-rules.json</b><br/><i>Deterministic Hard Gates</i>)):::totem
+        T4((<b>.lancedb/</b><br/><i>Semantic Vector Index</i>)):::totem
+
+        T1 --> T2
+        T2 --> T3
+        T1 --> |"totem sync"| T4
+    end
+
+    %% CI/CD & Enforcement
+    subgraph CI [Enforcement Gates]
+        C1[<b>totem shield --deterministic</b><br/><i>Zero-LLM Pre-commit Hook</i>]:::core
+        C2[GitHub Actions / CI]:::core
+    end
+
+    %% Connections
+    Agents --> |Reads on Startup| CoreMemory
+
+    A1 & A2 & A3 <--> |"MCP search_knowledge"<br/>(Proactive Prevention)| T4
+    A1 & A2 & A3 --> |"MCP add_lesson"<br/>(Learning Loop)| T1
+
+    A1 --> |"git commit"| C1
+    C1 --> |Evaluates Diff Against| T3
+    C1 --> |"Blocks Bad Code"| A1
+
+    T3 -.-> |Runs in| C2
+```
+
+<!-- totem-preserve-end -->
+
 ### 1. Vector Database (`@mmnto/totem`)
 
 - **Storage & Engine:**

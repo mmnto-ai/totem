@@ -64,6 +64,7 @@ describe('learnFromVerdict', () => {
     totemDir: '.totem',
     lanceDir: '.lancedb',
     ignorePatterns: [],
+    shieldIgnorePatterns: [],
     contextWarningThreshold: 40_000,
   };
 

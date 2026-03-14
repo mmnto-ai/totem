@@ -5,18 +5,12 @@
 > Totem is currently in early alpha. While Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete, we are still polishing the "Magic Onboarding" experience (interactive tutorials). If you encounter friction during `totem init`, please bear with us!
 
 **Your AI team forgets. Totem remembers.**
-
-Right now, AI development is where code versioning was before Git. Every time you open a new AI session, your agents have amnesia. They forget why you chose Drizzle over Prisma, they hallucinate deprecated database tables, and they fall into the same architectural traps you fixed last week.
-
-**Totem is the state manager for your AI's brain.**
-
-It is an **AI Control Plane for Local Development**. Instead of uploading your proprietary codebase to a cloud SaaS platform, Totem compiles a syntax-aware, embedded vector index (LanceDB) right inside your project. It acts as an **Architectural Linter**, using the standard Model Context Protocol (MCP) to force your local agents (Claude, Gemini, Cursor, Junie) to read your project's constraints, decisions, and trap-logs _before_ they write a single line of code.
-
-When you're three levels deep in a debugging session, you need to know if the code you are writing is real, or just an AI hallucinating an anti-pattern you banned three months ago. You need a totem.
+AI generates the code. You generate the rules.
+Totem is the local-first governance compiler for AI agents — **deterministic, git-native, and trustworthy.**
 
 ## Why Totem?
 
-- **Local-First & Git-Native:** Totem compiles an embedded LanceDB vector index directly inside your project, storing actual knowledge in a human-readable, version-controlled `.totem/lessons.md` file. Review your AI's memory locally in your PRs instead of locking it in a cloud SaaS.
+- **Local-First & Git-Native:** Totem compiles an embedded LanceDB vector index directly inside your project, storing actual knowledge in a human-readable, version-controlled `.totem/lessons/` directory. Review your AI's memory locally in your PRs instead of locking it in a cloud SaaS.
 - **The Reflex Engine:** Totem gives your AI reflexes by auto-injecting behavioral triggers and Defensive Context Management Reflexes into system prompts. This forces them to autonomously document traps, query architecture, and issue warnings before writing code (#160).
 - **Multi-Agent Orchestration:** Use Claude to write code, Gemini to review PRs, and a local DeepSeek model for fast checks. Totem acts as the "Shared Brain" orchestrator, supporting role-based access control (RBAC) across your entire AI org chart (#312).
 - **Built for Enterprise Scale:** The ingestion pipeline streams chunks in batches, maintaining a flat memory footprint regardless of monorepo size (#104). Drift Detection ensures your memory stays self-cleaning and relevant as the codebase evolves (#211).
@@ -104,7 +98,7 @@ The file resolver natively scopes across your repository and correctly indexes f
 
 #### Drift Detection (Self-Cleaning Memory)
 
-Over time, lessons in `.totem/lessons.md` can reference files or paths that no longer exist. Use `--prune` to detect and interactively remove stale lessons (#211):
+Over time, lessons in `.totem/lessons/` can reference files or paths that no longer exist. Use `--prune` to detect and interactively remove stale lessons (#211):
 
 ```bash
 npx @mmnto/cli sync --prune

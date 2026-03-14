@@ -98,3 +98,18 @@ export interface SearchOptions {
   /** When true, combines vector + FTS results using RRF reranking. Requires an FTS index. */
   hybrid?: boolean;
 }
+
+/**
+ * Result of a health check against the LanceDB index.
+ */
+export interface HealthCheckResult {
+  healthy: boolean;
+  durationMs: number;
+  totalChunks: number;
+  expectedDimensions: number;
+  storedDimensions: number | null;
+  dimensionMatch: boolean;
+  canarySearchOk: boolean;
+  ftsAvailable: boolean;
+  issues: string[];
+}

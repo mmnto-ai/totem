@@ -8,6 +8,7 @@ import {
   extractAddedLines,
   LanceStore,
   loadCompiledRules,
+  matchesGlob,
   runSync,
 } from '@mmnto/totem';
 
@@ -302,6 +303,7 @@ async function runDeterministicShield(
   outPath?: string,
   exportPaths?: string[],
   format: ShieldFormat = 'text',
+  ignorePatterns?: string[],
 ): Promise<void> {
   const rulesPath = path.join(cwd, totemDir, COMPILED_RULES_FILE);
   const rules = loadCompiledRules(rulesPath);
@@ -324,7 +326,11 @@ async function runDeterministicShield(
       excluded.add(ep.replace(/\\/g, '/'));
     }
   }
-  const additions = extractAddedLines(diff).filter((a) => !excluded.has(a.file));
+  const additions = extractAddedLines(diff)
+    .filter((a) => !excluded.has(a.file))
+    .filter(
+      (a) => !ignorePatterns || !ignorePatterns.some((pattern) => matchesGlob(a.file, pattern)),
+    );
 
   // Enrich with AST context — skips strings/comments/regex during rule matching
   try {
@@ -578,6 +584,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       options.out,
       exportPaths,
       options.format,
+      [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])],
     );
     return;
   }

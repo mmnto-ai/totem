@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",
+    "@google/genai": "^1.44.0",
     "eslint": "^10.0.2",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-simple-import-sort": "^12.1.1",
