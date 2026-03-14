@@ -9,7 +9,6 @@ const config: TotemConfig = {
     { glob: '.gemini/**/*.md', type: 'spec', strategy: 'markdown-heading' },
     { glob: 'docs/**/*.md', type: 'spec', strategy: 'markdown-heading' },
     { glob: 'specs/**/*.md', type: 'spec', strategy: 'markdown-heading' },
-    { glob: '.strategy/**/*.md', type: 'spec', strategy: 'markdown-heading' },
     { glob: '.journal/**/*.md', type: 'spec', strategy: 'markdown-heading' },
     { glob: '.totem/lessons/*.md', type: 'lesson', strategy: 'markdown-heading' },
     { glob: '.totem/lessons.md', type: 'lesson', strategy: 'markdown-heading' },
@@ -49,9 +48,7 @@ const config: TotemConfig = {
     '**/dist/**',
     '**/__tests__/**',
     '**/*.test.ts',
-    '.strategy/archive/**',
-    '.strategy/deep-research/**',
-    '.strategy/governance-os-thesis/**',
+    '.strategy/**',
   ],
 
   shieldIgnorePatterns: [],
