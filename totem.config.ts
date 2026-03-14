@@ -52,9 +52,9 @@ const config: TotemConfig = {
     '.strategy/archive/**',
     '.strategy/deep-research/**',
     '.strategy/governance-os-thesis/**',
-    '.totem/lessons/**',
-    'docs/**',
   ],
+
+  shieldIgnorePatterns: ['.totem/lessons/**', 'docs/**'],
 };
 
 export default config;

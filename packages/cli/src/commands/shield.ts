@@ -584,7 +584,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       options.out,
       exportPaths,
       options.format,
-      config.ignorePatterns,
+      [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])],
     );
     return;
   }
