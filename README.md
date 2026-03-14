@@ -5,14 +5,8 @@
 > Totem is currently in early alpha. While Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete, we are still polishing the "Magic Onboarding" experience (interactive tutorials). If you encounter friction during `totem init`, please bear with us!
 
 **Your AI team forgets. Totem remembers.**
-
-Right now, AI development is where code versioning was before Git. Every time you open a new AI session, your agents have amnesia. They forget why you chose Drizzle over Prisma, they hallucinate deprecated database tables, and they fall into the same architectural traps you fixed last week.
-
-**Totem is the state manager for your AI's brain.**
-
-It is an **AI Control Plane for Local Development**. Instead of uploading your proprietary codebase to a cloud SaaS platform, Totem compiles a syntax-aware, embedded vector index (LanceDB) right inside your project. It acts as an **Architectural Linter**, using the standard Model Context Protocol (MCP) to force your local agents (Claude, Gemini, Cursor, Junie) to read your project's constraints, decisions, and trap-logs _before_ they write a single line of code.
-
-When you're three levels deep in a debugging session, you need to know if the code you are writing is real, or just an AI hallucinating an anti-pattern you banned three months ago. You need a totem.
+AI generates the code. You generate the rules.
+Totem is the local-first governance compiler for AI agents — **deterministic, git-native, and trustworthy.**
 
 ## Why Totem?
 

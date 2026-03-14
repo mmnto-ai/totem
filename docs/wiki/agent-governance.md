@@ -2,9 +2,9 @@
 
 When integrating Totem into a repository, it is critical to clearly define the boundaries, roles, and configuration files for all AI agents operating within the workspace. Without strict governance, agents may hallucinate capabilities, attempt to perform tasks outside their domain, or issue conflicting advice.
 
-## The Three Primary Agents
+## The Primary Agents
 
-In a standard Totem-enabled repository, there are three distinct AI actors. Each has a specific scope of responsibility:
+In a standard Totem-enabled repository, there are multiple distinct AI actors. Each has a specific scope of responsibility:
 
 ### 1. Claude Code (The Builder)
 
@@ -18,7 +18,7 @@ In a standard Totem-enabled repository, there are three distinct AI actors. Each
 - **Environment:** Local CLI / Terminal
 - **Role:** Breadth Analysis and Auditing.
 - **Responsibilities:** High-fidelity local code reviews, cross-file structural audits, catching architectural drift, and running the `totem shield` protocol. It reports findings but does not natively commit changes or merge code.
-- **Primary Config:** `.gemini/settings.json` and `.gemini/gemini.md`
+- **Primary Config:** `.gemini/settings.json` and `GEMINI.md`
 
 ### 3. Gemini Code Assist (The GCA Bot)
 
@@ -38,14 +38,13 @@ The `.gemini/` directory can be a source of confusion because it houses configur
 | **`CLAUDE.md`**             | Claude Code                        | Project context, architectural rules, and Totem local reflexes.                                                                                                      |
 | **`.gemini/settings.json`** | Gemini CLI                         | CLI tool configuration, UI preferences, and model defaults.                                                                                                          |
 | **`.gemini/config.yaml`**   | GCA Bot                            | PR review settings (severity thresholds, file exclusions, max comments).                                                                                             |
-| **`.gemini/styleguide.md`** | GCA Bot & Gemini CLI               | Syntactic rules, formatting, and coding standards.                                                                                                                   |
-| **`.gemini/gemini.md`**     | Gemini CLI (and sometimes GCA Bot) | Instructional memory and operational rules. Because the GCA bot may occasionally read this file during PR sweeps, local CLI commands must be explicitly scoped here. |
+| **`.gemini/styleguide.md`** | GCA Bot & Gemini CLI *[needs verification]* | Syntactic rules, formatting, and coding standards.                                                                                                                   |
 
 ---
 
 ## Workflow Scoping (The Overlap Problem)
 
-Because `totem init` injects local terminal reflexes (like running `totem sync` or `totem shield`) into `.gemini/gemini.md`, there is a risk that the headless GCA bot will read these instructions and hallucinate CLI capabilities during a PR review.
+Because `totem init` injects local terminal reflexes (like running `totem sync` or `totem shield`) into shared context or if developers accidentally place CLI instructions into GCA's `.gemini/styleguide.md`, there is a risk that the headless GCA bot will read these instructions and hallucinate CLI capabilities during a PR review.
 
 **The Solution:**
 All instructions injected into shared context files must include explicit environmental scoping. For example:

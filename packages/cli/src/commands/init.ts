@@ -22,7 +22,7 @@ const REFLEX_END = '<!-- totem:reflexes:end -->';
 const REFLEX_VERSION_RE = /<!-- totem:reflexes:version:(\d+) -->/;
 const LEGACY_SENTINEL = '## Totem AI Integration (Auto-Generated)';
 
-const AI_PROMPT_BLOCK = `
+export const AI_PROMPT_BLOCK = `
 ${REFLEX_START}
 <!-- totem:reflexes:version:${REFLEX_VERSION} -->
 
@@ -360,7 +360,7 @@ const AI_TOOLS: AiToolInfo[] = [
   {
     name: 'Gemini CLI',
     mcpPath: '.gemini/settings.json',
-    reflexFile: '.gemini/gemini.md',
+    reflexFile: 'GEMINI.md',
     serverEntry: { command: npxCmd, args: npxArgs },
     hookInstaller: installGeminiHooks,
   },
