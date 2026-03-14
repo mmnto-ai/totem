@@ -1,3 +1,5 @@
+<!-- totem-ignore-file — config paths are the subject matter -->
+
 ## Lesson — NEVER inline secrets, tokens, or API keys into agent config
 
 **Tags:** security, secrets, agent-config, mcp, init, trap

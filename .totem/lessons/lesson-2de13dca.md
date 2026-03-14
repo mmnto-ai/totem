@@ -1,3 +1,5 @@
+<!-- totem-ignore-file — config paths are the subject matter -->
+
 ## Lesson — AI agent memory config architectures differ significantly
 
 **Tags:** agent-config, init, claude, gemini, copilot, junie, architecture

@@ -52,6 +52,7 @@ const config: TotemConfig = {
     '.strategy/archive/**',
     '.strategy/deep-research/**',
     '.strategy/governance-os-thesis/**',
+    'docs/wiki/**',
   ],
 };
 

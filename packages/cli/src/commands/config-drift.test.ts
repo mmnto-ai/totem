@@ -86,7 +86,7 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
   });
 
   it('AI_PROMPT_BLOCK has a valid reflex version', () => {
-    expect(REFLEX_VERSION).toBeGreaterThanOrEqual(1);
+    expect(REFLEX_VERSION).toBeGreaterThanOrEqual(1); // totem-ignore — version floor check, not a set count
     expect(AI_PROMPT_BLOCK).toContain(`totem:reflexes:version:${REFLEX_VERSION}`);
   });
 });
@@ -148,7 +148,9 @@ describe('consumer MCP scaffolding matches published package', () => {
   });
 
   it('dev .mcp.json points to the correct local MCP entrypoint', () => {
-    const mcpJson = JSON.parse(readRoot('.mcp.json'));
+    const mcpPath = path.join(ROOT, '.mcp.json');
+    if (!fs.existsSync(mcpPath)) return; // gitignored — skip in CI
+    const mcpJson = JSON.parse(fs.readFileSync(mcpPath, 'utf-8'));
     const totemServer = mcpJson.mcpServers?.['totem-dev'];
     expect(totemServer).toBeDefined();
     expect(totemServer.args).toContain('./packages/mcp/dist/index.js');
