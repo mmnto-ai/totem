@@ -46,7 +46,7 @@ async function runFirstQueryHealthCheck(): Promise<string | null> {
       resultCount: 0,
       durationMs: 0,
       topScore: null,
-      error: `Health check failed: ${err instanceof Error ? err.message : String(err)}`, // eslint-disable-line id-match
+      error: `Health check failed: ${err instanceof Error ? err.message : String(err)}`,
     });
     return null;
   }
@@ -133,7 +133,7 @@ export function registerSearchKnowledge(server: McpServer): void {
             resultCount: 0,
             durationMs: 0,
             topScore: null,
-            error: `Failed to set log dir: ${err instanceof Error ? err.message : String(err)}`, // eslint-disable-line id-match
+            error: `Failed to set log dir: ${err instanceof Error ? err.message : String(err)}`,
           });
         }
 
