@@ -22,19 +22,19 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
-          
+
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
-        
+
       - name: Build Project
         run: pnpm build # (Or your equivalent build step)
 
@@ -53,18 +53,19 @@ jobs:
 
 ## CI Drift Testing
 
-If your team modifies the Totem instruction files (e.g., `CLAUDE.md`, `GEMINI.md`), you should add a drift test to ensure those files haven't exceeded the length limits (FR-C01) or lost the core `search_knowledge` reflexes. 
+If your team modifies the Totem instruction files (e.g., `CLAUDE.md`, `GEMINI.md`), you should add a drift test to ensure those files haven't exceeded the length limits (FR-C01) or lost the core `search_knowledge` reflexes.
 
 A standard Vitest test can assert the line count and presence of required strings, failing the pipeline if a developer accidentally bloats the agent config.
 
 ## Handling False Positives in CI
 
-If the CI pipeline fails due to a `totem shield` rule that is technically correct but contextually wrong (a false positive), developers do not need to modify the ruleset. 
+If the CI pipeline fails due to a `totem shield` rule that is technically correct but contextually wrong (a false positive), developers do not need to modify the ruleset.
 
 They can bypass the rule using an inline suppression directive directly in the code:
+
 ```typescript
 // totem-ignore-next-line
-const myLegacyPath = "src/legacy/data.json";
+const myLegacyPath = 'src/legacy/data.json';
 ```
 
-*(Note: Our Flight Rules dictate that every `totem-ignore` should be accompanied by a follow-up ticket to address the technical debt).*
+_(Note: Our Flight Rules dictate that every `totem-ignore` should be accompanied by a follow-up ticket to address the technical debt)._

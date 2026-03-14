@@ -27,11 +27,11 @@ export default {
     defaultModel: 'gemini-3-flash-preview',
     overrides: {
       // Use Anthropic specifically for deep architectural specs
-      spec: 'anthropic:claude-3-7-sonnet-latest', 
+      spec: 'anthropic:claude-3-7-sonnet-latest',
       shield: 'gemini-3.1-pro-preview',
-    }
-  }
-}
+    },
+  },
+};
 ```
 
 ## Local Models (Ollama)
@@ -42,17 +42,17 @@ Ensure Ollama is installed and running (`ollama serve`). You can configure Totem
 
 ```typescript
 export default {
-  embedding: { 
-    provider: 'ollama', 
-    model: 'nomic-embed-text' 
+  embedding: {
+    provider: 'ollama',
+    model: 'nomic-embed-text',
   },
   orchestrator: {
     provider: 'ollama',
     defaultModel: 'llama3', // or 'deepseek-coder'
     // Optional: Override context window size
-    options: { num_ctx: 16384 } 
-  }
-}
+    options: { num_ctx: 16384 },
+  },
+};
 ```
 
 ## Hybrid Search & Reranking
@@ -60,12 +60,13 @@ export default {
 Totem's file resolver natively combines Full-Text Search (FTS) and vector similarity, using Reciprocal Rank Fusion (RRF) to provide highly accurate retrieval. This requires no extra configuration, but you can explicitly filter knowledge by querying for specific ContentTypes.
 
 Example target configurations in `totem.config.ts`:
+
 ```typescript
 targets: [
   { glob: 'packages/**/*.ts', type: 'code', strategy: 'typescript-ast' },
   { glob: 'README.md', type: 'spec', strategy: 'markdown-heading' },
   { glob: '.totem/lessons/*.md', type: 'lesson', strategy: 'markdown-heading' },
-]
+];
 ```
 
 ## Custom Prompt Overrides
@@ -73,6 +74,7 @@ targets: [
 If you want to fundamentally change how a Totem command behaves (e.g., changing the persona or output format of `totem shield`), you do not need to modify the source code.
 
 You can override any command's system prompt by creating a markdown file in `.totem/prompts/`.
+
 - Example: Creating `.totem/prompts/shield.md` will completely override the default instruction set for the `shield` command.
 
 ## Export Targets (JetBrains Junie / Cursor)
