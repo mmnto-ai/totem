@@ -44,21 +44,22 @@ const FRONTMATTER_RE = /^---\s*\n([\s\S]*?)\n---/;
 const FAIL_SECTION_RE = /##\s*[Ss]hould\s+fail\s*\n+```[^\n]*\n([\s\S]*?)```/;
 const PASS_SECTION_RE = /##\s*[Ss]hould\s+pass\s*\n+```[^\n]*\n([\s\S]*?)```/;
 
+// totem-ignore-next-line — .exec() calls below are for trusted local fixture parsing, not security-sensitive
 export function parseFixture(content: string, fixturePath: string): RuleTestFixture | null {
-  const frontmatter = FRONTMATTER_RE.exec(content);
+  const frontmatter = FRONTMATTER_RE.exec(content); // totem-ignore
   if (!frontmatter) return null;
 
   const meta = frontmatter[1]!;
-  const ruleMatch = /rule:\s*(.+)/.exec(meta);
-  const fileMatch = /file:\s*(.+)/.exec(meta);
+  const ruleMatch = /rule:\s*(.+)/.exec(meta); // totem-ignore
+  const fileMatch = /file:\s*(.+)/.exec(meta); // totem-ignore
 
   if (!ruleMatch) return null;
 
   const ruleHash = ruleMatch[1]!.trim();
-  const filePath = fileMatch ? fileMatch[1]!.trim() : 'src/example.ts';
+  const filePath = fileMatch ? fileMatch[1]!.trim() : 'src/example.ts'; // totem-ignore — default fixture path
 
-  const failMatch = FAIL_SECTION_RE.exec(content);
-  const passMatch = PASS_SECTION_RE.exec(content);
+  const failMatch = FAIL_SECTION_RE.exec(content); // totem-ignore
+  const passMatch = PASS_SECTION_RE.exec(content); // totem-ignore
 
   const failLines = failMatch ? failMatch[1]!.split('\n').filter((l) => l.trim().length > 0) : [];
   const passLines = passMatch ? passMatch[1]!.split('\n').filter((l) => l.trim().length > 0) : [];

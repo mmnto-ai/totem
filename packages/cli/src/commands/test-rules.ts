@@ -1,14 +1,11 @@
-import * as path from 'node:path';
-
-import type { RuleTestResult } from '@mmnto/totem';
-import { runRuleTests } from '@mmnto/totem';
-
-import { bold, errorColor, log, success as successColor } from '../ui.js';
-import { loadConfig, loadEnv, resolveConfigPath } from '../utils.js';
-
 const TAG = 'Test';
 
 export async function testRulesCommand(opts: { filter?: string }): Promise<void> {
+  const path = await import('node:path');
+  const { log, bold, errorColor, success: successColor } = await import('../ui.js');
+  const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
+  const { runRuleTests, sanitize } = await import('@mmnto/totem');
+
   const cwd = process.cwd();
   loadEnv(cwd);
 
@@ -23,22 +20,22 @@ export async function testRulesCommand(opts: { filter?: string }): Promise<void>
   const summary = runRuleTests(rulesPath, testsDir);
 
   if (summary.total === 0) {
-    log.dim(TAG, `No test fixtures found in ${config.totemDir}/tests/`);
+    log.dim(TAG, `No test fixtures found in ${config.totemDir}/tests/`); // totem-ignore — config.totemDir is our own config, not untrusted
     log.dim(TAG, 'Create a fixture with:');
     log.dim(TAG, '');
     log.dim(TAG, '  ---');
     log.dim(TAG, '  rule: <lessonHash from compiled-rules.json>');
-    log.dim(TAG, '  file: src/example.ts');
+    log.dim(TAG, '  file: src/example.ts'); // totem-ignore — static example text
     log.dim(TAG, '  ---');
     log.dim(TAG, '');
     log.dim(TAG, '  ## Should fail');
     log.dim(TAG, '  ```ts');
-    log.dim(TAG, '  const data = JSON.parse(response);');
+    log.dim(TAG, '  const data = JSON.parse(response);'); // totem-ignore — static example text
     log.dim(TAG, '  ```');
     log.dim(TAG, '');
     log.dim(TAG, '  ## Should pass');
     log.dim(TAG, '  ```ts');
-    log.dim(TAG, '  const data = safeJsonParse(response);');
+    log.dim(TAG, '  const data = safeJsonParse(response);'); // totem-ignore — static example text
     log.dim(TAG, '  ```');
     return;
   }
@@ -54,10 +51,25 @@ export async function testRulesCommand(opts: { filter?: string }): Promise<void>
 
   // Display results
   for (const result of results) {
+    const heading = sanitize(result.ruleHeading);
     if (result.passed) {
-      log.success(TAG, `${result.ruleHeading} — PASS`);
+      log.success(TAG, `${heading} — PASS`);
     } else {
-      printFailure(result);
+      log.error('Totem Error', `${heading} — FAIL`);
+
+      if (result.missedFails.length > 0) {
+        log.warn(TAG, '  Missed violations (should have caught these):');
+        for (const line of result.missedFails) {
+          console.error(`    - ${sanitize(line.trim())}`);
+        }
+      }
+
+      if (result.falsePositives.length > 0) {
+        log.warn(TAG, '  False positives (should NOT have caught these):');
+        for (const line of result.falsePositives) {
+          console.error(`    - ${sanitize(line.trim())}`);
+        }
+      }
     }
   }
 
@@ -73,23 +85,5 @@ export async function testRulesCommand(opts: { filter?: string }): Promise<void>
     const label = errorColor(bold('FAIL'));
     log.info(TAG, `${label} — ${failedCount} failed, ${passedCount} passed`);
     process.exit(1);
-  }
-}
-
-function printFailure(result: RuleTestResult): void {
-  log.error('Totem Error', `${result.ruleHeading} — FAIL`);
-
-  if (result.missedFails.length > 0) {
-    log.warn(TAG, '  Missed violations (should have caught these):');
-    for (const line of result.missedFails) {
-      console.error(`    - ${line.trim()}`);
-    }
-  }
-
-  if (result.falsePositives.length > 0) {
-    log.warn(TAG, '  False positives (should NOT have caught these):');
-    for (const line of result.falsePositives) {
-      console.error(`    - ${line.trim()}`);
-    }
   }
 }
