@@ -99,20 +99,28 @@ export function buildSarifLog(
     };
   });
 
-  const results: SarifResult[] = violations.map((v) => ({
-    ruleId: ruleId(v.rule),
-    ruleIndex: ruleIndexMap.get(v.rule.lessonHash) ?? 0,
-    level: 'error',
-    message: { text: `${v.rule.message}\nMatched: \`${v.line.trim()}\`` },
-    locations: [
-      {
-        physicalLocation: {
-          artifactLocation: { uri: v.file },
-          region: { startLine: v.lineNumber },
+  const results: SarifResult[] = violations.map((v) => {
+    const idx = ruleIndexMap.get(v.rule.lessonHash);
+    if (idx === undefined) {
+      throw new Error(
+        `[Totem Error] SARIF builder: no rule index for lessonHash ${v.rule.lessonHash}`,
+      );
+    }
+    return {
+      ruleId: ruleId(v.rule),
+      ruleIndex: idx,
+      level: 'error' as const,
+      message: { text: `${v.rule.message}\nMatched: \`${v.line.trim()}\`` },
+      locations: [
+        {
+          physicalLocation: {
+            artifactLocation: { uri: v.file },
+            region: { startLine: v.lineNumber },
+          },
         },
-      },
-    ],
-  }));
+      ],
+    };
+  });
 
   return {
     $schema:
