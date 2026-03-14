@@ -38,8 +38,16 @@ async function runFirstQueryHealthCheck(): Promise<string | null> {
     lines.push('Run `totem sync --rebuild` to re-index and fix these issues.');
 
     return formatSystemWarning(lines.join('\n'));
-  } catch {
-    // Health check itself failed — don't block the search
+  } catch (err) {
+    // Health check itself failed — don't block the search. Log to disk for debugging.
+    logSearch({
+      timestamp: new Date().toISOString(),
+      query: 'internal:health-check',
+      resultCount: 0,
+      durationMs: 0,
+      topScore: null,
+      error: `Health check failed: ${err instanceof Error ? err.message : String(err)}`, // eslint-disable-line id-match
+    });
     return null;
   }
 }
@@ -117,8 +125,16 @@ export function registerSearchKnowledge(server: McpServer): void {
         try {
           const { projectRoot, config } = await getContext();
           setLogDir(path.join(projectRoot, config.totemDir));
-        } catch {
-          // Non-fatal — logging just won't write to disk
+        } catch (err) {
+          // Non-fatal — logging just won't write to disk. Record the failure.
+          logSearch({
+            timestamp: new Date().toISOString(),
+            query: 'internal:set-log-dir',
+            resultCount: 0,
+            durationMs: 0,
+            topScore: null,
+            error: `Failed to set log dir: ${err instanceof Error ? err.message : String(err)}`, // eslint-disable-line id-match
+          });
         }
 
         // First-query health gate — runs once per session, non-blocking
