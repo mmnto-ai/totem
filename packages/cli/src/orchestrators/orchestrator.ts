@@ -146,12 +146,18 @@ async function isCliAvailable(binary: string): Promise<boolean> {
   const cmd = process.platform === 'win32' ? 'where' : 'which';
   return new Promise((resolve) => {
     const child = spawn(cmd, [binary], { stdio: 'pipe' });
-    child.on('close', (code) => resolve(code === 0));
-    child.on('error', () => resolve(false));
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       child.kill();
       resolve(false);
     }, 5000);
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve(code === 0);
+    });
+    child.on('error', () => {
+      clearTimeout(timer);
+      resolve(false);
+    });
   });
 }
 

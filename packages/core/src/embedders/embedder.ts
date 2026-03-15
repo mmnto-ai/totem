@@ -59,7 +59,7 @@ async function tryBuildEmbedder(config: EmbeddingProvider): Promise<Embedder> {
  *
  * Returns synchronously via a lazy proxy that resolves on first embed() call.
  *
- * @param onWarn Optional callback for fallback warnings (defaults to console.error)
+ * @param onWarn Optional callback for fallback warnings (defaults to a no-op)
  */
 export function createEmbedder(
   config: EmbeddingProvider,
