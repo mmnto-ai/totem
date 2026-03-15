@@ -194,13 +194,16 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
           continue;
         }
 
+        const now = new Date().toISOString();
+        const existing = existingByHash.get(lesson.hash);
         newRules.push({
           lessonHash: lesson.hash,
           lessonHeading: lesson.heading,
           pattern: parsed.pattern,
           message: parsed.message,
           engine: 'regex',
-          compiledAt: new Date().toISOString(),
+          compiledAt: now,
+          createdAt: existing?.createdAt ?? now,
           ...(parsed.fileGlobs && parsed.fileGlobs.length > 0
             ? { fileGlobs: parsed.fileGlobs }
             : {}),

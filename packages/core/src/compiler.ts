@@ -19,6 +19,8 @@ export const CompiledRuleSchema = z.object({
   engine: z.literal('regex'),
   /** ISO timestamp of when this rule was compiled */
   compiledAt: z.string(),
+  /** ISO timestamp of when this rule was first created (survives recompilation) */
+  createdAt: z.string().optional(),
   /** Optional file glob patterns — rule only applies to matching files (e.g., ["*.sh", "*.yml"]) */
   fileGlobs: z.array(z.string()).optional(),
 });
@@ -256,13 +258,18 @@ function isSuppressed(line: string, precedingLine: string | null): boolean {
   return false;
 }
 
+/** Callback for observability — invoked when a rule is suppressed or triggered. */
+export type RuleEventCallback = (event: 'trigger' | 'suppress', lessonHash: string) => void;
+
 /**
  * Apply compiled rules against pre-extracted diff additions.
  * Skips additions with non-code AST context (strings, comments, regex).
+ * Optional `onRuleEvent` callback enables observability metrics collection.
  */
 export function applyRulesToAdditions(
   rules: CompiledRule[],
   additions: DiffAddition[],
+  onRuleEvent?: RuleEventCallback,
 ): Violation[] {
   if (additions.length === 0 || rules.length === 0) return [];
 
@@ -287,9 +294,15 @@ export function applyRulesToAdditions(
       }
 
       // Skip if suppressed via inline directive
-      if (isSuppressed(addition.line, addition.precedingLine)) continue;
+      if (isSuppressed(addition.line, addition.precedingLine)) {
+        if (re.test(addition.line)) {
+          onRuleEvent?.('suppress', rule.lessonHash);
+        }
+        continue;
+      }
 
       if (re.test(addition.line)) {
+        onRuleEvent?.('trigger', rule.lessonHash);
         violations.push({
           rule,
           file: addition.file,
