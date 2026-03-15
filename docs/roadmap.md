@@ -92,7 +92,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
 **Goal:** Scale Totem from individual developers to entire organizations by ingesting third-party data sources.
 
 - **Enterprise Memory & Scaling:**
-  - [ ] **#123 Epic: Federated Memory:** Allow `totem.config.ts` to declare external/upstream LanceDB indexes (The Mothership Pattern). Enables teams to inherit meta-lessons or team-wide policies (Post-1.0).
+  - [ ] **#123 Epic: Federated Memory:** Allow `totem.config.ts` to declare external/upstream LanceDB indexes (The Mother Brain Pattern). Enables teams to inherit meta-lessons or team-wide policies (Post-1.0).
   - [ ] **#175 Epic: Multiplayer Cache Syncing:** Phase 4 enterprise/team scaling capability (Post-1.0).
   - [ ] **#79 Documentation Ingestion Pipeline:** Build Pull/Push models for Notion, Confluence, or internal wikis.
   - [x] **#286 Epic: Rust Core Extraction:** Evaluated `totem-core-rs` for enterprise-scale extraction performance.
