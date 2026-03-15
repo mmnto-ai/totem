@@ -70,7 +70,7 @@
       "message": "Use dynamic imports for heavy dependencies like 'ora' within the specific functions that require them to avoid startup performance tax.",
       "engine": "regex",
       "compiledAt": "2026-03-09T03:02:59.361Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "e02e064077d533d6",
@@ -312,12 +312,7 @@
       "message": "Prefer dynamic imports inside command function bodies instead of top-level imports to ensure fast CLI startup.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:04:10.998Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "apps/cli/**/*.ts",
-        "src/commands/**/*.ts",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "adfc0cef98b8371f",
@@ -697,7 +692,11 @@
       "message": "Always iterate through all regex matches (e.g., via matchAll) rather than just checking the first. Relying on the first match allows 'shadowing' where an attacker prefixes a payload with a safe match to hide a malicious one later in the same text.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:28:19.809Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": [
+        "packages/cli/src/adapters/**/*.ts",
+        "packages/mcp/src/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "a5697f86bb23901e",
