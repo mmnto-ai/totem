@@ -17,7 +17,7 @@ Totem is the local-first governance compiler for AI agents — **deterministic, 
 - **Built for Enterprise Scale:**
   - **Performance:** Ingestion streams chunks in batches for a flat memory footprint.
   - **Relevance:** Drift Detection keeps memory self-cleaning as code evolves.
-  - **Reliability:** Startup health checks automatically detect broken LanceStore indexes (#439).
+  - **Reliability:** Startup health checks automatically detect broken LanceStore indexes (#439). The system also features graceful degradation, automatically falling back to local models if cloud providers fail (#517).
 
 ## Philosophy: The Unix Approach to AI
 
@@ -34,7 +34,7 @@ By building our orchestrator as discrete, composable commands (`spec`, `shield`,
 Totem is architected for high-compliance enterprise sectors (defense, finance, healthcare) that operate in strict AI sandboxes. **We adhere to the Air-Gapped Doctrine (Zero-Telemetry Architecture).**
 
 - **Zero Default Telemetry:** The `totem` CLI will _never_ transmit usage statistics, codebase contents, error logs, or rule evaluation metrics to a centralized server. Your codebase stays on your machine.
-- **Pluggable Local Intelligence:** Every command that requires an AI model natively supports local execution via Ollama or private VPC endpoints. You can run the entire Codebase Immune System without a public internet connection.
+- **Pluggable Local Intelligence:** Every command that requires an AI model natively supports local execution via Ollama or private VPC endpoints. Orchestrators and embedders gracefully degrade to local CLI/Ollama fallbacks if SDKs or networks fail (#516, #517).
 - **Bounded MCP Boundaries:** The Totem MCP server is a strict context provider that will _never_ expose destructive filesystem tools. This neutralizes the risk of agents executing malicious code via indirect prompt injection.
 - **Injection & ReDoS Hardening:** Totem actively sanitizes untrusted inputs and neutralizes terminal injection attacks. We apply SECURITY NOTICES to PR comments during extraction to explicitly warn agents of untrusted text.
 
@@ -56,11 +56,11 @@ Run this inside your consuming project (e.g., your Next.js or Node app):
 npx @mmnto/cli init
 ```
 
-Auto-detects your environment to generate a `totem.config.ts` and injects Proactive Memory Reflexes into your AI instruction files. It also installs a Curated Universal Baseline of AI traps to get you started on Day 1 (#419).
+Auto-detects your environment (including Copilot and Junie) to generate a `totem.config.ts` (#448). It injects Proactive Memory Reflexes into your AI instruction files using a recency sandwich approach for optimal context retention (#511). It also installs a Curated Universal Baseline of AI traps to get you started on Day 1 (#419).
 
 ### 2. Configure your Embedding Provider
 
-If `OPENAI_API_KEY` is already set in your environment or `.env`, `totem init` will detect it automatically. If you want to use local models (like Ollama) or cross-provider routing (Anthropic/Gemini Embedding 2), check out the [Advanced Configuration Wiki](./docs/wiki/advanced-configuration.md) (#380).
+If API keys are already set in your environment or `.env`, `totem init` will detect them automatically. The baseline configuration defaults to `gemini-embedding-2-preview` for highly optimized semantic retrieval (#539). If you want to use local models or alternative cross-provider routing, check out the [Advanced Configuration Wiki](./docs/wiki/advanced-configuration.md).
 
 ### 3. Sync the Index
 
@@ -72,7 +72,7 @@ This builds your local LanceDB vector index. _(Note: If you accepted the git hoo
 
 ### 4. Connect the MCP Server
 
-Add Totem to your AI agent's configuration to equip it with `search_knowledge`, `add_lesson`, and MCP enforcement tools like `check_compliance` for self-correction (#417). Supported environments include:
+Add Totem to your AI agent's configuration to equip it with `search_knowledge`, `add_lesson`, and MCP enforcement tools like `check_compliance` for self-correction (#417). Zombie process harvesting ensures the MCP server cleans up gracefully on timeouts (#503). Supported environments include:
 
 - **Standalone:** Claude Desktop, Claude Code
 - **IDE Integrations:** Cursor, Copilot, JetBrains Junie (#448)
@@ -108,7 +108,7 @@ _Note: For more details on IDE-specific wiring or pinning MCP versions, see the 
 
 ### 5. The Codebase Immune System
 
-Once your index is built, Totem natively intercepts your git pushes to perform an architectural review.
+Once your index is built, Totem natively intercepts your git pushes (and Claude Code pre-flights) to perform an architectural review.
 
 **`totem shield`**
 Reads your uncommitted diff and queries LanceDB for related traps to perform a deterministic architectural code review.
@@ -122,12 +122,12 @@ Totem ships with native CLI commands that orchestrate your entire shift-left wor
 
 - **Discovery:**
   - **Analysis:** `briefing`, `audit`
-  - **Prioritization:** `triage`
+  - **Prioritization:** `triage` (supports configurable multi-repo issue sources) (#514)
 - **Architectural Control:**
   - **Validation:** `shield`, `test` (#422)
   - **Enforcement:** `spec`, `hooks` (#310)
 - **Memory Management:**
-  - **Extraction:** `extract`, `add-lesson`
+  - **Extraction:** `extract` (supports multi-repo inputs), `add-lesson` (#532)
   - **Processing:** `compile`, `docs`
 - **Workflow:**
   - **Transitions:** `handoff`, `bridge`
@@ -143,7 +143,7 @@ To see where Totem is heading, including Phase 3 (The DX & Reliability Engine) a
 
 ## Contributing
 
-We welcome community contributions! Please review our `CONTRIBUTING.md` guidelines and the Dev Onboarding Wiki (#449) for testing conventions (#452). Note that external contributions require signing our automated Contributor License Agreement (CLA), and internal strategy discussions are isolated in the `totem-strategy` submodule.
+We welcome community contributions! You can explore our `totem-studio` playground repository to test consumer integrations in a safe environment (#481). Please review our `CONTRIBUTING.md` guidelines and the Dev Onboarding Wiki (#449) for testing conventions (#452). Note that external contributions require signing our automated Contributor License Agreement (CLA), and internal strategy discussions are isolated in the `totem-strategy` submodule.
 
 ## License
 

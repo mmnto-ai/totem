@@ -75,8 +75,8 @@ flowchart TD
     - _Context Parsing:_ Uses syntax-aware chunking via Tree-sitter AST parsing, seamlessly indexing both standard files and git submodules (#363).
     - _Integrity:_ Avoids blind character splitting by leveraging Markdown hierarchy and session breadcrumbs. A web-tree-sitter WASM implementation ensures robust handling of files exceeding 32KB (#354).
   - **Embedding & Retrieval:**
-    - _Embeddings:_ Supports OpenAI (`text-embedding-3-small`) by default, with Ollama (`nomic-embed-text`) and task-aware Gemini 2 as alternatives (#380).
-    - _Retrieval:_ Features hybrid search capabilities, combining Full-Text Search (FTS) and vector similarity with Reciprocal Rank Fusion (RRF) reranking (#378). FTS panics involving empty pivot postings have been safely resolved (#491).
+    - _Embeddings:_ Utilizes Gemini (`gemini-embedding-2-preview`) as the primary dogfood embedder, with robust alternatives available (#539). Features hybrid search combining Full-Text Search and vector similarity with RRF reranking (#378).
+    - _Resilience:_ Implements graceful degradation for embedders, automatically falling back to Ollama if the primary configured provider fails (#517).
 - **Security & Maintenance:**
   - **Filtering:** Includes adversarial content scrubbing and a dedicated `lesson` ContentType for highly precise vector retrieval (#315, #379).
   - **Drift Detection:** Self-cleaning sync engine purges orphaned vectors when source files are deleted. It is reinforced by strict path containment checks to prevent directory traversal (#284).
@@ -90,15 +90,15 @@ All commands feature proper `--help` output documentation (#358).
   - `totem hooks`: Installs git hooks and supports npm `prepare` auto-install (#332). It automatically walks up to the git root from monorepo sub-packages (#333).
   - **Environment Support:** Package manager auto-detection fully supports Bun (#316). It gracefully detects and handles non-bash hook environments (#317).
 - **Data & Context Management:**
-  - **Indexing:** `totem sync` crawls target directories, chunks, embeds, and updates the LanceDB index. It now supports multi-totem knowledge domains to seamlessly index `.strategy` repos (#463).
+  - **Indexing:** `totem sync` crawls target directories, chunks, embeds, and updates the LanceDB index. It supports multi-totem knowledge domains to seamlessly index `.strategy` repos (#463).
   - **Session Management:** `totem briefing` and `totem handoff` capture session state snapshots. The `handoff --lite` flag enables zero-LLM capture with robust ANSI sanitization (#292).
-  - **Workflow Resets:** `totem bridge` and `totem wrap` automate mid-session context resets and end-of-task workflows. Wrap integration cleanly aborts via `NoLessonsError` if compilation requirements are missing (#409).
+  - **Workflow Resets:** `totem bridge` and `totem wrap` automate mid-session context resets and end-of-task workflows. Wrap cleanly aborts via `NoLessonsError` if compilation requirements are missing (#409).
 - **Workflow & Evaluation:**
-  - **Planning & Orchestration:** `totem spec`, `totem triage`, and `totem audit` orchestrate workflows and backlog strategies with human approval gates (#362). Triage now strictly uses a streamlined four-priority blitz system (#497).
+  - **Planning & Orchestration:** Orchestrates workflows via `totem spec`, `totem triage`, and `totem audit` with human approval gates. Triage and extract commands now support configurable issue sources across multiple repositories (#532).
   - **Review & Quality:** `totem shield` enforces context-blind architectural reviews and inline lesson extraction (#303).
-  - **Documentation:** `totem docs` automates transactional document syncs with strict sub-bullet thresholds and line-length limits (#341). It employs a Saga validator to definitively prevent partial or corrupted updates (#351).
+  - **Documentation:** `totem docs` automates transactional document syncs with strict sub-bullet thresholds and line-length limits (#341). It employs a Saga validator to prevent partial or corrupted updates (#351).
 - **Rule Testing & Extraction:**
-  - **Capture & Extraction:** `totem add-lesson` enables inline capture, while `totem extract` handles batch PR reviews. It deduplicates identical lessons and uses concise, content-derived headings without mid-sentence truncation (#347).
+  - **Capture & Extraction:** `totem add-lesson` enables inline capture, while `totem extract` handles batch PR reviews. It deduplicates identical lessons and uses concise, content-derived headings (#347).
   - **Harness Verification:** `totem test` serves as a compiled rule testing harness to empirically measure regex false positives (#422). This local evaluation matrix actively shapes requirements for future AST rules.
   - **Security:** Context-aware heuristics minimize false positives and actively block bad rules (#326). Strict XML tagging guards against prompt injection from untrusted PR comments (#279).
 
@@ -127,11 +127,13 @@ A stdio-based server for LLM integration providing primary tools and strict acce
   - `add_lesson(lesson, tags)`: Appends architectural lessons with descriptive content-derived headings.
   - `get_rules_for_file` / `check_compliance`: Direct enforcement tools empowering agents to self-validate deterministic rules (#417).
 - **Security & Permissions:**
-  - **Sanitization:** XML-delimits all MCP responses and sanitizes persisted content to mitigate prompt injection attacks. Handles dimension mismatches (e.g., 1536 vs 768) dynamically for task-aware embedders like Gemini (#444).
+  - **Sanitization:** XML-delimits all MCP responses and sanitizes persisted content to mitigate prompt injection attacks. Handles dimension mismatches dynamically for task-aware embedders like Gemini (#444).
   - **Access Control:** Implements multi-agent permissions and role-based access control (RBAC) to safely restrict execution boundaries (#312).
+  - **Context Limits:** Agent instruction files are structurally governed using a recency sandwich pattern and strict length limits (#466, #511).
 - **Integrations & Lifecycle:**
-  - **IDE Support:** Agent hooks for Claude, Gemini, and Junie are actively reinstated and enforced (#464).
-  - **Session Management:** Utilizes a health check first-query gate and briefing warnings to prevent silent search failures at startup (#442). MCP lifecycle lessons ensure session consistency and improved boundary management (#384).
+  - **IDE Support:** Agent hooks for Claude Code, Gemini, and Junie (#464). Involuntary enforcement under research (#520).
+  - **Session Management:** Utilizes a health check first-query gate and briefing warnings to prevent silent search failures at startup (#442).
+  - **Stability:** Reaps zombie MCP processes via heartbeat timeouts to reliably resolve connection failures (#503, #512).
 
 ## Configuration Tiers
 
@@ -216,7 +218,7 @@ All orchestrator providers support standardizing complex configurations via cent
   - Centralized via `resolveOrchestrator()`, prioritizing `--model` over `overrides` and `defaultModel`.
   - Supports `fallbackModel` and cross-provider `overrides` using `provider:model` syntax.
 - **Customization:** Supports `systemPrompts` for per-command custom instructions and `cacheTtls` for performance tuning.
-- **Resilience:** Quota-exhaustion (429 errors) triggers automatic fallback. Legacy configs gracefully auto-migrate to the shell provider.
+- **Resilience:** Implements graceful degradation, automatically falling back from native SDKs to the CLI provider if primary execution fails (#516). Legacy configs elegantly auto-migrate to the shell provider.
 
 ## The `.totem/` Directory
 
