@@ -1,5 +1,3 @@
-import * as path from 'node:path';
-
 import type { ShieldFormat } from './shield.js';
 
 // ─── Constants ──────────────────────────────────────
@@ -18,6 +16,7 @@ export interface LintOptions {
 // ─── Command ────────────────────────────────────────
 
 export async function lintCommand(options: LintOptions): Promise<void> {
+  const path = await import('node:path');
   const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
   const { extractChangedFiles, getDefaultBranch, getGitBranchDiff, getGitDiff } =
     await import('../git.js');
@@ -67,7 +66,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
 
   if (rules.length === 0) {
     log.error(
-      TAG,
+      'Totem Error',
       `No compiled rules found at ${config.totemDir}/${COMPILED_RULES_FILE}. Run \`totem compile\` first.`,
     );
     process.exit(1);
