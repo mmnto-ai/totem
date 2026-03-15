@@ -6,7 +6,7 @@ AI agent hook/lifecycle events by provider (as of 2026-03-15):
 
 ## Claude Code (17+ events)
 
-Config: `.claude/settings.local.json` → `hooks` object. Scripts in `.claude/hooks/` or `.totem/hooks/`.
+Config: Claude Code settings JSON → `hooks` object. Scripts in project hooks directories.
 
 - **SessionStart** — session begins or resumes
 - **UserPromptSubmit** — before Claude processes a user message (can block, can inject additionalContext)
@@ -26,7 +26,7 @@ Communication: JSON on stdin, JSON on stdout. Exit 0 = allow, Exit 2 = block (fo
 
 ## Gemini CLI (11 events)
 
-Config: `.gemini/settings.json` → `hooks` object. Scripts in `.gemini/hooks/`.
+Config: Gemini settings JSON → `hooks` object. Scripts in project hooks directories.
 
 - **SessionStart** / **SessionEnd** — session lifecycle
 - **BeforeAgent** — after user prompt, before agent planning
