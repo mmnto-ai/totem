@@ -28,12 +28,12 @@ jobs:
 
       - run: pnpm build
 
-      - name: Run deterministic shield
-        run: node packages/cli/dist/index.js shield --deterministic
+      - name: Run totem lint
+        run: node packages/cli/dist/index.js lint
 
       - name: Generate SARIF report
         if: always()
-        run: node packages/cli/dist/index.js shield --deterministic --format sarif --out totem-shield.sarif
+        run: node packages/cli/dist/index.js lint --format sarif --out totem-shield.sarif
 
       - name: Upload SARIF to GitHub Security
         if: always()

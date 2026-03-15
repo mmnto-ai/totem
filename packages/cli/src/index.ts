@@ -117,14 +117,32 @@ program
   });
 
 program
+  .command('lint')
+  .description('Run compiled rules against your diff (zero LLM, fast)')
+  .option('--out <path>', 'Write output to a file instead of stdout')
+  .option('--format <format>', 'Output format: text (default), sarif, or json')
+  .option('--staged', 'Lint only staged changes (default: all uncommitted)')
+  .action(async (opts: { out?: string; format?: string; staged?: boolean }) => {
+    try {
+      const { lintCommand } = await import('./commands/lint.js');
+      await lintCommand({
+        ...opts,
+        format: opts.format as 'text' | 'sarif' | 'json' | undefined,
+      });
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('shield')
-  .description('Pre-flight code review: analyze your diff against Totem knowledge')
+  .description('AI-powered code review: analyze your diff against Totem knowledge')
   .option('--raw', 'Output retrieved context without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
   .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
   .option('--staged', 'Review only staged changes (default: all uncommitted)')
-  .option('--deterministic', 'Use compiled rules only — no LLM, no embeddings')
+  .option('--deterministic', '[DEPRECATED] Use `totem lint` instead')
   .option(
     '--mode <mode>',
     'Review mode: standard (default, with Totem knowledge) or structural (context-blind paranoia)',

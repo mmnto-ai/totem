@@ -589,8 +589,10 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const changedFiles = extractChangedFiles(diff);
   log.info(TAG, `Changed files (${changedFiles.length}): ${changedFiles.join(', ')}`);
 
-  // Deterministic mode — use compiled rules, no LLM, no embeddings
+  // Deterministic mode — DEPRECATED, use `totem lint` instead
   if (options.deterministic) {
+    log.warn(TAG, '⚠ --deterministic is deprecated. Use `totem lint` instead.');
+    log.warn(TAG, '  This flag will be removed in a future release.');
     const exportPaths = config.exports ? Object.values(config.exports) : undefined;
     await runDeterministicShield(
       diff,

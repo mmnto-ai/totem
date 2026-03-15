@@ -119,7 +119,7 @@ export async function installPostMergeHook(cwd: string, rl: readline.Interface):
   }
 
   const syncCmd = detectSyncCommand(gitRoot);
-  const shieldCmd = `${detectTotemPrefix(gitRoot)} shield --deterministic`;
+  const shieldCmd = `${detectTotemPrefix(gitRoot)} lint`;
   const manager = detectHookManager(gitRoot);
 
   if (manager) {
@@ -191,7 +191,7 @@ fi
 
 export function buildPrePushHook(shieldCmd: string): string {
   return `#!/bin/sh
-# ${TOTEM_PREPUSH_MARKER} — deterministic shield gate.
+# ${TOTEM_PREPUSH_MARKER} — run compiled rules before push.
 # Override with: git push --no-verify
 
 # Only run shield when compiled rules exist (zero Node startup penalty otherwise).
@@ -290,7 +290,7 @@ export async function installEnforcementHooks(
   }
 
   const hooksDir = path.join(gitRoot, '.git', 'hooks');
-  const shieldCmd = `${detectTotemPrefix(gitRoot)} shield --deterministic`;
+  const shieldCmd = `${detectTotemPrefix(gitRoot)} lint`;
 
   const preCommit = installGitHook(
     hooksDir,
@@ -356,14 +356,14 @@ export function installHooksNonInteractive(cwd: string): HooksCommandResult | nu
   const manager = detectHookManager(gitRoot);
   if (manager) {
     const syncCmd = detectSyncCommand(gitRoot);
-    const shieldCmd = `${detectTotemPrefix(gitRoot)} shield --deterministic`;
+    const shieldCmd = `${detectTotemPrefix(gitRoot)} lint`;
     printHookManagerGuidance(manager, syncCmd, shieldCmd);
     return null;
   }
 
   const hooksDir = path.join(gitRoot, '.git', 'hooks');
   const prefix = detectTotemPrefix(gitRoot);
-  const shieldCmd = `${prefix} shield --deterministic`;
+  const shieldCmd = `${prefix} lint`;
   const syncCmd = detectSyncCommand(gitRoot);
 
   const preCommit = installGitHook(
