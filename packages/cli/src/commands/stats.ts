@@ -54,9 +54,10 @@ export async function statsCommand(): Promise<void> {
       .slice(0, 5);
 
     if (sorted.length > 0) {
+      const rulesByHash = new Map(rules.map((r) => [r.lessonHash, r]));
       log.info(TAG, 'Most active rules:');
       for (const [hash, m] of sorted) {
-        const rule = rules.find((r) => r.lessonHash === hash);
+        const rule = rulesByHash.get(hash);
         const label = rule ? rule.message.slice(0, 60) : hash;
         log.dim(TAG, `  ${label} — triggers: ${m.triggerCount}, suppressions: ${m.suppressCount}`);
       }
