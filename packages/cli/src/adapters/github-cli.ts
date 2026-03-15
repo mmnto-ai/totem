@@ -38,11 +38,29 @@ const GhClosedIssueListItemSchema = z.object({
 const DEFAULT_ISSUE_LIMIT = 100;
 
 export class GitHubCliAdapter implements IssueAdapter {
-  constructor(private cwd: string) {}
+  private repoFlag: string[];
+
+  /**
+   * @param cwd Working directory for `gh` CLI
+   * @param repo Optional `owner/repo` string. When set, `--repo` is passed to all `gh` commands.
+   */
+  constructor(
+    private cwd: string,
+    private repo?: string,
+  ) {
+    this.repoFlag = repo ? ['--repo', repo] : [];
+  }
 
   fetchIssue(issueNumber: number): StandardIssue {
     const issue = ghFetchAndParse(
-      ['issue', 'view', String(issueNumber), '--json', 'number,title,body,labels,state'],
+      [
+        ...this.repoFlag,
+        'issue',
+        'view',
+        String(issueNumber),
+        '--json',
+        'number,title,body,labels,state',
+      ],
       GhIssueSchema,
       `issue #${issueNumber}`,
       this.cwd,
@@ -53,6 +71,7 @@ export class GitHubCliAdapter implements IssueAdapter {
       body: issue.body ?? '',
       state: issue.state,
       labels: issue.labels.map((l) => l.name),
+      repo: this.repo,
     };
   }
 
@@ -61,6 +80,7 @@ export class GitHubCliAdapter implements IssueAdapter {
    */
   fetchClosedIssues(limit: number = DEFAULT_ISSUE_LIMIT, sinceTag?: string): ClosedIssueListItem[] {
     const args = [
+      ...this.repoFlag,
       'issue',
       'list',
       '--state',
@@ -95,6 +115,7 @@ export class GitHubCliAdapter implements IssueAdapter {
   fetchOpenIssues(limit: number = DEFAULT_ISSUE_LIMIT): StandardIssueListItem[] {
     const issues = ghFetchAndParse(
       [
+        ...this.repoFlag,
         'issue',
         'list',
         '--state',
@@ -113,6 +134,7 @@ export class GitHubCliAdapter implements IssueAdapter {
       title: i.title,
       labels: i.labels.map((l) => l.name),
       updatedAt: i.updatedAt,
+      repo: this.repo,
     }));
   }
 }

@@ -3,7 +3,6 @@ import * as path from 'node:path';
 import type { ContentType, SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore } from '@mmnto/totem';
 
-import { GitHubCliAdapter } from '../adapters/github-cli.js';
 import type { StandardIssue } from '../adapters/issue-adapter.js';
 import { log } from '../ui.js';
 import {
@@ -186,21 +185,35 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   await store.connect();
 
   // Parse and fetch all inputs sequentially
-  const adapter = new GitHubCliAdapter(cwd);
+  const { createIssueAdapter } = await import('../adapters/create-issue-adapter.js');
+  const adapter = await createIssueAdapter(cwd, config);
   const parsed: ParsedInput[] = [];
   const queryParts: string[] = [];
 
   for (const input of unique) {
     const urlMatch = input.match(/^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/);
+    // Support owner/repo#123 format for multi-repo disambiguation
+    const hashIdx = input.indexOf('#');
+    const isQualified =
+      hashIdx > 0 && input.includes('/') && /^\d+$/.test(input.slice(hashIdx + 1));
+    const qualifiedRepo = isQualified ? input.slice(0, hashIdx) : null;
+    const qualifiedNum = isQualified ? parseInt(input.slice(hashIdx + 1), 10) : null;
+
     const issueNumber = /^\d+$/.test(input)
       ? parseInt(input, 10)
       : urlMatch
         ? parseInt(urlMatch[1]!, 10)
-        : null;
+        : qualifiedNum;
 
     if (issueNumber) {
+      // If qualified with owner/repo, create a repo-specific adapter
+      let fetchAdapter = adapter;
+      if (qualifiedRepo) {
+        const { GitHubCliAdapter } = await import('../adapters/github-cli.js');
+        fetchAdapter = new GitHubCliAdapter(cwd, qualifiedRepo);
+      }
       log.info(TAG, `Fetching issue #${issueNumber}...`);
-      const issue = adapter.fetchIssue(issueNumber);
+      const issue = fetchAdapter.fetchIssue(issueNumber);
       log.info(TAG, `Title: ${issue.title}`);
       parsed.push({ issue, freeText: null });
       queryParts.push(buildSearchQuery(issue));

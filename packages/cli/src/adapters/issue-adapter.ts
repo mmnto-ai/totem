@@ -9,6 +9,8 @@ export interface StandardIssue {
   body: string;
   state: string;
   labels: string[];
+  /** The owner/repo this issue belongs to (e.g., 'mmnto-ai/totem'). Omitted for single-repo setups. */
+  repo?: string;
 }
 
 export interface StandardIssueListItem {
@@ -16,6 +18,8 @@ export interface StandardIssueListItem {
   title: string;
   labels: string[];
   updatedAt: string;
+  /** The owner/repo this issue belongs to (e.g., 'mmnto-ai/totem'). Omitted for single-repo setups. */
+  repo?: string;
 }
 
 export interface IssueAdapter {
