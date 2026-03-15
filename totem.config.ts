@@ -49,7 +49,6 @@ const config: TotemConfig = {
     '**/__tests__/**',
     '**/*.test.ts',
     '.strategy/**',
-    'playground/**',
   ],
 
   shieldIgnorePatterns: [],

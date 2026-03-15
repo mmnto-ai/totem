@@ -1,6 +1,3 @@
 [submodule ".strategy"]
 	path = .strategy
 	url = https://github.com/mmnto-ai/totem-strategy.git
-[submodule "playground/totem-studio"]
-	path = playground/totem-studio
-	url = https://github.com/mmnto-ai/totem-studio.git
