@@ -19,7 +19,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@lancedb/lancedb": "^0.13.0",
+    "@lancedb/lancedb": "^0.26.2",
     "apache-arrow": "17.0.0",
     "glob": "^11.0.0",
     "openai": "^4.77.0",
