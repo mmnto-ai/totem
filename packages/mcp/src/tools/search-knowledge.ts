@@ -29,7 +29,20 @@ async function runFirstQueryHealthCheck(): Promise<string | null> {
 
     if (result.healthy) return null;
 
-    // Build actionable warning lines
+    // Dimension mismatch is a blocking error — search will fail with a cryptic LanceDB error
+    if (!result.dimensionMatch && result.storedDimensions !== null) {
+      const lines = [
+        `DIMENSION MISMATCH: Index has ${result.storedDimensions}-dim vectors but the configured embedder produces ${result.expectedDimensions}-dim vectors.`,
+        '',
+        'This usually means you switched embedding providers without rebuilding the index.',
+        'Fix: rm -rf .lancedb && totem sync --full',
+        '',
+        'If you already rebuilt, restart your AI agent to reload the MCP server with the new config.',
+      ];
+      return formatSystemWarning(lines.join('\n'));
+    }
+
+    // Build actionable warning lines for other issues
     const lines: string[] = ['Index health issues detected:'];
     for (const issue of result.issues) {
       lines.push(`- ${issue}`);

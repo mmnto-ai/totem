@@ -107,9 +107,24 @@ export async function invokeShellOrchestrator(
         if (stderr.length < LLM_MAX_OUTPUT) stderr += chunk.toString();
       });
 
+      const killTree = () => {
+        // On Windows with shell: true, child.kill() only kills the shell,
+        // leaving the actual process (grandchild) alive as a zombie.
+        // Use taskkill /T to kill the entire process tree.
+        if (IS_WIN && child.pid) {
+          try {
+            spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+          } catch {
+            child.kill(); // fallback
+          }
+        } else {
+          child.kill();
+        }
+      };
+
       const timer = setTimeout(() => {
         timedOut = true;
-        child.kill();
+        killTree();
       }, LLM_TIMEOUT_MS);
 
       child.on('error', (err) => {
