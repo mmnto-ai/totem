@@ -52,5 +52,5 @@ _Moving from static rules to a measurable, self-cleaning immune system._
 
 _Federated organizational memory and swarm intelligence._
 
-- **Federated Memory (The Mothership Pattern):** Allowing local Totem instances to securely `pull` cryptographically signed, enterprise-wide architectural lessons into new projects instantly.
+- **Federated Memory (The Mother Brain Pattern):** Allowing local Totem instances to securely `pull` cryptographically signed, enterprise-wide architectural lessons into new projects instantly.
 - **Auto-Discovery Mesh Networking:** Totems automatically discovering and wiring themselves to other upstream Totems across enterprise networks.
