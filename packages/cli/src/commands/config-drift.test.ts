@@ -128,24 +128,26 @@ describe('all agent instruction files share the same project rules', () => {
     'Never amend commits on feature branches',
     'Use `Closes #NNN` in PR descriptions',
     // Environment
-    'pnpm (never npm or yarn)',
+    'pnpm only',
     'Windows 11 + Git Bash',
     'TypeScript strict mode',
-    'NEVER put secrets, tokens, or API keys in config files',
+    'NEVER put secrets in config files',
     // Code Style
     '`kebab-case.ts`',
     '`err` (never `error`)',
-    'No empty catch blocks',
+    'no empty catches',
     'Extract magic numbers into named constants',
-    'Zod for runtime validation at system boundaries',
+    'Zod at system boundaries',
     '`pnpm run format`',
+    // Reflexes
+    'search_knowledge',
+    'NEVER use `git push --no-verify`',
     // Publishing
-    'Changesets + npm OIDC trusted publishing',
-    'RELEASE_TOKEN',
     '`pnpm run version`',
     // Contributor Principles
     'Consumer-first',
     'GCA decline reflex',
+    'No suppression without tickets',
   ];
 
   for (const rule of SHARED_RULES) {

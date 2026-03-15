@@ -8,35 +8,33 @@
 
 ## Environment
 
-- **Package manager:** pnpm (never npm or yarn). Use `pnpm dlx` (never `npx`).
-- **Platform:** Windows 11 + Git Bash
-- **Language:** TypeScript strict mode
-- **NEVER put secrets, tokens, or API keys in config files** (`.mcp.json`, `settings.json`, etc.). Secrets live ONLY in gitignored `.env` files. Agents and MCP servers inherit env vars from the shell automatically.
+- **pnpm only** (never npm/yarn). Use `pnpm dlx` (never `npx`).
+- **Platform:** Windows 11 + Git Bash. **Language:** TypeScript strict mode.
+- **NEVER put secrets in config files.** Secrets live ONLY in gitignored `.env` files.
 
 ## Code Style
 
-- `kebab-case.ts` for files
-- Use `err` (never `error`) in catch blocks
-- No empty catch blocks — always log or throw
-- Extract magic numbers into named constants
-- Zod for runtime validation at system boundaries (config, API input)
-- Run `pnpm run format` before committing new files
+- `kebab-case.ts` files, `err` (never `error`) in catch blocks, no empty catches.
+- Extract magic numbers into named constants. Zod at system boundaries only.
+- Run `pnpm run format` before committing.
 
-## Totem
+## Reflexes
 
-- Before writing code, you MUST call the `mcp__totem-dev__search_knowledge` tool with a query describing what you're about to change.
+- Before writing code, you MUST call `mcp__totem-dev__search_knowledge` with a query describing what you're about to change.
+- Before planning/architecture, query `mcp__totem-strategy__search_knowledge` for ADRs and research.
+- After merging a PR: run `totem extract <pr> --yes`, then `totem docs` if releasing.
+- **NEVER use `git push --no-verify`.** If shield fails, fix it or file a ticket.
 
 ## Publishing
 
-- Changesets + npm OIDC trusted publishing
-- Use `RELEASE_TOKEN` PAT for PRs (org blocks `GITHUB_TOKEN` from creating PRs)
-- Use `pnpm run version` (never bare `pnpm version` — resolves to pnpm built-in)
-- Changeset CLI doesn't work with piped stdin — write files manually to `.changeset/`
+- Changesets (write `.changeset/` files manually). Use `pnpm run version` (never bare `pnpm version`).
 
 ## Contributor Principles
 
-- **Consumer-first:** Changes to AI reflexes, hooks, or prompts must update the `AI_PROMPT_BLOCK` template in `init.ts`. Consumers must get updates out of the box.
 <!-- totem-ignore-next-line -->
-- **GCA decline reflex:** When declining a recurring GCA suggestion, add a lesson with `review-guidance` tag and update `.gemini/styleguide.md` §6 on the same PR.
-- **No suppression without tickets:** Never add `totem-ignore`, `eslint-disable`, or skip tests without filing a follow-up ticket for the root cause.
-- **GCA replies:** Respond to GCA bot PR comments with ONE consolidated `@gemini-code-assist` comment — never reply to individual threads (triggers re-review loops).
+
+- **Consumer-first:** Update `AI_PROMPT_BLOCK` in `init.ts` when changing reflexes/hooks/prompts.
+<!-- totem-ignore-next-line -->
+- **GCA decline reflex:** Add lesson with `review-guidance` tag + update `.gemini/styleguide.md` §6.
+- **No suppression without tickets.** No `totem-ignore`, `eslint-disable`, or `--no-verify` without a ticket.
+- **GCA replies:** ONE consolidated `@gemini-code-assist` comment per PR — never individual threads.
