@@ -280,7 +280,7 @@
       "message": "Use the .cjs extension for utility scripts and host integration hooks in ESM-first projects to ensure compatibility with external tools and prevent module resolution errors.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:01:52.623Z",
-      "fileGlobs": ["package.json", "**/*.sh", ".github/workflows/*.yml", "Makefile"]
+      "fileGlobs": ["package.json", "**/*.sh", "Makefile"]
     },
     {
       "lessonHash": "4142b945b49cd292",
