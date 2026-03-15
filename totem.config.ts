@@ -51,7 +51,7 @@ const config: TotemConfig = {
     '.strategy/**',
   ],
 
-  shieldIgnorePatterns: [],
+  shieldIgnorePatterns: ['.totem/lessons/**'],
 };
 
 export default config;
