@@ -81,8 +81,7 @@ export function createEmbedder(
  */
 class LazyEmbedder implements Embedder {
   readonly dimensions: number;
-  private inner: Embedder | null = null;
-  private resolved = false;
+  private initPromise: Promise<Embedder> | null = null;
   private config: EmbeddingProvider;
   private warn: (msg: string) => void;
 
@@ -93,42 +92,50 @@ class LazyEmbedder implements Embedder {
     this.dimensions = config.dimensions ?? (config.provider === 'gemini' ? 768 : 1536);
   }
 
-  async embed(texts: string[]): Promise<number[][]> {
-    if (!this.resolved) {
-      this.resolved = true;
-      try {
-        this.inner = await tryBuildEmbedder(this.config);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.warn(
-          `[Totem] ${this.config.provider} embedder unavailable: ${msg}\n` +
-            `[Totem] Falling back to Ollama (${OLLAMA_DEFAULTS.model})...`,
-        );
+  /** Resolve the real embedder once. Concurrent callers share the same promise. */
+  private resolve(): Promise<Embedder> {
+    if (!this.initPromise) {
+      this.initPromise = this.doResolve();
+    }
+    return this.initPromise;
+  }
 
-        const available = await isOllamaAvailable();
-        if (!available) {
-          throw new Error(
-            '[Totem Error] No embedding provider available.\n' +
-              'The configured provider failed and Ollama is not running.\n' +
-              'Either:\n' +
-              '  1. Install the SDK and set the API key for your configured provider\n' +
-              '  2. Install and start Ollama: https://ollama.com\n' +
-              "  3. Set provider: 'ollama' in totem.config.ts embedding config",
-          );
-        }
+  private async doResolve(): Promise<Embedder> {
+    try {
+      return await tryBuildEmbedder(this.config);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.warn(
+        `[Totem] ${this.config.provider} embedder unavailable: ${msg}\n` +
+          `[Totem] Falling back to Ollama (${OLLAMA_DEFAULTS.model})...`,
+      );
 
-        this.warn(
-          `[Totem] Using Ollama fallback embedder (${OLLAMA_DEFAULTS.model}, ${OLLAMA_DEFAULTS.dimensions}d).\n` +
-            '[Totem] If your index was built with a different provider, run `totem sync --full` to rebuild.',
-        );
-        this.inner = new OllamaEmbedder(
-          OLLAMA_DEFAULTS.model,
-          OLLAMA_DEFAULTS.baseUrl,
-          OLLAMA_DEFAULTS.dimensions,
+      const available = await isOllamaAvailable();
+      if (!available) {
+        throw new Error(
+          '[Totem Error] No embedding provider available.\n' +
+            'The configured provider failed and Ollama is not running.\n' +
+            'Either:\n' +
+            '  1. Install the SDK and set the API key for your configured provider\n' +
+            '  2. Install and start Ollama: https://ollama.com\n' +
+            "  3. Set provider: 'ollama' in totem.config.ts embedding config",
         );
       }
-    }
 
-    return this.inner!.embed(texts);
+      this.warn(
+        `[Totem] Using Ollama fallback embedder (${OLLAMA_DEFAULTS.model}, ${OLLAMA_DEFAULTS.dimensions}d).\n` +
+          '[Totem] If your index was built with a different provider, run `totem sync --full` to rebuild.',
+      );
+      return new OllamaEmbedder(
+        OLLAMA_DEFAULTS.model,
+        OLLAMA_DEFAULTS.baseUrl,
+        OLLAMA_DEFAULTS.dimensions,
+      );
+    }
+  }
+
+  async embed(texts: string[]): Promise<number[][]> {
+    const inner = await this.resolve();
+    return inner.embed(texts);
   }
 }
