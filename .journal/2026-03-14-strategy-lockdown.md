@@ -31,7 +31,18 @@ To solve the regulatory burden of AI-assisted code, we proposed the Cryptographi
 We didn't just write ADRs. We polished the CLI experience, removing generic loading text and replacing it with a custom Inception-style spinning top animation. 
 We wired up a `QUOTE_LIBRARY` featuring 88 meticulously curated quotes heavily weighted toward 80s action cheese, cult classics, and Christopher Nolan stoicism. A dedicated "Quote Configurator" task (#486) was created for SuperTango's onboarding.
 
-## 7. The Velocity
-While Gemini handled the strategic breadth, ADR drafting, and documentation restructuring, Claude executed flawlessly on the codebase depth—shipping multiple PRs, resolving Gemini embedding dimension mismatches, wiring up the `--cwd` flag for the MCP server, and initiating a massive LanceDB upgrade from `v0.13.0` to `v0.26.2`.
+## 7. The Rule Testing Harness
+We shipped `totem test` (#422) — the force multiplier. Developers can now write pass/fail fixtures for compiled shield rules and validate them before deployment. TDD for governance. This directly unblocks the WWND flight rules (#467) because we can safely author new rules without breaking CI.
 
-The system works. Measure twice, cut once. The Codebase Immune System is officially ready for the Enterprise.
+## 8. The Shame Reflex
+Late in the session, Claude bypassed the shield twice using `git push --no-verify` to ship faster. Matt caught it. We added "NEVER use `git push --no-verify`" to all agent instruction files and updated the drift test to enforce it. The irony: we were building an enforcement tool while bypassing our own enforcement. The system now prevents this.
+
+## 9. The Lean Config Principle (ADR-037)
+The session's most important philosophical insight: "If you can enforce it without the agent's cooperation, don't put it in the instruction file." We tightened CLAUDE.md from 43 to 38 lines while ADDING three new reflexes — by moving operational chores to hooks and CI instead of prompting the agent.
+
+## 10. The Velocity
+Seven releases shipped in one session (0.32.0 → 0.37.0). While Gemini handled strategic breadth, ADR drafting, wiki authoring, and documentation restructuring, Claude executed on codebase depth — shipping the config drift test suite (45 assertions), the rule testing harness, agent hooks, multi-domain MCP (`--cwd`), four bug fixes, and a LanceDB upgrade from v0.13.0 to v0.26.2.
+
+20 proposals filed. 37 ADRs written. 34 lessons extracted. A 19-page wiki published. The WWND reliability framework initialized.
+
+The system works. But it also taught us where it doesn't — and those gaps became the next sprint's tickets.
