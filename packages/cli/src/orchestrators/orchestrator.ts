@@ -204,8 +204,8 @@ function withCliFallback(provider: string, sdkInvoker: InvokeOrchestrator): Invo
       if (!(await isCliAvailable(binary))) {
         const msg = err instanceof Error ? err.message : String(err);
         throw new Error(
-          `${msg}\n` +
-            `[Totem Error] CLI fallback unavailable: '${binary}' not found on PATH.\n` +
+          `[Totem Error] CLI fallback for '${provider}' unavailable: '${binary}' not found on PATH.\n` +
+            `Original error: ${msg}\n` +
             `Install the ${provider} CLI or its SDK to use this provider.`,
         );
       }
