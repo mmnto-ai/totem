@@ -46,7 +46,9 @@ This phase fortified the core architecture, delivering native orchestration, zer
 
 - **AST & Orchestration:**
   - Universal Tree-sitter parsing and AST gating for zero-LLM shielding.
-  - Cross-provider routing across Gemini, Anthropic, OpenAI, and Ollama.
+  - Cross-provider LLM routing support:
+    - **Cloud Providers:** Gemini, Anthropic, OpenAI.
+    - **Local Providers:** Ollama.
 - **Data Safety & Memory:**
   - Saga-based transactional document checkpoints and rollbacks.
   - Automated document synchronization with drift detection.
@@ -63,9 +65,9 @@ This phase fortified the core architecture, delivering native orchestration, zer
 
 - **Observability & Maintenance:**
   - [ ] **#130 Epic: Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks. This will track index health and ignored files.
-  - [ ] **#92 CLI Metrics & Observability:** Provide local CLI metrics (`totem stats`) for violation history and lesson coverage. Requires terminal output only for v1.0 without cloud or TUI dependencies.
+  - [ ] **#92 CLI Metrics & Observability:** Provide local CLI metrics (`totem stats`) for violation history, lesson coverage, and rule fire counts. Requires terminal output only for v1.0 without cloud or TUI dependencies.
   - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
-  - [ ] **#283 Epic: v1.0 Documentation:** Develop the v1.0 documentation site and minimize the core README.
+  - [ ] **#283 Epic: v1.0 Documentation:** Develop the v1.0 documentation site and minimize the core README. Initial wiki migration has begun with developer guides (#447, #449).
 - **Workflow & Execution:**
   - [x] **#362 Strategic Backlog Audit:** Added `totem audit` for backlog auditing with a human approval gate (#362).
   - [x] **Context Injection:** Embedded relevant vector DB lessons into all orchestrator commands and `totem spec` output (#370).
@@ -76,14 +78,16 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - [ ] **#392 `totem review`:** Implement full codebase review powered by repomix and vectordb lessons.
   - [ ] **#430 Document Authority Modes:** Implement generated vs. assisted authority modes for `totem docs` to protect human-curated strategic decisions.
   - [ ] **#435 PR Lesson Extraction:** Auto-extract lessons from PR review comments using `totem extract --from-pr`.
+  - [ ] **#432 Dynamic CLI Imports:** Convert static imports to dynamic `await import()` in command files to optimize CLI startup performance.
 - **Shift-Left & Advanced Intelligence:**
   - [ ] **#195 / #196 / #214 Epic: Shift-Left AI Verification:** Define model compatibility and auditing strategy to systematically verify models. Build adversarial evaluation harness for CI.
-  - [ ] **#314 Epic: Adaptive Agent Governance:** Establish the Codebase Immune System. Provides adaptive agent governance and AST compilation design capabilities.
-  - [ ] **#176 Agent-Optimized MCP:** Dynamic token budgeting and write access for deeper agent-to-agent interactions. Includes multi-agent permissions and role-based access control (#312).
+  - [ ] **#314 Epic: Adaptive Agent Governance:** Establish the Codebase Immune System. Provides adaptive agent governance and incorporates AST compilation design to address regex limits.
+  - [x] **#176 Agent-Optimized MCP:** Implemented MCP enforcement tools enabling agents to self-correct during active work. Includes dynamic token budgeting and multi-agent permissions (#176, #417).
   - [ ] **#183 Cross-File Knowledge Graph (Blocked):** Implement symbol resolution to enable multi-file architectural reasoning.
-  - [x] **#364 VectorDB Structure:** Defined multi-type knowledge retrieval schemas for the local LanceDB index. Delivered hybrid search and Gemini embedding integration as ADR-024.
-  - [x] **#387 SARIF Output:** Standardized deterministic shield output for CI/CD integration. Enables GitHub Advanced Security tab integration (#418).
+  - [x] **#364 VectorDB Structure:** Defined multi-type knowledge retrieval schemas for the local LanceDB index. Delivered hybrid search and Gemini embedding integration as ADR-024 (#429).
+  - [x] **#387 SARIF Output:** Standardized deterministic shield output for CI/CD integration. Enables GitHub Advanced Security tab integration (#387, #418).
   - [ ] **#385 Rule Exports:** Export compiled rules to Semgrep YAML and ESLint configurations. Deferred until core governance (#314) is finalized.
+  - [x] **#422 Rule Testing Harness:** Implemented a compiled rule testing harness (ADR-022) to empirically identify regex false-positives and drive AST requirements.
   - [ ] **#434 Adversarial Trap Corpus:** Develop synthetic violations to measure precision and recall of the deterministic engine.
   - [ ] **#433 Lesson Packs Prototype:** Mine OSS projects as a proof of concept for distributable rule sets.
 
@@ -98,7 +102,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - [x] **#286 Epic: Rust Core Extraction:** Evaluated `totem-core-rs` for enterprise-scale extraction performance.
 - **Integration & DevEx:**
   - [ ] **#124 Epic: Frictionless 10-Minute Init:** Build `totem onboard <issue>` to generate contextual Day 1 briefings. These will be tailored to a new developer's first assigned ticket.
-  - [ ] **#128 Epic: Universal Lessons Baseline:** Ship baseline "Universal Lessons" dataset during initialization to bootstrap immediate value.
+  - [x] **#128 Epic: Universal Lessons Baseline:** Delivered baseline "Universal Lessons" dataset during initialization. Refined ignore patterns to ensure frictionless bootstrapping (#128, #419).
   - [ ] **#84 Issue Tracking Adapters:** Implement Jira and Linear adapters using the interface built in Phase 2.
   - [ ] **#42 Universal AI DevEx:** Evolve `totem init` to inject "Best Practices" guardrails like Anti-Refactor and Test Coverage triggers.
 - **Governance & Licensing:**

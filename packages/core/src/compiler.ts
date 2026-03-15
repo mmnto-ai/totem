@@ -206,7 +206,7 @@ export function matchesGlob(filePath: string, glob: string): boolean {
   }
   // dir/*.ext — single-star, non-recursive (matches files in exact directory)
   const singleStarIdx = glob.indexOf('/*.');
-  // eslint-disable-next-line -- totem-ignore-next-line
+
   if (singleStarIdx > 0 && !glob.includes('**')) {
     const prefix = glob.slice(0, singleStarIdx);
     const ext = glob.slice(singleStarIdx + 2); // "*.ext" portion
