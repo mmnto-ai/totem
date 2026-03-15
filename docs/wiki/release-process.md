@@ -55,3 +55,12 @@ Our GitHub organization restricts the default `GITHUB_TOKEN` from creating Pull 
 
 To reduce release noise, aim to batch approximately ~3 PRs per release.
 Documentation updates should generally be batched and merged alongside or immediately prior to a release.
+
+## 6. Post-Release Checklist
+
+After the Version Packages PR merges and npm publishes:
+
+1. **Extract lessons:** `totem extract <pr-numbers> --yes` for all PRs in the release
+2. **Sync wiki:** Copy `docs/wiki/*.md` to the GitHub Wiki repo and push
+3. **Verify roadmap:** Ensure `docs/wiki/roadmap.md` and the GitHub Wiki roadmap page are in sync
+4. **Update memory:** Bump the version number in project memory (MEMORY.md)

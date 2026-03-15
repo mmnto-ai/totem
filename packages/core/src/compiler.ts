@@ -204,6 +204,18 @@ export function matchesGlob(filePath: string, glob: string): boolean {
     const prefix = glob.slice(0, -3);
     return normalized.startsWith(prefix + '/');
   }
+  // dir/*.ext — single-star, non-recursive (matches files in exact directory)
+  const singleStarIdx = glob.indexOf('/*.');
+  // eslint-disable-next-line -- totem-ignore-next-line
+  if (singleStarIdx > 0 && !glob.includes('**')) {
+    const prefix = glob.slice(0, singleStarIdx);
+    const ext = glob.slice(singleStarIdx + 2); // "*.ext" portion
+    if (!normalized.startsWith(prefix + '/')) return false;
+    const rest = normalized.slice(prefix.length + 1);
+    // Must be a direct child (no further slashes) and match the extension
+    return !rest.includes('/') && rest.endsWith(ext);
+  }
+
   // Literal filename match (e.g., "Dockerfile")
   return normalized === glob || normalized.endsWith('/' + glob);
 }

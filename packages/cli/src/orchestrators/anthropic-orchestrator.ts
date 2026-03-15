@@ -4,7 +4,15 @@ import { detectPackageManager, isQuotaError } from './orchestrator.js';
 
 // ─── Constants ───────────────────────────────────────
 
-const DEFAULT_MAX_TOKENS = 16_384;
+const DEFAULT_MAX_TOKENS = 8_192;
+
+/** Model-aware max output tokens — prevents API errors on smaller models. */
+function getMaxTokens(model: string): number {
+  if (model.includes('haiku')) return 4_096;
+  if (model.includes('sonnet')) return DEFAULT_MAX_TOKENS;
+  if (model.includes('opus')) return 16_384;
+  return DEFAULT_MAX_TOKENS;
+}
 
 // ─── SDK loader (BYOSD) ─────────────────────────────
 
@@ -48,7 +56,7 @@ export async function invokeAnthropicOrchestrator(
   try {
     const response = await client.messages.create({
       model,
-      max_tokens: DEFAULT_MAX_TOKENS,
+      max_tokens: getMaxTokens(model),
       messages: [{ role: 'user' as const, content: prompt }],
     });
 

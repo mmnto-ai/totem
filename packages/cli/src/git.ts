@@ -232,8 +232,15 @@ export function extractChangedFiles(diff: string): string[] {
   const files: string[] = [];
   for (const line of diff.split('\n')) {
     if (line.startsWith('diff --git')) {
-      const match = line.match(/^diff --git a\/.+ b\/(.+)$/);
-      if (match) files.push(match[1]);
+      // Handle quoted paths (spaces): diff --git "a/my file.ts" "b/my file.ts"
+      const quoted = line.match(/^diff --git "a\/.+" "b\/(.+)"$/); // totem-ignore — single line match, not iterating
+      if (quoted) {
+        files.push(quoted[1]!);
+        continue;
+      }
+      // Standard unquoted paths: diff --git a/file.ts b/file.ts
+      const unquoted = line.match(/^diff --git a\/.+ b\/(.+)$/); // totem-ignore — single line match
+      if (unquoted) files.push(unquoted[1]!);
     }
   }
   return files;
