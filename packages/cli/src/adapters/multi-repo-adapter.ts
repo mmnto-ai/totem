@@ -1,4 +1,4 @@
-import { GitHubCliAdapter } from './github-cli.js';
+import type { GitHubCliAdapter } from './github-cli.js';
 import type { IssueAdapter, StandardIssue, StandardIssueListItem } from './issue-adapter.js';
 
 /**
@@ -6,14 +6,28 @@ import type { IssueAdapter, StandardIssue, StandardIssueListItem } from './issue
  * Each issue is tagged with its source repo.
  */
 export class MultiRepoAdapter implements IssueAdapter {
-  private adapters: GitHubCliAdapter[];
+  private adapters: GitHubCliAdapter[] = [];
+  private initialized = false;
+  private cwd: string;
+  private repositories: string[];
 
   constructor(cwd: string, repositories: string[]) {
-    this.adapters = repositories.map((repo) => new GitHubCliAdapter(cwd, repo));
+    this.cwd = cwd;
+    this.repositories = repositories;
+  }
+
+  private async init(): Promise<void> {
+    if (this.initialized) return;
+    const { GitHubCliAdapter: Adapter } = await import('./github-cli.js');
+    this.adapters = this.repositories.map((repo) => new Adapter(this.cwd, repo));
+    this.initialized = true;
   }
 
   fetchIssue(issueNumber: number): StandardIssue {
-    // Try each repo until we find the issue
+    // Sync — adapters must be initialized first
+    if (!this.initialized) {
+      throw new Error('[Totem Error] MultiRepoAdapter not initialized. Call init() first.');
+    }
     const errors: string[] = [];
     for (const adapter of this.adapters) {
       try {
@@ -29,6 +43,9 @@ export class MultiRepoAdapter implements IssueAdapter {
   }
 
   fetchOpenIssues(limit?: number): StandardIssueListItem[] {
+    if (!this.initialized) {
+      throw new Error('[Totem Error] MultiRepoAdapter not initialized. Call init() first.');
+    }
     const allIssues: StandardIssueListItem[] = [];
     for (const adapter of this.adapters) {
       try {
@@ -43,4 +60,14 @@ export class MultiRepoAdapter implements IssueAdapter {
 
     return allIssues;
   }
+}
+
+/** Create and initialize a MultiRepoAdapter. */
+export async function createMultiRepoAdapter(
+  cwd: string,
+  repositories: string[],
+): Promise<MultiRepoAdapter> {
+  const adapter = new MultiRepoAdapter(cwd, repositories);
+  await adapter['init']();
+  return adapter;
 }

@@ -186,7 +186,7 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
 
   // Parse and fetch all inputs sequentially
   const { createIssueAdapter } = await import('../adapters/create-issue-adapter.js');
-  const adapter = createIssueAdapter(cwd, config);
+  const adapter = await createIssueAdapter(cwd, config);
   const parsed: ParsedInput[] = [];
   const queryParts: string[] = [];
 

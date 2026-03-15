@@ -160,7 +160,7 @@ export async function triageCommand(options: TriageOptions): Promise<void> {
   // Fetch open issues
   log.info(TAG, 'Fetching open issues...');
   const { createIssueAdapter } = await import('../adapters/create-issue-adapter.js');
-  const adapter = createIssueAdapter(cwd, config);
+  const adapter = await createIssueAdapter(cwd, config);
   const issues = adapter.fetchOpenIssues(GH_ISSUE_LIMIT);
 
   if (issues.length === 0) {
