@@ -14,7 +14,7 @@ const config: TotemConfig = {
     { glob: '.totem/lessons.md', type: 'lesson', strategy: 'markdown-heading' },
   ],
 
-  embedding: { provider: 'openai', model: 'text-embedding-3-small' },
+  embedding: { provider: 'gemini', model: 'gemini-embedding-2-preview', dimensions: 768 },
 
   orchestrator: {
     provider: 'gemini',
