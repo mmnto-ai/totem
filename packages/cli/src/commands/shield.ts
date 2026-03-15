@@ -346,7 +346,7 @@ async function runDeterministicShield(
   // Wire up rule metrics recording
   const { loadRuleMetrics, recordTrigger, recordSuppression, saveRuleMetrics } =
     await import('@mmnto/totem');
-  const metrics = loadRuleMetrics(totemDir);
+  const metrics = loadRuleMetrics(totemDir, (msg) => log.dim(TAG, msg));
   const violations = applyRulesToAdditions(rules, additions, (event, hash) => {
     if (event === 'trigger') recordTrigger(metrics, hash);
     else recordSuppression(metrics, hash);

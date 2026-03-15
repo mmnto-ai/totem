@@ -35,7 +35,7 @@ function metricsPath(totemDir: string): string {
 }
 
 /** Load rule metrics from disk. Returns empty metrics if file is missing or invalid. */
-export function loadRuleMetrics(totemDir: string): RuleMetricsFile {
+export function loadRuleMetrics(totemDir: string, onWarn?: (msg: string) => void): RuleMetricsFile {
   const filePath = metricsPath(totemDir);
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');
@@ -45,10 +45,8 @@ export function loadRuleMetrics(totemDir: string): RuleMetricsFile {
     if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'ENOENT') {
       return { version: 1, rules: {} };
     }
-    // Other errors (permissions, corrupt JSON) — log but don't crash
-    console.error(
-      `[Totem] Warning: could not load rule metrics: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    // Other errors (permissions, corrupt JSON) — warn but don't crash
+    onWarn?.(`Could not load rule metrics: ${err instanceof Error ? err.message : String(err)}`);
     return { version: 1, rules: {} };
   }
 }
