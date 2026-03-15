@@ -121,6 +121,51 @@ describe('createOrchestrator', () => {
   });
 });
 
+// ─── CLI fallback ───────────────────────────────────
+
+describe('withCliFallback (via createOrchestrator)', () => {
+  it('gemini SDK success does not trigger fallback', async () => {
+    const config: OrchestratorConfig = { provider: 'gemini' };
+    const invoke = createOrchestrator(config);
+    const result = await invoke({
+      prompt: 'test',
+      model: 'gemini-2.5-flash',
+      cwd: '.',
+      tag: 'Test',
+      totemDir: '.totem',
+    });
+    // The mock resolves — no fallback triggered
+    expect(result.content).toBe('gemini result');
+  });
+
+  it('anthropic SDK success does not trigger fallback', async () => {
+    const config: OrchestratorConfig = { provider: 'anthropic' };
+    const invoke = createOrchestrator(config);
+    const result = await invoke({
+      prompt: 'test',
+      model: 'claude-sonnet-4-6',
+      cwd: '.',
+      tag: 'Test',
+      totemDir: '.totem',
+    });
+    expect(result.content).toBe('anthropic result');
+  });
+
+  it('non-fallback-eligible errors are re-thrown', async () => {
+    // Override the mock to throw a non-eligible error
+    const { invokeGeminiOrchestrator } = await import('./gemini-orchestrator.js');
+    vi.mocked(invokeGeminiOrchestrator).mockRejectedValueOnce(
+      new Error('Gemini API call failed: model not found'),
+    );
+
+    const config: OrchestratorConfig = { provider: 'gemini' };
+    const invoke = createOrchestrator(config);
+    await expect(
+      invoke({ prompt: 'test', model: 'bad-model', cwd: '.', tag: 'Test', totemDir: '.totem' }),
+    ).rejects.toThrow('model not found');
+  });
+});
+
 // ─── detectPackageManager ───────────────────────────
 
 describe('detectPackageManager', () => {
