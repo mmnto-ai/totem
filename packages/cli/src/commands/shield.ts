@@ -351,7 +351,14 @@ async function runDeterministicShield(
     if (event === 'trigger') recordTrigger(metrics, hash);
     else recordSuppression(metrics, hash);
   });
-  saveRuleMetrics(totemDir, metrics);
+  try {
+    saveRuleMetrics(totemDir, metrics);
+  } catch (err) {
+    log.dim(
+      TAG,
+      `Could not save rule metrics: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 
   // Build output based on format
   let output: string;

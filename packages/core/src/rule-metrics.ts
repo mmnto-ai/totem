@@ -40,7 +40,15 @@ export function loadRuleMetrics(totemDir: string): RuleMetricsFile {
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');
     return RuleMetricsFileSchema.parse(JSON.parse(raw));
-  } catch {
+  } catch (err) {
+    // ENOENT is expected on first run — silently return empty metrics
+    if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { version: 1, rules: {} };
+    }
+    // Other errors (permissions, corrupt JSON) — log but don't crash
+    console.error(
+      `[Totem] Warning: could not load rule metrics: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return { version: 1, rules: {} };
   }
 }
