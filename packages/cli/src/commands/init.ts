@@ -77,7 +77,7 @@ interface DetectedProject {
   hasSessions: boolean;
 }
 
-type AiTool = 'Claude Code' | 'Gemini CLI' | 'Cursor';
+type AiTool = 'Claude Code' | 'Gemini CLI' | 'Cursor' | 'JetBrains Junie' | 'GitHub Copilot';
 
 export interface HookInstallerResult {
   file: string;
@@ -87,9 +87,9 @@ export interface HookInstallerResult {
 
 interface AiToolInfo {
   name: AiTool;
-  mcpPath: string;
+  mcpPath: string | null;
   reflexFile: string | null;
-  serverEntry: Record<string, unknown>;
+  serverEntry: Record<string, unknown> | null;
   hookInstaller?: (cwd: string) => Promise<HookInstallerResult[]>;
 }
 
@@ -370,6 +370,18 @@ const AI_TOOLS: AiToolInfo[] = [
     reflexFile: '.cursorrules',
     serverEntry: { type: 'stdio', command: npxCmd, args: npxArgs },
   },
+  {
+    name: 'JetBrains Junie',
+    mcpPath: '.junie/mcp/mcp.json',
+    reflexFile: '.junie/guidelines.md',
+    serverEntry: { command: npxCmd, args: npxArgs },
+  },
+  {
+    name: 'GitHub Copilot',
+    mcpPath: null,
+    reflexFile: '.github/copilot-instructions.md',
+    serverEntry: null,
+  },
 ];
 
 function detectAiTools(cwd: string): AiToolInfo[] {
@@ -384,6 +396,12 @@ function detectAiTools(cwd: string): AiToolInfo[] {
   }
   if (exists('.cursorrules') || exists('.cursor/mcp.json')) {
     detected.push(AI_TOOLS.find((t) => t.name === 'Cursor')!);
+  }
+  if (exists('.junie') || exists('.junie/guidelines.md')) {
+    detected.push(AI_TOOLS.find((t) => t.name === 'JetBrains Junie')!);
+  }
+  if (exists('.github/copilot-instructions.md')) {
+    detected.push(AI_TOOLS.find((t) => t.name === 'GitHub Copilot')!);
   }
 
   return detected;
@@ -907,6 +925,7 @@ export async function initCommand(): Promise<void> {
 
       // --- MCP scaffolding for selected tools ---
       for (const tool of selectedTools) {
+        if (!tool.mcpPath || !tool.serverEntry) continue;
         const filePath = path.join(cwd, tool.mcpPath);
         const result = scaffoldMcpConfig(filePath, tool.serverEntry);
 
