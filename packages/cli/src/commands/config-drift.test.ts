@@ -136,18 +136,18 @@ describe('all agent instruction files share the same project rules', () => {
     '`kebab-case.ts`',
     '`err` (never `error`)',
     'no empty catches',
-    'Extract magic numbers into named constants',
+    'Named constants for magic numbers',
     'Zod at system boundaries',
     '`pnpm run format`',
-    // Reflexes
+    // Totem
     'search_knowledge',
     'NEVER use `git push --no-verify`',
     // Publishing
     '`pnpm run version`',
     // Contributor Principles
-    'Consumer-first',
-    'GCA decline reflex',
-    'No suppression without tickets',
+    'Update `AI_PROMPT_BLOCK` in `init.ts`',
+    'GCA decline',
+    'without a ticket',
   ];
 
   for (const rule of SHARED_RULES) {
