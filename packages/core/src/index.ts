@@ -80,6 +80,7 @@ export type {
   CompiledRulesFile,
   CompilerOutput,
   DiffAddition,
+  RuleEventCallback,
   Violation,
 } from './compiler.js';
 export {
@@ -149,3 +150,12 @@ export {
   XML_TAG_LEAKAGE_RE,
 } from './sanitize.js';
 export { wrapXml } from './xml-format.js';
+
+// Rule metrics (observability)
+export type { RuleMetric, RuleMetricsFile } from './rule-metrics.js';
+export {
+  loadRuleMetrics,
+  recordSuppression,
+  recordTrigger,
+  saveRuleMetrics,
+} from './rule-metrics.js';
