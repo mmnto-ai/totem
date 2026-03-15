@@ -192,15 +192,29 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
 
   for (const input of unique) {
     const urlMatch = input.match(/^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/);
+    // Support owner/repo#123 format for multi-repo disambiguation
+    const hashIdx = input.indexOf('#');
+    const isQualified =
+      hashIdx > 0 && input.includes('/') && /^\d+$/.test(input.slice(hashIdx + 1));
+    const qualifiedRepo = isQualified ? input.slice(0, hashIdx) : null;
+    const qualifiedNum = isQualified ? parseInt(input.slice(hashIdx + 1), 10) : null;
+
     const issueNumber = /^\d+$/.test(input)
       ? parseInt(input, 10)
       : urlMatch
         ? parseInt(urlMatch[1]!, 10)
-        : null;
+        : qualifiedNum;
 
     if (issueNumber) {
+      // If qualified with owner/repo, create a repo-specific adapter
+      const fetchAdapter = qualifiedRepo
+        ? await (async () => {
+            const { GitHubCliAdapter } = await import('../adapters/github-cli.js');
+            return new GitHubCliAdapter(cwd, qualifiedRepo);
+          })()
+        : adapter;
       log.info(TAG, `Fetching issue #${issueNumber}...`);
-      const issue = adapter.fetchIssue(issueNumber);
+      const issue = fetchAdapter.fetchIssue(issueNumber);
       log.info(TAG, `Title: ${issue.title}`);
       parsed.push({ issue, freeText: null });
       queryParts.push(buildSearchQuery(issue));
