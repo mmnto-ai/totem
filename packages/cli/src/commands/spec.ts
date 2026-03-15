@@ -207,12 +207,11 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
 
     if (issueNumber) {
       // If qualified with owner/repo, create a repo-specific adapter
-      const fetchAdapter = qualifiedRepo
-        ? await (async () => {
-            const { GitHubCliAdapter } = await import('../adapters/github-cli.js');
-            return new GitHubCliAdapter(cwd, qualifiedRepo);
-          })()
-        : adapter;
+      let fetchAdapter = adapter;
+      if (qualifiedRepo) {
+        const { GitHubCliAdapter } = await import('../adapters/github-cli.js');
+        fetchAdapter = new GitHubCliAdapter(cwd, qualifiedRepo);
+      }
       log.info(TAG, `Fetching issue #${issueNumber}...`);
       const issue = fetchAdapter.fetchIssue(issueNumber);
       log.info(TAG, `Title: ${issue.title}`);

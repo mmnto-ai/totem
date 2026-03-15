@@ -372,7 +372,8 @@ export function formatIssueInventory(issues: StandardIssueListItem[]): string {
   const rows = issues.map((i) => {
     const labels = i.labels.join(', ') || '(none)';
     const updated = i.updatedAt.slice(0, 10);
-    return `| #${i.number} | ${i.title} | ${labels} | ${updated} |`;
+    const id = i.repo ? `${i.repo}#${i.number}` : `#${i.number}`;
+    return `| ${id} | ${i.title} | ${labels} | ${updated} |`;
   });
 
   return ['| Issue | Title | Labels | Updated |', '|---|---|---|---|', ...rows].join('\n');
