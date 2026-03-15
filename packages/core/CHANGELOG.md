@@ -1,5 +1,14 @@
 # @mmnto/totem
 
+## 0.35.0
+
+### Minor Changes
+
+- f6074c4: Upgrade @lancedb/lancedb from 0.13.0 to 0.26.2.
+  - Fixes FTS (Full-Text Search) WAND panic (#491) — "pivot posting should have at least one document"
+  - Lance engine upgraded from v0.19 to v2.0.0 — improved search performance, FTS stability, and cache efficiency
+  - Users should run `totem sync --full` after upgrading to rebuild the index with the new engine format
+
 ## 0.34.0
 
 ## 0.33.1
