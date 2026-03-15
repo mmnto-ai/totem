@@ -354,7 +354,7 @@ async function runDeterministicShield(
   try {
     saveRuleMetrics(totemDir, metrics);
   } catch (err) {
-    log.dim(
+    log.warn(
       TAG,
       `Could not save rule metrics: ${err instanceof Error ? err.message : String(err)}`,
     );
