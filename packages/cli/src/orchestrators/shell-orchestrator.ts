@@ -114,8 +114,9 @@ export async function invokeShellOrchestrator(
         if (IS_WIN && child.pid) {
           try {
             spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
-          } catch {
-            child.kill(); // fallback
+          } catch (_err) {
+            // taskkill failed — fall back to basic kill
+            child.kill();
           }
         } else {
           child.kill();

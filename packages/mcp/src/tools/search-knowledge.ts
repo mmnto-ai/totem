@@ -150,8 +150,16 @@ export function registerSearchKnowledge(server: McpServer): void {
           });
         }
 
-        // First-query health gate — runs once per session, non-blocking
+        // First-query health gate — blocks on dimension mismatch, warns on other issues
         const healthWarning = await runFirstQueryHealthCheck();
+
+        // Dimension mismatch is fatal — search will crash with a cryptic LanceDB error
+        if (healthWarning && healthWarning.includes('DIMENSION MISMATCH')) {
+          return {
+            content: [{ type: 'text' as const, text: healthWarning }], // totem-ignore — healthWarning is from formatSystemWarning (already XML-wrapped)
+            isError: true,
+          };
+        }
 
         let result: ToolResult;
         try {
