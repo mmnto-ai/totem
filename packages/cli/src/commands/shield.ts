@@ -343,7 +343,15 @@ async function runDeterministicShield(
     log.dim(TAG, 'AST classification unavailable, falling back to raw matching');
   }
 
-  const violations = applyRulesToAdditions(rules, additions);
+  // Wire up rule metrics recording
+  const { loadRuleMetrics, recordTrigger, recordSuppression, saveRuleMetrics } =
+    await import('@mmnto/totem');
+  const metrics = loadRuleMetrics(totemDir);
+  const violations = applyRulesToAdditions(rules, additions, (event, hash) => {
+    if (event === 'trigger') recordTrigger(metrics, hash);
+    else recordSuppression(metrics, hash);
+  });
+  saveRuleMetrics(totemDir, metrics);
 
   // Build output based on format
   let output: string;
