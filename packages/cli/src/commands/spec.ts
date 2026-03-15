@@ -3,7 +3,6 @@ import * as path from 'node:path';
 import type { ContentType, SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore } from '@mmnto/totem';
 
-import { GitHubCliAdapter } from '../adapters/github-cli.js';
 import type { StandardIssue } from '../adapters/issue-adapter.js';
 import { log } from '../ui.js';
 import {
@@ -186,7 +185,8 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   await store.connect();
 
   // Parse and fetch all inputs sequentially
-  const adapter = new GitHubCliAdapter(cwd);
+  const { createIssueAdapter } = await import('../adapters/create-issue-adapter.js');
+  const adapter = createIssueAdapter(cwd, config);
   const parsed: ParsedInput[] = [];
   const queryParts: string[] = [];
 

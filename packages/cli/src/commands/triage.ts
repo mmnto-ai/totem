@@ -3,7 +3,6 @@ import * as path from 'node:path';
 import type { ContentType, SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore } from '@mmnto/totem';
 
-import { GitHubCliAdapter } from '../adapters/github-cli.js';
 import type { StandardIssueListItem } from '../adapters/issue-adapter.js';
 import { log } from '../ui.js';
 import {
@@ -96,13 +95,22 @@ function buildSearchQuery(issues: StandardIssueListItem[]): string {
 // ─── Prompt assembly ────────────────────────────────────
 
 export function formatIssueInventory(issues: StandardIssueListItem[]): string {
+  const hasMultiRepo = issues.some((i) => i.repo);
+
   const rows = issues.map((i) => {
     const labels = i.labels.join(', ') || '(none)';
     const updated = i.updatedAt.slice(0, 10); // YYYY-MM-DD
-    return `| #${i.number} | ${i.title} | ${labels} | ${updated} |`;
+    const prefix = hasMultiRepo && i.repo ? `${i.repo}#${i.number}` : `#${i.number}`;
+    return hasMultiRepo
+      ? `| ${prefix} | ${i.title} | ${labels} | ${updated} |`
+      : `| #${i.number} | ${i.title} | ${labels} | ${updated} |`;
   });
 
-  return ['| Issue | Title | Labels | Updated |', '|---|---|---|---|', ...rows].join('\n');
+  return [
+    hasMultiRepo ? '| Issue | Title | Labels | Updated |' : '| Issue | Title | Labels | Updated |',
+    '|---|---|---|---|',
+    ...rows,
+  ].join('\n');
 }
 
 export function assemblePrompt(
@@ -151,7 +159,8 @@ export async function triageCommand(options: TriageOptions): Promise<void> {
 
   // Fetch open issues
   log.info(TAG, 'Fetching open issues...');
-  const adapter = new GitHubCliAdapter(cwd);
+  const { createIssueAdapter } = await import('../adapters/create-issue-adapter.js');
+  const adapter = createIssueAdapter(cwd, config);
   const issues = adapter.fetchOpenIssues(GH_ISSUE_LIMIT);
 
   if (issues.length === 0) {

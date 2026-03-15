@@ -170,6 +170,9 @@ export const TotemConfigSchema = z.object({
 
   /** Optional: export targets for cross-model lesson enforcement (e.g., { gemini: '.gemini/styleguide.md' }) */
   exports: z.record(z.string()).optional(),
+
+  /** Optional: GitHub repositories to aggregate issues from (e.g., ['owner/repo', 'owner/repo2']) */
+  repositories: z.array(z.string()).optional(),
 });
 
 export type ChunkStrategy = z.infer<typeof ChunkStrategySchema>;

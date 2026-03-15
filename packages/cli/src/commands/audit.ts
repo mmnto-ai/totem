@@ -8,7 +8,6 @@ import { isCancel, multiselect } from '@clack/prompts';
 import { sanitize } from '@mmnto/totem';
 
 import { ghExec } from '../adapters/gh-utils.js';
-import { GitHubCliAdapter } from '../adapters/github-cli.js';
 import type { StandardIssueListItem } from '../adapters/issue-adapter.js';
 import { log } from '../ui.js';
 import {
@@ -420,7 +419,8 @@ export async function auditCommand(options: AuditOptions): Promise<void> {
 
   // Fetch open issues
   log.info(TAG, 'Fetching open issues...');
-  const adapter = new GitHubCliAdapter(cwd);
+  const { createIssueAdapter } = await import('../adapters/create-issue-adapter.js');
+  const adapter = createIssueAdapter(cwd, config);
   const issues = adapter.fetchOpenIssues(GH_ISSUE_LIMIT);
 
   if (issues.length === 0) {
