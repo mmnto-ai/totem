@@ -100,17 +100,11 @@ export function formatIssueInventory(issues: StandardIssueListItem[]): string {
   const rows = issues.map((i) => {
     const labels = i.labels.join(', ') || '(none)';
     const updated = i.updatedAt.slice(0, 10); // YYYY-MM-DD
-    const prefix = hasMultiRepo && i.repo ? `${i.repo}#${i.number}` : `#${i.number}`;
-    return hasMultiRepo
-      ? `| ${prefix} | ${i.title} | ${labels} | ${updated} |`
-      : `| #${i.number} | ${i.title} | ${labels} | ${updated} |`;
+    const id = hasMultiRepo && i.repo ? `${i.repo}#${i.number}` : `#${i.number}`;
+    return `| ${id} | ${i.title} | ${labels} | ${updated} |`;
   });
 
-  return [
-    hasMultiRepo ? '| Issue | Title | Labels | Updated |' : '| Issue | Title | Labels | Updated |',
-    '|---|---|---|---|',
-    ...rows,
-  ].join('\n');
+  return ['| Issue | Title | Labels | Updated |', '|---|---|---|---|', ...rows].join('\n');
 }
 
 export function assemblePrompt(

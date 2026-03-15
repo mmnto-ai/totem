@@ -6,68 +6,75 @@ import type { IssueAdapter, StandardIssue, StandardIssueListItem } from './issue
  * Each issue is tagged with its source repo.
  */
 export class MultiRepoAdapter implements IssueAdapter {
-  private adapters: GitHubCliAdapter[] = [];
-  private initialized = false;
-  private cwd: string;
-  private repositories: string[];
+  private adapters: GitHubCliAdapter[];
+  private warn: (msg: string) => void;
 
-  constructor(cwd: string, repositories: string[]) {
-    this.cwd = cwd;
-    this.repositories = repositories;
+  private constructor(adapters: GitHubCliAdapter[], warn: (msg: string) => void) {
+    this.adapters = adapters;
+    this.warn = warn;
   }
 
-  private async init(): Promise<void> {
-    if (this.initialized) return;
+  /** Public async factory — dynamically imports GitHubCliAdapter. */
+  static async create(
+    cwd: string,
+    repositories: string[],
+    warn?: (msg: string) => void,
+  ): Promise<MultiRepoAdapter> {
     const { GitHubCliAdapter: Adapter } = await import('./github-cli.js');
-    this.adapters = this.repositories.map((repo) => new Adapter(this.cwd, repo));
-    this.initialized = true;
+    const adapters = repositories.map((repo) => new Adapter(cwd, repo));
+    return new MultiRepoAdapter(adapters, warn ?? (() => {}));
   }
 
   fetchIssue(issueNumber: number): StandardIssue {
-    // Sync — adapters must be initialized first
-    if (!this.initialized) {
-      throw new Error('[Totem Error] MultiRepoAdapter not initialized. Call init() first.');
-    }
+    // Try each repo — collect all matches to detect ambiguity
+    const matches: StandardIssue[] = [];
     const errors: string[] = [];
+
     for (const adapter of this.adapters) {
       try {
-        return adapter.fetchIssue(issueNumber);
+        matches.push(adapter.fetchIssue(issueNumber));
       } catch (err) {
         errors.push(err instanceof Error ? err.message : String(err));
       }
     }
-    throw new Error(
-      `[Totem Error] Issue #${issueNumber} not found in any configured repository.\n` +
-        errors.map((e) => `  - ${e}`).join('\n'),
-    );
+
+    if (matches.length === 0) {
+      throw new Error(
+        `[Totem Error] Issue #${issueNumber} not found in any configured repository.\n` +
+          errors.map((e) => `  - ${e}`).join('\n'),
+      );
+    }
+
+    if (matches.length > 1) {
+      const repos = matches.map((m) => m.repo).join(', ');
+      throw new Error(
+        `[Totem Error] Issue #${issueNumber} is ambiguous — found in: ${repos}.\n` +
+          `Specify the full identifier (e.g., owner/repo#${issueNumber}).`,
+      );
+    }
+
+    return matches[0]!;
   }
 
   fetchOpenIssues(limit?: number): StandardIssueListItem[] {
-    if (!this.initialized) {
-      throw new Error('[Totem Error] MultiRepoAdapter not initialized. Call init() first.');
-    }
     const allIssues: StandardIssueListItem[] = [];
     for (const adapter of this.adapters) {
       try {
         allIssues.push(...adapter.fetchOpenIssues(limit));
-      } catch {
-        // Non-fatal: if one repo fails, still return issues from others
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.warn(`[Totem] Failed to fetch issues from a repository: ${msg}`);
       }
     }
 
     // Sort by updatedAt descending (most recent first)
     allIssues.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
+    // Apply limit to merged results, not per-repo
+    if (limit && allIssues.length > limit) {
+      return allIssues.slice(0, limit);
+    }
+
     return allIssues;
   }
-}
-
-/** Create and initialize a MultiRepoAdapter. */
-export async function createMultiRepoAdapter(
-  cwd: string,
-  repositories: string[],
-): Promise<MultiRepoAdapter> {
-  const adapter = new MultiRepoAdapter(cwd, repositories);
-  await adapter['init']();
-  return adapter;
 }
