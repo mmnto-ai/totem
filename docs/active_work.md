@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@0.35.0`. Recent efforts finalized the Rule Testing Harness (ADR-022) to resolve regex false positives, alongside comprehensive dev wiki migrations and core bug blitzes.
+ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@0.35.1` (staging for `0.38.0`). Recent efforts finalized the Rule Testing Harness (ADR-022) to resolve regex false positives, alongside comprehensive dev wiki migrations. Most recently, the core was hardened with graceful degradation for AI providers, Claude Code hook integration, and MCP reliability fixes.
 
 Post-merge sequence was aligned during a multi-agent planning session (Claude + Gemini, 2026-03-13) informed by Deep Research Brief #24 (Competitive Moat Analysis). See `.strategy/deep-research/24-competitive-moat-analysis/` for the full adversarial analysis.
 
@@ -37,18 +37,22 @@ The following sequence was determined by cross-referencing the competitive moat 
 
 - **Search & Data Layer:**
   - Delivered ADR-024 with hybrid search and Gemini embeddings (#429, #380).
+  - Switched default embedder to `gemini-embedding-2-preview` and implemented graceful degradation to Ollama fallbacks (#523, #517).
   - Upgraded LanceDB to 0.26.x and resolved FTS pivot posting panics (#491, #494).
   - Migrated lessons directory to dual-read/single-write and added startup health checks for LanceStore indexes (#428, #439).
 - **Core & Shift-Left Foundation:**
   - Delivered `totem test` compiled rule testing harness for ADR-022 to provide empirical rule failure data (#422).
   - Shipped SARIF 2.1.0 output for the deterministic shield, enabling GitHub Advanced Security integration (#387, #418).
   - Completed a bug blitz addressing AST gate file reading, glob matching, and orchestrator process leaks (#395, #397, #399).
-  - Reinstated agent hooks, audited suppressions, and blocked main commits via `totem hooks` (#310, #458, #464).
+  - Reinstated agent hooks and audited suppressions (#464).
+  - Applied "recency sandwich" pattern to agent instruction files and enforced length limits (#511, #466).
   - Delivered "Universal Lessons" baseline and refined ignore patterns for frictionless initialization (#128, #419).
 - **Orchestration & Integrations:**
   - Implemented MCP enforcement tools that equip agents to self-correct during active work (#176, #417).
   - Added MCP search logging and resolved Gemini embedder dimension mismatches (#440, #444).
-  - Resolved auto-handoff on MCP lifecycle events and integrated JetBrains Junie (#383, #371).
+  - Resolved auto-handoff on MCP lifecycle events, integrated JetBrains Junie, and fixed MCP connection failures and zombie processes (#383, #503).
+  - Shipped graceful degradation for orchestrator providers with SDK-to-CLI fallback capabilities (#522, #516).
+  - Configured issue sources to support triage and extraction across multiple repositories (#532, #514).
 - **Documentation & DX:**
   - Migrated README to a dev wiki including Dev Environment, Testing Conventions, and Release Process guides (#450, #452, #477).
   - Established an Agent Memory Architecture guide and documented the Consumer Scaffolding Pipeline (#447, #451).

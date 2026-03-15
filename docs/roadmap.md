@@ -28,12 +28,12 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 This phase delivered seamless cross-platform onboarding, automated AI tool configuration, and universal baseline lessons.
 
 - **Onboarding & UX:**
-  - Auto-configured AI tools with JetBrains Junie support.
+  - Auto-configured AI tools with JetBrains Junie and Copilot support (#448).
   - Versioned reflex upgrade paths for existing consumers.
   - Cross-platform installers and proper CLI `--help` output.
   - Premium CLI UI polish.
 - **Host Integration:**
-  - Seamless host integration hooks for Claude and Gemini.
+  - Seamless host integration hooks for Claude Code, Gemini, and Junie (#464). Involuntary enforcement strategy under research (#520).
   - Universal baseline lessons injected with harder vector DB reflexes.
 - [ ] **#129 Epic: Interactive CLI Tutorial:** Build an animated, interactive CLI tutorial (`totem tutorial`). This allows users to pause the walkthrough, ask the LLM contextual questions, and resume seamlessly.
 - [ ] **#125 Epic: Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically. Achieves a "run `init` and forget" workflow via deterministic shield gates and auto-installs.
@@ -46,12 +46,12 @@ This phase fortified the core architecture, delivering native orchestration, zer
 
 - **AST & Orchestration:**
   - Universal Tree-sitter parsing and AST gating for zero-LLM shielding.
-  - Cross-provider LLM routing support:
+  - Cross-provider LLM routing with graceful degradation fallbacks (#516, #517):
     - **Cloud Providers:** Gemini, Anthropic, OpenAI.
     - **Local Providers:** Ollama.
 - **Data Safety & Memory:**
   - Saga-based transactional document checkpoints and rollbacks.
-  - Automated document synchronization with drift detection.
+  - Automated document synchronization with drift detection and dual-read migrations (#428).
   - Zero-LLM session snapshots via `totem handoff --lite`.
   - Cross-model document export support.
 - **Security & DX:**
@@ -67,12 +67,13 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - [ ] **#130 Epic: Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks. This will track index health and ignored files.
   - [ ] **#92 CLI Metrics & Observability:** Provide local CLI metrics (`totem stats`) for violation history, lesson coverage, and rule fire counts. Requires terminal output only for v1.0 without cloud or TUI dependencies.
   - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
-  - [ ] **#283 Epic: v1.0 Documentation:** Develop the v1.0 documentation site and minimize the core README. Initial wiki migration has begun with developer guides (#447, #449).
+  - [ ] **#283 Epic: v1.0 Documentation:** Develop the v1.0 documentation site and minimize the core README. Extensive wiki migration covers dev environments and release processes (#477, #450).
 - **Workflow & Execution:**
   - [x] **#362 Strategic Backlog Audit:** Added `totem audit` for backlog auditing with a human approval gate (#362).
-  - [x] **Context Injection:** Embedded relevant vector DB lessons into all orchestrator commands and `totem spec` output (#370).
-  - [x] **Knowledge Promotion:** Audited local AI memory and promoted contributor knowledge to version-controlled surfaces (#408).
+  - [x] **Context Injection:** Embedded relevant vector DB lessons into orchestrator commands. Includes recency sandwiching for agent instruction files (#370, #511).
+  - [x] **Knowledge Promotion:** Audited local AI memory and promoted contributor knowledge to version-controlled surfaces (#408, #402).
   - [x] **Toolchain Exports:** Exported compiled lessons to GitHub Copilot instructions (#294).
+  - [x] **Configurable Issue Sources:** Added support for multiple repositories during triage and extraction workflows (#514, #532).
   - [ ] **#119 `totem run <workflow>`:** Introduce a custom AI task runner to execute user-defined markdown workflows via the orchestrator.
   - [ ] **#74 `totem oracle`:** Add a frictionless Q&A command to query LanceDB without strict personas.
   - [ ] **#392 `totem review`:** Implement full codebase review powered by repomix and vectordb lessons.
@@ -82,9 +83,9 @@ This phase fortified the core architecture, delivering native orchestration, zer
 - **Shift-Left & Advanced Intelligence:**
   - [ ] **#195 / #196 / #214 Epic: Shift-Left AI Verification:** Define model compatibility and auditing strategy to systematically verify models. Build adversarial evaluation harness for CI.
   - [ ] **#314 Epic: Adaptive Agent Governance:** Establish the Codebase Immune System. Provides adaptive agent governance and incorporates AST compilation design to address regex limits.
-  - [x] **#176 Agent-Optimized MCP:** Implemented MCP enforcement tools enabling agents to self-correct during active work. Includes dynamic token budgeting and multi-agent permissions (#176, #417).
+  - [x] **#176 Agent-Optimized MCP:** Implemented MCP enforcement tools enabling active self-correction. Includes heartbeat zombie harvesting and dynamic token budgets (#417, #503).
   - [ ] **#183 Cross-File Knowledge Graph (Blocked):** Implement symbol resolution to enable multi-file architectural reasoning.
-  - [x] **#364 VectorDB Structure:** Defined multi-type knowledge retrieval schemas for the local LanceDB index. Delivered hybrid search and Gemini embedding integration as ADR-024 (#429).
+  - [x] **#364 VectorDB Structure:** Defined multi-type schemas for the local LanceDB index. Delivered health checks, hybrid search, and Gemini embeddings (#439, #539).
   - [x] **#387 SARIF Output:** Standardized deterministic shield output for CI/CD integration. Enables GitHub Advanced Security tab integration (#387, #418).
   - [ ] **#385 Rule Exports:** Export compiled rules to Semgrep YAML and ESLint configurations. Deferred until core governance (#314) is finalized.
   - [x] **#422 Rule Testing Harness:** Implemented a compiled rule testing harness (ADR-022) to empirically identify regex false-positives and drive AST requirements.
@@ -100,6 +101,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - [ ] **#175 Epic: Multiplayer Cache Syncing:** Phase 4 enterprise/team scaling capability (Post-1.0).
   - [ ] **#79 Documentation Ingestion Pipeline:** Build Pull/Push models for Notion, Confluence, or internal wikis.
   - [x] **#286 Epic: Rust Core Extraction:** Evaluated `totem-core-rs` for enterprise-scale extraction performance.
+  - [x] **Multi-Totem Domains:** Established multi-totem knowledge domains with an indexed strategy repository and consumer playground (#463, #481).
 - **Integration & DevEx:**
   - [ ] **#124 Epic: Frictionless 10-Minute Init:** Build `totem onboard <issue>` to generate contextual Day 1 briefings. These will be tailored to a new developer's first assigned ticket.
   - [x] **#128 Epic: Universal Lessons Baseline:** Delivered baseline "Universal Lessons" dataset during initialization. Refined ignore patterns to ensure frictionless bootstrapping (#128, #419).
