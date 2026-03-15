@@ -1,5 +1,15 @@
 # @mmnto/mcp
 
+## 0.33.1
+
+### Patch Changes
+
+- 7a90a44: Bug fixes: Gemini embedder dimension mismatch detection, shell orchestrator process leak on Windows.
+  - **MCP:** Detect embedding dimension mismatch on first query and return clear error message with fix instructions (rebuild index + restart MCP server)
+  - **CLI:** Fix shell orchestrator process leak on Windows — use `taskkill /T` to kill entire process tree on timeout instead of just the shell wrapper
+  - **CLI:** `totem demo` command for previewing spinner animations
+  - @mmnto/totem@0.33.1
+
 ## 0.33.0
 
 ### Minor Changes
