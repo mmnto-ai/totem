@@ -87,7 +87,7 @@ class LazyEmbedder implements Embedder {
 
   constructor(config: EmbeddingProvider, onWarn?: (msg: string) => void) {
     this.config = config;
-    this.warn = onWarn ?? ((msg: string) => console.error(msg));
+    this.warn = onWarn ?? (() => {});
     // Use configured dimensions or provider defaults
     this.dimensions = config.dimensions ?? (config.provider === 'gemini' ? 768 : 1536);
   }
