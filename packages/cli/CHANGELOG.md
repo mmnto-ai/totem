@@ -1,5 +1,18 @@
 # @mmnto/cli
 
+## 0.34.0
+
+### Minor Changes
+
+- 7ae97f9: Add Copilot and Junie to totem init agent detection.
+  - **Init:** Auto-detect JetBrains Junie (`.junie/`) and GitHub Copilot (`.github/copilot-instructions.md`)
+  - **Init:** Correct Junie MCP path to `.junie/mcp/mcp.json` (was incorrectly using `.mcp.json`)
+  - **Init:** Copilot gets reflex injection only (no MCP — Copilot doesn't support it)
+
+### Patch Changes
+
+- @mmnto/totem@0.34.0
+
 ## 0.33.1
 
 ### Patch Changes
