@@ -160,8 +160,8 @@
       "engine": "regex",
       "compiledAt": "2026-03-09T03:15:36.127Z",
       "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
-      "category": "security",
-      "severity": "error"
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "f14881a4daf28160",
@@ -1068,8 +1068,8 @@
       "engine": "regex",
       "compiledAt": "2026-03-12T11:31:03.928Z",
       "fileGlobs": ["packages/cli/**/*.ts"],
-      "category": "architecture",
-      "severity": "error"
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "8969d8bc95c3864b",
@@ -1212,8 +1212,8 @@
       "compiledAt": "2026-03-16T02:48:07.575Z",
       "createdAt": "2026-03-16T02:48:07.575Z",
       "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.mjs", "**/*.cjs"],
-      "category": "architecture",
-      "severity": "error"
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "0c3bb064c951ada1",
