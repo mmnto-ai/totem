@@ -1,4 +1,9 @@
+import { randomBytes } from 'node:crypto';
+
 import type { CompiledRule, Violation } from './compiler.js';
+
+/** Default rule category when none is specified on the compiled rule. */
+export const DEFAULT_RULE_CATEGORY = 'architecture';
 
 // ─── SARIF 2.1.0 Types (minimal subset) ─────────────
 
@@ -35,6 +40,8 @@ export interface SarifResult {
   level: 'error' | 'warning' | 'note';
   message: { text: string };
   locations: SarifLocation[];
+  /** SARIF properties bag — Trap Ledger metadata */
+  properties?: Record<string, unknown>;
 }
 
 export interface SarifLocation {
@@ -94,6 +101,7 @@ export function buildSarifLog(
       properties: {
         engine: rule.engine,
         pattern: rule.pattern,
+        category: rule.category ?? DEFAULT_RULE_CATEGORY,
         ...(rule.fileGlobs ? { fileGlobs: rule.fileGlobs } : {}),
       },
     };
@@ -119,6 +127,12 @@ export function buildSarifLog(
           },
         },
       ],
+      properties: {
+        eventId: `${v.rule.lessonHash}-${Date.now()}-${randomBytes(4).toString('hex')}`,
+        ruleCategory: v.rule.category ?? DEFAULT_RULE_CATEGORY,
+        timestamp: new Date().toISOString(),
+        lessonHash: v.rule.lessonHash,
+      },
     };
   });
 

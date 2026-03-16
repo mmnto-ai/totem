@@ -23,6 +23,8 @@ export const CompiledRuleSchema = z.object({
   createdAt: z.string().optional(),
   /** Optional file glob patterns — rule only applies to matching files (e.g., ["*.sh", "*.yml"]) */
   fileGlobs: z.array(z.string()).optional(),
+  /** Rule category for Trap Ledger classification */
+  category: z.enum(['security', 'architecture', 'style', 'performance']).optional(),
 });
 
 export type CompiledRule = z.infer<typeof CompiledRuleSchema>;
