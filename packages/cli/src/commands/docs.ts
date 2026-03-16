@@ -24,6 +24,20 @@ const MAX_DOC_CHARS = 80_000;
 const MAX_LOG_CHARS = 20_000;
 const GH_CLOSED_ISSUE_LIMIT = 50;
 
+/**
+ * Issues closed without shipping. The LLM hallucinates these as live
+ * features because they appear in the git log. Strip before and after LLM.
+ */
+const CLOSED_NOT_SHIPPED = [515];
+
+function stripNotShipped(text: string): string {
+  let result = text;
+  for (const n of CLOSED_NOT_SHIPPED) {
+    result = result.replace(new RegExp(`\\s*\\(#${n}\\)`, 'g'), '');
+  }
+  return result;
+}
+
 // ─── System prompt ──────────────────────────────────────
 
 export const DOCS_SYSTEM_PROMPT = `# Docs System Prompt — Automated Documentation Sync
@@ -72,7 +86,7 @@ interface ReleaseContext {
 
 function gatherReleaseContext(cwd: string): ReleaseContext {
   const tag = getLatestTag(cwd);
-  const gitLog = getGitLogSince(cwd, tag ?? undefined);
+  const gitLog = stripNotShipped(getGitLogSince(cwd, tag ?? undefined));
 
   let closedIssues = '';
   try {
@@ -347,8 +361,9 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
       continue;
     }
 
-    // Check if anything changed
-    const trimmedContent = extracted.trimEnd() + '\n';
+    // Strip known hallucinated issue references from LLM output
+    const cleaned = stripNotShipped(extracted);
+    const trimmedContent = cleaned.trimEnd() + '\n';
     const hasChanges = showDiff(doc.path, currentContent, trimmedContent);
     if (!hasChanges) continue;
 
