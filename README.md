@@ -17,7 +17,7 @@ Totem is the local-first governance compiler for AI agents — **deterministic, 
 - **Built for Enterprise Scale:**
   - **Performance:** Ingestion streams chunks in batches for a flat memory footprint.
   - **Relevance:** Drift Detection keeps memory self-cleaning as code evolves.
-  - **Reliability:** Startup health checks automatically detect broken LanceStore indexes (#439). The system features graceful degradation, automatically falling back to local models or CLI orchestrators if cloud providers fail (#516, #517, #522).
+  - **Reliability:** Startup health checks automatically detect broken LanceStore indexes (#439). The system features graceful degradation, automatically falling back to local models or CLI orchestrators if cloud providers fail (#516, #517).
 
 ## Philosophy: The Unix Approach to AI
 
@@ -33,10 +33,12 @@ By building our orchestrator as discrete, composable commands (`spec`, `shield`,
 
 Totem is architected for high-compliance enterprise sectors (defense, finance, healthcare) that operate in strict AI sandboxes. **We adhere to the Air-Gapped Doctrine (Zero-Telemetry Architecture).**
 
-- **Zero Default Telemetry:** The `totem` CLI will _never_ transmit usage statistics, codebase contents, error logs, or rule evaluation metrics to a centralized server. Your codebase stays on your machine.
-- **Pluggable Local Intelligence:** Every command that requires an AI model natively supports local execution via Ollama or private VPC endpoints. Orchestrators and embedders gracefully degrade to local CLI/Ollama fallbacks if SDKs or networks fail (#516, #517).
-- **Bounded MCP Boundaries:** The Totem MCP server is a strict context provider that will _never_ expose destructive filesystem tools. This neutralizes the risk of agents executing malicious code via indirect prompt injection.
-- **Injection & ReDoS Hardening:** Totem actively sanitizes untrusted inputs and neutralizes terminal injection attacks. We apply SECURITY NOTICES to PR comments during extraction to explicitly warn agents of untrusted text.
+- **Data Sovereignty:**
+  - **Zero Default Telemetry:** The `totem` CLI will _never_ transmit usage statistics, codebase contents, error logs, or rule evaluation metrics to a centralized server. Your codebase stays on your machine.
+  - **Pluggable Local Intelligence:** Every command requiring an AI model natively supports local execution via Ollama or private VPC endpoints. Orchestrators gracefully degrade to CLI/Ollama fallbacks if networks fail (#516, #517).
+- **Threat Mitigation:**
+  - **Bounded MCP Boundaries:** The Totem MCP server is a strict context provider that will _never_ expose destructive filesystem tools. This neutralizes the risk of indirect prompt injection.
+  - **Injection & ReDoS Hardening:** Totem actively sanitizes untrusted inputs and neutralizes terminal injection attacks. SECURITY NOTICES are applied during extraction to warn agents of untrusted text.
 
 ## Prerequisites
 
@@ -113,26 +115,26 @@ Once your index is built, Totem natively intercepts your git pushes to perform a
 **`totem lint`**
 Runs compiled rules against your diff. Zero LLM, ~2 seconds, no API keys needed. Use in pre-push hooks and CI.
 
-- Executes compiled AST/regex rules scoped to modified file boundaries (#546, #549).
-- Outputs SARIF 2.1.0 for GitHub Advanced Security integration (#387, #418).
-- Tracks trigger and suppression metrics per rule (#545).
+- **Execution:** Executes compiled AST/regex rules scoped to modified file boundaries (#549). Automatically ingests `.cursorrules` and `.mdc` files (#558).
+- **Reporting:** Outputs SARIF 2.1.0 or JSON formats for GitHub Advanced Security integration (#561, #568).
+- **Observability:** Tracks metrics for 98+ categorized rules (invariant, style, security) using the Trap Ledger (#544, #559).
 
 **`totem shield`**
-AI-powered code review. Queries LanceDB for related traps, sends diff + context to an LLM for thorough architectural analysis. ~18 seconds. Use before opening a PR.
+AI-powered code review. Queries LanceDB for context, sends diff + knowledge to an LLM for thorough architectural analysis. ~18 seconds. Requires API keys. Use before opening a PR.
 
 ## Core Command Index
 
 Totem ships with native CLI commands that orchestrate your entire shift-left workflow.
 
 - **Discovery:**
-  - **Analysis:** `briefing`, `audit`, `stats` (semantic rule observability) (#545)
+  - **Analysis:** `briefing`, `audit`, `stats` (Semantic Rule Observability and Trap Ledger) (#544, #568)
   - **Prioritization:** `triage` (supports configurable multi-repo issue sources) (#514, #532)
 - **Architectural Control:**
-  - **Validation:** `shield`, `lint` (#549), `test` (compiled rule harness) (#422)
+  - **Validation:** `shield` (#521), `lint` (#549), `test` (compiled rule harness) (#422)
   - **Enforcement:** `spec`, `hooks` (#310)
 - **Memory Management:**
   - **Extraction:** `extract` (supports multi-repo inputs), `add-lesson` (#532)
-  - **Processing:** `compile`, `docs`
+  - **Processing:** `compile` (ingests `.cursorrules` / `.mdc` files) (#558), `docs`
 - **Workflow:**
   - **Transitions:** `handoff`, `bridge`
   - **Execution:** `wrap`

@@ -66,11 +66,13 @@ Merge-Label "epic" "type: epic"
 Merge-Label "tech-debt" "type: chore"
 Merge-Label "technical-debt" "type: chore"
 Merge-Label "refactor" "type: chore"
+Merge-Label "chore" "type: chore"
 
 # Scope/Domain merges
 Merge-Label "cli" "scope: cli"
 Merge-Label "core" "scope: core"
 Merge-Label "ci" "scope: ci"
+Merge-Label "mcp" "scope: mcp"
 Merge-Label "architecture" "domain: architecture"
 Merge-Label "dx" "domain: ux"
 
@@ -79,5 +81,9 @@ Merge-Label "priority: P0" "tier-1"
 Merge-Label "priority: P1" "tier-1"
 Merge-Label "priority: P2" "tier-2"
 Merge-Label "priority: P3" "tier-3"
+
+# Status merges
+Merge-Label "blocked" "status: blocked"
+Merge-Label "research" "status: investigation"
 
 Write-Host "Label taxonomy sync complete for $Repo!" -ForegroundColor Green
