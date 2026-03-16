@@ -10,7 +10,9 @@ This document provides a detailed breakdown of the `totem` command-line interfac
 
 ### `totem init`
 
-Auto-detects your project structure, package manager, and installed AI agents. It scaffolds `totem.config.ts` and injects the Proactive Memory Reflexes into your agent's instruction files (e.g., `CLAUDE.md`, `GEMINI.md`).
+Auto-detects your project structure, package manager, and installed AI agents. It scaffolds `totem.config.ts`, injects the Proactive Memory Reflexes into your agent's instruction files (e.g., `CLAUDE.md`, `GEMINI.md`), and automatically seeds the project with the **Universal Baseline** (50+ curated architectural invariants mined from elite engineering teams).
+
+If existing AI agent instructions (e.g., `.cursor/rules/*.mdc`) are detected during initialization, the command will prompt you to automatically ingest and compile them into deterministic CI guardrails.
 
 - **Flags:** None required. Auto-detects environment tier (Lite, Standard, Full).
 
