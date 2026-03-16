@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import * as fs from 'node:fs';
 
 import * as lancedb from '@lancedb/lancedb';
 
@@ -37,15 +38,90 @@ export class LanceStore {
     this.onWarn = onWarn ?? (() => {});
   }
 
-  /** Connect to LanceDB. Must be called before any other operations. */
+  /**
+   * Connect to LanceDB. Auto-heals on version mismatch, corruption,
+   * or embedder dimension change by deleting the index and signaling
+   * that a full rebuild is needed.
+   */
   async connect(): Promise<void> {
-    this.db = await lancedb.connect(this.dbPath);
+    try {
+      this.db = await lancedb.connect(this.dbPath);
 
-    const tableNames = await this.db.tableNames();
-    if (tableNames.includes(TOTEM_TABLE_NAME)) {
-      this.table = await this.db.openTable(TOTEM_TABLE_NAME);
-      await this.detectFtsIndex();
+      const tableNames = await this.db.tableNames();
+      if (tableNames.includes(TOTEM_TABLE_NAME)) {
+        this.table = await this.db.openTable(TOTEM_TABLE_NAME);
+
+        // Check for embedder dimension mismatch (#548)
+        if (this.table && (await this.hasDimensionMismatch())) {
+          this.onWarn(
+            `[Totem] Embedding dimensions changed. Rebuilding index... Run \`totem sync --full\` if this persists.`,
+          );
+          await this.nukeAndReset();
+          return;
+        }
+
+        await this.detectFtsIndex();
+      }
+    } catch (err) {
+      // Auto-heal: version mismatch, corruption, or schema incompatibility (#500)
+      if (this.isHealableError(err)) {
+        this.onWarn(`[Totem] Index format incompatible. Upgrading index...`);
+        await this.nukeAndReset();
+        return;
+      }
+      throw err;
     }
+  }
+
+  /** Check if the stored vector dimensions differ from the current embedder. */
+  private async hasDimensionMismatch(): Promise<boolean> {
+    if (!this.table) return false;
+    try {
+      const sample = await this.table.query().limit(1).toArray();
+      if (sample.length === 0) return false;
+      const row = sample[0] as Record<string, unknown>;
+      const vec = row['vector'];
+      if (Array.isArray(vec)) {
+        return vec.length !== this.embedder.dimensions;
+      }
+      return false;
+    } catch {
+      // Can't check — not a mismatch, might be empty or corrupted
+      return false;
+    }
+  }
+
+  /** Detect errors that warrant auto-healing (nuke + rebuild). */
+  private isHealableError(err: unknown): boolean {
+    if (!(err instanceof Error)) return false;
+    const msg = err.message.toLowerCase();
+    return (
+      msg.includes('version mismatch') ||
+      msg.includes('data corruption') ||
+      msg.includes('invalid schema') ||
+      msg.includes('lance error') ||
+      msg.includes('not found') ||
+      msg.includes('arrow error') ||
+      msg.includes('invalid input')
+    );
+  }
+
+  /** Delete the entire .lancedb/ directory and reset state. */
+  private async nukeAndReset(): Promise<void> {
+    this.db = null;
+    this.table = null;
+    this.hasFtsIndex = false;
+
+    try {
+      fs.rmSync(this.dbPath, { recursive: true, force: true });
+    } catch (err) {
+      // OS-level file locks may prevent deletion — warn but don't crash
+      const detail = err instanceof Error ? err.message : String(err);
+      this.onWarn(`[Totem] Could not delete index at ${this.dbPath}: ${detail}`);
+    }
+
+    // Reconnect to create a fresh empty database
+    this.db = await lancedb.connect(this.dbPath);
   }
 
   /** Insert chunks into the store. Embeds them first. */
