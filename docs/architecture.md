@@ -45,7 +45,7 @@ flowchart TD
 
     %% CI/CD & Enforcement
     subgraph CI [Enforcement Gates]
-        C1[<b>totem shield --deterministic</b><br/><i>Zero-LLM Pre-commit Hook</i>]:::core
+        C1[<b>totem lint</b><br/><i>Zero-LLM Pre-commit Hook</i>]:::core
         C2[GitHub Actions / CI]:::core
     end
 
@@ -95,7 +95,7 @@ All commands feature proper `--help` output documentation (#358).
   - **Workflow Resets:** `totem bridge` and `totem wrap` automate mid-session context resets and end-of-task workflows. Wrap cleanly aborts via `NoLessonsError` if compilation requirements are missing (#409).
 - **Workflow & Evaluation:**
   - **Planning & Orchestration:** Orchestrates workflows via `totem spec`, `totem triage`, and `totem audit` with human approval gates. Triage and extract commands now support configurable issue sources across multiple repositories (#532).
-  - **Review & Quality:** `totem shield` enforces context-blind architectural reviews and inline lesson extraction (#303).
+  - **Review & Quality:** Quality enforcement is bifurcated into specialized tools to improve precision (#549). `totem lint` handles context-blind architectural reviews, while `totem shield` explicitly enforces physical, deterministic hard gates locally.
   - **Documentation:** `totem docs` automates transactional document syncs with strict sub-bullet thresholds and line-length limits (#341). It employs a Saga validator to prevent partial or corrupted updates (#351).
 - **Rule Testing & Extraction:**
   - **Capture & Extraction:** `totem add-lesson` enables inline capture, while `totem extract` handles batch PR reviews. It deduplicates identical lessons and uses concise, content-derived headings (#347).
@@ -104,15 +104,15 @@ All commands feature proper `--help` output documentation (#358).
 
 ### 3. Deterministic Compiler & Zero-LLM Shield
 
-`totem compile` reads architectural constraints and translates each lesson into a regex rule (or marks it as non-compilable). Rules are stored in `.totem/compiled-rules.json`—now extended with advanced telemetry fields (#415)—and validated at compile-time with syntax checking and ReDoS static analysis. The compilation process is context-aware, directly reading files from disk instead of parsing staged diffs to prevent AST gating false positives (#399).
+`totem compile` reads architectural constraints and translates each lesson into a regex rule (or marks it as non-compilable). Rules are stored in `.totem/compiled-rules.json`—now extended with advanced telemetry fields and Phase 1 semantic rule observability (#415, #545)—and validated at compile-time with syntax checking and ReDoS static analysis. The compilation process is context-aware, directly reading files from disk instead of parsing staged diffs to prevent AST gating false positives (#399).
 
-Developers can bypass false positives using audited inline suppression directives (`totem-ignore` / `totem-ignore-next-line`) or negated patterns in `fileGlobs` (#458). Rules are strictly scoped using anchored glob matching, resolving literal file path false positives and handling paths with spaces (#397, #457). Vulnerable patterns (nested quantifiers, star height > 1) are rejected and left to be handled by the standard LLM-based shield.
+Developers can bypass false positives using audited inline suppression directives (`totem-ignore` / `totem-ignore-next-line`) or negated patterns in `fileGlobs` (#458). Rules are strictly scoped to correct file boundaries using anchored glob matching (#546). This resolves literal file path false positives and enables targeted enforcement, such as restricting dynamic-import rules to command files only (#457, #533). Vulnerable or overly aggressive patterns (e.g., single-match `exec` rules, nested quantifiers) are actively refined or rejected (#538).
 
-`totem shield --deterministic` applies these compiled rules against `git diff` additions with zero LLM calls. This physically blocks main branch commits and pre-push violations locally. It generates standard SARIF 2.1.0 formatted outputs (`Violation[]`) to enable seamless enterprise security integration (#418, #437).
+`totem lint` applies these compiled rules against `git diff` additions with zero LLM calls. This physically blocks main branch commits and pre-push violations locally. It generates standard SARIF 2.1.0 formatted outputs (`Violation[]`) to enable seamless enterprise security integration (#418, #437).
 
 ### 4. Shield GitHub Action & CI Drift Gate
 
-A composite GitHub Action (`action.yml`) runs `totem shield --deterministic` as a pass/fail CI quality gate on pull requests. It uses compiled AST/regex rules from `.totem/compiled-rules.json` to physically block known architectural traps from merging. The SARIF 2.1.0 output natively integrates with the GitHub Advanced Security tab, directly surfacing CISO-facing architectural violations (#387).
+A composite GitHub Action (`action.yml`) runs `totem lint` as a pass/fail CI quality gate on pull requests. It uses compiled AST/regex rules from `.totem/compiled-rules.json` to physically block known architectural traps from merging. The SARIF 2.1.0 output natively integrates with the GitHub Advanced Security tab, directly surfacing CISO-facing architectural violations (#387).
 
 Deterministic CI enforcement is further strengthened by evaluating sentinels like SonarQube Community Edition (#355), GitHub CodeQL (#268), and Dependabot (#267). The CI pipeline features a structural CI drift gate and an adversarial evaluation harness to perform integrity checks and mitigate model drift. To prevent pipeline lockouts, the local pre-push shield gate is securely guarded against missing CLI installations in CI environments.
 
@@ -139,11 +139,11 @@ A stdio-based server for LLM integration providing primary tools and strict acce
 
 Totem supports three configuration tiers, auto-detected from the environment during `totem init`:
 
-| Tier         | Requirements                               | Available Commands                                                                                   |
-| ------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `bridge`, `eject`, `handoff --lite`                                   |
-| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`                                                                     |
-| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `shield`, `triage`, `audit`, `briefing`, `handoff`, `extract`, `wrap`, `docs`) |
+| Tier         | Requirements                               | Available Commands                                                                                           |
+| ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `bridge`, `eject`, `handoff --lite`                                           |
+| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`                                                                             |
+| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `lint`, `shield`, `triage`, `audit`, `briefing`, `handoff`, `extract`, `wrap`, `docs`) |
 
 The `embedding` field in `totem.config.ts` is optional; when omitted, Totem operates in the Lite tier. The `getConfigTier()` helper and `requireEmbedding()` guard enforce these boundaries at runtime with clear upgrade instructions.
 
