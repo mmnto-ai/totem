@@ -4,7 +4,11 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { BASELINE_MARKER, UNIVERSAL_LESSONS_MARKDOWN } from '../assets/universal-lessons.js';
+import {
+  UNIVERSAL_BASELINE_LESSONS,
+  UNIVERSAL_BASELINE_MARKDOWN,
+  UNIVERSAL_BASELINE_MARKER,
+} from '../assets/universal-baseline.js';
 import {
   buildNpxCommand,
   detectEmbeddingTier,
@@ -536,27 +540,27 @@ describe('generateConfig', () => {
   });
 });
 
-describe('Universal Lessons baseline', () => {
-  it('BASELINE_MARKER is an HTML comment', () => {
-    expect(BASELINE_MARKER).toMatch(/^<!--.*-->$/);
+describe('Universal Baseline lessons', () => {
+  it('UNIVERSAL_BASELINE_MARKER is an HTML comment', () => {
+    expect(UNIVERSAL_BASELINE_MARKER).toMatch(/^<!--.*-->$/);
   });
 
-  it('UNIVERSAL_LESSONS_MARKDOWN contains the marker', () => {
-    expect(UNIVERSAL_LESSONS_MARKDOWN).toContain(BASELINE_MARKER);
+  it('UNIVERSAL_BASELINE_MARKDOWN contains the marker', () => {
+    expect(UNIVERSAL_BASELINE_MARKDOWN).toContain(UNIVERSAL_BASELINE_MARKER);
   });
 
   it('lessons follow the expected format for markdown chunker', () => {
     // Each lesson should have ## Lesson heading and **Tags:** line
-    const headings = UNIVERSAL_LESSONS_MARKDOWN.match(/^## Lesson — /gm);
-    const tags = UNIVERSAL_LESSONS_MARKDOWN.match(/^\*\*Tags:\*\* /gm);
+    const headings = UNIVERSAL_BASELINE_MARKDOWN.match(/^## Lesson — /gm);
+    const tags = UNIVERSAL_BASELINE_MARKDOWN.match(/^\*\*Tags:\*\* /gm);
     expect(headings).not.toBeNull();
     expect(tags).not.toBeNull();
-    expect(headings!.length).toBe(10);
+    expect(headings!.length).toBe(UNIVERSAL_BASELINE_LESSONS.length);
     expect(headings!.length).toBe(tags!.length);
   });
 
   it('each lesson has non-empty content after the tags line', () => {
-    const sections = UNIVERSAL_LESSONS_MARKDOWN.split(/^## Lesson — /m).filter(Boolean);
+    const sections = UNIVERSAL_BASELINE_MARKDOWN.split(/^## Lesson — /m).filter(Boolean);
     for (const section of sections) {
       // Skip the marker-only preamble
       if (!section.includes('**Tags:**')) continue;
@@ -569,17 +573,23 @@ describe('Universal Lessons baseline', () => {
 
   it('baseline can be appended to existing lessons without duplication', () => {
     const existing = `# Totem Lessons\n\n---\n\n## Lesson — custom\n\n**Tags:** custom\n\nMy lesson.\n`;
-    const combined = existing + UNIVERSAL_LESSONS_MARKDOWN;
+    const combined = existing + UNIVERSAL_BASELINE_MARKDOWN;
     // Marker appears exactly once
     const markers = combined.match(
-      new RegExp(BASELINE_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+      new RegExp(UNIVERSAL_BASELINE_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
     );
     expect(markers).toHaveLength(1);
   });
 
   it('marker check detects already-installed baseline', () => {
-    const withBaseline = `# Totem Lessons\n\n---\n${UNIVERSAL_LESSONS_MARKDOWN}`;
-    expect(withBaseline.includes(BASELINE_MARKER)).toBe(true);
+    const withBaseline = `# Totem Lessons\n\n---\n${UNIVERSAL_BASELINE_MARKDOWN}`;
+    expect(withBaseline.includes(UNIVERSAL_BASELINE_MARKER)).toBe(true);
+  });
+
+  it('structured array matches rendered markdown', () => {
+    for (const lesson of UNIVERSAL_BASELINE_LESSONS) {
+      expect(UNIVERSAL_BASELINE_MARKDOWN).toContain(`## Lesson — ${lesson.heading}`);
+    }
   });
 });
 
@@ -607,12 +617,18 @@ describe('installBaselineLessons', () => {
     const result = await installBaselineLessons(lessonsPath, makeMockRl(''));
     expect(result).toBe('installed');
     const content = fs.readFileSync(lessonsPath, 'utf-8');
-    expect(content).toContain(BASELINE_MARKER);
-    expect(content).toContain('prompt-injection');
+    expect(content).toContain(UNIVERSAL_BASELINE_MARKER);
+    expect(content).toContain('Unhandled promise rejections');
   });
 
   it('returns exists when baseline is already present', async () => {
-    fs.writeFileSync(lessonsPath, UNIVERSAL_LESSONS_MARKDOWN, 'utf-8');
+    fs.writeFileSync(lessonsPath, UNIVERSAL_BASELINE_MARKDOWN, 'utf-8');
+    const result = await installBaselineLessons(lessonsPath, makeMockRl(''));
+    expect(result).toBe('exists');
+  });
+
+  it('returns exists when legacy baseline marker is present', async () => {
+    fs.writeFileSync(lessonsPath, '<!-- totem:baseline -->\n\nold lessons', 'utf-8');
     const result = await installBaselineLessons(lessonsPath, makeMockRl(''));
     expect(result).toBe('exists');
   });
@@ -622,7 +638,7 @@ describe('installBaselineLessons', () => {
     await installBaselineLessons(lessonsPath, makeMockRl(''));
     const content = fs.readFileSync(lessonsPath, 'utf-8');
     const matches = content.match(
-      new RegExp(BASELINE_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+      new RegExp(UNIVERSAL_BASELINE_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
     );
     expect(matches).toHaveLength(1);
   });
@@ -633,7 +649,7 @@ describe('installBaselineLessons', () => {
     const result = await installBaselineLessons(lessonsPath, makeMockRl(''));
     expect(result).toBe('installed');
     const content = fs.readFileSync(lessonsPath, 'utf-8');
-    expect(content).toContain(BASELINE_MARKER);
+    expect(content).toContain(UNIVERSAL_BASELINE_MARKER);
   });
 
   it('skipped when user declines in TTY mode', async () => {
@@ -648,7 +664,7 @@ describe('installBaselineLessons', () => {
     const result = await installBaselineLessons(lessonsPath, makeMockRl(''));
     expect(result).toBe('installed');
     const content = fs.readFileSync(lessonsPath, 'utf-8');
-    expect(content).toContain(BASELINE_MARKER);
+    expect(content).toContain(UNIVERSAL_BASELINE_MARKER);
   });
 });
 
