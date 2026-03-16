@@ -346,26 +346,38 @@ export function applyRules(
 // ─── File I/O ────────────────────────────────────────
 
 /** Load compiled rules from a JSON file. Returns empty array if file missing or invalid. */
-export function loadCompiledRules(rulesPath: string): CompiledRule[] {
+export function loadCompiledRules(
+  rulesPath: string,
+  onWarn?: (msg: string) => void,
+): CompiledRule[] {
   if (!fs.existsSync(rulesPath)) return [];
 
   try {
     const raw = fs.readFileSync(rulesPath, 'utf-8');
     const parsed = CompiledRulesFileSchema.parse(JSON.parse(raw));
     return parsed.rules;
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    onWarn?.(`Could not load compiled rules: ${err instanceof Error ? err.message : String(err)}`);
     return [];
   }
 }
 
 /** Load the full compiled rules file (rules + non-compilable cache). */
-export function loadCompiledRulesFile(rulesPath: string): CompiledRulesFile {
+export function loadCompiledRulesFile(
+  rulesPath: string,
+  onWarn?: (msg: string) => void,
+): CompiledRulesFile {
   if (!fs.existsSync(rulesPath)) return { version: 1, rules: [], nonCompilable: [] };
 
   try {
     const raw = fs.readFileSync(rulesPath, 'utf-8');
     return CompiledRulesFileSchema.parse(JSON.parse(raw));
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { version: 1, rules: [], nonCompilable: [] };
+    }
+    onWarn?.(`Could not load compiled rules: ${err instanceof Error ? err.message : String(err)}`);
     return { version: 1, rules: [], nonCompilable: [] };
   }
 }

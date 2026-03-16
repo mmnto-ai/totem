@@ -1,19 +1,4 @@
-import * as path from 'node:path';
-
-import {
-  type CompiledRule,
-  type CompiledRulesFile,
-  exportLessons,
-  hashLesson,
-  loadCompiledRulesFile,
-  parseCompilerResponse,
-  readAllLessons,
-  saveCompiledRulesFile,
-  validateRegex,
-} from '@mmnto/totem';
-
-import { log } from '../ui.js';
-import { loadConfig, loadEnv, resolveConfigPath, runOrchestrator } from '../utils.js';
+import type { CompiledRule, CompiledRulesFile } from '@mmnto/totem';
 
 // ─── Constants ──────────────────────────────────────
 
@@ -133,6 +118,19 @@ export interface CompileOptions {
 }
 
 export async function compileCommand(options: CompileOptions): Promise<void> {
+  const path = await import('node:path');
+  const { log } = await import('../ui.js');
+  const { loadConfig, loadEnv, resolveConfigPath, runOrchestrator } = await import('../utils.js');
+  const {
+    exportLessons,
+    hashLesson,
+    loadCompiledRulesFile,
+    parseCompilerResponse,
+    readAllLessons,
+    saveCompiledRulesFile,
+    validateRegex,
+  } = await import('@mmnto/totem');
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);
