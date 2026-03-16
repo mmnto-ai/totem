@@ -2,12 +2,13 @@ import * as path from 'node:path';
 
 import {
   type CompiledRule,
+  type CompiledRulesFile,
   exportLessons,
   hashLesson,
-  loadCompiledRules,
+  loadCompiledRulesFile,
   parseCompilerResponse,
   readAllLessons,
-  saveCompiledRules,
+  saveCompiledRulesFile,
   validateRegex,
 } from '@mmnto/totem';
 
@@ -141,20 +142,27 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
 
   // ─── Phase 1: Regex compilation (requires orchestrator) ──
   if (config.orchestrator) {
-    const existingRules = options.force ? [] : loadCompiledRules(rulesPath);
+    const existingFile: CompiledRulesFile = options.force
+      ? { version: 1, rules: [], nonCompilable: [] }
+      : loadCompiledRulesFile(rulesPath);
+    const existingRules = existingFile.rules;
     const existingByHash = new Map(existingRules.map((r) => [r.lessonHash, r]));
+    const nonCompilableSet = new Set(existingFile.nonCompilable ?? []);
 
     const toCompile: Array<{ index: number; heading: string; body: string; hash: string }> = [];
 
     for (const lesson of lessons) {
       const hash = hashLesson(lesson.heading, lesson.body);
-      if (!existingByHash.has(hash)) {
-        toCompile.push({ index: lesson.index, heading: lesson.heading, body: lesson.body, hash });
-      }
+      if (existingByHash.has(hash)) continue; // already compiled
+      if (nonCompilableSet.has(hash)) continue; // cached as non-compilable
+      toCompile.push({ index: lesson.index, heading: lesson.heading, body: lesson.body, hash });
     }
 
     if (toCompile.length === 0) {
-      log.success(TAG, `All ${lessons.length} lessons already compiled. Use --force to recompile.`); // totem-ignore
+      log.success(
+        TAG,
+        `All ${lessons.length} lessons already processed (${existingRules.length} compiled, ${nonCompilableSet.size} non-compilable). Use --force to recompile.`,
+      ); // totem-ignore
     } else {
       log.info(
         TAG,
@@ -200,6 +208,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
 
         if (!parsed.compilable) {
           log.dim(TAG, `[${lesson.heading}] Not compilable (conceptual/architectural) — skipping`); // totem-ignore
+          nonCompilableSet.add(lesson.hash);
           skipped++;
           continue;
         }
@@ -236,10 +245,16 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
       }
 
       if (!options.raw) {
-        saveCompiledRules(rulesPath, newRules);
+        // Prune stale non-compilable hashes (lesson was edited or removed)
+        const freshNonCompilable = [...nonCompilableSet].filter((h) => currentHashes.has(h));
+        saveCompiledRulesFile(rulesPath, {
+          version: 1,
+          rules: newRules,
+          nonCompilable: freshNonCompilable,
+        });
         log.info(
           TAG,
-          `Results: ${compiled} compiled, ${skipped} skipped (conceptual), ${failed} failed`,
+          `Results: ${compiled} compiled, ${skipped} skipped (conceptual), ${failed} failed, ${freshNonCompilable.length} cached`,
         );
         log.success(
           TAG,
