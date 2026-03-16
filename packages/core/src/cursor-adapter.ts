@@ -79,33 +79,52 @@ function parseMdcFile(filePath: string, content: string): CursorInstruction | nu
  * (separated by blank lines or markdown headings) becomes an instruction.
  */
 function parseCursorRulesFile(filePath: string, content: string): CursorInstruction[] {
-  const sections = content.split(/\n#{1,3}\s+/).filter((s) => s.trim());
-  if (sections.length === 0) return [];
+  const trimmed = content.trim();
+  if (!trimmed) return [];
 
-  // If no headings, treat the whole file as one instruction
-  if (sections.length === 1) {
-    const body = content.trim();
-    if (!body) return [];
-    return [
-      {
-        source: filePath,
-        heading: 'cursorrules',
-        body,
-      },
-    ];
+  // Split into sections by markdown headings, preserving heading text
+  const HEADING_RE = /^(#{1,3})\s+(.+)$/gm;
+  const instructions: CursorInstruction[] = [];
+
+  // Collect all heading positions
+  const headings: Array<{ heading: string; idx: number }> = [];
+  let m: RegExpExecArray | null;
+  // totem-ignore-next-line
+  while ((m = HEADING_RE.exec(trimmed)) !== null) {
+    headings.push({ heading: m[2]!.trim(), idx: m.index });
   }
 
-  // Each heading-delimited section becomes an instruction
-  return sections
-    .map((section, i) => {
-      const lines = section.split('\n');
-      const heading =
-        i === 0 ? 'cursorrules (preamble)' : (lines[0]?.trim().slice(0, 60) ?? `rule-${i}`);
-      const body = (i === 0 ? lines : lines.slice(1)).join('\n').trim();
-      if (!body) return null;
-      return { source: filePath, heading, body };
-    })
-    .filter((x): x is CursorInstruction => x !== null);
+  if (headings.length === 0) {
+    // No headings — whole file is one instruction
+    return [{ source: filePath, heading: 'cursorrules', body: trimmed }];
+  }
+
+  // Text before first heading = preamble
+  if (headings[0]!.idx > 0) {
+    const preamble = trimmed.slice(0, headings[0]!.idx).trim();
+    if (preamble) {
+      instructions.push({ source: filePath, heading: 'cursorrules (preamble)', body: preamble });
+    }
+  }
+
+  // Each heading starts a section that runs until the next heading
+  for (let i = 0; i < headings.length; i++) {
+    const start = headings[i]!;
+    const end = i + 1 < headings.length ? headings[i + 1]!.idx : trimmed.length;
+    // Body starts after the heading line
+    const headingLineEnd = trimmed.indexOf('\n', start.idx);
+    const bodyStart = headingLineEnd === -1 ? trimmed.length : headingLineEnd + 1;
+    const body = trimmed.slice(bodyStart, end).trim();
+    if (body) {
+      instructions.push({
+        source: filePath,
+        heading: start.heading.slice(0, 60),
+        body,
+      });
+    }
+  }
+
+  return instructions;
 }
 
 /**
@@ -138,14 +157,14 @@ export function scanCursorInstructions(projectRoot: string): CursorInstruction[]
 
   // Scan root .cursorrules
   const cursorrules = path.join(projectRoot, '.cursorrules');
-  if (fs.existsSync(cursorrules)) {
+  if (fs.existsSync(cursorrules) && fs.statSync(cursorrules).size <= MAX_FILE_SIZE) {
     const content = fs.readFileSync(cursorrules, 'utf-8');
     instructions.push(...parseCursorRulesFile('.cursorrules', content));
   }
 
   // Scan root .windsurfrules
   const windsurfrules = path.join(projectRoot, '.windsurfrules');
-  if (fs.existsSync(windsurfrules)) {
+  if (fs.existsSync(windsurfrules) && fs.statSync(windsurfrules).size <= MAX_FILE_SIZE) {
     const content = fs.readFileSync(windsurfrules, 'utf-8');
     instructions.push(...parseCursorRulesFile('.windsurfrules', content));
   }
