@@ -157,7 +157,7 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Internal modules establishing cyclic dependencies on ambient type declarations',
     tags: ['typescript', 'types', 'universal'],
-    body: 'Internal framework code should never import directly from auto-generated ambient type declaration files (e.g., next-env.d.ts). This creates a cyclic dependency where the framework relies on the user\'s generated types to compile. Source: vercel/next.js#34394.',
+    body: "Internal framework code should never import directly from auto-generated ambient type declaration files (e.g., next-env.d.ts). This creates a cyclic dependency where the framework relies on the user's generated types to compile. Source: vercel/next.js#34394.",
   },
   {
     heading: 'Context flags misaligned during edge compilation',
@@ -172,7 +172,7 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Style injection breaking modular chunk loading',
     tags: ['css', 'bundler', 'universal'],
-    body: 'Injecting global CSS script tags directly into granular, dynamically loaded JavaScript chunks can cause race conditions or duplicate style definitions. CSS should be extracted and managed by the bundler\'s dedicated style loader, not inline scripts. Source: vercel/next.js#9306.',
+    body: "Injecting global CSS script tags directly into granular, dynamically loaded JavaScript chunks can cause race conditions or duplicate style definitions. CSS should be extracted and managed by the bundler's dedicated style loader, not inline scripts. Source: vercel/next.js#9306.",
   },
   {
     heading: 'Hardcoding third-party SDK dependencies into core logic',
@@ -222,7 +222,7 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Bypassing standard synthetic event systems for performance',
     tags: ['react', 'events', 'universal'],
-    body: 'Bypassing the framework\'s synthetic event system (e.g., attaching raw DOM event listeners) to gain performance often breaks event pooling, batching, and cross-platform compatibility (like React Native). Only bypass the event system when absolutely necessary and document the trade-off. Source: facebook/react#23232.',
+    body: "Bypassing the framework's synthetic event system (e.g., attaching raw DOM event listeners) to gain performance often breaks event pooling, batching, and cross-platform compatibility (like React Native). Only bypass the event system when absolutely necessary and document the trade-off. Source: facebook/react#23232.",
   },
   {
     heading: 'Compiler transforms invalidating internal context tracking',
@@ -332,3 +332,15 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
     body: 'Never alter the fundamental architecture of the project (e.g., switching from App Router to Pages Router, changing the ORM paradigm, or moving directories) as a side-effect of fulfilling a smaller feature request. Architectural shifts require explicit human approval.',
   },
 ];
+
+/**
+ * Pre-rendered markdown string for writing to `.totem/lessons/baseline.md`.
+ * Format matches `parseLessonsFile()` expectations so lessons index correctly.
+ */
+export const UNIVERSAL_BASELINE_MARKDOWN = [
+  UNIVERSAL_BASELINE_MARKER,
+  '',
+  ...UNIVERSAL_BASELINE_LESSONS.map(
+    (l) => `## Lesson — ${l.heading}\n\n**Tags:** ${l.tags.join(', ')}\n\n${l.body}`,
+  ),
+].join('\n\n');

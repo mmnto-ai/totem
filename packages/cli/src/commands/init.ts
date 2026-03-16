@@ -7,7 +7,10 @@ import { z } from 'zod';
 
 import type { IngestTarget } from '@mmnto/totem';
 
-import { BASELINE_MARKER, UNIVERSAL_LESSONS_MARKDOWN } from '../assets/universal-lessons.js';
+import {
+  UNIVERSAL_BASELINE_MARKDOWN,
+  UNIVERSAL_BASELINE_MARKER,
+} from '../assets/universal-baseline.js';
 import { bold, brand, dim, log, printBanner, success } from '../ui.js';
 import { IS_WIN } from '../utils.js';
 import { installEnforcementHooks, installPostMergeHook } from './install-hooks.js';
@@ -642,7 +645,11 @@ export async function installBaselineLessons(
   try {
     if (fs.existsSync(baselinePath)) {
       const existing = fs.readFileSync(baselinePath, 'utf-8');
-      if (existing.includes(BASELINE_MARKER)) return 'exists';
+      if (
+        existing.includes(UNIVERSAL_BASELINE_MARKER) ||
+        existing.includes('<!-- totem:baseline -->')
+      )
+        return 'exists';
     }
 
     // In non-TTY mode (CI, piped input), default to installing
@@ -658,7 +665,7 @@ export async function installBaselineLessons(
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(baselinePath, UNIVERSAL_LESSONS_MARKDOWN, 'utf-8');
+    fs.writeFileSync(baselinePath, UNIVERSAL_BASELINE_MARKDOWN, 'utf-8');
     return 'installed';
   } catch (err) {
     log.warn(
