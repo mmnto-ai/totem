@@ -26,8 +26,8 @@ function detectSyncCommand(projectRoot: string): { cmd: string; args: string[] }
 const SYNC_TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_BYTES = 10_000;
 
-/** Debounce guard — prevents concurrent sync processes. */
-let syncPending = false;
+/** Debounce guard — concurrent callers share the same sync promise. */
+let activeSyncPromise: Promise<{ success: boolean; output: string }> | null = null;
 
 /**
  * Kill a child process tree. With `shell: true`, child.kill() only kills the
@@ -138,30 +138,26 @@ export function registerAddLesson(server: McpServer): void {
         const fileName = path.basename(writtenPath);
 
         // Await sync so the LLM gets definitive success/failure confirmation.
-        // Debounce: skip if a sync is already in flight.
-        let syncMessage: string;
-        if (syncPending) {
-          syncMessage =
-            'A sync is already in progress — this lesson will be indexed when it completes.';
-        } else {
-          syncPending = true;
+        // Concurrent callers share the same sync promise to prevent races.
+        const isJoining = activeSyncPromise !== null;
+        if (!activeSyncPromise) {
+          activeSyncPromise = runSync(projectRoot).finally(() => {
+            activeSyncPromise = null;
+          });
+        }
+        const { success, output } = await activeSyncPromise;
+
+        if (!isJoining) {
           try {
-            const { success, output } = await runSync(projectRoot);
-
-            // Reconnect so the next search_knowledge call sees new data.
-            try {
-              await reconnectStore();
-            } catch {
-              // Non-fatal — store will reconnect on next search
-            }
-
-            syncMessage = success
-              ? `Sync completed successfully. ${output.trim()}`
-              : `Sync failed: ${output.trim()}`;
-          } finally {
-            syncPending = false;
+            await reconnectStore();
+          } catch {
+            // Non-fatal — store will reconnect on next search
           }
         }
+
+        const syncMessage = success
+          ? `Sync completed successfully. ${output.trim()}`
+          : `Sync failed: ${output.trim()}`;
 
         return {
           content: [

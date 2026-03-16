@@ -222,6 +222,13 @@ function sanitizeHeading(heading: string): string {
   return truncateHeading(cleaned);
 }
 
+/** Max allowed length for a single lesson's text to prevent corrupted/hallucinated output. */
+const MAX_LESSON_TEXT_LENGTH = 2000;
+/** Max allowed tags per lesson. */
+const MAX_TAGS_PER_LESSON = 10;
+/** Max allowed length for a single tag. */
+const MAX_TAG_LENGTH = 50;
+
 export function parseLessons(llmOutput: string): ExtractedLesson[] {
   if (llmOutput.trim() === 'NONE') return [];
 
@@ -235,10 +242,15 @@ export function parseLessons(llmOutput: string): ExtractedLesson[] {
       .map((t) => t.trim())
       .filter(Boolean);
     const text = match[3]!.trim();
-    if (text) {
-      const heading = rawHeading ? sanitizeHeading(rawHeading) : undefined;
-      lessons.push({ ...(heading && { heading }), tags, text });
-    }
+
+    // Validate: reject malformed or hallucinated lessons before they reach disk
+    if (!text) continue;
+    if (text.length > MAX_LESSON_TEXT_LENGTH) continue;
+    if (tags.length === 0 || tags.length > MAX_TAGS_PER_LESSON) continue;
+    if (tags.some((t) => t.length > MAX_TAG_LENGTH)) continue;
+
+    const heading = rawHeading ? sanitizeHeading(rawHeading) : undefined;
+    lessons.push({ ...(heading && { heading }), tags, text });
   }
 
   return lessons;

@@ -48,7 +48,7 @@ async function runFirstQueryHealthCheck(): Promise<string | null> {
       lines.push(`- ${issue}`);
     }
     lines.push('');
-    lines.push('Run `totem sync --rebuild` to re-index and fix these issues.');
+    lines.push('Run `totem sync --full` to re-index and fix these issues.');
 
     return formatSystemWarning(lines.join('\n'));
   } catch (err) {
