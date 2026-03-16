@@ -25,6 +25,8 @@ export const CompiledRuleSchema = z.object({
   fileGlobs: z.array(z.string()).optional(),
   /** Rule category for Trap Ledger classification */
   category: z.enum(['security', 'architecture', 'style', 'performance']).optional(),
+  /** Severity level — error blocks CI, warning reports but doesn't fail */
+  severity: z.enum(['error', 'warning']).optional(),
 });
 
 export type CompiledRule = z.infer<typeof CompiledRuleSchema>;

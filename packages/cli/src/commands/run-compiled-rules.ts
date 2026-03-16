@@ -118,14 +118,24 @@ export async function runCompiledRules(
     const sarif = buildSarifLog(violations, rules, { version, commitHash });
     output = JSON.stringify(sarif, null, 2);
   } else if (format === 'json') {
+    const jsonErrors = violations.filter((v) => (v.rule.severity ?? 'error') === 'error');
     output = JSON.stringify(
-      { pass: violations.length === 0, rules: rules.length, violations },
+      {
+        pass: jsonErrors.length === 0,
+        rules: rules.length,
+        errors: jsonErrors.length,
+        warnings: violations.length - jsonErrors.length,
+        violations,
+      },
       null,
       2,
     );
   } else {
+    const errors = violations.filter((v) => (v.rule.severity ?? 'error') === 'error');
+    const warnings = violations.filter((v) => (v.rule.severity ?? 'error') === 'warning');
     const lines: string[] = [];
-    if (violations.length === 0) {
+
+    if (errors.length === 0 && warnings.length === 0) {
       lines.push('### Verdict');
       lines.push(`**PASS** — All ${rules.length} rules passed.`);
       lines.push('');
@@ -133,17 +143,36 @@ export async function runCompiledRules(
       lines.push('No violations detected against compiled rules.');
     } else {
       lines.push('### Verdict');
-      lines.push(
-        `**FAIL** — ${violations.length} violation(s) found across ${rules.length} rules.`,
-      );
-      lines.push('');
-      lines.push('### Violations');
-      for (const v of violations) {
-        lines.push(`- **${v.file}:${v.lineNumber}** — ${v.rule.message}`);
-        lines.push(`  Pattern: \`/${v.rule.pattern}/\``);
-        lines.push(`  Lesson: "${v.rule.lessonHeading}"`);
-        lines.push(`  Line: \`${v.line.trim()}\``);
+      if (errors.length > 0) {
+        lines.push(
+          `**FAIL** — ${errors.length} error(s)${warnings.length > 0 ? `, ${warnings.length} warning(s)` : ''} across ${rules.length} rules.`,
+        );
+      } else {
+        lines.push(
+          `**PASS** — ${warnings.length} warning(s), 0 errors across ${rules.length} rules.`,
+        );
+      }
+
+      if (errors.length > 0) {
         lines.push('');
+        lines.push('### Errors');
+        for (const v of errors) {
+          lines.push(`- **${v.file}:${v.lineNumber}** — ${v.rule.message}`);
+          lines.push(`  Pattern: \`/${v.rule.pattern}/\``);
+          lines.push(`  Lesson: "${v.rule.lessonHeading}"`);
+          lines.push(`  Line: \`${v.line.trim()}\``);
+          lines.push('');
+        }
+      }
+
+      if (warnings.length > 0) {
+        lines.push('');
+        lines.push('### Warnings');
+        for (const v of warnings) {
+          lines.push(`- **${v.file}:${v.lineNumber}** — ${v.rule.message}`);
+          lines.push(`  Line: \`${v.line.trim()}\``);
+          lines.push('');
+        }
       }
     }
     output = lines.join('\n');
@@ -152,10 +181,17 @@ export async function runCompiledRules(
   writeOutput(output, outPath);
   if (outPath) log.success(tag, `Written to ${outPath}`);
 
-  if (violations.length > 0) {
+  const errors = violations.filter((v) => (v.rule.severity ?? 'error') === 'error');
+  const warnings = violations.filter((v) => (v.rule.severity ?? 'error') === 'warning');
+
+  if (errors.length > 0) {
     const verdictLabel = errorColor(bold('FAIL'));
-    log.info(tag, `Verdict: ${verdictLabel} — ${violations.length} violation(s)`);
+    const warnSuffix = warnings.length > 0 ? `, ${warnings.length} warning(s)` : '';
+    log.info(tag, `Verdict: ${verdictLabel} — ${errors.length} error(s)${warnSuffix}`);
     process.exit(1);
+  } else if (warnings.length > 0) {
+    const verdictLabel = successColor(bold('PASS'));
+    log.info(tag, `Verdict: ${verdictLabel} — ${warnings.length} warning(s), 0 errors`);
   } else {
     const verdictLabel = successColor(bold('PASS'));
     log.info(tag, `Verdict: ${verdictLabel} — ${rules.length} rules, 0 violations`);

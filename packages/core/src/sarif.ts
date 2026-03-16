@@ -117,7 +117,7 @@ export function buildSarifLog(
     return {
       ruleId: ruleId(v.rule),
       ruleIndex: idx,
-      level: 'error' as const,
+      level: (v.rule.severity ?? 'error') as 'error' | 'warning',
       message: { text: `${v.rule.message}\nMatched: \`${v.line.trim()}\`` },
       locations: [
         {
