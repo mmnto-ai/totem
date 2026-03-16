@@ -95,7 +95,7 @@ All commands feature proper `--help` output documentation (#358).
   - **Workflow Resets:** `totem bridge` and `totem wrap` automate mid-session context resets and end-of-task workflows. Wrap cleanly aborts via `NoLessonsError` if compilation requirements are missing (#409).
 - **Workflow & Evaluation:**
   - **Planning & Orchestration:** Orchestrates workflows via `totem spec`, `totem triage`, and `totem audit` with human approval gates. Triage and extract commands now support configurable issue sources across multiple repositories (#532).
-  - **Review & Quality:** Quality enforcement is bifurcated into specialized tools to improve precision (#549). `totem lint` handles context-blind architectural reviews, while `totem shield` explicitly enforces physical, deterministic hard gates locally.
+  - **Review & Quality:** `totem lint` runs compiled rules against diffs — zero LLM, fast, used in CI and pre-push hooks (#549). `totem shield` is the AI-powered code review with knowledge retrieval, used before opening PRs.
   - **Documentation:** `totem docs` automates transactional document syncs with strict sub-bullet thresholds and line-length limits (#341). It employs a Saga validator to prevent partial or corrupted updates (#351).
 - **Rule Testing & Extraction:**
   - **Capture & Extraction:** `totem add-lesson` enables inline capture, while `totem extract` handles batch PR reviews. It deduplicates identical lessons and uses concise, content-derived headings (#347).

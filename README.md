@@ -110,14 +110,15 @@ _Note: For more details on IDE-specific wiring or pinning MCP versions, see the 
 
 Once your index is built, Totem natively intercepts your git pushes to perform an architectural review.
 
-**`totem shield`**
-Reads your uncommitted diff and queries LanceDB for related traps to perform a deterministic architectural code review.
-
-- Executes in milliseconds using compiled rules scoped precisely to modified file boundaries (#546).
-- Outputs SARIF 2.1.0 natively for seamless CI/CD and GitHub Advanced Security integration (#387, #418).
-
 **`totem lint`**
-A discrete stylistic governance check split from the core `shield` command (#549). Allows you to validate syntactic rules independently of deep architectural validations.
+Runs compiled rules against your diff. Zero LLM, ~2 seconds, no API keys needed. Use in pre-push hooks and CI.
+
+- Executes compiled AST/regex rules scoped to modified file boundaries (#546, #549).
+- Outputs SARIF 2.1.0 for GitHub Advanced Security integration (#387, #418).
+- Tracks trigger and suppression metrics per rule (#545).
+
+**`totem shield`**
+AI-powered code review. Queries LanceDB for related traps, sends diff + context to an LLM for thorough architectural analysis. ~18 seconds. Use before opening a PR.
 
 ## Core Command Index
 
