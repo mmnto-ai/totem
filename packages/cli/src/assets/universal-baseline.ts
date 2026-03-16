@@ -304,4 +304,31 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
     tags: ['css', 'architecture', 'universal'],
     body: 'When generating utility classes (like Tailwind), the final output order determines the CSS cascade specificity. Do not rely on the implicit order of object keys in JavaScript. Use explicit directives (`@layer`, `@tailwind`) to guarantee the cascade order. Source: tailwindlabs/tailwindcss#88.',
   },
+
+  // ─── AI-Assisted Workflows (Solo Dev / Cursor Guardrails) ─────────
+  {
+    heading: 'Isolation of localized component changes',
+    tags: ['workflow', 'ai-agent', 'universal'],
+    body: 'When asked to implement a local feature (e.g., adding a button state), DO NOT rewrite the surrounding layout, change the CSS framework, or refactor sibling components unless explicitly instructed. Isolate the state change locally to prevent cascading breakages.',
+  },
+  {
+    heading: 'Premature abstraction of duplicated code',
+    tags: ['architecture', 'ai-agent', 'universal'],
+    body: 'Do not abstract repetitive code (like fetch calls or UI wrappers) into complex generic utilities until the exact pattern has been duplicated at least three times in separate domains (The Rule of Three). Premature generic abstraction ruins prototyping velocity.',
+  },
+  {
+    heading: 'Silent failures and "TODO" placeholders',
+    tags: ['workflow', 'dx', 'universal'],
+    body: 'If a requested feature cannot be fully implemented due to missing context or complexity, you MUST throw an explicit error or insert a highly visible UI warning (e.g., `<div style="color:red">NOT IMPLEMENTED</div>`). Never fail silently by returning null or leaving a hidden `// TODO` comment.',
+  },
+  {
+    heading: 'Monolithic file generation',
+    tags: ['architecture', 'ai-agent', 'universal'],
+    body: 'When generating new features, actively resist dumping all logic into a single 500+ line file. If a file grows beyond a single distinct responsibility, you must immediately extract its sub-components or utilities into sibling files before proceeding with the feature.',
+  },
+  {
+    heading: 'Destructive architectural refactoring without permission',
+    tags: ['workflow', 'safety', 'universal'],
+    body: 'Never alter the fundamental architecture of the project (e.g., switching from App Router to Pages Router, changing the ORM paradigm, or moving directories) as a side-effect of fulfilling a smaller feature request. Architectural shifts require explicit human approval.',
+  },
 ];
