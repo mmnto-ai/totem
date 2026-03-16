@@ -46,7 +46,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
 
 - **AST & Orchestration:**
   - Universal Tree-sitter parsing and AST gating for zero-LLM shielding.
-  - Cross-provider LLM routing with graceful degradation fallbacks (#516, #517):
+  - Cross-provider LLM routing with graceful degradation fallbacks (#516, #517, #522):
     - **Cloud Providers:** Gemini, Anthropic, OpenAI.
     - **Local Providers:** Ollama.
 - **Data Safety & Memory:**
@@ -64,6 +64,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
 **Goal:** Give existing users more ways to interact with their data locally and visualize their usage.
 
 - **Observability & Maintenance:**
+  - [x] **Semantic Rule Observability:** Separated `totem lint` from `totem shield` to enable semantic rule observability and targeted enforcement (#545, #549).
   - [ ] **#130 Epic: Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks. This will track index health and ignored files.
   - [ ] **#92 CLI Metrics & Observability:** Provide local CLI metrics (`totem stats`) for violation history, lesson coverage, and rule fire counts. Requires terminal output only for v1.0 without cloud or TUI dependencies.
   - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.

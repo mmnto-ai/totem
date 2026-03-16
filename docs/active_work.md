@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@0.35.1` (staging for `0.38.0`). Recent efforts finalized the Rule Testing Harness (ADR-022) to resolve regex false positives, alongside comprehensive dev wiki migrations. Most recently, the core was hardened with graceful degradation for AI providers, Claude Code hook integration, and MCP reliability fixes.
+ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@0.36.0` (staging for `0.38.0`). Recent efforts finalized the Rule Testing Harness (ADR-022) to resolve regex false positives, alongside comprehensive dev wiki migrations. Most recently, the core was advanced with Semantic Rule Observability (Phase 1), the splitting of `totem lint` from `totem shield`, and improved file boundary scoping for rules.
 
 Post-merge sequence was aligned during a multi-agent planning session (Claude + Gemini, 2026-03-13) informed by Deep Research Brief #24 (Competitive Moat Analysis). See `.strategy/deep-research/24-competitive-moat-analysis/` for the full adversarial analysis.
 
@@ -43,6 +43,9 @@ The following sequence was determined by cross-referencing the competitive moat 
 - **Core & Shift-Left Foundation:**
   - Delivered `totem test` compiled rule testing harness for ADR-022 to provide empirical rule failure data (#422).
   - Shipped SARIF 2.1.0 output for the deterministic shield, enabling GitHub Advanced Security integration (#387, #418).
+  - Split `totem lint` from `totem shield` and scoped shield rules to accurate file boundaries to minimize false positives (#549, #546).
+  - Delivered Semantic Rule Observability (Phase 1) to enhance rule telemetry and tracking (#545).
+  - Involuntary enforcement strategy under research (#520).
   - Completed a bug blitz addressing AST gate file reading, glob matching, and orchestrator process leaks (#395, #397, #399).
   - Reinstated agent hooks and audited suppressions (#464).
   - Applied "recency sandwich" pattern to agent instruction files and enforced length limits (#511, #466).
@@ -58,6 +61,7 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Established an Agent Memory Architecture guide and documented the Consumer Scaffolding Pipeline (#447, #451).
   - Released `totem-studio` consumer playground and a multi-totem knowledge domains index repo (#463, #481).
   - Standardized CLI help output and expanded compiled rules with telemetry fields (#358, #415).
+  - Completed post-release documentation sync and introduced 34 new lessons (#504).
 
 ### Blocked / Needs Input
 

@@ -4,7 +4,7 @@ This guide details how to integrate Totem into your automated pipelines, ensurin
 
 ## The Shield GitHub Action
 
-The most common integration is running `totem shield --deterministic` on pull requests. Because it uses the `compiled-rules.json` file, this check requires **zero API keys**, runs entirely locally, and executes in milliseconds.
+The most common integration is running `totem lint` on pull requests. Because it uses the `compiled-rules.json` file, this check requires **zero API keys**, runs entirely locally, and executes in milliseconds.
 
 Totem natively outputs in SARIF 2.1.0 format, which integrates seamlessly into the GitHub Advanced Security tab, annotating the exact lines of code where a rule was violated.
 
@@ -41,7 +41,7 @@ jobs:
       - name: Run deterministic shield
         # The shield command will evaluate the diff against compiled rules
         # and output the results as a SARIF file.
-        run: npx @mmnto/cli shield --deterministic --format sarif > totem-results.sarif
+        run: npx @mmnto/cli lint --format sarif > totem-results.sarif
 
       - name: Upload SARIF results
         # This action reads the SARIF file and posts the findings

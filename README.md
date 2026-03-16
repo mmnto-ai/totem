@@ -17,7 +17,7 @@ Totem is the local-first governance compiler for AI agents — **deterministic, 
 - **Built for Enterprise Scale:**
   - **Performance:** Ingestion streams chunks in batches for a flat memory footprint.
   - **Relevance:** Drift Detection keeps memory self-cleaning as code evolves.
-  - **Reliability:** Startup health checks automatically detect broken LanceStore indexes (#439). The system also features graceful degradation, automatically falling back to local models if cloud providers fail (#517).
+  - **Reliability:** Startup health checks automatically detect broken LanceStore indexes (#439). The system features graceful degradation, automatically falling back to local models or CLI orchestrators if cloud providers fail (#516, #517, #522).
 
 ## Philosophy: The Unix Approach to AI
 
@@ -27,7 +27,7 @@ Developers hate black boxes.
 
 Totem applies the **Unix Philosophy** to AI orchestration. We believe AI models are just standard IO processes. You don't need a heavy web UI to orchestrate them; you just need a CLI.
 
-By building our orchestrator as discrete, composable commands (`spec`, `shield`, `triage`, `docs`), we keep the developer in the terminal. You define the "Traction Points." If an AI generates a bad plan, you can run `totem spec --raw` to debug the context, edit the markdown, and fix it yourself. We don't replace your editor; we provide the invisible, configurable plumbing that connects your local agents together.
+By building our orchestrator as discrete, composable commands (`spec`, `shield`, `lint`, `triage`, `docs`), we keep the developer in the terminal. You define the "Traction Points." If an AI generates a bad plan, you can run `totem spec --raw` to debug the context, edit the markdown, and fix it yourself. We don't replace your editor; we provide the invisible, configurable plumbing that connects your local agents together.
 
 ## Security & Privacy: The Air-Gapped Doctrine
 
@@ -108,23 +108,27 @@ _Note: For more details on IDE-specific wiring or pinning MCP versions, see the 
 
 ### 5. The Codebase Immune System
 
-Once your index is built, Totem natively intercepts your git pushes (and Claude Code pre-flights) to perform an architectural review.
+Once your index is built, Totem natively intercepts your git pushes to perform an architectural review.
+
+**`totem lint`**
+Runs compiled rules against your diff. Zero LLM, ~2 seconds, no API keys needed. Use in pre-push hooks and CI.
+
+- Executes compiled AST/regex rules scoped to modified file boundaries (#546, #549).
+- Outputs SARIF 2.1.0 for GitHub Advanced Security integration (#387, #418).
+- Tracks trigger and suppression metrics per rule (#545).
 
 **`totem shield`**
-Reads your uncommitted diff and queries LanceDB for related traps to perform a deterministic architectural code review.
-
-- Executes in milliseconds using compiled rules.
-- Outputs SARIF 2.1.0 natively for seamless CI/CD and GitHub Advanced Security integration (#387, #418).
+AI-powered code review. Queries LanceDB for related traps, sends diff + context to an LLM for thorough architectural analysis. ~18 seconds. Use before opening a PR.
 
 ## Core Command Index
 
 Totem ships with native CLI commands that orchestrate your entire shift-left workflow.
 
 - **Discovery:**
-  - **Analysis:** `briefing`, `audit`
-  - **Prioritization:** `triage` (supports configurable multi-repo issue sources) (#514)
+  - **Analysis:** `briefing`, `audit`, `stats` (semantic rule observability) (#545)
+  - **Prioritization:** `triage` (supports configurable multi-repo issue sources) (#514, #532)
 - **Architectural Control:**
-  - **Validation:** `shield`, `test` (#422)
+  - **Validation:** `shield`, `lint` (#549), `test` (compiled rule harness) (#422)
   - **Enforcement:** `spec`, `hooks` (#310)
 - **Memory Management:**
   - **Extraction:** `extract` (supports multi-repo inputs), `add-lesson` (#532)
