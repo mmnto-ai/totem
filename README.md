@@ -1,49 +1,40 @@
 # Totem
 
-**Prove your AI-assisted code is safe. Ship faster.**
+**A zero-config CLI that compiles your `.cursorrules` into deterministic CI guardrails. Stop repeating yourself to your AI.**
 
 > [!WARNING]
 > **Developer Preview / Early Alpha**
-> Totem is currently in early alpha. While Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete, we are actively refining the onboarding experience. If you encounter friction during `totem init`, please bear with us!
+> Totem is in early alpha. Foundations through Phase 3 are functionally complete. If you hit friction during `totem init`, bear with us!
 
-You write `.cursorrules` in plain English. AI agents ignore them.
+Totem is not a framework. It's not a library. It's a **drop-in CLI and MCP Server** that gives Cursor, Copilot, Claude Code, and Gemini deterministic guardrails — in 60 seconds.
 
-Totem is a Governance Compiler. It ingests your natural language rules and compiles them into lightning-fast, deterministic AST/Regex guardrails that block bad code _before_ it commits.
-
-You get the ease of AI prompting with the zero-latency, zero-hallucination guarantee of Semgrep.
+You write `.cursorrules` in plain English. AI agents ignore them. Totem compiles those rules into mathematical AST/Regex checks that block bad code before it commits. Zero LLM. Zero hallucination. ~2 seconds.
 
 ## The 10-Second Workflow
 
-Write code with your AI. Then, let Totem prove it's safe.
+```bash
+$ npx @mmnto/cli lint
+✓ PASS — 137 rules, 0 violations.
 
-1. **Verify:** Run `npx @mmnto/cli lint` (or let the git hook do it automatically). Zero LLM, ~2 seconds.
-2. **Pass:** `✓ PASS — 137 rules, 0 violations.` Push with confidence.
-3. **Prove:** Run `npx @mmnto/cli stats` to see your ROI.
-   `> Total violations prevented: 47 | security: 12, architecture: 35`
+$ npx @mmnto/cli stats
+Total violations prevented: 47 | security: 12, architecture: 35
+```
+
+Write code with your AI. Run `totem lint`. Push with confidence. Run `totem stats` to prove your ROI.
 
 ## Quickstart
 
-### 1. Initialize Totem
-
-Run this inside your project root (e.g., your Next.js or Node app):
+### 1. Initialize
 
 ```bash
 npx @mmnto/cli init
 ```
 
-This auto-detects your environment (Cursor, Copilot, Junie) and sets up your `totem.config.ts`.
+Auto-detects your environment (Cursor, Copilot, Junie) and sets up `totem.config.ts`. Already have `.cursorrules`? Run `totem compile --from-cursor` to enforce them.
 
-### 2. Sync the Index
+### 2. Connect the MCP Server
 
-```bash
-npx @mmnto/cli sync
-```
-
-This builds your local vector index from your codebase, docs, and lessons.
-
-### 3. Connect the MCP Server
-
-Add Totem to your AI agent's configuration. This gives your agent the ability to search project knowledge (`search_knowledge`) and document new architectural traps (`add_lesson`) without leaving the editor.
+Give your AI agent persistent project memory. `search_knowledge` retrieves traps, patterns, and architectural constraints. `add_lesson` captures new ones.
 
 **macOS / Linux:**
 
@@ -71,46 +62,75 @@ Add Totem to your AI agent's configuration. This gives your agent the ability to
 }
 ```
 
-## What Totem Actually Does
+Works with Claude Desktop, Claude Code, Cursor, Windsurf, Gemini CLI, and any MCP-compatible agent.
 
-We are not an AI code reviewer that gives you subjective "readability" suggestions in your Pull Requests.
+### 3. Sync & Lint
 
-We are a compiler that enforces **Invariants**—business logic that must _never_ happen.
+```bash
+npx @mmnto/cli sync    # Build the vector index
+npx @mmnto/cli lint    # Run compiled rules (zero LLM)
+```
 
-- **Instruction Verifier:** We don't replace your `.mdc` or `.cursorrules` files. We enforce them. You wrote the prompt; we ensure the agent didn't ignore it.
-- **Deterministic Enforcement:** `totem lint` uses Tree-sitter to parse your AST. It does not use an LLM. It does not hallucinate. It is a mathematical check against your compiled rules.
-- **Continuous Learning:** When you catch a bug in a PR, run `totem extract`. Totem learns the lesson and compiles a new invariant so that specific bug can never be merged again.
+That's it. Your pre-push hook runs `totem lint` automatically.
 
-## Enterprise Grade (The Compliance Ledger)
+## What Totem Actually Is
 
-Totem is architected for high-compliance enterprise sectors (defense, finance, healthcare).
+**We don't compile your code. We compile your rules.**
 
-- **Air-Gapped Execution:** The core enforcement engine (`totem lint`) requires zero API keys. It runs entirely locally. Your proprietary codebase never leaves your machine.
-- **SARIF Integration:** Totem outputs standard Static Analysis Results Interchange Format (SARIF 2.1.0). This means your Trap Ledger integrates seamlessly into GitHub Advanced Security, GitLab Ultimate, and SonarQube dashboards to prove SOC 2 / DORA compliance to your auditors.
+Your `.cursorrules` and `.mdc` files are plain English. Totem reads them and generates deterministic AST/Regex queries — the same enforcement you'd get from Semgrep, but sourced from your own natural language instructions.
 
-## Works With Your Existing Tools
+- **Instruction Verifier:** You wrote the prompt. We prove the agent obeyed it. `totem compile --from-cursor` ingests your existing rules.
+- **Deterministic:** `totem lint` uses Tree-sitter AST parsing. No LLM. No hallucination. No API keys. Runs in your CI, your pre-push hook, your SCIF.
+- **Continuous Learning:** Catch a bug in a PR? Run `totem extract`. Totem learns the lesson and compiles a new invariant. That specific bug can never be merged again.
 
-Totem is the invisible plumbing that connects your local agents together. We natively support:
+**Totem is not another AI orchestration framework.** It is a closed-loop enforcement tool for the tools you already use.
+
+## The Solo Dev Superpower
+
+If you're a solo dev or small team using multiple AI agents (Cursor + Claude Code, Gemini + Copilot), Totem is your **Shared Memory Bus**.
+
+- Lessons learned in one agent session are available to all agents via MCP
+- Rules compiled from Cursor instructions are enforced in Claude Code's pre-push hook
+- `totem stats` shows your team (or your boss) exactly how many violations were prevented
+
+Stop repeating "no, use Zod here" to every agent in every session. Teach Totem once. It remembers forever.
+
+## Enterprise Grade
+
+Totem is architected for high-compliance sectors (defense, finance, healthcare).
+
+- **Air-Gapped:** `totem lint` requires zero API keys. Runs entirely locally. Your codebase never leaves your machine.
+- **SARIF 2.1.0:** The Trap Ledger integrates into GitHub Advanced Security, GitLab Ultimate, and SonarQube. Prove SOC 2 / DORA compliance to your auditors.
+- **Severity Levels:** Rules are classified as `error` (blocks CI) or `warning` (informs, doesn't block). 83 invariants, 54 guidance rules.
+
+Built on the same architecture as elite AI assistants (Tree-sitter + LanceDB), but pointed at enforcement, not generation.
+
+## Works With Everything
 
 - **Editors:** Cursor, Windsurf, GitHub Copilot, JetBrains Junie
 - **Agents:** Claude Code, Gemini CLI, Aider
 - **Orchestrators:** Anthropic, Google GenAI, OpenAI, Ollama (Local)
+- **CI:** GitHub Actions (SARIF), any CI that runs Node
 
 ---
 
-## Core Command Index
+## Commands
 
-- **Validation:** `lint` (Deterministic AST checks), `shield` (AI-assisted architectural review)
-- **Reporting:** `stats` (The Trap Ledger), `audit`, `briefing`
-- **Memory Management:** `extract` (Learn from PRs), `compile` (Ingest `.mdc` files), `sync`
+| Command   | What it does                                               | Speed    |
+| --------- | ---------------------------------------------------------- | -------- |
+| `lint`    | Compiled rules against diff. Zero LLM.                     | ~2s      |
+| `shield`  | AI-powered code review with knowledge retrieval.           | ~18s     |
+| `stats`   | The Trap Ledger — violations prevented, by category.       | instant  |
+| `compile` | Compile lessons + `.cursorrules` into deterministic rules. | ~5s/rule |
+| `extract` | Learn from PR reviews.                                     | ~15s     |
+| `spec`    | Pre-work briefing from knowledge base.                     | ~20s     |
+| `sync`    | Build/update the vector index.                             | ~30s     |
 
-For an exhaustive breakdown of every command and its flags, read the [CLI Reference Wiki](./docs/wiki/cli-reference.md).
+Full reference: [CLI Reference Wiki](./docs/wiki/cli-reference.md)
 
-## Strategic Roadmap & Contributing
+## Contributing
 
-To see where Totem is heading, view our [Strategic Roadmap](./docs/wiki/roadmap.md). For deeper architectural dives, see `docs/architecture.md`.
-
-We welcome community contributions! Please review our `CONTRIBUTING.md` guidelines and the Dev Onboarding Wiki.
+We welcome contributions. See `CONTRIBUTING.md` and the [Dev Onboarding Wiki](./docs/wiki/dev-environment-setup.md).
 
 ## License
 
