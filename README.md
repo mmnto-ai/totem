@@ -71,6 +71,7 @@ Give your AI agent persistent project memory. `search_knowledge` retrieves traps
 ```
 
 Works with any MCP-compatible agent, including:
+
 - **Desktop Apps:** Claude Desktop.
 - **Editors:** Cursor, Windsurf.
 - **CLIs:** Claude Code, Gemini CLI.
