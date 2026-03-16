@@ -98,5 +98,42 @@ export function sanitizeForIngestion(text: string, options: IngestionSanitizeOpt
     onWarn?.(`Suspicious content flagged${filePath ? ` in ${filePath}` : ''}: ${flags.join(', ')}`);
   }
 
+  // --- Phase 4: Secret masking (DLP) — strip secrets before embedding ---
+  result = maskSecrets(result);
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// DLP Secret Masking
+// ---------------------------------------------------------------------------
+
+/**
+ * Common secret patterns. Each regex matches a full token.
+ * Conservative — only matches high-confidence patterns to avoid false positives.
+ */
+const SECRET_PATTERNS: Array<{ name: string; re: RegExp }> = [
+  // API keys with known prefixes
+  { name: 'API key', re: /\b(sk-[a-zA-Z0-9]{20,})\b/g },
+  { name: 'API key', re: /\b(sk-proj-[a-zA-Z0-9_-]{20,})\b/g },
+  { name: 'API key', re: /\b(AIza[a-zA-Z0-9_-]{30,})\b/g },
+  { name: 'npm token', re: /\b(npm_[a-zA-Z0-9]{20,})\b/g },
+  { name: 'GitHub token', re: /\b(gh[pousr]_[a-zA-Z0-9]{20,})\b/g },
+  { name: 'AWS key', re: /\b(AKIA[A-Z0-9]{16})\b/g },
+  // Generic high-entropy strings after common key assignments
+  {
+    name: 'secret assignment',
+    re: /(?:api[_-]?key|secret|token|password|credential)['"]?\s*[:=]\s*['"]([a-zA-Z0-9_\-/.+]{20,})['"]/gi,
+  },
+];
+
+/** Mask detected secrets with [REDACTED]. Returns the cleaned text. */
+export function maskSecrets(text: string): string {
+  let result = text;
+  for (const { re } of SECRET_PATTERNS) {
+    // Reset lastIndex for global regexes
+    re.lastIndex = 0;
+    result = result.replace(re, '[REDACTED]');
+  }
   return result;
 }

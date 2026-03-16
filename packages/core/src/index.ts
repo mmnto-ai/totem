@@ -146,6 +146,7 @@ export type { IngestionSanitizeOptions } from './sanitize.js';
 export {
   BASE64_BLOB_RE,
   INSTRUCTIONAL_LEAKAGE_RE,
+  maskSecrets,
   sanitize,
   sanitizeForIngestion,
   UNICODE_ESCAPE_RE,
