@@ -32,7 +32,7 @@ Write code with your AI. Run `totem lint`. Push with confidence. Run `totem stat
 npx @mmnto/cli init
 ```
 
-Auto-detects your environment (Cursor, Copilot, Junie) and sets up `totem.config.ts`. Already have `.cursorrules` or `.mdc` files? `totem init` auto-ingests them and compiles your instructions into deterministic rules.
+Auto-detects your environment (Cursor, Copilot, Junie) and sets up `totem.config.ts`. Ships with **60 battle-tested lessons** extracted from PR reviews in Next.js, React, Prisma, Tailwind, and Drizzle — your project gets immediate protection against the most common architectural traps on Day 1. Already have `.cursorrules` or `.mdc` files? `totem init` auto-ingests them and compiles your instructions into deterministic rules.
 
 ### 2. Connect the MCP Server
 
@@ -84,6 +84,7 @@ Your `.cursorrules` and `.mdc` files are plain English. Totem reads them and gen
 - **Instruction Verifier:** We prove the agent obeyed your prompt. `totem init` auto-ingests your existing `.cursorrules` and `.mdc` files.
 - **Deterministic Execution:** `totem lint` uses Tree-sitter AST parsing. No LLM, no hallucination, and no API keys required.
 - **Continuous Learning:** Catch a bug in a PR? Run `totem extract` to learn the lesson and compile a new invariant. That specific bug can never be merged again.
+- **Universal Baseline:** 60 lessons from real failures at Vercel, Meta, Prisma, and Tailwind ship out of the box. Covers async traps, React hooks, SSR hydration, database migrations, TypeScript safety, and AI-assisted workflow guardrails.
 
 **Totem is not another AI orchestration framework.** It is a closed-loop enforcement tool for the tools you already use.
 
