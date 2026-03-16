@@ -28,10 +28,10 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 This phase delivered seamless cross-platform onboarding, automated AI tool configuration, and universal baseline lessons.
 
 - **Onboarding & UX:**
-  - **Tool Automation:** Auto-configured AI tools with JetBrains Junie and Copilot support (#448).
+  - **Tool Automation:** Auto-configured AI tools with JetBrains Junie and Copilot support (#448). Added configurable embedding detection defaulting to Gemini (#551, #608).
   - **CLI Experience:** Delivered cross-platform installers, versioned reflex upgrade paths, and premium CLI UI polish.
 - **Host Integration:**
-  - **Seamless Hooks:** Agent hooks for Claude Code, , Gemini, and Junie (#464).
+  - **Seamless Hooks:** Agent hooks for Claude Code, Gemini, and Junie (#464).
   - **Baseline Intelligence:** Universal baseline lessons injected with harder vector DB reflexes.
   - **Enforcement:** Involuntary enforcement strategy under research (#520).
 - [ ] **#129 Epic: Interactive CLI Tutorial:** Build an animated, interactive CLI tutorial (`totem tutorial`). This allows users to pause the walkthrough, ask the LLM contextual questions, and resume seamlessly.
@@ -52,6 +52,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - **Integrity & State:** Air-gapped zero-telemetry enforced (#474), alongside index health checks at startup (#438).
   - **Portability:** Zero-LLM session snapshots via `totem handoff --lite` and cross-model export support.
 - **Security & DX:**
+  - **Data Loss Prevention:** Implemented DLP secret masking middleware to proactively strip secrets prior to embedding (#534, #609).
   - **Adversarial Hardening:** Adversarial ingestion scrubbing, extraction hardening, and suspicious lesson detection.
   - **Git Enforcements:** Native Git hook enforcement with monorepo and Bun support. Enhanced by shield severity levels (error vs warning) for strict gating (ADR-028, #498, #576).
   - **Installation Automation:** Auto-installation of `totem hooks` and CI drift gating foundations.
@@ -62,11 +63,11 @@ This phase fortified the core architecture, delivering native orchestration, zer
 
 - **Observability & Maintenance:**
   - **Metrics & Diagnostics:**
-    - [x] **Semantic Rule Observability:** Separated zero-LLM `totem lint` from AI-powered `totem shield` to enable targeted rule enforcement (#521, #545).
+    - [x] **Semantic Rule Observability:** Separated zero-LLM `totem lint` from AI-powered `totem shield` to enable targeted rule enforcement (#521, #545). Integrated `onWarn` callbacks to trace and demote rule false positives (#575, #595).
     - [ ] **#92 CLI Metrics & Observability:** Provide local CLI metrics (`totem stats`) including basic CIS metric percentages (#425) and Trap Ledger integration (#544).
     - [ ] **#130 Epic: Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks and track index health.
   - **System Maintenance:**
-    - [ ] **#283 Epic: v1.0 Documentation:** Develop v1.0 docs and extensive wiki migrations covering dev environments and release processes (#450, #477).
+    - [ ] **#283 Epic: v1.0 Documentation:** Develop v1.0 docs and extensive wiki migrations covering dev environments and release processes (#450, #477). Includes refined Holy Grail positioning and architecture limitations (ADR-049, #586, #607).
     - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
     - [x] **Documentation Generation:** Stripped known-not-shipped issue references from docs generation to prevent hallucinations (#581, #598).
 - **Workflow & Execution:**
@@ -81,7 +82,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [ ] **#119 `totem run <workflow>`:** Introduce a custom AI task runner to execute user-defined markdown workflows via the orchestrator.
     - [ ] **#74 `totem oracle`:** Add a frictionless Q&A command to query LanceDB without strict personas.
     - [ ] **#392 `totem review`:** Implement full codebase review powered by repomix and vectordb lessons.
-    - [ ] **#432 Dynamic CLI Imports:** Convert static imports to dynamic `await import()` in command files to optimize startup performance.
+    - [ ] **#432 Dynamic CLI Imports:** Convert static imports to dynamic `await import()` in command files to optimize startup performance. Initial conversion underway to resolve dynamic-import shield rules (#594, #605).
   - **Extraction & Authority:**
     - [ ] **#430 Document Authority Modes:** Implement generated vs. assisted authority modes to protect human-curated strategic decisions.
     - [ ] **#435 PR Lesson Extraction:** Auto-extract lessons from PR review comments using `totem extract --from-pr`. Extracted lessons are strictly validated via Zod before disk writes (#565).
@@ -93,9 +94,9 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [ ] **#434 Adversarial Trap Corpus:** Develop synthetic violations to measure precision and recall of the deterministic engine.
   - **Rules & Standards:**
     - [x] **#387 SARIF Output:** Standardized output for CI/CD integration, enhanced with organizational trap ledgers and linting support (#418, #561).
-    - [x] **External Rule Ingestion:** Built support to automatically ingest `.cursorrules`, `.mdc` files, and prompt templates into compiled rules during `totem init` (#558, #596).
+    - [x] **External Rule Ingestion:** Built support to automatically ingest `.cursorrules`, `.mdc` files, and prompt templates into compiled rules during `totem init` (#558, #578, #596).
     - **Rule Invariant Audit:** Categorized over 130 compiled rules by invariant, style, and security to establish strict baseline severity (#559, #577).
-    - [x] **Compilation Optimization:** Cached non-compilable lessons and removed duplicate match/exec rules to optimize performance and accuracy (#589, #590).
+    - [x] **Compilation Optimization:** Cached non-compilable lessons and removed duplicate match/exec rules to optimize performance and accuracy (#589, #590). Refined compiler glob patterns to support prompt constraints and strict boundaries (#584, #602, #603).
     - [ ] **#385 Rule Exports:** Export compiled rules to Semgrep YAML and ESLint configurations. Deferred until core governance (#314) is finalized.
     - [ ] **#433 Lesson Packs Prototype:** Mine OSS projects as a proof of concept for distributable rule sets.
   - **Data Architecture & Agents:**
@@ -128,7 +129,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [ ] **#198 RFC: Open Core & Licensing:** Evaluate MIT vs. Fair Source licensing strategy (resolved to Apache 2.0).
     - [x] Chore: Relicense project from MIT to Apache 2.0.
   - **Security & Compliance:**
-    - [x] **#267 / #268 Security Scanning:** Configured Dependabot and enabled GitHub CodeQL for Advanced Security.
+    - [x] **#267 / #268 Security Scanning:** Configured Dependabot and enabled GitHub CodeQL for Advanced Security (#579).
     - [x] **#300 / #321 Governance & Security:** Migrate `.strategy` directory to a private submodule for secure collaboration and indexing (#363).
   - **Contributor Workflow:**
     - [x] Implement Changesets and npm publishing (#5, #46).

@@ -1,6 +1,8 @@
 # Totem
 
-**A zero-config CLI that compiles your `.cursorrules` into deterministic CI guardrails. Stop repeating yourself to your AI.**
+**Git for AI. Rule your context.**
+
+A zero-config CLI that compiles your `.cursorrules` into deterministic CI guardrails. Stop repeating yourself to your AI.
 
 > [!WARNING]
 > **Developer Preview / Early Alpha**
@@ -34,7 +36,7 @@ Auto-detects your environment (Cursor, Copilot, Junie) and sets up `totem.config
 
 ### 2. Connect the MCP Server
 
-Give your AI agent persistent project memory. `search_knowledge` retrieves traps, patterns, and architectural constraints. `add_lesson` captures new ones.
+Give your AI agent persistent project memory. `search_knowledge` retrieves traps, patterns, and architectural constraints, while `add_lesson` captures new ones.
 
 **macOS / Linux:**
 
@@ -79,9 +81,9 @@ That's it. Your pre-push hook runs `totem lint` automatically.
 
 Your `.cursorrules` and `.mdc` files are plain English. Totem reads them and generates deterministic AST/Regex queries — the same enforcement you'd get from Semgrep, but sourced from your own natural language instructions.
 
-- **Instruction Verifier:** You wrote the prompt. We prove the agent obeyed it. `totem init` auto-ingests your existing `.cursorrules` and `.mdc` rules.
-- **Deterministic:** `totem lint` uses Tree-sitter AST parsing. No LLM. No hallucination. No API keys. Runs in your CI, your pre-push hook, your SCIF.
-- **Continuous Learning:** Catch a bug in a PR? Run `totem extract`. Totem learns the lesson and compiles a new invariant. That specific bug can never be merged again.
+- **Instruction Verifier:** We prove the agent obeyed your prompt. `totem init` auto-ingests your existing `.cursorrules` and `.mdc` files.
+- **Deterministic Execution:** `totem lint` uses Tree-sitter AST parsing. No LLM, no hallucination, and no API keys required.
+- **Continuous Learning:** Catch a bug in a PR? Run `totem extract` to learn the lesson and compile a new invariant. That specific bug can never be merged again.
 
 **Totem is not another AI orchestration framework.** It is a closed-loop enforcement tool for the tools you already use.
 
@@ -89,9 +91,9 @@ Your `.cursorrules` and `.mdc` files are plain English. Totem reads them and gen
 
 If you're a solo dev or small team using multiple AI agents (Cursor + Claude Code, Gemini + Copilot), Totem is your **Shared Memory Bus**.
 
-- Lessons learned in one agent session are available to all agents via MCP
-- Rules compiled from Cursor instructions are enforced in Claude Code's pre-push hook
-- `totem stats` shows your team (or your boss) exactly how many violations were prevented
+- Lessons learned in one agent session are available to all agents via MCP.
+- Rules compiled from Cursor instructions are enforced in Claude Code's pre-push hook.
+- `totem stats` shows your team (or your boss) exactly how many violations were prevented.
 
 Stop repeating "no, use Zod here" to every agent in every session. Teach Totem once. It remembers forever.
 
@@ -99,18 +101,35 @@ Stop repeating "no, use Zod here" to every agent in every session. Teach Totem o
 
 Totem is architected for high-compliance sectors (defense, finance, healthcare).
 
-- **Air-Gapped:** `totem lint` requires zero API keys. Runs entirely locally. Your codebase never leaves your machine.
-- **SARIF 2.1.0:** The Trap Ledger integrates into GitHub Advanced Security, GitLab Ultimate, and SonarQube. Prove SOC 2 / DORA compliance to your auditors.
-- **Severity Levels & Categories:** Rules are categorized by invariant, style, and security. They are classified as `error` (blocks CI) or `warning` (informs, doesn't block). 83 invariants, 54 guidance rules.
+- **Security & Compliance:**
+  - **Air-Gapped Linting:** `totem lint` requires zero API keys and runs entirely locally. Your codebase never leaves your machine.
+  - **DLP Secret Masking:** Automatically strips secrets before embedding. This ensures credentials never leak into your vector index.
+  - **SARIF 2.1.0 Output:** Integrates into GitHub Advanced Security, GitLab Ultimate, and SonarQube via `--format sarif/json`. Prove SOC 2 / DORA compliance to your auditors.
+- **Rule Architecture:**
+  - **Severity Levels:** Rules are classified as `error` (blocks CI) or `warning` (informs, doesn't block).
+  - **Categorization:** 137 compiled rules span invariants, style, and security (83 invariants, 54 guidance rules).
 
 Built on the same architecture as elite AI assistants (Tree-sitter + LanceDB), but pointed at enforcement, not generation. Both deterministic `totem lint` and AI-powered `totem shield` share a unified execution core for consistent rule evaluation.
 
 ## Works With Everything
 
-- **Editors:** Cursor, Windsurf, GitHub Copilot, JetBrains Junie
-- **Agents:** Claude Code (with native `totem spec` and `totem shield` hooks), Gemini CLI, Aider
-- **Orchestrators:** Anthropic, Google GenAI, OpenAI, Ollama (Local fallback via graceful degradation)
-- **CI:** GitHub Actions (SARIF), any CI that runs Node
+- **Editors:**
+  - Cursor
+  - Windsurf
+  - GitHub Copilot
+  - JetBrains Junie
+- **Agents:**
+  - Claude Code (with native `totem spec` and `totem shield` hooks)
+  - Gemini CLI
+  - Aider
+- **Orchestrators:**
+  - Anthropic
+  - Google GenAI
+  - OpenAI
+  - Ollama (Local fallback via graceful degradation)
+- **CI Integration:**
+  - GitHub Actions (SARIF)
+  - Any CI that runs Node
 
 ---
 

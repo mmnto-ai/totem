@@ -2,7 +2,7 @@
 
 ## The Vision
 
-Totem is designed as a **Shared Brain** and **Orchestrator** for a team of autonomous AI agents. Licensed under Apache 2.0, it operates completely locally within the consuming project, strictly adhering to an **Air-Gapped Doctrine** (Zero Telemetry) to ensure total data privacy (#474).
+Totem — **Git for AI. Rule your context.** (#606) — is designed as a **Shared Brain** and **Orchestrator** for a team of autonomous AI agents. Licensed under Apache 2.0, it operates completely locally within the consuming project, strictly adhering to an **Air-Gapped Doctrine** (Zero Telemetry) to ensure total data privacy (#474).
 
 ## Core Components
 
@@ -78,7 +78,7 @@ flowchart TD
     - _Embeddings:_ Utilizes Gemini (`gemini-embedding-2-preview`) as the primary dogfood embedder (#523). It features hybrid search combining Full-Text Search and vector similarity (#378).
     - _Resilience:_ Implements graceful degradation, falling back to Ollama if the primary provider fails (#517). Automatic `--full` syncs trigger when embedder configuration changes are detected (#548).
 - **Security & Maintenance:**
-  - **Filtering:** Includes adversarial content scrubbing and a dedicated `lesson` ContentType for highly precise vector retrieval (#315).
+  - **Filtering:** Includes adversarial content scrubbing, DLP secret masking middleware to safely strip credentials before embedding (#609, #534), and a dedicated `lesson` ContentType for highly precise vector retrieval (#315).
   - **Drift Detection:** Self-cleaning sync engine purges orphaned vectors when source files are deleted. It is reinforced by strict path containment checks to prevent directory traversal (#284).
 
 ### 2. The CLI (`@mmnto/cli`)
@@ -86,8 +86,8 @@ flowchart TD
 All commands feature proper `--help` output documentation (#358).
 
 - **Setup & Infrastructure:**
-  - **Initialization:** Scaffolds configs, hooks, and AI tools like Copilot and Junie (#448). It automatically ingests `.cursorrules` and prompt files during setup to immediately align AI context (#596, #578).
-  - **Environment Support:** Package manager auto-detection fully supports Bun and safely detects non-bash environments (#421, #316). It installs git hooks automatically from monorepo sub-packages (#333).
+  - **Initialization:** Scaffolds configs, hooks, and AI tools like Copilot and Junie (#448). Initialization relies on an ordered provider detection schema (prioritizing Gemini, then OpenAI) (#608, #551), and automatically ingests `.cursorrules` and prompt files during setup to immediately align AI context (#596, #578).
+  - **Environment Support:** Package manager auto-detection fully supports Bun and safely detects non-bash environments (#421, #316). Command modules leverage top-level dynamic imports to significantly boost CLI startup performance (#594, #605).
 - **Data & Context Management:**
   - **Indexing:** `totem sync` crawls, chunks, and embeds targets into LanceDB. It seamlessly supports indexing `.strategy` repos across multi-totem domains (#463).
   - **Session Management:** `totem briefing` and `totem handoff` capture state snapshots. The `--lite` flag enables zero-LLM capture with ANSI sanitization (#292).
@@ -96,7 +96,7 @@ All commands feature proper `--help` output documentation (#358).
   - **Planning & Orchestration:** Orchestrates workflows with human approval gates. It supports configurable issue sources across multiple repositories for triage and extraction (#514).
   - **Review & Quality:**
     - **`totem lint`**: Runs compiled rules against diffs. Strictly zero LLM, fast, used in CI and pre-push hooks while natively supporting SARIF/JSON outputs (#521, #561).
-    - **`totem shield`**: Conducts AI-powered code review using LanceDB context before PRs (#521). It enforces explicit severity levels, cleanly differentiating between errors and warnings (#576, #498).
+    - **`totem shield`**: Conducts AI-powered code review using LanceDB context before PRs (#521). It enforces explicit severity levels, cleanly differentiating between errors and warnings, and correctly accommodates dynamic rule demotions (#576, #605).
   - **Documentation:** Automates transactional document syncs using a Saga validator to prevent partial updates (#351). It safely strips known-not-shipped issue references from generated docs to prevent AI hallucinations (#598, #581).
   - **Telemetry & Stats:** Surfaces local metrics powered by the Phase 1 Trap Ledger. Displays basic CIS metric percentages alongside violation histories (#544, #425).
 - **Rule Testing & Extraction:**
@@ -106,9 +106,9 @@ All commands feature proper `--help` output documentation (#358).
 
 ### 3. Deterministic Compiler & Zero-LLM Lint
 
-`totem compile` reads architectural constraints and translates each lesson into a regex rule (or marks it as non-compilable). It seamlessly ingests existing `.cursorrules` and `.mdc` files into the Totem compiled rule matrix (#558). To significantly boost performance, the compiler caches non-compilable lessons to skip redundant recompilation loops (#590). Rules are stored in `.totem/compiled-rules.json`—now extended with advanced telemetry fields and Phase 1 Semantic Rule Observability (#542).
+`totem compile` reads architectural constraints and translates each lesson into a regex rule (or marks it as non-compilable). It seamlessly ingests existing `.cursorrules` and `.mdc` files into the Totem compiled rule matrix (#558). To significantly boost performance, the compiler caches non-compilable lessons to skip redundant recompilation loops (#590) and converts core rule-loading imports to dynamic execution (#594). Rules are stored in `.totem/compiled-rules.json`—now extended with advanced telemetry fields and Phase 1 Semantic Rule Observability (#542).
 
-The compilation process is context-aware, reading files directly from disk instead of parsing staged diffs to prevent AST gating false positives (#399). Developers can bypass false positives using audited inline suppression directives or negated patterns (#458). Rules are strictly scoped using anchored glob matching, preventing `fileGlobs` from leaking outside specified directories (#584, #546). Duplicate, vulnerable, or overly broad match/exec patterns are actively refined or rejected (#589, #538).
+The compilation process is context-aware, reading files directly from disk instead of parsing staged diffs to prevent AST gating false positives (#399). Developers can bypass false positives using audited inline suppression directives or negated patterns (#458). Rules are strictly scoped using anchored glob matching, preventing `fileGlobs` from leaking outside specified directories (#584, #546). The compiler is constrained against generating unsupported nested globs or brace expansions (#603, #602). During execution, the loading engine applies an `onWarn` callback to filter valid structural warnings and suppress false positives (#595, #575). Duplicate, vulnerable, or overly broad match/exec patterns are actively refined or rejected (#589, #538).
 
 `totem lint` applies these compiled rules against `git diff` additions with zero LLM calls. It shares a core `runCompiledRules` engine with `totem shield` for execution consistency across the pipeline (#566). This physically blocks main branch commits and pre-push violations locally. It generates standard SARIF 2.1.0 or JSON formatted outputs (`Violation[]`) to enable seamless enterprise security integration (#561).
 
@@ -116,7 +116,7 @@ The compilation process is context-aware, reading files directly from disk inste
 
 A composite GitHub Action (`action.yml`) runs `totem lint` as a pass/fail CI quality gate on pull requests. It uses compiled AST/regex rules from `.totem/compiled-rules.json` to physically block known architectural traps from merging. The SARIF 2.1.0 output natively integrates with the GitHub Advanced Security tab, directly surfacing CISO-facing architectural violations (#387, #561).
 
-Deterministic CI enforcement is further strengthened by evaluating sentinels like SonarQube Community Edition (#355), GitHub CodeQL (#268), and Dependabot (#267). The CI pipeline features a structural CI drift gate and an adversarial evaluation harness to perform integrity checks and mitigate model drift. To prevent pipeline lockouts, the local pre-push gate is securely guarded against missing CLI installations in CI environments.
+Deterministic CI enforcement is further strengthened by evaluating sentinels like SonarQube Community Edition (#355), GitHub CodeQL v4 (#579, #268), and Dependabot (#267). The CI pipeline features a structural CI drift gate and an adversarial evaluation harness to perform integrity checks and mitigate model drift. To prevent pipeline lockouts, the local pre-push gate is securely guarded against missing CLI installations in CI environments.
 
 Because `totem lint` operates purely on deterministic rules, it requires **zero LLM API calls**. This eliminates statistical hallucinations in CI and maintains a strict, air-gapped security posture for enterprise environments.
 
@@ -234,7 +234,7 @@ For secure collaboration in enterprise environments, proprietary project guideli
 
 ## Scope & Limitations
 
-Totem enforces **architectural invariants** — structural rules about what code patterns must or must not exist. It is important to understand what Totem does and does not do:
+Totem enforces **architectural invariants** — structural rules about what code patterns must or must not exist. It is important to understand what Totem does and does not do (#607):
 
 **What Totem does:**
 
