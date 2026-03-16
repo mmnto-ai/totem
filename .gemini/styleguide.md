@@ -56,7 +56,16 @@ The following suggestions have been repeatedly declined during code review. Do n
 - **Confusing `totem lint` and `totem shield`.** `totem lint` = compiled rules, zero LLM, fast, Lite tier. `totem shield` = AI-powered code review, Full tier. Never describe shield as "deterministic" or lint as "AI-powered." Issue #515 (Claude Code hooks) was closed and NOT shipped — do not reference it as a live feature.
 - **Alphabetical sorting of command lists.** Do not suggest alphabetically sorting command lists in documentation tables. Commands are grouped by function (init → hooks → enforcement → workflow), which is more useful than alphabetical order.
 
-## 7. Error Handling & Logging Conventions
+## 7. Tone & Voice (The Solo Dev Litmus Test)
+
+Every feature, doc, and CLI output must pass this test: **Can a developer working on a side project at 2 AM install this, run it, and feel like they got a superpower in under 60 seconds?**
+
+- Use hacker language, not corporate language. "Stop repeating yourself to your AI" — not "Synergistic Governance Framework."
+- Enterprise features (SARIF, federated memory, RBAC) are always opt-in. The default path is zero-config.
+- CLI output should feel like instant gratification, not a compliance report.
+- If a sentence sounds like it belongs in a SOC 2 audit deck, rewrite it so it sounds like a README.
+
+## 8. Error Handling & Logging Conventions
 
 - `log.error()` calls MUST use `'Totem Error'` as the tag — this is styleguide rule 21. Do not suggest changing it to the command-specific `TAG` constant.
 - `log.info()`, `log.success()`, `log.warn()`, `log.dim()` use the command-specific `TAG` constant (e.g., `'Audit'`, `'Shield'`, `'Triage'`).
