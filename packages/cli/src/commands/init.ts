@@ -1071,6 +1071,28 @@ export async function initCommand(): Promise<void> {
       }
     }
 
+    // --- Auto-ingest cursor rules (ADR-048) ---
+    const { scanCursorInstructions } = await import('@mmnto/totem');
+    const cursorInstructions = scanCursorInstructions(cwd);
+    if (cursorInstructions.length > 0) {
+      const answer = await rl.question(
+        `\nFound ${cursorInstructions.length} existing AI rule(s) (.cursorrules / .mdc). Compile into deterministic invariants? (Y/n): `,
+      );
+      if (answer.trim().toLowerCase() !== 'n' && answer.trim().toLowerCase() !== 'no') {
+        try {
+          const { compileCommand } = await import('./compile.js');
+          await compileCommand({ fromCursor: true });
+          summary.push({
+            file: '.totem/compiled-rules.json',
+            action: `Compiled ${cursorInstructions.length} cursor rule(s) into invariants`,
+          });
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : String(err);
+          console.error(`[Totem] Could not compile cursor rules: ${detail}`);
+        }
+      }
+    }
+
     // --- Print summary ---
     if (summary.length > 0) {
       console.error(`\n${brand('--- Totem Init Summary ---')}`);
