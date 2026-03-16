@@ -16,7 +16,7 @@ import { installEnforcementHooks, installPostMergeHook } from './install-hooks.j
 // Bump REFLEX_VERSION whenever the AI_PROMPT_BLOCK content changes materially.
 // This allows `totem init` to detect stale blocks and offer upgrades.
 
-export const REFLEX_VERSION = 2;
+export const REFLEX_VERSION = 3;
 const REFLEX_START = '<!-- totem:reflexes:start -->';
 const REFLEX_END = '<!-- totem:reflexes:end -->';
 const REFLEX_VERSION_RE = /<!-- totem:reflexes:version:(\d+) -->/;
@@ -43,7 +43,7 @@ Lessons are automatically re-indexed in the background after each \`add_lesson\`
 
 ### Memory Classification
 When deciding where to store information or rules, use this decision tree:
-- If forgetting this causes a mistake on an UNRELATED task (Core Safety): Store in your root agent memory file (e.g., CLAUDE.md or .gemini/gemini.md).
+- If forgetting this causes a mistake on an UNRELATED task (Core Safety): Store in your root agent memory file (e.g., CLAUDE.md or GEMINI.md).
 - If it's a stable, project-wide workflow rule: Store in project config (e.g., CLAUDE.md).
 - If it's a stable syntax/style pattern: Store in the project's styleguide or linter rules.
 - If it's domain knowledge, an edge case, or a past trap: You MUST use the Totem \`add_lesson\` tool to anchor it into the project's LanceDB.
@@ -53,7 +53,7 @@ When deciding where to store information or rules, use this decision tree:
 Totem provides CLI commands that map to your development lifecycle. Use them at these moments:
 1. **Start of Session:** Run \`totem briefing\` to get oriented with current branch state, open PRs, and recent context. Run \`totem triage\` if you need to pick a new task.
 2. **Before Implementation:** Run \`totem spec <issue-url-or-topic>\` to generate an architectural plan and review related context before writing code.
-3. **Before PR/Push:** Run \`totem shield\` to analyze uncommitted changes against project knowledge — catches architectural drift and pattern violations.
+3. **Before Push:** Run \`totem lint\` for a fast compiled-rules check (zero LLM, ~2s). **Before PR:** Run \`totem shield\` for a full AI-powered code review against project knowledge (~18s).
 4. **End of Session:** Run \`totem handoff\` to generate a snapshot for the next agent session with current progress and open threads.
 
 ### Cloud / PR Review Bots
@@ -567,7 +567,7 @@ export async function generateConfig(
       embeddingBlock = `  embedding: { provider: 'ollama', model: 'nomic-embed-text', baseUrl: 'http://localhost:11434' },`;
       break;
     case 'gemini':
-      embeddingBlock = `  embedding: { provider: 'gemini', model: 'text-embedding-004' },`;
+      embeddingBlock = `  embedding: { provider: 'gemini', model: 'gemini-embedding-2-preview', dimensions: 768 },`;
       break;
     case 'none':
       embeddingBlock = `  // embedding: { provider: 'openai', model: 'text-embedding-3-small' },\n  // Lite tier — set OPENAI_API_KEY and re-run \`totem init\` to enable sync/search.`;
