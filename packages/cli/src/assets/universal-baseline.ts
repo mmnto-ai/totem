@@ -130,8 +130,178 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
     body: 'catch (e) {} swallows the error silently. The operation appears to succeed but downstream code operates on undefined or stale data. At minimum, log the error. Better: re-throw or return a typed error result.',
   },
   {
-    heading: 'Error messages must include recovery actions',
+    heading: 'Dev tooling modifying execution paths incorrectly',
+    tags: ['dx', 'tooling', 'universal'],
+    body: 'Development overlays or debuggers that inject elements or modify the component tree must defer execution until after initial hydration. Injecting UI too early causes position-dependent hooks (like useId) to generate inconsistent values between server and client. Source: vercel/next.js#75199.',
+  },
+  {
+    heading: 'Environment-specific URL handling leaking across boundaries',
+    tags: ['config', 'url', 'universal'],
+    body: 'Local development often uses specialized protocols (e.g., file:// or turbopack://) that do not exist in production environments. Code handling source maps, static assets, or metadata must normalize these URIs at the environment boundary to prevent broken paths when deployed. Source: vercel/next.js#71489.',
+  },
+  {
+    heading: 'Regex/Matcher divergence between dev and prod runtimes',
+    tags: ['routing', 'regex', 'universal'],
+    body: 'Middleware matchers or routing regular expressions that rely on environment-specific syntax or Node.js features may fail silently when compiled for Edge or V8 runtimes in production. Always test complex matchers in the target execution environment. Source: vercel/next.js#69602.',
+  },
+  {
+    heading: 'Swallowing critical errors during SSR',
+    tags: ['ssr', 'error-handling', 'universal'],
+    body: 'Hydration errors or SSR mismatches should not be caught and silenced by generic error boundaries without explicit logging. Masking these errors during development leads to unstable UI state and broken interactive elements in production. Source: vercel/next.js#44857.',
+  },
+  {
+    heading: 'Compiler transforms breaking CSS-in-JS injection',
+    tags: ['compiler', 'css', 'universal'],
+    body: 'Custom AST transformations or compiler plugins (like SWC/Babel) can inadvertently strip or reorder the styled-component injection tags required by CSS-in-JS libraries. Always ensure CSS extraction logic is preserved during AST compilation. Source: vercel/next.js#34687.',
+  },
+  {
+    heading: 'Internal modules establishing cyclic dependencies on ambient type declarations',
+    tags: ['typescript', 'types', 'universal'],
+    body: 'Internal framework code should never import directly from auto-generated ambient type declaration files (e.g., next-env.d.ts). This creates a cyclic dependency where the framework relies on the user\'s generated types to compile. Source: vercel/next.js#34394.',
+  },
+  {
+    heading: 'Context flags misaligned during edge compilation',
+    tags: ['compiler', 'edge', 'universal'],
+    body: 'When compiling code for Edge runtimes, standard environmental flags (like isServer or isClient) must be explicitly handled. Assuming Edge is purely "client" or purely "server" leads to incorrectly stripping required polyfills or exposing sensitive logic. Source: vercel/next.js#30242.',
+  },
+  {
+    heading: 'FS watchers failing to handle atomic file renames',
+    tags: ['fs', 'tooling', 'universal'],
+    body: 'When building file-system watchers, do not assume files are only "created" or "modified". Editors and OS operations frequently use atomic renames (moving a temp file over an existing file). Failure to handle the "rename" event leads to stale caches and missed updates. Source: vercel/next.js#10351.',
+  },
+  {
+    heading: 'Style injection breaking modular chunk loading',
+    tags: ['css', 'bundler', 'universal'],
+    body: 'Injecting global CSS script tags directly into granular, dynamically loaded JavaScript chunks can cause race conditions or duplicate style definitions. CSS should be extracted and managed by the bundler\'s dedicated style loader, not inline scripts. Source: vercel/next.js#9306.',
+  },
+  {
+    heading: 'Hardcoding third-party SDK dependencies into core logic',
+    tags: ['architecture', 'coupling', 'universal'],
+    body: 'Core routing or state management logic should never directly import third-party SDKs (e.g., Auth0, Stripe). Abstract these behind provider interfaces. Hardcoding them prevents replacing the vendor and breaks the application if the SDK is unavailable. Source: vercel/next.js#8802.',
+  },
+  {
+    heading: 'Leaking proprietary rendering logic into generic component trees',
+    tags: ['architecture', 'react', 'universal'],
+    body: 'Framework-specific rendering paradigms (like AMP or specific SSR wrappers) should not leak down into generic, reusable UI components. Passing framework-specific props deeply into the tree prevents those components from being used in other contexts. Source: vercel/next.js#7669.',
+  },
+  {
+    heading: 'Hook rules violation inside memoization callbacks',
+    tags: ['react', 'hooks', 'universal'],
+    body: 'Never call a React Hook (useContext, useState) inside the callback function passed to useMemo, useCallback, or React.memo. This breaks the fundamental rule of hooks (call order) because the memoized function is executed unpredictably. Source: facebook/react#14608.',
+  },
+  {
+    heading: 'Race conditions during batched state updates',
+    tags: ['react', 'state', 'universal'],
+    body: 'When deriving state from props (e.g., getDerivedStateFromProps), assume that multiple state updates might be batched together. Relying on the intermediate state synchronously before the batch completes will result in torn UI or dropped updates. Source: facebook/react#12408.',
+  },
+  {
+    heading: 'Swallowing nested errors across rendering boundaries',
+    tags: ['react', 'error-handling', 'universal'],
+    body: 'When building error boundaries or guarded execution callbacks, ensure that an error thrown in a deeply nested renderer (like a portal or a custom renderer) correctly bubbles up to the primary boundary. Swallowing cross-boundary errors masks fatal crashes. Source: facebook/react#10270.',
+  },
+  {
+    heading: 'Monolithic structures containing untestable generic utilities',
+    tags: ['architecture', 'testing', 'universal'],
+    body: 'Do not hide generic, pure utility functions (e.g., string formatting, math calculations) inside massive, stateful class components or UI modules. Extract them into separate files so they can be unit tested in isolation without mocking the DOM. Source: facebook/react#9658.',
+  },
+  {
+    heading: 'Insufficient context in error logging for dynamically typed inputs',
     tags: ['error-handling', 'dx', 'universal'],
-    body: 'A raw stack trace tells the developer what broke. A good error tells them how to fix it. Every user-facing error should include a concrete recovery action ("Run totem sync --full to rebuild the index").',
+    body: 'When throwing errors about invalid inputs (e.g., "Expected a string, got object"), always include a stack trace or the specific key/component name that caused the error. Generic type errors without context are impossible to debug in large trees. Source: facebook/react#8495.',
+  },
+  {
+    heading: 'Silent failures in static lifecycle methods',
+    tags: ['react', 'error-handling', 'universal'],
+    body: 'Errors thrown inside static lifecycle methods (like getDerivedStateFromProps) can sometimes fail silently if the framework does not explicitly wrap them in a logging boundary, as they execute outside the standard render flow. Always log exceptions at the boundary. Source: facebook/react#15797.',
+  },
+  {
+    heading: 'Serialization failures when passing complex objects to devtools',
+    tags: ['tooling', 'serialization', 'universal'],
+    body: 'When exposing internal state to DevTools or logger overlays, ensure the payload is serializable. Passing complex objects with circular references, functions, or Symbols will crash the DevTools bridge. Use useDebugValue with a formatter. Source: facebook/react#18070.',
+  },
+  {
+    heading: 'Bypassing standard synthetic event systems for performance',
+    tags: ['react', 'events', 'universal'],
+    body: 'Bypassing the framework\'s synthetic event system (e.g., attaching raw DOM event listeners) to gain performance often breaks event pooling, batching, and cross-platform compatibility (like React Native). Only bypass the event system when absolutely necessary and document the trade-off. Source: facebook/react#23232.',
+  },
+  {
+    heading: 'Compiler transforms invalidating internal context tracking',
+    tags: ['compiler', 'react', 'universal'],
+    body: 'When writing AST transforms or compiler optimizations, do not rewrite or reorder calls to `useContext` or other hooks that rely on internal fiber state tracking. Moving a hook call outside of its expected execution context breaks the React runtime. Source: facebook/react#30612.',
+  },
+  {
+    heading: 'Memory leaks caused by calling setState on unmounted components',
+    tags: ['react', 'memory', 'universal'],
+    body: 'Always cancel active asynchronous requests (fetch, setTimeout) when a component unmounts. Calling `setState` after the component is destroyed causes memory leaks and React warnings. Use AbortController or a mounted flag ref. Source: facebook/react#12531.',
+  },
+  {
+    heading: 'Leaking heavy development-only assertions into production bundles',
+    tags: ['performance', 'bundler', 'universal'],
+    body: 'Costly validation logic, deep object comparisons, and verbose error strings must be wrapped in `if (__DEV__)` or `if (process.env.NODE_ENV !== "production")` blocks so the bundler can strip them out via Dead Code Elimination. Source: facebook/react#10316.',
+  },
+  {
+    heading: 'Assuming `setState` is synchronous',
+    tags: ['react', 'state', 'universal'],
+    body: 'Never read `this.state` or a state variable immediately after calling `setState`. State updates are batched and asynchronous. If the next state depends on the previous state, use the updater function form: `setState((prev) => prev + 1)`. Source: facebook/react#9329.',
+  },
+  {
+    heading: 'Evaluating defaultProps before lazy component resolution',
+    tags: ['react', 'lazy', 'universal'],
+    body: 'When using lazy loading or dynamic imports, do not attempt to merge or evaluate `defaultProps` before the underlying module has fully resolved. This causes synchronous crashes. Defer prop resolution until the render phase. Source: facebook/react#14112.',
+  },
+  {
+    heading: 'Connection pooling leaks in underlying HTTP clients',
+    tags: ['database', 'network', 'universal'],
+    body: 'When initializing database clients or ORMs (like Prisma), ensure the underlying HTTP client (e.g., undici or node-fetch) has strict timeouts and connection pool limits. Infinite keep-alive connections will exhaust server sockets under load. Source: prisma/prisma#8831.',
+  },
+  {
+    heading: 'Type loss across SQL aggregate boundaries',
+    tags: ['database', 'typescript', 'universal'],
+    body: 'When executing raw SQL or aggregate functions (`count`, `sum`) in a type-safe ORM, ensure the return type is explicitly cast or parsed. SQL drivers often return aggregates as strings (e.g., "10" instead of 10) to prevent precision loss, breaking TS assumptions. Source: drizzle-team/drizzle-orm#1487.',
+  },
+  {
+    heading: 'Lateral joins breaking query builder schema resolution',
+    tags: ['database', 'sql', 'universal'],
+    body: 'Advanced SQL features like `LATERAL` joins introduce dynamic scoping where subqueries reference columns from preceding tables. Query builders must correctly resolve these scope chains, or they will generate invalid SQL or lose type safety. Source: drizzle-team/drizzle-orm#1079.',
+  },
+  {
+    heading: 'Driver-specific adapters leaking into core query logic',
+    tags: ['database', 'architecture', 'universal'],
+    body: 'Keep SQL query generation strictly separated from driver-specific execution (e.g., Postgres vs MySQL vs SQLite). Passing driver connection objects deep into the query builder tightly couples the ORM to a specific database vendor. Source: drizzle-team/drizzle-orm#5222.',
+  },
+  {
+    heading: 'Desync between .env templates and validation schemas',
+    tags: ['config', 'env', 'universal'],
+    body: 'If you maintain a `.env.example` file and a Zod schema for environment variables, they must be kept in perfect sync. Adding a variable to one without the other causes either failing builds or confusing onboarding experiences. Source: t3-oss/create-t3-app#430.',
+  },
+  {
+    heading: 'Incomplete database lifecycles in scaffolding templates',
+    tags: ['database', 'tooling', 'universal'],
+    body: 'When providing scripts to setup a project, ensure the database lifecycle is complete: generation, migration, and seeding. Providing a `db:generate` script without a `db:migrate` script leaves the developer in a broken state upon initial launch. Source: t3-oss/create-t3-app#1893.',
+  },
+  {
+    heading: 'Side-effect imports executing out of order due to lack of sorting',
+    tags: ['javascript', 'imports', 'universal'],
+    body: 'If modules rely on side-effects (e.g., polyfills, global CSS, or environment initializers), the import order is critical. Use an automated tool (like Prettier plugin or ESLint) to deterministically sort imports to prevent fragile execution orders. Source: t3-oss/create-t3-app#1392.',
+  },
+  {
+    heading: 'Hardcoded component logic inside top-level layout files',
+    tags: ['architecture', 'react', 'universal'],
+    body: 'Root `_app.tsx` or `layout.tsx` files should be as thin as possible, containing only context providers and structure. Hardcoding complex UI logic (like splash screens or modals) directly in the layout makes it impossible to reuse or test. Extract to components. Source: t3-oss/create-t3-app#178.',
+  },
+  {
+    heading: 'Scaffolding scripts failing to respect existing .git states',
+    tags: ['tooling', 'git', 'universal'],
+    body: 'CLI tools that generate projects (like `create-t3-app` or `totem init`) must check if a `.git` directory already exists before attempting to run `git init`. Blindly initializing git can corrupt an existing repository or submodule structure. Source: t3-oss/create-t3-app#4.',
+  },
+  {
+    heading: 'Specificity overrides breaking AST/string serialization',
+    tags: ['css', 'compiler', 'universal'],
+    body: 'When parsing or generating CSS (e.g., adding `!important`), ensure the AST formatter correctly handles the spacing and placement of the token. Appending `!important` without respecting the original declaration structure leads to malformed CSS strings. Source: tailwindlabs/tailwindcss#14611.',
+  },
+  {
+    heading: 'Implicit ordering dependencies in CSS cascade generation',
+    tags: ['css', 'architecture', 'universal'],
+    body: 'When generating utility classes (like Tailwind), the final output order determines the CSS cascade specificity. Do not rely on the implicit order of object keys in JavaScript. Use explicit directives (`@layer`, `@tailwind`) to guarantee the cascade order. Source: tailwindlabs/tailwindcss#88.',
   },
 ];
