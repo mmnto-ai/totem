@@ -1,3 +1,13 @@
+// Error hierarchy
+export type { TotemErrorCode } from './errors.js';
+export {
+  TotemCompileError,
+  TotemConfigError,
+  TotemDatabaseError,
+  TotemError,
+  TotemParseError,
+} from './errors.js';
+
 // Config schemas
 export type {
   ChunkStrategy,

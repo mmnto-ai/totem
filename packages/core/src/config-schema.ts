@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { TotemConfigError } from './errors.js';
+
 /**
  * Zod schema for totem.config.ts — lives at the root of consuming projects.
  */
@@ -201,10 +203,9 @@ export function getConfigTier(config: TotemConfig): ConfigTier {
  */
 export function requireEmbedding(config: TotemConfig): EmbeddingProvider {
   if (!config.embedding) {
-    throw new Error(
-      `[Totem Error] No embedding provider configured.\n` +
-        `This command requires embeddings (Lite tier does not support it).\n` +
-        `Set OPENAI_API_KEY or GEMINI_API_KEY in your .env and re-run \`totem init\`, or add an 'embedding' block to totem.config.ts.`,
+    throw new TotemConfigError(
+      'No embedding provider configured. This command requires embeddings (Lite tier does not support it).',
+      "Set OPENAI_API_KEY or GEMINI_API_KEY in your .env and re-run 'totem init'.",
     );
   }
   return config.embedding;

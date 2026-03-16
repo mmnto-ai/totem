@@ -383,8 +383,14 @@ describe('requireEmbedding', () => {
     expect(() => requireEmbedding(BASE_CONFIG)).toThrow('Lite tier');
   });
 
-  it('error message mentions totem init', () => {
-    expect(() => requireEmbedding(BASE_CONFIG)).toThrow('totem init');
+  it('error recovery hint mentions totem init', () => {
+    try {
+      requireEmbedding(BASE_CONFIG);
+    } catch (err) {
+      expect((err as { recoveryHint?: string }).recoveryHint).toContain('totem init');
+      return;
+    }
+    throw new Error('Expected requireEmbedding to throw');
   });
 });
 
