@@ -39,6 +39,14 @@ You are a deterministic rule compiler. Your job is to read a single natural-lang
   - **By package/directory:** \`["packages/mcp/**/*.ts"]\` — for rules about MCP-specific patterns in a monorepo.
   - **By exclusion:** \`["packages/cli/**/*.ts", "!**/*.test.ts"]\` — exclude test files that legitimately use the flagged pattern.
   - **Infer scope from context:** If a lesson mentions "MCP tool returns", "CLI output", "LanceDB filters", or a specific package, scope to that package. Only omit \`fileGlobs\` if the rule genuinely applies to ALL files (e.g., universal TypeScript style rules).
+  - **CRITICAL — Supported glob syntax only:**
+    - \`*.ext\` — match extension anywhere
+    - \`dir/**/*.ext\` — directory + recursive + extension
+    - \`dir/**\` — everything under directory
+    - \`dir/*.ext\` — direct children only
+    - \`!pattern\` — negation prefix
+    - **DO NOT use** brace expansion \`{a,b}\`, nested globstars \`**/dir/**\`, or regex-style patterns.
+    - **DO NOT use** \`**/*.{ts,js}\`. Instead use separate entries: \`["**/*.ts", "**/*.js"]\`.
 
 ## Output Schema
 \`\`\`json
@@ -86,6 +94,31 @@ Output: {"compilable": true, "pattern": "text:\\\\s*(?!formatXmlResponse)\\\\b\\
 Lesson: "Use @clack/prompts instead of inquirer for CLI interactions"
 Output: {"compilable": true, "pattern": "import.*from\\\\s+['\"]inquirer['\"]", "message": "Use @clack/prompts instead of inquirer", "fileGlobs": ["packages/cli/**/*.ts"]}
 `;
+
+// ─── Glob sanitization ─────────────────────────────
+
+/**
+ * Expand brace patterns and strip unsupported glob syntax.
+ * e.g., "**\/*.{ts,js}" → ["**\/*.ts", "**\/*.js"]
+ */
+function sanitizeFileGlobs(globs: string[]): string[] {
+  const result: string[] = [];
+  for (const glob of globs) {
+    // Expand brace patterns: **/*.{ts,js} → **/*.ts, **/*.js
+    const braceMatch = /^(.*)\{([^}]+)\}(.*)$/.exec(glob);
+    if (braceMatch) {
+      const prefix = braceMatch[1]!;
+      const alternatives = braceMatch[2]!.split(',').map((s) => s.trim());
+      const suffix = braceMatch[3]!;
+      for (const alt of alternatives) {
+        result.push(prefix + alt + suffix);
+      }
+      continue;
+    }
+    result.push(glob);
+  }
+  return result;
+}
 
 // ─── Main command ───────────────────────────────────
 
@@ -228,6 +261,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
 
         const now = new Date().toISOString();
         const existing = existingByHash.get(lesson.hash);
+        const sanitizedGlobs = parsed.fileGlobs ? sanitizeFileGlobs(parsed.fileGlobs) : undefined;
         newRules.push({
           lessonHash: lesson.hash,
           lessonHeading: lesson.heading,
@@ -236,9 +270,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
           engine: 'regex',
           compiledAt: now,
           createdAt: existing?.createdAt ?? now,
-          ...(parsed.fileGlobs && parsed.fileGlobs.length > 0
-            ? { fileGlobs: parsed.fileGlobs }
-            : {}),
+          ...(sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {}),
         });
         compiled++;
         log.success(TAG, `[${lesson.heading}] Compiled: /${parsed.pattern}/`); // totem-ignore
