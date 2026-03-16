@@ -139,7 +139,6 @@ export function registerAddLesson(server: McpServer): void {
 
         // Await sync so the LLM gets definitive success/failure confirmation.
         // Concurrent callers share the same sync promise to prevent races.
-        let syncMessage: string;
         const isJoining = activeSyncPromise !== null;
         if (!activeSyncPromise) {
           activeSyncPromise = runSync(projectRoot).finally(() => {
@@ -149,7 +148,6 @@ export function registerAddLesson(server: McpServer): void {
         const { success, output } = await activeSyncPromise;
 
         if (!isJoining) {
-          // Only reconnect once per sync, not for joined callers
           try {
             await reconnectStore();
           } catch {
@@ -157,7 +155,7 @@ export function registerAddLesson(server: McpServer): void {
           }
         }
 
-        syncMessage = success
+        const syncMessage = success
           ? `Sync completed successfully. ${output.trim()}`
           : `Sync failed: ${output.trim()}`;
 
