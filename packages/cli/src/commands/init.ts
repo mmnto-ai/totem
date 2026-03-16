@@ -1088,7 +1088,7 @@ export async function initCommand(): Promise<void> {
           });
         } catch (err) {
           const detail = err instanceof Error ? err.message : String(err);
-          log.warn('Init', `Could not compile cursor rules: ${detail}`);
+          log.warn('Totem', `Could not compile cursor rules: ${detail}`);
         }
       }
     }
