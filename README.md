@@ -107,7 +107,7 @@ If you're a solo dev or small team using multiple AI agents (Cursor + Claude Cod
 
 - Lessons learned in one agent session are available to all agents via MCP.
 - Rules compiled from Cursor instructions are enforced in Claude Code's pre-push hook.
-- Share knowledge and lessons between local repositories using `totem link` (#612).
+- Share knowledge and lessons between local repositories using `totem link` (#614).
 - `totem stats` shows your team (or your boss) exactly how many violations were prevented.
 
 Stop repeating "no, use Zod here" to every agent in every session. Teach Totem once. It remembers forever.
