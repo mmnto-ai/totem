@@ -31,7 +31,7 @@ This phase delivered seamless cross-platform onboarding, automated AI tool confi
   - **Tool Automation:** Auto-configured AI tools with JetBrains Junie and Copilot support (#448).
   - **CLI Experience:** Delivered cross-platform installers, versioned reflex upgrade paths, and premium CLI UI polish.
 - **Host Integration:**
-  - **Seamless Hooks:** Agent hooks for Claude Code, Gemini, and Junie (#464). Automatic enforcement under research (#520).
+  - **Seamless Hooks:** Agent hooks for Claude Code, , Gemini, and Junie (#464).
   - **Baseline Intelligence:** Universal baseline lessons injected with harder vector DB reflexes.
   - **Enforcement:** Involuntary enforcement strategy under research (#520).
 - [ ] **#129 Epic: Interactive CLI Tutorial:** Build an animated, interactive CLI tutorial (`totem tutorial`). This allows users to pause the walkthrough, ask the LLM contextual questions, and resume seamlessly.
@@ -44,16 +44,16 @@ This phase delivered seamless cross-platform onboarding, automated AI tool confi
 This phase fortified the core architecture, delivering native orchestration, zero-LLM linting, and rigorous security measures.
 
 - **AST & Orchestration:**
-  - **AST Governance:** Universal Tree-sitter parsing and AST gating for zero-LLM linting.
+  - **AST Governance:** Universal Tree-sitter parsing and AST gating for zero-LLM linting. Shared execution logic unifies the underlying rule runner for both linting and AI shield gates (#566).
   - **Graceful Degradation:** Cross-provider LLM routing with SDK-to-CLI and Ollama fallbacks (#516, #517).
   - **Provider Coverage:** Supported Cloud Providers (Gemini, Anthropic, OpenAI) and Local Providers (Ollama).
 - **Data Safety & Memory:**
-  - **Transactions & Sync:** Saga-based document rollbacks and automated sync with dual-read migrations (#428).
+  - **Transactions & Sync:** Saga-based document rollbacks, auto-healing DB version recovery (#500, #574), and automated sync with dual-read migrations (#428).
   - **Integrity & State:** Air-gapped zero-telemetry enforced (#474), alongside index health checks at startup (#438).
   - **Portability:** Zero-LLM session snapshots via `totem handoff --lite` and cross-model export support.
 - **Security & DX:**
   - **Adversarial Hardening:** Adversarial ingestion scrubbing, extraction hardening, and suspicious lesson detection.
-  - **Git Enforcements:** Native Git hook enforcement with monorepo and Bun support.
+  - **Git Enforcements:** Native Git hook enforcement with monorepo and Bun support. Enhanced by shield severity levels (error vs warning) for strict gating (ADR-028, #498, #576).
   - **Installation Automation:** Auto-installation of `totem hooks` and CI drift gating foundations.
 
 ## Phase 3: Workflow Expansion (Power User Tools)
@@ -83,7 +83,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [ ] **#432 Dynamic CLI Imports:** Convert static imports to dynamic `await import()` in command files to optimize startup performance.
   - **Extraction & Authority:**
     - [ ] **#430 Document Authority Modes:** Implement generated vs. assisted authority modes to protect human-curated strategic decisions.
-    - [ ] **#435 PR Lesson Extraction:** Auto-extract lessons from PR review comments using `totem extract --from-pr`.
+    - [ ] **#435 PR Lesson Extraction:** Auto-extract lessons from PR review comments using `totem extract --from-pr`. Extracted lessons are strictly validated via Zod before disk writes (#565).
 - **Shift-Left & Advanced Intelligence:**
   - **Governance & Verification:**
     - [ ] **#195 / #196 Epic: Shift-Left AI Verification:** Define model compatibility and auditing strategy to systematically verify models.
@@ -93,6 +93,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - **Rules & Standards:**
     - [x] **#387 SARIF Output:** Standardized output for CI/CD integration, enhanced with organizational trap ledgers and linting support (#418, #561).
     - [x] **External Rule Ingestion:** Built support to automatically ingest `.cursorrules` and `.mdc` files into compiled rules (#558).
+    - **Rule Invariant Audit:** Categorized over 130 compiled rules by invariant, style, and security to establish strict baseline severity (#559, #577).
     - [ ] **#385 Rule Exports:** Export compiled rules to Semgrep YAML and ESLint configurations. Deferred until core governance (#314) is finalized.
     - [ ] **#433 Lesson Packs Prototype:** Mine OSS projects as a proof of concept for distributable rule sets.
   - **Data Architecture & Agents:**
@@ -121,7 +122,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [ ] **#42 Universal AI DevEx:** Evolve `totem init` to inject "Best Practices" guardrails like Anti-Refactor and Test Coverage triggers.
 - **Governance & Licensing:**
   - **Policy & Licensing:**
-    - [ ] **#34 Configurable Governance:** Let enterprise teams configure AI review loops (`auditLoopLimit`, `shieldSeverityThreshold`).
+    - [ ] **#34 Configurable Governance:** Let enterprise teams configure AI review loops (`auditLoopLimit`). Shield severity thresholds (error vs warning) are now established for granular control (#498, #576).
     - [ ] **#198 RFC: Open Core & Licensing:** Evaluate MIT vs. Fair Source licensing strategy (resolved to Apache 2.0).
     - [x] Chore: Relicense project from MIT to Apache 2.0.
   - **Security & Compliance:**

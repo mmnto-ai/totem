@@ -17,7 +17,7 @@ Totem is the local-first governance compiler for AI agents — **deterministic, 
 - **Built for Enterprise Scale:**
   - **Performance:** Ingestion streams chunks in batches for a flat memory footprint.
   - **Relevance:** Drift Detection keeps memory self-cleaning as code evolves.
-  - **Reliability:** Startup health checks automatically detect broken LanceStore indexes (#439). The system features graceful degradation, automatically falling back to local models or CLI orchestrators if cloud providers fail (#516, #517).
+  - **Reliability:** Startup health checks automatically detect broken LanceStore indexes (#439). Auto-healing capabilities seamlessly recover database version and dimension mismatches (#500, #574). The system features graceful degradation, automatically falling back to local models or CLI orchestrators if cloud providers fail (#516, #517).
 
 ## Philosophy: The Unix Approach to AI
 
@@ -117,10 +117,13 @@ Runs compiled rules against your diff. Zero LLM, ~2 seconds, no API keys needed.
 
 - **Execution:** Executes compiled AST/regex rules scoped to modified file boundaries (#549). Automatically ingests `.cursorrules` and `.mdc` files (#558).
 - **Reporting:** Outputs SARIF 2.1.0 or JSON formats for GitHub Advanced Security integration (#561, #568).
-- **Observability:** Tracks metrics for 98+ categorized rules (invariant, style, security) using the Trap Ledger (#544, #559).
+- **Observability:** Tracks metrics for 137+ categorized rules (invariant, style, security) using the Trap Ledger (#559, #577).
 
 **`totem shield`**
 AI-powered code review. Queries LanceDB for context, sends diff + knowledge to an LLM for thorough architectural analysis. ~18 seconds. Requires API keys. Use before opening a PR.
+
+- **Enforcement:** Supports strict severity levels (error vs. warning) to give teams granular control over PR blocking (#498, #576).
+- **Integration:** Hooks into Claude Code, Gemini CLI, Copilot, and Junie.
 
 ## Core Command Index
 
@@ -133,7 +136,7 @@ Totem ships with native CLI commands that orchestrate your entire shift-left wor
   - **Validation:** `shield` (#521), `lint` (#549), `test` (compiled rule harness) (#422)
   - **Enforcement:** `spec`, `hooks` (#310)
 - **Memory Management:**
-  - **Extraction:** `extract` (supports multi-repo inputs), `add-lesson` (#532)
+  - **Extraction:** `extract` (supports multi-repo inputs and strict Zod validation) (#514, #565), `add-lesson` (#532)
   - **Processing:** `compile` (ingests `.cursorrules` / `.mdc` files) (#558), `docs`
 - **Workflow:**
   - **Transitions:** `handoff`, `bridge`
