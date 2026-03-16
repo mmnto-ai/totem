@@ -76,19 +76,15 @@ export class LanceStore {
   /** Check if the stored vector dimensions differ from the current embedder. */
   private async hasDimensionMismatch(): Promise<boolean> {
     if (!this.table) return false;
-    try {
-      const sample = await this.table.query().limit(1).toArray();
-      if (sample.length === 0) return false;
-      const row = sample[0] as Record<string, unknown>;
-      const vec = row['vector'];
-      if (Array.isArray(vec)) {
-        return vec.length !== this.embedder.dimensions;
-      }
-      return false;
-    } catch {
-      // Can't check — not a mismatch, might be empty or corrupted
-      return false;
+    // Let query errors bubble up to connect()'s catch block for auto-healing
+    const sample = await this.table.query().limit(1).toArray();
+    if (sample.length === 0) return false;
+    const row = sample[0] as Record<string, unknown>;
+    const vec = row['vector'];
+    if (Array.isArray(vec)) {
+      return vec.length !== this.embedder.dimensions;
     }
+    return false;
   }
 
   /** Detect errors that warrant auto-healing (nuke + rebuild). */
@@ -113,7 +109,7 @@ export class LanceStore {
     this.hasFtsIndex = false;
 
     try {
-      fs.rmSync(this.dbPath, { recursive: true, force: true });
+      await fs.promises.rm(this.dbPath, { recursive: true, force: true });
     } catch (err) {
       // OS-level file locks may prevent deletion — warn but don't crash
       const detail = err instanceof Error ? err.message : String(err);
