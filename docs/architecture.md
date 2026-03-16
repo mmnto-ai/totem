@@ -232,6 +232,26 @@ During `totem init`, users are offered an optional **Universal Baseline** — a 
 
 For secure collaboration in enterprise environments, proprietary project guidelines and sensitive orchestration instructions are isolated in a `.strategy/` directory. By securely initializing and managing `.strategy` as a private git submodule (#300, #321), teams ensure confidential workflows remain strictly access-controlled. It actively houses the deep research, north star, and architecture analysis documents without encumbering the distributable core codebase (#349).
 
+## Scope & Limitations
+
+Totem enforces **architectural invariants** — structural rules about what code patterns must or must not exist. It is important to understand what Totem does and does not do:
+
+**What Totem does:**
+
+- Blocks known-bad code patterns at the AST level (pre-commit, pre-push, CI)
+- Enforces structural boundaries ("never import from legacy auth module")
+- Detects violations of compiled `.cursorrules` and lesson-derived invariants
+- Generates SARIF telemetry for compliance dashboards
+
+**What Totem does NOT do:**
+
+- **Runtime analysis:** Totem cannot detect race conditions, memory leaks, or runtime state bugs. It operates on static source code, not execution traces.
+- **Cross-file taint analysis:** SQL injection or XSS that spans multiple files and requires data flow tracking is outside Totem's scope. Use DAST or SAST tools (Semgrep, Snyk) for these.
+- **Symbolic execution or formal verification:** `totem lint` is deterministic (regex/AST matching), not a formal prover. It does not "mathematically prove" code correctness.
+- **Probabilistic guarantees:** The vector search layer (LanceDB) uses fuzzy embeddings for _discovery_ (finding relevant rules). The _enforcement_ layer (Tree-sitter AST matching) is strictly deterministic. These are separate concerns — do not conflate them.
+
+Totem is a fast, deterministic pre-commit check that catches structural violations. It complements, not replaces, comprehensive security tooling.
+
 ## Phase 4 Vision: Federated Memory & Swarm Intelligence
 
 Because Totem treats memory as static files (`.totem/lessons.md`, `session-handoff.md`, `active_work.md`), we can unlock "Swarm Intelligence" across a team without inventing a complex peer-to-peer mesh network.
