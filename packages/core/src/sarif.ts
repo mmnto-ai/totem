@@ -35,6 +35,8 @@ export interface SarifResult {
   level: 'error' | 'warning' | 'note';
   message: { text: string };
   locations: SarifLocation[];
+  /** SARIF properties bag — Trap Ledger metadata */
+  properties?: Record<string, unknown>;
 }
 
 export interface SarifLocation {
@@ -94,6 +96,7 @@ export function buildSarifLog(
       properties: {
         engine: rule.engine,
         pattern: rule.pattern,
+        category: rule.category ?? 'architecture',
         ...(rule.fileGlobs ? { fileGlobs: rule.fileGlobs } : {}),
       },
     };
@@ -119,6 +122,12 @@ export function buildSarifLog(
           },
         },
       ],
+      properties: {
+        eventId: `${v.rule.lessonHash}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        ruleCategory: v.rule.category ?? 'architecture',
+        timestamp: new Date().toISOString(),
+        lessonHash: v.rule.lessonHash,
+      },
     };
   });
 
