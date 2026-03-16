@@ -876,17 +876,6 @@
       "severity": "error"
     },
     {
-      "lessonHash": "b2d2d79023432eb9",
-      "lessonHeading": "Always iterate through all regex matches (e.g.,",
-      "pattern": "\\.(match|exec)\\(",
-      "message": "Use matchAll() to iterate through all regex matches. Relying on match() or exec() can allow 'shadowing' attacks where a safe first match hides a malicious payload later in the string.",
-      "engine": "regex",
-      "compiledAt": "2026-03-12T10:29:36.148Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
-      "category": "architecture",
-      "severity": "error"
-    },
-    {
       "lessonHash": "5decef91ba5a7b52",
       "lessonHeading": "Include a space or delimiter when concatenating disjoint",
       "pattern": "(\\$\\{[^}]+\\}\\$\\{[^}]+\\}|\\.join\\(['\"]{2}\\))",
