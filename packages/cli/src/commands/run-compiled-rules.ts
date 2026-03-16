@@ -106,6 +106,10 @@ export async function runCompiledRules(
     );
   }
 
+  // Classify violations by severity (computed once, reused across all output formats)
+  const errors = violations.filter((v) => (v.rule.severity ?? 'error') === 'error');
+  const warnings = violations.filter((v) => (v.rule.severity ?? 'error') === 'warning');
+
   // Build output
   let output: string;
 
@@ -118,21 +122,18 @@ export async function runCompiledRules(
     const sarif = buildSarifLog(violations, rules, { version, commitHash });
     output = JSON.stringify(sarif, null, 2);
   } else if (format === 'json') {
-    const jsonErrors = violations.filter((v) => (v.rule.severity ?? 'error') === 'error');
     output = JSON.stringify(
       {
-        pass: jsonErrors.length === 0,
+        pass: errors.length === 0,
         rules: rules.length,
-        errors: jsonErrors.length,
-        warnings: violations.length - jsonErrors.length,
+        errors: errors.length,
+        warnings: warnings.length,
         violations,
       },
       null,
       2,
     );
   } else {
-    const errors = violations.filter((v) => (v.rule.severity ?? 'error') === 'error');
-    const warnings = violations.filter((v) => (v.rule.severity ?? 'error') === 'warning');
     const lines: string[] = [];
 
     if (errors.length === 0 && warnings.length === 0) {
@@ -170,6 +171,8 @@ export async function runCompiledRules(
         lines.push('### Warnings');
         for (const v of warnings) {
           lines.push(`- **${v.file}:${v.lineNumber}** — ${v.rule.message}`);
+          lines.push(`  Pattern: \`/${v.rule.pattern}/\``);
+          lines.push(`  Lesson: "${v.rule.lessonHeading}"`);
           lines.push(`  Line: \`${v.line.trim()}\``);
           lines.push('');
         }
@@ -180,9 +183,6 @@ export async function runCompiledRules(
 
   writeOutput(output, outPath);
   if (outPath) log.success(tag, `Written to ${outPath}`);
-
-  const errors = violations.filter((v) => (v.rule.severity ?? 'error') === 'error');
-  const warnings = violations.filter((v) => (v.rule.severity ?? 'error') === 'warning');
 
   if (errors.length > 0) {
     const verdictLabel = errorColor(bold('FAIL'));
