@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ContentType } from './config-schema.js';
-import { sanitize, sanitizeForIngestion } from './sanitize.js';
+import { maskSecrets, sanitize, sanitizeForIngestion } from './sanitize.js';
 
 // ─── Base sanitize() ────────────────────────────────
 
@@ -196,5 +196,51 @@ describe('sanitizeForIngestion', () => {
     expect(result).not.toContain('\u2066');
     expect(result).not.toContain('\u2069');
     expect(onWarn).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DLP Secret Masking
+// ---------------------------------------------------------------------------
+
+describe('maskSecrets', () => {
+  it('masks OpenAI API keys', () => {
+    expect(maskSecrets('key is sk-abc123def456ghi789jkl012mno')).toContain('[REDACTED]');
+  });
+
+  it('masks GitHub tokens', () => {
+    expect(maskSecrets('token ghp_abc123def456ghi789jkl012mno345')).toContain('[REDACTED]');
+  });
+
+  it('masks AWS access keys', () => {
+    expect(maskSecrets('AKIAIOSFODNN7EXAMPLE')).toContain('[REDACTED]');
+  });
+
+  it('masks npm tokens', () => {
+    expect(maskSecrets('npm_abcdefghijklmnopqrstu')).toContain('[REDACTED]');
+  });
+
+  it('masks Google API keys', () => {
+    expect(maskSecrets('AIzaSyD1234567890abcdefghijklmnopqrstuv')).toContain('[REDACTED]');
+  });
+
+  it('masks quoted secret assignments preserving key name', () => {
+    expect(maskSecrets('api_key = "sk_live_abc123def456ghi789"')).toBe('api_key = "[REDACTED]"');
+    expect(maskSecrets("password: 'supersecrettoken12345678'")).toBe("password: '[REDACTED]'");
+  });
+
+  it('masks unquoted secret assignments', () => {
+    expect(maskSecrets('api_key=sk_live_abc123def456ghi789')).toContain('[REDACTED]');
+    expect(maskSecrets('SECRET=myverylongsecrettokenvalue1234')).toContain('[REDACTED]');
+  });
+
+  it('preserves normal text', () => {
+    const text = 'This is a normal code comment about authentication.';
+    expect(maskSecrets(text)).toBe(text);
+  });
+
+  it('preserves short strings that look like keys', () => {
+    // Too short to be a real key
+    expect(maskSecrets('sk-short')).toBe('sk-short');
   });
 });
