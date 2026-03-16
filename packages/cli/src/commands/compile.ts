@@ -95,6 +95,7 @@ export interface CompileOptions {
   fresh?: boolean;
   force?: boolean;
   export?: boolean;
+  fromCursor?: boolean;
 }
 
 export async function compileCommand(options: CompileOptions): Promise<void> {
@@ -107,6 +108,28 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
   const rulesPath = path.join(totemDir, COMPILED_RULES_FILE);
 
   const lessons = readAllLessons(totemDir);
+
+  // Ingest cursor instructions if --from-cursor
+  if (options.fromCursor) {
+    const { scanCursorInstructions } = await import('@mmnto/totem');
+    const cursorInstructions = scanCursorInstructions(cwd);
+    if (cursorInstructions.length > 0) {
+      log.info(TAG, `Found ${cursorInstructions.length} Cursor instruction(s)`); // totem-ignore
+      for (const instr of cursorInstructions) {
+        const body = instr.body + (instr.globs ? `\n\nFile scope: ${instr.globs.join(', ')}` : '');
+        lessons.push({
+          index: lessons.length,
+          heading: `[cursor] ${instr.heading}`,
+          tags: ['cursor', 'ingested'],
+          body,
+          raw: `## Lesson — [cursor] ${instr.heading}\n\n**Tags:** cursor, ingested\n\n${body}`,
+          sourcePath: instr.source,
+        });
+      }
+    } else {
+      log.dim(TAG, 'No .cursorrules or .cursor/rules/*.mdc files found.');
+    }
+  }
 
   if (lessons.length === 0) {
     const err = new Error('No lessons found. Nothing to compile.');

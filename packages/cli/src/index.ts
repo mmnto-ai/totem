@@ -284,6 +284,7 @@ program
     '--export',
     'Export lessons as rules to AI assistant config files (uses exports from config)',
   )
+  .option('--from-cursor', 'Ingest .cursorrules and .cursor/rules/*.mdc files as lessons')
   .action(
     async (opts: {
       raw?: boolean;
@@ -292,6 +293,7 @@ program
       fresh?: boolean;
       force?: boolean;
       export?: boolean;
+      fromCursor?: boolean;
     }) => {
       try {
         const { compileCommand } = await import('./commands/compile.js');
