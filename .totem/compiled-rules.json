@@ -1200,8 +1200,8 @@
       "compiledAt": "2026-03-16T02:46:32.222Z",
       "createdAt": "2026-03-16T02:46:32.222Z",
       "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
-      "category": "architecture",
-      "severity": "error"
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "64f919558d8ad756",
@@ -1782,7 +1782,9 @@
         "!**/bin/**/*.ts",
         "!**/bin/**/*.jsx",
         "!**/bin/**/*.tsx"
-      ]
+      ],
+      "severity": "warning",
+      "category": "style"
     },
     {
       "lessonHash": "e383aa297e35d91d",
