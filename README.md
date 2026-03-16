@@ -1,84 +1,49 @@
 # Totem
 
+**Prove your AI-assisted code is safe. Ship faster.**
+
 > [!WARNING]
 > **Developer Preview / Early Alpha**
-> Totem is currently in early alpha. While Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete, we are still polishing the "Magic Onboarding" experience (interactive tutorials). If you encounter friction during `totem init`, please bear with us!
+> Totem is currently in early alpha. While Foundations, Phase 1 (Onboarding), and Phase 2 (Core Stability) are functionally complete, we are actively refining the onboarding experience. If you encounter friction during `totem init`, please bear with us!
 
-## Your AI team forgets. Totem remembers.
+You write `.cursorrules` in plain English. AI agents ignore them.
 
-**AI generates the code. You generate the rules.**
-Totem is the local-first governance compiler for AI agents — **deterministic, git-native, and trustworthy.**
+Totem is a Governance Compiler. It ingests your natural language rules and compiles them into lightning-fast, deterministic AST/Regex guardrails that block bad code _before_ it commits.
 
-## Why Totem?
+You get the ease of AI prompting with the zero-latency, zero-hallucination guarantee of Semgrep.
 
-- **Local-First & Git-Native:** Totem compiles an embedded LanceDB hybrid search (FTS + vector) index directly inside your project (#378). Review your AI's memory locally in your PRs instead of locking it in a cloud SaaS.
-- **The Reflex Engine:** Totem gives your AI reflexes by auto-injecting behavioral triggers and Defensive Context Management Reflexes into system prompts. This forces them to autonomously document traps, query architecture, and issue warnings before writing code.
-- **Multi-Agent Orchestration:** Use Claude to write code, Gemini to review PRs, and a local DeepSeek model for fast checks. Totem acts as the "Shared Brain" orchestrator, supporting role-based access control (RBAC) across your entire AI org chart.
-- **Built for Enterprise Scale:**
-  - **Performance:** Ingestion streams chunks in batches for a flat memory footprint.
-  - **Relevance:** Drift Detection keeps memory self-cleaning as code evolves.
-  - **Reliability:** Startup health checks automatically detect broken LanceStore indexes (#439). Auto-healing capabilities seamlessly recover database version and dimension mismatches (#500, #574). The system features graceful degradation, automatically falling back to local models or CLI orchestrators if cloud providers fail (#516, #517).
+## The 10-Second Workflow
 
-## Philosophy: The Unix Approach to AI
+Write code with your AI. Then, let Totem prove it's safe.
 
-The tech industry is currently trying to build massive, monolithic "AI Developer Platforms" — web apps where you type a prompt and a black-box swarm of cloud agents writes the code for you.
+1. **Verify:** Run `npx @mmnto/cli lint` (or let the git hook do it automatically). Zero LLM, ~2 seconds.
+2. **Pass:** `✓ PASS — 137 rules, 0 violations.` Push with confidence.
+3. **Prove:** Run `npx @mmnto/cli stats` to see your ROI.
+   `> Total violations prevented: 47 | security: 12, architecture: 35`
 
-Developers hate black boxes.
-
-Totem applies the **Unix Philosophy** to AI orchestration. We believe AI models are just standard IO processes. You don't need a heavy web UI to orchestrate them; you just need a CLI.
-
-By building our orchestrator as discrete, composable commands (`spec`, `shield`, `lint`, `triage`, `docs`), we keep the developer in the terminal. You define the "Traction Points." If an AI generates a bad plan, you can run `totem spec --raw` to debug the context, edit the markdown, and fix it yourself. We don't replace your editor; we provide the invisible, configurable plumbing that connects your local agents together.
-
-## Security & Privacy: The Air-Gapped Doctrine
-
-Totem is architected for high-compliance enterprise sectors (defense, finance, healthcare) that operate in strict AI sandboxes. **We adhere to the Air-Gapped Doctrine (Zero-Telemetry Architecture).**
-
-- **Data Sovereignty:**
-  - **Zero Default Telemetry:** The `totem` CLI will _never_ transmit usage statistics, codebase contents, error logs, or rule evaluation metrics to a centralized server. Your codebase stays on your machine.
-  - **Pluggable Local Intelligence:** Every command requiring an AI model natively supports local execution via Ollama or private VPC endpoints. Orchestrators gracefully degrade to CLI/Ollama fallbacks if networks fail (#516, #517).
-- **Threat Mitigation:**
-  - **Bounded MCP Boundaries:** The Totem MCP server is a strict context provider that will _never_ expose destructive filesystem tools. This neutralizes the risk of indirect prompt injection.
-  - **Injection & ReDoS Hardening:** Totem actively sanitizes untrusted inputs and neutralizes terminal injection attacks. SECURITY NOTICES are applied during extraction to warn agents of untrusted text.
-
-## Prerequisites
-
-- **Node.js 20+** — [nodejs.org](https://nodejs.org/) (or use a version manager like `nvm`/`fnm`)
-- **pnpm** _(recommended)_ — `corepack enable` or see other methods at [pnpm.io/installation](https://pnpm.io/installation)
-- **GitHub CLI (`gh`)** _(optional, for orchestrator commands)_ — [cli.github.com](https://cli.github.com/)
-
-Totem works on **Windows**, **macOS**, and **Linux**.
-
-## Getting Started: The 10-Minute Quickstart
+## Quickstart
 
 ### 1. Initialize Totem
 
-Run this inside your consuming project (e.g., your Next.js or Node app):
+Run this inside your project root (e.g., your Next.js or Node app):
 
 ```bash
 npx @mmnto/cli init
 ```
 
-Auto-detects your environment (including Copilot and Junie) to generate a `totem.config.ts` (#448). It injects Proactive Memory Reflexes into your AI instruction files using a recency sandwich approach for optimal context retention (#511). It also installs a Curated Universal Baseline of AI traps to get you started on Day 1 (#419).
+This auto-detects your environment (Cursor, Copilot, Junie) and sets up your `totem.config.ts`.
 
-### 2. Configure your Embedding Provider
-
-If API keys are already set in your environment or `.env`, `totem init` will detect them automatically. The baseline configuration defaults to `gemini-embedding-2-preview` for highly optimized semantic retrieval (#539). If you want to use local models or alternative cross-provider routing, check out the [Advanced Configuration Wiki](./docs/wiki/advanced-configuration.md).
-
-### 3. Sync the Index
+### 2. Sync the Index
 
 ```bash
 npx @mmnto/cli sync
 ```
 
-This builds your local LanceDB vector index. _(Note: If you accepted the git hook installation during `init`, Totem will automatically run incremental background syncs after every `git pull` or `git merge`)._
+This builds your local vector index from your codebase, docs, and lessons.
 
-### 4. Connect the MCP Server
+### 3. Connect the MCP Server
 
-Add Totem to your AI agent's configuration to equip it with `search_knowledge`, `add_lesson`, and MCP enforcement tools like `check_compliance` for self-correction (#417). Zombie process harvesting ensures the MCP server cleans up gracefully on timeouts (#503). Supported environments include:
-
-- **Standalone:** Claude Desktop, Claude Code
-- **IDE Integrations:** Cursor, Copilot, JetBrains Junie (#448)
-- **Web Orchestrators:** Gemini
+Add Totem to your AI agent's configuration. This gives your agent the ability to search project knowledge (`search_knowledge`) and document new architectural traps (`add_lesson`) without leaving the editor.
 
 **macOS / Linux:**
 
@@ -106,53 +71,46 @@ Add Totem to your AI agent's configuration to equip it with `search_knowledge`, 
 }
 ```
 
-_Note: For more details on IDE-specific wiring or pinning MCP versions, see the [Advanced Configuration Wiki](./docs/wiki/advanced-configuration.md)._
+## What Totem Actually Does
 
-### 5. The Codebase Immune System
+We are not an AI code reviewer that gives you subjective "readability" suggestions in your Pull Requests.
 
-Once your index is built, Totem natively intercepts your git pushes to perform an architectural review.
+We are a compiler that enforces **Invariants**—business logic that must _never_ happen.
 
-**`totem lint`**
-Runs compiled rules against your diff. Zero LLM, ~2 seconds, no API keys needed. Use in pre-push hooks and CI.
+- **Instruction Verifier:** We don't replace your `.mdc` or `.cursorrules` files. We enforce them. You wrote the prompt; we ensure the agent didn't ignore it.
+- **Deterministic Enforcement:** `totem lint` uses Tree-sitter to parse your AST. It does not use an LLM. It does not hallucinate. It is a mathematical check against your compiled rules.
+- **Continuous Learning:** When you catch a bug in a PR, run `totem extract`. Totem learns the lesson and compiles a new invariant so that specific bug can never be merged again.
 
-- **Execution:** Executes compiled AST/regex rules scoped to modified file boundaries (#549). Automatically ingests `.cursorrules` and `.mdc` files (#558).
-- **Reporting:** Outputs SARIF 2.1.0 or JSON formats for GitHub Advanced Security integration (#561, #568).
-- **Observability:** Tracks metrics for 137+ categorized rules (invariant, style, security) using the Trap Ledger (#559, #577).
+## Enterprise Grade (The Compliance Ledger)
 
-**`totem shield`**
-AI-powered code review. Queries LanceDB for context, sends diff + knowledge to an LLM for thorough architectural analysis. ~18 seconds. Requires API keys. Use before opening a PR.
+Totem is architected for high-compliance enterprise sectors (defense, finance, healthcare).
 
-- **Enforcement:** Supports strict severity levels (error vs. warning) to give teams granular control over PR blocking (#498, #576).
-- **Integration:** Hooks into Claude Code, Gemini CLI, Copilot, and Junie.
+- **Air-Gapped Execution:** The core enforcement engine (`totem lint`) requires zero API keys. It runs entirely locally. Your proprietary codebase never leaves your machine.
+- **SARIF Integration:** Totem outputs standard Static Analysis Results Interchange Format (SARIF 2.1.0). This means your Trap Ledger integrates seamlessly into GitHub Advanced Security, GitLab Ultimate, and SonarQube dashboards to prove SOC 2 / DORA compliance to your auditors.
 
-## Core Command Index
+## Works With Your Existing Tools
 
-Totem ships with native CLI commands that orchestrate your entire shift-left workflow.
+Totem is the invisible plumbing that connects your local agents together. We natively support:
 
-- **Discovery:**
-  - **Analysis:** `briefing`, `audit`, `stats` (Semantic Rule Observability and Trap Ledger) (#544, #568)
-  - **Prioritization:** `triage` (supports configurable multi-repo issue sources) (#514, #532)
-- **Architectural Control:**
-  - **Validation:** `shield` (#521), `lint` (#549), `test` (compiled rule harness) (#422)
-  - **Enforcement:** `spec`, `hooks` (#310)
-- **Memory Management:**
-  - **Extraction:** `extract` (supports multi-repo inputs and strict Zod validation) (#514, #565), `add-lesson` (#532)
-  - **Processing:** `compile` (ingests `.cursorrules` / `.mdc` files) (#558), `docs`
-- **Workflow:**
-  - **Transitions:** `handoff`, `bridge`
-  - **Execution:** `wrap`
-
-For an exhaustive breakdown of every command and its flags, read the [CLI Reference Wiki](./docs/wiki/cli-reference.md).
+- **Editors:** Cursor, Windsurf, GitHub Copilot, JetBrains Junie
+- **Agents:** Claude Code, Gemini CLI, Aider
+- **Orchestrators:** Anthropic, Google GenAI, OpenAI, Ollama (Local)
 
 ---
 
-## Strategic Roadmap
+## Core Command Index
 
-To see where Totem is heading, including Phase 3 (The DX & Reliability Engine) and the vision for Federated Memory, view our [Strategic Roadmap](./docs/wiki/roadmap.md). For deeper architectural dives, see `docs/architecture.md`.
+- **Validation:** `lint` (Deterministic AST checks), `shield` (AI-assisted architectural review)
+- **Reporting:** `stats` (The Trap Ledger), `audit`, `briefing`
+- **Memory Management:** `extract` (Learn from PRs), `compile` (Ingest `.mdc` files), `sync`
 
-## Contributing
+For an exhaustive breakdown of every command and its flags, read the [CLI Reference Wiki](./docs/wiki/cli-reference.md).
 
-We welcome community contributions! You can explore our `totem-studio` playground repository to test consumer integrations in a safe environment (#481). Please review our `CONTRIBUTING.md` guidelines and the Dev Onboarding Wiki (#449) for testing conventions (#452). Note that external contributions require signing our automated Contributor License Agreement (CLA), and internal strategy discussions are isolated in the `totem-strategy` submodule.
+## Strategic Roadmap & Contributing
+
+To see where Totem is heading, view our [Strategic Roadmap](./docs/wiki/roadmap.md). For deeper architectural dives, see `docs/architecture.md`.
+
+We welcome community contributions! Please review our `CONTRIBUTING.md` guidelines and the Dev Onboarding Wiki.
 
 ## License
 
