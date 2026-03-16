@@ -68,6 +68,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - **System Maintenance:**
     - [ ] **#283 Epic: v1.0 Documentation:** Develop v1.0 docs and extensive wiki migrations covering dev environments and release processes (#450, #477).
     - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
+    - [x] **Documentation Generation:** Stripped known-not-shipped issue references from docs generation to prevent hallucinations (#581, #598).
 - **Workflow & Execution:**
   - **Data & Backlog:**
     - [x] **#362 Strategic Backlog Audit:** Added `totem audit` for backlog auditing with a human approval gate.
@@ -92,8 +93,9 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [ ] **#434 Adversarial Trap Corpus:** Develop synthetic violations to measure precision and recall of the deterministic engine.
   - **Rules & Standards:**
     - [x] **#387 SARIF Output:** Standardized output for CI/CD integration, enhanced with organizational trap ledgers and linting support (#418, #561).
-    - [x] **External Rule Ingestion:** Built support to automatically ingest `.cursorrules` and `.mdc` files into compiled rules (#558).
+    - [x] **External Rule Ingestion:** Built support to automatically ingest `.cursorrules`, `.mdc` files, and prompt templates into compiled rules during `totem init` (#558, #596).
     - **Rule Invariant Audit:** Categorized over 130 compiled rules by invariant, style, and security to establish strict baseline severity (#559, #577).
+    - [x] **Compilation Optimization:** Cached non-compilable lessons and removed duplicate match/exec rules to optimize performance and accuracy (#589, #590).
     - [ ] **#385 Rule Exports:** Export compiled rules to Semgrep YAML and ESLint configurations. Deferred until core governance (#314) is finalized.
     - [ ] **#433 Lesson Packs Prototype:** Mine OSS projects as a proof of concept for distributable rule sets.
   - **Data Architecture & Agents:**
