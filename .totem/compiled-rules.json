@@ -390,8 +390,14 @@
       "engine": "regex",
       "compiledAt": "2026-03-12T10:04:39.037Z",
       "fileGlobs": [
-        "scripts/**/*.{js,ts,mjs,cjs}",
-        "tools/**/*.{js,ts,mjs,cjs}",
+        "scripts/**/*.js",
+        "scripts/**/*.ts",
+        "scripts/**/*.mjs",
+        "scripts/**/*.cjs",
+        "tools/**/*.js",
+        "tools/**/*.ts",
+        "tools/**/*.mjs",
+        "tools/**/*.cjs",
         ".husky/**/*",
         "**/hooks/**/*"
       ],
@@ -439,10 +445,14 @@
       "engine": "regex",
       "compiledAt": "2026-03-12T10:06:52.646Z",
       "fileGlobs": [
-        "**/scripts/**/*.{ts,js}",
-        "**/tasks/**/*.{ts,js}",
-        "**/maintenance/**/*.{ts,js}",
-        "**/jobs/**/*.{ts,js}"
+        "**/scripts/**/*.ts",
+        "**/scripts/**/*.js",
+        "**/tasks/**/*.ts",
+        "**/tasks/**/*.js",
+        "**/maintenance/**/*.ts",
+        "**/maintenance/**/*.js",
+        "**/jobs/**/*.ts",
+        "**/jobs/**/*.js"
       ],
       "category": "style",
       "severity": "warning"
@@ -730,7 +740,17 @@
       "message": "Avoid writing directly to .git/hooks. Detect existing hook managers (like Husky or Lefthook) and provide manual guidance instead to prevent clobbering developer workflows.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:24:37.542Z",
-      "fileGlobs": ["**/*.{js,ts,sh,bash,py,rb,go}", "!**/*.test.ts", "!**/*.spec.ts"],
+      "fileGlobs": [
+        "**/*.js",
+        "**/*.ts",
+        "**/*.sh",
+        "**/*.bash",
+        "**/*.py",
+        "**/*.rb",
+        "**/*.go",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ],
       "category": "architecture",
       "severity": "error"
     },
@@ -741,7 +761,16 @@
       "message": "When detecting Bun environments, check for both bun.lockb (legacy) and bun.lock (Bun >= 1.2) to ensure compatibility.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:26:00.387Z",
-      "fileGlobs": ["**/*.{js,ts,jsx,tsx,sh,yml,yaml}", "Dockerfile*"],
+      "fileGlobs": [
+        "**/*.js",
+        "**/*.ts",
+        "**/*.jsx",
+        "**/*.tsx",
+        "**/*.sh",
+        "**/*.yml",
+        "**/*.yaml",
+        "Dockerfile*"
+      ],
       "category": "architecture",
       "severity": "error"
     },
@@ -860,7 +889,16 @@
       "message": "Use semantic constraints (e.g., 'one to two short sentences') instead of numeric character/word limits. LLMs are poor at exact counting but respond effectively to qualitative boundaries.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:29:07.887Z",
-      "fileGlobs": ["**/*.{ts,tsx,js,jsx,py,md,yaml,yml}"],
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
+        "**/*.py",
+        "**/*.md",
+        "**/*.yaml",
+        "**/*.yml"
+      ],
       "category": "style",
       "severity": "warning"
     },
@@ -871,7 +909,16 @@
       "message": "Use granular assertions rather than snapshots when testing system prompts to avoid test fragility from non-functional prose changes.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:29:12.868Z",
-      "fileGlobs": ["**/*.test.{ts,js,tsx,jsx}", "**/*.spec.{ts,js,tsx,jsx}"],
+      "fileGlobs": [
+        "**/*.test.ts",
+        "**/*.test.js",
+        "**/*.test.tsx",
+        "**/*.test.jsx",
+        "**/*.spec.ts",
+        "**/*.spec.js",
+        "**/*.spec.tsx",
+        "**/*.spec.jsx"
+      ],
       "category": "architecture",
       "severity": "error"
     },
@@ -1064,7 +1111,7 @@
       "message": "Local LLM 500 errors often indicate VRAM or context exhaustion. Include specific guidance to adjust hardware-steering parameters like 'numCtx' in the error message to help users resolve failures immediately.",
       "engine": "regex",
       "compiledAt": "2026-03-12T11:39:36.248Z",
-      "fileGlobs": ["**/{llm,providers}/**/*.ts", "!**/*.test.ts"],
+      "fileGlobs": ["**/llm/**/*.ts", "**/providers/**/*.ts", "!**/*.test.ts"],
       "category": "architecture",
       "severity": "error"
     },
@@ -1119,7 +1166,16 @@
       "message": "Manually suppress 'unused export' errors in styleguide files (e.g., using // eslint-disable-line) as these are consumed by AI tools and not internal imports.",
       "engine": "regex",
       "compiledAt": "2026-03-12T11:48:26.594Z",
-      "fileGlobs": ["**/styleguide/**/*.{ts,tsx,js,jsx}", "**/*.styleguide.{ts,tsx,js,jsx}"],
+      "fileGlobs": [
+        "**/styleguide/**/*.ts",
+        "**/styleguide/**/*.tsx",
+        "**/styleguide/**/*.js",
+        "**/styleguide/**/*.jsx",
+        "**/*.styleguide.ts",
+        "**/*.styleguide.tsx",
+        "**/*.styleguide.js",
+        "**/*.styleguide.jsx"
+      ],
       "category": "style",
       "severity": "warning"
     },
@@ -1323,7 +1379,11 @@
       "compiledAt": "2026-03-16T03:01:20.857Z",
       "createdAt": "2026-03-16T03:01:20.857Z",
       "fileGlobs": [
-        "**/*.{json,yaml,yml,md,sh}",
+        "**/*.json",
+        "**/*.yaml",
+        "**/*.yml",
+        "**/*.md",
+        "**/*.sh",
         ".gemini/**/*",
         ".junie/**/*",
         ".github/workflows/**/*"
@@ -1514,7 +1574,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:08:29.013Z",
       "createdAt": "2026-03-16T03:08:29.013Z",
-      "fileGlobs": ["scripts/**/*.{js,ts}", "tools/**/*.{js,ts}"],
+      "fileGlobs": ["scripts/**/*.js", "scripts/**/*.ts", "tools/**/*.js", "tools/**/*.ts"],
       "category": "style",
       "severity": "warning"
     },
@@ -1710,9 +1770,18 @@
       "compiledAt": "2026-03-16T18:29:04.072Z",
       "createdAt": "2026-03-16T18:29:04.072Z",
       "fileGlobs": [
-        "**/*.{js,ts,jsx,tsx}",
-        "!**/commands/**/*.{js,ts,jsx,tsx}",
-        "!**/bin/**/*.{js,ts,jsx,tsx}"
+        "**/*.js",
+        "**/*.ts",
+        "**/*.jsx",
+        "**/*.tsx",
+        "!**/commands/**/*.js",
+        "!**/commands/**/*.ts",
+        "!**/commands/**/*.jsx",
+        "!**/commands/**/*.tsx",
+        "!**/bin/**/*.js",
+        "!**/bin/**/*.ts",
+        "!**/bin/**/*.jsx",
+        "!**/bin/**/*.tsx"
       ]
     },
     {
@@ -1773,7 +1842,16 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T18:36:05.648Z",
       "createdAt": "2026-03-16T18:36:05.648Z",
-      "fileGlobs": ["**/*.{js,ts,json,md,sh,yml,yaml}", ".gitignore"]
+      "fileGlobs": [
+        "**/*.js",
+        "**/*.ts",
+        "**/*.json",
+        "**/*.md",
+        "**/*.sh",
+        "**/*.yml",
+        "**/*.yaml",
+        ".gitignore"
+      ]
     }
   ],
   "nonCompilable": [
