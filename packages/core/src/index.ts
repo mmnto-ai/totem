@@ -151,6 +151,10 @@ export {
 } from './sanitize.js';
 export { wrapXml } from './xml-format.js';
 
+// Cursor adapter (.mdc / .cursorrules ingestion)
+export type { CursorInstruction } from './cursor-adapter.js';
+export { scanCursorInstructions } from './cursor-adapter.js';
+
 // Rule metrics (observability)
 export type { RuleMetric, RuleMetricsFile } from './rule-metrics.js';
 export {
