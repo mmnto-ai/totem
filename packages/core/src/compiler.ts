@@ -34,6 +34,8 @@ export type CompiledRule = z.infer<typeof CompiledRuleSchema>;
 export const CompiledRulesFileSchema = z.object({
   version: z.literal(1),
   rules: z.array(CompiledRuleSchema),
+  /** Lesson hashes that the LLM determined cannot be compiled (conceptual/architectural). */
+  nonCompilable: z.array(z.string()).optional(),
 });
 
 export type CompiledRulesFile = z.infer<typeof CompiledRulesFileSchema>;
@@ -356,9 +358,29 @@ export function loadCompiledRules(rulesPath: string): CompiledRule[] {
   }
 }
 
+/** Load the full compiled rules file (rules + non-compilable cache). */
+export function loadCompiledRulesFile(rulesPath: string): CompiledRulesFile {
+  if (!fs.existsSync(rulesPath)) return { version: 1, rules: [], nonCompilable: [] };
+
+  try {
+    const raw = fs.readFileSync(rulesPath, 'utf-8');
+    return CompiledRulesFileSchema.parse(JSON.parse(raw));
+  } catch {
+    return { version: 1, rules: [], nonCompilable: [] };
+  }
+}
+
 /** Save compiled rules to a JSON file. */
 export function saveCompiledRules(rulesPath: string, rules: CompiledRule[]): void {
   const data: CompiledRulesFile = { version: 1, rules };
+  fs.writeFileSync(rulesPath, JSON.stringify(data, null, 2) + '\n', {
+    encoding: 'utf-8',
+    mode: 0o644,
+  });
+}
+
+/** Save the full compiled rules file (rules + non-compilable cache). */
+export function saveCompiledRulesFile(rulesPath: string, data: CompiledRulesFile): void {
   fs.writeFileSync(rulesPath, JSON.stringify(data, null, 2) + '\n', {
     encoding: 'utf-8',
     mode: 0o644,

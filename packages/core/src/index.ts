@@ -92,10 +92,12 @@ export {
   extractAddedLines,
   hashLesson,
   loadCompiledRules,
+  loadCompiledRulesFile,
   matchesGlob,
   parseCompilerResponse,
   type RegexValidation,
   saveCompiledRules,
+  saveCompiledRulesFile,
   validateRegex,
 } from './compiler.js';
 
