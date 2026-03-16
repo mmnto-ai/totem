@@ -30,7 +30,8 @@ export async function statsCommand(): Promise<void> {
 
   // ─── Trap Ledger ──────────────────────────────────
   const totemDir = path.join(cwd, config.totemDir);
-  const { loadCompiledRules, loadRuleMetrics } = await import('@mmnto/totem');
+  const { DEFAULT_RULE_CATEGORY, loadCompiledRules, loadRuleMetrics } =
+    await import('@mmnto/totem');
   const rulesPath = path.join(totemDir, 'compiled-rules.json');
   const rules = loadCompiledRules(rulesPath);
   const metrics = loadRuleMetrics(totemDir);
@@ -55,7 +56,7 @@ export async function statsCommand(): Promise<void> {
   const byCategory: Record<string, { triggers: number; suppressions: number }> = {};
   for (const [hash, m] of Object.entries(metrics.rules)) {
     const rule = rulesByHash.get(hash);
-    const cat = rule?.category ?? 'architecture';
+    const cat = rule?.category ?? DEFAULT_RULE_CATEGORY;
     if (!byCategory[cat]) byCategory[cat] = { triggers: 0, suppressions: 0 };
     byCategory[cat].triggers += m.triggerCount;
     byCategory[cat].suppressions += m.suppressCount;
@@ -86,7 +87,7 @@ export async function statsCommand(): Promise<void> {
     log.info(TAG, 'Top prevented violations:');
     for (const [hash, m] of sorted) {
       const rule = rulesByHash.get(hash);
-      const cat = rule?.category ?? 'architecture';
+      const cat = rule?.category ?? DEFAULT_RULE_CATEGORY;
       const label = rule ? rule.message.slice(0, 55) : hash;
       const total = m.triggerCount + m.suppressCount;
       log.dim(TAG, `  [${cat}] ${label} — ${total}x`);
