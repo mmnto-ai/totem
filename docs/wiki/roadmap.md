@@ -14,7 +14,7 @@ _We established the core primitives required for a local-first memory engine._
 - [x] **MCP Interface:** Standardized `search_knowledge` for Claude, Gemini, and Junie.
 - [x] **MVC Tiers:** "Minimum Viable Configuration" scaling from Lite to Full.
 - [x] **Adversarial Hardening:** ANSI terminal injection defense and XML delimiting.
-- [x] **Saga-Based Syncs:** Transactional checkpoints for index updates.
+- [x] **Universal Lessons Baseline:** Curated set of architectural traps shipping automatically with `totem init`.
 
 ---
 

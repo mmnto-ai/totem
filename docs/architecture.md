@@ -78,7 +78,7 @@ flowchart TD
     - _Embeddings:_ Utilizes Gemini (`gemini-embedding-2-preview`) as the primary dogfood embedder (#523). It features hybrid search combining Full-Text Search and vector similarity (#378).
     - _Resilience:_ Implements graceful degradation, falling back to Ollama if the primary provider fails (#517). Automatic `--full` syncs trigger when embedder configuration changes are detected (#548).
 - **Security & Maintenance:**
-  - **Filtering:** Includes adversarial content scrubbing, DLP secret masking middleware to safely strip credentials before embedding (#609, #534), and a dedicated `lesson` ContentType for highly precise vector retrieval (#315).
+  - **Filtering:** Includes adversarial content scrubbing, DLP secret masking middleware to safely strip credentials before embedding (#609, #534). Includes a dedicated `lesson` ContentType for highly precise vector retrieval (#315).
   - **Drift Detection:** Self-cleaning sync engine purges orphaned vectors when source files are deleted. It is reinforced by strict path containment checks to prevent directory traversal (#284).
 
 ### 2. The CLI (`@mmnto/cli`)
@@ -86,17 +86,18 @@ flowchart TD
 All commands feature proper `--help` output documentation (#358).
 
 - **Setup & Infrastructure:**
-  - **Initialization:** Scaffolds configs, hooks, and AI tools like Copilot and Junie (#448). Initialization relies on an ordered provider detection schema (prioritizing Gemini, then OpenAI) (#608, #551), and automatically ingests `.cursorrules` and prompt files during setup to immediately align AI context (#596, #578).
+  - **Initialization:** Scaffolds configs, hooks, and AI tools like Copilot and Junie (#448). Initialization relies on an ordered provider detection schema (prioritizing Gemini, then OpenAI) (#608, #551), and automatically ingests `.cursorrules` and prompt files during setup (#596, #578).
   - **Environment Support:** Package manager auto-detection fully supports Bun and safely detects non-bash environments (#421, #316). Command modules leverage top-level dynamic imports to significantly boost CLI startup performance (#594, #605).
+  - **Error Handling:** Implements a strict `TotemError` class hierarchy to provide actionable `recoveryHint`s and standardized logging across the CLI (#620, #615).
 - **Data & Context Management:**
-  - **Indexing:** `totem sync` crawls, chunks, and embeds targets into LanceDB. It seamlessly supports indexing `.strategy` repos across multi-totem domains (#463).
+  - **Indexing & Sharing:** `totem sync` crawls, chunks, and embeds targets into LanceDB, supporting multi-totem domains (#463). `totem link` seamlessly shares lessons and local knowledge between multiple local repositories (#614).
   - **Session Management:** `totem briefing` and `totem handoff` capture state snapshots. The `--lite` flag enables zero-LLM capture with ANSI sanitization (#292).
   - **Workflow Resets:** Automates mid-session resets and end-of-task workflows. `totem wrap` cleanly aborts if compilation requirements are missing (#409).
 - **Workflow & Evaluation:**
   - **Planning & Orchestration:** Orchestrates workflows with human approval gates. It supports configurable issue sources across multiple repositories for triage and extraction (#514).
   - **Review & Quality:**
-    - **`totem lint`**: Runs compiled rules against diffs. Strictly zero LLM, fast, used in CI and pre-push hooks while natively supporting SARIF/JSON outputs (#521, #561).
-    - **`totem shield`**: Conducts AI-powered code review using LanceDB context before PRs (#521). It enforces explicit severity levels, cleanly differentiating between errors and warnings, and correctly accommodates dynamic rule demotions (#576, #605).
+    - **`totem lint`**: Runs compiled rules against diffs. Strictly zero LLM, fast, explicitly recommended for pre-push hooks and CI, and natively supports SARIF/JSON outputs (#610, #561).
+    - **`totem shield`**: Conducts AI-powered code review using LanceDB context before PRs (#521). Enforces explicit severity levels, cleanly demotes false positives to warnings, and formats output via standard Totem Errors (#616, #576).
   - **Documentation:** Automates transactional document syncs using a Saga validator to prevent partial updates (#351). It safely strips known-not-shipped issue references from generated docs to prevent AI hallucinations (#598, #581).
   - **Telemetry & Stats:** Surfaces local metrics powered by the Phase 1 Trap Ledger. Displays basic CIS metric percentages alongside violation histories (#544, #425).
 - **Rule Testing & Extraction:**
@@ -116,7 +117,7 @@ The compilation process is context-aware, reading files directly from disk inste
 
 A composite GitHub Action (`action.yml`) runs `totem lint` as a pass/fail CI quality gate on pull requests. It uses compiled AST/regex rules from `.totem/compiled-rules.json` to physically block known architectural traps from merging. The SARIF 2.1.0 output natively integrates with the GitHub Advanced Security tab, directly surfacing CISO-facing architectural violations (#387, #561).
 
-Deterministic CI enforcement is further strengthened by evaluating sentinels like SonarQube Community Edition (#355), GitHub CodeQL v4 (#579, #268), and Dependabot (#267). The CI pipeline features a structural CI drift gate and an adversarial evaluation harness to perform integrity checks and mitigate model drift. To prevent pipeline lockouts, the local pre-push gate is securely guarded against missing CLI installations in CI environments.
+Deterministic CI enforcement is further strengthened by evaluating sentinels like SonarQube Community Edition (#355), GitHub CodeQL v4 (#579, #268), and Dependabot (#267). The CI pipeline features a structural CI drift gate and an adversarial evaluation harness to perform integrity checks and mitigate model drift. To prevent pipeline lockouts, the local pre-push gate is securely guarded against missing CLI installations in CI environments and relies strictly on `totem lint` (#610).
 
 Because `totem lint` operates purely on deterministic rules, it requires **zero LLM API calls**. This eliminates statistical hallucinations in CI and maintains a strict, air-gapped security posture for enterprise environments.
 
@@ -141,11 +142,11 @@ A stdio-based server for LLM integration providing primary tools and strict acce
 
 Totem supports three configuration tiers, auto-detected from the environment during `totem init`:
 
-| Tier         | Requirements                               | Available Commands                                                                                   |
-| ------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `bridge`, `eject`, `lint`, `compile`, `test`, `handoff --lite`        |
-| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`                                                                     |
-| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `shield`, `triage`, `audit`, `briefing`, `handoff`, `extract`, `wrap`, `docs`) |
+| Tier         | Requirements                               | Available Commands                                                                                    |
+| ------------ | ------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `link`, `bridge`, `eject`, `lint`, `compile`, `test`, `handoff --lite` |
+| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`                                                                      |
+| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `shield`, `triage`, `audit`, `briefing`, `handoff`, `extract`, `wrap`, `docs`)  |
 
 The `embedding` field in `totem.config.ts` is optional; when omitted, Totem operates in the Lite tier. The `getConfigTier()` helper and `requireEmbedding()` guard enforce these boundaries at runtime with clear upgrade instructions.
 
@@ -226,7 +227,7 @@ All orchestrator providers support standardizing complex configurations via cent
 
 The `.totem/lessons/` directory acts as an explicit, version-controlled ledger of architectural decisions. Local AI memory is actively audited, and extracted lessons are safely Zod-validated and auto-committed to promote contributor knowledge to version-controlled surfaces (#565, #441). It uses a dual-read/single-write migration strategy to robustly transition away from legacy single-file storage patterns (#428). When updated, `totem sync` automatically re-indexes them into multi-domain structures.
 
-During `totem init`, users are offered an optional **Universal Baseline** — a curated dataset of foundational AI developer lessons (#419). Appended with a `<!-- totem:baseline -->` marker for idempotency, these lessons include specific audience tags (contributor vs. consumer) to properly scope knowledge (#404). This solves the cold-start problem where a fresh install has no knowledge to retrieve.
+During `totem init`, users are offered an optional **Universal Baseline** — a curated dataset of 60 battle-tested foundational AI developer lessons (#622, #419). Appended with a `<!-- totem:baseline -->` marker for idempotency, these lessons include specific audience tags (contributor vs. consumer) to properly scope knowledge (#404). This solves the cold-start problem where a fresh install has no knowledge to retrieve.
 
 ## The `.strategy/` Submodule
 

@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@0.41.0`. Recent efforts introduced Data Loss Prevention (DLP) secret masking prior to embedding, fixed compiler glob pattern constraints, and improved CLI startup performance through dynamic imports. Most recently, orchestration was advanced with Claude Code preflight hooks, alongside core refinements to shield false-positive handling and a finalized v1.0 product tagline.
+ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@0.42.0`. Recent efforts introduced `totem link` for sharing local knowledge across repositories, implemented a comprehensive `TotemError` class hierarchy with recovery hints, and shipped a 60-lesson Universal Baseline alongside `totem init`. Orchestration and integration flows were further refined by shifting reference hooks to rely on the deterministic `totem lint` engine over AI-powered review.
 
 Post-merge sequence was aligned during a multi-agent planning session (Claude + Gemini, 2026-03-13) informed by Deep Research Brief #24 (Competitive Moat Analysis). See `.strategy/deep-research/24-competitive-moat-analysis/` for the full adversarial analysis.
 
@@ -44,6 +44,10 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Migrated lessons directory to dual-read/single-write and added startup health checks for LanceStore indexes (#428, #439).
   - Automated `totem sync --full` triggering following embedder configuration changes (#548).
 - **Core & Shift-Left Foundation:**
+  - Released `totem link` functionality to seamlessly share and sync knowledge lessons across local repositories (#614, #612).
+  - Shipped the Universal Baseline, providing 60 battle-tested lessons automatically during `totem init` scaffolding (#622).
+  - Introduced the `TotemError` class hierarchy equipped with actionable recovery hints for improved error state handling (#620, #618).
+  - Demoted three overly-aggressive AI-powered `totem shield` rules to warnings and explicitly prefixed error logs to reduce false positives (#616, #615).
   - Fixed compiler generation of unsupported glob patterns, addressing brace expansion and nested constraints (#603, #602).
   - Converted `compile.ts` top-level imports to dynamic `await import()` to improve CLI startup performance (#594).
   - Executed a review blitz to address dynamic imports, `onWarn` callbacks, and AI-powered `totem shield` false positives (#605, #595, #575).
@@ -70,6 +74,7 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Delivered "Universal Lessons" baseline and refined ignore patterns for frictionless initialization (#128, #419).
   - Tuned match/exec patterns and literal file path rules to reduce false positives on docs and config lessons (#538, #457).
 - **Orchestration & Integrations:**
+  - Updated reference hooks to utilize deterministic `totem lint` instead of AI-powered `totem shield` for rapid, predictable pre-push validation (#610).
   - Integrated Claude Code hooks for `totem spec` preflight and AI-powered `totem shield` pre-push validation.
   - Automatic enforcement strategy under research (#520).
   - Implemented MCP enforcement tools that equip agents to self-correct during active work (#176, #417).
@@ -83,6 +88,7 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Resolved MCP server connection failures for `totem-dev` and `totem-strategy` (#512).
   - Validated Gemini CLI compliance regarding `search_knowledge` calls with lean configurations (#446).
 - **Documentation & DX:**
+  - Updated the README to prominently feature the new 60-lesson Universal Baseline shipped alongside initialization (6d800bc).
   - Added a dedicated Scope & Limitations section to the architecture documentation (#607).
   - Finalized the v1.0 tagline: "Git for AI. Rule your context." (#606).
   - Finalized the full "Verified Velocity" README rewrite, positioning the tool according to the Holy Grail framework defined in ADR-049 (#586, #557).

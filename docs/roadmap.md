@@ -32,7 +32,7 @@ This phase delivered seamless cross-platform onboarding, automated AI tool confi
   - **CLI Experience:** Delivered cross-platform installers, versioned reflex upgrade paths, and premium CLI UI polish.
 - **Host Integration:**
   - **Seamless Hooks:** Agent hooks for Claude Code, Gemini, and Junie (#464).
-  - **Baseline Intelligence:** Universal baseline lessons injected with harder vector DB reflexes.
+  - **Baseline Intelligence:** Universal Baseline delivered, shipping 60 battle-tested lessons automatically during `totem init` alongside harder vector DB reflexes (#622).
   - **Enforcement:** Involuntary enforcement strategy under research (#520).
 - [ ] **#129 Epic: Interactive CLI Tutorial:** Build an animated, interactive CLI tutorial (`totem tutorial`). This allows users to pause the walkthrough, ask the LLM contextual questions, and resume seamlessly.
 - [ ] **#125 Epic: Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically. Achieves a "run `init` and forget" workflow via deterministic shield gates and auto-installs.
@@ -54,7 +54,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
 - **Security & DX:**
   - **Data Loss Prevention:** Implemented DLP secret masking middleware to proactively strip secrets prior to embedding (#534, #609).
   - **Adversarial Hardening:** Adversarial ingestion scrubbing, extraction hardening, and suspicious lesson detection.
-  - **Git Enforcements:** Native Git hook enforcement with monorepo and Bun support. Enhanced by shield severity levels (error vs warning) for strict gating (ADR-028, #498, #576).
+  - **Git Enforcements:** Native Git hook enforcement with monorepo and Bun support. Enhanced by shield severity levels (error vs warning) and updated reference hooks prioritizing zero-LLM `totem lint` (ADR-028, #498, #610).
   - **Installation Automation:** Auto-installation of `totem hooks` and CI drift gating foundations.
 
 ## Phase 3: Workflow Expansion (Power User Tools)
@@ -63,11 +63,11 @@ This phase fortified the core architecture, delivering native orchestration, zer
 
 - **Observability & Maintenance:**
   - **Metrics & Diagnostics:**
-    - [x] **Semantic Rule Observability:** Separated zero-LLM `totem lint` from AI-powered `totem shield` to enable targeted rule enforcement (#521, #545). Integrated `onWarn` callbacks to trace and demote rule false positives (#575, #595).
+    - [x] **Semantic Rule Observability:** Separated zero-LLM `totem lint` from AI-powered `totem shield` to enable targeted rule enforcement. Integrated `onWarn` callbacks and a new `TotemError` hierarchy with recovery hints to trace and demote rule false positives (#595, #620).
     - [ ] **#92 CLI Metrics & Observability:** Provide local CLI metrics (`totem stats`) including basic CIS metric percentages (#425) and Trap Ledger integration (#544).
     - [ ] **#130 Epic: Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks and track index health.
   - **System Maintenance:**
-    - [ ] **#283 Epic: v1.0 Documentation:** Develop v1.0 docs and extensive wiki migrations covering dev environments and release processes (#450, #477). Includes refined Holy Grail positioning and architecture limitations (ADR-049, #586, #607).
+    - [ ] **#283 Epic: v1.0 Documentation:** Develop v1.0 docs and extensive wiki migrations covering dev environments and release processes (#450, #477). Includes the 1.0 tagline, Holy Grail positioning, and architecture limitations (ADR-049, #586, #606).
     - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
     - [x] **Documentation Generation:** Stripped known-not-shipped issue references from docs generation to prevent hallucinations (#581, #598).
 - **Workflow & Execution:**
@@ -78,6 +78,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [x] **Context Injection:** Embedded relevant vector DB lessons into orchestrator commands using a recency sandwiching pattern (#511).
     - [x] **Knowledge Promotion:** Audited local AI memory and promoted contributor knowledge to version-controlled surfaces (#402).
     - [x] **Toolchain Exports:** Exported compiled lessons to GitHub Copilot instructions (#294).
+    - [x] **Local Sharing:** Introduced `totem link` to securely share compiled lessons and knowledge across local repositories (#612, #614).
   - **Task Orchestration:**
     - [ ] **#119 `totem run <workflow>`:** Introduce a custom AI task runner to execute user-defined markdown workflows via the orchestrator.
     - [ ] **#74 `totem oracle`:** Add a frictionless Q&A command to query LanceDB without strict personas.
