@@ -35,7 +35,7 @@ export async function linkCommand(targetPath: string, options: LinkOptions): Pro
   // Read current config
   const configPath = resolveConfigPath(cwd);
   if (!fs.existsSync(configPath)) {
-    throw new Error('[Totem Error] No totem.config.ts found. Run `totem init` first.');
+    throw new Error('[Totem Error] No totem.config.ts found. Run totem init first.');
   }
 
   const configContent = fs.readFileSync(configPath, 'utf-8');
@@ -109,6 +109,6 @@ export async function linkCommand(targetPath: string, options: LinkOptions): Pro
 
   fs.writeFileSync(configPath, updated, 'utf-8');
   log.success(TAG, `Linked ${relative}`);
-  log.info(TAG, `Added lesson targets from ${relative}/.totem/`);
-  log.dim(TAG, 'Run `totem sync` to index the linked lessons.');
+  log.info(TAG, `Added targets from ${relative}/.totem/`);
+  log.dim(TAG, 'Run `totem sync` to rebuild the index.');
 }
