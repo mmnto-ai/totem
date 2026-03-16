@@ -224,9 +224,14 @@ describe('maskSecrets', () => {
     expect(maskSecrets('AIzaSyD1234567890abcdefghijklmnopqrstuv')).toContain('[REDACTED]');
   });
 
-  it('masks secret assignments', () => {
-    expect(maskSecrets('api_key = "sk_live_abc123def456ghi789"')).toContain('[REDACTED]');
-    expect(maskSecrets("password: 'supersecrettoken12345678'")).toContain('[REDACTED]');
+  it('masks quoted secret assignments preserving key name', () => {
+    expect(maskSecrets('api_key = "sk_live_abc123def456ghi789"')).toBe('api_key = "[REDACTED]"');
+    expect(maskSecrets("password: 'supersecrettoken12345678'")).toBe("password: '[REDACTED]'");
+  });
+
+  it('masks unquoted secret assignments', () => {
+    expect(maskSecrets('api_key=sk_live_abc123def456ghi789')).toContain('[REDACTED]');
+    expect(maskSecrets('SECRET=myverylongsecrettokenvalue1234')).toContain('[REDACTED]');
   });
 
   it('preserves normal text', () => {

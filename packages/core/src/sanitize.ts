@@ -112,7 +112,7 @@ export function sanitizeForIngestion(text: string, options: IngestionSanitizeOpt
  * Common secret patterns. Each regex matches a full token.
  * Conservative — only matches high-confidence patterns to avoid false positives.
  */
-const SECRET_PATTERNS: Array<{ name: string; re: RegExp }> = [
+const SECRET_PATTERNS: Array<{ name: string; re: RegExp; replacement?: string }> = [
   // API keys with known prefixes
   { name: 'API key', re: /\b(sk-[a-zA-Z0-9]{20,})\b/g },
   { name: 'API key', re: /\b(sk-proj-[a-zA-Z0-9_-]{20,})\b/g },
@@ -120,20 +120,27 @@ const SECRET_PATTERNS: Array<{ name: string; re: RegExp }> = [
   { name: 'npm token', re: /\b(npm_[a-zA-Z0-9]{20,})\b/g },
   { name: 'GitHub token', re: /\b(gh[pousr]_[a-zA-Z0-9]{20,})\b/g },
   { name: 'AWS key', re: /\b(AKIA[A-Z0-9]{16})\b/g },
-  // Generic high-entropy strings after common key assignments
+  // Generic high-entropy strings after common key assignments — replace only the value
   {
-    name: 'secret assignment',
-    re: /(?:api[_-]?key|secret|token|password|credential)['"]?\s*[:=]\s*['"]([a-zA-Z0-9_\-/.+]{20,})['"]/gi,
+    name: 'secret assignment (quoted)',
+    re: /((?:api[_-]?key|secret|token|password|credential)['"]?\s*[:=]\s*['"])([a-zA-Z0-9_\-/.+]{20,})(['"])/gi,
+    replacement: '$1[REDACTED]$3',
+  },
+  {
+    name: 'secret assignment (unquoted)',
+    re: /((?:api[_-]?key|secret|token|password|credential)\s*[:=]\s*)([a-zA-Z0-9_\-/.+]{20,})\b/gi,
+    replacement: '$1[REDACTED]',
   },
 ];
 
 /** Mask detected secrets with [REDACTED]. Returns the cleaned text. */
 export function maskSecrets(text: string): string {
   let result = text;
-  for (const { re } of SECRET_PATTERNS) {
+  for (const pattern of SECRET_PATTERNS) {
     // Reset lastIndex for global regexes
-    re.lastIndex = 0;
-    result = result.replace(re, '[REDACTED]');
+    pattern.re.lastIndex = 0;
+    const replacement = pattern.replacement ?? '[REDACTED]';
+    result = result.replace(pattern.re, replacement);
   }
   return result;
 }
