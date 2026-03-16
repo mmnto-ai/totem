@@ -348,6 +348,19 @@ program
   );
 
 program
+  .command('link <path>')
+  .description("Link a neighboring repo's lessons into this project")
+  .option('--unlink', 'Remove a previously linked repo')
+  .action(async (targetPath: string, opts: { unlink?: boolean }) => {
+    try {
+      const { linkCommand } = await import('./commands/link.js');
+      await linkCommand(targetPath, opts);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('eject')
   .description('Remove all Totem hooks, config, and data from this project')
   .option('--force', 'Skip confirmation prompt')
