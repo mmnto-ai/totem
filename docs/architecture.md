@@ -2,7 +2,7 @@
 
 ## The Vision
 
-Totem is designed as a **Shared Brain** and **Orchestrator** for a team of autonomous AI agents. Licensed under Apache 2.0, it operates completely locally within the consuming project.
+Totem is designed as a **Shared Brain** and **Orchestrator** for a team of autonomous AI agents. Licensed under Apache 2.0, it operates completely locally within the consuming project, strictly adhering to an **Air-Gapped Doctrine** (Zero Telemetry) to ensure total data privacy (#474).
 
 ## Core Components
 
@@ -94,31 +94,32 @@ All commands feature proper `--help` output documentation (#358).
   - **Session Management:** `totem briefing` and `totem handoff` capture session state snapshots. The `handoff --lite` flag enables zero-LLM capture with robust ANSI sanitization (#292).
   - **Workflow Resets:** `totem bridge` and `totem wrap` automate mid-session context resets and end-of-task workflows. Wrap cleanly aborts via `NoLessonsError` if compilation requirements are missing (#409).
 - **Workflow & Evaluation:**
-  - **Planning & Orchestration:** Orchestrates workflows via `totem spec`, `totem triage`, and `totem audit` with human approval gates. Triage and extract commands now support configurable issue sources across multiple repositories (#532).
+  - **Planning & Orchestration:** Orchestrates workflows via `totem spec`, `totem triage`, and `totem audit` with human approval gates. Triage and extract commands support configurable issue sources across multiple repositories (#532).
   - **Review & Quality:**
-    - **`totem lint`**: Runs compiled rules against diffs — zero LLM, fast, used in CI and pre-push hooks (#549).
-    - **`totem shield`**: AI-powered code review with knowledge retrieval, used before opening PRs.
+    - **`totem lint`**: Runs compiled rules against diffs — strictly zero LLM, fast, used in CI and pre-push hooks (#549, #521).
+    - **`totem shield`**: AI-powered code review with LanceDB knowledge retrieval, used before opening PRs (#521).
   - **Documentation:** `totem docs` automates transactional document syncs with strict sub-bullet thresholds and line-length limits (#341). It employs a Saga validator to prevent partial or corrupted updates (#351).
+  - **Telemetry & Stats:** `totem stats` surfaces local metrics, including basic CIS metric percentages, powered by the Phase 1 Trap Ledger (#425, #544).
 - **Rule Testing & Extraction:**
-  - **Capture & Extraction:** `totem add-lesson` enables inline capture, while `totem extract` handles batch PR reviews. It deduplicates identical lessons and uses concise, content-derived headings (#347).
+  - **Capture & Extraction:** `totem add-lesson` enables inline capture, while `totem extract` handles batch PR reviews. Extracted lessons are strictly Zod-validated before disk writes to ensure structural integrity (#565).
   - **Harness Verification:** `totem test` serves as a compiled rule testing harness to empirically measure regex false positives (#422). This local evaluation matrix actively shapes requirements for future AST rules.
   - **Security:** Context-aware heuristics minimize false positives and actively block bad rules (#326). Strict XML tagging guards against prompt injection from untrusted PR comments (#279).
 
-### 3. Deterministic Compiler & Zero-LLM Shield
+### 3. Deterministic Compiler & Zero-LLM Lint
 
-`totem compile` reads architectural constraints and translates each lesson into a regex rule (or marks it as non-compilable). Rules are stored in `.totem/compiled-rules.json`—now extended with advanced telemetry fields and Phase 1 semantic rule observability (#415, #545)—and validated at compile-time with syntax checking and ReDoS static analysis. The compilation process is context-aware, directly reading files from disk instead of parsing staged diffs to prevent AST gating false positives (#399).
+`totem compile` reads architectural constraints and translates each lesson into a regex rule (or marks it as non-compilable). It also seamlessly ingests existing `.cursorrules` and `.mdc` files into the Totem compiled rule matrix (#558). Rules are stored in `.totem/compiled-rules.json`—now extended with advanced telemetry fields, Phase 1 semantic rule observability, and explicit categorization (invariant/style/security) (#542, #559).
 
-Developers can bypass false positives using audited inline suppression directives (`totem-ignore` / `totem-ignore-next-line`) or negated patterns in `fileGlobs` (#458). Rules are strictly scoped to correct file boundaries using anchored glob matching (#546). This resolves literal file path false positives and enables targeted enforcement, such as restricting dynamic-import rules to command files only (#457, #533). Vulnerable or overly aggressive patterns (e.g., single-match `exec` rules, nested quantifiers) are actively refined or rejected (#538).
+The compilation process is context-aware, directly reading files from disk instead of parsing staged diffs to prevent AST gating false positives (#399). Developers can bypass false positives using audited inline suppression directives or negated patterns in `fileGlobs` (#458). Rules are strictly scoped to correct file boundaries using anchored glob matching, enabling targeted enforcement like restricting dynamic-import rules to command files (#546, #533). Vulnerable or overly aggressive patterns are actively refined or rejected (#538).
 
-`totem lint` applies these compiled rules against `git diff` additions with zero LLM calls. This physically blocks main branch commits and pre-push violations locally. It generates standard SARIF 2.1.0 formatted outputs (`Violation[]`) to enable seamless enterprise security integration (#418, #437).
+`totem lint` applies these compiled rules against `git diff` additions with zero LLM calls, sharing a core `runCompiledRules` engine with other review tools for consistency (#566). This physically blocks main branch commits and pre-push violations locally. It generates standard SARIF 2.1.0 or JSON formatted outputs (`Violation[]`) to enable seamless enterprise security integration (#418, #561).
 
-### 4. Shield GitHub Action & CI Drift Gate
+### 4. Lint GitHub Action & CI Drift Gate
 
-A composite GitHub Action (`action.yml`) runs `totem lint` as a pass/fail CI quality gate on pull requests. It uses compiled AST/regex rules from `.totem/compiled-rules.json` to physically block known architectural traps from merging. The SARIF 2.1.0 output natively integrates with the GitHub Advanced Security tab, directly surfacing CISO-facing architectural violations (#387).
+A composite GitHub Action (`action.yml`) runs `totem lint` as a pass/fail CI quality gate on pull requests. It uses compiled AST/regex rules from `.totem/compiled-rules.json` to physically block known architectural traps from merging. The SARIF 2.1.0 output natively integrates with the GitHub Advanced Security tab, directly surfacing CISO-facing architectural violations (#387, #568).
 
-Deterministic CI enforcement is further strengthened by evaluating sentinels like SonarQube Community Edition (#355), GitHub CodeQL (#268), and Dependabot (#267). The CI pipeline features a structural CI drift gate and an adversarial evaluation harness to perform integrity checks and mitigate model drift. To prevent pipeline lockouts, the local pre-push shield gate is securely guarded against missing CLI installations in CI environments.
+Deterministic CI enforcement is further strengthened by evaluating sentinels like SonarQube Community Edition (#355), GitHub CodeQL (#268), and Dependabot (#267). The CI pipeline features a structural CI drift gate and an adversarial evaluation harness to perform integrity checks and mitigate model drift. To prevent pipeline lockouts, the local pre-push gate is securely guarded against missing CLI installations in CI environments.
 
-Because it operates in `--deterministic` mode, the shield requires **zero LLM API calls**. This eliminates statistical hallucinations in CI and maintains a strict, air-gapped security posture for enterprise environments.
+Because `totem lint` operates purely on deterministic rules, it requires **zero LLM API calls**. This eliminates statistical hallucinations in CI and maintains a strict, air-gapped security posture for enterprise environments.
 
 ### 5. The MCP Server (`@mmnto/mcp`)
 
@@ -126,14 +127,14 @@ A stdio-based server for LLM integration providing primary tools and strict acce
 
 - **Core Tools:**
   - `search_knowledge(query)`: Semantic retrieval of codebase context and lessons. Search telemetry logs actively measure agent retrieval behaviors (#440).
-  - `add_lesson(lesson, tags)`: Appends architectural lessons with descriptive content-derived headings.
+  - `add_lesson(lesson, tags)`: Appends architectural lessons with descriptive content-derived headings. Employs a sync-pending debounce mechanism to prevent write race conditions (#564).
   - `get_rules_for_file` / `check_compliance`: Direct enforcement tools empowering agents to self-validate deterministic rules (#417).
 - **Security & Permissions:**
-  - **Sanitization:** XML-delimits all MCP responses and sanitizes persisted content to mitigate prompt injection attacks. Handles dimension mismatches dynamically for task-aware embedders like Gemini (#444).
+  - **Sanitization:** XML-delimits all MCP responses and sanitizes persisted content, including stripping quotes from loaded environment variables (#560). Handles dimension mismatches dynamically for task-aware embedders like Gemini (#444).
   - **Access Control:** Implements multi-agent permissions and role-based access control (RBAC) to safely restrict execution boundaries (#312).
   - **Context Limits:** Agent instruction files are structurally governed using a recency sandwich pattern and strict length limits (#466, #511).
 - **Integrations & Lifecycle:**
-  - **IDE Support:** Agent hooks for Claude Code, Gemini, and Junie (#464). Involuntary enforcement under research (#520).
+  - **IDE & Agent Hooks:** Agent hooks for Claude Code, Gemini CLI, and Junie (#464). Automatic enforcement under research (#520).
   - **Session Management:** Utilizes a health check first-query gate and briefing warnings to prevent silent search failures at startup (#442).
   - **Stability:** Reaps zombie MCP processes via heartbeat timeouts to reliably resolve connection failures (#503, #512).
 

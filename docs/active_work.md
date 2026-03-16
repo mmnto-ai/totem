@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@0.36.0` (staging for `0.38.0`). Recent efforts finalized the Rule Testing Harness (ADR-022) to resolve regex false positives, alongside comprehensive dev wiki migrations. Most recently, the core was advanced with Semantic Rule Observability (Phase 1), the splitting of `totem lint` from `totem shield`, and improved file boundary scoping for rules.
+ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@0.37.0` (staging for `0.38.0`). Recent efforts finalized the Rule Testing Harness (ADR-022) to resolve regex false positives, alongside comprehensive dev wiki migrations. Most recently, the core was advanced with the Organizational Trap Ledger (Phase 1), ingestion of `.cursorrules` / `.mdc` files, and shared compilation logic unifying `totem lint` and `totem shield`.
 
 Post-merge sequence was aligned during a multi-agent planning session (Claude + Gemini, 2026-03-13) informed by Deep Research Brief #24 (Competitive Moat Analysis). See `.strategy/deep-research/24-competitive-moat-analysis/` for the full adversarial analysis.
 
@@ -41,27 +41,39 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Upgraded LanceDB to 0.26.x and resolved FTS pivot posting panics (#491, #494).
   - Migrated lessons directory to dual-read/single-write and added startup health checks for LanceStore indexes (#428, #439).
 - **Core & Shift-Left Foundation:**
+  - Delivered Organizational Trap Ledger (Phase 1) featuring SARIF extensions and enhanced statistics (#544, #568).
+  - Extracted shared execution logic to unify `totem lint` and `totem shield`, extending `--format sarif/json` support to deterministic linting (#566, #561).
+  - Ingested `.cursorrules` and `.mdc` files into compiled rules, alongside an audit of 98 rules categorized by invariant, style, and security (#558, #559).
+  - Validated extracted lessons with Zod prior to disk writes and integrated basic CIS metrics into `totem stats` (#565, #425).
   - Delivered `totem test` compiled rule testing harness for ADR-022 to provide empirical rule failure data (#422).
-  - Shipped SARIF 2.1.0 output for the deterministic shield, enabling GitHub Advanced Security integration (#387, #418).
-  - Split `totem lint` from `totem shield` and scoped shield rules to accurate file boundaries to minimize false positives (#549, #546).
+  - Shipped SARIF 2.1.0 output, enabling GitHub Advanced Security integration (#387, #418).
+  - Split `totem lint` from `totem shield` and scoped rules to accurate file boundaries to minimize false positives (#549, #546).
   - Delivered Semantic Rule Observability (Phase 1) to enhance rule telemetry and tracking (#545).
   - Involuntary enforcement strategy under research (#520).
   - Completed a bug blitz addressing AST gate file reading, glob matching, and orchestrator process leaks (#395, #397, #399).
   - Reinstated agent hooks and audited suppressions (#464).
   - Applied "recency sandwich" pattern to agent instruction files and enforced length limits (#511, #466).
   - Delivered "Universal Lessons" baseline and refined ignore patterns for frictionless initialization (#128, #419).
+  - Tuned match/exec patterns and literal file path rules to reduce false positives on docs and config lessons (#538, #457).
 - **Orchestration & Integrations:**
+  - Automatic enforcement strategy under research (#520).
   - Implemented MCP enforcement tools that equip agents to self-correct during active work (#176, #417).
+  - Integrated health checks with MCP first-query gates and resolved race conditions in `add_lesson` debouncing (#442, #564).
   - Added MCP search logging and resolved Gemini embedder dimension mismatches (#440, #444).
   - Resolved auto-handoff on MCP lifecycle events, integrated JetBrains Junie, and fixed MCP connection failures and zombie processes (#383, #503).
+  - Fixed MCP `loadEnv` quote stripping and corrected default Gemini model configuration schemas (#560, #563).
   - Shipped graceful degradation for orchestrator providers with SDK-to-CLI fallback capabilities (#522, #516).
   - Configured issue sources to support triage and extraction across multiple repositories (#532, #514).
+  - Added Copilot and Junie to `totem init` scaffolding and corrected health check CLI flags (#448, #562).
 - **Documentation & DX:**
   - Migrated README to a dev wiki including Dev Environment, Testing Conventions, and Release Process guides (#450, #452, #477).
+  - Executed a multi-agent code review blitz and refreshed stale prompts for initialization and documentation glossaries (#567, #553).
+  - Updated the README to explicitly highlight the Air-Gapped Doctrine (Zero Telemetry) (#474).
   - Established an Agent Memory Architecture guide and documented the Consumer Scaffolding Pipeline (#447, #451).
   - Released `totem-studio` consumer playground and a multi-totem knowledge domains index repo (#463, #481).
   - Standardized CLI help output and expanded compiled rules with telemetry fields (#358, #415).
   - Completed post-release documentation sync and introduced 34 new lessons (#504).
+  - Audited all suppression directives and corrected stale lesson references across documentation (#458, #441).
 
 ### Blocked / Needs Input
 
