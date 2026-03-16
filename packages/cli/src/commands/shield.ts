@@ -562,7 +562,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     );
   }
   if (options.format && options.format !== 'text' && !options.deterministic) {
-    throw new Error('[Totem Error] --format sarif/json is only supported with --deterministic.');
+    throw new Error('[Totem Error] --format sarif/json is only supported with `totem lint`.');
   }
 
   const cwd = process.cwd();

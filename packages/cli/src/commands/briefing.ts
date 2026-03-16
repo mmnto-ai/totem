@@ -172,7 +172,7 @@ export async function briefingCommand(options: BriefingOptions): Promise<void> {
         '\n### Index Health\n' +
         '**Warning:** The Totem index has issues that may affect search quality:\n' +
         issueLines +
-        '\n\nRun `totem sync --rebuild` to re-index and fix these issues.\n';
+        '\n\nRun `totem sync --full` to re-index and fix these issues.\n';
       log.warn(TAG, `Index health check found ${healthResult.issues.length} issue(s)`);
     }
   } catch (err) {

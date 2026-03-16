@@ -35,7 +35,8 @@ function loadEnv(cwd: string): void {
     const match = line.match(/^([^#=]+)=(.*)$/);
     if (match) {
       const key = match[1]!.trim();
-      const value = match[2]!.trim();
+      const raw = match[2]!.trim();
+      const value = raw.replace(/^(['"])(.*)(\1)$/, '$2');
       if (!process.env[key]) {
         process.env[key] = value;
       }

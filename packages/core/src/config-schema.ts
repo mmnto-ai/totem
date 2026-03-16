@@ -35,7 +35,7 @@ export const OllamaProviderSchema = z.object({
 
 export const GeminiProviderSchema = z.object({
   provider: z.literal('gemini'),
-  model: z.string().default('text-embedding-004'),
+  model: z.string().default('gemini-embedding-2-preview'),
   dimensions: z.number().int().positive().optional(),
 });
 
