@@ -608,23 +608,24 @@ export default config;
  * Checks for API keys in env and .env, and optionally for a running Ollama instance.
  */
 export function detectEmbeddingTier(cwd: string): EmbeddingTier {
-  // Check env (including already-loaded .env)
-  if (process.env['OPENAI_API_KEY'] && /\S/.test(process.env['OPENAI_API_KEY'])) return 'openai';
-
   // Read .env file once (loadEnv may not have run yet)
   const envPath = path.join(cwd, '.env');
   const envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
 
-  if (/^\s*OPENAI_API_KEY\s*=\s*\S+/m.test(envContent)) return 'openai';
-
-  // Gemini: single-key DX — GEMINI_API_KEY covers both orchestrator and embeddings
-  if (
+  const hasGemini =
     (process.env['GEMINI_API_KEY'] && /\S/.test(process.env['GEMINI_API_KEY'])) ||
     (process.env['GOOGLE_API_KEY'] && /\S/.test(process.env['GOOGLE_API_KEY'])) ||
-    /^\s*(?:GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*\S+/m.test(envContent)
-  ) {
-    return 'gemini';
-  }
+    /^\s*(?:GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*\S+/m.test(envContent);
+
+  const hasOpenai =
+    (process.env['OPENAI_API_KEY'] && /\S/.test(process.env['OPENAI_API_KEY'])) ||
+    /^\s*OPENAI_API_KEY\s*=\s*\S+/m.test(envContent);
+
+  // Gemini first — task-type aware embeddings, best retrieval quality
+  if (hasGemini) return 'gemini';
+
+  // OpenAI — widely available, low friction
+  if (hasOpenai) return 'openai';
 
   return 'none';
 }
