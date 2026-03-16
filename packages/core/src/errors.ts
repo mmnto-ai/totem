@@ -35,19 +35,23 @@ export class TotemError extends Error {
 }
 
 export class TotemConfigError extends TotemError {
-  constructor(message: string, recoveryHint: string) {
-    super(message.includes('invalid') ? 'CONFIG_INVALID' : 'CONFIG_MISSING', message, recoveryHint);
+  constructor(
+    message: string,
+    recoveryHint: string,
+    code: 'CONFIG_MISSING' | 'CONFIG_INVALID' = 'CONFIG_MISSING',
+  ) {
+    super(code, message, recoveryHint);
     this.name = 'TotemConfigError';
   }
 }
 
 export class TotemDatabaseError extends TotemError {
-  constructor(message: string, recoveryHint: string) {
-    super(
-      message.includes('mismatch') ? 'DATABASE_MISMATCH' : 'DATABASE_CORRUPT',
-      message,
-      recoveryHint,
-    );
+  constructor(
+    message: string,
+    recoveryHint: string,
+    code: 'DATABASE_CORRUPT' | 'DATABASE_MISMATCH' = 'DATABASE_CORRUPT',
+  ) {
+    super(code, message, recoveryHint);
     this.name = 'TotemDatabaseError';
   }
 }

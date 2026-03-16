@@ -12,13 +12,11 @@ const require = createRequire(import.meta.url);
 const { version } = z.object({ version: z.string() }).parse(require('../package.json'));
 
 function handleError(err: unknown): never {
-  if (err && typeof err === 'object' && 'recoveryHint' in err) {
-    // TotemError — show message + recovery hint
-    const totemErr = err as { message: string; recoveryHint: string };
-    console.error(totemErr.message);
-    console.error(`  Fix: ${totemErr.recoveryHint}`);
-  } else if (err instanceof Error) {
+  if (err instanceof Error) {
     console.error(err.message);
+    if ('recoveryHint' in err && typeof err.recoveryHint === 'string') {
+      console.error(`  Fix: ${err.recoveryHint}`);
+    }
   } else {
     console.error('[Totem Error] An unknown error occurred:', err);
   }
