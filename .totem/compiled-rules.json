@@ -8,7 +8,9 @@
       "message": "Do not use os.tmpdir() for agent-readable files; use workspace-local paths (e.g., '.totem/temp/') to satisfy MCP boundary restrictions.",
       "engine": "regex",
       "compiledAt": "2026-03-09T02:47:42.931Z",
-      "fileGlobs": ["*.ts", "*.js", "!*.test.ts", "!*.spec.ts"]
+      "fileGlobs": ["*.ts", "*.js", "!*.test.ts", "!*.spec.ts"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "4683affcdc295f53",
@@ -17,7 +19,9 @@
       "message": "Use fs.openSync() instead of fs.createWriteStream() for spawn() stdio. WriteStream.fd is null until the 'open' event fires, which will cause spawn() to fail.",
       "engine": "regex",
       "compiledAt": "2026-03-09T02:50:03.081Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "ebe45f00165fbe3f",
@@ -25,7 +29,9 @@
       "pattern": "\\b(latency|tokens?|duration|ms|count)\\b\\s*\\|\\|",
       "message": "Use nullish coalescing (??) instead of logical OR (||) for numeric metrics to prevent valid '0' values (like cached latency or token counts) from incorrectly triggering the fallback.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T02:50:47.381Z"
+      "compiledAt": "2026-03-09T02:50:47.381Z",
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "cda917668c8a5a13",
@@ -34,7 +40,9 @@
       "message": "Anchor input regexes with '^' and include 'https?://' protocol to avoid substring matches in CLI input.",
       "engine": "regex",
       "compiledAt": "2026-03-09T02:53:05.481Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "90b042b866aefa9d",
@@ -43,7 +51,9 @@
       "message": "Use backticks (`) for column identifiers in LanceDB filters; double quotes (\") cause silent failures in DataFusion.",
       "engine": "regex",
       "compiledAt": "2026-03-09T02:57:21.498Z",
-      "fileGlobs": ["packages/core/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/core/**/*.ts", "!**/*.test.ts"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "2e8fe8d7c8458aae",
@@ -52,7 +62,9 @@
       "message": "Use '@clack/prompts' instead of 'inquirer' for a more modern CLI UX (Issue #21)",
       "engine": "regex",
       "compiledAt": "2026-03-09T02:59:47.145Z",
-      "fileGlobs": ["packages/cli/**/*.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "e18b9f81eef4cd6a",
@@ -61,7 +73,9 @@
       "message": "Decorative UI (branding tags, colors, banners) must be routed to stderr. Use the log.* helpers or console.error to reserve stdout for pipeable data.",
       "engine": "regex",
       "compiledAt": "2026-03-09T03:02:19.676Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "b8763e4bd93c7314",
@@ -70,7 +84,9 @@
       "message": "Use dynamic imports for heavy dependencies like 'ora' within the specific functions that require them to avoid startup performance tax.",
       "engine": "regex",
       "compiledAt": "2026-03-09T03:02:59.361Z",
-      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"],
+      "category": "performance",
+      "severity": "warning"
     },
     {
       "lessonHash": "e02e064077d533d6",
@@ -78,7 +94,9 @@
       "pattern": "\\$\\{\\s*err\\s*\\}",
       "message": "Avoid interpolating the raw 'err' object in template literals; use 'err.message' or 'err.stack' for informative logging.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T03:03:11.054Z"
+      "compiledAt": "2026-03-09T03:03:11.054Z",
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "4cb12ed837adf07a",
@@ -87,7 +105,9 @@
       "message": "Route host hook output to stderr (console.error or console.warn) rather than stdout (console.log) to prevent AI tool pollution.",
       "engine": "regex",
       "compiledAt": "2026-03-09T03:03:48.432Z",
-      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "40b5659a75c42e0d",
@@ -96,7 +116,9 @@
       "message": "MCP tool returns must be wrapped in XML tags (use formatXmlResponse) to prevent Indirect Prompt Injection from untrusted content.",
       "engine": "regex",
       "compiledAt": "2026-03-09T03:04:58.554Z",
-      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "637e8994d7866e10",
@@ -105,7 +127,9 @@
       "message": "Potential command injection: AI-provided environment variables (like $TOOL_INPUT) must be handled safely (e.g., quoting or escaping) when used in shell commands.",
       "engine": "regex",
       "compiledAt": "2026-03-09T03:05:23.884Z",
-      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml"]
+      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "b6c47924514dc4da",
@@ -114,7 +138,9 @@
       "message": "Do not sanitize or XML-wrap semi-trusted metadata like branch names or git file paths in prompts to avoid unnecessary clutter (Totem principle).",
       "engine": "regex",
       "compiledAt": "2026-03-09T03:09:49.306Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "2d364f952af19014",
@@ -122,7 +148,9 @@
       "pattern": "typeof\\s+[^\\s!&|=]+\\s*===\\s*['\"]object['\"](?!\\s*&&)",
       "message": "Always combine 'typeof val === \"object\"' with a truthiness check (e.g., 'val && typeof val === \"object\"') because 'typeof null' is 'object'.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T03:11:02.522Z"
+      "compiledAt": "2026-03-09T03:11:02.522Z",
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "7e9b6b44a2d8ff77",
@@ -131,7 +159,9 @@
       "message": "Untrusted text (LLM/PR content) must be wrapped in `sanitize()` before display in CLI to prevent terminal injection.",
       "engine": "regex",
       "compiledAt": "2026-03-09T03:15:36.127Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "f14881a4daf28160",
@@ -139,7 +169,9 @@
       "pattern": "process\\.env\\.[A-Z0-9_]+\\s*(?:!==|!=)\\s*(?:undefined|null|['\"]['\"])",
       "message": "Environment variable checks must validate non-whitespace characters (/\\S/.test()) to prevent false positives from empty strings.",
       "engine": "regex",
-      "compiledAt": "2026-03-09T03:16:20.241Z"
+      "compiledAt": "2026-03-09T03:16:20.241Z",
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "faeae7a9e495c145",
@@ -148,7 +180,9 @@
       "message": "Use exact count assertions (e.g., toBe(10)) for fixed asset collections instead of weak bounds.",
       "engine": "regex",
       "compiledAt": "2026-03-09T03:17:16.714Z",
-      "fileGlobs": ["*.test.ts", "*.spec.ts"]
+      "fileGlobs": ["*.test.ts", "*.spec.ts"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "5da43ea60b66e96e",
@@ -157,7 +191,9 @@
       "message": "Always use the '--' separator before positional arguments in git commands (e.g., 'git log -- <ref>') to protect against argument injection.",
       "engine": "regex",
       "compiledAt": "2026-03-09T03:20:47.247Z",
-      "fileGlobs": ["*.sh", "*.bash", "packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["*.sh", "*.bash", "packages/cli/**/*.ts", "!**/*.test.ts"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "dfd58fda9e518754",
@@ -166,7 +202,9 @@
       "message": "Always quote shell variables (e.g., \"$VAR\") to prevent word-splitting and argument injection.",
       "engine": "regex",
       "compiledAt": "2026-03-09T03:13:51.536Z",
-      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml"]
+      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "4d63af6631a6ddf7",
@@ -175,7 +213,9 @@
       "message": "Escape closing XML tags in prompts using backslash (e.g., <\\/tag>) to prevent injection.",
       "engine": "regex",
       "compiledAt": "2026-03-09T03:08:14.389Z",
-      "fileGlobs": ["*.md", "*.txt", "*.html", "*.xml"]
+      "fileGlobs": ["*.md", "*.txt", "*.html", "*.xml"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "8c0a9912680559f6",
@@ -184,7 +224,9 @@
       "message": "Use try-parse on stdout rather than string-matching the command for '-o json'. This handles edge cases and doesn't require config awareness.",
       "engine": "regex",
       "compiledAt": "2026-03-12T09:52:27.845Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "a9434d3f73d05db2",
@@ -193,7 +235,9 @@
       "message": "Use getDefaultBranch() to dynamically detect the base branch instead of hardcoding 'main' or 'master' in diff strings (e.g., main...HEAD).",
       "engine": "regex",
       "compiledAt": "2026-03-12T09:53:08.340Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "82000aa7360b28f3",
@@ -202,7 +246,9 @@
       "message": "Avoid hardcoded fallbacks like 'main' for environmental configuration; throw an explicit error if the value cannot be detected.",
       "engine": "regex",
       "compiledAt": "2026-03-12T09:53:26.715Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "772e4aa0ef24b499",
@@ -211,7 +257,9 @@
       "message": "Error re-throw guards (checking for '[Totem Error]') should be centralized in the shared error handler, not duplicated at call sites.",
       "engine": "regex",
       "compiledAt": "2026-03-12T09:54:29.799Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/error*.ts", "!**/error*.js"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/error*.ts", "!**/error*.js"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "56ebf3c19ab25b42",
@@ -220,7 +268,9 @@
       "message": "Do not strip ANSI escapes or control characters from MCP tool output. LLMs benefit from the full fidelity of formatting and snippets; terminal sanitization is a CLI concern, not an MCP payload concern.",
       "engine": "regex",
       "compiledAt": "2026-03-12T09:55:05.473Z",
-      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "9e4c9e474317c17b",
@@ -229,7 +279,9 @@
       "message": "Do not port legacy technical implementations (Kafka, Kubernetes, Firestore) into Totem. Use local primitives like LanceDB or terminal execution instead.",
       "engine": "regex",
       "compiledAt": "2026-03-12T09:56:15.768Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "package.json", "**/*.yaml", "**/*.yml"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "package.json", "**/*.yaml", "**/*.yml"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "277b4b74ce323c7e",
@@ -238,7 +290,9 @@
       "message": "Keep 'triage' and 'learn' decoupled to maintain modularity. Do not invoke 'learn' from within 'triage' logic; use 'totem run <workflow>' for composition instead.",
       "engine": "regex",
       "compiledAt": "2026-03-12T09:57:13.318Z",
-      "fileGlobs": ["**/triage/**", "**/triage.*", "!**/*.test.ts"]
+      "fileGlobs": ["**/triage/**", "**/triage.*", "!**/*.test.ts"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "33b5a968ffe0456e",
@@ -247,7 +301,9 @@
       "message": "Avoid embedding complex shell pipelines in JSON configuration; extract hook logic into a dedicated script file (e.g., .gemini/hooks/BeforeTool.js) for maintainability.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:00:01.065Z",
-      "fileGlobs": ["*.json"]
+      "fileGlobs": ["*.json"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "3613d5ba9b4af848",
@@ -262,7 +318,9 @@
         "packages/mcp/**/*.ts",
         "packages/cli/**/*.ts",
         ".github/workflows/*.yml"
-      ]
+      ],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "8c5de572889e11ff",
@@ -271,7 +329,9 @@
       "message": "When matching or escaping closing XML tags, use a case-insensitive regex that accounts for optional internal whitespace (e.g., /<\\/\\s*tag\\s*>/i). Literal matches like '</tag>' or whitespace-rigid regexes are easily bypassed by LLMs/parsers and lead to prompt injection vulnerabilities.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:00:49.815Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.tsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.tsx"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "60ed0c0103e81674",
@@ -280,7 +340,9 @@
       "message": "Use the .cjs extension for utility scripts and host integration hooks in ESM-first projects to ensure compatibility with external tools and prevent module resolution errors.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:01:52.623Z",
-      "fileGlobs": ["package.json", "**/*.sh", "Makefile"]
+      "fileGlobs": ["package.json", "**/*.sh", "Makefile"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "4142b945b49cd292",
@@ -294,7 +356,9 @@
         "**/tools/**/*.ts",
         "packages/mcp/**/*.ts",
         "!**/*.test.ts"
-      ]
+      ],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "87065a9e2e98d061",
@@ -303,7 +367,9 @@
       "message": "Do not apply terminal sanitization (like stripAnsi) to data intended for LLM prompts. Terminal sanitization is a presentation-layer concern for CLI output, while LLMs need raw data (including code symbols) to maintain fidelity. Use prompt-specific sanitization (like XML escaping) instead.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:03:48.868Z",
-      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "f33b0cba8caa726f",
@@ -312,7 +378,9 @@
       "message": "Prefer dynamic imports inside command function bodies instead of top-level imports to ensure fast CLI startup.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:04:10.998Z",
-      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"],
+      "category": "performance",
+      "severity": "warning"
     },
     {
       "lessonHash": "adfc0cef98b8371f",
@@ -326,7 +394,9 @@
         "tools/**/*.{js,ts,mjs,cjs}",
         ".husky/**/*",
         "**/hooks/**/*"
-      ]
+      ],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "be74c55caa9fd60c",
@@ -335,7 +405,9 @@
       "message": "Directly expanding ${{ inputs.key }} in shell scripts is a command injection risk. Map to an environment variable in the 'env' section first and use the environment variable in your script.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:04:57.385Z",
-      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml"]
+      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "46edc0540d7fbfa9",
@@ -344,7 +416,9 @@
       "message": "Avoid generic headings like timestamps or 'Untitled'. Use descriptive, unique headings to ensure humans and AI can differentiate between knowledge chunks in search results.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:06:11.781Z",
-      "fileGlobs": ["**/*.md", "**/*.mdx"]
+      "fileGlobs": ["**/*.md", "**/*.mdx"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "57f8903e23952c25",
@@ -353,7 +427,9 @@
       "message": "Use exact count assertions (e.g., .toHaveLength() or .toBe()) instead of 'greater than' checks to detect accidental deletions in fixed sets.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:06:24.016Z",
-      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]
+      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "aae3ebe04aaaa7af",
@@ -367,7 +443,9 @@
         "**/tasks/**/*.{ts,js}",
         "**/maintenance/**/*.{ts,js}",
         "**/jobs/**/*.{ts,js}"
-      ]
+      ],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "9db404994f0574b8",
@@ -376,7 +454,9 @@
       "message": "Use named error objects (e.g., err.name = 'NoDocsConfiguredError') instead of string matching on err.message to handle expected conditions.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:07:06.920Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "f7fc104cac7efdcf",
@@ -385,7 +465,9 @@
       "message": "Sanitize ANSI escape sequences (e.g., using 'stripAnsi') before persisting text to Markdown or log files to prevent terminal injection vulnerabilities.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:07:57.552Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "009679a6abb474e2",
@@ -394,7 +476,9 @@
       "message": "Do not reject a promise directly inside a setTimeout callback when timing out a child process. Call child.kill() and perform the rejection inside the 'close' event handler to ensure stdio streams are fully flushed.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:10:10.837Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "bb937a42753289f1",
@@ -411,7 +495,9 @@
         "!.gemini/hooks/**",
         "!.totem/hooks/**",
         "!tools/**"
-      ]
+      ],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "09edb9a76a7bc3dc",
@@ -420,7 +506,9 @@
       "message": "Do not manually edit machine-generated artifacts like compiled-rules.json; fixes must be applied to the source lessons or compiler logic.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:11:35.833Z",
-      "fileGlobs": ["compiled-rules.json"]
+      "fileGlobs": ["compiled-rules.json"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "5f3a95295db82291",
@@ -438,7 +526,9 @@
         "**/*.ts",
         "**/*.js",
         "**/*.py"
-      ]
+      ],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "84458e64c4ae2379",
@@ -447,7 +537,9 @@
       "message": "The @google/genai constructor requires an options object (e.g., { apiKey: '...' }) instead of a raw string.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:12:20.631Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "24d9d2ae3496bd95",
@@ -462,7 +554,9 @@
         "**/integrations/**/*",
         "**/sdk/**/*",
         "**/adapters/**/*"
-      ]
+      ],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "fdd2206acd4ea992",
@@ -471,7 +565,9 @@
       "message": "Avoid refactoring synchronous factory functions to async just to use dynamic import(). Node.js caches dynamic imports, so keep the factory synchronous to avoid unnecessary await boilerplate.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:12:55.785Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "525062ddda2989aa",
@@ -480,7 +576,9 @@
       "message": "Centralize error signature detection (e.g., 429 status or 'rate limit' strings) into a shared utility instead of hardcoding literals, ensuring consistent handling across SDKs and CLI paths.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:13:07.002Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "b9e4125e6a31f2cf",
@@ -489,7 +587,9 @@
       "message": "Use path.relative(process.cwd(), path.resolve(process.cwd(), input)) instead of string replacement for robust path normalization",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:13:43.629Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "1c7a70ec1752a212",
@@ -498,7 +598,9 @@
       "message": "Always use fully qualified identifiers (e.g., 'provider:model') for caching and telemetry to prevent cross-provider collisions.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:14:00.959Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts", "!**/*.test.js"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts", "!**/*.test.js"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "ecc543ffa9312ce8",
@@ -507,7 +609,9 @@
       "message": "Avoid heuristic truncation of the first line (e.g., .split('\\n')[0]). Instead, request explicit metadata tokens from the LLM (like 'Heading:') and sanitize them to remove markdown artifacts or prefixes.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:15:51.107Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "d487264e210913a4",
@@ -516,7 +620,9 @@
       "message": "Prefer Vitest's expect().rejects.toHaveProperty() assertions over manual try/catch blocks with expect.fail()",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:15:59.165Z",
-      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]
+      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "b4fb655a4fc13ea5",
@@ -525,7 +631,9 @@
       "message": "Omit defensive XML escaping for trusted local data (like git diffs) in CLI tools to reduce prompt clutter and token usage",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:16:52.434Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "apps/cli/**/*.ts", "**/cli/**/*.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts", "apps/cli/**/*.ts", "**/cli/**/*.ts"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "106f3b444026deb6",
@@ -534,7 +642,9 @@
       "message": "Always generate sentinel markers even when the internal content is empty. Returning an empty string instead of empty markers causes the replacement logic to delete the markers from the target file, leading to redundant appends.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:17:34.832Z",
-      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "a6f2d3a89d9ebae8",
@@ -543,7 +653,9 @@
       "message": "Set open-pull-requests-limit to 0 in dependabot.yml to suppress routine version bumps while allowing security patches.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:18:14.963Z",
-      "fileGlobs": [".github/dependabot.yml"]
+      "fileGlobs": [".github/dependabot.yml"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "dc656c9238a0f80e",
@@ -552,7 +664,9 @@
       "message": "Hoisting .split('\\n') outside of loops prevents quadratic O(N^2) complexity. Avoid splitting the same string repeatedly to access lines by index.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:18:31.586Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "49cf779ef649ffde",
@@ -561,7 +675,9 @@
       "message": "Synchronous file operations (e.g. readFileSync) are preferred in CLI tools for simplicity, as blocking the event loop is acceptable in short-lived processes.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:18:53.786Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js", "bin/**/*.ts", "bin/**/*.js"]
+      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js", "bin/**/*.ts", "bin/**/*.js"],
+      "category": "performance",
+      "severity": "warning"
     },
     {
       "lessonHash": "3cbe6d5f6544532c",
@@ -570,7 +686,9 @@
       "message": "Provide a dummy fallback API key (e.g., || 'local-only') when using environment variables to ensure local OpenAI-compatible endpoints bypass SDK validation.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:20:16.907Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "89b94dbfedfae9ab",
@@ -579,7 +697,9 @@
       "message": "Casting an object literal to an Error type does not satisfy 'instanceof Error' checks at runtime. Use 'Object.assign(new Error(message), properties)' instead.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:23:23.974Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "2b790d1938f8d223",
@@ -588,7 +708,9 @@
       "message": "Avoid Zod's .url() validator as it requires a protocol prefix (e.g., http://) and fails on bare hostnames or host:port configurations.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:23:30.349Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "40fdd031e2db1230",
@@ -597,7 +719,9 @@
       "message": "Avoid using 'exit 0' in git hooks as it prevents hook chaining. Wrap logic in if/fi blocks instead to allow subsequent hooks to execute.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:24:15.797Z",
-      "fileGlobs": [".husky/**/*", "scripts/hooks/**/*", "*.sh"]
+      "fileGlobs": [".husky/**/*", "scripts/hooks/**/*", "*.sh"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "16d10e42d757de78",
@@ -606,7 +730,9 @@
       "message": "Avoid writing directly to .git/hooks. Detect existing hook managers (like Husky or Lefthook) and provide manual guidance instead to prevent clobbering developer workflows.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:24:37.542Z",
-      "fileGlobs": ["**/*.{js,ts,sh,bash,py,rb,go}", "!**/*.test.ts", "!**/*.spec.ts"]
+      "fileGlobs": ["**/*.{js,ts,sh,bash,py,rb,go}", "!**/*.test.ts", "!**/*.spec.ts"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "5a4b3fd8e71882e8",
@@ -615,7 +741,9 @@
       "message": "When detecting Bun environments, check for both bun.lockb (legacy) and bun.lock (Bun >= 1.2) to ensure compatibility.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:26:00.387Z",
-      "fileGlobs": ["**/*.{js,ts,jsx,tsx,sh,yml,yaml}", "Dockerfile*"]
+      "fileGlobs": ["**/*.{js,ts,jsx,tsx,sh,yml,yaml}", "Dockerfile*"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "52ae1e9b8ef65385",
@@ -624,7 +752,9 @@
       "message": "Model name validation regexes must explicitly allow dots (.) to accommodate naming schemes like gpt-5.4",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:26:15.087Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "e1046c772a6bb6f9",
@@ -633,7 +763,9 @@
       "message": "Use 'pnpm exec' instead of 'pnpm bin' to reliably handle workspace package resolution in the monorepo.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:26:22.357Z",
-      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "package.json"]
+      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "package.json"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "9f5a1e43e16f3c52",
@@ -647,7 +779,9 @@
         "packages/cli/src/bin/**/*.ts",
         "packages/cli/src/cli.ts",
         "**/cli.ts"
-      ]
+      ],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "d245b21395563e6f",
@@ -656,7 +790,9 @@
       "message": "Always resolve the git repository root via 'git rev-parse --show-toplevel' instead of checking for a .git directory. This ensures compatibility with monorepos, submodules, and worktrees.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:27:11.859Z",
-      "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.js", "**/*.ts", "**/*.yml", "**/*.yaml"]
+      "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.js", "**/*.ts", "**/*.yml", "**/*.yaml"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "e66544fffe1bbab8",
@@ -665,7 +801,9 @@
       "message": "Use { shell: true } when calling the 'git' binary with execFileSync to ensure it resolves correctly on Windows.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:27:25.049Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "472e287ab57c6aee",
@@ -674,7 +812,9 @@
       "message": "LLMs are poor at character counting; use semantic constraints (e.g., 'one to two short sentences') instead of numeric limits.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:27:33.745Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md", "**/*.txt"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md", "**/*.txt"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "9455c39779cd7218",
@@ -683,7 +823,9 @@
       "message": "Use granular assertions rather than snapshots for testing system prompts to avoid brittle tests caused by minor prose changes",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:27:41.274Z",
-      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]
+      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "064f35405ec02082",
@@ -696,7 +838,9 @@
         "packages/cli/src/adapters/**/*.ts",
         "packages/mcp/src/**/*.ts",
         "!**/*.test.ts"
-      ]
+      ],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "a5697f86bb23901e",
@@ -705,7 +849,9 @@
       "message": "Check for the presence of the 'g' flag before appending it; re-adding a global flag to a pattern that already includes it causes a runtime SyntaxError.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:28:37.997Z",
-      "fileGlobs": ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"]
+      "fileGlobs": ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "bc73f8d7eb600d30",
@@ -714,7 +860,9 @@
       "message": "Use semantic constraints (e.g., 'one to two short sentences') instead of numeric character/word limits. LLMs are poor at exact counting but respond effectively to qualitative boundaries.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:29:07.887Z",
-      "fileGlobs": ["**/*.{ts,tsx,js,jsx,py,md,yaml,yml}"]
+      "fileGlobs": ["**/*.{ts,tsx,js,jsx,py,md,yaml,yml}"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "13860bc4d359bd1a",
@@ -723,7 +871,9 @@
       "message": "Use granular assertions rather than snapshots when testing system prompts to avoid test fragility from non-functional prose changes.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:29:12.868Z",
-      "fileGlobs": ["**/*.test.{ts,js,tsx,jsx}", "**/*.spec.{ts,js,tsx,jsx}"]
+      "fileGlobs": ["**/*.test.{ts,js,tsx,jsx}", "**/*.spec.{ts,js,tsx,jsx}"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "b2d2d79023432eb9",
@@ -732,7 +882,9 @@
       "message": "Use matchAll() to iterate through all regex matches. Relying on match() or exec() can allow 'shadowing' attacks where a safe first match hides a malicious payload later in the string.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:29:36.148Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "5decef91ba5a7b52",
@@ -741,7 +893,9 @@
       "message": "Include a space or delimiter when concatenating disjoint text fragments to prevent 'keyword synthesis' and security filter bypass.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:29:45.168Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "ca85d8aab7fc7312",
@@ -750,7 +904,9 @@
       "message": "Do not append the 'g' flag to existing RegExp flags without checking for its presence; duplicate flags cause a runtime SyntaxError in JavaScript.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:30:04.191Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "9657b97239a20ed0",
@@ -759,7 +915,9 @@
       "message": "When implementing glob matching for '**', ensure the index check excludes the start of the string (index 0). Use 'indexOf(...) > 0' to avoid misinterpreting repo-relative paths as root-anchored.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:31:03.838Z",
-      "fileGlobs": ["**/*.ts", "**/*.js"]
+      "fileGlobs": ["**/*.ts", "**/*.js"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "63f2b2d8c631089a",
@@ -768,7 +926,9 @@
       "message": "In core packages, prefer a small custom implementation over external libraries like 'micromatch' to keep the dependency graph lean.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:31:15.221Z",
-      "fileGlobs": ["packages/core/**/*"]
+      "fileGlobs": ["packages/core/**/*"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "86fe2def3463b256",
@@ -777,7 +937,9 @@
       "message": "Use the --recurse-submodules flag with git ls-files to ensure submodule files are included in scans.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:32:33.520Z",
-      "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.js", "**/*.ts", "**/*.yml", "**/*.yaml"]
+      "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.js", "**/*.ts", "**/*.yml", "**/*.yaml"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "fea10369daa04c98",
@@ -792,7 +954,9 @@
         "**/scripts/*.sh",
         "**/scripts/*.bash",
         "Makefile"
-      ]
+      ],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "03f572ffe933b21a",
@@ -801,7 +965,9 @@
       "message": "The MCP spec lacks session lifecycle hooks (session.start, session.end, or beforeDisconnect). Do not attempt to build auto-handoff via MCP code; use agent system prompts as a workaround (see #383).",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:33:29.060Z",
-      "fileGlobs": ["packages/mcp/**/*.ts"]
+      "fileGlobs": ["packages/mcp/**/*.ts"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "dc1c9e7628b48abd",
@@ -810,7 +976,9 @@
       "message": "Use --body-file instead of --body to prevent shell injection and escaping issues with LLM-generated text.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:33:45.083Z",
-      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "packages/cli/**/*.ts"]
+      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "packages/cli/**/*.ts"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "e40e3d7e3c5f415e",
@@ -819,7 +987,9 @@
       "message": "Potential shell injection: Never use github.event or inputs directly in 'run' blocks. Map them to environment variables first and reference them as \"$VAR\".",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:36:00.971Z",
-      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml"]
+      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "b2266f6438d481d0",
@@ -828,7 +998,9 @@
       "message": "Extract the shared exec → JSON.parse → schema.validate pattern into a private helper method to avoid duplicating boilerplate in CLI adapters.",
       "engine": "regex",
       "compiledAt": "2026-03-12T11:24:12.010Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "afc7179714d64317",
@@ -837,7 +1009,9 @@
       "message": "Strictly enforce 'Fail Fast' for multi-input orchestrator commands. Use Promise.all instead of Promise.allSettled; partial context assembly (e.g., missing one of several PRs) can lead to LLM hallucinations based on incomplete information.",
       "engine": "regex",
       "compiledAt": "2026-03-12T11:26:16.241Z",
-      "fileGlobs": ["**/cli/**/*.ts", "**/totem/**/*.ts", "**/orchestrator/**/*.ts"]
+      "fileGlobs": ["**/cli/**/*.ts", "**/totem/**/*.ts", "**/orchestrator/**/*.ts"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "11f05825133933e7",
@@ -846,7 +1020,9 @@
       "message": "Custom .env parsers must not override existing process.env keys (use ??= or ||=). Ensure you also strip CRLF (\\r) and surrounding quotes from values.",
       "engine": "regex",
       "compiledAt": "2026-03-12T11:30:21.712Z",
-      "fileGlobs": ["**/cli/**/*.ts", "**/cli/**/*.js", "!**/*.test.ts"]
+      "fileGlobs": ["**/cli/**/*.ts", "**/cli/**/*.js", "!**/*.test.ts"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "116cb61013507812",
@@ -855,7 +1031,9 @@
       "message": "Include the '[Totem Error]' prefix in re-thrown error messages to maintain consistent CLI reporting.",
       "engine": "regex",
       "compiledAt": "2026-03-12T11:31:03.928Z",
-      "fileGlobs": ["packages/cli/**/*.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "8969d8bc95c3864b",
@@ -864,7 +1042,9 @@
       "message": "Git diff headers wrap paths with spaces in quotes (e.g., +++ \"b/path\"). Update logic to handle optional quotes before the 'b/' prefix to ensure files with spaces are processed correctly.",
       "engine": "regex",
       "compiledAt": "2026-03-12T11:31:45.504Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh", "**/*.go", "**/*.rs"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh", "**/*.go", "**/*.rs"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "4fab6d3fd93f1a87",
@@ -873,7 +1053,9 @@
       "message": "User-controlled fields (like PR descriptions or comments) must be wrapped in XML tags explicitly labeled as 'untrusted content' to prevent prompt injection.",
       "engine": "regex",
       "compiledAt": "2026-03-12T11:37:34.822Z",
-      "fileGlobs": ["**/prompts/**/*", "**/ai/**/*", "**/llm/**/*", "**/*prompt*"]
+      "fileGlobs": ["**/prompts/**/*", "**/ai/**/*", "**/llm/**/*", "**/*prompt*"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "a8ade9d9b017f7b3",
@@ -882,7 +1064,9 @@
       "message": "Sanitize git-sourced metadata (branch, status, diff) to remove ANSI escape sequences and control characters.",
       "engine": "regex",
       "compiledAt": "2026-03-12T11:37:51.849Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh", "**/*.bash"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh", "**/*.bash"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "c6bb187bdd6dd8f7",
@@ -891,7 +1075,9 @@
       "message": "Local LLM 500 errors often indicate VRAM or context exhaustion. Include specific guidance to adjust hardware-steering parameters like 'numCtx' in the error message to help users resolve failures immediately.",
       "engine": "regex",
       "compiledAt": "2026-03-12T11:39:36.248Z",
-      "fileGlobs": ["**/{llm,providers}/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["**/{llm,providers}/**/*.ts", "!**/*.test.ts"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "1cc6a460ad508b68",
@@ -900,7 +1086,9 @@
       "message": "Verify CLI availability (e.g., using 'command -v' or 'tool --version') before execution in git hooks to prevent brittle CI failures.",
       "engine": "regex",
       "compiledAt": "2026-03-12T11:42:55.298Z",
-      "fileGlobs": [".husky/**/*", ".githooks/**/*", "scripts/hooks/**/*", "**/*.sh", "**/*.bash"]
+      "fileGlobs": [".husky/**/*", ".githooks/**/*", "scripts/hooks/**/*", "**/*.sh", "**/*.bash"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "741493a88528e2b8",
@@ -909,7 +1097,9 @@
       "message": "Include a space or delimiter between concatenated fragments (e.g., '${a} ${b}') to prevent 'keyword synthesis' and bypass security filters.",
       "engine": "regex",
       "compiledAt": "2026-03-12T11:43:36.197Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.sh", "**/*.bash"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.sh", "**/*.bash"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "ce4240d622c53f8e",
@@ -918,7 +1108,9 @@
       "message": "ESM intra-module mocks require re-binding: spreading vi.importActual() retains closure references to real exports. Re-bind callers to use the mocked factory instead.",
       "engine": "regex",
       "compiledAt": "2026-03-12T11:46:14.525Z",
-      "fileGlobs": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
+      "fileGlobs": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "bd31e87e32cfeefd",
@@ -927,7 +1119,9 @@
       "message": "Avoid using literal file paths in lessons (e.g., 'src/config.ts'). Use conceptual descriptions instead (e.g., 'the configuration file') to prevent drift detector errors when files are moved or renamed.",
       "engine": "regex",
       "compiledAt": "2026-03-12T11:46:43.434Z",
-      "fileGlobs": [".totem/lessons/**", ".totem/lessons.md"]
+      "fileGlobs": [".totem/lessons/**", ".totem/lessons.md"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "5d622e22e4b8f281",
@@ -936,7 +1130,9 @@
       "message": "Manually suppress 'unused export' errors in styleguide files (e.g., using // eslint-disable-line) as these are consumed by AI tools and not internal imports.",
       "engine": "regex",
       "compiledAt": "2026-03-12T11:48:26.594Z",
-      "fileGlobs": ["**/styleguide/**/*.{ts,tsx,js,jsx}", "**/*.styleguide.{ts,tsx,js,jsx}"]
+      "fileGlobs": ["**/styleguide/**/*.{ts,tsx,js,jsx}", "**/*.styleguide.{ts,tsx,js,jsx}"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "12d08c59eff035d0",
@@ -946,7 +1142,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T02:42:50.515Z",
       "createdAt": "2026-03-16T02:42:50.515Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "720d975cb84fd5f5",
@@ -956,7 +1154,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T02:46:32.222Z",
       "createdAt": "2026-03-16T02:46:32.222Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "64f919558d8ad756",
@@ -966,7 +1166,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T02:48:07.575Z",
       "createdAt": "2026-03-16T02:48:07.575Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.mjs", "**/*.cjs"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.mjs", "**/*.cjs"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "0c3bb064c951ada1",
@@ -976,7 +1178,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T02:49:39.467Z",
       "createdAt": "2026-03-16T02:49:39.467Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "449dde17cfcc4a2a",
@@ -986,7 +1190,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T02:50:11.470Z",
       "createdAt": "2026-03-16T02:50:11.470Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "7e74cc89f71bacf5",
@@ -996,7 +1202,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T02:50:44.927Z",
       "createdAt": "2026-03-16T02:50:44.927Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh", ".env*"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh", ".env*"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "cc118a8e17144de1",
@@ -1006,7 +1214,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T02:52:52.036Z",
       "createdAt": "2026-03-16T02:52:52.036Z",
-      "fileGlobs": [".husky/*", ".git/hooks/*"]
+      "fileGlobs": [".husky/*", ".git/hooks/*"],
+      "category": "performance",
+      "severity": "warning"
     },
     {
       "lessonHash": "2221a6aee0742ad6",
@@ -1016,7 +1226,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T02:56:34.988Z",
       "createdAt": "2026-03-16T02:56:34.988Z",
-      "fileGlobs": ["**/orchestrator/**/*.ts", "**/totem/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["**/orchestrator/**/*.ts", "**/totem/**/*.ts", "!**/*.test.ts"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "6b93afeee17b7b66",
@@ -1026,7 +1238,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T02:58:53.041Z",
       "createdAt": "2026-03-16T02:58:53.041Z",
-      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"],
+      "category": "performance",
+      "severity": "warning"
     },
     {
       "lessonHash": "3b48ad1c3c382306",
@@ -1036,7 +1250,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T02:59:35.089Z",
       "createdAt": "2026-03-16T02:59:35.089Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.mjs", "**/*.cjs"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.mjs", "**/*.cjs"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "9081a2fbc7e22475",
@@ -1052,7 +1268,9 @@
         "**/gates/**/*.ts",
         "**/git/**/*.ts",
         "!**/*.test.ts"
-      ]
+      ],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "64db934ca8c69121",
@@ -1062,7 +1280,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T02:59:59.949Z",
       "createdAt": "2026-03-16T02:59:59.949Z",
-      "fileGlobs": ["**/*.md", "**/*.mdx", "docs/**/*", "guides/**/*"]
+      "fileGlobs": ["**/*.md", "**/*.mdx", "docs/**/*", "guides/**/*"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "2d3ac4b9516ed9b6",
@@ -1072,7 +1292,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:00:18.456Z",
       "createdAt": "2026-03-16T03:00:18.456Z",
-      "fileGlobs": ["**/*.md", "**/*.sh", "**/*.yml", "**/*.yaml", "package.json", "**/*.txt"]
+      "fileGlobs": ["**/*.md", "**/*.sh", "**/*.yml", "**/*.yaml", "package.json", "**/*.txt"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "9feb088293fa8f8c",
@@ -1082,7 +1304,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:00:35.755Z",
       "createdAt": "2026-03-16T03:00:35.755Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.env", "**/*.yaml", "**/*.yml"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.env", "**/*.yaml", "**/*.yml"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "bc8b99e815c3943f",
@@ -1097,7 +1321,9 @@
         "packages/mcp/**/*.js",
         "!**/*.test.ts",
         "!**/*.test.js"
-      ]
+      ],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "5c834874c001d166",
@@ -1112,7 +1338,9 @@
         ".gemini/**/*",
         ".junie/**/*",
         ".github/workflows/**/*"
-      ]
+      ],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "00e6e4a5f7f46c8b",
@@ -1127,7 +1355,9 @@
         "**/orchestrators/**/*.ts",
         "**/*orchestrator*.ts",
         "!**/*.test.ts"
-      ]
+      ],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "ec594c0f3c8ad660",
@@ -1137,7 +1367,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:02:18.906Z",
       "createdAt": "2026-03-16T03:02:18.906Z",
-      "fileGlobs": ["**/*.mcp.json", "**/settings.json", "**/.vscode/settings.json"]
+      "fileGlobs": ["**/*.mcp.json", "**/settings.json", "**/.vscode/settings.json"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "39b3381c5c98760b",
@@ -1147,7 +1379,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:03:10.761Z",
       "createdAt": "2026-03-16T03:03:10.761Z",
-      "fileGlobs": ["**/*sarif*/**/*.ts", "**/sarif/**/*.ts"]
+      "fileGlobs": ["**/*sarif*/**/*.ts", "**/sarif/**/*.ts"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "f81edd8937285d99",
@@ -1163,7 +1397,9 @@
         "**/utils/**/*.ts",
         "**/utils/**/*.js",
         "!**/*.test.ts"
-      ]
+      ],
+      "category": "performance",
+      "severity": "warning"
     },
     {
       "lessonHash": "0f0dcd7ace750ecb",
@@ -1173,7 +1409,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:03:48.822Z",
       "createdAt": "2026-03-16T03:03:48.822Z",
-      "fileGlobs": ["**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "!**/*.test.ts"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "84e41d41ae92a50b",
@@ -1191,7 +1429,9 @@
         ".lintstagedrc*",
         "Makefile",
         "*.sh"
-      ]
+      ],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "1a7080ebf6162de3",
@@ -1206,7 +1446,9 @@
         "**/.gemini/settings.json",
         "**/mcp-config.json",
         "**/claude_desktop_config.json"
-      ]
+      ],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "9fb5c4290a5065f0",
@@ -1216,7 +1458,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:06:12.659Z",
       "createdAt": "2026-03-16T03:06:12.659Z",
-      "fileGlobs": ["**/*.md"]
+      "fileGlobs": ["**/*.md"],
+      "category": "security",
+      "severity": "error"
     },
     {
       "lessonHash": "2f88d9d72e39958d",
@@ -1226,7 +1470,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:06:36.995Z",
       "createdAt": "2026-03-16T03:06:36.995Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "45a50e604b60963a",
@@ -1243,7 +1489,9 @@
         "!**/cli.ts",
         "!**/bin.ts",
         "!**/*.test.ts"
-      ]
+      ],
+      "category": "performance",
+      "severity": "warning"
     },
     {
       "lessonHash": "9eabec8fb748d2a5",
@@ -1253,7 +1501,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:07:11.081Z",
       "createdAt": "2026-03-16T03:07:11.081Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "2f1a92e1321f2255",
@@ -1263,7 +1513,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:07:29.611Z",
       "createdAt": "2026-03-16T03:07:29.611Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "apps/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts", "apps/cli/**/*.ts", "!**/*.test.ts"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "d34c5054f0dd908a",
@@ -1273,7 +1525,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:08:29.013Z",
       "createdAt": "2026-03-16T03:08:29.013Z",
-      "fileGlobs": ["scripts/**/*.{js,ts}", "tools/**/*.{js,ts}"]
+      "fileGlobs": ["scripts/**/*.{js,ts}", "tools/**/*.{js,ts}"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "84ed6335dd7419b9",
@@ -1283,7 +1537,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:09:06.578Z",
       "createdAt": "2026-03-16T03:09:06.578Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "a8b6c82916cfe313",
@@ -1293,7 +1549,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:10:02.298Z",
       "createdAt": "2026-03-16T03:10:02.298Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "5e69ceb82f623d4f",
@@ -1303,7 +1561,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:10:47.000Z",
       "createdAt": "2026-03-16T03:10:47.000Z",
-      "fileGlobs": ["**/*.ts", "**/*.js"]
+      "fileGlobs": ["**/*.ts", "**/*.js"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "3786de834e401fc6",
@@ -1313,7 +1573,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:12:24.084Z",
       "createdAt": "2026-03-16T03:12:24.084Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "be6cdf607465c930",
@@ -1323,7 +1585,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:12:55.911Z",
       "createdAt": "2026-03-16T03:12:55.911Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "b51ebc641046583f",
@@ -1333,7 +1597,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:13:41.467Z",
       "createdAt": "2026-03-16T03:13:41.467Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"],
+      "category": "architecture",
+      "severity": "error"
     },
     {
       "lessonHash": "7d456edf2b3a1554",
@@ -1343,7 +1609,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:14:07.972Z",
       "createdAt": "2026-03-16T03:14:07.972Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.go"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.go"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "a5da42b79e964510",
@@ -1353,7 +1621,9 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T03:14:19.583Z",
       "createdAt": "2026-03-16T03:14:19.583Z",
-      "fileGlobs": ["packages/core/**/*.ts", "libs/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/core/**/*.ts", "libs/**/*.ts", "!**/*.test.ts"],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "56c801dfda484c75",
@@ -1371,7 +1641,9 @@
         "**/*.json",
         "**/*.yaml",
         "**/*.yml"
-      ]
+      ],
+      "category": "style",
+      "severity": "warning"
     },
     {
       "lessonHash": "6df0a3b68a5f0cb1",
@@ -1386,7 +1658,9 @@
         "packages/core/**/*.js",
         "!**/*.test.ts",
         "!**/*.spec.ts"
-      ]
+      ],
+      "category": "style",
+      "severity": "warning"
     }
   ]
 }
