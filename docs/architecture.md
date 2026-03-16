@@ -67,15 +67,15 @@ flowchart TD
 ### 1. Vector Database (`@mmnto/totem`)
 
 - **Storage & Engine:**
-  - **Database:** LanceDB (embedded Node.js) is upgraded to 0.26.x, supporting multi-type knowledge retrieval to separate invariants from context (#494). Features auto-healing migrations to gracefully recover from version bumps and FTS panics (#500, #491).
+  - **Database:** LanceDB (embedded Node.js) is upgraded to 0.26.x, supporting multi-type knowledge retrieval to separate invariants from context (#494). It features auto-healing migrations to gracefully recover from version bumps and FTS panics (#500, #491).
   - **Health:** Incorporates `healthCheck()` to detect broken indexes at startup. It utilizes auto-healing for dimension mismatches and recommends `--rebuild` when necessary (#562, #574).
-  - **Artifacts:** Creates a gitignored `.lancedb/` folder in the consumer's root. This is treated as a replaceable build artifact.
+  - **Artifacts:** Creates a gitignored `.lancedb/` folder in the consumer's root. This is safely treated as a replaceable build artifact.
 - **Data Processing:**
   - **Extraction & Chunking:**
     - _Context Parsing:_ Uses syntax-aware chunking via Tree-sitter AST parsing. It seamlessly indexes standard files and git submodules (#363).
     - _Integrity:_ Avoids blind character splitting by leveraging Markdown hierarchy and session breadcrumbs. A WASM implementation ensures robust handling of large files (#354).
   - **Embedding & Retrieval:**
-    - _Embeddings:_ Utilizes Gemini (`gemini-embedding-2-preview`) as the primary dogfood embedder (#523). Features hybrid search combining Full-Text Search and vector similarity (#378).
+    - _Embeddings:_ Utilizes Gemini (`gemini-embedding-2-preview`) as the primary dogfood embedder (#523). It features hybrid search combining Full-Text Search and vector similarity (#378).
     - _Resilience:_ Implements graceful degradation, falling back to Ollama if the primary provider fails (#517). Automatic `--full` syncs trigger when embedder configuration changes are detected (#548).
 - **Security & Maintenance:**
   - **Filtering:** Includes adversarial content scrubbing and a dedicated `lesson` ContentType for highly precise vector retrieval (#315).
@@ -86,18 +86,18 @@ flowchart TD
 All commands feature proper `--help` output documentation (#358).
 
 - **Setup & Infrastructure:**
-  - **Initialization:** Scaffolds configs, hooks, and AI tools like Copilot and Junie (#448). Emits sensible default ignore patterns and safely detects non-bash environments (#421, #317).
-  - **Environment Support:** Package manager auto-detection fully supports Bun (#316). Installs git hooks automatically from monorepo sub-packages (#333).
+  - **Initialization:** Scaffolds configs, hooks, and AI tools like Copilot and Junie (#448). It automatically ingests `.cursorrules` and prompt files during setup to immediately align AI context (#596, #578).
+  - **Environment Support:** Package manager auto-detection fully supports Bun and safely detects non-bash environments (#421, #316). It installs git hooks automatically from monorepo sub-packages (#333).
 - **Data & Context Management:**
   - **Indexing:** `totem sync` crawls, chunks, and embeds targets into LanceDB. It seamlessly supports indexing `.strategy` repos across multi-totem domains (#463).
   - **Session Management:** `totem briefing` and `totem handoff` capture state snapshots. The `--lite` flag enables zero-LLM capture with ANSI sanitization (#292).
   - **Workflow Resets:** Automates mid-session resets and end-of-task workflows. `totem wrap` cleanly aborts if compilation requirements are missing (#409).
 - **Workflow & Evaluation:**
-  - **Planning & Orchestration:** Orchestrates workflows with human approval gates. Supports configurable issue sources across multiple repositories for triage and extraction (#514).
+  - **Planning & Orchestration:** Orchestrates workflows with human approval gates. It supports configurable issue sources across multiple repositories for triage and extraction (#514).
   - **Review & Quality:**
     - **`totem lint`**: Runs compiled rules against diffs. Strictly zero LLM, fast, used in CI and pre-push hooks while natively supporting SARIF/JSON outputs (#521, #561).
-    - **`totem shield`**: Conducts AI-powered code review using LanceDB context before PRs (#521). It now enforces explicit severity levels, differentiating between errors and warnings (#576).
-  - **Documentation:** Automates transactional document syncs with strict thresholds. Employs a Saga validator to prevent partial or corrupted updates (#351).
+    - **`totem shield`**: Conducts AI-powered code review using LanceDB context before PRs (#521). It enforces explicit severity levels, cleanly differentiating between errors and warnings (#576, #498).
+  - **Documentation:** Automates transactional document syncs using a Saga validator to prevent partial updates (#351). It safely strips known-not-shipped issue references from generated docs to prevent AI hallucinations (#598, #581).
   - **Telemetry & Stats:** Surfaces local metrics powered by the Phase 1 Trap Ledger. Displays basic CIS metric percentages alongside violation histories (#544, #425).
 - **Rule Testing & Extraction:**
   - **Capture & Extraction:** Enables inline capture and batch PR lesson extraction. Lessons are strictly Zod-validated before disk writes to ensure structural integrity (#565).
@@ -106,9 +106,9 @@ All commands feature proper `--help` output documentation (#358).
 
 ### 3. Deterministic Compiler & Zero-LLM Lint
 
-`totem compile` reads architectural constraints and translates each lesson into a regex rule (or marks it as non-compilable). It also seamlessly ingests existing `.cursorrules` and `.mdc` files into the Totem compiled rule matrix (#558). Rules are stored in `.totem/compiled-rules.json`—now extended with advanced telemetry fields and Phase 1 Semantic Rule Observability (#542). An extensive audit categorized rules by invariant, style, and security while explicitly setting execution severities (#559, #577).
+`totem compile` reads architectural constraints and translates each lesson into a regex rule (or marks it as non-compilable). It seamlessly ingests existing `.cursorrules` and `.mdc` files into the Totem compiled rule matrix (#558). To significantly boost performance, the compiler caches non-compilable lessons to skip redundant recompilation loops (#590). Rules are stored in `.totem/compiled-rules.json`—now extended with advanced telemetry fields and Phase 1 Semantic Rule Observability (#542).
 
-The compilation process is context-aware, directly reading files from disk instead of parsing staged diffs to prevent AST gating false positives (#399). Developers can bypass false positives using audited inline suppression directives or negated patterns in `fileGlobs` (#458). Rules are strictly scoped to correct file boundaries using anchored glob matching, enabling targeted enforcement like restricting dynamic-import rules to command files (#546, #533). Vulnerable or overly aggressive patterns are actively refined or rejected (#538).
+The compilation process is context-aware, reading files directly from disk instead of parsing staged diffs to prevent AST gating false positives (#399). Developers can bypass false positives using audited inline suppression directives or negated patterns (#458). Rules are strictly scoped using anchored glob matching, preventing `fileGlobs` from leaking outside specified directories (#584, #546). Duplicate, vulnerable, or overly broad match/exec patterns are actively refined or rejected (#589, #538).
 
 `totem lint` applies these compiled rules against `git diff` additions with zero LLM calls. It shares a core `runCompiledRules` engine with `totem shield` for execution consistency across the pipeline (#566). This physically blocks main branch commits and pre-push violations locally. It generates standard SARIF 2.1.0 or JSON formatted outputs (`Violation[]`) to enable seamless enterprise security integration (#561).
 
@@ -133,7 +133,7 @@ A stdio-based server for LLM integration providing primary tools and strict acce
   - **Access Control:** Implements multi-agent permissions and role-based access control (RBAC) to safely restrict execution boundaries (#312).
   - **Context Limits:** Agent instruction files are structurally governed using a recency sandwich pattern and strict length limits (#466, #511).
 - **Integrations & Lifecycle:**
-  - **IDE & Agent Hooks:** Agent hooks for Claude Code, Gemini CLI, and Junie (#464). Automatic enforcement under research (#520).
+  - **IDE & Agent Hooks:** Agent hooks for Claude Code, Gemini CLI, and Junie (#464). Automatic enforcement pipelines are actively under research (#520).
   - **Session Management:** Utilizes a health check first-query gate to prevent silent search failures at startup. It accurately advises users to run `--rebuild` when indexes are broken (#442, #562).
   - **Stability:** Reaps zombie MCP processes via heartbeat timeouts to reliably resolve connection failures (#503). Handles dimension mismatches dynamically during retrieval queries (#444).
 

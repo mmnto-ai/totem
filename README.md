@@ -30,7 +30,7 @@ Write code with your AI. Run `totem lint`. Push with confidence. Run `totem stat
 npx @mmnto/cli init
 ```
 
-Auto-detects your environment (Cursor, Copilot, Junie) and sets up `totem.config.ts`. Already have `.cursorrules`? Run `totem compile --from-cursor` to enforce them.
+Auto-detects your environment (Cursor, Copilot, Junie) and sets up `totem.config.ts`. Already have `.cursorrules` or `.mdc` files? `totem init` auto-ingests them and compiles your instructions into deterministic rules.
 
 ### 2. Connect the MCP Server
 
@@ -79,7 +79,7 @@ That's it. Your pre-push hook runs `totem lint` automatically.
 
 Your `.cursorrules` and `.mdc` files are plain English. Totem reads them and generates deterministic AST/Regex queries — the same enforcement you'd get from Semgrep, but sourced from your own natural language instructions.
 
-- **Instruction Verifier:** You wrote the prompt. We prove the agent obeyed it. `totem compile --from-cursor` ingests your existing rules.
+- **Instruction Verifier:** You wrote the prompt. We prove the agent obeyed it. `totem init` auto-ingests your existing `.cursorrules` and `.mdc` rules.
 - **Deterministic:** `totem lint` uses Tree-sitter AST parsing. No LLM. No hallucination. No API keys. Runs in your CI, your pre-push hook, your SCIF.
 - **Continuous Learning:** Catch a bug in a PR? Run `totem extract`. Totem learns the lesson and compiles a new invariant. That specific bug can never be merged again.
 
@@ -101,15 +101,15 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
 
 - **Air-Gapped:** `totem lint` requires zero API keys. Runs entirely locally. Your codebase never leaves your machine.
 - **SARIF 2.1.0:** The Trap Ledger integrates into GitHub Advanced Security, GitLab Ultimate, and SonarQube. Prove SOC 2 / DORA compliance to your auditors.
-- **Severity Levels:** Rules are classified as `error` (blocks CI) or `warning` (informs, doesn't block). 83 invariants, 54 guidance rules.
+- **Severity Levels & Categories:** Rules are categorized by invariant, style, and security. They are classified as `error` (blocks CI) or `warning` (informs, doesn't block). 83 invariants, 54 guidance rules.
 
-Built on the same architecture as elite AI assistants (Tree-sitter + LanceDB), but pointed at enforcement, not generation.
+Built on the same architecture as elite AI assistants (Tree-sitter + LanceDB), but pointed at enforcement, not generation. Both deterministic `totem lint` and AI-powered `totem shield` share a unified execution core for consistent rule evaluation.
 
 ## Works With Everything
 
 - **Editors:** Cursor, Windsurf, GitHub Copilot, JetBrains Junie
-- **Agents:** Claude Code, Gemini CLI, Aider
-- **Orchestrators:** Anthropic, Google GenAI, OpenAI, Ollama (Local)
+- **Agents:** Claude Code (with native `totem spec` and `totem shield` hooks), Gemini CLI, Aider
+- **Orchestrators:** Anthropic, Google GenAI, OpenAI, Ollama (Local fallback via graceful degradation)
 - **CI:** GitHub Actions (SARIF), any CI that runs Node
 
 ---

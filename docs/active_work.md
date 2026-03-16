@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@0.38.0`. Recent efforts finalized the Rule Testing Harness (ADR-022) to resolve regex false positives, alongside comprehensive dev wiki migrations. Most recently, the core was advanced with shield severity levels, ingestion of `.cursorrules` / `.mdc` files, and shared compilation logic unifying deterministic `totem lint` and AI-powered `totem shield`.
+ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@0.40.0`. Recent efforts focused on compilation performance by caching non-compilable lessons, alongside auto-ingestion of cursor rules during initialization. Most recently, the core was advanced with shield severity levels, shared compilation logic unifying deterministic `totem lint` and AI-powered `totem shield`, and a complete "Verified Velocity" README rewrite (ADR-049).
 
 Post-merge sequence was aligned during a multi-agent planning session (Claude + Gemini, 2026-03-13) informed by Deep Research Brief #24 (Competitive Moat Analysis). See `.strategy/deep-research/24-competitive-moat-analysis/` for the full adversarial analysis.
 
@@ -43,10 +43,13 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Migrated lessons directory to dual-read/single-write and added startup health checks for LanceStore indexes (#428, #439).
   - Automated `totem sync --full` triggering following embedder configuration changes (#548).
 - **Core & Shift-Left Foundation:**
+  - Automated the ingestion of `.cursorrules` and prompt configurations directly during the `totem init` scaffolding phase (#596, #578).
+  - Optimized compilation performance by caching non-compilable lessons to skip redundant recompilation (#590, #569).
+  - Refined `fileGlobs` processing to strictly enforce specified directory boundaries, fixing broad `match/exec` overreaches (#589, #584).
   - Delivered Organizational Trap Ledger (Phase 1) featuring SARIF extensions and enhanced statistics (#544, #568).
   - Extracted shared execution logic to unify `totem lint` and `totem shield`. Extended `--format sarif/json` support to deterministic linting (#566, #561).
   - Introduced severity levels (error vs warning) for AI-powered `totem shield` reviews per ADR-028 (#498, #576).
-  - Ingested `.cursorrules` and `.mdc` files into compiled rules. Completed an expanded audit of 137 rules categorized by invariant, style, and security (#577, #558).
+  - Ingested `.cursorrules` and `.mdc` files into compiled rules. Completed an expanded audit of 137 rules categorized by invariant, style, and security (#577, #558, #559).
   - Validated extracted lessons with Zod prior to disk writes and integrated basic CIS metrics into `totem stats` (#565, #425).
   - Delivered `totem test` compiled rule testing harness for ADR-022 to provide empirical rule failure data (#422).
   - Shipped SARIF 2.1.0 output, enabling GitHub Advanced Security integration (#387, #418).
@@ -73,6 +76,8 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Resolved MCP server connection failures for `totem-dev` and `totem-strategy` (#512).
   - Validated Gemini CLI compliance regarding `search_knowledge` calls with lean configurations (#446).
 - **Documentation & DX:**
+  - Finalized the full "Verified Velocity" README rewrite, positioning the tool according to the Holy Grail framework defined in ADR-049 (#586, #557).
+  - Hardened `totem docs` generation against hallucinations by actively stripping known-not-shipped issue references from its context (#598, #581).
   - Migrated README to a comprehensive dev wiki (#449). This includes Dev Environment, Testing Conventions, Release Process, and CLI separation guides (#453, #454, #477).
   - Executed a multi-agent code review blitz and refreshed stale prompts for initialization and documentation glossaries (#567, #553).
   - Updated the README to explicitly highlight the Air-Gapped Doctrine (Zero Telemetry) (#474).
