@@ -10,9 +10,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const LOCK_FILE = 'sync.lock';
-const STALE_THRESHOLD_MS = 30_000;
-const MAX_RETRIES = 10;
-const BASE_DELAY_MS = 100;
+const STALE_THRESHOLD_MS = 120_000; // 2 minutes — sync can take 30-60s on large repos
+const MAX_RETRIES = 20;
+const BASE_DELAY_MS = 500;
 
 interface LockData {
   pid: number;

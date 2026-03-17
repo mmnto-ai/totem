@@ -45,15 +45,16 @@ describe('acquireLock', () => {
     release2();
   });
 
-  it('cleans up stale locks', async () => {
-    // Write a stale lock (timestamp 60s ago)
+  it('cleans up stale locks from dead processes', async () => {
+    // Write a stale lock with a PID guaranteed not to exist (PID 1 is init/system, use a very high PID)
     const lockPath = path.join(tmpDir, 'sync.lock');
-    fs.writeFileSync(lockPath, JSON.stringify({ pid: 99999, timestamp: Date.now() - 60_000 }));
+    const deadPid = 2_147_483_647; // max 32-bit PID — virtually guaranteed to be unused
+    fs.writeFileSync(lockPath, JSON.stringify({ pid: deadPid, timestamp: Date.now() - 130_000 }));
 
     const warnings: string[] = [];
     const release = await acquireLock(tmpDir, (msg) => warnings.push(msg));
 
-    expect(warnings.some((w) => w.includes('stale'))).toBe(true);
+    expect(warnings.some((w) => w.includes('stale') || w.includes('dead'))).toBe(true);
     release();
   });
 
@@ -70,5 +71,31 @@ describe('acquireLock', () => {
       }),
     ).rejects.toThrow('boom');
     expect(fs.existsSync(path.join(tmpDir, 'sync.lock'))).toBe(false);
+  });
+
+  it('withLock serializes concurrent operations', async () => {
+    const order: number[] = [];
+    const op = (id: number, ms: number) =>
+      withLock(tmpDir, async () => {
+        order.push(id);
+        await new Promise((r) => setTimeout(r, ms));
+        order.push(id * 10);
+      });
+
+    // Launch two operations concurrently — second must wait for first
+    await Promise.all([op(1, 100), op(2, 50)]);
+
+    // First operation should fully complete before second starts
+    expect(order[0]).toBe(1);
+    expect(order[1]).toBe(10);
+    expect(order[2]).toBe(2);
+    expect(order[3]).toBe(20);
+  });
+
+  it('creates totemDir if it does not exist', async () => {
+    const nested = path.join(tmpDir, 'deep', 'nested', '.totem');
+    const release = await acquireLock(nested);
+    expect(fs.existsSync(path.join(nested, 'sync.lock'))).toBe(true);
+    release();
   });
 });
