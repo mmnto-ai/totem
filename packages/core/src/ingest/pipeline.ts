@@ -5,6 +5,7 @@ import { createChunker } from '../chunkers/chunker.js';
 import type { TotemConfig } from '../config-schema.js';
 import { requireEmbedding } from '../config-schema.js';
 import { createEmbedder } from '../embedders/embedder.js';
+import { withLock } from '../lock.js';
 import { sanitizeForIngestion } from '../sanitize.js';
 import { LanceStore } from '../store/lance-store.js';
 import type { Chunk, SyncOptions, SyncState } from '../types.js';
@@ -48,6 +49,21 @@ function writeSyncState(totemDir: string, state: SyncState): void {
 }
 
 export async function runSync(
+  config: TotemConfig,
+  options: SyncOptions,
+): Promise<{ chunksProcessed: number; filesProcessed: number }> {
+  const { projectRoot, onProgress } = options;
+  const log = onProgress ?? (() => {});
+  const totemDir = path.join(projectRoot, config.totemDir);
+
+  return withLock(
+    totemDir,
+    () => runSyncInner(config, options),
+    (msg) => log(msg),
+  );
+}
+
+async function runSyncInner(
   config: TotemConfig,
   options: SyncOptions,
 ): Promise<{ chunksProcessed: number; filesProcessed: number }> {

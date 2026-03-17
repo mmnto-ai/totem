@@ -68,6 +68,9 @@ export { LanceStore } from './store/lance-store.js';
 export type { ResolvedFile } from './ingest/sync.js';
 export { getChangedFiles, getHeadSha, resolveFiles, runSync } from './ingest/sync.js';
 
+// Concurrency lock
+export { acquireLock, withLock } from './lock.js';
+
 // Drift detection
 export type { DriftResult, ParsedLesson } from './drift-detector.js';
 export {
