@@ -1,4 +1,5 @@
 import type { Orchestrator as OrchestratorConfig } from '@mmnto/totem';
+import { TotemConfigError, TotemOrchestratorError } from '@mmnto/totem';
 
 import { invokeShellOrchestrator } from './shell-orchestrator.js';
 
@@ -102,23 +103,28 @@ export function resolveOrchestrator(
   baseInvoke: InvokeOrchestrator,
 ): ResolvedOrchestrator {
   if (rawModel.startsWith('-') || !MODEL_NAME_RE.test(rawModel)) {
-    throw new Error(
-      `[Totem Error] Invalid model name '${rawModel}'. Model names may only contain word characters, dots, slashes, colons, underscores, and hyphens.`,
+    throw new TotemConfigError(
+      `Invalid model name '${rawModel}'. Model names may only contain word characters, dots, slashes, colons, underscores, and hyphens.`,
+      'Check your orchestrator.model config value and remove any invalid characters.',
+      'CONFIG_INVALID',
     );
   }
 
   const parsed = parseModelString(rawModel, baseProvider);
 
   if (parsed.provider === 'shell' && baseProvider !== 'shell') {
-    throw new Error(
-      `[Totem Error] Cannot route to 'shell' provider from a '${baseProvider}' config.\n` +
-        `The shell provider requires a 'command' template in the orchestrator config.`,
+    throw new TotemConfigError(
+      `Cannot route to 'shell' provider from a '${baseProvider}' config. The shell provider requires a 'command' template in the orchestrator config.`,
+      "Set provider: 'shell' and add a 'command' template in your orchestrator config.",
+      'CONFIG_INVALID',
     );
   }
 
   if (!parsed.model || parsed.model.startsWith('-')) {
-    throw new Error(
-      `[Totem Error] Invalid model name in '${rawModel}'. The model portion must not be empty or start with a hyphen.`,
+    throw new TotemConfigError(
+      `Invalid model name in '${rawModel}'. The model portion must not be empty or start with a hyphen.`,
+      'Provide a valid model name after the provider prefix, e.g. "gemini:gemini-2.5-flash-preview-05-20".',
+      'CONFIG_INVALID',
     );
   }
 
@@ -203,10 +209,9 @@ function withCliFallback(provider: string, sdkInvoker: InvokeOrchestrator): Invo
 
       if (!(await isCliAvailable(binary))) {
         const msg = err instanceof Error ? err.message : String(err);
-        throw new Error(
-          `[Totem Error] CLI fallback for '${provider}' unavailable: '${binary}' not found on PATH.\n` +
-            `Original error: ${msg}\n` +
-            `Install the ${provider} CLI or its SDK to use this provider.`,
+        throw new TotemOrchestratorError(
+          `CLI fallback for '${provider}' unavailable: '${binary}' not found on PATH. Original error: ${msg}`,
+          `Install the ${provider} CLI or its SDK to use this provider.`,
         );
       }
 

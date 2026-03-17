@@ -5,6 +5,8 @@ export {
   TotemConfigError,
   TotemDatabaseError,
   TotemError,
+  TotemGitError,
+  TotemOrchestratorError,
   TotemParseError,
 } from './errors.js';
 

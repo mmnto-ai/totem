@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { DocTarget, SagaViolation } from '@mmnto/totem';
-import { validateDocUpdate } from '@mmnto/totem';
+import { TotemConfigError, validateDocUpdate } from '@mmnto/totem';
 
 import { GitHubCliAdapter } from '../adapters/github-cli.js';
 import { getGitLogSince, getLatestTag, isFileDirty } from '../git.js';
@@ -224,15 +224,11 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
 
   // Validate docs are configured
   if (!config.docs || config.docs.length === 0) {
-    const err = new Error(
-      `[Totem Error] No docs configured.\n` +
-        `Add a 'docs' array to totem.config.ts. Example:\n` +
-        `  docs: [\n` +
-        `    { path: 'README.md', description: 'Public-facing README', trigger: 'post-release' },\n` +
-        `  ]`,
+    throw new TotemConfigError(
+      'No docs configured.',
+      "Add a 'docs' array to totem.config.ts. Example:\n  docs: [\n    { path: 'README.md', description: 'Public-facing README', trigger: 'post-release' },\n  ]",
+      'CONFIG_MISSING',
     );
-    err.name = 'NoDocsConfiguredError';
-    throw err;
   }
 
   // Resolve targets from positional args, --only, or all docs
@@ -240,9 +236,10 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
 
   // Fail-fast: conflicting targeting flags
   if (inputs.length > 0 && options.only) {
-    throw new Error(
-      `[Totem Error] Cannot combine positional doc paths with --only flag.\n` +
-        `Use one or the other: \`totem docs README.md\` OR \`totem docs --only readme\`.`,
+    throw new TotemConfigError(
+      'Cannot combine positional doc paths with --only flag.',
+      'Use one or the other: `totem docs README.md` OR `totem docs --only readme`.',
+      'CONFIG_INVALID',
     );
   }
 
@@ -264,9 +261,10 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
     }
 
     if (invalid.length > 0) {
-      throw new Error(
-        `[Totem Error] Unknown doc path(s): ${invalid.join(', ')}\n` +
-          `Available: ${config.docs.map((d) => d.path).join(', ')}`,
+      throw new TotemConfigError(
+        `Unknown doc path(s): ${invalid.join(', ')}`,
+        `Available: ${config.docs.map((d) => d.path).join(', ')}`,
+        'CONFIG_INVALID',
       );
     }
     targets = Array.from(resolved);
@@ -279,9 +277,10 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
       return onlyNames.some((name) => basename.includes(name) || fullPath.includes(name));
     });
     if (targets.length === 0) {
-      throw new Error(
-        `[Totem Error] --only '${options.only}' matched no configured docs.\n` +
-          `Available: ${config.docs.map((d) => d.path).join(', ')}`,
+      throw new TotemConfigError(
+        `--only '${options.only}' matched no configured docs.`,
+        `Available: ${config.docs.map((d) => d.path).join(', ')}`,
+        'CONFIG_INVALID',
       );
     }
   }
@@ -291,10 +290,11 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
   // Check for dirty files (data loss protection)
   const dirtyFiles = targets.filter((d) => isFileDirty(cwd, d.path));
   if (dirtyFiles.length > 0 && !options.dryRun) {
-    throw new Error(
-      `[Totem Error] The following doc(s) have uncommitted changes:\n` +
-        dirtyFiles.map((d) => `  - ${d.path}`).join('\n') +
-        `\nCommit or stash changes before running \`totem docs\` to prevent data loss.`,
+    throw new TotemConfigError(
+      `The following doc(s) have uncommitted changes:\n` +
+        dirtyFiles.map((d) => `  - ${d.path}`).join('\n'),
+      'Commit or stash changes before running `totem docs` to prevent data loss.',
+      'CONFIG_INVALID',
     );
   }
 

@@ -5,6 +5,8 @@
  * After linking, `totem sync` will index both local and linked lessons.
  */
 
+import { TotemConfigError, TotemParseError } from '@mmnto/totem';
+
 export interface LinkOptions {
   unlink?: boolean;
 }
@@ -25,17 +27,21 @@ export async function linkCommand(targetPath: string, options: LinkOptions): Pro
   // Validate target has a .totem directory
   const targetTotemDir = path.join(resolved, '.totem');
   if (!fs.existsSync(targetTotemDir)) {
-    throw new Error(
-      '[Totem Error] Target directory does not contain a .totem/ folder.\n' +
-        `Checked: ${targetTotemDir}\n` +
-        'Run `totem init` in the target project first.',
+    throw new TotemConfigError(
+      `Target directory does not contain a .totem/ folder. Checked: ${targetTotemDir}`,
+      'Run `totem init` in the target project first.',
+      'CONFIG_MISSING',
     );
   }
 
   // Read current config
   const configPath = resolveConfigPath(cwd);
   if (!fs.existsSync(configPath)) {
-    throw new Error('[Totem Error] No totem.config.ts found. Run totem init first.');
+    throw new TotemConfigError(
+      'No totem.config.ts found.',
+      'Run `totem init` first to create a configuration file.',
+      'CONFIG_MISSING',
+    );
   }
 
   const configContent = fs.readFileSync(configPath, 'utf-8');
@@ -76,8 +82,9 @@ export async function linkCommand(targetPath: string, options: LinkOptions): Pro
   // Find the targets array and append
   const targetsMatch = configContent.indexOf('targets: [');
   if (targetsMatch === -1) {
-    throw new Error(
-      '[Totem Error] Could not find `targets: [` in totem.config.ts. Is the config valid?',
+    throw new TotemParseError(
+      'Could not find `targets: [` in totem.config.ts.',
+      'Ensure totem.config.ts contains a valid `targets` array. Re-run `totem init` to regenerate.',
     );
   }
 
@@ -96,7 +103,10 @@ export async function linkCommand(targetPath: string, options: LinkOptions): Pro
   }
 
   if (insertIdx === -1) {
-    throw new Error('[Totem Error] Could not parse targets array in totem.config.ts.');
+    throw new TotemParseError(
+      'Could not parse targets array in totem.config.ts.',
+      'Ensure the `targets` array has valid syntax with matching brackets. Re-run `totem init` to regenerate.',
+    );
   }
 
   const newTargets = `

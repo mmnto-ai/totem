@@ -1,3 +1,5 @@
+import { TotemConfigError } from '@mmnto/totem';
+
 import type { ShieldFormat } from './shield.js';
 
 // ─── Types ──────────────────────────────────────────
@@ -21,7 +23,11 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   const format: ShieldFormat = options.format ?? 'text';
   const VALID_FORMATS: ShieldFormat[] = ['text', 'sarif', 'json'];
   if (!VALID_FORMATS.includes(format)) {
-    throw new Error(`[Totem Error] Invalid --format "${format}". Use "text", "sarif", or "json".`);
+    throw new TotemConfigError(
+      `Invalid --format "${format}". Use "text", "sarif", or "json".`,
+      'Check `totem lint --help` for valid options.',
+      'CONFIG_INVALID',
+    );
   }
 
   const cwd = process.cwd();

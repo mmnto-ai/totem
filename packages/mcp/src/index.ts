@@ -7,6 +7,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
+import { TotemConfigError, TotemError } from '@mmnto/totem';
+
 import { registerAddLesson } from './tools/add-lesson.js';
 import { registerSearchKnowledge } from './tools/search-knowledge.js';
 
@@ -15,13 +17,21 @@ const cwdFlagIdx = process.argv.indexOf('--cwd');
 if (cwdFlagIdx !== -1) {
   const cwdValue = process.argv[cwdFlagIdx + 1];
   if (!cwdValue || cwdValue.startsWith('-')) {
-    throw new Error('[Totem Error] --cwd flag requires a directory path argument.');
+    throw new TotemConfigError(
+      '--cwd flag requires a directory path argument.',
+      'Usage: @mmnto/mcp --cwd /path/to/project',
+      'CONFIG_INVALID',
+    );
   }
   try {
     process.chdir(path.resolve(cwdValue));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    throw new Error(`[Totem Error] Failed to change directory to "${cwdValue}": ${message}`);
+    throw new TotemError(
+      'MCP_ERROR',
+      `Failed to change directory to "${cwdValue}": ${message}`,
+      'Check that the directory exists and you have read access.',
+    );
   }
 }
 

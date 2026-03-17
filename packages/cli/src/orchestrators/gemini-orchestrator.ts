@@ -1,3 +1,5 @@
+import { TotemConfigError, TotemOrchestratorError } from '@mmnto/totem';
+
 import { log } from '../ui.js';
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
 import { detectPackageManager, isQuotaError } from './orchestrator.js';
@@ -12,10 +14,10 @@ async function importGeminiSdk() {
   try {
     return await import('@google/genai');
   } catch {
-    throw new Error(
-      '[Totem Error] Gemini SDK (@google/genai) is not installed.\n' +
-        `Install it with: ${detectPackageManager()} add @google/genai\n` +
-        "Or use provider: 'shell' in your orchestrator config.",
+    throw new TotemConfigError(
+      'Gemini SDK (@google/genai) is not installed.',
+      `Install it with: ${detectPackageManager()} add @google/genai`,
+      'CONFIG_MISSING',
     );
   }
 }
@@ -35,9 +37,10 @@ export async function invokeGeminiOrchestrator(
 
   const apiKey = process.env['GEMINI_API_KEY'] ?? process.env['GOOGLE_API_KEY'];
   if (!apiKey) {
-    throw new Error(
-      '[Totem Error] No Gemini API key found.\n' +
-        'Set GEMINI_API_KEY (or GOOGLE_API_KEY) in your .env file.',
+    throw new TotemConfigError(
+      'No Gemini API key found.',
+      'Set GEMINI_API_KEY (or GOOGLE_API_KEY) in your .env file.',
+      'CONFIG_MISSING',
     );
   }
 
@@ -68,6 +71,9 @@ export async function invokeGeminiOrchestrator(
       throw err;
     }
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`[Totem Error] Gemini API call failed: ${msg}`);
+    throw new TotemOrchestratorError(
+      `Gemini API call failed: ${msg}`,
+      'Check your GEMINI_API_KEY, network connection, and model name.',
+    );
   }
 }

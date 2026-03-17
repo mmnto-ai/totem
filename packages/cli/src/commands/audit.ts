@@ -5,7 +5,7 @@ import * as path from 'node:path';
 
 import { isCancel, multiselect } from '@clack/prompts';
 
-import { sanitize } from '@mmnto/totem';
+import { sanitize, TotemConfigError, TotemParseError } from '@mmnto/totem';
 
 import { ghExec } from '../adapters/gh-utils.js';
 import type { StandardIssueListItem } from '../adapters/issue-adapter.js';
@@ -134,8 +134,9 @@ export function loadStrategicDocs(cwd: string): string {
 export function parseAuditResponse(content: string): AuditProposal[] {
   const match = content.match(/<audit_proposals>([\s\S]*?)<\/audit_proposals>/);
   if (!match) {
-    throw new Error(
-      '[Totem Error] LLM response missing <audit_proposals> wrapper. Re-run or check prompt.',
+    throw new TotemParseError(
+      'LLM response missing <audit_proposals> wrapper.',
+      'Re-run the command or check the audit prompt template.',
     );
   }
 
@@ -143,34 +144,48 @@ export function parseAuditResponse(content: string): AuditProposal[] {
   try {
     parsed = JSON.parse(match[1]!);
   } catch {
-    throw new Error('[Totem Error] Failed to parse audit proposals as JSON.');
+    throw new TotemParseError(
+      'Failed to parse audit proposals as JSON.',
+      'Re-run the command. The LLM may have produced malformed output.',
+    );
   }
 
   if (!Array.isArray(parsed)) {
-    throw new Error('[Totem Error] Audit proposals must be a JSON array.');
+    throw new TotemParseError(
+      'Audit proposals must be a JSON array.',
+      'Re-run the command. The LLM returned an object instead of an array.',
+    );
   }
 
   const VALID_TIERS = ['tier-1', 'tier-2', 'tier-3'];
 
   return (parsed as Record<string, unknown>[]).map((item, i) => {
     if (typeof item.number !== 'number') {
-      throw new Error(`[Totem Error] Invalid or missing "number" for proposal ${i}.`);
+      throw new TotemParseError(
+        `Invalid or missing "number" for proposal ${i}.`,
+        'Re-run the command. Each proposal must include a numeric "number" field.',
+      );
     }
     const action = String(item.action ?? '').toUpperCase() as AuditAction;
     if (!VALID_ACTIONS.includes(action)) {
-      throw new Error(
-        `[Totem Error] Invalid action "${item.action}" for proposal ${i}. Must be one of: ${VALID_ACTIONS.join(', ')}`,
+      throw new TotemParseError(
+        `Invalid action "${item.action}" for proposal ${i}. Must be one of: ${VALID_ACTIONS.join(', ')}`,
+        'Re-run the command. The LLM produced an unrecognized action value.',
       );
     }
     if (action === 'MERGE' && typeof item.mergeInto !== 'number') {
-      throw new Error(`[Totem Error] Invalid or missing "mergeInto" for MERGE proposal ${i}.`);
+      throw new TotemParseError(
+        `Invalid or missing "mergeInto" for MERGE proposal ${i}.`,
+        'Re-run the command. MERGE proposals must include a numeric "mergeInto" field.',
+      );
     }
     if (
       action === 'REPRIORITIZE' &&
       (typeof item.newTier !== 'string' || !VALID_TIERS.includes(item.newTier))
     ) {
-      throw new Error(
-        `[Totem Error] Invalid "newTier" for REPRIORITIZE proposal ${i}. Must be one of: ${VALID_TIERS.join(', ')}.`,
+      throw new TotemParseError(
+        `Invalid "newTier" for REPRIORITIZE proposal ${i}. Must be one of: ${VALID_TIERS.join(', ')}.`,
+        'Re-run the command. REPRIORITIZE proposals must include a valid "newTier" value.',
       );
     }
     return {
@@ -227,8 +242,10 @@ export async function selectProposals(
   }
 
   if (!opts.isTTY) {
-    throw new Error(
-      '[Totem Error] Refusing to modify issues in non-interactive mode. Use --yes to bypass confirmation.',
+    throw new TotemConfigError(
+      'Refusing to modify issues in non-interactive mode.',
+      'Use --yes to bypass confirmation, or run in an interactive terminal.',
+      'CONFIG_INVALID',
     );
   }
 

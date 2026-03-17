@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 
+import { TotemGitError } from '@mmnto/totem';
+
 import { IS_WIN } from './utils.js';
 
 // ─── Constants ──────────────────────────────────────────
@@ -10,8 +12,9 @@ const GIT_COMMAND_TIMEOUT_MS = 15_000;
 function throwIfGitMissing(err: unknown): void {
   const msg = err instanceof Error ? err.message : String(err);
   if (msg.includes('ENOENT') || msg.includes('not found')) {
-    throw new Error(
-      `[Totem Error] 'git' command not found. Ensure Git is installed and in your PATH.`,
+    throw new TotemGitError(
+      "'git' command not found.",
+      'Ensure Git is installed and in your PATH.',
     );
   }
 }
@@ -54,7 +57,10 @@ export function getGitDiff(mode: 'staged' | 'all', cwd: string): string {
   } catch (err) {
     throwIfGitMissing(err);
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`[Totem Error] Failed to get git diff: ${msg}`);
+    throw new TotemGitError(
+      `Failed to get git diff: ${msg}`,
+      'Check that you are inside a Git repository with at least one commit.',
+    );
   }
 }
 
@@ -104,8 +110,9 @@ export function getDefaultBranch(cwd: string): string {
         }
       }
     }
-    throw new Error(
-      `[Totem Error] Could not determine default branch. Neither 'main' nor 'master' found locally, and 'git symbolic-ref' failed.`,
+    throw new TotemGitError(
+      "Could not determine default branch. Neither 'main' nor 'master' found locally, and 'git symbolic-ref' failed.",
+      "Run 'git remote set-head origin --auto' to configure the default branch, or pass --base explicitly.",
     );
   }
 }
@@ -127,7 +134,10 @@ export function getGitBranchDiff(cwd: string, base?: string): string {
       // If this was the last ref, throw
       if (ref === refs[refs.length - 1]) {
         const msg = err instanceof Error ? err.message : String(err);
-        throw new Error(`[Totem Error] Failed to get branch diff (${baseBranch}...HEAD): ${msg}`);
+        throw new TotemGitError(
+          `Failed to get branch diff (${baseBranch}...HEAD): ${msg}`,
+          `Ensure the base branch '${baseBranch}' exists locally or as a remote ref. Try 'git fetch origin ${baseBranch}'.`,
+        );
       }
     }
   }

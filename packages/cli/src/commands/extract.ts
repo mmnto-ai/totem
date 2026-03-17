@@ -10,6 +10,9 @@ import {
   INSTRUCTIONAL_LEAKAGE_RE,
   LanceStore,
   runSync,
+  TotemConfigError,
+  TotemError,
+  TotemParseError,
   truncateHeading,
   UNICODE_ESCAPE_RE,
   writeLessonFile,
@@ -427,8 +430,10 @@ export async function selectLessons(
   }
 
   if (!opts.isTTY) {
-    throw new Error(
-      `[Totem Error] Refusing to write lessons in non-interactive mode. Use --yes to bypass confirmation.`,
+    throw new TotemConfigError(
+      'Refusing to write lessons in non-interactive mode.',
+      'Use --yes to bypass confirmation, or run in an interactive terminal.',
+      'CONFIG_INVALID',
     );
   }
 
@@ -462,8 +467,10 @@ export async function selectLessons(
 /** Cosine similarity between two vectors of equal length. */
 export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) {
-    throw new Error(
-      '[Totem Error] Cannot compute cosine similarity for vectors of different lengths.',
+    throw new TotemError(
+      'PARSE_FAILED',
+      'Cannot compute cosine similarity for vectors of different lengths.',
+      'This is an internal error. The embedding dimensions may have changed between runs.',
     );
   }
   let dot = 0;
@@ -555,8 +562,10 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
   // Validate and deduplicate PR numbers
   const unique = [...new Set(prNumbers)];
   if (unique.length > MAX_INPUTS) {
-    throw new Error(
-      `[Totem Error] Too many PR numbers (${unique.length}). Maximum is ${MAX_INPUTS}.`,
+    throw new TotemConfigError(
+      `Too many PR numbers (${unique.length}). Maximum is ${MAX_INPUTS}.`,
+      `Pass at most ${MAX_INPUTS} PR numbers at a time.`,
+      'CONFIG_INVALID',
     );
   }
 
@@ -564,8 +573,10 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
   for (const prNumber of unique) {
     const num = parseInt(prNumber, 10);
     if (isNaN(num) || num <= 0) {
-      throw new Error(
-        `[Totem Error] Invalid PR number: '${prNumber}'. Must be a positive integer.`,
+      throw new TotemConfigError(
+        `Invalid PR number: '${prNumber}'. Must be a positive integer.`,
+        'Pass a numeric PR number, e.g. `totem extract 123`.',
+        'CONFIG_INVALID',
       );
     }
     nums.push(num);

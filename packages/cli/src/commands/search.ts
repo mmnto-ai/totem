@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 
 import type { ContentType } from '@mmnto/totem';
-import { ContentTypeSchema, createEmbedder, LanceStore } from '@mmnto/totem';
+import { ContentTypeSchema, createEmbedder, LanceStore, TotemConfigError } from '@mmnto/totem';
 
 import { loadConfig, loadEnv, requireEmbedding, resolveConfigPath, sanitize } from '../utils.js';
 
@@ -22,8 +22,10 @@ export async function searchCommand(
 
   const VALID_TYPES = ContentTypeSchema.options;
   if (options.type && !VALID_TYPES.includes(options.type as ContentType)) {
-    throw new Error(
-      `[Totem Error] Invalid type filter: '${options.type}'. Valid types are: ${VALID_TYPES.join(', ')}`,
+    throw new TotemConfigError(
+      `Invalid type filter: '${options.type}'. Valid types are: ${VALID_TYPES.join(', ')}`,
+      'Check `totem search --help` for valid --type options.',
+      'CONFIG_INVALID',
     );
   }
 

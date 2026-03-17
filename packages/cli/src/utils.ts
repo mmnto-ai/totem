@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { SearchResult, TotemConfig } from '@mmnto/totem';
-import { TotemConfigSchema } from '@mmnto/totem';
+import { TotemConfigError, TotemConfigSchema, TotemOrchestratorError } from '@mmnto/totem';
 
 import type { OrchestratorResult } from './orchestrators/orchestrator.js';
 import { createOrchestrator, resolveOrchestrator } from './orchestrators/orchestrator.js';
@@ -58,7 +58,11 @@ export async function loadConfig(configPath: string): Promise<TotemConfig> {
 export function resolveConfigPath(cwd: string): string {
   const configPath = path.join(cwd, 'totem.config.ts');
   if (!fs.existsSync(configPath)) {
-    throw new Error('[Totem Error] No totem.config.ts found. Run `totem init` first.');
+    throw new TotemConfigError(
+      'No totem.config.ts found.',
+      "Run 'totem init' to create one.",
+      'CONFIG_MISSING',
+    );
   }
   return configPath;
 }
@@ -319,9 +323,11 @@ export async function runOrchestrator(opts: {
 
   // Require orchestrator for LLM synthesis
   if (!config.orchestrator) {
-    throw new Error(
-      `[Totem Error] No orchestrator configured. Add an 'orchestrator' block to totem.config.ts.\n` +
-        `Example:\n  orchestrator: {\n    provider: 'shell',\n    command: 'gemini --model {model} -e none < {file}',\n    defaultModel: 'gemini-2.5-pro',\n  }`,
+    throw new TotemConfigError(
+      'No orchestrator configured.',
+      "Add an 'orchestrator' block to totem.config.ts.\n" +
+        "Example:\n  orchestrator: {\n    provider: 'shell',\n    command: 'gemini --model {model} -e none < {file}',\n    defaultModel: 'gemini-2.5-pro',\n  }",
+      'CONFIG_INVALID',
     );
   }
 
@@ -332,8 +338,10 @@ export async function runOrchestrator(opts: {
   const rawModel =
     options.model ?? config.orchestrator.overrides?.[tagKey] ?? config.orchestrator.defaultModel;
   if (!rawModel) {
-    throw new Error(
-      `[Totem Error] No model specified. Provide one with --model, set a command-specific model in 'overrides', or set a 'defaultModel' in your orchestrator config.`,
+    throw new TotemConfigError(
+      'No model specified.',
+      "Provide one with --model, set a command-specific model in 'overrides', or set a 'defaultModel' in your orchestrator config.",
+      'CONFIG_INVALID',
     );
   }
 
@@ -400,20 +408,19 @@ export async function runOrchestrator(opts: {
           const originalMsg = err.message;
           const fallbackMsg =
             fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
-          throw new Error(
-            `[Totem Error] Primary model '${rawModel}' failed and fallback model '${rawFallback}' also failed.\n\n` +
-              `Primary error:\n${originalMsg}\n\n` +
-              `Fallback error:\n${fallbackMsg}`,
+          throw new TotemOrchestratorError(
+            `Primary model '${rawModel}' failed and fallback model '${rawFallback}' also failed.\n\n` +
+              `Primary error:\n${originalMsg}\n\nFallback error:\n${fallbackMsg}`,
+            'Check API quotas and model availability, or try a different model with --model.',
           );
         }
       } else {
-        throw new Error(
-          `[Totem Error] Quota exhausted for ${model}.\n` +
-            `  Quota resets on a rolling daily window.\n` +
-            `  Options:\n` +
-            `    - Switch to a flash model: totem <command> --model <name>\n` +
-            `    - Inspect the prompt without calling the API: totem <command> --raw\n` +
-            `    - Set a fallbackModel in totem.config.ts`,
+        throw new TotemOrchestratorError(
+          `Quota exhausted for ${model}.`,
+          'Quota resets on a rolling daily window. Options:\n' +
+            '  - Switch to a flash model: totem <command> --model <name>\n' +
+            '  - Inspect the prompt without calling the API: totem <command> --raw\n' +
+            '  - Set a fallbackModel in totem.config.ts',
         );
       }
     } else {

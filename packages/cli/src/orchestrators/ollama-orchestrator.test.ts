@@ -121,14 +121,25 @@ describe('invokeOllamaOrchestrator', () => {
   it('suggests ollama serve in connection error', async () => {
     mockFetch.mockRejectedValueOnce(new Error('ECONNREFUSED'));
 
-    await expect(invokeOllamaOrchestrator(baseOpts)).rejects.toThrow('ollama serve');
+    await expect(invokeOllamaOrchestrator(baseOpts)).rejects.toSatisfy((err: Error) => {
+      return (
+        err.message.includes('Cannot connect to Ollama') &&
+        'recoveryHint' in err &&
+        (err as { recoveryHint: string }).recoveryHint.includes('ollama serve')
+      );
+    });
   });
 
   it('throws VRAM-friendly error on 500 with numCtx', async () => {
     mockFetch.mockResolvedValueOnce(new Response('out of memory', { status: 500 }));
 
-    await expect(invokeOllamaOrchestrator({ ...baseOpts, numCtx: 32768 })).rejects.toThrow(
-      'lowering numCtx',
+    await expect(invokeOllamaOrchestrator({ ...baseOpts, numCtx: 32768 })).rejects.toSatisfy(
+      (err: Error) => {
+        return (
+          'recoveryHint' in err &&
+          (err as { recoveryHint: string }).recoveryHint.includes('lowering numCtx')
+        );
+      },
     );
   });
 
@@ -143,7 +154,12 @@ describe('invokeOllamaOrchestrator', () => {
   it('throws VRAM-friendly error on 500 without numCtx', async () => {
     mockFetch.mockResolvedValueOnce(new Response('out of memory', { status: 500 }));
 
-    await expect(invokeOllamaOrchestrator(baseOpts)).rejects.toThrow('smaller numCtx');
+    await expect(invokeOllamaOrchestrator(baseOpts)).rejects.toSatisfy((err: Error) => {
+      return (
+        'recoveryHint' in err &&
+        (err as { recoveryHint: string }).recoveryHint.includes('smaller numCtx')
+      );
+    });
   });
 
   it('handles missing token counts gracefully', async () => {
