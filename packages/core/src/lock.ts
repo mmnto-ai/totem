@@ -78,10 +78,19 @@ export async function acquireLock(
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     const existing = readLock(file);
 
-    // Corrupted lockfile (empty, bad JSON) — remove it and retry
+    // Corrupted lockfile (empty, bad JSON) — remove if not mid-write
     if (!existing && fs.existsSync(file)) {
       try {
-        fs.unlinkSync(file);
+        const stat = fs.statSync(file);
+        const ageMs = Date.now() - stat.mtimeMs;
+        if (ageMs > 1000) {
+          // File is old enough to be genuinely corrupted, not mid-write
+          fs.unlinkSync(file);
+        } else {
+          // File may be mid-write by another process — wait and retry
+          const delay = backoffDelay(attempt);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
       } catch {
         // Another process may have cleaned it up
       }
@@ -175,15 +184,22 @@ export async function withLock<T>(
   const release = await acquireLock(totemDir, onWarn);
 
   // Best-effort cleanup on process termination (Ctrl+C, kill)
-  const cleanup = () => release();
-  process.on('SIGINT', cleanup);
-  process.on('SIGTERM', cleanup);
+  const cleanup = (signal: string) => {
+    release();
+    // Re-raise the signal so the process actually terminates
+    process.removeListener(signal, cleanup as () => void);
+    process.kill(process.pid, signal); // totem-ignore: re-raising caught signal
+  };
+  const onSigint = () => cleanup('SIGINT');
+  const onSigterm = () => cleanup('SIGTERM');
+  process.on('SIGINT', onSigint);
+  process.on('SIGTERM', onSigterm);
 
   try {
     return await fn();
   } finally {
-    process.removeListener('SIGINT', cleanup);
-    process.removeListener('SIGTERM', cleanup);
+    process.removeListener('SIGINT', onSigint);
+    process.removeListener('SIGTERM', onSigterm);
     release();
   }
 }
