@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 
 import type { ContentType, SearchResult } from '@mmnto/totem';
-import { createEmbedder, LanceStore } from '@mmnto/totem';
+import { createEmbedder, LanceStore, TotemConfigError } from '@mmnto/totem';
 
 import type { StandardIssue } from '../adapters/issue-adapter.js';
 import { log } from '../ui.js';
@@ -170,7 +170,11 @@ export interface SpecOptions {
 export async function specCommand(inputs: string[], options: SpecOptions): Promise<void> {
   const unique = [...new Set(inputs)];
   if (unique.length > MAX_INPUTS) {
-    throw new Error(`[Totem Error] Too many inputs (${unique.length}). Maximum is ${MAX_INPUTS}.`);
+    throw new TotemConfigError(
+      `Too many inputs (${unique.length}). Maximum is ${MAX_INPUTS}.`,
+      `Pass at most ${MAX_INPUTS} inputs at a time.`,
+      'CONFIG_INVALID',
+    );
   }
 
   const cwd = process.cwd();

@@ -1,3 +1,5 @@
+import { TotemConfigError, TotemOrchestratorError } from '@mmnto/totem';
+
 import { log } from '../ui.js';
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
 import { detectPackageManager, isQuotaError } from './orchestrator.js';
@@ -18,10 +20,10 @@ async function importOpenAISdk() {
   try {
     return (await import('openai')).default;
   } catch {
-    throw new Error(
-      '[Totem Error] OpenAI SDK (openai) is not installed.\n' +
-        `Install it with: ${detectPackageManager()} add openai\n` +
-        "Or use provider: 'shell' in your orchestrator config.",
+    throw new TotemConfigError(
+      'OpenAI SDK (openai) is not installed.',
+      `Install it with: ${detectPackageManager()} add openai`,
+      'CONFIG_MISSING',
     );
   }
 }
@@ -43,9 +45,10 @@ export async function invokeOpenAIOrchestrator(
   // For local servers, use a dummy key if none is set
   const apiKey = process.env['OPENAI_API_KEY'] ?? (baseUrl ? LOCAL_DUMMY_KEY : undefined);
   if (!apiKey) {
-    throw new Error(
-      '[Totem Error] No OpenAI API key found.\n' +
-        'Set OPENAI_API_KEY in your .env file, or add a baseUrl for local servers (Ollama, LM Studio).',
+    throw new TotemConfigError(
+      'No OpenAI API key found.',
+      'Set OPENAI_API_KEY in your .env file, or add a baseUrl for local servers (Ollama, LM Studio).',
+      'CONFIG_MISSING',
     );
   }
 
@@ -82,6 +85,9 @@ export async function invokeOpenAIOrchestrator(
       throw err;
     }
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`[Totem Error] OpenAI API call failed: ${msg}`);
+    throw new TotemOrchestratorError(
+      `OpenAI API call failed: ${msg}`,
+      'Check your OPENAI_API_KEY, network connection, and model name.',
+    );
   }
 }

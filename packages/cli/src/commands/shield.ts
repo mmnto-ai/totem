@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 
 import type { ContentType, LanceStore, SearchResult } from '@mmnto/totem';
+import { TotemConfigError } from '@mmnto/totem';
 
 import { extractChangedFiles, getDefaultBranch, getGitBranchDiff, getGitDiff } from '../git.js';
 import { bold, errorColor, log, success as successColor } from '../ui.js';
@@ -420,17 +421,25 @@ const VALID_FORMATS: ShieldFormat[] = ['text', 'sarif', 'json'];
 
 export async function shieldCommand(options: ShieldOptions): Promise<void> {
   if (options.mode && options.mode !== 'standard' && options.mode !== 'structural') {
-    throw new Error(
-      `[Totem Error] Invalid --mode "${options.mode}". Use "standard" or "structural".`,
+    throw new TotemConfigError(
+      `Invalid --mode "${options.mode}". Use "standard" or "structural".`,
+      'Check `totem shield --help` for valid options.',
+      'CONFIG_INVALID',
     );
   }
   if (options.format && !VALID_FORMATS.includes(options.format)) {
-    throw new Error(
-      `[Totem Error] Invalid --format "${options.format}". Use "text", "sarif", or "json".`,
+    throw new TotemConfigError(
+      `Invalid --format "${options.format}". Use "text", "sarif", or "json".`,
+      'Check `totem shield --help` for valid options.',
+      'CONFIG_INVALID',
     );
   }
   if (options.format && options.format !== 'text' && !options.deterministic) {
-    throw new Error('[Totem Error] --format sarif/json is only supported with `totem lint`.');
+    throw new TotemConfigError(
+      '--format sarif/json is only supported with `totem lint`.',
+      'Use `totem lint --format sarif` or `totem lint --format json` instead.',
+      'CONFIG_INVALID',
+    );
   }
 
   const cwd = process.cwd();

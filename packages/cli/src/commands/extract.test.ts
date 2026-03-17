@@ -581,7 +581,7 @@ describe('selectLessons', () => {
 
   it('throws in non-TTY without --yes', async () => {
     await expect(selectLessons(sampleLessons, { isTTY: false })).rejects.toThrow(
-      '[Totem Error] Refusing to write lessons in non-interactive mode. Use --yes to bypass confirmation.',
+      '[Totem Error] Refusing to write lessons in non-interactive mode.',
     );
   });
 });

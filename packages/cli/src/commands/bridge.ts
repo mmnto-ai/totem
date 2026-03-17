@@ -1,6 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { TotemGitError } from '@mmnto/totem';
+
 import { getGitBranch, getGitStatus } from '../git.js';
 import { log } from '../ui.js';
 import { writeOutput } from '../utils.js';
@@ -54,8 +56,9 @@ export function bridgeCommand(options: BridgeOptions): void {
   const cwd = process.cwd();
 
   if (!fs.existsSync(path.join(cwd, '.git'))) {
-    throw new Error(
-      '[Totem Error] Not a git repository. Run `totem bridge` from a project with git initialized.',
+    throw new TotemGitError(
+      'Not a git repository.',
+      'Run `totem bridge` from a project with git initialized.',
     );
   }
 

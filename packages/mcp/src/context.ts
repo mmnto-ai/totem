@@ -2,7 +2,13 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { Embedder, TotemConfig } from '@mmnto/totem';
-import { createEmbedder, LanceStore, requireEmbedding, TotemConfigSchema } from '@mmnto/totem';
+import {
+  createEmbedder,
+  LanceStore,
+  requireEmbedding,
+  TotemConfigError,
+  TotemConfigSchema,
+} from '@mmnto/totem';
 
 export interface ServerContext {
   projectRoot: string;
@@ -66,8 +72,10 @@ export async function getContext(): Promise<ServerContext> {
 
   const configPath = path.join(projectRoot, 'totem.config.ts');
   if (!fs.existsSync(configPath)) {
-    throw new Error(
-      '[Totem Error] No totem.config.ts found in current directory. Run `totem init` first.',
+    throw new TotemConfigError(
+      'No totem.config.ts found in current directory.',
+      "Run 'totem init' first.",
+      'CONFIG_MISSING',
     );
   }
 

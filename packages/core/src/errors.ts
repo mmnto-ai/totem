@@ -17,6 +17,7 @@ export type TotemErrorCode =
   | 'COMPILE_FAILED'
   | 'PARSE_FAILED'
   | 'SYNC_FAILED'
+  | 'GIT_FAILED'
   | 'NO_LESSONS'
   | 'NO_RULES'
   | 'SHIELD_FAILED'
@@ -67,5 +68,19 @@ export class TotemParseError extends TotemError {
   constructor(message: string, recoveryHint: string) {
     super('PARSE_FAILED', message, recoveryHint);
     this.name = 'TotemParseError';
+  }
+}
+
+export class TotemOrchestratorError extends TotemError {
+  constructor(message: string, recoveryHint: string) {
+    super('ORCHESTRATOR_UNAVAILABLE', message, recoveryHint);
+    this.name = 'TotemOrchestratorError';
+  }
+}
+
+export class TotemGitError extends TotemError {
+  constructor(message: string, recoveryHint: string) {
+    super('GIT_FAILED', message, recoveryHint);
+    this.name = 'TotemGitError';
   }
 }

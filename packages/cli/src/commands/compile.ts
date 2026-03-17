@@ -1,4 +1,5 @@
 import type { CompiledRule, CompiledRulesFile } from '@mmnto/totem';
+import { TotemConfigError, TotemError } from '@mmnto/totem';
 
 // ─── Constants ──────────────────────────────────────
 
@@ -164,9 +165,11 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
   }
 
   if (lessons.length === 0) {
-    const err = new Error('No lessons found. Nothing to compile.');
-    err.name = 'NoLessonsError';
-    throw err;
+    throw new TotemError(
+      'NO_LESSONS',
+      'No lessons found. Nothing to compile.',
+      'Add lessons with `totem extract <pr>` or create .totem/lessons/*.md files manually.',
+    );
   }
 
   log.info(TAG, `Found ${lessons.length} lessons`); // totem-ignore
@@ -293,9 +296,10 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
       }
     }
   } else if (!options.export) {
-    throw new Error(
-      '[Totem Error] No orchestrator configured. Regex compilation requires a Full-tier config.\n' +
-        'Use --export to export lessons to AI config files without an orchestrator.',
+    throw new TotemConfigError(
+      'No orchestrator configured. Regex compilation requires a Full-tier config.',
+      'Use --export to export lessons to AI config files without an orchestrator.',
+      'CONFIG_MISSING',
     );
   }
 

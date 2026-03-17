@@ -11,6 +11,7 @@ import {
   readAllLessons,
   rewriteLessonsFile,
   runSync,
+  TotemError,
 } from '@mmnto/totem';
 
 import { createSpinner, log } from '../ui.js';
@@ -54,7 +55,11 @@ export async function syncCommand(options: { full?: boolean; prune?: boolean }):
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       log.error(TAG, `Prune failed: ${message}`);
-      throw new Error(`[Totem Error] Prune failed: ${message}`);
+      throw new TotemError(
+        'SYNC_FAILED',
+        `Prune failed: ${message}`,
+        'Check the error above and ensure the .totem/lessons directory is readable.',
+      );
     }
   }
 }

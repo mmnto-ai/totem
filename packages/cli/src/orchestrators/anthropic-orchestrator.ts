@@ -1,3 +1,5 @@
+import { TotemConfigError, TotemOrchestratorError } from '@mmnto/totem';
+
 import { log } from '../ui.js';
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
 import { detectPackageManager, isQuotaError } from './orchestrator.js';
@@ -20,10 +22,10 @@ async function importAnthropicSdk() {
   try {
     return (await import('@anthropic-ai/sdk')).default;
   } catch {
-    throw new Error(
-      '[Totem Error] Anthropic SDK (@anthropic-ai/sdk) is not installed.\n' +
-        `Install it with: ${detectPackageManager()} add @anthropic-ai/sdk\n` +
-        "Or use provider: 'shell' in your orchestrator config.",
+    throw new TotemConfigError(
+      'Anthropic SDK (@anthropic-ai/sdk) is not installed.',
+      `Install it with: ${detectPackageManager()} add @anthropic-ai/sdk`,
+      'CONFIG_MISSING',
     );
   }
 }
@@ -42,8 +44,10 @@ export async function invokeAnthropicOrchestrator(
   const { prompt, model, tag } = opts;
 
   if (!process.env['ANTHROPIC_API_KEY']) {
-    throw new Error(
-      '[Totem Error] No Anthropic API key found.\n' + 'Set ANTHROPIC_API_KEY in your .env file.',
+    throw new TotemConfigError(
+      'No Anthropic API key found.',
+      'Set ANTHROPIC_API_KEY in your .env file.',
+      'CONFIG_MISSING',
     );
   }
 
@@ -82,6 +86,9 @@ export async function invokeAnthropicOrchestrator(
       throw err;
     }
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`[Totem Error] Anthropic API call failed: ${msg}`);
+    throw new TotemOrchestratorError(
+      `Anthropic API call failed: ${msg}`,
+      'Check your ANTHROPIC_API_KEY, network connection, and model name.',
+    );
   }
 }

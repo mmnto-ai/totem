@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { TotemOrchestratorError, TotemParseError } from '@mmnto/totem';
+
 import { log } from '../ui.js';
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
 import { isQuotaError } from './orchestrator.js';
@@ -60,10 +62,9 @@ export async function invokeOllamaOrchestrator(
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(
-      `[Totem Error] Cannot connect to Ollama at ${base}.\n` +
-        `Is Ollama running? Start it with: ollama serve\n` +
-        `Details: ${msg}`,
+    throw new TotemOrchestratorError(
+      `Cannot connect to Ollama at ${base}. Details: ${msg}`,
+      'Is Ollama running? Start it with: ollama serve',
     );
   }
 
@@ -78,29 +79,35 @@ export async function invokeOllamaOrchestrator(
 
     // 500 errors from Ollama are often VRAM/context exhaustion
     if (response.status >= 500) {
-      throw new Error(
-        `[Totem Error] Ollama server error (${response.status}): ${errorBody}\n` +
-          (numCtx
-            ? `Try lowering numCtx (currently ${numCtx}) in your orchestrator config.`
-            : `Try setting a smaller numCtx in your orchestrator config to limit VRAM usage.`),
+      throw new TotemOrchestratorError(
+        `Ollama server error (${response.status}): ${errorBody}`,
+        numCtx
+          ? `Try lowering numCtx (currently ${numCtx}) in your orchestrator config.`
+          : 'Try setting a smaller numCtx in your orchestrator config to limit VRAM usage.',
       );
     }
 
-    throw new Error(`[Totem Error] Ollama API error (${response.status}): ${errorBody}`);
+    throw new TotemOrchestratorError(
+      `Ollama API error (${response.status}): ${errorBody}`,
+      'Check that the model is pulled and Ollama is running correctly.',
+    );
   }
 
   let raw: unknown;
   try {
     raw = await response.json();
   } catch {
-    throw new Error(`[Totem Error] Ollama returned invalid JSON. Is the model loaded?`);
+    throw new TotemParseError(
+      'Ollama returned invalid JSON.',
+      'Ensure the model is fully loaded. Try: ollama pull <model>',
+    );
   }
 
   const parsed = OllamaChatResponseSchema.safeParse(raw);
   if (!parsed.success) {
-    throw new Error(
-      `[Totem Error] Unexpected response from Ollama API.\n` +
-        `Validation: ${parsed.error.issues.map((i) => i.message).join(', ')}`,
+    throw new TotemParseError(
+      `Unexpected response from Ollama API. Validation: ${parsed.error.issues.map((i) => i.message).join(', ')}`,
+      'Ensure Ollama is up to date. Try: ollama --version',
     );
   }
   const data = parsed.data;
