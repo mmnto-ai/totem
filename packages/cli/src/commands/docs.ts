@@ -40,6 +40,7 @@ Given a documentation file, its purpose, and recent project changes (git log, cl
 - **Evidence-Based:** Only update information that is supported by the provided git log, closed issues, or active work context. Do NOT invent features or status changes.
 - **Phase Numbering:** If the document references phases, use ONLY the phase numbering from the provided active_work.md context. Do NOT change or renumber phases.
 - **Conservative Updates:** When in doubt, keep the existing text. Only change what the evidence supports.
+- **Manual Content:** If \`<manual_content>\` blocks are provided, include them VERBATIM in the appropriate section of the document. Do NOT rewrite, summarize, or omit any part of manual content. These are hand-written by the maintainer and must survive regeneration.
 - **Checkbox Integrity:** NEVER change the checked/unchecked state of markdown checkboxes (\`[x]\` / \`[ ]\`) unless the commit history explicitly contains a revert, deprecation, or re-opening of the referenced item. Priority rankings in active_work.md are NOT evidence of completion status.
 - **XML Wrapper (MANDATORY):** Wrap your ENTIRE output inside \`<updated_document>\` and \`</updated_document>\` tags. No text before or after the tags. No markdown code fences. Example:
 
@@ -140,6 +141,26 @@ function assemblePrompt(
   if (activeWork) {
     sections.push('\n=== ACTIVE WORK (SOURCE OF TRUTH FOR PHASES & PRIORITIES) ===');
     sections.push(wrapXml('active_work', activeWork));
+  }
+
+  // Manual content — must be included VERBATIM in the output
+  try {
+    const manualPath = path.resolve('docs', 'manual');
+    if (fs.existsSync(manualPath)) {
+      const manualFiles = fs.readdirSync(manualPath).filter((f) => f.endsWith('.md'));
+      for (const file of manualFiles) {
+        const content = fs.readFileSync(path.join(manualPath, file), 'utf-8');
+        sections.push('\n=== MANUAL CONTENT (INCLUDE VERBATIM — DO NOT REWRITE) ===');
+        sections.push(`Source: docs/manual/${file}`);
+        sections.push(
+          'IMPORTANT: The following content is manually maintained. Include it in the appropriate ' +
+            'section of the document WITHOUT rewriting, summarizing, or omitting any part of it.',
+        );
+        sections.push(wrapXml('manual_content', content));
+      }
+    }
+  } catch {
+    // Manual dir doesn't exist or can't be read — skip silently
   }
 
   return sections.join('\n');
