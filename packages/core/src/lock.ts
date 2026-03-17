@@ -156,8 +156,9 @@ export async function acquireLock(
         }
       };
     } catch (err) {
-      // EEXIST means another process grabbed it between our read and write
-      if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      // EEXIST = another process grabbed it; EPERM/EACCES = Windows file handle contention
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'EEXIST' || code === 'EPERM' || code === 'EACCES') {
         const delay = backoffDelay(attempt);
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
@@ -184,14 +185,16 @@ export async function withLock<T>(
   const release = await acquireLock(totemDir, onWarn);
 
   // Best-effort cleanup on process termination (Ctrl+C, kill)
-  const cleanup = (signal: string) => {
+  const onSigint = () => {
     release();
-    // Re-raise the signal so the process actually terminates
-    process.removeListener(signal, cleanup as () => void);
-    process.kill(process.pid, signal); // totem-ignore: re-raising caught signal
+    process.removeListener('SIGINT', onSigint);
+    process.kill(process.pid, 'SIGINT'); // totem-ignore: re-raising caught signal
   };
-  const onSigint = () => cleanup('SIGINT');
-  const onSigterm = () => cleanup('SIGTERM');
+  const onSigterm = () => {
+    release();
+    process.removeListener('SIGTERM', onSigterm);
+    process.kill(process.pid, 'SIGTERM'); // totem-ignore: re-raising caught signal
+  };
   process.on('SIGINT', onSigint);
   process.on('SIGTERM', onSigterm);
 
