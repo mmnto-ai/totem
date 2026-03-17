@@ -211,12 +211,7 @@ export async function withLock<T>(
   try {
     return await fn();
   } finally {
-    process.removeListener('SIGINT', onSigint);
-    process.removeListener('SIGTERM', onSigterm);
-    if (process.platform !== 'win32') {
-      process.removeListener('SIGHUP', onSighup);
-      process.removeListener('SIGQUIT', onSigquit);
-    }
+    removeHandlers();
     release();
   }
 }

@@ -1,5 +1,4 @@
 import type { CompiledRule, Violation } from '@mmnto/totem';
-import { TotemError } from '@mmnto/totem';
 
 import type { ShieldFormat } from './shield.js';
 
@@ -49,6 +48,7 @@ export async function runCompiledRules(
     recordSuppression,
     recordTrigger,
     saveRuleMetrics,
+    TotemError,
   } = await import('@mmnto/totem');
 
   const { diff, cwd, totemDir, format, outPath, exportPaths, ignorePatterns, tag } = options;
