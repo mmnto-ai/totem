@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { Embedder } from './embedder.js';
+import { TotemConfigError } from '../errors.js';
 
 const DEFAULT_DIMENSIONS = 768;
 const MAX_BATCH_SIZE = 10;
@@ -38,12 +39,17 @@ export class OllamaEmbedder implements Embedder {
     if (!response.ok) {
       const body = await response.text();
       if (response.status === 404 || /not found|no such model/i.test(body)) {
-        throw new Error(
-          `[Totem Error] Ollama model '${this.model}' is not installed.\n` +
-            `  Fix: Run 'ollama pull ${this.model}' and try again.`,
+        throw new TotemConfigError(
+          `Ollama model '${this.model}' is not installed.`,
+          `Run 'ollama pull ${this.model}' and try again.`,
+          'CONFIG_MISSING',
         );
       }
-      throw new Error(`[Totem Error] Ollama embedding failed (${response.status}): ${body}`);
+      throw new TotemConfigError(
+        `Ollama embedding failed (${response.status}): ${body}`,
+        'Check that Ollama is running and the model is available.',
+        'CONFIG_INVALID',
+      );
     }
 
     const data = z
