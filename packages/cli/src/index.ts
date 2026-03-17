@@ -14,7 +14,7 @@ const { version } = z.object({ version: z.string() }).parse(require('../package.
 
 function requireGhCli(): void {
   try {
-    execSync('gh --version', { stdio: 'ignore' });
+    execSync('gh --version', { stdio: 'ignore', timeout: 3000 });
   } catch {
     console.error('[Totem Error] This command requires the GitHub CLI (gh).');
     console.error('  Install: https://cli.github.com');

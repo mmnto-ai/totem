@@ -567,11 +567,22 @@ interface DetectedOrchestrator {
 function cliExists(name: string): boolean {
   try {
     const cmd = IS_WIN ? `where ${name}` : `which ${name}`;
-    execSync(cmd, { stdio: 'ignore' });
+    execSync(cmd, { stdio: 'ignore', timeout: 3000 });
     return true;
   } catch {
     return false;
   }
+}
+
+/** Check whether any of the given env keys are set (in process.env or .env file content). */
+function hasKey(envContent: string, ...keyNames: string[]): boolean {
+  for (const keyName of keyNames) {
+    if (process.env[keyName] && /\S/.test(process.env[keyName]!)) {
+      return true;
+    }
+  }
+  const keyPattern = new RegExp(`^\\s*(?:${keyNames.join('|')})\\s*=\\s*\\S+`, 'm');
+  return keyPattern.test(envContent);
 }
 
 /**
@@ -611,12 +622,7 @@ function detectOrchestrator(cwd: string): DetectedOrchestrator | null {
   }
 
   // 3. API keys → native SDK providers
-  const hasGeminiKey =
-    (process.env['GEMINI_API_KEY'] && /\S/.test(process.env['GEMINI_API_KEY'])) ||
-    (process.env['GOOGLE_API_KEY'] && /\S/.test(process.env['GOOGLE_API_KEY'])) ||
-    /^\s*(?:GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*\S+/m.test(envContent);
-
-  if (hasGeminiKey) {
+  if (hasKey(envContent, 'GEMINI_API_KEY', 'GOOGLE_API_KEY')) {
     return {
       block: `  orchestrator: {
     provider: 'gemini',
@@ -630,11 +636,7 @@ function detectOrchestrator(cwd: string): DetectedOrchestrator | null {
     };
   }
 
-  const hasAnthropicKey =
-    (process.env['ANTHROPIC_API_KEY'] && /\S/.test(process.env['ANTHROPIC_API_KEY'])) ||
-    /^\s*ANTHROPIC_API_KEY\s*=\s*\S+/m.test(envContent);
-
-  if (hasAnthropicKey) {
+  if (hasKey(envContent, 'ANTHROPIC_API_KEY')) {
     return {
       block: `  orchestrator: {
     provider: 'anthropic',
@@ -643,11 +645,7 @@ function detectOrchestrator(cwd: string): DetectedOrchestrator | null {
     };
   }
 
-  const hasOpenaiKey =
-    (process.env['OPENAI_API_KEY'] && /\S/.test(process.env['OPENAI_API_KEY'])) ||
-    /^\s*OPENAI_API_KEY\s*=\s*\S+/m.test(envContent);
-
-  if (hasOpenaiKey) {
+  if (hasKey(envContent, 'OPENAI_API_KEY')) {
     return {
       block: `  orchestrator: {
     provider: 'openai',
@@ -715,20 +713,11 @@ export function detectEmbeddingTier(cwd: string): EmbeddingTier {
   const envPath = path.join(cwd, '.env');
   const envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
 
-  const hasGemini =
-    (process.env['GEMINI_API_KEY'] && /\S/.test(process.env['GEMINI_API_KEY'])) ||
-    (process.env['GOOGLE_API_KEY'] && /\S/.test(process.env['GOOGLE_API_KEY'])) ||
-    /^\s*(?:GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*\S+/m.test(envContent);
-
-  const hasOpenai =
-    (process.env['OPENAI_API_KEY'] && /\S/.test(process.env['OPENAI_API_KEY'])) ||
-    /^\s*OPENAI_API_KEY\s*=\s*\S+/m.test(envContent);
-
   // Gemini first — task-type aware embeddings, best retrieval quality
-  if (hasGemini) return 'gemini';
+  if (hasKey(envContent, 'GEMINI_API_KEY', 'GOOGLE_API_KEY')) return 'gemini';
 
   // OpenAI — widely available, low friction
-  if (hasOpenai) return 'openai';
+  if (hasKey(envContent, 'OPENAI_API_KEY')) return 'openai';
 
   return 'none';
 }
