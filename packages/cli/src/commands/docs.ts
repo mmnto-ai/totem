@@ -64,6 +64,9 @@ Updated content here...
 </updated_document>
 \`\`\`
 
+## Pinned Content (DO NOT change)
+- **README tagline:** "Stop repeating yourself to your AI." — This is the approved tagline. Do not replace, rephrase, or revert it.
+
 ## Command Glossary (DO NOT confuse these)
 - **\`totem lint\`**: Runs compiled AST/regex rules against a diff. Zero LLM. Fast (~2s). No API keys needed. Used in pre-push hooks and CI. Lives in the Lite configuration tier.
 - **\`totem shield\`**: AI-powered code review. Queries LanceDB for context, sends diff + knowledge to an LLM. Slow (~18s). Requires API keys. Used before opening PRs. Lives in the Full configuration tier.
