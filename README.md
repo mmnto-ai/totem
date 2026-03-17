@@ -2,13 +2,9 @@
 
 **Git for AI. Rule your context.**
 
-A zero-config CLI that compiles your `.cursorrules` into deterministic CI guardrails. Stop repeating yourself to your AI.
+A CLI that compiles your `.cursorrules` into deterministic CI guardrails. Stop repeating yourself to your AI.
 
-> [!WARNING]
-> **Developer Preview / Early Alpha**
-> Totem is in early alpha. Foundations through Phase 3 are functionally complete. If you hit friction during `totem init`, bear with us!
-
-Totem is not a framework. It's not a library. It's a **drop-in CLI and MCP Server** that gives leading AI agents (Cursor, Copilot, Claude Code) deterministic guardrails — in 60 seconds.
+Totem is not a framework. It's not a library. It's a **drop-in CLI and MCP Server** that gives Cursor, Copilot, Claude Code, and Gemini deterministic guardrails — in 60 seconds.
 
 You write `.cursorrules` in plain English. AI agents ignore them. Totem compiles those rules into mathematical AST/Regex checks that block bad code before it commits. Zero LLM. Zero hallucination. ~2 seconds.
 
@@ -40,7 +36,10 @@ Auto-detects your environment (Cursor, Copilot, Junie) and sets up `totem.config
 
 Your project gets immediate protection against the most common architectural traps on Day 1. Already have `.cursorrules` or `.mdc` files? `totem init` auto-ingests them and compiles your instructions into deterministic rules.
 
-### 2. Connect the MCP Server
+### 2. Connect the MCP Server _(optional)_
+
+> **Without MCP:** `totem lint`, `compile`, `extract`, `sync`, and `stats` all work standalone. You get full deterministic enforcement.
+> **With MCP:** Your AI agent can search project knowledge and add lessons mid-session — no copy-paste, no context loss.
 
 Give your AI agent persistent project memory. `search_knowledge` retrieves traps, patterns, and architectural constraints, while `add_lesson` captures new ones.
 
@@ -83,7 +82,7 @@ npx @mmnto/cli sync    # Build the vector index
 npx @mmnto/cli lint    # Run compiled rules (zero LLM)
 ```
 
-That's it. Your pre-push hook runs `totem lint` automatically.
+During `init`, Totem prompts to install a `pre-push` git hook that runs `totem lint` automatically before every push. It drops a standard shell script into `.git/hooks/` — works alongside Husky, lint-staged, or bare repos. Run `totem hooks --check` to verify installation at any time.
 
 ## What Totem Actually Is
 
@@ -107,7 +106,7 @@ If you're a solo dev or small team using multiple AI agents (Cursor + Claude Cod
 
 - Lessons learned in one agent session are available to all agents via MCP.
 - Rules compiled from Cursor instructions are enforced in Claude Code's pre-push hook.
-- Share knowledge and lessons between local repositories using `totem link` (#614).
+- Share knowledge and lessons between local repositories using `totem link`.
 - `totem stats` shows your team (or your boss) exactly how many violations were prevented.
 
 Stop repeating "no, use Zod here" to every agent in every session. Teach Totem once. It remembers forever.
@@ -121,8 +120,8 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
   - **DLP Secret Masking:** Automatically strips secrets before embedding. This ensures credentials never leak into your vector index.
   - **SARIF 2.1.0 Output:** Integrates into CI security scanners via `--format sarif/json`. Prove SOC 2 / DORA compliance to your auditors.
 - **Rule Architecture:**
-  - **Severity Levels:** Rules are classified as `error` (blocks CI) or `warning` (informs, doesn't block) (#616).
-  - **Categorization:** 137 compiled rules span invariants, style, and security (83 invariants, 54 guidance rules).
+  - **Severity Levels:** Rules are classified as `error` (blocks CI) or `warning` (informs, doesn't block).
+  - **Categorization:** Compiled rules span security, architecture, style, and performance domains.
 
 Built on the same architecture as elite AI assistants (Tree-sitter + LanceDB), but pointed at enforcement, not generation. Both deterministic `totem lint` and AI-powered `totem shield` share a unified execution core for consistent rule evaluation.
 
