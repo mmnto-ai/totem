@@ -80,7 +80,9 @@ export async function acquireLock(
 
         if (isOwnerAlive) {
           if (attempt === 0) {
-            onWarn?.(`Waiting for sync lock (held by PID ${existing.pid}, stale but process alive)...`);
+            onWarn?.(
+              `Waiting for sync lock (held by PID ${existing.pid}, stale but process alive)...`,
+            );
           }
           const delay = backoffDelay(attempt);
           await new Promise((resolve) => setTimeout(resolve, delay));
