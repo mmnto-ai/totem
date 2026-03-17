@@ -376,6 +376,11 @@ describe('DOCS_SYSTEM_PROMPT', () => {
     expect(DOCS_SYSTEM_PROMPT).toContain('PR References');
     expect(DOCS_SYSTEM_PROMPT).toContain('1-3 per sub-bullet');
   });
+
+  it('includes pinned content section to protect the tagline', () => {
+    expect(DOCS_SYSTEM_PROMPT).toContain('## Pinned Content (DO NOT change)');
+    expect(DOCS_SYSTEM_PROMPT).toContain('Stop repeating yourself to your AI.');
+  });
 });
 
 // ─── extractUpdatedDocument ─────────────────────────────
