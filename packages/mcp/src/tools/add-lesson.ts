@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-import { generateLessonHeading, sanitize, writeLessonFileAsync } from '@mmnto/totem';
+import { acquireLock, generateLessonHeading, sanitize, writeLessonFileAsync } from '@mmnto/totem';
 
 import { getContext, reconnectStore } from '../context.js';
 import { formatXmlResponse } from '../xml-format.js';
@@ -134,11 +134,23 @@ export function registerAddLesson(server: McpServer): void {
         const entry =
           `## Lesson — ${heading}\n\n` + `**Tags:** ${safeTags}\n\n` + `${safeLesson.trim()}\n`;
 
-        const writtenPath = await writeLessonFileAsync(lessonsDir, entry);
+        // Acquire lock before writing lesson + triggering sync
+        const releaseLock = await acquireLock(totemDir);
+        let writtenPath: string;
+        try {
+          writtenPath = await writeLessonFileAsync(lessonsDir, entry);
+        } catch (err) {
+          releaseLock();
+          throw err;
+        }
         const fileName = path.basename(writtenPath);
 
         // Await sync so the LLM gets definitive success/failure confirmation.
         // Concurrent callers share the same sync promise to prevent races.
+        // Note: the spawned sync process acquires its own lock via runSync/withLock,
+        // so we release ours before spawning to avoid deadlock.
+        releaseLock();
+
         const isJoining = activeSyncPromise !== null;
         if (!activeSyncPromise) {
           activeSyncPromise = runSync(projectRoot).finally(() => {
