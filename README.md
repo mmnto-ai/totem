@@ -1,8 +1,8 @@
 # Totem
 
-**Git for AI. Rule your context.**
+**Stop repeating yourself to your AI.**
 
-A CLI that compiles your `.cursorrules` into deterministic CI guardrails. Stop repeating yourself to your AI.
+A CLI that compiles your `.cursorrules` into deterministic CI guardrails.
 
 Totem is not a framework. It's not a library. It's a **drop-in CLI and MCP Server** that gives Cursor, Copilot, Claude Code, and Gemini deterministic guardrails — in 60 seconds.
 
