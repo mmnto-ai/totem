@@ -78,6 +78,16 @@ export async function acquireLock(
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     const existing = readLock(file);
 
+    // Corrupted lockfile (empty, bad JSON) — remove it and retry
+    if (!existing && fs.existsSync(file)) {
+      try {
+        fs.unlinkSync(file);
+      } catch {
+        // Another process may have cleaned it up
+      }
+      continue;
+    }
+
     if (existing) {
       if (isStale(existing)) {
         // Verify the owning process is actually dead before removing (prevents TOCTOU race)

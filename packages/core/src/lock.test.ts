@@ -92,6 +92,24 @@ describe('acquireLock', () => {
     expect(order[3]).toBe(20);
   });
 
+  it('recovers from corrupted lockfile', async () => {
+    const lockFile = path.join(tmpDir, 'sync.lock');
+    fs.writeFileSync(lockFile, 'not valid json');
+
+    const release = await acquireLock(tmpDir);
+    expect(fs.existsSync(lockFile)).toBe(true);
+    release();
+  });
+
+  it('recovers from empty lockfile', async () => {
+    const lockFile = path.join(tmpDir, 'sync.lock');
+    fs.writeFileSync(lockFile, '');
+
+    const release = await acquireLock(tmpDir);
+    expect(fs.existsSync(lockFile)).toBe(true);
+    release();
+  });
+
   it('creates totemDir if it does not exist', async () => {
     const nested = path.join(tmpDir, 'deep', 'nested', '.totem');
     const release = await acquireLock(nested);
