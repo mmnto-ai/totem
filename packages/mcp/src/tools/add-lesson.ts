@@ -134,22 +134,16 @@ export function registerAddLesson(server: McpServer): void {
         const entry =
           `## Lesson — ${heading}\n\n` + `**Tags:** ${safeTags}\n\n` + `${safeLesson.trim()}\n`;
 
-        // Acquire lock before writing lesson + triggering sync
+        // Acquire lock before writing lesson, release before spawning sync
+        // (the spawned sync process acquires its own lock via runSync/withLock)
         const releaseLock = await acquireLock(totemDir);
-        let writtenPath: string;
+        let fileName: string;
         try {
-          writtenPath = await writeLessonFileAsync(lessonsDir, entry);
-        } catch (err) {
+          const writtenPath = await writeLessonFileAsync(lessonsDir, entry);
+          fileName = path.basename(writtenPath);
+        } finally {
           releaseLock();
-          throw err;
         }
-        const fileName = path.basename(writtenPath);
-
-        // Await sync so the LLM gets definitive success/failure confirmation.
-        // Concurrent callers share the same sync promise to prevent races.
-        // Note: the spawned sync process acquires its own lock via runSync/withLock,
-        // so we release ours before spawning to avoid deadlock.
-        releaseLock();
 
         const isJoining = activeSyncPromise !== null;
         if (!activeSyncPromise) {
