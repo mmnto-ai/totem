@@ -102,8 +102,18 @@ export async function acquireLock(
         } catch {
           // Another process may have cleaned it up
         }
+      } else if (!isProcessAlive(existing.pid)) {
+        // Lock is fresh but owning process is dead (e.g., Ctrl+C during sync)
+        onWarn?.(
+          `Removing orphaned lock from dead PID ${existing.pid} (${Math.round((Date.now() - existing.timestamp) / 1000)}s old)`,
+        );
+        try {
+          fs.unlinkSync(file);
+        } catch {
+          // Another process may have cleaned it up
+        }
       } else {
-        // Lock is held and not stale — wait and retry
+        // Lock is held by a live process — wait and retry
         if (attempt === 0) {
           onWarn?.(`Waiting for sync lock (held by PID ${existing.pid})...`);
         }
@@ -153,9 +163,17 @@ export async function withLock<T>(
   onWarn?: (msg: string) => void,
 ): Promise<T> {
   const release = await acquireLock(totemDir, onWarn);
+
+  // Best-effort cleanup on process termination (Ctrl+C, kill)
+  const cleanup = () => release();
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
+
   try {
     return await fn();
   } finally {
+    process.removeListener('SIGINT', cleanup);
+    process.removeListener('SIGTERM', cleanup);
     release();
   }
 }
