@@ -992,6 +992,25 @@ export async function initCommand(): Promise<void> {
       });
     }
 
+    // --- Pre-compiled baseline rules (zero-LLM protection from Day 1) ---
+    const compiledRulesPath = path.join(totemDir, 'compiled-rules.json');
+    if (!fs.existsSync(compiledRulesPath)) {
+      try {
+        const { COMPILED_BASELINE_RULES } = await import('../assets/compiled-baseline.js');
+        const payload = { version: 1, rules: COMPILED_BASELINE_RULES };
+        fs.writeFileSync(compiledRulesPath, JSON.stringify(payload, null, 2) + '\n');
+        summary.push({
+          file: '.totem/compiled-rules.json',
+          action: `Installed ${COMPILED_BASELINE_RULES.length} pre-compiled baseline rules`,
+        });
+      } catch (err) {
+        log.dim(
+          'Totem',
+          `Could not install pre-compiled rules: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
     // --- Unified AI tool selection ---
     const detectedTools = detectAiTools(cwd);
 

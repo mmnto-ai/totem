@@ -37,6 +37,12 @@ export class OllamaEmbedder implements Embedder {
 
     if (!response.ok) {
       const body = await response.text();
+      if (response.status === 404 || /not found|no such model/i.test(body)) {
+        throw new Error(
+          `[Totem Error] Ollama model '${this.model}' is not installed.\n` +
+            `  Fix: Run 'ollama pull ${this.model}' and try again.`,
+        );
+      }
       throw new Error(`[Totem Error] Ollama embedding failed (${response.status}): ${body}`);
     }
 

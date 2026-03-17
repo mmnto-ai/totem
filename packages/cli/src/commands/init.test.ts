@@ -442,19 +442,26 @@ describe('Gemini hook scaffolding', () => {
 
 describe('detectEmbeddingTier', () => {
   let tmpDir: string;
-  const SAVED_KEY = process.env['OPENAI_API_KEY'];
+  const SAVED_OPENAI = process.env['OPENAI_API_KEY'];
+  const SAVED_GEMINI = process.env['GEMINI_API_KEY'];
+  const SAVED_GOOGLE = process.env['GOOGLE_API_KEY'];
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-detect-'));
     delete process.env['OPENAI_API_KEY'];
+    delete process.env['GEMINI_API_KEY'];
+    delete process.env['GOOGLE_API_KEY'];
   });
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
-    if (SAVED_KEY !== undefined) {
-      process.env['OPENAI_API_KEY'] = SAVED_KEY;
-    } else {
-      delete process.env['OPENAI_API_KEY'];
+    for (const [key, val] of [
+      ['OPENAI_API_KEY', SAVED_OPENAI],
+      ['GEMINI_API_KEY', SAVED_GEMINI],
+      ['GOOGLE_API_KEY', SAVED_GOOGLE],
+    ] as const) {
+      if (val !== undefined) process.env[key] = val;
+      else delete process.env[key];
     }
   });
 
