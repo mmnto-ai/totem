@@ -176,6 +176,10 @@ export async function withLock<T>(
   const removeHandlers = () => {
     process.removeListener('SIGINT', onSigint);
     process.removeListener('SIGTERM', onSigterm);
+    if (process.platform !== 'win32') {
+      process.removeListener('SIGHUP', onSighup);
+      process.removeListener('SIGQUIT', onSigquit);
+    }
   };
   const onSigint = () => {
     release();
@@ -187,14 +191,27 @@ export async function withLock<T>(
     removeHandlers();
     process.kill(process.pid, 'SIGTERM'); // totem-ignore: re-raising caught signal
   };
+  const onSighup = () => {
+    release();
+    removeHandlers();
+    process.kill(process.pid, 'SIGHUP'); // totem-ignore: re-raising caught signal
+  };
+  const onSigquit = () => {
+    release();
+    removeHandlers();
+    process.kill(process.pid, 'SIGQUIT'); // totem-ignore: re-raising caught signal
+  };
   process.on('SIGINT', onSigint);
   process.on('SIGTERM', onSigterm);
+  if (process.platform !== 'win32') {
+    process.on('SIGHUP', onSighup);
+    process.on('SIGQUIT', onSigquit);
+  }
 
   try {
     return await fn();
   } finally {
-    process.removeListener('SIGINT', onSigint);
-    process.removeListener('SIGTERM', onSigterm);
+    removeHandlers();
     release();
   }
 }

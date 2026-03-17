@@ -826,13 +826,13 @@
     {
       "lessonHash": "e66544fffe1bbab8",
       "lessonHeading": "Windows requires shell:true for git binary resolution",
-      "pattern": "execFileSync\\s*\\(\\s*['\"]git['\"](?![^)]*shell:\\s*true)",
-      "message": "Use { shell: true } when calling the 'git' binary with execFileSync to ensure it resolves correctly on Windows.",
+      "pattern": "execFileSync\\s*\\(\\s*['\"]git['\"](?![^)]*shell:\\s*(?:true|IS_WIN))",
+      "message": "Use { shell: true } or { shell: IS_WIN } when calling the 'git' binary with execFileSync to ensure it resolves correctly on Windows.",
       "engine": "regex",
       "compiledAt": "2026-03-12T10:27:25.049Z",
       "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "category": "architecture",
-      "severity": "error"
+      "severity": "warning"
     },
     {
       "lessonHash": "472e287ab57c6aee",

@@ -4,6 +4,8 @@ import * as fs from 'node:fs';
 import safeRegex from 'safe-regex2';
 import { z } from 'zod';
 
+import { TotemParseError } from './errors.js';
+
 // ─── Schemas ─────────────────────────────────────────
 
 export const CompiledRuleSchema = z.object({
@@ -345,7 +347,7 @@ export function applyRules(
 
 // ─── File I/O ────────────────────────────────────────
 
-/** Load compiled rules from a JSON file. Returns empty array if file missing or invalid. */
+/** Load compiled rules from a JSON file. Returns empty array if file missing. */
 export function loadCompiledRules(
   rulesPath: string,
   onWarn?: (msg: string) => void,
@@ -354,10 +356,17 @@ export function loadCompiledRules(
 
   try {
     const raw = fs.readFileSync(rulesPath, 'utf-8');
-    const parsed = CompiledRulesFileSchema.parse(JSON.parse(raw));
+    const json = JSON.parse(raw) as unknown;
+    const parsed = CompiledRulesFileSchema.parse(json);
     return parsed.rules;
   } catch (err) {
     if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    if (err instanceof z.ZodError) {
+      throw new TotemParseError(
+        `Invalid compiled-rules.json: ${err.issues.map((i) => i.message).join('; ')}`,
+        "Delete the file and run 'totem compile' to regenerate it.",
+      );
+    }
     onWarn?.(`Could not load compiled rules: ${err instanceof Error ? err.message : String(err)}`);
     return [];
   }
@@ -372,10 +381,17 @@ export function loadCompiledRulesFile(
 
   try {
     const raw = fs.readFileSync(rulesPath, 'utf-8');
-    return CompiledRulesFileSchema.parse(JSON.parse(raw));
+    const json = JSON.parse(raw) as unknown;
+    return CompiledRulesFileSchema.parse(json);
   } catch (err) {
     if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'ENOENT') {
       return { version: 1, rules: [], nonCompilable: [] };
+    }
+    if (err instanceof z.ZodError) {
+      throw new TotemParseError(
+        `Invalid compiled-rules.json: ${err.issues.map((i) => i.message).join('; ')}`,
+        "Delete the file and run 'totem compile' to regenerate it.",
+      );
     }
     onWarn?.(`Could not load compiled rules: ${err instanceof Error ? err.message : String(err)}`);
     return { version: 1, rules: [], nonCompilable: [] };

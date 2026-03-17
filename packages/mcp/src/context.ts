@@ -18,6 +18,7 @@ export interface ServerContext {
 }
 
 let cached: ServerContext | undefined;
+let initPromise: Promise<ServerContext> | undefined;
 
 /**
  * Re-open the cached LanceStore connection after a full sync rebuild.
@@ -62,12 +63,10 @@ async function loadConfig(configPath: string): Promise<TotemConfig> {
 }
 
 /**
- * Lazily initialize and return the shared server context.
- * Config, embedder, and LanceStore are created on first call and cached.
+ * Perform one-time initialization: load config, create embedder and store.
+ * Sets the module-level `cached` variable and returns the context.
  */
-export async function getContext(): Promise<ServerContext> {
-  if (cached) return cached;
-
+async function initContext(): Promise<ServerContext> {
   const projectRoot = process.cwd();
 
   const configPath = path.join(projectRoot, 'totem.config.ts');
@@ -90,4 +89,21 @@ export async function getContext(): Promise<ServerContext> {
 
   cached = { projectRoot, config, store, embedder };
   return cached;
+}
+
+/**
+ * Lazily initialize and return the shared server context.
+ * Config, embedder, and LanceStore are created on first call and cached.
+ * Uses promise memoization to prevent concurrent callers from creating
+ * duplicate connections.
+ */
+export async function getContext(): Promise<ServerContext> {
+  if (cached) return cached;
+  if (!initPromise) {
+    initPromise = initContext().catch((err) => {
+      initPromise = undefined; // Allow retry on transient failures
+      throw err;
+    });
+  }
+  return initPromise;
 }

@@ -614,10 +614,10 @@ describe('compiled rules file I/O', () => {
     expect(loadCompiledRules(rulesPath)).toEqual([]);
   });
 
-  it('returns empty array for wrong schema', () => {
+  it('throws TotemParseError for wrong schema', () => {
     const rulesPath = path.join(tmpDir, 'wrong.json');
     fs.writeFileSync(rulesPath, JSON.stringify({ version: 99, rules: [] }));
-    expect(loadCompiledRules(rulesPath)).toEqual([]);
+    expect(() => loadCompiledRules(rulesPath)).toThrow('Invalid compiled-rules.json');
   });
 });
 
