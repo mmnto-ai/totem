@@ -24,20 +24,6 @@ const MAX_DOC_CHARS = 80_000;
 const MAX_LOG_CHARS = 20_000;
 const GH_CLOSED_ISSUE_LIMIT = 50;
 
-/**
- * Issues closed without shipping. The LLM hallucinates these as live
- * features because they appear in the git log. Strip before and after LLM.
- */
-const CLOSED_NOT_SHIPPED = [515];
-
-function stripNotShipped(text: string): string {
-  let result = text;
-  for (const n of CLOSED_NOT_SHIPPED) {
-    result = result.replace(new RegExp(`\\s*\\(#${n}\\)`, 'g'), '');
-  }
-  return result;
-}
-
 // ─── System prompt ──────────────────────────────────────
 
 export const DOCS_SYSTEM_PROMPT = `# Docs System Prompt — Automated Documentation Sync
@@ -64,9 +50,6 @@ Updated content here...
 </updated_document>
 \`\`\`
 
-## Pinned Content (DO NOT change)
-- **README tagline:** "Stop repeating yourself to your AI." — This is the approved tagline. Do not replace, rephrase, or revert it.
-
 ## Command Glossary (DO NOT confuse these)
 - **\`totem lint\`**: Runs compiled AST/regex rules against a diff. Zero LLM. Fast (~2s). No API keys needed. Used in pre-push hooks and CI. Lives in the Lite configuration tier.
 - **\`totem shield\`**: AI-powered code review. Queries LanceDB for context, sends diff + knowledge to an LLM. Slow (~18s). Requires API keys. Used before opening PRs. Lives in the Full configuration tier.
@@ -89,7 +72,7 @@ interface ReleaseContext {
 
 function gatherReleaseContext(cwd: string): ReleaseContext {
   const tag = getLatestTag(cwd);
-  const gitLog = stripNotShipped(getGitLogSince(cwd, tag ?? undefined));
+  const gitLog = getGitLogSince(cwd, tag ?? undefined);
 
   let closedIssues = '';
   try {
@@ -305,13 +288,16 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
     log.dim(TAG, `Last release: ${releaseContext.tag}`);
   }
 
-  // Load active_work.md for phase/priority context
+  // Load active_work context from the first docs entry whose path contains "active_work"
   let activeWork = '';
-  const activeWorkPath = path.join(cwd, 'docs', 'active_work.md');
-  try {
-    activeWork = fs.readFileSync(activeWorkPath, 'utf-8');
-  } catch {
-    log.dim(TAG, 'No docs/active_work.md found — proceeding without active work context.');
+  const activeWorkDoc = config.docs?.find((d) => d.path.includes('active_work'));
+  if (activeWorkDoc) {
+    const activeWorkPath = path.join(cwd, activeWorkDoc.path);
+    try {
+      activeWork = fs.readFileSync(activeWorkPath, 'utf-8');
+    } catch {
+      log.dim(TAG, `${activeWorkDoc.path} not found — proceeding without active work context.`);
+    }
   }
 
   // Resolve system prompt (allow .totem/prompts/docs.md override)
@@ -364,9 +350,7 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
       continue;
     }
 
-    // Strip known hallucinated issue references from LLM output
-    const cleaned = stripNotShipped(extracted);
-    const trimmedContent = cleaned.trimEnd() + '\n';
+    const trimmedContent = extracted.trimEnd() + '\n';
     const hasChanges = showDiff(doc.path, currentContent, trimmedContent);
     if (!hasChanges) continue;
 

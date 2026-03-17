@@ -130,10 +130,13 @@ async function retrieveExistingLessons(store: LanceStore): Promise<SearchResult[
 
 // ─── Prompt assembly ────────────────────────────────────
 
-const GCA_MARKERS = ['Using Gemini Code Assist', 'Gemini Code Assist'];
+const DEFAULT_BOT_MARKERS = ['Using Gemini Code Assist', 'Gemini Code Assist'];
+
+/** Active bot markers — updated from config in extractCommand, falls back to defaults. */
+let activeBotMarkers: readonly string[] = DEFAULT_BOT_MARKERS;
 
 function isGcaBoilerplate(body: string): boolean {
-  return GCA_MARKERS.some((marker) => body.includes(marker));
+  return activeBotMarkers.some((marker) => body.includes(marker));
 }
 
 export function assemblePrompt(
@@ -585,6 +588,9 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);
   const config = await loadConfig(configPath);
+
+  // Use project-configured bot markers if provided, otherwise keep defaults
+  activeBotMarkers = config.botMarkers ?? DEFAULT_BOT_MARKERS;
 
   // Connect to LanceDB for dedup context
   const embedding = requireEmbedding(config);

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 import { Command } from 'commander';
@@ -10,6 +11,17 @@ import { reapOrphanedTempFiles } from './utils.js';
 
 const require = createRequire(import.meta.url);
 const { version } = z.object({ version: z.string() }).parse(require('../package.json'));
+
+function requireGhCli(): void {
+  try {
+    execSync('gh --version', { stdio: 'ignore' });
+  } catch {
+    console.error('[Totem Error] This command requires the GitHub CLI (gh).');
+    console.error('  Install: https://cli.github.com');
+    console.error('  Core commands (init, sync, lint) work without it.');
+    process.exit(1);
+  }
+}
 
 function handleError(err: unknown): never {
   if (err instanceof Error) {
@@ -187,6 +199,7 @@ program
   .option('--model <name>', 'Override the default model for the orchestrator')
   .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
   .action(async (opts: { raw?: boolean; out?: string; model?: string; fresh?: boolean }) => {
+    requireGhCli();
     try {
       const { triageCommand } = await import('./commands/triage.js');
       await triageCommand(opts);
@@ -215,6 +228,7 @@ program
       yes?: boolean;
       context?: string;
     }) => {
+      requireGhCli();
       try {
         const { auditCommand } = await import('./commands/audit.js');
         await auditCommand(opts);
@@ -341,6 +355,7 @@ program
         yes?: boolean;
       },
     ) => {
+      requireGhCli();
       try {
         const { extractCommand } = await import('./commands/extract.js');
         await extractCommand(prNumbers, opts);
@@ -383,6 +398,7 @@ program
   .option('--fresh', 'Bypass cache and force fresh LLM calls')
   .option('--yes', 'Skip confirmation prompt for lesson extraction')
   .action(async (prNumbers: string[], opts: { model?: string; fresh?: boolean; yes?: boolean }) => {
+    requireGhCli();
     try {
       const { wrapCommand } = await import('./commands/wrap.js');
       await wrapCommand(prNumbers, opts);
@@ -487,5 +503,16 @@ program
 
 // Fire-and-forget: reap orphaned temp files from previous crashed runs
 reapOrphanedTempFiles(process.cwd(), '.totem').catch(() => {});
+
+program.addHelpText(
+  'after',
+  `
+Commands by tier:
+  Core (no API keys):    init, sync, lint, compile, test, hooks, link, stats, drift
+  AI-Powered (needs LLM): shield, spec, briefing, handoff, bridge, docs, compile (with LLM)
+  GitHub Workflows:      extract, triage, audit, wrap
+  Utilities:             add-lesson, migrate-lessons, eject, demo
+`,
+);
 
 program.parse();

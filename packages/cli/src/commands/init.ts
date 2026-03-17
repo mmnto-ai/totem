@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
@@ -556,9 +557,113 @@ function formatTargets(targets: IngestTarget[]): string {
 
 type EmbeddingTier = 'openai' | 'ollama' | 'gemini' | 'none';
 
+// ─── Orchestrator auto-detection ─────────────────────
+
+interface DetectedOrchestrator {
+  block: string;
+}
+
+/** Check whether a CLI command exists on PATH. */
+function cliExists(name: string): boolean {
+  try {
+    const cmd = IS_WIN ? `where ${name}` : `which ${name}`;
+    execSync(cmd, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Auto-detect the best orchestrator from the environment.
+ * Priority: gemini CLI → claude CLI → API keys (GEMINI → ANTHROPIC → OPENAI) → null.
+ */
+function detectOrchestrator(cwd: string): DetectedOrchestrator | null {
+  // Read .env file once (loadEnv may not have run yet)
+  const envPath = path.join(cwd, '.env');
+  const envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
+
+  // 1. Gemini CLI on PATH → shell provider
+  if (cliExists('gemini')) {
+    return {
+      block: `  orchestrator: {
+    provider: 'shell',
+    command: 'gemini --model {model} -o json -e none < {file}',
+    defaultModel: 'gemini-3-flash-preview',
+    overrides: {
+      'spec': 'gemini-3.1-pro-preview',
+      'shield': 'gemini-3.1-pro-preview',
+      'triage': 'gemini-3.1-pro-preview',
+    },
+  },`,
+    };
+  }
+
+  // 2. Claude CLI on PATH → shell provider (anthropic)
+  if (cliExists('claude')) {
+    return {
+      block: `  orchestrator: {
+    provider: 'shell',
+    command: 'claude -p {file} --model {model} --output-format json',
+    defaultModel: 'sonnet',
+  },`,
+    };
+  }
+
+  // 3. API keys → native SDK providers
+  const hasGeminiKey =
+    (process.env['GEMINI_API_KEY'] && /\S/.test(process.env['GEMINI_API_KEY'])) ||
+    (process.env['GOOGLE_API_KEY'] && /\S/.test(process.env['GOOGLE_API_KEY'])) ||
+    /^\s*(?:GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*\S+/m.test(envContent);
+
+  if (hasGeminiKey) {
+    return {
+      block: `  orchestrator: {
+    provider: 'gemini',
+    defaultModel: 'gemini-3-flash-preview',
+    overrides: {
+      'spec': 'gemini-3.1-pro-preview',
+      'shield': 'gemini-3.1-pro-preview',
+      'triage': 'gemini-3.1-pro-preview',
+    },
+  },`,
+    };
+  }
+
+  const hasAnthropicKey =
+    (process.env['ANTHROPIC_API_KEY'] && /\S/.test(process.env['ANTHROPIC_API_KEY'])) ||
+    /^\s*ANTHROPIC_API_KEY\s*=\s*\S+/m.test(envContent);
+
+  if (hasAnthropicKey) {
+    return {
+      block: `  orchestrator: {
+    provider: 'anthropic',
+    defaultModel: 'claude-sonnet-4-20250514',
+  },`,
+    };
+  }
+
+  const hasOpenaiKey =
+    (process.env['OPENAI_API_KEY'] && /\S/.test(process.env['OPENAI_API_KEY'])) ||
+    /^\s*OPENAI_API_KEY\s*=\s*\S+/m.test(envContent);
+
+  if (hasOpenaiKey) {
+    return {
+      block: `  orchestrator: {
+    provider: 'openai',
+    defaultModel: 'gpt-4.1-mini',
+  },`,
+    };
+  }
+
+  // 4. Nothing found → omit orchestrator (Lite/Standard tier)
+  return null;
+}
+
 export async function generateConfig(
   targets: IngestTarget[],
   embeddingTier: EmbeddingTier,
+  cwd: string,
 ): Promise<string> {
   const { DEFAULT_IGNORE_PATTERNS } = await import('@mmnto/totem');
   let embeddingBlock: string;
@@ -577,6 +682,11 @@ export async function generateConfig(
       break;
   }
 
+  const orchestrator = detectOrchestrator(cwd);
+  const orchestratorBlock = orchestrator
+    ? `\n${orchestrator.block}`
+    : `\n  // orchestrator: no CLI or API key detected. Add one and re-run \`totem init\`.`;
+
   return `import type { TotemConfig } from '@mmnto/totem';
 
 const config: TotemConfig = {
@@ -589,17 +699,7 @@ ${embeddingBlock}
   ignorePatterns: [
 ${DEFAULT_IGNORE_PATTERNS.map((p) => `    '${p}',`).join('\n')}
   ],
-
-  orchestrator: {
-    provider: 'shell',
-    command: 'gemini --model {model} -o json -e none < {file}',
-    defaultModel: 'gemini-3-flash-preview',
-    overrides: {
-      'spec': 'gemini-3.1-pro-preview',
-      'shield': 'gemini-3.1-pro-preview',
-      'triage': 'gemini-3.1-pro-preview',
-    },
-  },
+${orchestratorBlock}
 };
 
 export default config;
@@ -861,7 +961,7 @@ export async function initCommand(): Promise<void> {
         );
       }
 
-      const configContent = await generateConfig(targets, embeddingTier);
+      const configContent = await generateConfig(targets, embeddingTier, cwd);
       fs.writeFileSync(configPath, configContent, 'utf-8');
       const tierLabel =
         embeddingTier === 'none'

@@ -92,30 +92,41 @@ Example:
 
 // ─── Strategic context loading ──────────────────────────
 
-export function loadStrategicDocs(cwd: string): string {
-  const strategyDir = path.join(cwd, '.strategy');
-  const docPaths = [path.join(cwd, 'docs', 'roadmap.md'), path.join(cwd, 'docs', 'active_work.md')];
+/**
+ * Candidate directories and files for strategic context.
+ * Each entry is tried; missing paths are silently skipped.
+ */
+const STRATEGY_DIRS = ['.strategy'];
+const STRATEGY_DOCS = ['docs/roadmap.md', 'docs/active_work.md'];
 
+export function loadStrategicDocs(cwd: string): string {
   const sections: string[] = [];
 
-  // Load root-level .strategy/*.md files (skip subdirs)
-  if (fs.existsSync(strategyDir)) {
-    const entries = fs.readdirSync(strategyDir, { withFileTypes: true });
+  // Load root-level *.md files from each strategy directory (skip subdirs)
+  for (const rel of STRATEGY_DIRS) {
+    const dir = path.join(cwd, rel);
+    if (!fs.existsSync(dir)) continue;
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isFile() && entry.name.endsWith('.md')) {
-        const content = fs.readFileSync(path.join(strategyDir, entry.name), 'utf-8');
+        const content = fs.readFileSync(path.join(dir, entry.name), 'utf-8');
         sections.push(`### ${entry.name}\n${content}`);
       }
     }
   }
 
-  // Load roadmap and active_work
-  for (const docPath of docPaths) {
-    if (fs.existsSync(docPath)) {
-      const content = fs.readFileSync(docPath, 'utf-8');
-      const name = path.basename(docPath);
-      sections.push(`### ${name}\n${content}`);
-    }
+  // Load individual strategic docs (roadmap, active_work, etc.)
+  for (const rel of STRATEGY_DOCS) {
+    const docPath = path.join(cwd, rel);
+    if (!fs.existsSync(docPath)) continue;
+    const content = fs.readFileSync(docPath, 'utf-8');
+    const name = path.basename(docPath);
+    sections.push(`### ${name}\n${content}`);
+  }
+
+  if (sections.length === 0) {
+    log.dim(TAG, 'No strategic context files found — skipping.');
+    return '';
   }
 
   const combined = sections.join('\n\n---\n\n');
