@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 
+import { TotemConfigError, TotemError, TotemParseError } from '@mmnto/totem';
 import { z } from 'zod';
 
 import { GH_TIMEOUT_MS, IS_WIN } from '../utils.js';
@@ -17,16 +18,31 @@ export function handleGhError(err: unknown, context: string): never {
     throw err;
   }
   if (err instanceof z.ZodError) {
-    throw new Error(`[Totem Error] Failed to parse GitHub ${context}`);
+    throw new TotemParseError(
+      `Failed to parse GitHub ${context}`,
+      'Check that the GitHub API response format has not changed and your gh CLI is up to date.',
+    );
   }
   const msg = err instanceof Error ? err.message : String(err);
   if (msg.includes('ENOENT')) {
-    throw new Error(`[Totem Error] GitHub CLI (gh) is required. Install: https://cli.github.com`);
+    throw new TotemConfigError(
+      'GitHub CLI (gh) is required but was not found.',
+      'Install the GitHub CLI: https://cli.github.com',
+      'CONFIG_MISSING',
+    );
   }
   if (/\b(403|429)\b/.test(msg) || /rate.limit/i.test(msg)) {
-    throw new Error(`[Totem Error] GitHub API rate limit exceeded. Try again later.`);
+    throw new TotemError(
+      'SHIELD_FAILED',
+      'GitHub API rate limit exceeded.',
+      'Wait a few minutes and try again, or authenticate with `gh auth login` for a higher rate limit.',
+    );
   }
-  throw new Error(`[Totem Error] Failed to fetch ${context}: ${msg}`);
+  throw new TotemError(
+    'SHIELD_FAILED',
+    `Failed to fetch ${context}: ${msg}`,
+    'Run `gh auth status` to verify authentication, then retry.',
+  );
 }
 
 /**
@@ -71,8 +87,9 @@ export function ghFetchAndParse<T>(
     try {
       parsed = JSON.parse(raw);
     } catch {
-      throw new Error(
-        `[Totem Error] GitHub CLI returned invalid JSON for ${context}. Run \`gh auth status\` to check your authentication.`,
+      throw new TotemParseError(
+        `GitHub CLI returned invalid JSON for ${context}.`,
+        'Run `gh auth status` to check your authentication.',
       );
     }
 

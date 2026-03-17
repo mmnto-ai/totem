@@ -1,3 +1,5 @@
+import { TotemError } from '@mmnto/totem';
+
 import type { GitHubCliAdapter } from './github-cli.js';
 import type { IssueAdapter, StandardIssue, StandardIssueListItem } from './issue-adapter.js';
 
@@ -39,17 +41,20 @@ export class MultiRepoAdapter implements IssueAdapter {
     }
 
     if (matches.length === 0) {
-      throw new Error(
-        `[Totem Error] Issue #${issueNumber} not found in any configured repository.\n` +
+      throw new TotemError(
+        'SHIELD_FAILED',
+        `Issue #${issueNumber} not found in any configured repository.\n` +
           errors.map((e) => `  - ${e}`).join('\n'),
+        'Check that the issue number exists in your configured repositories.',
       );
     }
 
     if (matches.length > 1) {
       const repos = matches.map((m) => m.repo).join(', ');
-      throw new Error(
-        `[Totem Error] Issue #${issueNumber} is ambiguous — found in: ${repos}.\n` +
-          `Specify the full identifier (e.g., owner/repo#${issueNumber}).`,
+      throw new TotemError(
+        'SHIELD_FAILED',
+        `Issue #${issueNumber} is ambiguous — found in: ${repos}.`,
+        `Use owner/repo#${issueNumber} syntax to specify which repository.`,
       );
     }
 

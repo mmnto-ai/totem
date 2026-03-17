@@ -1,4 +1,5 @@
 import type { CompiledRule, Violation } from '@mmnto/totem';
+import { TotemError } from '@mmnto/totem';
 
 import type { ShieldFormat } from './shield.js';
 
@@ -57,11 +58,11 @@ export async function runCompiledRules(
   const rules = loadCompiledRules(rulesPath);
 
   if (rules.length === 0) {
-    log.error(
-      'Totem Error',
-      `No compiled rules found at ${totemDir}/${COMPILED_RULES_FILE}. Run \`totem compile\` first.`,
+    throw new TotemError(
+      'NO_RULES',
+      `No compiled rules found at ${totemDir}/${COMPILED_RULES_FILE}.`,
+      "Run 'totem compile' to generate rules.",
     );
-    process.exit(1);
   }
 
   log.info(tag, `Running ${rules.length} rules (zero LLM)...`);
@@ -188,7 +189,11 @@ export async function runCompiledRules(
     const verdictLabel = errorColor(bold('FAIL'));
     const warnSuffix = warnings.length > 0 ? `, ${warnings.length} warning(s)` : '';
     log.info(tag, `Verdict: ${verdictLabel} — ${errors.length} error(s)${warnSuffix}`);
-    process.exit(1);
+    throw new TotemError(
+      'SHIELD_FAILED',
+      'Violations detected',
+      'Fix the violations above or use totem explain <hash> for details.',
+    );
   } else if (warnings.length > 0) {
     const verdictLabel = successColor(bold('PASS'));
     log.info(tag, `Verdict: ${verdictLabel} — ${warnings.length} warning(s), 0 errors`);
