@@ -12,7 +12,6 @@ import {
   runSync,
   TotemConfigError,
   TotemError,
-  TotemParseError,
   truncateHeading,
   UNICODE_ESCAPE_RE,
   writeLessonFile,
