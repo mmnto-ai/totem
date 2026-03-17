@@ -99,22 +99,10 @@ export async function acquireLock(
 
     if (existing) {
       if (isStale(existing)) {
-        // Verify the owning process is actually dead before removing (prevents TOCTOU race)
-        const isOwnerAlive = isProcessAlive(existing.pid);
-
-        if (isOwnerAlive) {
-          if (attempt === 0) {
-            onWarn?.(
-              `Waiting for sync lock (held by PID ${existing.pid}, stale but process alive)...`,
-            );
-          }
-          const delay = backoffDelay(attempt);
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          continue;
-        }
-
+        // Stale timestamp is the final authority — delete regardless of PID liveness.
+        // Per lesson-5b1929d1: PID checks fail across container namespaces.
         onWarn?.(
-          `Removing stale lock from dead PID ${existing.pid} (${Math.round((Date.now() - existing.timestamp) / 1000)}s old)`,
+          `Removing stale lock from PID ${existing.pid} (${Math.round((Date.now() - existing.timestamp) / 1000)}s old)`,
         );
         try {
           fs.unlinkSync(file);
@@ -156,9 +144,9 @@ export async function acquireLock(
         }
       };
     } catch (err) {
-      // EEXIST = another process grabbed it; EPERM/EACCES = Windows file handle contention
+      // EEXIST = another process grabbed it between our read and write
       const code = (err as NodeJS.ErrnoException).code;
-      if (code === 'EEXIST' || code === 'EPERM' || code === 'EACCES') {
+      if (code === 'EEXIST') {
         const delay = backoffDelay(attempt);
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
@@ -185,14 +173,18 @@ export async function withLock<T>(
   const release = await acquireLock(totemDir, onWarn);
 
   // Best-effort cleanup on process termination (Ctrl+C, kill)
+  const removeHandlers = () => {
+    process.removeListener('SIGINT', onSigint);
+    process.removeListener('SIGTERM', onSigterm);
+  };
   const onSigint = () => {
     release();
-    process.removeListener('SIGINT', onSigint);
+    removeHandlers();
     process.kill(process.pid, 'SIGINT'); // totem-ignore: re-raising caught signal
   };
   const onSigterm = () => {
     release();
-    process.removeListener('SIGTERM', onSigterm);
+    removeHandlers();
     process.kill(process.pid, 'SIGTERM'); // totem-ignore: re-raising caught signal
   };
   process.on('SIGINT', onSigint);
