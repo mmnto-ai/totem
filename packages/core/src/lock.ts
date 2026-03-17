@@ -66,8 +66,29 @@ export async function acquireLock(
 
     if (existing) {
       if (isStale(existing)) {
+        // Verify the owning process is actually dead before removing (prevents TOCTOU race)
+        let isOwnerAlive = false;
+        try {
+          process.kill(existing.pid, 0);
+          isOwnerAlive = true;
+        } catch (err) {
+          // ESRCH = process gone (safe to remove). Other errors = assume alive.
+          if ((err as NodeJS.ErrnoException).code !== 'ESRCH') {
+            isOwnerAlive = true;
+          }
+        }
+
+        if (isOwnerAlive) {
+          if (attempt === 0) {
+            onWarn?.(`Waiting for sync lock (held by PID ${existing.pid}, stale but process alive)...`);
+          }
+          const delay = backoffDelay(attempt);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+
         onWarn?.(
-          `Removing stale lock from PID ${existing.pid} (${Math.round((Date.now() - existing.timestamp) / 1000)}s old)`,
+          `Removing stale lock from dead PID ${existing.pid} (${Math.round((Date.now() - existing.timestamp) / 1000)}s old)`,
         );
         try {
           fs.unlinkSync(file);
@@ -75,7 +96,7 @@ export async function acquireLock(
           // Another process may have cleaned it up
         }
       } else {
-        // Lock is held — wait and retry
+        // Lock is held and not stale — wait and retry
         if (attempt === 0) {
           onWarn?.(`Waiting for sync lock (held by PID ${existing.pid})...`);
         }
