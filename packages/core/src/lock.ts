@@ -19,6 +19,20 @@ interface LockData {
   timestamp: number;
 }
 
+/**
+ * Check if a process is still running via signal 0 (no-op probe).
+ * Returns true if alive, false if dead (ESRCH), true on permission errors (assume alive).
+ */
+function isProcessAlive(pid: number): boolean {
+  try {
+    // Signal 0 does not terminate — it only checks if the process exists
+    process.kill(pid, 0); // totem-ignore: signal-0 probe, not a kill
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code !== 'ESRCH';
+  }
+}
+
 function lockPath(totemDir: string): string {
   return path.join(totemDir, LOCK_FILE);
 }
@@ -67,16 +81,7 @@ export async function acquireLock(
     if (existing) {
       if (isStale(existing)) {
         // Verify the owning process is actually dead before removing (prevents TOCTOU race)
-        let isOwnerAlive = false;
-        try {
-          process.kill(existing.pid, 0);
-          isOwnerAlive = true;
-        } catch (err) {
-          // ESRCH = process gone (safe to remove). Other errors = assume alive.
-          if ((err as NodeJS.ErrnoException).code !== 'ESRCH') {
-            isOwnerAlive = true;
-          }
-        }
+        const isOwnerAlive = isProcessAlive(existing.pid);
 
         if (isOwnerAlive) {
           if (attempt === 0) {
