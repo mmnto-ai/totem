@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-import type { Embedder } from './embedder.js';
 import { TotemConfigError } from '../errors.js';
+import type { Embedder } from './embedder.js';
 
 const DEFAULT_DIMENSIONS = 768;
 const MAX_BATCH_SIZE = 10;
