@@ -27,12 +27,23 @@ function isStale(data: LockData): boolean {
   return Date.now() - data.timestamp > STALE_THRESHOLD_MS;
 }
 
+function backoffDelay(attempt: number): number {
+  return BASE_DELAY_MS * Math.pow(2, Math.min(attempt, 5));
+}
+
 function readLock(filePath: string): LockData | null {
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');
-    const data = JSON.parse(raw) as LockData;
-    if (typeof data.pid === 'number' && typeof data.timestamp === 'number') {
-      return data;
+    const data: unknown = JSON.parse(raw);
+    if (
+      data !== null &&
+      typeof data === 'object' &&
+      'pid' in data &&
+      'timestamp' in data &&
+      typeof (data as LockData).pid === 'number' &&
+      typeof (data as LockData).timestamp === 'number'
+    ) {
+      return data as LockData;
     }
     return null;
   } catch {
@@ -68,7 +79,7 @@ export async function acquireLock(
         if (attempt === 0) {
           onWarn?.(`Waiting for sync lock (held by PID ${existing.pid})...`);
         }
-        const delay = BASE_DELAY_MS * Math.pow(2, Math.min(attempt, 5));
+        const delay = backoffDelay(attempt);
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
@@ -90,7 +101,7 @@ export async function acquireLock(
     } catch (err) {
       // EEXIST means another process grabbed it between our read and write
       if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
-        const delay = BASE_DELAY_MS * Math.pow(2, Math.min(attempt, 5));
+        const delay = backoffDelay(attempt);
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
