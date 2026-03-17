@@ -36,7 +36,7 @@ Auto-detects your environment (Cursor, Copilot, Junie) and sets up `totem.config
 
 Your project gets immediate protection against the most common architectural traps on Day 1. Already have `.cursorrules` or `.mdc` files? `totem init` auto-ingests them and compiles your instructions into deterministic rules.
 
-### 2. Connect the MCP Server *(optional)*
+### 2. Connect the MCP Server _(optional)_
 
 > **Without MCP:** `totem lint`, `compile`, `extract`, `sync`, and `stats` all work standalone. You get full deterministic enforcement.
 > **With MCP:** Your AI agent can search project knowledge and add lessons mid-session — no copy-paste, no context loss.
