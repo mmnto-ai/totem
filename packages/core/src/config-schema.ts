@@ -175,6 +175,9 @@ export const TotemConfigSchema = z.object({
 
   /** Optional: GitHub repositories to aggregate issues from (e.g., ['owner/repo', 'owner/repo2']) */
   repositories: z.array(z.string()).optional(),
+
+  /** Optional: bot boilerplate markers to filter from PR comments during `totem extract` (e.g., ['Using Gemini Code Assist', 'Copilot']) */
+  botMarkers: z.array(z.string()).optional(),
 });
 
 export type ChunkStrategy = z.infer<typeof ChunkStrategySchema>;

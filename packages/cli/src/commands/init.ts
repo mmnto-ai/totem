@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
@@ -556,9 +557,111 @@ function formatTargets(targets: IngestTarget[]): string {
 
 type EmbeddingTier = 'openai' | 'ollama' | 'gemini' | 'none';
 
+// ─── Orchestrator auto-detection ─────────────────────
+
+interface DetectedOrchestrator {
+  block: string;
+}
+
+/** Check whether a CLI command exists on PATH. */
+function cliExists(name: string): boolean {
+  try {
+    const cmd = IS_WIN ? `where ${name}` : `which ${name}`;
+    execSync(cmd, { stdio: 'ignore', timeout: 3000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Check whether any of the given env keys are set (in process.env or .env file content). */
+function hasKey(envContent: string, ...keyNames: string[]): boolean {
+  for (const keyName of keyNames) {
+    if (process.env[keyName] && /\S/.test(process.env[keyName]!)) {
+      return true;
+    }
+  }
+  const keyPattern = new RegExp(`^\\s*(?:${keyNames.join('|')})\\s*=\\s*\\S+`, 'm');
+  return keyPattern.test(envContent);
+}
+
+/**
+ * Auto-detect the best orchestrator from the environment.
+ * Priority: gemini CLI → claude CLI → API keys (GEMINI → ANTHROPIC → OPENAI) → null.
+ */
+function detectOrchestrator(cwd: string): DetectedOrchestrator | null {
+  // Read .env file once (loadEnv may not have run yet)
+  const envPath = path.join(cwd, '.env');
+  const envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
+
+  // 1. Gemini CLI on PATH → shell provider
+  if (cliExists('gemini')) {
+    return {
+      block: `  orchestrator: {
+    provider: 'shell',
+    command: 'gemini --model {model} -o json -e none < {file}',
+    defaultModel: 'gemini-3-flash-preview',
+    overrides: {
+      'spec': 'gemini-3.1-pro-preview',
+      'shield': 'gemini-3.1-pro-preview',
+      'triage': 'gemini-3.1-pro-preview',
+    },
+  },`,
+    };
+  }
+
+  // 2. Claude CLI on PATH → shell provider (anthropic)
+  if (cliExists('claude')) {
+    return {
+      block: `  orchestrator: {
+    provider: 'shell',
+    command: 'claude -p {file} --model {model} --output-format json',
+    defaultModel: 'sonnet',
+  },`,
+    };
+  }
+
+  // 3. API keys → native SDK providers
+  if (hasKey(envContent, 'GEMINI_API_KEY', 'GOOGLE_API_KEY')) {
+    return {
+      block: `  orchestrator: {
+    provider: 'gemini',
+    defaultModel: 'gemini-3-flash-preview',
+    overrides: {
+      'spec': 'gemini-3.1-pro-preview',
+      'shield': 'gemini-3.1-pro-preview',
+      'triage': 'gemini-3.1-pro-preview',
+    },
+  },`,
+    };
+  }
+
+  if (hasKey(envContent, 'ANTHROPIC_API_KEY')) {
+    return {
+      block: `  orchestrator: {
+    provider: 'anthropic',
+    defaultModel: 'claude-sonnet-4-20250514',
+  },`,
+    };
+  }
+
+  if (hasKey(envContent, 'OPENAI_API_KEY')) {
+    return {
+      block: `  orchestrator: {
+    provider: 'openai',
+    defaultModel: 'gpt-4.1-mini',
+  },`,
+    };
+  }
+
+  // 4. Nothing found → omit orchestrator (Lite/Standard tier)
+  return null;
+}
+
 export async function generateConfig(
   targets: IngestTarget[],
   embeddingTier: EmbeddingTier,
+  cwd: string,
 ): Promise<string> {
   const { DEFAULT_IGNORE_PATTERNS } = await import('@mmnto/totem');
   let embeddingBlock: string;
@@ -577,6 +680,11 @@ export async function generateConfig(
       break;
   }
 
+  const orchestrator = detectOrchestrator(cwd);
+  const orchestratorBlock = orchestrator
+    ? `\n${orchestrator.block}`
+    : `\n  // orchestrator: no CLI or API key detected. Add one and re-run \`totem init\`.`;
+
   return `import type { TotemConfig } from '@mmnto/totem';
 
 const config: TotemConfig = {
@@ -589,17 +697,7 @@ ${embeddingBlock}
   ignorePatterns: [
 ${DEFAULT_IGNORE_PATTERNS.map((p) => `    '${p}',`).join('\n')}
   ],
-
-  orchestrator: {
-    provider: 'shell',
-    command: 'gemini --model {model} -o json -e none < {file}',
-    defaultModel: 'gemini-3-flash-preview',
-    overrides: {
-      'spec': 'gemini-3.1-pro-preview',
-      'shield': 'gemini-3.1-pro-preview',
-      'triage': 'gemini-3.1-pro-preview',
-    },
-  },
+${orchestratorBlock}
 };
 
 export default config;
@@ -615,20 +713,11 @@ export function detectEmbeddingTier(cwd: string): EmbeddingTier {
   const envPath = path.join(cwd, '.env');
   const envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
 
-  const hasGemini =
-    (process.env['GEMINI_API_KEY'] && /\S/.test(process.env['GEMINI_API_KEY'])) ||
-    (process.env['GOOGLE_API_KEY'] && /\S/.test(process.env['GOOGLE_API_KEY'])) ||
-    /^\s*(?:GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*\S+/m.test(envContent);
-
-  const hasOpenai =
-    (process.env['OPENAI_API_KEY'] && /\S/.test(process.env['OPENAI_API_KEY'])) ||
-    /^\s*OPENAI_API_KEY\s*=\s*\S+/m.test(envContent);
-
   // Gemini first — task-type aware embeddings, best retrieval quality
-  if (hasGemini) return 'gemini';
+  if (hasKey(envContent, 'GEMINI_API_KEY', 'GOOGLE_API_KEY')) return 'gemini';
 
   // OpenAI — widely available, low friction
-  if (hasOpenai) return 'openai';
+  if (hasKey(envContent, 'OPENAI_API_KEY')) return 'openai';
 
   return 'none';
 }
@@ -861,7 +950,7 @@ export async function initCommand(): Promise<void> {
         );
       }
 
-      const configContent = await generateConfig(targets, embeddingTier);
+      const configContent = await generateConfig(targets, embeddingTier, cwd);
       fs.writeFileSync(configPath, configContent, 'utf-8');
       const tierLabel =
         embeddingTier === 'none'

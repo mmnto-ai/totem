@@ -195,7 +195,8 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   const queryParts: string[] = [];
 
   for (const input of unique) {
-    const urlMatch = input.match(/^https?:\/\/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/);
+    // Match GitHub, GitLab, or any URL ending in /issues/<number> or /-/issues/<number>
+    const urlMatch = input.match(/^https?:\/\/[^/]+\/.*\/(?:-\/)?issues\/(\d+)/);
     // Support owner/repo#123 format for multi-repo disambiguation
     const hashIdx = input.indexOf('#');
     const isQualified =

@@ -499,39 +499,52 @@ describe('detectEmbeddingTier', () => {
 });
 
 describe('generateConfig', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-genconfig-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   const targets = [
     { glob: 'src/**/*.ts', type: 'code' as const, strategy: 'typescript-ast' as const },
   ];
 
   it('generates config with openai embedding', async () => {
-    const config = await generateConfig(targets, 'openai');
+    const config = await generateConfig(targets, 'openai', tmpDir);
     expect(config).toContain("provider: 'openai'");
     expect(config).toContain('text-embedding-3-small');
     expect(config).not.toContain('// embedding:');
   });
 
   it('generates config with ollama embedding', async () => {
-    const config = await generateConfig(targets, 'ollama');
+    const config = await generateConfig(targets, 'ollama', tmpDir);
     expect(config).toContain("provider: 'ollama'");
     expect(config).toContain('nomic-embed-text');
   });
 
   it('generates Lite config with commented-out embedding', async () => {
-    const config = await generateConfig(targets, 'none');
+    const config = await generateConfig(targets, 'none', tmpDir);
     expect(config).toContain('// embedding:');
     expect(config).toContain('Lite tier');
   });
 
-  it('always includes orchestrator block', async () => {
+  it('includes orchestrator block or comment when none detected', async () => {
     for (const tier of ['openai', 'ollama', 'none'] as const) {
-      const config = await generateConfig(targets, tier);
-      expect(config).toContain("provider: 'shell'");
+      const config = await generateConfig(targets, tier, tmpDir);
+      // Either a detected orchestrator or the fallback comment
+      const hasOrchestrator =
+        config.includes('orchestrator:') || config.includes('// orchestrator:');
+      expect(hasOrchestrator).toBe(true);
     }
   });
 
   it('always includes ignorePatterns block', async () => {
     for (const tier of ['openai', 'ollama', 'none'] as const) {
-      const config = await generateConfig(targets, tier);
+      const config = await generateConfig(targets, tier, tmpDir);
       expect(config).toContain('ignorePatterns:');
       expect(config).toContain('**/__tests__/**');
       expect(config).toContain('**/*.test.ts');
