@@ -1,7 +1,8 @@
 import { execFileSync } from 'node:child_process';
 
-import { TotemConfigError, TotemError, TotemParseError } from '@mmnto/totem';
 import { z } from 'zod';
+
+import { TotemConfigError, TotemError, TotemParseError } from '@mmnto/totem';
 
 import { GH_TIMEOUT_MS, IS_WIN } from '../utils.js';
 
