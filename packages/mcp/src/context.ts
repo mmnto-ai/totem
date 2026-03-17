@@ -100,7 +100,10 @@ async function initContext(): Promise<ServerContext> {
 export async function getContext(): Promise<ServerContext> {
   if (cached) return cached;
   if (!initPromise) {
-    initPromise = initContext();
+    initPromise = initContext().catch((err) => {
+      initPromise = undefined; // Allow retry on transient failures
+      throw err;
+    });
   }
   return initPromise;
 }
