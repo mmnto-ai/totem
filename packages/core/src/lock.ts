@@ -27,8 +27,10 @@ function isStale(data: LockData): boolean {
   return Date.now() - data.timestamp > STALE_THRESHOLD_MS;
 }
 
+const MAX_BACKOFF_EXPONENT = 5;
+
 function backoffDelay(attempt: number): number {
-  return BASE_DELAY_MS * Math.pow(2, Math.min(attempt, 5));
+  return BASE_DELAY_MS * Math.pow(2, Math.min(attempt, MAX_BACKOFF_EXPONENT));
 }
 
 function readLock(filePath: string): LockData | null {
