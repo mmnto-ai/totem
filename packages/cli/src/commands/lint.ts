@@ -31,7 +31,7 @@ async function filterDiffByPatterns(diff: string, patterns: string[]): Promise<s
       // Exclude if any ignore pattern matches (reuse core's glob matcher)
       return !patterns.some((p) => matchesGlob(filePath, p));
     })
-    .join('');
+    .join(''); // totem-ignore (#669) — joining diff sections, not text fragments
 }
 
 export async function lintCommand(options: LintOptions): Promise<void> {
