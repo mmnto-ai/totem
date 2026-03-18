@@ -74,6 +74,12 @@ Respond with ONLY the sections below. No preamble, no closing remarks.
   > TOTEM INVARIANT: [lesson heading] — [one-line summary of the constraint]
   Place the invariant directly next to the step it affects, not in a separate section.]
 
+### Verification (MANDATORY — do not skip)
+Every implementation MUST end with these steps:
+1. \`totem lint\` — deterministic rule check (zero LLM, ~2s). Fixes any violations.
+2. \`totem shield\` — AI-powered architectural review (~18s). Addresses any critical findings.
+3. If using MCP, call \`verify_execution\` to confirm compliance before declaring the task done.
+
 ### Test Plan
 [Specific test scenarios needed to prove the feature works and edge cases are handled. Reference existing test file patterns when applicable.]
 `;

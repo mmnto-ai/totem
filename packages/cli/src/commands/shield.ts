@@ -463,6 +463,20 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     return;
   }
 
+  // Filter out shieldIgnorePatterns from diff (e.g., .strategy submodule)
+  const allIgnore = [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])];
+  if (allIgnore.length > 0) {
+    const { matchesGlob } = await import('@mmnto/totem');
+    const sections = diff.split(/^(?=diff --git )/m);
+    diff = sections
+      .filter((section) => {
+        const m = section.match(/^diff --git a\/\S+ b\/(.+)$/m);
+        if (!m) return true;
+        return !allIgnore.some((p) => matchesGlob(m[1]!, p));
+      })
+      .join(''); // totem-ignore (#669) — joining diff sections
+  }
+
   const changedFiles = extractChangedFiles(diff);
   log.info(TAG, `Changed files (${changedFiles.length}): ${changedFiles.join(', ')}`);
 
