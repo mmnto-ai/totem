@@ -377,9 +377,10 @@ describe('DOCS_SYSTEM_PROMPT', () => {
     expect(DOCS_SYSTEM_PROMPT).toContain('1-3 per sub-bullet');
   });
 
-  it('does not include project-specific pinned content', () => {
-    expect(DOCS_SYSTEM_PROMPT).not.toContain('## Pinned Content');
-    expect(DOCS_SYSTEM_PROMPT).not.toContain('Stop repeating yourself');
+  it('includes pinned content to protect the tagline', () => {
+    expect(DOCS_SYSTEM_PROMPT).toContain('## Pinned Content');
+    expect(DOCS_SYSTEM_PROMPT).toContain('Stop repeating yourself');
+    expect(DOCS_SYSTEM_PROMPT).toContain('brilliant goldfish');
   });
 });
 
