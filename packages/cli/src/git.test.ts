@@ -8,7 +8,13 @@ vi.mock('node:child_process', () => ({
   execSync: vi.fn(),
 }));
 
-import { getGitLogSince, getLatestTag, getTagDate, isFileDirty } from './git.js';
+import {
+  filterDiffByPatterns,
+  getGitLogSince,
+  getLatestTag,
+  getTagDate,
+  isFileDirty,
+} from './git.js';
 
 describe('getLatestTag', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -76,6 +82,52 @@ describe('getGitLogSince', () => {
       throw new Error('not a git repo');
     });
     expect(getGitLogSince('/tmp')).toBe('');
+  });
+});
+
+describe('filterDiffByPatterns', () => {
+  const DIFF_WITH_STRATEGY = [
+    'diff --git a/.strategy b/.strategy',
+    'index abc1234..def5678 160000',
+    '--- a/.strategy',
+    '+++ b/.strategy',
+    '@@ -1 +1 @@',
+    '-Subproject commit aaa',
+    '+Subproject commit bbb',
+  ].join('\n');
+
+  const DIFF_WITH_CODE = [
+    'diff --git a/packages/cli/src/commands/lint.ts b/packages/cli/src/commands/lint.ts',
+    'index 1234567..abcdef0 100644',
+    '--- a/packages/cli/src/commands/lint.ts',
+    '+++ b/packages/cli/src/commands/lint.ts',
+    '@@ -1,3 +1,4 @@',
+    ' import { foo } from "bar";',
+    '+const x = 1;',
+  ].join('\n');
+
+  it('removes sections matching ignore patterns', async () => {
+    const combined = DIFF_WITH_STRATEGY + '\n' + DIFF_WITH_CODE;
+    const result = await filterDiffByPatterns(combined, ['.strategy']);
+    expect(result).not.toContain('.strategy');
+    expect(result).toContain('lint.ts');
+  });
+
+  it('returns full diff when no patterns match', async () => {
+    const result = await filterDiffByPatterns(DIFF_WITH_CODE, ['*.md']);
+    expect(result).toContain('lint.ts');
+  });
+
+  it('returns full diff when patterns array is empty', async () => {
+    const combined = DIFF_WITH_STRATEGY + '\n' + DIFF_WITH_CODE;
+    const result = await filterDiffByPatterns(combined, []);
+    expect(result).toContain('.strategy');
+    expect(result).toContain('lint.ts');
+  });
+
+  it('returns empty string when all sections are filtered out', async () => {
+    const result = await filterDiffByPatterns(DIFF_WITH_STRATEGY, ['.strategy']);
+    expect(result.trim()).toBe('');
   });
 });
 
