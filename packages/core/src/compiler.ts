@@ -5,7 +5,7 @@ import safeRegex from 'safe-regex2';
 import { z } from 'zod';
 
 import { extensionToLanguage } from './ast-classifier.js';
-import { matchAstQuery } from './ast-query.js';
+import { matchAstQueriesBatch } from './ast-query.js';
 import { TotemParseError } from './errors.js';
 
 // ─── Schemas ─────────────────────────────────────────
@@ -355,39 +355,51 @@ export async function applyAstRulesToAdditions(
 
   const violations: Violation[] = [];
 
-  for (const rule of astRules) {
-    for (const [file, fileAdditions] of byFile) {
-      // Skip if rule has fileGlobs and this file doesn't match
+  // Process each file once — batch all applicable AST queries per file
+  for (const [file, fileAdditions] of byFile) {
+    // Check language support
+    const nodePath = await import('node:path');
+    const ext = nodePath.extname(file);
+    if (!extensionToLanguage(ext)) continue;
+
+    // Collect added line numbers, filtering suppressed lines
+    const addedLineNumbers: number[] = [];
+    for (const addition of fileAdditions) {
+      if (addition.astContext && addition.astContext !== 'code') continue;
+      if (isSuppressed(addition.line, addition.precedingLine)) continue;
+      addedLineNumbers.push(addition.lineNumber);
+    }
+    if (addedLineNumbers.length === 0) continue;
+
+    // Collect all applicable rules for this file
+    const applicableRules = astRules.filter((rule) => {
       if (rule.fileGlobs && rule.fileGlobs.length > 0) {
-        if (!fileMatchesGlobs(file, rule.fileGlobs)) continue;
+        return fileMatchesGlobs(file, rule.fileGlobs);
       }
+      return true;
+    });
+    if (applicableRules.length === 0) continue;
 
-      // Check language support
-      const path = await import('node:path');
-      const ext = path.extname(file);
-      if (!extensionToLanguage(ext)) continue;
+    // Batch: parse file once, run all queries against the cached tree
+    const queries = applicableRules.map((rule) => ({
+      astQuery: rule.astQuery!,
+      addedLineNumbers,
+    }));
 
-      // Collect added line numbers, filtering suppressed lines
-      const addedLineNumbers: number[] = [];
-      const additionsByLine = new Map<number, DiffAddition>();
-      for (const addition of fileAdditions) {
-        // Skip non-code lines when AST context is available
-        if (addition.astContext && addition.astContext !== 'code') continue;
+    const batchResults = await matchAstQueriesBatch(file, queries, cwd);
 
-        if (isSuppressed(addition.line, addition.precedingLine)) {
+    // Map results back to violations
+    for (const rule of applicableRules) {
+      const matches = batchResults.get(rule.astQuery!) ?? [];
+
+      // Check for suppressions per match
+      for (const match of matches) {
+        const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
+        if (addition && isSuppressed(addition.line, addition.precedingLine)) {
           onRuleEvent?.('suppress', rule.lessonHash);
           continue;
         }
 
-        addedLineNumbers.push(addition.lineNumber);
-        additionsByLine.set(addition.lineNumber, addition);
-      }
-
-      if (addedLineNumbers.length === 0) continue;
-
-      const matches = await matchAstQuery(file, rule.astQuery!, addedLineNumbers, cwd);
-
-      for (const match of matches) {
         onRuleEvent?.('trigger', rule.lessonHash);
         violations.push({
           rule,

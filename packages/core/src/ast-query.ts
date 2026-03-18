@@ -1,8 +1,12 @@
-import * as fs from 'node:fs';
+import { execFile } from 'node:child_process';
+import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { promisify } from 'node:util';
 
 import type { SupportedLanguage } from './ast-classifier.js';
 import { ensureInit, extensionToLanguage, loadGrammar } from './ast-classifier.js';
+
+const execFileAsync = promisify(execFile);
 
 // ─── Types ──────────────────────────────────────────
 
@@ -15,30 +19,96 @@ export interface AstMatch {
 
 /**
  * Read file content — try `git show :path` first (staged content), fall back to disk.
+ * Fully async — does not block the event loop.
  */
 async function readFileContent(filePath: string, cwd: string): Promise<string | null> {
   try {
-    const { execFileSync } = await import('node:child_process');
-    return execFileSync('git', ['show', `:${filePath}`], { cwd, encoding: 'utf-8' }); // totem-ignore — execFileSync resolves git via PATH, no shell needed
+    const { stdout } = await execFileAsync('git', ['show', `:${filePath}`], {
+      cwd,
+      encoding: 'utf-8',
+      maxBuffer: 10 * 1024 * 1024, // 10MB safety cap
+    });
+    return stdout;
   } catch {
     // Fall back to disk
   }
 
   try {
     const fullPath = path.resolve(cwd, filePath);
-    return fs.readFileSync(fullPath, 'utf-8');
+    return await fs.readFile(fullPath, 'utf-8');
   } catch {
     return null;
+  }
+}
+
+// ─── Query execution ────────────────────────────────
+
+/**
+ * Run a single S-expression query against a parsed tree.
+ * Returns matches that overlap with added line numbers.
+ */
+function runQuery(
+  QueryClass: new (
+    lang: import('web-tree-sitter').Language,
+    source: string,
+  ) => import('web-tree-sitter').Query,
+  grammar: import('web-tree-sitter').Language,
+  rootNode: import('web-tree-sitter').Node,
+  lines: string[],
+  astQuery: string,
+  addedLineNumbers: Set<number>,
+): AstMatch[] {
+  let query: import('web-tree-sitter').Query | null = null;
+  try {
+    query = new QueryClass(grammar, astQuery);
+    const matches = query.matches(rootNode);
+    const results: AstMatch[] = [];
+
+    for (const match of matches) {
+      // Find the @violation capture, or use the first capture
+      let targetNode: import('web-tree-sitter').Node | null = null;
+
+      for (const capture of match.captures) {
+        if (capture.name === 'violation') {
+          targetNode = capture.node;
+          break;
+        }
+      }
+
+      if (!targetNode && match.captures.length > 0) {
+        targetNode = match.captures[0]!.node;
+      }
+
+      if (!targetNode) continue;
+
+      const startLine = targetNode.startPosition.row + 1;
+      const endLine = targetNode.endPosition.row + 1;
+
+      for (let lineNum = startLine; lineNum <= endLine; lineNum++) {
+        if (addedLineNumbers.has(lineNum)) {
+          results.push({
+            lineNumber: lineNum,
+            lineText: lines[lineNum - 1] ?? '',
+          });
+          break;
+        }
+      }
+    }
+
+    return results;
+  } catch {
+    // Invalid query — fail-open
+    return [];
+  } finally {
+    query?.delete();
   }
 }
 
 // ─── Public API ─────────────────────────────────────
 
 /**
- * Run a Tree-sitter S-expression query against a file and return matches
- * that overlap with the given added line numbers.
- *
- * Fail-open: returns empty array on any error (invalid query, parse failure, etc.).
+ * Convenience wrapper: read + parse + query in one call.
+ * For batch operations, use `matchAstQueriesBatch` instead.
  */
 export async function matchAstQuery(
   filePath: string,
@@ -48,23 +118,17 @@ export async function matchAstQuery(
 ): Promise<AstMatch[]> {
   if (addedLineNumbers.length === 0) return [];
 
-  // Determine language from extension
   const ext = path.extname(filePath);
   const lang: SupportedLanguage | undefined = extensionToLanguage(ext);
-  if (!lang) return []; // Unsupported file type — fail-open
+  if (!lang) return [];
 
-  // Read file content
   const content = await readFileContent(filePath, cwd);
   if (!content) return [];
-
-  const lines = content.split('\n');
-  const addedSet = new Set(addedLineNumbers);
 
   try {
     await ensureInit();
     const grammar = await loadGrammar(lang);
 
-    // Import web-tree-sitter for Parser and Query constructors
     const TreeSitter = await import('web-tree-sitter');
     const ParserClass = TreeSitter.default?.Parser ?? TreeSitter.Parser;
     const QueryClass = TreeSitter.default?.Query ?? TreeSitter.Query;
@@ -76,50 +140,82 @@ export async function matchAstQuery(
       if (!tree) return [];
 
       try {
-        // Create the query from the S-expression
-        const query = new QueryClass(grammar, astQuery);
-        try {
-          const matches = query.matches(tree.rootNode);
-          const results: AstMatch[] = [];
+        return runQuery(
+          QueryClass,
+          grammar,
+          tree.rootNode,
+          content.split('\n'),
+          astQuery,
+          new Set(addedLineNumbers),
+        );
+      } finally {
+        tree.delete();
+      }
+    } finally {
+      parser.delete();
+    }
+  } catch {
+    return [];
+  }
+}
 
-          for (const match of matches) {
-            // Find the @violation capture, or use the first capture
-            let targetNode: import('web-tree-sitter').Node | null = null;
+/**
+ * Parse a file once and run multiple AST queries against it efficiently.
+ * O(M + N) instead of O(M * N) — file is read and parsed exactly once.
+ */
+export async function matchAstQueriesBatch(
+  filePath: string,
+  queries: Array<{ astQuery: string; addedLineNumbers: number[] }>,
+  cwd: string,
+): Promise<Map<string, AstMatch[]>> {
+  const results = new Map<string, AstMatch[]>();
+  if (queries.length === 0) return results;
 
-            for (const capture of match.captures) {
-              if (capture.name === 'violation') {
-                targetNode = capture.node;
-                break;
-              }
-            }
+  const ext = path.extname(filePath);
+  const lang: SupportedLanguage | undefined = extensionToLanguage(ext);
+  if (!lang) {
+    for (const q of queries) results.set(q.astQuery, []);
+    return results;
+  }
 
-            // Fall back to first capture if no @violation
-            if (!targetNode && match.captures.length > 0) {
-              targetNode = match.captures[0]!.node;
-            }
+  const content = await readFileContent(filePath, cwd);
+  if (!content) {
+    for (const q of queries) results.set(q.astQuery, []);
+    return results;
+  }
 
-            if (!targetNode) continue;
+  try {
+    await ensureInit();
+    const grammar = await loadGrammar(lang);
 
-            // Tree-sitter uses 0-based rows; convert to 1-based
-            const startLine = targetNode.startPosition.row + 1;
-            const endLine = targetNode.endPosition.row + 1;
+    const TreeSitter = await import('web-tree-sitter');
+    const ParserClass = TreeSitter.default?.Parser ?? TreeSitter.Parser;
+    const QueryClass = TreeSitter.default?.Query ?? TreeSitter.Query;
 
-            // Check if any line in the node's range overlaps with added lines
-            for (let lineNum = startLine; lineNum <= endLine; lineNum++) {
-              if (addedSet.has(lineNum)) {
-                const lineText = lines[lineNum - 1] ?? '';
-                results.push({
-                  lineNumber: lineNum,
-                  lineText,
-                });
-                break; // One match per node is enough
-              }
-            }
-          }
+    const parser = new ParserClass();
+    try {
+      parser.setLanguage(grammar);
+      const tree = parser.parse(content);
+      if (!tree) {
+        for (const q of queries) results.set(q.astQuery, []);
+        return results;
+      }
 
-          return results;
-        } finally {
-          query.delete();
+      const lines = content.split('\n');
+
+      try {
+        for (const { astQuery, addedLineNumbers } of queries) {
+          results.set(
+            astQuery,
+            runQuery(
+              QueryClass,
+              grammar,
+              tree.rootNode,
+              lines,
+              astQuery,
+              new Set(addedLineNumbers),
+            ),
+          );
         }
       } finally {
         tree.delete();
@@ -128,7 +224,8 @@ export async function matchAstQuery(
       parser.delete();
     }
   } catch {
-    // Fail-open: invalid query, parse failure, etc.
-    return [];
+    for (const q of queries) results.set(q.astQuery, []);
   }
+
+  return results;
 }
