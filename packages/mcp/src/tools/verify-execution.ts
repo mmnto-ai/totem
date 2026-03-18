@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execFileSync, execSync, spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -29,7 +29,7 @@ function detectLintCommand(projectRoot: string): { cmd: string; args: string[] }
  */
 function checkUnstagedChanges(projectRoot: string): string | null {
   try {
-    const { execFileSync } = require('node:child_process') as typeof import('node:child_process');
+    // execFileSync imported at top level
     const output = execFileSync('git', ['diff', '--name-only'], {
       cwd: projectRoot,
       encoding: 'utf-8',
@@ -79,7 +79,6 @@ function runLint(projectRoot: string): Promise<{ success: boolean; output: strin
     const timer = setTimeout(() => {
       try {
         if (process.platform === 'win32' && child.pid) {
-          const { execSync } = require('node:child_process');
           execSync(`taskkill /pid ${child.pid} /T /F`, { stdio: 'ignore' });
         } else {
           child.kill();
