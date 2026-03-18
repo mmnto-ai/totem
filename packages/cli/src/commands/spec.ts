@@ -103,9 +103,7 @@ export async function retrieveContext(
     const linkedResults = await Promise.all(
       linkedStores.map((ls) => search(ls, 'spec', MAX_SPECS).catch(() => [] as SearchResult[])),
     );
-    for (const results of linkedResults) {
-      allSpecs.push(...results);
-    }
+    allSpecs.push(...linkedResults.flat());
     // Re-sort by score after merging
     allSpecs.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   }
@@ -222,8 +220,8 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
         await linkedStore.connect();
         linkedStores.push(linkedStore);
         log.dim(TAG, `Linked index: ${linkedPath}`);
-      } catch {
-        log.dim(TAG, `Could not connect to linked index at ${linkedPath} — skipping.`);
+      } catch (err) {
+        log.warn(TAG, `Could not connect to linked index at ${linkedPath} — skipping. ${err instanceof Error ? err.message : String(err)}`);
       }
     }
   }
