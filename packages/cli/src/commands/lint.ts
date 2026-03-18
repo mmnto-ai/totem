@@ -15,6 +15,7 @@ export interface LintOptions {
 /**
  * Filter a unified diff to exclude files matching any of the given patterns.
  * Splits on `diff --git` boundaries and removes sections for ignored files.
+ * Supports: exact paths (.strategy), directory globs (dir/**), extension globs (** /*.ext).
  */
 function filterDiffByPatterns(diff: string, patterns: string[]): string {
   if (patterns.length === 0) return diff;
@@ -22,14 +23,17 @@ function filterDiffByPatterns(diff: string, patterns: string[]): string {
   const sections = diff.split(/^(?=diff --git )/m);
   return sections
     .filter((section) => {
-      // Extract file path from "diff --git a/path b/path"
-      const match = section.match(/^diff --git a\/(\S+)/);
-      if (!match) return true; // Keep non-diff sections
+      const match = section.match(/^diff --git a\/(.+?) b\//);
+      if (!match) return true;
       const filePath = match[1]!;
-      // Exclude if file path starts with any ignore pattern (simple prefix match)
+
       return !patterns.some((p) => {
-        const clean = p.replace(/\*\*/g, '').replace(/\*/g, '');
-        return filePath.startsWith(clean) || filePath === clean;
+        // Exact match: .strategy
+        if (!p.includes('*')) return filePath === p || filePath.startsWith(p + '/');
+        // Directory glob: dir/** or dir/**/*.ext
+        const dirPrefix = p.split('**')[0]!.replace(/\/$/, '');
+        if (dirPrefix && filePath.startsWith(dirPrefix)) return true;
+        return false;
       });
     })
     .join('');
