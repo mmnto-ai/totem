@@ -143,24 +143,27 @@ function assemblePrompt(
     sections.push(wrapXml('active_work', activeWork));
   }
 
-  // Manual content — must be included VERBATIM in the output
-  try {
-    const manualPath = path.resolve('docs', 'manual');
-    if (fs.existsSync(manualPath)) {
-      const manualFiles = fs.readdirSync(manualPath).filter((f) => f.endsWith('.md'));
-      for (const file of manualFiles) {
-        const content = fs.readFileSync(path.join(manualPath, file), 'utf-8');
-        sections.push('\n=== MANUAL CONTENT (INCLUDE VERBATIM — DO NOT REWRITE) ===');
-        sections.push(`Source: docs/manual/${file}`);
-        sections.push(
-          'IMPORTANT: The following content is manually maintained. Include it in the appropriate ' +
-            'section of the document WITHOUT rewriting, summarizing, or omitting any part of it.',
-        );
-        sections.push(wrapXml('manual_content', content));
+  // Manual content — only inject into user-facing docs (README), not internal docs
+  const isUserFacing = doc.path === 'README.md' || doc.path.includes('README');
+  if (isUserFacing) {
+    try {
+      const manualPath = path.resolve('docs', 'manual');
+      if (fs.existsSync(manualPath)) {
+        const manualFiles = fs.readdirSync(manualPath).filter((f) => f.endsWith('.md'));
+        for (const file of manualFiles) {
+          const content = fs.readFileSync(path.join(manualPath, file), 'utf-8');
+          sections.push('\n=== MANUAL CONTENT (INCLUDE VERBATIM — DO NOT REWRITE) ===');
+          sections.push(`Source: docs/manual/${file}`);
+          sections.push(
+            'IMPORTANT: The following content is manually maintained. Include it in the appropriate ' +
+              'section of the document WITHOUT rewriting, summarizing, or omitting any part of it.',
+          );
+          sections.push(wrapXml('manual_content', content));
+        }
       }
+    } catch {
+      // Manual dir doesn't exist or can't be read — skip silently
     }
-  } catch {
-    // Manual dir doesn't exist or can't be read — skip silently
   }
 
   return sections.join('\n');
