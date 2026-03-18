@@ -29,7 +29,7 @@ This phase delivered seamless cross-platform onboarding, automated AI tool confi
 
 - **Onboarding & UX:**
   - **Tool Automation:** Auto-configured AI tools with JetBrains Junie and Copilot support (#448). Added configurable embedding detection defaulting to Gemini (#551, #608).
-  - **CLI Experience:** Delivered cross-platform installers, versioned reflex upgrade paths, and premium CLI UI polish.
+  - **CLI Experience:** Delivered cross-platform installers, versioned reflex upgrade paths, and premium CLI UI polish. Added `--bare` scaffolding support for streamlined `totem init` (#659).
 - **Host Integration:**
   - **Seamless Hooks:** Agent hooks for Claude Code, Gemini, and Junie (#464).
   - **Baseline Intelligence:** Universal Baseline delivered, shipping 60 battle-tested lessons automatically during `totem init` alongside harder vector DB reflexes (#622).
@@ -44,12 +44,12 @@ This phase delivered seamless cross-platform onboarding, automated AI tool confi
 This phase fortified the core architecture, delivering native orchestration, zero-LLM linting, and rigorous security measures.
 
 - **AST & Orchestration:**
-  - **AST Governance:** Universal Tree-sitter parsing and AST gating for zero-LLM linting. Shared execution logic unifies the underlying rule runner for both linting and AI shield gates (#566).
+  - **AST Governance:** Universal Tree-sitter parsing and AST gating for zero-LLM linting. Shared execution logic unifies the underlying rule runner, now advanced by the Tier 2 AST engine (#566, #659).
   - **Graceful Degradation:** Cross-provider LLM routing with SDK-to-CLI and Ollama fallbacks (#516, #517).
   - **Provider Coverage:** Supported Cloud Providers (Gemini, Anthropic, OpenAI) and Local Providers (Ollama).
 - **Data Safety & Memory:**
   - **Transactions & Sync:** Saga-based document rollbacks, auto-healing DB version recovery (#500, #574), automated sync with dual-read migrations (#428), and filesystem concurrency locks (#635).
-  - **Integrity & State:** Air-gapped zero-telemetry enforced (#474), alongside index health checks at startup (#438).
+  - **Integrity & State:** Air-gapped zero-telemetry enforced (#474), alongside index health checks at startup (#438). Enhanced auto-healing with dimension mismatch detection via `index-meta.json` (#660).
   - **Portability:** Zero-LLM session snapshots via `totem handoff --lite`, cross-model export support, and a comprehensive 1.0 portability audit (#638).
 - **Security & DX:**
   - **Data Loss Prevention:** Implemented DLP secret masking middleware to proactively strip secrets prior to embedding (#534, #609).
@@ -63,8 +63,8 @@ This phase fortified the core architecture, delivering native orchestration, zer
 
 - **Observability & Maintenance:**
   - **Metrics & Diagnostics:**
-    - [x] **Semantic Rule Observability:** Separated zero-LLM `totem lint` from AI-powered `totem shield` to enable targeted rule enforcement. Integrated `onWarn` callbacks and a new `TotemError` hierarchy with recovery hints to trace and demote rule false positives (#595, #620).
-    - [ ] **#92 CLI Metrics & Observability:** Provide local CLI metrics (`totem stats`) including basic CIS metric percentages (#425) and Trap Ledger integration (#544).
+    - [x] **Semantic Rule Observability:** Separated zero-LLM `totem lint` from AI-powered `totem shield` to enable targeted rule enforcement. Introduced `totem explain` to look up the exact lesson behind a violation (#668). Integrated `onWarn` callbacks and a new `TotemError` hierarchy with recovery hints (#595, #620).
+    - [ ] **#92 CLI Metrics & Observability:** Provide local CLI metrics (`totem stats`) including violation history from git log, lesson coverage, and rule fire counts. No cloud telemetry or TUI — terminal output only for v1.0.
     - [ ] **#130 Epic: Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks and track index health.
   - **System Maintenance:**
     - [ ] **#283 Epic: v1.0 Documentation:** Develop v1.0 docs and extensive wiki migrations covering dev environments and release processes (#450, #477). Includes the 1.0 tagline, Holy Grail positioning, and architecture limitations (ADR-049, #586, #606).
@@ -78,7 +78,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [x] **Context Injection:** Embedded relevant vector DB lessons into orchestrator commands using a recency sandwiching pattern (#511).
     - [x] **Knowledge Promotion:** Audited local AI memory and promoted contributor knowledge to version-controlled surfaces (#402).
     - [x] **Toolchain Exports:** Exported compiled lessons to GitHub Copilot instructions (#294).
-    - [x] **Local Sharing:** Introduced `totem link` to securely share compiled lessons and knowledge across local repositories (#612, #614).
+    - [x] **Local Sharing:** Introduced `totem link` to securely share compiled lessons across repositories (#612, #614). Enabled cross-totem queries via `linkedIndexes` configuration (#665).
   - **Task Orchestration:**
     - [ ] **#119 `totem run <workflow>`:** Introduce a custom AI task runner to execute user-defined markdown workflows via the orchestrator.
     - [ ] **#74 `totem oracle`:** Add a frictionless Q&A command to query LanceDB without strict personas.
@@ -90,14 +90,14 @@ This phase fortified the core architecture, delivering native orchestration, zer
 - **Shift-Left & Advanced Intelligence:**
   - **Governance & Verification:**
     - [ ] **#195 / #196 Epic: Shift-Left AI Verification:** Define model compatibility and auditing strategy to systematically verify models.
-    - [ ] **#314 Epic: Adaptive Agent Governance:** Establish the Codebase Immune System, incorporating AST compilation design.
+    - [ ] **#314 Epic: Adaptive Agent Governance:** Establish the Codebase Immune System, incorporating AST compilation design. This transitions `totem compile` to support Tree-sitter for cases where regex is insufficient.
     - [x] **#422 Rule Testing Harness:** Implemented a compiled rule testing harness to identify regex false-positives and drive AST requirements.
     - [ ] **#434 Adversarial Trap Corpus:** Develop synthetic violations to measure precision and recall of the deterministic engine.
     - [x] **Quality Control:** Addressed joint 1.0 code review conditions and launch testing findings to ensure stability (#639, #648).
   - **Rules & Standards:**
     - [x] **#387 SARIF Output:** Standardized output for CI/CD integration, enhanced with organizational trap ledgers and linting support (#418, #561).
     - [x] **External Rule Ingestion:** Built support to automatically ingest `.cursorrules`, `.mdc` files, and prompt templates into compiled rules during `totem init` (#558, #578, #596).
-    - **Rule Invariant Audit:** Categorized over 130 compiled rules by invariant, style, and security to establish strict baseline severity (#559, #577). Audited compiled rules to significantly reduce false positives (#649).
+    - **Rule Invariant Audit:** Categorized over 130 compiled rules by invariant, style, and security to establish strict baseline severity (#559, #577). Audited compiled rules to significantly reduce false positives and introduced Complete or Broken guardrail rules (#649, #663).
     - [x] **Compilation Optimization:** Cached non-compilable lessons and removed duplicate match/exec rules to optimize performance and accuracy (#589, #590). Refined compiler glob patterns to support prompt constraints and strict boundaries (#584, #602, #603).
     - [ ] **#385 Rule Exports:** Export compiled rules to Semgrep YAML and ESLint configurations. Deferred until core governance (#314) is finalized.
     - [ ] **#433 Lesson Packs Prototype:** Mine OSS projects as a proof of concept for distributable rule sets.
@@ -112,7 +112,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
 
 - **Enterprise Memory & Scaling:**
   - **Federated Architectures:**
-    - [ ] **#123 Epic: Federated Memory:** Allow `totem.config.ts` to declare external/upstream LanceDB indexes (The Mother Brain Pattern).
+    - [ ] **#123 Epic: Federated Memory:** Allow `totem.config.ts` to declare external/upstream LanceDB indexes (The Mother Brain Pattern). Explicitly marked post-1.0.
     - [ ] **#175 Epic: Multiplayer Cache Syncing:** Phase 4 enterprise/team scaling capability (Post-1.0).
   - **Ingestion & Domains:**
     - [ ] **#79 Documentation Ingestion Pipeline:** Build Pull/Push models for Notion, Confluence, or internal wikis.

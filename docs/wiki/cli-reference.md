@@ -14,7 +14,8 @@ Auto-detects your project structure, package manager, and installed AI agents. I
 
 If existing AI agent instructions (e.g., `.cursor/rules/*.mdc`) are detected during initialization, the command will prompt you to automatically ingest and compile them into deterministic CI guardrails.
 
-- **Flags:** None required. Auto-detects environment tier (Lite, Standard, Full).
+- **Flags:**
+  - `--bare`: Initializes Totem in a zero-config mode optimized for non-code repositories (e.g., Markdown notes, Obsidian vaults, documentation sites). Skips Git hooks, orchestrator detection, and API key prompts, forcing the Lite tier so you can use Totem as a local MCP RAG server without developer tooling overhead.
 
 ### `totem hooks`
 
@@ -64,6 +65,10 @@ Interactively documents a context, symptom, and fix. Saves to `.totem/lessons.md
 ---
 
 ## Architectural Control & Enforcement
+
+### `totem explain <hash>`
+
+Looks up the original markdown lesson behind a deterministic rule violation. Supports partial hash prefixes. This runs locally in milliseconds with zero LLM overhead, acting as an asynchronous mentor when a junior developer encounters an architectural block.
 
 ### `totem shield`
 
