@@ -238,6 +238,30 @@ export function resolveGitRoot(cwd: string): string | null {
   }
 }
 
+/**
+ * Filter a unified diff to exclude files matching ignore patterns.
+ * Splits on `diff --git` boundaries and removes sections for ignored files.
+ * Uses matchesGlob from core for consistent glob behavior.
+ */
+export async function filterDiffByPatterns(diff: string, patterns: string[]): Promise<string> {
+  if (patterns.length === 0) return diff;
+
+  const { matchesGlob } = await import('@mmnto/totem');
+
+  const sections = diff.split(/^(?=diff --git )/m);
+  return sections
+    .filter((section) => {
+      // Extract destination path (b/) — handles renames correctly
+      const firstLine = section.substring(0, section.indexOf('\n'));
+      const quoted = firstLine.match(/^diff --git "a\/.*?" "b\/(.*?)"$/);
+      const unquoted = firstLine.match(/^diff --git a\/\S+ b\/(.+)$/);
+      const filePath = quoted?.[1] ?? unquoted?.[1];
+      if (!filePath) return true;
+      return !patterns.some((p) => matchesGlob(filePath, p));
+    })
+    .join(''); // totem-ignore (#669) — joining diff sections, not text fragments
+}
+
 export function extractChangedFiles(diff: string): string[] {
   const files: string[] = [];
   for (const line of diff.split('\n')) {

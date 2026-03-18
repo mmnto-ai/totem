@@ -3,7 +3,13 @@ import * as path from 'node:path';
 import type { ContentType, LanceStore, SearchResult } from '@mmnto/totem';
 import { TotemConfigError } from '@mmnto/totem';
 
-import { extractChangedFiles, getDefaultBranch, getGitBranchDiff, getGitDiff } from '../git.js';
+import {
+  extractChangedFiles,
+  filterDiffByPatterns,
+  getDefaultBranch,
+  getGitBranchDiff,
+  getGitDiff,
+} from '../git.js';
 import { bold, errorColor, log, success as successColor } from '../ui.js';
 import {
   formatLessonSection,
@@ -447,34 +453,23 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   loadEnv(cwd);
   const config = await loadConfig(configPath);
 
-  // Get git diff — try uncommitted/staged first, fall back to branch diff vs main
+  // Get git diff — filter ignored patterns before fallback check so that
+  // noise (e.g., .strategy submodule pointer) doesn't suppress the branch diff.
+  const allIgnore = [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])];
+
   const mode = options.staged ? 'staged' : 'all';
   log.info(TAG, `Getting ${mode === 'staged' ? 'staged' : 'uncommitted'} diff...`);
-  let diff = getGitDiff(mode, cwd);
+  let diff = await filterDiffByPatterns(getGitDiff(mode, cwd), allIgnore);
 
   if (!diff.trim()) {
     const base = getDefaultBranch(cwd);
-    log.dim(TAG, `No uncommitted changes. Falling back to branch diff (${base}...HEAD)...`);
-    diff = getGitBranchDiff(cwd, base);
+    log.dim(TAG, `No relevant changes. Falling back to branch diff (${base}...HEAD)...`);
+    diff = await filterDiffByPatterns(getGitBranchDiff(cwd, base), allIgnore);
   }
 
   if (!diff.trim()) {
     log.warn(TAG, 'No changes detected. Nothing to review.');
     return;
-  }
-
-  // Filter out shieldIgnorePatterns from diff (e.g., .strategy submodule)
-  const allIgnore = [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])];
-  if (allIgnore.length > 0) {
-    const { matchesGlob } = await import('@mmnto/totem');
-    const sections = diff.split(/^(?=diff --git )/m);
-    diff = sections
-      .filter((section) => {
-        const m = section.match(/^diff --git a\/\S+ b\/(.+)$/m);
-        if (!m) return true;
-        return !allIgnore.some((p) => matchesGlob(m[1]!, p));
-      })
-      .join(''); // totem-ignore (#669) — joining diff sections
   }
 
   const changedFiles = extractChangedFiles(diff);

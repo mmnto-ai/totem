@@ -12,34 +12,15 @@ export interface LintOptions {
 
 // ─── Command ────────────────────────────────────────
 
-/**
- * Filter a unified diff to exclude files matching shieldIgnorePatterns.
- * Splits on `diff --git` boundaries and removes sections for ignored files.
- * Uses the same matchesGlob from the core package for consistent behavior.
- */
-async function filterDiffByPatterns(diff: string, patterns: string[]): Promise<string> {
-  if (patterns.length === 0) return diff;
-
-  const { matchesGlob } = await import('@mmnto/totem');
-
-  const sections = diff.split(/^(?=diff --git )/m);
-  return sections
-    .filter((section) => {
-      // Extract destination path (b/) — handles renames correctly
-      const firstLine = section.substring(0, section.indexOf('\n'));
-      const quoted = firstLine.match(/^diff --git "a\/.*?" "b\/(.*?)"$/);
-      const unquoted = firstLine.match(/^diff --git a\/\S+ b\/(.+)$/);
-      const filePath = quoted?.[1] ?? unquoted?.[1];
-      if (!filePath) return true;
-      return !patterns.some((p) => matchesGlob(filePath, p));
-    })
-    .join(''); // totem-ignore (#669) — joining diff sections, not text fragments
-}
-
 export async function lintCommand(options: LintOptions): Promise<void> {
   const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
-  const { extractChangedFiles, getDefaultBranch, getGitBranchDiff, getGitDiff } =
-    await import('../git.js');
+  const {
+    extractChangedFiles,
+    filterDiffByPatterns,
+    getDefaultBranch,
+    getGitBranchDiff,
+    getGitDiff,
+  } = await import('../git.js');
   const { log } = await import('../ui.js');
   const { runCompiledRules } = await import('./run-compiled-rules.js');
 
@@ -59,25 +40,23 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   loadEnv(cwd);
   const config = await loadConfig(configPath);
 
-  // Get git diff
+  // Get git diff — filter ignored patterns before fallback check so that
+  // noise (e.g., .strategy submodule pointer) doesn't suppress the branch diff.
+  const allIgnore = [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])];
   const mode = options.staged ? 'staged' : 'all';
   log.info(TAG, `Getting ${mode === 'staged' ? 'staged' : 'uncommitted'} diff...`);
-  let diff = getGitDiff(mode, cwd);
+  let filteredDiff = await filterDiffByPatterns(getGitDiff(mode, cwd), allIgnore);
 
-  if (!diff.trim()) {
+  if (!filteredDiff.trim()) {
     const base = getDefaultBranch(cwd);
-    log.dim(TAG, `No uncommitted changes. Falling back to branch diff (${base}...HEAD)...`);
-    diff = getGitBranchDiff(cwd, base);
+    log.dim(TAG, `No relevant changes. Falling back to branch diff (${base}...HEAD)...`);
+    filteredDiff = await filterDiffByPatterns(getGitBranchDiff(cwd, base), allIgnore);
   }
 
-  if (!diff.trim()) {
+  if (!filteredDiff.trim()) {
     log.warn(TAG, 'No changes detected. Nothing to lint.');
     return;
   }
-
-  // Filter diff to exclude shieldIgnorePatterns (e.g., .strategy submodule)
-  const allIgnore = [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])];
-  const filteredDiff = await filterDiffByPatterns(diff, allIgnore);
 
   const changedFiles = extractChangedFiles(filteredDiff);
   log.info(TAG, `Changed files (${changedFiles.length}): ${changedFiles.join(', ')}`);
