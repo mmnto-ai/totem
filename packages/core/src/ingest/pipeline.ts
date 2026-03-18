@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { createChunker } from '../chunkers/chunker.js';
 import type { TotemConfig } from '../config-schema.js';
 import { requireEmbedding } from '../config-schema.js';
+import { TotemDatabaseError } from '../errors.js';
 import { createEmbedder } from '../embedders/embedder.js';
 import { withLock } from '../lock.js';
 import { sanitizeForIngestion } from '../sanitize.js';
@@ -14,6 +15,52 @@ import { getChangedFiles, getHeadSha, resolveFiles } from './file-resolver.js';
 
 const EMBED_BATCH_SIZE = 100;
 const SYNC_STATE_FILE = 'cache/sync-state.json';
+const INDEX_META_FILE = 'cache/index-meta.json';
+
+interface IndexMeta {
+  provider: string;
+  model: string;
+  dimensions: number;
+  lastSync: string; // ISO timestamp
+}
+
+function readIndexMeta(totemDir: string): IndexMeta | null {
+  const metaPath = path.join(totemDir, INDEX_META_FILE);
+  try {
+    return JSON.parse(fs.readFileSync(metaPath, 'utf-8')) as IndexMeta;
+  } catch {
+    return null;
+  }
+}
+
+function writeIndexMeta(totemDir: string, meta: IndexMeta): void {
+  const metaPath = path.join(totemDir, INDEX_META_FILE);
+  const dir = path.dirname(metaPath);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2) + '\n', 'utf-8');
+}
+
+/**
+ * Verify that the current embedding config matches the index.
+ * Throws TotemDatabaseError if there's a mismatch.
+ */
+export function verifyIndexMeta(totemDir: string, config: TotemConfig): void {
+  const embedding = config.embedding;
+  if (!embedding) return; // Lite tier — no index to verify
+
+  const meta = readIndexMeta(totemDir);
+  if (!meta) return; // No meta yet — first sync hasn't happened
+
+  if (
+    meta.provider !== embedding.provider ||
+    meta.dimensions !== (embedding.dimensions ?? meta.dimensions)
+  ) {
+    throw new TotemDatabaseError(
+      `Index was built with ${meta.provider} (${meta.dimensions}d) but config now uses ${embedding.provider} (${embedding.dimensions ?? 'default'}d).`,
+      "Run 'totem sync --full' to rebuild the index.",
+    );
+  }
+}
 
 function readSyncState(totemDir: string, onProgress?: (msg: string) => void): SyncState | null {
   const statePath = path.join(totemDir, SYNC_STATE_FILE);
@@ -232,6 +279,14 @@ async function runSyncInner(
   if (headSha) {
     writeSyncState(totemDir, { lastSyncSha: headSha, timestamp: Date.now() });
   }
+
+  // Persist index metadata for dimension mismatch detection
+  writeIndexMeta(totemDir, {
+    provider: embedding.provider,
+    model: embedding.model ?? 'default',
+    dimensions: embedder.dimensions,
+    lastSync: new Date().toISOString(),
+  });
 
   return {
     chunksProcessed: totalChunks,
