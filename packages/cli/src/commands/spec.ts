@@ -83,16 +83,30 @@ export interface RetrievedContext {
   lessons: SearchResult[];
 }
 
-export async function retrieveContext(query: string, store: LanceStore): Promise<RetrievedContext> {
-  const search = (typeFilter: ContentType, maxResults: number) =>
-    store.search({ query, typeFilter, maxResults });
+export async function retrieveContext(
+  query: string,
+  store: LanceStore,
+  linkedStores?: LanceStore[],
+): Promise<RetrievedContext> {
+  const search = (s: LanceStore, typeFilter: ContentType, maxResults: number) =>
+    s.search({ query, typeFilter, maxResults });
 
-  // Fetch a larger pool of specs to accommodate both regular specs and lessons
+  // Fetch from primary store
   const [allSpecs, sessions, code] = await Promise.all([
-    search('spec', SPEC_SEARCH_POOL),
-    search('session_log', MAX_SESSIONS),
-    search('code', MAX_CODE_RESULTS),
+    search(store, 'spec', SPEC_SEARCH_POOL),
+    search(store, 'session_log', MAX_SESSIONS),
+    search(store, 'code', MAX_CODE_RESULTS),
   ]);
+
+  // Fetch specs from linked stores (cross-totem knowledge)
+  if (linkedStores && linkedStores.length > 0) {
+    const linkedResults = await Promise.all(
+      linkedStores.map((ls) => search(ls, 'spec', MAX_SPECS).catch(() => [] as SearchResult[])), // totem-ignore (#666) — linked store failures are intentionally silent (graceful degradation)
+    );
+    allSpecs.push(...linkedResults.flat());
+    // Re-sort by score after merging
+    allSpecs.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  }
 
   // Partition: lessons come from lessons.md, everything else is a spec/ADR
   const { lessons, specs } = partitionLessons(allSpecs, MAX_LESSONS, MAX_SPECS);
@@ -188,6 +202,33 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
   await store.connect();
 
+  // Connect to linked indexes (cross-totem knowledge)
+  const linkedStores: LanceStore[] = [];
+  if (config.linkedIndexes && config.linkedIndexes.length > 0) {
+    for (const linkedPath of config.linkedIndexes) {
+      try {
+        const resolvedPath = path.resolve(cwd, linkedPath);
+        const linkedConfigPath = resolveConfigPath(resolvedPath);
+        const linkedConfig = await loadConfig(linkedConfigPath);
+        const linkedEmbedding = linkedConfig.embedding;
+        if (!linkedEmbedding) continue; // Linked totem has no embedder — skip
+        const linkedEmbedder = createEmbedder(linkedEmbedding);
+        const linkedStore = new LanceStore(
+          path.join(resolvedPath, linkedConfig.lanceDir),
+          linkedEmbedder,
+        );
+        await linkedStore.connect();
+        linkedStores.push(linkedStore);
+        log.dim(TAG, `Linked index: ${linkedPath}`);
+      } catch (err) {
+        log.warn(
+          TAG,
+          `Could not connect to linked index at ${linkedPath} — skipping. ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+  }
+
   // Parse and fetch all inputs sequentially
   const { createIssueAdapter } = await import('../adapters/create-issue-adapter.js');
   const adapter = await createIssueAdapter(cwd, config);
@@ -232,7 +273,11 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   // Retrieve context from LanceDB
   const query = queryParts.join(' ');
   log.info(TAG, 'Querying Totem index...');
-  const context = await retrieveContext(query, store);
+  const context = await retrieveContext(
+    query,
+    store,
+    linkedStores.length > 0 ? linkedStores : undefined,
+  );
   const totalResults =
     context.specs.length + context.sessions.length + context.code.length + context.lessons.length;
   log.info(
