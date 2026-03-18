@@ -14,14 +14,18 @@ const LINT_TIMEOUT_MS = 30_000;
 /**
  * Detect the correct command for running `totem lint`.
  */
-function detectLintCommand(projectRoot: string): { cmd: string; args: string[] } {
+function detectLintCommand(
+  projectRoot: string,
+  stagedOnly: boolean,
+): { cmd: string; args: string[] } {
+  const lintArgs = stagedOnly ? ['lint', '--staged'] : ['lint'];
   if (fs.existsSync(path.join(projectRoot, 'pnpm-lock.yaml'))) {
-    return { cmd: 'pnpm', args: ['exec', 'totem', 'lint'] };
+    return { cmd: 'pnpm', args: ['exec', 'totem', ...lintArgs] };
   }
   if (fs.existsSync(path.join(projectRoot, 'yarn.lock'))) {
-    return { cmd: 'yarn', args: ['totem', 'lint'] };
+    return { cmd: 'yarn', args: ['totem', ...lintArgs] };
   }
-  return { cmd: 'npx', args: ['totem', 'lint'] };
+  return { cmd: 'npx', args: ['totem', ...lintArgs] };
 }
 
 /**
@@ -52,9 +56,12 @@ function checkUnstagedChanges(projectRoot: string): string | null {
 /**
  * Run totem lint as a child process and capture output.
  */
-function runLint(projectRoot: string): Promise<{ success: boolean; output: string }> {
+function runLint(
+  projectRoot: string,
+  stagedOnly: boolean,
+): Promise<{ success: boolean; output: string }> {
   return new Promise((resolve) => {
-    const { cmd, args } = detectLintCommand(projectRoot);
+    const { cmd, args } = detectLintCommand(projectRoot, stagedOnly);
     const chunks: string[] = [];
     let totalChars = 0;
 
@@ -134,7 +141,7 @@ export function registerVerifyExecution(server: McpServer): void {
           }
         }
 
-        const { success, output } = await runLint(projectRoot);
+        const { success, output } = await runLint(projectRoot, staged_only);
 
         const verdict = success ? 'PASS' : 'FAIL';
         const message = warning + `Verification: ${verdict}\n\n${output.trim()}`;
