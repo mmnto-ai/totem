@@ -45,7 +45,8 @@ export async function testRulesCommand(opts: { filter?: string }): Promise<void>
   if (opts.filter) {
     const filter = opts.filter.toLowerCase();
     results = results.filter(
-      (r) => r.ruleHash.includes(filter) || r.ruleHeading.toLowerCase().includes(filter),
+      (r) =>
+        r.ruleHash.toLowerCase().includes(filter) || r.ruleHeading.toLowerCase().includes(filter),
     );
   }
 

@@ -24,7 +24,8 @@ export async function explainCommand(hash: string): Promise<void> {
   }
 
   // Find matching rule(s) — support partial hash prefix
-  const matches = rules.filter((r) => r.lessonHash.startsWith(hash));
+  const lowerHash = hash.toLowerCase();
+  const matches = rules.filter((r) => r.lessonHash.toLowerCase().startsWith(lowerHash));
 
   if (matches.length === 0) {
     log.error('Totem Error', `No rule found matching hash "${hash}".`);

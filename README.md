@@ -40,8 +40,8 @@ Your project gets immediate protection against the most common architectural tra
 
 ### 2. Connect the MCP Server _(optional)_
 
-> **Without MCP:** `totem lint`, `compile`, `extract`, `sync`, and `stats` all work standalone. You get full deterministic enforcement.
-> **With MCP:** Your AI agent can search project knowledge and add lessons mid-session — no copy-paste, no context loss.
+> **Without MCP:** `totem lint`, `compile`, `extract`, `sync`, `explain`, and `stats` all work standalone. You get full deterministic enforcement and the complete CLI experience.
+> **With MCP:** Your AI agent gains live access to the knowledge index mid-session — it can `search_knowledge` before writing code and `add_lesson` when it discovers traps. This is what makes the "persistent memory" work across sessions.
 
 Give your AI agent persistent project memory. `search_knowledge` retrieves traps, patterns, and architectural constraints, while `add_lesson` captures new ones.
 
