@@ -55,3 +55,25 @@ If using Ollama for embeddings or local orchestration (Air-Gapped Doctrine), you
 - Run `ollama serve` in a background terminal.
 - **macOS:** Install via Homebrew: `brew install ollama`.
 - **Linux:** Follow the official installation guide or use the standard install script: `curl -fsSL https://ollama.com/install.sh | sh`.
+
+## Provider Integrations (Enterprise & Proxies)
+
+### Azure OpenAI & Custom Gateways
+If your enterprise requires routing OpenAI API calls through Azure or an internal corporate proxy, you do not need a custom orchestrator. You can override the endpoint directly in your `totem.config.ts` using the `baseUrl` parameter for both the orchestrator and the embedding configuration:
+
+```typescript
+// totem.config.ts
+export default {
+  // ...
+  embedding: { 
+    provider: 'openai', 
+    model: 'text-embedding-3-small',
+    baseUrl: 'https://your-azure-endpoint.openai.azure.com/v1' 
+  },
+  orchestrator: {
+    provider: 'openai',
+    defaultModel: 'gpt-4o',
+    baseUrl: 'https://your-azure-endpoint.openai.azure.com/v1'
+  }
+}
+```
