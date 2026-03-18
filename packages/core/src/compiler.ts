@@ -25,8 +25,8 @@ export const CompiledRuleSchema = z.object({
   engine: z.enum(['regex', 'ast', 'ast-grep']),
   /** Tree-sitter S-expression query (required when engine is 'ast') */
   astQuery: z.string().optional(),
-  /** ast-grep structural pattern (required when engine is 'ast-grep') */
-  astGrepPattern: z.string().optional(),
+  /** ast-grep pattern — string for simple patterns, object for compound rules (has/inside/not) */
+  astGrepPattern: z.union([z.string(), z.record(z.unknown())]).optional(),
   /** ISO timestamp of when this rule was compiled */
   compiledAt: z.string(),
   /** ISO timestamp of when this rule was first created (survives recompilation) */
@@ -441,13 +441,14 @@ export async function applyAstRulesToAdditions(
         if (content) {
           // Batch: parse file once, run all patterns
           const queries = applicableAstGrep.map((rule) => ({
-            pattern: rule.astGrepPattern!,
+            rule: rule.astGrepPattern! as import('./ast-grep-query.js').AstGrepRule,
             addedLineNumbers,
           }));
           const batchResults = matchAstGrepPatternsBatch(content, ext, queries);
 
-          for (const rule of applicableAstGrep) {
-            const matches = batchResults.get(rule.astGrepPattern!) ?? [];
+          for (let i = 0; i < applicableAstGrep.length; i++) {
+            const rule = applicableAstGrep[i]!;
+            const matches = batchResults[i] ?? [];
 
             for (const match of matches) {
               const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
@@ -574,7 +575,7 @@ export const CompilerOutputSchema = z.object({
   fileGlobs: z.array(z.string()).optional(),
   engine: z.enum(['regex', 'ast', 'ast-grep']).optional(),
   astQuery: z.string().optional(),
-  astGrepPattern: z.string().optional(),
+  astGrepPattern: z.union([z.string(), z.record(z.unknown())]).optional(),
 });
 
 export type CompilerOutput = z.infer<typeof CompilerOutputSchema>;
