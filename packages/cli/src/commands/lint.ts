@@ -12,6 +12,29 @@ export interface LintOptions {
 
 // ─── Command ────────────────────────────────────────
 
+/**
+ * Filter a unified diff to exclude files matching any of the given patterns.
+ * Splits on `diff --git` boundaries and removes sections for ignored files.
+ */
+function filterDiffByPatterns(diff: string, patterns: string[]): string {
+  if (patterns.length === 0) return diff;
+
+  const sections = diff.split(/^(?=diff --git )/m);
+  return sections
+    .filter((section) => {
+      // Extract file path from "diff --git a/path b/path"
+      const match = section.match(/^diff --git a\/(\S+)/);
+      if (!match) return true; // Keep non-diff sections
+      const filePath = match[1]!;
+      // Exclude if file path starts with any ignore pattern (simple prefix match)
+      return !patterns.some((p) => {
+        const clean = p.replace(/\*\*/g, '').replace(/\*/g, '');
+        return filePath.startsWith(clean) || filePath === clean;
+      });
+    })
+    .join('');
+}
+
 export async function lintCommand(options: LintOptions): Promise<void> {
   const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
   const { extractChangedFiles, getDefaultBranch, getGitBranchDiff, getGitDiff } =
@@ -51,19 +74,23 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     return;
   }
 
-  const changedFiles = extractChangedFiles(diff);
+  // Filter diff to exclude shieldIgnorePatterns (e.g., .strategy submodule)
+  const allIgnore = [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])];
+  const filteredDiff = filterDiffByPatterns(diff, allIgnore);
+
+  const changedFiles = extractChangedFiles(filteredDiff);
   log.info(TAG, `Changed files (${changedFiles.length}): ${changedFiles.join(', ')}`);
 
   const exportPaths = config.exports ? Object.values(config.exports) : undefined;
 
   await runCompiledRules({
-    diff,
+    diff: filteredDiff,
     cwd,
     totemDir: config.totemDir,
     format,
     outPath: options.out,
     exportPaths,
-    ignorePatterns: [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])],
+    ignorePatterns: allIgnore,
     tag: TAG,
   });
 }
