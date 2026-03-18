@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { ParsedLesson } from './drift-detector.js';
+import { TotemParseError } from './errors.js';
 
 // ─── Constants ─────────────────────────────────────────
 
@@ -46,14 +47,16 @@ export function injectSentinelBlock(existingContent: string, generatedBlock: str
   const endIdx = existingContent.indexOf(SENTINEL_END);
 
   if (startIdx !== -1 && endIdx === -1) {
-    throw new Error(
-      `[Totem Error] Found ${SENTINEL_START} without matching ${SENTINEL_END}. Fix the target file manually.`,
+    throw new TotemParseError(
+      `Found ${SENTINEL_START} without matching ${SENTINEL_END}.`,
+      'Fix the target file manually — ensure both sentinel markers are present and correctly ordered.',
     );
   }
 
   if (startIdx !== -1 && endIdx !== -1 && endIdx < startIdx) {
-    throw new Error(
-      `[Totem Error] Found ${SENTINEL_END} before ${SENTINEL_START}. Fix the target file manually.`,
+    throw new TotemParseError(
+      `Found ${SENTINEL_END} before ${SENTINEL_START}.`,
+      'Fix the target file manually — ensure sentinel markers appear in the correct order.',
     );
   }
 

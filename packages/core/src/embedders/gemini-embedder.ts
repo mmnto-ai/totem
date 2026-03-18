@@ -1,3 +1,4 @@
+import { TotemConfigError, TotemError } from '../errors.js';
 import type { Embedder } from './embedder.js';
 
 const DEFAULT_DIMENSIONS = 768;
@@ -50,10 +51,10 @@ async function importGeminiSdk(): Promise<{
     // Dynamic import — @google/genai is an optional peer dep
     return await import('@google/genai');
   } catch {
-    throw new Error(
-      '[Totem Error] Gemini SDK (@google/genai) is not installed.\n' +
-        'Install it with: pnpm add @google/genai\n' +
-        "Or use provider: 'openai' in your embedding config.",
+    throw new TotemConfigError(
+      'Gemini SDK (@google/genai) is not installed.',
+      "Install it with: pnpm add @google/genai — or use provider: 'openai' in your embedding config.",
+      'CONFIG_MISSING',
     );
   }
 }
@@ -73,9 +74,10 @@ export class GeminiEmbedder implements Embedder {
 
     const apiKey = process.env['GEMINI_API_KEY'] ?? process.env['GOOGLE_API_KEY'];
     if (!apiKey) {
-      throw new Error(
-        '[Totem Error] No Gemini API key found.\n' +
-          'Set GEMINI_API_KEY (or GOOGLE_API_KEY) in your .env file.',
+      throw new TotemConfigError(
+        'No Gemini API key found.',
+        'Set GEMINI_API_KEY (or GOOGLE_API_KEY) in your .env file.',
+        'CONFIG_MISSING',
       );
     }
 
@@ -114,13 +116,20 @@ export class GeminiEmbedder implements Embedder {
         });
 
         if (!response.embeddings || response.embeddings.length !== batch.length) {
-          throw new Error(
-            `[Totem Error] Expected ${batch.length} embeddings, got ${response.embeddings?.length ?? 0}`,
+          throw new TotemError(
+            'EMBEDDING_UNAVAILABLE',
+            `Expected ${batch.length} embeddings, got ${response.embeddings?.length ?? 0}`,
+            'This may be a transient Gemini API issue. Retry with `totem sync`.',
           );
         }
 
         return response.embeddings.map((e: { values?: number[] }) => {
-          if (!e.values) throw new Error('[Totem Error] Embedding response missing values');
+          if (!e.values)
+            throw new TotemError(
+              'EMBEDDING_UNAVAILABLE',
+              'Embedding response missing values',
+              'This may be a transient Gemini API issue. Retry with `totem sync`.',
+            );
           return e.values;
         });
       } catch (err) {
@@ -131,9 +140,11 @@ export class GeminiEmbedder implements Embedder {
       }
     }
 
-    const message = lastErr instanceof Error ? lastErr.message : String(lastErr);
-    throw new Error(
-      `[Totem Error] Gemini embedding failed after ${MAX_RETRIES + 1} attempts: ${message}`,
+    const detail = lastErr instanceof Error ? lastErr.message : String(lastErr);
+    throw new TotemError(
+      'EMBEDDING_UNAVAILABLE',
+      `Gemini embedding failed after ${MAX_RETRIES + 1} attempts: ${detail}`,
+      'Check your GEMINI_API_KEY and network connection, then retry with `totem sync`.',
     );
   }
 }

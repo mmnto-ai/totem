@@ -302,9 +302,14 @@ export async function applyAstRulesToAdditions(
 // ─── Convenience wrapper ────────────────────────────
 
 /**
- * Apply compiled rules against added lines from a diff.
- * Returns all violations found.
- * @param excludeFiles — file paths to skip (e.g., compiled-rules.json to avoid self-matches)
+ * Apply **regex-engine** compiled rules against added lines from a diff.
+ * This is a convenience wrapper that only handles 'regex' engine rules.
+ * For 'ast' and 'ast-grep' rules, call `applyAstRulesToAdditions` separately.
+ *
+ * @param rules — The full list of compiled rules. This function filters to regex rules.
+ * @param diff — The unified diff string.
+ * @param excludeFiles — File paths to skip (e.g., compiled-rules.json to avoid self-matches).
+ * @returns All regex-based violations found.
  */
 export function applyRules(
   rules: CompiledRule[],

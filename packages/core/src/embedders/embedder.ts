@@ -1,4 +1,5 @@
 import type { EmbeddingProvider } from '../config-schema.js';
+import { TotemConfigError } from '../errors.js';
 import { OllamaEmbedder } from './ollama-embedder.js';
 
 /**
@@ -49,7 +50,11 @@ async function tryBuildEmbedder(config: EmbeddingProvider): Promise<Embedder> {
     const { GeminiEmbedder } = await import('./gemini-embedder.js');
     return new GeminiEmbedder(config.model, config.dimensions);
   }
-  throw new Error(`[Totem Error] Unknown embedding provider: ${config.provider}`);
+  throw new TotemConfigError(
+    `Unknown embedding provider: ${config.provider}`,
+    "Check totem.config.ts — valid providers: 'openai', 'gemini', 'ollama'.",
+    'CONFIG_INVALID',
+  );
 }
 
 /**
@@ -112,13 +117,10 @@ class LazyEmbedder implements Embedder {
 
       const available = await isOllamaAvailable();
       if (!available) {
-        throw new Error(
-          '[Totem Error] No embedding provider available.\n' +
-            'The configured provider failed and Ollama is not running.\n' +
-            'Either:\n' +
-            '  1. Install the SDK and set the API key for your configured provider\n' +
-            '  2. Install and start Ollama: https://ollama.com\n' +
-            "  3. Set provider: 'ollama' in totem.config.ts embedding config",
+        throw new TotemConfigError(
+          'No embedding provider available. The configured provider failed and Ollama is not running.',
+          "Either: (1) Install the SDK and set the API key for your configured provider, (2) Install and start Ollama: https://ollama.com, or (3) Set provider: 'ollama' in totem.config.ts.",
+          'CONFIG_MISSING',
         );
       }
 
