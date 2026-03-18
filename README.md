@@ -167,8 +167,10 @@ Full reference: [CLI Reference Wiki](./docs/wiki/cli-reference.md)
 
 # Troubleshooting
 
+<!--
 Manually maintained content that `totem docs` must include in the wiki.
 This file is the source of truth for troubleshooting notes — edit here, not in the generated wiki.
+-->
 
 ## Git Hooks
 
