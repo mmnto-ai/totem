@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.0.0`. Recent efforts introduced `totem explain` for contextual violation lookups, shipped the Tier 2 AST engine, and enabled cross-totem queries via `linkedIndexes`. Orchestration and integration flows were further refined by shifting reference hooks to rely on the deterministic `totem lint` engine over AI-powered review. Most recently, focus advanced to v1.0 readiness, addressing portability audits, launch testing findings, and filesystem concurrency locks.
+ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.2.0`. Recent efforts introduced `totem explain` for contextual violation lookups, shipped the Tier 2 AST engine, and enabled cross-totem queries via `linkedIndexes`. Orchestration and integration flows were further refined by shifting reference hooks to rely on the deterministic `totem lint` engine over AI-powered review. Most recently, focus advanced to the 1.3 sprint—introducing `verify_execution`, spec invariants, and baseline fix guidance (#688)—following successful v1.0 readiness audits and the resolution of filesystem concurrency locks.
 
 Post-merge sequence was aligned during a multi-agent planning session (Claude + Gemini, 2026-03-13) informed by Deep Research Brief #24 (Competitive Moat Analysis). See `.strategy/deep-research/24-competitive-moat-analysis/` for the full adversarial analysis.
 
@@ -46,6 +46,7 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Migrated lessons directory to dual-read/single-write and added startup health checks for LanceStore indexes (#428, #439).
   - Automated `totem sync --full` triggering following embedder configuration changes (#548).
 - **Core & Shift-Left Foundation:**
+  - Delivered 1.3 sprint capabilities including `verify_execution`, spec invariants, and enhanced baseline fix guidance (#688).
   - Introduced `totem explain` allowing users to look up the specific lesson behind a violation (#668).
   - Shipped the Tier 2 AST engine and introduced the `totem init --bare` minimal scaffolding option (#659).
   - Implemented "Complete or Broken" guardrail rules to enforce strict compliance (#663).

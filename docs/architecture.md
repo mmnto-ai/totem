@@ -94,7 +94,7 @@ All commands feature proper `--help` output documentation (#358).
   - **Session Management:** `totem briefing` and `totem handoff` capture state snapshots. The `--lite` flag enables zero-LLM capture with ANSI sanitization (#292).
   - **Workflow Resets:** Automates mid-session resets and end-of-task workflows. `totem wrap` cleanly aborts if compilation requirements are missing (#409).
 - **Workflow & Evaluation:**
-  - **Planning & Orchestration:** Orchestrates workflows with human approval gates. It supports configurable issue sources across multiple repositories for triage and extraction (#514).
+  - **Planning & Orchestration:** Orchestrates workflows with human approval gates. It supports configurable issue sources across multiple repositories for triage and extraction (#514). Integrates `verify_execution` pipelines to actively validate architectural spec invariants during generation (#688).
   - **Review & Quality:**
     - **`totem lint`**: Runs compiled rules against diffs. Strictly zero LLM, fast, explicitly recommended for pre-push hooks and CI, and natively supports SARIF/JSON outputs (#610, #561).
     - **`totem shield`**: Conducts AI-powered code review using LanceDB context before PRs (#521). Enforces explicit severity levels, cleanly demotes false positives to warnings, and formats output via standard Totem Errors (#616, #576).
@@ -108,7 +108,7 @@ All commands feature proper `--help` output documentation (#358).
 
 ### 3. Deterministic Compiler & Zero-LLM Lint
 
-`totem compile` reads architectural constraints and translates each lesson into a rule (or marks it as non-compilable). The compiler now integrates a Tier 2 AST engine alongside its regex capabilities for advanced structural pattern matching (#659). It seamlessly ingests existing `.cursorrules` and `.mdc` files into the Totem compiled rule matrix (#558). To significantly boost performance, the compiler caches non-compilable lessons to skip redundant recompilation loops (#590) and converts core rule-loading imports to dynamic execution (#594). Rules are stored in `.totem/compiled-rules.json`—now extended with advanced telemetry fields and Phase 1 Semantic Rule Observability (#542).
+`totem compile` reads architectural constraints and translates each lesson (including structural spec invariants) into a rule or marks it as non-compilable (#688). The compiler now integrates a Tier 2 AST engine alongside its regex capabilities for advanced structural pattern matching (#659). It seamlessly ingests existing `.cursorrules` and `.mdc` files into the Totem compiled rule matrix (#558). To significantly boost performance, the compiler caches non-compilable lessons to skip redundant recompilation loops (#590) and converts core rule-loading imports to dynamic execution (#594). Rules are stored in `.totem/compiled-rules.json`—now extended with advanced telemetry fields and Phase 1 Semantic Rule Observability (#542).
 
 The compilation process is context-aware, reading files directly from disk instead of parsing staged diffs to prevent AST gating false positives (#399). Developers can bypass false positives using audited inline suppression directives or negated patterns (#458). Rules are strictly scoped using anchored glob matching, preventing `fileGlobs` from leaking outside specified directories (#584, #546). The compiler is constrained against generating unsupported nested globs or brace expansions (#603, #602). During execution, the loading engine applies an `onWarn` callback to filter valid structural warnings and suppress false positives (#595, #575). Duplicate, vulnerable, or overly broad match/exec patterns are actively refined, audited, and rejected to heavily reduce false positives during 1.0 launch testing (#649, #648, #639, #589).
 
@@ -129,7 +129,7 @@ A stdio-based server for LLM integration providing primary tools and strict acce
 - **Core Tools:**
   - `search_knowledge(query)`: Semantic retrieval of codebase context and lessons. Search telemetry actively measures agent retrieval behaviors (#440).
   - `add_lesson(lesson, tags)`: Appends architectural lessons with descriptive headings. Employs a sync-pending debounce mechanism and filesystem concurrency locks to prevent write race conditions and mutation conflicts (#564, #635).
-  - `enforcement`: Direct check tools empower agents to self-validate deterministic rules (#417).
+  - `enforcement`: Direct check tools empower agents to self-validate deterministic rules. This includes `verify_execution` capabilities to proactively test generated code against spec invariants before finalizing tasks (#688, #417).
 - **Security & Permissions:**
   - **Sanitization:** XML-delimits all MCP responses and sanitizes persisted content. It cleanly strips quotes from loaded environment variables (#560).
   - **Access Control:** Implements multi-agent permissions and role-based access control (RBAC) to safely restrict execution boundaries (#312).
@@ -228,7 +228,7 @@ All orchestrator providers support standardizing complex configurations via cent
 
 The `.totem/lessons/` directory acts as an explicit, version-controlled ledger of architectural decisions. Local AI memory is actively audited, and extracted lessons are safely Zod-validated and auto-committed to promote contributor knowledge to version-controlled surfaces (#565, #441). It uses a dual-read/single-write migration strategy to robustly transition away from legacy single-file storage patterns (#428). When updated, `totem sync` automatically re-indexes them into multi-domain structures.
 
-During `totem init`, users are offered an optional **Universal Baseline** — a curated dataset of 60 battle-tested foundational AI developer lessons (#622, #419). Appended with a `<!-- totem:baseline -->` marker for idempotency, these lessons include specific audience tags (contributor vs. consumer) to properly scope knowledge (#404). This solves the cold-start problem where a fresh install has no knowledge to retrieve.
+During `totem init`, users are offered an optional **Universal Baseline** — a curated dataset of 60 battle-tested foundational AI developer lessons (#622, #419). Appended with a `<!-- totem:baseline -->` marker for idempotency, these lessons include specific audience tags (contributor vs. consumer) to properly scope knowledge (#404). Baseline rules now feature integrated fix guidance to help agents rapidly resolve violations and accurately follow architectural expectations (#688). This solves the cold-start problem where a fresh install has no knowledge to retrieve.
 
 ## The `.strategy/` Submodule
 
