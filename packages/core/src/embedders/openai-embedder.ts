@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 
+import { TotemConfigError, TotemError } from '../errors.js';
 import type { Embedder } from './embedder.js';
 
 const MAX_BATCH_SIZE = 2048;
@@ -18,9 +19,10 @@ export class OpenAIEmbedder implements Embedder {
 
     const apiKey = process.env['OPENAI_API_KEY'];
     if (!apiKey) {
-      throw new Error(
-        '[Totem Error] No embedding provider configured.\n' +
-          "Set OPENAI_API_KEY in your .env or configure 'ollama' in totem.config.ts.",
+      throw new TotemConfigError(
+        'No OpenAI API key found.',
+        "Set OPENAI_API_KEY in your .env or configure provider: 'ollama' in totem.config.ts.",
+        'CONFIG_MISSING',
       );
     }
 
@@ -64,9 +66,11 @@ export class OpenAIEmbedder implements Embedder {
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
-    const message = lastErr instanceof Error ? lastErr.message : String(lastErr);
-    throw new Error(
-      `[Totem Error] OpenAI embedding failed after ${MAX_RETRIES + 1} attempts: ${message}`,
+    const detail = lastErr instanceof Error ? lastErr.message : String(lastErr);
+    throw new TotemError(
+      'EMBEDDING_UNAVAILABLE',
+      `OpenAI embedding failed after ${MAX_RETRIES + 1} attempts: ${detail}`,
+      'Check your OPENAI_API_KEY and network connection, then retry with `totem sync`.',
     );
   }
 }

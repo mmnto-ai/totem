@@ -24,14 +24,25 @@ function requireGhCli(): void {
 }
 
 function handleError(err: unknown): never {
+  const debug = process.env['TOTEM_DEBUG'] === '1' || process.argv.includes('--debug');
+
   if (err instanceof Error) {
     console.error(err.message);
     if ('recoveryHint' in err && typeof err.recoveryHint === 'string') {
       console.error(`  Fix: ${err.recoveryHint}`);
     }
+    if (debug && err.stack) {
+      console.error('\nStack trace:');
+      console.error(err.stack);
+    }
   } else {
     console.error('[Totem Error] An unknown error occurred:', err);
   }
+
+  if (!debug) {
+    console.error('  (Set TOTEM_DEBUG=1 for full stack trace)');
+  }
+
   process.exit(1);
 }
 

@@ -9,6 +9,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { TotemError } from './errors.js';
+
 const LOCK_FILE = 'sync.lock';
 const STALE_THRESHOLD_MS = 120_000; // 2 minutes — sync can take 30-60s on large repos
 const MAX_RETRIES = 20;
@@ -155,9 +157,10 @@ export async function acquireLock(
     }
   }
 
-  throw new Error(
-    `[Totem Error] Could not acquire sync lock after ${MAX_RETRIES} attempts. ` +
-      `Another totem process may be running. Check ${file} or delete it manually.`,
+  throw new TotemError(
+    'SYNC_FAILED',
+    `Could not acquire sync lock after ${MAX_RETRIES} attempts.`,
+    `Another totem process may be running. Check ${file} or delete it manually.`,
   );
 }
 

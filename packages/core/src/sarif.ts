@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 
 import type { CompiledRule, Violation } from './compiler.js';
+import { TotemCompileError } from './errors.js';
 
 /** Default rule category when none is specified on the compiled rule. */
 export const DEFAULT_RULE_CATEGORY = 'architecture';
@@ -110,8 +111,9 @@ export function buildSarifLog(
   const results: SarifResult[] = violations.map((v) => {
     const idx = ruleIndexMap.get(v.rule.lessonHash);
     if (idx === undefined) {
-      throw new Error(
-        `[Totem Error] SARIF builder: no rule index for lessonHash ${v.rule.lessonHash}`,
+      throw new TotemCompileError(
+        `SARIF builder: no rule index for lessonHash ${v.rule.lessonHash}`,
+        'This is an internal error — the compiled rules may be corrupted. Run `totem compile --force`.',
       );
     }
     return {
