@@ -2,9 +2,11 @@
 
 **Stop repeating yourself to your AI.**
 
-A persistent, model-agnostic memory layer that outlasts any single AI session. Totem compiles your project's rules into deterministic guardrails and gives every agent — Claude Code, Cursor, Gemini, Copilot — the same enforced context.
+*AI coding agents are brilliant goldfish. Totem gives them a memory.*
 
-Totem doesn't ship with your app. It lives in your workflow. Write rules in plain English. Totem compiles them into mathematical AST checks that block bad code before it commits. Zero LLM. Zero hallucination. ~2 seconds.
+A zero-config CLI and MCP Server that compiles your project's architectural rules into deterministic CI guardrails. It creates a persistent, model-agnostic context layer that outlasts any single AI session — so Claude, Cursor, Gemini, and Copilot all enforce the same rules without being told twice.
+
+Totem doesn't ship with your app. It lives in your workflow.
 
 ## The 10-Second Workflow
 
