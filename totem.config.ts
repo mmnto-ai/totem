@@ -53,6 +53,8 @@ const config: TotemConfig = {
 
   repositories: ['mmnto-ai/totem', 'mmnto-ai/totem-strategy'],
 
+  linkedIndexes: ['.strategy'],
+
   shieldIgnorePatterns: ['.totem/lessons/**'],
 };
 

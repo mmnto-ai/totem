@@ -178,6 +178,9 @@ export const TotemConfigSchema = z.object({
 
   /** Optional: bot boilerplate markers to filter from PR comments during `totem extract` (e.g., ['Using Gemini Code Assist', 'Copilot']) */
   botMarkers: z.array(z.string()).optional(),
+
+  /** Optional: paths to other totem-managed directories whose indexes should be queried alongside this one (e.g., ['.strategy', '../docs-repo']) */
+  linkedIndexes: z.array(z.string()).optional(),
 });
 
 export type ChunkStrategy = z.infer<typeof ChunkStrategySchema>;
