@@ -66,7 +66,13 @@ export { LanceStore } from './store/lance-store.js';
 
 // Pipeline
 export type { ResolvedFile } from './ingest/sync.js';
-export { getChangedFiles, getHeadSha, resolveFiles, runSync } from './ingest/sync.js';
+export {
+  getChangedFiles,
+  getHeadSha,
+  resolveFiles,
+  runSync,
+  verifyIndexMeta,
+} from './ingest/sync.js';
 
 // Concurrency lock
 export { acquireLock, withLock } from './lock.js';
