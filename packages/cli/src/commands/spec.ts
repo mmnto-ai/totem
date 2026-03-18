@@ -101,7 +101,7 @@ export async function retrieveContext(
   // Fetch specs from linked stores (cross-totem knowledge)
   if (linkedStores && linkedStores.length > 0) {
     const linkedResults = await Promise.all(
-      linkedStores.map((ls) => search(ls, 'spec', MAX_SPECS).catch(() => [] as SearchResult[])), // totem-ignore — linked store failures are intentionally silent (graceful degradation)
+      linkedStores.map((ls) => search(ls, 'spec', MAX_SPECS).catch(() => [] as SearchResult[])), // totem-ignore (#666) — linked store failures are intentionally silent (graceful degradation)
     );
     allSpecs.push(...linkedResults.flat());
     // Re-sort by score after merging
