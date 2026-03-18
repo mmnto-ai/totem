@@ -372,17 +372,6 @@
       "severity": "error"
     },
     {
-      "lessonHash": "f33b0cba8caa726f",
-      "lessonHeading": "2026-03-07T06:05:56.069Z",
-      "pattern": "\\bimport\\s+(?!type\\b)",
-      "message": "Prefer dynamic imports inside command function bodies instead of top-level imports to ensure fast CLI startup.",
-      "engine": "regex",
-      "compiledAt": "2026-03-12T10:04:10.998Z",
-      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"],
-      "category": "performance",
-      "severity": "warning"
-    },
-    {
       "lessonHash": "adfc0cef98b8371f",
       "lessonHeading": "2026-03-07T06:05:56.069Z",
       "pattern": "\\.startsWith\\s*\\(\\s*['\"]\\(",
@@ -1278,7 +1267,7 @@
     {
       "lessonHash": "6b93afeee17b7b66",
       "lessonHeading": "GCA may suggest reverting dynamic imports back to static",
-      "pattern": "import\\s+.*\\s+from\\s+['\"]@mmnto/totem['\"]",
+      "pattern": "import\\s+(?!type\\s).*\\s+from\\s+['\"]@mmnto/totem['\"]",
       "message": "Use dynamic imports for @mmnto/totem in CLI command files to protect startup performance. Do not revert to static top-level imports.",
       "engine": "regex",
       "compiledAt": "2026-03-16T02:58:53.041Z",
@@ -1545,8 +1534,8 @@
     {
       "lessonHash": "9eabec8fb748d2a5",
       "lessonHeading": "CLI command entrypoints should catch validation errors",
-      "pattern": "\\bthrow\\s+new\\s+\\w*Error\\(",
-      "message": "CLI entrypoints should catch errors and print clean messages instead of throwing raw JavaScript errors",
+      "pattern": "\\bthrow\\s+new\\s+(?!Totem)\\w*Error\\(",
+      "message": "CLI entrypoints should catch errors and print clean messages instead of throwing raw JavaScript errors. TotemError and its subclasses are exempt — they are caught by the CLI error handler.",
       "engine": "regex",
       "compiledAt": "2026-03-16T03:07:11.081Z",
       "createdAt": "2026-03-16T03:07:11.081Z",
@@ -1719,7 +1708,8 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T18:26:19.306Z",
       "createdAt": "2026-03-16T18:26:19.306Z",
-      "fileGlobs": ["**/*config*.*", "**/*cache*.*"]
+      "fileGlobs": ["**/*config*.*", "**/*cache*.*"],
+      "severity": "warning"
     },
     {
       "lessonHash": "5b9058bd289a1dbb",
@@ -1729,7 +1719,8 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T18:26:53.992Z",
       "createdAt": "2026-03-16T18:26:53.992Z",
-      "fileGlobs": ["**/core/**/*.ts", "**/core/**/*.js", "!**/*.test.ts"]
+      "fileGlobs": ["**/core/**/*.ts", "**/core/**/*.js", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "9ba3b23b3039906d",
@@ -1739,7 +1730,8 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T18:28:10.471Z",
       "createdAt": "2026-03-16T18:28:10.471Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "e987c17afbe49d9a",
@@ -1749,17 +1741,19 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T18:28:19.310Z",
       "createdAt": "2026-03-16T18:28:19.310Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "55c903bd228e0b5c",
       "lessonHeading": "When wrapping external errors or providing fallbacks,",
-      "pattern": "\\bError\\(\\s*['\"`](?!\\s*\\[Totem Error\\])",
-      "message": "Error messages must be prefixed with '[Totem Error]' at the start of the string to ensure they are easily identifiable and searchable.",
+      "pattern": "\\bnew\\s+(?!Totem)Error\\(",
+      "message": "Use TotemError (or a subclass like TotemParseError, TotemConfigError) instead of raw Error() for user-facing errors. The TotemError hierarchy provides structured error codes and recovery hints.",
       "engine": "regex",
       "compiledAt": "2026-03-16T18:28:42.664Z",
       "createdAt": "2026-03-16T18:28:42.664Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "72be26d1c4b264a3",
@@ -1806,7 +1800,8 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T18:31:28.577Z",
       "createdAt": "2026-03-16T18:31:28.577Z",
-      "fileGlobs": ["**/*.md", "**/*.mdx", "**/*.txt"]
+      "fileGlobs": ["**/*.md", "**/*.mdx", "**/*.txt"],
+      "severity": "warning"
     },
     {
       "lessonHash": "e9c1203c7cbfdaa4",
@@ -1816,7 +1811,8 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T18:32:34.014Z",
       "createdAt": "2026-03-16T18:32:34.014Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "4795fac8ffa24e54",
@@ -1826,7 +1822,8 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T18:33:55.501Z",
       "createdAt": "2026-03-16T18:33:55.501Z",
-      "fileGlobs": ["**/compiled-rules.json"]
+      "fileGlobs": ["**/compiled-rules.json"],
+      "severity": "warning"
     },
     {
       "lessonHash": "270832e0401a5c4c",
@@ -1836,7 +1833,8 @@
       "engine": "regex",
       "compiledAt": "2026-03-16T18:34:35.156Z",
       "createdAt": "2026-03-16T18:34:35.156Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "2403f1b5404a1eca",
@@ -1855,7 +1853,8 @@
         "**/*.yml",
         "**/*.yaml",
         ".gitignore"
-      ]
+      ],
+      "severity": "warning"
     }
   ],
   "nonCompilable": [
