@@ -55,7 +55,7 @@ const config: TotemConfig = {
 
   linkedIndexes: ['.strategy'],
 
-  shieldIgnorePatterns: ['.totem/lessons/**'],
+  shieldIgnorePatterns: ['.totem/lessons/**', '.strategy'],
 };
 
 export default config;
