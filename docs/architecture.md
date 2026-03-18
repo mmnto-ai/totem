@@ -68,7 +68,7 @@ flowchart TD
 
 - **Storage & Engine:**
   - **Database:** LanceDB (embedded Node.js) is upgraded to 0.26.x, supporting multi-type knowledge retrieval to separate invariants from context (#494). It features auto-healing migrations to gracefully recover from version bumps and FTS panics (#500, #491).
-  - **Health:** Incorporates `healthCheck()` to detect broken indexes at startup. It utilizes auto-healing for dimension mismatches and recommends `--rebuild` when necessary (#562, #574).
+  - **Health:** Incorporates `healthCheck()` to detect broken indexes at startup. It utilizes `index-meta.json` for explicit dimension mismatch detection, recommending `--rebuild` when necessary (#660, #562).
   - **Artifacts:** Creates a gitignored `.lancedb/` folder in the consumer's root. This is safely treated as a replaceable build artifact.
 - **Data Processing:**
   - **Extraction & Chunking:**
@@ -86,11 +86,11 @@ flowchart TD
 All commands feature proper `--help` output documentation (#358).
 
 - **Setup & Infrastructure:**
-  - **Initialization:** Scaffolds configs, hooks, and AI tools like Copilot and Junie (#448). Initialization relies on an ordered provider detection schema (prioritizing Gemini, then OpenAI) (#608, #551), and automatically ingests `.cursorrules` and prompt files during setup (#596, #578).
+  - **Initialization:** Scaffolds configs, hooks, and AI tools, supporting a `--bare` flag for minimal setups (#659, #448). Initialization relies on an ordered provider detection schema (prioritizing Gemini, then OpenAI) and automatically ingests `.cursorrules` (#608, #596).
   - **Environment Support:** Package manager auto-detection fully supports Bun and safely detects non-bash environments (#421, #316). Command modules leverage top-level dynamic imports to significantly boost CLI startup performance (#594, #605). The system is hardened by a cross-platform portability audit for the 1.0 release (#638).
   - **Error Handling:** Implements a strict `TotemError` class hierarchy to provide actionable `recoveryHint`s and standardized logging across the CLI (#620, #615).
 - **Data & Context Management:**
-  - **Indexing & Sharing:** `totem sync` crawls, chunks, and embeds targets into LanceDB, supporting multi-totem domains (#463). `totem link` seamlessly shares lessons and local knowledge between multiple local repositories (#614).
+  - **Indexing & Sharing:** `totem sync` crawls, chunks, and embeds targets into LanceDB, seamlessly supporting cross-totem queries via the `linkedIndexes` config (#665, #463). `totem link` seamlessly shares lessons and local knowledge between multiple local repositories (#614).
   - **Session Management:** `totem briefing` and `totem handoff` capture state snapshots. The `--lite` flag enables zero-LLM capture with ANSI sanitization (#292).
   - **Workflow Resets:** Automates mid-session resets and end-of-task workflows. `totem wrap` cleanly aborts if compilation requirements are missing (#409).
 - **Workflow & Evaluation:**
@@ -98,16 +98,17 @@ All commands feature proper `--help` output documentation (#358).
   - **Review & Quality:**
     - **`totem lint`**: Runs compiled rules against diffs. Strictly zero LLM, fast, explicitly recommended for pre-push hooks and CI, and natively supports SARIF/JSON outputs (#610, #561).
     - **`totem shield`**: Conducts AI-powered code review using LanceDB context before PRs (#521). Enforces explicit severity levels, cleanly demotes false positives to warnings, and formats output via standard Totem Errors (#616, #576).
+    - **`totem explain`**: Looks up the specific lesson behind a rule violation to provide immediate developer context (#668).
   - **Documentation:** Automates transactional document syncs using a Saga validator to prevent partial updates (#351). It safely strips known-not-shipped issue references from generated docs to prevent AI hallucinations (#598, #581).
   - **Telemetry & Stats:** Surfaces local metrics powered by the Phase 1 Trap Ledger. Displays basic CIS metric percentages alongside violation histories (#544, #425).
 - **Rule Testing & Extraction:**
   - **Capture & Extraction:** Enables inline capture and batch PR lesson extraction. Lessons are strictly Zod-validated before disk writes to ensure structural integrity (#565).
-  - **Harness Verification:** Serves as a compiled rule testing harness to empirically measure regex false positives (#422). This local evaluation actively shapes requirements for future AST rules.
+  - **Harness Verification:** Serves as a compiled rule testing harness to empirically measure regex false positives (#422). The system also actively verifies for "Complete or Broken" guardrail rules to ensure enforcement integrity (#663).
   - **Security:** Context-aware heuristics minimize false positives and block bad rules (#326). XML tagging guards against prompt injection from untrusted PR comments (#279).
 
 ### 3. Deterministic Compiler & Zero-LLM Lint
 
-`totem compile` reads architectural constraints and translates each lesson into a regex rule (or marks it as non-compilable). It seamlessly ingests existing `.cursorrules` and `.mdc` files into the Totem compiled rule matrix (#558). To significantly boost performance, the compiler caches non-compilable lessons to skip redundant recompilation loops (#590) and converts core rule-loading imports to dynamic execution (#594). Rules are stored in `.totem/compiled-rules.json`—now extended with advanced telemetry fields and Phase 1 Semantic Rule Observability (#542).
+`totem compile` reads architectural constraints and translates each lesson into a rule (or marks it as non-compilable). The compiler now integrates a Tier 2 AST engine alongside its regex capabilities for advanced structural pattern matching (#659). It seamlessly ingests existing `.cursorrules` and `.mdc` files into the Totem compiled rule matrix (#558). To significantly boost performance, the compiler caches non-compilable lessons to skip redundant recompilation loops (#590) and converts core rule-loading imports to dynamic execution (#594). Rules are stored in `.totem/compiled-rules.json`—now extended with advanced telemetry fields and Phase 1 Semantic Rule Observability (#542).
 
 The compilation process is context-aware, reading files directly from disk instead of parsing staged diffs to prevent AST gating false positives (#399). Developers can bypass false positives using audited inline suppression directives or negated patterns (#458). Rules are strictly scoped using anchored glob matching, preventing `fileGlobs` from leaking outside specified directories (#584, #546). The compiler is constrained against generating unsupported nested globs or brace expansions (#603, #602). During execution, the loading engine applies an `onWarn` callback to filter valid structural warnings and suppress false positives (#595, #575). Duplicate, vulnerable, or overly broad match/exec patterns are actively refined, audited, and rejected to heavily reduce false positives during 1.0 launch testing (#649, #648, #639, #589).
 
@@ -142,11 +143,11 @@ A stdio-based server for LLM integration providing primary tools and strict acce
 
 Totem supports three configuration tiers, auto-detected from the environment during `totem init`:
 
-| Tier         | Requirements                               | Available Commands                                                                                    |
-| ------------ | ------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `link`, `bridge`, `eject`, `lint`, `compile`, `test`, `handoff --lite` |
-| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`                                                                      |
-| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `shield`, `triage`, `audit`, `briefing`, `handoff`, `extract`, `wrap`, `docs`)  |
+| Tier         | Requirements                               | Available Commands                                                                                               |
+| ------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `link`, `bridge`, `eject`, `lint`, `compile`, `test`, `explain`, `handoff --lite` |
+| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`                                                                                 |
+| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `shield`, `triage`, `audit`, `briefing`, `handoff`, `extract`, `wrap`, `docs`)             |
 
 The `embedding` field in `totem.config.ts` is optional; when omitted, Totem operates in the Lite tier. The `getConfigTier()` helper and `requireEmbedding()` guard enforce these boundaries at runtime with clear upgrade instructions.
 
@@ -252,3 +253,62 @@ Totem enforces **architectural invariants** — structural rules about what code
 - **Probabilistic guarantees:** The vector search layer (LanceDB) uses fuzzy embeddings for _discovery_ (finding relevant rules). The _enforcement_ layer (Tree-sitter AST matching) is strictly deterministic. These are separate concerns — do not conflate them.
 
 Totem is a fast, deterministic pre-commit check that catches structural violations. It complements, not replaces, comprehensive security tooling.
+
+# Troubleshooting
+
+Manually maintained content that `totem docs` must include in the wiki.
+This file is the source of truth for troubleshooting notes — edit here, not in the generated wiki.
+
+## Git Hooks
+
+### Hooks not firing on Mac/Linux
+
+If you clone a repository that was initialized on Windows and the git hooks fail to fire, Git may not recognize them as executable. The `chmod` permissions are often lost in translation between Windows and POSIX filesystems.
+
+**Fix:**
+
+```bash
+chmod +x .git/hooks/pre-push .git/hooks/post-merge
+```
+
+This applies the execute permission that POSIX systems require. Windows users are unaffected — Git Bash executes hooks regardless of the permission bit.
+
+### Hooks not firing with Husky
+
+If your project uses Husky, Totem's `install-hooks.js` detects `.husky/` and skips direct `.git/hooks/` installation. Add Totem's hook commands to your Husky config instead:
+
+```bash
+# .husky/pre-push
+pnpm exec totem lint
+```
+
+## Ollama
+
+### Model not found errors
+
+If `totem sync` or `totem shield` fails with "model not installed" when using Ollama, the required model hasn't been pulled yet.
+
+**Fix:**
+
+```bash
+# For embeddings (default model)
+ollama pull nomic-embed-text
+
+# For orchestration (use whatever model you configured)
+ollama pull gemma2:27b
+```
+
+## Embeddings
+
+### Dimension mismatch after switching providers
+
+If you switch embedding providers (e.g., from OpenAI 1536d to Gemini 768d), the existing `.lancedb` index becomes incompatible.
+
+**Fix:**
+
+```bash
+rm -rf .lancedb
+totem sync
+```
+
+This rebuilds the index from scratch with the new dimensions.

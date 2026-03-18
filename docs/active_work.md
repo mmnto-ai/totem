@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@0.44.0`. Recent efforts introduced `totem link` for sharing local knowledge across repositories, implemented a comprehensive `TotemError` class hierarchy with recovery hints, and shipped a 60-lesson Universal Baseline alongside `totem init`. Orchestration and integration flows were further refined by shifting reference hooks to rely on the deterministic `totem lint` engine over AI-powered review. Most recently, focus advanced to v1.0 readiness, addressing portability audits, launch testing findings, and filesystem concurrency locks.
+ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.0.0`. Recent efforts introduced `totem explain` for contextual violation lookups, shipped the Tier 2 AST engine, and enabled cross-totem queries via `linkedIndexes`. Orchestration and integration flows were further refined by shifting reference hooks to rely on the deterministic `totem lint` engine over AI-powered review. Most recently, focus advanced to v1.0 readiness, addressing portability audits, launch testing findings, and filesystem concurrency locks.
 
 Post-merge sequence was aligned during a multi-agent planning session (Claude + Gemini, 2026-03-13) informed by Deep Research Brief #24 (Competitive Moat Analysis). See `.strategy/deep-research/24-competitive-moat-analysis/` for the full adversarial analysis.
 
@@ -36,6 +36,8 @@ The following sequence was determined by cross-referencing the competitive moat 
 ### Completed
 
 - **Search & Data Layer:**
+  - Implemented cross-totem query support via the `linkedIndexes` configuration (#665).
+  - Enhanced dimension mismatch detection utilizing `index-meta.json` metadata (#660).
   - Implemented Data Loss Prevention (DLP) secret masking middleware to securely strip secrets before embedding (#609, #534).
   - Delivered ADR-024 with hybrid search and Gemini embeddings (#429, #380).
   - Switched default embedder to `gemini-embedding-2-preview` and implemented graceful degradation to Ollama fallbacks (#523, #517).
@@ -44,6 +46,9 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Migrated lessons directory to dual-read/single-write and added startup health checks for LanceStore indexes (#428, #439).
   - Automated `totem sync --full` triggering following embedder configuration changes (#548).
 - **Core & Shift-Left Foundation:**
+  - Introduced `totem explain` allowing users to look up the specific lesson behind a violation (#668).
+  - Shipped the Tier 2 AST engine and introduced the `totem init --bare` minimal scaffolding option (#659).
+  - Implemented "Complete or Broken" guardrail rules to enforce strict compliance (#663).
   - Executed a portability audit for v1.0 readiness and addressed conditions from the joint code review (#638, #639).
   - Resolved launch testing findings (F-001, F-006) and audited compiled rules to further reduce false positives (#648, #649).
   - Implemented filesystem concurrency locks to safely manage concurrent `totem sync` operations and MCP mutations (#635).
@@ -110,3 +115,62 @@ The following sequence was determined by cross-referencing the competitive moat 
 
 - #175 — Epic: Multiplayer Cache Syncing (Explicitly marked as `post-1.0`; do not engage until v1.0 ships).
 - #123 — Epic: Federated Memory (Mother Brain Pattern) (Explicitly marked as `post-1.0`; do not engage until v1.0 ships).
+
+# Troubleshooting
+
+Manually maintained content that `totem docs` must include in the wiki.
+This file is the source of truth for troubleshooting notes — edit here, not in the generated wiki.
+
+## Git Hooks
+
+### Hooks not firing on Mac/Linux
+
+If you clone a repository that was initialized on Windows and the git hooks fail to fire, Git may not recognize them as executable. The `chmod` permissions are often lost in translation between Windows and POSIX filesystems.
+
+**Fix:**
+
+```bash
+chmod +x .git/hooks/pre-push .git/hooks/post-merge
+```
+
+This applies the execute permission that POSIX systems require. Windows users are unaffected — Git Bash executes hooks regardless of the permission bit.
+
+### Hooks not firing with Husky
+
+If your project uses Husky, Totem's `install-hooks.js` detects `.husky/` and skips direct `.git/hooks/` installation. Add Totem's hook commands to your Husky config instead:
+
+```bash
+# .husky/pre-push
+pnpm exec totem lint
+```
+
+## Ollama
+
+### Model not found errors
+
+If `totem sync` or `totem shield` fails with "model not installed" when using Ollama, the required model hasn't been pulled yet.
+
+**Fix:**
+
+```bash
+# For embeddings (default model)
+ollama pull nomic-embed-text
+
+# For orchestration (use whatever model you configured)
+ollama pull gemma2:27b
+```
+
+## Embeddings
+
+### Dimension mismatch after switching providers
+
+If you switch embedding providers (e.g., from OpenAI 1536d to Gemini 768d), the existing `.lancedb` index becomes incompatible.
+
+**Fix:**
+
+```bash
+rm -rf .lancedb
+totem sync
+```
+
+This rebuilds the index from scratch with the new dimensions.

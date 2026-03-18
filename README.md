@@ -28,7 +28,9 @@ Write code with your AI. Run `totem lint`. Push with confidence. Run `totem stat
 npx @mmnto/cli init
 ```
 
-Auto-detects your environment (Cursor, Copilot, Junie) and sets up `totem.config.ts`. Ships with **60 battle-tested lessons** extracted from PR reviews across major ecosystem tools:
+Auto-detects your environment (Cursor, Copilot, Junie) and sets up `totem.config.ts`. You can also use `totem init --bare` to skip defaults and start with a clean slate (#659).
+
+Ships with **60 battle-tested lessons** extracted from PR reviews across major ecosystem tools:
 
 - **Frameworks:** Next.js, React.
 - **Data Layer:** Prisma, Drizzle.
@@ -90,13 +92,12 @@ During `init`, Totem prompts to install a `pre-push` git hook that runs `totem l
 
 Your `.cursorrules` and `.mdc` files are plain English. Totem reads them and generates deterministic AST/Regex queries — the same enforcement you'd get from Semgrep, but sourced from your own natural language instructions.
 
-- **Instruction Verifier:** We prove the agent obeyed your prompt. `totem init` auto-ingests your existing `.cursorrules` and `.mdc` files.
-- **Deterministic Execution:** `totem lint` uses Tree-sitter AST parsing. No LLM, no hallucination, and no API keys required. Audited rule logic strictly minimizes false positives (#649).
-- **Continuous Learning:** Catch a bug in a PR? Run `totem extract` to compile a new invariant, ensuring that specific bug never merges again.
-- **Universal Baseline:** 60 lessons ship out of the box based on real failures from Vercel, Meta, and Prisma. Covers critical application domains:
-  - **Frontend:** React hooks, SSR hydration.
-  - **Backend & Data:** Async traps, database migrations.
-  - **Tooling:** TypeScript safety, AI workflow guardrails.
+- **Enforcement & Verification:**
+  - **Instruction Verifier:** We prove the agent obeyed your prompt. `totem init` auto-ingests your existing `.cursorrules` and `.mdc` files.
+  - **Deterministic Execution:** `totem lint` uses our Tier 2 AST engine for robust parsing (#659). It enforces strictly "Complete or Broken" guardrail rules with zero LLMs or API keys (#663).
+- **Knowledge & Learning:**
+  - **Continuous Learning:** Catch a bug in a PR? Run `totem extract` to compile a new invariant, ensuring that specific bug never merges again.
+  - **Universal Baseline:** 60 lessons ship out of the box based on real failures from Vercel, Meta, and Prisma. Covers frontend, backend, and tooling domains.
 
 **Totem is not another AI orchestration framework.** It is a closed-loop enforcement tool for the tools you already use.
 
@@ -106,7 +107,7 @@ If you're a solo dev or small team using multiple AI agents (Cursor + Claude Cod
 
 - Lessons learned in one agent session are available to all agents via MCP.
 - Rules compiled from Cursor instructions are enforced in Claude Code's pre-push hook using the deterministic `totem lint` engine.
-- Share knowledge and lessons between local repositories using `totem link`.
+- Share knowledge between local repositories using `totem link` and execute cross-totem queries via the `linkedIndexes` config (#665).
 - `totem stats` shows your team (or your boss) exactly how many violations were prevented.
 
 Stop repeating "no, use Zod here" to every agent in every session. Teach Totem once. It remembers forever.
@@ -120,8 +121,9 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
   - **DLP Secret Masking:** Automatically strips secrets before embedding. This ensures credentials never leak into your vector index.
   - **SARIF 2.1.0 Output:** Integrates into CI security scanners via `--format sarif/json`. Prove SOC 2 / DORA compliance to your auditors.
 - **Reliability & Portability:**
-  - **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs and safe simultaneous MCP mutations (#635).
-  - **Cross-Platform Readiness:** V1.0 portability audits guarantee consistent behavior across major operating systems (#638).
+  - **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs and safe simultaneous MCP mutations.
+  - **Cross-Platform Readiness:** V1.0 portability audits guarantee consistent behavior across major operating systems.
+  - **Index Stability:** Dimension mismatch detection via `index-meta.json` prevents database corruption during embedder changes (#660).
 - **Rule Architecture:**
   - **Severity Levels:** Rules are classified as `error` (blocks CI) or `warning` (informs, doesn't block).
   - **Categorization:** Compiled rules span security, architecture, style, and performance domains.
@@ -156,6 +158,7 @@ Built on the same architecture as elite AI assistants (Tree-sitter + LanceDB), b
 | --------- | ---------------------------------------------------------- | -------- |
 | `lint`    | Compiled rules against diff. Zero LLM.                     | ~2s      |
 | `shield`  | AI-powered code review with knowledge retrieval.           | ~18s     |
+| `explain` | Look up the lesson behind a violation.                     | instant  |
 | `stats`   | The Trap Ledger — violations prevented, by category.       | instant  |
 | `link`    | Share local knowledge and lessons between repositories.    | instant  |
 | `compile` | Compile lessons + `.cursorrules` into deterministic rules. | ~5s/rule |
@@ -167,10 +170,8 @@ Full reference: [CLI Reference Wiki](./docs/wiki/cli-reference.md)
 
 # Troubleshooting
 
-<!--
 Manually maintained content that `totem docs` must include in the wiki.
 This file is the source of truth for troubleshooting notes — edit here, not in the generated wiki.
--->
 
 ## Git Hooks
 
