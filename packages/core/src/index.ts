@@ -136,7 +136,7 @@ export { enrichWithAstContext } from './ast-gate.js';
 
 // AST query engine
 export type { AstMatch } from './ast-query.js';
-export { matchAstQuery, matchAstQueriesBatch } from './ast-query.js';
+export { matchAstQueriesBatch,matchAstQuery } from './ast-query.js';
 
 // Exporter
 export {
