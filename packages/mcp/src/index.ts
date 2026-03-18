@@ -11,6 +11,7 @@ import { TotemConfigError, TotemError } from '@mmnto/totem';
 
 import { registerAddLesson } from './tools/add-lesson.js';
 import { registerSearchKnowledge } from './tools/search-knowledge.js';
+import { registerVerifyExecution } from './tools/verify-execution.js';
 
 // Support --cwd flag to run against a different project root
 const cwdFlagIdx = process.argv.indexOf('--cwd');
@@ -45,6 +46,7 @@ const server = new McpServer({
 
 registerSearchKnowledge(server);
 registerAddLesson(server);
+registerVerifyExecution(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
