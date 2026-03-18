@@ -252,4 +252,3 @@ Totem enforces **architectural invariants** — structural rules about what code
 - **Probabilistic guarantees:** The vector search layer (LanceDB) uses fuzzy embeddings for _discovery_ (finding relevant rules). The _enforcement_ layer (Tree-sitter AST matching) is strictly deterministic. These are separate concerns — do not conflate them.
 
 Totem is a fast, deterministic pre-commit check that catches structural violations. It complements, not replaces, comprehensive security tooling.
-

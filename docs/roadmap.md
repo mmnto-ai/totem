@@ -136,4 +136,3 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - **Contributor Workflow:**
     - [x] Implement Changesets and npm publishing (#5, #46).
     - [x] **#258 / #266 Governance:** Implement Contributor License Agreement (CLA) automation and CONTRIBUTING.md.
-
