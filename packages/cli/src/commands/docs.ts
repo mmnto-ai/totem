@@ -51,6 +51,10 @@ Updated content here...
 </updated_document>
 \`\`\`
 
+## Pinned Content (DO NOT change)
+- **README hero**: The tagline is: "Stop repeating yourself to your AI." followed by the goldfish subtitle: "AI coding agents are brilliant goldfish. Totem gives them a memory." Do not replace, rephrase, or revert these lines.
+- **README identity**: "Totem doesn't ship with your app. It lives in your workflow." Do not remove this line.
+
 ## Command Glossary (DO NOT confuse these)
 - **\`totem lint\`**: Runs compiled AST/regex rules against a diff. Zero LLM. Fast (~2s). No API keys needed. Used in pre-push hooks and CI. Lives in the Lite configuration tier.
 - **\`totem shield\`**: AI-powered code review. Queries LanceDB for context, sends diff + knowledge to an LLM. Slow (~18s). Requires API keys. Used before opening PRs. Lives in the Full configuration tier.
