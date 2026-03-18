@@ -108,8 +108,8 @@ Cross-totem queries (`linkedIndexes`) let the planner pull context from multiple
 AI coding agents are brilliant but forgetful. They'll nail a complex algorithm, then immediately violate the architectural rule you corrected them on five minutes ago. Totem fixes this by creating a layer that persists across sessions, across models, and across tools.
 
 - **Compile:** Your `.cursorrules` and `.mdc` files are plain English. Totem compiles them into deterministic AST and regex checks — the same enforcement you'd get from Semgrep, but sourced from your own natural language instructions.
-- **Enforce:** `totem lint` runs compiled rules against your diff. Zero LLM. Zero API keys. ~2 seconds. Your pre-push hook catches violations before they reach the repo.
-- **Learn:** Catch a bug in a PR? Run `totem extract` to compile a new invariant, ensuring that specific bug can never be merged again. The knowledge base grows with every review.
+- **Enforce:** `totem lint` is **100% deterministic**. It does not call an LLM. It does not have a temperature. It executes pre-compiled AST and regex patterns against your diff — your CI passes or fails based on logic, not inference. Zero API keys. ~2 seconds.
+- **Learn:** Catch a bug in a PR? Run `totem extract` to compile a new invariant, ensuring that specific bug can never be merged again. Think of it as executable ADRs — architectural decisions that aren't just documented, they're enforced in every commit.
 - **Plan:** `totem spec` queries the knowledge index before your AI writes code, surfacing past mistakes and architectural constraints. The AI starts informed instead of blank.
 
 **Totem doesn't replace your AI. It gives your AI a memory.**
@@ -130,8 +130,8 @@ Teach Totem once. It remembers forever.
 Totem is architected for high-compliance sectors (defense, finance, healthcare).
 
 - **Security & Compliance:**
-  - **Air-Gapped Linting:** `totem lint` requires zero API keys and runs entirely locally. Your codebase never leaves your machine.
-  - **DLP Secret Masking:** Automatically strips secrets before embedding. This ensures credentials never leak into your vector index.
+  - **Fully Air-Gappable:** `totem lint` requires zero API keys and zero network access. With Ollama for embeddings, the entire pipeline — sync, lint, and search — runs without a single external API call. Your codebase never leaves your network.
+  - **DLP Secret Masking:** Automatically strips secrets before embedding. Credentials never leak into your vector index.
   - **SARIF 2.1.0 Output:** Integrates into CI security scanners via `--format sarif/json`. Prove SOC 2 / DORA compliance to your auditors.
 - **Reliability & Portability:**
   - **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs and safe simultaneous MCP mutations.
@@ -141,7 +141,9 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
   - **Severity Levels:** Rules are classified as `error` (blocks CI) or `warning` (informs, doesn't block).
   - **Categorization:** Compiled rules span security, architecture, style, and performance domains.
 
-Built on the same architecture as elite AI assistants (Tree-sitter + LanceDB), but pointed at enforcement, not generation. Both deterministic `totem lint` and AI-powered `totem shield` share a unified execution core for consistent rule evaluation.
+**What gets committed:** Two small text files — `.totem/lessons/` (your knowledge base) and `.totem/compiled-rules.json` (the compiled artifact). The `.lancedb/` vector index is a local-only cache, automatically rebuilt by `totem sync`. It is never committed to your repository.
+
+Built on the same architecture as elite AI assistants (Tree-sitter + LanceDB), but pointed at enforcement, not generation.
 
 ## Works With Everything
 
