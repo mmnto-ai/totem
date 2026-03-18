@@ -40,8 +40,8 @@ Your project gets immediate protection against the most common architectural tra
 
 ### 2. Connect the MCP Server _(optional)_
 
-> **Without MCP:** `totem lint`, `compile`, `extract`, `sync`, and `stats` all work standalone. You get full deterministic enforcement.
-> **With MCP:** Your AI agent can search project knowledge and add lessons mid-session — no copy-paste, no context loss.
+> **Without MCP:** `totem lint`, `compile`, `extract`, `sync`, `explain`, and `stats` all work standalone. You get full deterministic enforcement and the complete CLI experience.
+> **With MCP:** Your AI agent gains live access to the knowledge index mid-session — it can `search_knowledge` before writing code and `add_lesson` when it discovers traps. This is what makes the "persistent memory" work across sessions.
 
 Give your AI agent persistent project memory. `search_knowledge` retrieves traps, patterns, and architectural constraints, while `add_lesson` captures new ones.
 
@@ -141,7 +141,7 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
   - **Severity Levels:** Rules are classified as `error` (blocks CI) or `warning` (informs, doesn't block).
   - **Categorization:** Compiled rules span security, architecture, style, and performance domains.
 
-**What gets committed:** Two small text files — `.totem/lessons/` (your knowledge base) and `.totem/compiled-rules.json` (the compiled artifact). The `.lancedb/` vector index is a local-only cache, automatically rebuilt by `totem sync`. It is never committed to your repository.
+**What gets committed:** Your knowledge base (text files in `.totem/lessons/`) and the compiled artifact (`.totem/compiled-rules.json`). The `.lancedb/` vector index is a local-only cache, automatically rebuilt by `totem sync`. It is never committed to your repository.
 
 Built on the same architecture as elite AI assistants (Tree-sitter + LanceDB), but pointed at enforcement, not generation.
 
