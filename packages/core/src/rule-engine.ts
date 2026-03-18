@@ -111,7 +111,10 @@ export function applyRulesToAdditions(
 
   const violations: Violation[] = [];
 
-  for (const rule of rules) {
+  // Only process regex-engine rules — AST rules have pattern: '' which would match everything
+  const regexRules = rules.filter((r) => r.engine === 'regex' || !r.engine);
+
+  for (const rule of regexRules) {
     let re: RegExp;
     try {
       re = new RegExp(rule.pattern);
