@@ -13,12 +13,14 @@ export interface LintOptions {
 // ─── Command ────────────────────────────────────────
 
 /**
- * Filter a unified diff to exclude files matching any of the given patterns.
+ * Filter a unified diff to exclude files matching shieldIgnorePatterns.
  * Splits on `diff --git` boundaries and removes sections for ignored files.
- * Supports: exact paths (.strategy), directory globs (dir/**), extension globs (** /*.ext).
+ * Uses the same matchesGlob from the core package for consistent behavior.
  */
-function filterDiffByPatterns(diff: string, patterns: string[]): string {
+async function filterDiffByPatterns(diff: string, patterns: string[]): Promise<string> {
   if (patterns.length === 0) return diff;
+
+  const { matchesGlob } = await import('@mmnto/totem');
 
   const sections = diff.split(/^(?=diff --git )/m);
   return sections
@@ -26,15 +28,8 @@ function filterDiffByPatterns(diff: string, patterns: string[]): string {
       const match = section.match(/^diff --git a\/(.+?) b\//);
       if (!match) return true;
       const filePath = match[1]!;
-
-      return !patterns.some((p) => {
-        // Exact match: .strategy
-        if (!p.includes('*')) return filePath === p || filePath.startsWith(p + '/');
-        // Directory glob: dir/** or dir/**/*.ext
-        const dirPrefix = p.split('**')[0]!.replace(/\/$/, '');
-        if (dirPrefix && filePath.startsWith(dirPrefix)) return true;
-        return false;
-      });
+      // Exclude if any ignore pattern matches (reuse core's glob matcher)
+      return !patterns.some((p) => matchesGlob(filePath, p));
     })
     .join('');
 }
@@ -80,7 +75,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
 
   // Filter diff to exclude shieldIgnorePatterns (e.g., .strategy submodule)
   const allIgnore = [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])];
-  const filteredDiff = filterDiffByPatterns(diff, allIgnore);
+  const filteredDiff = await filterDiffByPatterns(diff, allIgnore);
 
   const changedFiles = extractChangedFiles(filteredDiff);
   log.info(TAG, `Changed files (${changedFiles.length}): ${changedFiles.join(', ')}`);
