@@ -2,11 +2,11 @@
 
 **Stop repeating yourself to your AI.**
 
-A CLI that compiles your `.cursorrules` into deterministic CI guardrails.
+A CLI that compiles your project's rules into deterministic CI guardrails for any AI coding agent.
 
-Totem is not a framework. It's not a library. It's a **drop-in CLI and MCP Server** that gives Cursor, Copilot, Claude Code, and Gemini deterministic guardrails — in 60 seconds.
+Totem is not a framework. It's not a library. It's a **drop-in CLI and MCP Server** that gives Claude Code, Cursor, Copilot, Gemini, and Junie deterministic guardrails — in 60 seconds.
 
-You write `.cursorrules` in plain English. AI agents ignore them. Totem compiles those rules into mathematical AST/Regex checks that block bad code before it commits. Zero LLM. Zero hallucination. ~2 seconds.
+You write rules in plain English. AI agents ignore them. Totem compiles those rules into mathematical AST/Regex checks that block bad code before it commits. Zero LLM. Zero hallucination. ~2 seconds.
 
 ## The 10-Second Workflow
 
