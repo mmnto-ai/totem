@@ -1521,11 +1521,9 @@
       "compiledAt": "2026-03-16T03:07:04.806Z",
       "createdAt": "2026-03-16T03:07:04.806Z",
       "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/commands/**",
-        "!**/cli.ts",
-        "!**/bin.ts",
+        "packages/core/src/**/*.ts",
+        "packages/cli/src/adapters/**/*.ts",
+        "packages/cli/src/utils.ts",
         "!**/*.test.ts"
       ],
       "category": "performance",
@@ -1764,18 +1762,10 @@
       "compiledAt": "2026-03-16T18:29:04.072Z",
       "createdAt": "2026-03-16T18:29:04.072Z",
       "fileGlobs": [
-        "**/*.js",
-        "**/*.ts",
-        "**/*.jsx",
-        "**/*.tsx",
-        "!**/commands/**/*.js",
-        "!**/commands/**/*.ts",
-        "!**/commands/**/*.jsx",
-        "!**/commands/**/*.tsx",
-        "!**/bin/**/*.js",
-        "!**/bin/**/*.ts",
-        "!**/bin/**/*.jsx",
-        "!**/bin/**/*.tsx"
+        "packages/core/src/**/*.ts",
+        "packages/cli/src/adapters/**/*.ts",
+        "packages/cli/src/utils.ts",
+        "!**/*.test.ts"
       ],
       "severity": "warning",
       "category": "style"

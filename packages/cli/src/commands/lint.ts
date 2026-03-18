@@ -25,10 +25,12 @@ async function filterDiffByPatterns(diff: string, patterns: string[]): Promise<s
   const sections = diff.split(/^(?=diff --git )/m);
   return sections
     .filter((section) => {
-      const match = section.match(/^diff --git a\/(.+?) b\//);
-      if (!match) return true;
-      const filePath = match[1]!;
-      // Exclude if any ignore pattern matches (reuse core's glob matcher)
+      // Extract destination path (b/) — handles renames correctly
+      const firstLine = section.substring(0, section.indexOf('\n'));
+      const quoted = firstLine.match(/^diff --git "a\/.*?" "b\/(.*?)"$/);
+      const unquoted = firstLine.match(/^diff --git a\/\S+ b\/(.+)$/);
+      const filePath = quoted?.[1] ?? unquoted?.[1];
+      if (!filePath) return true;
       return !patterns.some((p) => matchesGlob(filePath, p));
     })
     .join(''); // totem-ignore (#669) — joining diff sections, not text fragments
