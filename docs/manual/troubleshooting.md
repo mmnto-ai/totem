@@ -23,7 +23,7 @@ If your project uses Husky, Totem's `install-hooks.js` detects `.husky/` and ski
 
 ```bash
 # .husky/pre-push
-pnpm exec totem shield --deterministic
+pnpm exec totem lint
 ```
 
 ## Ollama
