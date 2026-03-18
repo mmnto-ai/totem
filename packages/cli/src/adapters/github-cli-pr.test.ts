@@ -6,6 +6,8 @@ import { GitHubCliPrAdapter } from './github-cli-pr.js';
 
 vi.mock('node:child_process', () => ({
   execFileSync: vi.fn(),
+  execFile: vi.fn(),
+  execSync: vi.fn(),
 }));
 
 const mockedExec = vi.mocked(execFileSync);
