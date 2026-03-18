@@ -27,7 +27,17 @@ interface IndexMeta {
 function readIndexMeta(totemDir: string): IndexMeta | null {
   const metaPath = path.join(totemDir, INDEX_META_FILE);
   try {
-    return JSON.parse(fs.readFileSync(metaPath, 'utf-8')) as IndexMeta;
+    const parsed = JSON.parse(fs.readFileSync(metaPath, 'utf-8')) as IndexMeta;
+    if (
+      parsed &&
+      typeof parsed.provider === 'string' &&
+      typeof parsed.model === 'string' &&
+      typeof parsed.dimensions === 'number' &&
+      typeof parsed.lastSync === 'string'
+    ) {
+      return parsed;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -44,6 +54,12 @@ function writeIndexMeta(totemDir: string, meta: IndexMeta): void {
  * Verify that the current embedding config matches the index.
  * Throws TotemDatabaseError if there's a mismatch.
  */
+/**
+ * Verify that the current embedding config matches the index.
+ * Compares provider name only — dimensions are checked at sync time
+ * when the actual embedder resolves its effective dimensions.
+ * Throws TotemDatabaseError if the provider has changed.
+ */
 export function verifyIndexMeta(totemDir: string, config: TotemConfig): void {
   const embedding = config.embedding;
   if (!embedding) return; // Lite tier — no index to verify
@@ -51,13 +67,20 @@ export function verifyIndexMeta(totemDir: string, config: TotemConfig): void {
   const meta = readIndexMeta(totemDir);
   if (!meta) return; // No meta yet — first sync hasn't happened
 
-  if (
-    meta.provider !== embedding.provider ||
-    meta.dimensions !== (embedding.dimensions ?? meta.dimensions)
-  ) {
+  if (meta.provider !== embedding.provider) {
     throw new TotemDatabaseError(
-      `Index was built with ${meta.provider} (${meta.dimensions}d) but config now uses ${embedding.provider} (${embedding.dimensions ?? 'default'}d).`,
+      `Index was built with ${meta.provider} (${meta.dimensions}d) but config now uses ${embedding.provider}.`,
       "Run 'totem sync --full' to rebuild the index.",
+      'DATABASE_MISMATCH',
+    );
+  }
+
+  // If explicit dimensions are set and don't match, warn
+  if (embedding.dimensions && meta.dimensions !== embedding.dimensions) {
+    throw new TotemDatabaseError(
+      `Index was built with ${meta.dimensions}d vectors but config now specifies ${embedding.dimensions}d.`,
+      "Run 'totem sync --full' to rebuild the index.",
+      'DATABASE_MISMATCH',
     );
   }
 }
