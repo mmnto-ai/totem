@@ -99,6 +99,18 @@ program
   });
 
 program
+  .command('explain <hash>')
+  .description('Look up the lesson behind a compiled rule violation')
+  .action(async (hash: string) => {
+    try {
+      const { explainCommand } = await import('./commands/explain.js');
+      await explainCommand(hash);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('spec <inputs...>')
   .description('Generate a pre-work spec briefing for GitHub issue(s) or topic(s)')
   .option('--raw', 'Output retrieved context without LLM synthesis')
