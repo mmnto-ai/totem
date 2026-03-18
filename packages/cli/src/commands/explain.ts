@@ -19,7 +19,7 @@ export async function explainCommand(hash: string): Promise<void> {
   const rules = loadCompiledRules(rulesPath);
 
   if (rules.length === 0) {
-    log.error(TAG, 'No compiled rules found. Run `totem compile` first.');
+    log.error('Totem Error', 'No compiled rules found. Run `totem compile` first.');
     return;
   }
 
@@ -27,7 +27,7 @@ export async function explainCommand(hash: string): Promise<void> {
   const matches = rules.filter((r) => r.lessonHash.startsWith(hash));
 
   if (matches.length === 0) {
-    log.error(TAG, `No rule found matching hash "${hash}".`);
+    log.error('Totem Error', `No rule found matching hash "${hash}".`);
     log.dim(TAG, 'Run `totem compile` to ensure your rules are up to date.');
     return;
   }
