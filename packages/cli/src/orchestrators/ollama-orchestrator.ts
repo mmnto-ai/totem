@@ -71,6 +71,13 @@ export async function invokeOllamaOrchestrator(
   if (!response.ok) {
     const errorBody = await response.text();
 
+    if (response.status === 404 || /not found|no such model/i.test(errorBody)) {
+      throw new TotemOrchestratorError(
+        `Ollama model '${model}' is not installed.`,
+        `Run 'ollama pull ${model}' and try again.`,
+      );
+    }
+
     if (isQuotaError(Object.assign(new Error(errorBody), { status: response.status }))) {
       const err = new Error(`Ollama rate limit: ${errorBody}`);
       err.name = 'QuotaError';

@@ -178,11 +178,11 @@ describe('invokeOllamaOrchestrator', () => {
     expect(result.content).toBe('');
   });
 
-  it('wraps non-500 API errors', async () => {
+  it('throws model-not-installed for 404 with model not found', async () => {
     mockFetch.mockResolvedValueOnce(new Response('model not found', { status: 404 }));
 
     await expect(invokeOllamaOrchestrator(baseOpts)).rejects.toThrow(
-      '[Totem Error] Ollama API error (404)',
+      "Ollama model 'gemma2:27b' is not installed",
     );
   });
 
