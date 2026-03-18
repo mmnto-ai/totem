@@ -66,6 +66,14 @@ Respond with ONLY the sections below. No preamble, no closing remarks.
 ### Edge Cases & Traps
 [Things the issue description missed. Include race conditions, existing patterns that MUST be followed, and potential architectural regressions.]
 
+### Implementation Tasks
+[Break the work into discrete, ordered tasks. Each task should be completable in 2-10 minutes. For each task:
+- Name the files to modify and test
+- List concrete steps (write test → verify fails → implement → verify passes → lint)
+- If a Totem lesson is relevant to THIS SPECIFIC TASK, inject it inline as:
+  > TOTEM INVARIANT: [lesson heading] — [one-line summary of the constraint]
+  Place the invariant directly next to the step it affects, not in a separate section.]
+
 ### Test Plan
 [Specific test scenarios needed to prove the feature works and edge cases are handled. Reference existing test file patterns when applicable.]
 `;

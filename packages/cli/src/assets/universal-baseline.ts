@@ -26,19 +26,19 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Synchronous assumptions in async boundaries',
     tags: ['async', 'api', 'universal'],
-    body: 'Functions that accept callbacks or return values synchronously but are consumed in async contexts (fetch wrappers, middleware, headers) create subtle timing bugs. If a function CAN be async, treat it as async everywhere. Source: trpc/trpc#902.',
+    body: 'Functions that accept callbacks or return values synchronously but are consumed in async contexts (fetch wrappers, middleware, headers) create subtle timing bugs. If a function CAN be async, treat it as async everywhere. Source: trpc/trpc#902. Fix: Ensure all functions in an async chain are explicitly marked async and awaited.',
   },
   {
     heading: 'Missing state transitions in async lifecycles',
     tags: ['async', 'state', 'universal'],
-    body: 'WebSocket connections, database pools, and HTTP clients have distinct states (connecting, open, closing, closed). Skipping a state transition (e.g., marking a connection as "open" without going through "connecting") causes race conditions in reconnection logic. Source: trpc/trpc#5119.',
+    body: 'WebSocket connections, database pools, and HTTP clients have distinct states (connecting, open, closing, closed). Skipping a state transition (e.g., marking a connection as "open" without going through "connecting") causes race conditions in reconnection logic. Source: trpc/trpc#5119. Fix: Implement explicit state machines with all transitional states (e.g., "connecting") to prevent race conditions.',
   },
 
   // ─── React & Hooks ────────────────────────────────
   {
     heading: 'Stale closure from missing effect dependencies',
     tags: ['react', 'hooks', 'universal'],
-    body: 'useEffect and useCallback capture variables from their closure scope. If a dependency is omitted from the array, the callback uses a stale value from a previous render. This causes bugs that are invisible in dev but corrupt state in production. Source: facebook/react#29705.',
+    body: 'useEffect and useCallback capture variables from their closure scope. If a dependency is omitted from the array, the callback uses a stale value from a previous render. This causes bugs that are invisible in dev but corrupt state in production. Source: facebook/react#29705. Fix: Include all variables from the component scope used inside the effect in the dependency array, or use ESLint exhaustive-deps.',
   },
   {
     heading: 'Effects must clean up subscriptions and timers',
@@ -48,7 +48,7 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Impure effects break in StrictMode and Concurrent Mode',
     tags: ['react', 'hooks', 'universal'],
-    body: 'Effects that mutate external state (DOM, global variables, network) without idempotency will produce double side-effects when React double-invokes them in development. Design every effect to be safe to run twice. Source: facebook/react#19523.',
+    body: 'Effects that mutate external state (DOM, global variables, network) without idempotency will produce double side-effects when React double-invokes them in development. Design every effect to be safe to run twice. Source: facebook/react#19523. Fix: Make effects idempotent. Ensure cleanup functions fully reverse any mutations or subscriptions created by the effect.',
   },
 
   // ─── Server/Client Boundaries ─────────────────────
@@ -67,7 +67,7 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Runtime crashes from missing environment variables',
     tags: ['config', 'env', 'universal'],
-    body: 'Accessing process.env.MY_VAR without validation causes undefined-as-string bugs that surface only in production. Validate ALL required environment variables at build time using a schema (Zod, envalid) and fail fast. Source: t3-oss/create-t3-app#147.',
+    body: 'Accessing process.env.MY_VAR without validation causes undefined-as-string bugs that surface only in production. Validate ALL required environment variables at build time using a schema (Zod, envalid) and fail fast. Source: t3-oss/create-t3-app#147. Fix: Validate environment variables at application startup using a schema library like Zod.',
   },
   {
     heading: 'Build-time vs runtime env var confusion',
@@ -113,7 +113,7 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Unbounded payload sizes in state mechanisms',
     tags: ['performance', 'security', 'universal'],
-    body: 'Cookies, headers, localStorage, and URL params have size limits. Storing unbounded data (user preferences, preview data, session state) without size validation causes silent truncation or server errors. Source: vercel/next.js#10831.',
+    body: 'Cookies, headers, localStorage, and URL params have size limits. Storing unbounded data (user preferences, preview data, session state) without size validation causes silent truncation or server errors. Source: vercel/next.js#10831. Fix: Implement strict size limits and truncation/pagination logic for stored data payloads.',
   },
 
   // ─── CSS & Styling ────────────────────────────────
@@ -127,7 +127,7 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Empty catch blocks hide critical failures',
     tags: ['error-handling', 'universal'],
-    body: 'catch (e) {} swallows the error silently. The operation appears to succeed but downstream code operates on undefined or stale data. At minimum, log the error. Better: re-throw or return a typed error result.',
+    body: 'catch (e) {} swallows the error silently. The operation appears to succeed but downstream code operates on undefined or stale data. At minimum, log the error. Better: rethrow or return a typed error result. Fix: At minimum, log the error with context. If the error is truly safe to ignore, add a comment explaining why.',
   },
   {
     heading: 'Dev tooling modifying execution paths incorrectly',
@@ -147,7 +147,7 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Swallowing critical errors during SSR',
     tags: ['ssr', 'error-handling', 'universal'],
-    body: 'Hydration errors or SSR mismatches should not be caught and silenced by generic error boundaries without explicit logging. Masking these errors during development leads to unstable UI state and broken interactive elements in production. Source: vercel/next.js#44857.',
+    body: 'Hydration errors or SSR mismatches should not be caught and silenced by generic error boundaries without explicit logging. Masking these errors during development leads to unstable UI state and broken interactive elements in production. Source: vercel/next.js#44857. Fix: Explicitly log SSR errors to your monitoring service before allowing error boundaries to render fallback UI.',
   },
   {
     heading: 'Compiler transforms breaking CSS-in-JS injection',
@@ -157,7 +157,7 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Internal modules establishing cyclic dependencies on ambient type declarations',
     tags: ['typescript', 'types', 'universal'],
-    body: "Internal framework code should never import directly from auto-generated ambient type declaration files (e.g., next-env.d.ts). This creates a cyclic dependency where the framework relies on the user's generated types to compile. Source: vercel/next.js#34394.",
+    body: "Internal framework code should never import directly from auto-generated ambient type declaration files (e.g., next-env.d.ts). This creates a cyclic dependency where the framework relies on the user's generated types to compile. Source: vercel/next.js#34394. Fix: Define explicit interface contracts within the framework rather than relying on user-generated ambient types.",
   },
   {
     heading: 'Context flags misaligned during edge compilation',
@@ -177,12 +177,12 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Hardcoding third-party SDK dependencies into core logic',
     tags: ['architecture', 'coupling', 'universal'],
-    body: 'Core routing or state management logic should never directly import third-party SDKs (e.g., Auth0, Stripe). Abstract these behind provider interfaces. Hardcoding them prevents replacing the vendor and breaks the application if the SDK is unavailable. Source: vercel/next.js#8802.',
+    body: 'Core routing or state management logic should never directly import third-party SDKs (e.g., Auth0, Stripe). Abstract these behind provider interfaces. Hardcoding them prevents replacing the vendor and breaks the application if the SDK is unavailable. Source: vercel/next.js#8802. Fix: Inject dependencies using the Dependency Inversion Principle, wrapping SDKs in project-specific provider interfaces.',
   },
   {
     heading: 'Leaking proprietary rendering logic into generic component trees',
     tags: ['architecture', 'react', 'universal'],
-    body: 'Framework-specific rendering paradigms (like AMP or specific SSR wrappers) should not leak down into generic, reusable UI components. Passing framework-specific props deeply into the tree prevents those components from being used in other contexts. Source: vercel/next.js#7669.',
+    body: 'Framework-specific rendering paradigms (like AMP or specific SSR wrappers) should not leak down into generic, reusable UI components. Passing framework-specific props deeply into the tree prevents those components from being used in other contexts. Source: vercel/next.js#7669. Fix: Keep generic components unaware of their rendering context; pass necessary data via standard props.',
   },
   {
     heading: 'Hook rules violation inside memoization callbacks',
@@ -192,17 +192,17 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Race conditions during batched state updates',
     tags: ['react', 'state', 'universal'],
-    body: 'When deriving state from props (e.g., getDerivedStateFromProps), assume that multiple state updates might be batched together. Relying on the intermediate state synchronously before the batch completes will result in torn UI or dropped updates. Source: facebook/react#12408.',
+    body: 'When deriving state from props (e.g., getDerivedStateFromProps), assume that multiple state updates might be batched together. Relying on the intermediate state synchronously before the batch completes will result in torn UI or dropped updates. Source: facebook/react#12408. Fix: Use the functional update form of setState (e.g., setState(prev => ...)) when new state depends on previous state.',
   },
   {
     heading: 'Swallowing nested errors across rendering boundaries',
     tags: ['react', 'error-handling', 'universal'],
-    body: 'When building error boundaries or guarded execution callbacks, ensure that an error thrown in a deeply nested renderer (like a portal or a custom renderer) correctly bubbles up to the primary boundary. Swallowing cross-boundary errors masks fatal crashes. Source: facebook/react#10270.',
+    body: 'When building error boundaries or guarded execution callbacks, ensure that an error thrown in a deeply nested renderer (like a portal or a custom renderer) correctly bubbles up to the primary boundary. Swallowing cross-boundary errors masks fatal crashes. Source: facebook/react#10270. Fix: Ensure custom renderers and portals propagate exceptions up to the closest React Error Boundary.',
   },
   {
     heading: 'Monolithic structures containing untestable generic utilities',
     tags: ['architecture', 'testing', 'universal'],
-    body: 'Do not hide generic, pure utility functions (e.g., string formatting, math calculations) inside massive, stateful class components or UI modules. Extract them into separate files so they can be unit tested in isolation without mocking the DOM. Source: facebook/react#9658.',
+    body: 'Do not hide generic, pure utility functions (e.g., string formatting, math calculations) inside massive, stateful class components or UI modules. Extract them into separate files so they can be unit tested in isolation without mocking the DOM. Source: facebook/react#9658. Fix: Extract pure utility functions into separate, standalone modules and write isolated unit tests for them.',
   },
   {
     heading: 'Insufficient context in error logging for dynamically typed inputs',
@@ -222,12 +222,12 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Bypassing standard synthetic event systems for performance',
     tags: ['react', 'events', 'universal'],
-    body: "Bypassing the framework's synthetic event system (e.g., attaching raw DOM event listeners) to gain performance often breaks event pooling, batching, and cross-platform compatibility (like React Native). Only bypass the event system when absolutely necessary and document the trade-off. Source: facebook/react#23232.",
+    body: "Bypassing the framework's synthetic event system (e.g., attaching raw DOM event listeners) to gain performance often breaks event pooling, batching, and cross-platform compatibility (like React Native). Only bypass the event system when absolutely necessary and document the trade-off. Source: facebook/react#23232. Fix: Stick to standard React event handlers unless profiling proves native DOM events are strictly required, and document the exception.",
   },
   {
     heading: 'Compiler transforms invalidating internal context tracking',
     tags: ['compiler', 'react', 'universal'],
-    body: 'When writing AST transforms or compiler optimizations, do not rewrite or reorder calls to `useContext` or other hooks that rely on internal fiber state tracking. Moving a hook call outside of its expected execution context breaks the React runtime. Source: facebook/react#30612.',
+    body: 'When writing AST transforms or compiler optimizations, do not rewrite or reorder calls to `useContext` or other hooks that rely on internal fiber state tracking. Moving a hook call outside of its expected execution context breaks the React runtime. Source: facebook/react#30612. Fix: Ensure custom Babel/SWC plugins maintain the exact order and scope of hook calls during AST transformation.',
   },
   {
     heading: 'Memory leaks caused by calling setState on unmounted components',
@@ -247,12 +247,12 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Evaluating defaultProps before lazy component resolution',
     tags: ['react', 'lazy', 'universal'],
-    body: 'When using lazy loading or dynamic imports, do not attempt to merge or evaluate `defaultProps` before the underlying module has fully resolved. This causes synchronous crashes. Defer prop resolution until the render phase. Source: facebook/react#14112.',
+    body: 'When using lazy loading or dynamic imports, do not attempt to merge or evaluate `defaultProps` before the underlying module has fully resolved. This causes synchronous crashes. Defer prop resolution until the render phase. Source: facebook/react#14112. Fix: Apply default values during component render (e.g., destructuring with defaults) rather than relying on defaultProps for lazy components.',
   },
   {
     heading: 'Connection pooling leaks in underlying HTTP clients',
     tags: ['database', 'network', 'universal'],
-    body: 'When initializing database clients or ORMs (like Prisma), ensure the underlying HTTP client (e.g., undici or node-fetch) has strict timeouts and connection pool limits. Infinite keep-alive connections will exhaust server sockets under load. Source: prisma/prisma#8831.',
+    body: 'When initializing database clients or ORMs (like Prisma), ensure the underlying HTTP client (e.g., undici or node-fetch) has strict timeouts and connection pool limits. Infinite keep-alive connections will exhaust server sockets under load. Source: prisma/prisma#8831. Fix: Explicitly configure keep-alive timeouts and connection limits on HTTP clients used by ORMs.',
   },
   {
     heading: 'Type loss across SQL aggregate boundaries',
@@ -267,7 +267,7 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Driver-specific adapters leaking into core query logic',
     tags: ['database', 'architecture', 'universal'],
-    body: 'Keep SQL query generation strictly separated from driver-specific execution (e.g., Postgres vs MySQL vs SQLite). Passing driver connection objects deep into the query builder tightly couples the ORM to a specific database vendor. Source: drizzle-team/drizzle-orm#5222.',
+    body: 'Keep SQL query generation strictly separated from driver-specific execution (e.g., Postgres vs MySQL vs SQLite). Passing driver connection objects deep into the query builder tightly couples the ORM to a specific database vendor. Source: drizzle-team/drizzle-orm#5222. Fix: Create an abstraction layer for query execution that accepts generic query objects rather than driver-specific connection instances.',
   },
   {
     heading: 'Desync between .env templates and validation schemas',
@@ -277,7 +277,7 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Incomplete database lifecycles in scaffolding templates',
     tags: ['database', 'tooling', 'universal'],
-    body: 'When providing scripts to setup a project, ensure the database lifecycle is complete: generation, migration, and seeding. Providing a `db:generate` script without a `db:migrate` script leaves the developer in a broken state upon initial launch. Source: t3-oss/create-t3-app#1893.',
+    body: 'When providing scripts to setup a project, ensure the database lifecycle is complete: generation, migration, and seeding. Providing a `db:generate` script without a `db:migrate` script leaves the developer in a broken state upon initial launch. Source: t3-oss/create-t3-app#1893. Fix: Provide a comprehensive setup script that sequentially runs generation, migration, and seeding.',
   },
   {
     heading: 'Side-effect imports executing out of order due to lack of sorting',
@@ -297,7 +297,7 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Specificity overrides breaking AST/string serialization',
     tags: ['css', 'compiler', 'universal'],
-    body: 'When parsing or generating CSS (e.g., adding `!important`), ensure the AST formatter correctly handles the spacing and placement of the token. Appending `!important` without respecting the original declaration structure leads to malformed CSS strings. Source: tailwindlabs/tailwindcss#14611.',
+    body: 'When parsing or generating CSS (e.g., adding `!important`), ensure the AST formatter correctly handles the spacing and placement of the token. Appending `!important` without respecting the original declaration structure leads to malformed CSS strings. Source: tailwindlabs/tailwindcss#14611. Fix: Use an AST-aware CSS parser to safely inject modifiers like !important instead of string concatenation.',
   },
   {
     heading: 'Implicit ordering dependencies in CSS cascade generation',
@@ -309,12 +309,12 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Isolation of localized component changes',
     tags: ['workflow', 'ai-agent', 'universal'],
-    body: 'When asked to implement a local feature (e.g., adding a button state), DO NOT rewrite the surrounding layout, change the CSS framework, or refactor sibling components unless explicitly instructed. Isolate the state change locally to prevent cascading breakages.',
+    body: 'When asked to implement a local feature (e.g., adding a button state), DO NOT rewrite the surrounding layout, change the CSS framework, or refactor sibling components unless explicitly instructed. Isolate the state change locally to prevent cascading breakages. Fix: Restrict your edits only to the specific component requested, leaving surrounding architecture and layouts untouched.',
   },
   {
     heading: 'Premature abstraction of duplicated code',
     tags: ['architecture', 'ai-agent', 'universal'],
-    body: 'Do not abstract repetitive code (like fetch calls or UI wrappers) into complex generic utilities until the exact pattern has been duplicated at least three times in separate domains (The Rule of Three). Premature generic abstraction ruins prototyping velocity.',
+    body: 'Do not abstract repetitive code (like fetch calls or UI wrappers) into complex generic utilities until the exact pattern has been duplicated at least three times in separate domains (The Rule of Three). Premature generic abstraction ruins prototyping velocity. Fix: Wait until code is duplicated at least three times across different contexts before refactoring it into a shared abstraction.',
   },
   {
     heading: 'Silent failures and "TODO" placeholders',
@@ -329,7 +329,7 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Destructive architectural refactoring without permission',
     tags: ['workflow', 'safety', 'universal'],
-    body: 'Never alter the fundamental architecture of the project (e.g., switching from App Router to Pages Router, changing the ORM paradigm, or moving directories) as a side-effect of fulfilling a smaller feature request. Architectural shifts require explicit human approval.',
+    body: 'Never alter the fundamental architecture of the project (e.g., switching from App Router to Pages Router, changing the ORM paradigm, or moving directories) as a side-effect of fulfilling a smaller feature request. Architectural shifts require explicit human approval. Fix: Ask the user for explicit approval before changing core frameworks, routing paradigms, or database schemas.',
   },
 ];
 
