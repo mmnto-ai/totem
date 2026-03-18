@@ -28,14 +28,14 @@ The core embedded vector database, MCP server, and baseline CLI commands have be
 This phase delivered seamless cross-platform onboarding, automated AI tool configuration, and universal baseline lessons.
 
 - **Onboarding & UX:**
-  - **Tool Automation:** Auto-configured AI tools with JetBrains Junie and Copilot support (#448). Added configurable embedding detection defaulting to Gemini (#551, #608).
-  - **CLI Experience:** Delivered cross-platform installers, versioned reflex upgrade paths, and premium CLI UI polish. Added `--bare` scaffolding support for streamlined `totem init` (#659).
+  - **Tool Automation:** Auto-configured AI tools with JetBrains Junie and Copilot support. Added configurable embedding detection defaulting to Gemini.
+  - **CLI Experience:** Delivered cross-platform installers, versioned reflex upgrade paths, and premium CLI UI polish. Added `--bare` scaffolding support for streamlined `totem init`.
 - **Host Integration:**
-  - **Seamless Hooks:** Agent hooks for Claude Code, Gemini, and Junie (#464).
-  - **Baseline Intelligence:** Universal Baseline delivered, shipping 60 battle-tested lessons automatically during `totem init` alongside harder vector DB reflexes (#622).
-  - **Enforcement:** Involuntary enforcement strategy under research (#520).
+  - **Seamless Hooks:** Agent hooks for Claude Code, Gemini, and Junie.
+  - **Baseline Intelligence:** Universal Baseline delivered, shipping 60 battle-tested lessons automatically during `totem init` alongside harder vector DB reflexes.
+  - **Enforcement:** Involuntary enforcement strategy under research.
 - [ ] **#129 Epic: Interactive CLI Tutorial:** Build an animated, interactive CLI tutorial (`totem tutorial`). This allows users to pause the walkthrough, ask the LLM contextual questions, and resume seamlessly.
-- [ ] **#125 Epic: Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically. Achieves a "run `init` and forget" workflow via deterministic `lint` gates and auto-installs.
+- [ ] **#125 Epic: Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically. Achieves a "run `init` and forget" workflow via deterministic `totem lint` gates and auto-installs.
 
 ## Phase 2: Core Stability & Data Safety (Functionally Complete)
 
@@ -44,17 +44,17 @@ This phase delivered seamless cross-platform onboarding, automated AI tool confi
 This phase fortified the core architecture, delivering native orchestration, zero-LLM linting, and rigorous security measures.
 
 - **AST & Orchestration:**
-  - **AST Governance:** Universal Tree-sitter parsing and AST gating for zero-LLM linting. Shared execution logic unifies the underlying rule runner, now advanced by the Tier 2 AST engine (#566, #659).
-  - **Graceful Degradation:** Cross-provider LLM routing with SDK-to-CLI and Ollama fallbacks (#516, #517).
+  - **AST Governance:** Universal Tree-sitter parsing and AST gating for zero-LLM `totem lint`. Shared execution logic unifies the underlying rule runner, now advanced by the Tier 2 AST engine.
+  - **Graceful Degradation:** Cross-provider LLM routing with SDK-to-CLI and Ollama fallbacks.
   - **Provider Coverage:** Supported Cloud Providers (Gemini, Anthropic, OpenAI) and Local Providers (Ollama).
 - **Data Safety & Memory:**
-  - **Transactions & Sync:** Saga-based document rollbacks, auto-healing DB version recovery (#500, #574), automated sync with dual-read migrations (#428), and filesystem concurrency locks (#635).
-  - **Integrity & State:** Air-gapped zero-telemetry enforced (#474), alongside index health checks at startup (#438). Enhanced auto-healing with dimension mismatch detection via `index-meta.json` (#660).
-  - **Portability:** Zero-LLM session snapshots via `totem handoff --lite`, cross-model export support, and a comprehensive 1.0 portability audit (#638).
+  - **Transactions & Sync:** Saga-based document rollbacks, auto-healing DB version recovery, automated sync with dual-read migrations, and filesystem concurrency locks.
+  - **Integrity & State:** Air-gapped zero-telemetry enforced, alongside index health checks at startup. Enhanced auto-healing with dimension mismatch detection via `index-meta.json`.
+  - **Portability:** Zero-LLM session snapshots via `totem handoff --lite`, cross-model export support, and a comprehensive 1.0 portability audit.
 - **Security & DX:**
-  - **Data Loss Prevention:** Implemented DLP secret masking middleware to proactively strip secrets prior to embedding (#534, #609).
+  - **Data Loss Prevention:** Implemented DLP secret masking middleware to proactively strip secrets prior to embedding.
   - **Adversarial Hardening:** Adversarial ingestion scrubbing, extraction hardening, and suspicious lesson detection.
-  - **Git Enforcements:** Native Git hook enforcement with monorepo and Bun support. Enhanced by shield severity levels (error vs warning) and updated reference hooks prioritizing zero-LLM `totem lint` (ADR-028, #498, #610).
+  - **Git Enforcements:** Native Git hook enforcement prioritizing zero-LLM `totem lint` for fast validation, with monorepo and Bun support.
   - **Installation Automation:** Auto-installation of `totem hooks` and CI drift gating foundations.
 
 ## Phase 3: Workflow Expansion (Power User Tools)
@@ -64,7 +64,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
 - **Observability & Maintenance:**
   - **Metrics & Diagnostics:**
     - [x] **Semantic Rule Observability:** Separated zero-LLM `totem lint` from AI-powered `totem shield` to enable targeted rule enforcement. Introduced `totem explain` to look up the exact lesson behind a violation (#668). Integrated `onWarn` callbacks and a new `TotemError` hierarchy with recovery hints (#595, #620).
-    - [ ] **#92 CLI Metrics & Observability:** Provide local CLI metrics (`totem stats`) including violation history from git log, lesson coverage, and rule fire counts. No cloud telemetry or TUI — terminal output only for v1.0.
+    - [ ] **#92 CLI Metrics & Observability:** Provide local CLI metrics (`totem stats`) including violation history from git log, lesson coverage, and rule fire counts from local JSONL. No cloud telemetry or TUI — terminal output only for v1.0.
     - [ ] **#130 Epic: Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks and track index health.
   - **System Maintenance:**
     - [ ] **#283 Epic: v1.0 Documentation:** Develop v1.0 docs and extensive wiki migrations covering dev environments and release processes (#450, #477). Includes the 1.0 tagline, Holy Grail positioning, and architecture limitations (ADR-049, #586, #606).
@@ -90,17 +90,17 @@ This phase fortified the core architecture, delivering native orchestration, zer
 - **Shift-Left & Advanced Intelligence:**
   - **Governance & Verification:**
     - [ ] **#195 / #196 Epic: Shift-Left AI Verification:** Define model compatibility and auditing strategy to systematically verify models.
-    - [ ] **#314 Epic: Adaptive Agent Governance:** Establish the Codebase Immune System, incorporating AST compilation design. This transitions `totem compile` to support Tree-sitter for cases where regex is insufficient.
+    - [ ] **#314 Epic: Adaptive Agent Governance:** Establish the Codebase Immune System, explicitly scoped to include AST compilation design. This transitions `totem compile` from regex-only to AST-aware rules (Tree-sitter/ast-grep) for cases where regex is provably insufficient.
     - [x] **#422 Rule Testing Harness:** Implemented a compiled rule testing harness to identify regex false-positives and drive AST requirements.
     - [ ] **#434 Adversarial Trap Corpus:** Develop synthetic violations to measure precision and recall of the deterministic engine.
     - [x] **Quality Control:** Addressed joint 1.0 code review conditions and launch testing findings to ensure stability (#639, #648).
   - **Rules & Standards:**
     - [x] **#387 SARIF Output:** Standardized output for CI/CD integration, enhanced with organizational trap ledgers and linting support (#418, #561).
     - [x] **External Rule Ingestion:** Built support to automatically ingest `.cursorrules`, `.mdc` files, and prompt templates into compiled rules during `totem init` (#558, #578, #596).
-    - **Rule Invariant Audit:** Categorized over 130 compiled rules by invariant, style, and security to establish strict baseline severity (#559, #577). Audited compiled rules to significantly reduce false positives and introduced Complete or Broken guardrail rules (#649, #663).
+    - **Rule Invariant Audit:** Categorized over 130 compiled rules by invariant, style, and security to establish strict baseline severity (#559, #577). Audited compiled rules to significantly reduce false positives, introduced Complete or Broken guardrail rules, and added baseline Fix guidance for spec invariants (#649, #663, #688).
     - [x] **Compilation Optimization:** Cached non-compilable lessons and removed duplicate match/exec rules to optimize performance and accuracy (#589, #590). Refined compiler glob patterns to support prompt constraints and strict boundaries (#584, #602, #603).
     - [ ] **#385 Rule Exports:** Export compiled rules to Semgrep YAML and ESLint configurations. Deferred until core governance (#314) is finalized.
-    - [ ] **#433 Lesson Packs Prototype:** Mine OSS projects as a proof of concept for distributable rule sets.
+    - [ ] **#433 Lesson Packs Prototype:** Mine 1 OSS project as a proof of concept for distributable rule sets.
   - **Data Architecture & Agents:**
     - [x] **#176 Agent-Optimized MCP:** Implemented MCP enforcement tools enabling active self-correction and heartbeat zombie harvesting (#417, #503).
     - [x] **#364 VectorDB Structure:** Defined multi-type schemas, delivered health checks, and integrated Gemini embeddings (#439, #539).

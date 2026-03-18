@@ -41,7 +41,7 @@ Your project gets immediate protection against the most common architectural tra
 ### 2. Connect the MCP Server _(optional)_
 
 > **Without MCP:** `totem lint`, `compile`, `extract`, `sync`, `explain`, and `stats` all work standalone. You get full deterministic enforcement and the complete CLI experience.
-> **With MCP:** Your AI agent gains live access to the knowledge index mid-session — it can `search_knowledge` before writing code and `add_lesson` when it discovers traps. This is what makes the "persistent memory" work across sessions.
+> **With MCP:** Your AI agent gains live access to the knowledge index mid-session. It can `search_knowledge` before writing code and `add_lesson` when it discovers traps.
 
 Give your AI agent persistent project memory. `search_knowledge` retrieves traps, patterns, and architectural constraints, while `add_lesson` captures new ones.
 
@@ -84,7 +84,7 @@ npx @mmnto/cli sync    # Build the vector index
 npx @mmnto/cli lint    # Run compiled rules (zero LLM)
 ```
 
-During `init`, Totem prompts to install a `pre-push` git hook that runs `totem lint` automatically before every push. It drops a standard shell script into `.git/hooks/` — works alongside Husky, lint-staged, or bare repos. Run `totem hooks --check` to verify installation at any time.
+During `init`, Totem prompts to install a `pre-push` git hook that runs `totem lint` automatically before every push. It drops a standard shell script into `.git/hooks/` to work alongside Husky or bare repos. Run `totem hooks --check` to verify installation at any time.
 
 ## The Planning Pipeline
 
@@ -97,9 +97,9 @@ $ npx @mmnto/cli spec 570
 [Spec] Found: 5 specs, 3 code, 0 lessons
 ```
 
-`totem spec` fetches your issue, queries the project's knowledge index for relevant architectural traps, and generates a spec that tells your AI agent what to build _and_ what to avoid. It's the difference between "implement this feature" and "implement this feature, but here are the 5 mistakes the last agent made on a similar task."
+`totem spec` fetches your issue, queries the knowledge index for architectural traps, and generates a spec complete with invariants and baseline fix guidance. It tells your AI agent exactly what to build and what mistakes to avoid.
 
-Cross-totem queries (`linkedIndexes`) let the planner pull context from multiple projects simultaneously — strategy docs inform code decisions, shared design systems inform component repos.
+Cross-totem queries via `linkedIndexes` let the planner pull context from multiple projects simultaneously. Strategy docs can inform code decisions, while shared design systems inform component repositories.
 
 ## What Totem Actually Is
 
@@ -107,10 +107,10 @@ Cross-totem queries (`linkedIndexes`) let the planner pull context from multiple
 
 AI coding agents are brilliant but forgetful. They'll nail a complex algorithm, then immediately violate the architectural rule you corrected them on five minutes ago. Totem fixes this by creating a layer that persists across sessions, across models, and across tools.
 
-- **Compile:** Your `.cursorrules` and `.mdc` files are plain English. Totem compiles them into deterministic AST and regex checks — the same enforcement you'd get from Semgrep, but sourced from your own natural language instructions.
-- **Enforce:** `totem lint` is **100% deterministic**. It does not call an LLM. It does not have a temperature. It executes pre-compiled AST and regex patterns against your diff — your CI passes or fails based on logic, not inference. Zero API keys. ~2 seconds.
-- **Learn:** Catch a bug in a PR? Run `totem extract` to compile a new invariant, ensuring that specific bug can never be merged again. Think of it as executable ADRs — architectural decisions that aren't just documented, they're enforced in every commit.
-- **Plan:** `totem spec` queries the knowledge index before your AI writes code, surfacing past mistakes and architectural constraints. The AI starts informed instead of blank.
+- **Compile:** Your `.cursorrules` and `.mdc` files are plain English. Totem compiles them into deterministic AST and regex checks via the Tier 2 AST engine.
+- **Enforce:** `totem lint` is **100% deterministic** and runs compiled rules against your diff. It runs in ~2 seconds with zero API keys, and your CI passes or fails based purely on logic.
+- **Learn:** Run `totem extract` to compile new invariants from PR bugs, ensuring specific mistakes can never be merged again. When a violation happens, use `totem explain` to instantly retrieve the underlying lesson.
+- **Plan:** `totem spec` queries the knowledge index before your AI writes code, generating architectural invariants. The AI starts fully informed of past mistakes instead of starting blank.
 
 **Totem doesn't replace your AI. It gives your AI a memory.**
 
@@ -118,10 +118,10 @@ AI coding agents are brilliant but forgetful. They'll nail a complex algorithm, 
 
 Use Claude today, Gemini tomorrow, Copilot next week. It doesn't matter. Totem creates a persistent, model-agnostic layer that outlasts any single AI.
 
-- **Shared memory:** Lessons learned in one agent session are available to all agents via MCP.
-- **Portable rules:** Rules compiled from Cursor instructions are enforced in Claude Code's pre-push hook. The enforcement is model-independent.
-- **Cross-project knowledge:** Share lessons between repositories using `totem link`. Query multiple knowledge bases simultaneously via `linkedIndexes`.
-- **Prove ROI:** `totem stats` shows exactly how many violations were prevented, regardless of which AI introduced the code.
+- **Shared memory:** Lessons learned in one session are available to all agents via MCP.
+- **Portable rules:** Rules compiled from Cursor are enforced in Claude Code's pre-push hook. The enforcement is entirely model-independent.
+- **Cross-project knowledge:** Share local lessons between repositories using `totem link`. Query multiple knowledge bases simultaneously via `linkedIndexes`.
+- **Prove ROI:** `totem stats` shows exactly how many violations were prevented. It tracks prevention regardless of which AI introduced the code.
 
 Teach Totem once. It remembers forever.
 
@@ -130,13 +130,13 @@ Teach Totem once. It remembers forever.
 Totem is architected for high-compliance sectors (defense, finance, healthcare).
 
 - **Security & Compliance:**
-  - **Fully Air-Gappable:** `totem lint` requires zero API keys and zero network access. With Ollama for embeddings, the entire pipeline — sync, lint, and search — runs without a single external API call. Your codebase never leaves your network.
+  - **Fully Air-Gappable:** `totem lint` requires zero API keys and zero network access. With Ollama for embeddings, the entire pipeline runs without external API calls.
   - **DLP Secret Masking:** Automatically strips secrets before embedding. Credentials never leak into your vector index.
   - **SARIF 2.1.0 Output:** Integrates into CI security scanners via `--format sarif/json`. Prove SOC 2 / DORA compliance to your auditors.
 - **Reliability & Portability:**
-  - **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs and safe simultaneous MCP mutations.
+  - **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs. They also guarantee safe simultaneous MCP mutations.
   - **Cross-Platform Readiness:** V1.0 portability audits guarantee consistent behavior across major operating systems.
-  - **Index Stability:** Dimension mismatch detection via `index-meta.json` prevents database corruption during embedder changes.
+  - **Index Stability:** Dimension mismatch detection via `index-meta.json` prevents database corruption. Auto-healing migrations handle embedder changes automatically.
 - **Rule Architecture:**
   - **Severity Levels:** Rules are classified as `error` (blocks CI) or `warning` (informs, doesn't block).
   - **Categorization:** Compiled rules span security, architecture, style, and performance domains.
@@ -185,10 +185,8 @@ Full reference: [CLI Reference Wiki](./docs/wiki/cli-reference.md)
 
 # Troubleshooting
 
-<!--
-Source of truth: docs/manual/troubleshooting.md
-This content is injected by totem docs — edit the source file, not here.
--->
+Manually maintained content that `totem docs` must include in the wiki.
+This file is the source of truth for troubleshooting notes — edit here, not in the generated wiki.
 
 ## Git Hooks
 
