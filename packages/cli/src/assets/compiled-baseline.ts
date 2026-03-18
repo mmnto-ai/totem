@@ -218,8 +218,8 @@ export const COMPILED_BASELINE_RULES: CompiledRule[] = [
   },
   {
     lessonHash: 'guardrail-not-implemented',
-    lessonHeading: 'throw new Error("Not implemented") stubs',
-    pattern: 'throw\\s+new\\s+Error\\(\\s*[\'"]Not implemented',
+    lessonHeading: 'Not-implemented error stubs ship broken code',
+    pattern: 'throw\\s+new\\s+Error\\(\\s*[\'"`]Not implemented',
     message:
       'Not-implemented error stubs will crash at runtime. Either implement the function or remove it.',
     engine: 'regex',
@@ -246,7 +246,15 @@ export const COMPILED_BASELINE_RULES: CompiledRule[] = [
     engine: 'regex',
     compiledAt: '2026-03-18T03:00:00.000Z',
     createdAt: '2026-03-18T03:00:00.000Z',
-    fileGlobs: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '!**/*.test.ts', '!**/*.spec.ts'],
+    fileGlobs: [
+      '**/*.ts',
+      '**/*.tsx',
+      '**/*.js',
+      '**/*.jsx',
+      '!**/*.test.ts',
+      '!**/*.spec.ts',
+      '!**/__mocks__/**',
+    ],
     severity: 'warning',
     category: 'style',
   },
