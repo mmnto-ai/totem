@@ -1,8 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { ensureInit, extensionToLanguage, loadGrammar } from './ast-classifier.js';
 import type { SupportedLanguage } from './ast-classifier.js';
+import { ensureInit, extensionToLanguage, loadGrammar } from './ast-classifier.js';
 
 // ─── Types ──────────────────────────────────────────
 
