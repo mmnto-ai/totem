@@ -6,7 +6,7 @@ import safeRegex from 'safe-regex2';
 import { z } from 'zod';
 
 import { extensionToLanguage } from './ast-classifier.js';
-import { matchAstGrepPattern } from './ast-grep-query.js';
+import { matchAstGrepPatternsBatch } from './ast-grep-query.js';
 import { matchAstQueriesBatch } from './ast-query.js';
 import { TotemParseError } from './errors.js';
 
@@ -439,13 +439,15 @@ export async function applyAstRulesToAdditions(
         }
 
         if (content) {
+          // Batch: parse file once, run all patterns
+          const queries = applicableAstGrep.map((rule) => ({
+            pattern: rule.astGrepPattern!,
+            addedLineNumbers,
+          }));
+          const batchResults = matchAstGrepPatternsBatch(content, ext, queries);
+
           for (const rule of applicableAstGrep) {
-            const matches = matchAstGrepPattern(
-              content,
-              ext,
-              rule.astGrepPattern!,
-              addedLineNumbers,
-            );
+            const matches = batchResults.get(rule.astGrepPattern!) ?? [];
 
             for (const match of matches) {
               const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);

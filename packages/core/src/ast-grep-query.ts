@@ -40,37 +40,68 @@ export function matchAstGrepPattern(
   pattern: string,
   addedLineNumbers: number[],
 ): AstGrepMatch[] {
-  if (addedLineNumbers.length === 0) return [];
+  const results = matchAstGrepPatternsBatch(content, ext, [{ pattern, addedLineNumbers }]);
+  return results.get(pattern) ?? [];
+}
+
+/**
+ * Parse a file once and run multiple ast-grep patterns against it.
+ * O(M + N) — file parsed exactly once regardless of rule count.
+ */
+export function matchAstGrepPatternsBatch(
+  content: string,
+  ext: string,
+  queries: Array<{ pattern: string; addedLineNumbers: number[] }>,
+): Map<string, AstGrepMatch[]> {
+  const results = new Map<string, AstGrepMatch[]>();
+  if (queries.length === 0) return results;
 
   const lang = extensionToLang(ext);
-  if (!lang) return [];
+  if (!lang) {
+    for (const q of queries) results.set(q.pattern, []);
+    return results;
+  }
 
-  const addedSet = new Set(addedLineNumbers);
   const lines = content.split('\n');
 
   try {
     const root = parse(lang, content).root();
-    const matches = root.findAll(pattern);
-    const results: AstGrepMatch[] = [];
 
-    for (const match of matches) {
-      const startLine = match.range().start.line + 1; // 0-based to 1-based
-      const endLine = match.range().end.line + 1;
+    for (const { pattern, addedLineNumbers } of queries) {
+      if (addedLineNumbers.length === 0) {
+        results.set(pattern, []);
+        continue;
+      }
 
-      for (let lineNum = startLine; lineNum <= endLine; lineNum++) {
-        if (addedSet.has(lineNum)) {
-          results.push({
-            lineNumber: lineNum,
-            lineText: lines[lineNum - 1] ?? '',
-          });
-          break;
+      const addedSet = new Set(addedLineNumbers);
+      try {
+        const matches = root.findAll(pattern);
+        const patternResults: AstGrepMatch[] = [];
+
+        for (const match of matches) {
+          const startLine = match.range().start.line + 1;
+          const endLine = match.range().end.line + 1;
+
+          for (let lineNum = startLine; lineNum <= endLine; lineNum++) {
+            if (addedSet.has(lineNum)) {
+              patternResults.push({
+                lineNumber: lineNum,
+                lineText: lines[lineNum - 1] ?? '',
+              });
+              break;
+            }
+          }
         }
+
+        results.set(pattern, patternResults);
+      } catch {
+        results.set(pattern, []);
       }
     }
 
     return results;
   } catch {
-    // Fail-open on invalid pattern or parse failure
-    return [];
+    for (const q of queries) results.set(q.pattern, []);
+    return results;
   }
 }
