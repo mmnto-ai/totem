@@ -144,7 +144,7 @@ function assemblePrompt(
   }
 
   // Manual content — only inject into user-facing docs (README), not internal docs
-  const isUserFacing = doc.path === 'README.md' || doc.path.includes('README');
+  const isUserFacing = path.basename(doc.path).toLowerCase() === 'readme.md';
   if (isUserFacing) {
     try {
       const manualPath = path.resolve('docs', 'manual');
