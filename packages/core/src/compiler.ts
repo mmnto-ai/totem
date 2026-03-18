@@ -1,5 +1,6 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 import safeRegex from 'safe-regex2';
 import { z } from 'zod';
@@ -358,8 +359,7 @@ export async function applyAstRulesToAdditions(
   // Process each file once — batch all applicable AST queries per file
   for (const [file, fileAdditions] of byFile) {
     // Check language support
-    const nodePath = await import('node:path');
-    const ext = nodePath.extname(file);
+    const ext = path.extname(file);
     if (!extensionToLanguage(ext)) continue;
 
     // Collect added line numbers, filtering suppressed lines
