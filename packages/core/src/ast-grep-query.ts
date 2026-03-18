@@ -45,8 +45,7 @@ function executeQuery(
 
   try {
     // findAll accepts both string patterns and NapiConfig objects
-    const matches =
-      typeof rule === 'string' ? root.root().findAll(rule) : root.root().findAll(rule);
+    const matches = root.root().findAll(rule);
     const results: AstGrepMatch[] = [];
 
     for (const match of matches) {
