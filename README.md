@@ -2,11 +2,11 @@
 
 **Stop repeating yourself to your AI.**
 
-A CLI that compiles your project's rules into deterministic CI guardrails for any AI coding agent.
+_AI coding agents are brilliant goldfish. Totem gives them a memory._
 
-Totem is not a framework. It's not a library. It's a **drop-in CLI and MCP Server** that gives Claude Code, Cursor, Copilot, Gemini, and Junie deterministic guardrails — in 60 seconds.
+A zero-config CLI and MCP Server that compiles your project's architectural rules into deterministic CI guardrails. It creates a persistent, model-agnostic context layer that outlasts any single AI session — so Claude, Cursor, Gemini, and Copilot all enforce the same rules without being told twice.
 
-You write rules in plain English. AI agents ignore them. Totem compiles those rules into mathematical AST/Regex checks that block bad code before it commits. Zero LLM. Zero hallucination. ~2 seconds.
+Totem doesn't ship with your app. It lives in your workflow.
 
 ## The 10-Second Workflow
 
@@ -28,7 +28,7 @@ Write code with your AI. Run `totem lint`. Push with confidence. Run `totem stat
 npx @mmnto/cli init
 ```
 
-Auto-detects your environment (Cursor, Copilot, Junie) and sets up `totem.config.ts`. You can also use `totem init --bare` to skip defaults and start with a clean slate (#659).
+Auto-detects your environment (Cursor, Copilot, Junie) and sets up `totem.config.ts`. You can also use `totem init --bare` to skip defaults and start with a clean slate.
 
 Ships with **60 battle-tested lessons** extracted from PR reviews across major ecosystem tools:
 
@@ -86,31 +86,44 @@ npx @mmnto/cli lint    # Run compiled rules (zero LLM)
 
 During `init`, Totem prompts to install a `pre-push` git hook that runs `totem lint` automatically before every push. It drops a standard shell script into `.git/hooks/` — works alongside Husky, lint-staged, or bare repos. Run `totem hooks --check` to verify installation at any time.
 
+## The Planning Pipeline
+
+Before your AI writes a single line of code, `totem spec` builds a threat-modeled implementation plan:
+
+```bash
+$ npx @mmnto/cli spec 570
+[Spec] Linked index: .strategy
+[Spec] Querying Totem index...
+[Spec] Found: 5 specs, 3 code, 0 lessons
+```
+
+`totem spec` fetches your issue, queries the project's knowledge index for relevant architectural traps, and generates a spec that tells your AI agent what to build _and_ what to avoid. It's the difference between "implement this feature" and "implement this feature, but here are the 5 mistakes the last agent made on a similar task."
+
+Cross-totem queries (`linkedIndexes`) let the planner pull context from multiple projects simultaneously — strategy docs inform code decisions, shared design systems inform component repos.
+
 ## What Totem Actually Is
 
-**We don't compile your code. We compile your rules.**
+**A persistent memory that every AI agent shares.**
 
-Your `.cursorrules` and `.mdc` files are plain English. Totem reads them and generates deterministic AST/Regex queries — the same enforcement you'd get from Semgrep, but sourced from your own natural language instructions.
+AI coding agents are brilliant but forgetful. They'll nail a complex algorithm, then immediately violate the architectural rule you corrected them on five minutes ago. Totem fixes this by creating a layer that persists across sessions, across models, and across tools.
 
-- **Enforcement & Verification:**
-  - **Instruction Verifier:** We prove the agent obeyed your prompt. `totem init` auto-ingests your existing `.cursorrules` and `.mdc` files.
-  - **Deterministic Execution:** `totem lint` uses our Tier 2 AST engine for robust parsing (#659). It enforces strictly "Complete or Broken" guardrail rules with zero LLMs or API keys (#663).
-- **Knowledge & Learning:**
-  - **Continuous Learning:** Catch a bug in a PR? Run `totem extract` to compile a new invariant, ensuring that specific bug never merges again.
-  - **Universal Baseline:** 60 lessons ship out of the box based on real failures from Vercel, Meta, and Prisma. Covers frontend, backend, and tooling domains.
+- **Compile:** Your `.cursorrules` and `.mdc` files are plain English. Totem compiles them into deterministic AST and regex checks — the same enforcement you'd get from Semgrep, but sourced from your own natural language instructions.
+- **Enforce:** `totem lint` runs compiled rules against your diff. Zero LLM. Zero API keys. ~2 seconds. Your pre-push hook catches violations before they reach the repo.
+- **Learn:** Catch a bug in a PR? Run `totem extract` to compile a new invariant, ensuring that specific bug can never be merged again. The knowledge base grows with every review.
+- **Plan:** `totem spec` queries the knowledge index before your AI writes code, surfacing past mistakes and architectural constraints. The AI starts informed instead of blank.
 
-**Totem is not another AI orchestration framework.** It is a closed-loop enforcement tool for the tools you already use.
+**Totem doesn't replace your AI. It gives your AI a memory.**
 
-## The Solo Dev Superpower
+## Switch Models Without Losing Context
 
-If you're a solo dev or small team using multiple AI agents (Cursor + Claude Code, Gemini + Copilot), Totem is your **Shared Memory Bus**.
+Use Claude today, Gemini tomorrow, Copilot next week. It doesn't matter. Totem creates a persistent, model-agnostic layer that outlasts any single AI.
 
-- Lessons learned in one agent session are available to all agents via MCP.
-- Rules compiled from Cursor instructions are enforced in Claude Code's pre-push hook using the deterministic `totem lint` engine.
-- Share knowledge between local repositories using `totem link` and execute cross-totem queries via the `linkedIndexes` config (#665).
-- `totem stats` shows your team (or your boss) exactly how many violations were prevented.
+- **Shared memory:** Lessons learned in one agent session are available to all agents via MCP.
+- **Portable rules:** Rules compiled from Cursor instructions are enforced in Claude Code's pre-push hook. The enforcement is model-independent.
+- **Cross-project knowledge:** Share lessons between repositories using `totem link`. Query multiple knowledge bases simultaneously via `linkedIndexes`.
+- **Prove ROI:** `totem stats` shows exactly how many violations were prevented, regardless of which AI introduced the code.
 
-Stop repeating "no, use Zod here" to every agent in every session. Teach Totem once. It remembers forever.
+Teach Totem once. It remembers forever.
 
 ## Enterprise Grade
 
@@ -123,7 +136,7 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
 - **Reliability & Portability:**
   - **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs and safe simultaneous MCP mutations.
   - **Cross-Platform Readiness:** V1.0 portability audits guarantee consistent behavior across major operating systems.
-  - **Index Stability:** Dimension mismatch detection via `index-meta.json` prevents database corruption during embedder changes (#660).
+  - **Index Stability:** Dimension mismatch detection via `index-meta.json` prevents database corruption during embedder changes.
 - **Rule Architecture:**
   - **Severity Levels:** Rules are classified as `error` (blocks CI) or `warning` (informs, doesn't block).
   - **Categorization:** Compiled rules span security, architecture, style, and performance domains.
@@ -170,8 +183,10 @@ Full reference: [CLI Reference Wiki](./docs/wiki/cli-reference.md)
 
 # Troubleshooting
 
-Manually maintained content that `totem docs` must include in the wiki.
-This file is the source of truth for troubleshooting notes — edit here, not in the generated wiki.
+<!--
+Source of truth: docs/manual/troubleshooting.md
+This content is injected by totem docs — edit the source file, not here.
+-->
 
 ## Git Hooks
 
