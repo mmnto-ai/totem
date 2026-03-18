@@ -34,6 +34,7 @@ function checkUnstagedChanges(projectRoot: string): string | null {
       cwd: projectRoot,
       encoding: 'utf-8',
       timeout: 5000,
+      shell: process.platform === 'win32',
     }).trim();
     if (output) {
       const files = output.split('\n').slice(0, 10);
@@ -77,7 +78,12 @@ function runLint(projectRoot: string): Promise<{ success: boolean; output: strin
 
     const timer = setTimeout(() => {
       try {
-        child.kill();
+        if (process.platform === 'win32' && child.pid) {
+          const { execSync } = require('node:child_process');
+          execSync(`taskkill /pid ${child.pid} /T /F`, { stdio: 'ignore' });
+        } else {
+          child.kill();
+        }
       } catch {
         // Best effort
       }
@@ -86,7 +92,7 @@ function runLint(projectRoot: string): Promise<{ success: boolean; output: strin
 
     child.on('close', (code) => {
       clearTimeout(timer);
-      resolve({ success: code === 0, output: chunks.join('') });
+      resolve({ success: code === 0, output: chunks.reduce((acc, c) => acc + c, '') });
     });
 
     child.on('error', (err) => {

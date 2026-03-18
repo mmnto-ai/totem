@@ -127,7 +127,7 @@ export const UNIVERSAL_BASELINE_LESSONS: Array<{
   {
     heading: 'Empty catch blocks hide critical failures',
     tags: ['error-handling', 'universal'],
-    body: 'catch (e) {} swallows the error silently. The operation appears to succeed but downstream code operates on undefined or stale data. At minimum, log the error. Better: re-throw or return a typed error result. Fix: At minimum, log the error with context. If the error is truly safe to ignore, add a comment explaining why.',
+    body: 'catch (e) {} swallows the error silently. The operation appears to succeed but downstream code operates on undefined or stale data. At minimum, log the error. Better: rethrow or return a typed error result. Fix: At minimum, log the error with context. If the error is truly safe to ignore, add a comment explaining why.',
   },
   {
     heading: 'Dev tooling modifying execution paths incorrectly',
