@@ -34,6 +34,8 @@
 
 ## Totem
 
+- **Before starting issue work:** run `totem spec <issue>` to generate an implementation spec.
+- **Before pushing:** run `totem shield` to catch violations. Fix them — never bypass.
 - After merging a PR: run `totem extract <pr> --yes`, then `totem docs` if releasing.
 - **NEVER use `git push --no-verify`.** Fix the violation or file a ticket.
 - Before planning/architecture, query `mcp__totem-strategy__search_knowledge` for ADRs.
