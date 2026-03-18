@@ -12,7 +12,7 @@ Totem doesn't ship with your app. It lives in your workflow. It also works on no
 
 ```bash
 $ npx @mmnto/cli lint
-✓ PASS — 137 rules, 0 violations.
+✓ PASS — 147 rules, 0 violations.
 
 $ npx @mmnto/cli stats
 Total violations prevented: 47 | security: 12, architecture: 35
@@ -137,7 +137,9 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
   - **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs. They also guarantee safe simultaneous MCP mutations.
   - **Cross-Platform Readiness:** V1.0 portability audits guarantee consistent behavior across major operating systems.
   - **Index Stability:** Dimension mismatch detection via `index-meta.json` prevents database corruption. Auto-healing migrations handle embedder changes automatically.
+  - **Error Handling:** Typed `TotemError` subclasses unify error domains and provide actionable recovery hints for resilient operations (#711).
 - **Rule Architecture:**
+  - **Curated Baselines:** Features a highly-curated 147-rule set with mandatory verify steps to guarantee execution determinism (#708).
   - **Severity Levels:** Rules are classified as `error` (blocks CI) or `warning` (informs, doesn't block).
   - **Categorization:** Compiled rules span security, architecture, style, and performance domains.
 
