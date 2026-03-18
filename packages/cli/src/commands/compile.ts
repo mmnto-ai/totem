@@ -79,6 +79,38 @@ Output: {"compilable": true, "pattern": "text:\\\\s*(?!formatXmlResponse)\\\\b\\
 
 Lesson: "Use @clack/prompts instead of inquirer for CLI interactions"
 Output: {"compilable": true, "pattern": "import.*from\\\\s+['\"]inquirer['\"]", "message": "Use @clack/prompts instead of inquirer", "fileGlobs": ["packages/cli/**/*.ts"]}
+
+## AST Queries (Tier 2)
+If the lesson describes a STRUCTURAL constraint that cannot be expressed as a single-line regex, you may output an AST query instead.
+
+Set \`"engine": "ast"\` and provide an \`"astQuery"\` field with a Tree-sitter S-expression query. Leave \`"pattern"\` as an empty string.
+
+Tree-sitter S-expression syntax:
+- \`(node_type)\` — matches a node
+- \`(node_type field: (child_type))\` — matches with named field
+- \`@name\` — captures a node
+- \`(#eq? @name "value")\` — predicate: capture text equals value
+- Use \`@violation\` capture name for the node that should be flagged
+
+Examples:
+- Catch direct process.env access:
+  \`(member_expression object: (identifier) @obj (#eq? @obj "process") property: (property_identifier) @prop (#eq? @prop "env")) @violation\`
+- Catch empty catch blocks:
+  \`(catch_clause body: (statement_block) @body (#eq? @body "{}")) @violation\`
+
+AST query output schema:
+\`\`\`json
+{
+  "compilable": true,
+  "engine": "ast",
+  "astQuery": "(s-expression query here) @violation",
+  "pattern": "",
+  "message": "human-readable violation message",
+  "fileGlobs": ["**/*.ts", "**/*.tsx"]
+}
+\`\`\`
+
+IMPORTANT: Only use AST queries for TypeScript/JavaScript/TSX/JSX files. If the lesson applies to other file types, prefer regex or mark as non-compilable.
 `;
 
 // ─── Glob sanitization ─────────────────────────────

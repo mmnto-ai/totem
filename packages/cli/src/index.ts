@@ -45,9 +45,13 @@ program
 program
   .command('init')
   .description('Initialize Totem in the current project')
-  .action(async () => {
+  .option(
+    '--bare',
+    'Initialize without package manager checks or Git hooks (ideal for notes/docs repos)',
+  )
+  .action(async (options: { bare?: boolean }) => {
     try {
-      await initCommand();
+      await initCommand({ bare: options.bare });
     } catch (err) {
       handleError(err);
     }

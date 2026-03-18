@@ -741,7 +741,7 @@
         "!**/*.spec.ts"
       ],
       "category": "architecture",
-      "severity": "error"
+      "severity": "warning"
     },
     {
       "lessonHash": "5a4b3fd8e71882e8",

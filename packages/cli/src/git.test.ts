@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('node:child_process', () => ({
   execFileSync: vi.fn(),
+  execFile: vi.fn(),
+  execSync: vi.fn(),
 }));
 
 import { getGitLogSince, getLatestTag, getTagDate, isFileDirty } from './git.js';

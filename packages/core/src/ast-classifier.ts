@@ -16,7 +16,7 @@ const grammarCache = new Map<SupportedLanguage, import('web-tree-sitter').Langua
 /**
  * Initialize web-tree-sitter WASM engine. Idempotent — safe to call multiple times.
  */
-async function ensureInit(): Promise<void> {
+export async function ensureInit(): Promise<void> {
   if (Parser) return;
   if (initPromise) return initPromise;
 
@@ -37,7 +37,9 @@ async function ensureInit(): Promise<void> {
 /**
  * Load a Tree-sitter grammar WASM file for the given language.
  */
-async function loadGrammar(lang: SupportedLanguage): Promise<import('web-tree-sitter').Language> {
+export async function loadGrammar(
+  lang: SupportedLanguage,
+): Promise<import('web-tree-sitter').Language> {
   const cached = grammarCache.get(lang);
   if (cached) return cached;
 

@@ -57,6 +57,7 @@ let mockChild: MockChild;
 
 vi.mock('node:child_process', () => ({
   spawn: vi.fn(() => mockChild),
+  execFile: vi.fn(),
 }));
 
 // ─── Import orchestrators ───────────────────────────

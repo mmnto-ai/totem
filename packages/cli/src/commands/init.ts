@@ -860,7 +860,7 @@ interface InitSummaryEntry {
   action: string;
 }
 
-export async function initCommand(): Promise<void> {
+export async function initCommand(options?: { bare?: boolean }): Promise<void> {
   const cwd = process.cwd();
   const configPath = path.join(cwd, 'totem.config.ts');
   const totemDir = path.join(cwd, '.totem');
@@ -875,79 +875,92 @@ export async function initCommand(): Promise<void> {
     if (!configExists) {
       // --- Fresh install: generate config ---
       log.info('Totem', 'Scanning project...');
-      const detected = detectProject(cwd);
 
-      const detections: string[] = [];
-      if (detected.hasTypeScript) detections.push('TypeScript');
-      if (detected.hasSrc) detections.push('src/');
-      if (detected.hasDocs) detections.push('docs/');
-      if (detected.hasSpecs) detections.push('specs/');
-      if (detected.hasContext) detections.push('context/');
-      if (detected.hasSessions) detections.push('session logs');
-
-      if (detections.length > 0) {
-        log.info('Totem', `Detected: ${bold(detections.join(', '))}`);
-      } else {
-        log.dim('Totem', 'No specific project structure detected. Using markdown defaults.');
-      }
-
-      const targets = buildTargets(detected);
-
-      // Auto-detect embedding tier from environment
+      let targets: IngestTarget[] = [];
       let embeddingTier = detectEmbeddingTier(cwd);
 
-      if (embeddingTier === 'openai') {
-        log.info(
-          'Totem',
-          `Detected ${bold('OPENAI_API_KEY')} in environment. Using OpenAI embeddings.`,
-        );
-      } else if (embeddingTier === 'gemini') {
-        log.info(
-          'Totem',
-          `Detected ${bold('GEMINI_API_KEY')} in environment. Using Gemini embeddings (single-key DX).`,
-        );
+      if (options?.bare) {
+        log.info('Totem', `Initializing in ${bold('bare mode')} (non-code repository)`);
+        targets = [
+          { glob: '.totem/lessons/*.md', type: 'lesson', strategy: 'markdown-heading' },
+          { glob: '.totem/lessons.md', type: 'lesson', strategy: 'markdown-heading' },
+          { glob: '**/*.md', type: 'spec', strategy: 'markdown-heading' },
+        ];
+        embeddingTier = 'none'; // Force Lite tier for bare repos
       } else {
-        // No key detected — prompt the user
-        const answer = await rl.question(
-          'Enter your OpenAI API key, type "ollama" for a local model, or press Enter for Lite tier: ',
-        );
+        const detected = detectProject(cwd);
 
-        const input = answer.trim().replace(/[\r\n]/g, '');
-        if (input.toLowerCase() === 'ollama') {
-          embeddingTier = 'ollama';
-          log.info('Totem', 'Configured for Ollama. Make sure it is running locally.');
-        } else if (input) {
-          if (!/^sk-[a-zA-Z0-9_-]+$/.test(input)) {
-            log.warn(
-              'Totem',
-              'API key does not look like a valid OpenAI key (expected sk-...). Starting in Lite tier.',
-            );
-          } else {
-            const envPath = path.join(cwd, '.env');
-            const envLine = `OPENAI_API_KEY="${input}"\n`;
+        const detections: string[] = [];
+        if (detected.hasTypeScript) detections.push('TypeScript');
+        if (detected.hasSrc) detections.push('src/');
+        if (detected.hasDocs) detections.push('docs/');
+        if (detected.hasSpecs) detections.push('specs/');
+        if (detected.hasContext) detections.push('context/');
+        if (detected.hasSessions) detections.push('session logs');
 
-            if (fs.existsSync(envPath)) {
-              const existing = fs.readFileSync(envPath, 'utf-8');
-              if (!/^\s*OPENAI_API_KEY\s*=/m.test(existing)) {
-                const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
-                fs.appendFileSync(envPath, prefix + envLine);
-              }
+        if (detections.length > 0) {
+          log.info('Totem', `Detected: ${bold(detections.join(', '))}`);
+        } else {
+          log.dim('Totem', 'No specific project structure detected. Using markdown defaults.');
+        }
+
+        targets = buildTargets(detected);
+
+        if (embeddingTier === 'openai') {
+          log.info(
+            'Totem',
+            `Detected ${bold('OPENAI_API_KEY')} in environment. Using OpenAI embeddings.`,
+          );
+        } else if (embeddingTier === 'gemini') {
+          log.info(
+            'Totem',
+            `Detected ${bold('GEMINI_API_KEY')} in environment. Using Gemini embeddings (single-key DX).`,
+          );
+        } else {
+          // No key detected — prompt the user
+          const answer = await rl.question(
+            'Enter your OpenAI API key, type "ollama" for a local model, or press Enter for Lite tier: ',
+          );
+
+          const input = answer.trim().replace(/[\r\n]/g, '');
+          if (input.toLowerCase() === 'ollama') {
+            embeddingTier = 'ollama';
+            log.info('Totem', 'Configured for Ollama. Make sure it is running locally.');
+          } else if (input) {
+            if (!/^sk-[a-zA-Z0-9_-]+$/.test(input)) {
+              log.warn(
+                'Totem',
+                'API key does not look like a valid OpenAI key (expected sk-...). Starting in Lite tier.',
+              );
             } else {
-              fs.writeFileSync(envPath, envLine);
-            }
+              const envPath = path.join(cwd, '.env');
+              const envLine = `OPENAI_API_KEY="${input}"\n`;
 
-            embeddingTier = 'openai';
-            summary.push({ file: '.env', action: 'Saved OpenAI API key' });
+              if (fs.existsSync(envPath)) {
+                const existing = fs.readFileSync(envPath, 'utf-8');
+                if (!/^\s*OPENAI_API_KEY\s*=/m.test(existing)) {
+                  const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+                  fs.appendFileSync(envPath, prefix + envLine);
+                }
+              } else {
+                fs.writeFileSync(envPath, envLine);
+              }
+
+              embeddingTier = 'openai';
+              summary.push({ file: '.env', action: 'Saved OpenAI API key' });
+            }
           }
         }
       }
 
       if (embeddingTier === 'none') {
         log.info('Totem', `Starting in ${bold('Lite')} tier (add-lesson, bridge, eject only).`);
-        log.dim(
-          'Totem',
-          'Set OPENAI_API_KEY and re-run `totem init` to unlock sync/search/shield.',
-        );
+        if (!options?.bare) {
+          log.dim(
+            'Totem',
+            'Set OPENAI_API_KEY and re-run `totem init` to unlock sync/search/shield.',
+          );
+        }
       }
 
       const configContent = await generateConfig(targets, embeddingTier, cwd);
@@ -1011,203 +1024,210 @@ export async function initCommand(): Promise<void> {
       }
     }
 
-    // --- Unified AI tool selection ---
-    const detectedTools = detectAiTools(cwd);
+    if (options?.bare) {
+      log.info('Totem', 'Skipping AI tool and hook installation for bare mode.');
+    } else {
+      // --- Unified AI tool selection ---
+      const detectedTools = detectAiTools(cwd);
 
-    if (detectedTools.length > 0) {
-      const toolNames = detectedTools.map((t) => t.name).join(', ');
-      log.info('Totem', `Detected AI tools: ${bold(toolNames)}`);
-      const toolAnswer = await rl.question(
-        'Which tools should Totem configure? [all/none/select] (default: all): ',
-      );
+      if (detectedTools.length > 0) {
+        const toolNames = detectedTools.map((t) => t.name).join(', ');
+        log.info('Totem', `Detected AI tools: ${bold(toolNames)}`);
+        const toolAnswer = await rl.question(
+          'Which tools should Totem configure? [all/none/select] (default: all): ',
+        );
 
-      let selectedTools: AiToolInfo[];
-      const trimmed = toolAnswer.trim().toLowerCase();
+        let selectedTools: AiToolInfo[];
+        const trimmed = toolAnswer.trim().toLowerCase();
 
-      if (trimmed === 'none') {
-        selectedTools = [];
-      } else if (trimmed === 'select') {
-        selectedTools = [];
-        for (const tool of detectedTools) {
-          const pick = await rl.question(`  Configure ${tool.name}? (Y/n): `);
-          if (pick.trim().toLowerCase() !== 'n' && pick.trim().toLowerCase() !== 'no') {
-            selectedTools.push(tool);
-          }
-        }
-      } else {
-        // 'all' or Enter (default)
-        selectedTools = detectedTools;
-      }
-
-      // --- MCP scaffolding for selected tools ---
-      for (const tool of selectedTools) {
-        if (!tool.mcpPath || !tool.serverEntry) continue;
-        const filePath = path.join(cwd, tool.mcpPath);
-        const result = scaffoldMcpConfig(filePath, tool.serverEntry);
-
-        if (result.err) {
-          log.error('Totem Error', result.err); // totem-ignore — result.err is internal scaffolding error, not LLM output
-          console.error(
-            `To fix this, add the following manually to your ${tool.mcpPath} under "mcpServers":\n`,
-          );
-          console.error(`  "totem": ${JSON.stringify(tool.serverEntry, null, 2)}\n`);
-        } else if (result.action === 'created') {
-          summary.push({ file: tool.mcpPath, action: `Created with Totem MCP server` });
-        } else if (result.action === 'merged') {
-          summary.push({ file: tool.mcpPath, action: `Added totem to mcpServers` });
-        }
-      }
-
-      // --- Reflex injection & upgrade for selected tools ---
-      const outdatedFiles: Array<{ tool: AiToolInfo; filePath: string }> = [];
-
-      for (const tool of selectedTools) {
-        if (!tool.reflexFile) continue;
-        const filePath = path.join(cwd, tool.reflexFile);
-        try {
-          const result = injectReflexes(filePath);
-          if (result === 'injected') {
-            summary.push({ file: tool.reflexFile, action: 'Injected memory reflexes (v2)' });
-          } else if (result === 'outdated') {
-            outdatedFiles.push({ tool, filePath });
-          }
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          log.error('Totem Error', `Failed to inject reflexes into ${tool.reflexFile}: ${message}`);
-        }
-      }
-
-      // Prompt once for all outdated reflex files
-      if (outdatedFiles.length > 0) {
-        const fileList = outdatedFiles.map((f) => f.tool.reflexFile).join(', ');
-        log.warn('Totem', `Outdated reflexes found in: ${bold(fileList)}`);
-
-        let shouldUpgrade = false;
-        if (process.stdin.isTTY) {
-          const answer = await rl.question(`Upgrade reflexes to v${REFLEX_VERSION}? (Y/n): `);
-          shouldUpgrade =
-            answer.trim().toLowerCase() !== 'n' && answer.trim().toLowerCase() !== 'no';
-        } else {
-          // Non-TTY (CI/scripted): auto-upgrade to match baseline lessons behavior
-          shouldUpgrade = true;
-          log.info('Totem', 'Non-interactive mode — auto-upgrading reflexes.');
-        }
-
-        if (shouldUpgrade) {
-          for (const { tool, filePath } of outdatedFiles) {
-            try {
-              const clean = applyReflexUpgrade(filePath);
-              if (clean) {
-                summary.push({
-                  file: tool.reflexFile!,
-                  action: `Upgraded reflexes to v${REFLEX_VERSION}`,
-                });
-              } else {
-                summary.push({
-                  file: tool.reflexFile!,
-                  action: `Appended v${REFLEX_VERSION} reflexes (manual cleanup needed — remove old block)`,
-                });
-                log.warn(
-                  'Totem',
-                  `Could not cleanly replace old reflexes in ${tool.reflexFile}. New block appended — please remove the old one manually.`,
-                );
-              }
-            } catch (err) {
-              const message = err instanceof Error ? err.message : String(err);
-              log.error(
-                'Totem Error',
-                `Failed to upgrade reflexes in ${tool.reflexFile}: ${message}`,
-              );
+        if (trimmed === 'none') {
+          selectedTools = [];
+        } else if (trimmed === 'select') {
+          selectedTools = [];
+          for (const tool of detectedTools) {
+            const pick = await rl.question(`  Configure ${tool.name}? (Y/n): `);
+            if (pick.trim().toLowerCase() !== 'n' && pick.trim().toLowerCase() !== 'no') {
+              selectedTools.push(tool);
             }
           }
         } else {
-          for (const { tool } of outdatedFiles) {
-            summary.push({
-              file: tool.reflexFile!,
-              action: 'Outdated reflexes — upgrade declined',
-            });
-          }
+          // 'all' or Enter (default)
+          selectedTools = detectedTools;
         }
-      }
 
-      // --- Hook installation for selected tools ---
-      for (const tool of selectedTools) {
-        if (!tool.hookInstaller) continue;
-        const results = await tool.hookInstaller(cwd);
-        for (const result of results) {
+        // --- MCP scaffolding for selected tools ---
+        for (const tool of selectedTools) {
+          if (!tool.mcpPath || !tool.serverEntry) continue;
+          const filePath = path.join(cwd, tool.mcpPath);
+          const result = scaffoldMcpConfig(filePath, tool.serverEntry);
+
           if (result.err) {
-            log.error('Totem Error', `Hook scaffolding failed for ${result.file}: ${result.err}`); // totem-ignore — internal hook installer error
+            log.error('Totem Error', result.err); // totem-ignore — result.err is internal scaffolding error, not LLM output
+            console.error(
+              `To fix this, add the following manually to your ${tool.mcpPath} under "mcpServers":\n`,
+            );
+            console.error(`  "totem": ${JSON.stringify(tool.serverEntry, null, 2)}\n`);
           } else if (result.action === 'created') {
-            summary.push({ file: result.file, action: `Scaffolded ${tool.name} hook` });
+            summary.push({ file: tool.mcpPath, action: `Created with Totem MCP server` });
           } else if (result.action === 'merged') {
-            summary.push({
-              file: result.file,
-              action: `Merged ${tool.name} hook into existing config`,
-            });
+            summary.push({ file: tool.mcpPath, action: `Added totem to mcpServers` });
+          }
+        }
+
+        // --- Reflex injection & upgrade for selected tools ---
+        const outdatedFiles: Array<{ tool: AiToolInfo; filePath: string }> = [];
+
+        for (const tool of selectedTools) {
+          if (!tool.reflexFile) continue;
+          const filePath = path.join(cwd, tool.reflexFile);
+          try {
+            const result = injectReflexes(filePath);
+            if (result === 'injected') {
+              summary.push({ file: tool.reflexFile, action: 'Injected memory reflexes (v2)' });
+            } else if (result === 'outdated') {
+              outdatedFiles.push({ tool, filePath });
+            }
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            log.error(
+              'Totem Error',
+              `Failed to inject reflexes into ${tool.reflexFile}: ${message}`,
+            );
+          }
+        }
+
+        // Prompt once for all outdated reflex files
+        if (outdatedFiles.length > 0) {
+          const fileList = outdatedFiles.map((f) => f.tool.reflexFile).join(', ');
+          log.warn('Totem', `Outdated reflexes found in: ${bold(fileList)}`);
+
+          let shouldUpgrade = false;
+          if (process.stdin.isTTY) {
+            const answer = await rl.question(`Upgrade reflexes to v${REFLEX_VERSION}? (Y/n): `);
+            shouldUpgrade =
+              answer.trim().toLowerCase() !== 'n' && answer.trim().toLowerCase() !== 'no';
+          } else {
+            // Non-TTY (CI/scripted): auto-upgrade to match baseline lessons behavior
+            shouldUpgrade = true;
+            log.info('Totem', 'Non-interactive mode — auto-upgrading reflexes.');
+          }
+
+          if (shouldUpgrade) {
+            for (const { tool, filePath } of outdatedFiles) {
+              try {
+                const clean = applyReflexUpgrade(filePath);
+                if (clean) {
+                  summary.push({
+                    file: tool.reflexFile!,
+                    action: `Upgraded reflexes to v${REFLEX_VERSION}`,
+                  });
+                } else {
+                  summary.push({
+                    file: tool.reflexFile!,
+                    action: `Appended v${REFLEX_VERSION} reflexes (manual cleanup needed — remove old block)`,
+                  });
+                  log.warn(
+                    'Totem',
+                    `Could not cleanly replace old reflexes in ${tool.reflexFile}. New block appended — please remove the old one manually.`,
+                  );
+                }
+              } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                log.error(
+                  'Totem Error',
+                  `Failed to upgrade reflexes in ${tool.reflexFile}: ${message}`,
+                );
+              }
+            }
+          } else {
+            for (const { tool } of outdatedFiles) {
+              summary.push({
+                file: tool.reflexFile!,
+                action: 'Outdated reflexes — upgrade declined',
+              });
+            }
+          }
+        }
+
+        // --- Hook installation for selected tools ---
+        for (const tool of selectedTools) {
+          if (!tool.hookInstaller) continue;
+          const results = await tool.hookInstaller(cwd);
+          for (const result of results) {
+            if (result.err) {
+              log.error('Totem Error', `Hook scaffolding failed for ${result.file}: ${result.err}`); // totem-ignore — internal hook installer error
+            } else if (result.action === 'created') {
+              summary.push({ file: result.file, action: `Scaffolded ${tool.name} hook` });
+            } else if (result.action === 'merged') {
+              summary.push({
+                file: result.file,
+                action: `Merged ${tool.name} hook into existing config`,
+              });
+            }
           }
         }
       }
-    }
 
-    // --- Always run: enforcement hooks (pre-commit + pre-push) ---
-    const enforcement = await installEnforcementHooks(cwd, rl);
-    if (enforcement.preCommit === 'installed' || enforcement.preCommit === 'appended') {
-      summary.push({
-        file: '.git/hooks/pre-commit',
-        action: `${enforcement.preCommit === 'installed' ? 'Installed' : 'Appended'} main-branch protection`,
-      });
-    } else if (enforcement.preCommit === 'skipped-non-shell') {
-      summary.push({
-        file: '.git/hooks/pre-commit',
-        action: 'Skipped — non-shell hook detected (manual integration needed)',
-      });
-    }
-    if (enforcement.prePush === 'installed' || enforcement.prePush === 'appended') {
-      summary.push({
-        file: '.git/hooks/pre-push',
-        action: `${enforcement.prePush === 'installed' ? 'Installed' : 'Appended'} deterministic shield gate`,
-      });
-    } else if (enforcement.prePush === 'skipped-non-shell') {
-      summary.push({
-        file: '.git/hooks/pre-push',
-        action: 'Skipped — non-shell hook detected (manual integration needed)',
-      });
-    }
-
-    // --- Always run: post-merge git hook ---
-    await installPostMergeHook(cwd, rl);
-
-    // --- Always run: .gitignore ---
-    const gitignorePath = path.join(cwd, '.gitignore');
-    if (fs.existsSync(gitignorePath)) {
-      const gitignore = fs.readFileSync(gitignorePath, 'utf-8');
-      if (!gitignore.includes('.lancedb')) {
-        fs.appendFileSync(gitignorePath, '\n# Totem\n.lancedb/\n');
-        summary.push({ file: '.gitignore', action: 'Added .lancedb/ exclusion' });
+      // --- Always run: enforcement hooks (pre-commit + pre-push) ---
+      const enforcement = await installEnforcementHooks(cwd, rl);
+      if (enforcement.preCommit === 'installed' || enforcement.preCommit === 'appended') {
+        summary.push({
+          file: '.git/hooks/pre-commit',
+          action: `${enforcement.preCommit === 'installed' ? 'Installed' : 'Appended'} main-branch protection`,
+        });
+      } else if (enforcement.preCommit === 'skipped-non-shell') {
+        summary.push({
+          file: '.git/hooks/pre-commit',
+          action: 'Skipped — non-shell hook detected (manual integration needed)',
+        });
       }
-    }
+      if (enforcement.prePush === 'installed' || enforcement.prePush === 'appended') {
+        summary.push({
+          file: '.git/hooks/pre-push',
+          action: `${enforcement.prePush === 'installed' ? 'Installed' : 'Appended'} deterministic shield gate`,
+        });
+      } else if (enforcement.prePush === 'skipped-non-shell') {
+        summary.push({
+          file: '.git/hooks/pre-push',
+          action: 'Skipped — non-shell hook detected (manual integration needed)',
+        });
+      }
 
-    // --- Auto-ingest cursor rules (ADR-048) ---
-    const { scanCursorInstructions } = await import('@mmnto/totem');
-    const cursorInstructions = scanCursorInstructions(cwd);
-    if (cursorInstructions.length > 0) {
-      const answer = await rl.question(
-        `\nFound ${cursorInstructions.length} existing AI rule(s) (.cursorrules / .mdc). Compile into deterministic invariants? (Y/n): `,
-      );
-      if (answer.trim().toLowerCase() !== 'n' && answer.trim().toLowerCase() !== 'no') {
-        try {
-          const { compileCommand } = await import('./compile.js');
-          await compileCommand({ fromCursor: true });
-          summary.push({
-            file: '.totem/compiled-rules.json',
-            action: `Compiled ${cursorInstructions.length} cursor rule(s) into invariants`,
-          });
-        } catch (err) {
-          const detail = err instanceof Error ? err.message : String(err);
-          log.warn('Totem', `Could not compile cursor rules: ${detail}`);
+      // --- Always run: post-merge git hook ---
+      await installPostMergeHook(cwd, rl);
+
+      // --- Always run: .gitignore ---
+      const gitignorePath = path.join(cwd, '.gitignore');
+      if (fs.existsSync(gitignorePath)) {
+        const gitignore = fs.readFileSync(gitignorePath, 'utf-8');
+        if (!gitignore.includes('.lancedb')) {
+          fs.appendFileSync(gitignorePath, '\n# Totem\n.lancedb/\n');
+          summary.push({ file: '.gitignore', action: 'Added .lancedb/ exclusion' });
         }
       }
-    }
+
+      // --- Auto-ingest cursor rules (ADR-048) ---
+      const { scanCursorInstructions } = await import('@mmnto/totem');
+      const cursorInstructions = scanCursorInstructions(cwd);
+      if (cursorInstructions.length > 0) {
+        const answer = await rl.question(
+          `\nFound ${cursorInstructions.length} existing AI rule(s) (.cursorrules / .mdc). Compile into deterministic invariants? (Y/n): `,
+        );
+        if (answer.trim().toLowerCase() !== 'n' && answer.trim().toLowerCase() !== 'no') {
+          try {
+            const { compileCommand } = await import('./compile.js');
+            await compileCommand({ fromCursor: true });
+            summary.push({
+              file: '.totem/compiled-rules.json',
+              action: `Compiled ${cursorInstructions.length} cursor rule(s) into invariants`,
+            });
+          } catch (err) {
+            const detail = err instanceof Error ? err.message : String(err);
+            log.warn('Totem', `Could not compile cursor rules: ${detail}`);
+          }
+        }
+      }
+    } // end of bare mode else block
 
     // --- Print summary ---
     if (summary.length > 0) {

@@ -27,6 +27,7 @@ let mockChild: MockChild;
 
 vi.mock('node:child_process', () => ({
   spawn: vi.fn(() => mockChild),
+  execFile: vi.fn(),
 }));
 
 const { spawn } = await import('node:child_process');

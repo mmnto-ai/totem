@@ -1,9 +1,12 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 import safeRegex from 'safe-regex2';
 import { z } from 'zod';
 
+import { extensionToLanguage } from './ast-classifier.js';
+import { matchAstQueriesBatch } from './ast-query.js';
 import { TotemParseError } from './errors.js';
 
 // ─── Schemas ─────────────────────────────────────────
@@ -17,8 +20,10 @@ export const CompiledRuleSchema = z.object({
   pattern: z.string(),
   /** Human-readable violation message shown when the pattern matches */
   message: z.string(),
-  /** Engine type — only 'regex' for MVP */
-  engine: z.literal('regex'),
+  /** Engine type — 'regex' for line-level matching, 'ast' for Tree-sitter S-expression queries */
+  engine: z.enum(['regex', 'ast']),
+  /** Tree-sitter S-expression query (required when engine is 'ast') */
+  astQuery: z.string().optional(),
   /** ISO timestamp of when this rule was compiled */
   compiledAt: z.string(),
   /** ISO timestamp of when this rule was first created (survives recompilation) */
@@ -316,6 +321,91 @@ export function applyRulesToAdditions(
           file: addition.file,
           line: addition.line,
           lineNumber: addition.lineNumber,
+        });
+      }
+    }
+  }
+
+  return violations;
+}
+
+/**
+ * Apply AST-engine compiled rules against pre-extracted diff additions.
+ * Async because it reads files and runs Tree-sitter queries.
+ * Handles fileGlobs filtering and suppression same as regex rules.
+ */
+export async function applyAstRulesToAdditions(
+  rules: CompiledRule[],
+  additions: DiffAddition[],
+  cwd: string,
+  onRuleEvent?: RuleEventCallback,
+): Promise<Violation[]> {
+  const astRules = rules.filter((r) => r.engine === 'ast' && r.astQuery);
+  if (astRules.length === 0 || additions.length === 0) return [];
+
+  // Group additions by file
+  const byFile = new Map<string, DiffAddition[]>();
+  for (const a of additions) {
+    const existing = byFile.get(a.file);
+    if (existing) {
+      existing.push(a);
+    } else {
+      byFile.set(a.file, [a]);
+    }
+  }
+
+  const violations: Violation[] = [];
+
+  // Process each file once — batch all applicable AST queries per file
+  for (const [file, fileAdditions] of byFile) {
+    // Check language support
+    const ext = path.extname(file);
+    if (!extensionToLanguage(ext)) continue;
+
+    // Collect added line numbers, filtering suppressed lines
+    const addedLineNumbers: number[] = [];
+    for (const addition of fileAdditions) {
+      if (addition.astContext && addition.astContext !== 'code') continue;
+      if (isSuppressed(addition.line, addition.precedingLine)) continue;
+      addedLineNumbers.push(addition.lineNumber);
+    }
+    if (addedLineNumbers.length === 0) continue;
+
+    // Collect all applicable rules for this file
+    const applicableRules = astRules.filter((rule) => {
+      if (rule.fileGlobs && rule.fileGlobs.length > 0) {
+        return fileMatchesGlobs(file, rule.fileGlobs);
+      }
+      return true;
+    });
+    if (applicableRules.length === 0) continue;
+
+    // Batch: parse file once, run all queries against the cached tree
+    const queries = applicableRules.map((rule) => ({
+      astQuery: rule.astQuery!,
+      addedLineNumbers,
+    }));
+
+    const batchResults = await matchAstQueriesBatch(file, queries, cwd);
+
+    // Map results back to violations
+    for (const rule of applicableRules) {
+      const matches = batchResults.get(rule.astQuery!) ?? [];
+
+      // Check for suppressions per match
+      for (const match of matches) {
+        const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
+        if (addition && isSuppressed(addition.line, addition.precedingLine)) {
+          onRuleEvent?.('suppress', rule.lessonHash);
+          continue;
+        }
+
+        onRuleEvent?.('trigger', rule.lessonHash);
+        violations.push({
+          rule,
+          file,
+          line: match.lineText,
+          lineNumber: match.lineNumber,
         });
       }
     }
