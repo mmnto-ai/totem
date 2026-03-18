@@ -6,6 +6,7 @@ import safeRegex from 'safe-regex2';
 import { z } from 'zod';
 
 import { extensionToLanguage } from './ast-classifier.js';
+import { matchAstGrepPattern } from './ast-grep-query.js';
 import { matchAstQueriesBatch } from './ast-query.js';
 import { TotemParseError } from './errors.js';
 
@@ -20,10 +21,12 @@ export const CompiledRuleSchema = z.object({
   pattern: z.string(),
   /** Human-readable violation message shown when the pattern matches */
   message: z.string(),
-  /** Engine type — 'regex' for line-level matching, 'ast' for Tree-sitter S-expression queries */
-  engine: z.enum(['regex', 'ast']),
+  /** Engine type — 'regex' for line-level matching, 'ast' for Tree-sitter S-expression queries, 'ast-grep' for ast-grep structural patterns */
+  engine: z.enum(['regex', 'ast', 'ast-grep']),
   /** Tree-sitter S-expression query (required when engine is 'ast') */
   astQuery: z.string().optional(),
+  /** ast-grep structural pattern (required when engine is 'ast-grep') */
+  astGrepPattern: z.string().optional(),
   /** ISO timestamp of when this rule was compiled */
   compiledAt: z.string(),
   /** ISO timestamp of when this rule was first created (survives recompilation) */
@@ -331,6 +334,7 @@ export function applyRulesToAdditions(
 
 /**
  * Apply AST-engine compiled rules against pre-extracted diff additions.
+ * Handles both Tree-sitter S-expression ('ast') and ast-grep ('ast-grep') engines.
  * Async because it reads files and runs Tree-sitter queries.
  * Handles fileGlobs filtering and suppression same as regex rules.
  */
@@ -340,8 +344,11 @@ export async function applyAstRulesToAdditions(
   cwd: string,
   onRuleEvent?: RuleEventCallback,
 ): Promise<Violation[]> {
-  const astRules = rules.filter((r) => r.engine === 'ast' && r.astQuery);
-  if (astRules.length === 0 || additions.length === 0) return [];
+  const treeSitterRules = rules.filter((r) => r.engine === 'ast' && r.astQuery);
+  const astGrepRules = rules.filter((r) => r.engine === 'ast-grep' && r.astGrepPattern);
+  if ((treeSitterRules.length === 0 && astGrepRules.length === 0) || additions.length === 0) {
+    return [];
+  }
 
   // Group additions by file
   const byFile = new Map<string, DiffAddition[]>();
@@ -356,7 +363,7 @@ export async function applyAstRulesToAdditions(
 
   const violations: Violation[] = [];
 
-  // Process each file once — batch all applicable AST queries per file
+  // Process each file once — batch all applicable queries per file
   for (const [file, fileAdditions] of byFile) {
     // Check language support
     const ext = path.extname(file);
@@ -371,42 +378,92 @@ export async function applyAstRulesToAdditions(
     }
     if (addedLineNumbers.length === 0) continue;
 
-    // Collect all applicable rules for this file
-    const applicableRules = astRules.filter((rule) => {
-      if (rule.fileGlobs && rule.fileGlobs.length > 0) {
-        return fileMatchesGlobs(file, rule.fileGlobs);
+    // ── Tree-sitter S-expression rules ────────────────
+    if (treeSitterRules.length > 0) {
+      const applicableTreeSitter = treeSitterRules.filter((rule) => {
+        if (rule.fileGlobs && rule.fileGlobs.length > 0) {
+          return fileMatchesGlobs(file, rule.fileGlobs);
+        }
+        return true;
+      });
+
+      if (applicableTreeSitter.length > 0) {
+        // Batch: parse file once, run all queries against the cached tree
+        const queries = applicableTreeSitter.map((rule) => ({
+          astQuery: rule.astQuery!,
+          addedLineNumbers,
+        }));
+
+        const batchResults = await matchAstQueriesBatch(file, queries, cwd);
+
+        // Map results back to violations
+        for (const rule of applicableTreeSitter) {
+          const matches = batchResults.get(rule.astQuery!) ?? [];
+
+          for (const match of matches) {
+            const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
+            if (addition && isSuppressed(addition.line, addition.precedingLine)) {
+              onRuleEvent?.('suppress', rule.lessonHash);
+              continue;
+            }
+
+            onRuleEvent?.('trigger', rule.lessonHash);
+            violations.push({
+              rule,
+              file,
+              line: match.lineText,
+              lineNumber: match.lineNumber,
+            });
+          }
+        }
       }
-      return true;
-    });
-    if (applicableRules.length === 0) continue;
+    }
 
-    // Batch: parse file once, run all queries against the cached tree
-    const queries = applicableRules.map((rule) => ({
-      astQuery: rule.astQuery!,
-      addedLineNumbers,
-    }));
+    // ── ast-grep structural pattern rules ─────────────
+    if (astGrepRules.length > 0) {
+      const applicableAstGrep = astGrepRules.filter((rule) => {
+        if (rule.fileGlobs && rule.fileGlobs.length > 0) {
+          return fileMatchesGlobs(file, rule.fileGlobs);
+        }
+        return true;
+      });
 
-    const batchResults = await matchAstQueriesBatch(file, queries, cwd);
-
-    // Map results back to violations
-    for (const rule of applicableRules) {
-      const matches = batchResults.get(rule.astQuery!) ?? [];
-
-      // Check for suppressions per match
-      for (const match of matches) {
-        const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
-        if (addition && isSuppressed(addition.line, addition.precedingLine)) {
-          onRuleEvent?.('suppress', rule.lessonHash);
-          continue;
+      if (applicableAstGrep.length > 0) {
+        // Read file content once for all ast-grep rules on this file
+        let content: string | null = null;
+        try {
+          const fullPath = path.resolve(cwd, file);
+          content = fs.readFileSync(fullPath, 'utf-8');
+        } catch {
+          // Fall through — content stays null
         }
 
-        onRuleEvent?.('trigger', rule.lessonHash);
-        violations.push({
-          rule,
-          file,
-          line: match.lineText,
-          lineNumber: match.lineNumber,
-        });
+        if (content) {
+          for (const rule of applicableAstGrep) {
+            const matches = matchAstGrepPattern(
+              content,
+              ext,
+              rule.astGrepPattern!,
+              addedLineNumbers,
+            );
+
+            for (const match of matches) {
+              const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
+              if (addition && isSuppressed(addition.line, addition.precedingLine)) {
+                onRuleEvent?.('suppress', rule.lessonHash);
+                continue;
+              }
+
+              onRuleEvent?.('trigger', rule.lessonHash);
+              violations.push({
+                rule,
+                file,
+                line: match.lineText,
+                lineNumber: match.lineNumber,
+              });
+            }
+          }
+        }
       }
     }
   }
@@ -513,6 +570,9 @@ export const CompilerOutputSchema = z.object({
   pattern: z.string().optional(),
   message: z.string().optional(),
   fileGlobs: z.array(z.string()).optional(),
+  engine: z.enum(['regex', 'ast', 'ast-grep']).optional(),
+  astQuery: z.string().optional(),
+  astGrepPattern: z.string().optional(),
 });
 
 export type CompilerOutput = z.infer<typeof CompilerOutputSchema>;

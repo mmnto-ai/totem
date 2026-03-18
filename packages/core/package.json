@@ -19,6 +19,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ast-grep/napi": "^0.42.0",
     "@lancedb/lancedb": "^0.26.2",
     "apache-arrow": "17.0.0",
     "glob": "^11.0.0",
