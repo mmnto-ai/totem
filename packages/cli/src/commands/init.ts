@@ -860,7 +860,7 @@ interface InitSummaryEntry {
   action: string;
 }
 
-export async function initCommand(): Promise<void> {
+export async function initCommand(options?: { bare?: boolean }): Promise<void> {
   const cwd = process.cwd();
   const configPath = path.join(cwd, 'totem.config.ts');
   const totemDir = path.join(cwd, '.totem');
@@ -875,79 +875,92 @@ export async function initCommand(): Promise<void> {
     if (!configExists) {
       // --- Fresh install: generate config ---
       log.info('Totem', 'Scanning project...');
-      const detected = detectProject(cwd);
-
-      const detections: string[] = [];
-      if (detected.hasTypeScript) detections.push('TypeScript');
-      if (detected.hasSrc) detections.push('src/');
-      if (detected.hasDocs) detections.push('docs/');
-      if (detected.hasSpecs) detections.push('specs/');
-      if (detected.hasContext) detections.push('context/');
-      if (detected.hasSessions) detections.push('session logs');
-
-      if (detections.length > 0) {
-        log.info('Totem', `Detected: ${bold(detections.join(', '))}`);
-      } else {
-        log.dim('Totem', 'No specific project structure detected. Using markdown defaults.');
-      }
-
-      const targets = buildTargets(detected);
-
-      // Auto-detect embedding tier from environment
+      
+      let targets: IngestTarget[] = [];
       let embeddingTier = detectEmbeddingTier(cwd);
 
-      if (embeddingTier === 'openai') {
-        log.info(
-          'Totem',
-          `Detected ${bold('OPENAI_API_KEY')} in environment. Using OpenAI embeddings.`,
-        );
-      } else if (embeddingTier === 'gemini') {
-        log.info(
-          'Totem',
-          `Detected ${bold('GEMINI_API_KEY')} in environment. Using Gemini embeddings (single-key DX).`,
-        );
+      if (options?.bare) {
+        log.info('Totem', `Initializing in ${bold('bare mode')} (non-code repository)`);
+        targets = [
+          { glob: '.totem/lessons/*.md', type: 'lesson', strategy: 'markdown-heading' },
+          { glob: '.totem/lessons.md', type: 'lesson', strategy: 'markdown-heading' },
+          { glob: '**/*.md', type: 'spec', strategy: 'markdown-heading' }
+        ];
+        embeddingTier = 'none'; // Force Lite tier for bare repos
       } else {
-        // No key detected — prompt the user
-        const answer = await rl.question(
-          'Enter your OpenAI API key, type "ollama" for a local model, or press Enter for Lite tier: ',
-        );
+        const detected = detectProject(cwd);
 
-        const input = answer.trim().replace(/[\r\n]/g, '');
-        if (input.toLowerCase() === 'ollama') {
-          embeddingTier = 'ollama';
-          log.info('Totem', 'Configured for Ollama. Make sure it is running locally.');
-        } else if (input) {
-          if (!/^sk-[a-zA-Z0-9_-]+$/.test(input)) {
-            log.warn(
-              'Totem',
-              'API key does not look like a valid OpenAI key (expected sk-...). Starting in Lite tier.',
-            );
-          } else {
-            const envPath = path.join(cwd, '.env');
-            const envLine = `OPENAI_API_KEY="${input}"\n`;
+        const detections: string[] = [];
+        if (detected.hasTypeScript) detections.push('TypeScript');
+        if (detected.hasSrc) detections.push('src/');
+        if (detected.hasDocs) detections.push('docs/');
+        if (detected.hasSpecs) detections.push('specs/');
+        if (detected.hasContext) detections.push('context/');
+        if (detected.hasSessions) detections.push('session logs');
 
-            if (fs.existsSync(envPath)) {
-              const existing = fs.readFileSync(envPath, 'utf-8');
-              if (!/^\s*OPENAI_API_KEY\s*=/m.test(existing)) {
-                const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
-                fs.appendFileSync(envPath, prefix + envLine);
-              }
+        if (detections.length > 0) {
+          log.info('Totem', `Detected: ${bold(detections.join(', '))}`);
+        } else {
+          log.dim('Totem', 'No specific project structure detected. Using markdown defaults.');
+        }
+
+        targets = buildTargets(detected);
+
+        if (embeddingTier === 'openai') {
+          log.info(
+            'Totem',
+            `Detected ${bold('OPENAI_API_KEY')} in environment. Using OpenAI embeddings.`,
+          );
+        } else if (embeddingTier === 'gemini') {
+          log.info(
+            'Totem',
+            `Detected ${bold('GEMINI_API_KEY')} in environment. Using Gemini embeddings (single-key DX).`,
+          );
+        } else {
+          // No key detected — prompt the user
+          const answer = await rl.question(
+            'Enter your OpenAI API key, type "ollama" for a local model, or press Enter for Lite tier: ',
+          );
+
+          const input = answer.trim().replace(/[\r\n]/g, '');
+          if (input.toLowerCase() === 'ollama') {
+            embeddingTier = 'ollama';
+            log.info('Totem', 'Configured for Ollama. Make sure it is running locally.');
+          } else if (input) {
+            if (!/^sk-[a-zA-Z0-9_-]+$/.test(input)) {
+              log.warn(
+                'Totem',
+                'API key does not look like a valid OpenAI key (expected sk-...). Starting in Lite tier.',
+              );
             } else {
-              fs.writeFileSync(envPath, envLine);
-            }
+              const envPath = path.join(cwd, '.env');
+              const envLine = `OPENAI_API_KEY="${input}"\n`;
 
-            embeddingTier = 'openai';
-            summary.push({ file: '.env', action: 'Saved OpenAI API key' });
+              if (fs.existsSync(envPath)) {
+                const existing = fs.readFileSync(envPath, 'utf-8');
+                if (!/^\s*OPENAI_API_KEY\s*=/m.test(existing)) {
+                  const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+                  fs.appendFileSync(envPath, prefix + envLine);
+                }
+              } else {
+                fs.writeFileSync(envPath, envLine);
+              }
+
+              embeddingTier = 'openai';
+              summary.push({ file: '.env', action: 'Saved OpenAI API key' });
+            }
           }
         }
       }
 
       if (embeddingTier === 'none') {
         log.info('Totem', `Starting in ${bold('Lite')} tier (add-lesson, bridge, eject only).`);
-        log.dim(
-          'Totem',
-          'Set OPENAI_API_KEY and re-run `totem init` to unlock sync/search/shield.',
-        );
+        if (!options?.bare) {
+          log.dim(
+            'Totem',
+            'Set OPENAI_API_KEY and re-run `totem init` to unlock sync/search/shield.',
+          );
+        }
       }
 
       const configContent = await generateConfig(targets, embeddingTier, cwd);
@@ -1011,7 +1024,10 @@ export async function initCommand(): Promise<void> {
       }
     }
 
-    // --- Unified AI tool selection ---
+    if (options?.bare) {
+      log.info('Totem', 'Skipping AI tool and hook installation for bare mode.');
+    } else {
+      // --- Unified AI tool selection ---
     const detectedTools = detectAiTools(cwd);
 
     if (detectedTools.length > 0) {

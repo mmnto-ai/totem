@@ -4,6 +4,8 @@ import * as fs from 'node:fs';
 import safeRegex from 'safe-regex2';
 import { z } from 'zod';
 
+import { extensionToLanguage } from './ast-classifier.js';
+import { matchAstQuery } from './ast-query.js';
 import { TotemParseError } from './errors.js';
 
 // ─── Schemas ─────────────────────────────────────────
@@ -17,8 +19,10 @@ export const CompiledRuleSchema = z.object({
   pattern: z.string(),
   /** Human-readable violation message shown when the pattern matches */
   message: z.string(),
-  /** Engine type — only 'regex' for MVP */
-  engine: z.literal('regex'),
+  /** Engine type — 'regex' for line-level matching, 'ast' for Tree-sitter S-expression queries */
+  engine: z.enum(['regex', 'ast']),
+  /** Tree-sitter S-expression query (required when engine is 'ast') */
+  astQuery: z.string().optional(),
   /** ISO timestamp of when this rule was compiled */
   compiledAt: z.string(),
   /** ISO timestamp of when this rule was first created (survives recompilation) */
@@ -316,6 +320,80 @@ export function applyRulesToAdditions(
           file: addition.file,
           line: addition.line,
           lineNumber: addition.lineNumber,
+        });
+      }
+    }
+  }
+
+  return violations;
+}
+
+/**
+ * Apply AST-engine compiled rules against pre-extracted diff additions.
+ * Async because it reads files and runs Tree-sitter queries.
+ * Handles fileGlobs filtering and suppression same as regex rules.
+ */
+export async function applyAstRulesToAdditions(
+  rules: CompiledRule[],
+  additions: DiffAddition[],
+  cwd: string,
+  onRuleEvent?: RuleEventCallback,
+): Promise<Violation[]> {
+  const astRules = rules.filter((r) => r.engine === 'ast' && r.astQuery);
+  if (astRules.length === 0 || additions.length === 0) return [];
+
+  // Group additions by file
+  const byFile = new Map<string, DiffAddition[]>();
+  for (const a of additions) {
+    const existing = byFile.get(a.file);
+    if (existing) {
+      existing.push(a);
+    } else {
+      byFile.set(a.file, [a]);
+    }
+  }
+
+  const violations: Violation[] = [];
+
+  for (const rule of astRules) {
+    for (const [file, fileAdditions] of byFile) {
+      // Skip if rule has fileGlobs and this file doesn't match
+      if (rule.fileGlobs && rule.fileGlobs.length > 0) {
+        if (!fileMatchesGlobs(file, rule.fileGlobs)) continue;
+      }
+
+      // Check language support
+      const path = await import('node:path');
+      const ext = path.extname(file);
+      if (!extensionToLanguage(ext)) continue;
+
+      // Collect added line numbers, filtering suppressed lines
+      const addedLineNumbers: number[] = [];
+      const additionsByLine = new Map<number, DiffAddition>();
+      for (const addition of fileAdditions) {
+        // Skip non-code lines when AST context is available
+        if (addition.astContext && addition.astContext !== 'code') continue;
+
+        if (isSuppressed(addition.line, addition.precedingLine)) {
+          onRuleEvent?.('suppress', rule.lessonHash);
+          continue;
+        }
+
+        addedLineNumbers.push(addition.lineNumber);
+        additionsByLine.set(addition.lineNumber, addition);
+      }
+
+      if (addedLineNumbers.length === 0) continue;
+
+      const matches = await matchAstQuery(file, rule.astQuery!, addedLineNumbers, cwd);
+
+      for (const match of matches) {
+        onRuleEvent?.('trigger', rule.lessonHash);
+        violations.push({
+          rule,
+          file,
+          line: match.lineText,
+          lineNumber: match.lineNumber,
         });
       }
     }

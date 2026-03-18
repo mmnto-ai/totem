@@ -39,6 +39,7 @@ export async function runCompiledRules(
   const { bold, errorColor, log, success: successColor } = await import('../ui.js');
   const { writeOutput } = await import('../utils.js');
   const {
+    applyAstRulesToAdditions,
     applyRulesToAdditions,
     enrichWithAstContext,
     extractAddedLines,
@@ -94,10 +95,22 @@ export async function runCompiledRules(
 
   // Record metrics
   const metrics = loadRuleMetrics(totemDir, (msg) => log.dim(tag, msg));
-  const violations = applyRulesToAdditions(rules, additions, (event, hash) => {
+  const ruleEventCallback = (event: 'trigger' | 'suppress', hash: string) => {
     if (event === 'trigger') recordTrigger(metrics, hash);
     else recordSuppression(metrics, hash);
-  });
+  };
+  const regexViolations = applyRulesToAdditions(rules, additions, ruleEventCallback);
+
+  // Run AST rules (async — reads files and runs Tree-sitter queries)
+  const astRules = rules.filter((r) => r.engine === 'ast');
+  let astViolations: Violation[] = [];
+  if (astRules.length > 0) {
+    log.dim(tag, `Running ${astRules.length} AST rule(s)...`);
+    astViolations = await applyAstRulesToAdditions(rules, additions, cwd, ruleEventCallback);
+  }
+
+  const violations = [...regexViolations, ...astViolations];
+
   try {
     saveRuleMetrics(totemDir, metrics);
   } catch (err) {

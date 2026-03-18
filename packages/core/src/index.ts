@@ -99,6 +99,7 @@ export type {
   Violation,
 } from './compiler.js';
 export {
+  applyAstRulesToAdditions,
   applyRules,
   applyRulesToAdditions,
   CompiledRuleSchema,
@@ -129,9 +130,13 @@ export {
 
 // AST classification
 export type { SupportedLanguage } from './ast-classifier.js';
-export { classifyLines, extensionToLanguage } from './ast-classifier.js';
+export { classifyLines, ensureInit, extensionToLanguage, loadGrammar } from './ast-classifier.js';
 export type { AstGateOptions } from './ast-gate.js';
 export { enrichWithAstContext } from './ast-gate.js';
+
+// AST query engine
+export type { AstMatch } from './ast-query.js';
+export { matchAstQuery } from './ast-query.js';
 
 // Exporter
 export {
