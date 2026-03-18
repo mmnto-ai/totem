@@ -111,6 +111,32 @@ AST query output schema:
 \`\`\`
 
 IMPORTANT: Only use AST queries for TypeScript/JavaScript/TSX/JSX files. If the lesson applies to other file types, prefer regex or mark as non-compilable.
+
+## ast-grep Patterns (Tier 2b — Preferred for structural rules)
+If the lesson describes a structural constraint, prefer ast-grep patterns over regex or S-expressions.
+
+ast-grep patterns look like the source code itself with $METAVAR placeholders:
+- \`console.log($ARG)\` — matches any console.log call
+- \`process.env.$PROP\` — matches any process.env access
+- \`throw new Error($MSG)\` — matches any Error throw
+- \`useState($INIT)\` — matches any useState hook
+
+Set \`"engine": "ast-grep"\` and provide an \`"astGrepPattern"\` field. Leave \`"pattern"\` as an empty string.
+
+ast-grep output schema:
+\`\`\`json
+{
+  "compilable": true,
+  "engine": "ast-grep",
+  "astGrepPattern": "console.log($ARG)",
+  "pattern": "",
+  "message": "human-readable violation message",
+  "fileGlobs": ["**/*.ts", "**/*.tsx"]
+}
+\`\`\`
+
+IMPORTANT: ast-grep patterns must be single valid AST nodes. Statements like \`catch ($E) {}\` won't work — use regex for those.
+Only use for TypeScript/JavaScript/TSX/JSX files.
 `;
 
 // ─── Glob sanitization ─────────────────────────────
@@ -279,6 +305,63 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
           continue;
         }
 
+        const engine = parsed.engine ?? 'regex';
+
+        // ── ast-grep engine ───────────────────────────
+        if (engine === 'ast-grep') {
+          if (!parsed.astGrepPattern || !parsed.message) {
+            log.warn(TAG, `[${lesson.heading}] Missing astGrepPattern or message — skipping`); // totem-ignore
+            failed++;
+            continue;
+          }
+
+          const now = new Date().toISOString();
+          const existing = existingByHash.get(lesson.hash);
+          const sanitizedGlobs = parsed.fileGlobs ? sanitizeFileGlobs(parsed.fileGlobs) : undefined;
+          newRules.push({
+            lessonHash: lesson.hash,
+            lessonHeading: lesson.heading,
+            pattern: '', // ast-grep rules don't use regex patterns
+            message: parsed.message,
+            engine: 'ast-grep',
+            astGrepPattern: parsed.astGrepPattern,
+            compiledAt: now,
+            createdAt: existing?.createdAt ?? now,
+            ...(sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {}),
+          });
+          compiled++;
+          log.success(TAG, `[${lesson.heading}] Compiled (ast-grep): ${parsed.astGrepPattern}`); // totem-ignore
+          continue;
+        }
+
+        // ── Tree-sitter AST engine ────────────────────
+        if (engine === 'ast') {
+          if (!parsed.astQuery || !parsed.message) {
+            log.warn(TAG, `[${lesson.heading}] Missing astQuery or message — skipping`); // totem-ignore
+            failed++;
+            continue;
+          }
+
+          const now = new Date().toISOString();
+          const existing = existingByHash.get(lesson.hash);
+          const sanitizedGlobs = parsed.fileGlobs ? sanitizeFileGlobs(parsed.fileGlobs) : undefined;
+          newRules.push({
+            lessonHash: lesson.hash,
+            lessonHeading: lesson.heading,
+            pattern: '', // AST rules don't use regex patterns
+            message: parsed.message,
+            engine: 'ast',
+            astQuery: parsed.astQuery,
+            compiledAt: now,
+            createdAt: existing?.createdAt ?? now,
+            ...(sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {}),
+          });
+          compiled++;
+          log.success(TAG, `[${lesson.heading}] Compiled (ast): ${parsed.astQuery}`); // totem-ignore
+          continue;
+        }
+
+        // ── Regex engine (default) ────────────────────
         if (!parsed.pattern || !parsed.message) {
           log.warn(TAG, `[${lesson.heading}] Missing pattern or message — skipping`); // totem-ignore
           failed++;

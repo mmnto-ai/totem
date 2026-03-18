@@ -101,8 +101,8 @@ export async function runCompiledRules(
   };
   const regexViolations = applyRulesToAdditions(rules, additions, ruleEventCallback);
 
-  // Run AST rules (async — reads files and runs Tree-sitter queries)
-  const astRules = rules.filter((r) => r.engine === 'ast');
+  // Run AST rules (async — reads files and runs Tree-sitter/ast-grep queries)
+  const astRules = rules.filter((r) => r.engine === 'ast' || r.engine === 'ast-grep');
   let astViolations: Violation[] = [];
   if (astRules.length > 0) {
     log.dim(tag, `Running ${astRules.length} AST rule(s)...`);

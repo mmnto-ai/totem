@@ -144,6 +144,10 @@ export { enrichWithAstContext } from './ast-gate.js';
 export type { AstMatch } from './ast-query.js';
 export { matchAstQueriesBatch, matchAstQuery } from './ast-query.js';
 
+// ast-grep query engine
+export type { AstGrepMatch } from './ast-grep-query.js';
+export { matchAstGrepPattern, matchAstGrepPatternsBatch } from './ast-grep-query.js';
+
 // Exporter
 export {
   exportLessons,
