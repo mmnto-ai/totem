@@ -145,7 +145,7 @@ export type { AstMatch } from './ast-query.js';
 export { matchAstQueriesBatch, matchAstQuery } from './ast-query.js';
 
 // ast-grep query engine
-export type { AstGrepMatch } from './ast-grep-query.js';
+export type { AstGrepMatch, AstGrepRule } from './ast-grep-query.js';
 export { matchAstGrepPattern, matchAstGrepPatternsBatch } from './ast-grep-query.js';
 
 // Exporter
