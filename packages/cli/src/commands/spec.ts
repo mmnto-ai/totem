@@ -221,7 +221,10 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
         linkedStores.push(linkedStore);
         log.dim(TAG, `Linked index: ${linkedPath}`);
       } catch (err) {
-        log.warn(TAG, `Could not connect to linked index at ${linkedPath} — skipping. ${err instanceof Error ? err.message : String(err)}`);
+        log.warn(
+          TAG,
+          `Could not connect to linked index at ${linkedPath} — skipping. ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
   }
