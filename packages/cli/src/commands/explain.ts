@@ -1,14 +1,14 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { loadCompiledRules } from '@mmnto/totem';
-
 import { bold, dim, log } from '../ui.js';
 import { loadConfig, resolveConfigPath } from '../utils.js';
 
 const TAG = '[Explain]';
 
 export async function explainCommand(hash: string): Promise<void> {
+  const { loadCompiledRules } = await import('@mmnto/totem');
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   const config = await loadConfig(configPath);
@@ -44,7 +44,7 @@ export async function explainCommand(hash: string): Promise<void> {
   const rule = matches[0]!;
 
   // Display rule details
-  console.error('');
+  process.stderr.write('\n');
   log.info(TAG, `Rule: ${bold(rule.lessonHash)}`);
   log.info(TAG, `Heading: ${bold(rule.lessonHeading)}`);
   log.info(
@@ -55,7 +55,7 @@ export async function explainCommand(hash: string): Promise<void> {
   if (rule.astQuery) {
     log.info(TAG, `AST Query: ${dim(rule.astQuery)}`);
   }
-  console.error('');
+  process.stderr.write('\n');
   log.info(TAG, `Message: ${rule.message}`);
 
   // Try to find the source lesson file
@@ -63,12 +63,12 @@ export async function explainCommand(hash: string): Promise<void> {
   const lessonFile = path.join(lessonsDir, `lesson-${rule.lessonHash}.md`);
 
   if (fs.existsSync(lessonFile)) {
-    console.error('');
+    process.stderr.write('\n');
     log.info(TAG, `${bold('Source lesson:')} .totem/lessons/lesson-${rule.lessonHash}.md`);
-    console.error('');
+    process.stderr.write('\n');
     const content = fs.readFileSync(lessonFile, 'utf-8');
     // Print lesson content with light formatting
-    console.error(content.trim());
+    process.stderr.write(content.trim() + '\n');
   } else {
     // Try searching all lesson files for the heading
     let found = false;
@@ -77,7 +77,7 @@ export async function explainCommand(hash: string): Promise<void> {
       for (const file of files) {
         const content = fs.readFileSync(path.join(lessonsDir, file), 'utf-8');
         if (content.includes(rule.lessonHeading)) {
-          console.error('');
+          process.stderr.write('\n');
           log.info(TAG, `${bold('Found in:')} .totem/lessons/${file}`);
           // Extract the relevant section
           const lines = content.split('\n');
@@ -89,8 +89,8 @@ export async function explainCommand(hash: string): Promise<void> {
               if (i > headingIdx && lines[i]!.startsWith('## ')) break;
               section.push(lines[i]!);
             }
-            console.error('');
-            console.error(section.join('\n').trim());
+            process.stderr.write('\n');
+            process.stderr.write(section.join('\n').trim() + '\n');
           }
           found = true;
           break;
@@ -98,16 +98,16 @@ export async function explainCommand(hash: string): Promise<void> {
       }
     }
     if (!found) {
-      console.error('');
+      process.stderr.write('\n');
       log.dim(TAG, 'Source lesson file not found. It may have been manually removed.');
     }
   }
 
   // File glob info
   if (rule.fileGlobs && rule.fileGlobs.length > 0) {
-    console.error('');
+    process.stderr.write('\n');
     log.info(TAG, `${bold('Applies to:')} ${rule.fileGlobs.join(', ')}`);
   }
 
-  console.error('');
+  process.stderr.write('\n');
 }
