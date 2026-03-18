@@ -6,7 +6,7 @@ _AI coding agents are brilliant goldfish. Totem gives them a memory._
 
 A zero-config CLI and MCP Server that compiles your project's architectural rules into deterministic CI guardrails. It creates a persistent, model-agnostic context layer that outlasts any single AI session — so Claude, Cursor, Gemini, and Copilot all enforce the same rules without being told twice.
 
-Totem doesn't ship with your app. It lives in your workflow.
+Totem doesn't ship with your app. It lives in your workflow. It also works on non-code repositories — docs, ADRs, infrastructure configs, personal notes — via `totem init --bare`.
 
 ## The 10-Second Workflow
 
