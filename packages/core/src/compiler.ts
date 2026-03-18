@@ -433,7 +433,7 @@ export async function applyAstRulesToAdditions(
         let content: string | null = null;
         try {
           const fullPath = path.resolve(cwd, file);
-          content = fs.readFileSync(fullPath, 'utf-8');
+          content = await fs.promises.readFile(fullPath, 'utf-8');
         } catch {
           // Fall through — content stays null
         }
