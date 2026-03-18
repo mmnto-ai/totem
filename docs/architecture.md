@@ -76,7 +76,7 @@ flowchart TD
     - _Integrity:_ Avoids blind character splitting by leveraging Markdown hierarchy and session breadcrumbs. A WASM implementation ensures robust handling of large files (#354).
   - **Embedding & Retrieval:**
     - _Embeddings:_ Utilizes Gemini (`gemini-embedding-2-preview`) as the primary dogfood embedder (#523). It features hybrid search combining Full-Text Search and vector similarity (#378).
-    - _Resilience:_ Implements graceful degradation, falling back to Ollama if the primary provider fails (#517). Automatic `--full` syncs trigger when embedder configuration changes are detected (#548).
+    - _Resilience:_ Implements graceful degradation, falling back to Ollama if the primary provider fails (#517). Automatic `--full` syncs trigger when embedder configuration changes are detected, utilizing filesystem concurrency locks to prevent race conditions during sync operations (#548, #635).
 - **Security & Maintenance:**
   - **Filtering:** Includes adversarial content scrubbing, DLP secret masking middleware to safely strip credentials before embedding (#609, #534). Includes a dedicated `lesson` ContentType for highly precise vector retrieval (#315).
   - **Drift Detection:** Self-cleaning sync engine purges orphaned vectors when source files are deleted. It is reinforced by strict path containment checks to prevent directory traversal (#284).
@@ -87,7 +87,7 @@ All commands feature proper `--help` output documentation (#358).
 
 - **Setup & Infrastructure:**
   - **Initialization:** Scaffolds configs, hooks, and AI tools like Copilot and Junie (#448). Initialization relies on an ordered provider detection schema (prioritizing Gemini, then OpenAI) (#608, #551), and automatically ingests `.cursorrules` and prompt files during setup (#596, #578).
-  - **Environment Support:** Package manager auto-detection fully supports Bun and safely detects non-bash environments (#421, #316). Command modules leverage top-level dynamic imports to significantly boost CLI startup performance (#594, #605).
+  - **Environment Support:** Package manager auto-detection fully supports Bun and safely detects non-bash environments (#421, #316). Command modules leverage top-level dynamic imports to significantly boost CLI startup performance (#594, #605). The system is hardened by a cross-platform portability audit for the 1.0 release (#638).
   - **Error Handling:** Implements a strict `TotemError` class hierarchy to provide actionable `recoveryHint`s and standardized logging across the CLI (#620, #615).
 - **Data & Context Management:**
   - **Indexing & Sharing:** `totem sync` crawls, chunks, and embeds targets into LanceDB, supporting multi-totem domains (#463). `totem link` seamlessly shares lessons and local knowledge between multiple local repositories (#614).
@@ -109,7 +109,7 @@ All commands feature proper `--help` output documentation (#358).
 
 `totem compile` reads architectural constraints and translates each lesson into a regex rule (or marks it as non-compilable). It seamlessly ingests existing `.cursorrules` and `.mdc` files into the Totem compiled rule matrix (#558). To significantly boost performance, the compiler caches non-compilable lessons to skip redundant recompilation loops (#590) and converts core rule-loading imports to dynamic execution (#594). Rules are stored in `.totem/compiled-rules.json`—now extended with advanced telemetry fields and Phase 1 Semantic Rule Observability (#542).
 
-The compilation process is context-aware, reading files directly from disk instead of parsing staged diffs to prevent AST gating false positives (#399). Developers can bypass false positives using audited inline suppression directives or negated patterns (#458). Rules are strictly scoped using anchored glob matching, preventing `fileGlobs` from leaking outside specified directories (#584, #546). The compiler is constrained against generating unsupported nested globs or brace expansions (#603, #602). During execution, the loading engine applies an `onWarn` callback to filter valid structural warnings and suppress false positives (#595, #575). Duplicate, vulnerable, or overly broad match/exec patterns are actively refined or rejected (#589, #538).
+The compilation process is context-aware, reading files directly from disk instead of parsing staged diffs to prevent AST gating false positives (#399). Developers can bypass false positives using audited inline suppression directives or negated patterns (#458). Rules are strictly scoped using anchored glob matching, preventing `fileGlobs` from leaking outside specified directories (#584, #546). The compiler is constrained against generating unsupported nested globs or brace expansions (#603, #602). During execution, the loading engine applies an `onWarn` callback to filter valid structural warnings and suppress false positives (#595, #575). Duplicate, vulnerable, or overly broad match/exec patterns are actively refined, audited, and rejected to heavily reduce false positives during 1.0 launch testing (#649, #648, #639, #589).
 
 `totem lint` applies these compiled rules against `git diff` additions with zero LLM calls. It shares a core `runCompiledRules` engine with `totem shield` for execution consistency across the pipeline (#566). This physically blocks main branch commits and pre-push violations locally. It generates standard SARIF 2.1.0 or JSON formatted outputs (`Violation[]`) to enable seamless enterprise security integration (#561).
 
@@ -127,7 +127,7 @@ A stdio-based server for LLM integration providing primary tools and strict acce
 
 - **Core Tools:**
   - `search_knowledge(query)`: Semantic retrieval of codebase context and lessons. Search telemetry actively measures agent retrieval behaviors (#440).
-  - `add_lesson(lesson, tags)`: Appends architectural lessons with descriptive headings. Employs a sync-pending debounce mechanism to prevent write race conditions (#564).
+  - `add_lesson(lesson, tags)`: Appends architectural lessons with descriptive headings. Employs a sync-pending debounce mechanism and filesystem concurrency locks to prevent write race conditions and mutation conflicts (#564, #635).
   - `enforcement`: Direct check tools empower agents to self-validate deterministic rules (#417).
 - **Security & Permissions:**
   - **Sanitization:** XML-delimits all MCP responses and sanitizes persisted content. It cleanly strips quotes from loaded environment variables (#560).
@@ -252,15 +252,3 @@ Totem enforces **architectural invariants** — structural rules about what code
 - **Probabilistic guarantees:** The vector search layer (LanceDB) uses fuzzy embeddings for _discovery_ (finding relevant rules). The _enforcement_ layer (Tree-sitter AST matching) is strictly deterministic. These are separate concerns — do not conflate them.
 
 Totem is a fast, deterministic pre-commit check that catches structural violations. It complements, not replaces, comprehensive security tooling.
-
-## Phase 4 Vision: Federated Memory & Swarm Intelligence
-
-Because Totem treats memory as static files (`.totem/lessons.md`, `session-handoff.md`, `active_work.md`), we can unlock "Swarm Intelligence" across a team without inventing a complex peer-to-peer mesh network.
-
-By configuring `totem.config.ts` to read upstream or aggregated LanceDB indexes, an enterprise team can achieve:
-
-1. **Platform Policy Inheritance:** Local agents query a central platform database to inherit security and architectural rules before writing code.
-2. **Zero-Friction Standups:** A central AI aggregates local `handoff.md` and `active_work.md` artifacts from developer branches to synthesize team status without Jira.
-3. **Collision Detection:** Developers can query if an uncommitted architectural change exists in a teammate's active work tree.
-
-The core philosophy remains: **Keep the infrastructure dumb (static files and LanceDB), and the queries smart.** To further support extreme enterprise scaling capabilities, Rust Core Extraction (`totem-core-rs`) is actively being evaluated as part of future foundational shifts (#286).

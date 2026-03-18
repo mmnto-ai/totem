@@ -35,7 +35,7 @@ This phase delivered seamless cross-platform onboarding, automated AI tool confi
   - **Baseline Intelligence:** Universal Baseline delivered, shipping 60 battle-tested lessons automatically during `totem init` alongside harder vector DB reflexes (#622).
   - **Enforcement:** Involuntary enforcement strategy under research (#520).
 - [ ] **#129 Epic: Interactive CLI Tutorial:** Build an animated, interactive CLI tutorial (`totem tutorial`). This allows users to pause the walkthrough, ask the LLM contextual questions, and resume seamlessly.
-- [ ] **#125 Epic: Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically. Achieves a "run `init` and forget" workflow via deterministic shield gates and auto-installs.
+- [ ] **#125 Epic: Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically. Achieves a "run `init` and forget" workflow via deterministic `lint` gates and auto-installs.
 
 ## Phase 2: Core Stability & Data Safety (Functionally Complete)
 
@@ -48,9 +48,9 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - **Graceful Degradation:** Cross-provider LLM routing with SDK-to-CLI and Ollama fallbacks (#516, #517).
   - **Provider Coverage:** Supported Cloud Providers (Gemini, Anthropic, OpenAI) and Local Providers (Ollama).
 - **Data Safety & Memory:**
-  - **Transactions & Sync:** Saga-based document rollbacks, auto-healing DB version recovery (#500, #574), and automated sync with dual-read migrations (#428).
+  - **Transactions & Sync:** Saga-based document rollbacks, auto-healing DB version recovery (#500, #574), automated sync with dual-read migrations (#428), and filesystem concurrency locks (#635).
   - **Integrity & State:** Air-gapped zero-telemetry enforced (#474), alongside index health checks at startup (#438).
-  - **Portability:** Zero-LLM session snapshots via `totem handoff --lite` and cross-model export support.
+  - **Portability:** Zero-LLM session snapshots via `totem handoff --lite`, cross-model export support, and a comprehensive 1.0 portability audit (#638).
 - **Security & DX:**
   - **Data Loss Prevention:** Implemented DLP secret masking middleware to proactively strip secrets prior to embedding (#534, #609).
   - **Adversarial Hardening:** Adversarial ingestion scrubbing, extraction hardening, and suspicious lesson detection.
@@ -93,10 +93,11 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [ ] **#314 Epic: Adaptive Agent Governance:** Establish the Codebase Immune System, incorporating AST compilation design.
     - [x] **#422 Rule Testing Harness:** Implemented a compiled rule testing harness to identify regex false-positives and drive AST requirements.
     - [ ] **#434 Adversarial Trap Corpus:** Develop synthetic violations to measure precision and recall of the deterministic engine.
+    - [x] **Quality Control:** Addressed joint 1.0 code review conditions and launch testing findings to ensure stability (#639, #648).
   - **Rules & Standards:**
     - [x] **#387 SARIF Output:** Standardized output for CI/CD integration, enhanced with organizational trap ledgers and linting support (#418, #561).
     - [x] **External Rule Ingestion:** Built support to automatically ingest `.cursorrules`, `.mdc` files, and prompt templates into compiled rules during `totem init` (#558, #578, #596).
-    - **Rule Invariant Audit:** Categorized over 130 compiled rules by invariant, style, and security to establish strict baseline severity (#559, #577).
+    - **Rule Invariant Audit:** Categorized over 130 compiled rules by invariant, style, and security to establish strict baseline severity (#559, #577). Audited compiled rules to significantly reduce false positives (#649).
     - [x] **Compilation Optimization:** Cached non-compilable lessons and removed duplicate match/exec rules to optimize performance and accuracy (#589, #590). Refined compiler glob patterns to support prompt constraints and strict boundaries (#584, #602, #603).
     - [ ] **#385 Rule Exports:** Export compiled rules to Semgrep YAML and ESLint configurations. Deferred until core governance (#314) is finalized.
     - [ ] **#433 Lesson Packs Prototype:** Mine OSS projects as a proof of concept for distributable rule sets.
