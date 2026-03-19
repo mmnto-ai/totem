@@ -81,7 +81,7 @@ The following are out of scope:
 
 - **Model name injection:** `MODEL_NAME_RE = /^[\w./:_-]+$/` blocks all shell metacharacters (`$`, backticks, `;`, `|`, `&`, parentheses). Subshell injection via model names is not possible.
 - **Command template:** The shell command template comes from `totem.config.ts`, which has the same trust level as the codebase itself
-- **Process termination:** Uses `execFileSync` array form (not string interpolation) for `taskkill` on Windows
+- **Process termination:** Uses safe child process execution (`execFileSync`/`spawn`) with argument arrays (not string interpolation) for `taskkill` on Windows
 
 ### Totem Mesh (Cross-Repo Linking)
 
@@ -97,6 +97,6 @@ When you run `totem link <path>`, the linked repository's lessons become queryab
 
 ### Known Acceptable Risks
 
-- **Diff path traversal:** `extractAddedLines` parses file paths from `git diff` headers. `applyAstRulesToAdditions` reads those files via `path.resolve(cwd, file)`. A crafted diff could reference paths outside the project. Mitigated by: diffs come from `git diff` (trusted), not user input. The read is bounded to `cwd` resolution.
+- **Diff path traversal:** `extractAddedLines` parses file paths from `git diff` headers. `applyAstRulesToAdditions` reads those files via `path.resolve(cwd, file)`. A crafted diff with absolute paths or `../` traversal could escape the project directory — `path.resolve` does not enforce containment. Mitigated by: diffs come from `git diff` (trusted), not user input. A future hardening step could add a containment check (`resolvedPath.startsWith(cwd)`).
 - **Lesson prompt injection:** Lessons are included in LLM prompts for spec/shield. A malicious lesson could inject instructions. Mitigated by: lessons are authored by the same user who controls the config. `sanitize()` strips ANSI codes, control characters, and BiDi overrides.
 - **LLM response parsing:** `parseCompilerResponse` extracts JSON from LLM output. Malformed responses return `null` (fail-safe).
