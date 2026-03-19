@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.3.0`. Recent efforts introduced `totem explain` for contextual violation lookups, shipped the Tier 2 AST engine, and enabled cross-totem queries via `linkedIndexes`. Orchestration and integration flows were further refined by shifting reference hooks to rely on the deterministic `totem lint` engine over AI-powered review. Most recently, focus advanced through the 1.3 sprint—introducing `verify_execution`, a refactored compiler facade (#710), and unified error domains (#711)—following successful v1.0 readiness audits and a reversion to a curated 147-rule set (#708).
+ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.3.1`. Recent patch efforts delivered a security hardening batch to address MCP capability caps and injection vulnerabilities (#714), alongside new launch metrics and a Docker test harness (#715). Previous release efforts introduced `totem explain` for contextual violation lookups, shipped the Tier 2 AST engine, and enabled cross-totem queries via `linkedIndexes`. Orchestration and integration flows were further refined by shifting reference hooks to rely on the deterministic `totem lint` engine over AI-powered review. Most recently, focus advanced through the 1.3 sprint—introducing `verify_execution`, a refactored compiler facade (#710), and unified error domains (#711)—following successful v1.0 readiness audits and a reversion to a curated 147-rule set (#708).
 
 Post-merge sequence was aligned during a multi-agent planning session (Claude + Gemini, 2026-03-13) informed by Deep Research Brief #24 (Competitive Moat Analysis). See `.strategy/deep-research/24-competitive-moat-analysis/` for the full adversarial analysis.
 
@@ -46,6 +46,8 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Migrated lessons directory to dual-read/single-write and added startup health checks for LanceStore indexes (#428, #439).
   - Automated `totem sync --full` triggering following embedder configuration changes (#548).
 - **Core & Shift-Left Foundation:**
+  - Delivered a security hardening batch addressing MCP caps, taskkill injection vulnerabilities, and heading truncations (#714).
+  - Implemented launch metrics and a Docker test harness to improve deployment reliability and evaluation (#715).
   - Unified the error domain with typed `TotemError` subclasses and refactored the compiler architecture using a facade pattern (#711, #710).
   - Reverted to a curated 147-rule set with mandatory verify steps, and fixed branch-diff fallbacks to pre-filter ignored patterns (#708, #709).
   - Delivered 1.3 sprint capabilities including `verify_execution`, spec invariants, and enhanced baseline fix guidance (#688).
