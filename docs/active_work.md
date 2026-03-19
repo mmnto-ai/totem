@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.3.1`. Recent patch efforts delivered a security hardening batch to address MCP capability caps and injection vulnerabilities (#714), alongside new launch metrics and a Docker test harness (#715). Previous release efforts introduced `totem explain` for contextual violation lookups, shipped the Tier 2 AST engine, and enabled cross-totem queries via `linkedIndexes`. Orchestration and integration flows were further refined by shifting reference hooks to rely on the deterministic `totem lint` engine over AI-powered review. Most recently, focus advanced through the 1.3 sprint—introducing `verify_execution`, a refactored compiler facade (#710), and unified error domains (#711)—following successful v1.0 readiness audits and a reversion to a curated 147-rule set (#708).
+ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.3.1`. Recent patch efforts delivered a security hardening batch to address MCP capability caps and injection vulnerabilities (#714), alongside new launch metrics, a Docker test harness (#715), and DX polish targeting onboarding flows and output brevity (#717). Previous release efforts introduced `totem explain` for contextual violation lookups, shipped the Tier 2 AST engine, and enabled cross-totem queries via `linkedIndexes`. Orchestration and integration flows were further refined by shifting reference hooks to rely on the deterministic `totem lint` engine over AI-powered review. Most recently, focus advanced through the 1.3 sprint—introducing `verify_execution`, a refactored compiler facade (#710), and unified error domains (#711)—following successful v1.0 readiness audits and a reversion to a curated 147-rule set (#708).
 
 Post-merge sequence was aligned during a multi-agent planning session (Claude + Gemini, 2026-03-13) informed by Deep Research Brief #24 (Competitive Moat Analysis). See `.strategy/deep-research/24-competitive-moat-analysis/` for the full adversarial analysis.
 
@@ -101,6 +101,8 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Resolved MCP server connection failures for `totem-dev` and `totem-strategy` (#512).
   - Validated Gemini CLI compliance regarding `search_knowledge` calls with lean configurations (#446).
 - **Documentation & DX:**
+  - Executed Developer Experience (DX) polish to streamline onboarding flows, hide legacy commands, and condense standard output (#717).
+  - Regenerated project documentation to integrate launch metrics and reflect the v1.3.2 context (#716).
   - Updated the README to prominently feature the new 60-lesson Universal Baseline shipped alongside initialization (6d800bc).
   - Added a dedicated Scope & Limitations section to the architecture documentation (#607).
   - Finalized the v1.0 tagline: "Git for AI. Rule your context." (#606).

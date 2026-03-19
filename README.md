@@ -162,7 +162,7 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
   - **Execution Hardening:** Safeguards agent operations by enforcing MCP capability caps and preventing taskkill injections (#714).
 - **Reliability & Portability:**
   - **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs. They also guarantee safe simultaneous MCP mutations.
-  - **Cross-Platform Readiness:** V1.0 portability audits guarantee consistent behavior across major operating systems.
+  - **Cross-Platform Readiness:** V1.0 portability audits and Docker test harnesses (#715) guarantee consistent behavior across major operating systems and deployment environments.
   - **Index Stability:** Dimension mismatch detection via `index-meta.json` prevents database corruption. Auto-healing migrations handle embedder changes automatically.
   - **Error Handling:** Typed `TotemError` subclasses unify error domains and provide actionable recovery hints for resilient operations (#711).
 - **Rule Architecture:**
