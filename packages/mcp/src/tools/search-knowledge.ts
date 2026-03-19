@@ -124,6 +124,7 @@ export function registerSearchKnowledge(server: McpServer): void {
           .number()
           .int()
           .positive()
+          .max(100)
           .optional()
           .describe('Maximum number of results to return (default: 5)'),
       },

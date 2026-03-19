@@ -1,4 +1,4 @@
-import { execFileSync, execSync, spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -86,7 +86,7 @@ function runLint(
     const timer = setTimeout(() => {
       try {
         if (process.platform === 'win32' && child.pid) {
-          execSync(`taskkill /pid ${child.pid} /T /F`, { stdio: 'ignore' });
+          execFileSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
         } else {
           child.kill();
         }
