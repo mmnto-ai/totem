@@ -64,8 +64,12 @@ linkedIndexes: ['../api-server', '../shared-design-system'],
 
 This runs inside a `pre-push` git hook. Your AI agent's push is blocked until every violation is resolved — with the exact file, line, and fix guidance needed to self-correct in one cycle.
 
-## Try It — No Install Required
+## Try It
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/mmnto-ai/totem-playground)
+The [Totem Playground](https://github.com/mmnto-ai/totem-playground) is a pre-broken Next.js app with several common architectural violations. Clone it, run `npx @mmnto/cli lint`, and watch Totem instantly catch every single one.
 
-See Totem in action without installing anything. The [Totem Playground](https://github.com/mmnto-ai/totem-playground) is a pre-broken Next.js app with several common architectural violations. Click the button, run `npx @mmnto/cli lint` in the terminal, and watch Totem instantly catch every single one.
+```bash
+git clone https://github.com/mmnto-ai/totem-playground.git
+cd totem-playground
+npx @mmnto/cli lint
+```
