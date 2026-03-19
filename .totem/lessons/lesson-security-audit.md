@@ -1,4 +1,4 @@
-## Lesson — MCP and shell orchestrator security audit findings
+## Lesson — Key security audit findings and acceptable risks
 
 **Tags:** security, mcp, audit
 
