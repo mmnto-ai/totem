@@ -9,6 +9,7 @@ import { TotemConfigError, TotemParseError } from '@mmnto/totem';
 
 export interface LinkOptions {
   unlink?: boolean;
+  yes?: boolean;
 }
 
 export async function linkCommand(targetPath: string, options: LinkOptions): Promise<void> {
@@ -76,6 +77,26 @@ export async function linkCommand(targetPath: string, options: LinkOptions): Pro
   if (configContent.includes(lessonGlob)) {
     log.warn(TAG, `${relative} is already linked.`);
     return;
+  }
+
+  // Security gate: cross-trust-boundary consent (Proposal 067)
+  if (!options.yes) {
+    const readline = await import('node:readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
+    log.warn(TAG, 'You are creating a cross-trust-boundary link.');
+    log.warn(
+      TAG,
+      'AI agents in this repository will gain read-access to the linked index via MCP.',
+    );
+    log.warn(TAG, 'Do not link private/corporate knowledge to public or untrusted repositories.');
+    const answer = await new Promise<string>((resolve) => {
+      rl.question("\n[Totem] Type 'I understand' to proceed: ", resolve);
+    });
+    rl.close();
+    if (answer.trim().toLowerCase() !== 'i understand') {
+      log.info(TAG, 'Link cancelled.');
+      return;
+    }
   }
 
   // Add linked targets to the config

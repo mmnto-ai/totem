@@ -13,6 +13,7 @@ type MockChild = EventEmitter & {
   stdout: EventEmitter;
   stderr: EventEmitter;
   kill: ReturnType<typeof vi.fn>;
+  pid: number;
 };
 
 function createMockChild(): MockChild {
@@ -20,6 +21,7 @@ function createMockChild(): MockChild {
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
   child.kill = vi.fn();
+  child.pid = 12345;
   return child;
 }
 
@@ -194,10 +196,20 @@ describe('invokeShellOrchestrator', () => {
   it('throws descriptive error for timeout', async () => {
     vi.useFakeTimers();
 
-    // Simulate kill → close (rejection now happens in the close handler)
-    mockChild.kill = vi.fn(() => {
+    // On timeout, killTree fires (taskkill on Windows, process.kill on Unix).
+    // Either way, simulate the child closing after kill.
+    const originalKill = process.kill;
+    process.kill = vi.fn(() => {
       process.nextTick(() => mockChild.emit('close', null));
-    });
+    }) as unknown as typeof process.kill;
+    // Also handle Windows path: taskkill triggers a new spawn call
+    vi.mocked(spawn).mockImplementation(((cmd: string) => {
+      if (cmd === 'taskkill') {
+        process.nextTick(() => mockChild.emit('close', null));
+        return mockChild;
+      }
+      return mockChild;
+    }) as unknown as typeof spawn);
 
     // Capture the rejection before advancing timers
     const promise = invokeShellOrchestrator({
@@ -214,8 +226,14 @@ describe('invokeShellOrchestrator', () => {
     const err = await promise;
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toContain('timed out after 180s');
-    expect(mockChild.kill).toHaveBeenCalled();
 
+    // Verify kill was actually attempted (Windows: taskkill spawn, Unix: process.kill)
+    const killAttempted =
+      vi.mocked(process.kill).mock.calls.length > 0 ||
+      vi.mocked(spawn).mock.calls.some(([cmd]) => cmd === 'taskkill');
+    expect(killAttempted).toBe(true);
+
+    process.kill = originalKill;
     vi.useRealTimers();
   });
 });
