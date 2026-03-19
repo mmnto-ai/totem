@@ -10,6 +10,7 @@ RUN git add -A && git commit -m "init"
 RUN git branch -M main
 
 # Copy the full 147-rule compiled-rules.json from the Totem project
+RUN mkdir -p /app/.totem
 COPY compiled-rules.json /app/.totem/compiled-rules.json
 
 COPY stress-test.sh /app/stress-test.sh

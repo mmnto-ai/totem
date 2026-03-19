@@ -90,7 +90,7 @@ function runLint(
         if (isWin && child.pid) {
           execFileSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
         } else if (child.pid) {
-          process.kill(-child.pid); // kill the entire process group
+          process.kill(-child.pid); // totem-ignore — Unix-only process group kill, not child.kill()
         }
       } catch {
         // Best effort
