@@ -86,12 +86,12 @@ flowchart TD
 All commands feature proper `--help` output documentation (#358).
 
 - **Setup & Infrastructure:**
-  - **Initialization:** Scaffolds configs, hooks, and AI tools, supporting a `--bare` flag for minimal setups (#659, #448). Initialization relies on an ordered provider detection schema (prioritizing Gemini, then OpenAI) and automatically ingests `.cursorrules` (#608, #596).
+  - **Initialization:** Scaffolds configs, hooks, and AI tools with a polished onboarding dare, supporting a `--bare` flag and hiding legacy configurations (#717, #659). It relies on an ordered provider detection schema and automatically ingests `.cursorrules` (#608, #596).
   - **Environment Support:** Package manager auto-detection fully supports Bun and safely detects non-bash environments (#421, #316). Command modules leverage top-level dynamic imports to significantly boost CLI startup performance (#594, #605). The system is hardened by a cross-platform portability audit for the 1.0 release (#638).
   - **Error Handling:** Implements a unified error domain with typed `TotemError` subclasses, providing actionable `recoveryHint`s and standardized logging (#711, #620). The system is hardened against command injection and taskkill exploitation, establishing secure boundaries for shell execution (#714).
 - **Data & Context Management:**
   - **Indexing & Sharing:** `totem sync` crawls, chunks, and embeds targets into LanceDB, seamlessly supporting cross-totem queries via the `linkedIndexes` config (#665, #463). `totem link` seamlessly shares lessons and local knowledge between multiple local repositories (#614).
-  - **Session Management:** `totem briefing` and `totem handoff` capture state snapshots. The `--lite` flag enables zero-LLM capture with ANSI sanitization (#292).
+  - **Session Management:** `totem briefing` and `totem handoff` capture state snapshots, featuring brief output formatting for improved readability (#717). The `--lite` flag enables zero-LLM capture with ANSI sanitization (#292).
   - **Workflow Resets:** Automates mid-session resets and end-of-task workflows. `totem wrap` cleanly aborts if compilation requirements are missing (#409).
 - **Workflow & Evaluation:**
   - **Planning & Orchestration:** Orchestrates workflows with human approval gates. It supports configurable issue sources across multiple repositories for triage and extraction (#514). Integrates mandatory verify steps and `verify_execution` pipelines to actively validate architectural spec invariants during generation (#708, #688).
