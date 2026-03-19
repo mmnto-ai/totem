@@ -51,7 +51,7 @@ function detectHookManager(cwd: string): HookManager | null {
         return 'simple-git-hooks';
       }
     } catch {
-      console.log('[Totem] Warning: could not parse package.json while detecting hook manager.');
+      console.error('[Totem] Warning: could not parse package.json while detecting hook manager.');
     }
   }
 

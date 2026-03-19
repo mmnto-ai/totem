@@ -81,6 +81,8 @@ function mockConfig(docs?: DocTarget[]): void {
 describe('docsCommand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Suppress expected stderr from saga validator rejections and doc processing (#547)
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     // Reset return values (clearAllMocks only clears call records, not implementations)
     vi.mocked(isFileDirty).mockReturnValue(false);
     vi.mocked(runOrchestrator).mockResolvedValue(

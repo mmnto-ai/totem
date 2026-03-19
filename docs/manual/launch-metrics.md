@@ -1,3 +1,9 @@
+## Why Totem
+
+- **Zero-LLM enforcement.** Compiled rules run in your git hooks with no API keys, no network, no AI in the loop. Works in air-gapped CI and locked-down enterprise environments.
+- **Shared memory across repos.** `totem link` connects repos to a shared knowledge index. A lesson learned in your API repo automatically protects your frontend repo. One memory across your whole stack.
+- **Works with any AI agent.** Claude, Gemini, Cursor, Copilot, Codex — Totem doesn't care who writes the code. It just gates the push.
+
 ## How It Works — The 3-Layer Gate
 
 Your AI doesn't have to be obedient. It just has to push code.
@@ -9,6 +15,40 @@ Your AI doesn't have to be obedient. It just has to push code.
 | **Guarantee**  | `pre-push` git hook → `totem lint`      | Deterministic gate. If the AI ignored Layer 1 and skipped Layer 2, it hits the wall of Layer 3 and cannot proceed until it complies. |
 
 Totem doesn't try to control the agent in real-time. It enforces a strict final output state — like a compiler, not a linter.
+
+## Works Without AI
+
+Totem's enforcement layer is **100% deterministic** — no LLM, no API keys, no network required.
+
+| Feature                          |  Requires AI?  |
+| -------------------------------- | :------------: |
+| `totem lint` (compiled rules)    |       No       |
+| `totem init` (baseline rules)    |       No       |
+| Pre-push git hook                |       No       |
+| AST classification (Tree-sitter) |       No       |
+| `totem sync` (vector index)      | Yes (embedder) |
+| `totem compile` (rule authoring) |   Yes (LLM)    |
+| `totem shield` (AI review)       |   Yes (LLM)    |
+| `totem spec` (planning)          |   Yes (LLM)    |
+
+The AI helps you **write** rules. The rules enforce themselves.
+
+## Totem Mesh — Shared Memory Across Repos
+
+Most governance tools are per-repo. Totem lets you connect repos into a shared knowledge mesh:
+
+```bash
+# In your frontend repo
+totem link ../api-server
+```
+
+Now `totem spec` and `totem shield` in your frontend repo can query lessons from your API repo. An architectural mistake in one codebase becomes a rule protecting all others.
+
+Configure cross-repo queries in `totem.config.ts`:
+
+```typescript
+linkedIndexes: ['../api-server', '../shared-design-system'],
+```
 
 ## Performance
 

@@ -20,6 +20,72 @@ Total violations prevented: 47 | security: 12, architecture: 35
 
 Write code with your AI. Run `totem lint`. Push with confidence. Run `totem stats` to prove your ROI.
 
+## Why Totem
+
+- **Zero-LLM enforcement.** Compiled rules run in your git hooks with no API keys, no network, no AI in the loop. Works in air-gapped CI and locked-down enterprise environments.
+- **Shared memory across repos.** `totem link` connects repos to a shared knowledge index. A lesson learned in your API repo automatically protects your frontend repo. One memory across your whole stack.
+- **Works with any AI agent.** Claude, Gemini, Cursor, Copilot, Codex — Totem doesn't care who writes the code. It just gates the push.
+
+## How It Works — The 3-Layer Gate
+
+Your AI doesn't have to be obedient. It just has to push code.
+
+| Layer          | Mechanism                               | Purpose                                                                                                                              |
+| -------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **Suggestion** | `.cursorrules`, `CLAUDE.md`, `.gemini/` | Ask the AI to follow the rules so it works faster                                                                                    |
+| **Fast Path**  | `verify_execution` MCP tool             | Let the AI grade its own homework before pushing                                                                                     |
+| **Guarantee**  | `pre-push` git hook → `totem lint`      | Deterministic gate. If the AI ignored Layer 1 and skipped Layer 2, it hits the wall of Layer 3 and cannot proceed until it complies. |
+
+Totem doesn't try to control the agent in real-time. It enforces a strict final output state — like a compiler, not a linter.
+
+## Works Without AI
+
+Totem's enforcement layer is **100% deterministic** — no LLM, no API keys, no network required.
+
+| Feature                          |  Requires AI?  |
+| -------------------------------- | :------------: |
+| `totem lint` (compiled rules)    |       No       |
+| `totem init` (baseline rules)    |       No       |
+| Pre-push git hook                |       No       |
+| AST classification (Tree-sitter) |       No       |
+| `totem sync` (vector index)      | Yes (embedder) |
+| `totem compile` (rule authoring) |   Yes (LLM)    |
+| `totem shield` (AI review)       |   Yes (LLM)    |
+| `totem spec` (planning)          |   Yes (LLM)    |
+
+The AI helps you **write** rules. The rules enforce themselves.
+
+## Totem Mesh — Shared Memory Across Repos
+
+Most governance tools are per-repo. Totem lets you connect repos into a shared knowledge mesh:
+
+```bash
+# In your frontend repo
+totem link ../api-server
+```
+
+Now `totem spec` and `totem shield` in your frontend repo can query lessons from your API repo. An architectural mistake in one codebase becomes a rule protecting all others.
+
+Configure cross-repo queries in `totem.config.ts`:
+
+```typescript
+linkedIndexes: ['../api-server', '../shared-design-system'],
+```
+
+## Performance
+
+`totem lint` runs **147 compiled rules in under 2 seconds** on a 7,400-line, 105-file PR. Zero LLM inference. Pure AST classification + regex matching.
+
+| Metric         | Value                        |
+| -------------- | ---------------------------- |
+| Rules          | 147 (regex + AST + ast-grep) |
+| Lines scanned  | 7,397                        |
+| Files          | 105                          |
+| Execution time | **1.75s**                    |
+| LLM calls      | **0**                        |
+
+This runs inside a `pre-push` git hook. Your AI agent's push is blocked until every violation is resolved — with the exact file, line, and fix guidance needed to self-correct in one cycle.
+
 ## Quickstart
 
 ### 1. Initialize
@@ -100,32 +166,6 @@ $ npx @mmnto/cli spec 570
 `totem spec` fetches your issue, queries the knowledge index for architectural traps, and generates a spec complete with invariants and baseline fix guidance. It tells your AI agent exactly what to build and what mistakes to avoid.
 
 Cross-totem queries via `linkedIndexes` let the planner pull context from multiple projects simultaneously. Strategy docs can inform code decisions, while shared design systems inform component repositories.
-
-## How It Works — The 3-Layer Gate
-
-Your AI doesn't have to be obedient. It just has to push code.
-
-| Layer          | Mechanism                               | Purpose                                                                                                                              |
-| -------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| **Suggestion** | `.cursorrules`, `CLAUDE.md`, `.gemini/` | Ask the AI to follow the rules so it works faster                                                                                    |
-| **Fast Path**  | `verify_execution` MCP tool             | Let the AI grade its own homework before pushing                                                                                     |
-| **Guarantee**  | `pre-push` git hook → `totem lint`      | Deterministic gate. If the AI ignored Layer 1 and skipped Layer 2, it hits the wall of Layer 3 and cannot proceed until it complies. |
-
-Totem doesn't try to control the agent in real-time. It enforces a strict final output state — like a compiler, not a linter.
-
-## Performance
-
-`totem lint` runs **147 compiled rules in under 2 seconds** on a 7,400-line, 105-file PR. Zero LLM inference. Pure AST classification + regex matching.
-
-| Metric         | Value                        |
-| -------------- | ---------------------------- |
-| Rules          | 147 (regex + AST + ast-grep) |
-| Lines scanned  | 7,397                        |
-| Files          | 105                          |
-| Execution time | **1.75s**                    |
-| LLM calls      | **0**                        |
-
-This runs inside a `pre-push` git hook. Your AI agent's push is blocked until every violation is resolved — with the exact file, line, and fix guidance needed to self-correct in one cycle.
 
 ## What Totem Actually Is
 
