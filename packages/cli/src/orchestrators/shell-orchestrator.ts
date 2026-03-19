@@ -94,6 +94,7 @@ export async function invokeShellOrchestrator(
         cwd,
         shell: true,
         stdio: ['ignore', 'pipe', 'pipe'],
+        detached: !IS_WIN, // process group for clean tree-kill on Unix
       });
 
       let stdout = '';
@@ -118,8 +119,8 @@ export async function invokeShellOrchestrator(
             // taskkill failed — fall back to basic kill
             child.kill();
           }
-        } else {
-          child.kill();
+        } else if (child.pid) {
+          process.kill(-child.pid); // totem-ignore — Unix process group kill
         }
       };
 
