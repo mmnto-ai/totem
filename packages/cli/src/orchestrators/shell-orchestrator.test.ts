@@ -227,6 +227,12 @@ describe('invokeShellOrchestrator', () => {
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toContain('timed out after 180s');
 
+    // Verify kill was actually attempted (Windows: taskkill spawn, Unix: process.kill)
+    const killAttempted =
+      vi.mocked(process.kill).mock.calls.length > 0 ||
+      vi.mocked(spawn).mock.calls.some(([cmd]) => cmd === 'taskkill');
+    expect(killAttempted).toBe(true);
+
     process.kill = originalKill;
     vi.useRealTimers();
   });
