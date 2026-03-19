@@ -102,7 +102,7 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Validated Gemini CLI compliance regarding `search_knowledge` calls with lean configurations (#446).
 - **Documentation & DX:**
   - Executed Developer Experience (DX) polish to streamline onboarding flows, hide legacy commands, and condense standard output (#717).
-  - Regenerated project documentation to integrate launch metrics and reflect the v1.3.1 context (#716).
+  - Regenerated project documentation to integrate launch metrics and reflect the v1.3.2 context (#716).
   - Updated the README to prominently feature the new 60-lesson Universal Baseline shipped alongside initialization (6d800bc).
   - Added a dedicated Scope & Limitations section to the architecture documentation (#607).
   - Finalized the v1.0 tagline: "Git for AI. Rule your context." (#606).
