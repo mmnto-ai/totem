@@ -86,6 +86,21 @@ linkedIndexes: ['../api-server', '../shared-design-system'],
 
 This runs inside a `pre-push` git hook. Your AI agent's push is blocked until every violation is resolved — with the exact file, line, and fix guidance needed to self-correct in one cycle.
 
+## Try It
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/mmnto-ai/totem-playground)
+
+The [Totem Playground](https://github.com/mmnto-ai/totem-playground) is a pre-broken Next.js app with several common architectural violations. Open it in Codespaces, run `totem lint --staged`, and watch Totem catch every one.
+
+Or run locally:
+
+```bash
+git clone https://github.com/mmnto-ai/totem-playground.git
+cd totem-playground
+git reset HEAD~1 && git add -A
+npx @mmnto/cli lint --staged
+```
+
 ## Quickstart
 
 ### 1. Initialize
@@ -199,7 +214,7 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
   - **Fully Air-Gappable:** `totem lint` requires zero API keys and zero network access. With Ollama for embeddings, the entire pipeline runs without external API calls.
   - **DLP Secret Masking:** Automatically strips secrets before embedding. Credentials never leak into your vector index.
   - **SARIF 2.1.0 Output:** Integrates into CI security scanners via `--format sarif/json`. Prove SOC 2 / DORA compliance to your auditors.
-  - **Execution Hardening:** Safeguards agent operations by enforcing MCP capability caps and preventing taskkill injections (#714).
+  - **Execution Hardening:** Safeguards agent operations by enforcing MCP capability caps, preventing orchestrator taskkill injections, and prompting for consent on cross-repo links (#714, #724).
 - **Reliability & Portability:**
   - **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs. They also guarantee safe simultaneous MCP mutations.
   - **Cross-Platform Readiness:** V1.0 portability audits and Docker test harnesses (#715) guarantee consistent behavior across major operating systems and deployment environments.
@@ -207,7 +222,7 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
   - **Error Handling:** Typed `TotemError` subclasses unify error domains and provide actionable recovery hints for resilient operations (#711).
 - **Rule Architecture:**
   - **Curated Baselines:** Features a highly-curated 147-rule set with mandatory verify steps to guarantee execution determinism (#708).
-  - **Severity Levels:** Rules are classified as `error` (blocks CI) or `warning` (informs, doesn't block).
+  - **Severity Validation (Gate 1):** Compiled rules enforce strict severity levels (`error` blocks CI, `warning` informs without blocking) to guarantee execution safety (#725).
   - **Categorization:** Compiled rules span security, architecture, style, and performance domains.
 
 **What gets committed:** Your knowledge base (text files in `.totem/lessons/`) and the compiled artifact (`.totem/compiled-rules.json`). The `.lancedb/` vector index is a local-only cache, automatically rebuilt by `totem sync`. It is never committed to your repository.
