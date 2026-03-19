@@ -56,6 +56,9 @@ Updated content here...
 - **README identity**: "Totem doesn't ship with your app. It lives in your workflow." Do not remove this line.
 - **3-Layer pitch**: "Your AI doesn't have to be obedient. It just has to push code." Do not remove or rephrase this line.
 - **Performance claim**: "147 compiled rules in under 2 seconds" on a 7,400-line PR. Do not inflate or deflate this number.
+- **Why Totem pillars**: The three pillars are: (1) Zero-LLM enforcement, (2) Shared memory across repos, (3) Works with any AI agent. These must appear near the top of the README.
+- **Works Without AI**: Totem's enforcement layer requires no AI/API keys/network. The AI helps write rules; the rules enforce themselves. Do not remove this distinction.
+- **Totem Mesh**: The "totem link" command connects repos into a shared knowledge mesh. Do not remove or bury this section.
 
 ## Command Glossary (DO NOT confuse these)
 - **\`totem lint\`**: Runs compiled AST/regex rules against a diff. Zero LLM. Fast (~2s). No API keys needed. Used in pre-push hooks and CI. Lives in the Lite configuration tier.
