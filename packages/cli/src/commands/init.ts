@@ -1024,6 +1024,14 @@ export async function initCommand(options?: { bare?: boolean }): Promise<void> {
           `Could not install pre-compiled rules: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
+    } else {
+      // File already exists — read the rule count for the post-init message
+      try {
+        const existing = JSON.parse(fs.readFileSync(compiledRulesPath, 'utf-8'));
+        baselineRuleCount = Array.isArray(existing?.rules) ? existing.rules.length : 0;
+      } catch {
+        // Parse failure — leave count as 0
+      }
     }
 
     if (options?.bare) {
