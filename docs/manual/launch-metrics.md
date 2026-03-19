@@ -63,3 +63,9 @@ linkedIndexes: ['../api-server', '../shared-design-system'],
 | LLM calls      | **0**                        |
 
 This runs inside a `pre-push` git hook. Your AI agent's push is blocked until every violation is resolved — with the exact file, line, and fix guidance needed to self-correct in one cycle.
+
+## Try It — No Install Required
+
+[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/mmnto-ai/totem-playground/tree/feat/add-routes)
+
+The [Totem Playground](https://github.com/mmnto-ai/totem-playground) is a broken Next.js app with 5 intentional violations and 5 hand-written rules. Click the button, run `npx @mmnto/cli lint` in the terminal, and watch Totem catch all 11 violations in real time.
