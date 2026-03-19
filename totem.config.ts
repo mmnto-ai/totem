@@ -49,6 +49,7 @@ const config: TotemConfig = {
     '**/__tests__/**',
     '**/*.test.ts',
     '.strategy/**',
+    'tests/**',
   ],
 
   repositories: ['mmnto-ai/totem', 'mmnto-ai/totem-strategy'],

@@ -54,6 +54,8 @@ Updated content here...
 ## Pinned Content (DO NOT change)
 - **README hero**: The tagline is: "Stop repeating yourself to your AI." followed by the goldfish subtitle: "AI coding agents are brilliant goldfish. Totem gives them a memory." Do not replace, rephrase, or revert these lines.
 - **README identity**: "Totem doesn't ship with your app. It lives in your workflow." Do not remove this line.
+- **3-Layer pitch**: "Your AI doesn't have to be obedient. It just has to push code." Do not remove or rephrase this line.
+- **Performance claim**: "147 compiled rules in under 2 seconds" on a 7,400-line PR. Do not inflate or deflate this number.
 
 ## Command Glossary (DO NOT confuse these)
 - **\`totem lint\`**: Runs compiled AST/regex rules against a diff. Zero LLM. Fast (~2s). No API keys needed. Used in pre-push hooks and CI. Lives in the Lite configuration tier.
