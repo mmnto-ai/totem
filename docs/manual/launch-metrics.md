@@ -75,5 +75,6 @@ Or run locally:
 ```bash
 git clone https://github.com/mmnto-ai/totem-playground.git
 cd totem-playground
+git reset HEAD~1 && git add -A
 npx @mmnto/cli lint --staged
 ```
