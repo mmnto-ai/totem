@@ -53,7 +53,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - **Portability:** Zero-LLM session snapshots via `totem handoff --lite`, cross-model export support, and a comprehensive 1.0 portability audit.
 - **Security & DX:**
   - **Data Loss Prevention:** Implemented DLP secret masking middleware to proactively strip secrets prior to embedding.
-  - **Adversarial Hardening:** Adversarial ingestion scrubbing, extraction hardening, and suspicious lesson detection.
+  - **Adversarial Hardening:** Adversarial ingestion scrubbing, extraction hardening, suspicious lesson detection, and MCP taskkill injection prevention (#714).
   - **Git Enforcements:** Native Git hook enforcement prioritizing zero-LLM `totem lint` for fast validation, with monorepo and Bun support.
   - **Installation Automation:** Auto-installation of `totem hooks` and CI drift gating foundations.
 
@@ -63,7 +63,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
 
 - **Observability & Maintenance:**
   - **Metrics & Diagnostics:**
-    - [x] **Semantic Rule Observability:** Separated zero-LLM `totem lint` from AI-powered `totem shield` to enable targeted rule enforcement. Introduced `totem explain` to look up the exact lesson behind a violation (#668). Integrated `onWarn` callbacks and a unified `TotemError` hierarchy with typed subclasses and recovery hints (#620, #711).
+    - [x] **Semantic Rule Observability:** Separated zero-LLM `totem lint` from AI-powered `totem shield` for targeted rule enforcement, and introduced `totem explain` for violation lookups (#668). Integrated `onWarn` callbacks and a unified `TotemError` hierarchy with typed subclasses and recovery hints (#711).
     - [ ] **#92 CLI Metrics & Observability:** Provide local CLI metrics (`totem stats`) including violation history from git log, lesson coverage, and rule fire counts from local JSONL. No cloud telemetry or TUI — terminal output only for v1.0.
     - [ ] **#130 Epic: Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks and track index health.
   - **System Maintenance:**
@@ -93,12 +93,12 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [ ] **#314 Epic: Adaptive Agent Governance:** Establish the Codebase Immune System, explicitly scoped to include AST compilation design. This transitions `totem compile` from regex-only to AST-aware rules (Tree-sitter/ast-grep) for cases where regex is provably insufficient.
     - [x] **#422 Rule Testing Harness:** Implemented a compiled rule testing harness to identify regex false-positives and drive AST requirements.
     - [ ] **#434 Adversarial Trap Corpus:** Develop synthetic violations to measure precision and recall of the deterministic engine.
-    - [x] **Quality Control:** Addressed joint 1.0 code review conditions and launch testing findings to ensure stability (#639, #648).
+    - [x] **Quality Control:** Addressed joint 1.0 code review conditions and launch testing findings to ensure stability (#648). Deployed Docker test harness and launch metrics for enhanced verification (#715).
   - **Rules & Standards:**
     - [x] **#387 SARIF Output:** Standardized output for CI/CD integration, enhanced with organizational trap ledgers and linting support (#418, #561).
-    - [x] **External Rule Ingestion:** Built support to automatically ingest `.cursorrules`, `.mdc` files, and prompt templates into compiled rules during `totem init` (#558, #578, #596).
+    - [x] **External Rule Ingestion:** Built support to automatically ingest `.cursorrules`, `.mdc` files, and prompt templates into compiled rules during `totem init` (#578, #596).
     - **Rule Invariant Audit:** Categorized rules by invariant, style, and security to establish strict baseline severity (#559, #577). Refined to a curated 147-rule set to reduce false positives, introduced Complete or Broken guardrails, and added baseline Fix guidance with mandatory verify steps (#688, #708).
-    - [x] **Compilation Optimization:** Cached non-compilable lessons, removed duplicate rules, and implemented a compiler facade pattern to optimize performance and accuracy (#590, #710). Refined compiler glob patterns to support strict boundaries and filter ignored patterns before branch-diff fallbacks (#603, #709).
+    - [x] **Compilation Optimization:** Cached non-compilable lessons, removed duplicate rules, and implemented a compiler facade pattern to optimize performance and accuracy (#590, #710). Refined compiler glob patterns to support strict boundaries and filter ignored patterns before branch-diff fallbacks (#603).
     - [ ] **#385 Rule Exports:** Export compiled rules to Semgrep YAML and ESLint configurations. Deferred until core governance (#314) is finalized.
     - [ ] **#433 Lesson Packs Prototype:** Mine 1 OSS project as a proof of concept for distributable rule sets.
   - **Data Architecture & Agents:**

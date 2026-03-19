@@ -101,6 +101,32 @@ $ npx @mmnto/cli spec 570
 
 Cross-totem queries via `linkedIndexes` let the planner pull context from multiple projects simultaneously. Strategy docs can inform code decisions, while shared design systems inform component repositories.
 
+## How It Works — The 3-Layer Gate
+
+Your AI doesn't have to be obedient. It just has to push code.
+
+| Layer          | Mechanism                               | Purpose                                                                                                                              |
+| -------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **Suggestion** | `.cursorrules`, `CLAUDE.md`, `.gemini/` | Ask the AI to follow the rules so it works faster                                                                                    |
+| **Fast Path**  | `verify_execution` MCP tool             | Let the AI grade its own homework before pushing                                                                                     |
+| **Guarantee**  | `pre-push` git hook → `totem lint`      | Deterministic gate. If the AI ignored Layer 1 and skipped Layer 2, it hits the wall of Layer 3 and cannot proceed until it complies. |
+
+Totem doesn't try to control the agent in real-time. It enforces a strict final output state — like a compiler, not a linter.
+
+## Performance
+
+`totem lint` runs **147 compiled rules in under 2 seconds** on a 7,400-line, 105-file PR. Zero LLM inference. Pure AST classification + regex matching.
+
+| Metric         | Value                        |
+| -------------- | ---------------------------- |
+| Rules          | 147 (regex + AST + ast-grep) |
+| Lines scanned  | 7,397                        |
+| Files          | 105                          |
+| Execution time | **1.75s**                    |
+| LLM calls      | **0**                        |
+
+This runs inside a `pre-push` git hook. Your AI agent's push is blocked until every violation is resolved — with the exact file, line, and fix guidance needed to self-correct in one cycle.
+
 ## What Totem Actually Is
 
 **A persistent memory that every AI agent shares.**
@@ -133,6 +159,7 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
   - **Fully Air-Gappable:** `totem lint` requires zero API keys and zero network access. With Ollama for embeddings, the entire pipeline runs without external API calls.
   - **DLP Secret Masking:** Automatically strips secrets before embedding. Credentials never leak into your vector index.
   - **SARIF 2.1.0 Output:** Integrates into CI security scanners via `--format sarif/json`. Prove SOC 2 / DORA compliance to your auditors.
+  - **Execution Hardening:** Safeguards agent operations by enforcing MCP capability caps and preventing taskkill injections (#714).
 - **Reliability & Portability:**
   - **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs. They also guarantee safe simultaneous MCP mutations.
   - **Cross-Platform Readiness:** V1.0 portability audits guarantee consistent behavior across major operating systems.

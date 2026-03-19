@@ -73,7 +73,7 @@ flowchart TD
 - **Data Processing:**
   - **Extraction & Chunking:**
     - _Context Parsing:_ Uses syntax-aware chunking via Tree-sitter AST parsing. It seamlessly indexes standard files and git submodules (#363).
-    - _Integrity:_ Avoids blind character splitting by leveraging Markdown hierarchy and session breadcrumbs. A WASM implementation ensures robust handling of large files (#354).
+    - _Integrity:_ Avoids blind character splitting by leveraging Markdown hierarchy, session breadcrumbs, and secure heading truncation (#714). A WASM implementation ensures robust handling of large files (#354).
   - **Embedding & Retrieval:**
     - _Embeddings:_ Utilizes Gemini (`gemini-embedding-2-preview`) as the primary dogfood embedder (#523). It features hybrid search combining Full-Text Search and vector similarity (#378).
     - _Resilience:_ Implements graceful degradation, falling back to Ollama if the primary provider fails (#517). Automatic `--full` syncs trigger when embedder configuration changes are detected, utilizing filesystem concurrency locks to prevent race conditions during sync operations (#548, #635).
@@ -88,7 +88,7 @@ All commands feature proper `--help` output documentation (#358).
 - **Setup & Infrastructure:**
   - **Initialization:** Scaffolds configs, hooks, and AI tools, supporting a `--bare` flag for minimal setups (#659, #448). Initialization relies on an ordered provider detection schema (prioritizing Gemini, then OpenAI) and automatically ingests `.cursorrules` (#608, #596).
   - **Environment Support:** Package manager auto-detection fully supports Bun and safely detects non-bash environments (#421, #316). Command modules leverage top-level dynamic imports to significantly boost CLI startup performance (#594, #605). The system is hardened by a cross-platform portability audit for the 1.0 release (#638).
-  - **Error Handling:** Implements a unified error domain with typed `TotemError` subclasses. This provides actionable `recoveryHint`s and standardized logging across the CLI (#711, #620).
+  - **Error Handling:** Implements a unified error domain with typed `TotemError` subclasses, providing actionable `recoveryHint`s and standardized logging (#711, #620). The system is hardened against command injection and taskkill exploitation, establishing secure boundaries for shell execution (#714).
 - **Data & Context Management:**
   - **Indexing & Sharing:** `totem sync` crawls, chunks, and embeds targets into LanceDB, seamlessly supporting cross-totem queries via the `linkedIndexes` config (#665, #463). `totem link` seamlessly shares lessons and local knowledge between multiple local repositories (#614).
   - **Session Management:** `totem briefing` and `totem handoff` capture state snapshots. The `--lite` flag enables zero-LLM capture with ANSI sanitization (#292).
@@ -100,10 +100,10 @@ All commands feature proper `--help` output documentation (#358).
     - **`totem shield`**: Conducts AI-powered code review using LanceDB context before PRs (#521). Enforces explicit severity levels, cleanly demotes false positives to warnings, and formats output via standard Totem Errors (#616, #576).
     - **`totem explain`**: Looks up the specific lesson behind a rule violation to provide immediate developer context (#668).
   - **Documentation:** Automates transactional document syncs using a Saga validator to prevent partial updates (#351). It safely strips known-not-shipped issue references from generated docs to prevent AI hallucinations (#598, #581).
-  - **Telemetry & Stats:** Surfaces local metrics powered by the Phase 1 Trap Ledger. Displays basic CIS metric percentages alongside violation histories (#544, #425).
+  - **Telemetry & Stats:** Surfaces local metrics powered by the Phase 1 Trap Ledger and records launch metrics for performance visibility (#715, #544). Displays basic CIS metric percentages alongside violation histories (#425).
 - **Rule Testing & Extraction:**
   - **Capture & Extraction:** Enables inline capture and batch PR lesson extraction. Lessons are strictly Zod-validated before disk writes to ensure structural integrity (#565).
-  - **Harness Verification:** Serves as a compiled rule testing harness to empirically measure regex false positives (#422). The system also actively verifies for "Complete or Broken" guardrail rules to ensure enforcement integrity (#663).
+  - **Harness Verification:** Serves as a compiled rule testing harness to empirically measure regex false positives, utilizing an integrated Docker test harness for isolated environment validation (#715, #422). The system actively verifies for "Complete or Broken" guardrail rules to ensure enforcement integrity (#663).
   - **Security:** Context-aware heuristics minimize false positives and block bad rules (#326). XML tagging guards against prompt injection from untrusted PR comments (#279).
 
 ### 3. Deterministic Compiler & Zero-LLM Lint
@@ -132,7 +132,7 @@ A stdio-based server for LLM integration providing primary tools and strict acce
   - `enforcement`: Direct check tools empower agents to self-validate deterministic rules. This includes `verify_execution` capabilities to proactively test generated code against spec invariants before finalizing tasks (#688, #417).
 - **Security & Permissions:**
   - **Sanitization:** XML-delimits all MCP responses and sanitizes persisted content. It cleanly strips quotes from loaded environment variables (#560).
-  - **Access Control:** Implements multi-agent permissions and role-based access control (RBAC) to safely restrict execution boundaries (#312).
+  - **Access Control:** Implements multi-agent permissions and role-based access control (RBAC) to safely restrict execution boundaries (#312). Enforces explicit MCP payload capacity caps to prevent unbounded memory consumption (#714).
   - **Context Limits:** Agent instruction files are structurally governed using a recency sandwich pattern and strict length limits (#466, #511).
 - **Integrations & Lifecycle:**
   - **IDE & Agent Hooks:** Agent hooks for Claude Code, Gemini CLI, and Junie (#464). Automatic enforcement pipelines are actively under research (#520).
@@ -157,7 +157,7 @@ The CLI orchestrator supports multiple provider types via a discriminated union 
 
 ### Shell Provider (default)
 
-Pipes prompts to any CLI tool via `{file}` and `{model}` placeholders. Handled timeouts ensure stray orchestration processes do not cause memory leaks (#395):
+Pipes prompts to any CLI tool via `{file}` and `{model}` placeholders. Handled timeouts and strict taskkill injection mitigations ensure stray orchestration processes do not cause memory leaks or execute malicious payloads (#714, #395):
 
 ```typescript
 orchestrator: {
