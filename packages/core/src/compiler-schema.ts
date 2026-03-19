@@ -51,6 +51,7 @@ export const CompilerOutputSchema = z.object({
   engine: z.enum(['regex', 'ast', 'ast-grep']).optional(),
   astQuery: z.string().optional(),
   astGrepPattern: z.union([z.string(), z.record(z.unknown())]).optional(),
+  severity: z.enum(['error', 'warning']).optional(),
 });
 
 export type CompilerOutput = z.infer<typeof CompilerOutputSchema>;

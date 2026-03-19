@@ -305,6 +305,12 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
           continue;
         }
 
+        // ── Gate 1: Severity validation (Proposal 184) ──
+        // LLMs (especially Flash) frequently omit severity, producing rules
+        // that default to 'error' and break CI on advisory patterns.
+        // Default to 'warning' for new rules — they must be manually promoted.
+        const severity = parsed.severity ?? 'warning';
+
         const engine = parsed.engine ?? 'regex';
 
         // ── ast-grep engine ───────────────────────────
@@ -325,12 +331,16 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
             message: parsed.message,
             engine: 'ast-grep',
             astGrepPattern: parsed.astGrepPattern,
+            severity,
             compiledAt: now,
             createdAt: existing?.createdAt ?? now,
             ...(sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {}),
           });
           compiled++;
-          log.success(TAG, `[${lesson.heading}] Compiled (ast-grep): ${parsed.astGrepPattern}`); // totem-ignore
+          log.success(
+            TAG,
+            `[${lesson.heading}] Compiled (ast-grep, ${severity}): ${parsed.astGrepPattern}`,
+          ); // totem-ignore
           continue;
         }
 
@@ -352,12 +362,13 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
             message: parsed.message,
             engine: 'ast',
             astQuery: parsed.astQuery,
+            severity,
             compiledAt: now,
             createdAt: existing?.createdAt ?? now,
             ...(sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {}),
           });
           compiled++;
-          log.success(TAG, `[${lesson.heading}] Compiled (ast): ${parsed.astQuery}`); // totem-ignore
+          log.success(TAG, `[${lesson.heading}] Compiled (ast, ${severity}): ${parsed.astQuery}`); // totem-ignore
           continue;
         }
 
@@ -384,12 +395,13 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
           pattern: parsed.pattern,
           message: parsed.message,
           engine: 'regex',
+          severity,
           compiledAt: now,
           createdAt: existing?.createdAt ?? now,
           ...(sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {}),
         });
         compiled++;
-        log.success(TAG, `[${lesson.heading}] Compiled: /${parsed.pattern}/`); // totem-ignore
+        log.success(TAG, `[${lesson.heading}] Compiled (regex, ${severity}): /${parsed.pattern}/`); // totem-ignore
       }
 
       if (!options.raw) {
