@@ -53,7 +53,7 @@ Totem's enforcement layer is **100% deterministic** — no LLM, no API keys, no 
 | `totem shield` (AI review)       |   Yes (LLM)    |
 | `totem spec` (planning)          |   Yes (LLM)    |
 
-The AI helps you _write_ rules. The rules enforce themselves.
+The AI helps you **write** rules. The rules enforce themselves.
 
 ## Totem Mesh — Shared Memory Across Repos
 
@@ -64,7 +64,7 @@ Most governance tools are per-repo. Totem lets you connect repos into a shared k
 totem link ../api-server
 ```
 
-Now `totem spec` and `totem shield` in your frontend repo can query lessons from your API repo. An architectural mistake caught in one codebase becomes a rule that protects all of them.
+Now `totem spec` and `totem shield` in your frontend repo can query lessons from your API repo. An architectural mistake in one codebase becomes a rule protecting all others.
 
 Configure cross-repo queries in `totem.config.ts`:
 
