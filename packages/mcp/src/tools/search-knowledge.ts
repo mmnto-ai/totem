@@ -12,8 +12,6 @@ import { formatSystemWarning, formatXmlResponse } from '../xml-format.js';
 
 type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
 
-const MAX_SEARCH_RESULTS = 100;
-
 /** Session-level flag — healthCheck runs only on the first search call. */
 let firstHealthCheckDone = false;
 
@@ -126,9 +124,9 @@ export function registerSearchKnowledge(server: McpServer): void {
           .number()
           .int()
           .positive()
-          .max(MAX_SEARCH_RESULTS)
+          .max(100)
           .optional()
-          .describe(`Maximum number of results to return (default: 5, max: ${MAX_SEARCH_RESULTS})`),
+          .describe('Maximum number of results to return (default: 5)'),
       },
       annotations: {
         readOnlyHint: true,
