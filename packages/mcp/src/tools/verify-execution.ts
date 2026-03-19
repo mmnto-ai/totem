@@ -65,11 +65,13 @@ function runLint(
     const chunks: string[] = [];
     let totalChars = 0;
 
+    const isWin = process.platform === 'win32';
     const child = spawn(cmd, args, {
       cwd: projectRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: true,
       windowsHide: true,
+      detached: !isWin, // process group for clean tree-kill on Unix
     });
 
     const capture = (data: Buffer) => {
@@ -85,10 +87,10 @@ function runLint(
 
     const timer = setTimeout(() => {
       try {
-        if (process.platform === 'win32' && child.pid) {
+        if (isWin && child.pid) {
           execFileSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
-        } else {
-          child.kill();
+        } else if (child.pid) {
+          process.kill(-child.pid); // kill the entire process group
         }
       } catch {
         // Best effort
