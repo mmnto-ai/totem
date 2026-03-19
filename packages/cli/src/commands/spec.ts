@@ -115,7 +115,22 @@ export async function retrieveContext(
   // Fetch specs from linked stores (cross-totem knowledge)
   if (linkedStores && linkedStores.length > 0) {
     const linkedResults = await Promise.all(
-      linkedStores.map((ls) => search(ls, 'spec', MAX_SPECS).catch(() => [] as SearchResult[])), // totem-ignore (#666) — linked store failures are intentionally silent (graceful degradation)
+      linkedStores.map((ls) =>
+        search(ls, 'spec', MAX_SPECS).catch((err) => {
+          // Network/connection failures → graceful degradation (return empty)
+          // Config/parse errors → surface to user so they can fix their setup
+          const msg = err instanceof Error ? err.message : String(err);
+          if (
+            msg.includes('ECONNREFUSED') ||
+            msg.includes('ENOTFOUND') ||
+            msg.includes('FetchError')
+          ) {
+            return [] as SearchResult[];
+          }
+          log.warn(TAG, `Linked store query failed: ${msg}`);
+          return [] as SearchResult[];
+        }),
+      ),
     );
     allSpecs.push(...linkedResults.flat());
     // Re-sort by score after merging

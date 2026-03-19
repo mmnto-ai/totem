@@ -1006,15 +1006,17 @@ export async function initCommand(options?: { bare?: boolean }): Promise<void> {
     }
 
     // --- Pre-compiled baseline rules (zero-LLM protection from Day 1) ---
+    let baselineRuleCount = 0;
     const compiledRulesPath = path.join(totemDir, 'compiled-rules.json');
     if (!fs.existsSync(compiledRulesPath)) {
       try {
         const { COMPILED_BASELINE_RULES } = await import('../assets/compiled-baseline.js');
+        baselineRuleCount = COMPILED_BASELINE_RULES.length;
         const payload = { version: 1, rules: COMPILED_BASELINE_RULES };
         fs.writeFileSync(compiledRulesPath, JSON.stringify(payload, null, 2) + '\n');
         summary.push({
           file: '.totem/compiled-rules.json',
-          action: `Installed ${COMPILED_BASELINE_RULES.length} pre-compiled baseline rules`,
+          action: `Installed ${baselineRuleCount} pre-compiled baseline rules`,
         });
       } catch (err) {
         log.dim(
@@ -1241,7 +1243,7 @@ export async function initCommand(options?: { bare?: boolean }): Promise<void> {
     log.success(
       'Totem',
       options?.bare
-        ? 'Init complete. 15 baseline rules are active.\n' +
+        ? `Init complete.${baselineRuleCount ? ` ${baselineRuleCount} baseline rules are active.` : ''}\n` +
             '[Totem] Try it: write an empty `catch(e) {}` block and run `npx totem lint` — watch what happens.'
         : 'Init complete. Run `totem sync` to index your project.',
     );
