@@ -79,7 +79,7 @@ export async function linkCommand(targetPath: string, options: LinkOptions): Pro
   }
 
   // Security warning: cross-trust-boundary leakage (Proposal 067)
-  log.warn(TAG, 'AI agents in this repository will have read-access to the linked index via MCP.');
+  log.warn(TAG, 'Linking creates a cross-trust-boundary bridge. AI agents will gain read-access.');
   log.warn(TAG, 'Do not link private/corporate knowledge to public or untrusted repositories.');
 
   // Add linked targets to the config
