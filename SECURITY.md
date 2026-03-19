@@ -97,6 +97,6 @@ When you run `totem link <path>`, the linked repository's lessons become queryab
 
 ### Known Acceptable Risks
 
-- **Diff path traversal:** `extractAddedLines` parses file paths from `git diff` headers. `applyAstRulesToAdditions` reads those files via `path.resolve(cwd, file)`. A crafted diff with absolute paths or `../` traversal could escape the project directory — `path.resolve` does not enforce containment. Mitigated by: diffs come from `git diff` (trusted), not user input. A future hardening step could add a containment check (`resolvedPath.startsWith(cwd)`).
+- **Diff path traversal:** `extractAddedLines` parses file paths from `git diff` headers. `applyAstRulesToAdditions` reads those files via `path.resolve(cwd, file)`. Mitigated by: (1) diffs come from `git diff` (trusted), not user input, and (2) a `path.relative` containment check prevents reads outside the project directory.
 - **Lesson prompt injection:** Lessons are included in LLM prompts for spec/shield. A malicious lesson could inject instructions. Mitigated by: lessons are authored by the same user who controls the config. `sanitize()` strips ANSI codes, control characters, and BiDi overrides.
 - **LLM response parsing:** `parseCompilerResponse` extracts JSON from LLM output. Malformed responses return `null` (fail-safe).
