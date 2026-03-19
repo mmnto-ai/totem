@@ -151,11 +151,14 @@ export async function runCompiledRules(
     const lines: string[] = [];
 
     if (errors.length === 0 && warnings.length === 0) {
-      lines.push('### Verdict');
-      lines.push(`**PASS** — All ${rules.length} rules passed.`);
-      lines.push('');
-      lines.push('### Details');
-      lines.push('No violations detected against compiled rules.');
+      // Clean pass — only emit verbose markdown when writing to file
+      if (outPath) {
+        lines.push('### Verdict');
+        lines.push(`**PASS** — All ${rules.length} rules passed.`);
+        lines.push('');
+        lines.push('### Details');
+        lines.push('No violations detected against compiled rules.');
+      }
     } else {
       lines.push('### Verdict');
       if (errors.length > 0) {

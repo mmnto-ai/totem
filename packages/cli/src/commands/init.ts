@@ -1238,7 +1238,13 @@ export async function initCommand(options?: { bare?: boolean }): Promise<void> {
       console.error(brand('--------------------------'));
     }
 
-    log.success('Totem', 'Init complete. Run `totem sync` to index your project.');
+    log.success(
+      'Totem',
+      options?.bare
+        ? 'Init complete. 15 baseline rules are active.\n' +
+            '[Totem] Try it: write an empty `catch(e) {}` block and run `npx totem lint` — watch what happens.'
+        : 'Init complete. Run `totem sync` to index your project.',
+    );
   } finally {
     rl.close();
   }

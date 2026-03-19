@@ -467,7 +467,7 @@ program
   );
 
 program
-  .command('migrate-lessons')
+  .command('migrate-lessons', { hidden: true })
   .description('Migrate .totem/lessons.md to .totem/lessons/ directory (one file per lesson)')
   .action(async () => {
     try {
@@ -504,7 +504,7 @@ program
   });
 
 program
-  .command('demo')
+  .command('demo', { hidden: true })
   .description('Show the Totem spinner with movie quotes')
   .option('--duration <seconds>', 'How long to run (default: 6)', '6')
   .action(async (opts: { duration: string }) => {
@@ -517,7 +517,7 @@ program
   });
 
 program
-  .command('install-hooks')
+  .command('install-hooks', { hidden: true })
   .description('Install git hooks interactively (legacy — prefer `totem hooks`)')
   .action(async () => {
     try {
