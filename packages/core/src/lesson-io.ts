@@ -21,8 +21,14 @@ export function lessonFileName(content: string): string {
  */
 function enforceHeadingLimit(entry: string): string {
   return entry.replace(/^(## Lesson — )(.+)$/m, (_match, prefix: string, heading: string) => {
-    return `${prefix}${truncateHeading(heading)}`; // totem-ignore — prefix ends with "— " delimiter
+    return `${prefix}${truncateHeading(heading) || 'Lesson'}`; // totem-ignore — prefix ends with "— " delimiter
   });
+}
+
+/** Shared preparation: enforce heading limit, compute filename and content. */
+function prepareLessonForWrite(entry: string): { fileName: string; content: string } {
+  const sanitized = enforceHeadingLimit(entry);
+  return { fileName: lessonFileName(sanitized), content: sanitized.trim() + '\n' };
 }
 
 /**
@@ -34,12 +40,9 @@ export function writeLessonFile(lessonsDir: string, entry: string): string {
     fs.mkdirSync(lessonsDir, { recursive: true });
   }
 
-  // Enforce heading length limit at the write boundary (#690)
-  const sanitized = enforceHeadingLimit(entry);
-
-  const fileName = lessonFileName(sanitized);
+  const { fileName, content } = prepareLessonForWrite(entry);
   const filePath = path.join(lessonsDir, fileName);
-  fs.writeFileSync(filePath, sanitized.trim() + '\n', 'utf-8');
+  fs.writeFileSync(filePath, content, 'utf-8');
   return filePath;
 }
 
@@ -49,12 +52,9 @@ export function writeLessonFile(lessonsDir: string, entry: string): string {
 export async function writeLessonFileAsync(lessonsDir: string, entry: string): Promise<string> {
   await fs.promises.mkdir(lessonsDir, { recursive: true });
 
-  // Enforce heading length limit at the write boundary (#690)
-  const sanitized = enforceHeadingLimit(entry);
-
-  const fileName = lessonFileName(sanitized);
+  const { fileName, content } = prepareLessonForWrite(entry);
   const filePath = path.join(lessonsDir, fileName);
-  await fs.promises.writeFile(filePath, sanitized.trim() + '\n', 'utf-8');
+  await fs.promises.writeFile(filePath, content, 'utf-8');
   return filePath;
 }
 
