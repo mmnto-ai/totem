@@ -68,4 +68,4 @@ This runs inside a `pre-push` git hook. Your AI agent's push is blocked until ev
 
 [![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/mmnto-ai/totem-playground)
 
-The [Totem Playground](https://github.com/mmnto-ai/totem-playground) is a broken Next.js app with 5 types of architectural violations and 5 hand-written rules. Click the button, run `npx @mmnto/cli lint` in the terminal, and watch Totem catch every one.
+See Totem in action without installing anything. The [Totem Playground](https://github.com/mmnto-ai/totem-playground) is a pre-broken Next.js app with several common architectural violations. Click the button, run `npx @mmnto/cli lint` in the terminal, and watch Totem instantly catch every single one.
