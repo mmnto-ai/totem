@@ -66,10 +66,15 @@ This runs inside a `pre-push` git hook. Your AI agent's push is blocked until ev
 
 ## Try It
 
-The [Totem Playground](https://github.com/mmnto-ai/totem-playground) is a pre-broken Next.js app with several common architectural violations. Clone it, run `npx @mmnto/cli lint`, and watch Totem instantly catch every single one.
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/mmnto-ai/totem-playground)
+
+The [Totem Playground](https://github.com/mmnto-ai/totem-playground) is a pre-broken Next.js app with several common architectural violations. Open it in Codespaces, run `totem lint --staged`, and watch Totem catch every one.
+
+Or run locally:
 
 ```bash
 git clone https://github.com/mmnto-ai/totem-playground.git
 cd totem-playground
-npx @mmnto/cli lint
+git reset HEAD~1 && git add -A
+npx @mmnto/cli lint --staged
 ```
