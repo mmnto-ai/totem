@@ -63,7 +63,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
 
 - **Observability & Maintenance:**
   - **Metrics & Diagnostics:**
-    - [x] **Semantic Rule Observability:** Separated zero-LLM `totem lint` from AI-powered `totem shield` to enable targeted rule enforcement. Introduced `totem explain` to look up the exact lesson behind a violation (#668). Integrated `onWarn` callbacks and a new `TotemError` hierarchy with recovery hints (#595, #620).
+    - [x] **Semantic Rule Observability:** Separated zero-LLM `totem lint` from AI-powered `totem shield` to enable targeted rule enforcement. Introduced `totem explain` to look up the exact lesson behind a violation (#668). Integrated `onWarn` callbacks and a unified `TotemError` hierarchy with typed subclasses and recovery hints (#620, #711).
     - [ ] **#92 CLI Metrics & Observability:** Provide local CLI metrics (`totem stats`) including violation history from git log, lesson coverage, and rule fire counts from local JSONL. No cloud telemetry or TUI — terminal output only for v1.0.
     - [ ] **#130 Epic: Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks and track index health.
   - **System Maintenance:**
@@ -97,8 +97,8 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - **Rules & Standards:**
     - [x] **#387 SARIF Output:** Standardized output for CI/CD integration, enhanced with organizational trap ledgers and linting support (#418, #561).
     - [x] **External Rule Ingestion:** Built support to automatically ingest `.cursorrules`, `.mdc` files, and prompt templates into compiled rules during `totem init` (#558, #578, #596).
-    - **Rule Invariant Audit:** Categorized over 130 compiled rules by invariant, style, and security to establish strict baseline severity (#559, #577). Audited compiled rules to significantly reduce false positives, introduced Complete or Broken guardrail rules, and added baseline Fix guidance for spec invariants (#649, #663, #688).
-    - [x] **Compilation Optimization:** Cached non-compilable lessons and removed duplicate match/exec rules to optimize performance and accuracy (#589, #590). Refined compiler glob patterns to support prompt constraints and strict boundaries (#584, #602, #603).
+    - **Rule Invariant Audit:** Categorized rules by invariant, style, and security to establish strict baseline severity (#559, #577). Refined to a curated 147-rule set to reduce false positives, introduced Complete or Broken guardrails, and added baseline Fix guidance with mandatory verify steps (#688, #708).
+    - [x] **Compilation Optimization:** Cached non-compilable lessons, removed duplicate rules, and implemented a compiler facade pattern to optimize performance and accuracy (#590, #710). Refined compiler glob patterns to support strict boundaries and filter ignored patterns before branch-diff fallbacks (#603, #709).
     - [ ] **#385 Rule Exports:** Export compiled rules to Semgrep YAML and ESLint configurations. Deferred until core governance (#314) is finalized.
     - [ ] **#433 Lesson Packs Prototype:** Mine 1 OSS project as a proof of concept for distributable rule sets.
   - **Data Architecture & Agents:**
