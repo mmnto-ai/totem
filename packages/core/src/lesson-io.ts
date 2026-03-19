@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import type { ParsedLesson } from './drift-detector.js';
 import { parseLessonsFile } from './drift-detector.js';
+import { truncateHeading } from './lesson-format.js';
 
 /**
  * Generate a deterministic, idempotent filename for a lesson entry.
@@ -15,6 +16,22 @@ export function lessonFileName(content: string): string {
 }
 
 /**
+ * Enforce heading length limit on a lesson entry string.
+ * Applies truncateHeading() to any `## Lesson — ...` heading that exceeds the limit.
+ */
+function enforceHeadingLimit(entry: string): string {
+  return entry.replace(/^(## Lesson — )(.+)$/m, (_match, prefix: string, heading: string) => {
+    return `${prefix}${truncateHeading(heading) || 'Lesson'}`; // totem-ignore — prefix ends with "— " delimiter
+  });
+}
+
+/** Shared preparation: enforce heading limit, compute filename and content. */
+function prepareLessonForWrite(entry: string): { fileName: string; content: string } {
+  const sanitized = enforceHeadingLimit(entry);
+  return { fileName: lessonFileName(sanitized), content: sanitized.trim() + '\n' };
+}
+
+/**
  * Write a formatted lesson entry to a discrete file in the lessons directory.
  * Creates the directory if missing. Returns the full path of the written file.
  */
@@ -23,9 +40,9 @@ export function writeLessonFile(lessonsDir: string, entry: string): string {
     fs.mkdirSync(lessonsDir, { recursive: true });
   }
 
-  const fileName = lessonFileName(entry);
+  const { fileName, content } = prepareLessonForWrite(entry);
   const filePath = path.join(lessonsDir, fileName);
-  fs.writeFileSync(filePath, entry.trim() + '\n', 'utf-8');
+  fs.writeFileSync(filePath, content, 'utf-8');
   return filePath;
 }
 
@@ -35,9 +52,9 @@ export function writeLessonFile(lessonsDir: string, entry: string): string {
 export async function writeLessonFileAsync(lessonsDir: string, entry: string): Promise<string> {
   await fs.promises.mkdir(lessonsDir, { recursive: true });
 
-  const fileName = lessonFileName(entry);
+  const { fileName, content } = prepareLessonForWrite(entry);
   const filePath = path.join(lessonsDir, fileName);
-  await fs.promises.writeFile(filePath, entry.trim() + '\n', 'utf-8');
+  await fs.promises.writeFile(filePath, content, 'utf-8');
   return filePath;
 }
 

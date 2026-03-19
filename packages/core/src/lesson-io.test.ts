@@ -63,6 +63,27 @@ describe('writeLessonFile', () => {
     const files = fs.readdirSync(lessonsDir);
     expect(files.filter((f) => f.endsWith('.md'))).toHaveLength(1);
   });
+
+  it('truncates headings exceeding 60 characters (#690)', () => {
+    const lessonsDir = path.join(tmpDir, 'lessons');
+    const longHeading =
+      'This is a very long lesson heading that definitely exceeds the sixty character limit we enforce';
+    const entry = `## Lesson — ${longHeading}\n\n**Tags:** test\n\nBody.\n`;
+    const filePath = writeLessonFile(lessonsDir, entry);
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const headingMatch = content.match(/^## Lesson — (.+)$/m);
+    expect(headingMatch).toBeTruthy();
+    expect(headingMatch![1]!.length).toBeLessThanOrEqual(60);
+  });
+
+  it('preserves headings within the 60-char limit', () => {
+    const lessonsDir = path.join(tmpDir, 'lessons');
+    const shortHeading = 'Short heading';
+    const entry = `## Lesson — ${shortHeading}\n\n**Tags:** test\n\nBody.\n`;
+    const filePath = writeLessonFile(lessonsDir, entry);
+    const content = fs.readFileSync(filePath, 'utf-8');
+    expect(content).toContain(`## Lesson — ${shortHeading}`);
+  });
 });
 
 describe('writeLessonFileAsync', () => {
