@@ -459,7 +459,13 @@ function buildWhereClause(typeFilter?: ContentType, boundary?: string): string |
     conditions.push(`\`type\` = '${typeFilter.replace(/'/g, "''")}'`);
   }
   if (boundary) {
-    conditions.push(`\`filePath\` LIKE '${boundary.replace(/'/g, "''")}%'`);
+    // Escape SQL LIKE wildcards (%, _, \) to ensure strict prefix matching
+    const escaped = boundary
+      .replace(/\\/g, '\\\\')
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_')
+      .replace(/'/g, "''");
+    conditions.push(`\`filePath\` LIKE '${escaped}%'`);
   }
   return conditions.length > 0 ? conditions.join(' AND ') : undefined;
 }

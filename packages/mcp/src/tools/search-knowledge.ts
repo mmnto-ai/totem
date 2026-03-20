@@ -78,7 +78,7 @@ async function performSearch(
     query,
     typeFilter,
     maxResults: maxResults ?? 5,
-    boundary: boundary?.toLowerCase(),
+    boundary,
   });
 
   if (results.length === 0) {
