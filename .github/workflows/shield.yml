@@ -21,22 +21,27 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm build
 
-      - name: Run totem lint
-        run: node packages/cli/dist/index.js lint
+      - name: Run totem lint (PR diff)
+        run: |
+          # Ensure the base branch is available for diff
+          git fetch origin ${{ github.base_ref }} --depth=1
+          node packages/cli/dist/index.js lint
 
       - name: Generate SARIF report
         if: always()
-        run: node packages/cli/dist/index.js lint --format sarif --out totem-shield.sarif
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1 2>/dev/null || true
+          node packages/cli/dist/index.js lint --format sarif --out totem-shield.sarif || true
 
       - name: Upload SARIF to GitHub Security
-        if: always()
+        if: always() && hashFiles('totem-shield.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: totem-shield.sarif
