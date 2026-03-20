@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { LanceStore, SearchResult } from '@mmnto/totem';
 
+import { log } from '../ui.js';
 import type { RetrievedContext } from './spec.js';
 import {
   assemblePrompt,
@@ -225,7 +226,7 @@ describe('retrieveContext — cross-totem linked stores', () => {
   });
 
   it('config error in linked store logs warning and continues', async () => {
-    const warnSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
     const primary = mockStore([makeSpec({ label: 'primary', score: 0.5 })]);
     const broken = mockFailingStore(new Error('Invalid config: dimension mismatch'));
 
