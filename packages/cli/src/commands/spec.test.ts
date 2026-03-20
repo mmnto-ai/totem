@@ -221,12 +221,11 @@ describe('retrieveContext — cross-totem linked stores', () => {
     const ctx = await retrieveContext('test query', primary, [linked]);
 
     const scores = ctx.specs.map((s) => s.score ?? 0);
-    for (let i = 1; i < scores.length; i++) {
-      expect(scores[i]!).toBeLessThanOrEqual(scores[i - 1]!);
-    }
+    expect(scores).toEqual([...scores].sort((a, b) => b - a));
   });
 
   it('config error in linked store logs warning and continues', async () => {
+    const warnSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const primary = mockStore([makeSpec({ label: 'primary', score: 0.5 })]);
     const broken = mockFailingStore(new Error('Invalid config: dimension mismatch'));
 
@@ -234,6 +233,8 @@ describe('retrieveContext — cross-totem linked stores', () => {
 
     expect(ctx.specs.length).toBeGreaterThanOrEqual(1);
     expect(ctx.specs.some((s) => s.label === 'primary')).toBe(true);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 
   it('empty linkedStores behaves same as no linked stores', async () => {
