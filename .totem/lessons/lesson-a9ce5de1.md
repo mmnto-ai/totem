@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, !**/*.test.ts
 **Severity:** error
-
-Exception messages must start with the '[Totem Error]' prefix to help distinguish internal logic failures from external system errors.

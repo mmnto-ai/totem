@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** .github/workflows/**/*.yml, .circleci/config.yml, **/scripts/*.sh, **/scripts/*.bash, Makefile
 **Severity:** error
-
-The interactive 'pnpm changeset' command crashes in non-TTY/CI environments. For automated releases, write changeset files manually to .changeset/ or use non-interactive commands.

@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.tsx, **/*.jsx
 **Severity:** error
-
-Include a space or delimiter when concatenating disjoint text fragments to prevent 'keyword synthesis' and security filter bypass.

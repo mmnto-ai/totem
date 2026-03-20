@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx, **/*.js, **/*.jsx
 **Severity:** warning
-
-Use TotemError (or a subclass like TotemParseError, TotemConfigError) instead of raw Error() for user-facing errors. The TotemError hierarchy provides structured error codes and recovery hints.

@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** packages/cli/**/*.ts, apps/cli/**/*.ts, !**/*.test.ts
 **Severity:** error
-
-Use qualified issue syntax (owner/repo#number) to prevent collisions across repositories in CLI commands.

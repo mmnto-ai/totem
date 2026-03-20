@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx, **/*.js, **/*.jsx, !**/*.test.ts
 **Severity:** error
-
-Use nullish coalescing (??) instead of logical OR (||) for numeric metrics to prevent valid '0' values (like cached latency or token counts) from incorrectly triggering the fallback.

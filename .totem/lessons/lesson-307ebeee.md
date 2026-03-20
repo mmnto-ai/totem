@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx, **/*.js, **/*.jsx, !**/error*.ts, !**/error*.js
 **Severity:** error
-
-Error re-throw guards (checking for '[Totem Error]') should be centralized in the shared error handler, not duplicated at call sites.

@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx
 **Severity:** warning
-
-Explicit type assertions are unnecessary when using the nullish coalescing operator (??) with a literal fallback, as TypeScript infers the narrowest type automatically.

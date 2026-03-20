@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** .github/workflows/*.yml, .github/workflows/*.yaml
 **Severity:** error
-
-Potential shell injection: Never use github.event or inputs directly in 'run' blocks. Map them to environment variables first and reference them as "$VAR".

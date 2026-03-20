@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** packages/cli/**/*.ts, !**/*.test.ts
 **Severity:** error
-
-Anchor input regexes with '^' and include 'https?://' protocol to avoid substring matches in CLI input.

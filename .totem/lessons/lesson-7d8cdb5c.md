@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** *.json
 **Severity:** error
-
-Avoid embedding complex shell pipelines in JSON configuration; extract hook logic into a dedicated script file (e.g., .gemini/hooks/BeforeTool.js) for maintainability.

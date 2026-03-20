@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** packages/cli/**/*.ts
 **Severity:** warning
-
-Use '@clack/prompts' instead of 'inquirer' for a more modern CLI UX (Issue #21)

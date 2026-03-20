@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/core/**/*.ts, **/core/**/*.js, !**/*.test.ts
 **Severity:** warning
-
-Avoid direct console logging in core modules to prevent environment coupling. Use optional onWarn callbacks instead.

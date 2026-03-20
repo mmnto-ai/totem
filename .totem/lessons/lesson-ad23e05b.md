@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.sh, **/*.bash
 **Severity:** error
-
-Sanitize git-sourced metadata (branch, status, diff) to remove ANSI escape sequences and control characters.

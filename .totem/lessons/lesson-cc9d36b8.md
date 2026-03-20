@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx
 **Severity:** warning
-
-Avoid bypassing visibility checks with bracket notation. Use public static factory methods for encapsulation and type-safe initialization.

@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.md, **/*.mdx, docs/**/*, guides/**/*
 **Severity:** warning
-
-Proactively remove references to planned features from user guides to avoid misleading users. Documentation should reflect the current release state.

@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.sh
 **Severity:** warning
-
-Centralize error signature detection (e.g., 429 status or 'rate limit' strings) into a shared utility instead of hardcoding literals, ensuring consistent handling across SDKs and CLI paths.

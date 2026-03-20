@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.mcp.json, **/.gemini/settings.json, **/mcp-config.json, **/claude_desktop_config.json
 **Severity:** error
-
-NEVER inline secrets, tokens, or API keys into agent configs (.mcp.json, settings.json, etc.). Use environment variables instead.

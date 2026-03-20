@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.tsx, **/*.jsx
 **Severity:** error
-
-Sanitize or wrap offending input variables in security warning messages to prevent injection attacks (e.g., terminal escape sequences).

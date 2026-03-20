@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx, **/*.js, **/*.jsx
 **Severity:** error
-
-Do not append the 'g' flag to existing RegExp flags without checking for its presence; duplicate flags cause a runtime SyntaxError in JavaScript.

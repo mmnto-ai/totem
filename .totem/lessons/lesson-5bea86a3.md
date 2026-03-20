@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.js, **/*.ts, **/*.jsx, **/*.tsx
 **Severity:** error
-
-Check for the presence of the 'g' flag before appending it; re-adding a global flag to a pattern that already includes it causes a runtime SyntaxError.

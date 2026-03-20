@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** *.test.ts, *.spec.ts
 **Severity:** warning
-
-Use exact count assertions (e.g., toBe(10)) for fixed asset collections instead of weak bounds.

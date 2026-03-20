@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*tool*/**/*.ts, **/tools/**/*.ts, packages/mcp/**/*.ts, !**/*.test.ts
 **Severity:** error
-
-Always await side-effect operations like indexing during tool execution to provide the LLM with definitive success or failure confirmation.

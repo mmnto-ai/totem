@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, !**/*.test.ts
 **Severity:** error
-
-Use deterministic IDs (based on file, line, and content) for violations to ensure stability across runs. Avoid non-deterministic values like timestamps or random numbers.

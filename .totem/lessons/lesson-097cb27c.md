@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.tsx, **/*.jsx, !.gemini/hooks/**, !.totem/hooks/**, !tools/**
 **Severity:** warning
-
-Use asynchronous spawn instead of execSync to avoid potential process hangs and silent failures.

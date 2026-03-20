@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.py, **/*.sh
 **Severity:** error
-
-Use try-parse on stdout rather than string-matching the command for '-o json'. This handles edge cases and doesn't require config awareness.

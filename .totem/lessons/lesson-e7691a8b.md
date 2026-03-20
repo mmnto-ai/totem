@@ -1,9 +1,0 @@
-## Lesson — 2026-03-06T10:00:40.352Z
-
-**Tags:** architecture, curated
-**Pattern:** \b(echo|run_shell_command|exec|sh|bash)\b.*\$TOOL_INPUT
-**Engine:** regex
-**Scope:** *.sh, _.bash, _.yml, \*.yaml
-**Severity:** error
-
-Route host hook output to stderr (console.error or console.warn) rather than stdout (console.log) to prevent AI tool pollution.

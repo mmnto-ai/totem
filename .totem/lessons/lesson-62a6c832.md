@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** packages/cli/src/commands/**/*.ts, !**/*.test.ts
 **Severity:** warning
-
-Use dynamic imports for @mmnto/totem in CLI command files to protect startup performance. Do not revert to static top-level imports.

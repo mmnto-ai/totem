@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** .husky/*, .git/hooks/*
 **Severity:** warning
-
-Perform shell-level existence checks (e.g., [ -f config.json ]) before invoking heavy CLI tools in git hooks to avoid Node.js overhead.

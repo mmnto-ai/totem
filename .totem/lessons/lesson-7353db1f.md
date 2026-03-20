@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.tsx, **/*.jsx
 **Severity:** warning
-
-Model name validation regexes must explicitly allow dots (.) to accommodate naming schemes like gpt-5.4

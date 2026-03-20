@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** packages/core/**/*.ts, packages/core/**/*.js, !**/*.test.ts, !**/*.spec.ts
 **Severity:** warning
-
-Core library code should avoid direct calls to console; use configurable callbacks to allow consumers to control logging.

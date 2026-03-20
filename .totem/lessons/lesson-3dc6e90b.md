@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, !**/*.test.ts
 **Severity:** error
-
-Broad keyword matching for tool hooks (e.g., /git/) causes false positives. Use specific regex patterns that include both the command and sub-arguments (e.g., /git\s+(push|commit)/).

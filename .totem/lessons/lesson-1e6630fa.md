@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.test.ts, **/*.test.tsx, **/*.spec.ts, **/*.spec.tsx
 **Severity:** warning
-
-ESM intra-module mocks require re-binding: spreading vi.importActual() retains closure references to real exports. Re-bind callers to use the mocked factory instead.

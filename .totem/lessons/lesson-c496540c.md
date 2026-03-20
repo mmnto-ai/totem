@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.md, **/*.mdx, **/*.txt
 **Severity:** warning
-
-Issue #515 (Claude Code hooks) was closed as not implemented. References in documentation are hallucinations; use #520 for enforcement strategy.

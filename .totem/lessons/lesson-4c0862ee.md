@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/orchestrator/**/*.ts, **/totem/**/*.ts, !**/*.test.ts
 **Severity:** warning
-
-Use 'continue' instead of 'break' in character budget loops so oversized items are skipped but smaller ones still fit.

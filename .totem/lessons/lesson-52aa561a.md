@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, package.json, **/*.yaml, **/*.yml
 **Severity:** warning
-
-Do not port legacy technical implementations (Kafka, Kubernetes, Firestore) into Totem. Use local primitives like LanceDB or terminal execution instead.

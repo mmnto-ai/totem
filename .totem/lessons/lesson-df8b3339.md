@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/prompts/**/*, **/ai/**/*, **/llm/**/*, **/*prompt*
 **Severity:** error
-
-User-controlled fields (like PR descriptions or comments) must be wrapped in XML tags explicitly labeled as 'untrusted content' to prevent prompt injection.

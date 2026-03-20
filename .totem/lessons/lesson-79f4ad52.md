@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.tsx, **/*.jsx
 **Severity:** error
-
-Sanitize ANSI escape sequences (e.g., using 'stripAnsi') before persisting text to Markdown or log files to prevent terminal injection vulnerabilities.

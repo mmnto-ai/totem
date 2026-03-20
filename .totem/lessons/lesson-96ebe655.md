@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx, **/*.js, **/*.jsx
 **Severity:** error
-
-Hoisting .split('\n') outside of loops prevents quadratic O(N^2) complexity. Avoid splitting the same string repeatedly to access lines by index.

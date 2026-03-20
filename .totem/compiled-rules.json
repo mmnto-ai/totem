@@ -1248,21 +1248,6 @@
       "fileGlobs": ["packages/core/**/*.ts", "!**/*.test.ts"]
     },
     {
-      "lessonHash": "9b37e9903afab4a5",
-      "lessonHeading": "Restricting dynamic imports to CLI command entry points",
-      "pattern": "\\bimport\\s*\\(",
-      "message": "Restricting dynamic imports to CLI command entry points",
-      "engine": "regex",
-      "severity": "warning",
-      "compiledAt": "2026-03-20T07:48:36.468Z",
-      "fileGlobs": [
-        "packages/core/src/**/*.ts",
-        "packages/cli/src/adapters/**/*.ts",
-        "packages/cli/src/utils.ts",
-        "!**/*.test.ts"
-      ]
-    },
-    {
       "lessonHash": "3160c2ad7ab623e2",
       "lessonHeading": "2026-03-08T02:39:04.901Z",
       "pattern": "#+\\s+(\\d{4}-\\d{2}-\\d{2}T|\\d{10,}|Untitled|Heading\\s*\\d*$)",

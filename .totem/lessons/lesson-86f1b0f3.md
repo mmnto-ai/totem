@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.tsx, **/*.jsx
 **Severity:** warning
-
-Use { shell: true } or { shell: IS_WIN } when calling the 'git' binary with execFileSync to ensure it resolves correctly on Windows.

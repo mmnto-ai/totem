@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** packages/core/**/*.ts, !**/*.test.ts
 **Severity:** error
-
-Use backticks (`) for column identifiers in LanceDB filters; double quotes (") cause silent failures in DataFusion.

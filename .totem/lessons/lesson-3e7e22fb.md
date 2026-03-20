@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx, **/*.js, **/*.jsx, !**/*.test.ts
 **Severity:** error
-
-Escape closing XML tags in prompts using backslash (e.g., <\/tag>) to prevent injection.

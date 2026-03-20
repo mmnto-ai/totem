@@ -5,5 +5,3 @@
 **Engine:** regex
 **Scope:** **/*.json, **/*.yaml, **/*.yml, **/*.md, **/*.sh, .gemini/**/*, .junie/**/*, .github/workflows/**/*
 **Severity:** warning
-
-AI agent configuration naming error. Use GEMINI.md (uppercase) for Gemini CLI, .gemini/config.yaml for GCA, or .junie/mcp/mcp.json for Junie. The files .gemini/gemini.md and .mcp.json are not supported.
