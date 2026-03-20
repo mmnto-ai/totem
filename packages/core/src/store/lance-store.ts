@@ -461,11 +461,10 @@ function buildWhereClause(typeFilter?: ContentType, boundary?: string): string |
   if (boundary && boundary.length > 0) {
     // Normalize Windows backslashes to forward slashes
     const normalized = boundary.replace(/\\/g, '/');
-    // Ensure trailing slash for strict directory prefix matching
-    // (prevents "packages/core" from matching "packages/core-utils")
-    const prefix = normalized.endsWith('/') ? normalized : normalized + '/';
     // Escape SQL LIKE wildcards (%, _) to ensure strict prefix matching
-    const escaped = prefix.replace(/%/g, '\\%').replace(/_/g, '\\_').replace(/'/g, "''");
+    // For strict directory matching, callers should include a trailing slash
+    // (e.g., "packages/core/" to avoid matching "packages/core-utils/")
+    const escaped = normalized.replace(/%/g, '\\%').replace(/_/g, '\\_').replace(/'/g, "''");
     conditions.push(`\`filePath\` LIKE '${escaped}%'`);
   }
   return conditions.length > 0 ? conditions.join(' AND ') : undefined;

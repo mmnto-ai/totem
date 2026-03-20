@@ -191,7 +191,7 @@ describe('LanceStore', () => {
 
       const results = await store.search({
         query: 'logic handler entry',
-        boundary: 'packages/mcp',
+        boundary: 'packages/mcp/',
         maxResults: 10,
       });
       expect(results.length).toBeGreaterThan(0);
