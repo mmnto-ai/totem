@@ -67,12 +67,17 @@ Respond with ONLY the sections below. No preamble, no closing remarks.
 [Things the issue description missed. Include race conditions, existing patterns that MUST be followed, and potential architectural regressions.]
 
 ### Implementation Tasks
-[Break the work into discrete, ordered tasks. Each task should be completable in 2-10 minutes. For each task:
-- Name the files to modify and test
-- List concrete steps (write test → verify fails → implement → verify passes → lint)
-- If a Totem lesson is relevant to THIS SPECIFIC TASK, inject it inline as:
-  > TOTEM INVARIANT: [lesson heading] — [one-line summary of the constraint]
-  Place the invariant directly next to the step it affects, not in a separate section.]
+[Break the work into discrete, ordered checkbox tasks. Each task should be completable in 5-15 minutes. Format each as \`- [ ] **Task N: Title**\` followed by indented steps.
+
+For each task:
+- Name the files to modify and the test files to update
+- If a retrieved Totem lesson applies to THIS SPECIFIC TASK, inject it inline as:
+  > TOTEM INVARIANT ([lesson heading]): [one-line constraint summary]
+  Place the invariant directly above the step it constrains, not in a separate section.
+- If the task introduces behavior that could regress, add a TDD directive:
+  > TEST DIRECTIVE: Before implementing, write a failing test named \`[descriptive test name]\` that proves the regression is caught.
+  The test name must be specific (e.g., \`rejects empty catch blocks\`), not generic (e.g., \`works correctly\`).
+- Each task ends with: write test (or update existing) → verify fails → implement → verify passes]
 
 ### Verification (MANDATORY — do not skip)
 Every implementation MUST end with these steps:
