@@ -248,6 +248,27 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
 
   log.info(TAG, `Found ${lessons.length} lessons`); // totem-ignore
 
+  // ─── Pre-compilation gate: validate Pipeline 1 metadata ──
+  {
+    const { validateLessons } = await import('@mmnto/totem');
+    const lintResult = validateLessons(lessons);
+    const errors = lintResult.diagnostics.filter((d) => d.severity === 'error');
+    const warnings = lintResult.diagnostics.filter((d) => d.severity === 'warning');
+    for (const d of warnings) {
+      log.warn(TAG, `${d.lessonHeading}: [${d.field}] ${d.message}`);
+    }
+    if (errors.length > 0) {
+      for (const d of errors) {
+        log.error('Totem Error', `${d.lessonHeading}: [${d.field}] ${d.message}`);
+      }
+      throw new TotemError(
+        'LINT_LESSONS_FAILED',
+        `${errors.length} lesson(s) have invalid metadata. Fix them before compiling.`,
+        'Run `totem lint-lessons` for details.',
+      );
+    }
+  }
+
   // ─── Phase 1: Regex compilation (requires orchestrator) ──
   if (config.orchestrator) {
     const existingFile: CompiledRulesFile = options.force

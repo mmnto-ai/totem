@@ -420,6 +420,18 @@ program
   });
 
 program
+  .command('lint-lessons')
+  .description('Validate Pipeline 1 lesson metadata (patterns, scopes, severity)')
+  .action(async () => {
+    try {
+      const { lintLessonsCommand } = await import('./commands/lint-lessons.js');
+      await lintLessonsCommand();
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('drift')
   .description('Check lessons for stale file references (CI gate)')
   .action(async () => {
