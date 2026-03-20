@@ -54,3 +54,4 @@ dev-cheatsheet.txt
 review-output.md
 .code-review/
 2026-*
+.totem/cache/.shield-passed

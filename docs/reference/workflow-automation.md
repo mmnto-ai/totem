@@ -44,7 +44,7 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 **What should happen:** Run shield, verify no violations, format check.
 **Commands:** `totem shield`, `totem lint`, `pnpm run format:check`
 **Skill:** `/prepush`
-**Note:** A `PreToolUse` hook to block `git push` without shield is planned but not yet implemented. Currently enforced by the `/prepush` skill and the pre-push git hook (which runs `totem lint`).
+**Hook:** `PreToolUse` blocks `git push` if `/prepush` hasn't been run (checks `.totem/cache/.shield-passed` timestamp, expires after 30 min).
 
 ### Phase 6: After PR Merge
 
@@ -66,10 +66,10 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 
 ## Hooks (Enforced by Harness)
 
-| Hook               | Event                     | Purpose                                  | Status  |
-| ------------------ | ------------------------- | ---------------------------------------- | ------- |
-| `PostCompact`      | After context compression | Re-inject critical CLAUDE.md rules       | Active  |
-| `PreToolUse(Bash)` | Before any Bash command   | Block `git push` if shield hasn't passed | Planned |
+| Hook               | Event                     | Purpose                                  | Status |
+| ------------------ | ------------------------- | ---------------------------------------- | ------ |
+| `PostCompact`      | After context compression | Re-inject critical CLAUDE.md rules       | Active |
+| `PreToolUse(Bash)` | Before any Bash command   | Block `git push` if shield hasn't passed | Active |
 
 ## Skills (User-Invoked)
 
