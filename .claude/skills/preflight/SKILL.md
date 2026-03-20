@@ -10,3 +10,6 @@ Before starting work on issue $ARGUMENTS:
 3. Summarize: what the spec says, what lessons are relevant, and any constraints or traps
 
 Do NOT start writing code until these steps complete. If spec fails, report the error and stop.
+
+After successful completion, create the spec gate flag:
+`mkdir -p .totem/cache && touch .totem/cache/.spec-completed`
