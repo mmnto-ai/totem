@@ -3,7 +3,7 @@
 **Tags:** security, curated
 **Pattern:** (?:\brun:|^\s*[^:\s]+\s+).*\$\{\{\s*inputs\..*\}\}
 **Engine:** regex
-**Scope:** .github/workflows/_.yml, .github/workflows/_.yaml
+**Scope:** .github/workflows/*.yml, .github/workflows/*.yaml
 **Severity:** error
 
 Directly expanding ${{ inputs.key }} in shell scripts is a command injection risk. Map to an environment variable in the 'env' section first and use the environment variable in your script.

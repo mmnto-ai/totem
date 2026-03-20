@@ -3,7 +3,7 @@
 **Tags:** architecture, curated
 **Pattern:** \bnew\s+\w*Error\(\s*['"`](?!\[Totem Error\])
 **Engine:** regex
-**Scope:** **/\*.ts, **/_.js, !\*\*/_.test.ts
+**Scope:** **/*.ts, **/*.js, !**/*.test.ts
 **Severity:** error
 
 Exception messages must start with the '[Totem Error]' prefix to help distinguish internal logic failures from external system errors.

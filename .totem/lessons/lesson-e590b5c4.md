@@ -3,7 +3,7 @@
 **Tags:** architecture, curated
 **Pattern:** process\.env\.[A-Z0-9_]+\s*(?:!==|!=)\s*(?:undefined|null|['"]['"])
 **Engine:** regex
-**Scope:** **/\*.ts, **/_.tsx, \*\*/_.js, **/\*.jsx, !**/\*.test.ts
+**Scope:** **/*.ts, **/*.tsx, **/*.js, **/*.jsx, !**/*.test.ts
 **Severity:** error
 
 Environment variable checks must validate non-whitespace characters (/\S/.test()) to prevent false positives from empty strings.

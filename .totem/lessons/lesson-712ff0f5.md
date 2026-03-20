@@ -1,9 +1,9 @@
 ## Lesson — 2026-03-06T10:00:40.352Z
 
 **Tags:** security, curated
-**Pattern:** text:\s*(?!(?:formatXmlResponse|wrapXml|formatSystemWarning)\b|['"`\[\{]|err|error|message|text|undefined|null\b)\b\w+
+**Pattern:** \b(echo|run_shell_command|exec|sh|bash)\b.*\$TOOL_INPUT
 **Engine:** regex
-**Scope:** packages/mcp/\*\*/*.ts, !**/\*.test.ts
-**Severity:\*\*\*\* error
+**Scope:** *.sh, _.bash, _.yml, \*.yaml
+**Severity:** error
 
 MCP tool returns must be wrapped in XML tags (use formatXmlResponse) to prevent Indirect Prompt Injection from untrusted content.
