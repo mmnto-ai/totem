@@ -168,6 +168,7 @@ export async function applyAstRulesToAdditions(
   additions: DiffAddition[],
   cwd: string,
   onRuleEvent?: RuleEventCallback,
+  onWarn?: (msg: string) => void,
 ): Promise<Violation[]> {
   const treeSitterRules = rules.filter((r) => r.engine === 'ast' && r.astQuery);
   const astGrepRules = rules.filter((r) => r.engine === 'ast-grep' && r.astGrepPattern);
@@ -260,7 +261,10 @@ export async function applyAstRulesToAdditions(
           const fullPath = path.resolve(cwd, file);
           // Path containment check — prevent traversal outside the project
           const relative = path.relative(path.resolve(cwd), fullPath);
-          if (relative.startsWith('..') || path.isAbsolute(relative)) continue;
+          if (relative.startsWith('..') || path.isAbsolute(relative)) {
+            onWarn?.(`Skipped file outside project: ${file} (resolved to ${fullPath})`);
+            continue;
+          }
           content = await fs.promises.readFile(fullPath, 'utf-8');
         } catch {
           // Fall through — content stays null
