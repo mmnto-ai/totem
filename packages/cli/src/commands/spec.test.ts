@@ -198,7 +198,7 @@ describe('retrieveContext — cross-totem linked stores', () => {
 
     const ctx = await retrieveContext('test query', primary, [linked]);
 
-    expect(ctx.specs.length).toBeGreaterThanOrEqual(2);
+    expect(ctx.specs.length).toBe(2);
     const labels = ctx.specs.map((s) => s.label);
     expect(labels).toContain('primary');
     expect(labels).toContain('linked');
@@ -210,7 +210,7 @@ describe('retrieveContext — cross-totem linked stores', () => {
 
     const ctx = await retrieveContext('test query', primary, [failing]);
 
-    expect(ctx.specs.length).toBeGreaterThanOrEqual(1);
+    expect(ctx.specs.length).toBe(1);
     expect(ctx.specs.some((s) => s.label === 'primary')).toBe(true);
   });
 
@@ -231,7 +231,7 @@ describe('retrieveContext — cross-totem linked stores', () => {
 
     const ctx = await retrieveContext('test query', primary, [broken]);
 
-    expect(ctx.specs.length).toBeGreaterThanOrEqual(1);
+    expect(ctx.specs.length).toBe(1);
     expect(ctx.specs.some((s) => s.label === 'primary')).toBe(true);
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
