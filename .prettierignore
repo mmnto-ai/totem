@@ -4,3 +4,5 @@ dist/
 .turbo/
 .strategy/
 pnpm-lock.yaml
+# Lesson files contain regex patterns and glob syntax that prettier mangles
+.totem/lessons/
