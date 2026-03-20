@@ -258,6 +258,9 @@ export async function applyAstRulesToAdditions(
         let content: string | null = null;
         try {
           const fullPath = path.resolve(cwd, file);
+          // Path containment check — prevent traversal outside the project
+          const relative = path.relative(path.resolve(cwd), fullPath);
+          if (relative.startsWith('..') || path.isAbsolute(relative)) continue;
           content = await fs.promises.readFile(fullPath, 'utf-8');
         } catch {
           // Fall through — content stays null
