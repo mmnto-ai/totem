@@ -182,6 +182,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
   const { loadConfig, loadEnv, resolveConfigPath, runOrchestrator } = await import('../utils.js');
   const {
     exportLessons,
+    extractManualPattern,
     hashLesson,
     loadCompiledRulesFile,
     parseCompilerResponse,
@@ -276,6 +277,47 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
       newRules.push(...freshRules);
 
       for (const lesson of toCompile) {
+        // ── Pipeline 1: Manual pattern (zero LLM) ────────
+        const manual = extractManualPattern(lesson.body);
+        if (manual) {
+          // Validate the manually provided pattern
+          if (manual.engine === 'regex') {
+            const validation = validateRegex(manual.pattern);
+            if (!validation.valid) {
+              log.warn(
+                TAG,
+                `[${lesson.heading}] Manual pattern rejected: ${validation.reason} — skipping`,
+              ); // totem-ignore
+              failed++;
+              continue;
+            }
+          }
+
+          const now = new Date().toISOString();
+          const existing = existingByHash.get(lesson.hash);
+          const sanitizedGlobs = manual.fileGlobs ? sanitizeFileGlobs(manual.fileGlobs) : undefined;
+          newRules.push({
+            lessonHash: lesson.hash,
+            lessonHeading: lesson.heading,
+            pattern: manual.engine === 'regex' ? manual.pattern : '',
+            message: lesson.heading,
+            engine: manual.engine,
+            severity: manual.severity,
+            ...(manual.engine === 'ast-grep' ? { astGrepPattern: manual.pattern } : {}),
+            ...(manual.engine === 'ast' ? { astQuery: manual.pattern } : {}),
+            compiledAt: now,
+            createdAt: existing?.createdAt ?? now,
+            ...(sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {}),
+          });
+          compiled++;
+          log.success(
+            TAG,
+            `[${lesson.heading}] Compiled (manual ${manual.engine}, ${manual.severity}): ${manual.pattern}`,
+          ); // totem-ignore
+          continue;
+        }
+
+        // ── Pipeline 2: LLM compilation ──────────────────
         const prompt = `${COMPILER_SYSTEM_PROMPT}\n\n## Lesson to Compile\n\nHeading: ${lesson.heading}\n\n${lesson.body}`;
 
         const response = await runOrchestrator({
