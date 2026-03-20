@@ -458,9 +458,11 @@ function buildWhereClause(typeFilter?: ContentType, boundary?: string): string |
   if (typeFilter) {
     conditions.push(`\`type\` = '${typeFilter.replace(/'/g, "''")}'`);
   }
-  if (boundary) {
+  if (boundary && boundary.length > 0) {
+    // Normalize Windows backslashes to forward slashes
+    const normalized = boundary.replace(/\\/g, '/');
     // Escape SQL LIKE wildcards (%, _, \) to ensure strict prefix matching
-    const escaped = boundary
+    const escaped = normalized
       .replace(/\\/g, '\\\\')
       .replace(/%/g, '\\%')
       .replace(/_/g, '\\_')
