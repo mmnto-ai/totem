@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** scripts/**/*.js, scripts/**/*.ts, tools/**/*.js, tools/**/*.ts
 **Severity:** warning
+
+Static analysis tools should read file content using git.

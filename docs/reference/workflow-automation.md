@@ -82,6 +82,32 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 | `/release-prep`      | Before cutting a release | verify tickets → `totem wrap` → `totem triage` → `totem docs` |
 | `/signoff`           | End of session           | update memory → journal                                       |
 
+## Agent Delegation (Subagent Patterns)
+
+Claude Code can spawn background agents for mechanical tasks, preserving the main context window for decisions.
+
+### What agents CAN do (local operations)
+
+- `totem shield` — run and report verdict
+- `totem lint` / `totem lint-lessons` — validate rules
+- `pnpm run test` / `pnpm run lint` — test suites
+- File reads, searches, code generation
+
+### What agents CANNOT do (sandbox restrictions)
+
+- `git push` — network operations are blocked
+- `gh pr create` — GitHub CLI requires network
+- MCP tool calls — run in a separate process
+
+### Recommended pattern
+
+1. Main agent writes code, makes decisions
+2. Delegate shield/lint/test to a background agent
+3. Continue working on strategy or next task while agent runs
+4. When agent reports back, main agent does the push + PR
+
+This saves context from 30-40KB of test output per push cycle while keeping the mandatory gates (spec before, shield after) running.
+
 ## What This Does NOT Solve
 
 - The agent will still drift on advisory steps (spec, search_knowledge) unless you invoke the skill

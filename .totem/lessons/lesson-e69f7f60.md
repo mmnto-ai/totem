@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/services/**/*, **/clients/**/*, **/integrations/**/*, **/sdk/**/*, **/adapters/**/*
 **Severity:** warning
+
+When normalizing diverse SDK errors for internal retry.

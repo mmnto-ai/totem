@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/shared/**/*.ts, **/shared/**/*.js, **/utils/**/*.ts, **/utils/**/*.js, !**/*.test.ts
 **Severity:** warning
+
+Avoid using dynamic imports in shared utility modules.

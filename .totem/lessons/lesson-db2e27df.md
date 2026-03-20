@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/triage/**, **/triage.*, !**/*.test.ts
 **Severity:** warning
+
+The totem learn command is deprecated; use totem extract instead.

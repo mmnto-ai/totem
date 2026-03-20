@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** .husky/**/*, .githooks/**/*, scripts/hooks/**/*, **/*.sh, **/*.bash
 **Severity:** error
+
+Verify CLI availability in shared git hooks before execution.

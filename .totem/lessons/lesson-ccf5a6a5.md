@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** packages/core/**/*.ts, !**/*.test.ts
 **Severity:** error
+
+SQL WHERE/DELETE clauses must use parameterized queries, not string interpolation.

@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*config*.*, **/*cache*.*
 **Severity:** warning
+
+When reading cache or config files, specifically check.

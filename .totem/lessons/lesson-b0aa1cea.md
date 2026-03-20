@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** .github/workflows/*.yml, .github/workflows/*.yaml
 **Severity:** error
+
+GitHub Actions workflow inputs must be sanitized before use in shell commands.

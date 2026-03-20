@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js
 **Severity:** error
+
+When identifying directory-based glob patterns (like.

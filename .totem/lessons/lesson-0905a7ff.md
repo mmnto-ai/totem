@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/cli/**/*.ts, **/totem/**/*.ts, **/orchestrator/**/*.ts
 **Severity:** warning
+
+Prefer Promise.all over Promise.allSettled in core packages for fail-fast behavior.

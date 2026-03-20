@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.test.ts, **/*.test.tsx, **/*.spec.ts, **/*.spec.tsx
 **Severity:** warning
+
+ESM intra-module mock requires re-binding.

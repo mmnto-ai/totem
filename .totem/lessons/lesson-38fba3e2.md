@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/hooks/**/*.ts, **/shield/**/*.ts, **/gates/**/*.ts, **/git/**/*.ts, !**/*.test.ts
 **Severity:** error
+
+Hooks designed to block agent actions, such as shield gates.

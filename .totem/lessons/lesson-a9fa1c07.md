@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** packages/cli/src/adapters/**/*.ts, packages/mcp/src/**/*.ts, !**/*.test.ts
 **Severity:** error
+
+Always iterate through all regex matches (e.g..

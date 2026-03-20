@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx, **/*.js, **/*.jsx
 **Severity:** error
+
+Performing content.split('\n') inside a loop over line.

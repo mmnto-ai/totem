@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** packages/cli/src/index.ts, packages/cli/src/bin/**/*.ts, packages/cli/src/cli.ts, **/cli.ts
 **Severity:** warning
+
+CLI entrypoints print clean errors, libraries throw.

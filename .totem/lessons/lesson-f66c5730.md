@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx
 **Severity:** warning
+
+Casting an object literal to an Error type does not satisfy.

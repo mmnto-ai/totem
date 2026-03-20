@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, package.json, **/*.yaml, **/*.yml
 **Severity:** warning
+
+Do not reference external services (Kafka, Kubernetes, Firestore) that are not part of the project.

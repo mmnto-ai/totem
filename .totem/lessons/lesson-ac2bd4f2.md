@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx, !**/*.test.ts
 **Severity:** warning
+
+AI tool metadata must treat MCP-related fields as optional.

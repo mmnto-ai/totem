@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.js, **/*.ts, **/*.json, **/*.md, **/*.sh, **/*.yml, **/*.yaml, .gitignore
 **Severity:** warning
+
+Junie requires specific file locations for auto-detection.

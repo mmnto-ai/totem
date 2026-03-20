@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/orchestrator/**/*.ts, **/totem/**/*.ts, !**/*.test.ts
 **Severity:** warning
+
+When injecting vectordb lessons into orchestrator prompts.

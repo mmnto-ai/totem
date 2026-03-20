@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx, **/*.js, **/*.jsx, **/*.py, **/*.go
 **Severity:** warning
+
+Using a unified "Totem Error" tag in error logs instead.

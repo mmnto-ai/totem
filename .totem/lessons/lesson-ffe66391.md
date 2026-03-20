@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** .github/workflows/**/*.yml, .circleci/config.yml, **/scripts/*.sh, **/scripts/*.bash, Makefile
 **Severity:** error
+
+Changesets interactive CLI (pnpm changeset) crashes when.

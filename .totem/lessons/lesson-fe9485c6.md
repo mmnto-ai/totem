@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.sh
 **Severity:** warning
+
+Do not hardcode main...HEAD in git commands; use the configurable base branch.

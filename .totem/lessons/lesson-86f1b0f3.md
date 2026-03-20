@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.tsx, **/*.jsx
 **Severity:** warning
+
+Windows requires shell:true for git binary resolution.

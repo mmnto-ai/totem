@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** *.json
 **Severity:** error
+
+Hook configurations must not contain shell injection patterns (pipes, grep, etc.).

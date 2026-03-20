@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.py, **/*.sh
 **Severity:** error
+
+Do not hardcode CLI flags like "-o json" in string matching; use structured argument parsing.

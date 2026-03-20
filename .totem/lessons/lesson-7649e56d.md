@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx, **/*.js, **/*.jsx, **/*.py, **/*.md, **/*.txt
 **Severity:** warning
+
+LLMs are notoriously poor at character counting; use.

@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx, **/*.js, **/*.jsx, !**/*.test.ts
 **Severity:** error
+
+Always combine typeof val === "object" with a truthiness check because typeof null is "object".

@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.tsx, **/*.jsx
 **Severity:** warning
+
+Ensure model name validation regexes explicitly allow.

@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx
 **Severity:** warning
+
+Avoid bypassing visibility checks with bracket notation.

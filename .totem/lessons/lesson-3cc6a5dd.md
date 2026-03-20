@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx, **/*.js, **/*.jsx, !**/*.test.ts
 **Severity:** warning
+
+Avoid interpolating raw err objects in template literals; use err.message or err.stack.

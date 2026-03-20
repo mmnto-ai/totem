@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx, **/*.js, **/*.jsx, **/*.py, **/*.md, **/*.yaml, **/*.yml
 **Severity:** warning
+
+Use semantic constraints like "one to two short sentences".

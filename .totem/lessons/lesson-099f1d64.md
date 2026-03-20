@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/core/**/*.ts, **/core/**/*.js, !**/*.test.ts
 **Severity:** warning
+
+Swallowing errors in core modules hides silent failures.

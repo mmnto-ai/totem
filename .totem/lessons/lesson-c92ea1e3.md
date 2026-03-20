@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.md, **/*.mdx, docs/**/*, guides/**/*
 **Severity:** warning
+
+Proactively remove references to planned features from user.

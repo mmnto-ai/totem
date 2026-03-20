@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.test.ts, **/*.test.js, **/*.spec.ts, **/*.spec.js
 **Severity:** warning
+
+Avoid brittle numeric assertions like toBeGreaterThan; use precise matchers instead.

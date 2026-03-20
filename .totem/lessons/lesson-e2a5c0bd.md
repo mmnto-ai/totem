@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** *.test.ts, *.spec.ts
 **Severity:** warning
+
+Avoid testing array length with comparison matchers; use toHaveLength for clarity.

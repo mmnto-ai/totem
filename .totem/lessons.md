@@ -1453,7 +1453,7 @@ Increase search pool sizes (e.g., to 20 results) when retrieving architectural l
 
 **Tags:** review-guidance, audience:contributor
 
-GCA (Gemini Code Assist) has stale model knowledge and repeatedly flags valid model identifiers like `gemini-2.5-flash`, `claude-haiku-4-5-20251001`, and `gemini-3-flash-preview` as typos or non-existent models. These are verified in smoke tests. Decline firmly with a link to `docs/supported-models.md`.
+GCA (Gemini Code Assist) has stale model knowledge and repeatedly flags valid model identifiers like `gemini-2.5-flash`, `claude-haiku-4-5-20251001`, and `gemini-3-flash-preview` as typos or non-existent models. These are verified in smoke tests. Decline firmly with a link to `docs/reference/supported-models.md`.
 
 ## Lesson — ESM intra-module mock requires re-binding
 

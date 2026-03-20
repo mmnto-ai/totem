@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*sarif*/**/*.ts, **/sarif/**/*.ts
 **Severity:** error
+
+When mapping violations to rules in SARIF generation.

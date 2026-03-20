@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx
 **Severity:** warning
+
+Explicit type assertions are often unnecessary when using.

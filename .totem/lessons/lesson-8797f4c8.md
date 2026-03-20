@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, !**/*.test.ts, !**/*.spec.ts
 **Severity:** error
+
+Do not JSON.parse raw stdout/stderr from child processes without error handling.
