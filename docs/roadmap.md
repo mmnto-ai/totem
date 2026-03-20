@@ -66,7 +66,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - Suspicious lesson detection algorithms.
     - MCP taskkill injection prevention and capability caps (#714).
   - **Git Enforcements:** Native Git hook enforcement prioritizing zero-LLM `totem lint` for fast validation, with monorepo and Bun support.
-  - **Installation Automation:** Auto-installation of `totem hooks` and CI drift gating foundations.
+  - **Installation Automation:** Auto-installation of `totem hooks` and CI drift gating foundations. Expanded drift gating with a cross-platform CI matrix ensuring stable tests across Ubuntu, Windows, and macOS (#774).
 
 ## Phase 3: Workflow Expansion (Power User Tools)
 
@@ -91,7 +91,9 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [x] **Toolchain Exports:** Exported compiled lessons to GitHub Copilot instructions (#294).
     - [x] **Local Sharing:** Introduced `totem link` to securely share compiled lessons across repositories (#612, #614). Enabled cross-totem queries via `linkedIndexes` configuration and added extensive CI testing (#665, #744).
   - **Task Orchestration:**
-    - [x] **Automation & Skills:** Delivered workflow automation, cleaned up stale commands, and restructured skills into a directory format (`SKILL.md`) (#755, #757).
+    - [x] **Automation & Skills:**
+      - Restructured skills into a directory format (`SKILL.md`) and cleaned up stale commands (#755, #757).
+      - Upgraded `totem spec` to a straitjacket checklist format for strict preflight validation (#773).
     - [ ] **#119 `totem run <workflow>`:** Introduce a custom AI task runner to execute user-defined markdown workflows via the orchestrator.
     - [ ] **#74 `totem oracle`:** Add a frictionless Q&A command to query LanceDB without strict personas.
     - [ ] **#392 `totem review`:** Implement full codebase review powered by repomix and vectordb lessons.
@@ -113,7 +115,9 @@ This phase fortified the core architecture, delivering native orchestration, zer
       - Categorized rules by invariant, style, and security to establish strict baseline severity (#559, #577).
       - Refined to a curated 147-rule set to reduce false positives and assure fast execution.
       - Introduced Complete or Broken guardrails and added baseline Fix guidance with mandatory verify steps (#688, #708).
-    - [x] **Compilation Optimization:** Cached non-compilable lessons, removed duplicate rules, and implemented a compiler facade pattern to optimize performance (#590, #710). Refined compiler glob patterns to strictly enforce specified directory boundaries (#603).
+    - [x] **Compilation Optimization:**
+      - Implemented a compiler facade pattern and cached non-compilable lessons to optimize performance (#590, #710).
+      - Refined glob boundaries and introduced a pre-compilation lesson file linter to ensure structural validity (#603, #769).
     - [x] **Pipeline 1 Lessons:** Integrated manual patterns into lessons and reverse-compiled curated rules into Pipeline 1 (#752, #759). Streamlined compilation by extracting the `engineFields` helper (#754).
     - [ ] **#385 Rule Exports:** Export compiled rules to Semgrep YAML and ESLint configurations. Deferred until core governance (#314) is finalized.
     - [ ] **#433 Lesson Packs Prototype:** Mine 1 OSS project as a proof of concept for distributable rule sets.

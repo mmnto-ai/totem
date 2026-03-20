@@ -178,7 +178,7 @@ $ npx @mmnto/cli spec 570
 [Spec] Found: 5 specs, 3 code, 0 lessons
 ```
 
-`totem spec` fetches your issue, queries the knowledge index for architectural traps, and generates a spec complete with invariants and baseline fix guidance. It tells your AI agent exactly what to build and what mistakes to avoid.
+`totem spec` fetches your issue, queries the knowledge index for architectural traps, and generates a straitjacket checklist complete with invariants and baseline fix guidance (#773). It tells your AI agent exactly what to build and what mistakes to avoid.
 
 Cross-totem queries via `linkedIndexes` let the planner pull context from multiple projects simultaneously. Strategy docs can inform code decisions, while shared design systems inform component repositories.
 
@@ -217,12 +217,13 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
   - **Execution Hardening:** Safeguards agent operations by enforcing MCP capability caps, preventing orchestrator taskkill injections, and prompting for consent on cross-repo links (#714, #724).
 - **Reliability & Portability:**
   - **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs. They also guarantee safe simultaneous MCP mutations.
-  - **Cross-Platform Readiness:** V1.0 portability audits and Docker test harnesses (#715) guarantee consistent behavior across major operating systems and deployment environments.
+  - **Cross-Platform Readiness:** V1.0 portability audits, Docker test harnesses (#715), and a comprehensive CI matrix (Ubuntu, Windows, macOS) (#774) guarantee consistent behavior across environments.
   - **Index Stability:** Dimension mismatch detection via `index-meta.json` prevents database corruption. Auto-healing migrations handle embedder changes automatically.
   - **Error Handling:** Typed `TotemError` subclasses unify error domains and provide actionable recovery hints for resilient operations (#711).
 - **Rule Architecture:**
   - **Curated Baselines:** Features a highly-curated 147-rule set with mandatory verify steps to guarantee execution determinism (#708). Supports reverse-compiling rules into Pipeline 1 lessons with manual patterns (#752, #759).
-  - **Agent Automation:** Agent skills are structured in modular directories (`SKILL.md`), enforcing `/prepush` execution via `PreToolUse` and `PostCompact` hooks (#755, #756, #757, #758).
+  - **Quality Gates:** Validates authoring consistency with a rigorous lesson file linter backed by a pre-compilation gate (#769).
+  - **Agent Automation:** Agent skills are structured in modular directories (`SKILL.md`), enforcing `/prepush` execution via `PreToolUse` and `PostCompact` hooks (#755, #757, #758).
   - **Severity Validation (Gate 1):** Compiled rules enforce strict severity levels (`error` blocks CI, `warning` informs without blocking) to guarantee execution safety (#725).
   - **Categorization:** Compiled rules span security, architecture, style, and performance domains.
 

@@ -1,5 +1,13 @@
 # @mmnto/cli
 
+## 1.3.7
+
+### Patch Changes
+
+- 6a2eb4c: Lesson linter with pre-compilation gate, spec straitjacket format (TDD forcing + inline invariants), cross-platform CI matrix.
+- Updated dependencies [6a2eb4c]
+  - @mmnto/totem@1.3.7
+
 ## 1.3.6
 
 ### Patch Changes
