@@ -66,10 +66,11 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 
 ## Hooks (Enforced by Harness)
 
-| Hook               | Event                     | Purpose                                  | Status |
-| ------------------ | ------------------------- | ---------------------------------------- | ------ |
-| `PostCompact`      | After context compression | Re-inject critical CLAUDE.md rules       | Active |
-| `PreToolUse(Bash)` | Before any Bash command   | Block `git push` if shield hasn't passed | Active |
+| Hook               | Event                     | Purpose                                                | Status |
+| ------------------ | ------------------------- | ------------------------------------------------------ | ------ |
+| `PostCompact`      | After context compression | Re-inject rules + capability manifest (ADR-063)        | Active |
+| `PreToolUse(Bash)` | Before `git commit`       | Warn if `/preflight` hasn't been run on feature branch | Active |
+| `PreToolUse(Bash)` | Before `git push`         | Block if `/prepush` hasn't been run                    | Active |
 
 ## Skills (User-Invoked)
 

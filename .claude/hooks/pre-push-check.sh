@@ -1,13 +1,29 @@
 #!/bin/bash
-# Block git push if /prepush hasn't been run.
-# The /prepush skill creates .shield-passed after shield passes.
-# This hook consumes the flag — every push requires a fresh /prepush.
+# Phase-gate enforcement (ADR-063):
+# 1. Block git push if /prepush hasn't been run
+# 2. Warn on git commit if /preflight hasn't been run on a feature branch
 
 TOOL_INPUT=$(cat)
 COMMAND=$(echo "$TOOL_INPUT" | grep -o '"command":"[^"]*"' | head -1 | sed 's/"command":"//;s/"//')
 
-# Only check git push commands
-if echo "$COMMAND" | grep -q "git push"; then
+# ─── Gate 1: Spec before commit (warning) ──
+if [[ "$COMMAND" == "git commit"* ]]; then
+  SPEC_FLAG=".totem/cache/.spec-completed"
+  BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+  # Skip: main/master, hotfix/docs/chore branches, detached HEAD
+  case "$BRANCH" in
+    main|master|HEAD|""|hotfix/*|docs/*|chore/*|fix/*) ;;
+    *)
+      if [ ! -f "$SPEC_FLAG" ]; then
+        echo "⚠️  No /preflight run on this branch. Consider running /preflight <issue> first." >&2
+      fi
+      ;;
+  esac
+fi
+
+# ─── Gate 2: Shield before push (hard block) ──
+if [[ "$COMMAND" == "git push"* ]]; then
   SHIELD_FLAG=".totem/cache/.shield-passed"
 
   if [ ! -f "$SHIELD_FLAG" ]; then
