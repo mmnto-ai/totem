@@ -97,6 +97,8 @@ export interface SearchOptions {
   maxResults?: number;
   /** When true, combines vector + FTS results using RRF reranking. Requires an FTS index. */
   hybrid?: boolean;
+  /** File path prefix to restrict results to a specific architectural boundary (e.g., 'packages/core'). */
+  boundary?: string;
 }
 
 /**

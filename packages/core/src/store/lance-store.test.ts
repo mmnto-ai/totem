@@ -181,6 +181,41 @@ describe('LanceStore', () => {
       const results = await store.search({ query: 'content', typeFilter: 'spec', maxResults: 10 });
       expect(results.every((r) => r.type === 'spec')).toBe(true);
     });
+
+    it('filters by boundary (file path prefix)', async () => {
+      await store.insert([
+        makeChunk({ filePath: 'packages/core/src/compiler.ts', content: 'core compiler logic' }),
+        makeChunk({ filePath: 'packages/mcp/src/tools.ts', content: 'mcp tool handler' }),
+        makeChunk({ filePath: 'packages/cli/src/index.ts', content: 'cli entry point' }),
+      ]);
+
+      const results = await store.search({
+        query: 'logic handler entry',
+        boundary: 'packages/mcp/',
+        maxResults: 10,
+      });
+      expect(results.length).toBeGreaterThan(0);
+      expect(results.every((r) => r.filePath.startsWith('packages/mcp'))).toBe(true);
+    });
+
+    it('returns all results when boundary is omitted', async () => {
+      await store.insert([
+        makeChunk({ filePath: 'packages/core/src/a.ts', content: 'alpha content' }),
+        makeChunk({ filePath: 'packages/mcp/src/b.ts', content: 'beta content' }),
+      ]);
+
+      const results = await store.search({ query: 'content', maxResults: 10 });
+      expect(results.length).toBe(2);
+    });
+
+    it('ignores empty string boundary', async () => {
+      await store.insert([
+        makeChunk({ filePath: 'packages/core/src/a.ts', content: 'gamma content' }),
+      ]);
+
+      const results = await store.search({ query: 'gamma', boundary: '', maxResults: 10 });
+      expect(results.length).toBeGreaterThan(0);
+    });
   });
 
   describe('reset', () => {
