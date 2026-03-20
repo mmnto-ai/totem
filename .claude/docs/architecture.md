@@ -35,5 +35,5 @@ Pass partition names via the `boundary` parameter on `search_knowledge`.
 
 ## Test Suite
 
-- 1,047+ tests across core (411) + cli (626) + mcp (9)
+- Over 1,000 tests across the core, cli, and mcp packages
 - Cross-platform CI: ubuntu, windows, macos
