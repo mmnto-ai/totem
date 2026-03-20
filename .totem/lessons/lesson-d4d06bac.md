@@ -3,5 +3,5 @@
 **Tags:** architecture, curated
 **Pattern:** ^.+$
 **Engine:** regex
-**Scope:** compiled-rules.json
+**Scope:** **/compiled-rules.json
 **Severity:** error

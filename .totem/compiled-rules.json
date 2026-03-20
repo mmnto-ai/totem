@@ -810,16 +810,6 @@
       "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"]
     },
     {
-      "lessonHash": "9b5b76b73a20845c",
-      "lessonHeading": "Manually editing compiled rule files",
-      "pattern": "^.+$",
-      "message": "Manually editing compiled rule files",
-      "engine": "regex",
-      "severity": "warning",
-      "compiledAt": "2026-03-20T07:48:36.464Z",
-      "fileGlobs": ["**/compiled-rules.json"]
-    },
-    {
       "lessonHash": "276ffebed65eef41",
       "lessonHeading": "2026-03-06T10:00:40.352Z",
       "pattern": "grep\\s+[^&|]*['\"]git\\s+(push|commit|pull|checkout|clone|reset|rebase|merge|branch|add)",
@@ -854,16 +844,6 @@
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.464Z",
       "fileGlobs": [".github/dependabot.yml"]
-    },
-    {
-      "lessonHash": "d937a9f2fe8bbd3a",
-      "lessonHeading": "Use granular assertions rather than snapshots for testing",
-      "pattern": "\\.toMatch(Inline)?Snapshot\\s*\\(",
-      "message": "Use granular assertions rather than snapshots for testing",
-      "engine": "regex",
-      "severity": "warning",
-      "compiledAt": "2026-03-20T07:48:36.464Z",
-      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]
     },
     {
       "lessonHash": "fa1e3b728a113f6a",
@@ -1265,7 +1245,7 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.468Z",
-      "fileGlobs": ["compiled-rules.json"]
+      "fileGlobs": ["**/compiled-rules.json"]
     },
     {
       "lessonHash": "48e0284fd380dd9b",

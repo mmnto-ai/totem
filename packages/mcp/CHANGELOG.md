@@ -1,5 +1,13 @@
 # @mmnto/mcp
 
+## 1.3.8
+
+### Patch Changes
+
+- 16e6071: Context isolation boundary parameter for search_knowledge MCP tool. Consolidated near-duplicate rules (146 → 144).
+- Updated dependencies [16e6071]
+  - @mmnto/totem@1.3.8
+
 ## 1.3.7
 
 ### Patch Changes

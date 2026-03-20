@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.3.6`. Recent patch efforts established a cross-platform CI matrix (#774), upgraded `totem spec` to a straitjacket checklist format (#773), and introduced a lesson file linter with a pre-compilation gate (#769). Previous efforts advanced workflow automation by restructuring skills into a directory format (#757) and enforcing `/prepush` validation via `PreToolUse` hooks (#758). Core governance was simultaneously strengthened by introducing Pipeline 1 manual patterns in lessons and reverse-compiling curated rules (#752, #759). Previous release efforts delivered a security hardening batch to address MCP capability caps and injection vulnerabilities (#714), alongside new launch metrics, a Docker test harness (#715), and DX polish targeting onboarding flows and output brevity (#717). Focus advanced through the sprint by introducing `verify_execution`, a refactored compiler facade (#710), and unified error domains (#711)—following successful v1.0 readiness audits and a reversion to a curated 147-rule set (#708).
+ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.3.7`. Recent patch efforts introduced a boundary parameter to the MCP `search_knowledge` tool (#777), consolidated near-duplicate rules (#764), and established a cross-platform CI matrix (#774). Earlier sprint work upgraded `totem spec` to a straitjacket checklist format (#773) and introduced a lesson file linter with a pre-compilation gate (#769). Previous efforts advanced workflow automation by restructuring skills into a directory format (#757) and enforcing `/prepush` validation via `PreToolUse` hooks (#758). Core governance was simultaneously strengthened by introducing Pipeline 1 manual patterns in lessons and reverse-compiling curated rules (#752, #759). Previous release efforts delivered a security hardening batch to address MCP capability caps and injection vulnerabilities (#714), alongside new launch metrics, a Docker test harness (#715), and DX polish targeting onboarding flows and output brevity (#717). Focus advanced through the sprint by introducing `verify_execution`, a refactored compiler facade (#710), and unified error domains (#711)—following successful v1.0 readiness audits and a reversion to a curated 147-rule set (#708).
 
 Post-merge sequence was aligned during a multi-agent planning session (Claude + Gemini, 2026-03-13) informed by Deep Research Brief #24 (Competitive Moat Analysis). See `.strategy/deep-research/24-competitive-moat-analysis/` for the full adversarial analysis.
 
@@ -47,6 +47,7 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Migrated lessons directory to dual-read/single-write and added startup health checks for LanceStore indexes (#428, #439).
   - Automated `totem sync --full` triggering following embedder configuration changes (#548).
 - **Core & Shift-Left Foundation:**
+  - Consolidated near-duplicate rules to streamline the active baseline and improve enforcement precision (#764).
   - Established a cross-platform CI matrix supporting Ubuntu, Windows, and macOS environments (#774).
   - Upgraded `totem spec` to utilize a strict straitjacket checklist format for improved validation (#773).
   - Introduced a lesson file linter with a pre-compilation gate to validate lessons before processing (#769).
@@ -93,6 +94,7 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Delivered "Universal Lessons" baseline and refined ignore patterns for frictionless initialization (#128, #419).
   - Tuned match/exec patterns and literal file path rules to reduce false positives on docs and config lessons (#538, #457).
 - **Orchestration & Integrations:**
+  - Added a boundary parameter to the MCP `search_knowledge` tool to enhance context scoping and extracted corresponding operational lessons (#777).
   - Delivered workflow automation enhancements, restructuring skills into a dedicated directory format (`SKILL.md` per directory) and removing stale commands (#755, #757).
   - Refined agent hooks by enforcing `/prepush` validation via the `PreToolUse` hook and correcting the `PostCompact` hook formatting (#758, #756).
   - Updated reference hooks to utilize deterministic `totem lint` instead of AI-powered `totem shield` for rapid, predictable pre-push validation (#610).
