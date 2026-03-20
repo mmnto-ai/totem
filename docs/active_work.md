@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.3.9`. Recent sprint efforts introduced index partitions with alias resolution (#782) and expanded core governance by backfilling body text for 125 Pipeline 1 lessons (#781). Previous patch efforts introduced a boundary parameter to the MCP `search_knowledge` tool (#777), consolidated near-duplicate rules (#764), and established a cross-platform CI matrix (#774). Earlier sprint work upgraded `totem spec` to a straitjacket checklist format (#773) and introduced a lesson file linter with a pre-compilation gate (#769). Previous efforts advanced workflow automation by restructuring skills into a directory format (#757) and enforcing `/prepush` validation via `PreToolUse` hooks (#758). Core governance was simultaneously strengthened by introducing Pipeline 1 manual patterns in lessons and reverse-compiling curated rules (#752, #759). Previous release efforts delivered a security hardening batch to address MCP capability caps and injection vulnerabilities (#714), alongside new launch metrics, a Docker test harness (#715), and DX polish targeting onboarding flows and output brevity (#717). Focus advanced through the sprint by introducing `verify_execution`, a refactored compiler facade (#710), and unified error domains (#711)—following successful v1.0 readiness audits and a reversion to a curated 147-rule set (#708).
+ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.3.9`. Recent efforts fixed documentation generation to prevent persistence of stale issue references (c3a6a0a). Recent sprint efforts introduced index partitions with alias resolution (#782) and expanded core governance by backfilling body text for 125 Pipeline 1 lessons (#781). Previous patch efforts introduced a boundary parameter to the MCP `search_knowledge` tool (#777), consolidated near-duplicate rules (#764), and established a cross-platform CI matrix (#774). Earlier sprint work upgraded `totem spec` to a straitjacket checklist format (#773) and introduced a lesson file linter with a pre-compilation gate (#769). Previous efforts advanced workflow automation by restructuring skills into a directory format (#757) and enforcing `/prepush` validation via `PreToolUse` hooks (#758). Core governance was simultaneously strengthened by introducing Pipeline 1 manual patterns in lessons and reverse-compiling curated rules (#752, #759). Previous release efforts delivered a security hardening batch to address MCP capability caps and injection vulnerabilities (#714), alongside new launch metrics, a Docker test harness (#715), and DX polish targeting onboarding flows and output brevity (#717). Focus advanced through the sprint by introducing `verify_execution`, a refactored compiler facade (#710), and unified error domains (#711)—following successful v1.0 readiness audits and a reversion to a curated 147-rule set (#708).
 
 Post-merge sequence was aligned during a multi-agent planning session (Claude + Gemini, 2026-03-13) informed by Deep Research Brief #24 (Competitive Moat Analysis). See `.strategy/deep-research/24-competitive-moat-analysis/` for the full adversarial analysis.
 
@@ -113,6 +113,7 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Resolved MCP server connection failures for `totem-dev` and `totem-strategy` (#512).
   - Validated Gemini CLI compliance regarding `search_knowledge` calls with lean configurations (#446).
 - **Documentation & DX:**
+  - Fixed documentation generation to prevent persistence of stale issue references (c3a6a0a).
   - Executed Developer Experience (DX) polish to streamline onboarding flows, hide legacy commands, and condense standard output (#717).
   - Regenerated project documentation to integrate launch metrics and reflect the v1.3.2 context (#716).
   - Updated the README to prominently feature the new 60-lesson Universal Baseline shipped alongside initialization (6d800bc).
@@ -130,7 +131,4 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Completed post-release documentation sync, introduced 34 new lessons, and closed stale tickets (#504, #465).
   - Audited all suppression directives and corrected stale lesson references across documentation (#458, #441).
 
-### Blocked / Needs Input
-
-- #175 — Epic: Multiplayer Cache Syncing (Explicitly marked as `post-1.0`; do not engage until v1.0 ships).
-- #123 — Epic: Federated Memory (Mother Brain Pattern) (Explicitly marked as `post-1.0`; do not engage until v1.0 ships).
+<!-- No blocked items. #175 was closed, #123 was superseded by ADR-051. Do not re-add. -->
