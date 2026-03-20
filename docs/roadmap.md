@@ -113,8 +113,8 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [x] **External Rule Ingestion:** Built support to automatically ingest `.cursorrules`, `.mdc` files, and prompt templates into compiled rules during `totem init` (#578, #596).
     - **Rule Invariant Audit:**
       - Categorized rules by invariant, style, and security to establish strict baseline severity (#559, #577).
-      - Refined to a curated 147-rule set to reduce false positives and assure fast execution.
-      - Introduced Complete or Broken guardrails and added baseline Fix guidance with mandatory verify steps (#688, #708).
+      - Refined to a curated 147-rule set and consolidated near-duplicate rules to reduce false positives (#708, #764).
+      - Introduced Complete or Broken guardrails and added baseline Fix guidance with mandatory verify steps (#688).
     - [x] **Compilation Optimization:**
       - Implemented a compiler facade pattern and cached non-compilable lessons to optimize performance (#590, #710).
       - Refined glob boundaries and introduced a pre-compilation lesson file linter to ensure structural validity (#603, #769).
@@ -122,7 +122,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [ ] **#385 Rule Exports:** Export compiled rules to Semgrep YAML and ESLint configurations. Deferred until core governance (#314) is finalized.
     - [ ] **#433 Lesson Packs Prototype:** Mine 1 OSS project as a proof of concept for distributable rule sets.
   - **Data Architecture & Agents:**
-    - [x] **#176 Agent-Optimized MCP:** Implemented MCP enforcement tools enabling active self-correction and heartbeat zombie harvesting. Hardened with capability caps, `PreToolUse` prepush enforcement, and precise `PostCompact` hooks (#714, #756, #758).
+    - [x] **#176 Agent-Optimized MCP:** Implemented MCP enforcement tools enabling active self-correction and heartbeat zombie harvesting. Hardened with capability caps, `PreToolUse` prepush enforcement, and boundary parameters for precise `search_knowledge` queries (#714, #758, #777).
     - [x] **#364 VectorDB Structure:** Defined multi-type schemas, delivered health checks, and integrated Gemini embeddings (#439, #539).
     - [ ] **#183 Cross-File Knowledge Graph (Blocked):** Implement symbol resolution to enable multi-file architectural reasoning.
 

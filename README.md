@@ -124,7 +124,7 @@ Your project gets immediate protection against the most common architectural tra
 > **Without MCP:** `totem lint`, `compile`, `extract`, `sync`, `explain`, and `stats` all work standalone. You get full deterministic enforcement and the complete CLI experience.
 > **With MCP:** Your AI agent gains live access to the knowledge index mid-session. It can `search_knowledge` before writing code and `add_lesson` when it discovers traps.
 
-Give your AI agent persistent project memory. `search_knowledge` retrieves traps, patterns, and architectural constraints, while `add_lesson` captures new ones.
+Give your AI agent persistent project memory. `search_knowledge` retrieves traps, patterns, and architectural constraints (now with boundary parameters for scoped queries #777), while `add_lesson` captures new ones.
 
 **macOS / Linux:**
 
@@ -221,7 +221,7 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
   - **Index Stability:** Dimension mismatch detection via `index-meta.json` prevents database corruption. Auto-healing migrations handle embedder changes automatically.
   - **Error Handling:** Typed `TotemError` subclasses unify error domains and provide actionable recovery hints for resilient operations (#711).
 - **Rule Architecture:**
-  - **Curated Baselines:** Features a highly-curated 147-rule set with mandatory verify steps to guarantee execution determinism (#708). Supports reverse-compiling rules into Pipeline 1 lessons with manual patterns (#752, #759).
+  - **Curated Baselines:** Features a highly-curated 147-rule set with mandatory verify steps to guarantee execution determinism (#708), consolidating near-duplicate invariants for higher precision (#764). Supports reverse-compiling rules into Pipeline 1 lessons with manual patterns (#752, #759).
   - **Quality Gates:** Validates authoring consistency with a rigorous lesson file linter backed by a pre-compilation gate (#769).
   - **Agent Automation:** Agent skills are structured in modular directories (`SKILL.md`), enforcing `/prepush` execution via `PreToolUse` and `PostCompact` hooks (#755, #757, #758).
   - **Severity Validation (Gate 1):** Compiled rules enforce strict severity levels (`error` blocks CI, `warning` informs without blocking) to guarantee execution safety (#725).
