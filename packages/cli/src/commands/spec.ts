@@ -77,7 +77,7 @@ For each task:
 - If the task introduces behavior that could regress, add a TDD directive:
   > TEST DIRECTIVE: Before implementing, write a failing test named \`[descriptive test name]\` that proves the regression is caught.
   The test name must be specific (e.g., \`rejects empty catch blocks\`), not generic (e.g., \`works correctly\`).
-- Each task ends with: write test (or update existing) → verify fails → implement → verify passes]
+- Each task ends with: write test (or update existing) → verify fails → implement → verify passes → lint]
 
 ### Verification (MANDATORY — do not skip)
 Every implementation MUST end with these steps:
