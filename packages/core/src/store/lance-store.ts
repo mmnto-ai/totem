@@ -206,7 +206,7 @@ export class LanceStore {
     if (!this.table) return [];
 
     const maxResults = options.maxResults ?? 5;
-    const boundary = options.boundary?.toLowerCase();
+    const boundary = options.boundary;
     const useHybrid = (options.hybrid ?? true) && this.hasFtsIndex;
 
     if (useHybrid) {
