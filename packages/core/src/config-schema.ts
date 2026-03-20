@@ -181,6 +181,9 @@ export const TotemConfigSchema = z.object({
 
   /** Optional: paths to other totem-managed directories whose indexes should be queried alongside this one (e.g., ['.strategy', '../docs-repo']) */
   linkedIndexes: z.array(z.string()).optional(),
+
+  /** Optional: named partitions mapping logical aliases to file path prefixes for context isolation (e.g., { core: ['packages/core/'], mcp: ['packages/mcp/'] }) */
+  partitions: z.record(z.array(z.string().min(1)).min(1)).optional(),
 });
 
 export type ChunkStrategy = z.infer<typeof ChunkStrategySchema>;

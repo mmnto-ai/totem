@@ -74,11 +74,17 @@ async function performSearch(
   boundary?: string,
 ): Promise<ToolResult> {
   const { store, config } = await getContext();
+
+  // Resolve partition alias to path prefixes, or fall back to raw prefix
+  const resolvedBoundary: string | string[] | undefined = boundary
+    ? (config.partitions?.[boundary] ?? boundary)
+    : undefined;
+
   const results = await store.search({
     query,
     typeFilter,
     maxResults: maxResults ?? 5,
-    boundary,
+    boundary: resolvedBoundary,
   });
 
   if (results.length === 0) {
@@ -135,7 +141,7 @@ export function registerSearchKnowledge(server: McpServer): void {
           .string()
           .optional()
           .describe(
-            'File path prefix to restrict results to an architectural boundary (e.g., "packages/core", "src/components"). Enables context isolation per layer.',
+            'Partition name or file path prefix to restrict results to an architectural boundary. Use configured partition names (e.g., "core", "cli", "mcp") or raw path prefixes (e.g., "src/components/"). Enables context isolation per layer.',
           ),
       },
       annotations: {
