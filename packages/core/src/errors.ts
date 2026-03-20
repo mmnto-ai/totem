@@ -21,6 +21,7 @@ export type TotemErrorCode =
   | 'NO_LESSONS'
   | 'NO_RULES'
   | 'SHIELD_FAILED'
+  | 'LINT_LESSONS_FAILED'
   | 'MCP_ERROR';
 
 export class TotemError extends Error {

@@ -172,8 +172,10 @@ export {
   rewriteLessonHeadings,
   truncateHeading,
 } from './lesson-format.js';
+export type { LessonLintDiagnostic, LessonLintResult } from './lesson-linter.js';
+export { validateLessons } from './lesson-linter.js';
 export type { ManualPattern } from './lesson-pattern.js';
-export { extractManualPattern } from './lesson-pattern.js';
+export { extractField, extractManualPattern } from './lesson-pattern.js';
 export type { IngestionSanitizeOptions } from './sanitize.js';
 export {
   BASE64_BLOB_RE,

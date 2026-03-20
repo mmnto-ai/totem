@@ -16,7 +16,7 @@ export interface ManualPattern {
   severity: 'error' | 'warning';
 }
 
-function extractField(body: string, field: string): string | undefined {
+export function extractField(body: string, field: string): string | undefined {
   // Match: **Field:** value, **Field**: value, Field: value
   // Colon is mandatory to avoid matching prose like "Pattern is important..."
   const re = new RegExp(`^(?:\\*{2})?${field}:(?:\\*{2})?\\s+(.+)$`, 'im');
