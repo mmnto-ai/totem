@@ -4,6 +4,6 @@
 **Pattern:** \bfs\.(promises|readFile|writeFile|readdir|mkdir|rm|stat|access|appendFile|copyFile|rename|unlink)\b|['"]fs/promises['"]
 **Engine:** regex
 **Scope:** packages/cli/**/\*.ts, packages/cli/**/_.js, bin/\*\*/_.ts, bin/**/\*.js
-**Severity:\*\* warning
+**Severity:\*\*\*\* warning
 
 Synchronous file operations (e.g. readFileSync) are preferred in CLI tools for simplicity, as blocking the event loop is acceptable in short-lived processes.

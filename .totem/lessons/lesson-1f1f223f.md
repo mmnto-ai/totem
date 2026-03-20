@@ -4,6 +4,6 @@
 **Pattern:** ^# Lesson: .{61,}
 **Engine:** regex
 **Scope:** **/\*.md
-**Severity:\*\* error
+**Severity:\*\*\*\* error
 
 Lesson headings must be 60 characters or fewer to serve as efficient SARIF identifiers and optimize token usage

@@ -4,6 +4,6 @@
 **Pattern:** text:\s*(?!(?:formatXmlResponse|wrapXml|formatSystemWarning)\b|['"`\[\{]|err|error|message|text|undefined|null\b)\b\w+
 **Engine:** regex
 **Scope:** packages/mcp/\*\*/*.ts, !**/\*.test.ts
-**Severity:\*\* error
+**Severity:\*\*\*\* error
 
 MCP tool returns must be wrapped in XML tags (use formatXmlResponse) to prevent Indirect Prompt Injection from untrusted content.

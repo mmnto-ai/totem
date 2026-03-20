@@ -4,6 +4,6 @@
 **Pattern:** \.url\(\)
 **Engine:** regex
 **Scope:** **/\*.ts, **/_.js, \*\*/_.tsx, **/\*.jsx
-**Severity:\*\* error
+**Severity:\*\*\*\* error
 
 Avoid Zod's .url() validator as it requires a protocol prefix (e.g., http://) and fails on bare hostnames or host:port configurations.

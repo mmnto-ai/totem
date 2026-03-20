@@ -4,6 +4,6 @@
 **Pattern:** \bnode\s+[^"'\s]+\.js\b
 **Engine:** regex
 **Scope:** package.json, **/\*.sh, Makefile
-**Severity:\*\* error
+**Severity:\*\*\*\* error
 
 Use the .cjs extension for utility scripts and host integration hooks in ESM-first projects to ensure compatibility with external tools and prevent module resolution errors.

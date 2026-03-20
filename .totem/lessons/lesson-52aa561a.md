@@ -4,6 +4,6 @@
 **Pattern:** \b(kafka|kubernetes|firestore)\b
 **Engine:** regex
 **Scope:** **/\*.ts, **/_.js, package.json, \*\*/_.yaml, **/\*.yml
-**Severity:\*\* warning
+**Severity:\*\*\*\* warning
 
 Do not port legacy technical implementations (Kafka, Kubernetes, Firestore) into Totem. Use local primitives like LanceDB or terminal execution instead.

@@ -4,6 +4,6 @@
 **Pattern:** \.(toBeGreaterThan|toBeGreaterThanOrEqual)\(
 **Engine:** regex
 **Scope:** **/\*.test.ts, **/_.test.js, \*\*/_.spec.ts, **/\*.spec.js
-**Severity:\*\* warning
+**Severity:\*\*\*\* warning
 
 Use exact count assertions (e.g., .toHaveLength() or .toBe()) instead of 'greater than' checks to detect accidental deletions in fixed sets.

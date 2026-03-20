@@ -4,6 +4,6 @@
 **Pattern:** \.(where|delete)\s*\(\s*(?:'[^']_"[^"]+"[^']_'|"[^"]_\\"[^"]+\\"[^"]_"|`[^`]_"[^"]+"[^`]_`)\s*\)
 **Engine:** regex
 **Scope:** packages/core/\*\*/*.ts, !**/\*.test.ts
-**Severity:\*\* error
+**Severity:\*\*\*\* error
 
 Use backticks (`) for column identifiers in LanceDB filters; double quotes (") cause silent failures in DataFusion.

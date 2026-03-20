@@ -4,6 +4,6 @@
 **Pattern:** ^(?!._\b(await|return)\b)._?\.(index|upsert|persist|addDocument|deleteDocument)\s*\(
 **Engine:** regex
 **Scope:** \*\*/*tool*/\*\*/*.ts, **/tools/**/_.ts, packages/mcp/\*\*/_.ts, !**/\*.test.ts
-**Severity:\*\* error
+**Severity:\*\*\*\* error
 
 Always await side-effect operations like indexing during tool execution to provide the LLM with definitive success or failure confirmation.
