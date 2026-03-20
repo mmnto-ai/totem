@@ -1,9 +1,18 @@
 #!/bin/bash
-# Re-inject critical CLAUDE.md rules after context compaction
+# Re-inject critical rules + capability manifest after context compaction (ADR-063)
 echo ""
 echo "⚠️  CONTEXT COMPACTED — Critical rules:"
 echo "  1. Run /preflight <issue> before starting ticket work"
 echo "  2. Run /prepush BEFORE pushing (lint + shield)"
 echo "  3. Use Closes #NNN in PR bodies"
-echo "  4. Search mcp__totem-dev__search_knowledge before writing code"
+echo "  4. Call mcp__totem-dev__search_knowledge before writing code"
+echo ""
+echo "📋 Capability Manifest:"
+echo "  Commands: init, sync, lint, compile, shield, spec, extract, docs, link, lint-lessons, drift"
+echo "  MCP Tools: search_knowledge (+ boundary param), add_lesson, verify_execution"
+echo "  Partitions: core (packages/core/), cli (packages/cli/), mcp (packages/mcp/)"
+echo "  Skills: /preflight, /prepush, /postmerge, /signoff"
+echo "  Hooks: PreToolUse (blocks push without shield), PostCompact (this manifest)"
+echo "  Engines: regex, ast (Tree-sitter), ast-grep"
+echo "  Docs: .claude/docs/contributing.md, .claude/docs/architecture.md"
 echo ""
