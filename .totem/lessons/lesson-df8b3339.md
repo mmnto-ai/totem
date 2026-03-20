@@ -1,7 +1,7 @@
 ## Lesson — Wrap user-controlled fields like PR descriptions
 
 **Tags:** security, curated
-**Pattern:** (?=._\$\{._(?:description|comment|body|user*?input|userInput).*\})(?!.*untrusted[ *-]content)
+**Pattern:** (?=._\$\{._(?:description|comment|body|user*?input|userInput).*\})(?!._untrusted[ _-]content)
 **Engine:** regex
 **Scope:** **/prompts/**/_, **/ai/**/_, **/llm/**/*, \*\*/*prompt\*
 **Severity:** error
