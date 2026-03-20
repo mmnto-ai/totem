@@ -13,8 +13,7 @@ if echo "$COMMAND" | grep -q "git commit"; then
 
   # Skip: main/master, hotfix/docs/chore branches, detached HEAD
   case "$BRANCH" in
-    main|master|HEAD|"") ;;
-    hotfix/*|docs/*|chore/*|fix/*) ;;
+    main|master|HEAD|""|hotfix/*|docs/*|chore/*|fix/*) ;;
     *)
       if [ ! -f "$SPEC_FLAG" ]; then
         echo "⚠️  No /preflight run on this branch. Consider running /preflight <issue> first." >&2
