@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "PostCompact": [
+      {
+        "type": "command",
+        "command": "bash .claude/hooks/post-compact.sh"
+      }
+    ]
+  }
+}

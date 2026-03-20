@@ -143,22 +143,6 @@ program
   );
 
 program
-  .command('briefing')
-  .description('Generate a session startup briefing with current context')
-  .option('--raw', 'Output retrieved context without LLM synthesis')
-  .option('--out <path>', 'Write output to a file instead of stdout')
-  .option('--model <name>', 'Override the default model for the orchestrator')
-  .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
-  .action(async (opts: { raw?: boolean; out?: string; model?: string; fresh?: boolean }) => {
-    try {
-      const { briefingCommand } = await import('./commands/briefing.js');
-      await briefingCommand(opts);
-    } catch (err) {
-      handleError(err);
-    }
-  });
-
-program
   .command('lint')
   .description('Run compiled rules against your diff (zero LLM, fast)')
   .option('--out <path>', 'Write output to a file instead of stdout')
@@ -236,36 +220,6 @@ program
   });
 
 program
-  .command('audit')
-  .description('Audit the open issue backlog against strategic context')
-  .option('--raw', 'Output retrieved context without LLM synthesis')
-  .option('--out <path>', 'Write output to a file instead of stdout')
-  .option('--model <name>', 'Override the default model for the orchestrator')
-  .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
-  .option('--dry-run', 'Show proposals without prompting for execution')
-  .option('--yes', 'Auto-accept all actionable proposals without interactive confirmation')
-  .option('--context <lens>', 'Strategic lens to guide the audit (e.g., "speed to 1.0")')
-  .action(
-    async (opts: {
-      raw?: boolean;
-      out?: string;
-      model?: string;
-      fresh?: boolean;
-      dryRun?: boolean;
-      yes?: boolean;
-      context?: string;
-    }) => {
-      requireGhCli();
-      try {
-        const { auditCommand } = await import('./commands/audit.js');
-        await auditCommand(opts);
-      } catch (err) {
-        handleError(err);
-      }
-    },
-  );
-
-program
   .command('handoff')
   .description('Generate an end-of-session handoff snapshot for the next session')
   .option('--lite', 'Zero-LLM deterministic snapshot (git state + lessons, no API key needed)')
@@ -289,20 +243,6 @@ program
       }
     },
   );
-
-program
-  .command('bridge')
-  .description('Generate a lightweight context bridge for mid-session compaction')
-  .option('-m, --message <text>', 'Breadcrumb message describing current task state')
-  .option('--out <path>', 'Write output to a file instead of stdout')
-  .action(async (opts: { message?: string; out?: string }) => {
-    try {
-      const { bridgeCommand } = await import('./commands/bridge.js');
-      bridgeCommand(opts);
-    } catch (err) {
-      handleError(err);
-    }
-  });
 
 program
   .command('add-lesson [lesson]')
@@ -537,9 +477,9 @@ program.addHelpText(
   `
 Commands by tier:
   Core (no API keys):    init, sync, lint, compile, test, hooks, link, stats, drift
-  AI-Powered (needs LLM): shield, spec, briefing, handoff, bridge, docs, compile (with LLM)
-  GitHub Workflows:      extract, triage, audit, wrap
-  Utilities:             add-lesson, migrate-lessons, eject, demo
+  AI-Powered (needs LLM): shield, spec, handoff, docs, compile (with LLM)
+  GitHub Workflows:      extract, triage, wrap
+  Utilities:             add-lesson, explain, eject
 `,
 );
 
