@@ -172,6 +172,8 @@ export {
   rewriteLessonHeadings,
   truncateHeading,
 } from './lesson-format.js';
+export type { ManualPattern } from './lesson-pattern.js';
+export { extractManualPattern } from './lesson-pattern.js';
 export type { IngestionSanitizeOptions } from './sanitize.js';
 export {
   BASE64_BLOB_RE,
