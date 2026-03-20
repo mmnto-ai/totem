@@ -18,7 +18,8 @@ export interface ManualPattern {
 
 function extractField(body: string, field: string): string | undefined {
   // Match: **Field:** value, **Field**: value, Field: value
-  const re = new RegExp(`^(?:\\*{2})?${field}:?(?:\\*{2})?:?\\s+(.+)$`, 'im');
+  // Colon is mandatory to avoid matching prose like "Pattern is important..."
+  const re = new RegExp(`^(?:\\*{2})?${field}:(?:\\*{2})?\\s+(.+)$`, 'im');
   const match = body.match(re);
   return match?.[1]?.trim();
 }
