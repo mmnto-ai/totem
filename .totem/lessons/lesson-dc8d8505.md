@@ -1,4 +1,4 @@
-## Lesson — When using file paths in SQL LIKE clauses, normalize
+## Lesson — Normalize file paths for SQL LIKE clauses
 
 **Tags:** sql, lancedb, security
 

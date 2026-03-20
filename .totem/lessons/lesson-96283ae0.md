@@ -1,4 +1,4 @@
-## Lesson — When restoring large sets of legacy metadata, providing
+## Lesson — Prefer incomplete metadata over empty metadata
 
 **Tags:** workflow, documentation, technical-debt
 

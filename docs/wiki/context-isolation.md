@@ -13,9 +13,9 @@ You can partition your workspace's knowledge base by defining logical aliases in
 export default {
   // ...
   partitions: {
-    core: ['packages/core/src'],
-    cli: ['packages/cli/src'],
-    mcp: ['packages/mcp/src'],
+    core: ['packages/core/'],
+    cli: ['packages/cli/'],
+    mcp: ['packages/mcp/'],
   },
 };
 ```

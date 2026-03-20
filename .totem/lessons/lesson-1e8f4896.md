@@ -1,4 +1,4 @@
-## Lesson — Reusing strings from fields with strict length constraints
+## Lesson — Reusing strings from fields with strict length limits
 
 **Tags:** automation, documentation, data-migration
 

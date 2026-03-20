@@ -1,4 +1,4 @@
-## Lesson — Use .min(1) on string schemas within configuration arrays
+## Lesson — Use .min(1) on string schemas in config arrays
 
 **Tags:** zod, validation, configuration
 
