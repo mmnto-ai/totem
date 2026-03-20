@@ -131,12 +131,7 @@ function lintLesson(lesson: ParsedLesson): LessonLintDiagnostic[] {
 }
 
 export function validateLessons(lessons: ParsedLesson[]): LessonLintResult {
-  const diagnostics: LessonLintDiagnostic[] = [];
-
-  for (const lesson of lessons) {
-    diagnostics.push(...lintLesson(lesson));
-  }
-
+  const diagnostics = lessons.flatMap(lintLesson);
   const hasErrors = diagnostics.some((d) => d.severity === 'error');
 
   return {
