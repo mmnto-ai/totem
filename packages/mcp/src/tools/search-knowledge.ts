@@ -71,12 +71,14 @@ async function performSearch(
   query: string,
   typeFilter?: ContentType,
   maxResults?: number,
+  boundary?: string,
 ): Promise<ToolResult> {
   const { store, config } = await getContext();
   const results = await store.search({
     query,
     typeFilter,
     maxResults: maxResults ?? 5,
+    boundary: boundary?.toLowerCase(),
   });
 
   if (results.length === 0) {
@@ -129,12 +131,18 @@ export function registerSearchKnowledge(server: McpServer): void {
           .max(MAX_SEARCH_RESULTS)
           .optional()
           .describe(`Maximum number of results to return (default: 5, max: ${MAX_SEARCH_RESULTS})`),
+        boundary: z
+          .string()
+          .optional()
+          .describe(
+            'File path prefix to restrict results to an architectural boundary (e.g., "packages/core", "src/components"). Enables context isolation per layer.',
+          ),
       },
       annotations: {
         readOnlyHint: true,
       },
     },
-    async ({ query, type_filter, max_results }) => {
+    async ({ query, type_filter, max_results, boundary }) => {
       const start = Date.now();
       try {
         // Initialize log directory on first call (lazy — avoids loading config at import time)
@@ -166,13 +174,13 @@ export function registerSearchKnowledge(server: McpServer): void {
 
         let result: ToolResult;
         try {
-          result = await performSearch(query, type_filter, max_results);
+          result = await performSearch(query, type_filter, max_results, boundary);
         } catch (originalErr) {
           // Any LanceDB error could indicate a stale handle (e.g. files deleted
           // during a full sync rebuild). Reconnect and retry once before failing.
           try {
             await reconnectStore();
-            result = await performSearch(query, type_filter, max_results);
+            result = await performSearch(query, type_filter, max_results, boundary);
           } catch (retryErr) {
             // Retry failed — report both errors for diagnostics
             const originalMessage =
@@ -210,6 +218,7 @@ export function registerSearchKnowledge(server: McpServer): void {
           timestamp: new Date().toISOString(),
           query,
           typeFilter: type_filter,
+          boundary,
           resultCount: scoreMatches.length,
           durationMs: Date.now() - start,
           topScore,

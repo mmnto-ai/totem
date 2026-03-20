@@ -5,6 +5,7 @@ export interface SearchLogEntry {
   timestamp: string;
   query: string;
   typeFilter?: string;
+  boundary?: string;
   resultCount: number;
   durationMs: number;
   topScore: number | null;

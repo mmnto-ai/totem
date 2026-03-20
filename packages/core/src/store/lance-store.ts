@@ -206,13 +206,14 @@ export class LanceStore {
     if (!this.table) return [];
 
     const maxResults = options.maxResults ?? 5;
+    const boundary = options.boundary?.toLowerCase();
     const useHybrid = (options.hybrid ?? true) && this.hasFtsIndex;
 
     if (useHybrid) {
-      return this.hybridSearch(options.query, options.typeFilter, maxResults);
+      return this.hybridSearch(options.query, options.typeFilter, maxResults, boundary);
     }
 
-    return this.vectorSearch(options.query, options.typeFilter, maxResults);
+    return this.vectorSearch(options.query, options.typeFilter, maxResults, boundary);
   }
 
   /** Pure vector search (original behavior). */
@@ -220,14 +221,14 @@ export class LanceStore {
     query: string,
     typeFilter: ContentType | undefined,
     maxResults: number,
+    boundary?: string,
   ): Promise<SearchResult[]> {
     const [queryVector] = await this.embedder.embed([query]);
 
     let q = this.table!.vectorSearch(queryVector!).limit(maxResults);
 
-    if (typeFilter) {
-      q = q.where(`\`type\` = '${typeFilter.replace(/'/g, "''")}'`);
-    }
+    const whereClause = buildWhereClause(typeFilter, boundary);
+    if (whereClause) q = q.where(whereClause);
 
     const results = await q.toArray();
     return results.map(rowToSearchResult);
@@ -242,9 +243,10 @@ export class LanceStore {
     query: string,
     typeFilter: ContentType | undefined,
     maxResults: number,
+    boundary?: string,
   ): Promise<SearchResult[]> {
     const fetchCount = maxResults * HYBRID_OVERFETCH_FACTOR;
-    const whereClause = typeFilter ? `\`type\` = '${typeFilter.replace(/'/g, "''")}'` : undefined;
+    const whereClause = buildWhereClause(typeFilter, boundary);
 
     const [queryVector] = await this.embedder.embed([query]);
 
@@ -448,6 +450,18 @@ interface RankedRow {
   row: Record<string, unknown>;
   rank: number;
   id: string;
+}
+
+/** Build a SQL WHERE clause from optional type and boundary filters. */
+function buildWhereClause(typeFilter?: ContentType, boundary?: string): string | undefined {
+  const conditions: string[] = [];
+  if (typeFilter) {
+    conditions.push(`\`type\` = '${typeFilter.replace(/'/g, "''")}'`);
+  }
+  if (boundary) {
+    conditions.push(`\`filePath\` LIKE '${boundary.replace(/'/g, "''")}%'`);
+  }
+  return conditions.length > 0 ? conditions.join(' AND ') : undefined;
 }
 
 /** Convert a raw LanceDB row to a SearchResult. */
