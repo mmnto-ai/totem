@@ -2,7 +2,7 @@
 
 ## Essentials
 
-- **pnpm only** (never npm/yarn). Windows 11 + Git Bash. TypeScript strict mode.
+- **pnpm only** (never npm/yarn). Use `pnpm dlx` (never `npx`). Windows 11 + Git Bash. TypeScript strict mode.
 - `main` is protected. Feature branches + PRs. `Closes #NNN` in PR bodies.
 - `kebab-case.ts` files, `err` (never `error`) in catch blocks.
 - Run `pnpm run format` before committing.
