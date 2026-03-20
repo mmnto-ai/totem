@@ -220,13 +220,12 @@ describe('LanceStore', () => {
         boundary: ['packages/core/', 'packages/mcp/'],
         maxResults: 10,
       });
-      expect(results.length).toBeGreaterThan(0);
+      expect(results.length).toBe(2);
       expect(
         results.every(
           (r) => r.filePath.startsWith('packages/core/') || r.filePath.startsWith('packages/mcp/'),
         ),
       ).toBe(true);
-      expect(results.some((r) => r.filePath.startsWith('packages/cli/'))).toBe(false);
     });
 
     it('ignores empty string boundary', async () => {
