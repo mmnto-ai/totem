@@ -7,7 +7,7 @@ TOOL_INPUT=$(cat)
 COMMAND=$(echo "$TOOL_INPUT" | grep -o '"command":"[^"]*"' | head -1 | sed 's/"command":"//;s/"//')
 
 # ─── Gate 1: Spec before commit (warning) ──
-if echo "$COMMAND" | grep -q "git commit"; then
+if echo "$COMMAND" | grep -q "^git commit"; then
   SPEC_FLAG=".totem/cache/.spec-completed"
   BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 
@@ -23,7 +23,7 @@ if echo "$COMMAND" | grep -q "git commit"; then
 fi
 
 # ─── Gate 2: Shield before push (hard block) ──
-if echo "$COMMAND" | grep -q "git push"; then
+if echo "$COMMAND" | grep -q "^git push"; then
   SHIELD_FLAG=".totem/cache/.shield-passed"
 
   if [ ! -f "$SHIELD_FLAG" ]; then
