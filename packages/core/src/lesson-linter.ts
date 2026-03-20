@@ -50,18 +50,10 @@ function lintLesson(lesson: ParsedLesson): LessonLintDiagnostic[] {
   const body = lesson.raw;
 
   // ── Required fields ──
-  const pattern = extractField(body, 'Pattern');
+  // Pattern is guaranteed by isPipeline1 check above
+  const pattern = extractField(body, 'Pattern')!;
   const engineRaw = extractField(body, 'Engine');
   const severityRaw = extractField(body, 'Severity');
-
-  if (!pattern) {
-    diags.push({
-      ...base,
-      severity: 'error',
-      field: 'Pattern',
-      message: 'Missing **Pattern:** field',
-    });
-  }
 
   if (!engineRaw) {
     diags.push({

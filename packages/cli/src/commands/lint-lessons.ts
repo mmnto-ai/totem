@@ -40,7 +40,7 @@ export async function lintLessonsCommand(): Promise<void> {
 
   if (errors.length > 0) {
     log.error(
-      TAG,
+      'Totem Error',
       `${errors.length} error(s), ${warnings.length} warning(s) across ${lessons.length} lessons`,
     );
     process.exit(1);
