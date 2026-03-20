@@ -221,7 +221,8 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
   - **Index Stability:** Dimension mismatch detection via `index-meta.json` prevents database corruption. Auto-healing migrations handle embedder changes automatically.
   - **Error Handling:** Typed `TotemError` subclasses unify error domains and provide actionable recovery hints for resilient operations (#711).
 - **Rule Architecture:**
-  - **Curated Baselines:** Features a highly-curated 147-rule set with mandatory verify steps to guarantee execution determinism (#708).
+  - **Curated Baselines:** Features a highly-curated 147-rule set with mandatory verify steps to guarantee execution determinism (#708). Supports reverse-compiling rules into Pipeline 1 lessons with manual patterns (#752, #759).
+  - **Agent Automation:** Agent skills are structured in modular directories (`SKILL.md`), enforcing `/prepush` execution via `PreToolUse` and `PostCompact` hooks (#755, #756, #757, #758).
   - **Severity Validation (Gate 1):** Compiled rules enforce strict severity levels (`error` blocks CI, `warning` informs without blocking) to guarantee execution safety (#725).
   - **Categorization:** Compiled rules span security, architecture, style, and performance domains.
 
