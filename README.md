@@ -72,6 +72,27 @@ Configure cross-repo queries in `totem.config.ts`:
 linkedIndexes: ['../api-server', '../shared-design-system'],
 ```
 
+## Context Isolation — Scoped Search per Architecture Layer
+
+When multiple AI agents (or one agent across packages) share a knowledge index, you can restrict search results to specific boundaries. This prevents a frontend agent from hallucinating based on backend database schemas.
+
+```typescript
+// totem.config.ts
+partitions: {
+  core: ['packages/core/'],
+  cli: ['packages/cli/'],
+  mcp: ['packages/mcp/'],
+},
+```
+
+Agents pass the partition name when searching:
+
+```
+search_knowledge({ query: "error handling", boundary: "mcp" })
+```
+
+Results are restricted to `packages/mcp/` files. Unknown boundary names fall back to raw path prefix matching. Partitions work alongside `linkedIndexes` — a boundary is just a scoped slice of knowledge, whether local or remote.
+
 ## Performance
 
 `totem lint` runs **147 compiled rules in under 2 seconds** on a 7,400-line, 105-file PR. Zero LLM inference. Pure AST classification + regex matching.
@@ -111,7 +132,7 @@ npx @mmnto/cli init
 
 Auto-detects your environment (Cursor, Copilot, Junie) and sets up `totem.config.ts`. You can also use `totem init --bare` to skip defaults and start with a clean slate.
 
-Ships with **125 battle-tested lessons** extracted from PR reviews across major ecosystem tools (#781):
+Ships with an expanded baseline of **125 battle-tested Pipeline 1 lessons** extracted from PR reviews across major ecosystem tools (#781):
 
 - **Frameworks:** Next.js, React.
 - **Data Layer:** Prisma, Drizzle.
