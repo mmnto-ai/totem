@@ -164,6 +164,21 @@ function sanitizeFileGlobs(globs: string[]): string[] {
   return result;
 }
 
+/** Build engine-specific fields for a compiled rule. */
+function engineFields(
+  engine: 'regex' | 'ast' | 'ast-grep',
+  pattern: string | Record<string, unknown>,
+): { pattern: string; astGrepPattern?: string | Record<string, unknown>; astQuery?: string } {
+  switch (engine) {
+    case 'regex':
+      return { pattern: String(pattern) };
+    case 'ast-grep':
+      return { pattern: '', astGrepPattern: pattern };
+    case 'ast':
+      return { pattern: '', astQuery: String(pattern) };
+  }
+}
+
 // ─── Main command ───────────────────────────────────
 
 export interface CompileOptions {
@@ -299,12 +314,10 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
           newRules.push({
             lessonHash: lesson.hash,
             lessonHeading: lesson.heading,
-            pattern: manual.engine === 'regex' ? manual.pattern : '',
             message: lesson.heading,
             engine: manual.engine,
             severity: manual.severity,
-            ...(manual.engine === 'ast-grep' ? { astGrepPattern: manual.pattern } : {}),
-            ...(manual.engine === 'ast' ? { astQuery: manual.pattern } : {}),
+            ...engineFields(manual.engine, manual.pattern),
             compiledAt: now,
             createdAt: existing?.createdAt ?? now,
             ...(sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {}),
@@ -369,11 +382,10 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
           newRules.push({
             lessonHash: lesson.hash,
             lessonHeading: lesson.heading,
-            pattern: '', // ast-grep rules don't use regex patterns
             message: parsed.message,
             engine: 'ast-grep',
-            astGrepPattern: parsed.astGrepPattern,
             severity,
+            ...engineFields('ast-grep', parsed.astGrepPattern),
             compiledAt: now,
             createdAt: existing?.createdAt ?? now,
             ...(sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {}),
@@ -400,11 +412,10 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
           newRules.push({
             lessonHash: lesson.hash,
             lessonHeading: lesson.heading,
-            pattern: '', // AST rules don't use regex patterns
             message: parsed.message,
             engine: 'ast',
-            astQuery: parsed.astQuery,
             severity,
+            ...engineFields('ast', parsed.astQuery),
             compiledAt: now,
             createdAt: existing?.createdAt ?? now,
             ...(sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {}),
@@ -434,10 +445,10 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
         newRules.push({
           lessonHash: lesson.hash,
           lessonHeading: lesson.heading,
-          pattern: parsed.pattern,
           message: parsed.message,
           engine: 'regex',
           severity,
+          ...engineFields('regex', parsed.pattern),
           compiledAt: now,
           createdAt: existing?.createdAt ?? now,
           ...(sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {}),
