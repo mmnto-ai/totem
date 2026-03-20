@@ -30,7 +30,7 @@ export async function lintLessonsCommand(): Promise<void> {
 
   for (const d of errors) {
     const src = d.sourcePath ? ` (${d.sourcePath})` : '';
-    log.error(TAG, `${d.lessonHeading} ${src}: [${d.field}] ${d.message}`);
+    log.error('Totem Error', `${d.lessonHeading} ${src}: [${d.field}] ${d.message}`);
   }
 
   for (const d of warnings) {

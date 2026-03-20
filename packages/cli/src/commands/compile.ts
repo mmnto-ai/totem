@@ -259,7 +259,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
     }
     if (errors.length > 0) {
       for (const d of errors) {
-        log.error(TAG, `${d.lessonHeading}: [${d.field}] ${d.message}`);
+        log.error('Totem Error', `${d.lessonHeading}: [${d.field}] ${d.message}`);
       }
       throw new TotemError(
         'LINT_LESSONS_FAILED',
