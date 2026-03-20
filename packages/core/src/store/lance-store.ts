@@ -221,7 +221,7 @@ export class LanceStore {
     query: string,
     typeFilter: ContentType | undefined,
     maxResults: number,
-    boundary?: string,
+    boundary?: string | string[],
   ): Promise<SearchResult[]> {
     const [queryVector] = await this.embedder.embed([query]);
 
@@ -243,7 +243,7 @@ export class LanceStore {
     query: string,
     typeFilter: ContentType | undefined,
     maxResults: number,
-    boundary?: string,
+    boundary?: string | string[],
   ): Promise<SearchResult[]> {
     const fetchCount = maxResults * HYBRID_OVERFETCH_FACTOR;
     const whereClause = buildWhereClause(typeFilter, boundary);
@@ -452,20 +452,34 @@ interface RankedRow {
   id: string;
 }
 
+/** Escape a single boundary prefix for use in a SQL LIKE clause. */
+function escapeBoundaryPrefix(raw: string): string {
+  // Normalize Windows backslashes to forward slashes
+  const normalized = raw.replace(/\\/g, '/');
+  // Escape SQL LIKE wildcards (%, _) and single quotes
+  return normalized.replace(/%/g, '\\%').replace(/_/g, '\\_').replace(/'/g, "''");
+}
+
 /** Build a SQL WHERE clause from optional type and boundary filters. */
-function buildWhereClause(typeFilter?: ContentType, boundary?: string): string | undefined {
+function buildWhereClause(
+  typeFilter?: ContentType,
+  boundary?: string | string[],
+): string | undefined {
   const conditions: string[] = [];
   if (typeFilter) {
     conditions.push(`\`type\` = '${typeFilter.replace(/'/g, "''")}'`);
   }
-  if (boundary && boundary.length > 0) {
-    // Normalize Windows backslashes to forward slashes
-    const normalized = boundary.replace(/\\/g, '/');
-    // Escape SQL LIKE wildcards (%, _) to ensure strict prefix matching
-    // For strict directory matching, callers should include a trailing slash
-    // (e.g., "packages/core/" to avoid matching "packages/core-utils/")
-    const escaped = normalized.replace(/%/g, '\\%').replace(/_/g, '\\_').replace(/'/g, "''");
-    conditions.push(`\`filePath\` LIKE '${escaped}%'`);
+  // Normalize boundary to array
+  const prefixes = boundary
+    ? (Array.isArray(boundary) ? boundary : [boundary]).filter((b) => b.length > 0)
+    : [];
+  if (prefixes.length === 1) {
+    conditions.push(`\`filePath\` LIKE '${escapeBoundaryPrefix(prefixes[0]!)}%'`);
+  } else if (prefixes.length > 1) {
+    const orClauses = prefixes
+      .map((p) => `\`filePath\` LIKE '${escapeBoundaryPrefix(p)}%'`)
+      .join(' OR ');
+    conditions.push(`(${orClauses})`);
   }
   return conditions.length > 0 ? conditions.join(' AND ') : undefined;
 }

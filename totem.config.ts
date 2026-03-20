@@ -57,6 +57,12 @@ const config: TotemConfig = {
 
   linkedIndexes: ['.strategy'],
 
+  partitions: {
+    core: ['packages/core/'],
+    cli: ['packages/cli/'],
+    mcp: ['packages/mcp/'],
+  },
+
   shieldIgnorePatterns: ['.totem/lessons/**', '.strategy'],
 };
 

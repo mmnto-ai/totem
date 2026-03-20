@@ -208,6 +208,27 @@ describe('LanceStore', () => {
       expect(results.length).toBe(2);
     });
 
+    it('filters by array boundary (OR across prefixes)', async () => {
+      await store.insert([
+        makeChunk({ filePath: 'packages/core/src/a.ts', content: 'core logic delta' }),
+        makeChunk({ filePath: 'packages/mcp/src/b.ts', content: 'mcp handler delta' }),
+        makeChunk({ filePath: 'packages/cli/src/c.ts', content: 'cli command delta' }),
+      ]);
+
+      const results = await store.search({
+        query: 'delta',
+        boundary: ['packages/core/', 'packages/mcp/'],
+        maxResults: 10,
+      });
+      expect(results.length).toBeGreaterThan(0);
+      expect(
+        results.every(
+          (r) => r.filePath.startsWith('packages/core/') || r.filePath.startsWith('packages/mcp/'),
+        ),
+      ).toBe(true);
+      expect(results.some((r) => r.filePath.startsWith('packages/cli/'))).toBe(false);
+    });
+
     it('ignores empty string boundary', async () => {
       await store.insert([
         makeChunk({ filePath: 'packages/core/src/a.ts', content: 'gamma content' }),
