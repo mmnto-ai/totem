@@ -87,17 +87,20 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 Claude Code can spawn background agents for mechanical tasks, preserving the main context window for decisions.
 
 ### What agents CAN do (local operations)
+
 - `totem shield` — run and report verdict
 - `totem lint` / `totem lint-lessons` — validate rules
 - `pnpm run test` / `pnpm run lint` — test suites
 - File reads, searches, code generation
 
 ### What agents CANNOT do (sandbox restrictions)
+
 - `git push` — network operations are blocked
 - `gh pr create` — GitHub CLI requires network
 - MCP tool calls — run in a separate process
 
 ### Recommended pattern
+
 1. Main agent writes code, makes decisions
 2. Delegate shield/lint/test to a background agent
 3. Continue working on strategy or next task while agent runs
