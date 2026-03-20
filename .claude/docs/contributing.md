@@ -22,7 +22,9 @@
 - Named constants for magic numbers.
 - Zod at system boundaries only.
 - `log.error()` must use `'Totem Error'` as the tag.
-- No empty catches. No secrets in config files — `.env` only.
+- no empty catches.
+- **NEVER put secrets in config files.** `.env` only.
+- **NEVER use `git push --no-verify`.** Fix the violation or file a ticket.
 
 ## Contributor Principles
 

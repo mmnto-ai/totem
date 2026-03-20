@@ -118,7 +118,16 @@ describe('agent instruction files stay under 50 lines (FMEA-001 / FR-C01)', () =
 // ─── Cross-agent consistency ─────────────────────────
 
 describe('all agent instruction files share the same project rules', () => {
-  const claudeMd = readRoot('CLAUDE.md');
+  // Claude uses a lean root + linked sub-docs; combine them for rule checking
+  const claudeRoot = readRoot('CLAUDE.md');
+  const claudeDocs = fs.existsSync(path.join(ROOT, '.claude', 'docs'))
+    ? fs
+        .readdirSync(path.join(ROOT, '.claude', 'docs'))
+        .filter((f) => f.endsWith('.md'))
+        .map((f) => fs.readFileSync(path.join(ROOT, '.claude', 'docs', f), 'utf-8'))
+        .join('\n')
+    : '';
+  const claudeMd = claudeRoot + '\n' + claudeDocs;
   const geminiMd = readRoot('GEMINI.md');
   const junieGuidelines = readRoot('.junie/guidelines.md');
 
