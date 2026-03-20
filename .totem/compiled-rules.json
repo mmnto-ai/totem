@@ -9,7 +9,13 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.455Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "f693d6bb3d85d2c6",
@@ -19,7 +25,11 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.456Z",
-      "fileGlobs": ["**/cli/**/*.ts", "**/totem/**/*.ts", "**/orchestrator/**/*.ts"]
+      "fileGlobs": [
+        "**/cli/**/*.ts",
+        "**/totem/**/*.ts",
+        "**/orchestrator/**/*.ts"
+      ]
     },
     {
       "lessonHash": "78486efbdd520fcc",
@@ -47,7 +57,11 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.457Z",
-      "fileGlobs": ["**/core/**/*.ts", "**/core/**/*.js", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/core/**/*.ts",
+        "**/core/**/*.js",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "8baa1dac0de14d9a",
@@ -57,7 +71,10 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.457Z",
-      "fileGlobs": ["**/*.ts", "**/*.js"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js"
+      ]
     },
     {
       "lessonHash": "8b643a3b50b243e1",
@@ -86,7 +103,10 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.457Z",
-      "fileGlobs": ["**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "fed8298b5b959b32",
@@ -96,7 +116,11 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.457Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.sh"
+      ]
     },
     {
       "lessonHash": "2492e43cbc41be5f",
@@ -106,7 +130,11 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.457Z",
-      "fileGlobs": ["**/llm/**/*.ts", "**/providers/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/llm/**/*.ts",
+        "**/providers/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "739bcbb8525105bc",
@@ -116,7 +144,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T08:21:53.283Z",
-      "fileGlobs": ["*.sh", "_.bash", "_.yml", "\\*.yaml"]
+      "fileGlobs": [
+        "*.sh",
+        "_.bash",
+        "_.yml",
+        "\\*.yaml"
+      ]
     },
     {
       "lessonHash": "f24ad42147b0bad9",
@@ -141,7 +174,13 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.458Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh", ".env*"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.py",
+        "**/*.sh",
+        ".env*"
+      ]
     },
     {
       "lessonHash": "019f45fce6306ec0",
@@ -170,7 +209,12 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.458Z",
-      "fileGlobs": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
+      "fileGlobs": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
     },
     {
       "lessonHash": "480ae55a5b7ac462",
@@ -180,7 +224,10 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.458Z",
-      "fileGlobs": ["**/*config*.*", "**/*cache*.*"]
+      "fileGlobs": [
+        "**/*config*.*",
+        "**/*cache*.*"
+      ]
     },
     {
       "lessonHash": "a52edd82cbe838b9",
@@ -190,7 +237,9 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.458Z",
-      "fileGlobs": ["**/*.md"]
+      "fileGlobs": [
+        "**/*.md"
+      ]
     },
     {
       "lessonHash": "60c9dd506983f51b",
@@ -234,7 +283,10 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.458Z",
-      "fileGlobs": [".totem/lessons/**", ".totem/lessons.md"]
+      "fileGlobs": [
+        ".totem/lessons/**",
+        ".totem/lessons.md"
+      ]
     },
     {
       "lessonHash": "ef8b1fa1ba25f21e",
@@ -244,7 +296,12 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.458Z",
-      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]
+      "fileGlobs": [
+        "**/*.test.ts",
+        "**/*.test.js",
+        "**/*.spec.ts",
+        "**/*.spec.js"
+      ]
     },
     {
       "lessonHash": "351801eb01fca0b5",
@@ -254,7 +311,14 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.458Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.go"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
+        "**/*.py",
+        "**/*.go"
+      ]
     },
     {
       "lessonHash": "97c608cc59d3cc80",
@@ -264,7 +328,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.458Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "d419d2c4432f525c",
@@ -274,7 +343,12 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.458Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "729193efd162d1b1",
@@ -284,7 +358,13 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.458Z",
-      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "package.json"]
+      "fileGlobs": [
+        "*.sh",
+        "*.bash",
+        "*.yml",
+        "*.yaml",
+        "package.json"
+      ]
     },
     {
       "lessonHash": "833257ac0c6128db",
@@ -294,7 +374,11 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.459Z",
-      "fileGlobs": [".husky/**/*", "scripts/hooks/**/*", "*.sh"]
+      "fileGlobs": [
+        ".husky/**/*",
+        "scripts/hooks/**/*",
+        "*.sh"
+      ]
     },
     {
       "lessonHash": "ae8020f85b219fa3",
@@ -304,7 +388,12 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.459Z",
-      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]
+      "fileGlobs": [
+        "**/*.test.ts",
+        "**/*.test.js",
+        "**/*.spec.ts",
+        "**/*.spec.js"
+      ]
     },
     {
       "lessonHash": "51c47f9d57c1e176",
@@ -314,7 +403,12 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.459Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "bdd541e95f6ef2f0",
@@ -324,7 +418,14 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.459Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/error*.ts", "!**/error*.js"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
+        "!**/error*.ts",
+        "!**/error*.js"
+      ]
     },
     {
       "lessonHash": "f95c0424fc206666",
@@ -334,7 +435,14 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.459Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts", "!**/*.test.js"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx",
+        "!**/*.test.ts",
+        "!**/*.test.js"
+      ]
     },
     {
       "lessonHash": "b56fec21cf0746ef",
@@ -344,7 +452,9 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.459Z",
-      "fileGlobs": ["packages/core/**/*"]
+      "fileGlobs": [
+        "packages/core/**/*"
+      ]
     },
     {
       "lessonHash": "31745af2b2b1beb6",
@@ -370,7 +480,12 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.459Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "2c65b4195253e97e",
@@ -380,7 +495,11 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.459Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "fc2e85ea40081cd4",
@@ -390,7 +509,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.459Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "f68cda79304221ec",
@@ -400,7 +524,13 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T08:21:53.284Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "1f8779811104acb9",
@@ -410,7 +540,14 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.460Z",
-      "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.js", "**/*.ts", "**/*.yml", "**/*.yaml"]
+      "fileGlobs": [
+        "**/*.sh",
+        "**/*.bash",
+        "**/*.js",
+        "**/*.ts",
+        "**/*.yml",
+        "**/*.yaml"
+      ]
     },
     {
       "lessonHash": "a2065edd3af2c2d5",
@@ -420,7 +557,14 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.460Z",
-      "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.js", "**/*.ts", "**/*.yml", "**/*.yaml"]
+      "fileGlobs": [
+        "**/*.sh",
+        "**/*.bash",
+        "**/*.js",
+        "**/*.ts",
+        "**/*.yml",
+        "**/*.yaml"
+      ]
     },
     {
       "lessonHash": "7355ed704a4a7b8a",
@@ -430,7 +574,11 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.460Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "f0bce2ff9adb46c8",
@@ -440,7 +588,9 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.460Z",
-      "fileGlobs": ["packages/cli/**/*.ts"]
+      "fileGlobs": [
+        "packages/cli/**/*.ts"
+      ]
     },
     {
       "lessonHash": "6926370d9f1a0793",
@@ -450,7 +600,13 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T08:21:53.284Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "793af4cbb1bd3e44",
@@ -460,7 +616,13 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.460Z",
-      "fileGlobs": [".husky/**/*", ".githooks/**/*", "scripts/hooks/**/*", "**/*.sh", "**/*.bash"]
+      "fileGlobs": [
+        ".husky/**/*",
+        ".githooks/**/*",
+        "scripts/hooks/**/*",
+        "**/*.sh",
+        "**/*.bash"
+      ]
     },
     {
       "lessonHash": "34fb2ae8d1c391cb",
@@ -470,7 +632,12 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.460Z",
-      "fileGlobs": ["scripts/**/*.js", "scripts/**/*.ts", "tools/**/*.js", "tools/**/*.ts"]
+      "fileGlobs": [
+        "scripts/**/*.js",
+        "scripts/**/*.ts",
+        "tools/**/*.js",
+        "tools/**/*.ts"
+      ]
     },
     {
       "lessonHash": "1ffc0d6dc63bd3de",
@@ -480,7 +647,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.460Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "597c7a69643f3f0a",
@@ -490,7 +662,11 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.460Z",
-      "fileGlobs": ["**/orchestrator/**/*.ts", "**/totem/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/orchestrator/**/*.ts",
+        "**/totem/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "09005c691ef99dc1",
@@ -500,7 +676,12 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.460Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "615aaf0e7be6b28a",
@@ -510,7 +691,13 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.461Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "package.json", "**/*.yaml", "**/*.yml"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "package.json",
+        "**/*.yaml",
+        "**/*.yml"
+      ]
     },
     {
       "lessonHash": "58f018344411dda5",
@@ -520,7 +707,10 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.461Z",
-      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "8fa3736c2a760da2",
@@ -530,7 +720,10 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.461Z",
-      "fileGlobs": ["**/*sarif*/**/*.ts", "**/sarif/**/*.ts"]
+      "fileGlobs": [
+        "**/*sarif*/**/*.ts",
+        "**/sarif/**/*.ts"
+      ]
     },
     {
       "lessonHash": "0f0bb2042c1935e9",
@@ -540,7 +733,13 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.461Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "bd9535985d8e8d20",
@@ -550,7 +749,12 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.461Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "d83847fb1223730d",
@@ -560,7 +764,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.461Z",
-      "fileGlobs": ["*.sh", "*.bash", "packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "*.sh",
+        "*.bash",
+        "packages/cli/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "33d3640703d3b13e",
@@ -570,7 +779,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.462Z",
-      "fileGlobs": ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"]
+      "fileGlobs": [
+        "**/*.js",
+        "**/*.ts",
+        "**/*.jsx",
+        "**/*.tsx"
+      ]
     },
     {
       "lessonHash": "06a577638c0e8529",
@@ -595,7 +809,11 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.462Z",
-      "fileGlobs": ["**/cli/**/*.ts", "**/cli/**/*.js", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/cli/**/*.ts",
+        "**/cli/**/*.js",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "dc800bffdb2a653c",
@@ -620,7 +838,10 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.462Z",
-      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "f1b61f21226f56a0",
@@ -630,7 +851,12 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.462Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "e0a21ed16d9fe0ac",
@@ -640,7 +866,14 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.462Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.env", "**/*.yaml", "**/*.yml"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.py",
+        "**/*.env",
+        "**/*.yaml",
+        "**/*.yml"
+      ]
     },
     {
       "lessonHash": "def867915d125811",
@@ -650,7 +883,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.462Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.py",
+        "**/*.sh"
+      ]
     },
     {
       "lessonHash": "b7f0badd3e04e633",
@@ -660,7 +898,10 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.462Z",
-      "fileGlobs": ["**/*.ts", "**/*.js"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js"
+      ]
     },
     {
       "lessonHash": "00755a46647bbc6d",
@@ -670,7 +911,10 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.463Z",
-      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "packages/mcp/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "16e57123b4cc3720",
@@ -680,7 +924,12 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.463Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "2778ca0617141a65",
@@ -690,7 +939,15 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.463Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md", "**/*.txt"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
+        "**/*.py",
+        "**/*.md",
+        "**/*.txt"
+      ]
     },
     {
       "lessonHash": "6c9f21a8e28c967d",
@@ -719,7 +976,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.463Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "813fd2c4f1e392d7",
@@ -729,7 +991,10 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.463Z",
-      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "f88aa036aeec037e",
@@ -739,7 +1004,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.463Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "d91609ea23f1ed37",
@@ -749,7 +1019,9 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.463Z",
-      "fileGlobs": ["*.json"]
+      "fileGlobs": [
+        "*.json"
+      ]
     },
     {
       "lessonHash": "045c8a789c09ec03",
@@ -787,7 +1059,9 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.464Z",
-      "fileGlobs": ["packages/cli/**/*.ts"]
+      "fileGlobs": [
+        "packages/cli/**/*.ts"
+      ]
     },
     {
       "lessonHash": "fb241f2c6f06909d",
@@ -797,7 +1071,12 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.464Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "3b2dcaa3b97922a6",
@@ -807,17 +1086,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.464Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"]
-    },
-    {
-      "lessonHash": "9b5b76b73a20845c",
-      "lessonHeading": "Manually editing compiled rule files",
-      "pattern": "^.+$",
-      "message": "Manually editing compiled rule files",
-      "engine": "regex",
-      "severity": "warning",
-      "compiledAt": "2026-03-20T07:48:36.464Z",
-      "fileGlobs": ["**/compiled-rules.json"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
     },
     {
       "lessonHash": "276ffebed65eef41",
@@ -843,7 +1117,10 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.464Z",
-      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml"]
+      "fileGlobs": [
+        ".github/workflows/*.yml",
+        ".github/workflows/*.yaml"
+      ]
     },
     {
       "lessonHash": "4bc1a3f5c3890515",
@@ -853,17 +1130,9 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.464Z",
-      "fileGlobs": [".github/dependabot.yml"]
-    },
-    {
-      "lessonHash": "d937a9f2fe8bbd3a",
-      "lessonHeading": "Use granular assertions rather than snapshots for testing",
-      "pattern": "\\.toMatch(Inline)?Snapshot\\s*\\(",
-      "message": "Use granular assertions rather than snapshots for testing",
-      "engine": "regex",
-      "severity": "warning",
-      "compiledAt": "2026-03-20T07:48:36.464Z",
-      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]
+      "fileGlobs": [
+        ".github/dependabot.yml"
+      ]
     },
     {
       "lessonHash": "fa1e3b728a113f6a",
@@ -873,7 +1142,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.465Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "c9b3dd93051d0100",
@@ -883,7 +1157,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.465Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "e4def25bdcaf5665",
@@ -902,7 +1181,14 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.465Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.sh", "**/*.bash"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx",
+        "**/*.sh",
+        "**/*.bash"
+      ]
     },
     {
       "lessonHash": "f4cf4e184b7c1766",
@@ -912,7 +1198,10 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.465Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx"
+      ]
     },
     {
       "lessonHash": "51586901a7e351a9",
@@ -922,7 +1211,11 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.465Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "98b78ae169a25674",
@@ -946,7 +1239,13 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.465Z",
-      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "packages/cli/**/*.ts"]
+      "fileGlobs": [
+        "*.sh",
+        "*.bash",
+        "*.yml",
+        "*.yaml",
+        "packages/cli/**/*.ts"
+      ]
     },
     {
       "lessonHash": "a31d4068d3190f14",
@@ -956,7 +1255,11 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.465Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "4e2c90d8b84fa14a",
@@ -966,7 +1269,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.466Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh", "**/*.bash"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.sh",
+        "**/*.bash"
+      ]
     },
     {
       "lessonHash": "54b52e20f1ede476",
@@ -991,7 +1299,11 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.466Z",
-      "fileGlobs": ["package.json", "**/*.sh", "Makefile"]
+      "fileGlobs": [
+        "package.json",
+        "**/*.sh",
+        "Makefile"
+      ]
     },
     {
       "lessonHash": "612f39cabfbbaffe",
@@ -1016,7 +1328,10 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.466Z",
-      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml"]
+      "fileGlobs": [
+        ".github/workflows/*.yml",
+        ".github/workflows/*.yaml"
+      ]
     },
     {
       "lessonHash": "c908c4217c1cfbe1",
@@ -1026,7 +1341,13 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T08:21:53.284Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "737716e307b941e9",
@@ -1036,7 +1357,14 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.466Z",
-      "fileGlobs": ["**/*.md", "**/*.sh", "**/*.yml", "**/*.yaml", "package.json", "**/*.txt"]
+      "fileGlobs": [
+        "**/*.md",
+        "**/*.sh",
+        "**/*.yml",
+        "**/*.yaml",
+        "package.json",
+        "**/*.txt"
+      ]
     },
     {
       "lessonHash": "b68b25842e19d080",
@@ -1046,7 +1374,10 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.466Z",
-      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "packages/mcp/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "e5dde6ac1cf82f1d",
@@ -1056,7 +1387,10 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.466Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "packages/cli/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "a7acf7ad5c0b5df9",
@@ -1066,7 +1400,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.466Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.tsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "!**/*.test.ts",
+        "!**/*.tsx"
+      ]
     },
     {
       "lessonHash": "81233c7b781316e1",
@@ -1076,7 +1415,10 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.466Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "packages/cli/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "0a52a18b8bbc5a00",
@@ -1086,7 +1428,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.466Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "d88986b00e605d37",
@@ -1117,7 +1464,10 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.466Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "packages/cli/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "771a789289b93000",
@@ -1127,7 +1477,14 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.467Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.mjs", "**/*.cjs"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx",
+        "**/*.mjs",
+        "**/*.cjs"
+      ]
     },
     {
       "lessonHash": "e7e83c3b762c8e72",
@@ -1137,7 +1494,11 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.467Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "apps/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "packages/cli/**/*.ts",
+        "apps/cli/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "30311ebee8adde00",
@@ -1165,7 +1526,11 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.467Z",
-      "fileGlobs": ["**/*.mcp.json", "**/settings.json", "**/.vscode/settings.json"]
+      "fileGlobs": [
+        "**/*.mcp.json",
+        "**/settings.json",
+        "**/.vscode/settings.json"
+      ]
     },
     {
       "lessonHash": "6b6dc44cc358b9c2",
@@ -1175,7 +1540,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.467Z",
-      "fileGlobs": ["*.ts", "*.js", "!*.test.ts", "!*.spec.ts"]
+      "fileGlobs": [
+        "*.ts",
+        "*.js",
+        "!*.test.ts",
+        "!*.spec.ts"
+      ]
     },
     {
       "lessonHash": "43ecc91681d6d88a",
@@ -1185,7 +1555,11 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.467Z",
-      "fileGlobs": ["**/*.md", "**/*.mdx", "**/*.txt"]
+      "fileGlobs": [
+        "**/*.md",
+        "**/*.mdx",
+        "**/*.txt"
+      ]
     },
     {
       "lessonHash": "e8c77560d650afc8",
@@ -1195,7 +1569,11 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.467Z",
-      "fileGlobs": ["packages/core/**/*.ts", "libs/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "packages/core/**/*.ts",
+        "libs/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "a5cfcc0b455fa11f",
@@ -1205,7 +1583,12 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.467Z",
-      "fileGlobs": ["**/*.md", "**/*.mdx", "docs/**/*", "guides/**/*"]
+      "fileGlobs": [
+        "**/*.md",
+        "**/*.mdx",
+        "docs/**/*",
+        "guides/**/*"
+      ]
     },
     {
       "lessonHash": "b9e82a76b1a97525",
@@ -1215,7 +1598,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.467Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.mjs", "**/*.cjs"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.mjs",
+        "**/*.cjs"
+      ]
     },
     {
       "lessonHash": "27778cadd3dd4c73",
@@ -1225,7 +1613,12 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.467Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "2ead4c9d80af0af0",
@@ -1235,7 +1628,10 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.467Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx"
+      ]
     },
     {
       "lessonHash": "86dc57d8abd282df",
@@ -1245,7 +1641,10 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.467Z",
-      "fileGlobs": ["packages/core/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "packages/core/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "3160c2ad7ab623e2",
@@ -1255,7 +1654,10 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.468Z",
-      "fileGlobs": ["**/*.md", "**/*.mdx"]
+      "fileGlobs": [
+        "**/*.md",
+        "**/*.mdx"
+      ]
     },
     {
       "lessonHash": "8448fb2ba91be897",
@@ -1265,7 +1667,9 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.468Z",
-      "fileGlobs": ["compiled-rules.json"]
+      "fileGlobs": [
+        "**/compiled-rules.json"
+      ]
     },
     {
       "lessonHash": "48e0284fd380dd9b",
@@ -1312,7 +1716,10 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.468Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "packages/cli/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "96ca9531f1c47364",
@@ -1322,7 +1729,11 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.468Z",
-      "fileGlobs": ["**/triage/**", "**/triage.*", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/triage/**",
+        "**/triage.*",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "82dc7861256e96ed",
@@ -1332,7 +1743,11 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.468Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "65a9ef4540c97a2e",
@@ -1362,7 +1777,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.468Z",
-      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml"]
+      "fileGlobs": [
+        "*.sh",
+        "*.bash",
+        "*.yml",
+        "*.yaml"
+      ]
     },
     {
       "lessonHash": "cb9ac00700ec1c0f",
@@ -1372,7 +1792,12 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.468Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "69f402c1a00b3956",
@@ -1382,7 +1807,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.468Z",
-      "fileGlobs": ["**/prompts/**/*", "**/ai/**/*", "**/llm/**/*", "**/*prompt*"]
+      "fileGlobs": [
+        "**/prompts/**/*",
+        "**/ai/**/*",
+        "**/llm/**/*",
+        "**/*prompt*"
+      ]
     },
     {
       "lessonHash": "b47714945280b062",
@@ -1392,7 +1822,14 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.468Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh", "**/*.go", "**/*.rs"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.py",
+        "**/*.sh",
+        "**/*.go",
+        "**/*.rs"
+      ]
     },
     {
       "lessonHash": "b421aa503c25a3c0",
@@ -1402,7 +1839,10 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.469Z",
-      "fileGlobs": ["*.test.ts", "*.spec.ts"]
+      "fileGlobs": [
+        "*.test.ts",
+        "*.spec.ts"
+      ]
     },
     {
       "lessonHash": "bfc6e512c9f73f8e",
@@ -1412,7 +1852,12 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.469Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js", "bin/**/*.ts", "bin/**/*.js"]
+      "fileGlobs": [
+        "packages/cli/**/*.ts",
+        "packages/cli/**/*.js",
+        "bin/**/*.ts",
+        "bin/**/*.js"
+      ]
     },
     {
       "lessonHash": "6b038e07a55c1a4d",
@@ -1437,7 +1882,11 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.469Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "apps/cli/**/*.ts", "**/cli/**/*.ts"]
+      "fileGlobs": [
+        "packages/cli/**/*.ts",
+        "apps/cli/**/*.ts",
+        "**/cli/**/*.ts"
+      ]
     },
     {
       "lessonHash": "1be4c99a36999207",
@@ -1447,7 +1896,13 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T08:22:11.665Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "6b655a5b70a8e9d5",
@@ -1457,7 +1912,13 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.469Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "25a2b8e7836c3b94",
@@ -1483,7 +1944,10 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.469Z",
-      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "packages/mcp/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "67f85b47605fe233",
@@ -1493,7 +1957,10 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.469Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "packages/cli/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "1750d666c0fddd5a",
@@ -1503,7 +1970,12 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.469Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
     },
     {
       "lessonHash": "a9ec3d378b3afe48",
@@ -1513,7 +1985,10 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.469Z",
-      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "packages/mcp/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "86417ba0c7039748",
@@ -1523,7 +1998,10 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.469Z",
-      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": [
+        "packages/mcp/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "eb39739094f84e77",
@@ -1552,7 +2030,12 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.470Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
     },
     {
       "lessonHash": "3ad297c703ea2a2c",
@@ -1562,7 +2045,10 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.470Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx"
+      ]
     },
     {
       "lessonHash": "eb71cba24f65c635",
@@ -1607,7 +2093,10 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.470Z",
-      "fileGlobs": [".husky/*", ".git/hooks/*"]
+      "fileGlobs": [
+        ".husky/*",
+        ".git/hooks/*"
+      ]
     },
     {
       "lessonHash": "e0167c11e83adb61",
@@ -1617,7 +2106,11 @@
       "engine": "regex",
       "severity": "warning",
       "compiledAt": "2026-03-20T07:48:36.470Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh"]
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.sh"
+      ]
     },
     {
       "lessonHash": "cedf199f7159b400",
@@ -1627,7 +2120,9 @@
       "engine": "regex",
       "severity": "error",
       "compiledAt": "2026-03-20T07:48:36.470Z",
-      "fileGlobs": ["packages/mcp/**/*.ts"]
+      "fileGlobs": [
+        "packages/mcp/**/*.ts"
+      ]
     },
     {
       "lessonHash": "66d5e89e7cd39c26",
