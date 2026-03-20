@@ -1,5 +1,13 @@
 # @mmnto/cli
 
+## 1.3.6
+
+### Patch Changes
+
+- 09153f8: Pipeline 1 backfill: 127 curated rules now compile deterministically (zero LLM). Added .totem/lessons/ to .prettierignore. Workflow automation hooks and skills for Claude Code.
+- Updated dependencies [09153f8]
+  - @mmnto/totem@1.3.6
+
 ## 1.3.5
 
 ### Patch Changes
