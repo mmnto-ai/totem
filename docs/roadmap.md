@@ -118,12 +118,12 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [x] **Compilation Optimization:**
       - Implemented a compiler facade pattern and cached non-compilable lessons to optimize performance (#590, #710).
       - Refined glob boundaries and introduced a pre-compilation lesson file linter to ensure structural validity (#603, #769).
-    - [x] **Pipeline 1 Lessons:** Integrated manual patterns into lessons and reverse-compiled curated rules into Pipeline 1 (#752, #759). Streamlined compilation by extracting the `engineFields` helper (#754).
+    - [x] **Pipeline 1 Lessons:** Integrated manual patterns and reverse-compiled curated rules into Pipeline 1, enriching context with 125 body-text backfills (#759, #781). Streamlined compilation by extracting the `engineFields` helper (#754).
     - [ ] **#385 Rule Exports:** Export compiled rules to Semgrep YAML and ESLint configurations. Deferred until core governance (#314) is finalized.
     - [ ] **#433 Lesson Packs Prototype:** Mine 1 OSS project as a proof of concept for distributable rule sets.
   - **Data Architecture & Agents:**
     - [x] **#176 Agent-Optimized MCP:** Implemented MCP enforcement tools enabling active self-correction and heartbeat zombie harvesting. Hardened with capability caps, `PreToolUse` prepush enforcement, and boundary parameters for precise `search_knowledge` queries (#714, #758, #777).
-    - [x] **#364 VectorDB Structure:** Defined multi-type schemas, delivered health checks, and integrated Gemini embeddings (#439, #539).
+    - [x] **#364 VectorDB Structure:** Defined multi-type schemas, delivered health checks, and integrated Gemini embeddings (#439, #539). Advanced querying by introducing index partitions with alias resolution (#782).
     - [ ] **#183 Cross-File Knowledge Graph (Blocked):** Implement symbol resolution to enable multi-file architectural reasoning.
 
 ## Phase 4: Enterprise Expansion

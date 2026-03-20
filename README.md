@@ -72,6 +72,27 @@ Configure cross-repo queries in `totem.config.ts`:
 linkedIndexes: ['../api-server', '../shared-design-system'],
 ```
 
+## Context Isolation — Scoped Search per Architecture Layer
+
+When multiple AI agents (or one agent across packages) share a knowledge index, you can restrict search results to specific boundaries. This prevents a frontend agent from hallucinating based on backend database schemas.
+
+```typescript
+// totem.config.ts
+partitions: {
+  core: ['packages/core/'],
+  cli: ['packages/cli/'],
+  mcp: ['packages/mcp/'],
+},
+```
+
+Agents pass the partition name when searching:
+
+```
+search_knowledge({ query: "error handling", boundary: "mcp" })
+```
+
+Results are restricted to `packages/mcp/` files. Unknown boundary names fall back to raw path prefix matching. Partitions work alongside `linkedIndexes` — a boundary is just a scoped slice of knowledge, whether local or remote.
+
 ## Performance
 
 `totem lint` runs **147 compiled rules in under 2 seconds** on a 7,400-line, 105-file PR. Zero LLM inference. Pure AST classification + regex matching.
@@ -111,13 +132,13 @@ npx @mmnto/cli init
 
 Auto-detects your environment (Cursor, Copilot, Junie) and sets up `totem.config.ts`. You can also use `totem init --bare` to skip defaults and start with a clean slate.
 
-Ships with **60 battle-tested lessons** extracted from PR reviews across major ecosystem tools:
+Ships with an expanded baseline of **125 battle-tested Pipeline 1 lessons** extracted from PR reviews across major ecosystem tools (#781):
 
 - **Frameworks:** Next.js, React.
 - **Data Layer:** Prisma, Drizzle.
 - **Styling:** Tailwind.
 
-Your project gets immediate protection against the most common architectural traps on Day 1. Already have `.cursorrules` or `.mdc` files? `totem init` auto-ingests them and compiles your instructions into deterministic rules.
+Your project gets immediate protection against the most common architectural traps on Day 1. Existing `.cursorrules` or `.mdc` files are automatically ingested and compiled into deterministic rules during initialization.
 
 ### 2. Connect the MCP Server _(optional)_
 
@@ -178,7 +199,7 @@ $ npx @mmnto/cli spec 570
 [Spec] Found: 5 specs, 3 code, 0 lessons
 ```
 
-`totem spec` fetches your issue, queries the knowledge index for architectural traps, and generates a straitjacket checklist complete with invariants and baseline fix guidance (#773). It tells your AI agent exactly what to build and what mistakes to avoid.
+`totem spec` fetches your issue, queries the knowledge index, and generates a straitjacket checklist complete with invariants and baseline fix guidance (#773). It tells your AI agent exactly what to build and what mistakes to avoid.
 
 Cross-totem queries via `linkedIndexes` let the planner pull context from multiple projects simultaneously. Strategy docs can inform code decisions, while shared design systems inform component repositories.
 
@@ -186,7 +207,7 @@ Cross-totem queries via `linkedIndexes` let the planner pull context from multip
 
 **A persistent memory that every AI agent shares.**
 
-AI coding agents are brilliant but forgetful. They'll nail a complex algorithm, then immediately violate the architectural rule you corrected them on five minutes ago. Totem fixes this by creating a layer that persists across sessions, across models, and across tools.
+AI coding agents are brilliant but forgetful, often repeating architectural violations across sessions. Totem fixes this by creating a persistent memory layer that outlasts any single agent, model, or tool.
 
 - **Compile:** Your `.cursorrules` and `.mdc` files are plain English. Totem compiles them into deterministic AST and regex checks via the Tier 2 AST engine.
 - **Enforce:** `totem lint` is **100% deterministic** and runs compiled rules against your diff. It runs in ~2 seconds with zero API keys, and your CI passes or fails based purely on logic.
@@ -197,7 +218,7 @@ AI coding agents are brilliant but forgetful. They'll nail a complex algorithm, 
 
 ## Switch Models Without Losing Context
 
-Use Claude today, Gemini tomorrow, Copilot next week. It doesn't matter. Totem creates a persistent, model-agnostic layer that outlasts any single AI.
+Switching from Claude to Gemini or Copilot is seamless, as Totem's persistent memory outlasts any single AI session. It creates a model-agnostic layer that maintains your architectural rules everywhere.
 
 - **Shared memory:** Lessons learned in one session are available to all agents via MCP.
 - **Portable rules:** Rules compiled from Cursor are enforced in Claude Code's pre-push hook. The enforcement is entirely model-independent.
@@ -214,18 +235,18 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
   - **Fully Air-Gappable:** `totem lint` requires zero API keys and zero network access. With Ollama for embeddings, the entire pipeline runs without external API calls.
   - **DLP Secret Masking:** Automatically strips secrets before embedding. Credentials never leak into your vector index.
   - **SARIF 2.1.0 Output:** Integrates into CI security scanners via `--format sarif/json`. Prove SOC 2 / DORA compliance to your auditors.
-  - **Execution Hardening:** Safeguards agent operations by enforcing MCP capability caps, preventing orchestrator taskkill injections, and prompting for consent on cross-repo links (#714, #724).
+  - **Execution Hardening:** Safeguards agent operations by enforcing MCP capability caps and preventing orchestrator taskkill injections. Prompts for explicit consent on cross-repo links (#714, #724).
 - **Reliability & Portability:**
   - **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs. They also guarantee safe simultaneous MCP mutations.
-  - **Cross-Platform Readiness:** V1.0 portability audits, Docker test harnesses (#715), and a comprehensive CI matrix (Ubuntu, Windows, macOS) (#774) guarantee consistent behavior across environments.
+  - **Cross-Platform Readiness:** Backed by V1.0 portability audits and Docker test harnesses (#715). A comprehensive CI matrix (Ubuntu, Windows, macOS) guarantees consistent behavior (#774).
   - **Index Stability:** Dimension mismatch detection via `index-meta.json` prevents database corruption. Auto-healing migrations handle embedder changes automatically.
-  - **Error Handling:** Typed `TotemError` subclasses unify error domains and provide actionable recovery hints for resilient operations (#711).
+  - **Data Partitioning:** Vector indexes now support partition aliases. This ensures efficient, isolated data resolution across complex workspaces (#782).
+  - **Error Handling:** Typed `TotemError` subclasses unify error domains. They provide actionable recovery hints for resilient operations (#711).
 - **Rule Architecture:**
-  - **Curated Baselines:** Features a highly-curated 147-rule set with mandatory verify steps to guarantee execution determinism (#708), consolidating near-duplicate invariants for higher precision (#764). Supports reverse-compiling rules into Pipeline 1 lessons with manual patterns (#752, #759).
-  - **Quality Gates:** Validates authoring consistency with a rigorous lesson file linter backed by a pre-compilation gate (#769).
-  - **Agent Automation:** Agent skills are structured in modular directories (`SKILL.md`), enforcing `/prepush` execution via `PreToolUse` and `PostCompact` hooks (#755, #757, #758).
-  - **Severity Validation (Gate 1):** Compiled rules enforce strict severity levels (`error` blocks CI, `warning` informs without blocking) to guarantee execution safety (#725).
-  - **Categorization:** Compiled rules span security, architecture, style, and performance domains.
+  - **Curated Baselines:** Features a highly-curated 147-rule set with mandatory verify steps to guarantee execution determinism (#708). Includes reverse-compiled Pipeline 1 lessons with manual patterns (#752, #759).
+  - **Quality Gates:** Validates authoring consistency with a rigorous lesson file linter. This linter is backed by a pre-compilation gate (#769).
+  - **Agent Automation:** Agent skills are structured in modular directories (`SKILL.md`). They enforce `/prepush` execution via `PreToolUse` and `PostCompact` hooks (#755, #758).
+  - **Severity Validation:** Compiled rules enforce strict severity levels to guarantee execution safety (#725). Errors actively block CI, while warnings inform without blocking.
 
 **What gets committed:** Your knowledge base (text files in `.totem/lessons/`) and the compiled artifact (`.totem/compiled-rules.json`). The `.lancedb/` vector index is a local-only cache, automatically rebuilt by `totem sync`. It is never committed to your repository.
 

@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.3.7`. Recent patch efforts introduced a boundary parameter to the MCP `search_knowledge` tool (#777), consolidated near-duplicate rules (#764), and established a cross-platform CI matrix (#774). Earlier sprint work upgraded `totem spec` to a straitjacket checklist format (#773) and introduced a lesson file linter with a pre-compilation gate (#769). Previous efforts advanced workflow automation by restructuring skills into a directory format (#757) and enforcing `/prepush` validation via `PreToolUse` hooks (#758). Core governance was simultaneously strengthened by introducing Pipeline 1 manual patterns in lessons and reverse-compiling curated rules (#752, #759). Previous release efforts delivered a security hardening batch to address MCP capability caps and injection vulnerabilities (#714), alongside new launch metrics, a Docker test harness (#715), and DX polish targeting onboarding flows and output brevity (#717). Focus advanced through the sprint by introducing `verify_execution`, a refactored compiler facade (#710), and unified error domains (#711)—following successful v1.0 readiness audits and a reversion to a curated 147-rule set (#708).
+ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.3.9`. Recent sprint efforts introduced index partitions with alias resolution (#782) and expanded core governance by backfilling body text for 125 Pipeline 1 lessons (#781). Previous patch efforts introduced a boundary parameter to the MCP `search_knowledge` tool (#777), consolidated near-duplicate rules (#764), and established a cross-platform CI matrix (#774). Earlier sprint work upgraded `totem spec` to a straitjacket checklist format (#773) and introduced a lesson file linter with a pre-compilation gate (#769). Previous efforts advanced workflow automation by restructuring skills into a directory format (#757) and enforcing `/prepush` validation via `PreToolUse` hooks (#758). Core governance was simultaneously strengthened by introducing Pipeline 1 manual patterns in lessons and reverse-compiling curated rules (#752, #759). Previous release efforts delivered a security hardening batch to address MCP capability caps and injection vulnerabilities (#714), alongside new launch metrics, a Docker test harness (#715), and DX polish targeting onboarding flows and output brevity (#717). Focus advanced through the sprint by introducing `verify_execution`, a refactored compiler facade (#710), and unified error domains (#711)—following successful v1.0 readiness audits and a reversion to a curated 147-rule set (#708).
 
 Post-merge sequence was aligned during a multi-agent planning session (Claude + Gemini, 2026-03-13) informed by Deep Research Brief #24 (Competitive Moat Analysis). See `.strategy/deep-research/24-competitive-moat-analysis/` for the full adversarial analysis.
 
@@ -36,6 +36,7 @@ The following sequence was determined by cross-referencing the competitive moat 
 ### Completed
 
 - **Search & Data Layer:**
+  - Implemented index partitions with alias resolution to enhance vector search capabilities (#782).
   - Added comprehensive test coverage for cross-totem linked index queries and stabilized the AI-powered `totem shield` CI pipeline (#744).
   - Implemented cross-totem query support via the `linkedIndexes` configuration (#665).
   - Enhanced dimension mismatch detection utilizing `index-meta.json` metadata (#660).
@@ -47,6 +48,7 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Migrated lessons directory to dual-read/single-write and added startup health checks for LanceStore indexes (#428, #439).
   - Automated `totem sync --full` triggering following embedder configuration changes (#548).
 - **Core & Shift-Left Foundation:**
+  - Expanded the enforcement baseline by backfilling body text for 125 Pipeline 1 lessons and extracting recent PR operational lessons (#781).
   - Consolidated near-duplicate rules to streamline the active baseline and improve enforcement precision (#764).
   - Established a cross-platform CI matrix supporting Ubuntu, Windows, and macOS environments (#774).
   - Upgraded `totem spec` to utilize a strict straitjacket checklist format for improved validation (#773).

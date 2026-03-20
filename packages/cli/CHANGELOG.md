@@ -1,5 +1,13 @@
 # @mmnto/cli
 
+## 1.3.9
+
+### Patch Changes
+
+- 48cd644: Named index partitions for context isolation. Backfilled body text for 125 Pipeline 1 lessons. Consolidated near-duplicate rules (146 → 144).
+- Updated dependencies [48cd644]
+  - @mmnto/totem@1.3.9
+
 ## 1.3.8
 
 ### Patch Changes
