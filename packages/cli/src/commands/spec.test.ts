@@ -1,9 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import type { SearchResult } from '@mmnto/totem';
+import type { LanceStore, SearchResult } from '@mmnto/totem';
 
 import type { RetrievedContext } from './spec.js';
-import { assemblePrompt, MAX_LESSON_CHARS, MAX_LESSONS, SPEC_SYSTEM_PROMPT } from './spec.js';
+import {
+  assemblePrompt,
+  MAX_LESSON_CHARS,
+  MAX_LESSONS,
+  retrieveContext,
+  SPEC_SYSTEM_PROMPT,
+} from './spec.js';
 
 // ─── Helpers ─────────────────────────────────────────────
 
@@ -175,10 +181,73 @@ describe('spec constants', () => {
 
 // ─── retrieveContext (partition logic) ───────────────────
 
-describe('retrieveContext partitioning', () => {
-  // We can't easily test retrieveContext directly without a real LanceDB,
-  // but we can test the partitioning logic via assemblePrompt behavior.
+// ─── retrieveContext with linked stores (#667) ──────────
 
+function mockStore(results: SearchResult[]): LanceStore {
+  return { search: vi.fn().mockResolvedValue(results) } as unknown as LanceStore;
+}
+
+function mockFailingStore(err: Error): LanceStore {
+  return { search: vi.fn().mockRejectedValue(err) } as unknown as LanceStore;
+}
+
+describe('retrieveContext — cross-totem linked stores', () => {
+  it('merges results from primary + linked stores', async () => {
+    const primary = mockStore([makeSpec({ label: 'primary', score: 0.8 })]);
+    const linked = mockStore([makeSpec({ label: 'linked', score: 0.6 })]);
+
+    const ctx = await retrieveContext('test query', primary, [linked]);
+
+    expect(ctx.specs.length).toBe(2);
+    const labels = ctx.specs.map((s) => s.label);
+    expect(labels).toContain('primary');
+    expect(labels).toContain('linked');
+  });
+
+  it('linked store failure does not block primary query', async () => {
+    const primary = mockStore([makeSpec({ label: 'primary', score: 0.9 })]);
+    const failing = mockFailingStore(new Error('ECONNREFUSED'));
+
+    const ctx = await retrieveContext('test query', primary, [failing]);
+
+    expect(ctx.specs.length).toBe(1);
+    expect(ctx.specs.some((s) => s.label === 'primary')).toBe(true);
+  });
+
+  it('results sorted by score across stores', async () => {
+    const primary = mockStore([makeSpec({ label: 'low', score: 0.3 })]);
+    const linked = mockStore([makeSpec({ label: 'high', score: 0.9 })]);
+
+    const ctx = await retrieveContext('test query', primary, [linked]);
+
+    const scores = ctx.specs.map((s) => s.score ?? 0);
+    expect(scores).toEqual([...scores].sort((a, b) => b - a));
+  });
+
+  it('config error in linked store logs warning and continues', async () => {
+    const warnSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const primary = mockStore([makeSpec({ label: 'primary', score: 0.5 })]);
+    const broken = mockFailingStore(new Error('Invalid config: dimension mismatch'));
+
+    const ctx = await retrieveContext('test query', primary, [broken]);
+
+    expect(ctx.specs.length).toBe(1);
+    expect(ctx.specs.some((s) => s.label === 'primary')).toBe(true);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('empty linkedStores behaves same as no linked stores', async () => {
+    const primary = mockStore([makeSpec({ label: 'only', score: 0.7 })]);
+
+    const withEmpty = await retrieveContext('test query', primary, []);
+    const withUndefined = await retrieveContext('test query', primary);
+
+    expect(withEmpty.specs.length).toBe(withUndefined.specs.length);
+  });
+});
+
+describe('retrieveContext partitioning', () => {
   it('lessons from lessons.md are separated from regular specs', () => {
     // Simulate what retrieveContext produces: lessons in lessons array, specs in specs array
     const ctx: RetrievedContext = {
