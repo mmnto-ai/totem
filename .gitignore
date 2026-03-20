@@ -14,7 +14,7 @@ dist/
 # IDE & AI tool configs
 .vscode/
 *.code-workspace
-.claude/
+.claude/settings.local.json
 .gemini/settings.json
 
 # Gemini hooks & skills ARE committed (no secrets)
