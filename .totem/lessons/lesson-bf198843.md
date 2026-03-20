@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.tsx, **/*.jsx, **/*.mjs, **/*.cjs
 **Severity:** warning
+
+Ensure all thrown errors, including those for missing.

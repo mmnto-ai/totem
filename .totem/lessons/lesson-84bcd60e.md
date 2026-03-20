@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** packages/cli/**/*.ts
 **Severity:** warning
+
+When re-throwing errors in a CLI orchestrator, always.

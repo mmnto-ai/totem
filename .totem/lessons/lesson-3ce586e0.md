@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.sh, **/*.bash, **/*.js, **/*.ts, **/*.yml, **/*.yaml
 **Severity:** error
+
+Use the --recurse-submodules flag with git ls-files.

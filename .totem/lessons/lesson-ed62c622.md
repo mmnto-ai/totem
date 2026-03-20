@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** packages/cli/**/*.ts, !**/*.test.ts
 **Severity:** warning
+
+Do not pass raw file descriptors to stdio options; use pipe or inherit instead.

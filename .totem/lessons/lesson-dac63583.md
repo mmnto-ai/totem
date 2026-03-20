@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** packages/cli/**/*.ts, !**/*.test.ts
 **Severity:** error
+
+URL regex patterns must anchor with ^ to prevent partial matches on malicious input.

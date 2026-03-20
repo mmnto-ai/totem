@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.md
 **Severity:** error
+
+Lesson: Lesson headings are strictly limited to 60.

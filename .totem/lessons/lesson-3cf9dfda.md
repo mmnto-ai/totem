@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.sh, **/*.bash, **/*.js, **/*.ts, **/*.yml, **/*.yaml
 **Severity:** warning
+
+Resolve git root via rev-parse for monorepo compatibility.

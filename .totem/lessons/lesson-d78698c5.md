@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.json, **/*.yaml, **/*.yml, **/*.md, **/*.sh, .gemini/**/*, .junie/**/*, .github/workflows/**/*
 **Severity:** warning
+
+AI agent memory config architectures differ significantly.

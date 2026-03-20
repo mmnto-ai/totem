@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*orchestrator*/**/*.ts, **/orchestrators/**/*.ts, **/*orchestrator*.ts, !**/*.test.ts
 **Severity:** error
+
+Orchestrators must dynamically adjust max_tokens based.

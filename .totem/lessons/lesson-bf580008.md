@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** packages/cli/**/*.ts, apps/cli/**/*.ts, !**/*.test.ts
 **Severity:** error
+
+Issue numbers are only unique within a single repository;.

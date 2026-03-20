@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** packages/mcp/**/*.ts
 **Severity:** error
+
+MCP session lifecycle limitation.

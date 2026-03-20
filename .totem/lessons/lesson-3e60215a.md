@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** packages/cli/**/*.ts
 **Severity:** warning
+
+Do not use inquirer for prompts; use the built-in readline interface instead.

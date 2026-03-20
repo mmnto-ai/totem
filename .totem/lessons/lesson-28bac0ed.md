@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** .husky/**/*, scripts/hooks/**/*, *.sh
 **Severity:** error
+
+Avoid using exit 0 inside git hooks intended for chaining.

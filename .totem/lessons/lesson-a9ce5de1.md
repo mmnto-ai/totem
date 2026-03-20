@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, !**/*.test.ts
 **Severity:** error
+
+Standardize exception messages with a consistent prefix.

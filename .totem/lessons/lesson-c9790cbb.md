@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.mjs, **/*.cjs
 **Severity:** error
+
+When manually parsing CLI arguments, verify that a flag's.

@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/compiled-rules.json
 **Severity:** error
+
+Do not manually edit machine-generated artifacts.

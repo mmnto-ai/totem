@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.md, **/*.mdx, **/*.txt
 **Severity:** warning
+
+The LLM documentation generator consistently hallucinates.

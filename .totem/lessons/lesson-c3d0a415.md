@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** *.ts, *.js, !*.test.ts, !*.spec.ts
 **Severity:** error
+
+Do not use os.tmpdir() for agent-readable files; use workspace-local paths instead.

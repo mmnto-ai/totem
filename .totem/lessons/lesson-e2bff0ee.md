@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** packages/cli/**/*.ts, packages/cli/**/*.js, bin/**/*.ts, bin/**/*.js
 **Severity:** warning
+
+Synchronous file operations are often preferable in CLI.

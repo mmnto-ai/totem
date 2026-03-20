@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/styleguide/**/*.ts, **/styleguide/**/*.tsx, **/styleguide/**/*.js, **/styleguide/**/*.jsx, **/*.styleguide.ts, **/*.styleguide.tsx, **/*.styleguide.js, **/*.styleguide.jsx
 **Severity:** warning
+
+Manually suppress "unused export" errors in styleguide.

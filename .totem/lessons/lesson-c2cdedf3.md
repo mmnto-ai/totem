@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.mcp.json, **/settings.json, **/.vscode/settings.json
 **Severity:** error
+
+Avoid inlining tokens or API keys in configuration files.

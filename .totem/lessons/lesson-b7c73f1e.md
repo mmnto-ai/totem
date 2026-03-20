@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** packages/cli/**/*.ts, !**/*.test.ts
 **Severity:** warning
+
+CLI command entrypoints should catch validation errors.

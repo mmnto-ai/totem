@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** .totem/lessons/**, .totem/lessons.md
 **Severity:** warning
+
+Drift detector flags lesson file path mentions.

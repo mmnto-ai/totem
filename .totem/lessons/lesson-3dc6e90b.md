@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, !**/*.test.ts
 **Severity:** error
+
+When intercepting agent tool inputs via hooks, use specific.

@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.sh
 **Severity:** warning
+
+Centralize error signature detection (such as 429 status.

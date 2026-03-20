@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** packages/cli/src/commands/**/*.ts, !**/*.test.ts
 **Severity:** warning
+
+GCA may suggest reverting dynamic imports back to static.

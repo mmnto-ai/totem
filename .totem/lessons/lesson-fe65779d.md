@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** .husky/*, .git/hooks/*
 **Severity:** warning
+
+Perform shell-level existence checks before invoking CLI.

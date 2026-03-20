@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** packages/mcp/**/*.ts, !**/*.test.ts
 **Severity:** error
+
+Use a tested ANSI-stripping library instead of hand-rolled regex replacements.

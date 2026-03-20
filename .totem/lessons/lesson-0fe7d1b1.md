@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js
 **Severity:** error
+
+When implementing custom glob matching for dir/\*/.ext.

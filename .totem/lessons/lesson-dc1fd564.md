@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.js, **/*.ts, **/*.sh, **/*.bash, **/*.py, **/*.rb, **/*.go, !**/*.test.ts, !**/*.spec.ts
 **Severity:** warning
+
+Detect existing hook managers and provide manual guidance.

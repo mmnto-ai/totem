@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx, **/*.js, **/*.jsx
 **Severity:** warning
+
+Using a boolean flag to track lazy initialization causes.

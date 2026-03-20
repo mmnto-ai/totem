@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.sh, **/*.bash
 **Severity:** error
+
+Sanitize git-sourced metadata like branch names, status.

@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.py, **/*.sh, .env*
 **Severity:** error
+
+Ollama num_ctx and VRAM: The OpenAI-compatible API adapter.

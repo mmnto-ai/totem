@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.tsx, **/*.js, **/*.jsx, !**/error*.ts, !**/error*.js
 **Severity:** error
+
+Do not assert error messages by checking string prefixes; use TotemError subclasses.

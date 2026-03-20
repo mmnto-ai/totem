@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.tsx, **/*.jsx, !**/*.test.ts
 **Severity:** error
+
+Treat usage and token statistics as optional fields.

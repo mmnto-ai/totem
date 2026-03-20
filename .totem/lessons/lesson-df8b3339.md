@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/prompts/**/*, **/ai/**/*, **/llm/**/*, **/*prompt*
 **Severity:** error
+
+Wrap user-controlled fields like PR descriptions.

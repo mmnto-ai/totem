@@ -5,3 +5,5 @@
 **Engine:** regex
 **Scope:** **/*.ts, **/*.js, **/*.tsx, **/*.jsx, !**/*.test.ts, !**/*.test.js
 **Severity:** error
+
+Always use fully qualified identifiers for caching.
