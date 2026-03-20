@@ -19,8 +19,7 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 ### Phase 1: Start of Session
 
 **What should happen:** Agent re-familiarizes with the project.
-**Command:** `totem briefing`
-**Skill:** `/briefing` (or automatic via `SessionStart` hook)
+**Mechanism:** `PostCompact` hook re-injects rules automatically. For a fresh session, use `/preflight` with the first ticket.
 
 ### Phase 2: Pick a Ticket
 
