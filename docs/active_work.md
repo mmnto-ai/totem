@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.3.1`. Recent patch efforts delivered a security hardening batch to address MCP capability caps and injection vulnerabilities (#714), alongside new launch metrics, a Docker test harness (#715), and DX polish targeting onboarding flows and output brevity (#717). Previous release efforts introduced `totem explain` for contextual violation lookups, shipped the Tier 2 AST engine, and enabled cross-totem queries via `linkedIndexes`. Orchestration and integration flows were further refined by shifting reference hooks to rely on the deterministic `totem lint` engine over AI-powered review. Most recently, focus advanced through the 1.3 sprint—introducing `verify_execution`, a refactored compiler facade (#710), and unified error domains (#711)—following successful v1.0 readiness audits and a reversion to a curated 147-rule set (#708).
+ADR-024 Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.3.5`. Recent patch efforts advanced workflow automation by restructuring skills into a directory format (#757) and enforcing `/prepush` validation via `PreToolUse` hooks (#758). Core governance was simultaneously strengthened by introducing Pipeline 1 manual patterns in lessons and reverse-compiling curated rules (#752, #759). Previous release efforts delivered a security hardening batch to address MCP capability caps and injection vulnerabilities (#714), alongside new launch metrics, a Docker test harness (#715), and DX polish targeting onboarding flows and output brevity (#717). Focus advanced through the sprint by introducing `verify_execution`, a refactored compiler facade (#710), and unified error domains (#711)—following successful v1.0 readiness audits and a reversion to a curated 147-rule set (#708).
 
 Post-merge sequence was aligned during a multi-agent planning session (Claude + Gemini, 2026-03-13) informed by Deep Research Brief #24 (Competitive Moat Analysis). See `.strategy/deep-research/24-competitive-moat-analysis/` for the full adversarial analysis.
 
@@ -36,6 +36,7 @@ The following sequence was determined by cross-referencing the competitive moat 
 ### Completed
 
 - **Search & Data Layer:**
+  - Added comprehensive test coverage for cross-totem linked index queries and stabilized the AI-powered `totem shield` CI pipeline (#744).
   - Implemented cross-totem query support via the `linkedIndexes` configuration (#665).
   - Enhanced dimension mismatch detection utilizing `index-meta.json` metadata (#660).
   - Implemented Data Loss Prevention (DLP) secret masking middleware to securely strip secrets before embedding (#609, #534).
@@ -46,6 +47,8 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Migrated lessons directory to dual-read/single-write and added startup health checks for LanceStore indexes (#428, #439).
   - Automated `totem sync --full` triggering following embedder configuration changes (#548).
 - **Core & Shift-Left Foundation:**
+  - Introduced Pipeline 1 manual patterns in lessons and reverse-compiled curated rules to strengthen the enforcement baseline (#752, #759).
+  - Extracted the `engineFields` compiler helper and refined logging interception for improved reliability (#754, #746).
   - Delivered a security hardening batch addressing MCP caps, taskkill injection vulnerabilities, and heading truncations (#714).
   - Implemented launch metrics and a Docker test harness to improve deployment reliability and evaluation (#715).
   - Unified the error domain with typed `TotemError` subclasses and refactored the compiler architecture using a facade pattern (#711, #710).
@@ -87,6 +90,8 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Delivered "Universal Lessons" baseline and refined ignore patterns for frictionless initialization (#128, #419).
   - Tuned match/exec patterns and literal file path rules to reduce false positives on docs and config lessons (#538, #457).
 - **Orchestration & Integrations:**
+  - Delivered workflow automation enhancements, restructuring skills into a dedicated directory format (`SKILL.md` per directory) and removing stale commands (#755, #757).
+  - Refined agent hooks by enforcing `/prepush` validation via the `PreToolUse` hook and correcting the `PostCompact` hook formatting (#758, #756).
   - Updated reference hooks to utilize deterministic `totem lint` instead of AI-powered `totem shield` for rapid, predictable pre-push validation (#610).
   - Integrated Claude Code hooks for `totem spec` preflight and AI-powered `totem shield` pre-push validation.
   - Automatic enforcement strategy under research (#520).
