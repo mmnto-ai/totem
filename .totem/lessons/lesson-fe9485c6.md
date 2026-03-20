@@ -3,7 +3,7 @@
 **Tags:** style, curated
 **Pattern:** \b(main|master)\.\.\.HEAD\b
 **Engine:** regex
-**Scope:** **/*.ts, **/*.js, **/*.sh
+**Scope:** **/\*.ts, **/_.js, \*\*/_.sh
 **Severity:** warning
 
 Use getDefaultBranch() to dynamically detect the base branch instead of hardcoding 'main' or 'master' in diff strings (e.g., main...HEAD).

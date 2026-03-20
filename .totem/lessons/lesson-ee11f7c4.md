@@ -3,7 +3,7 @@
 **Tags:** architecture, curated
 **Pattern:** (\|\||\?\?)\s*['"]main['"]
 **Engine:** regex
-**Scope:** **/*.ts, **/*.js, **/*.tsx, **/*.jsx
+**Scope:** \*\*/*.ts, **/\*.js, **/_.tsx, \*\*/_.jsx
 **Severity:** error
 
 Avoid hardcoded fallbacks like 'main' for environmental configuration; throw an explicit error if the value cannot be detected.

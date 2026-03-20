@@ -1,7 +1,7 @@
 ## Lesson — 2026-03-03T03:20:15.923Z
 
 **Tags:** security, curated
-**Pattern:** \b(latency|tokens?|duration|ms|count)\b\s*\|\|
+**Pattern:** \b(latency|tokens?|duration|ms|count)\b\s\*\|\|
 **Engine:** regex
 **Severity:** error
 

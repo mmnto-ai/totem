@@ -3,7 +3,7 @@
 **Tags:** architecture, curated
 **Pattern:** \$\{[^}]+\}\$\{[^}]+\}
 **Engine:** regex
-**Scope:** **/*.ts, **/*.js, **/*.tsx, **/*.jsx, **/*.sh, **/*.bash
+**Scope:** **/\*.ts, **/_.js, \*\*/_.tsx, **/\*.jsx, **/_.sh, \*\*/_.bash
 **Severity:** error
 
 Include a space or delimiter between concatenated fragments (e.g., '${a} ${b}') to prevent 'keyword synthesis' and bypass security filters.
