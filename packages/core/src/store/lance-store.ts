@@ -473,13 +473,11 @@ function buildWhereClause(
   const prefixes = boundary
     ? (Array.isArray(boundary) ? boundary : [boundary]).filter((b) => b.length > 0)
     : [];
-  if (prefixes.length === 1) {
-    conditions.push(`\`filePath\` LIKE '${escapeBoundaryPrefix(prefixes[0]!)}%'`);
-  } else if (prefixes.length > 1) {
+  if (prefixes.length > 0) {
     const orClauses = prefixes
       .map((p) => `\`filePath\` LIKE '${escapeBoundaryPrefix(p)}%'`)
       .join(' OR ');
-    conditions.push(`(${orClauses})`);
+    conditions.push(prefixes.length > 1 ? `(${orClauses})` : orClauses);
   }
   return conditions.length > 0 ? conditions.join(' AND ') : undefined;
 }
