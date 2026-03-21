@@ -151,6 +151,47 @@ export function saveCompiledRulesFile(rulesPath: string, data: CompiledRulesFile
   });
 }
 
+// ─── Glob sanitization ─────────────────────────────
+
+/**
+ * Expand brace patterns and strip unsupported glob syntax.
+ * e.g., "**\/*.{ts,js}" → ["**\/*.ts", "**\/*.js"]
+ */
+export function sanitizeFileGlobs(globs: string[]): string[] {
+  const result: string[] = [];
+  for (const glob of globs) {
+    // Expand brace patterns: **/*.{ts,js} → **/*.ts, **/*.js
+    const braceMatch = /^(.*?)\{([^}]+)\}(.*)$/.exec(glob);
+    if (braceMatch) {
+      const prefix = braceMatch[1]!;
+      const alternatives = braceMatch[2]!.split(',').map((s) => s.trim());
+      const suffix = braceMatch[3]!;
+      // Recursively expand remaining brace groups in each result
+      for (const alt of alternatives) {
+        result.push(...sanitizeFileGlobs([prefix + alt + suffix]));
+      }
+      continue;
+    }
+    result.push(glob);
+  }
+  return result;
+}
+
+/** Build engine-specific fields for a compiled rule. */
+export function engineFields(
+  engine: 'regex' | 'ast' | 'ast-grep',
+  pattern: string | Record<string, unknown>,
+): { pattern: string; astGrepPattern?: string | Record<string, unknown>; astQuery?: string } {
+  switch (engine) {
+    case 'regex':
+      return { pattern: String(pattern) };
+    case 'ast-grep':
+      return { pattern: '', astGrepPattern: pattern };
+    case 'ast':
+      return { pattern: '', astQuery: String(pattern) };
+  }
+}
+
 // ─── LLM response parsing ──────────────────────────
 
 /**

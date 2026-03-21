@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 1.3.13
+
+### Patch Changes
+
+- Spec template tests (#805), spec/compile prompt extraction (#806, #799), compiler utility tests, prompt versioning, post-compact gate strengthening
+
 ## 1.3.12
 
 ### Patch Changes

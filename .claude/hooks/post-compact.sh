@@ -17,6 +17,6 @@ cat << 'EOF'
   Hooks: PreToolUse (blocks push without shield), PostCompact (this manifest)
   Engines: regex, ast (Tree-sitter), ast-grep
   Docs: .claude/docs/contributing.md, .claude/docs/architecture.md, .claude/docs/agent-workflow.md
-  ⚡ AGENT DISCIPLINE: Delegate code+test tasks to background agents. You are the controller, not the implementer.
+  ⚡ AGENT DISCIPLINE: Delegate code+test tasks to background agents. You are the controller, not the implementer. RED: Never advance until tests pass + lint clean. TDD is mandatory.
 
 EOF
