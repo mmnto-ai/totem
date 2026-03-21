@@ -11,6 +11,9 @@ reviews:
       instructions: 'Lesson files. Heading text (after "## Lesson — ") must be ≤60 chars. Only lessons with **Pattern:** field are Pipeline 1 and require Engine/Severity. Lessons without Pattern are Pipeline 2 (prose only) — do not flag missing fields.'
     - path: '.claude/**'
       instructions: 'Claude Code hooks and skills. Bash scripts must use [[ ]] glob matching, not echo|grep. CLAUDE.md must stay under 50 lines.'
+pre_merge_checks:
+  docstring_coverage:
+    enabled: false
 knowledge_base:
   learnings:
     scope: auto
