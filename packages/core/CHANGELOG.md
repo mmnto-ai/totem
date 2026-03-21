@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 1.3.12
+
+### Patch Changes
+
+- Agent workflow doc, spec straitjacket upgrade (militant red flags + Graphviz), lean GEMINI.md, PostCompact agent discipline reminder
+
 ## 1.3.11
 
 ### Patch Changes

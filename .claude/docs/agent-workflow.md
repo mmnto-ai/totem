@@ -11,11 +11,13 @@ Their context is ephemeral — they don't carry session history.
 ## When to Delegate
 
 Delegate to a background agent when:
+
 - The task involves writing code + running tests (build/test cycle)
 - The output would be >5KB of terminal text (test results, lint output)
 - The task is mechanical (format, lint, shield, test)
 
 Do NOT delegate when:
+
 - The task requires architectural decisions
 - The task needs MCP tool calls (agents can't access MCP)
 - The task needs git push / PR creation (network blocked in sandbox)
@@ -24,12 +26,14 @@ Do NOT delegate when:
 ## Dispatch Template
 
 When spawning a worker agent, provide:
+
 1. **Files to modify** — exact paths
 2. **What to change** — specific instructions, not vague goals
 3. **Test command** — how to verify
 4. **Report format** — "report success/failure and any errors"
 
 Example:
+
 ```
 Implement Task 2 in packages/core/src/lesson-linter.ts:
 - Add onWarn parameter to validateLessons
@@ -41,6 +45,7 @@ Implement Task 2 in packages/core/src/lesson-linter.ts:
 ## Review Protocol
 
 When the agent reports back:
+
 1. Read the changed files (agent can't commit)
 2. Verify the changes match the spec
 3. Run totem lint if the agent didn't

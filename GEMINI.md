@@ -19,6 +19,7 @@
 ## Contributor Principles
 
 <!-- totem-ignore-next-line -->
+
 - Update `AI_PROMPT_BLOCK` in `init.ts` when changing reflexes/hooks/prompts.
 <!-- totem-ignore-next-line -->
 - GCA decline: add lesson with `review-guidance` tag + update `.gemini/styleguide.md` §6.
