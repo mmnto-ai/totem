@@ -86,13 +86,16 @@ for (const filePath of files) {
       for (let i = 0; i < lines.length; i++) {
         if (re.test(lines[i])) {
           totalViolations++;
-          const key = rule.lessonHeading || rule.message;
+          const key = rule.lessonHash || rule.lessonHeading || rule.message;
           if (!ruleHits.has(key)) {
             ruleHits.set(key, {
               count: 0,
               files: new Set(),
               severity: rule.severity,
               pattern: rule.pattern,
+              heading: rule.lessonHeading || rule.message,
+              hash: rule.lessonHash,
+              globs: rule.fileGlobs,
             });
           }
           ruleHits.get(key).count++;
@@ -112,10 +115,12 @@ console.log('');
 const sorted = [...ruleHits.entries()].sort((a, b) => b[1].count - a[1].count);
 
 console.log('=== TOP 25 NOISIEST ===');
-sorted.slice(0, 25).forEach(([heading, data]) => {
+sorted.slice(0, 25).forEach(([, data]) => {
   console.log(`[${data.severity}] ${data.count} hits / ${data.files.size} files`);
-  console.log(`  Rule: ${heading.slice(0, 80)}`);
-  console.log(`  Pattern: /${data.pattern.slice(0, 60)}/`);
+  console.log(`  Hash: ${data.hash || 'unknown'}`);
+  console.log(`  Rule: ${(data.heading || '').slice(0, 80)}`);
+  console.log(`  Pattern: /${(data.pattern || '').slice(0, 60)}/`);
+  console.log(`  Globs: ${JSON.stringify(data.globs || [])}`);
   console.log('');
 });
 

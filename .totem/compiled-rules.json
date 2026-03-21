@@ -43,7 +43,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:38:51.398Z",
       "createdAt": "2026-03-21T06:38:51.398Z",
-      "fileGlobs": ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"],
+      "fileGlobs": ["packages/cli/src/git.ts"],
       "severity": "warning"
     },
     {
@@ -134,7 +134,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:42:10.970Z",
       "createdAt": "2026-03-21T06:42:10.970Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "fileGlobs": ["packages/cli/src/orchestrators/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -238,18 +238,11 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:49:04.367Z",
       "createdAt": "2026-03-21T06:49:04.367Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "a8ade9d9b017f7b3",
-      "lessonHeading": "Sanitize git-sourced metadata like branch names, status,",
-      "pattern": "\\bgit\\s+(status|branch|diff)\\b(?!.*(--no-color|--porcelain))",
-      "message": "Sanitize git-sourced metadata (branch, status, diff) to remove ANSI escape sequences and control characters. Use --no-color, --porcelain, or a stripping library to prevent parsing errors.",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T06:49:31.562Z",
-      "createdAt": "2026-03-21T06:49:31.562Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh", "**/*.bash", "**/*.yml", "**/*.yaml"],
+      "fileGlobs": [
+        "packages/cli/src/commands/extract.ts",
+        "packages/cli/src/commands/shield.ts",
+        "packages/cli/src/commands/spec.ts"
+      ],
       "severity": "warning"
     },
     {
@@ -284,17 +277,6 @@
       "compiledAt": "2026-03-21T06:52:43.493Z",
       "createdAt": "2026-03-21T06:52:43.493Z",
       "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "16d10e42d757de78",
-      "lessonHeading": "Detect existing hook managers and provide manual guidance",
-      "pattern": "\\.git/hooks",
-      "message": "Avoid writing directly to .git/hooks. Detect existing hook managers (like Husky or Lefthook) and provide manual integration guidance instead to avoid clobbering developer workflows.",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T06:54:54.573Z",
-      "createdAt": "2026-03-21T06:54:54.573Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh", "**/*.bash", "**/*.py"],
       "severity": "warning"
     },
     {
@@ -367,16 +349,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:58:42.266Z",
       "createdAt": "2026-03-21T06:58:42.266Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.sh",
-        "**/*.bash",
-        "**/*.yml",
-        "**/*.yaml",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ],
+      "fileGlobs": ["packages/cli/src/git.ts"],
       "severity": "warning"
     },
     {
@@ -387,7 +360,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:58:56.946Z",
       "createdAt": "2026-03-21T06:58:56.946Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "fileGlobs": ["packages/cli/src/git.ts"],
       "severity": "warning"
     },
     {
@@ -455,15 +428,9 @@
       "compiledAt": "2026-03-21T07:00:52.321Z",
       "createdAt": "2026-03-21T07:00:52.321Z",
       "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "**/*.py",
-        "**/*.md",
-        "**/*.txt",
-        "**/*.yml",
-        "**/*.yaml"
+        "packages/cli/src/commands/spec-templates.ts",
+        "packages/cli/src/commands/compile-templates.ts",
+        "packages/cli/src/commands/docs.ts"
       ],
       "severity": "warning"
     },
@@ -593,17 +560,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "bd31e87e32cfeefd",
-      "lessonHeading": "Drift detector flags lesson file path mentions",
-      "pattern": "(?:\\.{1,2}\\/|[\\w.-]+\\/)+[\\w.-]+\\.[a-z]{2,}",
-      "message": "Avoid using literal file paths in lessons; describe the file conceptually instead (e.g., 'the Junie guidelines file') to prevent drift detector failures when files are moved or renamed.",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T07:07:43.431Z",
-      "createdAt": "2026-03-21T07:07:43.431Z",
-      "fileGlobs": ["**/*.md"],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "3b48ad1c3c382306",
       "lessonHeading": "When manually parsing CLI arguments, verify that a flag's",
       "pattern": "",
@@ -613,17 +569,6 @@
       "compiledAt": "2026-03-21T07:10:02.103Z",
       "createdAt": "2026-03-21T07:10:02.103Z",
       "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "f52f5615a0543837",
-      "lessonHeading": "Generic function names like applyRules in a facade",
-      "pattern": "\\bapplyRules\\b",
-      "message": "Generic function name 'applyRules' can be misleading. Use a more specific name (e.g., 'applyLintRules', 'applyValidationRules') or clarify which engines are supported via JSDoc.",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T07:10:13.697Z",
-      "createdAt": "2026-03-21T07:10:13.697Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -646,11 +591,9 @@
       "compiledAt": "2026-03-21T07:10:30.560Z",
       "createdAt": "2026-03-21T07:10:30.560Z",
       "fileGlobs": [
-        "**/hooks/**/*.ts",
-        "**/hooks/**/*.js",
-        "**/shield/**/*.ts",
-        "**/shield/**/*.js",
-        ".husky/**",
+        "packages/cli/src/commands/install-hooks.ts",
+        ".claude/hooks/**",
+        ".git/hooks/**",
         "!**/*.test.ts"
       ],
       "severity": "warning"
@@ -674,18 +617,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:11:06.839Z",
       "createdAt": "2026-03-21T07:11:06.839Z",
-      "fileGlobs": ["*.sh", "*.yml", "*.yaml", "*.md", "package.json", "Makefile", "*.ts", "*.js"],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "ff50cadc6e05631c",
-      "lessonHeading": "Swallowing errors in core modules hides silent failures,",
-      "pattern": "\\bconsole\\.(log|warn|error|info|debug)\\(",
-      "message": "Swallowing errors in core modules hides silent failures,",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T07:11:45.228Z",
-      "createdAt": "2026-03-21T07:11:45.228Z",
-      "fileGlobs": ["**/core/**/*.ts", "**/core/**/*.js", "!**/*.test.ts"],
+      "fileGlobs": [".gemini/**"],
       "severity": "warning"
     },
     {
@@ -718,16 +650,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:13:30.152Z",
       "createdAt": "2026-03-21T07:13:30.152Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "!**/*.test.ts",
-        "!**/*.test.js",
-        "!**/*.spec.ts",
-        "!**/*.spec.js"
-      ],
+      "fileGlobs": [".claude/hooks/**", "packages/cli/src/commands/install-hooks.ts"],
       "severity": "warning"
     },
     {
@@ -852,7 +775,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:16:09.671Z",
       "createdAt": "2026-03-21T07:16:09.671Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/config/**/*.ts", "**/schema/**/*.ts"],
+      "fileGlobs": ["packages/core/src/config-schema.ts", "packages/core/src/compiler-schema.ts"],
       "severity": "warning"
     },
     {
@@ -977,14 +900,9 @@
       "compiledAt": "2026-03-21T07:17:09.504Z",
       "createdAt": "2026-03-21T07:17:09.504Z",
       "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "**/*.py",
-        "**/*.md",
-        "**/*.yaml",
-        "**/*.yml"
+        "packages/cli/src/commands/spec-templates.ts",
+        "packages/cli/src/commands/compile-templates.ts",
+        "packages/cli/src/commands/docs.ts"
       ],
       "severity": "warning"
     },
@@ -1007,7 +925,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:17:31.605Z",
       "createdAt": "2026-03-21T07:17:31.605Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.go"],
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -1087,17 +1005,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "cbb308940a59e34a",
-      "lessonHeading": "When creating rules to catch generic Error usage,",
-      "pattern": "\\bnew\\s+Error\\s*\\(",
-      "message": "Avoid generic Error usage; use project-specific error base classes or variants instead.",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T07:19:11.691Z",
-      "createdAt": "2026-03-21T07:19:11.691Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "5c834874c001d166",
       "lessonHeading": "AI agent memory config architectures differ significantly",
       "pattern": "\\bgemini\\.md\\b|\\.mcp\\.json",
@@ -1150,23 +1057,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "6d6d70d5a0f0fa7d",
-      "lessonHeading": "Restrict subagent tasks to mechanical implementation",
-      "pattern": "\\b(callTool|useTool|fetch)\\s*\\(",
-      "message": "Subagents are restricted from architectural decisions and external resource access (MCP tools/network). Keep these calls in the main controller.",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T07:20:29.393Z",
-      "createdAt": "2026-03-21T07:20:29.393Z",
-      "fileGlobs": [
-        "**/subagents/**/*.ts",
-        "**/subagents/**/*.js",
-        "**/subagent/**/*.ts",
-        "**/subagent/**/*.js",
-        "!**/*.test.ts"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "730cd03e41cff889",
       "lessonHeading": "Labeling a prompt as \"Regex Rule Extraction\" biases models",
       "pattern": "Regex\\s+Rule\\s+Extraction",
@@ -1208,10 +1098,9 @@
       "compiledAt": "2026-03-21T07:21:04.636Z",
       "createdAt": "2026-03-21T07:21:04.636Z",
       "fileGlobs": [
-        "**/hooks/**/*.ts",
-        "**/shield/**/*.ts",
-        "**/gates/**/*.ts",
-        "**/git/**/*.ts",
+        "packages/cli/src/commands/install-hooks.ts",
+        ".claude/hooks/**",
+        ".git/hooks/**",
         "!**/*.test.ts"
       ],
       "severity": "error"
@@ -1235,7 +1124,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:21:49.612Z",
       "createdAt": "2026-03-21T07:21:49.612Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "fileGlobs": ["packages/cli/src/orchestrators/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -1367,7 +1256,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:24:32.505Z",
       "createdAt": "2026-03-21T07:24:32.505Z",
-      "fileGlobs": ["scripts/**/*.js", "scripts/**/*.ts", "tools/**/*.js", "tools/**/*.ts"],
+      "fileGlobs": ["packages/core/src/rule-engine.ts", "packages/core/src/compiler.ts"],
       "severity": "warning"
     },
     {
@@ -1382,17 +1271,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "1a6aacfb227f5afa",
-      "lessonHeading": "Do not automatically append trailing slashes to path",
-      "pattern": "(\\$\\{[^}]+\\}/|[\\w)]\\s*\\+\\s*['\"]/['\"]|\\.concat\\(['\"]/['\"]\\))",
-      "message": "Do not automatically append trailing slashes to paths; let the caller control the slash to allow both file and directory-wide search scopes.",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T07:25:02.487Z",
-      "createdAt": "2026-03-21T07:25:02.487Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "3629f9e09986b8f4",
       "lessonHeading": "Include a space or delimiter when concatenating disjoint",
       "pattern": "(\\$\\{[^}]+\\}\\$\\{[^}]+\\}|\\.join\\(['\"]{2}\\))",
@@ -1400,7 +1278,11 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:25:02.487Z",
       "createdAt": "2026-03-21T07:25:02.487Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "fileGlobs": [
+        "packages/cli/src/utils.ts",
+        "packages/core/src/sanitize.ts",
+        "packages/core/src/sarif.ts"
+      ],
       "severity": "error"
     },
     {
@@ -1426,23 +1308,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "5b9058bd289a1dbb",
-      "lessonHeading": "Swallowing errors in core modules hides silent failures,",
-      "pattern": "\\bconsole\\.(log|warn|error|info)\\(",
-      "message": "Avoid direct console logging in core modules to prevent environment coupling. Use optional onWarn callbacks for diagnostic reporting.",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T07:25:22.599Z",
-      "createdAt": "2026-03-21T07:25:22.599Z",
-      "fileGlobs": [
-        "packages/core/**/*.ts",
-        "src/core/**/*.ts",
-        "packages/core/**/*.js",
-        "src/core/**/*.js",
-        "!**/*.test.ts"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "11b944fd4ec76ffc",
       "lessonHeading": "Project conventions require a universal 'Totem Error' tag",
       "pattern": "(\\.(error|warn)\\(\\s*['\"\\x60](?![^'\"\\x60]*Totem Error))|(\\.(log|info)\\(\\s*['\"\\x60]\\[(Status|Log|Info|General)\\])",
@@ -1450,7 +1315,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:26:18.826Z",
       "createdAt": "2026-03-21T07:26:18.826Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -1735,17 +1600,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "5d34d2d1c2262add",
-      "lessonHeading": "Metacharacters must be escaped when interpolating dynamic",
-      "pattern": "new\\s+RegExp\\(\\s*(?![^'\"`\\s\\)]*escape)([^'\"`\\s\\d][^'\"`\\s\\)]*|\\`[^\\`]*\\$\\{.*\\}.*\\`)\\s*[\\),]",
-      "message": "Escape dynamic strings before interpolating them into a RegExp to prevent injection attacks. Use a helper like escapeRegExp().",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T07:38:37.653Z",
-      "createdAt": "2026-03-21T07:38:37.653Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "ddb842bcd2ea76d3",
       "lessonHeading": "When identifying directory-based glob patterns (like",
       "pattern": "\\.(includes\\(['\"]/['\"]\\)(?!\\s*,\\s*1)|indexOf\\(['\"]/['\"]\\)\\s*(?:>=?\\s*0|!==\\s*-1))",
@@ -1753,7 +1607,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:38:41.084Z",
       "createdAt": "2026-03-21T07:38:41.084Z",
-      "fileGlobs": ["**/*.ts", "**/*.js"],
+      "fileGlobs": ["packages/core/src/rule-engine.ts"],
       "severity": "error"
     },
     {
@@ -1833,7 +1687,11 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:40:33.419Z",
       "createdAt": "2026-03-21T07:40:33.419Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md", "**/*.txt"],
+      "fileGlobs": [
+        "packages/cli/src/commands/spec-templates.ts",
+        "packages/cli/src/commands/compile-templates.ts",
+        "packages/cli/src/commands/docs.ts"
+      ],
       "severity": "warning"
     },
     {
@@ -1886,7 +1744,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:41:43.357Z",
       "createdAt": "2026-03-21T07:41:43.357Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js", "!**/*.test.ts"],
+      "fileGlobs": ["packages/cli/src/index.ts"],
       "severity": "warning"
     },
     {
@@ -1954,7 +1812,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:43:43.680Z",
       "createdAt": "2026-03-21T07:43:43.680Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "fileGlobs": ["packages/cli/src/git.ts"],
       "severity": "warning"
     },
     {
@@ -2041,7 +1899,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:47:08.710Z",
       "createdAt": "2026-03-21T07:47:08.710Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"],
+      "fileGlobs": ["packages/core/src/rule-engine.ts", "packages/core/src/compiler.ts"],
       "severity": "warning"
     },
     {
@@ -2067,17 +1925,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "d8e71d6900e46d8c",
-      "lessonHeading": "For data structures with few fields (e.g., < 10), use type",
-      "pattern": "import.*from\\s+['\"]zod['\"]",
-      "message": "Use type assertions instead of Zod for small data structures (< 10 fields) to avoid dependency overhead in the CLI.",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T07:48:54.066Z",
-      "createdAt": "2026-03-21T07:48:54.066Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.tsx", "!**/*.test.ts"],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "94936169ab6f8d32",
       "lessonHeading": "Binaries like git may fail to resolve correctly when using",
       "pattern": "\\bexecFileSync\\s*\\((?![^)]*shell:\\s*true)",
@@ -2085,7 +1932,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:49:27.518Z",
       "createdAt": "2026-03-21T07:49:27.518Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "fileGlobs": ["packages/cli/src/git.ts"],
       "severity": "warning"
     },
     {
@@ -2202,7 +2049,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:53:04.001Z",
       "createdAt": "2026-03-21T07:53:04.001Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "!**/*.test.ts"],
+      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -2235,7 +2082,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:53:48.413Z",
       "createdAt": "2026-03-21T07:53:48.413Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh", "**/*.bash"],
+      "fileGlobs": ["packages/cli/src/git.ts"],
       "severity": "error"
     },
     {
@@ -2246,7 +2093,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:54:01.977Z",
       "createdAt": "2026-03-21T07:54:01.977Z",
-      "fileGlobs": ["**/*.json", "**/*.yml", "**/*.yaml", "**/*.ts", "**/*.js"],
+      "fileGlobs": [".claude/hooks/**", "packages/cli/src/commands/install-hooks.ts"],
       "severity": "warning"
     },
     {
@@ -2355,7 +2202,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:57:17.223Z",
       "createdAt": "2026-03-21T07:57:17.223Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.mjs", "**/*.cjs"],
+      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -2366,7 +2213,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:57:17.223Z",
       "createdAt": "2026-03-21T07:57:17.223Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "apps/cli/**/*.ts", "!**/*.test.ts"],
+      "fileGlobs": ["README.md", "docs/**/*.md"],
       "severity": "error"
     },
     {
@@ -2418,7 +2265,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:58:00.308Z",
       "createdAt": "2026-03-21T07:58:00.308Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -2542,15 +2389,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:01:18.700Z",
       "createdAt": "2026-03-21T08:01:18.700Z",
-      "fileGlobs": [
-        "**/*.json",
-        "**/*.yml",
-        "**/*.yaml",
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["packages/core/src/compiler.ts", "packages/core/src/rule-engine.ts"],
       "severity": "warning"
     },
     {
@@ -2644,17 +2483,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:03:51.699Z",
       "createdAt": "2026-03-21T08:03:51.699Z",
-      "fileGlobs": [
-        "**/*.js",
-        "**/*.ts",
-        "**/*.sh",
-        "**/*.bash",
-        "**/*.py",
-        "**/*.rb",
-        "**/*.go",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ],
+      "fileGlobs": ["packages/cli/src/commands/install-hooks.ts"],
       "severity": "warning"
     },
     {
@@ -2775,7 +2604,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:06:49.594Z",
       "createdAt": "2026-03-21T08:06:49.594Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "apps/cli/**/*.ts", "**/cli/**/*.ts"],
+      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"],
       "severity": "error"
     },
     {
@@ -2807,17 +2636,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "1c4b3232555e41c8",
-      "lessonHeading": "Use a case-insensitive regex with optional internal",
-      "pattern": "(<\\\\?\\/[\\w:_-]+>|\\/<\\\\\\/\\s*[\\w:_-]+\\s*>\\/(?![^\\/\\n]*i))",
-      "message": "Use a case-insensitive regex with optional internal whitespace (e.g., /<\\/\\s*tag\\s*>/i) when matching closing tags. Rigid literal matches or case-sensitive patterns are easily bypassed and can lead to prompt injection vulnerabilities.",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T08:07:48.964Z",
-      "createdAt": "2026-03-21T08:07:48.964Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "7d456edf2b3a1554",
       "lessonHeading": "Using a unified \"Totem Error\" tag in error logs instead",
       "pattern": "\\b(console\\.error|logger\\.error|new\\s+Error)\\s*\\((?![^)]*Totem Error)",
@@ -2825,7 +2643,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:08:30.265Z",
       "createdAt": "2026-03-21T08:08:30.265Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -2836,7 +2654,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:08:56.078Z",
       "createdAt": "2026-03-21T08:08:56.078Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
+      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -2985,17 +2803,6 @@
       "severity": "error"
     },
     {
-      "lessonHash": "afda0df95f960602",
-      "lessonHeading": "2026-03-06T06:25:26.036Z",
-      "message": "Wrap untrusted external content (e.g., PR comments, topics) in XML tags to prevent direct and indirect prompt injection. Use a helper like formatXmlResponse if available.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(?:text|content):\\s*(?!(?:['\"`]<|\\w*xml|\\w*Format|\\w*Render))\\b(?:comment|topic|body|description|content|text)\\b",
-      "compiledAt": "2026-03-21T22:15:17.571Z",
-      "createdAt": "2026-03-21T22:15:17.571Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "!**/*.test.ts"]
-    },
-    {
       "lessonHash": "637e8994d7866e10",
       "lessonHeading": "2026-03-06T10:00:40.352Z",
       "message": "$TOOL_INPUT is untrusted data from the host AI. It must be quoted in shell commands (e.g., \"$TOOL_INPUT\") to prevent command injection.",
@@ -3077,7 +2884,7 @@
       "pattern": "['\"](?![^'\" ]*\\/)[^'\" ]*#\\d+['\"]",
       "compiledAt": "2026-03-21T22:20:39.927Z",
       "createdAt": "2026-03-21T22:20:39.927Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"]
+      "fileGlobs": ["README.md", "docs/**/*.md"]
     },
     {
       "lessonHash": "a8b6c82916cfe313",
@@ -3099,7 +2906,7 @@
       "pattern": "\\bRegExp\\s*\\(\\s*([^'\"\\(\\s][^,)]*|\\`[^\\`]*\\$\\{)",
       "compiledAt": "2026-03-21T22:22:15.562Z",
       "createdAt": "2026-03-21T22:22:15.562Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["packages/core/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "2d962603591aa928",
@@ -3533,6 +3340,19 @@
     "3c975f752bc2d396",
     "5a8a7c95fe68bec3",
     "1eb033251746ef35",
-    "75dc445f57a03da2"
+    "75dc445f57a03da2",
+    "ff50cadc6e05631c",
+    "1a6aacfb227f5afa",
+    "5b9058bd289a1dbb",
+    "a8ade9d9b017f7b3",
+    "16d10e42d757de78",
+    "cbb308940a59e34a",
+    "5d34d2d1c2262add",
+    "d8e71d6900e46d8c",
+    "1c4b3232555e41c8",
+    "bd31e87e32cfeefd",
+    "f52f5615a0543837",
+    "6d6d70d5a0f0fa7d",
+    "afda0df95f960602"
   ]
 }
