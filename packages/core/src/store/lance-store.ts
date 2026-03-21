@@ -304,7 +304,8 @@ export class LanceStore {
   /** Delete all chunks from a specific file (for incremental re-index). */
   async deleteByFile(filePath: string): Promise<void> {
     if (!this.table) return;
-    await this.table.delete(`\`filePath\` = '${filePath.replace(/'/g, "''")}'`);
+    const safePath = filePath.replace(/`/g, '\\`').replace(/'/g, "''");
+    await this.table.delete(`\`filePath\` = '${safePath}'`);
   }
 
   /** Drop the entire table. Used for full re-index. */
@@ -456,8 +457,12 @@ interface RankedRow {
 function escapeBoundaryPrefix(raw: string): string {
   // Normalize Windows backslashes to forward slashes
   const normalized = raw.replace(/\\/g, '/');
-  // Escape SQL LIKE wildcards (%, _) and single quotes
-  return normalized.replace(/%/g, '\\%').replace(/_/g, '\\_').replace(/'/g, "''");
+  // Escape SQL LIKE wildcards (%, _), backticks, and single quotes
+  return normalized
+    .replace(/`/g, '\\`')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_')
+    .replace(/'/g, "''");
 }
 
 /** Build a SQL WHERE clause from optional type and boundary filters. */
