@@ -12,7 +12,7 @@ Totem doesn't ship with your app. It lives in your workflow. It also works on no
 
 ```bash
 $ npx @mmnto/cli lint
-✓ PASS — 147 rules, 0 violations.
+PASS — 239 rules, 0 violations.
 
 $ npx @mmnto/cli stats
 Total violations prevented: 47 | security: 12, architecture: 35
@@ -95,11 +95,11 @@ Results are restricted to `packages/mcp/` files. Unknown boundary names fall bac
 
 ## Performance
 
-`totem lint` runs **147 compiled rules in under 2 seconds** on a 7,400-line, 105-file PR. Zero LLM inference. Pure AST classification + regex matching.
+`totem lint` runs **239 compiled rules in under 2 seconds** on a 7,400-line, 105-file PR. Zero LLM inference. Pure AST classification + regex matching.
 
 | Metric         | Value                        |
 | -------------- | ---------------------------- |
-| Rules          | 147 (regex + AST + ast-grep) |
+| Rules          | 239 (regex + AST + ast-grep) |
 | Lines scanned  | 7,397                        |
 | Files          | 105                          |
 | Execution time | **1.75s**                    |
@@ -132,7 +132,7 @@ npx @mmnto/cli init
 
 Auto-detects your environment (Cursor, Copilot, Junie) and sets up `totem.config.ts`. You can also use `totem init --bare` to skip defaults and start with a clean slate.
 
-Ships with an expanded baseline of **125 battle-tested Pipeline 1 lessons** extracted from PR reviews across major ecosystem tools (#781):
+Ships with an expanded baseline of **125 curated lessons** extracted from PR reviews across major ecosystem tools:
 
 - **Frameworks:** Next.js, React.
 - **Data Layer:** Prisma, Drizzle.
@@ -145,7 +145,7 @@ Your project gets immediate protection against the most common architectural tra
 > **Without MCP:** `totem lint`, `compile`, `extract`, `sync`, `explain`, and `stats` all work standalone. You get full deterministic enforcement and the complete CLI experience.
 > **With MCP:** Your AI agent gains live access to the knowledge index mid-session. It can `search_knowledge` before writing code and `add_lesson` when it discovers traps.
 
-Give your AI agent persistent project memory. `search_knowledge` retrieves traps, patterns, and architectural constraints (now with boundary parameters for scoped queries #777), while `add_lesson` captures new ones.
+Give your AI agent persistent project memory. `search_knowledge` retrieves traps, patterns, and architectural constraints with boundary parameters for scoped queries, while `add_lesson` captures new ones.
 
 **macOS / Linux:**
 
@@ -186,7 +186,7 @@ npx @mmnto/cli sync    # Build the vector index
 npx @mmnto/cli lint    # Run compiled rules (zero LLM)
 ```
 
-During `init`, Totem prompts to install a `pre-push` git hook that runs `totem lint` automatically before every push. It drops a standard shell script into `.git/hooks/` to work alongside Husky or bare repos. Phase-gate enforcement additionally warns on commits without proper preflight (#793). Run `totem hooks --check` to verify installation at any time.
+During `init`, Totem prompts to install a `pre-push` git hook that runs `totem lint` automatically before every push. It drops a standard shell script into `.git/hooks/` to work alongside Husky or bare repos. Phase-gate enforcement additionally warns on commits without proper preflight. Run `totem hooks --check` to verify installation at any time.
 
 ## The Planning Pipeline
 
@@ -199,7 +199,7 @@ $ npx @mmnto/cli spec 570
 [Spec] Found: 5 specs, 3 code, 0 lessons
 ```
 
-`totem spec` fetches your issue, queries the knowledge index, and generates a straitjacket checklist complete with invariants and baseline fix guidance (#773). It tells your AI agent exactly what to build and what mistakes to avoid.
+`totem spec` fetches your issue, queries the knowledge index, and generates a straitjacket checklist complete with invariants and fix guidance. It tells your AI agent exactly what to build and what mistakes to avoid.
 
 Cross-totem queries via `linkedIndexes` let the planner pull context from multiple projects simultaneously. Strategy docs can inform code decisions, while shared design systems inform component repositories.
 
@@ -235,18 +235,18 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
   - **Fully Air-Gappable:** `totem lint` requires zero API keys and zero network access. With Ollama for embeddings, the entire pipeline runs without external API calls.
   - **DLP Secret Masking:** Automatically strips secrets before embedding. Credentials never leak into your vector index.
   - **SARIF 2.1.0 Output:** Integrates into CI security scanners via `--format sarif/json`. Prove SOC 2 / DORA compliance to your auditors.
-  - **Execution Hardening:** Safeguards agent operations by enforcing capability caps, preventing injections, and integrating codebase security hardening (#714, #801). Incorporates phase-gate enforcement to actively warn on commits lacking preflight validation (#793).
+  - **Execution Hardening:** Safeguards agent operations by enforcing capability caps and preventing injections. Incorporates phase-gate enforcement to actively warn on commits lacking preflight validation.
 - **Reliability & Portability:**
   - **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs. They also guarantee safe simultaneous MCP mutations.
-  - **Cross-Platform Readiness:** Backed by V1.0 portability audits, Docker test harnesses, and CodeRabbit CI integrations (#715, #802). A comprehensive CI matrix guarantees consistent behavior across OS environments (#774).
+  - **Cross-Platform Readiness:** Backed by portability audits, Docker test harnesses, and automated CI reviews. Tested across Ubuntu, Windows, and macOS in every CI run.
   - **Index Stability:** Dimension mismatch detection via `index-meta.json` prevents database corruption. Auto-healing migrations handle embedder changes automatically.
-  - **Data Partitioning:** Vector indexes now support partition aliases. This ensures efficient, isolated data resolution across complex workspaces (#782).
-  - **Error Handling:** Typed `TotemError` subclasses unify error domains. They provide actionable recovery hints for resilient operations (#711).
+  - **Data Partitioning:** Vector indexes support partition aliases for efficient, isolated data resolution across complex workspaces.
+  - **Error Handling:** Typed `TotemError` subclasses unify error domains with actionable recovery hints for resilient operations.
 - **Rule Architecture:**
-  - **Curated Baselines:** Features a highly-curated 147-rule set with mandatory verify steps to guarantee execution determinism (#708). Includes reverse-compiled Pipeline 1 lessons with manual patterns (#752, #759).
-  - **Quality Gates:** Validates authoring consistency with a rigorous lesson file linter. This linter is backed by a pre-compilation gate (#769).
-  - **Agent Automation:** Agent skills are modularized and utilize lean root routers for instruction files (#791). They enforce `/prepush` execution and expand `PostCompact` hooks with capability manifests (#758, #792).
-  - **Severity Validation:** Compiled rules enforce strict severity levels to guarantee execution safety (#725). Errors actively block CI, while warnings inform without blocking.
+  - **Curated Baselines:** Ships a curated 239-rule set with mandatory verify steps for execution determinism. Includes reverse-compiled lessons with manual patterns for zero-LLM enforcement.
+  - **Quality Gates:** Validates authoring consistency with a lesson file linter backed by a pre-compilation gate.
+  - **Agent Automation:** Agent skills are modularized with lean root routers for instruction files. Phase-gate hooks enforce validation before push and restore context after compaction.
+  - **Severity Validation:** Compiled rules enforce strict severity levels. Errors actively block CI, while warnings inform without blocking.
 
 **What gets committed:** Your knowledge base (text files in `.totem/lessons/`) and the compiled artifact (`.totem/compiled-rules.json`). The `.lancedb/` vector index is a local-only cache, automatically rebuilt by `totem sync`. It is never committed to your repository.
 
@@ -291,9 +291,6 @@ Built on the same architecture as elite AI assistants (Tree-sitter + LanceDB), b
 Full reference: [CLI Reference Wiki](./docs/wiki/cli-reference.md)
 
 # Troubleshooting
-
-Manually maintained content that `totem docs` must include in the wiki.
-This file is the source of truth for troubleshooting notes — edit here, not in the generated wiki.
 
 ## Git Hooks
 

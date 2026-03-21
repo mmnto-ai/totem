@@ -55,7 +55,7 @@ Updated content here...
 - **README hero**: The tagline is: "Stop repeating yourself to your AI." followed by the goldfish subtitle: "AI coding agents are brilliant goldfish. Totem gives them a memory." Do not replace, rephrase, or revert these lines.
 - **README identity**: "Totem doesn't ship with your app. It lives in your workflow." Do not remove this line.
 - **3-Layer pitch**: "Your AI doesn't have to be obedient. It just has to push code." Do not remove or rephrase this line.
-- **Performance claim**: "147 compiled rules in under 2 seconds" on a 7,400-line PR. Do not inflate or deflate this number.
+- **Performance claim**: The rule count changes with each compile. Read the current count from \`.totem/compiled-rules.json\` if available in context, otherwise keep the existing number. The "under 2 seconds" benchmark is stable.
 - **Why Totem pillars**: The three pillars are: (1) Zero-LLM enforcement, (2) Shared memory across repos, (3) Works with any AI agent. These must appear near the top of the README.
 - **Works Without AI**: Totem's enforcement layer requires no AI/API keys/network. The AI helps write rules; the rules enforce themselves. Do not remove this distinction.
 - **Totem Mesh**: The "totem link" command connects repos into a shared knowledge mesh. Do not remove or bury this section.
@@ -69,7 +69,9 @@ Updated content here...
 - **Sub-Bullet Threshold:** When a feature list exceeds 3 items, use nested sub-bullets instead of comma-separated inline lists. Group related items into named categories (e.g., "Security:", "DX:", "Orchestration:").
 - **Completed Phase Summary:** Phases marked \`[x]\` should be summarized in 1-2 sentences max. Do NOT expand completed phases with every PR number — use categorized sub-bullets for the key capability areas only.
 - **Line Length:** No single bullet point should exceed two short sentences. If it does, break it into sub-bullets or summarize. Readability is more important than completeness.
-- **PR References:** Reference PR numbers sparingly — only for the most significant items (1-3 per sub-bullet). Do NOT list every PR number for a capability area.
+- **No Issue/PR References:** NEVER include GitHub issue or PR references (e.g., \`#714\`, \`(#801)\`, \`(#714, #801)\`) in user-facing documentation. These are internal tracking artifacts. Describe features by what they do, not by which ticket shipped them.
+- **No Internal Jargon:** Do not use internal terms like "Pipeline 1", "Pipeline 2", "ADR-058", or "Proposal 186" in user-facing copy. Use plain language that a new user would understand.
+- **No Maintenance Comments:** Do not include comments about how documentation is maintained, generated, or structured. The output is the final document, not a template.
 `;
 
 // ─── Release context gathering ──────────────────────────
@@ -189,6 +191,27 @@ const UPDATED_DOC_RE = /^\s*<updated_document>\s*\n?([\s\S]*?)\n?\s*<\/updated_d
 export function extractUpdatedDocument(response: string): string | null {
   const match = UPDATED_DOC_RE.exec(response);
   return match ? match[1]! : null;
+}
+
+/**
+ * Strip GitHub issue/PR references from user-facing docs.
+ * Handles: (#123), (#123, #456), (fixes #123), standalone #123 in prose.
+ */
+export function stripIssueRefs(content: string): string {
+  return (
+    content
+      // Remove parenthesized refs: "(#123)", "(#123, #456)", "(fixes #123)"
+      .replace(/\s*\((?:(?:fixes|closes|resolves|refs?)\s+)?#\d+(?:\s*,\s*#\d+)*\)/gi, '')
+      // Remove standalone refs in prose: "security hardening #801" → "security hardening"
+      .replace(/\s+#(\d{3,})\b/g, (match, num) => {
+        // Preserve anchors like "#my-heading" and short numbers
+        return parseInt(num, 10) >= 100 ? '' : match;
+      })
+      // Clean up double spaces left behind
+      .replace(/ {2,}/g, ' ')
+      // Clean up trailing spaces on lines
+      .replace(/ +$/gm, '')
+  );
 }
 
 // ─── Diff display ───────────────────────────────────────
@@ -383,7 +406,10 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
       continue;
     }
 
-    const trimmedContent = extracted.trimEnd() + '\n';
+    // Post-process: strip issue/PR refs from user-facing docs (#815)
+    const isUserFacingDoc = path.basename(doc.path).toLowerCase() === 'readme.md';
+    const cleaned = isUserFacingDoc ? stripIssueRefs(extracted) : extracted;
+    const trimmedContent = cleaned.trimEnd() + '\n';
     const hasChanges = showDiff(doc.path, currentContent, trimmedContent);
     if (!hasChanges) continue;
 

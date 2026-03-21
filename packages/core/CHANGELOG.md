@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 1.3.14
+
+### Patch Changes
+
+- Rule audit: kill 70 garbage rules, dedup 18 overlaps (327 → 239). Docs prompt fix: strip issue refs from user-facing output. README cleanup.
+
 ## 1.3.13
 
 ### Patch Changes

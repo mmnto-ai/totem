@@ -55,6 +55,9 @@ const config: TotemConfig = {
     '.strategy/**',
     '.claude/**',
     'tests/**',
+    'scripts/**',
+    '.totem/compiled-rules.json',
+    '.coderabbit.yaml',
   ],
 
   repositories: ['mmnto-ai/totem', 'mmnto-ai/totem-strategy'],
