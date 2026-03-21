@@ -59,6 +59,18 @@ describe('SPEC_SYSTEM_PROMPT', () => {
   it('instructs LLM to cite lessons in Architectural Context', () => {
     expect(SPEC_SYSTEM_PROMPT).toContain('Call out which lessons influenced');
   });
+
+  it('contains RED FLAGS TDD enforcement section', () => {
+    expect(SPEC_SYSTEM_PROMPT).toContain('RED FLAGS');
+    expect(SPEC_SYSTEM_PROMPT).toContain('Never write code before writing the failing test');
+    expect(SPEC_SYSTEM_PROMPT).toContain('Never skip the test step');
+  });
+
+  it('contains Graphviz execution flow diagram', () => {
+    expect(SPEC_SYSTEM_PROMPT).toContain('digraph workflow');
+    expect(SPEC_SYSTEM_PROMPT).toContain('verify_fails -> implement');
+    expect(SPEC_SYSTEM_PROMPT).toContain('verify_passes -> lint');
+  });
 });
 
 // ─── assemblePrompt ──────────────────────────────────────
