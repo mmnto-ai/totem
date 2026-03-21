@@ -2,636 +2,6 @@
   "version": 1,
   "rules": [
     {
-      "lessonHash": "1bd32906a5067397",
-      "lessonHeading": "2026-03-02T09:18:21.092Z",
-      "message": "Do not use os.tmpdir() for AI agent files. Secure MCP clients require temporary files to be within the project workspace (e.g., use '.totem/temp/') to avoid 'Path not in workspace' errors.",
-      "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
-      "astGrepPattern": "os.tmpdir()",
-      "compiledAt": "2026-03-21T06:11:52.146Z",
-      "createdAt": "2026-03-21T06:11:52.146Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
-    },
-    {
-      "lessonHash": "8c0a9912680559f6",
-      "lessonHeading": "2026-03-03T01:51:33.783Z",
-      "message": "Do not string-match the command for '-o json'. Instead, use try-parse on the Gemini CLI stdout to handle structured output. This handles edge cases and captures full stats (tokens, latency) without requiring config awareness.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(includes|indexOf|match|search)\\(\\s*['\"\\/]-o\\s+json",
-      "compiledAt": "2026-03-21T06:12:14.068Z",
-      "createdAt": "2026-03-21T06:12:14.068Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
-    },
-    {
-      "lessonHash": "a9434d3f73d05db2",
-      "lessonHeading": "2026-03-03T01:52:20.000Z",
-      "message": "Use getDefaultBranch() instead of manual git commands for branch detection. Ensure it throws an error if detection fails entirely instead of silently returning 'main'.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "git\\s+symbolic-ref\\s+refs/remotes/origin/HEAD",
-      "compiledAt": "2026-03-21T06:12:56.627Z",
-      "createdAt": "2026-03-21T06:12:56.627Z",
-      "fileGlobs": [
-        "packages/totem/**/*.ts",
-        "!**/getDefaultBranch.ts"
-      ]
-    },
-    {
-      "lessonHash": "4683affcdc295f53",
-      "lessonHeading": "2026-03-03T02:16:24.772Z",
-      "message": "Use fs.openSync() instead of fs.createWriteStream() for child_process stdio. WriteStream.fd is null until the 'open' event, which causes spawn() to reject. Close the FD in the parent after spawning.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bstdio\\s*:\\s*[^,}]*\\b(createWriteStream|\\.fd)\\b",
-      "compiledAt": "2026-03-21T06:13:49.488Z",
-      "createdAt": "2026-03-21T06:13:49.488Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.mjs",
-        "**/*.cjs"
-      ]
-    },
-    {
-      "lessonHash": "ebe45f00165fbe3f",
-      "lessonHeading": "2026-03-03T03:20:15.923Z",
-      "message": "Use nullish coalescing (??) instead of logical OR (||) for numeric metrics like latency or token counts to avoid incorrectly overwriting valid 0 values.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(latency|tokens?|count|duration|ms|time|score|limit|offset|size|length)\\b\\s*\\|\\|",
-      "compiledAt": "2026-03-21T06:14:10.321Z",
-      "createdAt": "2026-03-21T06:14:10.321Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
-    },
-    {
-      "lessonHash": "82000aa7360b28f3",
-      "lessonHeading": "2026-03-03T03:20:15.923Z",
-      "message": "Avoid hardcoded fallbacks like 'main' for required environmental configuration; throw an explicit error if the value cannot be detected.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "(?:\\?\\?|\\|\\|)\\s*['\"]main['\"]",
-      "compiledAt": "2026-03-21T06:14:33.855Z",
-      "createdAt": "2026-03-21T06:14:33.855Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "!**/*.test.ts",
-        "!**/*.test.js"
-      ]
-    },
-    {
-      "lessonHash": "772e4aa0ef24b499",
-      "lessonHeading": "2026-03-05T04:05:16.794Z",
-      "message": "Move '[Totem Error]' prefix guards into the shared error handler instead of duplicating them at call sites. Centralize error routing in one place.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(includes|startsWith|indexOf)\\s*\\(\\s*['\"]\\[Totem Error\\]['\"]",
-      "compiledAt": "2026-03-21T06:16:21.660Z",
-      "createdAt": "2026-03-21T06:16:21.660Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "cda917668c8a5a13",
-      "lessonHeading": "2026-03-05T04:05:19.420Z",
-      "message": "Regex patterns for URLs (like GitHub) must be anchored with '^' and include the protocol ('https?://') to prevent unintended substring matches during input parsing.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "(\\/|'|\")(?!\\^https?:\\/\\/)[^'\"\\/]*github\\.com",
-      "compiledAt": "2026-03-21T06:16:33.429Z",
-      "createdAt": "2026-03-21T06:16:33.429Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
-    },
-    {
-      "lessonHash": "56ebf3c19ab25b42",
-      "lessonHeading": "2026-03-06T01:32:23.369Z",
-      "message": "Do not strip ANSI escapes or control characters from MCP tool output. LLMs benefit from the raw formatting; terminal sanitization is a CLI presentation concern, not a data payload concern.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bstripAnsi\\s*\\(|\\.replace\\(\\s*\\/\\\\(u001b|x1b|u009b)\\[[0-9;]*[a-zA-Z]\\/",
-      "compiledAt": "2026-03-21T06:17:09.399Z",
-      "createdAt": "2026-03-21T06:17:09.399Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts",
-        "packages/mcp/**/*.js"
-      ]
-    },
-    {
-      "lessonHash": "9e4c9e474317c17b",
-      "lessonHeading": "2026-03-06T03:34:53.287Z",
-      "message": "Do not port legacy cloud implementations (Kafka, Kubernetes, Firestore) to Totem. Totem is designed to use local, pragmatic primitives like LanceDB and local terminal execution instead of massive cloud architectures.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(kafka|kubernetes|k8s|firestore)\\b",
-      "compiledAt": "2026-03-21T06:18:11.876Z",
-      "createdAt": "2026-03-21T06:18:11.876Z",
-      "fileGlobs": [
-        "*.ts",
-        "*.js",
-        "package.json",
-        "Dockerfile",
-        "*.yml",
-        "*.yaml"
-      ]
-    },
-    {
-      "lessonHash": "90b042b866aefa9d",
-      "lessonHeading": "2026-03-06T03:36:17.521Z",
-      "message": "Use backticks (`) for case-sensitive column identifiers in LanceDB filters. SQL-standard double quotes (\") cause silent failures (zero matches) without throwing errors.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(where|delete)\\s*\\(\\s*(?:['\\x60].*?\".*?['\\x60]|\\\".*?\\\\\".*?\\\")",
-      "compiledAt": "2026-03-21T06:18:40.998Z",
-      "createdAt": "2026-03-21T06:18:40.998Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
-    },
-    {
-      "lessonHash": "277b4b74ce323c7e",
-      "lessonHeading": "2026-03-06T04:31:54.888Z",
-      "message": "Modular decoupling violation: 'triage' should not automatically invoke 'learn'. Use 'totem run <workflow>' for composition to avoid creating a 'mega-command'.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\blearn\\(|totem\\s+learn",
-      "compiledAt": "2026-03-21T06:19:05.395Z",
-      "createdAt": "2026-03-21T06:19:05.395Z",
-      "fileGlobs": [
-        "**/triage.ts",
-        "**/triage.js",
-        "**/triage/*.ts",
-        "**/triage/*.js"
-      ]
-    },
-    {
-      "lessonHash": "afc7179714d64317",
-      "lessonHeading": "2026-03-06T05:32:34.074Z",
-      "message": "Strictly enforce 'Fail Fast' in orchestrator commands. Avoid Promise.allSettled; use Promise.all to prevent partial context assembly, which can cause the AI to hallucinate based on incomplete information.",
-      "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
-      "astGrepPattern": "Promise.allSettled($ARGS)",
-      "compiledAt": "2026-03-21T06:19:28.366Z",
-      "createdAt": "2026-03-21T06:19:28.366Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "2e8fe8d7c8458aae",
-      "lessonHeading": "2026-03-06T05:41:19.122Z",
-      "message": "Use @clack/prompts instead of inquirer for modern CLI UX polish (Issue #21)",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "import.*from\\s+['\"]inquirer['\"]",
-      "compiledAt": "2026-03-21T06:19:35.665Z",
-      "createdAt": "2026-03-21T06:19:35.665Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "packages/cli/**/*.js",
-        "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "12d08c59eff035d0",
-      "lessonHeading": "2026-03-06T06:25:26.036Z",
-      "message": "Path traversal risk: strictly enforce path traversal protection when reading from .totem/prompts/. Ensure the resolved path is validated to stay within the intended directory.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.totem/prompts/.*(\\$\\{|\\+)|path\\.(join|resolve)\\(.*\\.totem/prompts.*,(?!\\s*['\"`\\)])",
-      "compiledAt": "2026-03-21T06:20:53.390Z",
-      "createdAt": "2026-03-21T06:20:53.390Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ]
-    },
-    {
-      "lessonHash": "e18b9f81eef4cd6a",
-      "lessonHeading": "2026-03-06T06:25:26.036Z",
-      "message": "Route decorative UI output (spinners, banners, tags) to stderr (e.g., console.error) to reserve stdout strictly for pipeable data.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bconsole\\.(log|info)\\b",
-      "compiledAt": "2026-03-21T06:21:32.165Z",
-      "createdAt": "2026-03-21T06:21:32.165Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "packages/cli/**/*.js"
-      ]
-    },
-    {
-      "lessonHash": "b8763e4bd93c7314",
-      "lessonHeading": "2026-03-06T06:25:26.036Z",
-      "message": "Use dynamic imports (e.g., const ora = (await import('ora')).default) for heavy dependencies to avoid performance penalties during CLI startup.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "import\\s+(?!type\\b).*from\\s+['\"]ora['\"]",
-      "compiledAt": "2026-03-21T06:21:47.397Z",
-      "createdAt": "2026-03-21T06:21:47.397Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "packages/cli/**/*.js"
-      ]
-    },
-    {
-      "lessonHash": "e02e064077d533d6",
-      "lessonHeading": "2026-03-06T06:25:26.036Z",
-      "message": "Avoid using '${err}' in template literals as it relies on a generic toString() call. Use '${err.message}' or pass the error object as a separate argument to ensure consistent and informative logging.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\$\\{err\\}",
-      "compiledAt": "2026-03-21T06:21:58.767Z",
-      "createdAt": "2026-03-21T06:21:58.767Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
-    },
-    {
-      "lessonHash": "33b5a968ffe0456e",
-      "lessonHeading": "2026-03-06T09:08:26.567Z",
-      "message": "Avoid embedding complex shell logic in JSON. Extract hook logic into a dedicated executable script file (e.g., .gemini/hooks/BeforeTool.js) and invoke that instead.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\"(?:hook|command|exec|script|shell)\"\\s*:\\s*\"[^\"]*(?:\\||&&|;|`|\\$\\()\"",
-      "compiledAt": "2026-03-21T06:22:28.849Z",
-      "createdAt": "2026-03-21T06:22:28.849Z",
-      "fileGlobs": [
-        "**/*.json"
-      ]
-    },
-    {
-      "lessonHash": "4cb12ed837adf07a",
-      "lessonHeading": "2026-03-06T10:00:40.352Z",
-      "message": "Route host hook output (briefing or shield results) to stderr instead of stdout to prevent polluting AI tool return values.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(console\\.log|process\\.stdout\\.write)\\s*\\(.*(briefing|shield)",
-      "compiledAt": "2026-03-21T06:22:37.754Z",
-      "createdAt": "2026-03-21T06:22:37.754Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts",
-        "packages/cli/**/*.ts",
-        "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "3613d5ba9b4af848",
-      "lessonHeading": "2026-03-06T10:00:40.352Z",
-      "message": "Avoid complex single-regex patterns for git command interception. Use a dual-grep approach (e.g., grep 'git' && grep -E 'push|commit') for better reliability across platforms and encoded inputs.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bgrep\\s+.*['\"]\\bgit\\b.*(push|commit|pull|checkout|merge|branch|clone)",
-      "compiledAt": "2026-03-21T06:22:49.518Z",
-      "createdAt": "2026-03-21T06:22:49.518Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.bash",
-        "*.yml",
-        "*.yaml",
-        "Makefile"
-      ]
-    },
-    {
-      "lessonHash": "40b5659a75c42e0d",
-      "lessonHeading": "2026-03-06T10:00:40.352Z",
-      "message": "Wrap MCP tool returns in unique XML tags (e.g., using formatXmlResponse) to prevent indirect prompt injection. Raw file content must be treated as untrusted data.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "text:\\s*(?!formatXmlResponse)\\b\\w+",
-      "compiledAt": "2026-03-21T06:22:58.455Z",
-      "createdAt": "2026-03-21T06:22:58.455Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts",
-        "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "8c5de572889e11ff",
-      "lessonHeading": "2026-03-06T18:48:00.895Z",
-      "message": "When escaping closing XML tags, use a case-insensitive regex that accounts for optional internal whitespace (e.g., </\\s*tag\\s*>/i) to prevent prompt injection bypasses.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "(?:['\"]<\\/|\\/<\\\\\\/)[a-zA-Z0-9_-]*",
-      "compiledAt": "2026-03-21T06:24:02.327Z",
-      "createdAt": "2026-03-21T06:24:02.327Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts",
-        "packages/mcp/**/*.js",
-        "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "60ed0c0103e81674",
-      "lessonHeading": "2026-03-06T18:48:00.895Z",
-      "message": "Use the .cjs extension for Node.js utility scripts and host integration hooks in ESM-first projects to ensure compatibility with external tools.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "^#!.*\\bnode\\b",
-      "compiledAt": "2026-03-21T06:25:08.739Z",
-      "createdAt": "2026-03-21T06:25:08.739Z",
-      "fileGlobs": [
-        "**/*.js",
-        "!**/*.test.js"
-      ]
-    },
-    {
-      "lessonHash": "4142b945b49cd292",
-      "lessonHeading": "2026-03-07T00:44:37.037Z",
-      "message": "Always await side-effect operations like indexing during tool execution to provide the LLM with definitive success or failure confirmation. Fire-and-forget patterns cause hallucinations regarding state.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "^(?!.*await\\b).*\\b(index|upsert|persist)\\w*\\(",
-      "compiledAt": "2026-03-21T06:25:45.086Z",
-      "createdAt": "2026-03-21T06:25:45.086Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts",
-        "**/*tool*.ts",
-        "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "4d63af6631a6ddf7",
-      "lessonHeading": "2026-03-07T06:05:56.069Z",
-      "message": "Escape closing XML tags in prompts (e.g., <\\/tag>) to prevent prompt injection and reduce parsing noise.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "<\\/\\s*[a-zA-Z][a-zA-Z0-9_-]*\\s*>",
-      "compiledAt": "2026-03-21T06:27:27.938Z",
-      "createdAt": "2026-03-21T06:27:27.938Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "**/*.py",
-        "!**/*.html",
-        "!**/*.xml"
-      ]
-    },
-    {
-      "lessonHash": "87065a9e2e98d061",
-      "lessonHeading": "2026-03-07T06:05:56.069Z",
-      "message": "Do not apply terminal sanitization (stripping ANSI codes) to data intended for LLM prompts; it degrades code fidelity. Terminal sanitization is a CLI presentation concern, not for LLM payloads.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bstripAnsi\\(",
-      "compiledAt": "2026-03-21T06:27:42.261Z",
-      "createdAt": "2026-03-21T06:27:42.261Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts",
-        "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "b6c47924514dc4da",
-      "lessonHeading": "2026-03-07T06:05:56.069Z",
-      "message": "Do not apply prompt injection sanitization (formatXmlResponse) to semi-trusted metadata like branch names or git file paths to maintain prompt readability.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "formatXmlResponse\\s*\\(\\s*[^)]*?\\b(branch|branchName|filePath|gitPath)\\b",
-      "compiledAt": "2026-03-21T06:28:01.721Z",
-      "createdAt": "2026-03-21T06:28:01.721Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts",
-        "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "f33b0cba8caa726f",
-      "lessonHeading": "2026-03-07T06:05:56.069Z",
-      "message": "Prefer dynamic imports inside command function bodies to ensure CLI tools start quickly. Static imports at module scope increase startup latency.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bimport\\s+(?!type\\b)",
-      "compiledAt": "2026-03-21T06:28:30.094Z",
-      "createdAt": "2026-03-21T06:28:30.094Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "src/commands/**/*.ts",
-        "commands/**/*.ts",
-        "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "adfc0cef98b8371f",
-      "lessonHeading": "2026-03-07T06:05:56.069Z",
-      "message": "Avoid generic line-matching patterns (like startsWith with a single punctuation mark) when scrubbing auto-generated sections. Use unique block markers or precise strings to prevent accidental removal of user-added logic.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.startsWith\\(['\"][^a-zA-Z0-9\\s]['\"]\\)",
-      "compiledAt": "2026-03-21T06:28:57.500Z",
-      "createdAt": "2026-03-21T06:28:57.500Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "scripts/**",
-        ".husky/**"
-      ]
-    },
-    {
-      "lessonHash": "be74c55caa9fd60c",
-      "lessonHeading": "2026-03-07T21:45:57.754Z",
-      "message": "Directly expanding GitHub Action inputs in shell scripts is a command injection risk. Map inputs to intermediate environment variables first (e.g., env: VAR_NAME: ${{ inputs.key }}).",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\brun:.*\\$\\{\\{\\s*inputs\\..*\\}\\}|([^:]|^)\\s*\\$\\{\\{\\s*inputs\\..*\\}\\}",
-      "compiledAt": "2026-03-21T06:30:14.084Z",
-      "createdAt": "2026-03-21T06:30:14.084Z",
-      "fileGlobs": [
-        ".github/workflows/*.yml",
-        ".github/workflows/*.yaml"
-      ]
-    },
-    {
-      "lessonHash": "dfd58fda9e518754",
-      "lessonHeading": "2026-03-07T21:45:57.754Z",
-      "message": "Always quote shell variables (e.g., \"$VAR\") to prevent word-splitting and argument injection.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "(?:^|\\s)(\\$[a-zA-Z_]\\w*|\\$\\{[a-zA-Z_]\\w*\\})",
-      "compiledAt": "2026-03-21T06:30:31.900Z",
-      "createdAt": "2026-03-21T06:30:31.900Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.bash",
-        "*.yml",
-        "*.yaml"
-      ]
-    },
-    {
-      "lessonHash": "7e9b6b44a2d8ff77",
-      "lessonHeading": "2026-03-07T21:45:57.754Z",
-      "message": "Sanitize text derived from untrusted sources (like LLM outputs or PR comments) before displaying it in interactive CLI components to prevent terminal injection via malicious ANSI escape sequences.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(note|intro|outro|log\\.(step|info|warn|error|success))\\(\\s*(?![ur]?['\"`])[a-zA-Z_$][\\w$.]*\\s*\\)",
-      "compiledAt": "2026-03-21T06:31:39.025Z",
-      "createdAt": "2026-03-21T06:31:39.025Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "!**/*.test.ts",
-        "!**/*.test.tsx"
-      ]
-    },
-    {
-      "lessonHash": "f14881a4daf28160",
-      "lessonHeading": "2026-03-08T00:11:33.219Z",
-      "message": "Environment variable checks for a 'configured' state must validate that the value contains non-whitespace characters (e.g., using /\\S/.test(process.env.VAR || '')) to prevent false positives from variables exported as empty strings or whitespace.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "(\\b!!process\\.env\\.\\w+|\\bBoolean\\(process\\.env\\.\\w+\\)|if\\s*\\(\\s*process\\.env\\.\\w+\\s*\\)|process\\.env\\.\\w+\\s*\\?)",
-      "compiledAt": "2026-03-21T06:32:20.231Z",
-      "createdAt": "2026-03-21T06:32:20.231Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
-    },
-    {
-      "lessonHash": "faeae7a9e495c145",
-      "lessonHeading": "2026-03-08T00:56:41.780Z",
-      "message": "Use exact count assertions (e.g., .toBe(10)) instead of weak bounds (e.g., .toBeGreaterThanOrEqual(5)) for fixed asset collections to prevent regression errors.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(length|size|count)\\b.*\\.toBe(GreaterThan|LessThan)(OrEqual)?",
-      "compiledAt": "2026-03-21T06:32:57.883Z",
-      "createdAt": "2026-03-21T06:32:57.883Z",
-      "fileGlobs": [
-        "**/*.test.ts",
-        "**/*.test.tsx",
-        "**/*.spec.ts",
-        "**/*.spec.tsx",
-        "**/*.test.js",
-        "**/*.spec.js"
-      ]
-    },
-    {
-      "lessonHash": "46edc0540d7fbfa9",
-      "lessonHeading": "2026-03-08T02:39:04.901Z",
-      "message": "Avoid generic timestamp headings for knowledge chunks. Use descriptive, unique headings to ensure both humans and AI can differentiate between entries in search results.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "^(?:#+\\s+|Heading:\\s*)\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}",
-      "compiledAt": "2026-03-21T06:33:38.458Z",
-      "createdAt": "2026-03-21T06:33:38.458Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.txt"
-      ]
-    },
-    {
-      "lessonHash": "57f8903e23952c25",
-      "lessonHeading": "2026-03-08T02:39:04.901Z",
-      "message": "Use exact count assertions (e.g., .toHaveLength() or .toBe()) instead of range-based checks to ensure fixed sets of assets/features are fully preserved and accidental deletions are detected.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(toBeGreaterThan|toBeGreaterThanOrEqual|isAbove|isAtLeast|at\\.least|above)\\s*\\(",
-      "compiledAt": "2026-03-21T06:33:46.493Z",
-      "createdAt": "2026-03-21T06:33:46.493Z",
-      "fileGlobs": [
-        "**/*.test.ts",
-        "**/*.test.js",
-        "**/*.spec.ts",
-        "**/*.spec.js"
-      ]
-    },
-    {
-      "lessonHash": "c70a88493f3ed6d8",
-      "lessonHeading": "2026-03-08T02:39:04.901Z",
-      "message": "Avoid passing large data (like prompts or context) via CLI arguments or environment variables to prevent 'argument list too long' errors on Windows. Use temporary files instead.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(spawn|exec|fork|execa|execSync|spawnSync|args|env)\\s*[:(].*\\b(prompt|context|content|inputData)\\b",
-      "compiledAt": "2026-03-21T06:34:10.902Z",
-      "createdAt": "2026-03-21T06:34:10.902Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
-    },
-    {
-      "lessonHash": "5da43ea60b66e96e",
-      "lessonHeading": "2026-03-08T02:39:04.901Z",
-      "message": "Always use the '--' separator before positional arguments in git commands to prevent argument injection (e.g., 'git log -- <ref>').",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bgit\\s+(log|checkout|diff|reset|show|describe|add|rm)\\s+[^-\\s]",
-      "compiledAt": "2026-03-21T06:34:45.514Z",
-      "createdAt": "2026-03-21T06:34:45.514Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.bash",
-        "*.yml",
-        "*.yaml",
-        "Dockerfile",
-        "*.ts",
-        "*.js",
-        "*.py"
-      ]
-    },
-    {
-      "lessonHash": "9db404994f0574b8",
-      "lessonHeading": "2026-03-08T02:39:04.901Z",
-      "message": "Use named error objects (e.g., err.name === 'NoDocsConfiguredError') instead of string matching on error messages to handle logic flow or 'graceful skip' conditions.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.message\\s*(===|==|!==|!=|\\.includes|\\.startsWith|\\.indexOf)",
-      "compiledAt": "2026-03-21T06:35:06.468Z",
-      "createdAt": "2026-03-21T06:35:06.468Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
-    },
-    {
       "lessonHash": "f7fc104cac7efdcf",
       "lessonHeading": "Sanitize user-provided text before persisting to files",
       "message": "Sanitize ANSI escape sequences (e.g., using 'strip-ansi') before writing user-provided text to .md or .log files to prevent terminal injection vulnerabilities.",
@@ -1016,22 +386,6 @@
       ]
     },
     {
-      "lessonHash": "40fdd031e2db1230",
-      "lessonHeading": "Avoid using exit 0 inside git hooks intended for chaining",
-      "message": "Avoid using 'exit 0' in git hooks as it terminates the shell and prevents subsequent hooks from running. Use conditional blocks (if/fi) instead.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bexit\\s+0\\b",
-      "compiledAt": "2026-03-21T06:54:35.400Z",
-      "createdAt": "2026-03-21T06:54:35.400Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.bash",
-        ".husky/**",
-        "hooks/**"
-      ]
-    },
-    {
       "lessonHash": "16d10e42d757de78",
       "lessonHeading": "Detect existing hook managers and provide manual guidance",
       "message": "Avoid writing directly to .git/hooks. Detect existing hook managers (like Husky or Lefthook) and provide manual integration guidance instead to avoid clobbering developer workflows.",
@@ -1185,22 +539,6 @@
       ]
     },
     {
-      "lessonHash": "9455c39779cd7218",
-      "lessonHeading": "Use granular assertions rather than snapshots for testing",
-      "message": "Use granular assertions (e.g., toContain) instead of snapshots for testing prompts to prevent tests from breaking on minor, non-functional prose changes.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.toMatch(Inline)?Snapshot\\s*\\(",
-      "compiledAt": "2026-03-21T06:59:29.645Z",
-      "createdAt": "2026-03-21T06:59:29.645Z",
-      "fileGlobs": [
-        "**/*.test.ts",
-        "**/*.test.tsx",
-        "**/*.spec.ts",
-        "**/*.spec.tsx"
-      ]
-    },
-    {
       "lessonHash": "064f35405ec02082",
       "lessonHeading": "Always iterate through all regex matches (e.g.,",
       "message": "Use matchAll() instead of match() to iterate through all matches. Relying on the first match allows 'shadowing' where an attacker prefixes a payload with a safe match to hide a malicious one later in the string.",
@@ -1276,26 +614,6 @@
         "**/*.txt",
         "**/*.yml",
         "**/*.yaml"
-      ]
-    },
-    {
-      "lessonHash": "13860bc4d359bd1a",
-      "lessonHeading": "Use granular assertions rather than snapshots when testing",
-      "message": "Use granular assertions rather than snapshots when testing system prompts to verify functional constraints without breaking on minor prose changes.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.toMatch(Inline)?Snapshot\\s*\\(",
-      "compiledAt": "2026-03-21T07:01:06.872Z",
-      "createdAt": "2026-03-21T07:01:06.872Z",
-      "fileGlobs": [
-        "**/*.test.ts",
-        "**/*.test.tsx",
-        "**/*.test.js",
-        "**/*.test.jsx",
-        "**/*.spec.ts",
-        "**/*.spec.tsx",
-        "**/*.spec.js",
-        "**/*.spec.jsx"
       ]
     },
     {
@@ -1448,23 +766,6 @@
       ]
     },
     {
-      "lessonHash": "dc1c9e7628b48abd",
-      "lessonHeading": "Use --body-file for LLM text in CLI",
-      "message": "Use --body-file instead of --body for LLM-generated text to prevent shell injection and formatting issues.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b--body\\b(?!-file)",
-      "compiledAt": "2026-03-21T07:06:22.989Z",
-      "createdAt": "2026-03-21T07:06:22.989Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.bash",
-        "*.yml",
-        "*.yaml",
-        "packages/cli/**/*.ts"
-      ]
-    },
-    {
       "lessonHash": "ce4240d622c53f8e",
       "lessonHeading": "ESM intra-module mock requires re-binding",
       "message": "Using '...await vi.importActual()' in ESM mocks retains closure references to original functions. Internal calls within the mocked module will not use your mocks unless re-bound.",
@@ -1596,40 +897,6 @@
       ]
     },
     {
-      "lessonHash": "d331385059f68e0e",
-      "lessonHeading": "2026-03-06T05:32:34.074Z",
-      "message": "2026-03-06T05:32:34.074Z",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "Promise\\.allSettled",
-      "compiledAt": "2026-03-21T07:11:45.228Z",
-      "createdAt": "2026-03-21T07:11:45.228Z",
-      "fileGlobs": [
-        "**/cli/**/*.ts",
-        "**/totem/**/*.ts",
-        "**/orchestrator/**/*.ts"
-      ]
-    },
-    {
-      "lessonHash": "dc4f30456925f88e",
-      "lessonHeading": "Synchronous execSync with piped stdio can cause the parent",
-      "message": "Synchronous execSync with piped stdio can cause the parent",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bexecSync\\s*\\(",
-      "compiledAt": "2026-03-21T07:11:45.228Z",
-      "createdAt": "2026-03-21T07:11:45.228Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "!.gemini/hooks/**",
-        "!.totem/hooks/**",
-        "!tools/**"
-      ]
-    },
-    {
       "lessonHash": "ff50cadc6e05631c",
       "lessonHeading": "Swallowing errors in core modules hides silent failures,",
       "message": "Swallowing errors in core modules hides silent failures,",
@@ -1747,20 +1014,6 @@
       ]
     },
     {
-      "lessonHash": "dbb0c9bda83a8c2a",
-      "lessonHeading": "Hardcoded default values for properties like rule",
-      "message": "Hardcoded default values for properties like rule",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(category|ruleCategory)\\s*:\\s*['\"][^'\"]+['\"]",
-      "compiledAt": "2026-03-21T07:13:51.813Z",
-      "createdAt": "2026-03-21T07:13:51.813Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "!**/*.test.ts"
-      ]
-    },
-    {
       "lessonHash": "e0fcbc814acf6deb",
       "lessonHeading": "Centralize error signature detection (such as 429 status",
       "message": "Centralize error signature detection (such as 429 status",
@@ -1805,22 +1058,6 @@
         "**/llm/**/*.ts",
         "**/providers/**/*.ts",
         "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "08ba74359ffb57d4",
-      "lessonHeading": "2026-03-06T10:00:40.352Z",
-      "message": "2026-03-06T10:00:40.352Z",
-      "engine": "regex",
-      "severity": "error",
-      "pattern": "\\b(echo|run_shell_command|exec|sh|bash)\\b.*\\$TOOL_INPUT",
-      "compiledAt": "2026-03-21T07:14:55.956Z",
-      "createdAt": "2026-03-21T07:14:55.956Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.bash",
-        "*.yml",
-        "*.yaml"
       ]
     },
     {
@@ -2019,22 +1256,6 @@
       ]
     },
     {
-      "lessonHash": "e7e4f5461a73a058",
-      "lessonHeading": "2026-03-07T00:44:37.037Z",
-      "message": "2026-03-07T00:44:37.037Z",
-      "engine": "regex",
-      "severity": "error",
-      "pattern": "^(?!.*\\b(await|return)\\b).*?\\.(index|upsert|persist|addDocument|deleteDocument)\\s*\\(",
-      "compiledAt": "2026-03-21T07:17:09.503Z",
-      "createdAt": "2026-03-21T07:17:09.503Z",
-      "fileGlobs": [
-        "**/*tool*/**/*.ts",
-        "**/tools/**/*.ts",
-        "packages/mcp/**/*.ts",
-        "!**/*.test.ts"
-      ]
-    },
-    {
       "lessonHash": "463721b73bcacdc3",
       "lessonHeading": "Use semantic constraints like \"one to two short sentences\"",
       "message": "Use semantic constraints like \"one to two short sentences\"",
@@ -2066,38 +1287,6 @@
       "fileGlobs": [
         ".totem/lessons/**",
         ".totem/lessons.md"
-      ]
-    },
-    {
-      "lessonHash": "ae2eb256ef921feb",
-      "lessonHeading": "2026-03-08T02:39:04.901Z",
-      "message": "2026-03-08T02:39:04.901Z",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(toBeGreaterThan|toBeGreaterThanOrEqual)\\(",
-      "compiledAt": "2026-03-21T07:17:09.504Z",
-      "createdAt": "2026-03-21T07:17:09.504Z",
-      "fileGlobs": [
-        "**/*.test.ts",
-        "**/*.test.js",
-        "**/*.spec.ts",
-        "**/*.spec.js"
-      ]
-    },
-    {
-      "lessonHash": "b17b82ef6d627552",
-      "lessonHeading": "Hardcoding strings for categories in both reporting and CLI",
-      "message": "Avoid hardcoding category strings; use shared constants from a core schema to prevent logic drift.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bcategory\\b\\s*[:=]\\s*['\"][^'\"]+['\"]",
-      "compiledAt": "2026-03-21T07:17:31.605Z",
-      "createdAt": "2026-03-21T07:17:31.605Z",
-      "fileGlobs": [
-        "packages/reporting/**/*.ts",
-        "packages/reporting/**/*.tsx",
-        "packages/cli/**/*.ts",
-        "packages/cli/**/*.tsx"
       ]
     },
     {
@@ -2167,23 +1356,6 @@
         "**/*.jsx",
         "!**/*.test.ts",
         "!**/*.test.js"
-      ]
-    },
-    {
-      "lessonHash": "bce6beebbec33b1f",
-      "lessonHeading": "Use pnpm exec for workspace binaries in monorepos",
-      "message": "Use pnpm exec for workspace binaries in monorepos",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bpnpm\\s+bin\\b",
-      "compiledAt": "2026-03-21T07:18:01.445Z",
-      "createdAt": "2026-03-21T07:18:01.445Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.bash",
-        "*.yml",
-        "*.yaml",
-        "package.json"
       ]
     },
     {
@@ -2305,24 +1477,6 @@
       ]
     },
     {
-      "lessonHash": "2bc7194b06a470fd",
-      "lessonHeading": "2026-03-05T04:05:16.794Z",
-      "message": "2026-03-05T04:05:16.794Z",
-      "engine": "regex",
-      "severity": "error",
-      "pattern": "\\.(includes|startsWith)\\(['\"]\\\\\\[Totem Error\\\\\\]['\"]\\)",
-      "compiledAt": "2026-03-21T07:19:47.719Z",
-      "createdAt": "2026-03-21T07:19:47.719Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "!**/error*.ts",
-        "!**/error*.js"
-      ]
-    },
-    {
       "lessonHash": "71935fe9a742137b",
       "lessonHeading": "Using String() casting on input patterns can lead to silent",
       "message": "Avoid using String() casting on input patterns; this can lead to silent failures by turning objects into '[object Object]'. Use explicit type validation and error handling instead.",
@@ -2400,23 +1554,6 @@
       "createdAt": "2026-03-21T07:20:48.796Z",
       "fileGlobs": [
         "packages/core/**/*"
-      ]
-    },
-    {
-      "lessonHash": "1210f02da9f16e5b",
-      "lessonHeading": "Using domain-specific error subclasses instead of raw Error",
-      "message": "Use domain-specific error subclasses instead of raw Error to provide actionable recovery hints and suppress noisy stack traces in CLI output.",
-      "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
-      "astGrepPattern": "throw new Error($MSG)",
-      "compiledAt": "2026-03-21T07:21:04.636Z",
-      "createdAt": "2026-03-21T07:21:04.636Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "packages/cli/**/*.tsx",
-        "packages/cli/**/*.js",
-        "packages/cli/**/*.jsx"
       ]
     },
     {
@@ -2530,23 +1667,6 @@
       ]
     },
     {
-      "lessonHash": "9a3555ca73096423",
-      "lessonHeading": "2026-03-06T06:25:26.036Z",
-      "message": "2026-03-06T06:25:26.036Z",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\$\\{\\s*err\\s*\\}",
-      "compiledAt": "2026-03-21T07:22:45.347Z",
-      "createdAt": "2026-03-21T07:22:45.347Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "!**/*.test.ts"
-      ]
-    },
-    {
       "lessonHash": "6aea57594018cd0e",
       "lessonHeading": "Use the --recurse-submodules flag with git ls-files",
       "message": "Use the --recurse-submodules flag with git ls-files",
@@ -2609,36 +1729,6 @@
       "fileGlobs": [
         "**/*.ts",
         "**/*.js",
-        "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "05298dc692d0fea7",
-      "lessonHeading": "2026-03-06T05:41:19.122Z",
-      "message": "2026-03-06T05:41:19.122Z",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "(import\\s+.*from\\s+['\"]inquirer['\"]|require\\(['\"]inquirer['\"]\\)|\\\"inquirer\\\"\\s*:)",
-      "compiledAt": "2026-03-21T07:22:59.892Z",
-      "createdAt": "2026-03-21T07:22:59.892Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts"
-      ]
-    },
-    {
-      "lessonHash": "720d414c35052de9",
-      "lessonHeading": "2026-03-07T06:05:56.069Z",
-      "message": "2026-03-07T06:05:56.069Z",
-      "engine": "regex",
-      "severity": "error",
-      "pattern": "typeof\\s+[^\\s!&|=]+\\s*===\\s*['\"]object['\"](?!\\s*&&)",
-      "compiledAt": "2026-03-21T07:22:59.892Z",
-      "createdAt": "2026-03-21T07:22:59.892Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
         "!**/*.test.ts"
       ]
     },
@@ -2868,23 +1958,6 @@
       ]
     },
     {
-      "lessonHash": "14f0df175e3f0be5",
-      "lessonHeading": "2026-03-06T03:34:53.287Z",
-      "message": "2026-03-06T03:34:53.287Z",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(kafka|kubernetes|firestore)\\b",
-      "compiledAt": "2026-03-21T07:29:15.492Z",
-      "createdAt": "2026-03-21T07:29:15.492Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "package.json",
-        "**/*.yaml",
-        "**/*.yml"
-      ]
-    },
-    {
       "lessonHash": "e61b4c48ac65eb17",
       "lessonHeading": "Static top-level imports from heavy internal packages delay",
       "message": "Static top-level imports from heavy internal packages delay",
@@ -2996,41 +2069,6 @@
       ]
     },
     {
-      "lessonHash": "0f0dcd7ace750ecb",
-      "lessonHeading": "Hardcoded default values for properties like rule",
-      "message": "Use shared constants for rule categories and properties instead of hardcoded strings to prevent logic drift between the engine and CLI.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(category|rule)\\s*[:=]\\s*['\"][^'\"]+['\"]",
-      "compiledAt": "2026-03-21T07:31:24.652Z",
-      "createdAt": "2026-03-21T07:31:24.652Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "84e41d41ae92a50b",
-      "lessonHeading": "Automated gates like pre-commit or pre-push hooks",
-      "message": "Automated gates using 'shield' must include the '--deterministic' flag to avoid high latency and non-deterministic LLM calls in pre-commit/pre-push hooks.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bshield\\b(?!.*--deterministic)",
-      "compiledAt": "2026-03-21T07:31:36.160Z",
-      "createdAt": "2026-03-21T07:31:36.160Z",
-      "fileGlobs": [
-        ".husky/**",
-        "package.json",
-        "*.sh",
-        ".pre-commit-config.yaml",
-        "Makefile",
-        "*.yaml",
-        "*.yml"
-      ]
-    },
-    {
       "lessonHash": "4706b1b4d34c9e63",
       "lessonHeading": "When parsing diff --git headers, extract the destination",
       "message": "When parsing 'diff --git' headers, handle quoted strings to support filenames with spaces/renames, and prioritize extracting the 'b/' destination path.",
@@ -3117,41 +2155,6 @@
       ]
     },
     {
-      "lessonHash": "72be26d1c4b264a3",
-      "lessonHeading": "Dynamic imports should be limited to CLI command entry",
-      "message": "Dynamic imports should be limited to CLI command entry points. Use standard top-level imports in core utility layers to maintain clean dependency graphs and pass security scans.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bimport\\s*\\(",
-      "compiledAt": "2026-03-21T07:33:52.271Z",
-      "createdAt": "2026-03-21T07:33:52.271Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "!packages/cli/**",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ]
-    },
-    {
-      "lessonHash": "10864ecdeb08b26e",
-      "lessonHeading": "Core library code should avoid direct calls to console",
-      "message": "Core library code should avoid direct calls to console",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bconsole\\.(log|warn|error|info|debug|trace)\\s*\\(",
-      "compiledAt": "2026-03-21T07:33:52.271Z",
-      "createdAt": "2026-03-21T07:33:52.271Z",
-      "fileGlobs": [
-        "packages/core/**/*.ts",
-        "packages/core/**/*.js",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ]
-    },
-    {
       "lessonHash": "52e5665393f46eed",
       "lessonHeading": "Custom .env parsers must strip CRLF and quotes",
       "message": "Custom .env parsers must strip CRLF and quotes",
@@ -3163,22 +2166,6 @@
       "fileGlobs": [
         "**/cli/**/*.ts",
         "**/cli/**/*.js",
-        "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "28de64ad6b2d0dbf",
-      "lessonHeading": "Dynamic imports should be limited to CLI command entry",
-      "message": "Dynamic imports should be limited to CLI command entry",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bimport\\s*\\(",
-      "compiledAt": "2026-03-21T07:35:28.869Z",
-      "createdAt": "2026-03-21T07:35:28.869Z",
-      "fileGlobs": [
-        "packages/core/src/**/*.ts",
-        "packages/cli/src/adapters/**/*.ts",
-        "packages/cli/src/utils.ts",
         "!**/*.test.ts"
       ]
     },
@@ -3309,22 +2296,6 @@
       ]
     },
     {
-      "lessonHash": "1d82d631553bc417",
-      "lessonHeading": "2026-03-03T01:51:33.783Z",
-      "message": "2026-03-03T01:51:33.783Z",
-      "engine": "regex",
-      "severity": "error",
-      "pattern": "\\.(includes|match|indexOf|search)\\(\\s*['\"`].*-o\\s+json.*['\"`]\\s*\\)",
-      "compiledAt": "2026-03-21T07:37:53.834Z",
-      "createdAt": "2026-03-21T07:37:53.834Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.py",
-        "**/*.sh"
-      ]
-    },
-    {
       "lessonHash": "5d34d2d1c2262add",
       "lessonHeading": "Metacharacters must be escaped when interpolating dynamic",
       "message": "Escape dynamic strings before interpolating them into a RegExp to prevent injection attacks. Use a helper like escapeRegExp().",
@@ -3352,24 +2323,6 @@
       "fileGlobs": [
         "**/*.ts",
         "**/*.js"
-      ]
-    },
-    {
-      "lessonHash": "533e817e87a7a519",
-      "lessonHeading": "Restrict dynamic import security rules to core and adapter",
-      "message": "Dynamic imports are restricted in core and adapter packages to maintain security boundaries. CLI command entry points are exempt for performance and modularity.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bimport\\s*\\(",
-      "compiledAt": "2026-03-21T07:39:01.614Z",
-      "createdAt": "2026-03-21T07:39:01.614Z",
-      "fileGlobs": [
-        "packages/core/**/*.ts",
-        "packages/core/**/*.js",
-        "packages/adapter/**/*.ts",
-        "packages/adapter/**/*.js",
-        "!**/*.test.ts",
-        "!**/*.test.js"
       ]
     },
     {
@@ -3523,19 +2476,6 @@
       ]
     },
     {
-      "lessonHash": "6eab76609f117638",
-      "lessonHeading": "2026-03-06T09:08:26.567Z",
-      "message": "2026-03-06T09:08:26.567Z",
-      "engine": "regex",
-      "severity": "error",
-      "pattern": "\"(hook|PreToolUse|command|scripts?)\":\\s*\\\"[^\\\"]*(\\\\||\\\\b(grep|awk|sed|xargs)\\\\b|&&)[^\\\"]*\\\"",
-      "compiledAt": "2026-03-21T07:41:14.540Z",
-      "createdAt": "2026-03-21T07:41:14.540Z",
-      "fileGlobs": [
-        "*.json"
-      ]
-    },
-    {
       "lessonHash": "411562e8bdcec9a2",
       "lessonHeading": "CLI command actions must wrap asynchronous logic",
       "message": "CLI command actions must wrap asynchronous logic in a try/catch block that delegates to a centralized error handler to ensure consistent error reporting.",
@@ -3548,26 +2488,6 @@
         "packages/cli/**/*.ts",
         "packages/cli/**/*.js",
         "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "5f573f60651f3f1d",
-      "lessonHeading": "Manually suppress \"unused export\" errors in styleguide",
-      "message": "Manually suppress \"unused export\" errors in styleguide",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "^\\+?\\s*export\\b(?!.*eslint-disable)",
-      "compiledAt": "2026-03-21T07:41:43.357Z",
-      "createdAt": "2026-03-21T07:41:43.357Z",
-      "fileGlobs": [
-        "**/styleguide/**/*.ts",
-        "**/styleguide/**/*.tsx",
-        "**/styleguide/**/*.js",
-        "**/styleguide/**/*.jsx",
-        "**/*.styleguide.ts",
-        "**/*.styleguide.tsx",
-        "**/*.styleguide.js",
-        "**/*.styleguide.jsx"
       ]
     },
     {
@@ -3657,22 +2577,6 @@
         "**/*.js",
         "**/*.tsx",
         "**/*.jsx"
-      ]
-    },
-    {
-      "lessonHash": "87af967e7c8f562c",
-      "lessonHeading": "2026-03-05T04:05:14.473Z",
-      "message": "2026-03-05T04:05:14.473Z",
-      "engine": "regex",
-      "severity": "error",
-      "pattern": "JSON\\.parse\\(.*(exec|spawn|stdout|stderr)",
-      "compiledAt": "2026-03-21T07:44:16.276Z",
-      "createdAt": "2026-03-21T07:44:16.276Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
       ]
     },
     {
@@ -3857,28 +2761,6 @@
       "fileGlobs": [
         "**/*.ts",
         "**/*.tsx"
-      ]
-    },
-    {
-      "lessonHash": "2289704c6db99704",
-      "lessonHeading": "Applying broad security rules against dynamic imports",
-      "message": "Dynamic imports should be restricted to CLI entry points. Avoid using them in core logic or adapters to maintain security coverage and reduce noise.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bimport\\s*\\(",
-      "compiledAt": "2026-03-21T07:51:17.012Z",
-      "createdAt": "2026-03-21T07:51:17.012Z",
-      "fileGlobs": [
-        "packages/core/**/*.ts",
-        "packages/core/**/*.js",
-        "src/core/**/*.ts",
-        "src/core/**/*.js",
-        "packages/adapters/**/*.ts",
-        "packages/adapters/**/*.js",
-        "src/adapters/**/*.ts",
-        "src/adapters/**/*.js",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
       ]
     },
     {
@@ -4107,34 +2989,6 @@
       ]
     },
     {
-      "lessonHash": "a4cfb13c627cd813",
-      "lessonHeading": "Lesson headings must be restricted to 60 characters",
-      "message": "Lesson headings must be restricted to 60 characters or fewer to ensure SARIF compatibility.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "^#.{60,}",
-      "compiledAt": "2026-03-21T07:54:51.872Z",
-      "createdAt": "2026-03-21T07:54:51.872Z",
-      "fileGlobs": [
-        "**/*.md"
-      ]
-    },
-    {
-      "lessonHash": "873676519635c0cc",
-      "lessonHeading": "2026-03-06T18:48:00.895Z",
-      "message": "2026-03-06T18:48:00.895Z",
-      "engine": "regex",
-      "severity": "error",
-      "pattern": "\\bnode\\s+[^\"'\\s]+\\.js\\b",
-      "compiledAt": "2026-03-21T07:54:51.872Z",
-      "createdAt": "2026-03-21T07:54:51.872Z",
-      "fileGlobs": [
-        "package.json",
-        "**/*.sh",
-        "Makefile"
-      ]
-    },
-    {
       "lessonHash": "c1875701370aa087",
       "lessonHeading": "Orchestrators must dynamically adjust max_tokens based",
       "message": "Orchestrators must dynamically adjust max_tokens based",
@@ -4147,37 +3001,6 @@
         "**/*orchestrator*/**/*.ts",
         "**/orchestrators/**/*.ts",
         "**/*orchestrator*.ts",
-        "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "c0cdf97610eece92",
-      "lessonHeading": "2026-03-07T21:45:57.754Z",
-      "message": "2026-03-07T21:45:57.754Z",
-      "engine": "regex",
-      "severity": "error",
-      "pattern": "(?:\\brun:|^\\s*[^:\\s]+\\s+).*\\$\\{\\{\\s*inputs\\..*\\}\\}",
-      "compiledAt": "2026-03-21T07:55:03.574Z",
-      "createdAt": "2026-03-21T07:55:03.574Z",
-      "fileGlobs": [
-        ".github/workflows/*.yml",
-        ".github/workflows/*.yaml"
-      ]
-    },
-    {
-      "lessonHash": "d6f8cd6abf39c4b5",
-      "lessonHeading": "2026-03-03T03:20:15.923Z",
-      "message": "2026-03-03T03:20:15.923Z",
-      "engine": "regex",
-      "severity": "error",
-      "pattern": "\\b(latency|tokens?|duration|ms|count)\\b\\s\\*\\|\\|",
-      "compiledAt": "2026-03-21T07:55:03.574Z",
-      "createdAt": "2026-03-21T07:55:03.574Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
         "!**/*.test.ts"
       ]
     },
@@ -4330,22 +3153,6 @@
       ]
     },
     {
-      "lessonHash": "02d45ec49e42dc0e",
-      "lessonHeading": "2026-03-02T09:18:21.092Z",
-      "message": "2026-03-02T09:18:21.092Z",
-      "engine": "regex",
-      "severity": "error",
-      "pattern": "\\bos\\.tmpdir\\(\\)",
-      "compiledAt": "2026-03-21T07:57:26.805Z",
-      "createdAt": "2026-03-21T07:57:26.805Z",
-      "fileGlobs": [
-        "*.ts",
-        "*.js",
-        "!*.test.ts",
-        "!*.spec.ts"
-      ]
-    },
-    {
       "lessonHash": "a449a52e54671a80",
       "lessonHeading": "Moving instructions from the error message string",
       "message": "Move instructional text (e.g., 'Please...', 'Try...') from the error message string to a dedicated 'recoveryHint' property to enable consistent CLI formatting.",
@@ -4373,21 +3180,6 @@
         "**/*.tsx",
         "**/*.js",
         "**/*.jsx"
-      ]
-    },
-    {
-      "lessonHash": "adc80c5dc2d6c25c",
-      "lessonHeading": "The LLM documentation generator consistently hallucinates",
-      "message": "The LLM documentation generator consistently hallucinates",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b#515\\b",
-      "compiledAt": "2026-03-21T07:58:00.308Z",
-      "createdAt": "2026-03-21T07:58:00.308Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.mdx",
-        "**/*.txt"
       ]
     },
     {
@@ -4499,20 +3291,6 @@
       ]
     },
     {
-      "lessonHash": "68d11cfeed34a75d",
-      "lessonHeading": "2026-03-06T03:36:17.521Z",
-      "message": "2026-03-06T03:36:17.521Z",
-      "engine": "regex",
-      "severity": "error",
-      "pattern": "\\.(where|delete)\\s*\\(\\s*(?:'[^']*\"[^\"]+\"[^']*'|\"[^\"]*\\\\\"[^\"]+\\\\\"[^\"]*\"|`[^`]*\"[^\"]+\"[^`]*`)\\s*\\)",
-      "compiledAt": "2026-03-21T07:59:11.752Z",
-      "createdAt": "2026-03-21T07:59:11.752Z",
-      "fileGlobs": [
-        "packages/core/**/*.ts",
-        "!**/*.test.ts"
-      ]
-    },
-    {
       "lessonHash": "5e7cc2a0121c0ab4",
       "lessonHeading": "Spying on underlying implementation details",
       "message": "Avoid spying on 'console' methods. Target the project's public logging utility instead to ensure tests remain robust against internal changes.",
@@ -4588,22 +3366,6 @@
       ]
     },
     {
-      "lessonHash": "983059ed53d609cb",
-      "lessonHeading": "Using synchronous file operations like fs.readFileSync",
-      "message": "Avoid synchronous fs operations (e.g., readFileSync) as they block the Node.js event loop. Use fs.promises instead, especially in asynchronous contexts.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bfs\\.\\w+Sync\\(",
-      "compiledAt": "2026-03-21T08:01:44.968Z",
-      "createdAt": "2026-03-21T08:01:44.968Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
-    },
-    {
       "lessonHash": "939ae83ed3bf28bb",
       "lessonHeading": "Do not manually edit machine-generated artifacts",
       "message": "Do not manually edit machine-generated artifacts",
@@ -4614,22 +3376,6 @@
       "createdAt": "2026-03-21T08:01:52.877Z",
       "fileGlobs": [
         "**/compiled-rules.json"
-      ]
-    },
-    {
-      "lessonHash": "0ec34c9200bf289d",
-      "lessonHeading": "Convert top-level static imports to dynamic import() calls",
-      "message": "Convert top-level static imports to dynamic import() calls within command handlers to reduce CLI startup latency.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "^import\\s+(?!type\\b)",
-      "compiledAt": "2026-03-21T08:02:17.326Z",
-      "createdAt": "2026-03-21T08:02:17.326Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "packages/cli/**/*.js",
-        "!**/*.test.ts",
-        "!**/*.test.js"
       ]
     },
     {
@@ -4698,35 +3444,6 @@
         ".gemini/**/*",
         ".junie/**/*",
         ".github/workflows/**/*"
-      ]
-    },
-    {
-      "lessonHash": "0f57f8bf9307e36b",
-      "lessonHeading": "2026-03-05T04:05:19.420Z",
-      "message": "2026-03-05T04:05:19.420Z",
-      "engine": "regex",
-      "severity": "error",
-      "pattern": "const\\s+\\w+\\s*=\\s*/(?![\\^])https\\?:",
-      "compiledAt": "2026-03-21T08:03:51.698Z",
-      "createdAt": "2026-03-21T08:03:51.698Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "bb435b568e09bedb",
-      "lessonHeading": "2026-03-06T04:31:54.888Z",
-      "message": "2026-03-06T04:31:54.888Z",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(totem\\s+learn|learn\\()",
-      "compiledAt": "2026-03-21T08:03:51.698Z",
-      "createdAt": "2026-03-21T08:03:51.698Z",
-      "fileGlobs": [
-        "**/triage/**",
-        "**/triage.*",
-        "!**/*.test.ts"
       ]
     },
     {
@@ -4868,20 +3585,6 @@
       ]
     },
     {
-      "lessonHash": "541a56213e186fa9",
-      "lessonHeading": "2026-03-08T00:56:41.780Z",
-      "message": "2026-03-08T00:56:41.780Z",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "expect\\(.*\\.length\\)\\.(toBeGreaterThan|toBeLessThan)(OrEqual)?\\(\\d+\\)",
-      "compiledAt": "2026-03-21T08:06:06.626Z",
-      "createdAt": "2026-03-21T08:06:06.626Z",
-      "fileGlobs": [
-        "*.test.ts",
-        "*.spec.ts"
-      ]
-    },
-    {
       "lessonHash": "9355430ce50aea6a",
       "lessonHeading": "Synchronous file operations are often preferable in CLI",
       "message": "Synchronous file operations are often preferable in CLI",
@@ -4942,23 +3645,6 @@
         "packages/cli/**/*.ts",
         "apps/cli/**/*.ts",
         "**/cli/**/*.ts"
-      ]
-    },
-    {
-      "lessonHash": "128c55f185c04c6a",
-      "lessonHeading": "2026-03-08T00:11:33.219Z",
-      "message": "2026-03-08T00:11:33.219Z",
-      "engine": "regex",
-      "severity": "error",
-      "pattern": "process\\.env\\.[A-Z0-9_]+\\s*(?:!==|!=)\\s*(?:undefined|null|['\"]['\"])",
-      "compiledAt": "2026-03-21T08:06:49.594Z",
-      "createdAt": "2026-03-21T08:06:49.594Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "!**/*.test.ts"
       ]
     },
     {
@@ -5029,20 +3715,6 @@
       ]
     },
     {
-      "lessonHash": "d71fd8a959eece1e",
-      "lessonHeading": "2026-03-03T02:16:24.772Z",
-      "message": "2026-03-03T02:16:24.772Z",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bstdio\\s*:\\s*.*\\.\\bfd\\b",
-      "compiledAt": "2026-03-21T08:08:33.515Z",
-      "createdAt": "2026-03-21T08:08:33.515Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "!**/*.test.ts"
-      ]
-    },
-    {
       "lessonHash": "d69a222f170d6d3d",
       "lessonHeading": "Individual CLI commands should throw standardized errors",
       "message": "Individual CLI commands should throw standardized errors instead of logging or exiting locally. This allows a central top-level handler to manage consistent exit codes, error formatting, and process lifecycle.",
@@ -5084,37 +3756,6 @@
         "packages/core/**/*.ts",
         "packages/core/**/*.js",
         "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "1c0b8ee89d7fb8d8",
-      "lessonHeading": "2026-03-06T01:32:23.369Z",
-      "message": "2026-03-06T01:32:23.369Z",
-      "engine": "regex",
-      "severity": "error",
-      "pattern": "\\bstripAnsi\\s*\\(|\\.replace\\(\\s*\\/\\\\(x1[bB]|u001[bB])",
-      "compiledAt": "2026-03-21T08:09:19.775Z",
-      "createdAt": "2026-03-21T08:09:19.775Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts",
-        "!**/*.test.ts"
-      ]
-    },
-    {
-      "lessonHash": "56c801dfda484c75",
-      "lessonHeading": "The text-embedding-004 identifier is frequently unavailable",
-      "message": "Use 'gemini-embedding-2-preview' instead of 'text-embedding-004' as it is frequently unavailable for Gemini integrations.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "text-embedding-004",
-      "compiledAt": "2026-03-21T08:09:33.850Z",
-      "createdAt": "2026-03-21T08:09:33.850Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.json",
-        "**/*.yml",
-        "**/*.yaml"
       ]
     },
     {
@@ -5186,23 +3827,6 @@
       ]
     },
     {
-      "lessonHash": "53b02e5bd3044e6d",
-      "lessonHeading": "Avoid using dynamic imports in shared utility modules",
-      "message": "Avoid using dynamic imports in shared utility modules",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bimport\\s*\\(",
-      "compiledAt": "2026-03-21T08:10:43.858Z",
-      "createdAt": "2026-03-21T08:10:43.858Z",
-      "fileGlobs": [
-        "**/shared/**/*.ts",
-        "**/shared/**/*.js",
-        "**/utils/**/*.ts",
-        "**/utils/**/*.js",
-        "!**/*.test.ts"
-      ]
-    },
-    {
       "lessonHash": "6df0a3b68a5f0cb1",
       "lessonHeading": "Core library code should avoid direct calls to console",
       "message": "Avoid direct console calls in library code to prevent unexpected side effects for consumers. Use a configurable callback or a logging abstraction instead.",
@@ -5233,21 +3857,6 @@
       "fileGlobs": [
         ".husky/*",
         ".git/hooks/*"
-      ]
-    },
-    {
-      "lessonHash": "d39a131ae7c13730",
-      "lessonHeading": "2026-03-03T01:52:20.000Z",
-      "message": "2026-03-03T01:52:20.000Z",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(main|master)\\.\\.\\.HEAD\\b",
-      "compiledAt": "2026-03-21T08:11:01.170Z",
-      "createdAt": "2026-03-21T08:11:01.170Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.sh"
       ]
     },
     {
@@ -5292,21 +3901,6 @@
         "**/scripts/*.sh",
         "**/scripts/*.bash",
         "Makefile"
-      ]
-    },
-    {
-      "lessonHash": "0e5c81adae63b8a1",
-      "lessonHeading": "Key security audit findings and acceptable risks",
-      "message": "Use execFileSync or spawn with array arguments instead of execSync to prevent shell interpolation vulnerabilities (Audit Finding #2)",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bexecSync\\s*\\(",
-      "compiledAt": "2026-03-21T08:11:38.864Z",
-      "createdAt": "2026-03-21T08:11:38.864Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/*.test.ts"
       ]
     }
   ],
@@ -5628,6 +4222,94 @@
     "0dee16023673d03e",
     "d4b67dfb0acd9cdd",
     "bcc4b63fde399d00",
-    "7bcf16958820aa36"
+    "7bcf16958820aa36",
+    "1bd32906a5067397",
+    "8c0a9912680559f6",
+    "a9434d3f73d05db2",
+    "4683affcdc295f53",
+    "ebe45f00165fbe3f",
+    "82000aa7360b28f3",
+    "772e4aa0ef24b499",
+    "cda917668c8a5a13",
+    "56ebf3c19ab25b42",
+    "9e4c9e474317c17b",
+    "90b042b866aefa9d",
+    "277b4b74ce323c7e",
+    "afc7179714d64317",
+    "2e8fe8d7c8458aae",
+    "12d08c59eff035d0",
+    "e18b9f81eef4cd6a",
+    "b8763e4bd93c7314",
+    "e02e064077d533d6",
+    "33b5a968ffe0456e",
+    "4cb12ed837adf07a",
+    "3613d5ba9b4af848",
+    "40b5659a75c42e0d",
+    "8c5de572889e11ff",
+    "60ed0c0103e81674",
+    "4142b945b49cd292",
+    "4d63af6631a6ddf7",
+    "87065a9e2e98d061",
+    "b6c47924514dc4da",
+    "f33b0cba8caa726f",
+    "adfc0cef98b8371f",
+    "be74c55caa9fd60c",
+    "dfd58fda9e518754",
+    "7e9b6b44a2d8ff77",
+    "f14881a4daf28160",
+    "faeae7a9e495c145",
+    "46edc0540d7fbfa9",
+    "57f8903e23952c25",
+    "c70a88493f3ed6d8",
+    "5da43ea60b66e96e",
+    "9db404994f0574b8",
+    "d331385059f68e0e",
+    "dbb0c9bda83a8c2a",
+    "08ba74359ffb57d4",
+    "e7e4f5461a73a058",
+    "ae2eb256ef921feb",
+    "b17b82ef6d627552",
+    "2bc7194b06a470fd",
+    "9a3555ca73096423",
+    "05298dc692d0fea7",
+    "720d414c35052de9",
+    "14f0df175e3f0be5",
+    "0f0dcd7ace750ecb",
+    "1d82d631553bc417",
+    "6eab76609f117638",
+    "5f573f60651f3f1d",
+    "87af967e7c8f562c",
+    "873676519635c0cc",
+    "c0cdf97610eece92",
+    "d6f8cd6abf39c4b5",
+    "02d45ec49e42dc0e",
+    "68d11cfeed34a75d",
+    "983059ed53d609cb",
+    "0ec34c9200bf289d",
+    "0f57f8bf9307e36b",
+    "bb435b568e09bedb",
+    "541a56213e186fa9",
+    "128c55f185c04c6a",
+    "d71fd8a959eece1e",
+    "1c0b8ee89d7fb8d8",
+    "d39a131ae7c13730",
+    "dc4f30456925f88e",
+    "0e5c81adae63b8a1",
+    "40fdd031e2db1230",
+    "bce6beebbec33b1f",
+    "9455c39779cd7218",
+    "13860bc4d359bd1a",
+    "dc1c9e7628b48abd",
+    "10864ecdeb08b26e",
+    "1210f02da9f16e5b",
+    "72be26d1c4b264a3",
+    "28de64ad6b2d0dbf",
+    "533e817e87a7a519",
+    "2289704c6db99704",
+    "53b02e5bd3044e6d",
+    "84e41d41ae92a50b",
+    "56c801dfda484c75",
+    "a4cfb13c627cd813",
+    "adc80c5dc2d6c25c"
   ]
 }
