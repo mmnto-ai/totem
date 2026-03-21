@@ -57,6 +57,7 @@ function runQuery(
   lines: string[],
   astQuery: string,
   addedLineNumbers: Set<number>,
+  onWarn?: (msg: string) => void,
 ): AstMatch[] {
   let query: import('web-tree-sitter').Query | null = null;
   try {
@@ -96,8 +97,8 @@ function runQuery(
     }
 
     return results;
-  } catch {
-    // Invalid query — fail-open
+  } catch (err) {
+    onWarn?.(`AST query failed: ${err instanceof Error ? err.message : String(err)}`);
     return [];
   } finally {
     query?.delete();
@@ -115,6 +116,7 @@ export async function matchAstQuery(
   astQuery: string,
   addedLineNumbers: number[],
   cwd: string,
+  onWarn?: (msg: string) => void,
 ): Promise<AstMatch[]> {
   if (addedLineNumbers.length === 0) return [];
 
@@ -147,6 +149,7 @@ export async function matchAstQuery(
           content.split('\n'),
           astQuery,
           new Set(addedLineNumbers),
+          onWarn,
         );
       } finally {
         tree.delete();
@@ -154,7 +157,8 @@ export async function matchAstQuery(
     } finally {
       parser.delete();
     }
-  } catch {
+  } catch (err) {
+    onWarn?.(`AST parse failed: ${err instanceof Error ? err.message : String(err)}`);
     return [];
   }
 }
@@ -167,6 +171,7 @@ export async function matchAstQueriesBatch(
   filePath: string,
   queries: Array<{ astQuery: string; addedLineNumbers: number[] }>,
   cwd: string,
+  onWarn?: (msg: string) => void,
 ): Promise<Map<string, AstMatch[]>> {
   const results = new Map<string, AstMatch[]>();
   if (queries.length === 0) return results;
@@ -214,6 +219,7 @@ export async function matchAstQueriesBatch(
               lines,
               astQuery,
               new Set(addedLineNumbers),
+              onWarn,
             ),
           );
         }
@@ -223,7 +229,8 @@ export async function matchAstQueriesBatch(
     } finally {
       parser.delete();
     }
-  } catch {
+  } catch (err) {
+    onWarn?.(`AST batch parse failed: ${err instanceof Error ? err.message : String(err)}`);
     for (const q of queries) results.set(q.astQuery, []);
   }
 

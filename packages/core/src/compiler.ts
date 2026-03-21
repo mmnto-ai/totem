@@ -160,7 +160,7 @@ export function saveCompiledRulesFile(rulesPath: string, data: CompiledRulesFile
 export function parseCompilerResponse(response: string): CompilerOutput | null {
   // Try to extract JSON from the response (LLMs often wrap in ```json blocks)
   const jsonMatch = response.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  const jsonStr = jsonMatch ? jsonMatch[1]! : response.trim();
+  const jsonStr = (jsonMatch?.[1] ?? response).trim();
 
   try {
     const parsed = JSON.parse(jsonStr);
