@@ -238,12 +238,12 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
   - **Execution Hardening:** Safeguards agent operations by enforcing capability caps and preventing injections. Incorporates phase-gate enforcement to actively warn on commits lacking preflight validation.
 - **Reliability & Portability:**
   - **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs. They also guarantee safe simultaneous MCP mutations.
-  - **Cross-Platform Readiness:** Backed by portability audits, Docker test harnesses, and automated CI reviews. A comprehensive CI matrix (Ubuntu, Windows, macOS) guarantees consistent behavior across OS environments.
+  - **Cross-Platform Readiness:** Backed by portability audits, Docker test harnesses, and automated CI reviews. Tested across Ubuntu, Windows, and macOS in every CI run.
   - **Index Stability:** Dimension mismatch detection via `index-meta.json` prevents database corruption. Auto-healing migrations handle embedder changes automatically.
   - **Data Partitioning:** Vector indexes support partition aliases for efficient, isolated data resolution across complex workspaces.
   - **Error Handling:** Typed `TotemError` subclasses unify error domains with actionable recovery hints for resilient operations.
 - **Rule Architecture:**
-  - **Curated Baselines:** Features a curated 239-rule set with mandatory verify steps to guarantee execution determinism. Includes reverse-compiled lessons with manual patterns for zero-LLM enforcement.
+  - **Curated Baselines:** Ships a curated 239-rule set with mandatory verify steps for execution determinism. Includes reverse-compiled lessons with manual patterns for zero-LLM enforcement.
   - **Quality Gates:** Validates authoring consistency with a lesson file linter backed by a pre-compilation gate.
   - **Agent Automation:** Agent skills are modularized with lean root routers for instruction files. Phase-gate hooks enforce validation before push and restore context after compaction.
   - **Severity Validation:** Compiled rules enforce strict severity levels. Errors actively block CI, while warnings inform without blocking.

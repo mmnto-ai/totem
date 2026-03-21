@@ -5,7 +5,6 @@
  * Run: node scripts/clean-rules.js
  */
 const fs = require('fs');
-const path = require('path');
 
 const RULES_PATH = '.totem/compiled-rules.json';
 const data = JSON.parse(fs.readFileSync(RULES_PATH, 'utf-8'));
@@ -59,7 +58,7 @@ for (const r of data.rules) {
 let dedupCount = 0;
 const survivorHashes = new Set();
 
-for (const [pattern, group] of patternGroups) {
+for (const [, group] of patternGroups) {
   if (group.length <= 1) {
     survivorHashes.add(group[0].lessonHash);
     continue;
