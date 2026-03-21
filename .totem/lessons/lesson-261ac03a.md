@@ -1,4 +1,4 @@
-## Lesson — LLMs can persist stale or nonexistent data when using
+## Lesson — LLMs persist stale data from prior regen context
 
 **Tags:** llm, documentation, prompt-engineering, hallucinations
 

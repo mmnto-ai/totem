@@ -75,14 +75,14 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 
 ## Skills (User-Invoked)
 
-| Skill                | Usage                    | Steps                                                         |
-| -------------------- | ------------------------ | ------------------------------------------------------------- |
-| `/preflight <issue>` | Before starting a ticket | `totem spec` → `search_knowledge`                             |
-| `/prepush`           | Before pushing code      | `totem lint` → `totem shield`                                 |
-| `/postmerge <prs>`   | After merging PRs        | `totem wrap`                                                  |
-| `/triage`            | Pick next work           | `totem triage --fresh`                                        |
-| `/release-prep`      | Before cutting a release | verify tickets → `totem wrap` → `totem triage` → `totem docs` |
-| `/signoff`           | End of session           | update memory → journal                                       |
+| Skill                | Usage                    | Steps                                                           |
+| -------------------- | ------------------------ | --------------------------------------------------------------- |
+| `/preflight <issue>` | Before starting a ticket | `totem spec` → `search_knowledge`                               |
+| `/prepush`           | Before pushing code      | `totem lint` → `totem shield`                                   |
+| `/postmerge <prs>`   | After merging PRs        | `totem wrap`                                                    |
+| `/triage`            | Pick next work           | `totem triage --fresh`                                          |
+| `/release-prep`      | Before cutting a release | `totem extract` → changeset → `pnpm run version` → `totem docs` |
+| `/signoff`           | End of session           | update memory → journal                                         |
 
 ## Agent Delegation (Subagent Patterns)
 
