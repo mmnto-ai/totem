@@ -7,10 +7,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   applyRules,
   type CompiledRule,
+  engineFields,
   extractAddedLines,
   hashLesson,
   loadCompiledRules,
   parseCompilerResponse,
+  sanitizeFileGlobs,
   saveCompiledRules,
   validateRegex,
 } from './compiler.js';
@@ -680,6 +682,63 @@ describe('parseCompilerResponse', () => {
       pattern: '\\$[a-zA-Z_]+',
       message: 'Quote shell variables',
       fileGlobs: ['*.sh', '*.bash', '*.yml'],
+    });
+  });
+});
+
+// ─── sanitizeFileGlobs ─────────────────────────────
+
+describe('sanitizeFileGlobs', () => {
+  it('passes through simple globs unchanged', () => {
+    expect(sanitizeFileGlobs(['**/*.ts', '*.js'])).toEqual(['**/*.ts', '*.js']);
+  });
+
+  it('expands brace patterns', () => {
+    expect(sanitizeFileGlobs(['**/*.{ts,js}'])).toEqual(['**/*.ts', '**/*.js']);
+  });
+
+  it('handles mixed array of simple and brace globs', () => {
+    expect(sanitizeFileGlobs(['src/**/*.py', '**/*.{ts,js}', '*.md'])).toEqual([
+      'src/**/*.py',
+      '**/*.ts',
+      '**/*.js',
+      '*.md',
+    ]);
+  });
+
+  it('handles empty array', () => {
+    expect(sanitizeFileGlobs([])).toEqual([]);
+  });
+
+  it('handles negation patterns', () => {
+    expect(sanitizeFileGlobs(['!*.test.ts', '!**/*.spec.{ts,js}'])).toEqual([
+      '!*.test.ts',
+      '!**/*.spec.ts',
+      '!**/*.spec.js',
+    ]);
+  });
+});
+
+// ─── engineFields ──────────────────────────────────
+
+describe('engineFields', () => {
+  it('returns { pattern } for regex engine', () => {
+    expect(engineFields('regex', '\\bconsole\\.log\\b')).toEqual({
+      pattern: '\\bconsole\\.log\\b',
+    });
+  });
+
+  it('returns { pattern: "", astGrepPattern } for ast-grep engine', () => {
+    expect(engineFields('ast-grep', 'console.log($$$ARGS)')).toEqual({
+      pattern: '',
+      astGrepPattern: 'console.log($$$ARGS)',
+    });
+  });
+
+  it('returns { pattern: "", astQuery } for ast engine', () => {
+    expect(engineFields('ast', '(call_expression function: (identifier) @fn)')).toEqual({
+      pattern: '',
+      astQuery: '(call_expression function: (identifier) @fn)',
     });
   });
 });

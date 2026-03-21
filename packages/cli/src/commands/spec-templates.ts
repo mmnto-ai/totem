@@ -1,4 +1,5 @@
 // ─── System prompt ──────────────────────────────────────
+// Version: 1.1.0 (2026-03-21) — Added RED FLAGS + Graphviz execution flow
 
 export const SYSTEM_PROMPT = `# Spec System Prompt — Pre-Work Briefing
 
