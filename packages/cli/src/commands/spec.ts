@@ -77,7 +77,24 @@ For each task:
 - If the task introduces behavior that could regress, add a TDD directive:
   > TEST DIRECTIVE: Before implementing, write a failing test named \`[descriptive test name]\` that proves the regression is caught.
   The test name must be specific (e.g., \`rejects empty catch blocks\`), not generic (e.g., \`works correctly\`).
-- Each task ends with: write test (or update existing) → verify fails → implement → verify passes → lint]
+- Each task ends with: write test (or update existing) → verify fails → implement → verify passes → lint
+
+RED FLAGS — if any of these occur, STOP and fix before proceeding:
+- Never move to the next task until the current task's tests pass AND lint is clean.
+- Never accept "close enough" on a failing test. Fix it or rewrite the approach.
+- Never skip the test step. No untested code advances to the next task.
+- Never write code before writing the failing test (TDD is mandatory, not advisory).]
+
+### Execution Flow (structural constraint)
+\`\`\`dot
+digraph workflow {
+  spec -> write_test -> verify_fails -> implement -> verify_passes -> lint -> next_task
+  verify_fails -> implement [label="RED only"]
+  verify_passes -> lint [label="GREEN required"]
+  lint -> next_task [label="0 violations"]
+  lint -> implement [label="violations found — fix first"]
+}
+\`\`\`
 
 ### Verification (MANDATORY — do not skip)
 Every implementation MUST end with these steps:
