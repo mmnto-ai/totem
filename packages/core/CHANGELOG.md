@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 1.3.11
+
+### Patch Changes
+
+- 0b47c94: Security hardening: regex escape, shell:true removal, SQL backtick escape. CodeRabbit integration with path instructions. onWarn logging for AST catch blocks. Unsafe non-null assertions replaced.
+
 ## 1.3.10
 
 ### Patch Changes

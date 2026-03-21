@@ -75,7 +75,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
 - **Observability & Maintenance:**
   - **Metrics & Diagnostics:**
     - [x] **Semantic Rule Observability:** Separated zero-LLM `totem lint` from AI-powered `totem shield` for targeted rule enforcement, and introduced `totem explain` for violation lookups (#668). Integrated `onWarn` callbacks and a unified `TotemError` hierarchy with typed subclasses and recovery hints (#711).
-    - [ ] **#92 CLI Metrics & Observability:** Reframed to local CLI metrics (`totem stats`). Includes violation history from git log, lesson coverage, and rule fire counts from local JSONL with terminal output only.
+    - [ ] **#92 CLI Metrics & Observability:** Reframed to local CLI metrics (`totem stats`) with terminal output only. Includes violation history, lesson coverage, and rule fire counts from local JSONL.
     - [ ] **#130 Epic: Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks and track index health.
   - **System Maintenance:**
     - [ ] **#283 Epic: v1.0 Documentation:** Develop v1.0 docs and extensive wiki migrations covering dev environments and release processes (#450, #477). Includes the 1.0 tagline, Holy Grail positioning, and architecture limitations (ADR-049, #586, #606).
@@ -108,7 +108,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [ ] **#314 Epic: Adaptive Agent Governance:** Establish the Codebase Immune System. Now explicitly scoped to include AST compilation design, transitioning `totem compile` from regex-only to AST-aware rules for provably complex cases.
     - [x] **#422 Rule Testing Harness:** Implemented a compiled rule testing harness to identify regex false-positives and drive AST requirements.
     - [ ] **#434 Adversarial Trap Corpus:** Develop synthetic violations to measure precision and recall of the deterministic engine.
-    - [x] **Quality Control:** Addressed joint 1.0 code review conditions and deployed a Docker test harness for stability validation (#648, #715). Implemented phase-gate enforcement to warn on commits lacking preflight validation (#793).
+    - [x] **Quality Control:** Addressed joint 1.0 code review conditions and deployed a Docker test harness for stability validation (#648, #715). Implemented phase-gate enforcement and integrated security hardening from codebase reviews (#793, #801, #802).
   - **Rules & Standards:**
     - [x] **#387 SARIF Output:** Standardized output for CI/CD integration, enhanced with organizational trap ledgers and linting support (#418, #561).
     - [x] **External Rule Ingestion:** Built support to automatically ingest `.cursorrules`, `.mdc` files, and prompt templates into compiled rules during `totem init` (#578, #596).
@@ -132,9 +132,6 @@ This phase fortified the core architecture, delivering native orchestration, zer
 **Goal:** Scale Totem from individual developers to entire organizations by ingesting third-party data sources.
 
 - **Enterprise Memory & Scaling:**
-  - **Federated Architectures:**
-    - [ ] **#123 Epic: Federated Memory:** Allow `totem.config.ts` to declare external/upstream LanceDB indexes (The Mother Brain Pattern). Explicitly marked post-1.0.
-    - [ ] **#175 Epic: Multiplayer Cache Syncing:** Phase 4 enterprise/team scaling capability (Post-1.0).
   - **Ingestion & Domains:**
     - [ ] **#79 Documentation Ingestion Pipeline:** Build Pull/Push models for Notion, Confluence, or internal wikis.
     - [x] **#286 Epic: Rust Core Extraction:** Evaluated `totem-core-rs` for enterprise-scale extraction performance.

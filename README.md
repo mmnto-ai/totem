@@ -235,17 +235,17 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
   - **Fully Air-Gappable:** `totem lint` requires zero API keys and zero network access. With Ollama for embeddings, the entire pipeline runs without external API calls.
   - **DLP Secret Masking:** Automatically strips secrets before embedding. Credentials never leak into your vector index.
   - **SARIF 2.1.0 Output:** Integrates into CI security scanners via `--format sarif/json`. Prove SOC 2 / DORA compliance to your auditors.
-  - **Execution Hardening:** Safeguards agent operations by enforcing MCP capability caps and preventing orchestrator taskkill injections. Incorporates phase-gate enforcement to warn on commits without preflight (#714, #793).
+  - **Execution Hardening:** Safeguards agent operations by enforcing capability caps, preventing injections, and integrating codebase security hardening (#714, #801). Incorporates phase-gate enforcement to actively warn on commits lacking preflight validation (#793).
 - **Reliability & Portability:**
   - **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs. They also guarantee safe simultaneous MCP mutations.
-  - **Cross-Platform Readiness:** Backed by V1.0 portability audits and Docker test harnesses (#715). A comprehensive CI matrix (Ubuntu, Windows, macOS) guarantees consistent behavior (#774).
+  - **Cross-Platform Readiness:** Backed by V1.0 portability audits, Docker test harnesses, and CodeRabbit CI integrations (#715, #802). A comprehensive CI matrix guarantees consistent behavior across OS environments (#774).
   - **Index Stability:** Dimension mismatch detection via `index-meta.json` prevents database corruption. Auto-healing migrations handle embedder changes automatically.
   - **Data Partitioning:** Vector indexes now support partition aliases. This ensures efficient, isolated data resolution across complex workspaces (#782).
   - **Error Handling:** Typed `TotemError` subclasses unify error domains. They provide actionable recovery hints for resilient operations (#711).
 - **Rule Architecture:**
   - **Curated Baselines:** Features a highly-curated 147-rule set with mandatory verify steps to guarantee execution determinism (#708). Includes reverse-compiled Pipeline 1 lessons with manual patterns (#752, #759).
   - **Quality Gates:** Validates authoring consistency with a rigorous lesson file linter. This linter is backed by a pre-compilation gate (#769).
-  - **Agent Automation:** Agent skills are structured in modular directories (`SKILL.md`). They enforce `/prepush` execution via `PreToolUse` and expand `PostCompact` hooks with capability manifests (#758, #792).
+  - **Agent Automation:** Agent skills are modularized and utilize lean root routers for instruction files (#791). They enforce `/prepush` execution and expand `PostCompact` hooks with capability manifests (#758, #792).
   - **Severity Validation:** Compiled rules enforce strict severity levels to guarantee execution safety (#725). Errors actively block CI, while warnings inform without blocking.
 
 **What gets committed:** Your knowledge base (text files in `.totem/lessons/`) and the compiled artifact (`.totem/compiled-rules.json`). The `.lancedb/` vector index is a local-only cache, automatically rebuilt by `totem sync`. It is never committed to your repository.
