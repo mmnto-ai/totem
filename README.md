@@ -132,7 +132,7 @@ npx @mmnto/cli init
 
 Auto-detects your environment (Cursor, Copilot, Junie) and sets up `totem.config.ts`. You can also use `totem init --bare` to skip defaults and start with a clean slate.
 
-Ships with an expanded baseline of **125 battle-tested lessons** extracted from PR reviews across major ecosystem tools:
+Ships with an expanded baseline of **125 curated lessons** extracted from PR reviews across major ecosystem tools:
 
 - **Frameworks:** Next.js, React.
 - **Data Layer:** Prisma, Drizzle.
