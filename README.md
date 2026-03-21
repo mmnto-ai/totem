@@ -12,7 +12,7 @@ Totem doesn't ship with your app. It lives in your workflow. It also works on no
 
 ```bash
 $ npx @mmnto/cli lint
-✓ PASS — 239 rules, 0 violations.
+PASS — 239 rules, 0 violations.
 
 $ npx @mmnto/cli stats
 Total violations prevented: 47 | security: 12, architecture: 35

@@ -1,4 +1,4 @@
-## Lesson — Injecting untrusted lesson content directly into a system
+## Lesson — Wrap untrusted lesson content in XML delimiters
 
 **Tags:** security, llm, prompt-engineering
 
