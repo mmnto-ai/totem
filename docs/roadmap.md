@@ -80,7 +80,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - **System Maintenance:**
     - [ ] **#283 Epic: v1.0 Documentation:** Develop v1.0 docs and extensive wiki migrations covering dev environments and release processes (#450, #477). Includes the 1.0 tagline, Holy Grail positioning, and architecture limitations (ADR-049, #586, #606).
     - [ ] **#23 Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
-    - [x] **Documentation Generation:** Stripped known-not-shipped issue references from docs generation to prevent hallucinations (#581, #598).
+    - [x] **Documentation Generation:** Stripped known-not-shipped issue references from docs generation to prevent hallucinations and the persistence of stale references (#581, #786).
 - **Workflow & Execution:**
   - **Data & Backlog:**
     - [x] **#362 Strategic Backlog Audit:** Added `totem audit` for backlog auditing with a human approval gate.
@@ -94,6 +94,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [x] **Automation & Skills:**
       - Restructured skills into a directory format (`SKILL.md`) and cleaned up stale commands (#755, #757).
       - Upgraded `totem spec` to a straitjacket checklist format for strict preflight validation (#773).
+      - Refactored `CLAUDE.md` to a lean root router pattern and expanded the `PostCompact` hook with a capability manifest (#791, #792).
     - [ ] **#119 `totem run <workflow>`:** Introduce a custom AI task runner to execute user-defined markdown workflows via the orchestrator.
     - [ ] **#74 `totem oracle`:** Add a frictionless Q&A command to query LanceDB without strict personas.
     - [ ] **#392 `totem review`:** Implement full codebase review powered by repomix and vectordb lessons.
@@ -107,7 +108,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [ ] **#314 Epic: Adaptive Agent Governance:** Establish the Codebase Immune System. Now explicitly scoped to include AST compilation design, transitioning `totem compile` from regex-only to AST-aware rules for provably complex cases.
     - [x] **#422 Rule Testing Harness:** Implemented a compiled rule testing harness to identify regex false-positives and drive AST requirements.
     - [ ] **#434 Adversarial Trap Corpus:** Develop synthetic violations to measure precision and recall of the deterministic engine.
-    - [x] **Quality Control:** Addressed joint 1.0 code review conditions and launch testing findings to ensure stability (#648). Deployed Docker test harness and integrated launch metrics for enhanced verification (#715).
+    - [x] **Quality Control:** Addressed joint 1.0 code review conditions and deployed a Docker test harness for stability validation (#648, #715). Implemented phase-gate enforcement to warn on commits lacking preflight validation (#793).
   - **Rules & Standards:**
     - [x] **#387 SARIF Output:** Standardized output for CI/CD integration, enhanced with organizational trap ledgers and linting support (#418, #561).
     - [x] **External Rule Ingestion:** Built support to automatically ingest `.cursorrules`, `.mdc` files, and prompt templates into compiled rules during `totem init` (#578, #596).

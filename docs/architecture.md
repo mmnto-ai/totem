@@ -97,12 +97,12 @@ All commands feature proper `--help` output documentation (#358).
   - **Planning & Orchestration:**
     - _Workflows:_ Orchestrates workflows with human approval gates, supporting configurable issue sources across repositories (#514). Integrates mandatory verify steps and `verify_execution` pipelines, while `totem spec` utilizes a straitjacket checklist format to validate spec invariants during generation (#773, #708).
     - _Automation:_ Structures capabilities using directory-based skills (`SKILL.md` per directory) to cleanly scope execution context (#757). Workflow automation improvements have deprecated and removed stale commands for a leaner toolset (#755).
-    - _Hooks:_ Enforces lifecycle events like `/prepush` via `PreToolUse` hooks to guarantee compliance (#758). Pipeline reliability is bolstered by robust `PostCompact` formatting (#756).
+    - _Hooks:_ Enforces lifecycle events like `/prepush` via `PreToolUse` hooks, integrating phase-gate enforcement to warn on commits lacking proper preflight (#793, #758). Pipeline reliability is bolstered by robust `PostCompact` formatting, now expanded with a capability manifest (#792, #756).
   - **Review & Quality:**
     - **`totem lint`**: Runs compiled rules against diffs. Strictly zero LLM, fast, explicitly recommended for pre-push hooks and CI, and natively supports SARIF/JSON outputs (#610, #561).
     - **`totem shield`**: Conducts AI-powered code review using LanceDB context before PRs (#521). Enforces explicit severity levels, cleanly demotes false positives to warnings, and formats output via standard Totem Errors (#616, #576).
     - **`totem explain`**: Looks up the specific lesson behind a rule violation to provide immediate developer context (#668).
-  - **Documentation:** Automates transactional document syncs using a Saga validator to prevent partial updates (#351). It safely strips known-not-shipped issue references from generated docs to prevent AI hallucinations (#598, #581).
+  - **Documentation:** Automates transactional document syncs using a Saga validator to prevent partial updates (#351). It safely strips known-not-shipped and stale issue references from generated docs to prevent AI hallucinations (#786, #598).
   - **Telemetry & Stats:** Surfaces local metrics powered by the Phase 1 Trap Ledger and records launch metrics for performance visibility (#715, #544). Displays basic CIS metric percentages alongside violation histories (#425).
 - **Rule Testing & Extraction:**
   - **Capture & Extraction:** Enables inline capture and batch PR lesson extraction. Lessons are strictly Zod-validated before disk writes to ensure structural integrity (#565).
@@ -136,7 +136,7 @@ A stdio-based server for LLM integration providing primary tools and strict acce
 - **Security & Permissions:**
   - **Sanitization:** XML-delimits all MCP responses and sanitizes persisted content. It cleanly strips quotes from loaded environment variables (#560).
   - **Access Control:** Implements multi-agent permissions and role-based access control (RBAC) to safely restrict execution boundaries (#312). Enforces explicit MCP payload capacity caps to prevent unbounded memory consumption (#714).
-  - **Context Limits:** Agent instruction files are structurally governed using a recency sandwich pattern and strict length limits (#466, #511).
+  - **Context Limits:** Agent instruction files are structurally governed using a recency sandwich pattern, strict length limits, and a lean root router pattern for files like `CLAUDE.md` (#791, #466).
 - **Integrations & Lifecycle:**
   - **IDE & Agent Hooks:** Agent hooks for Claude Code, Gemini CLI, and Junie (#464). Integrates robust lifecycle workflow automation, ensuring consistent enforcement at hook stages (#758).
   - **Session Management:** Utilizes a health check first-query gate to prevent silent search failures at startup. It accurately advises users to run `--rebuild` when indexes are broken (#442, #562).

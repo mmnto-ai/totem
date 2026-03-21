@@ -54,8 +54,9 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 
 ### Phase 7: Before Release
 
-**What should happen:** Verify tickets are closed, extract from all PRs since last release, triage, docs.
-**Commands:** `totem wrap`, `totem triage --fresh`, `totem docs`
+**What should happen:** Verify tickets are closed, extract from all PRs since last release, version bump, then docs.
+**Order matters:** extract → changeset → `pnpm run version` → `totem docs` (docs must run _after_ version bump so the LLM sees the correct version in git tags)
+**Commands:** `totem extract`, `pnpm run version`, `totem docs`
 **Skill:** `/release-prep`
 
 ### Phase 8: End of Session
@@ -74,14 +75,14 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 
 ## Skills (User-Invoked)
 
-| Skill                | Usage                    | Steps                                                         |
-| -------------------- | ------------------------ | ------------------------------------------------------------- |
-| `/preflight <issue>` | Before starting a ticket | `totem spec` → `search_knowledge`                             |
-| `/prepush`           | Before pushing code      | `totem lint` → `totem shield`                                 |
-| `/postmerge <prs>`   | After merging PRs        | `totem wrap`                                                  |
-| `/triage`            | Pick next work           | `totem triage --fresh`                                        |
-| `/release-prep`      | Before cutting a release | verify tickets → `totem wrap` → `totem triage` → `totem docs` |
-| `/signoff`           | End of session           | update memory → journal                                       |
+| Skill                | Usage                    | Steps                                                           |
+| -------------------- | ------------------------ | --------------------------------------------------------------- |
+| `/preflight <issue>` | Before starting a ticket | `totem spec` → `search_knowledge`                               |
+| `/prepush`           | Before pushing code      | `totem lint` → `totem shield`                                   |
+| `/postmerge <prs>`   | After merging PRs        | `totem wrap`                                                    |
+| `/triage`            | Pick next work           | `totem triage --fresh`                                          |
+| `/release-prep`      | Before cutting a release | `totem extract` → changeset → `pnpm run version` → `totem docs` |
+| `/signoff`           | End of session           | update memory → journal                                         |
 
 ## Agent Delegation (Subagent Patterns)
 
