@@ -272,10 +272,12 @@ export async function applyAstRulesToAdditions(
 
         if (content) {
           // Batch: parse file once, run all patterns
-          const queries = applicableAstGrep.map((rule) => ({
-            rule: rule.astGrepPattern! as AstGrepRule,
-            addedLineNumbers,
-          }));
+          const queries = applicableAstGrep
+            .filter((rule) => rule.astGrepPattern != null)
+            .map((rule) => ({
+              rule: rule.astGrepPattern as AstGrepRule,
+              addedLineNumbers,
+            }));
           const batchResults = matchAstGrepPatternsBatch(content, ext, queries, onWarn);
 
           for (let i = 0; i < applicableAstGrep.length; i++) {
