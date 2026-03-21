@@ -8,7 +8,7 @@ reviews:
     - path: 'packages/cli/**'
       instructions: "CLI commands. All imports must be lazy-loaded (dynamic import). log.error() must use 'Totem Error' as the tag."
     - path: '.totem/lessons/**'
-      instructions: 'Pipeline 1 lesson files. Validate: heading ≤60 chars, required fields (Pattern/Engine/Severity), no markdown-escaped globs.'
+      instructions: 'Lesson files. Heading text (after "## Lesson — ") must be ≤60 chars. Only lessons with **Pattern:** field are Pipeline 1 and require Engine/Severity. Lessons without Pattern are Pipeline 2 (prose only) — do not flag missing fields.'
     - path: '.claude/**'
       instructions: 'Claude Code hooks and skills. Bash scripts must use [[ ]] glob matching, not echo|grep. CLAUDE.md must stay under 50 lines.'
 knowledge_base:

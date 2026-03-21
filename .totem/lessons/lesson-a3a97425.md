@@ -1,4 +1,4 @@
-## Lesson — Ensure backticks are included in escaping logic alongside
+## Lesson — Escape backticks in SQL predicates
 
 **Tags:** security, sql, database
 

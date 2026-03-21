@@ -1,4 +1,4 @@
-## Lesson — Offloading high-volume text tasks like build and test
+## Lesson — Offload build/test to subagents for context
 
 **Tags:** ai, workflow, performance
 

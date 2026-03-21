@@ -1,4 +1,4 @@
-## Lesson — Always escape metacharacters when interpolating dynamic
+## Lesson — Escape metacharacters in RegExp interpolation
 
 **Tags:** security, regex, javascript
 

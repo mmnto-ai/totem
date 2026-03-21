@@ -1,4 +1,4 @@
-## Lesson — Filter rule sets by their execution engine (e.g., AST-grep
+## Lesson — Filter rules by engine before execution
 
 **Tags:** performance, architecture
 

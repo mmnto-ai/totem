@@ -1,4 +1,4 @@
-## Lesson — Lesson headings must be strictly limited to 60 characters
+## Lesson — Lesson headings must not exceed 60 characters
 
 **Tags:** sarif, validation
 

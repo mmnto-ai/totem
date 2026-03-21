@@ -1,4 +1,4 @@
-## Lesson — Warning messages should include rich metadata such as file
+## Lesson — Include file paths in warning messages
 
 **Tags:** observability, dev-experience
 

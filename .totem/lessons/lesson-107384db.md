@@ -1,4 +1,4 @@
-## Lesson — Core library modules should accept an optional onWarn
+## Lesson — Use onWarn callbacks in core library modules
 
 **Tags:** architecture, logging, typescript
 

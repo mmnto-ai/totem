@@ -472,7 +472,8 @@ function buildWhereClause(
 ): string | undefined {
   const conditions: string[] = [];
   if (typeFilter) {
-    conditions.push(`\`type\` = '${typeFilter.replace(/'/g, "''")}'`);
+    const safeType = typeFilter.replace(/`/g, '\\`').replace(/'/g, "''");
+    conditions.push(`\`type\` = '${safeType}'`);
   }
   // Normalize boundary to array
   const prefixes = boundary

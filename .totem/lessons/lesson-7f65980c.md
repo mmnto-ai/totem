@@ -1,4 +1,4 @@
-## Lesson — Omit the shell: true option in spawn() calls when arguments
+## Lesson — Omit shell:true when spawn args are arrays
 
 **Tags:** security, nodejs, subprocess
 
