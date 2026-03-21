@@ -34,7 +34,7 @@ When spawning a worker agent, provide:
 
 Example:
 
-```
+```text
 Implement Task 2 in packages/core/src/lesson-linter.ts:
 - Add onWarn parameter to validateLessons
 - Thread it through lintLesson
@@ -49,8 +49,9 @@ When the agent reports back:
 1. Read the changed files (agent can't commit)
 2. Verify the changes match the spec
 3. Run totem lint if the agent didn't
-4. Commit with proper message
-5. Move to next task
+4. Run totem shield (mandatory architectural review)
+5. Commit with proper message
+6. Move to next task
 
 ## What This Solves
 
