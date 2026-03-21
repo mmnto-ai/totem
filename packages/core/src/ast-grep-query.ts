@@ -38,6 +38,7 @@ function executeQuery(
   rule: AstGrepRule,
   addedLineNumbers: number[],
   lines: string[],
+  onWarn?: (msg: string) => void,
 ): AstGrepMatch[] {
   if (addedLineNumbers.length === 0) return [];
 
@@ -64,7 +65,8 @@ function executeQuery(
     }
 
     return results;
-  } catch {
+  } catch (err) {
+    onWarn?.(`ast-grep query failed: ${err instanceof Error ? err.message : String(err)}`);
     return [];
   }
 }
@@ -80,14 +82,16 @@ export function matchAstGrepPattern(
   ext: string,
   pattern: AstGrepRule,
   addedLineNumbers: number[],
+  onWarn?: (msg: string) => void,
 ): AstGrepMatch[] {
   const lang = extensionToLang(ext);
   if (!lang) return [];
 
   try {
     const root = parse(lang, content);
-    return executeQuery(root, pattern, addedLineNumbers, content.split('\n'));
-  } catch {
+    return executeQuery(root, pattern, addedLineNumbers, content.split('\n'), onWarn);
+  } catch (err) {
+    onWarn?.(`ast-grep parse failed: ${err instanceof Error ? err.message : String(err)}`);
     return [];
   }
 }
@@ -101,6 +105,7 @@ export function matchAstGrepPatternsBatch(
   content: string,
   ext: string,
   queries: Array<{ rule: AstGrepRule; addedLineNumbers: number[] }>,
+  onWarn?: (msg: string) => void,
 ): AstGrepMatch[][] {
   if (queries.length === 0) return [];
 
@@ -114,9 +119,10 @@ export function matchAstGrepPatternsBatch(
   try {
     const root = parse(lang, content);
     return queries.map(({ rule, addedLineNumbers }) =>
-      executeQuery(root, rule, addedLineNumbers, lines),
+      executeQuery(root, rule, addedLineNumbers, lines, onWarn),
     );
-  } catch {
+  } catch (err) {
+    onWarn?.(`ast-grep batch parse failed: ${err instanceof Error ? err.message : String(err)}`);
     return queries.map(() => []);
   }
 }

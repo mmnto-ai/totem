@@ -220,7 +220,7 @@ export async function applyAstRulesToAdditions(
           addedLineNumbers,
         }));
 
-        const batchResults = await matchAstQueriesBatch(file, queries, cwd);
+        const batchResults = await matchAstQueriesBatch(file, queries, cwd, onWarn);
 
         // Map results back to violations
         for (const rule of applicableTreeSitter) {
@@ -276,7 +276,7 @@ export async function applyAstRulesToAdditions(
             rule: rule.astGrepPattern! as AstGrepRule,
             addedLineNumbers,
           }));
-          const batchResults = matchAstGrepPatternsBatch(content, ext, queries);
+          const batchResults = matchAstGrepPatternsBatch(content, ext, queries, onWarn);
 
           for (let i = 0; i < applicableAstGrep.length; i++) {
             const rule = applicableAstGrep[i]!;
