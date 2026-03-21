@@ -50,7 +50,9 @@ function walk(dir, exts) {
         results.push(full);
       }
     }
-  } catch (err) { /* walk errors are expected for inaccessible dirs */ } // eslint-disable-line no-empty
+  } catch (err) {
+    /* walk errors are expected for inaccessible dirs */
+  } // eslint-disable-line no-empty
   return results;
 }
 
@@ -97,7 +99,9 @@ for (const filePath of files) {
           ruleHits.get(key).files.add(relPath);
         }
       }
-    } catch (err) { /* invalid regex patterns are expected and skipped */ } // eslint-disable-line no-empty
+    } catch (err) {
+      /* invalid regex patterns are expected and skipped */
+    } // eslint-disable-line no-empty
   }
 }
 
