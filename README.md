@@ -199,7 +199,7 @@ $ npx @mmnto/cli spec 570
 [Spec] Found: 5 specs, 3 code, 0 lessons
 ```
 
-`totem spec` fetches your issue, queries the knowledge index, and generates a straitjacket checklist complete with invariants and baseline fix guidance (#773). It tells your AI agent exactly what to build and what mistakes to avoid.
+`totem spec` fetches your issue, queries the knowledge index, and generates a straitjacket checklist complete with invariants and fix guidance. It tells your AI agent exactly what to build and what mistakes to avoid.
 
 Cross-totem queries via `linkedIndexes` let the planner pull context from multiple projects simultaneously. Strategy docs can inform code decisions, while shared design systems inform component repositories.
 
