@@ -88,7 +88,7 @@ All commands feature proper `--help` output documentation (#358).
 - **Setup & Infrastructure:**
   - **Initialization:** Scaffolds configs, hooks, and AI tools with a polished onboarding dare, supporting a `--bare` flag and hiding legacy configurations (#717, #659). It relies on an ordered provider detection schema and automatically ingests `.cursorrules` (#608, #596).
   - **Environment Support:** Package manager auto-detection fully supports Bun and safely detects non-bash environments (#421, #316). The system is hardened by a 1.0 portability audit ensuring cross-platform stability, while dynamic imports significantly boost CLI startup performance (#774, #594).
-  - **Error Handling:** Implements a unified error domain with typed `TotemError` subclasses for standardized logging, and relies on improved test assertions to ensure output integrity (#746, #711). It is securely hardened against command injection and taskkill exploitation to establish safe boundaries for shell execution (#714).
+  - **Error Handling:** Implements a unified error domain with typed `TotemError` subclasses for standardized logging, and relies on improved test assertions to ensure output integrity (#746, #711). It is securely hardened against command injection, taskkill exploitation, and broader codebase vulnerabilities to establish safe boundaries for shell execution (#801, #714).
 - **Data & Context Management:**
   - **Indexing & Sharing:** `totem sync` crawls, chunks, and embeds targets into LanceDB, seamlessly supporting cross-totem queries via the `linkedIndexes` config (#665, #463). `totem link` seamlessly shares lessons and local knowledge between multiple local repositories (#614).
   - **Session Management:** `totem briefing` and `totem handoff` capture state snapshots, featuring brief output formatting for improved readability (#717). The `--lite` flag enables zero-LLM capture with ANSI sanitization (#292).
@@ -105,7 +105,7 @@ All commands feature proper `--help` output documentation (#358).
   - **Documentation:** Automates transactional document syncs using a Saga validator to prevent partial updates (#351). It safely strips known-not-shipped and stale issue references from generated docs to prevent AI hallucinations (#786, #598).
   - **Telemetry & Stats:** Surfaces local metrics powered by the Phase 1 Trap Ledger and records launch metrics for performance visibility (#715, #544). Displays basic CIS metric percentages alongside violation histories (#425).
 - **Rule Testing & Extraction:**
-  - **Capture & Extraction:** Enables inline capture and batch PR lesson extraction. Lessons are strictly Zod-validated before disk writes to ensure structural integrity (#565).
+  - **Capture & Extraction:** Enables inline capture and batch PR lesson extraction, including continuously harvesting operational lessons from automated codebase reviews (#802, #565). Lessons are strictly Zod-validated before disk writes to ensure structural integrity.
   - **Harness Verification:** Serves as a compiled rule testing harness to empirically measure regex false positives, utilizing an integrated Docker test harness for isolated environment validation (#715, #422). The system actively verifies for "Complete or Broken" guardrail rules to ensure enforcement integrity (#663).
   - **Security:** Context-aware heuristics minimize false positives and block bad rules (#326). XML tagging guards against prompt injection from untrusted PR comments (#279).
 
@@ -121,7 +121,7 @@ The compilation process is context-aware, reading files directly from disk inste
 
 A composite GitHub Action (`action.yml`) runs `totem lint` as a pass/fail CI quality gate on pull requests, rigorously validated across a cross-platform CI matrix covering Ubuntu, Windows, and macOS (#774). It uses compiled AST/regex rules from `.totem/compiled-rules.json` to physically block known architectural traps from merging. The SARIF 2.1.0 output natively integrates with the GitHub Advanced Security tab, directly surfacing CISO-facing architectural violations (#387, #561).
 
-Deterministic CI enforcement is further strengthened by evaluating sentinels like SonarQube Community Edition (#355), GitHub CodeQL v4 (#579, #268), and Dependabot (#267). The CI pipeline features a structural CI drift gate and an adversarial evaluation harness to perform integrity checks and mitigate model drift. To prevent pipeline lockouts, the local pre-push gate is securely guarded against missing CLI installations in CI environments and relies strictly on `totem lint` (#610).
+Deterministic CI enforcement is further strengthened by evaluating sentinels like SonarQube Community Edition (#355), GitHub CodeQL v4 (#579, #268), Dependabot (#267), and CodeRabbit for continuous automated codebase review (#802). The CI pipeline features a structural CI drift gate and an adversarial evaluation harness to perform integrity checks and mitigate model drift. To prevent pipeline lockouts, the local pre-push gate is securely guarded against missing CLI installations in CI environments and relies strictly on `totem lint` (#610).
 
 Because `totem lint` operates purely on deterministic rules, it requires **zero LLM API calls**. This eliminates statistical hallucinations in CI and maintains a strict, air-gapped security posture for enterprise environments.
 
