@@ -10,12 +10,7 @@
       "pattern": "\\.(?:write|append)File(?:Sync)?\\s*\\(\\s*['\"`][^'\"`]+\\.(?:md|log)['\"`]\\s*,\\s*(?![^,)]*(?:stripAnsi|sanitize))",
       "compiledAt": "2026-03-21T06:36:05.566Z",
       "createdAt": "2026-03-21T06:36:05.566Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "8969d8bc95c3864b",
@@ -26,14 +21,7 @@
       "pattern": "\\+\\+\\+ [ab]\\/",
       "compiledAt": "2026-03-21T06:36:57.866Z",
       "createdAt": "2026-03-21T06:36:57.866Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.go",
-        "**/*.py",
-        "!**/*.test.*",
-        "!**/*_test.go"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.go", "**/*.py", "!**/*.test.*", "!**/*_test.go"]
     },
     {
       "lessonHash": "009679a6abb474e2",
@@ -45,10 +33,7 @@
       "astGrepPattern": "setTimeout(() => { $$$ reject($$$) $$$ }, $TIME)",
       "compiledAt": "2026-03-21T06:37:58.847Z",
       "createdAt": "2026-03-21T06:37:58.847Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js"]
     },
     {
       "lessonHash": "bb937a42753289f1",
@@ -59,12 +44,7 @@
       "pattern": "\\bexecSync\\s*\\(",
       "compiledAt": "2026-03-21T06:38:51.398Z",
       "createdAt": "2026-03-21T06:38:51.398Z",
-      "fileGlobs": [
-        "**/*.js",
-        "**/*.ts",
-        "**/*.jsx",
-        "**/*.tsx"
-      ]
+      "fileGlobs": ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"]
     },
     {
       "lessonHash": "09edb9a76a7bc3dc",
@@ -75,9 +55,7 @@
       "pattern": "^.*$",
       "compiledAt": "2026-03-21T06:39:26.739Z",
       "createdAt": "2026-03-21T06:39:26.739Z",
-      "fileGlobs": [
-        "**/compiled-rules.json"
-      ]
+      "fileGlobs": ["**/compiled-rules.json"]
     },
     {
       "lessonHash": "5f3a95295db82291",
@@ -88,15 +66,7 @@
       "pattern": "\\bgit\\s+[a-z-]+\\s+.*--\\s+.*(\\S+\\.{2,3}\\S+|HEAD\\b|@\\b)",
       "compiledAt": "2026-03-21T06:39:37.213Z",
       "createdAt": "2026-03-21T06:39:37.213Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.bash",
-        "*.zsh",
-        "*.yml",
-        "*.yaml",
-        "Makefile",
-        "package.json"
-      ]
+      "fileGlobs": ["*.sh", "*.bash", "*.zsh", "*.yml", "*.yaml", "Makefile", "package.json"]
     },
     {
       "lessonHash": "84458e64c4ae2379",
@@ -107,12 +77,7 @@
       "pattern": "\\bGoogleGenerativeAI\\s*\\(\\s*[^\\s{]",
       "compiledAt": "2026-03-21T06:40:23.231Z",
       "createdAt": "2026-03-21T06:40:23.231Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "24d9d2ae3496bd95",
@@ -124,12 +89,7 @@
       "astGrepPattern": "try { $$$ } catch ($E) { $$$ throw new $ERR($$$) $$$ }",
       "compiledAt": "2026-03-21T06:40:49.240Z",
       "createdAt": "2026-03-21T06:40:49.240Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "fdd2206acd4ea992",
@@ -141,12 +101,7 @@
       "astGrepPattern": "async function $NAME($$$) { $$$ await import($$$) $$$ }",
       "compiledAt": "2026-03-21T06:41:09.659Z",
       "createdAt": "2026-03-21T06:41:09.659Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "525062ddda2989aa",
@@ -157,14 +112,7 @@
       "pattern": "\\.(includes|indexOf)\\s*\\(\\s*['\"]rate limit['\"]\\s*\\)|(status|code|statusCode)\\s*===?\\s*429",
       "compiledAt": "2026-03-21T06:41:24.154Z",
       "createdAt": "2026-03-21T06:41:24.154Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts", "!**/*.spec.ts"]
     },
     {
       "lessonHash": "b9e4125e6a31f2cf",
@@ -176,12 +124,7 @@
       "astGrepPattern": "$OBJ.replace(process.cwd(), $REPLACEMENT)",
       "compiledAt": "2026-03-21T06:41:58.539Z",
       "createdAt": "2026-03-21T06:41:58.539Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "1c7a70ec1752a212",
@@ -192,12 +135,7 @@
       "pattern": "\\b(model|cacheKey|modelId|modelHash)\\s*[:=]\\s*['\"][^'\":]+['\"]",
       "compiledAt": "2026-03-21T06:42:10.970Z",
       "createdAt": "2026-03-21T06:42:10.970Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "32ec1dbb9c6dbd48",
@@ -250,9 +188,7 @@
       "pattern": "open-pull-requests-limit:\\s*(?!0\\b)\\d+",
       "compiledAt": "2026-03-21T06:46:10.910Z",
       "createdAt": "2026-03-21T06:46:10.910Z",
-      "fileGlobs": [
-        "**/.github/dependabot.yml"
-      ]
+      "fileGlobs": ["**/.github/dependabot.yml"]
     },
     {
       "lessonHash": "49cf779ef649ffde",
@@ -281,12 +217,7 @@
       "pattern": "\\bapiKey\\s*:\\s*(['\"]['\"]|[\\w\\.]+\\s*(?:\\|\\||\\?\\?)\\s*['\"]['\"])",
       "compiledAt": "2026-03-21T06:48:15.815Z",
       "createdAt": "2026-03-21T06:48:15.815Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "449dde17cfcc4a2a",
@@ -297,12 +228,7 @@
       "pattern": "\\busage\\.(prompt_tokens|completion_tokens|total_tokens)\\b",
       "compiledAt": "2026-03-21T06:48:36.799Z",
       "createdAt": "2026-03-21T06:48:36.799Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "4fab6d3fd93f1a87",
@@ -313,12 +239,7 @@
       "pattern": "^(?!.*untrusted).*\\$\\{(?:[^}]*(?:description|comment|body)[^}]*)\\}",
       "compiledAt": "2026-03-21T06:49:04.367Z",
       "createdAt": "2026-03-21T06:49:04.367Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "a8ade9d9b017f7b3",
@@ -329,14 +250,7 @@
       "pattern": "\\bgit\\s+(status|branch|diff)\\b(?!.*(--no-color|--porcelain))",
       "compiledAt": "2026-03-21T06:49:31.562Z",
       "createdAt": "2026-03-21T06:49:31.562Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.sh",
-        "**/*.bash",
-        "**/*.yml",
-        "**/*.yaml"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh", "**/*.bash", "**/*.yml", "**/*.yaml"]
     },
     {
       "lessonHash": "7e74cc89f71bacf5",
@@ -348,12 +262,7 @@
       "astGrepPattern": "{ $$$ , num_ctx: $V, model: $M, $$$ }",
       "compiledAt": "2026-03-21T06:50:45.453Z",
       "createdAt": "2026-03-21T06:50:45.453Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "89b94dbfedfae9ab",
@@ -364,10 +273,7 @@
       "pattern": "(\\{.*\\}\\s+as\\s+Error|<\\s*Error\\s*>\\s*\\{.*\\})",
       "compiledAt": "2026-03-21T06:52:30.714Z",
       "createdAt": "2026-03-21T06:52:30.714Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx"]
     },
     {
       "lessonHash": "2b790d1938f8d223",
@@ -378,12 +284,7 @@
       "pattern": "\\.string\\(\\).*\\.url\\(\\)",
       "compiledAt": "2026-03-21T06:52:43.493Z",
       "createdAt": "2026-03-21T06:52:43.493Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "16d10e42d757de78",
@@ -394,13 +295,7 @@
       "pattern": "\\.git/hooks",
       "compiledAt": "2026-03-21T06:54:54.573Z",
       "createdAt": "2026-03-21T06:54:54.573Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.sh",
-        "**/*.bash",
-        "**/*.py"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh", "**/*.bash", "**/*.py"]
     },
     {
       "lessonHash": "b89cad573b04fd56",
@@ -411,10 +306,7 @@
       "pattern": "(\\/<\\\\\\/\\w+>|\\\\\\\\u202[a-eA-E])",
       "compiledAt": "2026-03-21T06:56:12.331Z",
       "createdAt": "2026-03-21T06:56:12.331Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "5a4b3fd8e71882e8",
@@ -425,13 +317,7 @@
       "pattern": "^(?!.*bun\\.lock\\b).*bun\\.lockb",
       "compiledAt": "2026-03-21T06:56:50.893Z",
       "createdAt": "2026-03-21T06:56:50.893Z",
-      "fileGlobs": [
-        "*.ts",
-        "*.js",
-        "*.sh",
-        "*.yml",
-        "*.yaml"
-      ]
+      "fileGlobs": ["*.ts", "*.js", "*.sh", "*.yml", "*.yaml"]
     },
     {
       "lessonHash": "52ae1e9b8ef65385",
@@ -442,12 +328,7 @@
       "pattern": "\\bmodel(?:Name|Regex|Pattern|Id)?\\b.*(\\/|'|\")\\^?\\[[a-zA-Z0-9\\-_]+\\][+*]?\\$?\\1",
       "compiledAt": "2026-03-21T06:57:03.648Z",
       "createdAt": "2026-03-21T06:57:03.648Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "e1046c772a6bb6f9",
@@ -458,13 +339,7 @@
       "pattern": "\\bpnpm\\s+bin\\b",
       "compiledAt": "2026-03-21T06:57:11.663Z",
       "createdAt": "2026-03-21T06:57:11.663Z",
-      "fileGlobs": [
-        "package.json",
-        "*.sh",
-        "*.bash",
-        "*.yml",
-        "*.yaml"
-      ]
+      "fileGlobs": ["package.json", "*.sh", "*.bash", "*.yml", "*.yaml"]
     },
     {
       "lessonHash": "1cc6a460ad508b68",
@@ -513,12 +388,7 @@
       "pattern": "execFileSync\\s*\\(\\s*['\"]git['\"]\\s*(?![^)]*shell:\\s*true)",
       "compiledAt": "2026-03-21T06:58:56.946Z",
       "createdAt": "2026-03-21T06:58:56.946Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "472e287ab57c6aee",
@@ -529,14 +399,7 @@
       "pattern": "\\b(max|maximum|limit|under|than|most|length)\\b\\s*\\d+\\s*(chars?|characters?)\\b",
       "compiledAt": "2026-03-21T06:59:15.315Z",
       "createdAt": "2026-03-21T06:59:15.315Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "**/*.py",
-        "**/*.md"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
     },
     {
       "lessonHash": "064f35405ec02082",
@@ -548,14 +411,7 @@
       "astGrepPattern": "$STR.match($REG)",
       "compiledAt": "2026-03-21T06:59:43.019Z",
       "createdAt": "2026-03-21T06:59:43.019Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts", "!**/*.spec.ts"]
     },
     {
       "lessonHash": "741493a88528e2b8",
@@ -567,12 +423,7 @@
       "astGrepPattern": "`${$A}${$B}`",
       "compiledAt": "2026-03-21T07:00:07.350Z",
       "createdAt": "2026-03-21T07:00:07.350Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "a5697f86bb23901e",
@@ -646,12 +497,7 @@
       "pattern": "\\bRegExp\\s*\\(\\s*[^'\"\\s][^,]*?,\\s*['\"\\`][^'\"\\`]*g[^'\"\\`]*['\"\\`]",
       "compiledAt": "2026-03-21T07:02:28.769Z",
       "createdAt": "2026-03-21T07:02:28.769Z",
-      "fileGlobs": [
-        "**/*.js",
-        "**/*.ts",
-        "**/*.jsx",
-        "**/*.tsx"
-      ]
+      "fileGlobs": ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"]
     },
     {
       "lessonHash": "e780d5664d74a03b",
@@ -662,12 +508,7 @@
       "pattern": "(['\"])\\`\\1\\s*,\\s*(['\"])\\`{3}\\2",
       "compiledAt": "2026-03-21T07:02:46.313Z",
       "createdAt": "2026-03-21T07:02:46.313Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "9657b97239a20ed0",
@@ -678,12 +519,7 @@
       "pattern": "\\.startsWith\\s*\\(\\s*['\"]\\*\\*['\"]|\\.indexOf\\s*\\(\\s*['\"]\\*\\*['\"]\\s*\\)\\s*(?:===?|>=)\\s*0",
       "compiledAt": "2026-03-21T07:03:43.442Z",
       "createdAt": "2026-03-21T07:03:43.442Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "63f2b2d8c631089a",
@@ -710,12 +546,7 @@
       "pattern": "\\.(includes|indexOf|startsWith|endsWith)\\s*\\(\\s*['\"](?:<|>|\\[|\\])['\"]\\s*\\)",
       "compiledAt": "2026-03-21T07:04:27.660Z",
       "createdAt": "2026-03-21T07:04:27.660Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "86fe2def3463b256",
@@ -726,15 +557,7 @@
       "pattern": "\\bgit\\s+ls-files\\b(?!.*\\s--recurse-submodules\\b)",
       "compiledAt": "2026-03-21T07:04:58.487Z",
       "createdAt": "2026-03-21T07:04:58.487Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.bash",
-        "*.yml",
-        "*.yaml",
-        "**/*.ts",
-        "**/*.js",
-        "Makefile"
-      ]
+      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "**/*.ts", "**/*.js", "Makefile"]
     },
     {
       "lessonHash": "fea10369daa04c98",
@@ -745,12 +568,7 @@
       "pattern": "\\bpnpm\\s+changeset\\b(?!\\s+(version|publish|status|tag|pre|list))",
       "compiledAt": "2026-03-21T07:05:59.724Z",
       "createdAt": "2026-03-21T07:05:59.724Z",
-      "fileGlobs": [
-        ".github/workflows/*.yml",
-        ".github/workflows/*.yaml",
-        "**/*.sh",
-        "**/*.bash"
-      ]
+      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml", "**/*.sh", "**/*.bash"]
     },
     {
       "lessonHash": "03f572ffe933b21a",
@@ -761,9 +579,7 @@
       "pattern": "\\.(session\\.start|session\\.end|beforeDisconnect)\\b",
       "compiledAt": "2026-03-21T07:06:08.004Z",
       "createdAt": "2026-03-21T07:06:08.004Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts"
-      ]
+      "fileGlobs": ["packages/mcp/**/*.ts"]
     },
     {
       "lessonHash": "ce4240d622c53f8e",
@@ -774,12 +590,7 @@
       "pattern": "\\.\\.\\.await\\s+vi\\.importActual",
       "compiledAt": "2026-03-21T07:07:24.082Z",
       "createdAt": "2026-03-21T07:07:24.082Z",
-      "fileGlobs": [
-        "**/*.test.ts",
-        "**/*.test.js",
-        "**/*.spec.ts",
-        "**/*.spec.js"
-      ]
+      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]
     },
     {
       "lessonHash": "bd31e87e32cfeefd",
@@ -790,9 +601,7 @@
       "pattern": "(?:\\.{1,2}\\/|[\\w.-]+\\/)+[\\w.-]+\\.[a-z]{2,}",
       "compiledAt": "2026-03-21T07:07:43.431Z",
       "createdAt": "2026-03-21T07:07:43.431Z",
-      "fileGlobs": [
-        "**/*.md"
-      ]
+      "fileGlobs": ["**/*.md"]
     },
     {
       "lessonHash": "3b48ad1c3c382306",
@@ -804,12 +613,7 @@
       "astGrepPattern": "$A[$A.indexOf($B) + 1]",
       "compiledAt": "2026-03-21T07:10:02.103Z",
       "createdAt": "2026-03-21T07:10:02.103Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"]
     },
     {
       "lessonHash": "f52f5615a0543837",
@@ -820,12 +624,7 @@
       "pattern": "\\bapplyRules\\b",
       "compiledAt": "2026-03-21T07:10:13.697Z",
       "createdAt": "2026-03-21T07:10:13.697Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "548cd82f9c6f1944",
@@ -836,13 +635,7 @@
       "pattern": "\\bapiKey:\\s*process\\.env\\.[A-Z0-9_]+(?!\\s*(\\|\\||\\?\\?))",
       "compiledAt": "2026-03-21T07:10:13.697Z",
       "createdAt": "2026-03-21T07:10:13.697Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts"]
     },
     {
       "lessonHash": "9081a2fbc7e22475",
@@ -871,10 +664,7 @@
       "pattern": "\\b(planned\\s+features?|coming\\s+soon|slated\\s+for|roadmap|future\\s+release|later\\s+development)\\b",
       "compiledAt": "2026-03-21T07:10:50.885Z",
       "createdAt": "2026-03-21T07:10:50.885Z",
-      "fileGlobs": [
-        "*.md",
-        "*.mdx"
-      ]
+      "fileGlobs": ["*.md", "*.mdx"]
     },
     {
       "lessonHash": "2d3ac4b9516ed9b6",
@@ -885,16 +675,7 @@
       "pattern": "\\.gemini/|\\bgemini\\.md\\b",
       "compiledAt": "2026-03-21T07:11:06.839Z",
       "createdAt": "2026-03-21T07:11:06.839Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.yml",
-        "*.yaml",
-        "*.md",
-        "package.json",
-        "Makefile",
-        "*.ts",
-        "*.js"
-      ]
+      "fileGlobs": ["*.sh", "*.yml", "*.yaml", "*.md", "package.json", "Makefile", "*.ts", "*.js"]
     },
     {
       "lessonHash": "ff50cadc6e05631c",
@@ -905,11 +686,7 @@
       "pattern": "\\bconsole\\.(log|warn|error|info|debug)\\(",
       "compiledAt": "2026-03-21T07:11:45.228Z",
       "createdAt": "2026-03-21T07:11:45.228Z",
-      "fileGlobs": [
-        "**/core/**/*.ts",
-        "**/core/**/*.js",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["**/core/**/*.ts", "**/core/**/*.js", "!**/*.test.ts"]
     },
     {
       "lessonHash": "d64dec9ec5792378",
@@ -920,10 +697,7 @@
       "pattern": "^",
       "compiledAt": "2026-03-21T07:12:25.923Z",
       "createdAt": "2026-03-21T07:12:25.923Z",
-      "fileGlobs": [
-        "skills/**/*.md",
-        "!**/SKILL.md"
-      ]
+      "fileGlobs": ["skills/**/*.md", "!**/SKILL.md"]
     },
     {
       "lessonHash": "21cb428b15711741",
@@ -934,10 +708,7 @@
       "pattern": "fail-fast:\\s*['\"]?true['\"]?",
       "compiledAt": "2026-03-21T07:12:49.401Z",
       "createdAt": "2026-03-21T07:12:49.401Z",
-      "fileGlobs": [
-        ".github/workflows/*.yml",
-        ".github/workflows/*.yaml"
-      ]
+      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml"]
     },
     {
       "lessonHash": "72faae2c99fddc2c",
@@ -968,10 +739,7 @@
       "pattern": "\\.(?:(?:includes|startsWith)\\s*\\(\\s*['\"]\\*\\*['\"]|indexOf\\s*\\(\\s*['\"]\\*\\*['\"]\\s*\\)\\s*(?:>=\\s*0|>\\s*-1|!==?\\s*-1|===?\\s*0))",
       "compiledAt": "2026-03-21T07:13:30.153Z",
       "createdAt": "2026-03-21T07:13:30.153Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js"]
     },
     {
       "lessonHash": "9921090ca5c814b4",
@@ -1022,11 +790,7 @@
       "pattern": "(\\.status\\s*===?\\s*429|['\"]rate\\s+limit['\"])",
       "compiledAt": "2026-03-21T07:13:51.813Z",
       "createdAt": "2026-03-21T07:13:51.813Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.sh"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh"]
     },
     {
       "lessonHash": "1d5fc28021149af7",
@@ -1054,11 +818,7 @@
       "pattern": "^(?!.*(numCtx|context|VRAM|exhaustion))(?=.*500)(?=.*Internal\\s+Server\\s+Error).*$",
       "compiledAt": "2026-03-21T07:14:55.956Z",
       "createdAt": "2026-03-21T07:14:55.956Z",
-      "fileGlobs": [
-        "**/llm/**/*.ts",
-        "**/providers/**/*.ts",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["**/llm/**/*.ts", "**/providers/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "32b6adb4972689f6",
@@ -1070,12 +830,7 @@
       "astGrepPattern": "$OBJ.replace($A, $B).replace($C, $D)",
       "compiledAt": "2026-03-21T07:15:26.534Z",
       "createdAt": "2026-03-21T07:15:26.534Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "73ed3dcdca4135eb",
@@ -1087,12 +842,7 @@
       "astGrepPattern": "$PROC.kill($$$ARGS)",
       "compiledAt": "2026-03-21T07:15:50.610Z",
       "createdAt": "2026-03-21T07:15:50.610Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "329479bf34f8816f",
@@ -1103,12 +853,7 @@
       "pattern": "\\.string\\(\\)(?!\\.min\\()",
       "compiledAt": "2026-03-21T07:16:09.671Z",
       "createdAt": "2026-03-21T07:16:09.671Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/config/**/*.ts",
-        "**/schema/**/*.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/config/**/*.ts", "**/schema/**/*.ts"]
     },
     {
       "lessonHash": "a4e45715c3a45348",
@@ -1135,13 +880,7 @@
       "pattern": "11434/v1",
       "compiledAt": "2026-03-21T07:16:12.378Z",
       "createdAt": "2026-03-21T07:16:12.378Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.py",
-        "**/*.sh",
-        ".env*"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh", ".env*"]
     },
     {
       "lessonHash": "2d6032dd8919f119",
@@ -1152,13 +891,7 @@
       "pattern": "\\b(ai-pr-reviewer|pr-agent|coderabbit|gpt-lint|chatgpt-lint)\\b",
       "compiledAt": "2026-03-21T07:16:31.597Z",
       "createdAt": "2026-03-21T07:16:31.597Z",
-      "fileGlobs": [
-        ".husky/**",
-        "package.json",
-        "scripts/**",
-        "*.sh",
-        "*.bash"
-      ]
+      "fileGlobs": [".husky/**", "package.json", "scripts/**", "*.sh", "*.bash"]
     },
     {
       "lessonHash": "071d5571be2d531a",
@@ -1189,12 +922,7 @@
       "pattern": "\\.\\.\\.\\s*await\\s+vi\\.importActual\\(",
       "compiledAt": "2026-03-21T07:16:38.736Z",
       "createdAt": "2026-03-21T07:16:38.736Z",
-      "fileGlobs": [
-        "**/*.test.ts",
-        "**/*.test.tsx",
-        "**/*.spec.ts",
-        "**/*.spec.tsx"
-      ]
+      "fileGlobs": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
     },
     {
       "lessonHash": "9445c3c56278d890",
@@ -1205,10 +933,7 @@
       "pattern": "\\.catch\\(\\s*[^)]*\\)\\s*=>\\s*(?!.*ENOENT)[^\\{\\s]+|\\bcatch\\s*\\{",
       "compiledAt": "2026-03-21T07:16:42.876Z",
       "createdAt": "2026-03-21T07:16:42.876Z",
-      "fileGlobs": [
-        "**/*config*.*",
-        "**/*cache*.*"
-      ]
+      "fileGlobs": ["**/*config*.*", "**/*cache*.*"]
     },
     {
       "lessonHash": "9075dc782818ee82",
@@ -1219,9 +944,7 @@
       "pattern": "^# Lesson: .{61,}",
       "compiledAt": "2026-03-21T07:16:45.395Z",
       "createdAt": "2026-03-21T07:16:45.395Z",
-      "fileGlobs": [
-        "**/*.md"
-      ]
+      "fileGlobs": ["**/*.md"]
     },
     {
       "lessonHash": "3d6802ffb3a85fb8",
@@ -1232,13 +955,7 @@
       "pattern": "\\b(echo|printf)\\s+[^|]*\\|\\s*grep\\b",
       "compiledAt": "2026-03-21T07:16:51.528Z",
       "createdAt": "2026-03-21T07:16:51.528Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.bash",
-        "*.zsh",
-        "*.yml",
-        "*.yaml"
-      ]
+      "fileGlobs": ["*.sh", "*.bash", "*.zsh", "*.yml", "*.yaml"]
     },
     {
       "lessonHash": "bc8b99e815c3943f",
@@ -1249,11 +966,7 @@
       "pattern": "\\bconsole\\.(log|error|warn|info)\\s*\\(",
       "compiledAt": "2026-03-21T07:17:09.503Z",
       "createdAt": "2026-03-21T07:17:09.503Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts",
-        "packages/mcp/**/*.js",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["packages/mcp/**/*.ts", "packages/mcp/**/*.js", "!**/*.test.ts"]
     },
     {
       "lessonHash": "463721b73bcacdc3",
@@ -1284,10 +997,7 @@
       "pattern": "\\b[\\w.-]+\\/[\\w.-]+\\.[a-z0-9]{2,}\\b",
       "compiledAt": "2026-03-21T07:17:09.504Z",
       "createdAt": "2026-03-21T07:17:09.504Z",
-      "fileGlobs": [
-        ".totem/lessons/**",
-        ".totem/lessons.md"
-      ]
+      "fileGlobs": [".totem/lessons/**", ".totem/lessons.md"]
     },
     {
       "lessonHash": "1d850285825d167d",
@@ -1298,14 +1008,7 @@
       "pattern": "['\"](?![^'\"]*Totem Error)(?:\\[[^\\]]*Error\\]|[\\w-]+\\s+Error:)",
       "compiledAt": "2026-03-21T07:17:31.605Z",
       "createdAt": "2026-03-21T07:17:31.605Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "**/*.py",
-        "**/*.go"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.go"]
     },
     {
       "lessonHash": "2b0ab8197ab67226",
@@ -1316,12 +1019,7 @@
       "pattern": "\\.(?:warn|error|log)\\(\\s*[`'].*(?:security|malicious|violation|illegal|invalid|attack).*\\$\\{(?!sanitize|escape|encode|strip)[^}]+\\}",
       "compiledAt": "2026-03-21T07:17:43.617Z",
       "createdAt": "2026-03-21T07:17:43.617Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "9b689086c3c6ef18",
@@ -1332,12 +1030,7 @@
       "pattern": "\\basync\\b.*\\bimport\\s*\\(",
       "compiledAt": "2026-03-21T07:17:43.617Z",
       "createdAt": "2026-03-21T07:17:43.617Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "86d57e06e538a7d3",
@@ -1349,14 +1042,7 @@
       "astGrepPattern": "throw new Error($MSG)",
       "compiledAt": "2026-03-21T07:17:57.337Z",
       "createdAt": "2026-03-21T07:17:57.337Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "!**/*.test.ts",
-        "!**/*.test.js"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts", "!**/*.test.js"]
     },
     {
       "lessonHash": "76a1f3c723b57c3a",
@@ -1367,11 +1053,7 @@
       "pattern": "\\bexit\\s+0\\b",
       "compiledAt": "2026-03-21T07:18:18.494Z",
       "createdAt": "2026-03-21T07:18:18.494Z",
-      "fileGlobs": [
-        ".husky/**/*",
-        "scripts/hooks/**/*",
-        "*.sh"
-      ]
+      "fileGlobs": [".husky/**/*", "scripts/hooks/**/*", "*.sh"]
     },
     {
       "lessonHash": "a1fd35ee696110b0",
@@ -1402,12 +1084,7 @@
       "astGrepPattern": "[$VAL].flat().filter(Boolean)",
       "compiledAt": "2026-03-21T07:18:42.164Z",
       "createdAt": "2026-03-21T07:18:42.164Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "cbb308940a59e34a",
@@ -1418,12 +1095,7 @@
       "pattern": "\\bnew\\s+Error\\s*\\(",
       "compiledAt": "2026-03-21T07:19:11.691Z",
       "createdAt": "2026-03-21T07:19:11.691Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "5c834874c001d166",
@@ -1453,12 +1125,7 @@
       "pattern": "\\bexpect\\.fail\\(",
       "compiledAt": "2026-03-21T07:19:45.508Z",
       "createdAt": "2026-03-21T07:19:45.508Z",
-      "fileGlobs": [
-        "**/*.test.ts",
-        "**/*.test.js",
-        "**/*.spec.ts",
-        "**/*.spec.js"
-      ]
+      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]
     },
     {
       "lessonHash": "42a7363aa69215dd",
@@ -1469,12 +1136,7 @@
       "pattern": "new\\s+GoogleGenerativeAI\\s*\\(\\s*[^\\s\\{]",
       "compiledAt": "2026-03-21T07:19:47.719Z",
       "createdAt": "2026-03-21T07:19:47.719Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "71935fe9a742137b",
@@ -1485,12 +1147,7 @@
       "pattern": "\\bString\\(\\s*[^)]*(?:[Pp]attern|[Ii]nput)[^)]*\\)",
       "compiledAt": "2026-03-21T07:20:10.770Z",
       "createdAt": "2026-03-21T07:20:10.770Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "6d6d70d5a0f0fa7d",
@@ -1518,12 +1175,7 @@
       "pattern": "Regex\\s+Rule\\s+Extraction",
       "compiledAt": "2026-03-21T07:20:36.676Z",
       "createdAt": "2026-03-21T07:20:36.676Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.ts",
-        "**/*.js",
-        "**/*.txt"
-      ]
+      "fileGlobs": ["**/*.md", "**/*.ts", "**/*.js", "**/*.txt"]
     },
     {
       "lessonHash": "bb1001a2c6d6e9bd",
@@ -1534,14 +1186,7 @@
       "pattern": "\\b(cacheKey|telemetryId|modelId)\\s*[:=]\\s*['\"][^'\"\\s:]+['\"]",
       "compiledAt": "2026-03-21T07:20:48.796Z",
       "createdAt": "2026-03-21T07:20:48.796Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "!**/*.test.ts",
-        "!**/*.test.js"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts", "!**/*.test.js"]
     },
     {
       "lessonHash": "51f362e3743c49f5",
@@ -1552,9 +1197,7 @@
       "pattern": "\\b(import|require).+['\"]micromatch['\"]",
       "compiledAt": "2026-03-21T07:20:48.796Z",
       "createdAt": "2026-03-21T07:20:48.796Z",
-      "fileGlobs": [
-        "packages/core/**/*"
-      ]
+      "fileGlobs": ["packages/core/**/*"]
     },
     {
       "lessonHash": "965b29fcccf3d8a5",
@@ -1582,12 +1225,7 @@
       "pattern": "\\bnew\\s+\\w*(?:Database|Db)Error\\s*\\(\\s*['\"\\x60][^'\"\\x60]+['\"\\x60]\\s*\\)",
       "compiledAt": "2026-03-21T07:21:24.094Z",
       "createdAt": "2026-03-21T07:21:24.094Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "4c53a4cd45410edf",
@@ -1598,12 +1236,7 @@
       "pattern": "\\.kill\\(",
       "compiledAt": "2026-03-21T07:21:49.612Z",
       "createdAt": "2026-03-21T07:21:49.612Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "6ad0d4d5c760a5d6",
@@ -1614,10 +1247,7 @@
       "pattern": "\\b(?:[Gg]uarantees?|[Cc]omprehensive)\\b",
       "compiledAt": "2026-03-21T07:21:58.029Z",
       "createdAt": "2026-03-21T07:21:58.029Z",
-      "fileGlobs": [
-        "*.md",
-        "*.mdx"
-      ]
+      "fileGlobs": ["*.md", "*.mdx"]
     },
     {
       "lessonHash": "f1e6b70ba8796049",
@@ -1628,11 +1258,7 @@
       "pattern": "\\.split\\(['\"/](?:\\\\n|\\\\r\\\\n)['\"/]\\)\\s*\\[\\s*0\\s*\\]",
       "compiledAt": "2026-03-21T07:21:58.029Z",
       "createdAt": "2026-03-21T07:21:58.029Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
     },
     {
       "lessonHash": "ef230abe26dbdb31",
@@ -1643,12 +1269,7 @@
       "pattern": "\\bsetTimeout\\s*\\(.*?\\breject\\b",
       "compiledAt": "2026-03-21T07:21:58.029Z",
       "createdAt": "2026-03-21T07:21:58.029Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "01ad9fa44c7c5a3f",
@@ -1659,12 +1280,7 @@
       "pattern": "\\.(?:forEach|map)\\s*\\(\\s*\\(?(\\w+)\\b[^)]*\\)?\\s*=>.*?\\.replace\\(\\s*\\1\\b",
       "compiledAt": "2026-03-21T07:22:45.347Z",
       "createdAt": "2026-03-21T07:22:45.347Z",
-      "fileGlobs": [
-        "*.ts",
-        "*.tsx",
-        "*.js",
-        "*.jsx"
-      ]
+      "fileGlobs": ["*.ts", "*.tsx", "*.js", "*.jsx"]
     },
     {
       "lessonHash": "6aea57594018cd0e",
@@ -1675,14 +1291,7 @@
       "pattern": "\\bgit\\s+ls-files\\b(?!.*\\b--recurse-submodules\\b)",
       "compiledAt": "2026-03-21T07:22:45.347Z",
       "createdAt": "2026-03-21T07:22:45.347Z",
-      "fileGlobs": [
-        "**/*.sh",
-        "**/*.bash",
-        "**/*.js",
-        "**/*.ts",
-        "**/*.yml",
-        "**/*.yaml"
-      ]
+      "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.js", "**/*.ts", "**/*.yml", "**/*.yaml"]
     },
     {
       "lessonHash": "f9f620a07401e96d",
@@ -1693,14 +1302,7 @@
       "pattern": "(-d\\s+['\"]?\\.git['\"]?|existsSync\\([^)]*['\"]\\.git['\"]\\))",
       "compiledAt": "2026-03-21T07:22:45.347Z",
       "createdAt": "2026-03-21T07:22:45.347Z",
-      "fileGlobs": [
-        "**/*.sh",
-        "**/*.bash",
-        "**/*.js",
-        "**/*.ts",
-        "**/*.yml",
-        "**/*.yaml"
-      ]
+      "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.js", "**/*.ts", "**/*.yml", "**/*.yaml"]
     },
     {
       "lessonHash": "5afaf8d03f059a41",
@@ -1711,11 +1313,7 @@
       "pattern": "[\\uD83C-\\uDBFF\\uDC00-\\uDFFF]|[\\u2600-\\u27BF]",
       "compiledAt": "2026-03-21T07:22:59.892Z",
       "createdAt": "2026-03-21T07:22:59.892Z",
-      "fileGlobs": [
-        "*.md",
-        "*.markdown",
-        "*.txt"
-      ]
+      "fileGlobs": ["*.md", "*.markdown", "*.txt"]
     },
     {
       "lessonHash": "06b97073f9073676",
@@ -1726,11 +1324,7 @@
       "pattern": "(\\.(match|test|includes)\\s*\\(|pattern:\\s*)[/\"']\\^?\\b(git|npm|docker|aws|kubectl|gh|sh|bash)\\b\\$?[/\"']",
       "compiledAt": "2026-03-21T07:22:59.892Z",
       "createdAt": "2026-03-21T07:22:59.892Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
     },
     {
       "lessonHash": "00e6e4a5f7f46c8b",
@@ -1741,13 +1335,7 @@
       "pattern": "\\bmax_tokens\\s*[:=]\\s*\\d+",
       "compiledAt": "2026-03-21T07:23:30.778Z",
       "createdAt": "2026-03-21T07:23:30.778Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "**/*.py"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.py"]
     },
     {
       "lessonHash": "fc6576908594af96",
@@ -1758,12 +1346,7 @@
       "pattern": "\\b(deterministic|fast)\\b.*\\b(suite|toolset|framework|agent|system)\\b",
       "compiledAt": "2026-03-21T07:24:32.504Z",
       "createdAt": "2026-03-21T07:24:32.504Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.ts",
-        "**/*.js",
-        "**/package.json"
-      ]
+      "fileGlobs": ["**/*.md", "**/*.ts", "**/*.js", "**/package.json"]
     },
     {
       "lessonHash": "f4b44468f7f5b46a",
@@ -1774,13 +1357,7 @@
       "pattern": "^[ \\t]*(?!(?:if|command|type|hash|\\[|&&|\\|\\|)\\b)\\s*(npx|pnpm|npm|yarn|eslint|prettier|lint-staged|tsc|vitest|jest|oxlint|biome|stylelint)\\b",
       "compiledAt": "2026-03-21T07:24:32.505Z",
       "createdAt": "2026-03-21T07:24:32.505Z",
-      "fileGlobs": [
-        ".husky/**/*",
-        ".githooks/**/*",
-        "scripts/hooks/**/*",
-        "**/*.sh",
-        "**/*.bash"
-      ]
+      "fileGlobs": [".husky/**/*", ".githooks/**/*", "scripts/hooks/**/*", "**/*.sh", "**/*.bash"]
     },
     {
       "lessonHash": "6d53d5fd241365d5",
@@ -1791,12 +1368,7 @@
       "pattern": "\\b(?:fs\\.)?read(?:File|FileSync)\\s*\\(",
       "compiledAt": "2026-03-21T07:24:32.505Z",
       "createdAt": "2026-03-21T07:24:32.505Z",
-      "fileGlobs": [
-        "scripts/**/*.js",
-        "scripts/**/*.ts",
-        "tools/**/*.js",
-        "tools/**/*.ts"
-      ]
+      "fileGlobs": ["scripts/**/*.js", "scripts/**/*.ts", "tools/**/*.js", "tools/**/*.ts"]
     },
     {
       "lessonHash": "ec594c0f3c8ad660",
@@ -1807,10 +1379,7 @@
       "pattern": "\"(?:token|api[-_]?key|secret|password)\"\\s*:\\s*\"[^$].*\"",
       "compiledAt": "2026-03-21T07:24:48.956Z",
       "createdAt": "2026-03-21T07:24:48.956Z",
-      "fileGlobs": [
-        "**/*.mcp.json",
-        "**/settings.json"
-      ]
+      "fileGlobs": ["**/*.mcp.json", "**/settings.json"]
     },
     {
       "lessonHash": "1a6aacfb227f5afa",
@@ -1821,12 +1390,7 @@
       "pattern": "(\\$\\{[^}]+\\}/|[\\w)]\\s*\\+\\s*['\"]/['\"]|\\.concat\\(['\"]/['\"]\\))",
       "compiledAt": "2026-03-21T07:25:02.487Z",
       "createdAt": "2026-03-21T07:25:02.487Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "3629f9e09986b8f4",
@@ -1837,12 +1401,7 @@
       "pattern": "(\\$\\{[^}]+\\}\\$\\{[^}]+\\}|\\.join\\(['\"]{2}\\))",
       "compiledAt": "2026-03-21T07:25:02.487Z",
       "createdAt": "2026-03-21T07:25:02.487Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "2ce8aafccb3d038a",
@@ -1853,11 +1412,7 @@
       "pattern": "\\bif\\s*\\(.*?\\b(budget|limit|max|capacity|length|chars)\\b.*?\\)\\s*break\\b",
       "compiledAt": "2026-03-21T07:25:02.487Z",
       "createdAt": "2026-03-21T07:25:02.487Z",
-      "fileGlobs": [
-        "**/orchestrator/**/*.ts",
-        "**/totem/**/*.ts",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["**/orchestrator/**/*.ts", "**/totem/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "cdc8a8fe4897d952",
@@ -1868,12 +1423,7 @@
       "pattern": "\\bnew\\s+(?!Totem)Error\\(",
       "compiledAt": "2026-03-21T07:25:02.487Z",
       "createdAt": "2026-03-21T07:25:02.487Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "5b9058bd289a1dbb",
@@ -1901,12 +1451,7 @@
       "pattern": "(\\.(error|warn)\\(\\s*['\"\\x60](?![^'\"\\x60]*Totem Error))|(\\.(log|info)\\(\\s*['\"\\x60]\\[(Status|Log|Info|General)\\])",
       "compiledAt": "2026-03-21T07:26:18.826Z",
       "createdAt": "2026-03-21T07:26:18.826Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "ae672444a0fa5574",
@@ -1917,12 +1462,7 @@
       "pattern": "new\\s+RegExp\\(\\s*(['\"]{2}|[\\w.]*pattern)\\s*\\)",
       "compiledAt": "2026-03-21T07:27:14.295Z",
       "createdAt": "2026-03-21T07:27:14.295Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "9ba3b23b3039906d",
@@ -1933,12 +1473,7 @@
       "pattern": "\\.split\\(\\s*\\/(\\^|\\\\n)#{1,6}",
       "compiledAt": "2026-03-21T07:28:06.154Z",
       "createdAt": "2026-03-21T07:28:06.154Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "8057fcca873b861a",
@@ -1950,12 +1485,7 @@
       "astGrepPattern": "spawn($CMD, [$$$ARGS], { $$$BEFORE, shell: true, $$$AFTER })",
       "compiledAt": "2026-03-21T07:29:15.492Z",
       "createdAt": "2026-03-21T07:29:15.492Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "e61b4c48ac65eb17",
@@ -1966,10 +1496,7 @@
       "pattern": "^import\\s+(?!type\\s)(?!\\s*\\{[^}]*Error).*from\\s+['\"](?:\\.\\.\\/|@[\\w-]+\\/)",
       "compiledAt": "2026-03-21T07:29:29.447Z",
       "createdAt": "2026-03-21T07:29:29.447Z",
-      "fileGlobs": [
-        "packages/cli/src/commands/**/*.ts",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "668bc7d7f676f7e7",
@@ -1980,14 +1507,7 @@
       "pattern": "\\b[\\w]*(path|file)[\\w]*\\.to(Lower|Upper)Case\\(\\)|\\b(LOWER|UPPER)\\s*\\(\\s*[^)]*(path|file)[^)]*\\)",
       "compiledAt": "2026-03-21T07:30:15.396Z",
       "createdAt": "2026-03-21T07:30:15.396Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "**/*.py",
-        "**/*.sql"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.py", "**/*.sql"]
     },
     {
       "lessonHash": "04872b16e8b055df",
@@ -1998,10 +1518,7 @@
       "pattern": "\\bruleIndex\\b.*(\\?\\?|\\|\\|)\\s*0",
       "compiledAt": "2026-03-21T07:30:19.276Z",
       "createdAt": "2026-03-21T07:30:19.276Z",
-      "fileGlobs": [
-        "**/*sarif*/**/*.ts",
-        "**/sarif/**/*.ts"
-      ]
+      "fileGlobs": ["**/*sarif*/**/*.ts", "**/sarif/**/*.ts"]
     },
     {
       "lessonHash": "d309bbfc3d682100",
@@ -2012,13 +1529,7 @@
       "pattern": "\\.(includes|indexOf|match)\\(\\s*['\"]marker['\"]",
       "compiledAt": "2026-03-21T07:30:22.609Z",
       "createdAt": "2026-03-21T07:30:22.609Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"]
     },
     {
       "lessonHash": "39b3381c5c98760b",
@@ -2029,10 +1540,7 @@
       "pattern": "ruleIndex\\s*[:=]\\s*(?:0\\b|.*(?:\\?\\?|\\|\\||\\?|:)\\s*0\\b)",
       "compiledAt": "2026-03-21T07:30:58.693Z",
       "createdAt": "2026-03-21T07:30:58.693Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js"]
     },
     {
       "lessonHash": "8207aa4dddbb29bf",
@@ -2043,12 +1551,7 @@
       "pattern": "\\b(?:is)?[iI]nitialized\\s*(?::\\s*boolean|=\\s*(?:true|false))\\b",
       "compiledAt": "2026-03-21T07:30:58.694Z",
       "createdAt": "2026-03-21T07:30:58.694Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "f81edd8937285d99",
@@ -2077,14 +1580,7 @@
       "pattern": "diff --git a\\/(\\.\\*|\\S+)",
       "compiledAt": "2026-03-21T07:32:05.130Z",
       "createdAt": "2026-03-21T07:32:05.130Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.py",
-        "**/*.go",
-        "**/*.rb",
-        "**/*.rs"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.rb", "**/*.rs"]
     },
     {
       "lessonHash": "64a863955923e5b0",
@@ -2095,13 +1591,7 @@
       "pattern": "^(?!.*#).*\\bgit\\s+reset\\b",
       "compiledAt": "2026-03-21T07:32:33.084Z",
       "createdAt": "2026-03-21T07:32:33.084Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.sh",
-        "**/*.bash",
-        "**/*.yml",
-        "**/*.yaml"
-      ]
+      "fileGlobs": ["**/*.md", "**/*.sh", "**/*.bash", "**/*.yml", "**/*.yaml"]
     },
     {
       "lessonHash": "55c903bd228e0b5c",
@@ -2112,14 +1602,7 @@
       "pattern": "\\bError\\s*\\(\\s*['\"\\`](?!\\[Totem Error\\])",
       "compiledAt": "2026-03-21T07:32:50.877Z",
       "createdAt": "2026-03-21T07:32:50.877Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "**/*.mjs",
-        "**/*.cjs"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs"]
     },
     {
       "lessonHash": "bb1bcd038255556c",
@@ -2131,12 +1614,7 @@
       "astGrepPattern": "process.kill($PID, 0)",
       "compiledAt": "2026-03-21T07:33:08.203Z",
       "createdAt": "2026-03-21T07:33:08.203Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "f87cd61687b84261",
@@ -2147,12 +1625,7 @@
       "pattern": "new\\s+RegExp\\s*\\([^,]+,\\s*[^?:]*\\+\\s*['\"]g['\"]",
       "compiledAt": "2026-03-21T07:33:25.011Z",
       "createdAt": "2026-03-21T07:33:25.011Z",
-      "fileGlobs": [
-        "**/*.js",
-        "**/*.ts",
-        "**/*.jsx",
-        "**/*.tsx"
-      ]
+      "fileGlobs": ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"]
     },
     {
       "lessonHash": "52e5665393f46eed",
@@ -2163,11 +1636,7 @@
       "pattern": "\\bprocess\\.env\\[[^\\]]+\\]\\s*=\\s*(?![^;\\n]*(\\?\\?|\\|\\||process\\.env))",
       "compiledAt": "2026-03-21T07:33:52.271Z",
       "createdAt": "2026-03-21T07:33:52.271Z",
-      "fileGlobs": [
-        "**/cli/**/*.ts",
-        "**/cli/**/*.js",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["**/cli/**/*.ts", "**/cli/**/*.js", "!**/*.test.ts"]
     },
     {
       "lessonHash": "1408ec626c931051",
@@ -2178,10 +1647,7 @@
       "pattern": "import\\s+(?!type\\s).*\\s+from\\s+['\"]@mmnto/totem['\"]",
       "compiledAt": "2026-03-21T07:35:28.869Z",
       "createdAt": "2026-03-21T07:35:28.869Z",
-      "fileGlobs": [
-        "packages/cli/src/commands/**/*.ts",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "698693bb86cb8cc2",
@@ -2192,12 +1658,7 @@
       "pattern": "\\.replace\\(\\s*process\\.cwd\\(\\)",
       "compiledAt": "2026-03-21T07:35:31.395Z",
       "createdAt": "2026-03-21T07:35:31.395Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "e940f4c791eafc9d",
@@ -2226,9 +1687,7 @@
       "pattern": "(\\\\_|\\\\\\*)",
       "compiledAt": "2026-03-21T07:36:18.501Z",
       "createdAt": "2026-03-21T07:36:18.501Z",
-      "fileGlobs": [
-        "*.md"
-      ]
+      "fileGlobs": ["*.md"]
     },
     {
       "lessonHash": "6749e021fcc85028",
@@ -2239,14 +1698,7 @@
       "pattern": "text-embedding-004",
       "compiledAt": "2026-03-21T07:36:18.501Z",
       "createdAt": "2026-03-21T07:36:18.501Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.py",
-        "**/*.env",
-        "**/*.yaml",
-        "**/*.yml"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.env", "**/*.yaml", "**/*.yml"]
     },
     {
       "lessonHash": "28adb06a2b879edc",
@@ -2258,12 +1710,7 @@
       "astGrepPattern": "import($SOURCE)",
       "compiledAt": "2026-03-21T07:36:30.605Z",
       "createdAt": "2026-03-21T07:36:30.605Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/commands/**/*.ts",
-        "!**/commands/**/*.js"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/commands/**/*.ts", "!**/commands/**/*.js"]
     },
     {
       "lessonHash": "9cede77f72fe608b",
@@ -2274,10 +1721,7 @@
       "pattern": "^(await|const|let|var)\\s+.*(Parser\\.init|Language\\.load)",
       "compiledAt": "2026-03-21T07:37:15.024Z",
       "createdAt": "2026-03-21T07:37:15.024Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js"]
     },
     {
       "lessonHash": "705c32d4820d1089",
@@ -2288,12 +1732,7 @@
       "pattern": "\\blog\\.error\\s*\\(\\s*(?!['\"]Totem Error['\"])|\\blog\\.(warn|info|debug|trace)\\s*\\(\\s*['\"]Totem Error['\"]",
       "compiledAt": "2026-03-21T07:37:44.336Z",
       "createdAt": "2026-03-21T07:37:44.336Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "5d34d2d1c2262add",
@@ -2304,12 +1743,7 @@
       "pattern": "new\\s+RegExp\\(\\s*(?![^'\"`\\s\\)]*escape)([^'\"`\\s\\d][^'\"`\\s\\)]*|\\`[^\\`]*\\$\\{.*\\}.*\\`)\\s*[\\),]",
       "compiledAt": "2026-03-21T07:38:37.653Z",
       "createdAt": "2026-03-21T07:38:37.653Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "ddb842bcd2ea76d3",
@@ -2320,10 +1754,7 @@
       "pattern": "\\.(includes\\(['\"]/['\"]\\)(?!\\s*,\\s*1)|indexOf\\(['\"]/['\"]\\)\\s*(?:>=?\\s*0|!==\\s*-1))",
       "compiledAt": "2026-03-21T07:38:41.084Z",
       "createdAt": "2026-03-21T07:38:41.084Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js"]
     },
     {
       "lessonHash": "8db5440cd22cb81a",
@@ -2335,10 +1766,7 @@
       "astGrepPattern": "JSON.parse($A) as $B",
       "compiledAt": "2026-03-21T07:39:11.636Z",
       "createdAt": "2026-03-21T07:39:11.636Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx"]
     },
     {
       "lessonHash": "3c7773706e5b3b2d",
@@ -2368,12 +1796,7 @@
       "pattern": "\\bmodel\\w*\\b.*(['\"\\/])\\^?\\[[a-zA-Z0-9\\-_]+\\][*+]\\$?\\1",
       "compiledAt": "2026-03-21T07:39:45.935Z",
       "createdAt": "2026-03-21T07:39:45.935Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "1a7080ebf6162de3",
@@ -2400,9 +1823,7 @@
       "pattern": "^Lesson:.{54,}",
       "compiledAt": "2026-03-21T07:40:30.271Z",
       "createdAt": "2026-03-21T07:40:30.271Z",
-      "fileGlobs": [
-        "**/*.md"
-      ]
+      "fileGlobs": ["**/*.md"]
     },
     {
       "lessonHash": "73517376e8d9dca5",
@@ -2413,15 +1834,7 @@
       "pattern": "\\b\\d+\\s*(?:characters?|chars?|words?)\\b",
       "compiledAt": "2026-03-21T07:40:33.419Z",
       "createdAt": "2026-03-21T07:40:33.419Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "**/*.py",
-        "**/*.md",
-        "**/*.txt"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md", "**/*.txt"]
     },
     {
       "lessonHash": "817ececc53e163bb",
@@ -2452,12 +1865,7 @@
       "pattern": "new\\s+RegExp\\s*\\(\\s*[^,]+\\s*,\\s*[^,]*\\.flags\\s*\\+\\s*['\"][^'\"]*g",
       "compiledAt": "2026-03-21T07:40:33.420Z",
       "createdAt": "2026-03-21T07:40:33.420Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "fec2a53d322a5fd4",
@@ -2468,12 +1876,7 @@
       "pattern": "\\b(?:write|append)File(?:Sync)?\\s*\\(\\s*['\"][^'\"]*\\.(?:md|log)['\"]\\s*,\\s*(?![^,]*\\b(?:stripAnsi|sanitize|replace)\\b)[^,)\\s]+",
       "compiledAt": "2026-03-21T07:40:53.001Z",
       "createdAt": "2026-03-21T07:40:53.001Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "411562e8bdcec9a2",
@@ -2484,11 +1887,7 @@
       "pattern": "\\.action\\(\\s*async\\b[^{]*\\{\\s*(?!try\\b)",
       "compiledAt": "2026-03-21T07:41:43.357Z",
       "createdAt": "2026-03-21T07:41:43.357Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "packages/cli/**/*.js",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js", "!**/*.test.ts"]
     },
     {
       "lessonHash": "e88b974f187ba484",
@@ -2500,12 +1899,7 @@
       "astGrepPattern": "spawn($CMD, $ARGS, { $$$BEFORE, shell: true, $$$AFTER })",
       "compiledAt": "2026-03-21T07:42:14.624Z",
       "createdAt": "2026-03-21T07:42:14.624Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "547431b89da28c4d",
@@ -2516,9 +1910,7 @@
       "pattern": "^#.{60,}",
       "compiledAt": "2026-03-21T07:42:46.567Z",
       "createdAt": "2026-03-21T07:42:46.567Z",
-      "fileGlobs": [
-        "*.md"
-      ]
+      "fileGlobs": ["*.md"]
     },
     {
       "lessonHash": "80bd76a4c4651b81",
@@ -2529,9 +1921,7 @@
       "pattern": "\\b#515\\b",
       "compiledAt": "2026-03-21T07:43:01.961Z",
       "createdAt": "2026-03-21T07:43:01.961Z",
-      "fileGlobs": [
-        "**/*.md"
-      ]
+      "fileGlobs": ["**/*.md"]
     },
     {
       "lessonHash": "3fb8d8bf771804fb",
@@ -2543,12 +1933,7 @@
       "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
       "compiledAt": "2026-03-21T07:43:17.117Z",
       "createdAt": "2026-03-21T07:43:17.117Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "5427714960346622",
@@ -2559,9 +1944,7 @@
       "pattern": "throw\\s+new\\s+Error\\(\\s*['\"\\`](?![^'\"\\`]*\\[Totem Error\\])",
       "compiledAt": "2026-03-21T07:43:26.366Z",
       "createdAt": "2026-03-21T07:43:26.366Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts"
-      ]
+      "fileGlobs": ["packages/cli/**/*.ts"]
     },
     {
       "lessonHash": "e2269aee2505521c",
@@ -2572,12 +1955,7 @@
       "pattern": "execFileSync\\s*\\(\\s*['\"]git['\"](?![^)]*shell:\\s*(?:true|IS_WIN))",
       "compiledAt": "2026-03-21T07:43:43.680Z",
       "createdAt": "2026-03-21T07:43:43.680Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "cb854652a786c5d7",
@@ -2588,9 +1966,7 @@
       "pattern": "^#\\s.{61,}",
       "compiledAt": "2026-03-21T07:44:29.835Z",
       "createdAt": "2026-03-21T07:44:29.835Z",
-      "fileGlobs": [
-        "**/*.md"
-      ]
+      "fileGlobs": ["**/*.md"]
     },
     {
       "lessonHash": "45a50e604b60963a",
@@ -2622,10 +1998,7 @@
       "astGrepPattern": "throw $ERR",
       "compiledAt": "2026-03-21T07:45:04.100Z",
       "createdAt": "2026-03-21T07:45:04.100Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "771fb0e59ec42095",
@@ -2636,10 +2009,7 @@
       "pattern": "\\$\\{\\{\\s*(github\\.event|inputs)\\..*\\}\\}",
       "compiledAt": "2026-03-21T07:45:50.468Z",
       "createdAt": "2026-03-21T07:45:50.468Z",
-      "fileGlobs": [
-        ".github/workflows/*.yml",
-        ".github/workflows/*.yaml"
-      ]
+      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml"]
     },
     {
       "lessonHash": "5b961a2a63d69d96",
@@ -2650,9 +2020,7 @@
       "pattern": "open-pull-requests-limit\\s*:\\s*['\"]?[1-9]\\d*['\"]?",
       "compiledAt": "2026-03-21T07:46:01.049Z",
       "createdAt": "2026-03-21T07:46:01.049Z",
-      "fileGlobs": [
-        ".github/dependabot.yml"
-      ]
+      "fileGlobs": [".github/dependabot.yml"]
     },
     {
       "lessonHash": "797e14d294b5f3fd",
@@ -2663,12 +2031,7 @@
       "pattern": "\\.replace(?:All)?\\(\\/[a-zA-Z0-9_-]+\\s*[=:]\\s*[^/()\\n]*\\/\\s*,\\s*['\"](?![^'\"]*\\$\\d)[^'\"]*(?:REDACTED|MASKED|SECRET|FILTERED|\\*{3,})['\"]\\)",
       "compiledAt": "2026-03-21T07:46:44.719Z",
       "createdAt": "2026-03-21T07:46:44.719Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "d34c5054f0dd908a",
@@ -2679,12 +2042,7 @@
       "pattern": "\\bfs(\\.promises)?\\.read(File|FileSync)\\(",
       "compiledAt": "2026-03-21T07:47:08.710Z",
       "createdAt": "2026-03-21T07:47:08.710Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"]
     },
     {
       "lessonHash": "b0ad61d6fd0eafe4",
@@ -2695,12 +2053,7 @@
       "pattern": "\\.split\\(['\"]\\\\n['\"]\\)\\s*\\[",
       "compiledAt": "2026-03-21T07:48:10.171Z",
       "createdAt": "2026-03-21T07:48:10.171Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "a885cb7ba7d393f8",
@@ -2711,12 +2064,7 @@
       "pattern": "\\b(event|type|eventType)\\s*===?\\s*['\"](change|modified|created)['\"](?![^\"']*?['\"]rename['\"])",
       "compiledAt": "2026-03-21T07:48:35.030Z",
       "createdAt": "2026-03-21T07:48:35.030Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.mjs",
-        "**/*.cjs"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.mjs", "**/*.cjs"]
     },
     {
       "lessonHash": "d8e71d6900e46d8c",
@@ -2727,11 +2075,7 @@
       "pattern": "import.*from\\s+['\"]zod['\"]",
       "compiledAt": "2026-03-21T07:48:54.066Z",
       "createdAt": "2026-03-21T07:48:54.066Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "packages/cli/**/*.tsx",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.tsx", "!**/*.test.ts"]
     },
     {
       "lessonHash": "94936169ab6f8d32",
@@ -2742,12 +2086,7 @@
       "pattern": "\\bexecFileSync\\s*\\((?![^)]*shell:\\s*true)",
       "compiledAt": "2026-03-21T07:49:27.518Z",
       "createdAt": "2026-03-21T07:49:27.518Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "e9c1203c7cbfdaa4",
@@ -2758,10 +2097,7 @@
       "pattern": "\\?\\?\\s*(['\"][^'\"]*['\"]|\\d+|true|false)\\s*\\)?\\s+as\\s+",
       "compiledAt": "2026-03-21T07:50:19.353Z",
       "createdAt": "2026-03-21T07:50:19.353Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx"]
     },
     {
       "lessonHash": "3507e492f0f5a192",
@@ -2772,12 +2108,7 @@
       "pattern": "\\.replace\\(\\/\\s*\\[[^\\]`]*['\"%_][^\\]`]*\\]",
       "compiledAt": "2026-03-21T07:51:39.296Z",
       "createdAt": "2026-03-21T07:51:39.296Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "bbfe23900dca4450",
@@ -2824,10 +2155,7 @@
       "pattern": "\\?\\?\\s*(['\"][^'\"]*['\"]|\\d+|true|false)\\s+as\\s+",
       "compiledAt": "2026-03-21T07:52:51.896Z",
       "createdAt": "2026-03-21T07:52:51.896Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx"]
     },
     {
       "lessonHash": "917e59a4359adb20",
@@ -2838,11 +2166,7 @@
       "pattern": "\\bnew\\s+\\w*Error\\(\\s*['\"`](?!\\[Totem Error\\])",
       "compiledAt": "2026-03-21T07:52:51.896Z",
       "createdAt": "2026-03-21T07:52:51.896Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
     },
     {
       "lessonHash": "ba29c80ef7b13c15",
@@ -2868,13 +2192,7 @@
       "pattern": "\\b--body\\b(?!-file)",
       "compiledAt": "2026-03-21T07:52:51.896Z",
       "createdAt": "2026-03-21T07:52:51.896Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.bash",
-        "*.yml",
-        "*.yaml",
-        "packages/cli/**/*.ts"
-      ]
+      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "packages/cli/**/*.ts"]
     },
     {
       "lessonHash": "fe49bb51fe20e80b",
@@ -2885,11 +2203,7 @@
       "pattern": "\\bmcp[a-zA-Z0-9_]*(?!\\?)\\s*:",
       "compiledAt": "2026-03-21T07:53:04.001Z",
       "createdAt": "2026-03-21T07:53:04.001Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "!**/*.test.ts"]
     },
     {
       "lessonHash": "2b570f4ebf0982cd",
@@ -2900,12 +2214,7 @@
       "pattern": "totem\\s+shield\\s+--deterministic",
       "compiledAt": "2026-03-21T07:53:09.583Z",
       "createdAt": "2026-03-21T07:53:09.583Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.yml",
-        "*.yaml",
-        "package.json"
-      ]
+      "fileGlobs": ["*.sh", "*.yml", "*.yaml", "package.json"]
     },
     {
       "lessonHash": "702b94ab71944d67",
@@ -2916,12 +2225,7 @@
       "pattern": "\\bconsole\\.(log|warn|error|info)\\b",
       "compiledAt": "2026-03-21T07:53:48.413Z",
       "createdAt": "2026-03-21T07:53:48.413Z",
-      "fileGlobs": [
-        "lib/**/*.ts",
-        "packages/core/**/*.ts",
-        "src/lib/**/*.ts",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["lib/**/*.ts", "packages/core/**/*.ts", "src/lib/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "468830cbb3cf0e71",
@@ -2932,12 +2236,7 @@
       "pattern": "\\bgit\\s+(?:branch|status|diff|log|describe|show)\\b(?!.*(?:stripAnsi|replace|sed|tr|\\|))",
       "compiledAt": "2026-03-21T07:53:48.413Z",
       "createdAt": "2026-03-21T07:53:48.413Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.sh",
-        "**/*.bash"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh", "**/*.bash"]
     },
     {
       "lessonHash": "6a08238fdff2f808",
@@ -2948,13 +2247,7 @@
       "pattern": "\\b(hook|pattern|glob|include|matches|files)\\b\\s*[:=]\\s*(['\"])\\2",
       "compiledAt": "2026-03-21T07:54:01.977Z",
       "createdAt": "2026-03-21T07:54:01.977Z",
-      "fileGlobs": [
-        "**/*.json",
-        "**/*.yml",
-        "**/*.yaml",
-        "**/*.ts",
-        "**/*.js"
-      ]
+      "fileGlobs": ["**/*.json", "**/*.yml", "**/*.yaml", "**/*.ts", "**/*.js"]
     },
     {
       "lessonHash": "840a9ee072046158",
@@ -2965,12 +2258,7 @@
       "pattern": "\\.includes\\(['\"][^'\"]*README[^'\"]*['\"]\\)",
       "compiledAt": "2026-03-21T07:54:12.750Z",
       "createdAt": "2026-03-21T07:54:12.750Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "9ff38f6159e82c1d",
@@ -3013,12 +2301,7 @@
       "pattern": "\\b(pattern|glob|path)\\.(includes\\(['\"][/\\\\]['\"]\\)|indexOf\\(['\"][/\\\\]['\"]\\)(?!\\s*,\\s*[1-9])(?!\\s*>\\s*0))",
       "compiledAt": "2026-03-21T07:55:35.205Z",
       "createdAt": "2026-03-21T07:55:35.205Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "e3b09f1304e90238",
@@ -3029,14 +2312,7 @@
       "pattern": "\\bgemini\\.md\\b",
       "compiledAt": "2026-03-21T07:55:35.205Z",
       "createdAt": "2026-03-21T07:55:35.205Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.sh",
-        "**/*.yml",
-        "**/*.yaml",
-        "package.json",
-        "**/*.txt"
-      ]
+      "fileGlobs": ["**/*.md", "**/*.sh", "**/*.yml", "**/*.yaml", "package.json", "**/*.txt"]
     },
     {
       "lessonHash": "0c4cd45a9b56ca95",
@@ -3047,10 +2323,7 @@
       "pattern": "\\bthrow\\s+new\\s+(?!Totem)\\w*Error\\(",
       "compiledAt": "2026-03-21T07:55:35.205Z",
       "createdAt": "2026-03-21T07:55:35.205Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "c5396c73d3fc9adf",
@@ -3061,13 +2334,7 @@
       "pattern": "diff --git\\s+a\\/\\S+(?![^\\n]*b\\/\"|[^\\n]*b\\/[^\\s])",
       "compiledAt": "2026-03-21T07:56:01.571Z",
       "createdAt": "2026-03-21T07:56:01.571Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "**/*.py"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.py"]
     },
     {
       "lessonHash": "8a0f9076899ee00f",
@@ -3078,12 +2345,7 @@
       "pattern": "\\.url\\(\\)",
       "compiledAt": "2026-03-21T07:56:26.881Z",
       "createdAt": "2026-03-21T07:56:26.881Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "d2f1385aecbf1d51",
@@ -3094,14 +2356,7 @@
       "pattern": "throw\\s+.*['\"`](?!\\s*\\[Totem Error\\])",
       "compiledAt": "2026-03-21T07:57:17.223Z",
       "createdAt": "2026-03-21T07:57:17.223Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "**/*.mjs",
-        "**/*.cjs"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.mjs", "**/*.cjs"]
     },
     {
       "lessonHash": "061d635e1b2c36bc",
@@ -3112,11 +2367,7 @@
       "pattern": "(^|[^a-zA-Z0-9-_./])#\\d+",
       "compiledAt": "2026-03-21T07:57:17.223Z",
       "createdAt": "2026-03-21T07:57:17.223Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "apps/cli/**/*.ts",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["packages/cli/**/*.ts", "apps/cli/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "995907cf8756e39a",
@@ -3146,11 +2397,7 @@
       "pattern": "\"(?:api[_-]?key|token|secret|password)\"\\s*:\\s*\".+\"",
       "compiledAt": "2026-03-21T07:57:26.805Z",
       "createdAt": "2026-03-21T07:57:26.805Z",
-      "fileGlobs": [
-        "**/*.mcp.json",
-        "**/settings.json",
-        "**/.vscode/settings.json"
-      ]
+      "fileGlobs": ["**/*.mcp.json", "**/settings.json", "**/.vscode/settings.json"]
     },
     {
       "lessonHash": "a449a52e54671a80",
@@ -3161,10 +2408,7 @@
       "pattern": "\\b(message|errorMessage|error)\\s*[:=]\\s*['\"][^'\"]*?\\b([Pp]lease|[Ss]hould|[Tt]ry|[Rr]un|[Ee]nsure|[Mm]ake sure)\\b",
       "compiledAt": "2026-03-21T07:57:51.074Z",
       "createdAt": "2026-03-21T07:57:51.074Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "packages/cli/**/*.js"
-      ]
+      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js"]
     },
     {
       "lessonHash": "ca66f0cecc30bd82",
@@ -3175,12 +2419,7 @@
       "pattern": "\\bconsole\\.error\\s*\\(",
       "compiledAt": "2026-03-21T07:58:00.308Z",
       "createdAt": "2026-03-21T07:58:00.308Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "ac154fa02758dce1",
@@ -3191,11 +2430,7 @@
       "pattern": "\\bconsole\\.(log|warn|error|info|debug|trace)\\b",
       "compiledAt": "2026-03-21T07:58:09.939Z",
       "createdAt": "2026-03-21T07:58:09.939Z",
-      "fileGlobs": [
-        "packages/core/**/*.ts",
-        "libs/**/*.ts",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["packages/core/**/*.ts", "libs/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "116ab168dae04201",
@@ -3206,12 +2441,7 @@
       "pattern": "\\b(coming soon|planned (feature|for)|future release|roadmap|under development|slated for|later development phases)\\b",
       "compiledAt": "2026-03-21T07:58:17.482Z",
       "createdAt": "2026-03-21T07:58:17.482Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.mdx",
-        "docs/**/*",
-        "guides/**/*"
-      ]
+      "fileGlobs": ["**/*.md", "**/*.mdx", "docs/**/*", "guides/**/*"]
     },
     {
       "lessonHash": "60d41ffe66994705",
@@ -3222,12 +2452,7 @@
       "pattern": "[\\w.]+\\s*\\[[^\\]]*\\.indexOf\\(.+?\\)\\s*\\+\\s*1\\s*\\]",
       "compiledAt": "2026-03-21T07:58:20.331Z",
       "createdAt": "2026-03-21T07:58:20.331Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.mjs",
-        "**/*.cjs"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.mjs", "**/*.cjs"]
     },
     {
       "lessonHash": "90eccad00d7df088",
@@ -3239,10 +2464,7 @@
       "astGrepPattern": "$NODE.findAll(typeof $X === 'string' ? $Y : $Z)",
       "compiledAt": "2026-03-21T07:58:42.377Z",
       "createdAt": "2026-03-21T07:58:42.377Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js"]
     },
     {
       "lessonHash": "270832e0401a5c4c",
@@ -3253,12 +2475,7 @@
       "pattern": "\\b(mcp|mcpServer|mcpTool)\\b(?!\\?)\\s*:(?![^;]*\\.optional\\(\\))",
       "compiledAt": "2026-03-21T07:59:11.752Z",
       "createdAt": "2026-03-21T07:59:11.752Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "8b4cc375e7fe2019",
@@ -3269,12 +2486,7 @@
       "pattern": "\\.split\\(\\s*(?:\\/\\^?#+|['\"]\\^?#+)",
       "compiledAt": "2026-03-21T07:59:11.752Z",
       "createdAt": "2026-03-21T07:59:11.752Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "f5165e80950237a8",
@@ -3285,10 +2497,7 @@
       "pattern": "\\[['\"][a-zA-Z_]\\w*['\"]\\]\\s*\\(",
       "compiledAt": "2026-03-21T07:59:11.752Z",
       "createdAt": "2026-03-21T07:59:11.752Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx"]
     },
     {
       "lessonHash": "5e7cc2a0121c0ab4",
@@ -3299,12 +2508,7 @@
       "pattern": "\\b(spyOn|spy|stub)\\(\\s*console\\b",
       "compiledAt": "2026-03-21T07:59:35.585Z",
       "createdAt": "2026-03-21T07:59:35.585Z",
-      "fileGlobs": [
-        "**/*.test.ts",
-        "**/*.test.js",
-        "**/*.spec.ts",
-        "**/*.spec.js"
-      ]
+      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]
     },
     {
       "lessonHash": "ae385d1454537cf0",
@@ -3339,12 +2543,7 @@
       "pattern": "(`(?![^`]*<[a-zA-Z0-9]+>)[^`]*\\$\\{lesson(Content)?\\}[^`]*`|(['\"])(?![^'\"<]*<[a-zA-Z0-9]+>)[^'\"<]*\\2\\s*\\+\\s*lesson(Content)?\\b)",
       "compiledAt": "2026-03-21T08:00:34.992Z",
       "createdAt": "2026-03-21T08:00:34.992Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "838b6ed91dd41f9b",
@@ -3374,9 +2573,7 @@
       "pattern": "^.+$",
       "compiledAt": "2026-03-21T08:01:52.877Z",
       "createdAt": "2026-03-21T08:01:52.877Z",
-      "fileGlobs": [
-        "**/compiled-rules.json"
-      ]
+      "fileGlobs": ["**/compiled-rules.json"]
     },
     {
       "lessonHash": "916e2117b749ce03",
@@ -3406,12 +2603,7 @@
       "pattern": "\\.(?:log|info|debug|trace)\\(\\s*(?:['\"\\`].*?\\b(?:fail|error|exception|failure)\\b|\\b(?:err|error|e)\\b)",
       "compiledAt": "2026-03-21T08:02:57.599Z",
       "createdAt": "2026-03-21T08:02:57.599Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "e56183354e601cae",
@@ -3422,9 +2614,7 @@
       "pattern": "\"(ai-?lint|llm-?lint|lint-?ai|static-?check|pattern-?check)\":|\\\"lint\\\":\\s*\\\"[^\\\"]*\\\\bshield\\\\b[^\\\"]*\\\"",
       "compiledAt": "2026-03-21T08:03:26.315Z",
       "createdAt": "2026-03-21T08:03:26.315Z",
-      "fileGlobs": [
-        "package.json"
-      ]
+      "fileGlobs": ["package.json"]
     },
     {
       "lessonHash": "e997a3f5317bf805",
@@ -3455,11 +2645,7 @@
       "pattern": "\\bid\\s*[:=]\\s*.*\\b(Date\\.now|Math\\.random|uuid|randomUUID)",
       "compiledAt": "2026-03-21T08:03:51.698Z",
       "createdAt": "2026-03-21T08:03:51.698Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
     },
     {
       "lessonHash": "06f8480a32a4a1d0",
@@ -3491,13 +2677,7 @@
       "pattern": "\\b[lL][iI][kK][eE]\\b\\s+['\"\\x60][^'\"\\x60]*\\$\\{\\s*(?!\\w+\\s*\\()[\\w.]+\\s*\\}[^'\"\\x60]*['\"\\x60]",
       "compiledAt": "2026-03-21T08:04:24.196Z",
       "createdAt": "2026-03-21T08:04:24.196Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "**/*.sql"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.sql"]
     },
     {
       "lessonHash": "466ef9140f993dbd",
@@ -3508,12 +2688,7 @@
       "pattern": "(['\"`])\\[[^\\]]+\\].*?\\b(err|error)\\.message\\b(?!.*\\.replace)",
       "compiledAt": "2026-03-21T08:04:24.196Z",
       "createdAt": "2026-03-21T08:04:24.196Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "be6cdf607465c930",
@@ -3524,14 +2699,7 @@
       "pattern": "\\[['\"](?:_|init|setup|bootstrap|initialize)\\w*['\"]\\]\\s*\\(",
       "compiledAt": "2026-03-21T08:04:41.670Z",
       "createdAt": "2026-03-21T08:04:41.670Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts", "!**/*.spec.ts"]
     },
     {
       "lessonHash": "d028ccfe660860fd",
@@ -3543,12 +2711,7 @@
       "astGrepPattern": "try { $$$A; execSync($$$B, { $$$C, stdio: 'inherit', $$$D }); $$$E; } catch ($$$F) { $$$G; }",
       "compiledAt": "2026-03-21T08:05:17.304Z",
       "createdAt": "2026-03-21T08:05:17.304Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "1ce4bdde8d6e800d",
@@ -3559,12 +2722,7 @@
       "pattern": "(?=.*\\$\\{.*(?:description|comment|body|user_?input|userInput).*\\})(?!.*untrusted[ _-]content)",
       "compiledAt": "2026-03-21T08:05:50.608Z",
       "createdAt": "2026-03-21T08:05:50.608Z",
-      "fileGlobs": [
-        "**/prompts/**/*",
-        "**/ai/**/*",
-        "**/llm/**/*",
-        "**/*prompt*"
-      ]
+      "fileGlobs": ["**/prompts/**/*", "**/ai/**/*", "**/llm/**/*", "**/*prompt*"]
     },
     {
       "lessonHash": "7e51180103c25af5",
@@ -3575,14 +2733,7 @@
       "pattern": "(['\"\\/])\\^?\\+\\+\\+\\s+b\\\\?\\/",
       "compiledAt": "2026-03-21T08:06:06.626Z",
       "createdAt": "2026-03-21T08:06:06.626Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.py",
-        "**/*.sh",
-        "**/*.go",
-        "**/*.rs"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh", "**/*.go", "**/*.rs"]
     },
     {
       "lessonHash": "9355430ce50aea6a",
@@ -3593,12 +2744,7 @@
       "pattern": "\\bfs\\.(promises|readFile|writeFile|readdir|mkdir|rm|stat|access|appendFile|copyFile|rename|unlink)\\b|['\"]fs/promises['\"]",
       "compiledAt": "2026-03-21T08:06:06.626Z",
       "createdAt": "2026-03-21T08:06:06.626Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "packages/cli/**/*.js",
-        "bin/**/*.ts",
-        "bin/**/*.js"
-      ]
+      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js", "bin/**/*.ts", "bin/**/*.js"]
     },
     {
       "lessonHash": "3f38691c1e69ee88",
@@ -3641,11 +2787,7 @@
       "pattern": "\\b(escapeXml|escapeHtml|encodeXml|formatXmlResponse)\\s*\\(",
       "compiledAt": "2026-03-21T08:06:49.594Z",
       "createdAt": "2026-03-21T08:06:49.594Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "apps/cli/**/*.ts",
-        "**/cli/**/*.ts"
-      ]
+      "fileGlobs": ["packages/cli/**/*.ts", "apps/cli/**/*.ts", "**/cli/**/*.ts"]
     },
     {
       "lessonHash": "6c32009899d3cfdf",
@@ -3656,13 +2798,7 @@
       "pattern": "\\busage\\s*\\.\\s*(prompt_tokens|completion_tokens|total_tokens)\\b",
       "compiledAt": "2026-03-21T08:06:49.594Z",
       "createdAt": "2026-03-21T08:06:49.594Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"]
     },
     {
       "lessonHash": "53a33008bf2e422e",
@@ -3690,13 +2826,7 @@
       "pattern": "(<\\\\?\\/[\\w:_-]+>|\\/<\\\\\\/\\s*[\\w:_-]+\\s*>\\/(?![^\\/\\n]*i))",
       "compiledAt": "2026-03-21T08:07:48.964Z",
       "createdAt": "2026-03-21T08:07:48.964Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"]
     },
     {
       "lessonHash": "7d456edf2b3a1554",
@@ -3707,12 +2837,7 @@
       "pattern": "\\b(console\\.error|logger\\.error|new\\s+Error)\\s*\\((?![^)]*Totem Error)",
       "compiledAt": "2026-03-21T08:08:30.265Z",
       "createdAt": "2026-03-21T08:08:30.265Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "d69a222f170d6d3d",
@@ -3723,10 +2848,7 @@
       "pattern": "\\b(process\\.exit|console\\.error|console\\.warn)\\(",
       "compiledAt": "2026-03-21T08:08:56.078Z",
       "createdAt": "2026-03-21T08:08:56.078Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "49fd13c2ff2eae88",
@@ -3737,10 +2859,7 @@
       "pattern": "\\btext:\\s*['\"]['\"]",
       "compiledAt": "2026-03-21T08:09:06.753Z",
       "createdAt": "2026-03-21T08:09:06.753Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]
     },
     {
       "lessonHash": "a5da42b79e964510",
@@ -3752,11 +2871,7 @@
       "astGrepPattern": "console.$METHOD($$$ARGS)",
       "compiledAt": "2026-03-21T08:09:19.775Z",
       "createdAt": "2026-03-21T08:09:19.775Z",
-      "fileGlobs": [
-        "packages/core/**/*.ts",
-        "packages/core/**/*.js",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["packages/core/**/*.ts", "packages/core/**/*.js", "!**/*.test.ts"]
     },
     {
       "lessonHash": "f07dbd649a8c147c",
@@ -3787,10 +2902,7 @@
       "pattern": "\\}\\s*as\\s+Error\\b",
       "compiledAt": "2026-03-21T08:09:55.445Z",
       "createdAt": "2026-03-21T08:09:55.445Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx"]
     },
     {
       "lessonHash": "ef82bb08588407c9",
@@ -3801,12 +2913,7 @@
       "pattern": "\\b(fs\\.promises|['\"]fs/promises['\"])\\b",
       "compiledAt": "2026-03-21T08:10:08.688Z",
       "createdAt": "2026-03-21T08:10:08.688Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "packages/cli/**/*.js",
-        "bin/**/*.ts",
-        "bin/**/*.js"
-      ]
+      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js", "bin/**/*.ts", "bin/**/*.js"]
     },
     {
       "lessonHash": "47a22620cd00e637",
@@ -3836,14 +2943,7 @@
       "astGrepPattern": "console.$METHOD($$$)",
       "compiledAt": "2026-03-21T08:11:01.170Z",
       "createdAt": "2026-03-21T08:11:01.170Z",
-      "fileGlobs": [
-        "*.ts",
-        "*.js",
-        "!*.test.ts",
-        "!*.test.js",
-        "!*.spec.ts",
-        "!*.spec.js"
-      ]
+      "fileGlobs": ["*.ts", "*.js", "!*.test.ts", "!*.test.js", "!*.spec.ts", "!*.spec.js"]
     },
     {
       "lessonHash": "237fdede2e40f456",
@@ -3854,10 +2954,7 @@
       "pattern": "^(npx|node|npm|pnpm|yarn|bun)\\b",
       "compiledAt": "2026-03-21T08:11:01.170Z",
       "createdAt": "2026-03-21T08:11:01.170Z",
-      "fileGlobs": [
-        ".husky/*",
-        ".git/hooks/*"
-      ]
+      "fileGlobs": [".husky/*", ".git/hooks/*"]
     },
     {
       "lessonHash": "e61224a2a46e31bc",
@@ -3868,9 +2965,7 @@
       "pattern": "session\\.(start|end)|beforeDisconnect",
       "compiledAt": "2026-03-21T08:11:01.170Z",
       "createdAt": "2026-03-21T08:11:01.170Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts"
-      ]
+      "fileGlobs": ["packages/mcp/**/*.ts"]
     },
     {
       "lessonHash": "4a7a6a4348ff08e0",
@@ -3881,10 +2976,7 @@
       "pattern": "\\b[Ll]ocal\\s+[Bb]rain\\b",
       "compiledAt": "2026-03-21T08:11:06.736Z",
       "createdAt": "2026-03-21T08:11:06.736Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.mdx"
-      ]
+      "fileGlobs": ["**/*.md", "**/*.mdx"]
     },
     {
       "lessonHash": "4a408d868a972f5f",
