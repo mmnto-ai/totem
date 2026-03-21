@@ -1,40 +1,32 @@
 # Totem — Development Rules
 
-## Git
+## Essentials
 
-- `main` is protected. Always use feature branches + PRs.
-- Never amend commits on feature branches — create new commits.
+- **pnpm only** (never npm/yarn). Use `pnpm dlx` (never `npx`). Windows 11 + Git Bash. TypeScript strict mode.
+- `main` is protected. Feature branches + PRs. Never amend commits on feature branches.
 - Use `Closes #NNN` in PR descriptions.
-
-## Environment
-
-- **pnpm only** (never npm/yarn). Use `pnpm dlx` (never `npx`).
-- Windows 11 + Git Bash. TypeScript strict mode.
+- `kebab-case.ts` files, `err` (never `error`) in catch blocks, no empty catches.
+- Run `pnpm run format` before committing.
 - **NEVER put secrets in config files.** `.env` only.
 
-## Code Style
+## Totem Workflow (BLOCKING)
 
-- `kebab-case.ts` files, `err` (never `error`) in catch blocks, no empty catches.
-- Named constants for magic numbers. Zod at system boundaries only.
-- Run `pnpm run format` before committing.
-
-## Publishing
-
-- Changesets (write `.changeset/` files manually). Use `pnpm run version` (never bare `pnpm version`).
+- Before writing code: call `search_knowledge` with what you're changing
+- Before planning/architecture: query `totem-strategy:search_knowledge` for ADRs
+- After merging a PR: run `totem extract <pr> --yes`, then `totem docs` if releasing
+- **NEVER use `git push --no-verify`.** Fix the violation or file a ticket.
 
 ## Contributor Principles
 
 <!-- totem-ignore-next-line -->
-
 - Update `AI_PROMPT_BLOCK` in `init.ts` when changing reflexes/hooks/prompts.
 <!-- totem-ignore-next-line -->
 - GCA decline: add lesson with `review-guidance` tag + update `.gemini/styleguide.md` §6.
 - No `totem-ignore`, `eslint-disable`, or `--no-verify` without a ticket.
 - GCA replies: ONE `@gemini-code-assist` comment per PR.
 
-## Totem
+## Detailed Rules
 
-- After merging a PR: run `totem extract <pr> --yes`, then `totem docs` if releasing.
-- **NEVER use `git push --no-verify`.** Fix the violation or file a ticket.
-- Before planning/architecture, query `totem-strategy:search_knowledge` for ADRs.
-- Before writing code, you MUST call `search_knowledge` with a query describing what you're about to change.
+- See `.gemini/styleguide.md` for full code style, naming, and architecture rules.
+- Changesets: write `.changeset/` files manually. Use `pnpm run version` (never bare `pnpm version`).
+- Named constants for magic numbers. Zod at system boundaries only.
