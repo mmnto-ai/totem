@@ -69,7 +69,6 @@ function runLint(
     const child = spawn(cmd, args, {
       cwd: projectRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
-      shell: true,
       windowsHide: true,
       detached: !isWin, // process group for clean tree-kill on Unix
     });

@@ -30,8 +30,8 @@ const MAX_OUTPUT_BYTES = 10_000;
 let activeSyncPromise: Promise<{ success: boolean; output: string }> | null = null;
 
 /**
- * Kill a child process tree. With `shell: true`, child.kill() only kills the
- * shell — we need to kill the process group to prevent orphaned children.
+ * Kill a child process tree. With `detached: true`, child.kill() only kills the
+ * lead process — we need to kill the process group to prevent orphaned children.
  */
 function killTree(child: ReturnType<typeof spawn>): void {
   if (child.pid == null) return;
@@ -63,7 +63,6 @@ function runSync(projectRoot: string): Promise<{ success: boolean; output: strin
       cwd: projectRoot,
       detached: process.platform !== 'win32', // enables process group kill on Unix
       stdio: ['ignore', 'pipe', 'pipe'],
-      shell: true,
       windowsHide: true,
     });
 
