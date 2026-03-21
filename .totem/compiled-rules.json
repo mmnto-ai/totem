@@ -4,146 +4,145 @@
     {
       "lessonHash": "f7fc104cac7efdcf",
       "lessonHeading": "Sanitize user-provided text before persisting to files",
+      "pattern": "\\.(?:write|append)File(?:Sync)?\\s*\\(\\s*['\"`][^'\"`]+\\.(?:md|log)['\"`]\\s*,\\s*(?![^,)]*(?:stripAnsi|sanitize))",
       "message": "Sanitize ANSI escape sequences (e.g., using 'strip-ansi') before writing user-provided text to .md or .log files to prevent terminal injection vulnerabilities.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(?:write|append)File(?:Sync)?\\s*\\(\\s*['\"`][^'\"`]+\\.(?:md|log)['\"`]\\s*,\\s*(?![^,)]*(?:stripAnsi|sanitize))",
       "compiledAt": "2026-03-21T06:36:05.566Z",
       "createdAt": "2026-03-21T06:36:05.566Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "8969d8bc95c3864b",
       "lessonHeading": "Git diff headers wrap file paths containing spaces",
+      "pattern": "\\+\\+\\+ [ab]\\/",
       "message": "Git diff headers wrap paths with spaces in double quotes (e.g., +++ \"b/path\"). Ensure parsing logic accounts for optional quotes before the 'a/' or 'b/' prefix.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\+\\+\\+ [ab]\\/",
       "compiledAt": "2026-03-21T06:36:57.866Z",
       "createdAt": "2026-03-21T06:36:57.866Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.go", "**/*.py", "!**/*.test.*", "!**/*_test.go"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.go", "**/*.py", "!**/*.test.*", "!**/*_test.go"],
+      "severity": "warning"
     },
     {
       "lessonHash": "009679a6abb474e2",
       "lessonHeading": "When timing out a child process, do not reject the promise",
+      "pattern": "",
       "message": "When timing out a child process, do not reject the promise immediately within the setTimeout callback. Instead, call child.kill() and perform the rejection inside the 'close' event handler to ensure all stdio streams have fully flushed and captured the complete error log.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "setTimeout(() => { $$$ reject($$$) $$$ }, $TIME)",
       "compiledAt": "2026-03-21T06:37:58.847Z",
       "createdAt": "2026-03-21T06:37:58.847Z",
-      "fileGlobs": ["**/*.ts", "**/*.js"]
+      "fileGlobs": ["**/*.ts", "**/*.js"],
+      "severity": "warning"
     },
     {
       "lessonHash": "bb937a42753289f1",
       "lessonHeading": "Synchronous execSync with piped stdio can cause the parent",
+      "pattern": "\\bexecSync\\s*\\(",
       "message": "Synchronous execSync with piped stdio (the default) can cause the parent process to hang or abort silently. Use asynchronous spawn with manual stream collection instead.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bexecSync\\s*\\(",
       "compiledAt": "2026-03-21T06:38:51.398Z",
       "createdAt": "2026-03-21T06:38:51.398Z",
-      "fileGlobs": ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"]
+      "fileGlobs": ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "09edb9a76a7bc3dc",
       "lessonHeading": "Do not manually edit machine-generated artifacts",
+      "pattern": "^.*$",
       "message": "Do not manually edit machine-generated artifacts like compiled-rules.json. Fixes must be applied to the source lessons or the compiler logic to ensure they are not overwritten.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^.*$",
       "compiledAt": "2026-03-21T06:39:26.739Z",
       "createdAt": "2026-03-21T06:39:26.739Z",
-      "fileGlobs": ["**/compiled-rules.json"]
+      "fileGlobs": ["**/compiled-rules.json"],
+      "severity": "warning"
     },
     {
       "lessonHash": "5f3a95295db82291",
       "lessonHeading": "The Git -- separator treats all subsequent arguments",
+      "pattern": "\\bgit\\s+[a-z-]+\\s+.*--\\s+.*(\\S+\\.{2,3}\\S+|HEAD\\b|@\\b)",
       "message": "Revision specifiers (like 'branch..HEAD' or 'HEAD') must appear before the '--' separator in Git commands; arguments after '--' are treated strictly as file paths.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bgit\\s+[a-z-]+\\s+.*--\\s+.*(\\S+\\.{2,3}\\S+|HEAD\\b|@\\b)",
       "compiledAt": "2026-03-21T06:39:37.213Z",
       "createdAt": "2026-03-21T06:39:37.213Z",
-      "fileGlobs": ["*.sh", "*.bash", "*.zsh", "*.yml", "*.yaml", "Makefile", "package.json"]
+      "fileGlobs": ["*.sh", "*.bash", "*.zsh", "*.yml", "*.yaml", "Makefile", "package.json"],
+      "severity": "warning"
     },
     {
       "lessonHash": "84458e64c4ae2379",
       "lessonHeading": "When using the @google/genai SDK (v1+), the constructor",
+      "pattern": "\\bGoogleGenerativeAI\\s*\\(\\s*[^\\s{]",
       "message": "When using the @google/genai v1+ SDK, the constructor requires an options object (e.g., { apiKey: '...' }) instead of a raw string or variable.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bGoogleGenerativeAI\\s*\\(\\s*[^\\s{]",
       "compiledAt": "2026-03-21T06:40:23.231Z",
       "createdAt": "2026-03-21T06:40:23.231Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "24d9d2ae3496bd95",
       "lessonHeading": "When normalizing diverse SDK errors for internal retry",
+      "pattern": "",
       "message": "When normalizing SDK errors, mutate the original error's '.name' property and re-throw it instead of creating a new Error instance. This preserves the original stack trace and provider-specific metadata.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "try { $$$ } catch ($E) { $$$ throw new $ERR($$$) $$$ }",
       "compiledAt": "2026-03-21T06:40:49.240Z",
       "createdAt": "2026-03-21T06:40:49.240Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "fdd2206acd4ea992",
       "lessonHeading": "Avoid refactoring synchronous factory functions to async",
+      "pattern": "",
       "message": "Avoid refactoring synchronous factory functions to async just to hoist dynamic import() calls. Node.js caches dynamic imports after the first call; use top-level imports or keep the factory synchronous to avoid unnecessary async boilerplate propagation.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "async function $NAME($$$) { $$$ await import($$$) $$$ }",
       "compiledAt": "2026-03-21T06:41:09.659Z",
       "createdAt": "2026-03-21T06:41:09.659Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "525062ddda2989aa",
       "lessonHeading": "Centralize error signature detection (such as 429 status",
+      "pattern": "\\.(includes|indexOf)\\s*\\(\\s*['\"]rate limit['\"]\\s*\\)|(status|code|statusCode)\\s*===?\\s*429",
       "message": "Centralize error signature detection (e.g., 429 status or 'rate limit' strings) into a shared utility to ensure consistent handling across native SDKs and CLI/shell execution paths.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(includes|indexOf)\\s*\\(\\s*['\"]rate limit['\"]\\s*\\)|(status|code|statusCode)\\s*===?\\s*429",
       "compiledAt": "2026-03-21T06:41:24.154Z",
       "createdAt": "2026-03-21T06:41:24.154Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts", "!**/*.spec.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts", "!**/*.spec.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "b9e4125e6a31f2cf",
       "lessonHeading": "Use path.relative(process.cwd(),",
+      "pattern": "",
       "message": "Use path.relative(process.cwd(), path.resolve(process.cwd(), input)) for robust path normalization instead of simple string replacements (e.g. .replace(process.cwd(), '')).",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "$OBJ.replace(process.cwd(), $REPLACEMENT)",
       "compiledAt": "2026-03-21T06:41:58.539Z",
       "createdAt": "2026-03-21T06:41:58.539Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "1c7a70ec1752a212",
       "lessonHeading": "Always use fully qualified identifiers for caching",
+      "pattern": "\\b(model|cacheKey|modelId|modelHash)\\s*[:=]\\s*['\"][^'\":]+['\"]",
       "message": "Always use fully qualified identifiers (e.g., 'provider:model') for cache hashing and telemetry to prevent cross-provider collisions.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(model|cacheKey|modelId|modelHash)\\s*[:=]\\s*['\"][^'\":]+['\"]",
       "compiledAt": "2026-03-21T06:42:10.970Z",
       "createdAt": "2026-03-21T06:42:10.970Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "32ec1dbb9c6dbd48",
       "lessonHeading": "Use vi.importActual in mocks to preserve utility functions",
+      "pattern": "",
       "message": "Use vi.importActual() or the (importOriginal) factory argument to preserve utility functions. Re-implementing utilities in mocks is brittle.",
       "engine": "ast",
-      "severity": "warning",
-      "pattern": "",
       "astQuery": "(call_expression function: (member_expression object: (identifier) @vi (#match? @vi \"^(vi|vitest)$\") property: (property_identifier) @method (#eq? @method \"mock\")) arguments: (arguments (_) [(arrow_function body: (_) @body (#not-match? @body \"importActual|importOriginal\")) (function_expression body: (_) @body (#not-match? @body \"importActual|importOriginal\"))])) @violation",
       "compiledAt": "2026-03-21T06:42:38.919Z",
       "createdAt": "2026-03-21T06:42:38.919Z",
@@ -156,15 +155,15 @@
         "**/*.test.jsx",
         "**/*.spec.js",
         "**/*.spec.jsx"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "d487264e210913a4",
       "lessonHeading": "Prefer Vitest's expect().rejects.toHaveProperty()",
+      "pattern": "",
       "message": "Prefer Vitest's expect().rejects.toHaveProperty() assertions over manual try/catch blocks with expect.fail()",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "try { $$$PRE; expect.fail($$$ARGS); $$$POST } catch ($ERR) { $$$CATCH }",
       "compiledAt": "2026-03-21T06:43:38.031Z",
       "createdAt": "2026-03-21T06:43:38.031Z",
@@ -177,26 +176,26 @@
         "**/*.spec.tsx",
         "**/*.spec.js",
         "**/*.spec.jsx"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "a6f2d3a89d9ebae8",
       "lessonHeading": "Setting open-pull-requests-limit to 0 in dependabot.yml",
+      "pattern": "open-pull-requests-limit:\\s*(?!0\\b)\\d+",
       "message": "Set open-pull-requests-limit to 0 in dependabot.yml to suppress routine version bumps while allowing security updates via GitHub settings.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "open-pull-requests-limit:\\s*(?!0\\b)\\d+",
       "compiledAt": "2026-03-21T06:46:10.910Z",
       "createdAt": "2026-03-21T06:46:10.910Z",
-      "fileGlobs": ["**/.github/dependabot.yml"]
+      "fileGlobs": ["**/.github/dependabot.yml"],
+      "severity": "warning"
     },
     {
       "lessonHash": "49cf779ef649ffde",
       "lessonHeading": "Synchronous file operations are often preferable in CLI",
+      "pattern": "\\bfs\\.promises\\b|['\"](?:node:)?fs/promises['\"]|await\\s+fs\\.(?![a-zA-Z0-9]*Sync\\b)",
       "message": "Prefer synchronous file operations in CLI tools (e.g., fs.readFileSync) for simplicity; blocking the event loop is acceptable in short-lived CLI processes.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bfs\\.promises\\b|['\"](?:node:)?fs/promises['\"]|await\\s+fs\\.(?![a-zA-Z0-9]*Sync\\b)",
       "compiledAt": "2026-03-21T06:47:07.794Z",
       "createdAt": "2026-03-21T06:47:07.794Z",
       "fileGlobs": [
@@ -206,148 +205,148 @@
         "bin/**/*.js",
         "!**/*.test.ts",
         "!**/*.test.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "3cbe6d5f6544532c",
       "lessonHeading": "Provide a dummy fallback API key (e.g., 'local-only')",
+      "pattern": "\\bapiKey\\s*:\\s*(['\"]['\"]|[\\w\\.]+\\s*(?:\\|\\||\\?\\?)\\s*['\"]['\"])",
       "message": "Provide a dummy fallback API key (e.g., 'local-only') instead of an empty string to bypass client-side SDK validation for local endpoints like Ollama.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bapiKey\\s*:\\s*(['\"]['\"]|[\\w\\.]+\\s*(?:\\|\\||\\?\\?)\\s*['\"]['\"])",
       "compiledAt": "2026-03-21T06:48:15.815Z",
       "createdAt": "2026-03-21T06:48:15.815Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "449dde17cfcc4a2a",
       "lessonHeading": "Treat usage and token statistics as optional fields",
+      "pattern": "\\busage\\.(prompt_tokens|completion_tokens|total_tokens)\\b",
       "message": "Usage and token statistics are optional in many OpenAI-compatible APIs. Access them defensively using optional chaining (e.g., usage?.total_tokens) to prevent runtime crashes when fields are omitted by third-party providers.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\busage\\.(prompt_tokens|completion_tokens|total_tokens)\\b",
       "compiledAt": "2026-03-21T06:48:36.799Z",
       "createdAt": "2026-03-21T06:48:36.799Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "4fab6d3fd93f1a87",
       "lessonHeading": "Wrap user-controlled fields like PR descriptions",
+      "pattern": "^(?!.*untrusted).*\\$\\{(?:[^}]*(?:description|comment|body)[^}]*)\\}",
       "message": "User-controlled fields like PR descriptions or comments must be wrapped in XML tags explicitly labeled as 'untrusted content' within system prompts to prevent injection.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^(?!.*untrusted).*\\$\\{(?:[^}]*(?:description|comment|body)[^}]*)\\}",
       "compiledAt": "2026-03-21T06:49:04.367Z",
       "createdAt": "2026-03-21T06:49:04.367Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "a8ade9d9b017f7b3",
       "lessonHeading": "Sanitize git-sourced metadata like branch names, status,",
+      "pattern": "\\bgit\\s+(status|branch|diff)\\b(?!.*(--no-color|--porcelain))",
       "message": "Sanitize git-sourced metadata (branch, status, diff) to remove ANSI escape sequences and control characters. Use --no-color, --porcelain, or a stripping library to prevent parsing errors.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bgit\\s+(status|branch|diff)\\b(?!.*(--no-color|--porcelain))",
       "compiledAt": "2026-03-21T06:49:31.562Z",
       "createdAt": "2026-03-21T06:49:31.562Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh", "**/*.bash", "**/*.yml", "**/*.yaml"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh", "**/*.bash", "**/*.yml", "**/*.yaml"],
+      "severity": "warning"
     },
     {
       "lessonHash": "7e74cc89f71bacf5",
       "lessonHeading": "Ollama num_ctx and VRAM: The OpenAI-compatible API adapter",
+      "pattern": "",
       "message": "Ollama's 'num_ctx' must be wrapped in an 'options' object (e.g., options: { num_ctx: ... }). The OpenAI-compatible adapter does not support passing 'num_ctx' at the top level of the request.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "{ $$$ , num_ctx: $V, model: $M, $$$ }",
       "compiledAt": "2026-03-21T06:50:45.453Z",
       "createdAt": "2026-03-21T06:50:45.453Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "89b94dbfedfae9ab",
       "lessonHeading": "Casting an object literal to an Error type does not satisfy",
+      "pattern": "(\\{.*\\}\\s+as\\s+Error|<\\s*Error\\s*>\\s*\\{.*\\})",
       "message": "Casting an object literal to an Error type does not satisfy 'instanceof Error' checks because the prototype chain is missing at runtime. Use 'Object.assign(new Error(message), properties)' to ensure objects pass both TypeScript validation and runtime prototype inspections.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(\\{.*\\}\\s+as\\s+Error|<\\s*Error\\s*>\\s*\\{.*\\})",
       "compiledAt": "2026-03-21T06:52:30.714Z",
       "createdAt": "2026-03-21T06:52:30.714Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "2b790d1938f8d223",
       "lessonHeading": "Avoid using Zod's .url() validator for configurations where",
+      "pattern": "\\.string\\(\\).*\\.url\\(\\)",
       "message": "Avoid using Zod's .url() validator for configuration fields; it requires a protocol prefix (like 'http://') which prevents users from providing bare hostnames or host:port combinations.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.string\\(\\).*\\.url\\(\\)",
       "compiledAt": "2026-03-21T06:52:43.493Z",
       "createdAt": "2026-03-21T06:52:43.493Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "16d10e42d757de78",
       "lessonHeading": "Detect existing hook managers and provide manual guidance",
+      "pattern": "\\.git/hooks",
       "message": "Avoid writing directly to .git/hooks. Detect existing hook managers (like Husky or Lefthook) and provide manual integration guidance instead to avoid clobbering developer workflows.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.git/hooks",
       "compiledAt": "2026-03-21T06:54:54.573Z",
       "createdAt": "2026-03-21T06:54:54.573Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh", "**/*.bash", "**/*.py"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh", "**/*.bash", "**/*.py"],
+      "severity": "warning"
     },
     {
       "lessonHash": "b89cad573b04fd56",
       "lessonHeading": "Moving security-sensitive regexes (like BiDi stripping",
+      "pattern": "(\\/<\\\\\\/\\w+>|\\\\\\\\u202[a-eA-E])",
       "message": "Move security-sensitive regexes (BiDi stripping, XML bypass defense) to core packages. Ensure XML patterns allow for optional whitespace (e.g., </\\s*tag\\s*>) to prevent prompt injection evasion.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(\\/<\\\\\\/\\w+>|\\\\\\\\u202[a-eA-E])",
       "compiledAt": "2026-03-21T06:56:12.331Z",
       "createdAt": "2026-03-21T06:56:12.331Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "5a4b3fd8e71882e8",
       "lessonHeading": "When detecting Bun environments, check for both bun.lockb",
+      "pattern": "^(?!.*bun\\.lock\\b).*bun\\.lockb",
       "message": "When detecting Bun environments, check for both 'bun.lockb' and 'bun.lock' (Bun >= 1.2). Ensure detection priority is explicitly defined (e.g., pnpm > yarn > bun > npx).",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^(?!.*bun\\.lock\\b).*bun\\.lockb",
       "compiledAt": "2026-03-21T06:56:50.893Z",
       "createdAt": "2026-03-21T06:56:50.893Z",
-      "fileGlobs": ["*.ts", "*.js", "*.sh", "*.yml", "*.yaml"]
+      "fileGlobs": ["*.ts", "*.js", "*.sh", "*.yml", "*.yaml"],
+      "severity": "warning"
     },
     {
       "lessonHash": "52ae1e9b8ef65385",
       "lessonHeading": "Ensure model name validation regexes explicitly allow",
+      "pattern": "\\bmodel(?:Name|Regex|Pattern|Id)?\\b.*(\\/|'|\")\\^?\\[[a-zA-Z0-9\\-_]+\\][+*]?\\$?\\1",
       "message": "Model name validation regexes must explicitly allow dots (.) to accommodate newer naming schemes like gpt-5.4.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bmodel(?:Name|Regex|Pattern|Id)?\\b.*(\\/|'|\")\\^?\\[[a-zA-Z0-9\\-_]+\\][+*]?\\$?\\1",
       "compiledAt": "2026-03-21T06:57:03.648Z",
       "createdAt": "2026-03-21T06:57:03.648Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "e1046c772a6bb6f9",
       "lessonHeading": "Use pnpm exec for workspace binaries in monorepos",
+      "pattern": "\\bpnpm\\s+bin\\b",
       "message": "Use 'pnpm exec' instead of 'pnpm bin' for workspace binaries (more reliable in monorepos)",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bpnpm\\s+bin\\b",
       "compiledAt": "2026-03-21T06:57:11.663Z",
       "createdAt": "2026-03-21T06:57:11.663Z",
-      "fileGlobs": ["package.json", "*.sh", "*.bash", "*.yml", "*.yaml"]
+      "fileGlobs": ["package.json", "*.sh", "*.bash", "*.yml", "*.yaml"],
+      "severity": "warning"
     },
     {
       "lessonHash": "1cc6a460ad508b68",
       "lessonHeading": "Verify CLI availability in shared git hooks before execution",
+      "pattern": "^\\s*(?!(#|if|command|type|which|\\[|&&|\\|\\||[A-Z_]+=))\\s*(eslint|prettier|jest|vitest|tsc|lint-staged|husky|turbo|aws|jq|yq|npm|pnpm|yarn)\\b",
       "message": "Verify CLI availability (e.g., using 'command -v <tool>') before execution in git hooks to prevent brittle CI failures.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^\\s*(?!(#|if|command|type|which|\\[|&&|\\|\\||[A-Z_]+=))\\s*(eslint|prettier|jest|vitest|tsc|lint-staged|husky|turbo|aws|jq|yq|npm|pnpm|yarn)\\b",
       "compiledAt": "2026-03-21T06:57:52.383Z",
       "createdAt": "2026-03-21T06:57:52.383Z",
       "fileGlobs": [
@@ -357,15 +356,15 @@
         "hooks/**",
         "*.sh",
         "*.bash"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "d245b21395563e6f",
       "lessonHeading": "Resolve git root via rev-parse for monorepo compatibility",
+      "pattern": "(\\.(existsSync|statSync|join|resolve|findUp)\\s*\\([^)]*['\"]\\.git['\"]|\\[\\s+-d\\s+[^\\s\\]]*\\.git|test\\s+-d\\s+[^\\s;&]*\\.git)",
       "message": "Resolve the git repository root using 'git rev-parse --show-toplevel' instead of checking for a local '.git' directory, which is incompatible with monorepos, submodules, and worktrees.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(\\.(existsSync|statSync|join|resolve|findUp)\\s*\\([^)]*['\"]\\.git['\"]|\\[\\s+-d\\s+[^\\s\\]]*\\.git|test\\s+-d\\s+[^\\s;&]*\\.git)",
       "compiledAt": "2026-03-21T06:58:42.266Z",
       "createdAt": "2026-03-21T06:58:42.266Z",
       "fileGlobs": [
@@ -377,61 +376,61 @@
         "**/*.yaml",
         "!**/*.test.ts",
         "!**/*.spec.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "e66544fffe1bbab8",
       "lessonHeading": "Windows requires shell:true for git binary resolution",
+      "pattern": "execFileSync\\s*\\(\\s*['\"]git['\"]\\s*(?![^)]*shell:\\s*true)",
       "message": "When using execFileSync with 'git', include { shell: true } to ensure the binary is resolved correctly on Windows.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "execFileSync\\s*\\(\\s*['\"]git['\"]\\s*(?![^)]*shell:\\s*true)",
       "compiledAt": "2026-03-21T06:58:56.946Z",
       "createdAt": "2026-03-21T06:58:56.946Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "472e287ab57c6aee",
       "lessonHeading": "LLMs are notoriously poor at character counting; use",
+      "pattern": "\\b(max|maximum|limit|under|than|most|length)\\b\\s*\\d+\\s*(chars?|characters?)\\b",
       "message": "LLMs are poor at character counting; use semantic constraints like 'one to two short sentences' instead of numeric character limits to ensure reliable adherence.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(max|maximum|limit|under|than|most|length)\\b\\s*\\d+\\s*(chars?|characters?)\\b",
       "compiledAt": "2026-03-21T06:59:15.315Z",
       "createdAt": "2026-03-21T06:59:15.315Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"],
+      "severity": "warning"
     },
     {
       "lessonHash": "064f35405ec02082",
       "lessonHeading": "Always iterate through all regex matches (e.g.,",
+      "pattern": "",
       "message": "Use matchAll() instead of match() to iterate through all matches. Relying on the first match allows 'shadowing' where an attacker prefixes a payload with a safe match to hide a malicious one later in the string.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "$STR.match($REG)",
       "compiledAt": "2026-03-21T06:59:43.019Z",
       "createdAt": "2026-03-21T06:59:43.019Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts", "!**/*.spec.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts", "!**/*.spec.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "741493a88528e2b8",
       "lessonHeading": "Include a space or delimiter when concatenating disjoint",
+      "pattern": "",
       "message": "Include a space or delimiter when concatenating disjoint text fragments (e.g., `${a} ${b}`) to prevent 'keyword synthesis' and bypass of security filters during context analysis.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "`${$A}${$B}`",
       "compiledAt": "2026-03-21T07:00:07.350Z",
       "createdAt": "2026-03-21T07:00:07.350Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "a5697f86bb23901e",
       "lessonHeading": "Check for the presence of the 'g' flag before appending it",
+      "pattern": "",
       "message": "Check for the presence of the 'g' flag before appending it to a new RegExp's flags; re-adding it when already present causes a runtime SyntaxError.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "new RegExp($SRC, $FLAGS + 'g')",
       "compiledAt": "2026-03-21T07:00:27.886Z",
       "createdAt": "2026-03-21T07:00:27.886Z",
@@ -444,15 +443,15 @@
         "!**/*.test.js",
         "!**/*.spec.ts",
         "!**/*.spec.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "bc73f8d7eb600d30",
       "lessonHeading": "Use semantic constraints like \"one to two short sentences\"",
+      "pattern": "\\b(?:max|limit|under|maximum)?\\s*\\d+\\s*(?:char|character|byte)s?\\b",
       "message": "Use semantic constraints (e.g., 'one to two short sentences') instead of numeric character limits for LLM prompts to ensure reliable adherence to length requirements.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(?:max|limit|under|maximum)?\\s*\\d+\\s*(?:char|character|byte)s?\\b",
       "compiledAt": "2026-03-21T07:00:52.321Z",
       "createdAt": "2026-03-21T07:00:52.321Z",
       "fileGlobs": [
@@ -465,15 +464,15 @@
         "**/*.txt",
         "**/*.yml",
         "**/*.yaml"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "b2d2d79023432eb9",
       "lessonHeading": "Always iterate through all regex matches (e.g.,",
+      "pattern": "",
       "message": "Use matchAll() instead of match() to ensure all occurrences are validated. Relying on the first match allows 'shadowing' attacks where an attacker hides a malicious payload behind a safe first match.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "$S.match($RE)",
       "compiledAt": "2026-03-21T07:01:43.755Z",
       "createdAt": "2026-03-21T07:01:43.755Z",
@@ -486,48 +485,48 @@
         "!**/*.test.js",
         "!**/*.spec.ts",
         "!**/*.spec.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "ca85d8aab7fc7312",
       "lessonHeading": "Check for the presence of the global ('g') flag",
+      "pattern": "\\bRegExp\\s*\\(\\s*[^'\"\\s][^,]*?,\\s*['\"\\`][^'\"\\`]*g[^'\"\\`]*['\"\\`]",
       "message": "When dynamically constructing a RegExp from an existing one, check for the presence of the global ('g') flag before appending it. Re-adding 'g' to a pattern that already has it can cause a SyntaxError in some environments.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bRegExp\\s*\\(\\s*[^'\"\\s][^,]*?,\\s*['\"\\`][^'\"\\`]*g[^'\"\\`]*['\"\\`]",
       "compiledAt": "2026-03-21T07:02:28.769Z",
       "createdAt": "2026-03-21T07:02:28.769Z",
-      "fileGlobs": ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"]
+      "fileGlobs": ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "e780d5664d74a03b",
       "lessonHeading": "Identify larger or more specific text markers (like triple",
+      "pattern": "(['\"])\\`\\1\\s*,\\s*(['\"])\\`{3}\\2",
       "message": "Identify larger or more specific text markers (like triple backticks) before smaller ones (single backticks) during range collection to ensure correct block isolation.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(['\"])\\`\\1\\s*,\\s*(['\"])\\`{3}\\2",
       "compiledAt": "2026-03-21T07:02:46.313Z",
       "createdAt": "2026-03-21T07:02:46.313Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "9657b97239a20ed0",
       "lessonHeading": "When implementing custom glob matching for dir/\\*/.ext,",
+      "pattern": "\\.startsWith\\s*\\(\\s*['\"]\\*\\*['\"]|\\.indexOf\\s*\\(\\s*['\"]\\*\\*['\"]\\s*\\)\\s*(?:===?|>=)\\s*0",
       "message": "When implementing custom glob matching for 'dir/**/*.ext', ensure the index check for the double-wildcard separator excludes the start of the string (index 0). This prevents repo-relative paths from being misinterpreted as root-anchored.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.startsWith\\s*\\(\\s*['\"]\\*\\*['\"]|\\.indexOf\\s*\\(\\s*['\"]\\*\\*['\"]\\s*\\)\\s*(?:===?|>=)\\s*0",
       "compiledAt": "2026-03-21T07:03:43.442Z",
       "createdAt": "2026-03-21T07:03:43.442Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "63f2b2d8c631089a",
       "lessonHeading": "In core packages, a small, tested custom implementation",
+      "pattern": "\\b(import|require)\\b.*['\"]micromatch['\"]",
       "message": "Avoid adding 'micromatch' as a dependency in core packages. Use a small, tested custom implementation for specific pattern shapes to keep the dependency graph lean.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(import|require)\\b.*['\"]micromatch['\"]",
       "compiledAt": "2026-03-21T07:03:52.307Z",
       "createdAt": "2026-03-21T07:03:52.307Z",
       "fileGlobs": [
@@ -535,115 +534,115 @@
         "packages/core/**/*.js",
         "packages/core/**/*.tsx",
         "packages/core/**/*.jsx"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "0f2cead152ac6641",
       "lessonHeading": "Use occurrence counts of opening and closing markers",
+      "pattern": "\\.(includes|indexOf|startsWith|endsWith)\\s*\\(\\s*['\"](?:<|>|\\[|\\])['\"]\\s*\\)",
       "message": "Use occurrence counts of opening/closing markers per line instead of simple string inclusion checks to accurately detect corruption in lines with multiple tags.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(includes|indexOf|startsWith|endsWith)\\s*\\(\\s*['\"](?:<|>|\\[|\\])['\"]\\s*\\)",
       "compiledAt": "2026-03-21T07:04:27.660Z",
       "createdAt": "2026-03-21T07:04:27.660Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "86fe2def3463b256",
       "lessonHeading": "Use the --recurse-submodules flag with git ls-files",
+      "pattern": "\\bgit\\s+ls-files\\b(?!.*\\s--recurse-submodules\\b)",
       "message": "Always use --recurse-submodules with git ls-files to ensure submodule files are included in scans.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bgit\\s+ls-files\\b(?!.*\\s--recurse-submodules\\b)",
       "compiledAt": "2026-03-21T07:04:58.487Z",
       "createdAt": "2026-03-21T07:04:58.487Z",
-      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "**/*.ts", "**/*.js", "Makefile"]
+      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "**/*.ts", "**/*.js", "Makefile"],
+      "severity": "warning"
     },
     {
       "lessonHash": "fea10369daa04c98",
       "lessonHeading": "Changesets interactive CLI (pnpm changeset) crashes when",
+      "pattern": "\\bpnpm\\s+changeset\\b(?!\\s+(version|publish|status|tag|pre|list))",
       "message": "The interactive 'pnpm changeset' command crashes in non-TTY/automated environments like CI. For automated releases, write changeset files manually to .changeset/ or use non-interactive subcommands (e.g., 'version').",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bpnpm\\s+changeset\\b(?!\\s+(version|publish|status|tag|pre|list))",
       "compiledAt": "2026-03-21T07:05:59.724Z",
       "createdAt": "2026-03-21T07:05:59.724Z",
-      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml", "**/*.sh", "**/*.bash"]
+      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml", "**/*.sh", "**/*.bash"],
+      "severity": "warning"
     },
     {
       "lessonHash": "03f572ffe933b21a",
       "lessonHeading": "MCP session lifecycle limitation",
+      "pattern": "\\.(session\\.start|session\\.end|beforeDisconnect)\\b",
       "message": "The MCP spec does not support session lifecycle hooks (session.start, session.end, or beforeDisconnect). Auto-handoff via these events is not possible.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(session\\.start|session\\.end|beforeDisconnect)\\b",
       "compiledAt": "2026-03-21T07:06:08.004Z",
       "createdAt": "2026-03-21T07:06:08.004Z",
-      "fileGlobs": ["packages/mcp/**/*.ts"]
+      "fileGlobs": ["packages/mcp/**/*.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "ce4240d622c53f8e",
       "lessonHeading": "ESM intra-module mock requires re-binding",
+      "pattern": "\\.\\.\\.await\\s+vi\\.importActual",
       "message": "Using '...await vi.importActual()' in ESM mocks retains closure references to original functions. Internal calls within the mocked module will not use your mocks unless re-bound.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.\\.\\.await\\s+vi\\.importActual",
       "compiledAt": "2026-03-21T07:07:24.082Z",
       "createdAt": "2026-03-21T07:07:24.082Z",
-      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]
+      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"],
+      "severity": "warning"
     },
     {
       "lessonHash": "bd31e87e32cfeefd",
       "lessonHeading": "Drift detector flags lesson file path mentions",
+      "pattern": "(?:\\.{1,2}\\/|[\\w.-]+\\/)+[\\w.-]+\\.[a-z]{2,}",
       "message": "Avoid using literal file paths in lessons; describe the file conceptually instead (e.g., 'the Junie guidelines file') to prevent drift detector failures when files are moved or renamed.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(?:\\.{1,2}\\/|[\\w.-]+\\/)+[\\w.-]+\\.[a-z]{2,}",
       "compiledAt": "2026-03-21T07:07:43.431Z",
       "createdAt": "2026-03-21T07:07:43.431Z",
-      "fileGlobs": ["**/*.md"]
+      "fileGlobs": ["**/*.md"],
+      "severity": "warning"
     },
     {
       "lessonHash": "3b48ad1c3c382306",
       "lessonHeading": "When manually parsing CLI arguments, verify that a flag's",
+      "pattern": "",
       "message": "Manual CLI argument parsing via indexOf + 1 is error-prone. Verify that the flag's value exists and does not start with a hyphen to avoid misinterpreting the next flag as a parameter.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "$A[$A.indexOf($B) + 1]",
       "compiledAt": "2026-03-21T07:10:02.103Z",
       "createdAt": "2026-03-21T07:10:02.103Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "f52f5615a0543837",
       "lessonHeading": "Generic function names like applyRules in a facade",
+      "pattern": "\\bapplyRules\\b",
       "message": "Generic function name 'applyRules' can be misleading. Use a more specific name (e.g., 'applyLintRules', 'applyValidationRules') or clarify which engines are supported via JSDoc.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bapplyRules\\b",
       "compiledAt": "2026-03-21T07:10:13.697Z",
       "createdAt": "2026-03-21T07:10:13.697Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "548cd82f9c6f1944",
       "lessonHeading": "Provide a dummy fallback API key (e.g., 'local-only')",
+      "pattern": "\\bapiKey:\\s*process\\.env\\.[A-Z0-9_]+(?!\\s*(\\|\\||\\?\\?))",
       "message": "Provide a dummy fallback API key (e.g., 'local-only')",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\bapiKey:\\s*process\\.env\\.[A-Z0-9_]+(?!\\s*(\\|\\||\\?\\?))",
       "compiledAt": "2026-03-21T07:10:13.697Z",
       "createdAt": "2026-03-21T07:10:13.697Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts"],
+      "severity": "error"
     },
     {
       "lessonHash": "9081a2fbc7e22475",
       "lessonHeading": "Hooks designed to block agent actions, such as shield gates",
+      "pattern": "\\b(exec|spawn)\\(",
       "message": "Hooks designed to block agent actions (like shield gates) must use synchronous execution (e.g., execSync) to prevent the agent from proceeding before the check completes. Asynchronous patterns can cause race conditions.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(exec|spawn)\\(",
       "compiledAt": "2026-03-21T07:10:30.560Z",
       "createdAt": "2026-03-21T07:10:30.560Z",
       "fileGlobs": [
@@ -653,70 +652,70 @@
         "**/shield/**/*.js",
         ".husky/**",
         "!**/*.test.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "64db934ca8c69121",
       "lessonHeading": "Proactively remove references to planned features from user",
+      "pattern": "\\b(planned\\s+features?|coming\\s+soon|slated\\s+for|roadmap|future\\s+release|later\\s+development)\\b",
       "message": "Remove references to planned features or upcoming capabilities in user guides to avoid misleading users about current functionality.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(planned\\s+features?|coming\\s+soon|slated\\s+for|roadmap|future\\s+release|later\\s+development)\\b",
       "compiledAt": "2026-03-21T07:10:50.885Z",
       "createdAt": "2026-03-21T07:10:50.885Z",
-      "fileGlobs": ["*.md", "*.mdx"]
+      "fileGlobs": ["*.md", "*.mdx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "2d3ac4b9516ed9b6",
       "lessonHeading": "The Gemini CLI and Gemini Code Assist (GCA) do not",
+      "pattern": "\\.gemini/|\\bgemini\\.md\\b",
       "message": "Use 'GEMINI.md' (uppercase) at the project root. Lowercase configuration files like '.gemini/gemini.md' or 'gemini.md' are not recognized by Gemini CLI or Gemini Code Assist.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.gemini/|\\bgemini\\.md\\b",
       "compiledAt": "2026-03-21T07:11:06.839Z",
       "createdAt": "2026-03-21T07:11:06.839Z",
-      "fileGlobs": ["*.sh", "*.yml", "*.yaml", "*.md", "package.json", "Makefile", "*.ts", "*.js"]
+      "fileGlobs": ["*.sh", "*.yml", "*.yaml", "*.md", "package.json", "Makefile", "*.ts", "*.js"],
+      "severity": "warning"
     },
     {
       "lessonHash": "ff50cadc6e05631c",
       "lessonHeading": "Swallowing errors in core modules hides silent failures,",
+      "pattern": "\\bconsole\\.(log|warn|error|info|debug)\\(",
       "message": "Swallowing errors in core modules hides silent failures,",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bconsole\\.(log|warn|error|info|debug)\\(",
       "compiledAt": "2026-03-21T07:11:45.228Z",
       "createdAt": "2026-03-21T07:11:45.228Z",
-      "fileGlobs": ["**/core/**/*.ts", "**/core/**/*.js", "!**/*.test.ts"]
+      "fileGlobs": ["**/core/**/*.ts", "**/core/**/*.js", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "d64dec9ec5792378",
       "lessonHeading": "Claude Code requires skills to be organized in a nested",
+      "pattern": "^",
       "message": "Claude Code skills must be organized in a nested directory format with a SKILL.md file (e.g., skills/my-skill/SKILL.md) rather than as flat markdown files for the agent to correctly discover them.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^",
       "compiledAt": "2026-03-21T07:12:25.923Z",
       "createdAt": "2026-03-21T07:12:25.923Z",
-      "fileGlobs": ["skills/**/*.md", "!**/SKILL.md"]
+      "fileGlobs": ["skills/**/*.md", "!**/SKILL.md"],
+      "severity": "warning"
     },
     {
       "lessonHash": "21cb428b15711741",
       "lessonHeading": "Setting fail-fast: false in matrix workflows ensures",
+      "pattern": "fail-fast:\\s*['\"]?true['\"]?",
       "message": "Set 'fail-fast: false' in matrix workflows to ensure failures on one OS do not cancel other test runs.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "fail-fast:\\s*['\"]?true['\"]?",
       "compiledAt": "2026-03-21T07:12:49.401Z",
       "createdAt": "2026-03-21T07:12:49.401Z",
-      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml"]
+      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml"],
+      "severity": "warning"
     },
     {
       "lessonHash": "72faae2c99fddc2c",
       "lessonHeading": "Anchor command validation patterns with ^ to prevent hooks",
+      "pattern": "(\\.match\\s*\\(|\\.test\\s*\\(|\\bonCommand\\s*\\(|\\bonText\\s*\\(|\\bcommand\\s*[:=]\\s*|\\bcmd\\s*[:=]\\s*)\\/([^^/][^/]*)\\/",
       "message": "Anchor command validation patterns with '^' (e.g., /^command/) to prevent hooks from triggering on arguments that contain the command name as a substring.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(\\.match\\s*\\(|\\.test\\s*\\(|\\bonCommand\\s*\\(|\\bonText\\s*\\(|\\bcommand\\s*[:=]\\s*|\\bcmd\\s*[:=]\\s*)\\/([^^/][^/]*)\\/",
       "compiledAt": "2026-03-21T07:13:30.152Z",
       "createdAt": "2026-03-21T07:13:30.152Z",
       "fileGlobs": [
@@ -728,26 +727,26 @@
         "!**/*.test.js",
         "!**/*.spec.ts",
         "!**/*.spec.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "07d4d77e9549fdf6",
       "lessonHeading": "When implementing custom glob matching for dir/\\*/.ext,",
+      "pattern": "\\.(?:(?:includes|startsWith)\\s*\\(\\s*['\"]\\*\\*['\"]|indexOf\\s*\\(\\s*['\"]\\*\\*['\"]\\s*\\)\\s*(?:>=\\s*0|>\\s*-1|!==?\\s*-1|===?\\s*0))",
       "message": "When implementing custom glob matching for dir/\\*/.ext,",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\.(?:(?:includes|startsWith)\\s*\\(\\s*['\"]\\*\\*['\"]|indexOf\\s*\\(\\s*['\"]\\*\\*['\"]\\s*\\)\\s*(?:>=\\s*0|>\\s*-1|!==?\\s*-1|===?\\s*0))",
       "compiledAt": "2026-03-21T07:13:30.153Z",
       "createdAt": "2026-03-21T07:13:30.153Z",
-      "fileGlobs": ["**/*.ts", "**/*.js"]
+      "fileGlobs": ["**/*.ts", "**/*.js"],
+      "severity": "error"
     },
     {
       "lessonHash": "9921090ca5c814b4",
       "lessonHeading": "Use onWarn callbacks in core library modules",
+      "pattern": "\\bconsole\\.(log|warn|error|info|debug|trace)\\s*\\(",
       "message": "Core library modules should use an optional onWarn callback instead of console methods directly to avoid hard dependencies on logging frameworks.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bconsole\\.(log|warn|error|info|debug|trace)\\s*\\(",
       "compiledAt": "2026-03-21T07:13:47.229Z",
       "createdAt": "2026-03-21T07:13:47.229Z",
       "fileGlobs": [
@@ -759,15 +758,15 @@
         "lib/core/**/*.js",
         "!**/*.test.ts",
         "!**/*.test.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "2a6a623091cdc876",
       "lessonHeading": "When detecting Bun environments, check for both bun.lockb",
+      "pattern": "^(?=.*\\bbun\\.lockb?\\b)(?!.*\\bbun\\.lockb\\b.*\\bbun\\.lock\\b|.*\\bbun\\.lock\\b.*\\bbun\\.lockb\\b).*$",
       "message": "When detecting Bun environments, check for both bun.lockb",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "^(?=.*\\bbun\\.lockb?\\b)(?!.*\\bbun\\.lockb\\b.*\\bbun\\.lock\\b|.*\\bbun\\.lock\\b.*\\bbun\\.lockb\\b).*$",
       "compiledAt": "2026-03-21T07:13:47.230Z",
       "createdAt": "2026-03-21T07:13:47.230Z",
       "fileGlobs": [
@@ -779,26 +778,26 @@
         "**/*.yml",
         "**/*.yaml",
         "Dockerfile*"
-      ]
+      ],
+      "severity": "error"
     },
     {
       "lessonHash": "e0fcbc814acf6deb",
       "lessonHeading": "Centralize error signature detection (such as 429 status",
+      "pattern": "(\\.status\\s*===?\\s*429|['\"]rate\\s+limit['\"])",
       "message": "Centralize error signature detection (such as 429 status",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(\\.status\\s*===?\\s*429|['\"]rate\\s+limit['\"])",
       "compiledAt": "2026-03-21T07:13:51.813Z",
       "createdAt": "2026-03-21T07:13:51.813Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh"],
+      "severity": "warning"
     },
     {
       "lessonHash": "1d5fc28021149af7",
       "lessonHeading": "CLI command files should use dynamic await import()",
+      "pattern": "\\bimport\\s+(?!type\\s).+\\bfrom\\s+['\"](?:\\.\\/|\\.\\.\\/|@)",
       "message": "CLI command files should use dynamic await import() for heavy internal packages instead of top-level static imports. This ensures that operations like --help or version checks remain fast by avoiding unnecessary module loading at startup.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bimport\\s+(?!type\\s).+\\bfrom\\s+['\"](?:\\.\\/|\\.\\.\\/|@)",
       "compiledAt": "2026-03-21T07:14:55.956Z",
       "createdAt": "2026-03-21T07:14:55.956Z",
       "fileGlobs": [
@@ -807,61 +806,61 @@
         "packages/cli/commands/**/*.ts",
         "!**/*.test.ts",
         "!**/*.spec.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "c5c7b1c2374fa99c",
       "lessonHeading": "For local LLM providers, 500 Internal Server Errors often",
+      "pattern": "^(?!.*(numCtx|context|VRAM|exhaustion))(?=.*500)(?=.*Internal\\s+Server\\s+Error).*$",
       "message": "For local LLM providers, 500 Internal Server Errors often",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "^(?!.*(numCtx|context|VRAM|exhaustion))(?=.*500)(?=.*Internal\\s+Server\\s+Error).*$",
       "compiledAt": "2026-03-21T07:14:55.956Z",
       "createdAt": "2026-03-21T07:14:55.956Z",
-      "fileGlobs": ["**/llm/**/*.ts", "**/providers/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["**/llm/**/*.ts", "**/providers/**/*.ts", "!**/*.test.ts"],
+      "severity": "error"
     },
     {
       "lessonHash": "32b6adb4972689f6",
       "lessonHeading": "Iterative string replacements for a list of identifiers",
+      "pattern": "",
       "message": "Iterative string replacements are less efficient than a single regex with an alternation group. Consolidate multiple .replace() calls into a single call with a regex alternation (e.g., .replace(/id1|id2/g, '')) to improve performance and maintainability.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "$OBJ.replace($A, $B).replace($C, $D)",
       "compiledAt": "2026-03-21T07:15:26.534Z",
       "createdAt": "2026-03-21T07:15:26.534Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "73ed3dcdca4135eb",
       "lessonHeading": "Using child.kill() on Windows when shell: true is enabled",
+      "pattern": "",
       "message": "Using child.kill() on Windows when 'shell: true' is enabled often fails to clean up child processes. Use 'taskkill /pid [pid] /T /F' to ensure the entire process tree is terminated.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "$PROC.kill($$$ARGS)",
       "compiledAt": "2026-03-21T07:15:50.610Z",
       "createdAt": "2026-03-21T07:15:50.610Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "329479bf34f8816f",
       "lessonHeading": "Use .min(1) on string schemas in config arrays",
+      "pattern": "\\.string\\(\\)(?!\\.min\\()",
       "message": "Use .min(1) on string schemas in configuration to reject empty strings at the parsing stage.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.string\\(\\)(?!\\.min\\()",
       "compiledAt": "2026-03-21T07:16:09.671Z",
       "createdAt": "2026-03-21T07:16:09.671Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/config/**/*.ts", "**/schema/**/*.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/config/**/*.ts", "**/schema/**/*.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "a4e45715c3a45348",
       "lessonHeading": "Standard console.log or console.error calls in MCP tools",
+      "pattern": "\\bconsole\\.(log|error)\\(",
       "message": "Standard console.log or console.error calls in MCP tools",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bconsole\\.(log|error)\\(",
       "compiledAt": "2026-03-21T07:16:12.378Z",
       "createdAt": "2026-03-21T07:16:12.378Z",
       "fileGlobs": [
@@ -869,37 +868,37 @@
         "packages/mcp/**/*.js",
         "!**/*.test.ts",
         "!**/*.test.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "60b06b2e528aa3b1",
       "lessonHeading": "Ollama num_ctx and VRAM: The OpenAI-compatible API adapter",
+      "pattern": "11434/v1",
       "message": "Ollama num_ctx and VRAM: The OpenAI-compatible API adapter",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "11434/v1",
       "compiledAt": "2026-03-21T07:16:12.378Z",
       "createdAt": "2026-03-21T07:16:12.378Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh", ".env*"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh", ".env*"],
+      "severity": "error"
     },
     {
       "lessonHash": "2d6032dd8919f119",
       "lessonHeading": "Git hooks should utilize fast, deterministic linting tools",
+      "pattern": "\\b(ai-pr-reviewer|pr-agent|coderabbit|gpt-lint|chatgpt-lint)\\b",
       "message": "Git hooks should use fast, deterministic linting tools. AI-powered tools cause non-deterministic delays and friction in the developer workflow.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(ai-pr-reviewer|pr-agent|coderabbit|gpt-lint|chatgpt-lint)\\b",
       "compiledAt": "2026-03-21T07:16:31.597Z",
       "createdAt": "2026-03-21T07:16:31.597Z",
-      "fileGlobs": [".husky/**", "package.json", "scripts/**", "*.sh", "*.bash"]
+      "fileGlobs": [".husky/**", "package.json", "scripts/**", "*.sh", "*.bash"],
+      "severity": "warning"
     },
     {
       "lessonHash": "071d5571be2d531a",
       "lessonHeading": "Use granular assertions rather than snapshots when testing",
+      "pattern": "\\.toMatch(Inline)?Snapshot\\s*\\(",
       "message": "Use granular assertions rather than snapshots when testing",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\.toMatch(Inline)?Snapshot\\s*\\(",
       "compiledAt": "2026-03-21T07:16:31.597Z",
       "createdAt": "2026-03-21T07:16:31.597Z",
       "fileGlobs": [
@@ -911,70 +910,70 @@
         "**/*.spec.js",
         "**/*.spec.tsx",
         "**/*.spec.jsx"
-      ]
+      ],
+      "severity": "error"
     },
     {
       "lessonHash": "a485a2172b7399e9",
       "lessonHeading": "ESM intra-module mock requires re-binding",
+      "pattern": "\\.\\.\\.\\s*await\\s+vi\\.importActual\\(",
       "message": "ESM intra-module mock requires re-binding",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.\\.\\.\\s*await\\s+vi\\.importActual\\(",
       "compiledAt": "2026-03-21T07:16:38.736Z",
       "createdAt": "2026-03-21T07:16:38.736Z",
-      "fileGlobs": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
+      "fileGlobs": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "9445c3c56278d890",
       "lessonHeading": "When reading cache or config files, specifically check",
+      "pattern": "\\.catch\\(\\s*[^)]*\\)\\s*=>\\s*(?!.*ENOENT)[^\\{\\s]+|\\bcatch\\s*\\{",
       "message": "When reading cache or config files, specifically check",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.catch\\(\\s*[^)]*\\)\\s*=>\\s*(?!.*ENOENT)[^\\{\\s]+|\\bcatch\\s*\\{",
       "compiledAt": "2026-03-21T07:16:42.876Z",
       "createdAt": "2026-03-21T07:16:42.876Z",
-      "fileGlobs": ["**/*config*.*", "**/*cache*.*"]
+      "fileGlobs": ["**/*config*.*", "**/*cache*.*"],
+      "severity": "warning"
     },
     {
       "lessonHash": "9075dc782818ee82",
       "lessonHeading": "Lesson: Lesson headings are strictly limited to 60",
+      "pattern": "^# Lesson: .{61,}",
       "message": "Lesson: Lesson headings are strictly limited to 60",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "^# Lesson: .{61,}",
       "compiledAt": "2026-03-21T07:16:45.395Z",
       "createdAt": "2026-03-21T07:16:45.395Z",
-      "fileGlobs": ["**/*.md"]
+      "fileGlobs": ["**/*.md"],
+      "severity": "error"
     },
     {
       "lessonHash": "3d6802ffb3a85fb8",
       "lessonHeading": "Prefer [[ \"$VAR\" == \"pattern\"* ]] over piping to grep",
+      "pattern": "\\b(echo|printf)\\s+[^|]*\\|\\s*grep\\b",
       "message": "Prefer shell built-in matching [[ \"$VAR\" == \"pattern\"* ]] over piping to grep to avoid subshell performance overhead.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(echo|printf)\\s+[^|]*\\|\\s*grep\\b",
       "compiledAt": "2026-03-21T07:16:51.528Z",
       "createdAt": "2026-03-21T07:16:51.528Z",
-      "fileGlobs": ["*.sh", "*.bash", "*.zsh", "*.yml", "*.yaml"]
+      "fileGlobs": ["*.sh", "*.bash", "*.zsh", "*.yml", "*.yaml"],
+      "severity": "warning"
     },
     {
       "lessonHash": "bc8b99e815c3943f",
       "lessonHeading": "Standard console.log or console.error calls in MCP tools",
+      "pattern": "\\bconsole\\.(log|error|warn|info)\\s*\\(",
       "message": "Standard console calls in MCP tools corrupt the stdio transport protocol. Use a dedicated file-based logger or return formatted system warnings instead.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bconsole\\.(log|error|warn|info)\\s*\\(",
       "compiledAt": "2026-03-21T07:17:09.503Z",
       "createdAt": "2026-03-21T07:17:09.503Z",
-      "fileGlobs": ["packages/mcp/**/*.ts", "packages/mcp/**/*.js", "!**/*.test.ts"]
+      "fileGlobs": ["packages/mcp/**/*.ts", "packages/mcp/**/*.js", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "463721b73bcacdc3",
       "lessonHeading": "Use semantic constraints like \"one to two short sentences\"",
+      "pattern": "\\b\\d+\\s*([Cc]har(acter)?s?|[Ww]ords?)\\b",
       "message": "Use semantic constraints like \"one to two short sentences\"",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b\\d+\\s*([Cc]har(acter)?s?|[Ww]ords?)\\b",
       "compiledAt": "2026-03-21T07:17:09.504Z",
       "createdAt": "2026-03-21T07:17:09.504Z",
       "fileGlobs": [
@@ -986,82 +985,82 @@
         "**/*.md",
         "**/*.yaml",
         "**/*.yml"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "13337e9a210f3c34",
       "lessonHeading": "Drift detector flags lesson file path mentions",
+      "pattern": "\\b[\\w.-]+\\/[\\w.-]+\\.[a-z0-9]{2,}\\b",
       "message": "Drift detector flags lesson file path mentions",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b[\\w.-]+\\/[\\w.-]+\\.[a-z0-9]{2,}\\b",
       "compiledAt": "2026-03-21T07:17:09.504Z",
       "createdAt": "2026-03-21T07:17:09.504Z",
-      "fileGlobs": [".totem/lessons/**", ".totem/lessons.md"]
+      "fileGlobs": [".totem/lessons/**", ".totem/lessons.md"],
+      "severity": "warning"
     },
     {
       "lessonHash": "1d850285825d167d",
       "lessonHeading": "Using a unified \"Totem Error\" tag in error logs instead",
+      "pattern": "['\"](?![^'\"]*Totem Error)(?:\\[[^\\]]*Error\\]|[\\w-]+\\s+Error:)",
       "message": "Using a unified \"Totem Error\" tag in error logs instead",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "['\"](?![^'\"]*Totem Error)(?:\\[[^\\]]*Error\\]|[\\w-]+\\s+Error:)",
       "compiledAt": "2026-03-21T07:17:31.605Z",
       "createdAt": "2026-03-21T07:17:31.605Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.go"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.go"],
+      "severity": "warning"
     },
     {
       "lessonHash": "2b0ab8197ab67226",
       "lessonHeading": "Warning messages triggered by security violations",
+      "pattern": "\\.(?:warn|error|log)\\(\\s*[`'].*(?:security|malicious|violation|illegal|invalid|attack).*\\$\\{(?!sanitize|escape|encode|strip)[^}]+\\}",
       "message": "Warning messages triggered by security violations",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\.(?:warn|error|log)\\(\\s*[`'].*(?:security|malicious|violation|illegal|invalid|attack).*\\$\\{(?!sanitize|escape|encode|strip)[^}]+\\}",
       "compiledAt": "2026-03-21T07:17:43.617Z",
       "createdAt": "2026-03-21T07:17:43.617Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "error"
     },
     {
       "lessonHash": "9b689086c3c6ef18",
       "lessonHeading": "Avoid refactoring synchronous factory functions to async",
+      "pattern": "\\basync\\b.*\\bimport\\s*\\(",
       "message": "Avoid refactoring synchronous factory functions to async",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\basync\\b.*\\bimport\\s*\\(",
       "compiledAt": "2026-03-21T07:17:43.617Z",
       "createdAt": "2026-03-21T07:17:43.617Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "86d57e06e538a7d3",
       "lessonHeading": "Transitioning from generic errors to a typed hierarchy",
+      "pattern": "",
       "message": "Use TotemGitError (or a specific subclass) instead of the generic Error class to allow for domain-specific recovery and error codes.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "throw new Error($MSG)",
       "compiledAt": "2026-03-21T07:17:57.337Z",
       "createdAt": "2026-03-21T07:17:57.337Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts", "!**/*.test.js"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts", "!**/*.test.js"],
+      "severity": "warning"
     },
     {
       "lessonHash": "76a1f3c723b57c3a",
       "lessonHeading": "Avoid using exit 0 inside git hooks intended for chaining",
+      "pattern": "\\bexit\\s+0\\b",
       "message": "Avoid using exit 0 inside git hooks intended for chaining",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\bexit\\s+0\\b",
       "compiledAt": "2026-03-21T07:18:18.494Z",
       "createdAt": "2026-03-21T07:18:18.494Z",
-      "fileGlobs": [".husky/**/*", "scripts/hooks/**/*", "*.sh"]
+      "fileGlobs": [".husky/**/*", "scripts/hooks/**/*", "*.sh"],
+      "severity": "error"
     },
     {
       "lessonHash": "a1fd35ee696110b0",
       "lessonHeading": "Dynamic imports intended for performance optimization",
+      "pattern": "",
       "message": "Dynamic imports should be confined to CLI command entry points. Avoid using them in utility or adapter layers to maintain a clean dependency graph and prevent security scanner flags.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "import($PATH)",
       "compiledAt": "2026-03-21T07:18:34.475Z",
       "createdAt": "2026-03-21T07:18:34.475Z",
@@ -1072,38 +1071,38 @@
         "adapters/**/*.js",
         "lib/**/*.ts",
         "lib/**/*.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "99baac2504eec5fb",
       "lessonHeading": "Using [val].flat().filter(Boolean) to normalize inputs",
+      "pattern": "",
       "message": "Using [val].flat().filter(Boolean) to normalize inputs loses TypeScript's type narrowing. Use explicit ternary checks and Array.isArray() to preserve specific types.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "[$VAL].flat().filter(Boolean)",
       "compiledAt": "2026-03-21T07:18:42.164Z",
       "createdAt": "2026-03-21T07:18:42.164Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "cbb308940a59e34a",
       "lessonHeading": "When creating rules to catch generic Error usage,",
+      "pattern": "\\bnew\\s+Error\\s*\\(",
       "message": "Avoid generic Error usage; use project-specific error base classes or variants instead.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bnew\\s+Error\\s*\\(",
       "compiledAt": "2026-03-21T07:19:11.691Z",
       "createdAt": "2026-03-21T07:19:11.691Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "5c834874c001d166",
       "lessonHeading": "AI agent memory config architectures differ significantly",
+      "pattern": "\\bgemini\\.md\\b|\\.mcp\\.json",
       "message": "Incorrect agent configuration file: use 'GEMINI.md' (uppercase) for Gemini CLI as lowercase is not read by default. For Junie, use '.junie/mcp/mcp.json' instead of '.mcp.json'.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bgemini\\.md\\b|\\.mcp\\.json",
       "compiledAt": "2026-03-21T07:19:41.451Z",
       "createdAt": "2026-03-21T07:19:41.451Z",
       "fileGlobs": [
@@ -1114,48 +1113,48 @@
         "**/*.yml",
         "**/*.yaml",
         "**/*.md"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "3cc3f90997f1ffda",
       "lessonHeading": "Prefer Vitest's expect().rejects.toHaveProperty()",
+      "pattern": "\\bexpect\\.fail\\(",
       "message": "Prefer Vitest's expect().rejects.toHaveProperty()",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bexpect\\.fail\\(",
       "compiledAt": "2026-03-21T07:19:45.508Z",
       "createdAt": "2026-03-21T07:19:45.508Z",
-      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]
+      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"],
+      "severity": "warning"
     },
     {
       "lessonHash": "42a7363aa69215dd",
       "lessonHeading": "When using the @google/genai SDK (v1+), the constructor",
+      "pattern": "new\\s+GoogleGenerativeAI\\s*\\(\\s*[^\\s\\{]",
       "message": "When using the @google/genai SDK (v1+), the constructor",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "new\\s+GoogleGenerativeAI\\s*\\(\\s*[^\\s\\{]",
       "compiledAt": "2026-03-21T07:19:47.719Z",
       "createdAt": "2026-03-21T07:19:47.719Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "71935fe9a742137b",
       "lessonHeading": "Using String() casting on input patterns can lead to silent",
+      "pattern": "\\bString\\(\\s*[^)]*(?:[Pp]attern|[Ii]nput)[^)]*\\)",
       "message": "Avoid using String() casting on input patterns; this can lead to silent failures by turning objects into '[object Object]'. Use explicit type validation and error handling instead.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bString\\(\\s*[^)]*(?:[Pp]attern|[Ii]nput)[^)]*\\)",
       "compiledAt": "2026-03-21T07:20:10.770Z",
       "createdAt": "2026-03-21T07:20:10.770Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "6d6d70d5a0f0fa7d",
       "lessonHeading": "Restrict subagent tasks to mechanical implementation",
+      "pattern": "\\b(callTool|useTool|fetch)\\s*\\(",
       "message": "Subagents are restricted from architectural decisions and external resource access (MCP tools/network). Keep these calls in the main controller.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(callTool|useTool|fetch)\\s*\\(",
       "compiledAt": "2026-03-21T07:20:29.393Z",
       "createdAt": "2026-03-21T07:20:29.393Z",
       "fileGlobs": [
@@ -1164,48 +1163,48 @@
         "**/subagent/**/*.ts",
         "**/subagent/**/*.js",
         "!**/*.test.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "730cd03e41cff889",
       "lessonHeading": "Labeling a prompt as \"Regex Rule Extraction\" biases models",
+      "pattern": "Regex\\s+Rule\\s+Extraction",
       "message": "Use neutral terminology like 'Rule Extraction' instead of 'Regex Rule Extraction' to avoid biasing models toward text-based patterns and ensure structural engines (AST/ast-grep) are considered.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "Regex\\s+Rule\\s+Extraction",
       "compiledAt": "2026-03-21T07:20:36.676Z",
       "createdAt": "2026-03-21T07:20:36.676Z",
-      "fileGlobs": ["**/*.md", "**/*.ts", "**/*.js", "**/*.txt"]
+      "fileGlobs": ["**/*.md", "**/*.ts", "**/*.js", "**/*.txt"],
+      "severity": "warning"
     },
     {
       "lessonHash": "bb1001a2c6d6e9bd",
       "lessonHeading": "Always use fully qualified identifiers for caching",
+      "pattern": "\\b(cacheKey|telemetryId|modelId)\\s*[:=]\\s*['\"][^'\"\\s:]+['\"]",
       "message": "Always use fully qualified identifiers for caching",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\b(cacheKey|telemetryId|modelId)\\s*[:=]\\s*['\"][^'\"\\s:]+['\"]",
       "compiledAt": "2026-03-21T07:20:48.796Z",
       "createdAt": "2026-03-21T07:20:48.796Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts", "!**/*.test.js"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts", "!**/*.test.js"],
+      "severity": "error"
     },
     {
       "lessonHash": "51f362e3743c49f5",
       "lessonHeading": "In core packages, a small, tested custom implementation",
+      "pattern": "\\b(import|require).+['\"]micromatch['\"]",
       "message": "In core packages, a small, tested custom implementation",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(import|require).+['\"]micromatch['\"]",
       "compiledAt": "2026-03-21T07:20:48.796Z",
       "createdAt": "2026-03-21T07:20:48.796Z",
-      "fileGlobs": ["packages/core/**/*"]
+      "fileGlobs": ["packages/core/**/*"],
+      "severity": "warning"
     },
     {
       "lessonHash": "965b29fcccf3d8a5",
       "lessonHeading": "Hooks designed to block agent actions, such as shield gates",
+      "pattern": "\\b(exec|spawn|execFile)\\s*\\(",
       "message": "Hooks designed to block agent actions, such as shield gates",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\b(exec|spawn|execFile)\\s*\\(",
       "compiledAt": "2026-03-21T07:21:04.636Z",
       "createdAt": "2026-03-21T07:21:04.636Z",
       "fileGlobs": [
@@ -1214,224 +1213,224 @@
         "**/gates/**/*.ts",
         "**/git/**/*.ts",
         "!**/*.test.ts"
-      ]
+      ],
+      "severity": "error"
     },
     {
       "lessonHash": "fd676f51a189f283",
       "lessonHeading": "Custom database errors should include specific",
+      "pattern": "\\bnew\\s+\\w*(?:Database|Db)Error\\s*\\(\\s*['\"\\x60][^'\"\\x60]+['\"\\x60]\\s*\\)",
       "message": "Custom database errors should include a machine-readable code (e.g., 'DATABASE_MISMATCH') as a second argument to enable programmatic recovery and specific UI suggestions.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bnew\\s+\\w*(?:Database|Db)Error\\s*\\(\\s*['\"\\x60][^'\"\\x60]+['\"\\x60]\\s*\\)",
       "compiledAt": "2026-03-21T07:21:24.094Z",
       "createdAt": "2026-03-21T07:21:24.094Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "4c53a4cd45410edf",
       "lessonHeading": "Using child.kill() on Windows when shell: true is enabled",
+      "pattern": "\\.kill\\(",
       "message": "Using child.kill() on Windows when shell: true is enabled",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.kill\\(",
       "compiledAt": "2026-03-21T07:21:49.612Z",
       "createdAt": "2026-03-21T07:21:49.612Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "6ad0d4d5c760a5d6",
       "lessonHeading": "Technical documentation must avoid marketing-centric terms",
+      "pattern": "\\b(?:[Gg]uarantees?|[Cc]omprehensive)\\b",
       "message": "Technical documentation must avoid marketing-centric terms like 'guarantees' or 'comprehensive'. Replace absolute claims with specific descriptions of tested environments and observed results.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(?:[Gg]uarantees?|[Cc]omprehensive)\\b",
       "compiledAt": "2026-03-21T07:21:58.029Z",
       "createdAt": "2026-03-21T07:21:58.029Z",
-      "fileGlobs": ["*.md", "*.mdx"]
+      "fileGlobs": ["*.md", "*.mdx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "f1e6b70ba8796049",
       "lessonHeading": "Prefer Explicit Metadata Tokens from LLMs Over Heuristics",
+      "pattern": "\\.split\\(['\"/](?:\\\\n|\\\\r\\\\n)['\"/]\\)\\s*\\[\\s*0\\s*\\]",
       "message": "Prefer Explicit Metadata Tokens from LLMs Over Heuristics",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\.split\\(['\"/](?:\\\\n|\\\\r\\\\n)['\"/]\\)\\s*\\[\\s*0\\s*\\]",
       "compiledAt": "2026-03-21T07:21:58.029Z",
       "createdAt": "2026-03-21T07:21:58.029Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"],
+      "severity": "error"
     },
     {
       "lessonHash": "ef230abe26dbdb31",
       "lessonHeading": "When timing out a child process, do not reject the promise",
+      "pattern": "\\bsetTimeout\\s*\\(.*?\\breject\\b",
       "message": "When timing out a child process, do not reject the promise",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\bsetTimeout\\s*\\(.*?\\breject\\b",
       "compiledAt": "2026-03-21T07:21:58.029Z",
       "createdAt": "2026-03-21T07:21:58.029Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "error"
     },
     {
       "lessonHash": "01ad9fa44c7c5a3f",
       "lessonHeading": "Constructing a single regular expression with alternation",
+      "pattern": "\\.(?:forEach|map)\\s*\\(\\s*\\(?(\\w+)\\b[^)]*\\)?\\s*=>.*?\\.replace\\(\\s*\\1\\b",
       "message": "Use a single regular expression with alternation (e.g., /a|b|c/g) instead of iterating over an array to perform multiple .replace() calls. This is more efficient and scales better.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(?:forEach|map)\\s*\\(\\s*\\(?(\\w+)\\b[^)]*\\)?\\s*=>.*?\\.replace\\(\\s*\\1\\b",
       "compiledAt": "2026-03-21T07:22:45.347Z",
       "createdAt": "2026-03-21T07:22:45.347Z",
-      "fileGlobs": ["*.ts", "*.tsx", "*.js", "*.jsx"]
+      "fileGlobs": ["*.ts", "*.tsx", "*.js", "*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "6aea57594018cd0e",
       "lessonHeading": "Use the --recurse-submodules flag with git ls-files",
+      "pattern": "\\bgit\\s+ls-files\\b(?!.*\\b--recurse-submodules\\b)",
       "message": "Use the --recurse-submodules flag with git ls-files",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\bgit\\s+ls-files\\b(?!.*\\b--recurse-submodules\\b)",
       "compiledAt": "2026-03-21T07:22:45.347Z",
       "createdAt": "2026-03-21T07:22:45.347Z",
-      "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.js", "**/*.ts", "**/*.yml", "**/*.yaml"]
+      "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.js", "**/*.ts", "**/*.yml", "**/*.yaml"],
+      "severity": "error"
     },
     {
       "lessonHash": "f9f620a07401e96d",
       "lessonHeading": "Resolve git root via rev-parse for monorepo compatibility",
+      "pattern": "(-d\\s+['\"]?\\.git['\"]?|existsSync\\([^)]*['\"]\\.git['\"]\\))",
       "message": "Resolve git root via rev-parse for monorepo compatibility",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(-d\\s+['\"]?\\.git['\"]?|existsSync\\([^)]*['\"]\\.git['\"]\\))",
       "compiledAt": "2026-03-21T07:22:45.347Z",
       "createdAt": "2026-03-21T07:22:45.347Z",
-      "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.js", "**/*.ts", "**/*.yml", "**/*.yaml"]
+      "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.js", "**/*.ts", "**/*.yml", "**/*.yaml"],
+      "severity": "warning"
     },
     {
       "lessonHash": "5afaf8d03f059a41",
       "lessonHeading": "Emojis are excluded from all documentation files to adhere",
+      "pattern": "[\\uD83C-\\uDBFF\\uDC00-\\uDFFF]|[\\u2600-\\u27BF]",
       "message": "Emojis are excluded from documentation files to adhere to professional formatting standards (see CLAUDE.md).",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "[\\uD83C-\\uDBFF\\uDC00-\\uDFFF]|[\\u2600-\\u27BF]",
       "compiledAt": "2026-03-21T07:22:59.892Z",
       "createdAt": "2026-03-21T07:22:59.892Z",
-      "fileGlobs": ["*.md", "*.markdown", "*.txt"]
+      "fileGlobs": ["*.md", "*.markdown", "*.txt"],
+      "severity": "warning"
     },
     {
       "lessonHash": "06b97073f9073676",
       "lessonHeading": "When intercepting agent tool inputs via hooks, use specific",
+      "pattern": "(\\.(match|test|includes)\\s*\\(|pattern:\\s*)[/\"']\\^?\\b(git|npm|docker|aws|kubectl|gh|sh|bash)\\b\\$?[/\"']",
       "message": "When intercepting agent tool inputs via hooks, use specific",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "(\\.(match|test|includes)\\s*\\(|pattern:\\s*)[/\"']\\^?\\b(git|npm|docker|aws|kubectl|gh|sh|bash)\\b\\$?[/\"']",
       "compiledAt": "2026-03-21T07:22:59.892Z",
       "createdAt": "2026-03-21T07:22:59.892Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"],
+      "severity": "error"
     },
     {
       "lessonHash": "00e6e4a5f7f46c8b",
       "lessonHeading": "Orchestrators must dynamically adjust max_tokens based",
+      "pattern": "\\bmax_tokens\\s*[:=]\\s*\\d+",
       "message": "Hardcoded max_tokens detected. Orchestrators must dynamically adjust max_tokens based on the model used (e.g., Haiku vs Opus) to avoid API failures or unnecessary truncation.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bmax_tokens\\s*[:=]\\s*\\d+",
       "compiledAt": "2026-03-21T07:23:30.778Z",
       "createdAt": "2026-03-21T07:23:30.778Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.py"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.py"],
+      "severity": "warning"
     },
     {
       "lessonHash": "fc6576908594af96",
       "lessonHeading": "Avoid labeling a tool suite as \"deterministic\" or \"fast\"",
+      "pattern": "\\b(deterministic|fast)\\b.*\\b(suite|toolset|framework|agent|system)\\b",
       "message": "Avoid labeling a tool suite as 'deterministic' or 'fast' if it contains AI-powered components. Attribute these properties to specific commands instead (e.g., 'totem lint').",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(deterministic|fast)\\b.*\\b(suite|toolset|framework|agent|system)\\b",
       "compiledAt": "2026-03-21T07:24:32.504Z",
       "createdAt": "2026-03-21T07:24:32.504Z",
-      "fileGlobs": ["**/*.md", "**/*.ts", "**/*.js", "**/package.json"]
+      "fileGlobs": ["**/*.md", "**/*.ts", "**/*.js", "**/package.json"],
+      "severity": "warning"
     },
     {
       "lessonHash": "f4b44468f7f5b46a",
       "lessonHeading": "Verify CLI availability in shared git hooks before execution",
+      "pattern": "^[ \\t]*(?!(?:if|command|type|hash|\\[|&&|\\|\\|)\\b)\\s*(npx|pnpm|npm|yarn|eslint|prettier|lint-staged|tsc|vitest|jest|oxlint|biome|stylelint)\\b",
       "message": "Verify CLI availability in shared git hooks before execution",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "^[ \\t]*(?!(?:if|command|type|hash|\\[|&&|\\|\\|)\\b)\\s*(npx|pnpm|npm|yarn|eslint|prettier|lint-staged|tsc|vitest|jest|oxlint|biome|stylelint)\\b",
       "compiledAt": "2026-03-21T07:24:32.505Z",
       "createdAt": "2026-03-21T07:24:32.505Z",
-      "fileGlobs": [".husky/**/*", ".githooks/**/*", "scripts/hooks/**/*", "**/*.sh", "**/*.bash"]
+      "fileGlobs": [".husky/**/*", ".githooks/**/*", "scripts/hooks/**/*", "**/*.sh", "**/*.bash"],
+      "severity": "error"
     },
     {
       "lessonHash": "6d53d5fd241365d5",
       "lessonHeading": "Static analysis tools should read file content using git",
+      "pattern": "\\b(?:fs\\.)?read(?:File|FileSync)\\s*\\(",
       "message": "Static analysis tools should read file content using git",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(?:fs\\.)?read(?:File|FileSync)\\s*\\(",
       "compiledAt": "2026-03-21T07:24:32.505Z",
       "createdAt": "2026-03-21T07:24:32.505Z",
-      "fileGlobs": ["scripts/**/*.js", "scripts/**/*.ts", "tools/**/*.js", "tools/**/*.ts"]
+      "fileGlobs": ["scripts/**/*.js", "scripts/**/*.ts", "tools/**/*.js", "tools/**/*.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "ec594c0f3c8ad660",
       "lessonHeading": "Avoid inlining tokens or API keys in configuration files",
+      "pattern": "\"(?:token|api[-_]?key|secret|password)\"\\s*:\\s*\"[^$].*\"",
       "message": "Do not inline tokens or API keys in configuration files like .mcp.json or settings.json. Use environment variables instead.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\"(?:token|api[-_]?key|secret|password)\"\\s*:\\s*\"[^$].*\"",
       "compiledAt": "2026-03-21T07:24:48.956Z",
       "createdAt": "2026-03-21T07:24:48.956Z",
-      "fileGlobs": ["**/*.mcp.json", "**/settings.json"]
+      "fileGlobs": ["**/*.mcp.json", "**/settings.json"],
+      "severity": "warning"
     },
     {
       "lessonHash": "1a6aacfb227f5afa",
       "lessonHeading": "Do not automatically append trailing slashes to path",
+      "pattern": "(\\$\\{[^}]+\\}/|[\\w)]\\s*\\+\\s*['\"]/['\"]|\\.concat\\(['\"]/['\"]\\))",
       "message": "Do not automatically append trailing slashes to paths; let the caller control the slash to allow both file and directory-wide search scopes.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(\\$\\{[^}]+\\}/|[\\w)]\\s*\\+\\s*['\"]/['\"]|\\.concat\\(['\"]/['\"]\\))",
       "compiledAt": "2026-03-21T07:25:02.487Z",
       "createdAt": "2026-03-21T07:25:02.487Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "3629f9e09986b8f4",
       "lessonHeading": "Include a space or delimiter when concatenating disjoint",
+      "pattern": "(\\$\\{[^}]+\\}\\$\\{[^}]+\\}|\\.join\\(['\"]{2}\\))",
       "message": "Include a space or delimiter when concatenating disjoint",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "(\\$\\{[^}]+\\}\\$\\{[^}]+\\}|\\.join\\(['\"]{2}\\))",
       "compiledAt": "2026-03-21T07:25:02.487Z",
       "createdAt": "2026-03-21T07:25:02.487Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "error"
     },
     {
       "lessonHash": "2ce8aafccb3d038a",
       "lessonHeading": "When injecting vectordb lessons into orchestrator prompts",
+      "pattern": "\\bif\\s*\\(.*?\\b(budget|limit|max|capacity|length|chars)\\b.*?\\)\\s*break\\b",
       "message": "When injecting vectordb lessons into orchestrator prompts",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bif\\s*\\(.*?\\b(budget|limit|max|capacity|length|chars)\\b.*?\\)\\s*break\\b",
       "compiledAt": "2026-03-21T07:25:02.487Z",
       "createdAt": "2026-03-21T07:25:02.487Z",
-      "fileGlobs": ["**/orchestrator/**/*.ts", "**/totem/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["**/orchestrator/**/*.ts", "**/totem/**/*.ts", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "cdc8a8fe4897d952",
       "lessonHeading": "When wrapping external errors or providing fallbacks,",
+      "pattern": "\\bnew\\s+(?!Totem)Error\\(",
       "message": "When wrapping external errors or providing fallbacks,",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bnew\\s+(?!Totem)Error\\(",
       "compiledAt": "2026-03-21T07:25:02.487Z",
       "createdAt": "2026-03-21T07:25:02.487Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "5b9058bd289a1dbb",
       "lessonHeading": "Swallowing errors in core modules hides silent failures,",
+      "pattern": "\\bconsole\\.(log|warn|error|info)\\(",
       "message": "Avoid direct console logging in core modules to prevent environment coupling. Use optional onWarn callbacks for diagnostic reporting.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bconsole\\.(log|warn|error|info)\\(",
       "compiledAt": "2026-03-21T07:25:22.599Z",
       "createdAt": "2026-03-21T07:25:22.599Z",
       "fileGlobs": [
@@ -1440,126 +1439,126 @@
         "packages/core/**/*.js",
         "src/core/**/*.js",
         "!**/*.test.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "11b944fd4ec76ffc",
       "lessonHeading": "Project conventions require a universal 'Totem Error' tag",
+      "pattern": "(\\.(error|warn)\\(\\s*['\"\\x60](?![^'\"\\x60]*Totem Error))|(\\.(log|info)\\(\\s*['\"\\x60]\\[(Status|Log|Info|General)\\])",
       "message": "Project conventions require the 'Totem Error' tag for error logs and command-specific tags (e.g., [Init]) instead of generic tags like [Status] or [Log] for status logs.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(\\.(error|warn)\\(\\s*['\"\\x60](?![^'\"\\x60]*Totem Error))|(\\.(log|info)\\(\\s*['\"\\x60]\\[(Status|Log|Info|General)\\])",
       "compiledAt": "2026-03-21T07:26:18.826Z",
       "createdAt": "2026-03-21T07:26:18.826Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "ae672444a0fa5574",
       "lessonHeading": "AST-based rules often use empty strings for regex patterns,",
+      "pattern": "new\\s+RegExp\\(\\s*(['\"]{2}|[\\w.]*pattern)\\s*\\)",
       "message": "AST-based rules often use empty strings for regex patterns. Always filter by engine type (e.g., rule.engine === 'regex') before creating a RegExp from a rule pattern to prevent matching every line.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "new\\s+RegExp\\(\\s*(['\"]{2}|[\\w.]*pattern)\\s*\\)",
       "compiledAt": "2026-03-21T07:27:14.295Z",
       "createdAt": "2026-03-21T07:27:14.295Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "9ba3b23b3039906d",
       "lessonHeading": "Using split() on markdown headings often misclassifies",
+      "pattern": "\\.split\\(\\s*\\/(\\^|\\\\n)#{1,6}",
       "message": "Avoid using split() on markdown headings as it can misclassify the preamble or lose heading text. Use matchAll to capture heading indices for precise slicing of content blocks.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.split\\(\\s*\\/(\\^|\\\\n)#{1,6}",
       "compiledAt": "2026-03-21T07:28:06.154Z",
       "createdAt": "2026-03-21T07:28:06.154Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "8057fcca873b861a",
       "lessonHeading": "The shell option in spawn() calls should be omitted",
+      "pattern": "",
       "message": "The 'shell' option should be omitted when command arguments are provided as an array. Using structured arguments with shell: true increases the attack surface for command injection.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "spawn($CMD, [$$$ARGS], { $$$BEFORE, shell: true, $$$AFTER })",
       "compiledAt": "2026-03-21T07:29:15.492Z",
       "createdAt": "2026-03-21T07:29:15.492Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "e61b4c48ac65eb17",
       "lessonHeading": "Static top-level imports from heavy internal packages delay",
+      "pattern": "^import\\s+(?!type\\s)(?!\\s*\\{[^}]*Error).*from\\s+['\"](?:\\.\\.\\/|@[\\w-]+\\/)",
       "message": "Static top-level imports from heavy internal packages delay",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^import\\s+(?!type\\s)(?!\\s*\\{[^}]*Error).*from\\s+['\"](?:\\.\\.\\/|@[\\w-]+\\/)",
       "compiledAt": "2026-03-21T07:29:29.447Z",
       "createdAt": "2026-03-21T07:29:29.447Z",
-      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "668bc7d7f676f7e7",
       "lessonHeading": "Avoid forcing case normalization on file path filters",
+      "pattern": "\\b[\\w]*(path|file)[\\w]*\\.to(Lower|Upper)Case\\(\\)|\\b(LOWER|UPPER)\\s*\\(\\s*[^)]*(path|file)[^)]*\\)",
       "message": "Avoid forcing case normalization on file path filters (e.g., .toLowerCase() or LOWER()) to maintain consistency with case-sensitive filesystems and ensure compatibility with SQL dialects like LanceDB/DataFusion.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b[\\w]*(path|file)[\\w]*\\.to(Lower|Upper)Case\\(\\)|\\b(LOWER|UPPER)\\s*\\(\\s*[^)]*(path|file)[^)]*\\)",
       "compiledAt": "2026-03-21T07:30:15.396Z",
       "createdAt": "2026-03-21T07:30:15.396Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.py", "**/*.sql"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.py", "**/*.sql"],
+      "severity": "warning"
     },
     {
       "lessonHash": "04872b16e8b055df",
       "lessonHeading": "When mapping violations to rules in SARIF generation,",
+      "pattern": "\\bruleIndex\\b.*(\\?\\?|\\|\\|)\\s*0",
       "message": "When mapping violations to rules in SARIF generation,",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\bruleIndex\\b.*(\\?\\?|\\|\\|)\\s*0",
       "compiledAt": "2026-03-21T07:30:19.276Z",
       "createdAt": "2026-03-21T07:30:19.276Z",
-      "fileGlobs": ["**/*sarif*/**/*.ts", "**/sarif/**/*.ts"]
+      "fileGlobs": ["**/*sarif*/**/*.ts", "**/sarif/**/*.ts"],
+      "severity": "error"
     },
     {
       "lessonHash": "d309bbfc3d682100",
       "lessonHeading": "When detecting markers in user-authored files, use",
+      "pattern": "\\.(includes|indexOf|match)\\(\\s*['\"]marker['\"]",
       "message": "When detecting markers in user-authored files, use",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(includes|indexOf|match)\\(\\s*['\"]marker['\"]",
       "compiledAt": "2026-03-21T07:30:22.609Z",
       "createdAt": "2026-03-21T07:30:22.609Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "39b3381c5c98760b",
       "lessonHeading": "When mapping violations to rules in SARIF generation,",
+      "pattern": "ruleIndex\\s*[:=]\\s*(?:0\\b|.*(?:\\?\\?|\\|\\||\\?|:)\\s*0\\b)",
       "message": "When mapping violations to rules in SARIF generation, failing to find a rule index must trigger a hard error instead of falling back to a default index (0).",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "ruleIndex\\s*[:=]\\s*(?:0\\b|.*(?:\\?\\?|\\|\\||\\?|:)\\s*0\\b)",
       "compiledAt": "2026-03-21T07:30:58.693Z",
       "createdAt": "2026-03-21T07:30:58.693Z",
-      "fileGlobs": ["**/*.ts", "**/*.js"]
+      "fileGlobs": ["**/*.ts", "**/*.js"],
+      "severity": "warning"
     },
     {
       "lessonHash": "8207aa4dddbb29bf",
       "lessonHeading": "Using a boolean flag to track lazy initialization causes",
+      "pattern": "\\b(?:is)?[iI]nitialized\\s*(?::\\s*boolean|=\\s*(?:true|false))\\b",
       "message": "Using a boolean flag to track lazy initialization causes",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(?:is)?[iI]nitialized\\s*(?::\\s*boolean|=\\s*(?:true|false))\\b",
       "compiledAt": "2026-03-21T07:30:58.694Z",
       "createdAt": "2026-03-21T07:30:58.694Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "f81edd8937285d99",
       "lessonHeading": "Avoid using dynamic imports in shared utility modules",
+      "pattern": "\\bimport\\s*\\(",
       "message": "Avoid using dynamic imports in shared utility modules. Dynamic imports are most effective when used inside specific command handlers to defer loading of heavy dependencies.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bimport\\s*\\(",
       "compiledAt": "2026-03-21T07:31:13.231Z",
       "createdAt": "2026-03-21T07:31:13.231Z",
       "fileGlobs": [
@@ -1569,104 +1568,104 @@
         "shared/**/*.js",
         "helpers/**/*.ts",
         "helpers/**/*.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "4706b1b4d34c9e63",
       "lessonHeading": "When parsing diff --git headers, extract the destination",
+      "pattern": "diff --git a\\/(\\.\\*|\\S+)",
       "message": "When parsing 'diff --git' headers, handle quoted strings to support filenames with spaces/renames, and prioritize extracting the 'b/' destination path.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "diff --git a\\/(\\.\\*|\\S+)",
       "compiledAt": "2026-03-21T07:32:05.130Z",
       "createdAt": "2026-03-21T07:32:05.130Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.rb", "**/*.rs"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.rb", "**/*.rs"],
+      "severity": "warning"
     },
     {
       "lessonHash": "64a863955923e5b0",
       "lessonHeading": "When using advanced git commands like reset to stage demo",
+      "pattern": "^(?!.*#).*\\bgit\\s+reset\\b",
       "message": "When using advanced git commands like 'reset' in demos or onboarding scripts, include an inline comment to explain the intent.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^(?!.*#).*\\bgit\\s+reset\\b",
       "compiledAt": "2026-03-21T07:32:33.084Z",
       "createdAt": "2026-03-21T07:32:33.084Z",
-      "fileGlobs": ["**/*.md", "**/*.sh", "**/*.bash", "**/*.yml", "**/*.yaml"]
+      "fileGlobs": ["**/*.md", "**/*.sh", "**/*.bash", "**/*.yml", "**/*.yaml"],
+      "severity": "warning"
     },
     {
       "lessonHash": "55c903bd228e0b5c",
       "lessonHeading": "When wrapping external errors or providing fallbacks,",
+      "pattern": "\\bError\\s*\\(\\s*['\"\\`](?!\\[Totem Error\\])",
       "message": "Error messages must start with the '[Totem Error]' prefix for consistency and searchability.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bError\\s*\\(\\s*['\"\\`](?!\\[Totem Error\\])",
       "compiledAt": "2026-03-21T07:32:50.877Z",
       "createdAt": "2026-03-21T07:32:50.877Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs"],
+      "severity": "warning"
     },
     {
       "lessonHash": "bb1bcd038255556c",
       "lessonHeading": "PID-based process liveness checks (process.kill(pid, 0))",
+      "pattern": "",
       "message": "PID-based liveness checks (process.kill(pid, 0)) are unreliable across PID namespaces (Docker/CI). Combine with stale timestamps for safety.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "process.kill($PID, 0)",
       "compiledAt": "2026-03-21T07:33:08.203Z",
       "createdAt": "2026-03-21T07:33:08.203Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "f87cd61687b84261",
       "lessonHeading": "Check for the presence of the 'g' flag before appending it",
+      "pattern": "new\\s+RegExp\\s*\\([^,]+,\\s*[^?:]*\\+\\s*['\"]g['\"]",
       "message": "Check for the presence of the 'g' flag before appending it",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "new\\s+RegExp\\s*\\([^,]+,\\s*[^?:]*\\+\\s*['\"]g['\"]",
       "compiledAt": "2026-03-21T07:33:25.011Z",
       "createdAt": "2026-03-21T07:33:25.011Z",
-      "fileGlobs": ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"]
+      "fileGlobs": ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"],
+      "severity": "error"
     },
     {
       "lessonHash": "52e5665393f46eed",
       "lessonHeading": "Custom .env parsers must strip CRLF and quotes",
+      "pattern": "\\bprocess\\.env\\[[^\\]]+\\]\\s*=\\s*(?![^;\\n]*(\\?\\?|\\|\\||process\\.env))",
       "message": "Custom .env parsers must strip CRLF and quotes",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\bprocess\\.env\\[[^\\]]+\\]\\s*=\\s*(?![^;\\n]*(\\?\\?|\\|\\||process\\.env))",
       "compiledAt": "2026-03-21T07:33:52.271Z",
       "createdAt": "2026-03-21T07:33:52.271Z",
-      "fileGlobs": ["**/cli/**/*.ts", "**/cli/**/*.js", "!**/*.test.ts"]
+      "fileGlobs": ["**/cli/**/*.ts", "**/cli/**/*.js", "!**/*.test.ts"],
+      "severity": "error"
     },
     {
       "lessonHash": "1408ec626c931051",
       "lessonHeading": "GCA may suggest reverting dynamic imports back to static",
+      "pattern": "import\\s+(?!type\\s).*\\s+from\\s+['\"]@mmnto/totem['\"]",
       "message": "GCA may suggest reverting dynamic imports back to static",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "import\\s+(?!type\\s).*\\s+from\\s+['\"]@mmnto/totem['\"]",
       "compiledAt": "2026-03-21T07:35:28.869Z",
       "createdAt": "2026-03-21T07:35:28.869Z",
-      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "698693bb86cb8cc2",
       "lessonHeading": "Use path.relative(process.cwd(),",
+      "pattern": "\\.replace\\(\\s*process\\.cwd\\(\\)",
       "message": "Use path.relative(process.cwd(),",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.replace\\(\\s*process\\.cwd\\(\\)",
       "compiledAt": "2026-03-21T07:35:31.395Z",
       "createdAt": "2026-03-21T07:35:31.395Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "e940f4c791eafc9d",
       "lessonHeading": "Require specific names for failing tests (e.g., \"rejects",
+      "pattern": "\\b(it|test)\\s*\\(\\s*['\"](?:works correctly|should work|it works|test|basic test)['\"]",
       "message": "Use specific names for failing tests (e.g., 'rejects empty catch blocks') instead of generic descriptions like 'works correctly'. This ensures the test defines a concrete failure condition.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(it|test)\\s*\\(\\s*['\"](?:works correctly|should work|it works|test|basic test)['\"]",
       "compiledAt": "2026-03-21T07:36:08.375Z",
       "createdAt": "2026-03-21T07:36:08.375Z",
       "fileGlobs": [
@@ -1676,105 +1675,105 @@
         "**/*.spec.ts",
         "**/*.spec.js",
         "**/*.spec.tsx"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "1961a27872269f47",
       "lessonHeading": "Auto-formatters like Prettier can mangle technical metadata",
+      "pattern": "(\\\\_|\\\\\\*)",
       "message": "Found escaped underscores (\\_) or asterisks (\\*) in Markdown. This is often caused by Prettier mangling technical metadata/globs and will break glob matching logic.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(\\\\_|\\\\\\*)",
       "compiledAt": "2026-03-21T07:36:18.501Z",
       "createdAt": "2026-03-21T07:36:18.501Z",
-      "fileGlobs": ["*.md"]
+      "fileGlobs": ["*.md"],
+      "severity": "warning"
     },
     {
       "lessonHash": "6749e021fcc85028",
       "lessonHeading": "Specific LLM models, such as Gemini's text-embedding-004,",
+      "pattern": "text-embedding-004",
       "message": "Specific LLM models, such as Gemini's text-embedding-004,",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "text-embedding-004",
       "compiledAt": "2026-03-21T07:36:18.501Z",
       "createdAt": "2026-03-21T07:36:18.501Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.env", "**/*.yaml", "**/*.yml"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.env", "**/*.yaml", "**/*.yml"],
+      "severity": "error"
     },
     {
       "lessonHash": "28adb06a2b879edc",
       "lessonHeading": "Restrict dynamic imports to CLI command entry points",
+      "pattern": "",
       "message": "Restrict dynamic imports to CLI command entry points. Utility and adapter layers must use standard top-level imports to maintain a clean dependency graph and pass security audits.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "import($SOURCE)",
       "compiledAt": "2026-03-21T07:36:30.605Z",
       "createdAt": "2026-03-21T07:36:30.605Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/commands/**/*.ts", "!**/commands/**/*.js"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/commands/**/*.ts", "!**/commands/**/*.js"],
+      "severity": "warning"
     },
     {
       "lessonHash": "9cede77f72fe608b",
       "lessonHeading": "Loading large Tree-sitter WASM binaries at the module level",
+      "pattern": "^(await|const|let|var)\\s+.*(Parser\\.init|Language\\.load)",
       "message": "Avoid loading Tree-sitter WASM binaries at the module level to prevent cold-start penalties. Use lazy loading instead.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^(await|const|let|var)\\s+.*(Parser\\.init|Language\\.load)",
       "compiledAt": "2026-03-21T07:37:15.024Z",
       "createdAt": "2026-03-21T07:37:15.024Z",
-      "fileGlobs": ["**/*.ts", "**/*.js"]
+      "fileGlobs": ["**/*.ts", "**/*.js"],
+      "severity": "warning"
     },
     {
       "lessonHash": "705c32d4820d1089",
       "lessonHeading": "Project conventions require log.error to use a mandatory",
+      "pattern": "\\blog\\.error\\s*\\(\\s*(?!['\"]Totem Error['\"])|\\blog\\.(warn|info|debug|trace)\\s*\\(\\s*['\"]Totem Error['\"]",
       "message": "Project conventions require 'Totem Error' tag for log.error and command-specific tags for other log levels (warn, info, etc.).",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\blog\\.error\\s*\\(\\s*(?!['\"]Totem Error['\"])|\\blog\\.(warn|info|debug|trace)\\s*\\(\\s*['\"]Totem Error['\"]",
       "compiledAt": "2026-03-21T07:37:44.336Z",
       "createdAt": "2026-03-21T07:37:44.336Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "5d34d2d1c2262add",
       "lessonHeading": "Metacharacters must be escaped when interpolating dynamic",
+      "pattern": "new\\s+RegExp\\(\\s*(?![^'\"`\\s\\)]*escape)([^'\"`\\s\\d][^'\"`\\s\\)]*|\\`[^\\`]*\\$\\{.*\\}.*\\`)\\s*[\\),]",
       "message": "Escape dynamic strings before interpolating them into a RegExp to prevent injection attacks. Use a helper like escapeRegExp().",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "new\\s+RegExp\\(\\s*(?![^'\"`\\s\\)]*escape)([^'\"`\\s\\d][^'\"`\\s\\)]*|\\`[^\\`]*\\$\\{.*\\}.*\\`)\\s*[\\),]",
       "compiledAt": "2026-03-21T07:38:37.653Z",
       "createdAt": "2026-03-21T07:38:37.653Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "ddb842bcd2ea76d3",
       "lessonHeading": "When identifying directory-based glob patterns (like",
+      "pattern": "\\.(includes\\(['\"]/['\"]\\)(?!\\s*,\\s*1)|indexOf\\(['\"]/['\"]\\)\\s*(?:>=?\\s*0|!==\\s*-1))",
       "message": "When identifying directory-based glob patterns (like",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\.(includes\\(['\"]/['\"]\\)(?!\\s*,\\s*1)|indexOf\\(['\"]/['\"]\\)\\s*(?:>=?\\s*0|!==\\s*-1))",
       "compiledAt": "2026-03-21T07:38:41.084Z",
       "createdAt": "2026-03-21T07:38:41.084Z",
-      "fileGlobs": ["**/*.ts", "**/*.js"]
+      "fileGlobs": ["**/*.ts", "**/*.js"],
+      "severity": "error"
     },
     {
       "lessonHash": "8db5440cd22cb81a",
       "lessonHeading": "Perform explicit null and type checks on the results",
+      "pattern": "",
       "message": "Avoid direct type assertions on JSON.parse results for lock files. Use explicit null and type validation to safely handle malformed or truncated files.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "JSON.parse($A) as $B",
       "compiledAt": "2026-03-21T07:39:11.636Z",
       "createdAt": "2026-03-21T07:39:11.636Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "3c7773706e5b3b2d",
       "lessonHeading": "Brace expansion (e.g., \\*.{ts,js}) is not universally",
+      "pattern": "['\"][^'\"\\s]*\\{[^'\"\\s]*,[^'\"\\s]*\\}[^'\"\\s]*['\"]",
       "message": "Brace expansion (e.g., {ts,js}) is not universally supported and can cause silent matching failures. Expand these patterns into an explicit array of separate strings.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "['\"][^'\"\\s]*\\{[^'\"\\s]*,[^'\"\\s]*\\}[^'\"\\s]*['\"]",
       "compiledAt": "2026-03-21T07:39:42.895Z",
       "createdAt": "2026-03-21T07:39:42.895Z",
       "fileGlobs": [
@@ -1785,26 +1784,26 @@
         "**/*.ts",
         "**/*.sh",
         "**/*.bash"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "556e02153e02344e",
       "lessonHeading": "Ensure model name validation regexes explicitly allow",
+      "pattern": "\\bmodel\\w*\\b.*(['\"\\/])\\^?\\[[a-zA-Z0-9\\-_]+\\][*+]\\$?\\1",
       "message": "Ensure model name validation regexes explicitly allow",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bmodel\\w*\\b.*(['\"\\/])\\^?\\[[a-zA-Z0-9\\-_]+\\][*+]\\$?\\1",
       "compiledAt": "2026-03-21T07:39:45.935Z",
       "createdAt": "2026-03-21T07:39:45.935Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "1a7080ebf6162de3",
       "lessonHeading": "NEVER inline secrets, tokens, or API keys into agent config",
+      "pattern": "\"(?:env|environment|api[_-]?key|token|secret|access[_-]?token|pat|password)\"\\s*:",
       "message": "NEVER inline secrets, tokens, or API keys in config files. Use .env files; environment variables are inherited automatically without explicit 'env' blocks.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\"(?:env|environment|api[_-]?key|token|secret|access[_-]?token|pat|password)\"\\s*:",
       "compiledAt": "2026-03-21T07:40:14.940Z",
       "createdAt": "2026-03-21T07:40:14.940Z",
       "fileGlobs": [
@@ -1812,37 +1811,37 @@
         ".gemini/settings.json",
         "claude_desktop_config.json",
         "mcp-config.json"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "9fb5c4290a5065f0",
       "lessonHeading": "Lesson: Lesson headings are strictly limited to 60",
+      "pattern": "^Lesson:.{54,}",
       "message": "Lesson headings are strictly limited to 60 characters to serve as efficient SARIF identifiers and minimize token consumption.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^Lesson:.{54,}",
       "compiledAt": "2026-03-21T07:40:30.271Z",
       "createdAt": "2026-03-21T07:40:30.271Z",
-      "fileGlobs": ["**/*.md"]
+      "fileGlobs": ["**/*.md"],
+      "severity": "warning"
     },
     {
       "lessonHash": "73517376e8d9dca5",
       "lessonHeading": "LLMs are notoriously poor at character counting; use",
+      "pattern": "\\b\\d+\\s*(?:characters?|chars?|words?)\\b",
       "message": "LLMs are notoriously poor at character counting; use",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b\\d+\\s*(?:characters?|chars?|words?)\\b",
       "compiledAt": "2026-03-21T07:40:33.419Z",
       "createdAt": "2026-03-21T07:40:33.419Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md", "**/*.txt"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md", "**/*.txt"],
+      "severity": "warning"
     },
     {
       "lessonHash": "817ececc53e163bb",
       "lessonHeading": "The Git -- separator treats all subsequent arguments",
+      "pattern": "\\bgit\\s+.*\\s--\\s+.*(\\.\\.\\.?|[\\^~])",
       "message": "The Git -- separator treats all subsequent arguments",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\bgit\\s+.*\\s--\\s+.*(\\.\\.\\.?|[\\^~])",
       "compiledAt": "2026-03-21T07:40:33.420Z",
       "createdAt": "2026-03-21T07:40:33.420Z",
       "fileGlobs": [
@@ -1854,127 +1853,127 @@
         "**/*.ts",
         "**/*.js",
         "**/*.py"
-      ]
+      ],
+      "severity": "error"
     },
     {
       "lessonHash": "27f89a4715dc701e",
       "lessonHeading": "Check for the presence of the global ('g') flag",
+      "pattern": "new\\s+RegExp\\s*\\(\\s*[^,]+\\s*,\\s*[^,]*\\.flags\\s*\\+\\s*['\"][^'\"]*g",
       "message": "Check for the presence of the global ('g') flag",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "new\\s+RegExp\\s*\\(\\s*[^,]+\\s*,\\s*[^,]*\\.flags\\s*\\+\\s*['\"][^'\"]*g",
       "compiledAt": "2026-03-21T07:40:33.420Z",
       "createdAt": "2026-03-21T07:40:33.420Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "error"
     },
     {
       "lessonHash": "fec2a53d322a5fd4",
       "lessonHeading": "Sanitize user-provided text before persisting to files",
+      "pattern": "\\b(?:write|append)File(?:Sync)?\\s*\\(\\s*['\"][^'\"]*\\.(?:md|log)['\"]\\s*,\\s*(?![^,]*\\b(?:stripAnsi|sanitize|replace)\\b)[^,)\\s]+",
       "message": "Sanitize user-provided text before persisting to files",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\b(?:write|append)File(?:Sync)?\\s*\\(\\s*['\"][^'\"]*\\.(?:md|log)['\"]\\s*,\\s*(?![^,]*\\b(?:stripAnsi|sanitize|replace)\\b)[^,)\\s]+",
       "compiledAt": "2026-03-21T07:40:53.001Z",
       "createdAt": "2026-03-21T07:40:53.001Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "error"
     },
     {
       "lessonHash": "411562e8bdcec9a2",
       "lessonHeading": "CLI command actions must wrap asynchronous logic",
+      "pattern": "\\.action\\(\\s*async\\b[^{]*\\{\\s*(?!try\\b)",
       "message": "CLI command actions must wrap asynchronous logic in a try/catch block that delegates to a centralized error handler to ensure consistent error reporting.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.action\\(\\s*async\\b[^{]*\\{\\s*(?!try\\b)",
       "compiledAt": "2026-03-21T07:41:43.357Z",
       "createdAt": "2026-03-21T07:41:43.357Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "e88b974f187ba484",
       "lessonHeading": "Omit shell:true when spawn args are arrays",
+      "pattern": "",
       "message": "Omit 'shell: true' when calling spawn with a parameterized array of arguments to prevent shell injection and reduce overhead.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "spawn($CMD, $ARGS, { $$$BEFORE, shell: true, $$$AFTER })",
       "compiledAt": "2026-03-21T07:42:14.624Z",
       "createdAt": "2026-03-21T07:42:14.624Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "547431b89da28c4d",
       "lessonHeading": "Lesson headings must be restricted to 60 characters",
+      "pattern": "^#.{60,}",
       "message": "Lesson headings must be restricted to 60 characters or fewer to ensure stable identifiers in SARIF reports.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^#.{60,}",
       "compiledAt": "2026-03-21T07:42:46.567Z",
       "createdAt": "2026-03-21T07:42:46.567Z",
-      "fileGlobs": ["*.md"]
+      "fileGlobs": ["*.md"],
+      "severity": "warning"
     },
     {
       "lessonHash": "80bd76a4c4651b81",
       "lessonHeading": "The LLM documentation generator consistently hallucinates",
+      "pattern": "\\b#515\\b",
       "message": "Issue #515 (Claude Code hooks) was closed as not implemented. References to it are known LLM hallucinations. Use #520 for the automatic enforcement strategy instead.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b#515\\b",
       "compiledAt": "2026-03-21T07:43:01.961Z",
       "createdAt": "2026-03-21T07:43:01.961Z",
-      "fileGlobs": ["**/*.md"]
+      "fileGlobs": ["**/*.md"],
+      "severity": "warning"
     },
     {
       "lessonHash": "3fb8d8bf771804fb",
       "lessonHeading": "Swallowing errors within internal validation checks (like",
+      "pattern": "",
       "message": "Do not swallow errors in internal validation checks. Propagate them to allow top-level handlers to identify database corruption or 'healable' states and trigger appropriate resets.",
       "engine": "ast",
-      "severity": "warning",
-      "pattern": "",
       "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
       "compiledAt": "2026-03-21T07:43:17.117Z",
       "createdAt": "2026-03-21T07:43:17.117Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "5427714960346622",
       "lessonHeading": "When re-throwing errors in a CLI orchestrator, always",
+      "pattern": "throw\\s+new\\s+Error\\(\\s*['\"\\`](?![^'\"\\`]*\\[Totem Error\\])",
       "message": "When re-throwing errors in a CLI orchestrator, always",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "throw\\s+new\\s+Error\\(\\s*['\"\\`](?![^'\"\\`]*\\[Totem Error\\])",
       "compiledAt": "2026-03-21T07:43:26.366Z",
       "createdAt": "2026-03-21T07:43:26.366Z",
-      "fileGlobs": ["packages/cli/**/*.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "e2269aee2505521c",
       "lessonHeading": "Windows requires shell:true for git binary resolution",
+      "pattern": "execFileSync\\s*\\(\\s*['\"]git['\"](?![^)]*shell:\\s*(?:true|IS_WIN))",
       "message": "Windows requires shell:true for git binary resolution",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "execFileSync\\s*\\(\\s*['\"]git['\"](?![^)]*shell:\\s*(?:true|IS_WIN))",
       "compiledAt": "2026-03-21T07:43:43.680Z",
       "createdAt": "2026-03-21T07:43:43.680Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "cb854652a786c5d7",
       "lessonHeading": "Lesson headings must not exceed 60 characters",
+      "pattern": "^#\\s.{61,}",
       "message": "Lesson headings must not exceed 60 characters to ensure compatibility with SARIF output formats",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^#\\s.{61,}",
       "compiledAt": "2026-03-21T07:44:29.835Z",
       "createdAt": "2026-03-21T07:44:29.835Z",
-      "fileGlobs": ["**/*.md"]
+      "fileGlobs": ["**/*.md"],
+      "severity": "warning"
     },
     {
       "lessonHash": "45a50e604b60963a",
       "lessonHeading": "Restricting dynamic imports to CLI command entry points",
+      "pattern": "",
       "message": "Restricting dynamic imports to CLI command entry points allows utility and adapter layers to use standard top-level imports. Avoid dynamic imports outside of entry points.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "import($MOD)",
       "compiledAt": "2026-03-21T07:44:54.955Z",
       "createdAt": "2026-03-21T07:44:54.955Z",
@@ -1986,137 +1985,137 @@
         "!packages/cli/src/commands/**/*.ts",
         "!packages/cli/src/commands/**/*.js",
         "!**/*.test.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "9eabec8fb748d2a5",
       "lessonHeading": "CLI command entrypoints should catch validation errors",
+      "pattern": "",
       "message": "CLI command entrypoints should catch validation errors and print clean messages instead of throwing raw JavaScript errors. Reserve throwing for internal library functions.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "throw $ERR",
       "compiledAt": "2026-03-21T07:45:04.100Z",
       "createdAt": "2026-03-21T07:45:04.100Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "771fb0e59ec42095",
       "lessonHeading": "GitHub Actions shell injection via template expressions",
+      "pattern": "\\$\\{\\{\\s*(github\\.event|inputs)\\..*\\}\\}",
       "message": "GitHub Actions shell injection via template expressions",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\$\\{\\{\\s*(github\\.event|inputs)\\..*\\}\\}",
       "compiledAt": "2026-03-21T07:45:50.468Z",
       "createdAt": "2026-03-21T07:45:50.468Z",
-      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml"]
+      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml"],
+      "severity": "error"
     },
     {
       "lessonHash": "5b961a2a63d69d96",
       "lessonHeading": "Setting open-pull-requests-limit to 0 in dependabot.yml",
+      "pattern": "open-pull-requests-limit\\s*:\\s*['\"]?[1-9]\\d*['\"]?",
       "message": "Setting open-pull-requests-limit to 0 in dependabot.yml",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "open-pull-requests-limit\\s*:\\s*['\"]?[1-9]\\d*['\"]?",
       "compiledAt": "2026-03-21T07:46:01.049Z",
       "createdAt": "2026-03-21T07:46:01.049Z",
-      "fileGlobs": [".github/dependabot.yml"]
+      "fileGlobs": [".github/dependabot.yml"],
+      "severity": "error"
     },
     {
       "lessonHash": "797e14d294b5f3fd",
       "lessonHeading": "When masking secrets with assignment patterns, use capture",
+      "pattern": "\\.replace(?:All)?\\(\\/[a-zA-Z0-9_-]+\\s*[=:]\\s*[^/()\\n]*\\/\\s*,\\s*['\"](?![^'\"]*\\$\\d)[^'\"]*(?:REDACTED|MASKED|SECRET|FILTERED|\\*{3,})['\"]\\)",
       "message": "When masking secrets, use capture groups (e.g., `/(key=).*/`) and backreferences (e.g., `'$1REDACTED'`) to preserve the key and assignment syntax for debugging purposes.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.replace(?:All)?\\(\\/[a-zA-Z0-9_-]+\\s*[=:]\\s*[^/()\\n]*\\/\\s*,\\s*['\"](?![^'\"]*\\$\\d)[^'\"]*(?:REDACTED|MASKED|SECRET|FILTERED|\\*{3,})['\"]\\)",
       "compiledAt": "2026-03-21T07:46:44.719Z",
       "createdAt": "2026-03-21T07:46:44.719Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "d34c5054f0dd908a",
       "lessonHeading": "Static analysis tools should read file content using git",
+      "pattern": "\\bfs(\\.promises)?\\.read(File|FileSync)\\(",
       "message": "Use 'git show :path' instead of 'fs' methods to read file content for static analysis. This ensures the tool reads the staged index version rather than unstaged local changes.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bfs(\\.promises)?\\.read(File|FileSync)\\(",
       "compiledAt": "2026-03-21T07:47:08.710Z",
       "createdAt": "2026-03-21T07:47:08.710Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "b0ad61d6fd0eafe4",
       "lessonHeading": "Performing content.split('\\n') inside a loop over line",
+      "pattern": "\\.split\\(['\"]\\\\n['\"]\\)\\s*\\[",
       "message": "Performing content.split('\\n') inside a loop over line",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\.split\\(['\"]\\\\n['\"]\\)\\s*\\[",
       "compiledAt": "2026-03-21T07:48:10.171Z",
       "createdAt": "2026-03-21T07:48:10.171Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "error"
     },
     {
       "lessonHash": "a885cb7ba7d393f8",
       "lessonHeading": "File system watchers should monitor for \"rename\" events",
+      "pattern": "\\b(event|type|eventType)\\s*===?\\s*['\"](change|modified|created)['\"](?![^\"']*?['\"]rename['\"])",
       "message": "File system watchers should monitor for 'rename' events to support atomic saves. Handling only 'change' or 'modified' often misses updates from editors that save to a temporary file and then rename it.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(event|type|eventType)\\s*===?\\s*['\"](change|modified|created)['\"](?![^\"']*?['\"]rename['\"])",
       "compiledAt": "2026-03-21T07:48:35.030Z",
       "createdAt": "2026-03-21T07:48:35.030Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.mjs", "**/*.cjs"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.mjs", "**/*.cjs"],
+      "severity": "warning"
     },
     {
       "lessonHash": "d8e71d6900e46d8c",
       "lessonHeading": "For data structures with few fields (e.g., < 10), use type",
+      "pattern": "import.*from\\s+['\"]zod['\"]",
       "message": "Use type assertions instead of Zod for small data structures (< 10 fields) to avoid dependency overhead in the CLI.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "import.*from\\s+['\"]zod['\"]",
       "compiledAt": "2026-03-21T07:48:54.066Z",
       "createdAt": "2026-03-21T07:48:54.066Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.tsx", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.tsx", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "94936169ab6f8d32",
       "lessonHeading": "Binaries like git may fail to resolve correctly when using",
+      "pattern": "\\bexecFileSync\\s*\\((?![^)]*shell:\\s*true)",
       "message": "Binaries like git may fail to resolve correctly when using execFileSync on Windows unless 'shell: true' is explicitly enabled.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bexecFileSync\\s*\\((?![^)]*shell:\\s*true)",
       "compiledAt": "2026-03-21T07:49:27.518Z",
       "createdAt": "2026-03-21T07:49:27.518Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "e9c1203c7cbfdaa4",
       "lessonHeading": "Explicit type assertions are often unnecessary when using",
+      "pattern": "\\?\\?\\s*(['\"][^'\"]*['\"]|\\d+|true|false)\\s*\\)?\\s+as\\s+",
       "message": "Explicit type assertion is redundant when using nullish coalescing (??) with a literal fallback; TypeScript infers the type automatically.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\?\\?\\s*(['\"][^'\"]*['\"]|\\d+|true|false)\\s*\\)?\\s+as\\s+",
       "compiledAt": "2026-03-21T07:50:19.353Z",
       "createdAt": "2026-03-21T07:50:19.353Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "3507e492f0f5a192",
       "lessonHeading": "Escape backticks in SQL predicates",
+      "pattern": "\\.replace\\(\\/\\s*\\[[^\\]`]*['\"%_][^\\]`]*\\]",
       "message": "SQL escaping logic must include backticks (`) alongside single quotes and wildcards to prevent identifier-based injection attacks.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.replace\\(\\/\\s*\\[[^\\]`]*['\"%_][^\\]`]*\\]",
       "compiledAt": "2026-03-21T07:51:39.296Z",
       "createdAt": "2026-03-21T07:51:39.296Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "bbfe23900dca4450",
       "lessonHeading": "Use the core package's glob matching logic",
+      "pattern": "(import|require).*['\"](glob|globby|micromatch|minimatch|fast-glob)['\"]",
       "message": "Use the core package's glob matching logic instead of third-party libraries (glob, micromatch, etc.) when filtering Git diffs to maintain CI/CD behavioral parity.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(import|require).*['\"](glob|globby|micromatch|minimatch|fast-glob)['\"]",
       "compiledAt": "2026-03-21T07:52:07.666Z",
       "createdAt": "2026-03-21T07:52:07.666Z",
       "fileGlobs": [
@@ -2125,15 +2124,15 @@
         "packages/cli/**/*.ts",
         "packages/ci/**/*.ts",
         "!**/*.test.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "427c97fb0063f0cb",
       "lessonHeading": "Avoid using partial matchers like toContain when testing",
+      "pattern": "",
       "message": "Avoid using partial matchers like 'toContain' when testing secret masking or data sanitization. Use exact string assertions to ensure logic preserves surrounding context and does not redact more than intended.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "expect($VAL).toContain($SUB)",
       "compiledAt": "2026-03-21T07:52:51.896Z",
       "createdAt": "2026-03-21T07:52:51.896Z",
@@ -2144,129 +2143,129 @@
         "**/*.spec.tsx",
         "**/*.test.js",
         "**/*.spec.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "ab8cf85a5ebfca09",
       "lessonHeading": "Explicit type assertions are often unnecessary when using",
+      "pattern": "\\?\\?\\s*(['\"][^'\"]*['\"]|\\d+|true|false)\\s+as\\s+",
       "message": "Explicit type assertions are often unnecessary when using",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\?\\?\\s*(['\"][^'\"]*['\"]|\\d+|true|false)\\s+as\\s+",
       "compiledAt": "2026-03-21T07:52:51.896Z",
       "createdAt": "2026-03-21T07:52:51.896Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "917e59a4359adb20",
       "lessonHeading": "Standardize exception messages with a consistent prefix",
+      "pattern": "\\bnew\\s+\\w*Error\\(\\s*['\"`](?!\\[Totem Error\\])",
       "message": "Standardize exception messages with a consistent prefix",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\bnew\\s+\\w*Error\\(\\s*['\"`](?!\\[Totem Error\\])",
       "compiledAt": "2026-03-21T07:52:51.896Z",
       "createdAt": "2026-03-21T07:52:51.896Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"],
+      "severity": "error"
     },
     {
       "lessonHash": "ba29c80ef7b13c15",
       "lessonHeading": "Always iterate through all regex matches (e.g.,",
+      "pattern": "\\.(match|exec)\\s*\\(",
       "message": "Always iterate through all regex matches (e.g.,",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\.(match|exec)\\s*\\(",
       "compiledAt": "2026-03-21T07:52:51.896Z",
       "createdAt": "2026-03-21T07:52:51.896Z",
       "fileGlobs": [
         "packages/cli/src/adapters/**/*.ts",
         "packages/mcp/src/**/*.ts",
         "!**/*.test.ts"
-      ]
+      ],
+      "severity": "error"
     },
     {
       "lessonHash": "bcd7db927f2a58bd",
       "lessonHeading": "Use --body-file for LLM text in CLI",
+      "pattern": "\\b--body\\b(?!-file)",
       "message": "Use --body-file for LLM text in CLI",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\b--body\\b(?!-file)",
       "compiledAt": "2026-03-21T07:52:51.896Z",
       "createdAt": "2026-03-21T07:52:51.896Z",
-      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "packages/cli/**/*.ts"]
+      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "packages/cli/**/*.ts"],
+      "severity": "error"
     },
     {
       "lessonHash": "fe49bb51fe20e80b",
       "lessonHeading": "AI tool metadata must treat MCP-related fields as optional",
+      "pattern": "\\bmcp[a-zA-Z0-9_]*(?!\\?)\\s*:",
       "message": "AI tool metadata must treat MCP-related fields as optional",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bmcp[a-zA-Z0-9_]*(?!\\?)\\s*:",
       "compiledAt": "2026-03-21T07:53:04.001Z",
       "createdAt": "2026-03-21T07:53:04.001Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "2b570f4ebf0982cd",
       "lessonHeading": "Prefer totem lint over the deprecated totem shield",
+      "pattern": "totem\\s+shield\\s+--deterministic",
       "message": "Use 'totem lint' instead of the deprecated 'totem shield --deterministic' for structural validation.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "totem\\s+shield\\s+--deterministic",
       "compiledAt": "2026-03-21T07:53:09.583Z",
       "createdAt": "2026-03-21T07:53:09.583Z",
-      "fileGlobs": ["*.sh", "*.yml", "*.yaml", "package.json"]
+      "fileGlobs": ["*.sh", "*.yml", "*.yaml", "package.json"],
+      "severity": "warning"
     },
     {
       "lessonHash": "702b94ab71944d67",
       "lessonHeading": "Core library modules should accept an optional onWarn",
+      "pattern": "\\bconsole\\.(log|warn|error|info)\\b",
       "message": "Core library modules should use an optional 'onWarn' callback to surface diagnostics instead of hardcoding 'console' dependencies.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bconsole\\.(log|warn|error|info)\\b",
       "compiledAt": "2026-03-21T07:53:48.413Z",
       "createdAt": "2026-03-21T07:53:48.413Z",
-      "fileGlobs": ["lib/**/*.ts", "packages/core/**/*.ts", "src/lib/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["lib/**/*.ts", "packages/core/**/*.ts", "src/lib/**/*.ts", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "468830cbb3cf0e71",
       "lessonHeading": "Sanitize git-sourced metadata like branch names, status,",
+      "pattern": "\\bgit\\s+(?:branch|status|diff|log|describe|show)\\b(?!.*(?:stripAnsi|replace|sed|tr|\\|))",
       "message": "Sanitize git-sourced metadata like branch names, status,",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\bgit\\s+(?:branch|status|diff|log|describe|show)\\b(?!.*(?:stripAnsi|replace|sed|tr|\\|))",
       "compiledAt": "2026-03-21T07:53:48.413Z",
       "createdAt": "2026-03-21T07:53:48.413Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh", "**/*.bash"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh", "**/*.bash"],
+      "severity": "error"
     },
     {
       "lessonHash": "6a08238fdff2f808",
       "lessonHeading": "When a hook is intended to run unconditionally, use",
+      "pattern": "\\b(hook|pattern|glob|include|matches|files)\\b\\s*[:=]\\s*(['\"])\\2",
       "message": "Use an explicit '**/*' glob pattern instead of an empty string for unconditional hooks to clarify intent.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(hook|pattern|glob|include|matches|files)\\b\\s*[:=]\\s*(['\"])\\2",
       "compiledAt": "2026-03-21T07:54:01.977Z",
       "createdAt": "2026-03-21T07:54:01.977Z",
-      "fileGlobs": ["**/*.json", "**/*.yml", "**/*.yaml", "**/*.ts", "**/*.js"]
+      "fileGlobs": ["**/*.json", "**/*.yml", "**/*.yaml", "**/*.ts", "**/*.js"],
+      "severity": "warning"
     },
     {
       "lessonHash": "840a9ee072046158",
       "lessonHeading": "Using .includes() to identify target files like READMEs",
+      "pattern": "\\.includes\\(['\"][^'\"]*README[^'\"]*['\"]\\)",
       "message": "Use path.basename() instead of .includes() to identify files (like READMEs) to avoid false positives from parent directory names.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.includes\\(['\"][^'\"]*README[^'\"]*['\"]\\)",
       "compiledAt": "2026-03-21T07:54:12.750Z",
       "createdAt": "2026-03-21T07:54:12.750Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "9ff38f6159e82c1d",
       "lessonHeading": "CLI entrypoints print clean errors, libraries throw",
+      "pattern": "\\bthrow\\s+",
       "message": "CLI entrypoints print clean errors, libraries throw",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bthrow\\s+",
       "compiledAt": "2026-03-21T07:54:12.750Z",
       "createdAt": "2026-03-21T07:54:12.750Z",
       "fileGlobs": [
@@ -2274,15 +2273,15 @@
         "packages/cli/src/bin/**/*.ts",
         "packages/cli/src/cli.ts",
         "**/cli.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "c1875701370aa087",
       "lessonHeading": "Orchestrators must dynamically adjust max_tokens based",
+      "pattern": "\\bmax_?[tT]okens\\b\\s*:\\s*\\d+",
       "message": "Orchestrators must dynamically adjust max_tokens based",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\bmax_?[tT]okens\\b\\s*:\\s*\\d+",
       "compiledAt": "2026-03-21T07:55:03.574Z",
       "createdAt": "2026-03-21T07:55:03.574Z",
       "fileGlobs": [
@@ -2290,92 +2289,92 @@
         "**/orchestrators/**/*.ts",
         "**/*orchestrator*.ts",
         "!**/*.test.ts"
-      ]
+      ],
+      "severity": "error"
     },
     {
       "lessonHash": "5e69ceb82f623d4f",
       "lessonHeading": "When identifying directory-based glob patterns (like",
+      "pattern": "\\b(pattern|glob|path)\\.(includes\\(['\"][/\\\\]['\"]\\)|indexOf\\(['\"][/\\\\]['\"]\\)(?!\\s*,\\s*[1-9])(?!\\s*>\\s*0))",
       "message": "When identifying directory-based glob patterns, ensure the separator check excludes index 0 (e.g., use .indexOf('/', 1) or check .indexOf('/') > 0). This prevents repo-relative paths from being misinterpreted as root-anchored.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(pattern|glob|path)\\.(includes\\(['\"][/\\\\]['\"]\\)|indexOf\\(['\"][/\\\\]['\"]\\)(?!\\s*,\\s*[1-9])(?!\\s*>\\s*0))",
       "compiledAt": "2026-03-21T07:55:35.205Z",
       "createdAt": "2026-03-21T07:55:35.205Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "e3b09f1304e90238",
       "lessonHeading": "The Gemini CLI and Gemini Code Assist (GCA) do not",
+      "pattern": "\\bgemini\\.md\\b",
       "message": "The Gemini CLI and Gemini Code Assist (GCA) do not",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\bgemini\\.md\\b",
       "compiledAt": "2026-03-21T07:55:35.205Z",
       "createdAt": "2026-03-21T07:55:35.205Z",
-      "fileGlobs": ["**/*.md", "**/*.sh", "**/*.yml", "**/*.yaml", "package.json", "**/*.txt"]
+      "fileGlobs": ["**/*.md", "**/*.sh", "**/*.yml", "**/*.yaml", "package.json", "**/*.txt"],
+      "severity": "error"
     },
     {
       "lessonHash": "0c4cd45a9b56ca95",
       "lessonHeading": "CLI command entrypoints should catch validation errors",
+      "pattern": "\\bthrow\\s+new\\s+(?!Totem)\\w*Error\\(",
       "message": "CLI command entrypoints should catch validation errors",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bthrow\\s+new\\s+(?!Totem)\\w*Error\\(",
       "compiledAt": "2026-03-21T07:55:35.205Z",
       "createdAt": "2026-03-21T07:55:35.205Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "c5396c73d3fc9adf",
       "lessonHeading": "When parsing git diff output, target the b/ destination",
+      "pattern": "diff --git\\s+a\\/\\S+(?![^\\n]*b\\/\"|[^\\n]*b\\/[^\\s])",
       "message": "When parsing git diff output, ensure you target the 'b/' destination path and account for quoted strings/spaces. Avoid simple whitespace-based matches like 'a/\\S+' which fail on renames or paths with spaces.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "diff --git\\s+a\\/\\S+(?![^\\n]*b\\/\"|[^\\n]*b\\/[^\\s])",
       "compiledAt": "2026-03-21T07:56:01.571Z",
       "createdAt": "2026-03-21T07:56:01.571Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.py"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.py"],
+      "severity": "warning"
     },
     {
       "lessonHash": "8a0f9076899ee00f",
       "lessonHeading": "Avoid using Zod's .url() validator for configurations where",
+      "pattern": "\\.url\\(\\)",
       "message": "Avoid using Zod's .url() validator for configurations where",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\.url\\(\\)",
       "compiledAt": "2026-03-21T07:56:26.881Z",
       "createdAt": "2026-03-21T07:56:26.881Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "error"
     },
     {
       "lessonHash": "d2f1385aecbf1d51",
       "lessonHeading": "Ensure all thrown errors, including those for missing",
+      "pattern": "throw\\s+.*['\"`](?!\\s*\\[Totem Error\\])",
       "message": "Ensure all thrown errors, including those for missing",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "throw\\s+.*['\"`](?!\\s*\\[Totem Error\\])",
       "compiledAt": "2026-03-21T07:57:17.223Z",
       "createdAt": "2026-03-21T07:57:17.223Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.mjs", "**/*.cjs"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.mjs", "**/*.cjs"],
+      "severity": "warning"
     },
     {
       "lessonHash": "061d635e1b2c36bc",
       "lessonHeading": "Issue numbers are only unique within a single repository;",
+      "pattern": "(^|[^a-zA-Z0-9-_./])#\\d+",
       "message": "Issue numbers are only unique within a single repository;",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "(^|[^a-zA-Z0-9-_./])#\\d+",
       "compiledAt": "2026-03-21T07:57:17.223Z",
       "createdAt": "2026-03-21T07:57:17.223Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "apps/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts", "apps/cli/**/*.ts", "!**/*.test.ts"],
+      "severity": "error"
     },
     {
       "lessonHash": "995907cf8756e39a",
       "lessonHeading": "The text-embedding-004 identifier is frequently unavailable",
+      "pattern": "\\btext-embedding-004\\b",
       "message": "The text-embedding-004 identifier is frequently unavailable",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\btext-embedding-004\\b",
       "compiledAt": "2026-03-21T07:57:26.804Z",
       "createdAt": "2026-03-21T07:57:26.804Z",
       "fileGlobs": [
@@ -2386,137 +2385,137 @@
         "**/*.json",
         "**/*.yaml",
         "**/*.yml"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "4724fc8ef8e9994f",
       "lessonHeading": "Avoid inlining tokens or API keys in configuration files",
+      "pattern": "\"(?:api[_-]?key|token|secret|password)\"\\s*:\\s*\".+\"",
       "message": "Avoid inlining tokens or API keys in configuration files",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\"(?:api[_-]?key|token|secret|password)\"\\s*:\\s*\".+\"",
       "compiledAt": "2026-03-21T07:57:26.805Z",
       "createdAt": "2026-03-21T07:57:26.805Z",
-      "fileGlobs": ["**/*.mcp.json", "**/settings.json", "**/.vscode/settings.json"]
+      "fileGlobs": ["**/*.mcp.json", "**/settings.json", "**/.vscode/settings.json"],
+      "severity": "error"
     },
     {
       "lessonHash": "a449a52e54671a80",
       "lessonHeading": "Moving instructions from the error message string",
+      "pattern": "\\b(message|errorMessage|error)\\s*[:=]\\s*['\"][^'\"]*?\\b([Pp]lease|[Ss]hould|[Tt]ry|[Rr]un|[Ee]nsure|[Mm]ake sure)\\b",
       "message": "Move instructional text (e.g., 'Please...', 'Try...') from the error message string to a dedicated 'recoveryHint' property to enable consistent CLI formatting.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(message|errorMessage|error)\\s*[:=]\\s*['\"][^'\"]*?\\b([Pp]lease|[Ss]hould|[Tt]ry|[Rr]un|[Ee]nsure|[Mm]ake sure)\\b",
       "compiledAt": "2026-03-21T07:57:51.074Z",
       "createdAt": "2026-03-21T07:57:51.074Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js"]
+      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js"],
+      "severity": "warning"
     },
     {
       "lessonHash": "ca66f0cecc30bd82",
       "lessonHeading": "Standardized logging utilities should always be used over",
+      "pattern": "\\bconsole\\.error\\s*\\(",
       "message": "Use the standardized 'log' utility instead of 'console.error' for consistent output formatting and tagging.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bconsole\\.error\\s*\\(",
       "compiledAt": "2026-03-21T07:58:00.308Z",
       "createdAt": "2026-03-21T07:58:00.308Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "ac154fa02758dce1",
       "lessonHeading": "Avoid using console methods directly in core library",
+      "pattern": "\\bconsole\\.(log|warn|error|info|debug|trace)\\b",
       "message": "Avoid using console methods directly in core library",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bconsole\\.(log|warn|error|info|debug|trace)\\b",
       "compiledAt": "2026-03-21T07:58:09.939Z",
       "createdAt": "2026-03-21T07:58:09.939Z",
-      "fileGlobs": ["packages/core/**/*.ts", "libs/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/core/**/*.ts", "libs/**/*.ts", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "116ab168dae04201",
       "lessonHeading": "Proactively remove references to planned features from user",
+      "pattern": "\\b(coming soon|planned (feature|for)|future release|roadmap|under development|slated for|later development phases)\\b",
       "message": "Proactively remove references to planned features from user",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(coming soon|planned (feature|for)|future release|roadmap|under development|slated for|later development phases)\\b",
       "compiledAt": "2026-03-21T07:58:17.482Z",
       "createdAt": "2026-03-21T07:58:17.482Z",
-      "fileGlobs": ["**/*.md", "**/*.mdx", "docs/**/*", "guides/**/*"]
+      "fileGlobs": ["**/*.md", "**/*.mdx", "docs/**/*", "guides/**/*"],
+      "severity": "warning"
     },
     {
       "lessonHash": "60d41ffe66994705",
       "lessonHeading": "When manually parsing CLI arguments, verify that a flag's",
+      "pattern": "[\\w.]+\\s*\\[[^\\]]*\\.indexOf\\(.+?\\)\\s*\\+\\s*1\\s*\\]",
       "message": "When manually parsing CLI arguments, verify that a flag's",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "[\\w.]+\\s*\\[[^\\]]*\\.indexOf\\(.+?\\)\\s*\\+\\s*1\\s*\\]",
       "compiledAt": "2026-03-21T07:58:20.331Z",
       "createdAt": "2026-03-21T07:58:20.331Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.mjs", "**/*.cjs"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.mjs", "**/*.cjs"],
+      "severity": "error"
     },
     {
       "lessonHash": "90eccad00d7df088",
       "lessonHeading": "The @ast-grep/napi findAll method accepts both string",
+      "pattern": "",
       "message": "The @ast-grep/napi findAll method handles string patterns and NapiConfig objects natively; manual typeof branching is redundant.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "$NODE.findAll(typeof $X === 'string' ? $Y : $Z)",
       "compiledAt": "2026-03-21T07:58:42.377Z",
       "createdAt": "2026-03-21T07:58:42.377Z",
-      "fileGlobs": ["**/*.ts", "**/*.js"]
+      "fileGlobs": ["**/*.ts", "**/*.js"],
+      "severity": "warning"
     },
     {
       "lessonHash": "270832e0401a5c4c",
       "lessonHeading": "AI tool metadata must treat MCP-related fields as optional",
+      "pattern": "\\b(mcp|mcpServer|mcpTool)\\b(?!\\?)\\s*:(?![^;]*\\.optional\\(\\))",
       "message": "MCP-related fields in tool metadata must be optional (e.g., 'mcp?:' in TypeScript or '.optional()' in Zod) to accommodate agents like GitHub Copilot that lack MCP capabilities.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(mcp|mcpServer|mcpTool)\\b(?!\\?)\\s*:(?![^;]*\\.optional\\(\\))",
       "compiledAt": "2026-03-21T07:59:11.752Z",
       "createdAt": "2026-03-21T07:59:11.752Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "8b4cc375e7fe2019",
       "lessonHeading": "Using split() on markdown headings often misclassifies",
+      "pattern": "\\.split\\(\\s*(?:\\/\\^?#+|['\"]\\^?#+)",
       "message": "Using split() on markdown headings often misclassifies",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.split\\(\\s*(?:\\/\\^?#+|['\"]\\^?#+)",
       "compiledAt": "2026-03-21T07:59:11.752Z",
       "createdAt": "2026-03-21T07:59:11.752Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "f5165e80950237a8",
       "lessonHeading": "Avoid bypassing visibility checks with bracket notation",
+      "pattern": "\\[['\"][a-zA-Z_]\\w*['\"]\\]\\s*\\(",
       "message": "Avoid bypassing visibility checks with bracket notation",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\[['\"][a-zA-Z_]\\w*['\"]\\]\\s*\\(",
       "compiledAt": "2026-03-21T07:59:11.752Z",
       "createdAt": "2026-03-21T07:59:11.752Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "5e7cc2a0121c0ab4",
       "lessonHeading": "Spying on underlying implementation details",
+      "pattern": "\\b(spyOn|spy|stub)\\(\\s*console\\b",
       "message": "Avoid spying on 'console' methods. Target the project's public logging utility instead to ensure tests remain robust against internal changes.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(spyOn|spy|stub)\\(\\s*console\\b",
       "compiledAt": "2026-03-21T07:59:35.585Z",
       "createdAt": "2026-03-21T07:59:35.585Z",
-      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]
+      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"],
+      "severity": "warning"
     },
     {
       "lessonHash": "ae385d1454537cf0",
       "lessonHeading": "When deferring a bot optimization suggestion as \"premature\"",
+      "pattern": "(?:\\/\\/|#|\\*)\\s*(?!.*revisit\\s+when).*?(?:[Pp]remature|[Dd]efer)",
       "message": "When deferring an optimization as 'premature', document the trigger condition (e.g., 'revisit when list exceeds N entries') to avoid silent accumulation of sub-optimal patterns.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(?:\\/\\/|#|\\*)\\s*(?!.*revisit\\s+when).*?(?:[Pp]remature|[Dd]efer)",
       "compiledAt": "2026-03-21T08:00:03.853Z",
       "createdAt": "2026-03-21T08:00:03.853Z",
       "fileGlobs": [
@@ -2532,26 +2531,15 @@
         "*.java",
         "*.cpp",
         "*.c"
-      ]
-    },
-    {
-      "lessonHash": "1350ce9172ff0aa2",
-      "lessonHeading": "Injecting untrusted lesson content directly into a system",
-      "message": "Wrap untrusted lesson content in XML tags (e.g., <lesson_content>${lesson}</lesson_content>) to prevent instruction leakage and prompt injection.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "(`(?![^`]*<[a-zA-Z0-9]+>)[^`]*\\$\\{lesson(Content)?\\}[^`]*`|(['\"])(?![^'\"<]*<[a-zA-Z0-9]+>)[^'\"<]*\\2\\s*\\+\\s*lesson(Content)?\\b)",
-      "compiledAt": "2026-03-21T08:00:34.992Z",
-      "createdAt": "2026-03-21T08:00:34.992Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "838b6ed91dd41f9b",
       "lessonHeading": "Standard glob matchers often handle brace expansion",
+      "pattern": "['\"][^'\"\\n]*\\{[^'\"\\n]*,[^'\"\\n]*\\}[^'\"\\n]*['\"]",
       "message": "Standard glob matchers often handle brace expansion (e.g., {ts,tsx}) inconsistently. Manually expand groups into discrete patterns to ensure comprehensive file coverage.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "['\"][^'\"\\n]*\\{[^'\"\\n]*,[^'\"\\n]*\\}[^'\"\\n]*['\"]",
       "compiledAt": "2026-03-21T08:01:18.700Z",
       "createdAt": "2026-03-21T08:01:18.700Z",
       "fileGlobs": [
@@ -2562,26 +2550,26 @@
         "**/*.js",
         "**/*.tsx",
         "**/*.jsx"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "939ae83ed3bf28bb",
       "lessonHeading": "Do not manually edit machine-generated artifacts",
+      "pattern": "^.+$",
       "message": "Do not manually edit machine-generated artifacts",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "^.+$",
       "compiledAt": "2026-03-21T08:01:52.877Z",
       "createdAt": "2026-03-21T08:01:52.877Z",
-      "fileGlobs": ["**/compiled-rules.json"]
+      "fileGlobs": ["**/compiled-rules.json"],
+      "severity": "error"
     },
     {
       "lessonHash": "916e2117b749ce03",
       "lessonHeading": "Automated gates like pre-commit or pre-push hooks",
+      "pattern": "\\bshield\\b(?!.*--deterministic)",
       "message": "Automated gates like pre-commit or pre-push hooks",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\bshield\\b(?!.*--deterministic)",
       "compiledAt": "2026-03-21T08:02:17.326Z",
       "createdAt": "2026-03-21T08:02:17.326Z",
       "fileGlobs": [
@@ -2592,37 +2580,37 @@
         ".lintstagedrc*",
         "Makefile",
         "*.sh"
-      ]
+      ],
+      "severity": "error"
     },
     {
       "lessonHash": "f9ae9cce60c5d221",
       "lessonHeading": "Log optional component failures at the warn level rather",
+      "pattern": "\\.(?:log|info|debug|trace)\\(\\s*(?:['\"\\`].*?\\b(?:fail|error|exception|failure)\\b|\\b(?:err|error|e)\\b)",
       "message": "Log optional component failures at the 'warn' level rather than using info, debug, or trace to ensure environmental misconfigurations are discoverable.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(?:log|info|debug|trace)\\(\\s*(?:['\"\\`].*?\\b(?:fail|error|exception|failure)\\b|\\b(?:err|error|e)\\b)",
       "compiledAt": "2026-03-21T08:02:57.599Z",
       "createdAt": "2026-03-21T08:02:57.599Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "e56183354e601cae",
       "lessonHeading": "Separate fast, pattern-based checks into a \"lint\" command",
+      "pattern": "\"(ai-?lint|llm-?lint|lint-?ai|static-?check|pattern-?check)\":|\\\"lint\\\":\\s*\\\"[^\\\"]*\\\\bshield\\\\b[^\\\"]*\\\"",
       "message": "Follow intent-based naming: use 'lint' for fast pattern-based checks and 'shield' for thorough AI-powered analysis. Avoid naming commands after their implementation (e.g., 'ai-lint' or 'static-check').",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\"(ai-?lint|llm-?lint|lint-?ai|static-?check|pattern-?check)\":|\\\"lint\\\":\\s*\\\"[^\\\"]*\\\\bshield\\\\b[^\\\"]*\\\"",
       "compiledAt": "2026-03-21T08:03:26.315Z",
       "createdAt": "2026-03-21T08:03:26.315Z",
-      "fileGlobs": ["package.json"]
+      "fileGlobs": ["package.json"],
+      "severity": "warning"
     },
     {
       "lessonHash": "e997a3f5317bf805",
       "lessonHeading": "AI agent memory config architectures differ significantly",
+      "pattern": "\\.gemini/gemini\\.md|\\.mcp\\.json|\\bgemini\\.md",
       "message": "AI agent memory config architectures differ significantly",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.gemini/gemini\\.md|\\.mcp\\.json|\\bgemini\\.md",
       "compiledAt": "2026-03-21T08:03:30.507Z",
       "createdAt": "2026-03-21T08:03:30.507Z",
       "fileGlobs": [
@@ -2634,26 +2622,26 @@
         ".gemini/**/*",
         ".junie/**/*",
         ".github/workflows/**/*"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "b0f1a2352da635ee",
       "lessonHeading": "Generating IDs from violation properties like file, line,",
+      "pattern": "\\bid\\s*[:=]\\s*.*\\b(Date\\.now|Math\\.random|uuid|randomUUID)",
       "message": "Generating IDs from violation properties like file, line,",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\bid\\s*[:=]\\s*.*\\b(Date\\.now|Math\\.random|uuid|randomUUID)",
       "compiledAt": "2026-03-21T08:03:51.698Z",
       "createdAt": "2026-03-21T08:03:51.698Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"],
+      "severity": "error"
     },
     {
       "lessonHash": "06f8480a32a4a1d0",
       "lessonHeading": "Detect existing hook managers and provide manual guidance",
+      "pattern": "\\.git\\/hooks",
       "message": "Detect existing hook managers and provide manual guidance",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.git\\/hooks",
       "compiledAt": "2026-03-21T08:03:51.699Z",
       "createdAt": "2026-03-21T08:03:51.699Z",
       "fileGlobs": [
@@ -2666,93 +2654,93 @@
         "**/*.go",
         "!**/*.test.ts",
         "!**/*.spec.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "0d7365d657fd9116",
       "lessonHeading": "Normalize file paths for SQL LIKE clauses",
+      "pattern": "\\b[lL][iI][kK][eE]\\b\\s+['\"\\x60][^'\"\\x60]*\\$\\{\\s*(?!\\w+\\s*\\()[\\w.]+\\s*\\}[^'\"\\x60]*['\"\\x60]",
       "message": "When using file paths in SQL LIKE clauses, normalize backslashes and explicitly escape % and _ characters (e.g. using a helper function) to prevent accidental wildcard matching.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b[lL][iI][kK][eE]\\b\\s+['\"\\x60][^'\"\\x60]*\\$\\{\\s*(?!\\w+\\s*\\()[\\w.]+\\s*\\}[^'\"\\x60]*['\"\\x60]",
       "compiledAt": "2026-03-21T08:04:24.196Z",
       "createdAt": "2026-03-21T08:04:24.196Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.sql"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.sql"],
+      "severity": "warning"
     },
     {
       "lessonHash": "466ef9140f993dbd",
       "lessonHeading": "When catching and re-logging errors that originate",
+      "pattern": "(['\"`])\\[[^\\]]+\\].*?\\b(err|error)\\.message\\b(?!.*\\.replace)",
       "message": "When catching and re-logging errors that originate",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(['\"`])\\[[^\\]]+\\].*?\\b(err|error)\\.message\\b(?!.*\\.replace)",
       "compiledAt": "2026-03-21T08:04:24.196Z",
       "createdAt": "2026-03-21T08:04:24.196Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "be6cdf607465c930",
       "lessonHeading": "Avoid bypassing visibility checks with bracket notation",
+      "pattern": "\\[['\"](?:_|init|setup|bootstrap|initialize)\\w*['\"]\\]\\s*\\(",
       "message": "Avoid bypassing visibility checks with bracket notation for private or initialization methods. Use a public static factory method for clean, type-safe instantiation instead.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\[['\"](?:_|init|setup|bootstrap|initialize)\\w*['\"]\\]\\s*\\(",
       "compiledAt": "2026-03-21T08:04:41.670Z",
       "createdAt": "2026-03-21T08:04:41.670Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts", "!**/*.spec.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts", "!**/*.spec.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "d028ccfe660860fd",
       "lessonHeading": "When executing child processes via execSync with stdio:",
+      "pattern": "",
       "message": "When using execSync with stdio: 'inherit', the child process output is already streamed to the terminal. Adding explicit error logs in the catch block results in duplicate output. Consider removing the log or leaving the catch block empty if the error is already handled by the streamed output.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "try { $$$A; execSync($$$B, { $$$C, stdio: 'inherit', $$$D }); $$$E; } catch ($$$F) { $$$G; }",
       "compiledAt": "2026-03-21T08:05:17.304Z",
       "createdAt": "2026-03-21T08:05:17.304Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "1ce4bdde8d6e800d",
       "lessonHeading": "Wrap user-controlled fields like PR descriptions",
+      "pattern": "(?=.*\\$\\{.*(?:description|comment|body|user_?input|userInput).*\\})(?!.*untrusted[ _-]content)",
       "message": "Wrap user-controlled fields like PR descriptions",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "(?=.*\\$\\{.*(?:description|comment|body|user_?input|userInput).*\\})(?!.*untrusted[ _-]content)",
       "compiledAt": "2026-03-21T08:05:50.608Z",
       "createdAt": "2026-03-21T08:05:50.608Z",
-      "fileGlobs": ["**/prompts/**/*", "**/ai/**/*", "**/llm/**/*", "**/*prompt*"]
+      "fileGlobs": ["**/prompts/**/*", "**/ai/**/*", "**/llm/**/*", "**/*prompt*"],
+      "severity": "error"
     },
     {
       "lessonHash": "7e51180103c25af5",
       "lessonHeading": "Git diff headers wrap file paths containing spaces",
+      "pattern": "(['\"\\/])\\^?\\+\\+\\+\\s+b\\\\?\\/",
       "message": "Git diff headers wrap file paths containing spaces",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "(['\"\\/])\\^?\\+\\+\\+\\s+b\\\\?\\/",
       "compiledAt": "2026-03-21T08:06:06.626Z",
       "createdAt": "2026-03-21T08:06:06.626Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh", "**/*.go", "**/*.rs"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh", "**/*.go", "**/*.rs"],
+      "severity": "error"
     },
     {
       "lessonHash": "9355430ce50aea6a",
       "lessonHeading": "Synchronous file operations are often preferable in CLI",
+      "pattern": "\\bfs\\.(promises|readFile|writeFile|readdir|mkdir|rm|stat|access|appendFile|copyFile|rename|unlink)\\b|['\"]fs/promises['\"]",
       "message": "Synchronous file operations are often preferable in CLI",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bfs\\.(promises|readFile|writeFile|readdir|mkdir|rm|stat|access|appendFile|copyFile|rename|unlink)\\b|['\"]fs/promises['\"]",
       "compiledAt": "2026-03-21T08:06:06.626Z",
       "createdAt": "2026-03-21T08:06:06.626Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js", "bin/**/*.ts", "bin/**/*.js"]
+      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js", "bin/**/*.ts", "bin/**/*.js"],
+      "severity": "warning"
     },
     {
       "lessonHash": "3f38691c1e69ee88",
       "lessonHeading": "NEVER inline secrets, tokens, or API keys into agent config",
+      "pattern": "\"(?:[Aa]pi[Kk]ey|[Aa]pi_?[Kk]ey|[Tt]oken|[Ss]ecret|[Pp]assword|[Aa]ccess_?[Tt]oken|[Pp]at)\"\\s*:\\s*\"[^\"]+\"",
       "message": "NEVER inline secrets, tokens, or API keys into agent config",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\"(?:[Aa]pi[Kk]ey|[Aa]pi_?[Kk]ey|[Tt]oken|[Ss]ecret|[Pp]assword|[Aa]ccess_?[Tt]oken|[Pp]at)\"\\s*:\\s*\"[^\"]+\"",
       "compiledAt": "2026-03-21T08:06:20.216Z",
       "createdAt": "2026-03-21T08:06:20.216Z",
       "fileGlobs": [
@@ -2760,15 +2748,15 @@
         "**/.gemini/settings.json",
         "**/mcp-config.json",
         "**/claude_desktop_config.json"
-      ]
+      ],
+      "severity": "error"
     },
     {
       "lessonHash": "0a9cc0608aefaa46",
       "lessonHeading": "Avoid hardcoding \"magic numbers\" or specific counts",
+      "pattern": "\\bgit\\s+(?:checkout|reset|revert)\\s+.*HEAD~\\d+",
       "message": "Avoid hardcoding specific commit offsets (e.g., HEAD~1) when automating file reverts. Use 'git checkout HEAD' to restore the file to its last committed state, which is more robust against project evolution.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bgit\\s+(?:checkout|reset|revert)\\s+.*HEAD~\\d+",
       "compiledAt": "2026-03-21T08:06:41.399Z",
       "createdAt": "2026-03-21T08:06:41.399Z",
       "fileGlobs": [
@@ -2776,37 +2764,37 @@
         "**/skills/**/*.js",
         "**/skills/**/*.sh",
         "**/skills/**/*.bash"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "f1ff2ef77ef09ea2",
       "lessonHeading": "Omit defensive XML escaping for prompt injection",
+      "pattern": "\\b(escapeXml|escapeHtml|encodeXml|formatXmlResponse)\\s*\\(",
       "message": "Omit defensive XML escaping for prompt injection",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\b(escapeXml|escapeHtml|encodeXml|formatXmlResponse)\\s*\\(",
       "compiledAt": "2026-03-21T08:06:49.594Z",
       "createdAt": "2026-03-21T08:06:49.594Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "apps/cli/**/*.ts", "**/cli/**/*.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts", "apps/cli/**/*.ts", "**/cli/**/*.ts"],
+      "severity": "error"
     },
     {
       "lessonHash": "6c32009899d3cfdf",
       "lessonHeading": "Treat usage and token statistics as optional fields",
+      "pattern": "\\busage\\s*\\.\\s*(prompt_tokens|completion_tokens|total_tokens)\\b",
       "message": "Treat usage and token statistics as optional fields",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\busage\\s*\\.\\s*(prompt_tokens|completion_tokens|total_tokens)\\b",
       "compiledAt": "2026-03-21T08:06:49.594Z",
       "createdAt": "2026-03-21T08:06:49.594Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"],
+      "severity": "error"
     },
     {
       "lessonHash": "53a33008bf2e422e",
       "lessonHeading": "When normalizing diverse SDK errors for internal retry",
+      "pattern": "throw\\s+new\\s+\\w*Error\\s*\\(\\s*.*\\b(e|err|error)\\b",
       "message": "When normalizing diverse SDK errors for internal retry",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "throw\\s+new\\s+\\w*Error\\s*\\(\\s*.*\\b(e|err|error)\\b",
       "compiledAt": "2026-03-21T08:07:05.720Z",
       "createdAt": "2026-03-21T08:07:05.720Z",
       "fileGlobs": [
@@ -2815,71 +2803,71 @@
         "**/integrations/**/*",
         "**/sdk/**/*",
         "**/adapters/**/*"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "1c4b3232555e41c8",
       "lessonHeading": "Use a case-insensitive regex with optional internal",
+      "pattern": "(<\\\\?\\/[\\w:_-]+>|\\/<\\\\\\/\\s*[\\w:_-]+\\s*>\\/(?![^\\/\\n]*i))",
       "message": "Use a case-insensitive regex with optional internal whitespace (e.g., /<\\/\\s*tag\\s*>/i) when matching closing tags. Rigid literal matches or case-sensitive patterns are easily bypassed and can lead to prompt injection vulnerabilities.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(<\\\\?\\/[\\w:_-]+>|\\/<\\\\\\/\\s*[\\w:_-]+\\s*>\\/(?![^\\/\\n]*i))",
       "compiledAt": "2026-03-21T08:07:48.964Z",
       "createdAt": "2026-03-21T08:07:48.964Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "7d456edf2b3a1554",
       "lessonHeading": "Using a unified \"Totem Error\" tag in error logs instead",
+      "pattern": "\\b(console\\.error|logger\\.error|new\\s+Error)\\s*\\((?![^)]*Totem Error)",
       "message": "Use the unified 'Totem Error' tag in error logs instead of command-specific identifiers to ensure consistent observability.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(console\\.error|logger\\.error|new\\s+Error)\\s*\\((?![^)]*Totem Error)",
       "compiledAt": "2026-03-21T08:08:30.265Z",
       "createdAt": "2026-03-21T08:08:30.265Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "d69a222f170d6d3d",
       "lessonHeading": "Individual CLI commands should throw standardized errors",
+      "pattern": "\\b(process\\.exit|console\\.error|console\\.warn)\\(",
       "message": "Individual CLI commands should throw standardized errors instead of logging or exiting locally. This allows a central top-level handler to manage consistent exit codes, error formatting, and process lifecycle.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(process\\.exit|console\\.error|console\\.warn)\\(",
       "compiledAt": "2026-03-21T08:08:56.078Z",
       "createdAt": "2026-03-21T08:08:56.078Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "49fd13c2ff2eae88",
       "lessonHeading": "Always generate sentinel markers even when the internal",
+      "pattern": "\\btext:\\s*['\"]['\"]",
       "message": "Always generate sentinel markers even when the internal",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\btext:\\s*['\"]['\"]",
       "compiledAt": "2026-03-21T08:09:06.753Z",
       "createdAt": "2026-03-21T08:09:06.753Z",
-      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "a5da42b79e964510",
       "lessonHeading": "Avoid using console methods directly in core library",
+      "pattern": "",
       "message": "Avoid using console methods directly in core library modules to maintain I/O separation. Provide an optional onWarn callback or use a formal logger instead.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "console.$METHOD($$$ARGS)",
       "compiledAt": "2026-03-21T08:09:19.775Z",
       "createdAt": "2026-03-21T08:09:19.775Z",
-      "fileGlobs": ["packages/core/**/*.ts", "packages/core/**/*.js", "!**/*.test.ts"]
+      "fileGlobs": ["packages/core/**/*.ts", "packages/core/**/*.js", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "f07dbd649a8c147c",
       "lessonHeading": "Junie requires specific file locations for auto-detection,",
+      "pattern": "\\.junie\\/(?!mcp\\/mcp\\.json|guidelines\\.md)[^'\"\\s>]+\\.(json|md)",
       "message": "Junie requires specific file locations for auto-detection,",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.junie\\/(?!mcp\\/mcp\\.json|guidelines\\.md)[^'\"\\s>]+\\.(json|md)",
       "compiledAt": "2026-03-21T08:09:33.850Z",
       "createdAt": "2026-03-21T08:09:33.850Z",
       "fileGlobs": [
@@ -2891,37 +2879,37 @@
         "**/*.yml",
         "**/*.yaml",
         ".gitignore"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "845180bf4c773226",
       "lessonHeading": "Casting an object literal to an Error type does not satisfy",
+      "pattern": "\\}\\s*as\\s+Error\\b",
       "message": "Casting an object literal to an Error type does not satisfy",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\}\\s*as\\s+Error\\b",
       "compiledAt": "2026-03-21T08:09:55.445Z",
       "createdAt": "2026-03-21T08:09:55.445Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx"]
+      "fileGlobs": ["**/*.ts", "**/*.tsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "ef82bb08588407c9",
       "lessonHeading": "For CLI tools reading a small number of local files,",
+      "pattern": "\\b(fs\\.promises|['\"]fs/promises['\"])\\b",
       "message": "In CLI tools, prefer synchronous file system APIs (e.g., readFileSync) over asynchronous ones to minimize promise overhead and code complexity.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(fs\\.promises|['\"]fs/promises['\"])\\b",
       "compiledAt": "2026-03-21T08:10:08.688Z",
       "createdAt": "2026-03-21T08:10:08.688Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js", "bin/**/*.ts", "bin/**/*.js"]
+      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js", "bin/**/*.ts", "bin/**/*.js"],
+      "severity": "warning"
     },
     {
       "lessonHash": "47a22620cd00e637",
       "lessonHeading": "Heavy dependencies or sub-command logic should be",
+      "pattern": "^import\\s+.*\\s+from\\s+['\"].*\\/commands\\/",
       "message": "Sub-command logic should be dynamically imported within the command handler (using await import()) rather than at the top level to ensure fast CLI startup times.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^import\\s+.*\\s+from\\s+['\"].*\\/commands\\/",
       "compiledAt": "2026-03-21T08:10:27.866Z",
       "createdAt": "2026-03-21T08:10:27.866Z",
       "fileGlobs": [
@@ -2931,60 +2919,60 @@
         "packages/cli/src/bin.ts",
         "packages/cli/src/index.js",
         "packages/cli/src/main.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "6df0a3b68a5f0cb1",
       "lessonHeading": "Core library code should avoid direct calls to console",
+      "pattern": "",
       "message": "Avoid direct console calls in library code to prevent unexpected side effects for consumers. Use a configurable callback or a logging abstraction instead.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "console.$METHOD($$$)",
       "compiledAt": "2026-03-21T08:11:01.170Z",
       "createdAt": "2026-03-21T08:11:01.170Z",
-      "fileGlobs": ["*.ts", "*.js", "!*.test.ts", "!*.test.js", "!*.spec.ts", "!*.spec.js"]
+      "fileGlobs": ["*.ts", "*.js", "!*.test.ts", "!*.test.js", "!*.spec.ts", "!*.spec.js"],
+      "severity": "warning"
     },
     {
       "lessonHash": "237fdede2e40f456",
       "lessonHeading": "Perform shell-level existence checks before invoking CLI",
+      "pattern": "^(npx|node|npm|pnpm|yarn|bun)\\b",
       "message": "Perform shell-level existence checks before invoking CLI",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^(npx|node|npm|pnpm|yarn|bun)\\b",
       "compiledAt": "2026-03-21T08:11:01.170Z",
       "createdAt": "2026-03-21T08:11:01.170Z",
-      "fileGlobs": [".husky/*", ".git/hooks/*"]
+      "fileGlobs": [".husky/*", ".git/hooks/*"],
+      "severity": "warning"
     },
     {
       "lessonHash": "e61224a2a46e31bc",
       "lessonHeading": "MCP session lifecycle limitation",
+      "pattern": "session\\.(start|end)|beforeDisconnect",
       "message": "MCP session lifecycle limitation",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "session\\.(start|end)|beforeDisconnect",
       "compiledAt": "2026-03-21T08:11:01.170Z",
       "createdAt": "2026-03-21T08:11:01.170Z",
-      "fileGlobs": ["packages/mcp/**/*.ts"]
+      "fileGlobs": ["packages/mcp/**/*.ts"],
+      "severity": "error"
     },
     {
       "lessonHash": "4a7a6a4348ff08e0",
       "lessonHeading": "Technical documentation should avoid marketing-centric",
+      "pattern": "\\b[Ll]ocal\\s+[Bb]rain\\b",
       "message": "Avoid marketing-centric terms like 'Local Brain' in technical documentation. Use precise technical descriptions instead.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b[Ll]ocal\\s+[Bb]rain\\b",
       "compiledAt": "2026-03-21T08:11:06.736Z",
       "createdAt": "2026-03-21T08:11:06.736Z",
-      "fileGlobs": ["**/*.md", "**/*.mdx"]
+      "fileGlobs": ["**/*.md", "**/*.mdx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "4a408d868a972f5f",
       "lessonHeading": "Changesets interactive CLI (pnpm changeset) crashes when",
+      "pattern": "\\bpnpm\\s+changeset\\b(?!\\s+(version|publish|status|pre|tag|init))",
       "message": "Changesets interactive CLI (pnpm changeset) crashes when",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\bpnpm\\s+changeset\\b(?!\\s+(version|publish|status|pre|tag|init))",
       "compiledAt": "2026-03-21T08:11:06.736Z",
       "createdAt": "2026-03-21T08:11:06.736Z",
       "fileGlobs": [
@@ -2993,6 +2981,143 @@
         "**/scripts/*.sh",
         "**/scripts/*.bash",
         "Makefile"
+      ],
+      "severity": "error"
+    },
+    {
+      "lessonHash": "afda0df95f960602",
+      "lessonHeading": "2026-03-06T06:25:26.036Z",
+      "message": "Wrap untrusted external content (e.g., PR comments, topics) in XML tags to prevent direct and indirect prompt injection. Use a helper like formatXmlResponse if available.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\b(?:text|content):\\s*(?!(?:['\"`]<|\\w*xml|\\w*Format|\\w*Render))\\b(?:comment|topic|body|description|content|text)\\b",
+      "compiledAt": "2026-03-21T22:15:17.571Z",
+      "createdAt": "2026-03-21T22:15:17.571Z",
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "!**/*.test.ts"]
+    },
+    {
+      "lessonHash": "637e8994d7866e10",
+      "lessonHeading": "2026-03-06T10:00:40.352Z",
+      "message": "$TOOL_INPUT is untrusted data from the host AI. It must be quoted in shell commands (e.g., \"$TOOL_INPUT\") to prevent command injection.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "(^|\\s)\\$TOOL_INPUT\\b",
+      "compiledAt": "2026-03-21T22:15:32.541Z",
+      "createdAt": "2026-03-21T22:15:32.541Z",
+      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "package.json"]
+    },
+    {
+      "lessonHash": "9056229f945c425b",
+      "lessonHeading": "2026-03-08T00:56:41.781Z",
+      "message": "For static, small sets of string comparisons, explicit boolean OR checks (e.g., x === 'y' || x === 'n') are more idiomatic and readable than [].includes().",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "[$...VALUES].includes($TARGET)",
+      "compiledAt": "2026-03-21T22:16:12.502Z",
+      "createdAt": "2026-03-21T22:16:12.502Z",
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+    },
+    {
+      "lessonHash": "116cb61013507812",
+      "lessonHeading": "When re-throwing errors in a CLI orchestrator, always",
+      "message": "When re-throwing errors in the CLI orchestrator, always include the project's standard error prefix '[Totem Error]' in the message.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "throw\\s+new\\s+Error\\(\\s*['\"\\`](?!\\s*\\[Totem Error\\])",
+      "compiledAt": "2026-03-21T22:16:30.127Z",
+      "createdAt": "2026-03-21T22:16:30.127Z",
+      "fileGlobs": ["packages/cli/**/*.ts"]
+    },
+    {
+      "lessonHash": "c6bb187bdd6dd8f7",
+      "lessonHeading": "For local LLM providers, 500 Internal Server Errors often",
+      "message": "Local LLM 500 errors often indicate VRAM or context exhaustion. Include guidance for hardware parameters like 'numCtx' or 'VRAM' in the error message to help users resolve resource failures.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "(['\"\\`]).*(?:500|Internal Server Error)(?![^'\"\\`]*(?:numCtx|VRAM|context|exhaustion|hardware)).*\\1",
+      "compiledAt": "2026-03-21T22:17:41.581Z",
+      "createdAt": "2026-03-21T22:17:41.581Z",
+      "fileGlobs": [
+        "src/providers/**/*.ts",
+        "packages/providers/**/*.ts",
+        "src/providers/**/*.js",
+        "packages/providers/**/*.js"
+      ]
+    },
+    {
+      "lessonHash": "e40e3d7e3c5f415e",
+      "lessonHeading": "GitHub Actions shell injection via template expressions",
+      "message": "GitHub Actions shell injection/word-splitting risk: Map github.event or inputs to env variables first to avoid command injection, and always quote shell variables (e.g., \"$VAR\") to prevent word-splitting.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "(\\$\\{\\{\\s*(?:github\\.event|inputs)\\.[^\\}]*\\}\\}|(^|\\s)\\$[a-zA-Z_]+)",
+      "compiledAt": "2026-03-21T22:18:55.305Z",
+      "createdAt": "2026-03-21T22:18:55.305Z",
+      "fileGlobs": ["*.yml", "*.yaml"]
+    },
+    {
+      "lessonHash": "6b93afeee17b7b66",
+      "lessonHeading": "GCA may suggest reverting dynamic imports back to static",
+      "message": "Do not use static top-level imports for @mmnto/totem in CLI command files; use dynamic imports inside command functions to ensure fast CLI startup performance.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "import $SPECIFIERS from '@mmnto/totem'",
+      "compiledAt": "2026-03-21T22:19:10.791Z",
+      "createdAt": "2026-03-21T22:19:10.791Z",
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+    },
+    {
+      "lessonHash": "2f1a92e1321f2255",
+      "lessonHeading": "Issue numbers are only unique within a single repository;",
+      "message": "Issue numbers are only unique within a single repository; use qualified syntax like 'owner/repo#number' to prevent collisions.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "['\"](?![^'\" ]*\\/)[^'\" ]*#\\d+['\"]",
+      "compiledAt": "2026-03-21T22:20:39.927Z",
+      "createdAt": "2026-03-21T22:20:39.927Z",
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"]
+    },
+    {
+      "lessonHash": "a8b6c82916cfe313",
+      "lessonHeading": "Standardize exception messages with a consistent prefix",
+      "message": "Exception messages must start with the '[Totem Error]' prefix to help distinguish internal logic failures from external system errors.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bnew\\s+\\w*Error\\(\\s*['\"\\`](?!\\[Totem Error\\])",
+      "compiledAt": "2026-03-21T22:20:56.000Z",
+      "createdAt": "2026-03-21T22:20:56.000Z",
+      "fileGlobs": ["*.ts", "*.tsx", "*.js", "*.jsx"]
+    },
+    {
+      "lessonHash": "342da7b7572c73b6",
+      "lessonHeading": "Escape metacharacters in RegExp interpolation",
+      "message": "Always escape metacharacters when interpolating dynamic strings into a RegExp constructor to prevent regex injection (e.g., using escape-string-regexp).",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bRegExp\\s*\\(\\s*([^'\"\\(\\s][^,)]*|\\`[^\\`]*\\$\\{)",
+      "compiledAt": "2026-03-21T22:22:15.562Z",
+      "createdAt": "2026-03-21T22:22:15.562Z",
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+    },
+    {
+      "lessonHash": "2d962603591aa928",
+      "lessonHeading": "Using empty catch blocks during regex compilation in audit",
+      "message": "Empty catch blocks in audit scripts hide regex compilation failures. Ensure errors are surfaced to prevent silent coverage gaps and maintain rule-set integrity.",
+      "engine": "ast",
+      "severity": "warning",
+      "pattern": "",
+      "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
+      "compiledAt": "2026-03-21T22:22:34.588Z",
+      "createdAt": "2026-03-21T22:22:34.588Z",
+      "fileGlobs": [
+        "audit/**/*.ts",
+        "audit/**/*.js",
+        "audits/**/*.ts",
+        "audits/**/*.js",
+        "scripts/**/*.ts",
+        "scripts/**/*.js"
       ]
     }
   ],
@@ -3402,6 +3527,12 @@
     "84e41d41ae92a50b",
     "56c801dfda484c75",
     "a4cfb13c627cd813",
-    "adc80c5dc2d6c25c"
+    "adc80c5dc2d6c25c",
+    "afdf208aff098da0",
+    "19744771a15f1e7c",
+    "3c975f752bc2d396",
+    "5a8a7c95fe68bec3",
+    "1eb033251746ef35",
+    "75dc445f57a03da2"
   ]
 }
