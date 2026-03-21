@@ -12,7 +12,7 @@ Totem doesn't ship with your app. It lives in your workflow. It also works on no
 
 ```bash
 $ npx @mmnto/cli lint
-✓ PASS — 327 rules, 0 violations.
+✓ PASS — 239 rules, 0 violations.
 
 $ npx @mmnto/cli stats
 Total violations prevented: 47 | security: 12, architecture: 35
@@ -95,11 +95,11 @@ Results are restricted to `packages/mcp/` files. Unknown boundary names fall bac
 
 ## Performance
 
-`totem lint` runs **327 compiled rules in under 2 seconds** on a 7,400-line, 105-file PR. Zero LLM inference. Pure AST classification + regex matching.
+`totem lint` runs **239 compiled rules in under 2 seconds** on a 7,400-line, 105-file PR. Zero LLM inference. Pure AST classification + regex matching.
 
 | Metric         | Value                        |
 | -------------- | ---------------------------- |
-| Rules          | 327 (regex + AST + ast-grep) |
+| Rules          | 239 (regex + AST + ast-grep) |
 | Lines scanned  | 7,397                        |
 | Files          | 105                          |
 | Execution time | **1.75s**                    |
@@ -243,7 +243,7 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
   - **Data Partitioning:** Vector indexes support partition aliases for efficient, isolated data resolution across complex workspaces.
   - **Error Handling:** Typed `TotemError` subclasses unify error domains with actionable recovery hints for resilient operations.
 - **Rule Architecture:**
-  - **Curated Baselines:** Features a curated 327-rule set with mandatory verify steps to guarantee execution determinism. Includes reverse-compiled lessons with manual patterns for zero-LLM enforcement.
+  - **Curated Baselines:** Features a curated 239-rule set with mandatory verify steps to guarantee execution determinism. Includes reverse-compiled lessons with manual patterns for zero-LLM enforcement.
   - **Quality Gates:** Validates authoring consistency with a lesson file linter backed by a pre-compilation gate.
   - **Agent Automation:** Agent skills are modularized with lean root routers for instruction files. Phase-gate hooks enforce validation before push and restore context after compaction.
   - **Severity Validation:** Compiled rules enforce strict severity levels. Errors actively block CI, while warnings inform without blocking.

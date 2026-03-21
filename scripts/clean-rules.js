@@ -42,7 +42,9 @@ for (const r of killed) {
   nonCompSet.add(r.lessonHash);
 }
 
-console.log(`Phase 1: Killed ${killed.length} rules (${killed.filter((r) => r.severity === 'error').length} error, ${killed.filter((r) => r.severity === 'warning').length} warning)`);
+console.log(
+  `Phase 1: Killed ${killed.length} rules (${killed.filter((r) => r.severity === 'error').length} error, ${killed.filter((r) => r.severity === 'warning').length} warning)`,
+);
 
 // ─── Phase 2: Deduplicate overlapping patterns ───
 

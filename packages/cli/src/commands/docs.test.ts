@@ -6,12 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DocTarget } from '@mmnto/totem';
 
-import {
-  DOCS_SYSTEM_PROMPT,
-  docsCommand,
-  extractUpdatedDocument,
-  stripIssueRefs,
-} from './docs.js';
+import { DOCS_SYSTEM_PROMPT, docsCommand, extractUpdatedDocument, stripIssueRefs } from './docs.js';
 
 // ─── Mocks ──────────────────────────────────────────────
 

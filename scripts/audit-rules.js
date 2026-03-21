@@ -14,7 +14,10 @@ function simpleGlobMatch(filePath, globs) {
     } else if (pattern.includes('**')) {
       const prefix = pattern.split('**')[0];
       const suffix = pattern.split('**').pop();
-      if (filePath.startsWith(prefix) && (!suffix || filePath.endsWith(suffix.replace('/*.', '.')))) {
+      if (
+        filePath.startsWith(prefix) &&
+        (!suffix || filePath.endsWith(suffix.replace('/*.', '.')))
+      ) {
         return !isNeg;
       }
     }
@@ -39,7 +42,11 @@ function walk(dir, exts) {
         !f.includes('.lancedb')
       ) {
         results = results.concat(walk(full, exts));
-      } else if (exts.some((e) => f.endsWith(e)) && !f.endsWith('.test.ts') && !f.endsWith('.d.ts')) {
+      } else if (
+        exts.some((e) => f.endsWith(e)) &&
+        !f.endsWith('.test.ts') &&
+        !f.endsWith('.d.ts')
+      ) {
         results.push(full);
       }
     }
