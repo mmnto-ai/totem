@@ -4,7 +4,6 @@ import type { ContentType, SearchResult } from '@mmnto/totem';
 import { createEmbedder, LanceStore, TotemConfigError } from '@mmnto/totem';
 
 import type { StandardIssue } from '../adapters/issue-adapter.js';
-import { SYSTEM_PROMPT } from './spec-templates.js';
 import { log } from '../ui.js';
 import {
   formatLessonSection,
@@ -19,6 +18,7 @@ import {
   wrapXml,
   writeOutput,
 } from '../utils.js';
+import { SYSTEM_PROMPT } from './spec-templates.js';
 
 // ─── Constants ──────────────────────────────────────────
 
