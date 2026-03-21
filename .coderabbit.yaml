@@ -12,8 +12,8 @@ reviews:
     - path: '.claude/**'
       instructions: 'Claude Code hooks and skills. Bash scripts must use [[ ]] glob matching, not echo|grep. CLAUDE.md must stay under 50 lines.'
 pre_merge_checks:
-  docstring_coverage:
-    enabled: false
+  docstrings:
+    mode: 'off'
 knowledge_base:
   learnings:
     scope: auto
