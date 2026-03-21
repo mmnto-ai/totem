@@ -53,6 +53,20 @@ When the agent reports back:
 5. Commit with proper message
 6. Move to next task
 
+## Pre-Push Review
+
+Before pushing, run `coderabbit:code-review` to catch issues locally. This is an **early filter** — it does NOT feed the lesson pipeline. The PR review (auto-triggered by CodeRabbit on push) is what feeds `totem extract`.
+
+Flow: local review → fix → push → PR review → extract lessons
+
+Available plugins (controller only, agents don't have these):
+
+- `coderabbit:code-review` — local CodeRabbit review
+- `coderabbit:autofix` — auto-fix review comments (requires user approval)
+- TypeScript LSP — type checking during reviews
+- `security-guidance` — security review
+- `github` — issues, PRs, repository operations
+
 ## What This Solves
 
 - Context window stays clean for decisions (~16K agent tokens vs ~35K inline)
