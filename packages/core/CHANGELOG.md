@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 1.3.10
+
+### Patch Changes
+
+- ceb8663: Context engineering (ADR-063): lean CLAUDE.md router pattern, PostCompact capability manifest, phase-gate enforcement (spec warning before commit). Fixed doc regen hallucination loop.
+
 ## 1.3.9
 
 ### Patch Changes
