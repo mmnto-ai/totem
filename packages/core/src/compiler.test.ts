@@ -717,6 +717,15 @@ describe('sanitizeFileGlobs', () => {
       '!**/*.spec.js',
     ]);
   });
+
+  it('expands multiple brace groups in a single glob', () => {
+    expect(sanitizeFileGlobs(['src/{cli,core}/**/*.{ts,js}'])).toEqual([
+      'src/cli/**/*.ts',
+      'src/cli/**/*.js',
+      'src/core/**/*.ts',
+      'src/core/**/*.js',
+    ]);
+  });
 });
 
 // ─── engineFields ──────────────────────────────────

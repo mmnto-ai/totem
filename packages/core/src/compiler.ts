@@ -161,13 +161,14 @@ export function sanitizeFileGlobs(globs: string[]): string[] {
   const result: string[] = [];
   for (const glob of globs) {
     // Expand brace patterns: **/*.{ts,js} → **/*.ts, **/*.js
-    const braceMatch = /^(.*)\{([^}]+)\}(.*)$/.exec(glob);
+    const braceMatch = /^(.*?)\{([^}]+)\}(.*)$/.exec(glob);
     if (braceMatch) {
       const prefix = braceMatch[1]!;
       const alternatives = braceMatch[2]!.split(',').map((s) => s.trim());
       const suffix = braceMatch[3]!;
+      // Recursively expand remaining brace groups in each result
       for (const alt of alternatives) {
-        result.push(prefix + alt + suffix);
+        result.push(...sanitizeFileGlobs([prefix + alt + suffix]));
       }
       continue;
     }
