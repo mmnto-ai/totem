@@ -106,7 +106,13 @@ export async function runCompiledRules(
   let astViolations: Violation[] = [];
   if (astRules.length > 0) {
     log.dim(tag, `Running ${astRules.length} AST rule(s)...`);
-    astViolations = await applyAstRulesToAdditions(rules, additions, cwd, ruleEventCallback);
+    astViolations = await applyAstRulesToAdditions(
+      rules,
+      additions,
+      cwd,
+      ruleEventCallback,
+      (msg) => log.warn(tag, msg),
+    );
   }
 
   const violations = [...regexViolations, ...astViolations];
