@@ -6,7 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DocTarget } from '@mmnto/totem';
 
-import { DOCS_SYSTEM_PROMPT, docsCommand, extractUpdatedDocument } from './docs.js';
+import {
+  DOCS_SYSTEM_PROMPT,
+  docsCommand,
+  extractUpdatedDocument,
+  stripIssueRefs,
+} from './docs.js';
 
 // ─── Mocks ──────────────────────────────────────────────
 
@@ -374,9 +379,14 @@ describe('DOCS_SYSTEM_PROMPT', () => {
     expect(DOCS_SYSTEM_PROMPT).not.toMatch(/\d+ characters/);
   });
 
-  it('limits PR reference density', () => {
-    expect(DOCS_SYSTEM_PROMPT).toContain('PR References');
-    expect(DOCS_SYSTEM_PROMPT).toContain('1-3 per sub-bullet');
+  it('prohibits issue/PR references in user-facing docs', () => {
+    expect(DOCS_SYSTEM_PROMPT).toContain('No Issue/PR References');
+    expect(DOCS_SYSTEM_PROMPT).toContain('NEVER include GitHub issue or PR references');
+  });
+
+  it('prohibits internal jargon', () => {
+    expect(DOCS_SYSTEM_PROMPT).toContain('No Internal Jargon');
+    expect(DOCS_SYSTEM_PROMPT).toContain('Pipeline 1');
   });
 
   it('includes pinned content to protect the tagline', () => {
@@ -405,5 +415,39 @@ describe('extractUpdatedDocument', () => {
   it('handles extra whitespace around tags', () => {
     const input = '  <updated_document>\n# Content\n  </updated_document>  ';
     expect(extractUpdatedDocument(input)).toBe('# Content');
+  });
+});
+
+// ─── stripIssueRefs ─────────────────────────────────────
+
+describe('stripIssueRefs', () => {
+  it('strips parenthesized single refs', () => {
+    expect(stripIssueRefs('security hardening (#714)')).toBe('security hardening');
+  });
+
+  it('strips parenthesized multi refs', () => {
+    expect(stripIssueRefs('fixes (#714, #801)')).toBe('fixes');
+  });
+
+  it('strips "fixes #NNN" style refs', () => {
+    expect(stripIssueRefs('applied patch (fixes #793)')).toBe('applied patch');
+  });
+
+  it('strips standalone refs in prose', () => {
+    expect(stripIssueRefs('security hardening #801 was applied')).toBe(
+      'security hardening was applied',
+    );
+  });
+
+  it('preserves markdown anchors', () => {
+    expect(stripIssueRefs('[link](#my-heading)')).toBe('[link](#my-heading)');
+  });
+
+  it('preserves short numbers', () => {
+    expect(stripIssueRefs('use #42 as the answer')).toBe('use #42 as the answer');
+  });
+
+  it('cleans double spaces left behind', () => {
+    expect(stripIssueRefs('feature (#714) is ready')).toBe('feature is ready');
   });
 });

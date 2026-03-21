@@ -193,6 +193,27 @@ export function extractUpdatedDocument(response: string): string | null {
   return match ? match[1]! : null;
 }
 
+/**
+ * Strip GitHub issue/PR references from user-facing docs.
+ * Handles: (#123), (#123, #456), (fixes #123), standalone #123 in prose.
+ */
+export function stripIssueRefs(content: string): string {
+  return (
+    content
+      // Remove parenthesized refs: "(#123)", "(#123, #456)", "(fixes #123)"
+      .replace(/\s*\((?:(?:fixes|closes|resolves|refs?)\s+)?#\d+(?:\s*,\s*#\d+)*\)/gi, '')
+      // Remove standalone refs in prose: "security hardening #801" → "security hardening"
+      .replace(/\s+#(\d{3,})\b/g, (match, num) => {
+        // Preserve anchors like "#my-heading" and short numbers
+        return parseInt(num, 10) >= 100 ? '' : match;
+      })
+      // Clean up double spaces left behind
+      .replace(/ {2,}/g, ' ')
+      // Clean up trailing spaces on lines
+      .replace(/ +$/gm, '')
+  );
+}
+
 // ─── Diff display ───────────────────────────────────────
 
 function showDiff(filePath: string, original: string, updated: string): boolean {
@@ -385,7 +406,10 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
       continue;
     }
 
-    const trimmedContent = extracted.trimEnd() + '\n';
+    // Post-process: strip issue/PR refs from user-facing docs (#815)
+    const isUserFacingDoc = path.basename(doc.path).toLowerCase() === 'readme.md';
+    const cleaned = isUserFacingDoc ? stripIssueRefs(extracted) : extracted;
+    const trimmedContent = cleaned.trimEnd() + '\n';
     const hasChanges = showDiff(doc.path, currentContent, trimmedContent);
     if (!hasChanges) continue;
 
