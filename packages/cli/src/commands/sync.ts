@@ -14,13 +14,18 @@ import {
   TotemError,
 } from '@mmnto/totem';
 
+import type { Spinner } from '../ui.js';
 import { createSpinner, log } from '../ui.js';
 import { loadConfig, loadEnv, requireEmbedding, resolveConfigPath, sanitize } from '../utils.js';
 
 const TAG = 'Sync';
 const PRUNE_LABEL_MAX = 70;
 
-export async function syncCommand(options: { full?: boolean; prune?: boolean }): Promise<void> {
+export async function syncCommand(options: {
+  full?: boolean;
+  prune?: boolean;
+  quiet?: boolean;
+}): Promise<void> {
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
 
@@ -30,10 +35,16 @@ export async function syncCommand(options: { full?: boolean; prune?: boolean }):
   requireEmbedding(config);
   const incremental = !options.full;
 
-  const spinner = await createSpinner(
-    TAG,
-    incremental ? 'Incremental sync...' : 'Full re-index...',
-  );
+  const noopSpinner: Spinner = {
+    update() {},
+    succeed() {},
+    fail() {},
+    stop() {},
+  };
+
+  const spinner = options.quiet
+    ? noopSpinner
+    : await createSpinner(TAG, incremental ? 'Incremental sync...' : 'Full re-index...');
 
   try {
     const result = await runSync(config, {
