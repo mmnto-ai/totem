@@ -2,20 +2,17 @@ import * as path from 'node:path';
 
 import { isCancel, multiselect } from '@clack/prompts';
 
-import type { Embedder, SearchResult } from '@mmnto/totem';
+import type { ExtractedLesson, SearchResult } from '@mmnto/totem';
 import {
-  BASE64_BLOB_RE,
   createEmbedder,
+  deduplicateLessons,
+  flagSuspiciousLessons,
   generateLessonHeading,
-  INSTRUCTIONAL_LEAKAGE_RE,
   LanceStore,
   runSync,
   TotemConfigError,
-  TotemError,
   truncateHeading,
-  UNICODE_ESCAPE_RE,
   writeLessonFile,
-  XML_TAG_LEAKAGE_RE,
 } from '@mmnto/totem';
 
 import { GitHubCliPrAdapter } from '../adapters/github-cli-pr.js';
@@ -48,9 +45,18 @@ import {
   MAX_EXISTING_LESSONS,
   MAX_INPUTS,
   MAX_REVIEW_BODY_CHARS,
-  SEMANTIC_DEDUP_THRESHOLD,
   SYSTEM_PROMPT,
 } from './extract-templates.js';
+
+// ─── Re-exports from core (moved from this file) ────────
+
+export type { ExtractedLesson } from '@mmnto/totem';
+export {
+  cosineSimilarity,
+  deduplicateLessons,
+  flagSuspiciousLessons,
+  isInstructionalContext,
+} from '@mmnto/totem';
 
 const TAG = 'Extract';
 
@@ -192,13 +198,6 @@ export function assemblePrompt(
 
 // ─── Lesson parser ──────────────────────────────────────
 
-export interface ExtractedLesson {
-  heading?: string;
-  tags: string[];
-  text: string;
-  suspiciousFlags?: string[];
-}
-
 const LESSON_RE = /---LESSON---\s*\n(?:Heading:\s*(.+)\n)?Tags:\s*(.+)\n([\s\S]+?)---END---/g;
 
 /** Strip markdown heading markers and "Lesson —" prefixes, then enforce max length. */
@@ -242,130 +241,6 @@ export function parseLessons(llmOutput: string): ExtractedLesson[] {
   }
 
   return lessons;
-}
-
-// ─── Suspicious lesson detection ────────────────────────
-
-const MAX_SUSPICIOUS_HEADING_LENGTH = 60;
-
-/** Defensive keywords suggesting instructional/security discussion context. */
-const DEFENSIVE_KEYWORD_RE =
-  /\b(?:detect|prevent|harden|defense|defensive|strip|flag|mitigat|sanitiz|block|neutraliz|scrub|filter|reject|validat|protect|guard|secur)\w*\b/i;
-
-/** Characters of context to check around a match for defensive keywords. */
-const DEFENSIVE_PROXIMITY_WINDOW = 100;
-
-/**
- * Collect all [start, end] ranges of code-fenced regions in the text.
- * Uses inline regexes via matchAll to avoid module-level global state mutation.
- */
-// totem-ignore-next-line
-function collectCodeRanges(text: string): Array<[number, number]> {
-  const ranges: Array<[number, number]> = [];
-
-  // Fenced blocks first (higher priority — consume triple backticks before singles)
-  for (const match of text.matchAll(/```[\s\S]*?```/g)) {
-    ranges.push([match.index, match.index + match[0].length]);
-  }
-
-  for (const match of text.matchAll(/`[^`\n]+`/g)) {
-    const start = match.index;
-    const end = start + match[0].length;
-    // Skip if this range overlaps with a fenced block
-    const overlaps = ranges.some(([rs, re]) => start >= rs && end <= re);
-    if (!overlaps) {
-      ranges.push([start, end]);
-    }
-  }
-
-  return ranges;
-}
-
-/**
- * Check if ALL matches of a pattern in text occur in instructional context
- * (inside backticks/code blocks AND near defensive keywords).
- * Both conditions must be met for EVERY match to suppress a flag.
- * If any single match is outside instructional context, returns false (fail closed).
- */
-export function isInstructionalContext(
-  text: string, // totem-ignore
-  pattern: RegExp,
-  codeRanges?: Array<[number, number]>,
-): boolean {
-  // Create global copy to iterate all matches — guard against duplicate 'g' flag
-  const flags = pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g';
-  const globalPattern = new RegExp(pattern.source, flags);
-  const ranges = codeRanges ?? collectCodeRanges(text);
-  let foundAny = false;
-
-  for (const match of text.matchAll(globalPattern)) {
-    foundAny = true;
-    const matchStart = match.index;
-    const matchEnd = matchStart + match[0].length;
-
-    // Condition 1: Match must fall within a code-fenced region
-    const inCode = ranges.some(([rs, re]) => matchStart >= rs && matchEnd <= re);
-    if (!inCode) return false;
-
-    // Condition 2: Defensive keywords must be nearby (outside the match itself)
-    // Space delimiter prevents cross-boundary keyword synthesis
-    const windowStart = Math.max(0, matchStart - DEFENSIVE_PROXIMITY_WINDOW);
-    const windowEnd = Math.min(text.length, matchEnd + DEFENSIVE_PROXIMITY_WINDOW);
-    const surroundingText =
-      text.slice(windowStart, matchStart) + ' ' + text.slice(matchEnd, windowEnd);
-
-    if (!DEFENSIVE_KEYWORD_RE.test(surroundingText)) return false;
-  }
-
-  return foundAny;
-}
-
-/**
- * Scans extracted lessons for heuristic indicators of prompt injection or
- * LLM constraint violations. Returns a new array with `suspiciousFlags`
- * populated on any lesson that triggers one or more checks.
- *
- * For XML tag and instructional leakage patterns, a context-aware heuristic
- * suppresses false positives: if the match is inside backticks/code fences
- * AND defensive keywords are nearby, it's treated as instructional discussion.
- */
-export function flagSuspiciousLessons(lessons: ExtractedLesson[]): ExtractedLesson[] {
-  return lessons.map((lesson) => {
-    const flags: string[] = [];
-    const heading = lesson.heading ?? '';
-    const combined = `${heading} ${lesson.text}`;
-
-    if (heading.length > MAX_SUSPICIOUS_HEADING_LENGTH) {
-      flags.push('Heading exceeds 60 characters');
-    }
-
-    // Compute code ranges once per lesson for both context-aware checks
-    const codeRanges = collectCodeRanges(combined);
-
-    if (
-      INSTRUCTIONAL_LEAKAGE_RE.test(combined) &&
-      !isInstructionalContext(combined, INSTRUCTIONAL_LEAKAGE_RE, codeRanges)
-    ) {
-      flags.push('Contains potential instructional leakage');
-    }
-
-    if (
-      XML_TAG_LEAKAGE_RE.test(combined) &&
-      !isInstructionalContext(combined, XML_TAG_LEAKAGE_RE, codeRanges)
-    ) {
-      flags.push('Contains system XML tags');
-    }
-
-    if (BASE64_BLOB_RE.test(combined)) {
-      flags.push('Contains potential Base64 payload');
-    }
-
-    if (UNICODE_ESCAPE_RE.test(combined)) {
-      flags.push('Contains excessive unicode escapes');
-    }
-
-    return flags.length > 0 ? { ...lesson, suspiciousFlags: flags } : lesson;
-  });
 }
 
 // ─── Lesson writer ──────────────────────────────────────
@@ -445,91 +320,6 @@ export async function selectLessons(
   }
 
   return (result as number[]).map((i) => lessons[i]!);
-}
-
-// ─── Semantic deduplication ──────────────────────────────
-
-/** Cosine similarity between two vectors of equal length. */
-export function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) {
-    throw new TotemError(
-      'PARSE_FAILED',
-      'Cannot compute cosine similarity for vectors of different lengths.',
-      'This is an internal error. The embedding dimensions may have changed between runs.',
-    );
-  }
-  let dot = 0;
-  let magA = 0;
-  let magB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i]! * b[i]!;
-    magA += a[i]! * a[i]!;
-    magB += b[i]! * b[i]!;
-  }
-  const denom = Math.sqrt(magA) * Math.sqrt(magB);
-  return denom === 0 ? 0 : dot / denom;
-}
-
-/**
- * Remove semantically duplicate lessons by checking against both the LanceDB
- * index and already-accepted candidates in the current batch.
- *
- * Uses embedding cosine similarity with a configurable threshold (default 0.92).
- * Returns only the lessons that are sufficiently novel.
- */
-export async function deduplicateLessons(
-  candidates: ExtractedLesson[],
-  store: LanceStore,
-  embedder: Embedder,
-  threshold: number = SEMANTIC_DEDUP_THRESHOLD,
-): Promise<{ kept: ExtractedLesson[]; dropped: ExtractedLesson[] }> {
-  if (candidates.length === 0) return { kept: [], dropped: [] };
-
-  const kept: ExtractedLesson[] = [];
-  const dropped: ExtractedLesson[] = [];
-  const batchVectors: number[][] = [];
-
-  for (const candidate of candidates) {
-    // Check against existing LanceDB lessons
-    let isDbDuplicate = false;
-    try {
-      const results = await store.search({
-        query: candidate.text,
-        typeFilter: 'spec',
-        maxResults: 1,
-      });
-
-      if (results.length > 0 && results[0]!.score >= threshold) {
-        isDbDuplicate = true;
-      }
-    } catch {
-      // Empty DB or no table — no existing lessons to dedup against
-    }
-
-    if (isDbDuplicate) {
-      dropped.push(candidate);
-      continue;
-    }
-
-    // Check against already-accepted candidates in this batch
-    const [candidateVector] = await embedder.embed([candidate.text]);
-    let isIntraBatchDuplicate = false;
-    for (const batchVec of batchVectors) {
-      if (cosineSimilarity(candidateVector!, batchVec) >= threshold) {
-        isIntraBatchDuplicate = true;
-        break;
-      }
-    }
-
-    if (isIntraBatchDuplicate) {
-      dropped.push(candidate);
-    } else {
-      kept.push(candidate);
-      batchVectors.push(candidateVector!);
-    }
-  }
-
-  return { kept, dropped };
 }
 
 // ─── Main command ───────────────────────────────────────

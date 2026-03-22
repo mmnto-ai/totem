@@ -190,6 +190,20 @@ export {
 } from './sanitize.js';
 export { wrapXml } from './xml-format.js';
 
+// Suspicious lesson detection
+export type { ExtractedLesson } from './suspicious-lesson.js';
+export {
+  collectCodeRanges,
+  DEFENSIVE_KEYWORD_RE,
+  DEFENSIVE_PROXIMITY_WINDOW,
+  flagSuspiciousLessons,
+  isInstructionalContext,
+  MAX_SUSPICIOUS_HEADING_LENGTH,
+} from './suspicious-lesson.js';
+
+// Semantic deduplication
+export { cosineSimilarity, deduplicateLessons } from './semantic-dedup.js';
+
 // Cursor adapter (.mdc / .cursorrules ingestion)
 export type { CursorInstruction } from './cursor-adapter.js';
 export { scanCursorInstructions } from './cursor-adapter.js';
