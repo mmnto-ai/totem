@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { ejectCommand, scrubPostMergeHook } from './eject.js';
+import { ejectCommand, scrubPostCheckoutHook, scrubPostMergeHook } from './eject.js';
 import type { EjectSummary } from './eject.js';
 
 function makeTmpDir(): string {
@@ -264,5 +264,78 @@ fi
     expect(content).toContain('deploy notification');
     expect(content).not.toContain('[totem]');
     expect(summary.scrubbed).toContain('.git/hooks/post-merge');
+  });
+});
+
+// ─── scrubPostCheckoutHook (direct unit tests) ──────
+
+describe('scrubPostCheckoutHook', () => {
+  let cwd: string;
+
+  beforeEach(() => {
+    cwd = makeTmpDir();
+    fs.mkdirSync(path.join(cwd, '.git', 'hooks'), { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it('removes post-checkout hook with end marker', () => {
+    const hookPath = path.join(cwd, '.git', 'hooks', 'post-checkout');
+    fs.writeFileSync(
+      hookPath,
+      `#!/bin/sh
+# [totem] post-checkout hook — background re-index on branch switch.
+
+# $1 = previous HEAD, $2 = new HEAD, $3 = checkout type (1=branch, 0=file)
+# Skip file checkouts — only sync on branch switches
+if [ "$3" = "0" ]; then
+  exit 0
+fi
+
+# Only sync when .totem/ files differ between branches
+if git diff --name-only "$1" "$2" 2>/dev/null | grep -q '\\.totem/'; then
+  (pnpm exec totem sync --incremental --quiet > .git/totem-sync.log 2>&1) &
+fi
+# [totem] end post-checkout
+`,
+    );
+
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+    scrubPostCheckoutHook(cwd, summary);
+
+    expect(fs.existsSync(hookPath)).toBe(false);
+    expect(summary.removed).toContain('.git/hooks/post-checkout');
+  });
+
+  it('preserves non-Totem content in post-checkout hook', () => {
+    const hookPath = path.join(cwd, '.git', 'hooks', 'post-checkout');
+    fs.writeFileSync(
+      hookPath,
+      `#!/bin/sh
+echo "deploy notification"
+# [totem] post-checkout hook — background re-index on branch switch.
+
+# $1 = previous HEAD, $2 = new HEAD, $3 = checkout type (1=branch, 0=file)
+if [ "$3" = "0" ]; then
+  exit 0
+fi
+
+if git diff --name-only "$1" "$2" 2>/dev/null | grep -q '\\.totem/'; then
+  (pnpm exec totem sync --incremental --quiet > .git/totem-sync.log 2>&1) &
+fi
+# [totem] end post-checkout
+`,
+    );
+
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+    scrubPostCheckoutHook(cwd, summary);
+
+    expect(fs.existsSync(hookPath)).toBe(true);
+    const content = fs.readFileSync(hookPath, 'utf-8');
+    expect(content).toContain('deploy notification');
+    expect(content).not.toContain('[totem]');
+    expect(summary.scrubbed).toContain('.git/hooks/post-checkout');
   });
 });

@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  buildPostCheckoutHookContent,
   buildPreCommitHook,
   buildPrePushHook,
   checkHooksInstalled,
@@ -357,7 +358,7 @@ describe('installHooksNonInteractive', () => {
     expect(result).toBeNull();
   });
 
-  it('installs all three hooks in a git repo', () => {
+  it('installs all four hooks in a git repo', () => {
     execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
 
@@ -367,12 +368,14 @@ describe('installHooksNonInteractive', () => {
     expect(result!.preCommit).toBe('installed');
     expect(result!.prePush).toBe('installed');
     expect(result!.postMerge).toBe('installed');
+    expect(result!.postCheckout).toBe('installed');
 
     // Verify files exist
     const hooksDir = path.join(tmpDir, '.git', 'hooks');
     expect(fs.existsSync(path.join(hooksDir, 'pre-commit'))).toBe(true);
     expect(fs.existsSync(path.join(hooksDir, 'pre-push'))).toBe(true);
     expect(fs.existsSync(path.join(hooksDir, 'post-merge'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'post-checkout'))).toBe(true);
   });
 
   it('is idempotent — second call returns exists for all hooks', () => {
@@ -386,6 +389,7 @@ describe('installHooksNonInteractive', () => {
     expect(result!.preCommit).toBe('exists');
     expect(result!.prePush).toBe('exists');
     expect(result!.postMerge).toBe('exists');
+    expect(result!.postCheckout).toBe('exists');
   });
 
   it('returns null when hook manager is detected', () => {
@@ -408,12 +412,14 @@ describe('installHooksNonInteractive', () => {
     expect(result!.preCommit).toBe('installed');
     expect(result!.prePush).toBe('installed');
     expect(result!.postMerge).toBe('installed');
+    expect(result!.postCheckout).toBe('installed');
 
     // Hooks should be at git root, not in the subdirectory
     const hooksDir = path.join(tmpDir, '.git', 'hooks');
     expect(fs.existsSync(path.join(hooksDir, 'pre-commit'))).toBe(true);
     expect(fs.existsSync(path.join(hooksDir, 'pre-push'))).toBe(true);
     expect(fs.existsSync(path.join(hooksDir, 'post-merge'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'post-checkout'))).toBe(true);
     expect(fs.existsSync(path.join(subDir, '.git'))).toBe(false);
   });
 
@@ -479,6 +485,7 @@ describe('checkHooksInstalled', () => {
     fs.writeFileSync(path.join(hooksDir, 'pre-commit'), '#!/bin/sh\necho "no marker"\n');
     fs.writeFileSync(path.join(hooksDir, 'pre-push'), '#!/bin/sh\necho "no marker"\n');
     fs.writeFileSync(path.join(hooksDir, 'post-merge'), '#!/bin/sh\necho "no marker"\n');
+    fs.writeFileSync(path.join(hooksDir, 'post-checkout'), '#!/bin/sh\necho "no marker"\n');
     expect(checkHooksInstalled(tmpDir)).toBe(false);
   });
 });
@@ -534,5 +541,56 @@ describe('post-merge hook content', () => {
     expect(content).toContain('[totem] post-merge hook');
     expect(content).toContain('ORIG_HEAD');
     expect(content).toContain('fi');
+  });
+});
+
+// ─── post-checkout hook content (branch switch guard) ─
+
+describe('post-checkout hook content', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hooks-pc-'));
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('generates post-checkout hook with branch switch guard', () => {
+    installHooksNonInteractive(tmpDir);
+
+    const hookPath = path.join(tmpDir, '.git', 'hooks', 'post-checkout');
+    const content = fs.readFileSync(hookPath, 'utf-8');
+
+    expect(content).toContain('$3');
+    expect(content).toContain('exit 0');
+    expect(content).toContain('[totem] post-checkout hook');
+    expect(content).toContain('[totem] end post-checkout');
+  });
+
+  it('handles null SHA for initial checkout', () => {
+    const hook = buildPostCheckoutHookContent('pnpm exec totem sync --incremental --quiet');
+
+    expect(hook).toContain('0000000000000000000000000000000000000000');
+    expect(hook).toContain('.totem');
+  });
+
+  it('uses quiet sync command', () => {
+    installHooksNonInteractive(tmpDir);
+
+    const hookPath = path.join(tmpDir, '.git', 'hooks', 'post-checkout');
+    const content = fs.readFileSync(hookPath, 'utf-8');
+
+    expect(content).toContain('--quiet');
+  });
+
+  it('includes post-checkout in non-interactive install', () => {
+    const result = installHooksNonInteractive(tmpDir);
+
+    expect(result).not.toBeNull();
+    expect(result!.postCheckout).toBe('installed');
   });
 });

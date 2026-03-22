@@ -10,6 +10,8 @@ import { log } from '../ui.js';
 const TAG = 'Eject';
 const TOTEM_HOOK_MARKER = '[totem] post-merge hook';
 const TOTEM_HOOK_END = '[totem] end post-merge';
+const TOTEM_CHECKOUT_MARKER = '[totem] post-checkout hook';
+const TOTEM_CHECKOUT_END = '[totem] end post-checkout';
 const TOTEM_FILE_MARKER = '// [totem] auto-generated';
 
 /** Files that may have AI reflex blocks appended by `totem init`. */
@@ -90,6 +92,68 @@ export function scrubPostMergeHook(cwd: string, summary: EjectSummary): void {
   } else {
     fs.writeFileSync(hookPath, remaining + '\n', 'utf-8');
     summary.scrubbed.push('.git/hooks/post-merge');
+  }
+}
+
+/**
+ * Remove the Totem section from the post-checkout git hook.
+ * Deletes the file entirely if it only contains the Totem hook.
+ */
+export function scrubPostCheckoutHook(cwd: string, summary: EjectSummary): void {
+  const hookPath = path.join(cwd, '.git', 'hooks', 'post-checkout');
+  if (!fs.existsSync(hookPath)) {
+    summary.skipped.push('.git/hooks/post-checkout (not found)');
+    return;
+  }
+
+  const content = fs.readFileSync(hookPath, 'utf-8');
+  if (!content.includes(TOTEM_CHECKOUT_MARKER)) {
+    summary.skipped.push('.git/hooks/post-checkout (no Totem section)');
+    return;
+  }
+
+  // Remove the Totem block: from the marker comment to the end marker (or heuristic end)
+  const hasEndMarker = content.includes(TOTEM_CHECKOUT_END);
+  const lines = content.split('\n');
+  const filtered: string[] = [];
+  let inTotemBlock = false;
+
+  for (const line of lines) {
+    if (line.includes(TOTEM_CHECKOUT_MARKER)) {
+      inTotemBlock = true;
+      continue;
+    }
+    if (inTotemBlock) {
+      if (hasEndMarker) {
+        // New format: skip everything until the deterministic end marker
+        if (line.includes(TOTEM_CHECKOUT_END)) {
+          inTotemBlock = false;
+        }
+        continue;
+      }
+      // Old format (no end marker): skip known totem lines only
+      if (
+        line === '' ||
+        line.trim() === '' ||
+        line.startsWith('echo "[totem]') ||
+        line.startsWith('(')
+      ) {
+        continue;
+      }
+      // Unrecognised line — stop skipping to protect user content
+      inTotemBlock = false;
+    }
+    filtered.push(line);
+  }
+
+  const remaining = filtered.join('\n').trim();
+
+  if (!remaining || remaining === '#!/bin/sh') {
+    fs.unlinkSync(hookPath);
+    summary.removed.push('.git/hooks/post-checkout');
+  } else {
+    fs.writeFileSync(hookPath, remaining + '\n', 'utf-8');
+    summary.scrubbed.push('.git/hooks/post-checkout');
   }
 }
 
@@ -266,6 +330,7 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
 
   // 1. Scrub git hooks
   scrubPostMergeHook(cwd, summary);
+  scrubPostCheckoutHook(cwd, summary);
 
   // 2. Remove scaffolded Gemini/Claude hook files
   removeScaffoldedFiles(cwd, summary);
