@@ -14,7 +14,7 @@ export interface WrapOptions {
 
 export async function wrapCommand(prNumbers: string[], options: WrapOptions): Promise<void> {
   // Step 1: Learn from PR(s)
-  log.info(TAG, `Step 1/5 — Extracting from PR ${prNumbers.join(', ')}...`);
+  log.info(TAG, `Step 1/6 — Extracting from PR ${prNumbers.join(', ')}...`);
   const { extractCommand } = await import('./extract.js');
   await extractCommand(prNumbers, {
     model: options.model,
@@ -23,12 +23,12 @@ export async function wrapCommand(prNumbers: string[], options: WrapOptions): Pr
   });
 
   // Step 2: Sync index
-  log.info(TAG, 'Step 2/5 — Syncing index...');
+  log.info(TAG, 'Step 2/6 — Syncing index...');
   const { syncCommand } = await import('./sync.js');
   await syncCommand({ full: false });
 
   // Step 3: Triage
-  log.info(TAG, 'Step 3/5 — Generating triage roadmap...');
+  log.info(TAG, 'Step 3/6 — Generating triage roadmap...');
   const { triageCommand } = await import('./triage.js');
   await triageCommand({
     model: options.model,
@@ -36,7 +36,7 @@ export async function wrapCommand(prNumbers: string[], options: WrapOptions): Pr
   });
 
   // Step 4: Update project docs (if configured)
-  log.info(TAG, 'Step 4/5 — Updating project docs...');
+  log.info(TAG, 'Step 4/6 — Updating project docs...');
   try {
     const { docsCommand } = await import('./docs.js');
     await docsCommand([], {
@@ -53,8 +53,29 @@ export async function wrapCommand(prNumbers: string[], options: WrapOptions): Pr
     }
   }
 
-  // Step 5: Compile rules and export to AI tool configs (if configured)
-  log.info(TAG, 'Step 5/5 — Compiling rules and exporting...');
+  // Step 5: Deterministic doc injection (markdown-magic)
+  log.info(TAG, 'Step 5/6 — Injecting dynamic doc values...');
+  try {
+    const { execSync } = await import('node:child_process');
+    execSync('pnpm run docs:inject', { cwd: process.cwd(), stdio: 'pipe' });
+    log.success(TAG, 'Doc values injected.');
+  } catch (err) {
+    // execSync errors may carry details in stdout/stderr buffers
+    const msg = [
+      err instanceof Error ? err.message : String(err),
+      err && typeof err === 'object' && 'stdout' in err ? String(err.stdout) : '',
+      err && typeof err === 'object' && 'stderr' in err ? String(err.stderr) : '',
+    ].join(' ');
+    if (msg.includes('Missing script') || msg.includes('not found')) {
+      log.dim(TAG, 'docs:inject not configured — skipping.');
+    } else {
+      log.error('Totem Error', `docs:inject failed: ${msg.slice(0, 200)}`);
+      throw err;
+    }
+  }
+
+  // Step 6: Compile rules and export to AI tool configs (if configured)
+  log.info(TAG, 'Step 6/6 — Compiling rules and exporting...');
   try {
     const { compileCommand } = await import('./compile.js');
     await compileCommand({
@@ -73,6 +94,6 @@ export async function wrapCommand(prNumbers: string[], options: WrapOptions): Pr
 
   log.success(
     TAG,
-    'Wrap complete — lessons extracted, index synced, roadmap updated, docs synced, rules exported.',
+    'Wrap complete — lessons extracted, index synced, roadmap updated, docs synced, values injected, rules exported.',
   );
 }
