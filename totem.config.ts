@@ -70,7 +70,11 @@ const config: TotemConfig = {
     mcp: ['packages/mcp/'],
   },
 
-  shieldIgnorePatterns: ['.totem/lessons/**', '.strategy'],
+  shieldIgnorePatterns: [
+    '.totem/lessons/**',
+    '.strategy',
+    'packages/cli/src/assets/compiled-baseline.ts',
+  ],
 };
 
 export default config;

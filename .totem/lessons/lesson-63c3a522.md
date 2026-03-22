@@ -1,9 +1,9 @@
 ## Lesson — Use path.relative(process.cwd(),
 
 **Tags:** style, curated
-**Pattern:** \.replace\(\s*process\.cwd\(\)
-**Engine:** regex
-**Scope:** **/*.ts, **/*.tsx, **/*.js, **/*.jsx
+**Engine:** ast-grep
 **Severity:** warning
+**Scope:** **/*.ts, **/*.js
+**Pattern:** `$OBJ.replace(process.cwd(), $REPLACEMENT)`
 
 Use path.relative(process.cwd().

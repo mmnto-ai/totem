@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 1.3.16
+
+### Patch Changes
+
+- Universal Baseline grows from 15 → 23 rules (8 Gemini-validated ast-grep patterns). Wind tunnel: 9 test fixtures + ast-grep test runner fix. Adversarial corpus (16 clean-room fixtures). TypeScript detection for monorepo per-package tsconfig.json.
+
 ## 1.3.15
 
 ### Patch Changes

@@ -1,6 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import type { AstGrepRule } from './ast-grep-query.js';
+import { matchAstGrepPattern } from './ast-grep-query.js';
 import type { CompiledRule, DiffAddition } from './compiler.js';
 import { applyRulesToAdditions, loadCompiledRules } from './compiler.js';
 
@@ -88,21 +90,49 @@ export function testRule(rule: CompiledRule, fixture: RuleTestFixture): RuleTest
     passed: true,
   };
 
-  // Test fail lines — each should produce at least one violation
-  for (const line of fixture.failLines) {
-    const additions = linesToAdditions([line], fixture.filePath);
-    const violations = applyRulesToAdditions([rule], additions);
-    if (violations.length === 0) {
-      result.missedFails.push(line);
-    }
-  }
+  const isAstGrep = rule.engine === 'ast-grep' && rule.astGrepPattern;
 
-  // Test pass lines — none should produce violations
-  for (const line of fixture.passLines) {
-    const additions = linesToAdditions([line], fixture.filePath);
-    const violations = applyRulesToAdditions([rule], additions);
-    if (violations.length > 0) {
-      result.falsePositives.push(line);
+  if (isAstGrep) {
+    const ext = path.extname(fixture.filePath) || '.ts';
+    const pattern = rule.astGrepPattern as AstGrepRule;
+
+    // Test fail block — parse all fail lines as one snippet; expect at least one match
+    if (fixture.failLines.length > 0) {
+      const content = fixture.failLines.join('\n');
+      const allLineNums = fixture.failLines.map((_, i) => i + 1);
+      const onWarn = (msg: string) => result.missedFails.push(`[ast-grep warning] ${msg}`);
+      const matches = matchAstGrepPattern(content, ext, pattern, allLineNums, onWarn);
+      if (matches.length === 0) {
+        result.missedFails.push(fixture.failLines.join('\n'));
+      }
+    }
+
+    // Test pass block — parse all pass lines as one snippet; expect zero matches
+    if (fixture.passLines.length > 0) {
+      const content = fixture.passLines.join('\n');
+      const allLineNums = fixture.passLines.map((_, i) => i + 1);
+      const onWarn = (msg: string) => result.falsePositives.push(`[ast-grep warning] ${msg}`);
+      const matches = matchAstGrepPattern(content, ext, pattern, allLineNums, onWarn);
+      if (matches.length > 0) {
+        result.falsePositives.push(fixture.passLines.join('\n'));
+      }
+    }
+  } else {
+    // Regex-engine rules — test line by line
+    for (const line of fixture.failLines) {
+      const additions = linesToAdditions([line], fixture.filePath);
+      const violations = applyRulesToAdditions([rule], additions);
+      if (violations.length === 0) {
+        result.missedFails.push(line);
+      }
+    }
+
+    for (const line of fixture.passLines) {
+      const additions = linesToAdditions([line], fixture.filePath);
+      const violations = applyRulesToAdditions([rule], additions);
+      if (violations.length > 0) {
+        result.falsePositives.push(line);
+      }
     }
   }
 

@@ -110,6 +110,8 @@ function assemblePrompt(
   releaseContext: ReleaseContext,
   activeWork: string,
   systemPrompt: string,
+  cwd: string,
+  totemDir: string,
 ): string {
   const sections: string[] = [systemPrompt];
 
@@ -174,6 +176,50 @@ function assemblePrompt(
       }
     } catch {
       // Manual dir doesn't exist or can't be read — skip silently
+    }
+  }
+
+  // Dynamic metrics — inject live counts so the LLM uses accurate numbers
+  if (isUserFacing) {
+    const metrics: string[] = [];
+    try {
+      const rulesPath = path.join(cwd, totemDir, 'compiled-rules.json');
+      if (fs.existsSync(rulesPath)) {
+        const rulesData = JSON.parse(fs.readFileSync(rulesPath, 'utf-8'));
+        metrics.push(`Total compiled rules: ${rulesData.rules?.length ?? 'unknown'}`);
+      }
+    } catch {
+      // compiled-rules.json unreadable
+    }
+    try {
+      const baselinePath = path.join(
+        cwd,
+        'packages',
+        'cli',
+        'src',
+        'assets',
+        'compiled-baseline.ts',
+      );
+      if (fs.existsSync(baselinePath)) {
+        const baselineContent = fs.readFileSync(baselinePath, 'utf-8');
+        const count = (baselineContent.match(/lessonHash\s*:/g) || []).length;
+        metrics.push(`Baseline rules shipped with totem init: ${count}`);
+      }
+    } catch {
+      // baseline file unreadable
+    }
+    try {
+      const lessonsDir = path.join(cwd, totemDir, 'lessons');
+      if (fs.existsSync(lessonsDir)) {
+        const count = fs.readdirSync(lessonsDir).filter((f) => f.endsWith('.md')).length;
+        metrics.push(`Total lessons in knowledge base: ${count}`);
+      }
+    } catch {
+      // lessons dir unreadable
+    }
+    if (metrics.length > 0) {
+      sections.push('\n=== LIVE METRICS (USE THESE EXACT NUMBERS — DO NOT GUESS) ===');
+      sections.push(metrics.join('\n'));
     }
   }
 
@@ -377,7 +423,15 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
     log.info(TAG, `Processing ${doc.path}...`);
 
     // Assemble prompt for this doc
-    const prompt = assemblePrompt(doc, currentContent, releaseContext, activeWork, systemPrompt);
+    const prompt = assemblePrompt(
+      doc,
+      currentContent,
+      releaseContext,
+      activeWork,
+      systemPrompt,
+      cwd,
+      config.totemDir,
+    );
     log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
     let content: string | undefined;

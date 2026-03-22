@@ -1,6 +1,6 @@
 ---
 rule: bb937a42753289f1
-file: src/utils/process.ts
+file: packages/cli/src/git.ts
 ---
 
 ## Should fail

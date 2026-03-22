@@ -116,8 +116,21 @@ export const AI_TOOLS: AiToolInfo[] = [
 
 export function detectProject(cwd: string): DetectedProject {
   const exists = (p: string) => fs.existsSync(path.join(cwd, p));
+
+  // Check root tsconfig, then per-package tsconfigs for monorepos
+  let hasTypeScript = exists('tsconfig.json');
+  if (!hasTypeScript && exists('packages')) {
+    try {
+      hasTypeScript = fs
+        .readdirSync(path.join(cwd, 'packages'))
+        .some((d) => fs.existsSync(path.join(cwd, 'packages', d, 'tsconfig.json')));
+    } catch {
+      // packages/ unreadable — skip
+    }
+  }
+
   return {
-    hasTypeScript: exists('tsconfig.json'),
+    hasTypeScript,
     hasSrc: exists('src'),
     hasDocs: exists('docs'),
     hasSpecs: exists('specs'),
