@@ -262,12 +262,12 @@ export function buildTargets(detected: DetectedProject): IngestTarget[] {
   );
 
   if (detected.hasTypeScript) {
-    targets.push(
-      { glob: 'src/**/*.ts', type: 'code', strategy: 'typescript-ast' },
-      { glob: 'src/**/*.tsx', type: 'code', strategy: 'typescript-ast' },
-    );
-
-    if (!detected.hasSrc) {
+    if (detected.hasSrc) {
+      targets.push(
+        { glob: 'src/**/*.ts', type: 'code', strategy: 'typescript-ast' },
+        { glob: 'src/**/*.tsx', type: 'code', strategy: 'typescript-ast' },
+      );
+    } else {
       // Monorepo layout — scan packages/
       targets.push(
         { glob: 'packages/**/*.ts', type: 'code', strategy: 'typescript-ast' },
@@ -311,7 +311,8 @@ export function buildTargets(detected: DetectedProject): IngestTarget[] {
     });
   }
 
-  // Fallback: if nothing else detected (besides the 2 lesson targets), add a sensible default
+  // Fallback: if nothing else detected (besides the 2 lesson targets at lines 259-262),
+  // add a sensible default. INVARIANT: update this guard if lesson target count changes.
   if (targets.length <= 2) {
     targets.push({
       glob: '**/*.md',
