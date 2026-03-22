@@ -60,11 +60,16 @@ export async function wrapCommand(prNumbers: string[], options: WrapOptions): Pr
     execSync('pnpm run docs:inject', { cwd: process.cwd(), stdio: 'pipe' });
     log.success(TAG, 'Doc values injected.');
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    // execSync errors may carry details in stdout/stderr buffers
+    const msg = [
+      err instanceof Error ? err.message : String(err),
+      err && typeof err === 'object' && 'stdout' in err ? String(err.stdout) : '',
+      err && typeof err === 'object' && 'stderr' in err ? String(err.stderr) : '',
+    ].join(' ');
     if (msg.includes('Missing script') || msg.includes('not found')) {
       log.dim(TAG, 'docs:inject not configured — skipping.');
     } else {
-      log.error(TAG, `docs:inject failed: ${msg}`);
+      log.error('Totem Error', `docs:inject failed: ${msg.slice(0, 200)}`);
       throw err;
     }
   }
