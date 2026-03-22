@@ -2,7 +2,7 @@
 
 ## The Vision
 
-Totem is a local-only CLI and MCP server that compiles project knowledge into deterministic enforcement rules. It operates entirely within the consuming project with no outbound network calls or telemetry. Licensed under Apache 2.0.
+Totem is a local-first CLI and MCP server that compiles project knowledge into deterministic enforcement rules. By default it operates entirely within the consuming project with no outbound network calls or telemetry. Cloud embedding and orchestrator providers make outbound API calls only when explicitly configured. Licensed under Apache 2.0.
 
 ## Core Components
 
