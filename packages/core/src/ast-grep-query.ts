@@ -1,6 +1,8 @@
 import type { NapiConfig } from '@ast-grep/napi';
 import { Lang, parse } from '@ast-grep/napi';
 
+import { TotemParseError } from './errors.js';
+
 // ─── Types ──────────────────────────────────────────
 
 /** ast-grep pattern: either a simple string or a full NapiConfig rule object */
@@ -9,6 +11,19 @@ export type AstGrepRule = string | NapiConfig;
 export interface AstGrepMatch {
   lineNumber: number;
   lineText: string;
+}
+
+// ─── Constants ──────────────────────────────────────
+
+const AST_GREP_HINT =
+  'Check the rule pattern syntax. If valid, the source file may contain syntax that crashes the parser.';
+
+function rethrowAsParseError(label: string, err: unknown): never {
+  if (err instanceof TotemParseError) throw err;
+  throw new TotemParseError(
+    `${label}: ${err instanceof Error ? err.message : String(err)}`,
+    AST_GREP_HINT,
+  );
 }
 
 // ─── Language mapping ───────────────────────────────
@@ -38,7 +53,6 @@ function executeQuery(
   rule: AstGrepRule,
   addedLineNumbers: number[],
   lines: string[],
-  onWarn?: (msg: string) => void,
 ): AstGrepMatch[] {
   if (addedLineNumbers.length === 0) return [];
 
@@ -66,8 +80,7 @@ function executeQuery(
 
     return results;
   } catch (err) {
-    onWarn?.(`ast-grep query failed: ${err instanceof Error ? err.message : String(err)}`);
-    return [];
+    rethrowAsParseError('ast-grep query failed', err);
   }
 }
 
@@ -82,17 +95,15 @@ export function matchAstGrepPattern(
   ext: string,
   pattern: AstGrepRule,
   addedLineNumbers: number[],
-  onWarn?: (msg: string) => void,
 ): AstGrepMatch[] {
   const lang = extensionToLang(ext);
   if (!lang) return [];
 
   try {
     const root = parse(lang, content);
-    return executeQuery(root, pattern, addedLineNumbers, content.split('\n'), onWarn);
+    return executeQuery(root, pattern, addedLineNumbers, content.split('\n'));
   } catch (err) {
-    onWarn?.(`ast-grep parse failed: ${err instanceof Error ? err.message : String(err)}`);
-    return [];
+    rethrowAsParseError('ast-grep parse failed', err);
   }
 }
 
@@ -105,7 +116,6 @@ export function matchAstGrepPatternsBatch(
   content: string,
   ext: string,
   queries: Array<{ rule: AstGrepRule; addedLineNumbers: number[] }>,
-  onWarn?: (msg: string) => void,
 ): AstGrepMatch[][] {
   if (queries.length === 0) return [];
 
@@ -119,10 +129,9 @@ export function matchAstGrepPatternsBatch(
   try {
     const root = parse(lang, content);
     return queries.map(({ rule, addedLineNumbers }) =>
-      executeQuery(root, rule, addedLineNumbers, lines, onWarn),
+      executeQuery(root, rule, addedLineNumbers, lines),
     );
   } catch (err) {
-    onWarn?.(`ast-grep batch parse failed: ${err instanceof Error ? err.message : String(err)}`);
-    return queries.map(() => []);
+    rethrowAsParseError('ast-grep batch parse failed', err);
   }
 }

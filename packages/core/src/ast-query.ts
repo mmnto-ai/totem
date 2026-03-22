@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 
 import type { SupportedLanguage } from './ast-classifier.js';
 import { ensureInit, extensionToLanguage, loadGrammar } from './ast-classifier.js';
+import { TotemParseError } from './errors.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -13,6 +14,19 @@ const execFileAsync = promisify(execFile);
 export interface AstMatch {
   lineNumber: number;
   lineText: string;
+}
+
+// ─── Constants ──────────────────────────────────────
+
+const TREE_SITTER_HINT =
+  'Check the S-expression query syntax. If valid, the source file may contain syntax that crashes tree-sitter.';
+
+function rethrowAsParseError(label: string, err: unknown): never {
+  if (err instanceof TotemParseError) throw err;
+  throw new TotemParseError(
+    `${label}: ${err instanceof Error ? err.message : String(err)}`,
+    TREE_SITTER_HINT,
+  );
 }
 
 // ─── File reading ───────────────────────────────────
@@ -57,7 +71,6 @@ function runQuery(
   lines: string[],
   astQuery: string,
   addedLineNumbers: Set<number>,
-  onWarn?: (msg: string) => void,
 ): AstMatch[] {
   let query: import('web-tree-sitter').Query | null = null;
   try {
@@ -98,8 +111,7 @@ function runQuery(
 
     return results;
   } catch (err) {
-    onWarn?.(`AST query failed: ${err instanceof Error ? err.message : String(err)}`);
-    return [];
+    rethrowAsParseError('AST query failed', err);
   } finally {
     query?.delete();
   }
@@ -116,7 +128,6 @@ export async function matchAstQuery(
   astQuery: string,
   addedLineNumbers: number[],
   cwd: string,
-  onWarn?: (msg: string) => void,
 ): Promise<AstMatch[]> {
   if (addedLineNumbers.length === 0) return [];
 
@@ -149,7 +160,6 @@ export async function matchAstQuery(
           content.split('\n'),
           astQuery,
           new Set(addedLineNumbers),
-          onWarn,
         );
       } finally {
         tree.delete();
@@ -158,8 +168,7 @@ export async function matchAstQuery(
       parser.delete();
     }
   } catch (err) {
-    onWarn?.(`AST parse failed: ${err instanceof Error ? err.message : String(err)}`);
-    return [];
+    rethrowAsParseError('AST parse failed', err);
   }
 }
 
@@ -171,7 +180,6 @@ export async function matchAstQueriesBatch(
   filePath: string,
   queries: Array<{ astQuery: string; addedLineNumbers: number[] }>,
   cwd: string,
-  onWarn?: (msg: string) => void,
 ): Promise<Map<string, AstMatch[]>> {
   const results = new Map<string, AstMatch[]>();
   if (queries.length === 0) return results;
@@ -219,7 +227,6 @@ export async function matchAstQueriesBatch(
               lines,
               astQuery,
               new Set(addedLineNumbers),
-              onWarn,
             ),
           );
         }
@@ -230,8 +237,7 @@ export async function matchAstQueriesBatch(
       parser.delete();
     }
   } catch (err) {
-    onWarn?.(`AST batch parse failed: ${err instanceof Error ? err.message : String(err)}`);
-    for (const q of queries) results.set(q.astQuery, []);
+    rethrowAsParseError('AST batch parse failed', err);
   }
 
   return results;
