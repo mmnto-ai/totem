@@ -25,6 +25,7 @@ export type CompileManifest = z.infer<typeof CompileManifestSchema>;
  * relative to `baseDir`, sorted alphabetically.
  */
 function collectMdFiles(baseDir: string, currentDir: string = baseDir): string[] {
+  if (!fs.existsSync(baseDir)) return [];
   const entries = fs.readdirSync(currentDir, { withFileTypes: true });
   const results: string[] = [];
 
@@ -64,8 +65,15 @@ export function generateInputHash(lessonsDir: string): string {
  * Line endings are normalized to `\n` before hashing.
  */
 export function generateOutputHash(rulesPath: string): string {
-  const content = fs.readFileSync(rulesPath, 'utf-8').replace(/\r\n/g, '\n');
-  return crypto.createHash('sha256').update(content).digest('hex');
+  try {
+    const content = fs.readFileSync(rulesPath, 'utf-8').replace(/\r\n/g, '\n');
+    return crypto.createHash('sha256').update(content).digest('hex');
+  } catch {
+    throw new TotemParseError(
+      `Cannot hash compiled rules: ${rulesPath} not found`,
+      'Run "totem compile" to generate compiled-rules.json.',
+    );
+  }
 }
 
 // ─── I/O ─────────────────────────────────────────────

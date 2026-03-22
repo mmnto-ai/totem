@@ -1,4 +1,4 @@
-## Lesson — Hashing directory contents via git ls-files -s and git
+## Lesson — Hash dirs with git ls-files for cross-platform stability
 
 **Tags:** git, ci, cross-platform
 

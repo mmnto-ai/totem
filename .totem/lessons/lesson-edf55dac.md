@@ -1,4 +1,4 @@
-## Lesson — Using redirection (< file) instead of cat file | avoids
+## Lesson — Prefer shell redirection over cat pipe
 
 **Tags:** shell, performance, dx
 

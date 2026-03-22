@@ -110,14 +110,9 @@ describe('verify-manifest', () => {
         '\n',
     );
 
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
-      throw new Error(`process.exit(${code})`);
-    }) as never);
-
     const { verifyManifestCommand } = await import('./verify-manifest.js');
 
-    await expect(verifyManifestCommand()).rejects.toThrow('process.exit(1)');
-    expect(exitSpy).toHaveBeenCalledWith(1);
+    await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
   });
 
   it('rejects when lessons changed since compile', async () => {
@@ -132,14 +127,9 @@ describe('verify-manifest', () => {
       '# Lesson — New lesson\n\n**Tags:** new\n\nSomething new.\n',
     );
 
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
-      throw new Error(`process.exit(${code})`);
-    }) as never);
-
     const { verifyManifestCommand } = await import('./verify-manifest.js');
 
-    await expect(verifyManifestCommand()).rejects.toThrow('process.exit(1)');
-    expect(exitSpy).toHaveBeenCalledWith(1);
+    await expect(verifyManifestCommand()).rejects.toThrow(/[Cc]ompile manifest/);
   });
 
   it('passes with valid state', async () => {
@@ -148,14 +138,9 @@ describe('verify-manifest', () => {
     // Write manifest that matches current disk state
     writeValidManifest(manifestPath, lessonsDir, rulesPath);
 
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
-      throw new Error(`process.exit(${code})`);
-    }) as never);
-
     const { verifyManifestCommand } = await import('./verify-manifest.js');
 
-    // Should complete without throwing or calling process.exit
+    // Should complete without throwing
     await verifyManifestCommand();
-    expect(exitSpy).not.toHaveBeenCalled();
   });
 });

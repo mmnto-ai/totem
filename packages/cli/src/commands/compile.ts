@@ -1,11 +1,5 @@
 import type { CompiledRule, CompiledRulesFile, CompilerOutput, TotemConfig } from '@mmnto/totem';
-import {
-  generateInputHash,
-  generateOutputHash,
-  TotemConfigError,
-  TotemError,
-  writeCompileManifest,
-} from '@mmnto/totem';
+import { TotemConfigError, TotemError } from '@mmnto/totem';
 
 import { COMPILER_SYSTEM_PROMPT } from './compile-templates.js';
 
@@ -469,6 +463,8 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
         });
 
         // ─── Write compile manifest (provenance chain) ───
+        const { generateInputHash, generateOutputHash, writeCompileManifest } =
+          await import('@mmnto/totem');
         const lessonsDir = path.join(totemDir, 'lessons');
         const manifestPath = path.join(totemDir, 'compile-manifest.json');
         const inputHash = generateInputHash(lessonsDir);

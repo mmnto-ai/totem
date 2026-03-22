@@ -1,10 +1,3 @@
-import * as path from 'node:path';
-
-import { generateInputHash, generateOutputHash, readCompileManifest } from '@mmnto/totem';
-
-import { bold, errorColor, log, success as successColor } from '../ui.js';
-import { loadConfig, resolveConfigPath } from '../utils.js';
-
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Verify';
@@ -12,6 +5,12 @@ const TAG = 'Verify';
 // ─── Main command ───────────────────────────────────────
 
 export async function verifyManifestCommand(): Promise<void> {
+  const path = await import('node:path');
+  const { generateInputHash, generateOutputHash, readCompileManifest, TotemError } =
+    await import('@mmnto/totem');
+  const { bold, errorColor, log, success: successColor } = await import('../ui.js');
+  const { loadConfig, resolveConfigPath } = await import('../utils.js');
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   const config = await loadConfig(configPath);
@@ -28,32 +27,35 @@ export async function verifyManifestCommand(): Promise<void> {
   const actualInputHash = generateInputHash(lessonsDir);
   const actualOutputHash = generateOutputHash(rulesPath);
 
-  let failed = false;
+  const mismatches: string[] = [];
 
   if (actualInputHash !== manifest.input_hash) {
-    log.error(
-      TAG,
+    mismatches.push(
       `Input hash mismatch — lessons changed since last compile.\n` +
         `  Expected: ${manifest.input_hash}\n` +
         `  Actual:   ${actualInputHash}`,
     );
-    failed = true;
   }
 
   if (actualOutputHash !== manifest.output_hash) {
-    log.error(
-      TAG,
+    mismatches.push(
       `Output hash mismatch — compiled-rules.json was modified outside totem compile.\n` +
         `  Expected: ${manifest.output_hash}\n` +
         `  Actual:   ${actualOutputHash}`,
     );
-    failed = true;
   }
 
-  if (failed) {
+  if (mismatches.length > 0) {
+    for (const msg of mismatches) {
+      log.error('Totem Error', msg);
+    }
     const label = errorColor(bold('FAIL'));
-    log.error(TAG, `${label} — Manifest verification failed. Run "totem compile" to regenerate.`);
-    process.exit(1);
+    log.error('Totem Error', `${label} — Manifest verification failed.`);
+    throw new TotemError(
+      'COMPILE_FAILED',
+      'Compile manifest verification failed.',
+      'Run "totem compile" to regenerate the manifest.',
+    );
   }
 
   const label = successColor(bold('PASS'));
