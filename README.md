@@ -12,7 +12,7 @@ Totem doesn't ship with your app. It lives in your workflow. It also works on no
 
 ```bash
 $ npx @mmnto/cli lint
-PASS — 219 rules, 0 violations.
+PASS — 230 rules, 0 violations.
 
 $ npx @mmnto/cli stats
 Total violations prevented: 47 | security: 12, architecture: 35
@@ -95,11 +95,11 @@ Results are restricted to `packages/mcp/` files. Unknown boundary names fall bac
 
 ## Performance
 
-`totem lint` runs **219 compiled rules in under 2 seconds** on a 7,400-line, 105-file PR. Zero LLM inference. Pure AST classification + regex matching.
+`totem lint` runs **230 compiled rules in under 2 seconds** on a 7,400-line, 105-file PR. Zero LLM inference. Pure AST classification + regex matching.
 
 | Metric         | Value                        |
 | -------------- | ---------------------------- |
-| Rules          | 219 (regex + AST + ast-grep) |
+| Rules          | 230 (regex + AST + ast-grep) |
 | Lines scanned  | 7,397                        |
 | Files          | 105                          |
 | Execution time | **1.75s**                    |
@@ -186,7 +186,7 @@ npx @mmnto/cli sync # Build the vector index
 npx @mmnto/cli lint # Run compiled rules (zero LLM)
 ```
 
-During `init`, Totem prompts to install a `pre-push` git hook that runs `totem lint` automatically before every push. It drops a standard shell script into `.git/hooks/` to work alongside Husky or bare repos. Pre-commit hooks warn on commits that lack proper preflight validation. Run `totem hooks --check` to verify installation at any time.
+During `init`, Totem prompts to install a `pre-push` git hook that runs `totem lint` automatically before every push. It drops a standard shell script into `.git/hooks/` to work alongside Husky or bare repos, alongside invisible sync hooks that seamlessly keep the vector index updated. Pre-commit hooks actively warn on commits that lack proper preflight validation. Run `totem hooks --check` to verify installation at any time.
 
 ## The Planning Pipeline
 
@@ -211,7 +211,7 @@ AI coding agents are brilliant but forgetful, often repeating architectural viol
 
 - **Compile:** Your `.cursorrules` and `.mdc` files are plain English. Totem compiles them into deterministic AST and regex checks via the AST engine. A pre-compilation gate validates lessons before processing.
 - **Enforce:** `totem lint` is **100% deterministic** and runs compiled rules against your diff. It runs in ~2 seconds with zero API keys, and your CI passes or fails based purely on logic.
-- **Learn:** Run `totem extract` to compile new invariants from PR bugs, scaling your local index over time (the active CLI instance currently coordinates **436 embedded lessons**). When a violation happens, use `totem explain` to instantly retrieve the underlying lesson.
+- **Learn:** Run `totem extract` to compile new invariants from PR bugs, scaling your local index over time (the active CLI instance currently coordinates **441 embedded lessons**). When a violation happens, use `totem explain` to instantly retrieve the underlying lesson.
 - **Plan:** `totem spec` queries the knowledge index before your AI writes code, generating architectural invariants. The AI starts fully informed of past mistakes instead of starting blank.
 
 **Totem doesn't replace your AI. It gives your AI a memory.**
@@ -243,7 +243,7 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
 - **Workspace Compatibility:** Native monorepo support accurately detects TypeScript via per-package configurations, while index partitions support alias resolution for targeted scopes.
 - **Error Handling:** Typed `TotemError` subclasses unify error domains with actionable recovery hints for resilient operations.
 - **Rule Architecture:**
-- **Curated Baselines:** Ships a curated **219-rule set** with mandatory verify steps for execution determinism. Includes reverse-compiled lessons with manual patterns for zero-LLM enforcement.
+- **Curated Baselines:** Enforces up to 230 compiled rules with mandatory verify steps for execution determinism. Includes reverse-compiled lessons with manual patterns for zero-LLM enforcement.
 - **Advanced AST Validation:** Empowers deterministic enforcement via tree-sitter and ast-grep classifications. The underlying engine is validated against an adversarial corpus to reduce false positives.
 - **Agent Automation:** Agent skills utilize a streamlined directory format and root router pattern for clear instruction files. Context restoration uses explicit capability manifests to maintain agent focus.
 - **Severity Validation:** Compiled rules enforce strict severity levels. Errors actively block CI, while warnings inform without blocking.
@@ -293,6 +293,11 @@ Full reference: [CLI Reference Wiki](./docs/wiki/cli-reference.md)
 
 # Troubleshooting
 
+<!--
+Manually maintained content that `totem docs` must include in the wiki.
+This file is the source of truth for troubleshooting notes — edit here, not in the generated wiki.
+-->
+
 ## Git Hooks
 
 ### Hooks not firing on Mac/Linux
@@ -302,7 +307,7 @@ If you clone a repository that was initialized on Windows and the git hooks fail
 **Fix:**
 
 ```bash
-chmod +x .git/hooks/pre-push .git/hooks/post-merge
+chmod +x .git/hooks/pre-commit .git/hooks/pre-push .git/hooks/post-merge .git/hooks/post-checkout
 ```
 
 This applies the execute permission that POSIX systems require. Windows users are unaffected — Git Bash executes hooks regardless of the permission bit.

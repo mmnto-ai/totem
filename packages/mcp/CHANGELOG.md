@@ -1,5 +1,20 @@
 # @mmnto/mcp
 
+## 1.3.18
+
+### Patch Changes
+
+- feat: invisible sync hooks (ADR-066)
+  - Post-merge hook only syncs when `.totem/lessons/` files change (git diff-tree conditional)
+  - New post-checkout hook syncs on branch switch when `.totem/` differs
+  - `totem sync --quiet` flag for silent background hook execution
+  - Deterministic end markers for safe eject scrubbing
+  - DRY scrubHook helper with try/catch and exact marker matching
+  - 230 compiled rules (19 new), 697 lessons
+
+- Updated dependencies
+  - @mmnto/totem@1.3.18
+
 ## 1.3.17
 
 ### Patch Changes

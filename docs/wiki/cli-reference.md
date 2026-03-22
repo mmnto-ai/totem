@@ -19,10 +19,10 @@ If existing AI agent instructions (e.g., `.cursor/rules/*.mdc`) are detected dur
 
 ### `totem hooks`
 
-Installs or updates background git hooks (`pre-commit`, `pre-push`, `post-merge`). Automatically resolves the git root in monorepo sub-packages.
+Installs or updates background git hooks (`pre-commit`, `pre-push`, `post-merge`, `post-checkout`). Automatically resolves the git root in monorepo sub-packages.
 
 - **Usage:** Typically run automatically during `pnpm prepare`.
-- **Troubleshooting (Mac/Linux):** If you clone a repository initialized on Windows and the hooks fail to fire, Git may not recognize them as executable. Fix this by running: `chmod +x .git/hooks/pre-push .git/hooks/post-merge`
+- **Troubleshooting (Mac/Linux):** If you clone a repository initialized on Windows and the hooks fail to fire, Git may not recognize them as executable. Fix this by running: `chmod +x .git/hooks/pre-commit .git/hooks/pre-push .git/hooks/post-merge .git/hooks/post-checkout`
 
 ### `totem doctor` _(Upcoming)_
 

@@ -876,17 +876,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "3cc3f90997f1ffda",
-      "lessonHeading": "Prefer Vitest's expect().rejects.toHaveProperty()",
-      "pattern": "\\bexpect\\.fail\\(",
-      "message": "Prefer Vitest's expect().rejects.toHaveProperty()",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T07:19:45.508Z",
-      "createdAt": "2026-03-21T07:19:45.508Z",
-      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "42a7363aa69215dd",
       "lessonHeading": "When using the @google/genai SDK (v1+), the constructor",
       "pattern": "new\\s+GoogleGenerativeAI\\s*\\(\\s*[^\\s\\{]",
@@ -1193,18 +1182,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "8057fcca873b861a",
-      "lessonHeading": "The shell option in spawn() calls should be omitted",
-      "pattern": "",
-      "message": "The 'shell' option should be omitted when command arguments are provided as an array. Using structured arguments with shell: true increases the attack surface for command injection.",
-      "engine": "ast-grep",
-      "astGrepPattern": "spawn($CMD, [$$$ARGS], { $$$BEFORE, shell: true, $$$AFTER })",
-      "compiledAt": "2026-03-21T07:29:15.492Z",
-      "createdAt": "2026-03-21T07:29:15.492Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "e61b4c48ac65eb17",
       "lessonHeading": "Static top-level imports from heavy internal packages delay",
       "pattern": "^import\\s+(?!type\\s)(?!\\s*\\{[^}]*Error).*from\\s+['\"](?:\\.\\.\\/|@[\\w-]+\\/)",
@@ -1322,29 +1299,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "bb1bcd038255556c",
-      "lessonHeading": "PID-based process liveness checks (process.kill(pid, 0))",
-      "pattern": "",
-      "message": "PID-based liveness checks (process.kill(pid, 0)) are unreliable across PID namespaces (Docker/CI). Combine with stale timestamps for safety.",
-      "engine": "ast-grep",
-      "astGrepPattern": "process.kill($PID, 0)",
-      "compiledAt": "2026-03-21T07:33:08.203Z",
-      "createdAt": "2026-03-21T07:33:08.203Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "f87cd61687b84261",
-      "lessonHeading": "Check for the presence of the 'g' flag before appending it",
-      "pattern": "new\\s+RegExp\\s*\\([^,]+,\\s*[^?:]*\\+\\s*['\"]g['\"]",
-      "message": "Check for the presence of the 'g' flag before appending it",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T07:33:25.011Z",
-      "createdAt": "2026-03-21T07:33:25.011Z",
-      "fileGlobs": ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"],
-      "severity": "error"
-    },
-    {
       "lessonHash": "52e5665393f46eed",
       "lessonHeading": "Custom .env parsers must strip CRLF and quotes",
       "pattern": "\\bprocess\\.env\\[[^\\]]+\\]\\s*=\\s*(?![^;\\n]*(\\?\\?|\\|\\||process\\.env))",
@@ -1364,17 +1318,6 @@
       "compiledAt": "2026-03-21T07:35:28.869Z",
       "createdAt": "2026-03-21T07:35:28.869Z",
       "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "698693bb86cb8cc2",
-      "lessonHeading": "Use path.relative(process.cwd(),",
-      "pattern": "\\.replace\\(\\s*process\\.cwd\\(\\)",
-      "message": "Use path.relative(process.cwd(),",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T07:35:31.395Z",
-      "createdAt": "2026-03-21T07:35:31.395Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -1449,18 +1392,6 @@
       "createdAt": "2026-03-21T07:38:41.084Z",
       "fileGlobs": ["packages/core/src/rule-engine.ts"],
       "severity": "error"
-    },
-    {
-      "lessonHash": "8db5440cd22cb81a",
-      "lessonHeading": "Perform explicit null and type checks on the results",
-      "pattern": "",
-      "message": "Avoid direct type assertions on JSON.parse results for lock files. Use explicit null and type validation to safely handle malformed or truncated files.",
-      "engine": "ast-grep",
-      "astGrepPattern": "JSON.parse($A) as $B",
-      "compiledAt": "2026-03-21T07:39:11.636Z",
-      "createdAt": "2026-03-21T07:39:11.636Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx"],
-      "severity": "warning"
     },
     {
       "lessonHash": "3c7773706e5b3b2d",
@@ -2068,29 +1999,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "60d41ffe66994705",
-      "lessonHeading": "When manually parsing CLI arguments, verify that a flag's",
-      "pattern": "[\\w.]+\\s*\\[[^\\]]*\\.indexOf\\(.+?\\)\\s*\\+\\s*1\\s*\\]",
-      "message": "When manually parsing CLI arguments, verify that a flag's",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T07:58:20.331Z",
-      "createdAt": "2026-03-21T07:58:20.331Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.mjs", "**/*.cjs"],
-      "severity": "error"
-    },
-    {
-      "lessonHash": "90eccad00d7df088",
-      "lessonHeading": "The @ast-grep/napi findAll method accepts both string",
-      "pattern": "",
-      "message": "The @ast-grep/napi findAll method handles string patterns and NapiConfig objects natively; manual typeof branching is redundant.",
-      "engine": "ast-grep",
-      "astGrepPattern": "$NODE.findAll(typeof $X === 'string' ? $Y : $Z)",
-      "compiledAt": "2026-03-21T07:58:42.377Z",
-      "createdAt": "2026-03-21T07:58:42.377Z",
-      "fileGlobs": ["**/*.ts", "**/*.js"],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "270832e0401a5c4c",
       "lessonHeading": "AI tool metadata must treat MCP-related fields as optional",
       "pattern": "\\b(mcp|mcpServer|mcpTool)\\b(?!\\?)\\s*:(?![^;]*\\.optional\\(\\))",
@@ -2683,13 +2591,252 @@
     {
       "lessonHash": "d5faa14cbb8b50fb",
       "lessonHeading": "Technical documentation must replace absolute claims",
+      "pattern": "\\b([Gg]uarantee|[Cc]omprehensive)\\b",
       "message": "Technical documentation must replace absolute claims like 'guarantee' or 'comprehensive' with specific, evidence-backed descriptions of tested behavior.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b([Gg]uarantee|[Cc]omprehensive)\\b",
       "compiledAt": "2026-03-22T00:36:46.241Z",
       "createdAt": "2026-03-22T00:36:46.241Z",
-      "fileGlobs": ["**/*.md", "**/*.txt", "docs/**"]
+      "fileGlobs": ["**/*.md", "**/*.txt", "docs/**"],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "7418ff7c3005d543",
+      "lessonHeading": "Static top-level imports in CLI command files increase",
+      "message": "Static top-level imports in CLI command files increase startup latency. Use dynamic import() within the command handler to ensure heavy modules are only loaded when executed.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "import $BINDINGS from '$SOURCE'",
+      "compiledAt": "2026-03-22T17:35:34.269Z",
+      "createdAt": "2026-03-22T17:35:34.269Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "packages/cli/src/commands/**/*.js",
+        "packages/cli/commands/**/*.ts",
+        "packages/cli/commands/**/*.js"
+      ]
+    },
+    {
+      "lessonHash": "213f7ef6c8cf30c3",
+      "lessonHeading": "Move large imports, such as multi-line prompt templates,",
+      "message": "Move large multi-line prompt templates inside function bodies to prevent eager parsing at module load time and improve CLI responsiveness.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\b(?:const|let|var)\\s+\\w+\\s+=\\s+`[^`]*$",
+      "compiledAt": "2026-03-22T17:36:11.891Z",
+      "createdAt": "2026-03-22T17:36:11.891Z",
+      "fileGlobs": [
+        "packages/cli/**/*.ts",
+        "packages/cli/**/*.js",
+        "!**/*.test.ts",
+        "!**/*.test.js"
+      ]
+    },
+    {
+      "lessonHash": "5b07806c9e917897",
+      "lessonHeading": "Exact-match regexes for HTML tags fail on valid variants",
+      "message": "Exact-match HTML tag regexes are fragile. Use resilient patterns that handle attributes and whitespace (e.g., /<tag(?:\\s+[^>]*)?>/i) to prevent extraction failures on valid variants.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\/<[a-zA-Z0-9]+>\\/i?",
+      "compiledAt": "2026-03-22T17:36:26.161Z",
+      "createdAt": "2026-03-22T17:36:26.161Z",
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
+    },
+    {
+      "lessonHash": "7dc49f6f765e47fa",
+      "lessonHeading": "Always propagate parse warning callbacks in AST-based test",
+      "message": "Always propagate parse warning callbacks in AST-based tests. Swallowing these warnings via empty functions (e.g., `onWarning: () => {}`) makes it impossible to distinguish between a legitimate 'no match' and a silent syntax error in a test fixture.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\b(onWarning|onParseWarning)\\s*:\\s*(?:\\([^)]*\\)|[a-zA-Z_$][\\w$]*)?\\s*=>\\s*\\{\\s*\\}",
+      "compiledAt": "2026-03-22T17:37:13.018Z",
+      "createdAt": "2026-03-22T17:37:13.018Z",
+      "fileGlobs": [
+        "**/*.test.ts",
+        "**/*.test.js",
+        "**/*.spec.ts",
+        "**/*.spec.js",
+        "**/tests/**/*.ts",
+        "**/tests/**/*.js"
+      ]
+    },
+    {
+      "lessonHash": "0c7441a0f06b9a7e",
+      "lessonHeading": "Prefer Vitest's expect().rejects.toHaveProperty()",
+      "message": "Prefer Vitest's expect().rejects.toHaveProperty()",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "try { $$$PRE; expect.fail($$$ARGS); $$$POST } catch ($ERR) { $$$CATCH }",
+      "compiledAt": "2026-03-22T17:37:13.018Z",
+      "createdAt": "2026-03-22T17:37:13.018Z",
+      "fileGlobs": ["**/*.test.ts", "**/*.spec.ts"]
+    },
+    {
+      "lessonHash": "a1021f312bb564a2",
+      "lessonHeading": "Core library modules should accept optional warning",
+      "message": "Warning callbacks should be optional (e.g. 'warn?:' or as part of an options object) rather than required positional arguments to maintain API flexibility.",
+      "engine": "ast",
+      "severity": "warning",
+      "pattern": "",
+      "astQuery": "(required_parameter pattern: (identifier) @id (#match? @id \"^(warn|warning)$\")) @violation",
+      "compiledAt": "2026-03-22T17:37:48.379Z",
+      "createdAt": "2026-03-22T17:37:48.379Z",
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"]
+    },
+    {
+      "lessonHash": "4eb175f98879dbb8",
+      "lessonHeading": "Review metadata from third-party integrations",
+      "message": "Third-party integration metadata can contain null 'author' fields. Use optional chaining (author?.includes) or an existence check before calling .includes() to prevent runtime crashes.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "$OBJ.author.includes($$$)",
+      "compiledAt": "2026-03-22T17:38:36.891Z",
+      "createdAt": "2026-03-22T17:38:36.891Z",
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts", "!**/*.test.tsx"]
+    },
+    {
+      "lessonHash": "dd4542e69ec3d5a1",
+      "lessonHeading": "The shell option in spawn() calls should be omitted",
+      "message": "The shell option in spawn() calls should be omitted",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "spawn($CMD, [$$$ARGS], { $$$BEFORE, shell: true, $$$AFTER })",
+      "compiledAt": "2026-03-22T17:38:40.852Z",
+      "createdAt": "2026-03-22T17:38:40.852Z",
+      "fileGlobs": ["**/*.ts", "**/*.js"]
+    },
+    {
+      "lessonHash": "c0f2a3fd2956184e",
+      "lessonHeading": "PID-based process liveness checks (process.kill(pid, 0))",
+      "message": "PID-based process liveness checks (process.kill(pid, 0))",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "process.kill($PID, 0)",
+      "compiledAt": "2026-03-22T17:38:40.852Z",
+      "createdAt": "2026-03-22T17:38:40.852Z",
+      "fileGlobs": ["**/*.ts", "**/*.js"]
+    },
+    {
+      "lessonHash": "a6b7018495166ceb",
+      "lessonHeading": "Check for the presence of the 'g' flag before appending it",
+      "message": "Check for the presence of the 'g' flag before appending it",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "new RegExp($SRC, $FLAGS + 'g')",
+      "compiledAt": "2026-03-22T17:38:40.853Z",
+      "createdAt": "2026-03-22T17:38:40.853Z",
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
+    },
+    {
+      "lessonHash": "5d89c8596d8bcea5",
+      "lessonHeading": "Use path.relative(process.cwd(),",
+      "message": "Use path.relative(process.cwd(),",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "$OBJ.replace(process.cwd(), $REPLACEMENT)",
+      "compiledAt": "2026-03-22T17:38:40.853Z",
+      "createdAt": "2026-03-22T17:38:40.853Z",
+      "fileGlobs": ["**/*.ts", "**/*.js"]
+    },
+    {
+      "lessonHash": "df326a7c29885525",
+      "lessonHeading": "Perform explicit null and type checks on the results",
+      "message": "Perform explicit null and type checks on the results",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "JSON.parse($A) as $B",
+      "compiledAt": "2026-03-22T17:38:52.601Z",
+      "createdAt": "2026-03-22T17:38:52.601Z",
+      "fileGlobs": ["**/*.ts", "**/*.tsx"]
+    },
+    {
+      "lessonHash": "2c4fccdb11f6afb3",
+      "lessonHeading": "Empty catch blocks during file discovery can lead",
+      "message": "Empty catch blocks can lead to incomplete data sets and incorrect logic. Use explicit error handling to distinguish between missing directories and file read failures.",
+      "engine": "ast",
+      "severity": "warning",
+      "pattern": "",
+      "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
+      "compiledAt": "2026-03-22T17:39:21.564Z",
+      "createdAt": "2026-03-22T17:39:21.564Z",
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+    },
+    {
+      "lessonHash": "1d7dbe69b248fa50",
+      "lessonHeading": "When manually parsing CLI arguments, verify that a flag's",
+      "message": "When manually parsing CLI arguments, verify that a flag's",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "$A[$A.indexOf($B) + 1]",
+      "compiledAt": "2026-03-22T17:40:18.643Z",
+      "createdAt": "2026-03-22T17:40:18.643Z",
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
+    },
+    {
+      "lessonHash": "5cbf4ee7e76975d4",
+      "lessonHeading": "The @ast-grep/napi findAll method accepts both string",
+      "message": "The @ast-grep/napi findAll method accepts both string",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "$NODE.findAll(typeof $X === 'string' ? $Y : $Z)",
+      "compiledAt": "2026-03-22T17:40:18.643Z",
+      "createdAt": "2026-03-22T17:40:18.643Z",
+      "fileGlobs": ["**/*.ts", "**/*.js"]
+    },
+    {
+      "lessonHash": "24c9e2738d4a5f25",
+      "lessonHeading": "Avoid naive substring matching when extracting counts",
+      "message": "Avoid naive substring matching for 'lessonHash'. Anchor the search pattern to the object property (e.g., /lessonHash\\\\s*:/) to prevent false positives in comments, imports, or types.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "(\\.(match|matchAll|search|split|test|includes)\\(|new\\s+RegExp\\()\\s*(['\"/])\\\\blessonHash\\\\b(?![^'\"/]*?:)\\3",
+      "compiledAt": "2026-03-22T17:41:25.546Z",
+      "createdAt": "2026-03-22T17:41:25.546Z",
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"]
+    },
+    {
+      "lessonHash": "243b32bd5f8d1a74",
+      "lessonHeading": "When scanning directories for feature detection",
+      "message": "Do not swallow all errors in an empty catch block. When scanning directories for feature detection, explicitly handle known errors (like ENOENT) and log or rethrow others (like EACCES) to avoid masking structural or permission issues.",
+      "engine": "ast",
+      "severity": "warning",
+      "pattern": "",
+      "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
+      "compiledAt": "2026-03-22T17:42:09.151Z",
+      "createdAt": "2026-03-22T17:42:09.151Z",
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts", "!**/*.spec.ts"]
+    },
+    {
+      "lessonHash": "7d299a9fd0e81e3b",
+      "lessonHeading": "Use anchored regex for shell command matching",
+      "message": "Use anchored regex (e.g., /^\\s*git\\s+/) for shell command matching instead of loose keyword matching to prevent accidental matches on file paths (like .git/hooks) or comments.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "(\\.(includes|indexOf|match)\\s*\\(\\s*['\"\\/](?!\\^)(git|p?npm|yarn|docker|aws|kubectl|node|bash|sh)\\b|\\/(?!\\^)(git|p?npm|yarn|docker|aws|kubectl|node|bash|sh)\\b\\/\\.test)",
+      "compiledAt": "2026-03-22T17:42:42.238Z",
+      "createdAt": "2026-03-22T17:42:42.238Z",
+      "fileGlobs": ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"]
+    },
+    {
+      "lessonHash": "1061e953cb99a0ec",
+      "lessonHeading": "Always use dynamic imports for heavy logic or detection",
+      "message": "Always use dynamic imports (await import(...)) for heavy logic or detection modules within CLI command functions to ensure fast startup performance.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "import\\s+.*from\\s+['\"][^'\"]*detection[^'\"]*['\"]",
+      "compiledAt": "2026-03-22T17:43:30.348Z",
+      "createdAt": "2026-03-22T17:43:30.348Z",
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
     }
   ],
   "nonCompilable": [
@@ -3137,6 +3284,23 @@
     "32b6adb4972689f6",
     "73ed3dcdca4135eb",
     "99baac2504eec5fb",
-    "427c97fb0063f0cb"
+    "427c97fb0063f0cb",
+    "71ed3149ac1eec94",
+    "c6aba1a8de0e41d1",
+    "549fbe79ec1f9e72",
+    "40c56bcb8559ef29",
+    "a51cac033a6ac173",
+    "664fc0bbc72e5d3d",
+    "fb2b413ca3e7365e",
+    "c6d3fe1adb8ecbfe",
+    "258c704aed0e481c",
+    "6205693612901f93",
+    "5ce5730ff5d1f9d2",
+    "19610823108a28b5",
+    "2cb69260d898d388",
+    "b5fc107250c40193",
+    "dd397d8a19b5e776",
+    "affa26956e6d5abf",
+    "fae3a9cefd3a80d1"
   ]
 }

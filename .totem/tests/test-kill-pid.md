@@ -1,5 +1,5 @@
 ---
-rule: bb1bcd038255556c
+rule: c0f2a3fd2956184e
 file: src/process.ts
 ---
 
