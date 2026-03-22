@@ -4,8 +4,8 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { ejectCommand, scrubPostCheckoutHook, scrubPostMergeHook } from './eject.js';
 import type { EjectSummary } from './eject.js';
+import { ejectCommand, scrubPostCheckoutHook, scrubPostMergeHook } from './eject.js';
 
 function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'totem-eject-'));
