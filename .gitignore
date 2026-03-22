@@ -52,6 +52,7 @@ dev-cheatsheet.txt
 
 # Review artifacts
 review-output.md
+totem-audit.zip
 .code-review/
 2026-*
 .totem/cache/.shield-passed
