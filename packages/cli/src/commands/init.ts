@@ -14,15 +14,14 @@ import {
 import { bold, brand, dim, log, printBanner, success } from '../ui.js';
 import {
   AI_TOOLS,
+  type AiToolInfo,
   buildTargets,
   detectAiTools,
   detectEmbeddingTier,
   detectProject,
-  type AiToolInfo,
   type EmbeddingTier,
   type HookInstallerResult,
 } from './init-detect.js';
-import { installEnforcementHooks, installPostMergeHook } from './install-hooks.js';
 import {
   AI_PROMPT_BLOCK,
   CLAUDE_PRETOOLUSE_ENTRY,
@@ -30,18 +29,19 @@ import {
   GEMINI_BEFORE_TOOL,
   GEMINI_SESSION_START,
   GEMINI_SKILL,
+  generateConfig,
   LEGACY_SENTINEL,
   REFLEX_END,
   REFLEX_START,
   REFLEX_VERSION,
   REFLEX_VERSION_RE,
   TOTEM_FILE_MARKER,
-  generateConfig,
 } from './init-templates.js';
+import { installEnforcementHooks, installPostMergeHook } from './install-hooks.js';
 
 // Re-export moved items so existing consumers (including tests) don't break
-export { buildNpxCommand, detectEmbeddingTier } from './init-detect.js';
 export type { AiToolInfo, HookInstallerResult } from './init-detect.js';
+export { buildNpxCommand, detectEmbeddingTier } from './init-detect.js';
 export { AI_PROMPT_BLOCK, generateConfig, REFLEX_VERSION } from './init-templates.js';
 
 /**

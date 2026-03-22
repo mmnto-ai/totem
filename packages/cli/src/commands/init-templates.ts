@@ -3,7 +3,7 @@
 
 import type { IngestTarget } from '@mmnto/totem';
 
-import { detectOrchestrator, formatTargets, type EmbeddingTier } from './init-detect.js';
+import { detectOrchestrator, type EmbeddingTier, formatTargets } from './init-detect.js';
 
 // ─── Reflex versioning ────────────────────────────────────
 // Bump REFLEX_VERSION whenever the AI_PROMPT_BLOCK content changes materially.

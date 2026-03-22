@@ -24,18 +24,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "009679a6abb474e2",
-      "lessonHeading": "When timing out a child process, do not reject the promise",
-      "pattern": "",
-      "message": "When timing out a child process, do not reject the promise immediately within the setTimeout callback. Instead, call child.kill() and perform the rejection inside the 'close' event handler to ensure all stdio streams have fully flushed and captured the complete error log.",
-      "engine": "ast-grep",
-      "astGrepPattern": "setTimeout(() => { $$$ reject($$$) $$$ }, $TIME)",
-      "compiledAt": "2026-03-21T06:37:58.847Z",
-      "createdAt": "2026-03-21T06:37:58.847Z",
-      "fileGlobs": ["**/*.ts", "**/*.js"],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "bb937a42753289f1",
       "lessonHeading": "Synchronous execSync with piped stdio can cause the parent",
       "pattern": "\\bexecSync\\s*\\(",
@@ -77,30 +65,6 @@
       "compiledAt": "2026-03-21T06:40:23.231Z",
       "createdAt": "2026-03-21T06:40:23.231Z",
       "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "24d9d2ae3496bd95",
-      "lessonHeading": "When normalizing diverse SDK errors for internal retry",
-      "pattern": "",
-      "message": "When normalizing SDK errors, mutate the original error's '.name' property and re-throw it instead of creating a new Error instance. This preserves the original stack trace and provider-specific metadata.",
-      "engine": "ast-grep",
-      "astGrepPattern": "try { $$$ } catch ($E) { $$$ throw new $ERR($$$) $$$ }",
-      "compiledAt": "2026-03-21T06:40:49.240Z",
-      "createdAt": "2026-03-21T06:40:49.240Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "fdd2206acd4ea992",
-      "lessonHeading": "Avoid refactoring synchronous factory functions to async",
-      "pattern": "",
-      "message": "Avoid refactoring synchronous factory functions to async just to hoist dynamic import() calls. Node.js caches dynamic imports after the first call; use top-level imports or keep the factory synchronous to avoid unnecessary async boilerplate propagation.",
-      "engine": "ast-grep",
-      "astGrepPattern": "async function $NAME($$$) { $$$ await import($$$) $$$ }",
-      "compiledAt": "2026-03-21T06:41:09.659Z",
-      "createdAt": "2026-03-21T06:41:09.659Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -246,18 +210,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "7e74cc89f71bacf5",
-      "lessonHeading": "Ollama num_ctx and VRAM: The OpenAI-compatible API adapter",
-      "pattern": "",
-      "message": "Ollama's 'num_ctx' must be wrapped in an 'options' object (e.g., options: { num_ctx: ... }). The OpenAI-compatible adapter does not support passing 'num_ctx' at the top level of the request.",
-      "engine": "ast-grep",
-      "astGrepPattern": "{ $$$ , num_ctx: $V, model: $M, $$$ }",
-      "compiledAt": "2026-03-21T06:50:45.453Z",
-      "createdAt": "2026-03-21T06:50:45.453Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "89b94dbfedfae9ab",
       "lessonHeading": "Casting an object literal to an Error type does not satisfy",
       "pattern": "(\\{.*\\}\\s+as\\s+Error|<\\s*Error\\s*>\\s*\\{.*\\})",
@@ -372,30 +324,6 @@
       "compiledAt": "2026-03-21T06:59:15.315Z",
       "createdAt": "2026-03-21T06:59:15.315Z",
       "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "064f35405ec02082",
-      "lessonHeading": "Always iterate through all regex matches (e.g.,",
-      "pattern": "",
-      "message": "Use matchAll() instead of match() to iterate through all matches. Relying on the first match allows 'shadowing' where an attacker prefixes a payload with a safe match to hide a malicious one later in the string.",
-      "engine": "ast-grep",
-      "astGrepPattern": "$STR.match($REG)",
-      "compiledAt": "2026-03-21T06:59:43.019Z",
-      "createdAt": "2026-03-21T06:59:43.019Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts", "!**/*.spec.ts"],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "741493a88528e2b8",
-      "lessonHeading": "Include a space or delimiter when concatenating disjoint",
-      "pattern": "",
-      "message": "Include a space or delimiter when concatenating disjoint text fragments (e.g., `${a} ${b}`) to prevent 'keyword synthesis' and bypass of security filters during context analysis.",
-      "engine": "ast-grep",
-      "astGrepPattern": "`${$A}${$B}`",
-      "compiledAt": "2026-03-21T07:00:07.350Z",
-      "createdAt": "2026-03-21T07:00:07.350Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -723,30 +651,6 @@
       "severity": "error"
     },
     {
-      "lessonHash": "32b6adb4972689f6",
-      "lessonHeading": "Iterative string replacements for a list of identifiers",
-      "pattern": "",
-      "message": "Iterative string replacements are less efficient than a single regex with an alternation group. Consolidate multiple .replace() calls into a single call with a regex alternation (e.g., .replace(/id1|id2/g, '')) to improve performance and maintainability.",
-      "engine": "ast-grep",
-      "astGrepPattern": "$OBJ.replace($A, $B).replace($C, $D)",
-      "compiledAt": "2026-03-21T07:15:26.534Z",
-      "createdAt": "2026-03-21T07:15:26.534Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "73ed3dcdca4135eb",
-      "lessonHeading": "Using child.kill() on Windows when shell: true is enabled",
-      "pattern": "",
-      "message": "Using child.kill() on Windows when 'shell: true' is enabled often fails to clean up child processes. Use 'taskkill /pid [pid] /T /F' to ensure the entire process tree is terminated.",
-      "engine": "ast-grep",
-      "astGrepPattern": "$PROC.kill($$$ARGS)",
-      "compiledAt": "2026-03-21T07:15:50.610Z",
-      "createdAt": "2026-03-21T07:15:50.610Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "329479bf34f8816f",
       "lessonHeading": "Use .min(1) on string schemas in config arrays",
       "pattern": "\\.string\\(\\)(?!\\.min\\()",
@@ -949,26 +853,7 @@
       "astGrepPattern": "import($PATH)",
       "compiledAt": "2026-03-21T07:18:34.475Z",
       "createdAt": "2026-03-21T07:18:34.475Z",
-      "fileGlobs": [
-        "utils/**/*.ts",
-        "utils/**/*.js",
-        "adapters/**/*.ts",
-        "adapters/**/*.js",
-        "lib/**/*.ts",
-        "lib/**/*.js"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "99baac2504eec5fb",
-      "lessonHeading": "Using [val].flat().filter(Boolean) to normalize inputs",
-      "pattern": "",
-      "message": "Using [val].flat().filter(Boolean) to normalize inputs loses TypeScript's type narrowing. Use explicit ternary checks and Array.isArray() to preserve specific types.",
-      "engine": "ast-grep",
-      "astGrepPattern": "[$VAL].flat().filter(Boolean)",
-      "compiledAt": "2026-03-21T07:18:42.164Z",
-      "createdAt": "2026-03-21T07:18:42.164Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+      "fileGlobs": ["packages/cli/src/**/*.ts", "!packages/cli/src/commands/**", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -1886,25 +1771,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "427c97fb0063f0cb",
-      "lessonHeading": "Avoid using partial matchers like toContain when testing",
-      "pattern": "",
-      "message": "Avoid using partial matchers like 'toContain' when testing secret masking or data sanitization. Use exact string assertions to ensure logic preserves surrounding context and does not redact more than intended.",
-      "engine": "ast-grep",
-      "astGrepPattern": "expect($VAL).toContain($SUB)",
-      "compiledAt": "2026-03-21T07:52:51.896Z",
-      "createdAt": "2026-03-21T07:52:51.896Z",
-      "fileGlobs": [
-        "**/*.test.ts",
-        "**/*.test.tsx",
-        "**/*.spec.ts",
-        "**/*.spec.tsx",
-        "**/*.test.js",
-        "**/*.spec.js"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "ab8cf85a5ebfca09",
       "lessonHeading": "Explicit type assertions are often unnecessary when using",
       "pattern": "\\?\\?\\s*(['\"][^'\"]*['\"]|\\d+|true|false)\\s+as\\s+",
@@ -2588,7 +2454,7 @@
       "astGrepPattern": "console.$METHOD($$$ARGS)",
       "compiledAt": "2026-03-21T08:09:19.775Z",
       "createdAt": "2026-03-21T08:09:19.775Z",
-      "fileGlobs": ["packages/core/**/*.ts", "packages/core/**/*.js", "!**/*.test.ts"],
+      "fileGlobs": ["packages/core/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -3261,6 +3127,16 @@
     "28adb06a2b879edc",
     "e88b974f187ba484",
     "45a50e604b60963a",
-    "6df0a3b68a5f0cb1"
+    "6df0a3b68a5f0cb1",
+    "009679a6abb474e2",
+    "24d9d2ae3496bd95",
+    "fdd2206acd4ea992",
+    "7e74cc89f71bacf5",
+    "064f35405ec02082",
+    "741493a88528e2b8",
+    "32b6adb4972689f6",
+    "73ed3dcdca4135eb",
+    "99baac2504eec5fb",
+    "427c97fb0063f0cb"
   ]
 }
