@@ -2668,7 +2668,7 @@
       "engine": "ast-grep",
       "severity": "warning",
       "pattern": "",
-      "astGrepPattern": "`try { $$$PRE; expect.fail($$$ARGS); $$$POST } catch ($ERR) { $$$CATCH }`",
+      "astGrepPattern": "try { $$$PRE; expect.fail($$$ARGS); $$$POST } catch ($ERR) { $$$CATCH }",
       "compiledAt": "2026-03-22T17:37:13.018Z",
       "createdAt": "2026-03-22T17:37:13.018Z",
       "fileGlobs": ["**/*.test.ts", "**/*.spec.ts"]
@@ -2704,7 +2704,7 @@
       "engine": "ast-grep",
       "severity": "warning",
       "pattern": "",
-      "astGrepPattern": "`spawn($CMD, [$$$ARGS], { $$$BEFORE, shell: true, $$$AFTER })`",
+      "astGrepPattern": "spawn($CMD, [$$$ARGS], { $$$BEFORE, shell: true, $$$AFTER })",
       "compiledAt": "2026-03-22T17:38:40.852Z",
       "createdAt": "2026-03-22T17:38:40.852Z",
       "fileGlobs": ["**/*.ts", "**/*.js"]
@@ -2716,7 +2716,7 @@
       "engine": "ast-grep",
       "severity": "warning",
       "pattern": "",
-      "astGrepPattern": "`process.kill($PID, 0)`",
+      "astGrepPattern": "process.kill($PID, 0)",
       "compiledAt": "2026-03-22T17:38:40.852Z",
       "createdAt": "2026-03-22T17:38:40.852Z",
       "fileGlobs": ["**/*.ts", "**/*.js"]
@@ -2728,7 +2728,7 @@
       "engine": "ast-grep",
       "severity": "warning",
       "pattern": "",
-      "astGrepPattern": "`new RegExp($SRC, $FLAGS + 'g')`",
+      "astGrepPattern": "new RegExp($SRC, $FLAGS + 'g')",
       "compiledAt": "2026-03-22T17:38:40.853Z",
       "createdAt": "2026-03-22T17:38:40.853Z",
       "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
@@ -2740,7 +2740,7 @@
       "engine": "ast-grep",
       "severity": "warning",
       "pattern": "",
-      "astGrepPattern": "`$OBJ.replace(process.cwd(), $REPLACEMENT)`",
+      "astGrepPattern": "$OBJ.replace(process.cwd(), $REPLACEMENT)",
       "compiledAt": "2026-03-22T17:38:40.853Z",
       "createdAt": "2026-03-22T17:38:40.853Z",
       "fileGlobs": ["**/*.ts", "**/*.js"]
@@ -2752,7 +2752,7 @@
       "engine": "ast-grep",
       "severity": "warning",
       "pattern": "",
-      "astGrepPattern": "`JSON.parse($A) as $B`",
+      "astGrepPattern": "JSON.parse($A) as $B",
       "compiledAt": "2026-03-22T17:38:52.601Z",
       "createdAt": "2026-03-22T17:38:52.601Z",
       "fileGlobs": ["**/*.ts", "**/*.tsx"]
@@ -2776,7 +2776,7 @@
       "engine": "ast-grep",
       "severity": "warning",
       "pattern": "",
-      "astGrepPattern": "`$A[$A.indexOf($B) + 1]`",
+      "astGrepPattern": "$A[$A.indexOf($B) + 1]",
       "compiledAt": "2026-03-22T17:40:18.643Z",
       "createdAt": "2026-03-22T17:40:18.643Z",
       "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
@@ -2788,7 +2788,7 @@
       "engine": "ast-grep",
       "severity": "warning",
       "pattern": "",
-      "astGrepPattern": "`$NODE.findAll(typeof $X === 'string' ? $Y : $Z)`",
+      "astGrepPattern": "$NODE.findAll(typeof $X === 'string' ? $Y : $Z)",
       "compiledAt": "2026-03-22T17:40:18.643Z",
       "createdAt": "2026-03-22T17:40:18.643Z",
       "fileGlobs": ["**/*.ts", "**/*.js"]

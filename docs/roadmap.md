@@ -58,7 +58,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - Automated sync with dual-read migrations.
     - Filesystem concurrency locks to safely manage operations.
   - **Integrity & State:** Air-gapped zero-telemetry enforced, alongside index health checks at startup. Enhanced auto-healing with dimension mismatch detection via internal metadata.
-  - **Portability:** Zero-LLM session snapshots via `totem handoff --lite`, cross-model export support, and a comprehensive portability audit.
+  - **Portability:** Zero-LLM session snapshots via `totem handoff --lite`, cross-model export support, and a portability audit across Windows, macOS, and Linux.
 - **Security & DX:**
   - **Data Loss Prevention:** Implemented DLP secret masking middleware to proactively strip secrets prior to embedding.
   - **Adversarial Hardening:**
@@ -78,7 +78,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [ ] **CLI Metrics & Observability:** Reframed to local CLI metrics (`totem stats`) with terminal output only. Includes violation history, lesson coverage, and rule fire counts from local storage.
     - [ ] **Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks and track index health.
   - **System Maintenance:**
-    - [ ] **v1.0 Documentation:** Develop comprehensive documentation and extensive wiki migrations covering dev environments and release processes. Includes core tagline positioning and architecture limitations.
+    - [ ] **v1.0 Documentation:** Develop full documentation and extensive wiki migrations covering dev environments and release processes. Includes core tagline positioning and architecture limitations.
     - [ ] **Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
     - [x] **Documentation Generation:** Stripped known-not-shipped issue references from documentation generation to prevent hallucinations and the persistence of stale references.
 - **Workflow & Execution:**

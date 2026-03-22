@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-The Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.3.17`. Recent focus has centered on:
+The Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.3.18`. Recent focus has centered on:
 
 - **Orchestration & Workflows:**
   - Implemented invisible sync hooks for seamless orchestration context updates.
@@ -24,7 +24,7 @@ The Data Layer Foundation is complete, and the project is currently at release `
   - Unified error domains and refactored the compiler architecture using a facade pattern.
   - Delivered unified execution tracking following successful readiness audits.
 - **Documentation & DX:**
-  - Regenerated project documentation alongside comprehensive lesson extraction.
+  - Regenerated project documentation alongside 5-lesson extraction from PR #829.
   - Fixed documentation generation to prevent persistence of stale issue references.
   - Executed developer experience polish targeting onboarding flows and output brevity.
   - Integrated launch metrics and a Docker test harness.
@@ -64,7 +64,7 @@ The following sequence was determined by cross-referencing the competitive moat 
 
 - **Search & Data Layer:**
   - Implemented index partitions with alias resolution to enhance vector search capabilities.
-  - Added comprehensive test coverage for cross-repository linked index queries and stabilized the AI-powered `totem shield` CI pipeline.
+  - Added test coverage for cross-repository linked index queries and stabilized the AI-powered `totem shield` CI pipeline.
   - Implemented cross-repository query support via the linked indexes configuration.
   - Enhanced dimension mismatch detection utilizing index metadata.
   - Implemented Data Loss Prevention (DLP) secret masking middleware to securely strip secrets before embedding.
@@ -146,7 +146,7 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Resolved server connection failures for development and strategy environments.
   - Validated Gemini CLI compliance regarding search calls with lean configurations.
 - **Documentation & DX:**
-  - Regenerated post-1.3.17 README and performed comprehensive lesson extraction.
+  - Regenerated post-1.3.17 README and performed 47-lesson extraction from 8 PRs.
   - Fixed documentation generation to prevent persistence of stale issue references.
   - Executed Developer Experience (DX) polish to streamline onboarding flows, hide legacy commands, and condense standard output.
   - Regenerated project documentation to integrate launch metrics and reflect the latest context.
@@ -155,7 +155,7 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Finalized product tagline positioning and updated the core document framework.
   - Finalized the full documentation rewrite, positioning the tool according to the established framework.
   - Hardened documentation generation against hallucinations by actively stripping known-not-shipped issue references from its context.
-  - Migrated README to a comprehensive dev wiki encompassing environments, testing conventions, release processes, and CLI guides.
+  - Migrated README to a dev wiki covering environments, testing, releases, and CLI guides.
   - Executed a multi-agent code review blitz and refreshed stale prompts for initialization and documentation glossaries.
   - Updated the README to explicitly highlight the air-gapped security doctrine.
   - Updated the styleguide to proactively suppress recurring review nits.

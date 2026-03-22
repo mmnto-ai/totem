@@ -95,11 +95,11 @@ Results are restricted to `packages/mcp/` files. Unknown boundary names fall bac
 
 ## Performance
 
-`totem lint` runs **147 compiled rules in under 2 seconds** on a 7,400-line, 105-file PR. Zero LLM inference. Pure AST classification + regex matching.
+`totem lint` runs **230 compiled rules in under 2 seconds** on a 7,400-line, 105-file PR. Zero LLM inference. Pure AST classification + regex matching.
 
 | Metric         | Value                        |
 | -------------- | ---------------------------- |
-| Rules          | 147 (regex + AST + ast-grep) |
+| Rules          | 230 (regex + AST + ast-grep) |
 | Lines scanned  | 7,397                        |
 | Files          | 105                          |
 | Execution time | **1.75s**                    |
@@ -243,7 +243,7 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
 - **Workspace Compatibility:** Native monorepo support accurately detects TypeScript via per-package configurations, while index partitions support alias resolution for targeted scopes.
 - **Error Handling:** Typed `TotemError` subclasses unify error domains with actionable recovery hints for resilient operations.
 - **Rule Architecture:**
-- **Curated Baselines:** Enforces up to 219 compiled rules with mandatory verify steps for execution determinism. Includes reverse-compiled lessons with manual patterns for zero-LLM enforcement.
+- **Curated Baselines:** Enforces up to 230 compiled rules with mandatory verify steps for execution determinism. Includes reverse-compiled lessons with manual patterns for zero-LLM enforcement.
 - **Advanced AST Validation:** Empowers deterministic enforcement via tree-sitter and ast-grep classifications. The underlying engine is validated against an adversarial corpus to reduce false positives.
 - **Agent Automation:** Agent skills utilize a streamlined directory format and root router pattern for clear instruction files. Context restoration uses explicit capability manifests to maintain agent focus.
 - **Severity Validation:** Compiled rules enforce strict severity levels. Errors actively block CI, while warnings inform without blocking.
@@ -293,8 +293,10 @@ Full reference: [CLI Reference Wiki](./docs/wiki/cli-reference.md)
 
 # Troubleshooting
 
+<!--
 Manually maintained content that `totem docs` must include in the wiki.
 This file is the source of truth for troubleshooting notes — edit here, not in the generated wiki.
+-->
 
 ## Git Hooks
 
