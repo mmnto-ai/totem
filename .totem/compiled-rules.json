@@ -435,27 +435,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "b2d2d79023432eb9",
-      "lessonHeading": "Always iterate through all regex matches (e.g.,",
-      "pattern": "",
-      "message": "Use matchAll() instead of match() to ensure all occurrences are validated. Relying on the first match allows 'shadowing' attacks where an attacker hides a malicious payload behind a safe first match.",
-      "engine": "ast-grep",
-      "astGrepPattern": "$S.match($RE)",
-      "compiledAt": "2026-03-21T07:01:43.755Z",
-      "createdAt": "2026-03-21T07:01:43.755Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "!**/*.test.ts",
-        "!**/*.test.js",
-        "!**/*.spec.ts",
-        "!**/*.spec.js"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "ca85d8aab7fc7312",
       "lessonHeading": "Check for the presence of the global ('g') flag",
       "pattern": "\\bRegExp\\s*\\(\\s*[^'\"\\s][^,]*?,\\s*['\"\\`][^'\"\\`]*g[^'\"\\`]*['\"\\`]",
@@ -948,18 +927,6 @@
       "compiledAt": "2026-03-21T07:17:43.617Z",
       "createdAt": "2026-03-21T07:17:43.617Z",
       "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "86d57e06e538a7d3",
-      "lessonHeading": "Transitioning from generic errors to a typed hierarchy",
-      "pattern": "",
-      "message": "Use TotemGitError (or a specific subclass) instead of the generic Error class to allow for domain-specific recovery and error codes.",
-      "engine": "ast-grep",
-      "astGrepPattern": "throw new Error($MSG)",
-      "compiledAt": "2026-03-21T07:17:57.337Z",
-      "createdAt": "2026-03-21T07:17:57.337Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts", "!**/*.test.js"],
       "severity": "warning"
     },
     {
@@ -1566,18 +1533,6 @@
       "severity": "error"
     },
     {
-      "lessonHash": "28adb06a2b879edc",
-      "lessonHeading": "Restrict dynamic imports to CLI command entry points",
-      "pattern": "",
-      "message": "Restrict dynamic imports to CLI command entry points. Utility and adapter layers must use standard top-level imports to maintain a clean dependency graph and pass security audits.",
-      "engine": "ast-grep",
-      "astGrepPattern": "import($SOURCE)",
-      "compiledAt": "2026-03-21T07:36:30.605Z",
-      "createdAt": "2026-03-21T07:36:30.605Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "!**/commands/**/*.ts", "!**/commands/**/*.js"],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "9cede77f72fe608b",
       "lessonHeading": "Loading large Tree-sitter WASM binaries at the module level",
       "pattern": "^(await|const|let|var)\\s+.*(Parser\\.init|Language\\.load)",
@@ -1748,18 +1703,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "e88b974f187ba484",
-      "lessonHeading": "Omit shell:true when spawn args are arrays",
-      "pattern": "",
-      "message": "Omit 'shell: true' when calling spawn with a parameterized array of arguments to prevent shell injection and reduce overhead.",
-      "engine": "ast-grep",
-      "astGrepPattern": "spawn($CMD, $ARGS, { $$$BEFORE, shell: true, $$$AFTER })",
-      "compiledAt": "2026-03-21T07:42:14.624Z",
-      "createdAt": "2026-03-21T07:42:14.624Z",
-      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "547431b89da28c4d",
       "lessonHeading": "Lesson headings must be restricted to 60 characters",
       "pattern": "^#.{60,}",
@@ -1824,38 +1767,6 @@
       "compiledAt": "2026-03-21T07:44:29.835Z",
       "createdAt": "2026-03-21T07:44:29.835Z",
       "fileGlobs": ["**/*.md"],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "45a50e604b60963a",
-      "lessonHeading": "Restricting dynamic imports to CLI command entry points",
-      "pattern": "",
-      "message": "Restricting dynamic imports to CLI command entry points allows utility and adapter layers to use standard top-level imports. Avoid dynamic imports outside of entry points.",
-      "engine": "ast-grep",
-      "astGrepPattern": "import($MOD)",
-      "compiledAt": "2026-03-21T07:44:54.955Z",
-      "createdAt": "2026-03-21T07:44:54.955Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "!packages/cli/src/commands/**/*.ts",
-        "!packages/cli/src/commands/**/*.js",
-        "!**/*.test.ts"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "9eabec8fb748d2a5",
-      "lessonHeading": "CLI command entrypoints should catch validation errors",
-      "pattern": "",
-      "message": "CLI command entrypoints should catch validation errors and print clean messages instead of throwing raw JavaScript errors. Reserve throwing for internal library functions.",
-      "engine": "ast-grep",
-      "astGrepPattern": "throw $ERR",
-      "compiledAt": "2026-03-21T07:45:04.100Z",
-      "createdAt": "2026-03-21T07:45:04.100Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -2741,18 +2652,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "6df0a3b68a5f0cb1",
-      "lessonHeading": "Core library code should avoid direct calls to console",
-      "pattern": "",
-      "message": "Avoid direct console calls in library code to prevent unexpected side effects for consumers. Use a configurable callback or a logging abstraction instead.",
-      "engine": "ast-grep",
-      "astGrepPattern": "console.$METHOD($$$)",
-      "compiledAt": "2026-03-21T08:11:01.170Z",
-      "createdAt": "2026-03-21T08:11:01.170Z",
-      "fileGlobs": ["*.ts", "*.js", "!*.test.ts", "!*.test.js", "!*.spec.ts", "!*.spec.js"],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "237fdede2e40f456",
       "lessonHeading": "Perform shell-level existence checks before invoking CLI",
       "pattern": "^(npx|node|npm|pnpm|yarn|bun)\\b",
@@ -2805,44 +2704,31 @@
     {
       "lessonHash": "637e8994d7866e10",
       "lessonHeading": "2026-03-06T10:00:40.352Z",
+      "pattern": "(^|\\s)\\$TOOL_INPUT\\b",
       "message": "$TOOL_INPUT is untrusted data from the host AI. It must be quoted in shell commands (e.g., \"$TOOL_INPUT\") to prevent command injection.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(^|\\s)\\$TOOL_INPUT\\b",
       "compiledAt": "2026-03-21T22:15:32.541Z",
       "createdAt": "2026-03-21T22:15:32.541Z",
-      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "package.json"]
-    },
-    {
-      "lessonHash": "9056229f945c425b",
-      "lessonHeading": "2026-03-08T00:56:41.781Z",
-      "message": "For static, small sets of string comparisons, explicit boolean OR checks (e.g., x === 'y' || x === 'n') are more idiomatic and readable than [].includes().",
-      "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
-      "astGrepPattern": "[$...VALUES].includes($TARGET)",
-      "compiledAt": "2026-03-21T22:16:12.502Z",
-      "createdAt": "2026-03-21T22:16:12.502Z",
-      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "package.json"],
+      "severity": "warning"
     },
     {
       "lessonHash": "116cb61013507812",
       "lessonHeading": "When re-throwing errors in a CLI orchestrator, always",
+      "pattern": "throw\\s+new\\s+Error\\(\\s*['\"\\`](?!\\s*\\[Totem Error\\])",
       "message": "When re-throwing errors in the CLI orchestrator, always include the project's standard error prefix '[Totem Error]' in the message.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "throw\\s+new\\s+Error\\(\\s*['\"\\`](?!\\s*\\[Totem Error\\])",
       "compiledAt": "2026-03-21T22:16:30.127Z",
       "createdAt": "2026-03-21T22:16:30.127Z",
-      "fileGlobs": ["packages/cli/**/*.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "c6bb187bdd6dd8f7",
       "lessonHeading": "For local LLM providers, 500 Internal Server Errors often",
+      "pattern": "(['\"\\`]).*(?:500|Internal Server Error)(?![^'\"\\`]*(?:numCtx|VRAM|context|exhaustion|hardware)).*\\1",
       "message": "Local LLM 500 errors often indicate VRAM or context exhaustion. Include guidance for hardware parameters like 'numCtx' or 'VRAM' in the error message to help users resolve resource failures.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(['\"\\`]).*(?:500|Internal Server Error)(?![^'\"\\`]*(?:numCtx|VRAM|context|exhaustion|hardware)).*\\1",
       "compiledAt": "2026-03-21T22:17:41.581Z",
       "createdAt": "2026-03-21T22:17:41.581Z",
       "fileGlobs": [
@@ -2850,71 +2736,71 @@
         "packages/providers/**/*.ts",
         "src/providers/**/*.js",
         "packages/providers/**/*.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "e40e3d7e3c5f415e",
       "lessonHeading": "GitHub Actions shell injection via template expressions",
+      "pattern": "(\\$\\{\\{\\s*(?:github\\.event|inputs)\\.[^\\}]*\\}\\}|(^|\\s)\\$[a-zA-Z_]+)",
       "message": "GitHub Actions shell injection/word-splitting risk: Map github.event or inputs to env variables first to avoid command injection, and always quote shell variables (e.g., \"$VAR\") to prevent word-splitting.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(\\$\\{\\{\\s*(?:github\\.event|inputs)\\.[^\\}]*\\}\\}|(^|\\s)\\$[a-zA-Z_]+)",
       "compiledAt": "2026-03-21T22:18:55.305Z",
       "createdAt": "2026-03-21T22:18:55.305Z",
-      "fileGlobs": ["*.yml", "*.yaml"]
+      "fileGlobs": ["*.yml", "*.yaml"],
+      "severity": "warning"
     },
     {
       "lessonHash": "6b93afeee17b7b66",
       "lessonHeading": "GCA may suggest reverting dynamic imports back to static",
+      "pattern": "",
       "message": "Do not use static top-level imports for @mmnto/totem in CLI command files; use dynamic imports inside command functions to ensure fast CLI startup performance.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "import $SPECIFIERS from '@mmnto/totem'",
       "compiledAt": "2026-03-21T22:19:10.791Z",
       "createdAt": "2026-03-21T22:19:10.791Z",
-      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "2f1a92e1321f2255",
       "lessonHeading": "Issue numbers are only unique within a single repository;",
+      "pattern": "['\"](?![^'\" ]*\\/)[^'\" ]*#\\d+['\"]",
       "message": "Issue numbers are only unique within a single repository; use qualified syntax like 'owner/repo#number' to prevent collisions.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "['\"](?![^'\" ]*\\/)[^'\" ]*#\\d+['\"]",
       "compiledAt": "2026-03-21T22:20:39.927Z",
       "createdAt": "2026-03-21T22:20:39.927Z",
-      "fileGlobs": ["README.md", "docs/**/*.md"]
+      "fileGlobs": ["README.md", "docs/**/*.md"],
+      "severity": "warning"
     },
     {
       "lessonHash": "a8b6c82916cfe313",
       "lessonHeading": "Standardize exception messages with a consistent prefix",
+      "pattern": "\\bnew\\s+\\w*Error\\(\\s*['\"\\`](?!\\[Totem Error\\])",
       "message": "Exception messages must start with the '[Totem Error]' prefix to help distinguish internal logic failures from external system errors.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bnew\\s+\\w*Error\\(\\s*['\"\\`](?!\\[Totem Error\\])",
       "compiledAt": "2026-03-21T22:20:56.000Z",
       "createdAt": "2026-03-21T22:20:56.000Z",
-      "fileGlobs": ["*.ts", "*.tsx", "*.js", "*.jsx"]
+      "fileGlobs": ["*.ts", "*.tsx", "*.js", "*.jsx"],
+      "severity": "warning"
     },
     {
       "lessonHash": "342da7b7572c73b6",
       "lessonHeading": "Escape metacharacters in RegExp interpolation",
+      "pattern": "\\bRegExp\\s*\\(\\s*([^'\"\\(\\s][^,)]*|\\`[^\\`]*\\$\\{)",
       "message": "Always escape metacharacters when interpolating dynamic strings into a RegExp constructor to prevent regex injection (e.g., using escape-string-regexp).",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bRegExp\\s*\\(\\s*([^'\"\\(\\s][^,)]*|\\`[^\\`]*\\$\\{)",
       "compiledAt": "2026-03-21T22:22:15.562Z",
       "createdAt": "2026-03-21T22:22:15.562Z",
-      "fileGlobs": ["packages/core/**/*.ts", "!**/*.test.ts"]
+      "fileGlobs": ["packages/core/**/*.ts", "!**/*.test.ts"],
+      "severity": "warning"
     },
     {
       "lessonHash": "2d962603591aa928",
       "lessonHeading": "Using empty catch blocks during regex compilation in audit",
+      "pattern": "",
       "message": "Empty catch blocks in audit scripts hide regex compilation failures. Ensure errors are surfaced to prevent silent coverage gaps and maintain rule-set integrity.",
       "engine": "ast",
-      "severity": "warning",
-      "pattern": "",
       "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
       "compiledAt": "2026-03-21T22:22:34.588Z",
       "createdAt": "2026-03-21T22:22:34.588Z",
@@ -2925,7 +2811,19 @@
         "audits/**/*.js",
         "scripts/**/*.ts",
         "scripts/**/*.js"
-      ]
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "d5faa14cbb8b50fb",
+      "lessonHeading": "Technical documentation must replace absolute claims",
+      "message": "Technical documentation must replace absolute claims like 'guarantee' or 'comprehensive' with specific, evidence-backed descriptions of tested behavior.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\b([Gg]uarantee|[Cc]omprehensive)\\b",
+      "compiledAt": "2026-03-22T00:36:46.241Z",
+      "createdAt": "2026-03-22T00:36:46.241Z",
+      "fileGlobs": ["**/*.md", "**/*.txt", "docs/**"]
     }
   ],
   "nonCompilable": [
@@ -3353,6 +3251,16 @@
     "bd31e87e32cfeefd",
     "f52f5615a0543837",
     "6d6d70d5a0f0fa7d",
-    "afda0df95f960602"
+    "afda0df95f960602",
+    "11fa385db273a8e5",
+    "a848d7f5372d3172",
+    "86d57e06e538a7d3",
+    "9eabec8fb748d2a5",
+    "9056229f945c425b",
+    "b2d2d79023432eb9",
+    "28adb06a2b879edc",
+    "e88b974f187ba484",
+    "45a50e604b60963a",
+    "6df0a3b68a5f0cb1"
   ]
 }
