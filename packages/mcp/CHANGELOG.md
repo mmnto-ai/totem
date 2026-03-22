@@ -1,5 +1,18 @@
 # @mmnto/mcp
 
+## 1.3.19
+
+### Patch Changes
+
+- feat: markdown-magic deterministic doc injection
+  - Integrated markdown-magic with 4 transforms (RULE_COUNT, HOOK_LIST, CHMOD_HOOKS, COMMAND_TABLE)
+  - Wired docs:inject into totem wrap pipeline (step 5/6, after LLM docs, before compile)
+  - 9 unit tests for transforms, runs in 0.02s
+  - Eliminates stale hardcoded values in docs across releases
+
+- Updated dependencies
+  - @mmnto/totem@1.3.19
+
 ## 1.3.18
 
 ### Patch Changes
