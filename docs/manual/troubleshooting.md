@@ -12,7 +12,7 @@ If you clone a repository that was initialized on Windows and the git hooks fail
 **Fix:**
 
 ```bash
-chmod +x .git/hooks/pre-push .git/hooks/post-merge
+chmod +x .git/hooks/pre-push .git/hooks/post-merge .git/hooks/post-checkout
 ```
 
 This applies the execute permission that POSIX systems require. Windows users are unaffected — Git Bash executes hooks regardless of the permission bit.
