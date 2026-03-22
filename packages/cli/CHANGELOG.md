@@ -1,5 +1,13 @@
 # @mmnto/cli
 
+## 1.3.15
+
+### Patch Changes
+
+- Rule audit Phase 4: kill bad patterns, scope noisy rules, extract lessons from PR 816. Full audit progression: 2,713 → 555 violations (0 on enforcement path).
+- Updated dependencies
+  - @mmnto/totem@1.3.15
+
 ## 1.3.14
 
 ### Patch Changes

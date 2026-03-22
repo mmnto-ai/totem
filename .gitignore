@@ -56,3 +56,7 @@ review-output.md
 2026-*
 .totem/cache/.shield-passed
 .agents/
+.continue/
+skills-lock.json
+.claude/skills/autofix/
+.claude/skills/code-review/
