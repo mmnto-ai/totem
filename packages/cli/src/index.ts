@@ -292,6 +292,18 @@ program
   );
 
 program
+  .command('verify-manifest')
+  .description('Verify compiled-rules.json matches the compile manifest (CI gate)')
+  .action(async () => {
+    try {
+      const { verifyManifestCommand } = await import('./commands/verify-manifest.js');
+      await verifyManifestCommand();
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('test')
   .description('Run test fixtures against compiled rules (TDD for governance rules)')
   .option('--filter <term>', 'Filter by rule hash or heading substring')
@@ -491,7 +503,7 @@ program.addHelpText(
   'after',
   `
 Commands by tier:
-  Core (no API keys):    init, sync, lint, compile, test, hooks, link, stats, drift
+  Core (no API keys):    init, sync, lint, compile, test, verify-manifest, hooks, link, stats, drift
   AI-Powered (needs LLM): shield, spec, handoff, docs, compile (with LLM)
   GitHub Workflows:      extract, triage, wrap
   Utilities:             add-lesson, explain, eject

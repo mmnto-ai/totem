@@ -1,5 +1,11 @@
 import type { CompiledRule, CompiledRulesFile, CompilerOutput, TotemConfig } from '@mmnto/totem';
-import { TotemConfigError, TotemError } from '@mmnto/totem';
+import {
+  generateInputHash,
+  generateOutputHash,
+  TotemConfigError,
+  TotemError,
+  writeCompileManifest,
+} from '@mmnto/totem';
 
 import { COMPILER_SYSTEM_PROMPT } from './compile-templates.js';
 
@@ -461,6 +467,21 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
           rules: newRules,
           nonCompilable: freshNonCompilable,
         });
+
+        // ─── Write compile manifest (provenance chain) ───
+        const lessonsDir = path.join(totemDir, 'lessons');
+        const manifestPath = path.join(totemDir, 'compile-manifest.json');
+        const inputHash = generateInputHash(lessonsDir);
+        const outputHash = generateOutputHash(rulesPath);
+        writeCompileManifest(manifestPath, {
+          compiled_at: new Date().toISOString(),
+          model: options.model ?? config.orchestrator?.defaultModel ?? 'unknown',
+          input_hash: inputHash,
+          output_hash: outputHash,
+          rule_count: newRules.length,
+        });
+        log.dim(TAG, `Manifest: ${inputHash.slice(0, 8)}…→${outputHash.slice(0, 8)}…`);
+
         log.info(
           TAG,
           `Results: ${compiled} compiled, ${skipped} skipped (conceptual), ${failed} failed, ${freshNonCompilable.length} cached`,
