@@ -19,16 +19,20 @@ import {
   wrapXml,
   writeOutput,
 } from '../utils.js';
+import {
+  ACTION_LABELS,
+  GH_ISSUE_LIMIT,
+  MAX_STRATEGIC_CONTEXT_CHARS,
+  STRATEGY_DIRS,
+  STRATEGY_DOCS,
+  SYSTEM_PROMPT,
+  TAG,
+  VALID_ACTIONS,
+  VALID_TIERS,
+} from './audit-templates.js';
 
-// ─── Constants ──────────────────────────────────────────
+export { MAX_STRATEGIC_CONTEXT_CHARS } from './audit-templates.js';
 
-const TAG = 'Audit';
-const GH_ISSUE_LIMIT = 100;
-/** Max size for strategic context to avoid exceeding LLM context window (~100KB ≈ 25k tokens). */
-export const MAX_STRATEGIC_CONTEXT_CHARS = 100_000;
-
-/** Actions the LLM can propose for each issue. */
-const VALID_ACTIONS = ['KEEP', 'CLOSE', 'REPRIORITIZE', 'MERGE'] as const;
 type AuditAction = (typeof VALID_ACTIONS)[number];
 
 // ─── Types ──────────────────────────────────────────────
@@ -52,52 +56,7 @@ export interface AuditOptions {
   context?: string;
 }
 
-// ─── System prompt ──────────────────────────────────────
-
-const SYSTEM_PROMPT = `# Audit System Prompt — Strategic Backlog Audit
-
-## Identity & Role
-You are a ruthless Product Manager auditing an open issue backlog against the project's strategic direction. Your job is to propose which issues to KEEP, CLOSE, REPRIORITIZE, or MERGE. A focused backlog (15-20 issues) is healthier than a sprawling one.
-
-## Core Rules
-- **Bias toward closing.** If an issue is obsolete, duplicated, vague, or misaligned with the current strategy, propose CLOSE.
-- **One-sentence rationale per row.** Every proposal must have a clear, concise reason.
-- **No new issues.** You only audit what exists. Do not propose creating new work.
-- **Respect tier labels.** tier-1 = current sprint, tier-2 = next cycle, tier-3 = backlog/future.
-- **MERGE means consolidate.** When two issues overlap significantly, propose merging the smaller into the larger (specify mergeInto number).
-
-## Output Format
-Respond with ONLY a JSON array inside <audit_proposals> tags. No preamble, no closing remarks.
-
-Each element:
-{
-  "number": <issue number>,
-  "title": "<issue title>",
-  "action": "KEEP" | "CLOSE" | "REPRIORITIZE" | "MERGE",
-  "newTier": "<tier-1|tier-2|tier-3>" (only if REPRIORITIZE),
-  "mergeInto": <issue number> (only if MERGE),
-  "rationale": "<one sentence>"
-}
-
-Example:
-<audit_proposals>
-[
-  { "number": 42, "title": "Add widget support", "action": "KEEP", "rationale": "Aligns with Phase 3 roadmap goals." },
-  { "number": 99, "title": "Legacy auth cleanup", "action": "CLOSE", "rationale": "Superseded by #150 (new auth system)." },
-  { "number": 55, "title": "Perf optimization", "action": "REPRIORITIZE", "newTier": "tier-3", "rationale": "No user-facing impact yet; defer to post-1.0." },
-  { "number": 88, "title": "Widget colors", "action": "MERGE", "mergeInto": 42, "rationale": "Subset of #42 scope." }
-]
-</audit_proposals>
-`;
-
 // ─── Strategic context loading ──────────────────────────
-
-/**
- * Candidate directories and files for strategic context.
- * Each entry is tried; missing paths are silently skipped.
- */
-const STRATEGY_DIRS = ['.strategy'];
-const STRATEGY_DOCS = ['docs/roadmap.md', 'docs/active_work.md'];
 
 export function loadStrategicDocs(cwd: string): string {
   const sections: string[] = [];
@@ -168,8 +127,6 @@ export function parseAuditResponse(content: string): AuditProposal[] {
     );
   }
 
-  const VALID_TIERS = ['tier-1', 'tier-2', 'tier-3'];
-
   return (parsed as Record<string, unknown>[]).map((item, i) => {
     if (typeof item.number !== 'number') {
       throw new TotemParseError(
@@ -211,13 +168,6 @@ export function parseAuditResponse(content: string): AuditProposal[] {
 }
 
 // ─── Proposal display ───────────────────────────────────
-
-const ACTION_LABELS: Record<AuditAction, string> = {
-  KEEP: 'KEEP',
-  CLOSE: 'CLOSE',
-  REPRIORITIZE: 'REPRI',
-  MERGE: 'MERGE',
-};
 
 export function formatProposalTable(proposals: AuditProposal[]): string {
   const rows = proposals.map((p) => {
