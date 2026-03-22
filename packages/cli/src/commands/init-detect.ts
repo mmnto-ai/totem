@@ -155,8 +155,13 @@ export function detectAiTools(cwd: string): AiToolInfo[] {
  */
 export function detectEmbeddingTier(cwd: string): EmbeddingTier {
   // Read .env file once (loadEnv may not have run yet)
-  const envPath = path.join(cwd, '.env');
-  const envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
+  let envContent = '';
+  try {
+    const envPath = path.join(cwd, '.env');
+    if (fs.existsSync(envPath)) envContent = fs.readFileSync(envPath, 'utf-8');
+  } catch {
+    // .env unreadable — proceed with env vars only
+  }
 
   // Gemini first — task-type aware embeddings, best retrieval quality
   if (hasKey(envContent, 'GEMINI_API_KEY', 'GOOGLE_API_KEY')) return 'gemini';
@@ -173,8 +178,13 @@ export function detectEmbeddingTier(cwd: string): EmbeddingTier {
  */
 export function detectOrchestrator(cwd: string): DetectedOrchestrator | null {
   // Read .env file once (loadEnv may not have run yet)
-  const envPath = path.join(cwd, '.env');
-  const envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
+  let envContent = '';
+  try {
+    const envPath = path.join(cwd, '.env');
+    if (fs.existsSync(envPath)) envContent = fs.readFileSync(envPath, 'utf-8');
+  } catch {
+    // .env unreadable — proceed with env vars only
+  }
 
   // 1. Gemini CLI on PATH → shell provider
   if (cliExists('gemini')) {
@@ -291,6 +301,9 @@ export function buildTargets(detected: DetectedProject): IngestTarget[] {
   }
 
   if (detected.hasContext) {
+    // When hasSessions is also true, context/sessions/ files match both this
+    // target and the session_log target above. The sync engine deduplicates by
+    // file path, using the first matching target's type.
     targets.push({
       glob: 'context/**/*.md',
       type: 'spec',

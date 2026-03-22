@@ -3,7 +3,7 @@
 
 import type { IngestTarget } from '@mmnto/totem';
 
-import { detectOrchestrator, type EmbeddingTier, formatTargets } from './init-detect.js';
+import type { EmbeddingTier } from './init-detect.js';
 
 // ─── Reflex versioning ────────────────────────────────────
 // Bump REFLEX_VERSION whenever the AI_PROMPT_BLOCK content changes materially.
@@ -117,7 +117,7 @@ export const CLAUDE_SHIELD_GATE = `// [totem] auto-generated — Claude Code shi
 const { execSync } = require('child_process');
 
 const input = process.env.TOOL_INPUT || '';
-if (/\bgit\b/.test(input) && /\b(push|commit)\b/.test(input)) {
+if (/\bgit\s+(push|commit)\b/.test(input)) {
   try {
     execSync('totem lint', { encoding: 'utf-8', timeout: 60000, stdio: 'inherit' });
   } catch (err) {
@@ -143,6 +143,7 @@ export async function generateConfig(
   embeddingTier: EmbeddingTier,
   cwd: string,
 ): Promise<string> {
+  const { detectOrchestrator, formatTargets } = await import('./init-detect.js');
   const { DEFAULT_IGNORE_PATTERNS } = await import('@mmnto/totem');
   let embeddingBlock: string;
   switch (embeddingTier) {
@@ -156,7 +157,7 @@ export async function generateConfig(
       embeddingBlock = `  embedding: { provider: 'gemini', model: 'gemini-embedding-2-preview', dimensions: 768 },`;
       break;
     case 'none':
-      embeddingBlock = `  // embedding: { provider: 'openai', model: 'text-embedding-3-small' },\n  // Lite tier — set OPENAI_API_KEY and re-run \`totem init\` to enable sync/search.`;
+      embeddingBlock = `  // embedding: { provider: 'openai', model: 'text-embedding-3-small' },\n  // embedding: { provider: 'gemini', model: 'gemini-embedding-2-preview', dimensions: 768 },\n  // embedding: { provider: 'ollama', model: 'nomic-embed-text', baseUrl: 'http://localhost:11434' },\n  // Lite tier — configure an embedding provider and re-run \`totem init\` to enable sync/search.`;
       break;
   }
 
