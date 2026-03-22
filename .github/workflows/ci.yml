@@ -40,3 +40,16 @@ jobs:
       - run: pnpm lint
 
       - run: pnpm format:check
+
+  wind-tunnel-sha:
+    name: Wind Tunnel SHA Integrity
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'pull_request' &&
+      !contains(github.event.pull_request.title, '[WIND-TUNNEL-UPDATE]') &&
+      !contains(github.event.pull_request.body, '[WIND-TUNNEL-UPDATE]')
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify wind tunnel SHA
+        run: bash tools/update-wind-tunnel-sha.sh --verify
