@@ -1,6 +1,8 @@
 // Error hierarchy
 export type { TotemErrorCode } from './errors.js';
 export {
+  getErrorMessage,
+  rethrowAsParseError,
   TotemCompileError,
   TotemConfigError,
   TotemDatabaseError,

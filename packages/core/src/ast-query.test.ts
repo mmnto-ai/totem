@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { matchAstQuery } from './ast-query.js';
+import { TotemParseError } from './errors.js';
 
 // ─── Helpers ────────────────────────────────────────
 
@@ -59,11 +60,12 @@ describe('matchAstQuery', () => {
     expect(matches[0]!.lineNumber).toBe(3);
   });
 
-  it('returns empty array for invalid S-expression (fail-open)', async () => {
+  it('throws TotemParseError on invalid S-expression instead of returning empty array (fail-closed)', async () => {
     const file = writeFile('src/safe.ts', 'const x = 1;\n');
 
-    const matches = await matchAstQuery(file, '(this is not valid!!!', [1], tmpDir);
-    expect(matches).toEqual([]);
+    await expect(matchAstQuery(file, '(this is not valid!!!', [1], tmpDir)).rejects.toThrow(
+      TotemParseError,
+    );
   });
 
   it('returns empty array for non-JS/TS files', async () => {

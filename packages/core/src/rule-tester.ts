@@ -5,6 +5,7 @@ import type { AstGrepRule } from './ast-grep-query.js';
 import { matchAstGrepPattern } from './ast-grep-query.js';
 import type { CompiledRule, DiffAddition } from './compiler.js';
 import { applyRulesToAdditions, loadCompiledRules } from './compiler.js';
+import { getErrorMessage } from './errors.js';
 
 // ─── Types ───────────────────────────────────────────
 
@@ -100,10 +101,13 @@ export function testRule(rule: CompiledRule, fixture: RuleTestFixture): RuleTest
     if (fixture.failLines.length > 0) {
       const content = fixture.failLines.join('\n');
       const allLineNums = fixture.failLines.map((_, i) => i + 1);
-      const onWarn = (msg: string) => result.missedFails.push(`[ast-grep warning] ${msg}`);
-      const matches = matchAstGrepPattern(content, ext, pattern, allLineNums, onWarn);
-      if (matches.length === 0) {
-        result.missedFails.push(fixture.failLines.join('\n'));
+      try {
+        const matches = matchAstGrepPattern(content, ext, pattern, allLineNums);
+        if (matches.length === 0) {
+          result.missedFails.push(fixture.failLines.join('\n'));
+        }
+      } catch (err) {
+        result.missedFails.push(`[ast-grep error] ${getErrorMessage(err)}`);
       }
     }
 
@@ -111,10 +115,13 @@ export function testRule(rule: CompiledRule, fixture: RuleTestFixture): RuleTest
     if (fixture.passLines.length > 0) {
       const content = fixture.passLines.join('\n');
       const allLineNums = fixture.passLines.map((_, i) => i + 1);
-      const onWarn = (msg: string) => result.falsePositives.push(`[ast-grep warning] ${msg}`);
-      const matches = matchAstGrepPattern(content, ext, pattern, allLineNums, onWarn);
-      if (matches.length > 0) {
-        result.falsePositives.push(fixture.passLines.join('\n'));
+      try {
+        const matches = matchAstGrepPattern(content, ext, pattern, allLineNums);
+        if (matches.length > 0) {
+          result.falsePositives.push(fixture.passLines.join('\n'));
+        }
+      } catch (err) {
+        result.falsePositives.push(`[ast-grep error] ${getErrorMessage(err)}`);
       }
     }
   } else {
