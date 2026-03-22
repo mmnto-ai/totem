@@ -6,6 +6,9 @@ import * as readline from 'node:readline/promises';
 import { resolveGitRoot } from '../git.js';
 
 const TOTEM_HOOK_MARKER = '[totem] post-merge hook';
+const TOTEM_HOOK_END = '[totem] end post-merge';
+const TOTEM_CHECKOUT_MARKER = '[totem] post-checkout hook';
+const TOTEM_CHECKOUT_END = '[totem] end post-checkout';
 export const TOTEM_PRECOMMIT_MARKER = '[totem] pre-commit hook';
 export const TOTEM_PREPUSH_MARKER = '[totem] pre-push hook';
 
@@ -20,15 +23,44 @@ export function detectTotemPrefix(cwd: string): string {
 }
 
 function detectSyncCommand(cwd: string): string {
-  return `${detectTotemPrefix(cwd)} sync --incremental`;
+  return `${detectTotemPrefix(cwd)} sync --incremental --quiet`;
 }
 
 function buildHookContent(syncCmd: string): string {
   return `#!/bin/sh
 # ${TOTEM_HOOK_MARKER} — background re-index after pull/merge.
 
-echo "[totem] Triggering background re-index..."
-(${syncCmd} > .git/totem-sync.log 2>&1) &
+# Only sync when lessons changed (suppress errors if ORIG_HEAD is missing)
+if git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '\\.totem/lessons/'; then
+  (${syncCmd} > .git/totem-sync.log 2>&1) &
+fi
+# ${TOTEM_HOOK_END}
+`;
+}
+
+export function buildPostCheckoutHookContent(syncCmd: string): string {
+  return `#!/bin/sh
+# ${TOTEM_CHECKOUT_MARKER} — background re-index on branch switch.
+
+# $1 = previous HEAD, $2 = new HEAD, $3 = checkout type (1=branch, 0=file)
+# Skip file checkouts — only sync on branch switches
+if [ "$3" = "0" ]; then
+  exit 0
+fi
+
+# Handle initial checkout (null SHA) — sync if .totem/ exists
+if [ "$1" = "0000000000000000000000000000000000000000" ]; then
+  if [ -d ".totem" ]; then
+    (${syncCmd} > .git/totem-sync.log 2>&1) &
+  fi
+  exit 0
+fi
+
+# Only sync when .totem/ files differ between branches
+if git diff --name-only "$1" "$2" 2>/dev/null | grep -q '\\.totem/'; then
+  (${syncCmd} > .git/totem-sync.log 2>&1) &
+fi
+# ${TOTEM_CHECKOUT_END}
 `;
 }
 
@@ -77,6 +109,9 @@ function printHookManagerGuidance(manager: HookManager, syncCmd: string, shieldC
       console.error('');
       console.error('  # .husky/post-merge — background re-index');
       console.error(`  ${syncCmd}`);
+      console.error('');
+      console.error('  # .husky/post-checkout — background re-index on branch switch');
+      console.error(`  ${syncCmd}`);
       break;
     case 'lefthook':
       console.error('[Totem] Detected lefthook. Add to your lefthook.yml:');
@@ -94,6 +129,10 @@ function printHookManagerGuidance(manager: HookManager, syncCmd: string, shieldC
       console.error('    commands:');
       console.error('      totem-sync:');
       console.error(`        run: ${syncCmd}`);
+      console.error('  post-checkout:');
+      console.error('    commands:');
+      console.error('      totem-sync-checkout:');
+      console.error(`        run: ${syncCmd}`);
       break;
     case 'simple-git-hooks':
       console.error('[Totem] Detected simple-git-hooks. Add to your package.json:');
@@ -104,7 +143,8 @@ function printHookManagerGuidance(manager: HookManager, syncCmd: string, shieldC
       console.error(
         `    "pre-push": "if [ -f \\".totem/compiled-rules.json\\" ]; then ${shieldCmd}; fi",`,
       );
-      console.error(`    "post-merge": "${syncCmd}"`);
+      console.error(`    "post-merge": "${syncCmd}",`);
+      console.error(`    "post-checkout": "${syncCmd}"`);
       console.error('  }');
       break;
   }
@@ -146,14 +186,12 @@ export async function installPostMergeHook(cwd: string, rl: readline.Interface):
       return;
     }
 
-    // Append to existing hook
+    // Append to existing hook — reuse buildHookContent, strip shebang
     const separator = existing.endsWith('\n') ? '' : '\n';
-    const appendBlock = `${separator}
-# ${TOTEM_HOOK_MARKER} — background re-index after pull/merge.
-echo "[totem] Triggering background re-index..."
-(${syncCmd} > .git/totem-sync.log 2>&1) &
-`;
-    fs.appendFileSync(hookPath, appendBlock);
+    const appendBlock = buildHookContent(syncCmd)
+      .replace(/^#!\/bin\/sh\n/, '')
+      .trimStart();
+    fs.appendFileSync(hookPath, separator + '\n' + appendBlock);
     console.log('[Totem] Appended post-merge hook to existing hook file.');
     return;
   }
@@ -328,6 +366,24 @@ export async function installHooksCommand(): Promise<void> {
   try {
     await installEnforcementHooks(cwd, rl);
     await installPostMergeHook(cwd, rl);
+
+    // Silently install post-checkout alongside post-merge (same guard — only if post-merge was accepted)
+    const gitRoot = resolveGitRoot(cwd);
+    if (gitRoot && !detectHookManager(gitRoot)) {
+      const hooksDir = path.join(gitRoot, '.git', 'hooks');
+      const postMerge = path.join(hooksDir, 'post-merge');
+      const hasPostMerge =
+        fs.existsSync(postMerge) && fs.readFileSync(postMerge, 'utf-8').includes(TOTEM_HOOK_MARKER);
+      if (hasPostMerge) {
+        const syncCmd = detectSyncCommand(gitRoot);
+        installGitHook(
+          hooksDir,
+          'post-checkout',
+          buildPostCheckoutHookContent(syncCmd),
+          TOTEM_CHECKOUT_MARKER,
+        );
+      }
+    }
   } finally {
     rl.close();
   }
@@ -339,6 +395,7 @@ export interface HooksCommandResult {
   preCommit: 'installed' | 'exists' | 'appended' | 'skipped-non-shell';
   prePush: 'installed' | 'exists' | 'appended' | 'skipped-non-shell';
   postMerge: 'installed' | 'exists' | 'appended' | 'skipped-non-shell';
+  postCheckout: 'installed' | 'exists' | 'appended' | 'skipped-non-shell';
 }
 
 /**
@@ -383,7 +440,15 @@ export function installHooksNonInteractive(cwd: string): HooksCommandResult | nu
   const postMergeContent = buildHookContent(syncCmd);
   const postMerge = installGitHook(hooksDir, 'post-merge', postMergeContent, TOTEM_HOOK_MARKER);
 
-  return { preCommit, prePush, postMerge };
+  const postCheckoutContent = buildPostCheckoutHookContent(syncCmd);
+  const postCheckout = installGitHook(
+    hooksDir,
+    'post-checkout',
+    postCheckoutContent,
+    TOTEM_CHECKOUT_MARKER,
+  );
+
+  return { preCommit, prePush, postMerge, postCheckout };
 }
 
 /**
@@ -400,6 +465,7 @@ export function checkHooksInstalled(cwd: string): boolean {
     { file: 'pre-commit', marker: TOTEM_PRECOMMIT_MARKER },
     { file: 'pre-push', marker: TOTEM_PREPUSH_MARKER },
     { file: 'post-merge', marker: TOTEM_HOOK_MARKER },
+    { file: 'post-checkout', marker: TOTEM_CHECKOUT_MARKER },
   ];
 
   let allPresent = true;
@@ -455,6 +521,7 @@ export function hooksCommand(opts: { check?: boolean }): void {
     { name: 'pre-commit', status: result.preCommit },
     { name: 'pre-push', status: result.prePush },
     { name: 'post-merge', status: result.postMerge },
+    { name: 'post-checkout', status: result.postCheckout },
   ];
 
   for (const { name, status } of actions) {

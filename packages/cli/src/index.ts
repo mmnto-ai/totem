@@ -74,14 +74,17 @@ program
   .option('--full', 'Force a full re-index (ignores incremental)')
   .option('--incremental', 'Run an incremental sync (default behavior)')
   .option('--prune', 'Detect and interactively remove lessons with stale file references')
-  .action(async (opts: { full?: boolean; incremental?: boolean; prune?: boolean }) => {
-    try {
-      const { syncCommand } = await import('./commands/sync.js');
-      await syncCommand(opts);
-    } catch (err) {
-      handleError(err);
-    }
-  });
+  .option('-q, --quiet', 'Suppress output (for background/hook usage)')
+  .action(
+    async (opts: { full?: boolean; incremental?: boolean; prune?: boolean; quiet?: boolean }) => {
+      try {
+        const { syncCommand } = await import('./commands/sync.js');
+        await syncCommand(opts);
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
 
 program
   .command('search <query>')
