@@ -111,7 +111,8 @@ function runQuery(
 
     return results;
   } catch (err) {
-    rethrowAsParseError('AST query failed', err);
+    /* c8 ignore next – rethrowAsParseError always throws; return satisfies TS2366 */
+    return rethrowAsParseError('AST query failed', err);
   } finally {
     query?.delete();
   }
