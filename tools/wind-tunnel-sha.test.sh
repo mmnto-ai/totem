@@ -48,7 +48,7 @@ else
 fi
 
 # ---- test 2: generate writes the SHA file ----
-OUTPUT="$(sh "$SCRIPT" 2>&1)"
+sh "$SCRIPT" >/dev/null 2>&1
 if [ -f ".wind-tunnel-sha" ]; then
   pass "generate creates .wind-tunnel-sha"
 else
@@ -56,7 +56,7 @@ else
 fi
 
 # ---- test 3: SHA is a 40-char hex string ----
-SHA="$(cat .wind-tunnel-sha | tr -d '[:space:]')"
+SHA="$(tr -d '[:space:]' < .wind-tunnel-sha)"
 if test "${#SHA}" -eq 40 && test -z "$(printf '%s' "$SHA" | tr -d '0-9a-f')"; then
   pass "SHA is 40-char hex ($SHA)"
 else
@@ -82,7 +82,7 @@ fi
 # ---- test 6: re-generate after tamper produces a different hash ----
 OLD_SHA="$SHA"
 sh "$SCRIPT" >/dev/null 2>&1
-NEW_SHA="$(cat .wind-tunnel-sha | tr -d '[:space:]')"
+NEW_SHA="$(tr -d '[:space:]' < .wind-tunnel-sha)"
 if [ "$OLD_SHA" != "$NEW_SHA" ]; then
   pass "regenerated SHA differs after tamper ($NEW_SHA)"
 else
