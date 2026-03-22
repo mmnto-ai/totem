@@ -57,7 +57,7 @@ fi
 
 # ---- test 3: SHA is a 40-char hex string ----
 SHA="$(cat .wind-tunnel-sha | tr -d '[:space:]')"
-if echo "$SHA" | grep -qE '^[0-9a-f]{40}$'; then
+if test "${#SHA}" -eq 40 && test -z "$(printf '%s' "$SHA" | tr -d '0-9a-f')"; then
   pass "SHA is 40-char hex ($SHA)"
 else
   fail "SHA is not 40-char hex: '$SHA'"
@@ -103,4 +103,4 @@ echo "Results: $PASS passed, $FAIL failed"
 if [ "$FAIL" -gt 0 ]; then
   exit 1
 fi
-exit 0
+exit 0 # totem-ignore — #840: standalone test script, not a git hook

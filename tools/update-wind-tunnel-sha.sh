@@ -14,7 +14,7 @@ SHA_FILE="$REPO_ROOT/.wind-tunnel-sha"
 FIXTURE_DIR=".totem/tests"
 
 compute_hash() {
-  git ls-files -s "$FIXTURE_DIR" | git hash-object --stdin
+  git ls-files -s --recurse-submodules "$FIXTURE_DIR" | git hash-object --stdin # totem-ignore — #840: flag is present, rule regex \b doesn't match --prefixed flags
 }
 
 case "${1:-}" in
@@ -29,7 +29,7 @@ case "${1:-}" in
 
     if [ "$actual" = "$expected" ]; then
       echo "OK: Wind tunnel SHA verified ($actual)"
-      exit 0
+      exit 0 # totem-ignore — #840: standalone script, not a git hook
     else
       echo "FAIL: Wind tunnel SHA mismatch" >&2
       echo "  expected: $expected" >&2
