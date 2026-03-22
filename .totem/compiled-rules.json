@@ -9,12 +9,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:36:05.566Z",
       "createdAt": "2026-03-21T06:36:05.566Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -25,14 +20,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:36:57.866Z",
       "createdAt": "2026-03-21T06:36:57.866Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.go",
-        "**/*.py",
-        "!**/*.test.*",
-        "!**/*_test.go"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.go", "**/*.py", "!**/*.test.*", "!**/*_test.go"],
       "severity": "warning"
     },
     {
@@ -43,9 +31,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:38:51.398Z",
       "createdAt": "2026-03-21T06:38:51.398Z",
-      "fileGlobs": [
-        "packages/cli/src/git.ts"
-      ],
+      "fileGlobs": ["packages/cli/src/git.ts"],
       "severity": "warning"
     },
     {
@@ -56,9 +42,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:39:26.739Z",
       "createdAt": "2026-03-21T06:39:26.739Z",
-      "fileGlobs": [
-        "**/compiled-rules.json"
-      ],
+      "fileGlobs": ["**/compiled-rules.json"],
       "severity": "warning"
     },
     {
@@ -69,15 +53,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:39:37.213Z",
       "createdAt": "2026-03-21T06:39:37.213Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.bash",
-        "*.zsh",
-        "*.yml",
-        "*.yaml",
-        "Makefile",
-        "package.json"
-      ],
+      "fileGlobs": ["*.sh", "*.bash", "*.zsh", "*.yml", "*.yaml", "Makefile", "package.json"],
       "severity": "warning"
     },
     {
@@ -88,12 +64,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:40:23.231Z",
       "createdAt": "2026-03-21T06:40:23.231Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -104,14 +75,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:41:24.154Z",
       "createdAt": "2026-03-21T06:41:24.154Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts", "!**/*.spec.ts"],
       "severity": "warning"
     },
     {
@@ -123,12 +87,7 @@
       "astGrepPattern": "$OBJ.replace(process.cwd(), $REPLACEMENT)",
       "compiledAt": "2026-03-21T06:41:58.539Z",
       "createdAt": "2026-03-21T06:41:58.539Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -139,10 +98,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:42:10.970Z",
       "createdAt": "2026-03-21T06:42:10.970Z",
-      "fileGlobs": [
-        "packages/cli/src/orchestrators/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/cli/src/orchestrators/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -195,9 +151,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:46:10.910Z",
       "createdAt": "2026-03-21T06:46:10.910Z",
-      "fileGlobs": [
-        "**/.github/dependabot.yml"
-      ],
+      "fileGlobs": ["**/.github/dependabot.yml"],
       "severity": "warning"
     },
     {
@@ -226,12 +180,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:48:15.815Z",
       "createdAt": "2026-03-21T06:48:15.815Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -242,12 +191,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:48:36.799Z",
       "createdAt": "2026-03-21T06:48:36.799Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -273,10 +217,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:52:30.714Z",
       "createdAt": "2026-03-21T06:52:30.714Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx"],
       "severity": "warning"
     },
     {
@@ -287,12 +228,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:52:43.493Z",
       "createdAt": "2026-03-21T06:52:43.493Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -303,10 +239,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:56:12.331Z",
       "createdAt": "2026-03-21T06:56:12.331Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -317,13 +250,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:56:50.893Z",
       "createdAt": "2026-03-21T06:56:50.893Z",
-      "fileGlobs": [
-        "*.ts",
-        "*.js",
-        "*.sh",
-        "*.yml",
-        "*.yaml"
-      ],
+      "fileGlobs": ["*.ts", "*.js", "*.sh", "*.yml", "*.yaml"],
       "severity": "warning"
     },
     {
@@ -334,12 +261,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:57:03.648Z",
       "createdAt": "2026-03-21T06:57:03.648Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -350,13 +272,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:57:11.663Z",
       "createdAt": "2026-03-21T06:57:11.663Z",
-      "fileGlobs": [
-        "package.json",
-        "*.sh",
-        "*.bash",
-        "*.yml",
-        "*.yaml"
-      ],
+      "fileGlobs": ["package.json", "*.sh", "*.bash", "*.yml", "*.yaml"],
       "severity": "warning"
     },
     {
@@ -385,9 +301,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:58:42.266Z",
       "createdAt": "2026-03-21T06:58:42.266Z",
-      "fileGlobs": [
-        "packages/cli/src/git.ts"
-      ],
+      "fileGlobs": ["packages/cli/src/git.ts"],
       "severity": "warning"
     },
     {
@@ -398,9 +312,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:58:56.946Z",
       "createdAt": "2026-03-21T06:58:56.946Z",
-      "fileGlobs": [
-        "packages/cli/src/git.ts"
-      ],
+      "fileGlobs": ["packages/cli/src/git.ts"],
       "severity": "warning"
     },
     {
@@ -411,14 +323,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T06:59:15.315Z",
       "createdAt": "2026-03-21T06:59:15.315Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "**/*.py",
-        "**/*.md"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"],
       "severity": "warning"
     },
     {
@@ -465,12 +370,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:02:28.769Z",
       "createdAt": "2026-03-21T07:02:28.769Z",
-      "fileGlobs": [
-        "**/*.js",
-        "**/*.ts",
-        "**/*.jsx",
-        "**/*.tsx"
-      ],
+      "fileGlobs": ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"],
       "severity": "warning"
     },
     {
@@ -481,12 +381,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:02:46.313Z",
       "createdAt": "2026-03-21T07:02:46.313Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -497,12 +392,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:03:43.442Z",
       "createdAt": "2026-03-21T07:03:43.442Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -529,12 +419,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:04:27.660Z",
       "createdAt": "2026-03-21T07:04:27.660Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -545,15 +430,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:04:58.487Z",
       "createdAt": "2026-03-21T07:04:58.487Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.bash",
-        "*.yml",
-        "*.yaml",
-        "**/*.ts",
-        "**/*.js",
-        "Makefile"
-      ],
+      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "**/*.ts", "**/*.js", "Makefile"],
       "severity": "warning"
     },
     {
@@ -564,12 +441,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:05:59.724Z",
       "createdAt": "2026-03-21T07:05:59.724Z",
-      "fileGlobs": [
-        ".github/workflows/*.yml",
-        ".github/workflows/*.yaml",
-        "**/*.sh",
-        "**/*.bash"
-      ],
+      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml", "**/*.sh", "**/*.bash"],
       "severity": "warning"
     },
     {
@@ -580,9 +452,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:06:08.004Z",
       "createdAt": "2026-03-21T07:06:08.004Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts"
-      ],
+      "fileGlobs": ["packages/mcp/**/*.ts"],
       "severity": "warning"
     },
     {
@@ -593,12 +463,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:07:24.082Z",
       "createdAt": "2026-03-21T07:07:24.082Z",
-      "fileGlobs": [
-        "**/*.test.ts",
-        "**/*.test.js",
-        "**/*.spec.ts",
-        "**/*.spec.js"
-      ],
+      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"],
       "severity": "warning"
     },
     {
@@ -610,12 +475,7 @@
       "astGrepPattern": "$A[$A.indexOf($B) + 1]",
       "compiledAt": "2026-03-21T07:10:02.103Z",
       "createdAt": "2026-03-21T07:10:02.103Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"],
       "severity": "warning"
     },
     {
@@ -626,13 +486,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:10:13.697Z",
       "createdAt": "2026-03-21T07:10:13.697Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts"],
       "severity": "error"
     },
     {
@@ -659,10 +513,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:10:50.885Z",
       "createdAt": "2026-03-21T07:10:50.885Z",
-      "fileGlobs": [
-        "*.md",
-        "*.mdx"
-      ],
+      "fileGlobs": ["*.md", "*.mdx"],
       "severity": "warning"
     },
     {
@@ -673,9 +524,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:11:06.839Z",
       "createdAt": "2026-03-21T07:11:06.839Z",
-      "fileGlobs": [
-        ".gemini/**"
-      ],
+      "fileGlobs": [".gemini/**"],
       "severity": "warning"
     },
     {
@@ -686,10 +535,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:12:25.923Z",
       "createdAt": "2026-03-21T07:12:25.923Z",
-      "fileGlobs": [
-        "skills/**/*.md",
-        "!**/SKILL.md"
-      ],
+      "fileGlobs": ["skills/**/*.md", "!**/SKILL.md"],
       "severity": "warning"
     },
     {
@@ -700,10 +546,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:12:49.401Z",
       "createdAt": "2026-03-21T07:12:49.401Z",
-      "fileGlobs": [
-        ".github/workflows/*.yml",
-        ".github/workflows/*.yaml"
-      ],
+      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml"],
       "severity": "warning"
     },
     {
@@ -714,10 +557,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:13:30.152Z",
       "createdAt": "2026-03-21T07:13:30.152Z",
-      "fileGlobs": [
-        ".claude/hooks/**",
-        "packages/cli/src/commands/install-hooks.ts"
-      ],
+      "fileGlobs": [".claude/hooks/**", "packages/cli/src/commands/install-hooks.ts"],
       "severity": "warning"
     },
     {
@@ -728,10 +568,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:13:30.153Z",
       "createdAt": "2026-03-21T07:13:30.153Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js"],
       "severity": "error"
     },
     {
@@ -782,11 +619,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:13:51.813Z",
       "createdAt": "2026-03-21T07:13:51.813Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.sh"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.sh"],
       "severity": "warning"
     },
     {
@@ -814,11 +647,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:14:55.956Z",
       "createdAt": "2026-03-21T07:14:55.956Z",
-      "fileGlobs": [
-        "**/llm/**/*.ts",
-        "**/providers/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["**/llm/**/*.ts", "**/providers/**/*.ts", "!**/*.test.ts"],
       "severity": "error"
     },
     {
@@ -829,10 +658,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:16:09.671Z",
       "createdAt": "2026-03-21T07:16:09.671Z",
-      "fileGlobs": [
-        "packages/core/src/config-schema.ts",
-        "packages/core/src/compiler-schema.ts"
-      ],
+      "fileGlobs": ["packages/core/src/config-schema.ts", "packages/core/src/compiler-schema.ts"],
       "severity": "warning"
     },
     {
@@ -859,13 +685,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:16:12.378Z",
       "createdAt": "2026-03-21T07:16:12.378Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.py",
-        "**/*.sh",
-        ".env*"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh", ".env*"],
       "severity": "error"
     },
     {
@@ -876,13 +696,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:16:31.597Z",
       "createdAt": "2026-03-21T07:16:31.597Z",
-      "fileGlobs": [
-        ".husky/**",
-        "package.json",
-        "scripts/**",
-        "*.sh",
-        "*.bash"
-      ],
+      "fileGlobs": [".husky/**", "package.json", "scripts/**", "*.sh", "*.bash"],
       "severity": "warning"
     },
     {
@@ -913,12 +727,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:16:38.736Z",
       "createdAt": "2026-03-21T07:16:38.736Z",
-      "fileGlobs": [
-        "**/*.test.ts",
-        "**/*.test.tsx",
-        "**/*.spec.ts",
-        "**/*.spec.tsx"
-      ],
+      "fileGlobs": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
       "severity": "warning"
     },
     {
@@ -929,10 +738,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:16:42.876Z",
       "createdAt": "2026-03-21T07:16:42.876Z",
-      "fileGlobs": [
-        "**/*config*.*",
-        "**/*cache*.*"
-      ],
+      "fileGlobs": ["**/*config*.*", "**/*cache*.*"],
       "severity": "warning"
     },
     {
@@ -943,9 +749,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:16:45.395Z",
       "createdAt": "2026-03-21T07:16:45.395Z",
-      "fileGlobs": [
-        "**/*.md"
-      ],
+      "fileGlobs": ["**/*.md"],
       "severity": "error"
     },
     {
@@ -956,13 +760,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:16:51.528Z",
       "createdAt": "2026-03-21T07:16:51.528Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.bash",
-        "*.zsh",
-        "*.yml",
-        "*.yaml"
-      ],
+      "fileGlobs": ["*.sh", "*.bash", "*.zsh", "*.yml", "*.yaml"],
       "severity": "warning"
     },
     {
@@ -973,11 +771,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:17:09.503Z",
       "createdAt": "2026-03-21T07:17:09.503Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts",
-        "packages/mcp/**/*.js",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/mcp/**/*.ts", "packages/mcp/**/*.js", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -1003,10 +797,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:17:09.504Z",
       "createdAt": "2026-03-21T07:17:09.504Z",
-      "fileGlobs": [
-        ".totem/lessons/**",
-        ".totem/lessons.md"
-      ],
+      "fileGlobs": [".totem/lessons/**", ".totem/lessons.md"],
       "severity": "warning"
     },
     {
@@ -1017,10 +808,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:17:31.605Z",
       "createdAt": "2026-03-21T07:17:31.605Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -1031,12 +819,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:17:43.617Z",
       "createdAt": "2026-03-21T07:17:43.617Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "error"
     },
     {
@@ -1047,12 +830,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:17:43.617Z",
       "createdAt": "2026-03-21T07:17:43.617Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -1063,11 +841,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:18:18.494Z",
       "createdAt": "2026-03-21T07:18:18.494Z",
-      "fileGlobs": [
-        ".husky/**/*",
-        "scripts/hooks/**/*",
-        "*.sh"
-      ],
+      "fileGlobs": [".husky/**/*", "scripts/hooks/**/*", "*.sh"],
       "severity": "error"
     },
     {
@@ -1079,11 +853,7 @@
       "astGrepPattern": "import($PATH)",
       "compiledAt": "2026-03-21T07:18:34.475Z",
       "createdAt": "2026-03-21T07:18:34.475Z",
-      "fileGlobs": [
-        "packages/cli/src/**/*.ts",
-        "!packages/cli/src/commands/**",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/cli/src/**/*.ts", "!packages/cli/src/commands/**", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -1113,12 +883,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:19:47.719Z",
       "createdAt": "2026-03-21T07:19:47.719Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -1129,12 +894,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:20:10.770Z",
       "createdAt": "2026-03-21T07:20:10.770Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -1145,12 +905,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:20:36.676Z",
       "createdAt": "2026-03-21T07:20:36.676Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.ts",
-        "**/*.js",
-        "**/*.txt"
-      ],
+      "fileGlobs": ["**/*.md", "**/*.ts", "**/*.js", "**/*.txt"],
       "severity": "warning"
     },
     {
@@ -1161,14 +916,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:20:48.796Z",
       "createdAt": "2026-03-21T07:20:48.796Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "!**/*.test.ts",
-        "!**/*.test.js"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts", "!**/*.test.js"],
       "severity": "error"
     },
     {
@@ -1179,9 +927,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:20:48.796Z",
       "createdAt": "2026-03-21T07:20:48.796Z",
-      "fileGlobs": [
-        "packages/core/**/*"
-      ],
+      "fileGlobs": ["packages/core/**/*"],
       "severity": "warning"
     },
     {
@@ -1208,12 +954,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:21:24.094Z",
       "createdAt": "2026-03-21T07:21:24.094Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -1224,10 +965,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:21:49.612Z",
       "createdAt": "2026-03-21T07:21:49.612Z",
-      "fileGlobs": [
-        "packages/cli/src/orchestrators/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/cli/src/orchestrators/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -1238,10 +976,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:21:58.029Z",
       "createdAt": "2026-03-21T07:21:58.029Z",
-      "fileGlobs": [
-        "*.md",
-        "*.mdx"
-      ],
+      "fileGlobs": ["*.md", "*.mdx"],
       "severity": "warning"
     },
     {
@@ -1252,11 +987,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:21:58.029Z",
       "createdAt": "2026-03-21T07:21:58.029Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"],
       "severity": "error"
     },
     {
@@ -1267,12 +998,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:21:58.029Z",
       "createdAt": "2026-03-21T07:21:58.029Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "error"
     },
     {
@@ -1283,12 +1009,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:22:45.347Z",
       "createdAt": "2026-03-21T07:22:45.347Z",
-      "fileGlobs": [
-        "*.ts",
-        "*.tsx",
-        "*.js",
-        "*.jsx"
-      ],
+      "fileGlobs": ["*.ts", "*.tsx", "*.js", "*.jsx"],
       "severity": "warning"
     },
     {
@@ -1299,14 +1020,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:22:45.347Z",
       "createdAt": "2026-03-21T07:22:45.347Z",
-      "fileGlobs": [
-        "**/*.sh",
-        "**/*.bash",
-        "**/*.js",
-        "**/*.ts",
-        "**/*.yml",
-        "**/*.yaml"
-      ],
+      "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.js", "**/*.ts", "**/*.yml", "**/*.yaml"],
       "severity": "error"
     },
     {
@@ -1317,14 +1031,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:22:45.347Z",
       "createdAt": "2026-03-21T07:22:45.347Z",
-      "fileGlobs": [
-        "**/*.sh",
-        "**/*.bash",
-        "**/*.js",
-        "**/*.ts",
-        "**/*.yml",
-        "**/*.yaml"
-      ],
+      "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.js", "**/*.ts", "**/*.yml", "**/*.yaml"],
       "severity": "warning"
     },
     {
@@ -1335,11 +1042,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:22:59.892Z",
       "createdAt": "2026-03-21T07:22:59.892Z",
-      "fileGlobs": [
-        "*.md",
-        "*.markdown",
-        "*.txt"
-      ],
+      "fileGlobs": ["*.md", "*.markdown", "*.txt"],
       "severity": "warning"
     },
     {
@@ -1350,11 +1053,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:22:59.892Z",
       "createdAt": "2026-03-21T07:22:59.892Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"],
       "severity": "error"
     },
     {
@@ -1365,13 +1064,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:23:30.778Z",
       "createdAt": "2026-03-21T07:23:30.778Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "**/*.py"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.py"],
       "severity": "warning"
     },
     {
@@ -1382,12 +1075,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:24:32.504Z",
       "createdAt": "2026-03-21T07:24:32.504Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.ts",
-        "**/*.js",
-        "**/package.json"
-      ],
+      "fileGlobs": ["**/*.md", "**/*.ts", "**/*.js", "**/package.json"],
       "severity": "warning"
     },
     {
@@ -1398,13 +1086,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:24:32.505Z",
       "createdAt": "2026-03-21T07:24:32.505Z",
-      "fileGlobs": [
-        ".husky/**/*",
-        ".githooks/**/*",
-        "scripts/hooks/**/*",
-        "**/*.sh",
-        "**/*.bash"
-      ],
+      "fileGlobs": [".husky/**/*", ".githooks/**/*", "scripts/hooks/**/*", "**/*.sh", "**/*.bash"],
       "severity": "error"
     },
     {
@@ -1415,10 +1097,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:24:32.505Z",
       "createdAt": "2026-03-21T07:24:32.505Z",
-      "fileGlobs": [
-        "packages/core/src/rule-engine.ts",
-        "packages/core/src/compiler.ts"
-      ],
+      "fileGlobs": ["packages/core/src/rule-engine.ts", "packages/core/src/compiler.ts"],
       "severity": "warning"
     },
     {
@@ -1429,10 +1108,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:24:48.956Z",
       "createdAt": "2026-03-21T07:24:48.956Z",
-      "fileGlobs": [
-        "**/*.mcp.json",
-        "**/settings.json"
-      ],
+      "fileGlobs": ["**/*.mcp.json", "**/settings.json"],
       "severity": "warning"
     },
     {
@@ -1458,11 +1134,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:25:02.487Z",
       "createdAt": "2026-03-21T07:25:02.487Z",
-      "fileGlobs": [
-        "**/orchestrator/**/*.ts",
-        "**/totem/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["**/orchestrator/**/*.ts", "**/totem/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -1473,12 +1145,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:25:02.487Z",
       "createdAt": "2026-03-21T07:25:02.487Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -1489,10 +1156,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:26:18.826Z",
       "createdAt": "2026-03-21T07:26:18.826Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -1503,12 +1167,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:27:14.295Z",
       "createdAt": "2026-03-21T07:27:14.295Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -1519,12 +1178,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:28:06.154Z",
       "createdAt": "2026-03-21T07:28:06.154Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -1535,10 +1189,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:29:29.447Z",
       "createdAt": "2026-03-21T07:29:29.447Z",
-      "fileGlobs": [
-        "packages/cli/src/commands/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -1549,14 +1200,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:30:15.396Z",
       "createdAt": "2026-03-21T07:30:15.396Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "**/*.py",
-        "**/*.sql"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.py", "**/*.sql"],
       "severity": "warning"
     },
     {
@@ -1567,10 +1211,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:30:19.276Z",
       "createdAt": "2026-03-21T07:30:19.276Z",
-      "fileGlobs": [
-        "**/*sarif*/**/*.ts",
-        "**/sarif/**/*.ts"
-      ],
+      "fileGlobs": ["**/*sarif*/**/*.ts", "**/sarif/**/*.ts"],
       "severity": "error"
     },
     {
@@ -1581,13 +1222,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:30:22.609Z",
       "createdAt": "2026-03-21T07:30:22.609Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -1598,10 +1233,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:30:58.693Z",
       "createdAt": "2026-03-21T07:30:58.693Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js"],
       "severity": "warning"
     },
     {
@@ -1612,12 +1244,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:30:58.694Z",
       "createdAt": "2026-03-21T07:30:58.694Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -1646,14 +1273,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:32:05.130Z",
       "createdAt": "2026-03-21T07:32:05.130Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.py",
-        "**/*.go",
-        "**/*.rb",
-        "**/*.rs"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.go", "**/*.rb", "**/*.rs"],
       "severity": "warning"
     },
     {
@@ -1664,13 +1284,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:32:33.084Z",
       "createdAt": "2026-03-21T07:32:33.084Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.sh",
-        "**/*.bash",
-        "**/*.yml",
-        "**/*.yaml"
-      ],
+      "fileGlobs": ["**/*.md", "**/*.sh", "**/*.bash", "**/*.yml", "**/*.yaml"],
       "severity": "warning"
     },
     {
@@ -1681,14 +1295,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:32:50.877Z",
       "createdAt": "2026-03-21T07:32:50.877Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "**/*.mjs",
-        "**/*.cjs"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs"],
       "severity": "warning"
     },
     {
@@ -1699,11 +1306,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:33:52.271Z",
       "createdAt": "2026-03-21T07:33:52.271Z",
-      "fileGlobs": [
-        "**/cli/**/*.ts",
-        "**/cli/**/*.js",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["**/cli/**/*.ts", "**/cli/**/*.js", "!**/*.test.ts"],
       "severity": "error"
     },
     {
@@ -1714,10 +1317,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:35:28.869Z",
       "createdAt": "2026-03-21T07:35:28.869Z",
-      "fileGlobs": [
-        "packages/cli/src/commands/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -1746,9 +1346,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:36:18.501Z",
       "createdAt": "2026-03-21T07:36:18.501Z",
-      "fileGlobs": [
-        "*.md"
-      ],
+      "fileGlobs": ["*.md"],
       "severity": "warning"
     },
     {
@@ -1759,14 +1357,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:36:18.501Z",
       "createdAt": "2026-03-21T07:36:18.501Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.py",
-        "**/*.env",
-        "**/*.yaml",
-        "**/*.yml"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.env", "**/*.yaml", "**/*.yml"],
       "severity": "error"
     },
     {
@@ -1777,10 +1368,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:37:15.024Z",
       "createdAt": "2026-03-21T07:37:15.024Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js"],
       "severity": "warning"
     },
     {
@@ -1791,12 +1379,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:37:44.336Z",
       "createdAt": "2026-03-21T07:37:44.336Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -1807,9 +1390,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:38:41.084Z",
       "createdAt": "2026-03-21T07:38:41.084Z",
-      "fileGlobs": [
-        "packages/core/src/rule-engine.ts"
-      ],
+      "fileGlobs": ["packages/core/src/rule-engine.ts"],
       "severity": "error"
     },
     {
@@ -1839,12 +1420,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:39:45.935Z",
       "createdAt": "2026-03-21T07:39:45.935Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -1871,9 +1447,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:40:30.271Z",
       "createdAt": "2026-03-21T07:40:30.271Z",
-      "fileGlobs": [
-        "**/*.md"
-      ],
+      "fileGlobs": ["**/*.md"],
       "severity": "warning"
     },
     {
@@ -1919,12 +1493,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:40:33.420Z",
       "createdAt": "2026-03-21T07:40:33.420Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       "severity": "error"
     },
     {
@@ -1935,12 +1504,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:40:53.001Z",
       "createdAt": "2026-03-21T07:40:53.001Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "error"
     },
     {
@@ -1951,9 +1515,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:41:43.357Z",
       "createdAt": "2026-03-21T07:41:43.357Z",
-      "fileGlobs": [
-        "packages/cli/src/index.ts"
-      ],
+      "fileGlobs": ["packages/cli/src/index.ts"],
       "severity": "warning"
     },
     {
@@ -1964,9 +1526,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:42:46.567Z",
       "createdAt": "2026-03-21T07:42:46.567Z",
-      "fileGlobs": [
-        "*.md"
-      ],
+      "fileGlobs": ["*.md"],
       "severity": "warning"
     },
     {
@@ -1977,9 +1537,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:43:01.961Z",
       "createdAt": "2026-03-21T07:43:01.961Z",
-      "fileGlobs": [
-        "**/*.md"
-      ],
+      "fileGlobs": ["**/*.md"],
       "severity": "warning"
     },
     {
@@ -1991,12 +1549,7 @@
       "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
       "compiledAt": "2026-03-21T07:43:17.117Z",
       "createdAt": "2026-03-21T07:43:17.117Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -2007,9 +1560,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:43:26.366Z",
       "createdAt": "2026-03-21T07:43:26.366Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts"
-      ],
+      "fileGlobs": ["packages/cli/**/*.ts"],
       "severity": "warning"
     },
     {
@@ -2020,9 +1571,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:43:43.680Z",
       "createdAt": "2026-03-21T07:43:43.680Z",
-      "fileGlobs": [
-        "packages/cli/src/git.ts"
-      ],
+      "fileGlobs": ["packages/cli/src/git.ts"],
       "severity": "warning"
     },
     {
@@ -2033,9 +1582,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:44:29.835Z",
       "createdAt": "2026-03-21T07:44:29.835Z",
-      "fileGlobs": [
-        "**/*.md"
-      ],
+      "fileGlobs": ["**/*.md"],
       "severity": "warning"
     },
     {
@@ -2046,10 +1593,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:45:50.468Z",
       "createdAt": "2026-03-21T07:45:50.468Z",
-      "fileGlobs": [
-        ".github/workflows/*.yml",
-        ".github/workflows/*.yaml"
-      ],
+      "fileGlobs": [".github/workflows/*.yml", ".github/workflows/*.yaml"],
       "severity": "error"
     },
     {
@@ -2060,9 +1604,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:46:01.049Z",
       "createdAt": "2026-03-21T07:46:01.049Z",
-      "fileGlobs": [
-        ".github/dependabot.yml"
-      ],
+      "fileGlobs": [".github/dependabot.yml"],
       "severity": "error"
     },
     {
@@ -2073,12 +1615,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:46:44.719Z",
       "createdAt": "2026-03-21T07:46:44.719Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -2089,10 +1626,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:47:08.710Z",
       "createdAt": "2026-03-21T07:47:08.710Z",
-      "fileGlobs": [
-        "packages/core/src/rule-engine.ts",
-        "packages/core/src/compiler.ts"
-      ],
+      "fileGlobs": ["packages/core/src/rule-engine.ts", "packages/core/src/compiler.ts"],
       "severity": "warning"
     },
     {
@@ -2103,12 +1637,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:48:10.171Z",
       "createdAt": "2026-03-21T07:48:10.171Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       "severity": "error"
     },
     {
@@ -2119,12 +1648,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:48:35.030Z",
       "createdAt": "2026-03-21T07:48:35.030Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.mjs",
-        "**/*.cjs"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.mjs", "**/*.cjs"],
       "severity": "warning"
     },
     {
@@ -2135,9 +1659,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:49:27.518Z",
       "createdAt": "2026-03-21T07:49:27.518Z",
-      "fileGlobs": [
-        "packages/cli/src/git.ts"
-      ],
+      "fileGlobs": ["packages/cli/src/git.ts"],
       "severity": "warning"
     },
     {
@@ -2148,10 +1670,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:50:19.353Z",
       "createdAt": "2026-03-21T07:50:19.353Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx"],
       "severity": "warning"
     },
     {
@@ -2162,12 +1681,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:51:39.296Z",
       "createdAt": "2026-03-21T07:51:39.296Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -2195,10 +1709,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:52:51.896Z",
       "createdAt": "2026-03-21T07:52:51.896Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx"],
       "severity": "warning"
     },
     {
@@ -2209,11 +1720,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:52:51.896Z",
       "createdAt": "2026-03-21T07:52:51.896Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"],
       "severity": "error"
     },
     {
@@ -2239,13 +1746,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:52:51.896Z",
       "createdAt": "2026-03-21T07:52:51.896Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.bash",
-        "*.yml",
-        "*.yaml",
-        "packages/cli/**/*.ts"
-      ],
+      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "packages/cli/**/*.ts"],
       "severity": "error"
     },
     {
@@ -2256,10 +1757,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:53:04.001Z",
       "createdAt": "2026-03-21T07:53:04.001Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -2270,12 +1768,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:53:09.583Z",
       "createdAt": "2026-03-21T07:53:09.583Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.yml",
-        "*.yaml",
-        "package.json"
-      ],
+      "fileGlobs": ["*.sh", "*.yml", "*.yaml", "package.json"],
       "severity": "warning"
     },
     {
@@ -2286,12 +1779,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:53:48.413Z",
       "createdAt": "2026-03-21T07:53:48.413Z",
-      "fileGlobs": [
-        "lib/**/*.ts",
-        "packages/core/**/*.ts",
-        "src/lib/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["lib/**/*.ts", "packages/core/**/*.ts", "src/lib/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -2302,9 +1790,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:53:48.413Z",
       "createdAt": "2026-03-21T07:53:48.413Z",
-      "fileGlobs": [
-        "packages/cli/src/git.ts"
-      ],
+      "fileGlobs": ["packages/cli/src/git.ts"],
       "severity": "error"
     },
     {
@@ -2315,10 +1801,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:54:01.977Z",
       "createdAt": "2026-03-21T07:54:01.977Z",
-      "fileGlobs": [
-        ".claude/hooks/**",
-        "packages/cli/src/commands/install-hooks.ts"
-      ],
+      "fileGlobs": [".claude/hooks/**", "packages/cli/src/commands/install-hooks.ts"],
       "severity": "warning"
     },
     {
@@ -2329,12 +1812,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:54:12.750Z",
       "createdAt": "2026-03-21T07:54:12.750Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -2377,12 +1855,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:55:35.205Z",
       "createdAt": "2026-03-21T07:55:35.205Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -2393,14 +1866,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:55:35.205Z",
       "createdAt": "2026-03-21T07:55:35.205Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.sh",
-        "**/*.yml",
-        "**/*.yaml",
-        "package.json",
-        "**/*.txt"
-      ],
+      "fileGlobs": ["**/*.md", "**/*.sh", "**/*.yml", "**/*.yaml", "package.json", "**/*.txt"],
       "severity": "error"
     },
     {
@@ -2411,10 +1877,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:55:35.205Z",
       "createdAt": "2026-03-21T07:55:35.205Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -2425,13 +1888,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:56:01.571Z",
       "createdAt": "2026-03-21T07:56:01.571Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "**/*.py"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.py"],
       "severity": "warning"
     },
     {
@@ -2442,12 +1899,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:56:26.881Z",
       "createdAt": "2026-03-21T07:56:26.881Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "error"
     },
     {
@@ -2458,10 +1910,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:57:17.223Z",
       "createdAt": "2026-03-21T07:57:17.223Z",
-      "fileGlobs": [
-        "packages/cli/src/commands/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -2472,9 +1921,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:57:17.223Z",
       "createdAt": "2026-03-21T07:57:17.223Z",
-      "fileGlobs": [
-        "README.md"
-      ],
+      "fileGlobs": ["README.md"],
       "severity": "error"
     },
     {
@@ -2504,11 +1951,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:57:26.805Z",
       "createdAt": "2026-03-21T07:57:26.805Z",
-      "fileGlobs": [
-        "**/*.mcp.json",
-        "**/settings.json",
-        "**/.vscode/settings.json"
-      ],
+      "fileGlobs": ["**/*.mcp.json", "**/settings.json", "**/.vscode/settings.json"],
       "severity": "error"
     },
     {
@@ -2519,10 +1962,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:57:51.074Z",
       "createdAt": "2026-03-21T07:57:51.074Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "packages/cli/**/*.js"
-      ],
+      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js"],
       "severity": "warning"
     },
     {
@@ -2533,10 +1973,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:58:00.308Z",
       "createdAt": "2026-03-21T07:58:00.308Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -2547,11 +1984,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:58:09.939Z",
       "createdAt": "2026-03-21T07:58:09.939Z",
-      "fileGlobs": [
-        "packages/core/**/*.ts",
-        "libs/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/core/**/*.ts", "libs/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -2562,12 +1995,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:58:17.482Z",
       "createdAt": "2026-03-21T07:58:17.482Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.mdx",
-        "docs/**/*",
-        "guides/**/*"
-      ],
+      "fileGlobs": ["**/*.md", "**/*.mdx", "docs/**/*", "guides/**/*"],
       "severity": "warning"
     },
     {
@@ -2578,12 +2006,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:59:11.752Z",
       "createdAt": "2026-03-21T07:59:11.752Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -2594,12 +2017,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:59:11.752Z",
       "createdAt": "2026-03-21T07:59:11.752Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -2610,10 +2028,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:59:11.752Z",
       "createdAt": "2026-03-21T07:59:11.752Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx"],
       "severity": "warning"
     },
     {
@@ -2624,12 +2039,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T07:59:35.585Z",
       "createdAt": "2026-03-21T07:59:35.585Z",
-      "fileGlobs": [
-        "**/*.test.ts",
-        "**/*.test.js",
-        "**/*.spec.ts",
-        "**/*.spec.js"
-      ],
+      "fileGlobs": ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"],
       "severity": "warning"
     },
     {
@@ -2664,10 +2074,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:01:18.700Z",
       "createdAt": "2026-03-21T08:01:18.700Z",
-      "fileGlobs": [
-        "packages/core/src/compiler.ts",
-        "packages/core/src/rule-engine.ts"
-      ],
+      "fileGlobs": ["packages/core/src/compiler.ts", "packages/core/src/rule-engine.ts"],
       "severity": "warning"
     },
     {
@@ -2678,9 +2085,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:01:52.877Z",
       "createdAt": "2026-03-21T08:01:52.877Z",
-      "fileGlobs": [
-        "**/compiled-rules.json"
-      ],
+      "fileGlobs": ["**/compiled-rules.json"],
       "severity": "error"
     },
     {
@@ -2710,12 +2115,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:02:57.599Z",
       "createdAt": "2026-03-21T08:02:57.599Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -2726,9 +2126,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:03:26.315Z",
       "createdAt": "2026-03-21T08:03:26.315Z",
-      "fileGlobs": [
-        "package.json"
-      ],
+      "fileGlobs": ["package.json"],
       "severity": "warning"
     },
     {
@@ -2759,11 +2157,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:03:51.698Z",
       "createdAt": "2026-03-21T08:03:51.698Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"],
       "severity": "error"
     },
     {
@@ -2774,9 +2168,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:03:51.699Z",
       "createdAt": "2026-03-21T08:03:51.699Z",
-      "fileGlobs": [
-        "packages/cli/src/commands/install-hooks.ts"
-      ],
+      "fileGlobs": ["packages/cli/src/commands/install-hooks.ts"],
       "severity": "warning"
     },
     {
@@ -2787,13 +2179,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:04:24.196Z",
       "createdAt": "2026-03-21T08:04:24.196Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "**/*.sql"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.sql"],
       "severity": "warning"
     },
     {
@@ -2804,12 +2190,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:04:24.196Z",
       "createdAt": "2026-03-21T08:04:24.196Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -2820,14 +2201,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:04:41.670Z",
       "createdAt": "2026-03-21T08:04:41.670Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts", "!**/*.spec.ts"],
       "severity": "warning"
     },
     {
@@ -2839,12 +2213,7 @@
       "astGrepPattern": "try { $$$A; execSync($$$B, { $$$C, stdio: 'inherit', $$$D }); $$$E; } catch ($$$F) { $$$G; }",
       "compiledAt": "2026-03-21T08:05:17.304Z",
       "createdAt": "2026-03-21T08:05:17.304Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
       "severity": "warning"
     },
     {
@@ -2855,12 +2224,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:05:50.608Z",
       "createdAt": "2026-03-21T08:05:50.608Z",
-      "fileGlobs": [
-        "**/prompts/**/*",
-        "**/ai/**/*",
-        "**/llm/**/*",
-        "**/*prompt*"
-      ],
+      "fileGlobs": ["**/prompts/**/*", "**/ai/**/*", "**/llm/**/*", "**/*prompt*"],
       "severity": "error"
     },
     {
@@ -2871,14 +2235,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:06:06.626Z",
       "createdAt": "2026-03-21T08:06:06.626Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.py",
-        "**/*.sh",
-        "**/*.go",
-        "**/*.rs"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.py", "**/*.sh", "**/*.go", "**/*.rs"],
       "severity": "error"
     },
     {
@@ -2889,12 +2246,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:06:06.626Z",
       "createdAt": "2026-03-21T08:06:06.626Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "packages/cli/**/*.js",
-        "bin/**/*.ts",
-        "bin/**/*.js"
-      ],
+      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js", "bin/**/*.ts", "bin/**/*.js"],
       "severity": "warning"
     },
     {
@@ -2937,10 +2289,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:06:49.594Z",
       "createdAt": "2026-03-21T08:06:49.594Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"],
       "severity": "error"
     },
     {
@@ -2951,13 +2300,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:06:49.594Z",
       "createdAt": "2026-03-21T08:06:49.594Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"],
       "severity": "error"
     },
     {
@@ -2985,10 +2328,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:08:30.265Z",
       "createdAt": "2026-03-21T08:08:30.265Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -2999,10 +2339,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:08:56.078Z",
       "createdAt": "2026-03-21T08:08:56.078Z",
-      "fileGlobs": [
-        "packages/cli/src/commands/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/cli/src/commands/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -3013,10 +2350,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:09:06.753Z",
       "createdAt": "2026-03-21T08:09:06.753Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -3028,10 +2362,7 @@
       "astGrepPattern": "console.$METHOD($$$ARGS)",
       "compiledAt": "2026-03-21T08:09:19.775Z",
       "createdAt": "2026-03-21T08:09:19.775Z",
-      "fileGlobs": [
-        "packages/core/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/core/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -3062,10 +2393,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:09:55.445Z",
       "createdAt": "2026-03-21T08:09:55.445Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx"
-      ],
+      "fileGlobs": ["**/*.ts", "**/*.tsx"],
       "severity": "warning"
     },
     {
@@ -3076,12 +2404,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:10:08.688Z",
       "createdAt": "2026-03-21T08:10:08.688Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "packages/cli/**/*.js",
-        "bin/**/*.ts",
-        "bin/**/*.js"
-      ],
+      "fileGlobs": ["packages/cli/**/*.ts", "packages/cli/**/*.js", "bin/**/*.ts", "bin/**/*.js"],
       "severity": "warning"
     },
     {
@@ -3110,10 +2433,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:11:01.170Z",
       "createdAt": "2026-03-21T08:11:01.170Z",
-      "fileGlobs": [
-        ".husky/*",
-        ".git/hooks/*"
-      ],
+      "fileGlobs": [".husky/*", ".git/hooks/*"],
       "severity": "warning"
     },
     {
@@ -3124,9 +2444,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:11:01.170Z",
       "createdAt": "2026-03-21T08:11:01.170Z",
-      "fileGlobs": [
-        "packages/mcp/**/*.ts"
-      ],
+      "fileGlobs": ["packages/mcp/**/*.ts"],
       "severity": "error"
     },
     {
@@ -3137,10 +2455,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T08:11:06.736Z",
       "createdAt": "2026-03-21T08:11:06.736Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.mdx"
-      ],
+      "fileGlobs": ["**/*.md", "**/*.mdx"],
       "severity": "warning"
     },
     {
@@ -3168,13 +2483,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T22:15:32.541Z",
       "createdAt": "2026-03-21T22:15:32.541Z",
-      "fileGlobs": [
-        "*.sh",
-        "*.bash",
-        "*.yml",
-        "*.yaml",
-        "package.json"
-      ],
+      "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml", "package.json"],
       "severity": "warning"
     },
     {
@@ -3185,9 +2494,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T22:16:30.127Z",
       "createdAt": "2026-03-21T22:16:30.127Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts"
-      ],
+      "fileGlobs": ["packages/cli/**/*.ts"],
       "severity": "warning"
     },
     {
@@ -3214,10 +2521,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T22:18:55.305Z",
       "createdAt": "2026-03-21T22:18:55.305Z",
-      "fileGlobs": [
-        "*.yml",
-        "*.yaml"
-      ],
+      "fileGlobs": ["*.yml", "*.yaml"],
       "severity": "warning"
     },
     {
@@ -3229,10 +2533,7 @@
       "astGrepPattern": "import $SPECIFIERS from '@mmnto/totem'",
       "compiledAt": "2026-03-21T22:19:10.791Z",
       "createdAt": "2026-03-21T22:19:10.791Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -3243,10 +2544,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T22:20:39.927Z",
       "createdAt": "2026-03-21T22:20:39.927Z",
-      "fileGlobs": [
-        "README.md",
-        "docs/**/*.md"
-      ],
+      "fileGlobs": ["README.md", "docs/**/*.md"],
       "severity": "warning"
     },
     {
@@ -3257,12 +2555,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T22:20:56.000Z",
       "createdAt": "2026-03-21T22:20:56.000Z",
-      "fileGlobs": [
-        "*.ts",
-        "*.tsx",
-        "*.js",
-        "*.jsx"
-      ],
+      "fileGlobs": ["*.ts", "*.tsx", "*.js", "*.jsx"],
       "severity": "warning"
     },
     {
@@ -3273,10 +2566,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-21T22:22:15.562Z",
       "createdAt": "2026-03-21T22:22:15.562Z",
-      "fileGlobs": [
-        "packages/core/**/*.ts",
-        "!**/*.test.ts"
-      ],
+      "fileGlobs": ["packages/core/**/*.ts", "!**/*.test.ts"],
       "severity": "warning"
     },
     {
@@ -3306,11 +2596,7 @@
       "engine": "regex",
       "compiledAt": "2026-03-22T00:36:46.241Z",
       "createdAt": "2026-03-22T00:36:46.241Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.txt",
-        "docs/**"
-      ],
+      "fileGlobs": ["**/*.md", "**/*.txt", "docs/**"],
       "severity": "warning"
     },
     {
@@ -3355,12 +2641,7 @@
       "pattern": "\\/<[a-zA-Z0-9]+>\\/i?",
       "compiledAt": "2026-03-22T17:36:26.161Z",
       "createdAt": "2026-03-22T17:36:26.161Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"]
     },
     {
       "lessonHash": "7dc49f6f765e47fa",
@@ -3390,10 +2671,7 @@
       "astGrepPattern": "`try { $$$PRE; expect.fail($$$ARGS); $$$POST } catch ($ERR) { $$$CATCH }`",
       "compiledAt": "2026-03-22T17:37:13.018Z",
       "createdAt": "2026-03-22T17:37:13.018Z",
-      "fileGlobs": [
-        "**/*.test.ts",
-        "**/*.spec.ts"
-      ]
+      "fileGlobs": ["**/*.test.ts", "**/*.spec.ts"]
     },
     {
       "lessonHash": "a1021f312bb564a2",
@@ -3405,12 +2683,7 @@
       "astQuery": "(required_parameter pattern: (identifier) @id (#match? @id \"^(warn|warning)$\")) @violation",
       "compiledAt": "2026-03-22T17:37:48.379Z",
       "createdAt": "2026-03-22T17:37:48.379Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts", "!**/*.spec.ts"]
     },
     {
       "lessonHash": "4eb175f98879dbb8",
@@ -3422,14 +2695,7 @@
       "astGrepPattern": "$OBJ.author.includes($$$)",
       "compiledAt": "2026-03-22T17:38:36.891Z",
       "createdAt": "2026-03-22T17:38:36.891Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "!**/*.test.ts",
-        "!**/*.test.tsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts", "!**/*.test.tsx"]
     },
     {
       "lessonHash": "dd4542e69ec3d5a1",
@@ -3441,10 +2707,7 @@
       "astGrepPattern": "`spawn($CMD, [$$$ARGS], { $$$BEFORE, shell: true, $$$AFTER })`",
       "compiledAt": "2026-03-22T17:38:40.852Z",
       "createdAt": "2026-03-22T17:38:40.852Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js"]
     },
     {
       "lessonHash": "c0f2a3fd2956184e",
@@ -3456,10 +2719,7 @@
       "astGrepPattern": "`process.kill($PID, 0)`",
       "compiledAt": "2026-03-22T17:38:40.852Z",
       "createdAt": "2026-03-22T17:38:40.852Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js"]
     },
     {
       "lessonHash": "a6b7018495166ceb",
@@ -3471,11 +2731,7 @@
       "astGrepPattern": "`new RegExp($SRC, $FLAGS + 'g')`",
       "compiledAt": "2026-03-22T17:38:40.853Z",
       "createdAt": "2026-03-22T17:38:40.853Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
     },
     {
       "lessonHash": "5d89c8596d8bcea5",
@@ -3487,10 +2743,7 @@
       "astGrepPattern": "`$OBJ.replace(process.cwd(), $REPLACEMENT)`",
       "compiledAt": "2026-03-22T17:38:40.853Z",
       "createdAt": "2026-03-22T17:38:40.853Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js"]
     },
     {
       "lessonHash": "df326a7c29885525",
@@ -3502,10 +2755,7 @@
       "astGrepPattern": "`JSON.parse($A) as $B`",
       "compiledAt": "2026-03-22T17:38:52.601Z",
       "createdAt": "2026-03-22T17:38:52.601Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx"]
     },
     {
       "lessonHash": "2c4fccdb11f6afb3",
@@ -3517,12 +2767,7 @@
       "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
       "compiledAt": "2026-03-22T17:39:21.564Z",
       "createdAt": "2026-03-22T17:39:21.564Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
     },
     {
       "lessonHash": "1d7dbe69b248fa50",
@@ -3534,11 +2779,7 @@
       "astGrepPattern": "`$A[$A.indexOf($B) + 1]`",
       "compiledAt": "2026-03-22T17:40:18.643Z",
       "createdAt": "2026-03-22T17:40:18.643Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "!**/*.test.ts"]
     },
     {
       "lessonHash": "5cbf4ee7e76975d4",
@@ -3550,10 +2791,7 @@
       "astGrepPattern": "`$NODE.findAll(typeof $X === 'string' ? $Y : $Z)`",
       "compiledAt": "2026-03-22T17:40:18.643Z",
       "createdAt": "2026-03-22T17:40:18.643Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js"]
     },
     {
       "lessonHash": "24c9e2738d4a5f25",
@@ -3564,13 +2802,7 @@
       "pattern": "(\\.(match|matchAll|search|split|test|includes)\\(|new\\s+RegExp\\()\\s*(['\"/])\\\\blessonHash\\\\b(?![^'\"/]*?:)\\3",
       "compiledAt": "2026-03-22T17:41:25.546Z",
       "createdAt": "2026-03-22T17:41:25.546Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "!**/*.test.ts"]
     },
     {
       "lessonHash": "243b32bd5f8d1a74",
@@ -3582,14 +2814,7 @@
       "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
       "compiledAt": "2026-03-22T17:42:09.151Z",
       "createdAt": "2026-03-22T17:42:09.151Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ]
+      "fileGlobs": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "!**/*.test.ts", "!**/*.spec.ts"]
     },
     {
       "lessonHash": "7d299a9fd0e81e3b",
@@ -3600,12 +2825,7 @@
       "pattern": "(\\.(includes|indexOf|match)\\s*\\(\\s*['\"\\/](?!\\^)(git|p?npm|yarn|docker|aws|kubectl|node|bash|sh)\\b|\\/(?!\\^)(git|p?npm|yarn|docker|aws|kubectl|node|bash|sh)\\b\\/\\.test)",
       "compiledAt": "2026-03-22T17:42:42.238Z",
       "createdAt": "2026-03-22T17:42:42.238Z",
-      "fileGlobs": [
-        "**/*.js",
-        "**/*.ts",
-        "**/*.jsx",
-        "**/*.tsx"
-      ]
+      "fileGlobs": ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"]
     },
     {
       "lessonHash": "1061e953cb99a0ec",
@@ -3616,10 +2836,7 @@
       "pattern": "import\\s+.*from\\s+['\"][^'\"]*detection[^'\"]*['\"]",
       "compiledAt": "2026-03-22T17:43:30.348Z",
       "createdAt": "2026-03-22T17:43:30.348Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "!**/*.test.ts"
-      ]
+      "fileGlobs": ["packages/cli/**/*.ts", "!**/*.test.ts"]
     }
   ],
   "nonCompilable": [

@@ -122,6 +122,7 @@ The compilation process is context-aware, reading files directly from disk inste
 A composite GitHub Action (`action.yml`) runs `totem lint` as a pass/fail CI quality gate on pull requests, rigorously validated across a cross-platform CI matrix covering Ubuntu, Windows, and macOS. It uses compiled AST/regex rules from `.totem/compiled-rules.json` to physically block known architectural traps from merging. The SARIF 2.1.0 output natively integrates with the GitHub Advanced Security tab, directly surfacing CISO-facing architectural violations.
 
 Deterministic CI enforcement is further strengthened by evaluating continuous automated codebase review sentinels:
+
 - **Quality & Security:** SonarQube Community Edition and GitHub CodeQL v4.
 - **Dependencies:** Dependabot.
 - **Code Review:** CodeRabbit.
