@@ -38,7 +38,7 @@ This phase delivered seamless cross-platform onboarding, automated AI tool confi
   - **Baseline Intelligence:** Universal Baseline delivered, shipping 60 battle-tested lessons automatically during `totem init` alongside harder vector database reflexes.
   - **Enforcement:** Involuntary enforcement strategy under research.
 - [ ] **Interactive CLI Tutorial:** Build an animated, interactive CLI tutorial (`totem tutorial`). This allows users to pause the walkthrough, ask the AI contextual questions, and resume seamlessly.
-- [ ] **Invisible Orchestration:** Audit AI model hooks and Git hooks to trigger `shield`, `sync`, and `handoff` automagically. Recent additions include invisible sync hooks, driving toward a "run init and forget" workflow via deterministic `totem lint` gates and auto-installs.
+- [ ] **Invisible Orchestration:** Automate deterministic operations (`sync`, `lint`, `handoff`) via Git hooks. Recent additions include invisible sync hooks (post-merge, post-checkout), driving toward a "run init and forget" workflow. Note: `shield` remains a local review action (LLM-powered) and is not wired into automated hooks.
 
 ## Phase 2: Core Stability & Data Safety (Functionally Complete)
 

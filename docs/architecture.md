@@ -2,7 +2,7 @@
 
 ## The Vision
 
-Totem — **Git for AI. Rule your context.** — is designed as a **Shared Brain** and **Orchestrator** for a team of autonomous AI agents. Licensed under Apache 2.0, it operates completely locally within the consuming project, strictly adhering to an **Air-Gapped Doctrine** (Zero Telemetry) to ensure total data privacy.
+Totem is a local-only CLI and MCP server that compiles project knowledge into deterministic enforcement rules. It operates entirely within the consuming project with no outbound network calls or telemetry. Licensed under Apache 2.0.
 
 ## Core Components
 
