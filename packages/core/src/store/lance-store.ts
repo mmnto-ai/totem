@@ -12,17 +12,9 @@ import type {
   SearchResult,
   StoredChunk,
 } from '../types.js';
+import { runHealthCheck } from './lance-health.js';
 import { TOTEM_TABLE_NAME } from './lance-schema.js';
-
-/** RRF constant — standard value from the original RRF paper. */
-const RRF_K = 60;
-
-/**
- * Number of extra candidates to fetch per search leg during hybrid search.
- * We fetch more than `maxResults` per leg so that after RRF fusion we
- * still have enough results even when the two legs return different sets.
- */
-const HYBRID_OVERFETCH_FACTOR = 3;
+import { runHybridSearch, runVectorSearch } from './lance-search.js';
 
 export class LanceStore {
   private db: lancedb.Connection | null = null;
@@ -210,95 +202,25 @@ export class LanceStore {
     const useHybrid = (options.hybrid ?? true) && this.hasFtsIndex;
 
     if (useHybrid) {
-      return this.hybridSearch(options.query, options.typeFilter, maxResults, boundary);
+      return runHybridSearch(
+        this.table,
+        this.embedder,
+        this.onWarn,
+        options.query,
+        options.typeFilter as ContentType | undefined,
+        maxResults,
+        boundary,
+      );
     }
 
-    return this.vectorSearch(options.query, options.typeFilter, maxResults, boundary);
-  }
-
-  /** Pure vector search (original behavior). */
-  private async vectorSearch(
-    query: string,
-    typeFilter: ContentType | undefined,
-    maxResults: number,
-    boundary?: string | string[],
-  ): Promise<SearchResult[]> {
-    const [queryVector] = await this.embedder.embed([query]);
-
-    let q = this.table!.vectorSearch(queryVector!).limit(maxResults);
-
-    const whereClause = buildWhereClause(typeFilter, boundary);
-    if (whereClause) q = q.where(whereClause);
-
-    const results = await q.toArray();
-    return results.map(rowToSearchResult);
-  }
-
-  /**
-   * Hybrid search: runs vector + FTS in parallel, merges with RRF.
-   * Each leg fetches `maxResults * HYBRID_OVERFETCH_FACTOR` candidates
-   * to give RRF enough diversity to produce `maxResults` fused results.
-   */
-  private async hybridSearch(
-    query: string,
-    typeFilter: ContentType | undefined,
-    maxResults: number,
-    boundary?: string | string[],
-  ): Promise<SearchResult[]> {
-    const fetchCount = maxResults * HYBRID_OVERFETCH_FACTOR;
-    const whereClause = buildWhereClause(typeFilter, boundary);
-
-    const [queryVector] = await this.embedder.embed([query]);
-
-    // Run both legs in parallel
-    const [vectorResults, ftsResults] = await Promise.all([
-      this.runVectorLeg(queryVector!, whereClause, fetchCount),
-      this.runFtsLeg(query, whereClause, fetchCount),
-    ]);
-
-    // Merge with RRF
-    return rrfMerge(vectorResults, ftsResults, maxResults);
-  }
-
-  private async runVectorLeg(
-    queryVector: number[],
-    whereClause: string | undefined,
-    limit: number,
-  ): Promise<RankedRow[]> {
-    let q = this.table!.vectorSearch(queryVector).limit(limit).withRowId();
-    if (whereClause) q = q.where(whereClause);
-
-    const rows = await q.toArray();
-    return rows.map((row, rank) => ({
-      row,
-      rank: rank + 1,
-      id: String(row['_rowid'] ?? row['id']),
-    }));
-  }
-
-  private async runFtsLeg(
-    query: string,
-    whereClause: string | undefined,
-    limit: number,
-  ): Promise<RankedRow[]> {
-    try {
-      let q = this.table!.search(query, 'fts', 'content').withRowId();
-
-      if (whereClause) q = q.where(whereClause);
-      q = q.limit(limit);
-
-      const rows = await q.toArray();
-      return rows.map((row, rank) => ({
-        row,
-        rank: rank + 1,
-        id: String(row['_rowid'] ?? row['id']),
-      }));
-    } catch (err) {
-      // FTS leg failed — degrade gracefully
-      const msg = err instanceof Error ? err.message : String(err);
-      this.onWarn(`FTS search failed, falling back to vector-only: ${msg}`);
-      return [];
-    }
+    return runVectorSearch(
+      this.table,
+      this.embedder,
+      options.query,
+      options.typeFilter as ContentType | undefined,
+      maxResults,
+      boundary,
+    );
   }
 
   /** Delete all chunks from a specific file (for incremental re-index). */
@@ -352,172 +274,12 @@ export class LanceStore {
 
   /** Run a health check against the index, verifying dimensions, search, and FTS. */
   async healthCheck(): Promise<HealthCheckResult> {
-    const start = Date.now();
-    const issues: string[] = [];
-
-    let totalChunks = 0;
-    let storedDimensions: number | null = null;
-    let dimensionMatch = false;
-    let canarySearchOk = false;
-    let ftsAvailable = false;
-    const expectedDimensions = this.embedder.dimensions;
-
-    // 1. Count rows and check dimensions
-    try {
-      if (this.table) {
-        totalChunks = await this.table.countRows();
-
-        if (totalChunks > 0) {
-          // Read one row to get stored vector dimensions
-          const rows = await this.table.query().select(['vector']).limit(1).toArray();
-          if (rows.length > 0) {
-            const raw = rows[0]!['vector'];
-            // LanceDB may return Arrow FixedSizeList — coerce to plain array
-            const vec = Array.isArray(raw)
-              ? raw
-              : raw && typeof (raw as { toArray?: () => number[] }).toArray === 'function'
-                ? (raw as { toArray: () => number[] }).toArray()
-                : raw && typeof (raw as { length?: number }).length === 'number'
-                  ? Array.from(raw as ArrayLike<number>)
-                  : null;
-            if (vec) {
-              storedDimensions = vec.length;
-              dimensionMatch = storedDimensions === expectedDimensions;
-              if (!dimensionMatch) {
-                issues.push(
-                  `Dimension mismatch: embedder expects ${expectedDimensions} but stored vectors have ${storedDimensions}`,
-                );
-              }
-            } else {
-              issues.push('Could not read vector column from stored row');
-            }
-          }
-        } else {
-          // Empty table — dimensions can't be verified but that's OK
-          dimensionMatch = true;
-        }
-      } else {
-        // No table — treat as empty, still healthy
-        dimensionMatch = true;
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      issues.push(`Dimension check failed: ${msg}`);
-    }
-
-    // 2. Canary search — embed a probe string and run a search
-    try {
-      if (this.table && totalChunks > 0) {
-        await this.search({ query: 'totem health check canary', maxResults: 1, hybrid: false });
-        canarySearchOk = true;
-      } else {
-        // No data to search — canary is trivially OK
-        canarySearchOk = true;
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      issues.push(`Canary search failed: ${msg}`);
-    }
-
-    // 3. FTS availability
-    try {
-      await this.detectFtsIndex();
-      ftsAvailable = this.hasFtsIndex;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      issues.push(`FTS detection failed: ${msg}`);
-    }
-
-    const durationMs = Date.now() - start;
-    const healthy = issues.length === 0;
-
-    return {
-      healthy,
-      durationMs,
-      totalChunks,
-      expectedDimensions,
-      storedDimensions,
-      dimensionMatch,
-      canarySearchOk,
-      ftsAvailable,
-      issues,
-    };
+    return runHealthCheck(
+      this.table,
+      this.embedder,
+      (options) => this.search(options),
+      () => this.detectFtsIndex(),
+      () => this.hasFtsIndex,
+    );
   }
-}
-
-// ─── Internal helpers ──────────────────────────────────
-
-interface RankedRow {
-  row: Record<string, unknown>;
-  rank: number;
-  id: string;
-}
-
-/** Escape a single boundary prefix for use in a SQL LIKE clause. */
-function escapeBoundaryPrefix(raw: string): string {
-  // Normalize Windows backslashes to forward slashes
-  const normalized = raw.replace(/\\/g, '/');
-  // Escape SQL LIKE wildcards (%, _), backticks, and single quotes
-  return normalized
-    .replace(/`/g, '\\`')
-    .replace(/%/g, '\\%')
-    .replace(/_/g, '\\_')
-    .replace(/'/g, "''");
-}
-
-/** Build a SQL WHERE clause from optional type and boundary filters. */
-function buildWhereClause(
-  typeFilter?: ContentType,
-  boundary?: string | string[],
-): string | undefined {
-  const conditions: string[] = [];
-  if (typeFilter) {
-    const safeType = typeFilter.replace(/`/g, '\\`').replace(/'/g, "''");
-    conditions.push(`\`type\` = '${safeType}'`);
-  }
-  // Normalize boundary to array
-  const prefixes = boundary
-    ? (Array.isArray(boundary) ? boundary : [boundary]).filter((b) => b.length > 0)
-    : [];
-  if (prefixes.length > 0) {
-    const orClauses = prefixes
-      .map((p) => `\`filePath\` LIKE '${escapeBoundaryPrefix(p)}%'`)
-      .join(' OR ');
-    conditions.push(prefixes.length > 1 ? `(${orClauses})` : orClauses);
-  }
-  return conditions.length > 0 ? conditions.join(' AND ') : undefined;
-}
-
-/** Convert a raw LanceDB row to a SearchResult. */
-function rowToSearchResult(row: Record<string, unknown>): SearchResult {
-  return {
-    content: row['content'] as string,
-    contextPrefix: row['contextPrefix'] as string,
-    filePath: row['filePath'] as string,
-    type: row['type'] as ContentType,
-    label: row['label'] as string,
-    score: row['_distance'] != null ? 1 / (1 + (row['_distance'] as number)) : 0,
-    metadata: JSON.parse((row['metadata'] as string) || '{}') as Record<string, string>,
-  };
-}
-
-/**
- * Reciprocal Rank Fusion — merges two ranked result lists.
- * score(d) = Σ 1 / (k + rank_in_list) for each list containing d.
- */
-function rrfMerge(listA: RankedRow[], listB: RankedRow[], limit: number): SearchResult[] {
-  const scores = new Map<string, { score: number; row: Record<string, unknown> }>();
-
-  for (const list of [listA, listB]) {
-    for (const { row, rank, id } of list) {
-      const entry = scores.get(id) ?? { score: 0, row };
-      entry.score += 1 / (RRF_K + rank);
-      scores.set(id, entry);
-    }
-  }
-
-  return [...scores.values()]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map(({ score, row }) => ({ ...rowToSearchResult(row), score }));
 }
