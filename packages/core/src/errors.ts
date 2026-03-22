@@ -99,5 +99,5 @@ export function getErrorMessage(err: unknown): string {
  */
 export function rethrowAsParseError(label: string, err: unknown, hint: string): never {
   if (err instanceof TotemParseError) throw err;
-  throw new TotemParseError(`${label}: ${getErrorMessage(err)}`, hint);
+  throw new TotemParseError(`${label}: ${getErrorMessage(err)}`, hint); // totem-ignore — #848: TotemError constructor auto-prepends [Totem Error]
 }
