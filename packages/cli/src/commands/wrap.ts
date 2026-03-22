@@ -59,8 +59,14 @@ export async function wrapCommand(prNumbers: string[], options: WrapOptions): Pr
     const { execSync } = await import('node:child_process');
     execSync('pnpm run docs:inject', { cwd: process.cwd(), stdio: 'pipe' });
     log.success(TAG, 'Doc values injected.');
-  } catch {
-    log.dim(TAG, 'docs:inject not configured — skipping.');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('Missing script') || msg.includes('not found')) {
+      log.dim(TAG, 'docs:inject not configured — skipping.');
+    } else {
+      log.error(TAG, `docs:inject failed: ${msg}`);
+      throw err;
+    }
   }
 
   // Step 6: Compile rules and export to AI tool configs (if configured)

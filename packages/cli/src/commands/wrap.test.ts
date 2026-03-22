@@ -15,6 +15,9 @@ vi.mock('./docs.js', () => ({
 vi.mock('./compile.js', () => ({
   compileCommand: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock('node:child_process', () => ({
+  execSync: vi.fn(),
+}));
 
 import { compileCommand } from './compile.js';
 import { docsCommand } from './docs.js';
@@ -49,6 +52,9 @@ describe('wrapCommand', () => {
     await wrapCommand(['142'], {});
 
     expect(callOrder).toEqual(['extract', 'sync', 'triage', 'docs', 'compile']);
+    // docs:inject (execSync) should also have been called
+    const { execSync } = await import('node:child_process');
+    expect(execSync).toHaveBeenCalledWith('pnpm run docs:inject', expect.any(Object));
     expect(extractCommand).toHaveBeenCalledWith(['142'], {
       model: undefined,
       fresh: undefined,
