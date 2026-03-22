@@ -5,6 +5,7 @@ import type { AstGrepRule } from './ast-grep-query.js';
 import { matchAstGrepPattern } from './ast-grep-query.js';
 import type { CompiledRule, DiffAddition } from './compiler.js';
 import { applyRulesToAdditions, loadCompiledRules } from './compiler.js';
+import { getErrorMessage } from './errors.js';
 
 // ─── Types ───────────────────────────────────────────
 
@@ -106,9 +107,7 @@ export function testRule(rule: CompiledRule, fixture: RuleTestFixture): RuleTest
           result.missedFails.push(fixture.failLines.join('\n'));
         }
       } catch (err) {
-        result.missedFails.push(
-          `[ast-grep error] ${err instanceof Error ? err.message : String(err)}`,
-        );
+        result.missedFails.push(`[ast-grep error] ${getErrorMessage(err)}`);
       }
     }
 
@@ -122,9 +121,7 @@ export function testRule(rule: CompiledRule, fixture: RuleTestFixture): RuleTest
           result.falsePositives.push(fixture.passLines.join('\n'));
         }
       } catch (err) {
-        result.falsePositives.push(
-          `[ast-grep error] ${err instanceof Error ? err.message : String(err)}`,
-        );
+        result.falsePositives.push(`[ast-grep error] ${getErrorMessage(err)}`);
       }
     }
   } else {

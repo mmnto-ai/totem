@@ -1,7 +1,7 @@
 import type { NapiConfig } from '@ast-grep/napi';
 import { Lang, parse } from '@ast-grep/napi';
 
-import { TotemParseError } from './errors.js';
+import { rethrowAsParseError } from './errors.js';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -17,14 +17,6 @@ export interface AstGrepMatch {
 
 const AST_GREP_HINT =
   'Check the rule pattern syntax. If valid, the source file may contain syntax that crashes the parser.';
-
-function rethrowAsParseError(label: string, err: unknown): never {
-  if (err instanceof TotemParseError) throw err;
-  throw new TotemParseError(
-    `${label}: ${err instanceof Error ? err.message : String(err)}`,
-    AST_GREP_HINT,
-  );
-}
 
 // ─── Language mapping ───────────────────────────────
 
@@ -80,7 +72,7 @@ function executeQuery(
 
     return results;
   } catch (err) {
-    rethrowAsParseError('ast-grep query failed', err);
+    rethrowAsParseError('ast-grep query failed', err, AST_GREP_HINT);
   }
 }
 
@@ -103,7 +95,7 @@ export function matchAstGrepPattern(
     const root = parse(lang, content);
     return executeQuery(root, pattern, addedLineNumbers, content.split('\n'));
   } catch (err) {
-    rethrowAsParseError('ast-grep parse failed', err);
+    rethrowAsParseError('ast-grep parse failed', err, AST_GREP_HINT);
   }
 }
 
@@ -132,6 +124,6 @@ export function matchAstGrepPatternsBatch(
       executeQuery(root, rule, addedLineNumbers, lines),
     );
   } catch (err) {
-    rethrowAsParseError('ast-grep batch parse failed', err);
+    rethrowAsParseError('ast-grep batch parse failed', err, AST_GREP_HINT);
   }
 }

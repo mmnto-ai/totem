@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 
 import type { SupportedLanguage } from './ast-classifier.js';
 import { ensureInit, extensionToLanguage, loadGrammar } from './ast-classifier.js';
-import { TotemParseError } from './errors.js';
+import { rethrowAsParseError } from './errors.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -20,14 +20,6 @@ export interface AstMatch {
 
 const TREE_SITTER_HINT =
   'Check the S-expression query syntax. If valid, the source file may contain syntax that crashes tree-sitter.';
-
-function rethrowAsParseError(label: string, err: unknown): never {
-  if (err instanceof TotemParseError) throw err;
-  throw new TotemParseError(
-    `${label}: ${err instanceof Error ? err.message : String(err)}`,
-    TREE_SITTER_HINT,
-  );
-}
 
 // ─── File reading ───────────────────────────────────
 
@@ -112,7 +104,7 @@ function runQuery(
     return results;
   } catch (err) {
     /* c8 ignore next – rethrowAsParseError always throws; return satisfies TS2366 */
-    return rethrowAsParseError('AST query failed', err);
+    return rethrowAsParseError('AST query failed', err, TREE_SITTER_HINT);
   } finally {
     query?.delete();
   }
@@ -169,7 +161,7 @@ export async function matchAstQuery(
       parser.delete();
     }
   } catch (err) {
-    rethrowAsParseError('AST parse failed', err);
+    rethrowAsParseError('AST parse failed', err, TREE_SITTER_HINT);
   }
 }
 
@@ -238,7 +230,7 @@ export async function matchAstQueriesBatch(
       parser.delete();
     }
   } catch (err) {
-    rethrowAsParseError('AST batch parse failed', err);
+    rethrowAsParseError('AST batch parse failed', err, TREE_SITTER_HINT);
   }
 
   return results;

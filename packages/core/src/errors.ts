@@ -85,3 +85,19 @@ export class TotemGitError extends TotemError {
     this.name = 'TotemGitError';
   }
 }
+
+// ─── Utilities ──────────────────────────────────────
+
+/** Extract a human-readable message from an unknown thrown value. */
+export function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Re-throw as TotemParseError, preserving already-wrapped errors.
+ * Use in catch blocks where AST engine failures must fail-closed.
+ */
+export function rethrowAsParseError(label: string, err: unknown, hint: string): never {
+  if (err instanceof TotemParseError) throw err;
+  throw new TotemParseError(`${label}: ${getErrorMessage(err)}`, hint);
+}
