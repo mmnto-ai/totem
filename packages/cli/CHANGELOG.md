@@ -1,5 +1,13 @@
 # @mmnto/cli
 
+## 1.3.17
+
+### Patch Changes
+
+- God Object cleanup: extract.ts (804→566), shield.ts (587→475), audit.ts (560→510), lance-store.ts (523→285). Suspicious lesson detection + semantic dedup moved to core. Nit extraction from CodeRabbit review bodies. Compiler quality gate for untested error rules. Wind tunnel CI gate.
+- Updated dependencies
+  - @mmnto/totem@1.3.17
+
 ## 1.3.16
 
 ### Patch Changes
