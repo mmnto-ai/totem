@@ -63,7 +63,7 @@ export function parseCodeRabbitNits(body: string): string[] {
   // Strip fenced code blocks to avoid extracting fake nits from examples
   const stripped = body.replace(/```[\s\S]*?```/g, '');
   const nits: string[] = [];
-  const nitpickRe = /<details>\s*<summary>[^<]*(?:Nitpick|nitpick|🧹)[^<]*<\/summary>/g;
+  const nitpickRe = /<details>\s*<summary>[^<]*(?:nitpick|🧹)[^<]*<\/summary>/gi;
   let match: RegExpExecArray | null;
 
   while ((match = nitpickRe.exec(stripped)) !== null) {
