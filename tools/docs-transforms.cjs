@@ -20,7 +20,12 @@ function RULE_COUNT() {
     );
   }
   const data = JSON.parse(fs.readFileSync(rulesPath, 'utf-8'));
-  const count = Array.isArray(data.rules) ? data.rules.length : 0;
+  if (!Array.isArray(data.rules)) {
+    throw new Error(
+      `[Totem Error] RULE_COUNT transform failed: ${rulesPath} has no rules array. File may be corrupt.`,
+    );
+  }
+  const count = data.rules.length;
   return String(count);
 }
 

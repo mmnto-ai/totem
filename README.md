@@ -298,7 +298,7 @@ Built on the same architecture as elite AI assistants (Tree-sitter + LanceDB), b
 | `eject`        | Remove all Totem hooks, config, and data from this project                       |
 | `wrap`         | Post-merge workflow: learn from PR(s), sync index, then triage                   |
 | `docs`         | Auto-update registered project docs using LLM synthesis                          |
-| `lint-lessons` | Validate Pipeline 1 lesson metadata (patterns, scopes, severity)                 |
+| `lint-lessons` | Validate lesson metadata (patterns, scopes, severity)                            |
 | `drift`        | Check lessons for stale file references (CI gate)                                |
 | `hooks`        | Install git hooks (pre-commit, pre-push, post-merge) non-interactively           |
 
