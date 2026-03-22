@@ -32,6 +32,9 @@ jobs:
 
       - run: pnpm build
 
+      - name: Allow tag overwrites for republish resilience
+        run: git config --global push.followTags false
+
       - name: Create Release PR or Publish
         id: changesets
         uses: changesets/action@v1
@@ -41,8 +44,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
-      - name: Update Action v0 Tag
+      - name: Push release tags
         if: steps.changesets.outputs.published == 'true'
         run: |
+          git push origin --tags --force
           git tag -f v0
           git push origin refs/tags/v0 --force
