@@ -34,37 +34,44 @@ export interface EjectSummary {
 }
 
 /**
- * Remove the Totem section from the post-merge git hook.
- * Deletes the file entirely if it only contains the Totem hook.
+ * Generic hook scrubber — removes Totem block from a git hook file.
+ * Uses deterministic end marker when present, falls back to heuristic for old format.
  */
-export function scrubPostMergeHook(cwd: string, summary: EjectSummary): void {
-  const hookPath = path.join(cwd, '.git', 'hooks', 'post-merge');
+function scrubHook(
+  cwd: string,
+  summary: EjectSummary,
+  hookName: string,
+  startMarker: string,
+  endMarker: string,
+): void {
+  const hookFileName = `.git/hooks/${hookName}`;
+  const hookPath = path.join(cwd, hookFileName);
   if (!fs.existsSync(hookPath)) {
-    summary.skipped.push('.git/hooks/post-merge (not found)');
+    summary.skipped.push(`${hookFileName} (not found)`);
     return;
   }
 
   const content = fs.readFileSync(hookPath, 'utf-8');
-  if (!content.includes(TOTEM_HOOK_MARKER)) {
-    summary.skipped.push('.git/hooks/post-merge (no Totem section)');
+  if (!content.includes(startMarker)) {
+    summary.skipped.push(`${hookFileName} (no Totem section)`);
     return;
   }
 
-  // Remove the Totem block: from the marker comment to the end marker (or heuristic end)
-  const hasEndMarker = content.includes(TOTEM_HOOK_END);
+  const endSentinel = `# ${endMarker}`;
+  const hasEndMarker = content.includes(endSentinel);
   const lines = content.split('\n');
   const filtered: string[] = [];
   let inTotemBlock = false;
 
   for (const line of lines) {
-    if (line.includes(TOTEM_HOOK_MARKER)) {
+    if (line.includes(startMarker)) {
       inTotemBlock = true;
       continue;
     }
     if (inTotemBlock) {
       if (hasEndMarker) {
-        // New format: skip everything until the deterministic end marker
-        if (line.includes(TOTEM_HOOK_END)) {
+        // New format: skip everything until exact end sentinel line
+        if (line.trim() === endSentinel) {
           inTotemBlock = false;
         }
         continue;
@@ -86,13 +93,26 @@ export function scrubPostMergeHook(cwd: string, summary: EjectSummary): void {
 
   const remaining = filtered.join('\n').trim();
 
-  if (!remaining || remaining === '#!/bin/sh') {
-    fs.unlinkSync(hookPath);
-    summary.removed.push('.git/hooks/post-merge');
-  } else {
-    fs.writeFileSync(hookPath, remaining + '\n', 'utf-8');
-    summary.scrubbed.push('.git/hooks/post-merge');
+  try {
+    if (!remaining || remaining === '#!/bin/sh') {
+      fs.unlinkSync(hookPath);
+      summary.removed.push(hookFileName);
+    } else {
+      fs.writeFileSync(hookPath, remaining + '\n', 'utf-8');
+      summary.scrubbed.push(hookFileName);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    summary.skipped.push(`${hookFileName} (${msg})`);
   }
+}
+
+/**
+ * Remove the Totem section from the post-merge git hook.
+ * Deletes the file entirely if it only contains the Totem hook.
+ */
+export function scrubPostMergeHook(cwd: string, summary: EjectSummary): void {
+  scrubHook(cwd, summary, 'post-merge', TOTEM_HOOK_MARKER, TOTEM_HOOK_END);
 }
 
 /**
@@ -100,61 +120,7 @@ export function scrubPostMergeHook(cwd: string, summary: EjectSummary): void {
  * Deletes the file entirely if it only contains the Totem hook.
  */
 export function scrubPostCheckoutHook(cwd: string, summary: EjectSummary): void {
-  const hookPath = path.join(cwd, '.git', 'hooks', 'post-checkout');
-  if (!fs.existsSync(hookPath)) {
-    summary.skipped.push('.git/hooks/post-checkout (not found)');
-    return;
-  }
-
-  const content = fs.readFileSync(hookPath, 'utf-8');
-  if (!content.includes(TOTEM_CHECKOUT_MARKER)) {
-    summary.skipped.push('.git/hooks/post-checkout (no Totem section)');
-    return;
-  }
-
-  // Remove the Totem block: from the marker comment to the end marker (or heuristic end)
-  const hasEndMarker = content.includes(TOTEM_CHECKOUT_END);
-  const lines = content.split('\n');
-  const filtered: string[] = [];
-  let inTotemBlock = false;
-
-  for (const line of lines) {
-    if (line.includes(TOTEM_CHECKOUT_MARKER)) {
-      inTotemBlock = true;
-      continue;
-    }
-    if (inTotemBlock) {
-      if (hasEndMarker) {
-        // New format: skip everything until the deterministic end marker
-        if (line.includes(TOTEM_CHECKOUT_END)) {
-          inTotemBlock = false;
-        }
-        continue;
-      }
-      // Old format (no end marker): skip known totem lines only
-      if (
-        line === '' ||
-        line.trim() === '' ||
-        line.startsWith('echo "[totem]') ||
-        line.startsWith('(')
-      ) {
-        continue;
-      }
-      // Unrecognised line — stop skipping to protect user content
-      inTotemBlock = false;
-    }
-    filtered.push(line);
-  }
-
-  const remaining = filtered.join('\n').trim();
-
-  if (!remaining || remaining === '#!/bin/sh') {
-    fs.unlinkSync(hookPath);
-    summary.removed.push('.git/hooks/post-checkout');
-  } else {
-    fs.writeFileSync(hookPath, remaining + '\n', 'utf-8');
-    summary.scrubbed.push('.git/hooks/post-checkout');
-  }
+  scrubHook(cwd, summary, 'post-checkout', TOTEM_CHECKOUT_MARKER, TOTEM_CHECKOUT_END);
 }
 
 /**

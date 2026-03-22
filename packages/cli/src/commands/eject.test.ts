@@ -148,7 +148,6 @@ describe('ejectCommand', () => {
 
 # Only sync when lessons changed (suppress errors if ORIG_HEAD is missing)
 if git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '\\.totem/lessons/'; then
-  echo "[totem] Lessons changed — triggering background re-index..."
   (pnpm exec totem sync --incremental --quiet > .git/totem-sync.log 2>&1) &
 fi
 # [totem] end post-merge
@@ -170,7 +169,6 @@ echo "my custom hook"
 
 # Only sync when lessons changed (suppress errors if ORIG_HEAD is missing)
 if git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '\\.totem/lessons/'; then
-  echo "[totem] Lessons changed — triggering background re-index..."
   (pnpm exec totem sync --incremental --quiet > .git/totem-sync.log 2>&1) &
 fi
 # [totem] end post-merge
@@ -211,7 +209,6 @@ describe('scrubPostMergeHook', () => {
 
 # Only sync when lessons changed (suppress errors if ORIG_HEAD is missing)
 if git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '\\.totem/lessons/'; then
-  echo "[totem] Lessons changed — triggering background re-index..."
   (pnpm exec totem sync --incremental --quiet > .git/totem-sync.log 2>&1) &
 fi
 # [totem] end post-merge
@@ -249,7 +246,6 @@ echo "deploy notification"
 
 # Only sync when lessons changed (suppress errors if ORIG_HEAD is missing)
 if git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '\\.totem/lessons/'; then
-  echo "[totem] Lessons changed — triggering background re-index..."
   (pnpm exec totem sync --incremental --quiet > .git/totem-sync.log 2>&1) &
 fi
 # [totem] end post-merge

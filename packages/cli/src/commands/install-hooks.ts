@@ -32,7 +32,6 @@ function buildHookContent(syncCmd: string): string {
 
 # Only sync when lessons changed (suppress errors if ORIG_HEAD is missing)
 if git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '\\.totem/lessons/'; then
-  echo "[totem] Lessons changed — triggering background re-index..."
   (${syncCmd} > .git/totem-sync.log 2>&1) &
 fi
 # ${TOTEM_HOOK_END}
@@ -367,6 +366,24 @@ export async function installHooksCommand(): Promise<void> {
   try {
     await installEnforcementHooks(cwd, rl);
     await installPostMergeHook(cwd, rl);
+
+    // Silently install post-checkout alongside post-merge (same guard — only if post-merge was accepted)
+    const gitRoot = resolveGitRoot(cwd);
+    if (gitRoot && !detectHookManager(gitRoot)) {
+      const hooksDir = path.join(gitRoot, '.git', 'hooks');
+      const postMerge = path.join(hooksDir, 'post-merge');
+      const hasPostMerge =
+        fs.existsSync(postMerge) && fs.readFileSync(postMerge, 'utf-8').includes(TOTEM_HOOK_MARKER);
+      if (hasPostMerge) {
+        const syncCmd = detectSyncCommand(gitRoot);
+        installGitHook(
+          hooksDir,
+          'post-checkout',
+          buildPostCheckoutHookContent(syncCmd),
+          TOTEM_CHECKOUT_MARKER,
+        );
+      }
+    }
   } finally {
     rl.close();
   }
