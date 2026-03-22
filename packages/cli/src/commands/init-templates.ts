@@ -117,7 +117,7 @@ export const CLAUDE_SHIELD_GATE = `// [totem] auto-generated — Claude Code shi
 const { execSync } = require('child_process');
 
 const input = process.env.TOOL_INPUT || '';
-if (/git/.test(input) && /(push|commit)/.test(input)) {
+if (/\bgit\b/.test(input) && /\b(push|commit)\b/.test(input)) {
   try {
     execSync('totem lint', { encoding: 'utf-8', timeout: 60000, stdio: 'inherit' });
   } catch (err) {

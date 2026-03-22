@@ -298,8 +298,8 @@ export function buildTargets(detected: DetectedProject): IngestTarget[] {
     });
   }
 
-  // Fallback: if nothing else detected (besides the lessons target), add a sensible default
-  if (targets.length <= 1) {
+  // Fallback: if nothing else detected (besides the 2 lesson targets), add a sensible default
+  if (targets.length <= 2) {
     targets.push({
       glob: '**/*.md',
       type: 'spec',
