@@ -60,13 +60,15 @@ function stripWrapperTags(html: string): string {
  * Returns an array of cleaned nit text strings.
  */
 export function parseCodeRabbitNits(body: string): string[] {
+  // Strip fenced code blocks to avoid extracting fake nits from examples
+  const stripped = body.replace(/```[\s\S]*?```/g, '');
   const nits: string[] = [];
   const nitpickRe = /<details>\s*<summary>[^<]*(?:Nitpick|nitpick|🧹)[^<]*<\/summary>/g;
   let match: RegExpExecArray | null;
 
-  while ((match = nitpickRe.exec(body)) !== null) {
+  while ((match = nitpickRe.exec(stripped)) !== null) {
     const afterSummary = match.index + match[0].length;
-    const innerContent = extractNestedBlock(body, afterSummary);
+    const innerContent = extractNestedBlock(stripped, afterSummary);
     if (innerContent) {
       const cleaned = stripWrapperTags(innerContent);
       if (cleaned) {

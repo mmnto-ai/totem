@@ -20,7 +20,6 @@ import {
 
 import { GitHubCliPrAdapter } from '../adapters/github-cli-pr.js';
 import type { StandardPr, StandardReviewComment } from '../adapters/pr-adapter.js';
-import { parseCodeRabbitNits } from '../parse-nits.js';
 import { log } from '../ui.js';
 import {
   formatResults,
@@ -147,6 +146,7 @@ export function assemblePrompt(
   threads: CommentThread[],
   existingLessons: SearchResult[],
   systemPrompt: string,
+  nits?: string[],
 ): string {
   const sections: string[] = [systemPrompt];
 
@@ -170,17 +170,10 @@ export function assemblePrompt(
     }
   }
 
-  // Extract and present CodeRabbit nits from review bodies
-  const allNits: string[] = [];
-  for (const r of pr.reviews) {
-    if (r.author?.toLowerCase().includes('coderabbit')) {
-      const nits = parseCodeRabbitNits(r.body);
-      allNits.push(...nits);
-    }
-  }
-  if (allNits.length > 0) {
+  // CodeRabbit nits (pre-parsed and passed in)
+  if (nits && nits.length > 0) {
     sections.push('\n=== CODERABBIT NITS (extract valuable architectural insights) ===');
-    for (const nit of allNits) {
+    for (const nit of nits) {
       sections.push(wrapXml('nit_body', nit));
     }
   }
@@ -656,8 +649,17 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
     const threads = groupIntoThreads(filteredComments);
     log.info(TAG, `Grouped into ${threads.length} review threads`);
 
+    // Extract CodeRabbit nits from review bodies (lazy import)
+    const { parseCodeRabbitNits } = await import('../parse-nits.js');
+    const prNits: string[] = [];
+    for (const r of pr.reviews) {
+      if (r.author?.toLowerCase().includes('coderabbit')) {
+        prNits.push(...parseCodeRabbitNits(r.body));
+      }
+    }
+
     // Assemble prompt
-    const prompt = assemblePrompt(pr, threads, existingLessons, systemPrompt);
+    const prompt = assemblePrompt(pr, threads, existingLessons, systemPrompt, prNits);
     log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
     // Run orchestrator (handles --raw mode, validation, invocation, telemetry)
