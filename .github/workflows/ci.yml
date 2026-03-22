@@ -34,6 +34,9 @@ jobs:
 
       - run: pnpm test
 
+      - name: Wind Tunnel (rule fixture tests)
+        run: node packages/cli/dist/index.js test
+
       - run: pnpm lint
 
       - run: pnpm format:check
