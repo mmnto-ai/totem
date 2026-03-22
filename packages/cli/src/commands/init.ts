@@ -1,4 +1,3 @@
-import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
@@ -13,97 +12,37 @@ import {
   UNIVERSAL_BASELINE_MARKER,
 } from '../assets/universal-baseline.js';
 import { bold, brand, dim, log, printBanner, success } from '../ui.js';
-import { IS_WIN } from '../utils.js';
+import {
+  AI_TOOLS,
+  type AiToolInfo,
+  buildTargets,
+  detectAiTools,
+  detectEmbeddingTier,
+  detectProject,
+  type EmbeddingTier,
+  type HookInstallerResult,
+} from './init-detect.js';
+import {
+  AI_PROMPT_BLOCK,
+  CLAUDE_PRETOOLUSE_ENTRY,
+  CLAUDE_SHIELD_GATE,
+  GEMINI_BEFORE_TOOL,
+  GEMINI_SESSION_START,
+  GEMINI_SKILL,
+  generateConfig,
+  LEGACY_SENTINEL,
+  REFLEX_END,
+  REFLEX_START,
+  REFLEX_VERSION,
+  REFLEX_VERSION_RE,
+  TOTEM_FILE_MARKER,
+} from './init-templates.js';
 import { installEnforcementHooks, installPostMergeHook } from './install-hooks.js';
 
-// ─── Reflex versioning ────────────────────────────────────
-// Bump REFLEX_VERSION whenever the AI_PROMPT_BLOCK content changes materially.
-// This allows `totem init` to detect stale blocks and offer upgrades.
-
-export const REFLEX_VERSION = 3;
-const REFLEX_START = '<!-- totem:reflexes:start -->';
-const REFLEX_END = '<!-- totem:reflexes:end -->';
-const REFLEX_VERSION_RE = /<!-- totem:reflexes:version:(\d+) -->/;
-const LEGACY_SENTINEL = '## Totem AI Integration (Auto-Generated)';
-
-export const AI_PROMPT_BLOCK = `
-${REFLEX_START}
-<!-- totem:reflexes:version:${REFLEX_VERSION} -->
-
-## Totem AI Integration (Auto-Generated)
-You have access to the Totem MCP for long-term project memory. You MUST operate with the following reflexes:
-
-### Memory Reflexes
-1. **BLOCKING — Pull Before Coding:** Before writing or modifying code that touches more than one file, you MUST call \`search_knowledge\` with a query describing what you're about to change. This is not optional. The vector DB contains traps, edge cases, and architectural constraints that prevent rework. Skip this and you risk repeating a mistake that's already been solved.
-2. **Pull Before Planning:** Before writing specs, architecture, or fixing complex bugs, use \`search_knowledge\` to retrieve domain constraints and past traps.
-3. **Pull on Session Start:** At the beginning of every session, call \`search_knowledge\` with a broad query about the current task or area of work. The vector DB is your institutional memory — use it before relying on your own context window.
-4. **Proactive Anchoring (The 3 Triggers):** You must autonomously call \`add_lesson\` when any of the following occur — do NOT wait for the user to ask:
-   - **The Trap Trigger:** If you spend >2 turns fixing a bug caused by a framework quirk, unexpected API response, or edge case. (Anchor the symptom + fix).
-   - **The Pivot Trigger:** If the user introduces a new architectural pattern or deprecates an old one. (Anchor the rule).
-   - **The Handoff Trigger:** At the end of a session or when wrapping up a complex feature, extract the non-obvious lessons learned and anchor them.
-5. **Tool Preference (MCP over CLI):** Always prioritize using dedicated MCP tools (e.g., GitHub, Supabase, Vercel) over executing generic shell commands (like \`gh issue view\` or \`curl\`). MCP tools provide structured, un-truncated data optimized for your context window. Only fall back to bash execution if an MCP tool is unavailable or fails.
-
-Lessons are automatically re-indexed in the background after each \`add_lesson\` call — no manual sync needed.
-
-### Memory Classification
-When deciding where to store information or rules, use this decision tree:
-- If forgetting this causes a mistake on an UNRELATED task (Core Safety): Store in your root agent memory file (e.g., CLAUDE.md or GEMINI.md).
-- If it's a stable, project-wide workflow rule: Store in project config (e.g., CLAUDE.md).
-- If it's a stable syntax/style pattern: Store in the project's styleguide or linter rules.
-- If it's domain knowledge, an edge case, or a past trap: You MUST use the Totem \`add_lesson\` tool to anchor it into the project's LanceDB.
-
-### Workflow Orchestrator Rituals
-[FOR LOCAL CLI/TERMINAL AGENTS ONLY] Do not attempt to run these commands if you are a headless bot or operating in a cloud PR environment (e.g., Gemini Code Assist on GitHub).
-Totem provides CLI commands that map to your development lifecycle. Use them at these moments:
-1. **Start of Session:** Run \`totem briefing\` to get oriented with current branch state, open PRs, and recent context. Run \`totem triage\` if you need to pick a new task.
-2. **Before Implementation:** Run \`totem spec <issue-url-or-topic>\` to generate an architectural plan and review related context before writing code.
-3. **Before Push:** Run \`totem lint\` for a fast compiled-rules check (zero LLM, ~2s). **Before PR:** Run \`totem shield\` for a full AI-powered code review against project knowledge (~18s).
-4. **End of Session:** Run \`totem handoff\` to generate a snapshot for the next agent session with current progress and open threads.
-
-### Cloud / PR Review Bots
-[FOR CLOUD BOTS ONLY — e.g., Gemini Code Assist, GitHub Copilot PR Review]
-You do NOT have access to the local CLI. Instead, use the Totem MCP tools directly:
-1. **Before reviewing a PR:** Call \`search_knowledge\` with queries about the files and patterns being changed to check for known traps and architectural constraints.
-2. **Before suggesting changes:** Call \`search_knowledge\` to verify your suggestion aligns with established project patterns and past lessons.
-3. **When you spot a recurring issue:** Call \`add_lesson\` to persist the trap so future reviews catch it automatically.
-
-### Context Management Guardrail
-You must be highly defensive of your own context window. If you notice this session becoming long, or if you are asked to read multiple massive files at once, you MUST proactively warn the user about impending context loss. When warning the user, suggest they run \`totem bridge\` to condense their mid-task state so they can safely clear the chat and resume. If you receive a \`<totem_system_warning>\` tag in a tool response, read it silently and synthesize a natural-language warning to the user — do NOT echo the raw XML.
-${REFLEX_END}
-`;
-
-interface DetectedProject {
-  hasTypeScript: boolean;
-  hasSrc: boolean;
-  hasDocs: boolean;
-  hasSpecs: boolean;
-  hasContext: boolean;
-  hasSessions: boolean;
-}
-
-type AiTool = 'Claude Code' | 'Gemini CLI' | 'Cursor' | 'JetBrains Junie' | 'GitHub Copilot';
-
-export interface HookInstallerResult {
-  file: string;
-  action: 'created' | 'exists' | 'skipped' | 'merged';
-  err?: string;
-}
-
-interface AiToolInfo {
-  name: AiTool;
-  mcpPath: string | null;
-  reflexFile: string | null;
-  serverEntry: Record<string, unknown> | null;
-  hookInstaller?: (cwd: string) => Promise<HookInstallerResult[]>;
-}
-
-export function buildNpxCommand(isWin: boolean): { command: string; args: string[] } {
-  return isWin
-    ? { command: 'cmd', args: ['/c', 'npx', '-y', '@mmnto/mcp'] }
-    : { command: 'npx', args: ['-y', '@mmnto/mcp'] };
-}
-
-const TOTEM_FILE_MARKER = '// [totem] auto-generated';
+// Re-export moved items so existing consumers (including tests) don't break
+export type { AiToolInfo, HookInstallerResult } from './init-detect.js';
+export { buildNpxCommand, detectEmbeddingTier } from './init-detect.js';
+export { AI_PROMPT_BLOCK, generateConfig, REFLEX_VERSION } from './init-templates.js';
 
 /**
  * Scaffold a file with idempotency — skips if the marker is already present.
@@ -136,54 +75,7 @@ export function scaffoldFile(
   }
 }
 
-const { command: npxCmd, args: npxArgs } = buildNpxCommand(IS_WIN);
-
-// --- Gemini CLI hook templates ---
-
-const GEMINI_SESSION_START = `// [totem] auto-generated — Gemini CLI SessionStart hook
-// Runs \`totem briefing\` at the start of every Gemini CLI session.
-const { execSync } = require('child_process');
-
-try {
-  const output = execSync('totem briefing', {
-    encoding: 'utf-8',
-    timeout: 30000,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  process.stderr.write(output);
-} catch (err) {
-  process.stderr.write('[Totem Error] Briefing unavailable: ' + (err instanceof Error ? err.message : String(err)) + '\\n');
-}
-`;
-
-const GEMINI_BEFORE_TOOL = `// [totem] auto-generated — Gemini CLI BeforeTool hook
-// Intercepts git push/commit to run \`totem shield\` before proceeding.
-const { execSync } = require('child_process');
-
-module.exports = function beforeTool(toolName, toolInput) {
-  if (toolName !== 'run_shell_command') return;
-  const cmd = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput);
-  if (!/git\\s+(push|commit)/.test(cmd) && !/["']git["'].*["'](push|commit)["']/.test(cmd)) return;
-
-  try {
-    execSync('totem lint', { encoding: 'utf-8', timeout: 60000, stdio: 'inherit' });
-  } catch (err) {
-    throw new Error('[Totem Error] Shield check failed. Fix violations before pushing.\\n' + err.message);
-  }
-};
-`;
-
-const GEMINI_SKILL = `<!-- [totem] auto-generated — Totem Architect skill -->
-# Totem Architect
-
-Before designing, planning, or implementing features, query the project's memory index for relevant context:
-
-1. Use the \`search_knowledge\` MCP tool with a query describing what you're about to build.
-2. Review returned lessons, specs, and code patterns before writing any code.
-3. If you discover a trap or architectural constraint, factor it into your design.
-
-This ensures you build on existing knowledge rather than repeating past mistakes.
-`;
+// --- Gemini CLI hook installer ---
 
 async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
   const results: HookInstallerResult[] = [];
@@ -211,30 +103,6 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
 }
 
 // --- Claude Code hook installer ---
-
-const CLAUDE_SHIELD_GATE = `// [totem] auto-generated — Claude Code shield gate hook
-// Intercepts git push/commit to run \`totem shield\` before proceeding.
-const { execSync } = require('child_process');
-
-const input = process.env.TOOL_INPUT || '';
-if (/git/.test(input) && /(push|commit)/.test(input)) {
-  try {
-    execSync('totem lint', { encoding: 'utf-8', timeout: 60000, stdio: 'inherit' });
-  } catch (err) {
-    process.exit(1);
-  }
-}
-`;
-
-const CLAUDE_PRETOOLUSE_ENTRY = {
-  matcher: 'Bash',
-  hooks: [
-    {
-      type: 'command',
-      command: 'node .totem/hooks/shield-gate.cjs',
-    },
-  ],
-};
 
 // Zod schema for the subset of settings.local.json that we need to validate.
 // Uses .passthrough() to preserve unknown keys during round-trip read/write.
@@ -353,63 +221,13 @@ async function installClaudeHooks(cwd: string): Promise<HookInstallerResult[]> {
   return results;
 }
 
-const AI_TOOLS: AiToolInfo[] = [
-  {
-    name: 'Claude Code',
-    mcpPath: '.mcp.json',
-    reflexFile: 'CLAUDE.md',
-    serverEntry: { type: 'stdio', command: npxCmd, args: npxArgs },
-    hookInstaller: installClaudeHooks,
-  },
-  {
-    name: 'Gemini CLI',
-    mcpPath: '.gemini/settings.json',
-    reflexFile: 'GEMINI.md',
-    serverEntry: { command: npxCmd, args: npxArgs },
-    hookInstaller: installGeminiHooks,
-  },
-  {
-    name: 'Cursor',
-    mcpPath: '.cursor/mcp.json',
-    reflexFile: '.cursorrules',
-    serverEntry: { type: 'stdio', command: npxCmd, args: npxArgs },
-  },
-  {
-    name: 'JetBrains Junie',
-    mcpPath: '.junie/mcp/mcp.json',
-    reflexFile: '.junie/guidelines.md',
-    serverEntry: { command: npxCmd, args: npxArgs },
-  },
-  {
-    name: 'GitHub Copilot',
-    mcpPath: null,
-    reflexFile: '.github/copilot-instructions.md',
-    serverEntry: null,
-  },
-];
-
-function detectAiTools(cwd: string): AiToolInfo[] {
-  const exists = (p: string) => fs.existsSync(path.join(cwd, p));
-  const detected: AiToolInfo[] = [];
-
-  if (exists('CLAUDE.md') || exists('.claude')) {
-    detected.push(AI_TOOLS.find((t) => t.name === 'Claude Code')!);
-  }
-  if (exists('.gemini')) {
-    detected.push(AI_TOOLS.find((t) => t.name === 'Gemini CLI')!);
-  }
-  if (exists('.cursorrules') || exists('.cursor/mcp.json')) {
-    detected.push(AI_TOOLS.find((t) => t.name === 'Cursor')!);
-  }
-  if (exists('.junie') || exists('.junie/guidelines.md')) {
-    detected.push(AI_TOOLS.find((t) => t.name === 'JetBrains Junie')!);
-  }
-  if (exists('.github/copilot-instructions.md')) {
-    detected.push(AI_TOOLS.find((t) => t.name === 'GitHub Copilot')!);
-  }
-
-  return detected;
-}
+// Wire up hook installers on the AI_TOOLS entries that need them.
+// The AI_TOOLS array is defined in init-detect.ts without hook installers
+// (to avoid circular deps), so we attach them here.
+const claudeTool = AI_TOOLS.find((t) => t.name === 'Claude Code');
+if (claudeTool) claudeTool.hookInstaller = installClaudeHooks;
+const geminiTool = AI_TOOLS.find((t) => t.name === 'Gemini CLI');
+if (geminiTool) geminiTool.hookInstaller = installGeminiHooks;
 
 export function scaffoldMcpConfig(
   filePath: string,
@@ -466,260 +284,6 @@ export function scaffoldMcpConfig(
     const message = err instanceof Error ? err.message : String(err);
     return { action: 'skipped', err: message };
   }
-}
-
-function detectProject(cwd: string): DetectedProject {
-  const exists = (p: string) => fs.existsSync(path.join(cwd, p));
-  return {
-    hasTypeScript: exists('tsconfig.json'),
-    hasSrc: exists('src'),
-    hasDocs: exists('docs'),
-    hasSpecs: exists('specs'),
-    hasContext: exists('context'),
-    hasSessions: exists('context/sessions'),
-  };
-}
-
-function buildTargets(detected: DetectedProject): IngestTarget[] {
-  const targets: IngestTarget[] = [];
-
-  // Lessons targets — directory glob first, legacy glob for backward compat
-  targets.push(
-    { glob: '.totem/lessons/*.md', type: 'lesson', strategy: 'markdown-heading' },
-    { glob: '.totem/lessons.md', type: 'lesson', strategy: 'markdown-heading' },
-  );
-
-  if (detected.hasTypeScript) {
-    targets.push(
-      { glob: 'src/**/*.ts', type: 'code', strategy: 'typescript-ast' },
-      { glob: 'src/**/*.tsx', type: 'code', strategy: 'typescript-ast' },
-    );
-
-    if (!detected.hasSrc) {
-      // Monorepo layout — scan packages/
-      targets.push(
-        { glob: 'packages/**/*.ts', type: 'code', strategy: 'typescript-ast' },
-        { glob: 'packages/**/*.tsx', type: 'code', strategy: 'typescript-ast' },
-      );
-    }
-  }
-
-  if (detected.hasSessions) {
-    targets.push({
-      glob: 'context/sessions/**/*.md',
-      type: 'session_log',
-      strategy: 'session-log',
-    });
-  }
-
-  if (detected.hasSpecs) {
-    targets.push({
-      glob: 'specs/**/*.md',
-      type: 'spec',
-      strategy: 'markdown-heading',
-    });
-  }
-
-  if (detected.hasDocs) {
-    targets.push({
-      glob: 'docs/**/*.md',
-      type: 'spec',
-      strategy: 'markdown-heading',
-    });
-  }
-
-  if (detected.hasContext) {
-    targets.push({
-      glob: 'context/**/*.md',
-      type: 'spec',
-      strategy: 'markdown-heading',
-    });
-  }
-
-  // Fallback: if nothing else detected (besides the lessons target), add a sensible default
-  if (targets.length <= 1) {
-    targets.push({
-      glob: '**/*.md',
-      type: 'spec',
-      strategy: 'markdown-heading',
-    });
-  }
-
-  return targets;
-}
-
-function formatTargets(targets: IngestTarget[]): string {
-  const lines = targets.map((t) => {
-    return `    { glob: '${t.glob}', type: '${t.type}', strategy: '${t.strategy}' },`;
-  });
-  return lines.join('\n');
-}
-
-type EmbeddingTier = 'openai' | 'ollama' | 'gemini' | 'none';
-
-// ─── Orchestrator auto-detection ─────────────────────
-
-interface DetectedOrchestrator {
-  block: string;
-}
-
-/** Check whether a CLI command exists on PATH. */
-function cliExists(name: string): boolean {
-  try {
-    const cmd = IS_WIN ? `where ${name}` : `which ${name}`;
-    execSync(cmd, { stdio: 'ignore', timeout: 3000 });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Check whether any of the given env keys are set (in process.env or .env file content). */
-function hasKey(envContent: string, ...keyNames: string[]): boolean {
-  for (const keyName of keyNames) {
-    if (process.env[keyName] && /\S/.test(process.env[keyName]!)) {
-      return true;
-    }
-  }
-  const keyPattern = new RegExp(`^\\s*(?:${keyNames.join('|')})\\s*=\\s*\\S+`, 'm');
-  return keyPattern.test(envContent);
-}
-
-/**
- * Auto-detect the best orchestrator from the environment.
- * Priority: gemini CLI → claude CLI → API keys (GEMINI → ANTHROPIC → OPENAI) → null.
- */
-function detectOrchestrator(cwd: string): DetectedOrchestrator | null {
-  // Read .env file once (loadEnv may not have run yet)
-  const envPath = path.join(cwd, '.env');
-  const envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
-
-  // 1. Gemini CLI on PATH → shell provider
-  if (cliExists('gemini')) {
-    return {
-      block: `  orchestrator: {
-    provider: 'shell',
-    command: 'gemini --model {model} -o json -e none < {file}',
-    defaultModel: 'gemini-3-flash-preview',
-    overrides: {
-      'spec': 'gemini-3.1-pro-preview',
-      'shield': 'gemini-3.1-pro-preview',
-      'triage': 'gemini-3.1-pro-preview',
-    },
-  },`,
-    };
-  }
-
-  // 2. Claude CLI on PATH → shell provider (anthropic)
-  if (cliExists('claude')) {
-    return {
-      block: `  orchestrator: {
-    provider: 'shell',
-    command: 'claude -p {file} --model {model} --output-format json',
-    defaultModel: 'sonnet',
-  },`,
-    };
-  }
-
-  // 3. API keys → native SDK providers
-  if (hasKey(envContent, 'GEMINI_API_KEY', 'GOOGLE_API_KEY')) {
-    return {
-      block: `  orchestrator: {
-    provider: 'gemini',
-    defaultModel: 'gemini-3-flash-preview',
-    overrides: {
-      'spec': 'gemini-3.1-pro-preview',
-      'shield': 'gemini-3.1-pro-preview',
-      'triage': 'gemini-3.1-pro-preview',
-    },
-  },`,
-    };
-  }
-
-  if (hasKey(envContent, 'ANTHROPIC_API_KEY')) {
-    return {
-      block: `  orchestrator: {
-    provider: 'anthropic',
-    defaultModel: 'claude-sonnet-4-20250514',
-  },`,
-    };
-  }
-
-  if (hasKey(envContent, 'OPENAI_API_KEY')) {
-    return {
-      block: `  orchestrator: {
-    provider: 'openai',
-    defaultModel: 'gpt-4.1-mini',
-  },`,
-    };
-  }
-
-  // 4. Nothing found → omit orchestrator (Lite/Standard tier)
-  return null;
-}
-
-export async function generateConfig(
-  targets: IngestTarget[],
-  embeddingTier: EmbeddingTier,
-  cwd: string,
-): Promise<string> {
-  const { DEFAULT_IGNORE_PATTERNS } = await import('@mmnto/totem');
-  let embeddingBlock: string;
-  switch (embeddingTier) {
-    case 'openai':
-      embeddingBlock = `  embedding: { provider: 'openai', model: 'text-embedding-3-small' },`;
-      break;
-    case 'ollama':
-      embeddingBlock = `  embedding: { provider: 'ollama', model: 'nomic-embed-text', baseUrl: 'http://localhost:11434' },`;
-      break;
-    case 'gemini':
-      embeddingBlock = `  embedding: { provider: 'gemini', model: 'gemini-embedding-2-preview', dimensions: 768 },`;
-      break;
-    case 'none':
-      embeddingBlock = `  // embedding: { provider: 'openai', model: 'text-embedding-3-small' },\n  // Lite tier — set OPENAI_API_KEY and re-run \`totem init\` to enable sync/search.`;
-      break;
-  }
-
-  const orchestrator = detectOrchestrator(cwd);
-  const orchestratorBlock = orchestrator
-    ? `\n${orchestrator.block}`
-    : `\n  // orchestrator: no CLI or API key detected. Add one and re-run \`totem init\`.`;
-
-  return `import type { TotemConfig } from '@mmnto/totem';
-
-const config: TotemConfig = {
-  targets: [
-${formatTargets(targets)}
-  ],
-
-${embeddingBlock}
-
-  ignorePatterns: [
-${DEFAULT_IGNORE_PATTERNS.map((p) => `    '${p}',`).join('\n')}
-  ],
-${orchestratorBlock}
-};
-
-export default config;
-`;
-}
-
-/**
- * Auto-detect the best embedding tier from the environment.
- * Checks for API keys in env and .env, and optionally for a running Ollama instance.
- */
-export function detectEmbeddingTier(cwd: string): EmbeddingTier {
-  // Read .env file once (loadEnv may not have run yet)
-  const envPath = path.join(cwd, '.env');
-  const envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
-
-  // Gemini first — task-type aware embeddings, best retrieval quality
-  if (hasKey(envContent, 'GEMINI_API_KEY', 'GOOGLE_API_KEY')) return 'gemini';
-
-  // OpenAI — widely available, low friction
-  if (hasKey(envContent, 'OPENAI_API_KEY')) return 'openai';
-
-  return 'none';
 }
 
 /**
@@ -877,7 +441,7 @@ export async function initCommand(options?: { bare?: boolean }): Promise<void> {
       log.info('Totem', 'Scanning project...');
 
       let targets: IngestTarget[] = [];
-      let embeddingTier = detectEmbeddingTier(cwd);
+      let embeddingTier: EmbeddingTier = detectEmbeddingTier(cwd);
 
       if (options?.bare) {
         log.info('Totem', `Initializing in ${bold('bare mode')} (non-code repository)`);
