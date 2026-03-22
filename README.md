@@ -277,17 +277,32 @@ Built on the same architecture as elite AI assistants (Tree-sitter + LanceDB), b
 
 ## Commands
 
-| Command   | What it does                                               | Speed    |
-| --------- | ---------------------------------------------------------- | -------- |
-| `lint`    | Compiled rules against diff. Zero LLM.                     | ~2s      |
-| `shield`  | AI-powered code review with knowledge retrieval.           | ~18s     |
-| `explain` | Look up the lesson behind a violation.                     | instant  |
-| `stats`   | The Trap Ledger — violations prevented, by category.       | instant  |
-| `link`    | Share local knowledge and lessons between repositories.    | instant  |
-| `compile` | Compile lessons + `.cursorrules` into deterministic rules. | ~5s/rule |
-| `extract` | Learn from PR reviews.                                     | ~15s     |
-| `spec`    | Pre-work briefing from knowledge base.                     | ~20s     |
-| `sync`    | Build/update the vector index.                             | ~30s     |
+<!-- docs COMMAND_TABLE -->
+
+| Command        | Description                                                                      |
+| -------------- | -------------------------------------------------------------------------------- |
+| `init`         | Initialize Totem in the current project                                          |
+| `sync`         | Re-index project files into the local vector store                               |
+| `search`       | Search the knowledge index                                                       |
+| `stats`        | Show index statistics                                                            |
+| `explain`      | Look up the lesson behind a compiled rule violation                              |
+| `spec`         | Generate a pre-work spec briefing for GitHub issue(s) or topic(s)                |
+| `lint`         | Run compiled rules against your diff (zero LLM, fast)                            |
+| `shield`       | AI-powered code review: analyze your diff against Totem knowledge                |
+| `triage`       | Prioritize open issues into an active work roadmap                               |
+| `handoff`      | Generate an end-of-session handoff snapshot for the next session                 |
+| `add-lesson`   | Interactively add a lesson to project memory (or pass string as argument)        |
+| `compile`      | Compile lessons into deterministic regex rules for zero-LLM shield checks        |
+| `test`         | Run test fixtures against compiled rules (TDD for governance rules)              |
+| `extract`      | Extract lessons from PR review(s) into .totem/lessons/ (interactive cherry-pick) |
+| `eject`        | Remove all Totem hooks, config, and data from this project                       |
+| `wrap`         | Post-merge workflow: learn from PR(s), sync index, then triage                   |
+| `docs`         | Auto-update registered project docs using LLM synthesis                          |
+| `lint-lessons` | Validate lesson metadata (patterns, scopes, severity)                            |
+| `drift`        | Check lessons for stale file references (CI gate)                                |
+| `hooks`        | Install git hooks (pre-commit, pre-push, post-merge) non-interactively           |
+
+<!-- /docs -->
 
 Full reference: [CLI Reference Wiki](./docs/wiki/cli-reference.md)
 
@@ -306,9 +321,13 @@ If you clone a repository that was initialized on Windows and the git hooks fail
 
 **Fix:**
 
+<!-- docs CHMOD_HOOKS -->
+
 ```bash
 chmod +x .git/hooks/pre-commit .git/hooks/pre-push .git/hooks/post-merge .git/hooks/post-checkout
 ```
+
+<!-- /docs -->
 
 This applies the execute permission that POSIX systems require. Windows users are unaffected — Git Bash executes hooks regardless of the permission bit.
 

@@ -424,7 +424,7 @@ program
 
 program
   .command('lint-lessons')
-  .description('Validate Pipeline 1 lesson metadata (patterns, scopes, severity)')
+  .description('Validate lesson metadata (patterns, scopes, severity)')
   .action(async () => {
     try {
       const { lintLessonsCommand } = await import('./commands/lint-lessons.js');
