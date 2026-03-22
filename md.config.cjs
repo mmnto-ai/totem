@@ -14,9 +14,9 @@ const transforms = require('./tools/docs-transforms.cjs');
 module.exports = {
   files: ['README.md', 'docs/**/*.md'],
   transforms: {
-    RULE_COUNT: () => transforms.RULE_COUNT(),
-    HOOK_LIST: () => transforms.HOOK_LIST(),
-    CHMOD_HOOKS: () => transforms.CHMOD_HOOKS(),
-    COMMAND_TABLE: () => transforms.COMMAND_TABLE(),
+    RULE_COUNT: transforms.RULE_COUNT,
+    HOOK_LIST: transforms.HOOK_LIST,
+    CHMOD_HOOKS: transforms.CHMOD_HOOKS,
+    COMMAND_TABLE: transforms.COMMAND_TABLE,
   },
 };

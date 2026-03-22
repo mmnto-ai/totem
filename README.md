@@ -281,26 +281,26 @@ Built on the same architecture as elite AI assistants (Tree-sitter + LanceDB), b
 
 | Command        | Description                                                                      |
 | -------------- | -------------------------------------------------------------------------------- |
+| `init`         | Initialize Totem in the current project                                          |
+| `sync`         | Re-index project files into the local vector store                               |
+| `search`       | Search the knowledge index                                                       |
+| `stats`        | Show index statistics                                                            |
+| `explain`      | Look up the lesson behind a compiled rule violation                              |
+| `spec`         | Generate a pre-work spec briefing for GitHub issue(s) or topic(s)                |
+| `lint`         | Run compiled rules against your diff (zero LLM, fast)                            |
+| `shield`       | AI-powered code review: analyze your diff against Totem knowledge                |
+| `triage`       | Prioritize open issues into an active work roadmap                               |
+| `handoff`      | Generate an end-of-session handoff snapshot for the next session                 |
 | `add-lesson`   | Interactively add a lesson to project memory (or pass string as argument)        |
 | `compile`      | Compile lessons into deterministic regex rules for zero-LLM shield checks        |
-| `docs`         | Auto-update registered project docs using LLM synthesis                          |
-| `drift`        | Check lessons for stale file references (CI gate)                                |
-| `eject`        | Remove all Totem hooks, config, and data from this project                       |
-| `explain`      | Look up the lesson behind a compiled rule violation                              |
-| `extract`      | Extract lessons from PR review(s) into .totem/lessons/ (interactive cherry-pick) |
-| `handoff`      | Generate an end-of-session handoff snapshot for the next session                 |
-| `hooks`        | Install git hooks (pre-commit, pre-push, post-merge) non-interactively           |
-| `init`         | Initialize Totem in the current project                                          |
-| `lint`         | Run compiled rules against your diff (zero LLM, fast)                            |
-| `lint-lessons` | Validate Pipeline 1 lesson metadata (patterns, scopes, severity)                 |
-| `search`       | Search the knowledge index                                                       |
-| `shield`       | AI-powered code review: analyze your diff against Totem knowledge                |
-| `spec`         | Generate a pre-work spec briefing for GitHub issue(s) or topic(s)                |
-| `stats`        | Show index statistics                                                            |
-| `sync`         | Re-index project files into the local vector store                               |
 | `test`         | Run test fixtures against compiled rules (TDD for governance rules)              |
-| `triage`       | Prioritize open issues into an active work roadmap                               |
+| `extract`      | Extract lessons from PR review(s) into .totem/lessons/ (interactive cherry-pick) |
+| `eject`        | Remove all Totem hooks, config, and data from this project                       |
 | `wrap`         | Post-merge workflow: learn from PR(s), sync index, then triage                   |
+| `docs`         | Auto-update registered project docs using LLM synthesis                          |
+| `lint-lessons` | Validate Pipeline 1 lesson metadata (patterns, scopes, severity)                 |
+| `drift`        | Check lessons for stale file references (CI gate)                                |
+| `hooks`        | Install git hooks (pre-commit, pre-push, post-merge) non-interactively           |
 
 <!-- /docs -->
 

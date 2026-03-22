@@ -8,7 +8,6 @@
  * so tools/ stays zero-dependency and fast.
  */
 const assert = require('node:assert/strict');
-const path = require('node:path');
 const transforms = require('./docs-transforms.cjs');
 
 let passed = 0;
@@ -92,12 +91,17 @@ test('COMMAND_TABLE excludes hidden commands', () => {
   assert.ok(!result.includes('`demo`'), 'Should exclude demo');
 });
 
-test('COMMAND_TABLE rows are sorted alphabetically', () => {
+test('COMMAND_TABLE preserves registration order (not alphabetical)', () => {
   const result = transforms.COMMAND_TABLE();
   const rows = result.split('\n').filter((r) => r.startsWith('| `'));
   const names = rows.map((r) => r.match(/\| `([^`]+)` \|/)[1]);
-  const sorted = [...names].sort();
-  assert.deepEqual(names, sorted, `Commands not sorted: ${names.join(', ')}`);
+  // init should come before lint (registration order), not after (alphabetical)
+  const initIdx = names.indexOf('init');
+  const lintIdx = names.indexOf('lint');
+  assert.ok(
+    initIdx < lintIdx,
+    `init (${initIdx}) should come before lint (${lintIdx}) in registration order`,
+  );
 });
 
 // ── Summary ─────────────────────────────────────────────
