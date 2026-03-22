@@ -33,12 +33,12 @@ import {
 // ─── Constants (re-exported from extract-templates) ─────
 
 export {
+  EXTRACT_SYSTEM_PROMPT,
   MAX_EXISTING_LESSONS,
   MAX_INPUTS,
   MAX_REVIEW_BODY_CHARS,
   SEMANTIC_DEDUP_THRESHOLD,
   SYSTEM_PROMPT,
-  EXTRACT_SYSTEM_PROMPT,
 } from './extract-templates.js';
 
 import {
