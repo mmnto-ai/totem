@@ -1,4 +1,4 @@
-## Lesson — Rename general-purpose callbacks like onWarn if their scope
+## Lesson — Rename general callbacks when scope narrows
 
 **Tags:** api-design, refactoring, dx
 
