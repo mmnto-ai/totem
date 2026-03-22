@@ -311,7 +311,7 @@ export const COMPILED_BASELINE_RULES: CompiledRule[] = [
     category: 'style',
   },
   {
-    lessonHash: '8057fcca873b861a',
+    lessonHash: 'dd4542e69ec3d5a1',
     lessonHeading: 'The shell option in spawn() calls should be omitted',
     pattern: '',
     message:
@@ -325,7 +325,7 @@ export const COMPILED_BASELINE_RULES: CompiledRule[] = [
     category: 'style',
   },
   {
-    lessonHash: 'bb1bcd038255556c',
+    lessonHash: 'c0f2a3fd2956184e',
     lessonHeading: 'PID-based process liveness checks (process.kill(pid, 0))',
     pattern: '',
     message: 'PID-based process liveness checks (process.kill(pid, 0))',
@@ -338,7 +338,7 @@ export const COMPILED_BASELINE_RULES: CompiledRule[] = [
     category: 'style',
   },
   {
-    lessonHash: '8db5440cd22cb81a',
+    lessonHash: 'df326a7c29885525',
     lessonHeading: 'Perform explicit null and type checks on the results',
     pattern: '',
     message: 'Perform explicit null and type checks on the results',
@@ -351,7 +351,7 @@ export const COMPILED_BASELINE_RULES: CompiledRule[] = [
     category: 'style',
   },
   {
-    lessonHash: '90eccad00d7df088',
+    lessonHash: '5cbf4ee7e76975d4',
     lessonHeading: 'The @ast-grep/napi findAll method accepts both string',
     pattern: '',
     message: 'The @ast-grep/napi findAll method accepts both string',

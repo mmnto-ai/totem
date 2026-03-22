@@ -1,5 +1,5 @@
 ---
-rule: 90eccad00d7df088
+rule: 5cbf4ee7e76975d4
 file: src/ast.ts
 ---
 
