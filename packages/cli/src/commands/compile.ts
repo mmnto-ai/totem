@@ -256,9 +256,11 @@ function logCompiledRule(
 
 // ─── Test fixture lookup (ADR-065) ──────────────────
 
-function getTestedHashes(testsDir: string): Set<string> {
-  const fs = require('node:fs');
-  const path = require('node:path');
+function getTestedHashes(
+  testsDir: string,
+  fs: typeof import('node:fs'),
+  path: typeof import('node:path'),
+): Set<string> {
   const hashes = new Set<string>();
   try {
     if (!fs.existsSync(testsDir)) return hashes;
@@ -277,6 +279,7 @@ function getTestedHashes(testsDir: string): Set<string> {
 // ─── Main command ───────────────────────────────────
 
 export async function compileCommand(options: CompileOptions): Promise<void> {
+  const fs = await import('node:fs');
   const path = await import('node:path');
   const { log } = await import('../ui.js');
   const { loadConfig, loadEnv, resolveConfigPath, runOrchestrator } = await import('../utils.js');
@@ -358,7 +361,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
 
   // ─── Test fixture lookup (ADR-065) ──
   const testsDir = path.join(totemDir, 'tests');
-  const testedHashes = getTestedHashes(testsDir);
+  const testedHashes = getTestedHashes(testsDir, fs, path);
 
   // ─── Phase 1: Regex compilation (requires orchestrator) ──
   if (config.orchestrator) {

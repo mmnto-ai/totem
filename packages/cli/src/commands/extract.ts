@@ -173,7 +173,7 @@ export function assemblePrompt(
   // Extract and present CodeRabbit nits from review bodies
   const allNits: string[] = [];
   for (const r of pr.reviews) {
-    if (r.author.toLowerCase().includes('coderabbit')) {
+    if (r.author?.toLowerCase().includes('coderabbit')) {
       const nits = parseCodeRabbitNits(r.body);
       allNits.push(...nits);
     }

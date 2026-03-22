@@ -35,7 +35,7 @@ jobs:
       - run: pnpm test
 
       - name: Wind Tunnel (rule fixture tests)
-        run: pnpm exec totem test
+        run: node packages/cli/dist/index.js test
 
       - run: pnpm lint
 

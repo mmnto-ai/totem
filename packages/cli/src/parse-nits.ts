@@ -4,12 +4,6 @@
  * and returns the inner content as clean text.
  */
 
-/** Regex to find nitpick-flavored opening tags and their summary text. */
-const NITPICK_OPEN_RE = /<details>\s*<summary>[^<]*(?:Nitpick|nitpick|🧹)[^<]*<\/summary>/g;
-
-const DETAILS_OPEN_RE = /<details>/gi;
-const DETAILS_CLOSE_RE = /<\/details>/gi;
-
 /**
  * Given a position right after a `<details>...<summary>...</summary>`,
  * find the matching `</details>` accounting for nesting, and return
@@ -20,12 +14,14 @@ function extractNestedBlock(body: string, startPos: number): string | null {
   let pos = startPos;
 
   while (depth > 0 && pos < body.length) {
-    // Find next opening or closing <details> tag from current position
-    DETAILS_OPEN_RE.lastIndex = pos;
-    DETAILS_CLOSE_RE.lastIndex = pos;
+    // Create fresh regexes each iteration to avoid global state corruption
+    const openRe = /<details>/gi;
+    const closeRe = /<\/details>/gi;
+    openRe.lastIndex = pos;
+    closeRe.lastIndex = pos;
 
-    const openMatch = DETAILS_OPEN_RE.exec(body);
-    const closeMatch = DETAILS_CLOSE_RE.exec(body);
+    const openMatch = openRe.exec(body);
+    const closeMatch = closeRe.exec(body);
 
     if (!closeMatch) {
       // No closing tag found — malformed HTML, bail out
@@ -65,11 +61,10 @@ function stripWrapperTags(html: string): string {
  */
 export function parseCodeRabbitNits(body: string): string[] {
   const nits: string[] = [];
-
-  NITPICK_OPEN_RE.lastIndex = 0;
+  const nitpickRe = /<details>\s*<summary>[^<]*(?:Nitpick|nitpick|🧹)[^<]*<\/summary>/g;
   let match: RegExpExecArray | null;
 
-  while ((match = NITPICK_OPEN_RE.exec(body)) !== null) {
+  while ((match = nitpickRe.exec(body)) !== null) {
     const afterSummary = match.index + match[0].length;
     const innerContent = extractNestedBlock(body, afterSummary);
     if (innerContent) {
