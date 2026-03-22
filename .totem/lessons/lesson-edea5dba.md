@@ -1,4 +1,4 @@
-## Lesson — When triggering actions based on shell command strings, use
+## Lesson — Use anchored regex for shell command matching
 
 **Tags:** regex, security, automation
 

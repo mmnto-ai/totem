@@ -1,4 +1,4 @@
-## Lesson — Detect installed tools by checking for their canonical
+## Lesson — Detect tools via marker files, not directory names
 
 **Tags:** environment-detection, automation, tools
 

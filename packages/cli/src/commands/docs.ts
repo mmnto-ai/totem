@@ -202,7 +202,7 @@ function assemblePrompt(
       );
       if (fs.existsSync(baselinePath)) {
         const baselineContent = fs.readFileSync(baselinePath, 'utf-8');
-        const count = (baselineContent.match(/lessonHash/g) || []).length;
+        const count = (baselineContent.match(/lessonHash\s*:/g) || []).length;
         metrics.push(`Baseline rules shipped with totem init: ${count}`);
       }
     } catch {

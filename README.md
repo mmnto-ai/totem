@@ -186,7 +186,7 @@ npx @mmnto/cli sync # Build the vector index
 npx @mmnto/cli lint # Run compiled rules (zero LLM)
 ```
 
-During `init`, Totem prompts to install a `pre-push` git hook that runs `totem lint` automatically before every push. It drops a standard shell script into `.git/hooks/` to work alongside Husky or bare repos. Phase-gate enforcement actively warns on commits that lack proper preflight validation. Run `totem hooks --check` to verify installation at any time.
+During `init`, Totem prompts to install a `pre-push` git hook that runs `totem lint` automatically before every push. It drops a standard shell script into `.git/hooks/` to work alongside Husky or bare repos. Pre-commit hooks warn on commits that lack proper preflight validation. Run `totem hooks --check` to verify installation at any time.
 
 ## The Planning Pipeline
 
@@ -244,7 +244,7 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
 - **Error Handling:** Typed `TotemError` subclasses unify error domains with actionable recovery hints for resilient operations.
 - **Rule Architecture:**
 - **Curated Baselines:** Ships a curated **219-rule set** with mandatory verify steps for execution determinism. Includes reverse-compiled lessons with manual patterns for zero-LLM enforcement.
-- **Advanced AST Validation:** Empowers deterministic enforcement via tree-sitter and ast-grep classifications. The underlying engine is continually validated against an adversarial corpus to eliminate false positives.
+- **Advanced AST Validation:** Empowers deterministic enforcement via tree-sitter and ast-grep classifications. The underlying engine is validated against an adversarial corpus to reduce false positives.
 - **Agent Automation:** Agent skills utilize lean root routers for streamlined instruction files. Context restoration utilizes explicit capability manifests after compacting.
 - **Severity Validation:** Compiled rules enforce strict severity levels. Errors actively block CI, while warnings inform without blocking.
 

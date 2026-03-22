@@ -262,7 +262,7 @@ export const COMPILED_BASELINE_RULES: CompiledRule[] = [
     lessonHash: 'b9e4125e6a31f2cf',
     lessonHeading: 'Use path.relative(process.cwd(),',
     pattern: '',
-    message: 'Use path.relative(process.cwd(),',
+    message: 'Use path.relative() instead of string replace on process.cwd()',
     engine: 'ast-grep',
     astGrepPattern: '$OBJ.replace(process.cwd(), $REPLACEMENT)',
     compiledAt: '2026-03-22T00:00:00.000Z',
