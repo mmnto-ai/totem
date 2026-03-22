@@ -6,6 +6,7 @@ import * as readline from 'node:readline/promises';
 import { resolveGitRoot } from '../git.js';
 
 const TOTEM_HOOK_MARKER = '[totem] post-merge hook';
+const TOTEM_HOOK_END = '[totem] end post-merge';
 export const TOTEM_PRECOMMIT_MARKER = '[totem] pre-commit hook';
 export const TOTEM_PREPUSH_MARKER = '[totem] pre-push hook';
 
@@ -20,15 +21,19 @@ export function detectTotemPrefix(cwd: string): string {
 }
 
 function detectSyncCommand(cwd: string): string {
-  return `${detectTotemPrefix(cwd)} sync --incremental`;
+  return `${detectTotemPrefix(cwd)} sync --incremental --quiet`;
 }
 
 function buildHookContent(syncCmd: string): string {
   return `#!/bin/sh
 # ${TOTEM_HOOK_MARKER} — background re-index after pull/merge.
 
-echo "[totem] Triggering background re-index..."
-(${syncCmd} > .git/totem-sync.log 2>&1) &
+# Only sync when lessons changed (suppress errors if ORIG_HEAD is missing)
+if git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '\\.totem/lessons/'; then
+  echo "[totem] Lessons changed — triggering background re-index..."
+  (${syncCmd} > .git/totem-sync.log 2>&1) &
+fi
+# ${TOTEM_HOOK_END}
 `;
 }
 
@@ -146,14 +151,12 @@ export async function installPostMergeHook(cwd: string, rl: readline.Interface):
       return;
     }
 
-    // Append to existing hook
+    // Append to existing hook — reuse buildHookContent, strip shebang
     const separator = existing.endsWith('\n') ? '' : '\n';
-    const appendBlock = `${separator}
-# ${TOTEM_HOOK_MARKER} — background re-index after pull/merge.
-echo "[totem] Triggering background re-index..."
-(${syncCmd} > .git/totem-sync.log 2>&1) &
-`;
-    fs.appendFileSync(hookPath, appendBlock);
+    const appendBlock = buildHookContent(syncCmd)
+      .replace(/^#!\/bin\/sh\n/, '')
+      .trimStart();
+    fs.appendFileSync(hookPath, separator + '\n' + appendBlock);
     console.log('[Totem] Appended post-merge hook to existing hook file.');
     return;
   }

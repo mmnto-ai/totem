@@ -4,7 +4,8 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { ejectCommand } from './eject.js';
+import { ejectCommand, scrubPostMergeHook } from './eject.js';
+import type { EjectSummary } from './eject.js';
 
 function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'totem-eject-'));
@@ -136,5 +137,132 @@ describe('ejectCommand', () => {
     // No Totem artifacts exist
     await ejectCommand({ force: true });
     // Should not throw
+  });
+
+  it('removes post-merge hook with new conditional format (if/fi block)', async () => {
+    const hookPath = path.join(cwd, '.git', 'hooks', 'post-merge');
+    fs.writeFileSync(
+      hookPath,
+      `#!/bin/sh
+# [totem] post-merge hook — background re-index after pull/merge.
+
+# Only sync when lessons changed (suppress errors if ORIG_HEAD is missing)
+if git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '\\.totem/lessons/'; then
+  echo "[totem] Lessons changed — triggering background re-index..."
+  (pnpm exec totem sync --incremental --quiet > .git/totem-sync.log 2>&1) &
+fi
+# [totem] end post-merge
+`,
+    );
+
+    await ejectCommand({ force: true });
+
+    expect(fs.existsSync(hookPath)).toBe(false);
+  });
+
+  it('preserves non-Totem content when scrubbing new conditional format', async () => {
+    const hookPath = path.join(cwd, '.git', 'hooks', 'post-merge');
+    fs.writeFileSync(
+      hookPath,
+      `#!/bin/sh
+echo "my custom hook"
+# [totem] post-merge hook — background re-index after pull/merge.
+
+# Only sync when lessons changed (suppress errors if ORIG_HEAD is missing)
+if git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '\\.totem/lessons/'; then
+  echo "[totem] Lessons changed — triggering background re-index..."
+  (pnpm exec totem sync --incremental --quiet > .git/totem-sync.log 2>&1) &
+fi
+# [totem] end post-merge
+`,
+    );
+
+    await ejectCommand({ force: true });
+
+    expect(fs.existsSync(hookPath)).toBe(true);
+    const content = fs.readFileSync(hookPath, 'utf-8');
+    expect(content).toContain('my custom hook');
+    expect(content).not.toContain('[totem]');
+    expect(content).not.toContain('ORIG_HEAD');
+    expect(content).not.toContain('fi');
+  });
+});
+
+// ─── scrubPostMergeHook (direct unit tests) ─────────
+
+describe('scrubPostMergeHook', () => {
+  let cwd: string;
+
+  beforeEach(() => {
+    cwd = makeTmpDir();
+    fs.mkdirSync(path.join(cwd, '.git', 'hooks'), { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it('scrubs new conditional hook format (if/fi block)', () => {
+    const hookPath = path.join(cwd, '.git', 'hooks', 'post-merge');
+    fs.writeFileSync(
+      hookPath,
+      `#!/bin/sh
+# [totem] post-merge hook — background re-index after pull/merge.
+
+# Only sync when lessons changed (suppress errors if ORIG_HEAD is missing)
+if git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '\\.totem/lessons/'; then
+  echo "[totem] Lessons changed — triggering background re-index..."
+  (pnpm exec totem sync --incremental --quiet > .git/totem-sync.log 2>&1) &
+fi
+# [totem] end post-merge
+`,
+    );
+
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+    scrubPostMergeHook(cwd, summary);
+
+    expect(fs.existsSync(hookPath)).toBe(false);
+    expect(summary.removed).toContain('.git/hooks/post-merge');
+  });
+
+  it('scrubs old unconditional hook format', () => {
+    const hookPath = path.join(cwd, '.git', 'hooks', 'post-merge');
+    fs.writeFileSync(
+      hookPath,
+      '#!/bin/sh\n# [totem] post-merge hook — background re-index after pull/merge.\n\necho "[totem] Triggering background re-index..."\n(pnpm exec totem sync --incremental > .git/totem-sync.log 2>&1) &\n',
+    );
+
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+    scrubPostMergeHook(cwd, summary);
+
+    expect(fs.existsSync(hookPath)).toBe(false);
+    expect(summary.removed).toContain('.git/hooks/post-merge');
+  });
+
+  it('preserves non-totem content when scrubbing', () => {
+    const hookPath = path.join(cwd, '.git', 'hooks', 'post-merge');
+    fs.writeFileSync(
+      hookPath,
+      `#!/bin/sh
+echo "deploy notification"
+# [totem] post-merge hook — background re-index after pull/merge.
+
+# Only sync when lessons changed (suppress errors if ORIG_HEAD is missing)
+if git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '\\.totem/lessons/'; then
+  echo "[totem] Lessons changed — triggering background re-index..."
+  (pnpm exec totem sync --incremental --quiet > .git/totem-sync.log 2>&1) &
+fi
+# [totem] end post-merge
+`,
+    );
+
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+    scrubPostMergeHook(cwd, summary);
+
+    expect(fs.existsSync(hookPath)).toBe(true);
+    const content = fs.readFileSync(hookPath, 'utf-8');
+    expect(content).toContain('deploy notification');
+    expect(content).not.toContain('[totem]');
+    expect(summary.scrubbed).toContain('.git/hooks/post-merge');
   });
 });

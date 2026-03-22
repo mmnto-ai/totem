@@ -9,6 +9,7 @@ import { log } from '../ui.js';
 
 const TAG = 'Eject';
 const TOTEM_HOOK_MARKER = '[totem] post-merge hook';
+const TOTEM_HOOK_END = '[totem] end post-merge';
 const TOTEM_FILE_MARKER = '// [totem] auto-generated';
 
 /** Files that may have AI reflex blocks appended by `totem init`. */
@@ -24,7 +25,7 @@ const TOTEM_SCAFFOLDED_FILES = [
 
 // ─── Helpers ────────────────────────────────────────────
 
-interface EjectSummary {
+export interface EjectSummary {
   removed: string[];
   scrubbed: string[];
   skipped: string[];
@@ -34,7 +35,7 @@ interface EjectSummary {
  * Remove the Totem section from the post-merge git hook.
  * Deletes the file entirely if it only contains the Totem hook.
  */
-function scrubPostMergeHook(cwd: string, summary: EjectSummary): void {
+export function scrubPostMergeHook(cwd: string, summary: EjectSummary): void {
   const hookPath = path.join(cwd, '.git', 'hooks', 'post-merge');
   if (!fs.existsSync(hookPath)) {
     summary.skipped.push('.git/hooks/post-merge (not found)');
@@ -47,7 +48,8 @@ function scrubPostMergeHook(cwd: string, summary: EjectSummary): void {
     return;
   }
 
-  // Remove the Totem block: from the marker comment to the background command
+  // Remove the Totem block: from the marker comment to the end marker (or heuristic end)
+  const hasEndMarker = content.includes(TOTEM_HOOK_END);
   const lines = content.split('\n');
   const filtered: string[] = [];
   let inTotemBlock = false;
@@ -58,15 +60,23 @@ function scrubPostMergeHook(cwd: string, summary: EjectSummary): void {
       continue;
     }
     if (inTotemBlock) {
-      // Skip lines until we hit a blank line or non-Totem content
+      if (hasEndMarker) {
+        // New format: skip everything until the deterministic end marker
+        if (line.includes(TOTEM_HOOK_END)) {
+          inTotemBlock = false;
+        }
+        continue;
+      }
+      // Old format (no end marker): skip known totem lines only
       if (
         line === '' ||
+        line.trim() === '' ||
         line.startsWith('echo "[totem]') ||
-        line.startsWith('(') ||
-        line.trim() === ''
+        line.startsWith('(')
       ) {
         continue;
       }
+      // Unrecognised line — stop skipping to protect user content
       inTotemBlock = false;
     }
     filtered.push(line);

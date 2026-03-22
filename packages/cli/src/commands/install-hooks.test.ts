@@ -482,3 +482,57 @@ describe('checkHooksInstalled', () => {
     expect(checkHooksInstalled(tmpDir)).toBe(false);
   });
 });
+
+// ─── post-merge hook content (conditional diff-tree) ─
+
+describe('post-merge hook content', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hooks-pm-'));
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('generates post-merge hook with git diff-tree lesson check', () => {
+    installHooksNonInteractive(tmpDir);
+
+    const hookPath = path.join(tmpDir, '.git', 'hooks', 'post-merge');
+    const content = fs.readFileSync(hookPath, 'utf-8');
+
+    expect(content).toContain('ORIG_HEAD');
+    expect(content).toContain('grep -q');
+    expect(content).toContain('.totem/lessons/');
+    expect(content).toContain('if ');
+    expect(content).toContain('fi');
+    expect(content).toContain('[totem] post-merge hook');
+    expect(content).toContain('[totem] end post-merge');
+  });
+
+  it('passes quiet flag to sync command in post-merge hook', () => {
+    installHooksNonInteractive(tmpDir);
+
+    const hookPath = path.join(tmpDir, '.git', 'hooks', 'post-merge');
+    const content = fs.readFileSync(hookPath, 'utf-8');
+
+    expect(content).toContain('--quiet');
+  });
+
+  it('preserves existing hooks when appending post-merge block', () => {
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    fs.writeFileSync(path.join(hooksDir, 'post-merge'), '#!/bin/sh\necho "my custom hook"\n');
+
+    installHooksNonInteractive(tmpDir);
+
+    const content = fs.readFileSync(path.join(hooksDir, 'post-merge'), 'utf-8');
+    expect(content).toContain('echo "my custom hook"');
+    expect(content).toContain('[totem] post-merge hook');
+    expect(content).toContain('ORIG_HEAD');
+    expect(content).toContain('fi');
+  });
+});
