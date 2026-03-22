@@ -145,7 +145,7 @@ Your project gets immediate protection against the most common architectural tra
 > **Without MCP:** `totem lint`, `compile`, `extract`, `sync`, `explain`, and `stats` all work standalone. You get full deterministic enforcement and the complete CLI experience.
 > **With MCP:** Your AI agent gains live access to the knowledge index mid-session. It can `search_knowledge` before writing code and `add_lesson` when it discovers traps.
 
-Give your AI agent persistent project memory. `search_knowledge` retrieves traps, patterns, and architectural constraints with boundary parameters for scoped queries, while `add_lesson` captures new ones.
+Give your AI agent persistent project memory. `search_knowledge` retrieves traps, patterns, and architectural constraints with boundary parameters for scoped queries, while `add_lesson` captures new ones. Context is actively restored using explicit capability manifests during the session.
 
 **macOS / Linux:**
 
@@ -209,9 +209,9 @@ Cross-totem queries via `linkedIndexes` let the planner pull context from multip
 
 AI coding agents are brilliant but forgetful, often repeating architectural violations across sessions. Totem fixes this by creating a persistent memory layer that outlasts any single agent, model, or tool.
 
-- **Compile:** Your `.cursorrules` and `.mdc` files are plain English. Totem compiles them into deterministic AST and regex checks via the AST engine.
+- **Compile:** Your `.cursorrules` and `.mdc` files are plain English. Totem compiles them into deterministic AST and regex checks via the AST engine. A pre-compilation gate validates lessons before processing.
 - **Enforce:** `totem lint` is **100% deterministic** and runs compiled rules against your diff. It runs in ~2 seconds with zero API keys, and your CI passes or fails based purely on logic.
-- **Learn:** Run `totem extract` to compile new invariants from PR bugs, scaling your local index over time (the active CLI instance currently coordinates **419 embedded lessons**). When a violation happens, use `totem explain` to instantly retrieve the underlying lesson.
+- **Learn:** Run `totem extract` to compile new invariants from PR bugs, scaling your local index over time (the active CLI instance currently coordinates **436 embedded lessons**). When a violation happens, use `totem explain` to instantly retrieve the underlying lesson.
 - **Plan:** `totem spec` queries the knowledge index before your AI writes code, generating architectural invariants. The AI starts fully informed of past mistakes instead of starting blank.
 
 **Totem doesn't replace your AI. It gives your AI a memory.**
@@ -245,7 +245,7 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
 - **Rule Architecture:**
 - **Curated Baselines:** Ships a curated **219-rule set** with mandatory verify steps for execution determinism. Includes reverse-compiled lessons with manual patterns for zero-LLM enforcement.
 - **Advanced AST Validation:** Empowers deterministic enforcement via tree-sitter and ast-grep classifications. The underlying engine is validated against an adversarial corpus to reduce false positives.
-- **Agent Automation:** Agent skills utilize lean root routers for streamlined instruction files. Context restoration utilizes explicit capability manifests after compacting.
+- **Agent Automation:** Agent skills utilize a streamlined directory format and root router pattern for clear instruction files. Context restoration uses explicit capability manifests to maintain agent focus.
 - **Severity Validation:** Compiled rules enforce strict severity levels. Errors actively block CI, while warnings inform without blocking.
 
 **What gets committed:** Your knowledge base (text files in `.totem/lessons/`) and the compiled artifact (`.totem/compiled-rules.json`). The `.lancedb/` vector index is a local-only cache, automatically rebuilt by `totem sync`. It is never committed to your repository.
