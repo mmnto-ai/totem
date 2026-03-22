@@ -254,6 +254,26 @@ function logCompiledRule(
   }
 }
 
+// ─── Test fixture lookup (ADR-065) ──────────────────
+
+function getTestedHashes(testsDir: string): Set<string> {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const hashes = new Set<string>();
+  try {
+    if (!fs.existsSync(testsDir)) return hashes;
+    for (const file of fs.readdirSync(testsDir)) {
+      if (!file.endsWith('.md')) continue;
+      const content = fs.readFileSync(path.join(testsDir, file), 'utf-8');
+      const match = content.match(/^rule:\s*(\S+)/m);
+      if (match) hashes.add(match[1]);
+    }
+  } catch {
+    // tests dir unreadable
+  }
+  return hashes;
+}
+
 // ─── Main command ───────────────────────────────────
 
 export async function compileCommand(options: CompileOptions): Promise<void> {
@@ -336,6 +356,10 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
     }
   }
 
+  // ─── Test fixture lookup (ADR-065) ──
+  const testsDir = path.join(totemDir, 'tests');
+  const testedHashes = getTestedHashes(testsDir);
+
   // ─── Phase 1: Regex compilation (requires orchestrator) ──
   if (config.orchestrator) {
     const existingFile: CompiledRulesFile = options.force
@@ -398,6 +422,18 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
 
         switch (result.status) {
           case 'compiled':
+            // ADR-065: Pipeline 1 error rules require a test fixture
+            if (
+              extractManualPattern(lesson.body) &&
+              result.rule.severity === 'error' &&
+              !testedHashes.has(lesson.hash)
+            ) {
+              result.rule.severity = 'warning';
+              log.warn(
+                TAG,
+                `[${lesson.heading}] Downgraded to warning — no test fixture in .totem/tests/ (ADR-065)`,
+              );
+            }
             newRules.push(result.rule);
             compiled++;
             logCompiledRule(log, lesson, result.rule);
