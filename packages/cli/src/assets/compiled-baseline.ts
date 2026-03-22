@@ -314,7 +314,8 @@ export const COMPILED_BASELINE_RULES: CompiledRule[] = [
     lessonHash: '8057fcca873b861a',
     lessonHeading: 'The shell option in spawn() calls should be omitted',
     pattern: '',
-    message: 'The shell option in spawn() calls should be omitted',
+    message:
+      'Omit shell:true when spawn args are an array. Note: only catches inline array literals, not variable args or two-arg form.',
     engine: 'ast-grep',
     astGrepPattern: 'spawn($CMD, [$$$ARGS], { $$$BEFORE, shell: true, $$$AFTER })',
     compiledAt: '2026-03-22T00:00:00.000Z',

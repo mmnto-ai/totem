@@ -58,7 +58,6 @@ const config: TotemConfig = {
     'scripts/**',
     '.totem/compiled-rules.json',
     '.coderabbit.yaml',
-    'packages/cli/src/assets/compiled-baseline.ts',
   ],
 
   repositories: ['mmnto-ai/totem', 'mmnto-ai/totem-strategy'],
@@ -71,7 +70,11 @@ const config: TotemConfig = {
     mcp: ['packages/mcp/'],
   },
 
-  shieldIgnorePatterns: ['.totem/lessons/**', '.strategy'],
+  shieldIgnorePatterns: [
+    '.totem/lessons/**',
+    '.strategy',
+    'packages/cli/src/assets/compiled-baseline.ts',
+  ],
 };
 
 export default config;
