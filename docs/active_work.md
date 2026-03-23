@@ -1,15 +1,18 @@
 ### Active Work Summary
 
-The Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.3.18`. Recent focus has centered on:
+The Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.3.19`. Recent focus has centered on:
 
 - **Orchestration & Workflows:**
-  - Implemented invisible sync hooks for seamless orchestration context updates.
+  - Implemented invisible sync hooks for smooth orchestration context updates.
   - Integrated CodeRabbit configuration for automated PR reviews.
   - Expanded the post-compaction hook with a capability manifest.
   - Refactored agent instruction files (`CLAUDE.md`) to a lean root router pattern.
   - Restructured workflow skills into a dedicated directory format.
   - Enforced pre-push validation via pre-tool-use hooks.
 - **Security & Governance:**
+  - Hardened ingestion with trust boundaries and an MCP authentication model.
+  - Implemented compile manifest signing to establish a provenance chain.
+  - Added Data Loss Prevention (DLP) secret masking middleware for outbound LLM calls.
   - Executed codebase review fixes and targeted security hardening.
   - Introduced phase-gate enforcement with preflight commit warnings.
   - Backfilled body text for 125 foundational lessons and extracted operational knowledge from recent PRs.
@@ -18,12 +21,17 @@ The Data Layer Foundation is complete, and the project is currently at release `
   - Upgraded the specification process to utilize a strict checklist format.
   - Introduced a lesson file linter with a pre-compilation gate.
 - **Search & Infrastructure:**
+  - Configured AST query engines to fail-closed instead of swallowing exceptions.
+  - Added a CI wind tunnel SHA lock to ensure fixture integrity.
+  - Enhanced release workflow tag push resilience.
   - Introduced index partitions with alias resolution.
   - Added a boundary parameter to the MCP search tool.
   - Established a cross-platform CI matrix supporting multiple environments.
   - Unified error domains and refactored the compiler architecture using a facade pattern.
   - Delivered unified execution tracking following successful readiness audits.
 - **Documentation & DX:**
+  - Required explicit confirmation before writing LLM-generated documentation.
+  - Configured documentation generation to actively strip marketing terminology.
   - Regenerated project documentation alongside 5-lesson extraction from PR #829.
   - Fixed documentation generation to prevent persistence of stale issue references.
   - Executed developer experience polish targeting onboarding flows and output brevity.
@@ -75,6 +83,11 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Migrated lessons directory to dual-read/single-write and added startup health checks for LanceStore indexes.
   - Automated full sync triggering following embedder configuration changes.
 - **Core & Shift-Left Foundation:**
+  - Hardened ingestion by establishing trust boundaries and an MCP authentication model.
+  - Implemented compile manifest signing to ensure a secure provenance chain.
+  - Configured AST query engines to fail-closed, preventing swallowed exceptions during execution.
+  - Secured testing infrastructure with a CI wind tunnel SHA lock for fixture integrity.
+  - Improved release workflow tag push resilience.
   - Executed security hardening based on codebase review findings and extracted corresponding operational lessons.
   - Implemented phase-gate enforcement to actively warn users on commits lacking preflight validation.
   - Extracted operational lessons from recent orchestration and enforcement efforts.
@@ -96,7 +109,7 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Executed a portability audit for readiness and addressed conditions from the joint code review.
   - Resolved launch testing findings and audited compiled rules to further reduce false positives.
   - Implemented filesystem concurrency locks to safely manage concurrent sync operations and state mutations.
-  - Released cross-repository link functionality to seamlessly share and sync knowledge lessons across local projects.
+  - Released cross-repository link functionality to smoothly share and sync knowledge lessons across local projects.
   - Shipped the Universal Baseline, providing 60 battle-tested lessons automatically during initialization scaffolding.
   - Introduced the error class hierarchy equipped with actionable recovery hints for improved error state handling.
   - Demoted three overly-aggressive AI-powered `totem shield` rules to warnings and explicitly prefixed error logs to reduce false positives.
@@ -126,7 +139,8 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Delivered Universal Lessons baseline and refined ignore patterns for frictionless initialization.
   - Tuned matching patterns and literal file path rules to reduce false positives on docs and config lessons.
 - **Orchestration & Integrations:**
-  - Implemented invisible sync hooks for seamless orchestration context updates.
+  - Added Data Loss Prevention (DLP) secret masking middleware for outbound LLM calls.
+  - Implemented invisible sync hooks for smooth orchestration context updates.
   - Integrated CodeRabbit configuration for automated PR reviews.
   - Expanded the post-compaction hook with a capability manifest to enhance agent context during active work.
   - Refactored agent instruction files to utilize a lean root router pattern.
@@ -146,6 +160,8 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Resolved server connection failures for development and strategy environments.
   - Validated Gemini CLI compliance regarding search calls with lean configurations.
 - **Documentation & DX:**
+  - Required explicit confirmation before writing LLM-generated documentation.
+  - Configured documentation generation to actively strip marketing terminology.
   - Regenerated post-1.3.17 README and performed 47-lesson extraction from 8 PRs.
   - Fixed documentation generation to prevent persistence of stale issue references.
   - Executed Developer Experience (DX) polish to streamline onboarding flows, hide legacy commands, and condense standard output.
