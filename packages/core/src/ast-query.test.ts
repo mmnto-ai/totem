@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { matchAstQuery } from './ast-query.js';
+import { matchAstQueriesBatch, matchAstQuery } from './ast-query.js';
 import { TotemParseError } from './errors.js';
 
 // ─── Helpers ────────────────────────────────────────
@@ -122,5 +122,54 @@ describe('matchAstQuery', () => {
 
     const matches = await matchAstQuery(file, query, [2], tmpDir);
     expect(matches).toHaveLength(1);
+  });
+});
+
+// ─── matchAstQueriesBatch ────────────────────────────
+
+describe('matchAstQueriesBatch', () => {
+  it('returns results indexed by position so duplicate query strings are not lost', async () => {
+    const file = writeFile(
+      'src/dup.ts',
+      [
+        'console.log("line 1");', // line 1
+        'const x = 1;', // line 2
+        'console.log("line 3");', // line 3
+      ].join('\n'),
+    );
+
+    const query =
+      '(call_expression function: (member_expression object: (identifier) @obj (#eq? @obj "console"))) @violation';
+
+    // Two rules share the same query string but target different added lines
+    const results = await matchAstQueriesBatch(
+      file,
+      [
+        { astQuery: query, addedLineNumbers: [1] },
+        { astQuery: query, addedLineNumbers: [3] },
+      ],
+      tmpDir,
+    );
+
+    expect(results).toHaveLength(2);
+    expect(results[0]).toHaveLength(1);
+    expect(results[0]![0]!.lineNumber).toBe(1);
+    expect(results[1]).toHaveLength(1);
+    expect(results[1]![0]!.lineNumber).toBe(3);
+  });
+
+  it('returns empty arrays for empty queries', async () => {
+    const results = await matchAstQueriesBatch('src/x.ts', [], tmpDir);
+    expect(results).toEqual([]);
+  });
+
+  it('returns empty arrays for unsupported language', async () => {
+    writeFile('config.py', 'print("hello")\n');
+    const results = await matchAstQueriesBatch(
+      'config.py',
+      [{ astQuery: '(identifier) @violation', addedLineNumbers: [1] }],
+      tmpDir,
+    );
+    expect(results).toEqual([[]]);
   });
 });

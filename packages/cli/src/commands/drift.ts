@@ -1,7 +1,5 @@
 import * as path from 'node:path';
 
-import { detectDrift, readAllLessons } from '@mmnto/totem'; // totem-ignore
-
 import { bold, errorColor, log, success as successColor } from '../ui.js';
 import { loadConfig, resolveConfigPath, sanitize } from '../utils.js';
 
@@ -12,6 +10,7 @@ const TAG = 'Drift';
 // ─── Main command ───────────────────────────────────────
 
 export async function driftCommand(): Promise<void> {
+  const { detectDrift, readAllLessons, TotemError } = await import('@mmnto/totem');
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   const config = await loadConfig(configPath);
@@ -48,7 +47,11 @@ export async function driftCommand(): Promise<void> {
   const label = errorColor(bold('FAIL'));
   log.warn(
     TAG,
-    `${label} — ${totalRefs} stale reference(s) across ${drift.length} lesson(s). Run \`totem sync --prune\` to fix.`, // totem-ignore
+    `${label} — ${totalRefs} stale reference(s) across ${drift.length} lesson(s).`, // totem-ignore
   );
-  process.exit(1);
+  throw new TotemError(
+    'DRIFT_FAILED',
+    `${totalRefs} stale reference(s) across ${drift.length} lesson(s).`,
+    'Run `totem sync --prune` to fix.',
+  );
 }

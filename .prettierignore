@@ -6,4 +6,7 @@ dist/
 pnpm-lock.yaml
 # Lesson files contain regex patterns and glob syntax that prettier mangles
 .totem/lessons/
+# Compiled rules hash must match compile-manifest.json — prettier would invalidate it
+.totem/compiled-rules.json
+.totem/compile-manifest.json
 cloc-results.json

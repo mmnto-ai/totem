@@ -13,6 +13,8 @@ export interface WrapOptions {
 }
 
 export async function wrapCommand(prNumbers: string[], options: WrapOptions): Promise<void> {
+  const { TotemError } = await import('@mmnto/totem');
+
   // Step 1: Learn from PR(s)
   log.info(TAG, `Step 1/6 — Extracting from PR ${prNumbers.join(', ')}...`);
   const { extractCommand } = await import('./extract.js');
@@ -46,7 +48,7 @@ export async function wrapCommand(prNumbers: string[], options: WrapOptions): Pr
     });
   } catch (err) {
     // Don't fail wrap if docs aren't configured — it's optional
-    if (err instanceof Error && err.name === 'NoDocsConfiguredError') {
+    if (err instanceof TotemError && err.code === 'CONFIG_MISSING') {
       log.dim(TAG, 'No docs configured — skipping doc sync.');
     } else {
       throw err;
@@ -85,7 +87,7 @@ export async function wrapCommand(prNumbers: string[], options: WrapOptions): Pr
     });
   } catch (err) {
     // Don't fail wrap if compile has nothing to do
-    if (err instanceof Error && err.name === 'NoLessonsError') {
+    if (err instanceof TotemError && err.code === 'NO_LESSONS') {
       log.dim(TAG, 'Nothing to compile — skipping.');
     } else {
       throw err;

@@ -4,7 +4,7 @@ export async function testRulesCommand(opts: { filter?: string }): Promise<void>
   const path = await import('node:path');
   const { log, bold, errorColor, success: successColor } = await import('../ui.js');
   const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
-  const { runRuleTests, sanitize } = await import('@mmnto/totem');
+  const { TotemError, runRuleTests, sanitize } = await import('@mmnto/totem');
 
   const cwd = process.cwd();
   loadEnv(cwd);
@@ -85,6 +85,10 @@ export async function testRulesCommand(opts: { filter?: string }): Promise<void>
   } else {
     const label = errorColor(bold('FAIL'));
     log.info(TAG, `${label} — ${failedCount} failed, ${passedCount} passed`);
-    process.exit(1);
+    throw new TotemError(
+      'TEST_FAILED',
+      `${failedCount} rule test(s) failed.`,
+      'Fix the failing rules or update test fixtures, then re-run `totem test`.',
+    );
   }
 }

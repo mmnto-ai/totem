@@ -168,26 +168,24 @@ export async function matchAstQuery(
 /**
  * Parse a file once and run multiple AST queries against it efficiently.
  * O(M + N) instead of O(M * N) — file is read and parsed exactly once.
+ * Returns results indexed by position in the input array.
  */
 export async function matchAstQueriesBatch(
   filePath: string,
   queries: Array<{ astQuery: string; addedLineNumbers: number[] }>,
   cwd: string,
-): Promise<Map<string, AstMatch[]>> {
-  const results = new Map<string, AstMatch[]>();
-  if (queries.length === 0) return results;
+): Promise<AstMatch[][]> {
+  if (queries.length === 0) return [];
 
   const ext = path.extname(filePath);
   const lang: SupportedLanguage | undefined = extensionToLanguage(ext);
   if (!lang) {
-    for (const q of queries) results.set(q.astQuery, []);
-    return results;
+    return queries.map(() => []);
   }
 
   const content = await readFileContent(filePath, cwd);
   if (!content) {
-    for (const q of queries) results.set(q.astQuery, []);
-    return results;
+    return queries.map(() => []);
   }
 
   try {
@@ -203,26 +201,15 @@ export async function matchAstQueriesBatch(
       parser.setLanguage(grammar);
       const tree = parser.parse(content);
       if (!tree) {
-        for (const q of queries) results.set(q.astQuery, []);
-        return results;
+        return queries.map(() => []);
       }
 
       const lines = content.split('\n');
 
       try {
-        for (const { astQuery, addedLineNumbers } of queries) {
-          results.set(
-            astQuery,
-            runQuery(
-              QueryClass,
-              grammar,
-              tree.rootNode,
-              lines,
-              astQuery,
-              new Set(addedLineNumbers),
-            ),
-          );
-        }
+        return queries.map(({ astQuery, addedLineNumbers }) =>
+          runQuery(QueryClass, grammar, tree.rootNode, lines, astQuery, new Set(addedLineNumbers)),
+        );
       } finally {
         tree.delete();
       }
@@ -232,6 +219,4 @@ export async function matchAstQueriesBatch(
   } catch (err) {
     rethrowAsParseError('AST batch parse failed', err, TREE_SITTER_HINT);
   }
-
-  return results;
 }

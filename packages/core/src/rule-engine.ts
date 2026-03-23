@@ -195,11 +195,10 @@ export async function applyAstRulesToAdditions(
     const ext = path.extname(file);
     if (!extensionToLanguage(ext)) continue;
 
-    // Collect added line numbers, filtering suppressed lines
+    // Collect added line numbers (suppression is checked post-match so metrics fire)
     const addedLineNumbers: number[] = [];
     for (const addition of fileAdditions) {
       if (addition.astContext && addition.astContext !== 'code') continue;
-      if (isSuppressed(addition.line, addition.precedingLine)) continue;
       addedLineNumbers.push(addition.lineNumber);
     }
     if (addedLineNumbers.length === 0) continue;
@@ -223,8 +222,9 @@ export async function applyAstRulesToAdditions(
         const batchResults = await matchAstQueriesBatch(file, queries, cwd);
 
         // Map results back to violations
-        for (const rule of applicableTreeSitter) {
-          const matches = batchResults.get(rule.astQuery!) ?? [];
+        for (let i = 0; i < applicableTreeSitter.length; i++) {
+          const rule = applicableTreeSitter[i]!;
+          const matches = batchResults[i] ?? [];
 
           for (const match of matches) {
             const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
