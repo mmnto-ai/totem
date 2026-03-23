@@ -189,7 +189,7 @@ export { sanitize } from '@mmnto/totem';
 // ─── XML delimiting ─────────────────────────────────────
 
 // Re-export from core — unified XML escaping (#158)
-export { wrapXml } from '@mmnto/totem';
+export { wrapUntrustedXml, wrapXml } from '@mmnto/totem';
 
 // ─── Context formatting ─────────────────────────────────
 

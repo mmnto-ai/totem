@@ -17,3 +17,16 @@ export function wrapXml(tag: string, content: string): string {
   );
   return `<${tag}>\n${escaped}\n</${tag}>`;
 }
+
+/**
+ * Wrap untrusted external content (PR comments, MCP inputs, GitHub API data)
+ * in XML tags with full entity escaping. All `<`, `>`, and `&` characters
+ * are escaped to prevent prompt injection breakout.
+ *
+ * Use this for any content fetched from the network or supplied by external agents.
+ * For trusted local content (git diffs), use `wrapXml()` instead.
+ */
+export function wrapUntrustedXml(tag: string, content: string): string {
+  const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return `<${tag}>\n${escaped}\n</${tag}>`;
+}

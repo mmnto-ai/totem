@@ -190,7 +190,7 @@ export {
   UNICODE_ESCAPE_RE,
   XML_TAG_LEAKAGE_RE,
 } from './sanitize.js';
-export { wrapXml } from './xml-format.js';
+export { wrapUntrustedXml, wrapXml } from './xml-format.js';
 
 // Suspicious lesson detection
 export type { ExtractedLesson } from './suspicious-lesson.js';

@@ -27,7 +27,7 @@ import {
   resolveConfigPath,
   runOrchestrator,
   sanitize,
-  wrapXml,
+  wrapUntrustedXml,
 } from '../utils.js';
 
 // ─── Constants (re-exported from extract-templates) ─────
@@ -134,7 +134,7 @@ export function assemblePrompt(
   sections.push(`State: ${sanitize(pr.state)}`);
   if (pr.body) {
     sections.push('');
-    sections.push(wrapXml('pr_body', pr.body));
+    sections.push(wrapUntrustedXml('pr_body', pr.body));
   }
 
   // Review summaries (non-empty review bodies)
@@ -143,7 +143,7 @@ export function assemblePrompt(
     sections.push('\n=== REVIEW SUMMARIES ===');
     for (const r of reviewBodies) {
       sections.push(`[${sanitize(r.author)} — ${sanitize(r.state)}]`);
-      sections.push(wrapXml('review_body', r.body));
+      sections.push(wrapUntrustedXml('review_body', r.body));
       sections.push('');
     }
   }
@@ -152,7 +152,7 @@ export function assemblePrompt(
   if (nits && nits.length > 0) {
     sections.push('\n=== CODERABBIT NITS (extract valuable architectural insights) ===');
     for (const nit of nits) {
-      sections.push(wrapXml('nit_body', nit));
+      sections.push(wrapUntrustedXml('nit_body', nit));
     }
   }
 
@@ -162,7 +162,7 @@ export function assemblePrompt(
     sections.push('\n=== PR COMMENTS ===');
     for (const c of prComments) {
       sections.push(`[${sanitize(c.author)}]`);
-      sections.push(wrapXml('comment_body', c.body));
+      sections.push(wrapUntrustedXml('comment_body', c.body));
       sections.push('');
     }
   }
@@ -172,9 +172,9 @@ export function assemblePrompt(
     sections.push('\n=== INLINE REVIEW THREADS ===');
     for (const thread of threads) {
       sections.push(`--- ${sanitize(thread.path)} ---`); // totem-ignore — thread.path is untrusted PR data, not local git
-      sections.push(wrapXml('diff_hunk', thread.diffHunk));
+      sections.push(wrapUntrustedXml('diff_hunk', thread.diffHunk));
       for (const c of thread.comments) {
-        sections.push(`[${sanitize(c.author)}]:\n${wrapXml('comment_body', c.body)}`);
+        sections.push(`[${sanitize(c.author)}]:\n${wrapUntrustedXml('comment_body', c.body)}`);
       }
       sections.push('');
     }
