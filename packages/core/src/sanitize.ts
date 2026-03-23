@@ -65,17 +65,24 @@ export function sanitizeForIngestion(text: string, options: IngestionSanitizeOpt
   let result = text;
 
   // --- Phase 1: BiDi overrides (dangerous in ALL content types) ---
-  if (BIDI_OVERRIDE_RE.test(result)) {
+  // Call .replace() unconditionally — it's a no-op when there are no matches.
+  // Avoids statefulness bug: .test() on a /g regex advances lastIndex, causing
+  // the subsequent .replace() to miss earlier occurrences.
+  const bidiCleaned = result.replace(BIDI_OVERRIDE_RE, '');
+  if (bidiCleaned !== result) {
     onWarn?.(`BiDi override characters detected${filePath ? ` in ${filePath}` : ''} — stripped`);
-    result = result.replace(BIDI_OVERRIDE_RE, '');
+    result = bidiCleaned;
   }
 
   // --- Phase 2: Invisible characters (prose only — code may have valid uses) ---
-  if (chunkType !== 'code' && INVISIBLE_CHARS_RE.test(result)) {
-    onWarn?.(
-      `Invisible Unicode characters detected${filePath ? ` in ${filePath}` : ''} — stripped`,
-    );
-    result = result.replace(INVISIBLE_CHARS_RE, '');
+  if (chunkType !== 'code') {
+    const invisCleaned = result.replace(INVISIBLE_CHARS_RE, '');
+    if (invisCleaned !== result) {
+      onWarn?.(
+        `Invisible Unicode characters detected${filePath ? ` in ${filePath}` : ''} — stripped`,
+      );
+      result = invisCleaned;
+    }
   }
 
   // --- Phase 3: Flag suspicious patterns (all types, warn only, never strip) ---
@@ -113,9 +120,9 @@ export function sanitizeForIngestion(text: string, options: IngestionSanitizeOpt
  * Conservative — only matches high-confidence patterns to avoid false positives.
  */
 const SECRET_PATTERNS: Array<{ name: string; re: RegExp; replacement?: string }> = [
-  // API keys with known prefixes
-  { name: 'API key', re: /\b(sk-[a-zA-Z0-9]{20,})\b/g },
+  // API keys with known prefixes (longer/more-specific patterns first)
   { name: 'API key', re: /\b(sk-proj-[a-zA-Z0-9_-]{20,})\b/g },
+  { name: 'API key', re: /\b(sk-[a-zA-Z0-9]{20,})\b/g },
   { name: 'API key', re: /\b(AIza[a-zA-Z0-9_-]{30,})\b/g },
   { name: 'npm token', re: /\b(npm_[a-zA-Z0-9]{20,})\b/g },
   { name: 'GitHub token', re: /\b(gh[pousr]_[a-zA-Z0-9]{20,})\b/g },

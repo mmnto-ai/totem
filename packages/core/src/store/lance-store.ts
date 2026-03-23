@@ -16,6 +16,18 @@ import { runHealthCheck } from './lance-health.js';
 import { TOTEM_TABLE_NAME } from './lance-schema.js';
 import { runHybridSearch, runVectorSearch } from './lance-search.js';
 
+/**
+ * Escape a string for use in a LanceDB SQL WHERE clause (single-quoted literal).
+ *
+ * LanceDB uses DataFusion under the hood, which follows the SQL standard:
+ * single quotes are escaped by doubling ('' → ') and backslash is treated
+ * as a literal character (NOT an escape character). Therefore only quote
+ * doubling is required — escaping backslashes would break path matching.
+ */
+export function escapeSqlString(input: string): string {
+  return input.replace(/'/g, "''");
+}
+
 export class LanceStore {
   private db: lancedb.Connection | null = null;
   private table: lancedb.Table | null = null;
@@ -226,7 +238,7 @@ export class LanceStore {
   /** Delete all chunks from a specific file (for incremental re-index). */
   async deleteByFile(filePath: string): Promise<void> {
     if (!this.table) return;
-    const safePath = filePath.replace(/`/g, '\\`').replace(/'/g, "''");
+    const safePath = escapeSqlString(filePath);
     await this.table.delete(`\`filePath\` = '${safePath}'`);
   }
 

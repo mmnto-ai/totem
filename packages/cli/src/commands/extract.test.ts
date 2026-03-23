@@ -157,6 +157,97 @@ Second lesson without heading.
   });
 });
 
+// ─── parseLessons — JSON format ──────────────────────────
+
+describe('parseLessons — JSON format', () => {
+  it('parses a JSON array of lessons', () => {
+    const output = JSON.stringify([
+      { heading: 'Check ENOENT separately', tags: ['git', 'cli'], text: 'Always check ENOENT.' },
+    ]);
+    const lessons = parseLessons(output);
+    expect(lessons).toHaveLength(1);
+    expect(lessons[0]).toEqual({
+      heading: 'Check ENOENT separately',
+      tags: ['git', 'cli'],
+      text: 'Always check ENOENT.',
+    });
+  });
+
+  it('parses JSON wrapped in markdown code fences', () => {
+    const output = '```json\n[{"tags": ["test"], "text": "A lesson."}]\n```';
+    const lessons = parseLessons(output);
+    expect(lessons).toHaveLength(1);
+  });
+
+  it('rejects JSON with invalid schema (missing tags)', () => {
+    const output = JSON.stringify([{ text: 'No tags here.' }]);
+    // Should fall back to regex, which won't match either
+    const lessons = parseLessons(output);
+    expect(lessons).toEqual([]);
+  });
+
+  it('rejects JSON with oversized text (>2000 chars)', () => {
+    const output = JSON.stringify([{ tags: ['test'], text: 'x'.repeat(2001) }]);
+    const lessons = parseLessons(output);
+    expect(lessons).toEqual([]);
+  });
+
+  it('falls back to regex when JSON is invalid', () => {
+    // This is the old format — should still work via fallback
+    const output = `---LESSON---
+Tags: git, cli, trap
+Always check for ENOENT separately from other errors.
+---END---`;
+    const lessons = parseLessons(output);
+    expect(lessons).toHaveLength(1);
+  });
+
+  it('sanitizes heading from JSON lessons', () => {
+    const output = JSON.stringify([{ heading: '### My heading', tags: ['test'], text: 'Body.' }]);
+    const lessons = parseLessons(output);
+    expect(lessons[0]!.heading).toBe('My heading');
+  });
+
+  it('rejects injected content that mimics JSON format but has bad schema', () => {
+    // Attacker tries to inject a lesson with excessive tags
+    const output = JSON.stringify([{ tags: Array(11).fill('spam'), text: 'Injected content.' }]);
+    const lessons = parseLessons(output);
+    expect(lessons).toEqual([]);
+  });
+
+  it('extracts JSON from conversational LLM wrapping', () => {
+    const output = `Here are the lessons I extracted:\n\n${JSON.stringify([
+      { tags: ['git'], text: 'A lesson about git.' },
+    ])}`;
+    const lessons = parseLessons(output);
+    expect(lessons).toHaveLength(1);
+    expect(lessons[0]!.text).toBe('A lesson about git.');
+  });
+
+  it('handles empty JSON array gracefully', () => {
+    const lessons = parseLessons('[]');
+    expect(lessons).toEqual([]);
+  });
+
+  it('handles brackets inside lesson text without corrupting JSON parse', () => {
+    const output = JSON.stringify([
+      { tags: ['error'], text: 'Array [index] out of bounds errors need guard checks.' },
+    ]);
+    const lessons = parseLessons(output);
+    expect(lessons).toHaveLength(1);
+    expect(lessons[0]!.text).toBe('Array [index] out of bounds errors need guard checks.');
+  });
+
+  it('ignores conversational brackets before the actual JSON array', () => {
+    const output = `Here are the lessons [as requested]: ${JSON.stringify([
+      { tags: ['git'], text: 'A lesson about git.' },
+    ])}`;
+    const lessons = parseLessons(output);
+    expect(lessons).toHaveLength(1);
+    expect(lessons[0]!.text).toBe('A lesson about git.');
+  });
+});
+
 // ─── flagSuspiciousLessons ───────────────────────────────
 
 describe('flagSuspiciousLessons', () => {
@@ -533,14 +624,14 @@ describe('assemblePrompt', () => {
 describe('SYSTEM_PROMPT', () => {
   it('contains heading format constraint for complete phrases', () => {
     expect(SYSTEM_PROMPT).toContain('COMPLETE phrase');
-    expect(SYSTEM_PROMPT).toContain('Must NOT end with a preposition, article, or conjunction');
+    expect(SYSTEM_PROMPT).toContain('must NOT end with a preposition, article, or conjunction');
   });
 
-  it('contains output format delimiters', () => {
-    expect(SYSTEM_PROMPT).toContain('---LESSON---');
-    expect(SYSTEM_PROMPT).toContain('---END---');
-    expect(SYSTEM_PROMPT).toContain('Heading:');
-    expect(SYSTEM_PROMPT).toContain('Tags:');
+  it('contains JSON output format instructions', () => {
+    expect(SYSTEM_PROMPT).toContain('JSON array');
+    expect(SYSTEM_PROMPT).toContain('"heading"');
+    expect(SYSTEM_PROMPT).toContain('"tags"');
+    expect(SYSTEM_PROMPT).toContain('"text"');
   });
 
   it('contains duplicate prevention instruction', () => {
