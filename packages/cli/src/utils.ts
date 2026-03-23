@@ -3,7 +3,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { SearchResult, TotemConfig } from '@mmnto/totem';
-import { TotemConfigError, TotemConfigSchema, TotemOrchestratorError } from '@mmnto/totem';
+import {
+  maskSecrets,
+  TotemConfigError,
+  TotemConfigSchema,
+  TotemOrchestratorError,
+} from '@mmnto/totem';
 
 import type { OrchestratorResult } from './orchestrators/orchestrator.js';
 import { createOrchestrator, resolveOrchestrator } from './orchestrators/orchestrator.js';
@@ -379,9 +384,34 @@ export async function runOrchestrator(opts: {
     }
   }
 
+  // DLP middleware: mask secrets before any outbound LLM call (#strategy-12)
+  const baseUrl =
+    'baseUrl' in config.orchestrator && typeof config.orchestrator.baseUrl === 'string'
+      ? config.orchestrator.baseUrl
+      : undefined;
+  const LOCAL_HOST_RE = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?(\/|$)/i;
+  const isLocalProvider =
+    (config.orchestrator.provider === 'ollama' &&
+      (baseUrl == null || LOCAL_HOST_RE.test(baseUrl))) ||
+    (baseUrl != null && LOCAL_HOST_RE.test(baseUrl));
+  let safePrompt = prompt;
+  if (!isLocalProvider) {
+    try {
+      safePrompt = maskSecrets(prompt);
+      if (safePrompt !== prompt) {
+        log.warn(tag, 'DLP: secrets detected and redacted before LLM call');
+      }
+    } catch (err) {
+      throw new TotemOrchestratorError(
+        `DLP scan failed: ${err instanceof Error ? err.message : String(err)}`,
+        'DLP masking is mandatory for remote providers. Fix the error or use a local provider.',
+      );
+    }
+  }
+
   let result: OrchestratorResult;
   try {
-    result = await invoke({ prompt, model, cwd, tag, totemDir: config.totemDir });
+    result = await invoke({ prompt: safePrompt, model, cwd, tag, totemDir: config.totemDir });
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'QuotaError') {
       const rawFallback = config.orchestrator.fallbackModel;
@@ -393,7 +423,7 @@ export async function runOrchestrator(opts: {
         const fallbackResolved = resolveOrchestrator(rawFallback, baseProvider, baseInvoke);
         try {
           result = await fallbackResolved.invoke({
-            prompt,
+            prompt: safePrompt,
             model: fallbackResolved.parsed.model,
             cwd,
             tag,
