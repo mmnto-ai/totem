@@ -65,6 +65,9 @@ Updated content here...
 - **\`totem shield\`**: AI-powered code review. Queries LanceDB for context, sends diff + knowledge to an LLM. Slow (~18s). Requires API keys. Used before opening PRs. Lives in the Full configuration tier.
 - These are DIFFERENT commands with DIFFERENT purposes. Never describe \`shield\` as "deterministic" or \`lint\` as "AI-powered."
 
+## Writing Style (MANDATORY)
+- **No Marketing Language:** NEVER use marketing-centric terms: "comprehensive", "robust", "seamless", "cutting-edge", "state-of-the-art", "revolutionary", "guarantee", "guarantees". Use objective, factual descriptions instead. Say what the feature does, not how impressive it is.
+
 ## Formatting Rules
 - **Sub-Bullet Threshold:** When a feature list exceeds 3 items, use nested sub-bullets instead of comma-separated inline lists. Group related items into named categories (e.g., "Security:", "DX:", "Orchestration:").
 - **Completed Phase Summary:** Phases marked \`[x]\` should be summarized in 1-2 sentences max. Do NOT expand completed phases with every PR number — use categorized sub-bullets for the key capability areas only.
@@ -258,6 +261,49 @@ export function stripIssueRefs(content: string): string {
       // Clean up trailing spaces on lines
       .replace(/ +$/gm, '')
   );
+}
+
+/**
+ * Replace marketing-centric terms with factual alternatives in generated docs.
+ * Deterministic post-processing — does not rely on LLM compliance.
+ */
+/** Map of marketing terms to their factual replacements (lowercase). */
+const MARKETING_MAP: Record<string, string> = {
+  comprehensive: 'thorough',
+  robust: 'reliable',
+  seamlessly: 'smoothly',
+  seamless: 'smooth',
+  'cutting-edge': 'modern',
+  'state-of-the-art': 'current',
+  revolutionary: 'significant',
+  guarantees: 'ensures',
+  guarantee: 'ensure',
+};
+
+const MARKETING_RE = new RegExp(`\\b(${Object.keys(MARKETING_MAP).join('|')})\\b`, 'gi');
+
+/** Preserve the original capitalization pattern when replacing. */
+function casePreservingReplace(original: string, replacement: string): string {
+  if (original === original.toUpperCase()) return replacement.toUpperCase();
+  if (original.length > 0 && original[0] === original[0]?.toUpperCase()) {
+    return (replacement[0]?.toUpperCase() ?? '') + replacement.slice(1);
+  }
+  return replacement;
+}
+
+export function stripMarketingTerms(content: string): string {
+  // Split on fenced code blocks, inline code, and URLs/link targets to avoid mangling
+  const parts = content.split(/(```[\s\S]*?```|`[^`]+`|https?:\/\/[^\s)]+|\]\([^)]+\))/g);
+  return parts
+    .map((part, i) => {
+      // Odd-indexed parts are protected spans — leave them alone
+      if (i % 2 === 1) return part;
+      return part.replace(MARKETING_RE, (match) => {
+        const replacement = MARKETING_MAP[match.toLowerCase()];
+        return replacement ? casePreservingReplace(match, replacement) : match;
+      });
+    })
+    .join('');
 }
 
 // ─── Diff display ───────────────────────────────────────
@@ -475,9 +521,10 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
       continue;
     }
 
-    // Post-process: strip issue/PR refs from user-facing docs (#815)
+    // Post-process: deterministic sanitization of LLM output
     const isUserFacingDoc = path.basename(doc.path).toLowerCase() === 'readme.md';
-    const cleaned = isUserFacingDoc ? stripIssueRefs(extracted) : extracted;
+    const withoutRefs = isUserFacingDoc ? stripIssueRefs(extracted) : extracted;
+    const cleaned = stripMarketingTerms(withoutRefs);
     const trimmedContent = cleaned.trimEnd() + '\n';
     const hasChanges = showDiff(doc.path, currentContent, trimmedContent);
     if (!hasChanges) continue;

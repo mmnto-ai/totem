@@ -6,7 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DocTarget } from '@mmnto/totem';
 
-import { DOCS_SYSTEM_PROMPT, docsCommand, extractUpdatedDocument, stripIssueRefs } from './docs.js';
+import {
+  DOCS_SYSTEM_PROMPT,
+  docsCommand,
+  extractUpdatedDocument,
+  stripIssueRefs,
+  stripMarketingTerms,
+} from './docs.js';
 
 // ─── Mocks ──────────────────────────────────────────────
 
@@ -454,5 +460,72 @@ describe('stripIssueRefs', () => {
 
   it('cleans double spaces left behind', () => {
     expect(stripIssueRefs('feature (#714) is ready')).toBe('feature is ready');
+  });
+});
+
+// ─── stripMarketingTerms ────────────────────────────────
+
+describe('stripMarketingTerms', () => {
+  it('replaces "comprehensive" with "thorough"', () => {
+    expect(stripMarketingTerms('A comprehensive review of the system')).toBe(
+      'A thorough review of the system',
+    );
+  });
+
+  it('replaces "robust" with "reliable"', () => {
+    expect(stripMarketingTerms('robust error handling')).toBe('reliable error handling');
+  });
+
+  it('replaces "guarantees" with "ensures"', () => {
+    expect(stripMarketingTerms('This guarantees compliance')).toBe('This ensures compliance');
+  });
+
+  it('preserves capitalization pattern during replacement', () => {
+    expect(stripMarketingTerms('COMPREHENSIVE and Robust')).toBe('THOROUGH and Reliable');
+    expect(stripMarketingTerms('Seamlessly integrated')).toBe('Smoothly integrated');
+  });
+
+  it('preserves content without marketing terms', () => {
+    const clean = 'This system uses deterministic rules for enforcement.';
+    expect(stripMarketingTerms(clean)).toBe(clean);
+  });
+
+  it('preserves marketing terms inside code blocks', () => {
+    const withCode = 'A comprehensive API.\n\n```ts\nconst robust = true;\n```\n\nRobust system.';
+    const result = stripMarketingTerms(withCode);
+    expect(result).toContain('const robust = true;');
+    expect(result).toContain('A thorough API.');
+    expect(result).toContain('Reliable system.');
+  });
+
+  it('preserves marketing terms inside inline code', () => {
+    expect(stripMarketingTerms('Use `comprehensive` flag')).toBe('Use `comprehensive` flag');
+  });
+
+  it('replaces singular "guarantee"', () => {
+    expect(stripMarketingTerms('we guarantee compatibility')).toBe('we ensure compatibility');
+  });
+
+  it('preserves marketing terms inside URLs', () => {
+    expect(stripMarketingTerms('See https://example.com/state-of-the-art for details')).toBe(
+      'See https://example.com/state-of-the-art for details',
+    );
+  });
+
+  it('preserves marketing terms inside Markdown link targets', () => {
+    expect(stripMarketingTerms('[guide](https://robust-api.com/docs)')).toBe(
+      '[guide](https://robust-api.com/docs)',
+    );
+  });
+});
+
+// ─── DOCS_SYSTEM_PROMPT includes marketing ban ──────────
+
+describe('DOCS_SYSTEM_PROMPT marketing ban', () => {
+  it('includes banned marketing terms in system prompt', () => {
+    expect(DOCS_SYSTEM_PROMPT).toContain('comprehensive');
+    expect(DOCS_SYSTEM_PROMPT).toContain('robust');
+    expect(DOCS_SYSTEM_PROMPT).toContain('seamless');
+    expect(DOCS_SYSTEM_PROMPT).toContain('No Marketing Language');
   });
 });
