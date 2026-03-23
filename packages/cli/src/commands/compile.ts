@@ -424,7 +424,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
       };
 
       // Compile lessons in parallel batches (Proposal 188 Phase 1)
-      const parsed = parseInt(options.concurrency ?? String(DEFAULT_CONCURRENCY), 10);
+      const parsed = Number(options.concurrency ?? DEFAULT_CONCURRENCY);
       const CONCURRENCY = Math.min(
         MAX_CONCURRENCY,
         Math.max(1, Number.isNaN(parsed) ? DEFAULT_CONCURRENCY : parsed),
