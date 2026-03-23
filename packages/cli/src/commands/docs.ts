@@ -267,30 +267,41 @@ export function stripIssueRefs(content: string): string {
  * Replace marketing-centric terms with factual alternatives in generated docs.
  * Deterministic post-processing — does not rely on LLM compliance.
  */
-const MARKETING_REPLACEMENTS: [RegExp, string][] = [
-  [/\bcomprehensive\b/gi, 'thorough'],
-  [/\brobust\b/gi, 'reliable'],
-  [/\bseamlessly\b/gi, 'smoothly'],
-  [/\bseamless\b/gi, 'smooth'],
-  [/\bcutting-edge\b/gi, 'modern'],
-  [/\bstate-of-the-art\b/gi, 'current'],
-  [/\brevolutionary\b/gi, 'significant'],
-  [/\bguarantees\b/gi, 'ensures'],
-  [/\bguarantee\b/gi, 'ensure'],
-];
+/** Map of marketing terms to their factual replacements (lowercase). */
+const MARKETING_MAP: Record<string, string> = {
+  comprehensive: 'thorough',
+  robust: 'reliable',
+  seamlessly: 'smoothly',
+  seamless: 'smooth',
+  'cutting-edge': 'modern',
+  'state-of-the-art': 'current',
+  revolutionary: 'significant',
+  guarantees: 'ensures',
+  guarantee: 'ensure',
+};
+
+const MARKETING_RE = new RegExp(`\\b(${Object.keys(MARKETING_MAP).join('|')})\\b`, 'gi');
+
+/** Preserve the original capitalization pattern when replacing. */
+function casePreservingReplace(original: string, replacement: string): string {
+  if (original === original.toUpperCase()) return replacement.toUpperCase();
+  if (original.length > 0 && original[0] === original[0]?.toUpperCase()) {
+    return (replacement[0]?.toUpperCase() ?? '') + replacement.slice(1);
+  }
+  return replacement;
+}
 
 export function stripMarketingTerms(content: string): string {
   // Split on fenced code blocks, inline code, and URLs/link targets to avoid mangling
   const parts = content.split(/(```[\s\S]*?```|`[^`]+`|https?:\/\/[^\s)]+|\]\([^)]+\))/g);
   return parts
     .map((part, i) => {
-      // Odd-indexed parts are code blocks — leave them alone
+      // Odd-indexed parts are protected spans — leave them alone
       if (i % 2 === 1) return part;
-      let result = part;
-      for (const [pattern, replacement] of MARKETING_REPLACEMENTS) {
-        result = result.replace(pattern, replacement);
-      }
-      return result;
+      return part.replace(MARKETING_RE, (match) => {
+        const replacement = MARKETING_MAP[match.toLowerCase()];
+        return replacement ? casePreservingReplace(match, replacement) : match;
+      });
     })
     .join('');
 }

@@ -480,8 +480,9 @@ describe('stripMarketingTerms', () => {
     expect(stripMarketingTerms('This guarantees compliance')).toBe('This ensures compliance');
   });
 
-  it('handles case-insensitive replacements', () => {
-    expect(stripMarketingTerms('COMPREHENSIVE and Robust')).toBe('thorough and reliable');
+  it('preserves capitalization pattern during replacement', () => {
+    expect(stripMarketingTerms('COMPREHENSIVE and Robust')).toBe('THOROUGH and Reliable');
+    expect(stripMarketingTerms('Seamlessly integrated')).toBe('Smoothly integrated');
   });
 
   it('preserves content without marketing terms', () => {
@@ -494,7 +495,7 @@ describe('stripMarketingTerms', () => {
     const result = stripMarketingTerms(withCode);
     expect(result).toContain('const robust = true;');
     expect(result).toContain('A thorough API.');
-    expect(result).toContain('reliable system.');
+    expect(result).toContain('Reliable system.');
   });
 
   it('preserves marketing terms inside inline code', () => {
