@@ -1,4 +1,4 @@
-## Lesson — Using fixed literal tags like 'Totem Error' in log calls,
+## Lesson — Use fixed literal tags for log.error calls
 
 **Tags:** logging, cli, dx
 
