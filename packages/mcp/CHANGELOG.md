@@ -1,5 +1,13 @@
 # @mmnto/mcp
 
+## 1.4.1
+
+### Patch Changes
+
+- ec5b807: Security sweep: fix sanitizer regex statefulness (#871), secret pattern ordering (#872), extract parser injection vector (#873), SQL escaping (#874), and add compile manifest CI attestation (#875)
+- Updated dependencies [ec5b807]
+  - @mmnto/totem@1.4.1
+
 ## 1.4.0
 
 ### Minor Changes
