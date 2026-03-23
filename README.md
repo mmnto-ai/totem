@@ -12,7 +12,7 @@ Totem doesn't ship with your app. It lives in your workflow. It also works on no
 
 ```bash
 $ npx @mmnto/cli lint
-PASS — 230 rules, 0 violations.
+PASS — 247 rules, 0 violations.
 
 $ npx @mmnto/cli stats
 Total violations prevented: 47 | security: 12, architecture: 35
@@ -34,7 +34,7 @@ Your AI doesn't have to be obedient. It just has to push code.
 | -------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | **Suggestion** | `.cursorrules`, `CLAUDE.md`, `.gemini/` | Ask the AI to follow the rules so it works faster                                                                                    |
 | **Fast Path**  | `verify_execution` MCP tool             | Let the AI grade its own homework before pushing                                                                                     |
-| **Guarantee**  | `pre-push` git hook → `totem lint`      | Deterministic gate. If the AI ignored Layer 1 and skipped Layer 2, it hits the wall of Layer 3 and cannot proceed until it complies. |
+| **Ensure**     | `pre-push` git hook → `totem lint`      | Deterministic gate. If the AI ignored Layer 1 and skipped Layer 2, it hits the wall of Layer 3 and cannot proceed until it complies. |
 
 Totem doesn't try to control the agent in real-time. It enforces a strict final output state — like a compiler, not a linter.
 
@@ -95,11 +95,11 @@ Results are restricted to `packages/mcp/` files. Unknown boundary names fall bac
 
 ## Performance
 
-`totem lint` runs **230 compiled rules in under 2 seconds** on a 7,400-line, 105-file PR. Zero LLM inference. Pure AST classification + regex matching.
+`totem lint` runs **147 compiled rules in under 2 seconds** on a 7,400-line, 105-file PR. Zero LLM inference. Pure AST classification + regex matching.
 
 | Metric         | Value                        |
 | -------------- | ---------------------------- |
-| Rules          | 230 (regex + AST + ast-grep) |
+| Rules          | 147 (regex + AST + ast-grep) |
 | Lines scanned  | 7,397                        |
 | Files          | 105                          |
 | Execution time | **1.75s**                    |
@@ -186,7 +186,7 @@ npx @mmnto/cli sync # Build the vector index
 npx @mmnto/cli lint # Run compiled rules (zero LLM)
 ```
 
-During `init`, Totem prompts to install a `pre-push` git hook that runs `totem lint` automatically before every push. It drops a standard shell script into `.git/hooks/` to work alongside Husky or bare repos, alongside invisible sync hooks that seamlessly keep the vector index updated. Pre-commit hooks actively warn on commits that lack proper preflight validation. Run `totem hooks --check` to verify installation at any time.
+During `init`, Totem prompts to install a `pre-push` git hook that runs `totem lint` automatically before every push. It drops a standard shell script into `.git/hooks/` to work alongside Husky or bare repos, alongside invisible sync hooks that keep the vector index updated. Pre-commit hooks actively warn on commits that lack proper preflight validation. Run `totem hooks --check` to verify installation at any time.
 
 ## The Planning Pipeline
 
@@ -211,14 +211,14 @@ AI coding agents are brilliant but forgetful, often repeating architectural viol
 
 - **Compile:** Your `.cursorrules` and `.mdc` files are plain English. Totem compiles them into deterministic AST and regex checks via the AST engine. A pre-compilation gate validates lessons before processing.
 - **Enforce:** `totem lint` is **100% deterministic** and runs compiled rules against your diff. It runs in ~2 seconds with zero API keys, and your CI passes or fails based purely on logic.
-- **Learn:** Run `totem extract` to compile new invariants from PR bugs, scaling your local index over time (the active CLI instance currently coordinates **441 embedded lessons**). When a violation happens, use `totem explain` to instantly retrieve the underlying lesson.
+- **Learn:** Run `totem extract` to compile new invariants from PR bugs, scaling your local index over time (the active CLI instance currently coordinates **475 embedded lessons**). When a violation happens, use `totem explain` to instantly retrieve the underlying lesson.
 - **Plan:** `totem spec` queries the knowledge index before your AI writes code, generating architectural invariants. The AI starts fully informed of past mistakes instead of starting blank.
 
 **Totem doesn't replace your AI. It gives your AI a memory.**
 
 ## Switch Models Without Losing Context
 
-Switching from Claude to Gemini or Copilot is seamless, as Totem's persistent memory outlasts any single AI session. It creates a model-agnostic layer that maintains your architectural rules everywhere.
+Switching from Claude to Gemini or Copilot works without friction, as Totem's persistent memory outlasts any single AI session. It creates a model-agnostic layer that maintains your architectural rules everywhere.
 
 - **Shared memory:** Lessons learned in one session are available to all agents via MCP.
 - **Portable rules:** Rules compiled from Cursor are enforced in Claude Code's pre-push hook. The enforcement is entirely model-independent.
@@ -233,18 +233,20 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
 
 - **Security & Compliance:**
 - **Fully Air-Gappable:** `totem lint` requires zero API keys and zero network access. With Ollama for embeddings, the entire pipeline runs without external API calls.
-- **DLP Secret Masking:** Automatically strips secrets before embedding. Credentials never leak into your vector index.
+- **DLP Secret Masking:** Automatically strips secrets before embedding and during outbound LLM calls. Credentials are masked before reaching your vector index or any external provider.
 - **SARIF 2.1.0 Output:** Integrates into CI security scanners via `--format sarif/json`. Prove SOC 2 / DORA compliance to your auditors.
-- **Execution Hardening:** Safeguards agent operations by enforcing capability caps and preventing injections. Phase-gate enforcement actively warns on commits lacking proper validation.
+- **Execution Hardening:** Safeguards agent operations by enforcing capability caps, trust boundaries, and an MCP authorization model. Phase-gate enforcement actively warns on commits lacking proper validation.
+- **Provenance Tracking:** Compile manifests are signed to create a verifiable provenance chain.
 - **Reliability & Portability:**
 - **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs. Tested for safe simultaneous MCP mutations.
-- **Cross-Platform Readiness:** Backed by portability audits, Docker test harnesses, and automated CI reviews. Tested across Ubuntu, Windows, and macOS in every CI run.
+- **Cross-Platform Readiness:** Backed by portability audits, Docker test harnesses, and automated CI reviews. Tested across Ubuntu, Windows, and macOS in every CI run. Release workflows include tag push resilience.
 - **Index Stability:** Dimension mismatch detection via `index-meta.json` prevents database corruption. Auto-healing migrations handle embedder changes automatically.
+- **Fixture Integrity:** CI wind tunnel uses SHA locks to ensure testing fixture integrity.
 - **Workspace Compatibility:** Native monorepo support accurately detects TypeScript via per-package configurations, while index partitions support alias resolution for targeted scopes.
 - **Error Handling:** Typed `TotemError` subclasses unify error domains with actionable recovery hints for resilient operations.
 - **Rule Architecture:**
-- **Curated Baselines:** Enforces up to 230 compiled rules with mandatory verify steps for execution determinism. Includes reverse-compiled lessons with manual patterns for zero-LLM enforcement.
-- **Advanced AST Validation:** Empowers deterministic enforcement via tree-sitter and ast-grep classifications. The underlying engine is validated against an adversarial corpus to reduce false positives.
+- **Curated Baselines:** Enforces up to 247 compiled rules with mandatory verify steps for execution determinism. Includes reverse-compiled lessons with manual patterns for zero-LLM enforcement.
+- **Advanced AST Validation:** Empowers deterministic enforcement via tree-sitter and ast-grep classifications. Query engines fail-closed instead of swallowing exceptions. The underlying engine is validated against an adversarial corpus to reduce false positives.
 - **Agent Automation:** Agent skills utilize a streamlined directory format and root router pattern for clear instruction files. Context restoration uses explicit capability manifests to maintain agent focus.
 - **Severity Validation:** Compiled rules enforce strict severity levels. Errors actively block CI, while warnings inform without blocking.
 
@@ -308,10 +310,8 @@ Full reference: [CLI Reference Wiki](./docs/wiki/cli-reference.md)
 
 # Troubleshooting
 
-<!--
 Manually maintained content that `totem docs` must include in the wiki.
 This file is the source of truth for troubleshooting notes — edit here, not in the generated wiki.
--->
 
 ## Git Hooks
 
