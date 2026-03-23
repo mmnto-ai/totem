@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-The Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.3.19`. Recent focus has centered on:
+The Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.4.0`. Recent focus has centered on:
 
 - **Orchestration & Workflows:**
   - Implemented invisible sync hooks for smooth orchestration context updates.

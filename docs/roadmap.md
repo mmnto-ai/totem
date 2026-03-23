@@ -62,7 +62,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - **Data Loss Prevention:** Implemented DLP secret masking middleware. This proactively strips secrets prior to outbound LLM calls and embedding processes.
   - **Adversarial Hardening:**
     - **Scrubbing & Detection:** Adversarial ingestion scrubbing, extraction hardening, and suspicious lesson detection algorithms.
-    - **Trust Boundaries:** Added trust boundaries and an MCP authentication model to harden ingestion pipelines.
+    - **Trust Boundaries:** Added trust boundaries and an MCP authorization model to harden ingestion pipelines.
     - **Execution Constraints:** MCP taskkill injection prevention and capability caps.
   - **Git Enforcements:** Native Git hook enforcement prioritizing zero-LLM `totem lint` for fast validation. Added monorepo and Bun support.
   - **Installation & Verification:**

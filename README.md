@@ -12,7 +12,7 @@ Totem doesn't ship with your app. It lives in your workflow. It also works on no
 
 ```bash
 $ npx @mmnto/cli lint
-PASS — 243 rules, 0 violations.
+PASS — 247 rules, 0 violations.
 
 $ npx @mmnto/cli stats
 Total violations prevented: 47 | security: 12, architecture: 35
@@ -233,7 +233,7 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
 
 - **Security & Compliance:**
 - **Fully Air-Gappable:** `totem lint` requires zero API keys and zero network access. With Ollama for embeddings, the entire pipeline runs without external API calls.
-- **DLP Secret Masking:** Automatically strips secrets before embedding and during outbound LLM calls. Credentials never leak into your vector index.
+- **DLP Secret Masking:** Automatically strips secrets before embedding and during outbound LLM calls. Credentials are masked before reaching your vector index or any external provider.
 - **SARIF 2.1.0 Output:** Integrates into CI security scanners via `--format sarif/json`. Prove SOC 2 / DORA compliance to your auditors.
 - **Execution Hardening:** Safeguards agent operations by enforcing capability caps, trust boundaries, and an MCP authorization model. Phase-gate enforcement actively warns on commits lacking proper validation.
 - **Provenance Tracking:** Compile manifests are signed to create a verifiable provenance chain.
@@ -245,7 +245,7 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
 - **Workspace Compatibility:** Native monorepo support accurately detects TypeScript via per-package configurations, while index partitions support alias resolution for targeted scopes.
 - **Error Handling:** Typed `TotemError` subclasses unify error domains with actionable recovery hints for resilient operations.
 - **Rule Architecture:**
-- **Curated Baselines:** Enforces up to 243 compiled rules with mandatory verify steps for execution determinism. Includes reverse-compiled lessons with manual patterns for zero-LLM enforcement.
+- **Curated Baselines:** Enforces up to 247 compiled rules with mandatory verify steps for execution determinism. Includes reverse-compiled lessons with manual patterns for zero-LLM enforcement.
 - **Advanced AST Validation:** Empowers deterministic enforcement via tree-sitter and ast-grep classifications. Query engines fail-closed instead of swallowing exceptions. The underlying engine is validated against an adversarial corpus to reduce false positives.
 - **Agent Automation:** Agent skills utilize a streamlined directory format and root router pattern for clear instruction files. Context restoration uses explicit capability manifests to maintain agent focus.
 - **Severity Validation:** Compiled rules enforce strict severity levels. Errors actively block CI, while warnings inform without blocking.
