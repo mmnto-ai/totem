@@ -502,7 +502,7 @@ describe('stripMarketingTerms', () => {
   });
 
   it('replaces singular "guarantee"', () => {
-    expect(stripMarketingTerms('we guarantee compatibility')).toBe('we ensures compatibility');
+    expect(stripMarketingTerms('we guarantee compatibility')).toBe('we ensure compatibility');
   });
 
   it('preserves marketing terms inside URLs', () => {

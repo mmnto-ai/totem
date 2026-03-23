@@ -275,7 +275,8 @@ const MARKETING_REPLACEMENTS: [RegExp, string][] = [
   [/\bcutting-edge\b/gi, 'modern'],
   [/\bstate-of-the-art\b/gi, 'current'],
   [/\brevolutionary\b/gi, 'significant'],
-  [/\bguarantees?\b/gi, 'ensures'],
+  [/\bguarantees\b/gi, 'ensures'],
+  [/\bguarantee\b/gi, 'ensure'],
 ];
 
 export function stripMarketingTerms(content: string): string {
