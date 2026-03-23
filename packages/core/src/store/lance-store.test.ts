@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { Embedder } from '../embedders/embedder.js';
 import type { Chunk } from '../types.js';
-import { LanceStore } from './lance-store.js';
+import { escapeSqlString, LanceStore } from './lance-store.js';
 
 /** Deterministic fake embedder — hashes text into a fixed-dimension vector. */
 class FakeEmbedder implements Embedder {
@@ -37,6 +37,31 @@ function makeChunk(overrides: Partial<Chunk> = {}): Chunk {
     ...overrides,
   };
 }
+
+describe('escapeSqlString', () => {
+  it('doubles single quotes', () => {
+    expect(escapeSqlString("it's")).toBe("it''s");
+  });
+
+  it('handles strings with no special characters', () => {
+    expect(escapeSqlString('src/index.ts')).toBe('src/index.ts');
+  });
+
+  it('preserves backslashes (DataFusion treats them as literals)', () => {
+    expect(escapeSqlString('foo\\bar\\baz')).toBe('foo\\bar\\baz');
+  });
+
+  it('escapes quotes adjacent to backslashes', () => {
+    // Input: foo\'bar (actual chars: f,o,o,\,',b,a,r)
+    // Only the quote is doubled; backslash is literal in DataFusion SQL.
+    expect(escapeSqlString("foo\\'bar")).toBe("foo\\''bar");
+  });
+
+  it('escapes trailing backslash-quote sequences', () => {
+    // Input: foo\' (actual chars: f,o,o,\,')
+    expect(escapeSqlString("foo\\'")).toBe("foo\\''");
+  });
+});
 
 describe('LanceStore', () => {
   let tmpDir: string;
@@ -132,6 +157,30 @@ describe('LanceStore', () => {
       ]);
 
       await store.deleteByFile("src/user's-config.ts");
+
+      const stats = await store.stats();
+      expect(stats.totalChunks).toBe(1);
+    });
+
+    it('handles paths with backslash-quote (adversarial)', async () => {
+      await store.insert([
+        makeChunk({ filePath: "foo\\'bar", content: 'adversarial bq' }),
+        makeChunk({ filePath: 'src/safe.ts', content: 'safe file' }),
+      ]);
+
+      await store.deleteByFile("foo\\'bar");
+
+      const stats = await store.stats();
+      expect(stats.totalChunks).toBe(1);
+    });
+
+    it('handles paths with only backslashes (adversarial)', async () => {
+      await store.insert([
+        makeChunk({ filePath: 'foo\\bar\\baz', content: 'backslash path' }),
+        makeChunk({ filePath: 'src/safe.ts', content: 'safe file' }),
+      ]);
+
+      await store.deleteByFile('foo\\bar\\baz');
 
       const stats = await store.stats();
       expect(stats.totalChunks).toBe(1);

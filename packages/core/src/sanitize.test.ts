@@ -48,6 +48,23 @@ describe('sanitizeForIngestion', () => {
     );
   });
 
+  // --- Regex statefulness regression (lastIndex drift) ---
+
+  it('strips BiDi overrides at the START of a string', () => {
+    // Regression: .test() on a /g regex advances lastIndex, so .replace()
+    // would miss characters before that position.
+    const result = sanitizeForIngestion('\u202Eleading override', { chunkType: 'spec' });
+    expect(result).toBe('leading override');
+  });
+
+  it('produces identical output on consecutive calls (no lastIndex drift)', () => {
+    const input = '\u202Ebidi\u2066 content';
+    const first = sanitizeForIngestion(input, { chunkType: 'spec' });
+    const second = sanitizeForIngestion(input, { chunkType: 'spec' });
+    expect(first).toBe('bidi content');
+    expect(second).toBe(first);
+  });
+
   // --- Invisible characters (prose only) ---
 
   it('strips zero-width spaces from spec chunks', () => {
@@ -242,5 +259,19 @@ describe('maskSecrets', () => {
   it('preserves short strings that look like keys', () => {
     // Too short to be a real key
     expect(maskSecrets('sk-short')).toBe('sk-short');
+  });
+
+  it('fully redacts sk-proj- tokens without partial leakage', () => {
+    const token = 'sk-proj-abcdef1234567890abcdef1234567890';
+    const result = maskSecrets(`key is ${token}`);
+    expect(result).toBe('key is [REDACTED]');
+    expect(result).not.toContain('sk-proj-');
+  });
+
+  it('still redacts plain sk- tokens', () => {
+    const token = 'sk-abcdef1234567890abcdef1234567890';
+    const result = maskSecrets(`key is ${token}`);
+    expect(result).toBe('key is [REDACTED]');
+    expect(result).not.toContain('sk-');
   });
 });

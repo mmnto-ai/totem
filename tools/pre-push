@@ -3,6 +3,12 @@
 
 echo "[totem] Running pre-push checks..."
 
+# Ensure temp files are cleaned up on any exit (success, failure, or interrupt)
+LINT_OUTPUT=""
+TEST_OUTPUT=""
+cleanup() { rm -f "$LINT_OUTPUT" "$TEST_OUTPUT"; }
+trap cleanup EXIT INT TERM
+
 echo "[totem] Checking formatting..."
 pnpm run format:check
 if [ $? -ne 0 ]; then
@@ -11,18 +17,26 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "[totem] Running linter..."
-pnpm run lint
-if [ $? -ne 0 ]; then
-  echo "[totem] ❌ Lint failed. Fix errors above before pushing."
+LINT_OUTPUT=$(mktemp)
+pnpm run lint > "$LINT_OUTPUT" 2>&1
+LINT_EXIT=$?
+if [ $LINT_EXIT -ne 0 ]; then
+  echo "[totem] ❌ Lint failed. See output below:"
+  cat "$LINT_OUTPUT"
   exit 1
 fi
 
 echo "[totem] Running tests..."
-pnpm run test
-if [ $? -ne 0 ]; then
-  echo "[totem] ❌ Tests failed. Fix errors above before pushing."
+TEST_OUTPUT=$(mktemp)
+pnpm run test > "$TEST_OUTPUT" 2>&1
+TEST_EXIT=$?
+if [ $TEST_EXIT -ne 0 ]; then
+  echo "[totem] ❌ Tests failed. See output below:"
+  cat "$TEST_OUTPUT"
   exit 1
 fi
+# Show summary only on success
+grep -E "Tests|Test Files|passed|failed" "$TEST_OUTPUT" | tail -6
 
 echo "[totem] ✅ All pre-push checks passed."
 
@@ -32,7 +46,7 @@ if [ -f ".totem/compiled-rules.json" ] && pnpm exec totem --version > /dev/null 
   pnpm exec totem shield --deterministic
   if [ $? -ne 0 ]; then
     echo "[totem] ❌ Deterministic shield found violations. Fix before pushing."
-    echo "[totem] Override with: git push --no-verify"
+    echo "[totem] If this is a false positive, file a ticket. Do not bypass without approval."
     exit 1
   fi
   echo "[totem] ✅ Deterministic shield passed."

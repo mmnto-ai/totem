@@ -216,9 +216,107 @@ const MAX_TAGS_PER_LESSON = 10;
 /** Max allowed length for a single tag. */
 const MAX_TAG_LENGTH = 50;
 
-export function parseLessons(llmOutput: string): ExtractedLesson[] {
-  if (llmOutput.trim() === 'NONE') return [];
+/** Extract a JSON array from LLM output, handling code fences and conversational wrapping. */
+function extractJsonArray(input: string): string | null {
+  const trimmed = input.trim();
 
+  // If the entire output is a JSON array, use it directly
+  if (trimmed.startsWith('[')) return trimmed;
+
+  // Try markdown code fences
+  const fenced = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)```/i);
+  if (fenced) return fenced[1]!.trim();
+
+  // Look for `[{` which strongly signals a JSON array of objects (not conversational brackets)
+  const arrayStart = trimmed.indexOf('[{');
+  if (arrayStart !== -1) {
+    // Find matching ] respecting JSON string literals (brackets inside strings don't count)
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = arrayStart; i < trimmed.length; i++) {
+      const ch = trimmed[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === '\\' && inString) {
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) continue;
+      if (ch === '[') depth++;
+      else if (ch === ']') {
+        depth--;
+        if (depth === 0) return trimmed.slice(arrayStart, i + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
+/** Validate a single parsed lesson object. Returns null if invalid. */
+function validateLesson(obj: unknown): ExtractedLesson | null {
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return null;
+  const rec = obj as Record<string, unknown>;
+
+  // Validate text
+  if (
+    typeof rec.text !== 'string' ||
+    rec.text.length === 0 ||
+    rec.text.length > MAX_LESSON_TEXT_LENGTH
+  ) {
+    return null;
+  }
+
+  // Validate tags
+  if (!Array.isArray(rec.tags) || rec.tags.length === 0 || rec.tags.length > MAX_TAGS_PER_LESSON) {
+    return null;
+  }
+  if (
+    !rec.tags.every(
+      (t): t is string => typeof t === 'string' && t.length > 0 && t.length <= MAX_TAG_LENGTH,
+    )
+  ) {
+    return null;
+  }
+
+  // Validate optional heading
+  const heading = typeof rec.heading === 'string' ? sanitizeHeading(rec.heading) : undefined;
+
+  return { ...(heading && { heading }), tags: rec.tags, text: rec.text.trim() };
+}
+
+/** Try to parse JSON lessons with manual validation. Returns null on failure. */
+function tryParseJson(llmOutput: string): ExtractedLesson[] | null {
+  try {
+    const jsonStr = extractJsonArray(llmOutput);
+    if (!jsonStr) return null;
+
+    const parsed: unknown = JSON.parse(jsonStr);
+    if (!Array.isArray(parsed)) return null;
+
+    const lessons: ExtractedLesson[] = [];
+    for (const item of parsed) {
+      const validated = validateLesson(item);
+      if (validated) lessons.push(validated);
+    }
+
+    // If we parsed JSON but got zero valid lessons, return null to try regex fallback
+    // (the JSON might have been a false positive match from conversational text)
+    return lessons.length > 0 ? lessons : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Fallback: parse lessons using the legacy ---LESSON---...---END--- regex format. */
+function parseWithRegex(llmOutput: string): ExtractedLesson[] {
   const lessons: ExtractedLesson[] = [];
   let match: RegExpExecArray | null;
 
@@ -241,6 +339,17 @@ export function parseLessons(llmOutput: string): ExtractedLesson[] {
   }
 
   return lessons;
+}
+
+export function parseLessons(llmOutput: string): ExtractedLesson[] {
+  if (llmOutput.trim() === 'NONE') return [];
+
+  // Primary path: JSON + manual validation
+  const jsonLessons = tryParseJson(llmOutput);
+  if (jsonLessons !== null) return jsonLessons;
+
+  // Fallback: regex parsing for models that don't produce clean JSON
+  return parseWithRegex(llmOutput);
 }
 
 // ─── Lesson writer ──────────────────────────────────────
