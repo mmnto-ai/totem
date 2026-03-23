@@ -95,7 +95,14 @@ export function generateOutputHash(rulesPath: string): string {
  */
 export function writeCompileManifest(manifestPath: string, manifest: CompileManifest): void {
   const json = JSON.stringify(manifest, null, 2) + '\n';
-  fs.writeFileSync(manifestPath, json, { encoding: 'utf-8', mode: 0o644 });
+  try {
+    fs.writeFileSync(manifestPath, json, { encoding: 'utf-8', mode: 0o644 });
+  } catch (err) {
+    throw new TotemParseError(
+      `Cannot write compile manifest: ${getErrorMessage(err)}`,
+      `Check write permissions for ${manifestPath}.`,
+    );
+  }
 }
 
 /**
@@ -123,9 +130,9 @@ export function readCompileManifest(manifestPath: string): CompileManifest {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch {
+  } catch (err) {
     throw new TotemParseError(
-      `Invalid JSON in compile manifest: ${manifestPath}`,
+      `Invalid JSON in compile manifest: ${manifestPath} (${getErrorMessage(err)})`,
       'The manifest file is corrupted. Re-run "totem compile".',
     );
   }
