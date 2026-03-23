@@ -109,7 +109,10 @@ export function readCompileManifest(manifestPath: string): CompileManifest {
         'Run "totem compile" to generate the manifest.',
       );
     }
-    throw err;
+    throw new TotemParseError(
+      `Cannot read compile manifest: ${getErrorMessage(err)}`,
+      `Check file permissions for ${manifestPath}.`,
+    );
   }
 
   let parsed: unknown;
