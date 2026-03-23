@@ -389,10 +389,10 @@ export async function runOrchestrator(opts: {
     'baseUrl' in config.orchestrator && typeof config.orchestrator.baseUrl === 'string'
       ? config.orchestrator.baseUrl
       : undefined;
+  const LOCAL_HOST_RE = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?(\/|$)/i;
   const isLocalProvider =
-    config.orchestrator.provider === 'ollama' ||
-    (baseUrl != null &&
-      /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?(\/|$)/i.test(baseUrl));
+    (config.orchestrator.provider === 'ollama' && (baseUrl == null || LOCAL_HOST_RE.test(baseUrl))) ||
+    (baseUrl != null && LOCAL_HOST_RE.test(baseUrl));
   let safePrompt = prompt;
   if (!isLocalProvider) {
     try {
