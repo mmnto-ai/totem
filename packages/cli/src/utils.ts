@@ -3,7 +3,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { SearchResult, TotemConfig } from '@mmnto/totem';
-import { TotemConfigError, TotemConfigSchema, TotemOrchestratorError } from '@mmnto/totem';
+import {
+  maskSecrets,
+  TotemConfigError,
+  TotemConfigSchema,
+  TotemOrchestratorError,
+} from '@mmnto/totem';
 
 import type { OrchestratorResult } from './orchestrators/orchestrator.js';
 import { createOrchestrator, resolveOrchestrator } from './orchestrators/orchestrator.js';
@@ -380,10 +385,9 @@ export async function runOrchestrator(opts: {
   }
 
   // DLP middleware: mask secrets before any outbound LLM call (#strategy-12)
-  const { maskSecrets } = await import('@mmnto/totem');
   const baseUrl =
-    'baseUrl' in config.orchestrator
-      ? (config.orchestrator.baseUrl as string | undefined)
+    'baseUrl' in config.orchestrator && typeof config.orchestrator.baseUrl === 'string'
+      ? config.orchestrator.baseUrl
       : undefined;
   const isLocalProvider =
     config.orchestrator.provider === 'ollama' ||
