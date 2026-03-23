@@ -53,3 +53,27 @@ jobs:
 
       - name: Verify wind tunnel SHA
         run: bash tools/update-wind-tunnel-sha.sh --verify
+
+  compile-manifest:
+    name: Compile Manifest Attestation
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'pull_request' &&
+      !contains(github.event.pull_request.title, '[UPDATE-RULES]') &&
+      !contains(github.event.pull_request.body, '[UPDATE-RULES]')
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+
+      - name: Verify compile manifest hashes
+        run: node packages/cli/dist/index.js verify-manifest
