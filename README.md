@@ -209,9 +209,9 @@ Cross-totem queries via `linkedIndexes` let the planner pull context from multip
 
 AI coding agents are brilliant but forgetful, often repeating architectural violations across sessions. Totem fixes this by creating a persistent memory layer that outlasts any single agent, model, or tool.
 
-- **Compile:** Your `.cursorrules` and `.mdc` files are plain English. Totem compiles them into deterministic AST and regex checks via the AST engine. A pre-compilation gate validates lessons before processing.
+- **Compile:** Your `.cursorrules` and `.mdc` files are plain English. Totem compiles them into deterministic AST and regex checks via the AST engine. A pre-compilation gate validates lessons before processing, with support for parallel compilation via the `--concurrency` flag.
 - **Enforce:** `totem lint` is **100% deterministic** and runs compiled rules against your diff. It runs in ~2 seconds with zero API keys, and your CI passes or fails based purely on logic.
-- **Learn:** Run `totem extract` to compile new invariants from PR bugs, scaling your local index over time (the active CLI instance currently coordinates **475 embedded lessons**). When a violation happens, use `totem explain` to instantly retrieve the underlying lesson.
+- **Learn:** Run `totem extract` to compile new invariants from PR bugs, scaling your local index over time (the active CLI instance currently coordinates **506 embedded lessons**). When a violation happens, use `totem explain` to instantly retrieve the underlying lesson.
 - **Plan:** `totem spec` queries the knowledge index before your AI writes code, generating architectural invariants. The AI starts fully informed of past mistakes instead of starting blank.
 
 **Totem doesn't replace your AI. It gives your AI a memory.**
@@ -236,9 +236,9 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
 - **DLP Secret Masking:** Automatically strips secrets before embedding and during outbound LLM calls. Credentials are masked before reaching your vector index or any external provider.
 - **SARIF 2.1.0 Output:** Integrates into CI security scanners via `--format sarif/json`. Prove SOC 2 / DORA compliance to your auditors.
 - **Execution Hardening:** Safeguards agent operations by enforcing capability caps, trust boundaries, and an MCP authorization model. Phase-gate enforcement actively warns on commits lacking proper validation.
-- **Provenance Tracking:** Compile manifests are signed to create a verifiable provenance chain.
+- **Provenance Tracking:** Compile manifests are signed to create a verifiable provenance chain, fortified by manifest attestation CI gates.
 - **Reliability & Portability:**
-- **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs. Tested for safe simultaneous MCP mutations.
+- **Concurrency Safety:** Filesystem concurrency locks ensure stable vector index syncs. Tested for safe simultaneous MCP mutations. Parallel compilation scales performance securely.
 - **Cross-Platform Readiness:** Backed by portability audits, Docker test harnesses, and automated CI reviews. Tested across Ubuntu, Windows, and macOS in every CI run. Release workflows include tag push resilience.
 - **Index Stability:** Dimension mismatch detection via `index-meta.json` prevents database corruption. Auto-healing migrations handle embedder changes automatically.
 - **Fixture Integrity:** CI wind tunnel uses SHA locks to ensure testing fixture integrity.
@@ -247,7 +247,7 @@ Totem is architected for high-compliance sectors (defense, finance, healthcare).
 - **Rule Architecture:**
 - **Curated Baselines:** Enforces up to 247 compiled rules with mandatory verify steps for execution determinism. Includes reverse-compiled lessons with manual patterns for zero-LLM enforcement.
 - **Advanced AST Validation:** Empowers deterministic enforcement via tree-sitter and ast-grep classifications. Query engines fail-closed instead of swallowing exceptions. The underlying engine is validated against an adversarial corpus to reduce false positives.
-- **Agent Automation:** Agent skills utilize a streamlined directory format and root router pattern for clear instruction files. Context restoration uses explicit capability manifests to maintain agent focus.
+- **Agent Automation:** Agent skills utilize a dedicated directory format and a root router pattern for clear instruction files. Context restoration uses explicit capability manifests to maintain agent focus.
 - **Severity Validation:** Compiled rules enforce strict severity levels. Errors actively block CI, while warnings inform without blocking.
 
 **What gets committed:** Your knowledge base (text files in `.totem/lessons/`) and the compiled artifact (`.totem/compiled-rules.json`). The `.lancedb/` vector index is a local-only cache, automatically rebuilt by `totem sync`. It is never committed to your repository.
@@ -281,28 +281,29 @@ Built on the same architecture as elite AI assistants (Tree-sitter + LanceDB), b
 
 <!-- docs COMMAND_TABLE -->
 
-| Command        | Description                                                                      |
-| -------------- | -------------------------------------------------------------------------------- |
-| `init`         | Initialize Totem in the current project                                          |
-| `sync`         | Re-index project files into the local vector store                               |
-| `search`       | Search the knowledge index                                                       |
-| `stats`        | Show index statistics                                                            |
-| `explain`      | Look up the lesson behind a compiled rule violation                              |
-| `spec`         | Generate a pre-work spec briefing for GitHub issue(s) or topic(s)                |
-| `lint`         | Run compiled rules against your diff (zero LLM, fast)                            |
-| `shield`       | AI-powered code review: analyze your diff against Totem knowledge                |
-| `triage`       | Prioritize open issues into an active work roadmap                               |
-| `handoff`      | Generate an end-of-session handoff snapshot for the next session                 |
-| `add-lesson`   | Interactively add a lesson to project memory (or pass string as argument)        |
-| `compile`      | Compile lessons into deterministic regex rules for zero-LLM shield checks        |
-| `test`         | Run test fixtures against compiled rules (TDD for governance rules)              |
-| `extract`      | Extract lessons from PR review(s) into .totem/lessons/ (interactive cherry-pick) |
-| `eject`        | Remove all Totem hooks, config, and data from this project                       |
-| `wrap`         | Post-merge workflow: learn from PR(s), sync index, then triage                   |
-| `docs`         | Auto-update registered project docs using LLM synthesis                          |
-| `lint-lessons` | Validate lesson metadata (patterns, scopes, severity)                            |
-| `drift`        | Check lessons for stale file references (CI gate)                                |
-| `hooks`        | Install git hooks (pre-commit, pre-push, post-merge) non-interactively           |
+| Command           | Description                                                                      |
+| ----------------- | -------------------------------------------------------------------------------- |
+| `init`            | Initialize Totem in the current project                                          |
+| `sync`            | Re-index project files into the local vector store                               |
+| `search`          | Search the knowledge index                                                       |
+| `stats`           | Show index statistics                                                            |
+| `explain`         | Look up the lesson behind a compiled rule violation                              |
+| `spec`            | Generate a pre-work spec briefing for GitHub issue(s) or topic(s)                |
+| `lint`            | Run compiled rules against your diff (zero LLM, fast)                            |
+| `shield`          | AI-powered code review: analyze your diff against Totem knowledge                |
+| `triage`          | Prioritize open issues into an active work roadmap                               |
+| `handoff`         | Generate an end-of-session handoff snapshot for the next session                 |
+| `add-lesson`      | Interactively add a lesson to project memory (or pass string as argument)        |
+| `compile`         | Compile lessons into deterministic regex rules for zero-LLM shield checks        |
+| `verify-manifest` | Verify compiled-rules.json matches the compile manifest (CI gate)                |
+| `test`            | Run test fixtures against compiled rules (TDD for governance rules)              |
+| `extract`         | Extract lessons from PR review(s) into .totem/lessons/ (interactive cherry-pick) |
+| `eject`           | Remove all Totem hooks, config, and data from this project                       |
+| `wrap`            | Post-merge workflow: learn from PR(s), sync index, then triage                   |
+| `docs`            | Auto-update registered project docs using LLM synthesis                          |
+| `lint-lessons`    | Validate lesson metadata (patterns, scopes, severity)                            |
+| `drift`           | Check lessons for stale file references (CI gate)                                |
+| `hooks`           | Install git hooks (pre-commit, pre-push, post-merge) non-interactively           |
 
 <!-- /docs -->
 

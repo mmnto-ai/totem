@@ -52,6 +52,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - **AST Governance:**
     - Universal Tree-sitter parsing and AST gating for zero-LLM `totem lint`. Shared execution logic unifies the underlying rule runner.
     - Advanced by the syntax-aware AST engine. Added fail-closed logic for AST query engines to prevent exception swallowing.
+    - Resolved execution wrapper, process exit handling, and AST query stability issues.
   - **Graceful Degradation:** Cross-provider LLM routing with SDK-to-CLI and Ollama fallbacks.
   - **Provider Coverage:** Supported Cloud Providers including Gemini, Anthropic, and OpenAI. Supported Local Providers via Ollama fallbacks.
 - **Data Safety & Memory:**
@@ -66,9 +67,8 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - **Execution Constraints:** MCP taskkill injection prevention and capability caps.
   - **Git Enforcements:** Native Git hook enforcement prioritizing zero-LLM `totem lint` for fast validation. Added monorepo and Bun support.
   - **Installation & Verification:**
-    - Auto-installation of `totem hooks` and continuous integration drift gating foundations.
-    - Expanded drift gating with a cross-platform CI matrix across Ubuntu, Windows, and macOS.
-    - Added CI wind tunnel SHA locks to ensure fixture integrity.
+    - **CI Workflows:** Expanded drift gating with a cross-platform matrix and auto-installation of `totem hooks`.
+    - **Security Gates:** Added CI wind tunnel SHA locks for fixture integrity and hardened manifest attestation workflows.
 
 ## Phase 3: Workflow Expansion (Power User Tools)
 
@@ -76,7 +76,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
 
 - **Observability & Maintenance:**
   - **Metrics & Diagnostics:**
-    - [x] **Semantic Rule Observability:** Separated zero-LLM `totem lint` from AI-powered `totem shield` for targeted rule enforcement. Introduced `totem explain` for violation lookups.
+    - [x] **Semantic Rule Observability:** Separated zero-LLM `totem lint` from AI-powered `totem shield` for targeted rule enforcement. Introduced `totem explain` for violation lookups and repaired suppression metrics for accurate tracking.
     - [ ] **CLI Metrics & Observability:** Local CLI metrics (`totem stats`) with terminal output only. Includes violation history, lesson coverage, and rule fire counts from local storage.
     - [ ] **Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks and track index health.
   - **System Maintenance:**
@@ -89,7 +89,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [x] **Configurable Issue Sources:** Added support for multiple repositories during triage and extraction workflows.
   - **Knowledge Integration:**
     - [x] **Context Injection:** Embedded relevant vector database lessons into orchestrator commands using a recency sandwiching pattern.
-    - [x] **Knowledge Promotion:** Audited local AI memory and promoted contributor knowledge to version-controlled surfaces.
+    - [x] **Knowledge Promotion:** Audited local AI memory and promoted contributor knowledge to version-controlled surfaces. Extracted operational knowledge from active quality sweeps.
     - [x] **Toolchain Exports:** Exported compiled lessons to code assistant instructions.
     - [x] **Local Sharing:** Introduced `totem link` to securely share compiled lessons across repositories. Enabled cross-totem queries via linked indexes.
   - **Task Orchestration:**
@@ -105,7 +105,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - **Governance & Verification:**
     - [ ] **Shift-Left AI Verification:** Define model compatibility and auditing strategy to systematically verify models.
     - [ ] **Adaptive Agent Governance:** Establish a codebase immune system. Transitions compilation from regex-only to AST-aware rules for complex cases where regex is insufficient.
-    - [x] **Rule Testing Harness:** Implemented a compiled rule testing harness to identify regex false-positives and drive AST requirements.
+    - [x] **Rule Testing Harness:** Implemented a compiled rule testing harness to identify regex false-positives and drive AST requirements. Addressed critical test coverage gaps across the validation pipeline.
     - [ ] **Adversarial Trap Corpus:** Develop synthetic violations to measure precision and recall of the deterministic engine.
     - [x] **Quality Control:** Addressed joint code review conditions and deployed a Docker test harness for stability validation. Implemented phase-gate enforcement and integrated security hardening from codebase reviews.
   - **Rules & Standards:**
@@ -118,6 +118,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [x] **Compilation Optimization:**
       - Implemented a compiler facade pattern and cached non-compilable lessons to optimize performance. Added compile manifest signing to establish a provenance chain.
       - Refined glob boundaries and introduced a pre-compilation lesson file linter to ensure structural validity.
+      - Enabled parallel lesson compilation utilizing concurrency flags to accelerate execution.
     - [x] **Core Rule Engine:** Integrated manual patterns and reverse-compiled curated rules into the primary execution pipeline. Streamlined compilation by extracting engine helper fields and enriched context with body-text backfills.
     - [ ] **Rule Exports:** Export compiled rules to standard linter configurations. Deferred until core governance is finalized.
     - [ ] **Lesson Packs Prototype:** Mine open-source projects as a proof of concept for distributable rule sets.
@@ -135,6 +136,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [ ] **Documentation Ingestion Pipeline:** Build Pull/Push models for enterprise wikis or internal knowledge bases.
     - [x] **Rust Core Extraction:** Evaluated high-performance core extraction for enterprise-scale operations.
     - [x] **Multi-Totem Domains:** Established multi-totem knowledge domains with an indexed strategy repository and consumer playground.
+    - **Quality Hardening:** Executed structural quality hardening and code deduplication to support enterprise operations.
 - **Integration & DevEx:**
   - **Onboarding Journeys:**
     - [ ] **Frictionless 10-Minute Init:** Build an onboarding command to generate contextual briefings tailored to a new developer's first ticket.
