@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { z } from 'zod';
 
-import { TotemParseError } from './errors.js';
+import { getErrorMessage, TotemParseError } from './errors.js';
 
 // ─── Schema ──────────────────────────────────────────
 
@@ -68,10 +68,17 @@ export function generateOutputHash(rulesPath: string): string {
   try {
     const content = fs.readFileSync(rulesPath, 'utf-8').replace(/\r\n/g, '\n');
     return crypto.createHash('sha256').update(content).digest('hex');
-  } catch {
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      throw new TotemParseError(
+        `Cannot hash compiled rules: ${rulesPath} not found`,
+        'Run "totem compile" to generate compiled-rules.json.',
+      );
+    }
     throw new TotemParseError(
-      `Cannot hash compiled rules: ${rulesPath} not found`,
-      'Run "totem compile" to generate compiled-rules.json.',
+      `Cannot read compiled rules: ${getErrorMessage(err)}`,
+      `Check file permissions for ${rulesPath}.`,
     );
   }
 }
