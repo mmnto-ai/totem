@@ -4,25 +4,25 @@
 
 ### Minor Changes
 
-- ## 1.4.0 — Security Hardening
+#### Security Hardening
 
-  ### Core (`@mmnto/totem`)
-  - **AST engines fail-closed** — query/parse errors now throw `TotemParseError` instead of silently returning empty arrays (#848)
-  - **Compile manifest signing** — `totem compile` writes `.totem/compile-manifest.json` with SHA-256 provenance chain (#842)
-  - **XML trust boundaries** — new `wrapUntrustedXml()` for network-fetched content, existing `wrapXml()` preserved for trusted local diffs (#843)
-  - **Tag name validation** — both XML wrappers validate tag names against injection (#843)
-  - **DLP secret masking** — `maskSecrets()` utility with centralized `rethrowAsParseError` and `getErrorMessage` helpers (#848, #strategy-12)
-  - **247 compiled rules** (up from 230)
+### Core (`@mmnto/totem`)
+- **AST engines fail-closed** — query/parse errors now throw `TotemParseError` instead of silently returning empty arrays (#848)
+- **Compile manifest signing** — `totem compile` writes `.totem/compile-manifest.json` with SHA-256 provenance chain (#842)
+- **XML trust boundaries** — new `wrapUntrustedXml()` for network-fetched content, existing `wrapXml()` preserved for trusted local diffs (#843)
+- **Tag name validation** — both XML wrappers validate tag names against injection (#843)
+- **DLP secret masking** — `maskSecrets()` utility with centralized `rethrowAsParseError` and `getErrorMessage` helpers (#848, #strategy-12)
+- **247 compiled rules** (up from 230)
 
-  ### CLI (`@mmnto/cli`)
-  - **Wind tunnel SHA lock** — `tools/update-wind-tunnel-sha.sh` with CI verification job (#840)
-  - **`totem verify-manifest`** — zero-LLM CI command to verify compiled rules match source lessons (#842)
-  - **Docs confirmation gate** — `totem docs` requires interactive confirmation or `--yes` before writing LLM output (#847)
-  - **Marketing term stripping** — case-preserving deterministic replacement, preserves code blocks and URLs (#833)
-  - **DLP middleware** — `maskSecrets` runs before every outbound LLM call, bypasses local providers (#strategy-12)
+### CLI (`@mmnto/cli`)
+- **Wind tunnel SHA lock** — `tools/update-wind-tunnel-sha.sh` with CI verification job (#840)
+- **`totem verify-manifest`** — zero-LLM CI command to verify compiled rules match source lessons (#842)
+- **Docs confirmation gate** — `totem docs` requires interactive confirmation or `--yes` before writing LLM output (#847)
+- **Marketing term stripping** — case-preserving deterministic replacement, preserves code blocks and URLs (#833)
+- **DLP middleware** — `maskSecrets` runs before every outbound LLM call, bypasses local providers (#strategy-12)
 
-  ### MCP (`@mmnto/mcp`)
-  - **add_lesson auth model** — Zod schema validation, rate limiting (10/session), source provenance, heading sanitization (#844)
+### MCP (`@mmnto/mcp`)
+- **add_lesson auth model** — Zod schema validation, rate limiting (10/session), source provenance, heading sanitization (#844)
 
 ## 1.3.19
 
