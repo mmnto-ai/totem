@@ -272,6 +272,7 @@ program
     'Export lessons as rules to AI assistant config files (uses exports from config)',
   )
   .option('--from-cursor', 'Ingest .cursorrules and .cursor/rules/*.mdc files as lessons')
+  .option('--concurrency <n>', 'Number of parallel LLM compilations (default: 5)', '5')
   .action(
     async (opts: {
       raw?: boolean;
@@ -281,6 +282,7 @@ program
       force?: boolean;
       export?: boolean;
       fromCursor?: boolean;
+      concurrency?: string;
     }) => {
       try {
         const { compileCommand } = await import('./commands/compile.js');
