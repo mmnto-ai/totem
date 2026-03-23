@@ -7,6 +7,8 @@ import { COMPILER_SYSTEM_PROMPT } from './compile-templates.js';
 
 const TAG = 'Compile';
 const COMPILED_RULES_FILE = 'compiled-rules.json';
+const DEFAULT_CONCURRENCY = 5;
+const MAX_CONCURRENCY = 20;
 
 // ─── Types ──────────────────────────────────────────
 
@@ -18,6 +20,7 @@ export interface CompileOptions {
   force?: boolean;
   export?: boolean;
   fromCursor?: boolean;
+  concurrency?: string;
 }
 
 interface LessonInput {
@@ -420,36 +423,54 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
         cwd,
       };
 
-      for (const lesson of toCompile) {
-        const result = await compileLesson(lesson, deps);
+      // Compile lessons in parallel batches (Proposal 188 Phase 1)
+      const parsed = parseInt(options.concurrency ?? String(DEFAULT_CONCURRENCY), 10);
+      const CONCURRENCY = Math.min(
+        MAX_CONCURRENCY,
+        Math.max(1, Number.isNaN(parsed) ? DEFAULT_CONCURRENCY : parsed),
+      );
+      for (let i = 0; i < toCompile.length; i += CONCURRENCY) {
+        const batch = toCompile.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(
+          batch.map((lesson) =>
+            compileLesson(lesson, deps)
+              .then((result) => ({ lesson, result }))
+              .catch((err) => {
+                log.warn(TAG, `[${lesson.heading}] ${String(err)} — skipping`);
+                return { lesson, result: { status: 'failed' as const } };
+              }),
+          ),
+        );
 
-        switch (result.status) {
-          case 'compiled':
-            // ADR-065: Pipeline 1 error rules require a test fixture
-            if (
-              extractManualPattern(lesson.body) &&
-              result.rule.severity === 'error' &&
-              !testedHashes.has(lesson.hash)
-            ) {
-              result.rule.severity = 'warning';
-              log.warn(
-                TAG,
-                `[${lesson.heading}] Downgraded to warning — no test fixture in .totem/tests/ (ADR-065)`,
-              );
-            }
-            newRules.push(result.rule);
-            compiled++;
-            logCompiledRule(log, lesson, result.rule);
-            break;
-          case 'skipped':
-            nonCompilableSet.add(result.hash);
-            skipped++;
-            break;
-          case 'failed':
-            failed++;
-            break;
-          case 'noop':
-            break;
+        for (const { lesson, result } of results) {
+          switch (result.status) {
+            case 'compiled':
+              // ADR-065: Pipeline 1 error rules require a test fixture
+              if (
+                extractManualPattern(lesson.body) &&
+                result.rule.severity === 'error' &&
+                !testedHashes.has(lesson.hash)
+              ) {
+                result.rule.severity = 'warning';
+                log.warn(
+                  TAG,
+                  `[${lesson.heading}] Downgraded to warning — no test fixture in .totem/tests/ (ADR-065)`,
+                );
+              }
+              newRules.push(result.rule);
+              compiled++;
+              logCompiledRule(log, lesson, result.rule);
+              break;
+            case 'skipped':
+              nonCompilableSet.add(result.hash);
+              skipped++;
+              break;
+            case 'failed':
+              failed++;
+              break;
+            case 'noop':
+              break;
+          }
         }
       }
 
