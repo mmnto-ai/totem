@@ -392,7 +392,7 @@ export async function runOrchestrator(opts: {
   const isLocalProvider =
     config.orchestrator.provider === 'ollama' ||
     (baseUrl != null &&
-      /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?/i.test(baseUrl));
+      /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?(\/|$)/i.test(baseUrl));
   let safePrompt = prompt;
   if (!isLocalProvider) {
     try {
