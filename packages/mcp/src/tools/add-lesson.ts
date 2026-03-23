@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { acquireLock, generateLessonHeading, sanitize, writeLessonFileAsync } from '@mmnto/totem';
 
 import { getContext, reconnectStore } from '../context.js';
+import { detectPackageManager } from '../utils.js';
 import { formatXmlResponse } from '../xml-format.js';
 
 // ---------------------------------------------------------------------------
@@ -37,15 +38,12 @@ function sanitizeHeading(heading: string): string {
 }
 
 /**
- * Detect the correct package-manager command for running `totem sync`.
+ * Build the correct package-manager command for running `totem sync`.
  */
 function detectSyncCommand(projectRoot: string): { cmd: string; args: string[] } {
-  if (fs.existsSync(path.join(projectRoot, 'pnpm-lock.yaml'))) {
-    return { cmd: 'pnpm', args: ['exec', 'totem', 'sync', '--incremental'] };
-  }
-  if (fs.existsSync(path.join(projectRoot, 'yarn.lock'))) {
-    return { cmd: 'yarn', args: ['totem', 'sync', '--incremental'] };
-  }
+  const pm = detectPackageManager(projectRoot);
+  if (pm === 'pnpm') return { cmd: 'pnpm', args: ['exec', 'totem', 'sync', '--incremental'] };
+  if (pm === 'yarn') return { cmd: 'yarn', args: ['totem', 'sync', '--incremental'] };
   return { cmd: 'npx', args: ['totem', 'sync', '--incremental'] };
 }
 

@@ -93,6 +93,7 @@ export async function addLessonCommand(lessonArg?: string): Promise<void> {
       windowsHide: true,
     });
     child.unref();
+    fs.closeSync(logFd);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log.warn('Totem', `Failed to trigger background sync: ${message}`);

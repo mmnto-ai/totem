@@ -110,13 +110,10 @@ async function retrieveExistingLessons(store: LanceStore): Promise<SearchResult[
 
 // ─── Prompt assembly ────────────────────────────────────
 
-const DEFAULT_BOT_MARKERS = ['Using Gemini Code Assist', 'Gemini Code Assist'];
+const DEFAULT_BOT_MARKERS: readonly string[] = ['Using Gemini Code Assist', 'Gemini Code Assist'];
 
-/** Active bot markers — updated from config in extractCommand, falls back to defaults. */
-let activeBotMarkers: readonly string[] = DEFAULT_BOT_MARKERS;
-
-function isGcaBoilerplate(body: string): boolean {
-  return activeBotMarkers.some((marker) => body.includes(marker));
+function isGcaBoilerplate(body: string, botMarkers: readonly string[]): boolean {
+  return botMarkers.some((marker) => body.includes(marker));
 }
 
 export function assemblePrompt(
@@ -125,6 +122,7 @@ export function assemblePrompt(
   existingLessons: SearchResult[],
   systemPrompt: string,
   nits?: string[],
+  botMarkers: readonly string[] = DEFAULT_BOT_MARKERS,
 ): string {
   const sections: string[] = [systemPrompt];
 
@@ -157,7 +155,7 @@ export function assemblePrompt(
   }
 
   // Regular PR comments (filter GCA boilerplate)
-  const prComments = pr.comments.filter((c) => !isGcaBoilerplate(c.body));
+  const prComments = pr.comments.filter((c) => !isGcaBoilerplate(c.body, botMarkers));
   if (prComments.length > 0) {
     sections.push('\n=== PR COMMENTS ===');
     for (const c of prComments) {
@@ -463,7 +461,7 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
   const config = await loadConfig(configPath);
 
   // Use project-configured bot markers if provided, otherwise keep defaults
-  activeBotMarkers = config.botMarkers ?? DEFAULT_BOT_MARKERS;
+  const botMarkers: readonly string[] = config.botMarkers ?? DEFAULT_BOT_MARKERS;
 
   // Connect to LanceDB for dedup context
   const embedding = requireEmbedding(config);
@@ -494,12 +492,12 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
     log.info(TAG, `Found ${reviewComments.length} inline review comments`);
 
     // Filter GCA boilerplate from inline comments
-    const filteredComments = reviewComments.filter((c) => !isGcaBoilerplate(c.body));
+    const filteredComments = reviewComments.filter((c) => !isGcaBoilerplate(c.body, botMarkers));
 
     // Skip if no review content
     const hasReviewContent =
       pr.reviews.some((r) => r.body.trim()) ||
-      pr.comments.some((c) => !isGcaBoilerplate(c.body)) ||
+      pr.comments.some((c) => !isGcaBoilerplate(c.body, botMarkers)) ||
       filteredComments.length > 0;
 
     if (!hasReviewContent) {
@@ -521,7 +519,7 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
     }
 
     // Assemble prompt
-    const prompt = assemblePrompt(pr, threads, existingLessons, systemPrompt, prNits);
+    const prompt = assemblePrompt(pr, threads, existingLessons, systemPrompt, prNits, botMarkers);
     log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
     // Run orchestrator (handles --raw mode, validation, invocation, telemetry)

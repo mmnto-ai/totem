@@ -1,30 +1,26 @@
 import { execFileSync, spawn } from 'node:child_process';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 import { getContext } from '../context.js';
+import { detectPackageManager } from '../utils.js';
 import { formatXmlResponse } from '../xml-format.js';
 
 const MAX_OUTPUT_CHARS = 10_000;
 const LINT_TIMEOUT_MS = 30_000;
 
 /**
- * Detect the correct command for running `totem lint`.
+ * Build the correct command for running `totem lint`.
  */
 function detectLintCommand(
   projectRoot: string,
   stagedOnly: boolean,
 ): { cmd: string; args: string[] } {
   const lintArgs = stagedOnly ? ['lint', '--staged'] : ['lint'];
-  if (fs.existsSync(path.join(projectRoot, 'pnpm-lock.yaml'))) {
-    return { cmd: 'pnpm', args: ['exec', 'totem', ...lintArgs] };
-  }
-  if (fs.existsSync(path.join(projectRoot, 'yarn.lock'))) {
-    return { cmd: 'yarn', args: ['totem', ...lintArgs] };
-  }
+  const pm = detectPackageManager(projectRoot);
+  if (pm === 'pnpm') return { cmd: 'pnpm', args: ['exec', 'totem', ...lintArgs] };
+  if (pm === 'yarn') return { cmd: 'yarn', args: ['totem', ...lintArgs] };
   return { cmd: 'npx', args: ['totem', ...lintArgs] };
 }
 

@@ -2,13 +2,7 @@ import * as path from 'node:path';
 
 import type { ContentType, LanceStore, SearchResult } from '@mmnto/totem';
 
-import {
-  extractChangedFiles,
-  filterDiffByPatterns,
-  getDefaultBranch,
-  getGitBranchDiff,
-  getGitDiff,
-} from '../git.js';
+import { getDiffForReview } from '../git.js';
 import { bold, errorColor, log, success as successColor } from '../ui.js';
 import {
   formatLessonSection,
@@ -342,27 +336,12 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   loadEnv(cwd);
   const config = await loadConfig(configPath);
 
-  // Get git diff — filter ignored patterns before fallback check so that
-  // noise (e.g., .strategy submodule pointer) doesn't suppress the branch diff.
-  const allIgnore = [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])];
+  // Get git diff — shared helper merges ignore patterns, tries staged/all
+  // then falls back to branch diff, and extracts changed file paths.
+  const diffResult = await getDiffForReview(options, config, cwd, TAG);
+  if (!diffResult) return;
 
-  const mode = options.staged ? 'staged' : 'all';
-  log.info(TAG, `Getting ${mode === 'staged' ? 'staged' : 'uncommitted'} diff...`);
-  let diff = await filterDiffByPatterns(getGitDiff(mode, cwd), allIgnore);
-
-  if (!diff.trim()) {
-    const base = getDefaultBranch(cwd);
-    log.dim(TAG, `No relevant changes. Falling back to branch diff (${base}...HEAD)...`);
-    diff = await filterDiffByPatterns(getGitBranchDiff(cwd, base), allIgnore);
-  }
-
-  if (!diff.trim()) {
-    log.warn(TAG, 'No changes detected. Nothing to review.');
-    return;
-  }
-
-  const changedFiles = extractChangedFiles(diff);
-  log.info(TAG, `Changed files (${changedFiles.length}): ${changedFiles.join(', ')}`);
+  const { diff, changedFiles } = diffResult;
 
   // Deterministic mode — DEPRECATED, use `totem lint` instead
   if (options.deterministic) {
