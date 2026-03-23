@@ -220,15 +220,12 @@ const MAX_TAG_LENGTH = 50;
 function extractJsonArray(input: string): string | null {
   const trimmed = input.trim();
 
-  // If the entire output is a JSON array, use it directly
-  if (trimmed.startsWith('[')) return trimmed;
-
-  // Try markdown code fences
-  const fenced = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)```/i);
+  // Try markdown code fences (backtick or tilde)
+  const fenced = trimmed.match(/(?:```|~~~)(?:json)?\s*\n?([\s\S]*?)(?:```|~~~)/i);
   if (fenced) return fenced[1]!.trim();
 
-  // Look for `[{` which strongly signals a JSON array of objects (not conversational brackets)
-  const arrayStart = trimmed.indexOf('[{');
+  // Look for `[` followed by optional whitespace then `{` — handles both compact and pretty-printed
+  const arrayStart = trimmed.search(/\[\s*\{/);
   if (arrayStart !== -1) {
     // Find matching ] respecting JSON string literals (brackets inside strings don't count)
     let depth = 0;
@@ -265,31 +262,24 @@ function validateLesson(obj: unknown): ExtractedLesson | null {
   if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return null;
   const rec = obj as Record<string, unknown>;
 
-  // Validate text
-  if (
-    typeof rec.text !== 'string' ||
-    rec.text.length === 0 ||
-    rec.text.length > MAX_LESSON_TEXT_LENGTH
-  ) {
-    return null;
-  }
+  // Normalize text
+  const text = typeof rec.text === 'string' ? rec.text.trim() : null;
+  if (!text || text.length > MAX_LESSON_TEXT_LENGTH) return null;
 
-  // Validate tags
-  if (!Array.isArray(rec.tags) || rec.tags.length === 0 || rec.tags.length > MAX_TAGS_PER_LESSON) {
-    return null;
-  }
-  if (
-    !rec.tags.every(
-      (t): t is string => typeof t === 'string' && t.length > 0 && t.length <= MAX_TAG_LENGTH,
-    )
-  ) {
-    return null;
-  }
+  // Normalize tags — trim and filter empty
+  const tags = Array.isArray(rec.tags)
+    ? rec.tags
+        .filter((t): t is string => typeof t === 'string')
+        .map((t) => t.trim())
+        .filter(Boolean)
+    : null;
+  if (!tags || tags.length === 0 || tags.length > MAX_TAGS_PER_LESSON) return null;
+  if (tags.some((t) => t.length > MAX_TAG_LENGTH)) return null;
 
   // Validate optional heading
   const heading = typeof rec.heading === 'string' ? sanitizeHeading(rec.heading) : undefined;
 
-  return { ...(heading && { heading }), tags: rec.tags, text: rec.text.trim() };
+  return { ...(heading && { heading }), tags, text };
 }
 
 /** Try to parse JSON lessons with manual validation. Returns null on failure. */
@@ -307,9 +297,10 @@ function tryParseJson(llmOutput: string): ExtractedLesson[] | null {
       if (validated) lessons.push(validated);
     }
 
-    // If we parsed JSON but got zero valid lessons, return null to try regex fallback
-    // (the JSON might have been a false positive match from conversational text)
-    return lessons.length > 0 ? lessons : null;
+    // JSON was detected and parsed — return results even if empty.
+    // Returning [] (not null) prevents regex fallback from accepting
+    // injected ---LESSON--- content after JSON was already found.
+    return lessons;
   } catch {
     return null;
   }
