@@ -436,7 +436,8 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
             compileLesson(lesson, deps)
               .then((result) => ({ lesson, result }))
               .catch((err) => {
-                log.warn(TAG, `[${lesson.heading}] ${String(err)} — skipping`);
+                const message = err instanceof Error ? err.message : String(err);
+                log.warn(TAG, `[${lesson.heading}] ${message} — skipping`);
                 return { lesson, result: { status: 'failed' as const } };
               }),
           ),
