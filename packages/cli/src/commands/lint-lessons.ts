@@ -39,11 +39,11 @@ export async function lintLessonsCommand(): Promise<void> {
   }
 
   if (errors.length > 0) {
-    log.error(
-      'Totem Error',
-      `${errors.length} error(s), ${warnings.length} warning(s) across ${lessons.length} lessons`,
+    throw new TotemError(
+      'LINT_LESSONS_FAILED',
+      `${errors.length} error(s), ${warnings.length} warning(s) across ${lessons.length} lessons.`,
+      'Fix the errors listed above, then re-run `totem lint-lessons`.',
     );
-    process.exit(1);
   }
 
   if (warnings.length > 0) {

@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 
 import type { ContentType, LanceStore, SearchResult } from '@mmnto/totem';
-import { TotemConfigError } from '@mmnto/totem';
+import { TotemConfigError, TotemError } from '@mmnto/totem';
 
 import {
   extractChangedFiles,
@@ -398,8 +398,11 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
 
     const content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd });
     if (content == null && !options.raw) {
-      log.error(TAG, 'Orchestrator returned no content (defaulting to FAIL)'); // totem-ignore
-      process.exit(1);
+      throw new TotemError(
+        'SHIELD_FAILED',
+        'Orchestrator returned no content (defaulting to FAIL).',
+        'Check your orchestrator API key and model configuration.',
+      );
     }
     if (content != null) {
       writeOutput(content, options.out);
@@ -413,11 +416,18 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
           log.info(TAG, `Verdict: ${verdictLabel}${reason}`);
           if (!verdict.pass) {
             if (options.learn) await learnFromVerdict(content, diff, options, config, cwd);
-            process.exit(1);
+            throw new TotemError(
+              'SHIELD_FAILED',
+              `Shield structural review failed: ${verdict.reason || 'no reason given'}`,
+              'Fix the issues identified in the review above, then re-run `totem shield`.',
+            );
           }
         } else {
-          log.error(TAG, 'Verdict: not found (defaulting to FAIL — fix LLM output format)'); // totem-ignore
-          process.exit(1);
+          throw new TotemError(
+            'SHIELD_FAILED',
+            'Verdict not found in LLM output (defaulting to FAIL).',
+            'Fix LLM output format — expected VERDICT: PASS/FAIL.',
+          );
         }
       }
     }
@@ -464,11 +474,18 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
         log.info(TAG, `Verdict: ${verdictLabel}${reason}`);
         if (!verdict.pass) {
           if (options.learn) await learnFromVerdict(content, diff, options, config, cwd);
-          process.exit(1);
+          throw new TotemError(
+            'SHIELD_FAILED',
+            `Shield review failed: ${verdict.reason || 'no reason given'}`,
+            'Fix the issues identified in the review above, then re-run `totem shield`.',
+          );
         }
       } else {
-        log.error(TAG, 'Verdict: not found (defaulting to FAIL — fix LLM output format)');
-        process.exit(1);
+        throw new TotemError(
+          'SHIELD_FAILED',
+          'Verdict not found in LLM output (defaulting to FAIL).',
+          'Fix LLM output format — expected VERDICT: PASS/FAIL.',
+        );
       }
     }
   }

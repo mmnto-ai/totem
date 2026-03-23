@@ -15,9 +15,12 @@ vi.mock('./docs.js', () => ({
 vi.mock('./compile.js', () => ({
   compileCommand: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock('node:child_process', () => ({
-  execSync: vi.fn(),
-}));
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return { ...actual, execSync: vi.fn() };
+});
+
+import { TotemConfigError } from '@mmnto/totem';
 
 import { compileCommand } from './compile.js';
 import { docsCommand } from './docs.js';
@@ -97,8 +100,11 @@ describe('wrapCommand', () => {
   });
 
   it('gracefully skips docs step when no docs configured', async () => {
-    const err = new Error('[Totem Error] No docs configured.');
-    err.name = 'NoDocsConfiguredError';
+    const err = new TotemConfigError(
+      'No docs configured.',
+      'Add docs to config.',
+      'CONFIG_MISSING',
+    );
     vi.mocked(docsCommand).mockRejectedValueOnce(err);
 
     await wrapCommand(['142'], {});

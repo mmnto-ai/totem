@@ -1,3 +1,5 @@
+import { TotemError } from '@mmnto/totem';
+
 import { log } from '../ui.js';
 
 // ─── Constants ──────────────────────────────────────────
@@ -46,7 +48,7 @@ export async function wrapCommand(prNumbers: string[], options: WrapOptions): Pr
     });
   } catch (err) {
     // Don't fail wrap if docs aren't configured — it's optional
-    if (err instanceof Error && err.name === 'NoDocsConfiguredError') {
+    if (err instanceof TotemError && err.code === 'CONFIG_MISSING') {
       log.dim(TAG, 'No docs configured — skipping doc sync.');
     } else {
       throw err;
@@ -85,7 +87,7 @@ export async function wrapCommand(prNumbers: string[], options: WrapOptions): Pr
     });
   } catch (err) {
     // Don't fail wrap if compile has nothing to do
-    if (err instanceof Error && err.name === 'NoLessonsError') {
+    if (err instanceof TotemError && err.code === 'NO_LESSONS') {
       log.dim(TAG, 'Nothing to compile — skipping.');
     } else {
       throw err;
