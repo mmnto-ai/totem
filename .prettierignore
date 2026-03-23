@@ -6,3 +6,4 @@ dist/
 pnpm-lock.yaml
 # Lesson files contain regex patterns and glob syntax that prettier mangles
 .totem/lessons/
+cloc-results.json
