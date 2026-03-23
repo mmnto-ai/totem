@@ -218,3 +218,13 @@ export {
   recordTrigger,
   saveRuleMetrics,
 } from './rule-metrics.js';
+
+// Compile manifest (signing / provenance)
+export type { CompileManifest } from './compile-manifest.js';
+export {
+  CompileManifestSchema,
+  generateInputHash,
+  generateOutputHash,
+  readCompileManifest,
+  writeCompileManifest,
+} from './compile-manifest.js';

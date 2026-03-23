@@ -461,6 +461,23 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
           rules: newRules,
           nonCompilable: freshNonCompilable,
         });
+
+        // ─── Write compile manifest (provenance chain) ───
+        const { generateInputHash, generateOutputHash, writeCompileManifest } =
+          await import('@mmnto/totem');
+        const lessonsDir = path.join(totemDir, 'lessons');
+        const manifestPath = path.join(totemDir, 'compile-manifest.json');
+        const inputHash = generateInputHash(lessonsDir);
+        const outputHash = generateOutputHash(rulesPath);
+        writeCompileManifest(manifestPath, {
+          compiled_at: new Date().toISOString(),
+          model: options.model ?? config.orchestrator?.defaultModel ?? 'unknown',
+          input_hash: inputHash,
+          output_hash: outputHash,
+          rule_count: newRules.length,
+        });
+        log.dim(TAG, `Manifest: ${inputHash.slice(0, 8)}…→${outputHash.slice(0, 8)}…`);
+
         log.info(
           TAG,
           `Results: ${compiled} compiled, ${skipped} skipped (conceptual), ${failed} failed, ${freshNonCompilable.length} cached`,
