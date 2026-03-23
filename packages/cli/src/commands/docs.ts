@@ -65,6 +65,9 @@ Updated content here...
 - **\`totem shield\`**: AI-powered code review. Queries LanceDB for context, sends diff + knowledge to an LLM. Slow (~18s). Requires API keys. Used before opening PRs. Lives in the Full configuration tier.
 - These are DIFFERENT commands with DIFFERENT purposes. Never describe \`shield\` as "deterministic" or \`lint\` as "AI-powered."
 
+## Writing Style (MANDATORY)
+- **No Marketing Language:** NEVER use marketing-centric terms: "comprehensive", "robust", "seamless", "cutting-edge", "state-of-the-art", "revolutionary", "guarantees". Use objective, factual descriptions instead. Say what the feature does, not how impressive it is.
+
 ## Formatting Rules
 - **Sub-Bullet Threshold:** When a feature list exceeds 3 items, use nested sub-bullets instead of comma-separated inline lists. Group related items into named categories (e.g., "Security:", "DX:", "Orchestration:").
 - **Completed Phase Summary:** Phases marked \`[x]\` should be summarized in 1-2 sentences max. Do NOT expand completed phases with every PR number — use categorized sub-bullets for the key capability areas only.
@@ -258,6 +261,37 @@ export function stripIssueRefs(content: string): string {
       // Clean up trailing spaces on lines
       .replace(/ +$/gm, '')
   );
+}
+
+/**
+ * Replace marketing-centric terms with factual alternatives in generated docs.
+ * Deterministic post-processing — does not rely on LLM compliance.
+ */
+const MARKETING_REPLACEMENTS: [RegExp, string][] = [
+  [/\bcomprehensive\b/gi, 'thorough'],
+  [/\brobust\b/gi, 'reliable'],
+  [/\bseamlessly\b/gi, 'smoothly'],
+  [/\bseamless\b/gi, 'smooth'],
+  [/\bcutting-edge\b/gi, 'modern'],
+  [/\bstate-of-the-art\b/gi, 'current'],
+  [/\brevolutionary\b/gi, 'significant'],
+  [/\bguarantees\b/gi, 'ensures'],
+];
+
+export function stripMarketingTerms(content: string): string {
+  // Split on fenced code blocks to avoid mangling code examples
+  const parts = content.split(/(```[\s\S]*?```|`[^`]+`)/g);
+  return parts
+    .map((part, i) => {
+      // Odd-indexed parts are code blocks — leave them alone
+      if (i % 2 === 1) return part;
+      let result = part;
+      for (const [pattern, replacement] of MARKETING_REPLACEMENTS) {
+        result = result.replace(pattern, replacement);
+      }
+      return result;
+    })
+    .join('');
 }
 
 // ─── Diff display ───────────────────────────────────────
@@ -475,9 +509,10 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
       continue;
     }
 
-    // Post-process: strip issue/PR refs from user-facing docs (#815)
+    // Post-process: deterministic sanitization of LLM output
     const isUserFacingDoc = path.basename(doc.path).toLowerCase() === 'readme.md';
-    const cleaned = isUserFacingDoc ? stripIssueRefs(extracted) : extracted;
+    const withoutRefs = isUserFacingDoc ? stripIssueRefs(extracted) : extracted;
+    const cleaned = stripMarketingTerms(withoutRefs);
     const trimmedContent = cleaned.trimEnd() + '\n';
     const hasChanges = showDiff(doc.path, currentContent, trimmedContent);
     if (!hasChanges) continue;
