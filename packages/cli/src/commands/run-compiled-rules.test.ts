@@ -1,0 +1,366 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import type { CompiledRule } from '@mmnto/totem';
+import { saveCompiledRules } from '@mmnto/totem';
+
+import { runCompiledRules } from './run-compiled-rules.js';
+
+// ─── Helpers ─────────────────────────────────────────
+
+const TOTEM_DIR = '.totem';
+
+function makeRule(
+  pattern: string,
+  message: string,
+  heading: string,
+  overrides: Partial<CompiledRule> = {},
+): CompiledRule {
+  return {
+    lessonHash: 'test' + Math.random().toString(36).slice(2, 10),
+    lessonHeading: heading,
+    pattern,
+    message,
+    engine: 'regex',
+    compiledAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+/** Build a minimal unified diff that adds a single line in the given file. */
+function makeDiff(file: string, addedLine: string, precedingLine?: string): string {
+  const contextLine = precedingLine ?? ' // existing code';
+  return [
+    `diff --git a/${file} b/${file}`,
+    `--- a/${file}`,
+    `+++ b/${file}`,
+    `@@ -1,3 +1,4 @@`,
+    contextLine,
+    `+${addedLine}`,
+    ` // end`,
+  ].join('\n');
+}
+
+/** Save compiled rules to the .totem directory inside tmpDir. */
+function writeRules(tmpDir: string, rules: CompiledRule[]): void {
+  const rulesPath = path.join(tmpDir, TOTEM_DIR, 'compiled-rules.json');
+  saveCompiledRules(rulesPath, rules);
+}
+
+// ─── Tests ───────────────────────────────────────────
+
+describe('runCompiledRules', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-rcr-'));
+    fs.mkdirSync(path.join(tmpDir, TOTEM_DIR), { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // ─── Regex matching ──────────────────────────────────
+
+  it('detects a violation when regex matches added line', async () => {
+    const rules = [makeRule('console\\.log', 'Remove debug logging', 'No console.log')];
+    writeRules(tmpDir, rules);
+
+    const diff = makeDiff('src/app.ts', '  console.log("debug");');
+
+    // runCompiledRules throws SHIELD_FAILED for error-severity violations
+    await expect(
+      runCompiledRules({
+        diff,
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'json',
+        tag: 'Test',
+      }),
+    ).rejects.toThrow('Violations detected');
+  });
+
+  it('returns no violations when regex does not match', async () => {
+    const rules = [makeRule('console\\.log', 'Remove debug logging', 'No console.log')];
+    writeRules(tmpDir, rules);
+
+    const diff = makeDiff('src/app.ts', '  const x = 42;');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'text',
+      tag: 'Test',
+    });
+
+    expect(result.violations).toHaveLength(0);
+  });
+
+  // ─── Empty rules ─────────────────────────────────────
+
+  it('throws NO_RULES when compiled-rules.json has no rules', async () => {
+    // Write an empty rules array
+    const rulesPath = path.join(tmpDir, TOTEM_DIR, 'compiled-rules.json');
+    fs.writeFileSync(rulesPath, JSON.stringify({ version: 1, rules: [] }));
+
+    const diff = makeDiff('src/app.ts', '  const x = 1;');
+
+    await expect(
+      runCompiledRules({
+        diff,
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+      }),
+    ).rejects.toThrow('No compiled rules found');
+  });
+
+  // ─── Suppression via totem-ignore ────────────────────
+
+  it('suppresses violation on line with totem-ignore comment', async () => {
+    const rules = [makeRule('console\\.log', 'Remove debug logging', 'No console.log')];
+    writeRules(tmpDir, rules);
+
+    const diff = makeDiff('src/app.ts', '  console.log("ok"); // totem-ignore');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    expect(result.violations).toHaveLength(0);
+    const parsed = JSON.parse(result.output);
+    expect(parsed.pass).toBe(true);
+  });
+
+  it('suppresses violation on line after totem-ignore-next-line', async () => {
+    const rules = [makeRule('console\\.log', 'Remove debug logging', 'No console.log')];
+    writeRules(tmpDir, rules);
+
+    // Build diff where preceding context line contains the suppression directive
+    const diff = [
+      'diff --git a/src/app.ts b/src/app.ts',
+      '--- a/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -1,3 +1,5 @@',
+      ' // setup',
+      '+// totem-ignore-next-line',
+      '+  console.log("suppressed");',
+      ' // end',
+    ].join('\n');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    expect(result.violations).toHaveLength(0);
+  });
+
+  // ─── File glob filtering ─────────────────────────────
+
+  it('skips files that do not match fileGlobs', async () => {
+    const rules = [
+      makeRule('TODO', 'No TODOs in shell scripts', 'No TODOs in shell', {
+        fileGlobs: ['*.sh'],
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    // Diff with a .ts file — should NOT match the shell-only rule
+    const tsDiff = makeDiff('src/app.ts', '  // TODO: fix later');
+
+    const tsResult = await runCompiledRules({
+      diff: tsDiff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    expect(tsResult.violations).toHaveLength(0);
+  });
+
+  it('applies rule when file matches fileGlobs', async () => {
+    const rules = [
+      makeRule('TODO', 'No TODOs in shell scripts', 'No TODOs in shell', {
+        fileGlobs: ['*.sh'],
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    // Diff with a .sh file — should match and throw
+    const shDiff = makeDiff('scripts/build.sh', '# TODO: fix later');
+
+    await expect(
+      runCompiledRules({
+        diff: shDiff,
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'json',
+        tag: 'Test',
+      }),
+    ).rejects.toThrow('Violations detected');
+  });
+
+  // ─── Output formats ─────────────────────────────────
+
+  it('produces JSON output with correct structure for clean pass', async () => {
+    const rules = [makeRule('badPattern', 'Found bad pattern', 'Bad pattern rule')];
+    writeRules(tmpDir, rules);
+
+    // Diff that does NOT match the rule — clean pass
+    const diff = makeDiff('src/index.ts', '  goodPattern();');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    const parsed = JSON.parse(result.output);
+    expect(parsed).toHaveProperty('pass', true);
+    expect(parsed).toHaveProperty('rules', 1);
+    expect(parsed).toHaveProperty('errors', 0);
+    expect(parsed).toHaveProperty('warnings', 0);
+    expect(parsed).toHaveProperty('violations');
+    expect(parsed.violations).toHaveLength(0);
+  });
+
+  it('throws SHIELD_FAILED for error-severity violations in text format', async () => {
+    const rules = [makeRule('badPattern', 'Found bad pattern', 'Bad pattern rule')];
+    writeRules(tmpDir, rules);
+
+    const diff = makeDiff('src/index.ts', '  badPattern();');
+
+    await expect(
+      runCompiledRules({
+        diff,
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+      }),
+    ).rejects.toThrow('Violations detected');
+  });
+
+  // ─── Warning severity (PASS with warnings) ──────────
+
+  it('passes with warnings when violations are warning-severity only', async () => {
+    const rules = [
+      makeRule('TODO', 'Consider removing TODOs', 'TODO cleanup', {
+        severity: 'warning',
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    const diff = makeDiff('src/app.ts', '  // TODO: clean up later');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    const parsed = JSON.parse(result.output);
+    expect(parsed.pass).toBe(true);
+    expect(parsed.warnings).toBe(1);
+    expect(parsed.errors).toBe(0);
+    expect(result.violations).toHaveLength(1);
+  });
+
+  // ─── Multiple rules ─────────────────────────────────
+
+  it('applies multiple rules and reports all violations', async () => {
+    const rules = [
+      makeRule('console\\.log', 'Remove debug logging', 'No console.log'),
+      makeRule('catch\\s*\\(\\s*error\\b', 'Use err not error in catch', 'Use err not error'),
+    ];
+    writeRules(tmpDir, rules);
+
+    const diff = [
+      'diff --git a/src/handler.ts b/src/handler.ts',
+      '--- a/src/handler.ts',
+      '+++ b/src/handler.ts',
+      '@@ -1,3 +1,6 @@',
+      ' export function handler() {',
+      '+  console.log("debug");',
+      '+  try { work(); } catch (error) {',
+      '+    console.log(error);',
+      '+  }',
+      ' }',
+    ].join('\n');
+
+    // This will throw SHIELD_FAILED because there are error-severity violations
+    let caughtErr: unknown;
+    try {
+      await runCompiledRules({
+        diff,
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'json',
+        tag: 'Test',
+      });
+    } catch (err) {
+      caughtErr = err;
+    }
+
+    expect(caughtErr).toBeDefined();
+  });
+
+  // ─── Excluded files ──────────────────────────────────
+
+  it('excludes compiled-rules.json from scanning', async () => {
+    const rules = [makeRule('pattern', 'Found pattern in rules file', 'Self-match prevention')];
+    writeRules(tmpDir, rules);
+
+    // Diff that changes the compiled-rules.json itself
+    const diff = makeDiff('.totem/compiled-rules.json', '  "pattern": "pattern"');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    expect(result.violations).toHaveLength(0);
+  });
+
+  // ─── Ignore patterns ────────────────────────────────
+
+  it('respects ignorePatterns to skip matching files', async () => {
+    const rules = [makeRule('TODO', 'No TODOs', 'No TODOs')];
+    writeRules(tmpDir, rules);
+
+    const diff = makeDiff('vendor/lib.ts', '  // TODO: third party');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+      ignorePatterns: ['vendor/**'],
+    });
+
+    expect(result.violations).toHaveLength(0);
+  });
+});
