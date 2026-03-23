@@ -25,7 +25,12 @@ export type CompileManifest = z.infer<typeof CompileManifestSchema>;
  * relative to `baseDir`, sorted alphabetically.
  */
 function collectMdFiles(baseDir: string, currentDir: string = baseDir): string[] {
-  if (!fs.existsSync(baseDir)) return [];
+  if (!fs.existsSync(baseDir)) {
+    throw new TotemParseError(
+      `Lessons directory not found: ${baseDir}`,
+      'Run "totem sync" or create .totem/lessons/ with lesson files.',
+    );
+  }
   const entries = fs.readdirSync(currentDir, { withFileTypes: true });
   const results: string[] = [];
 
