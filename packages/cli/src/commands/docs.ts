@@ -66,7 +66,7 @@ Updated content here...
 - These are DIFFERENT commands with DIFFERENT purposes. Never describe \`shield\` as "deterministic" or \`lint\` as "AI-powered."
 
 ## Writing Style (MANDATORY)
-- **No Marketing Language:** NEVER use marketing-centric terms: "comprehensive", "robust", "seamless", "cutting-edge", "state-of-the-art", "revolutionary", "guarantees". Use objective, factual descriptions instead. Say what the feature does, not how impressive it is.
+- **No Marketing Language:** NEVER use marketing-centric terms: "comprehensive", "robust", "seamless", "cutting-edge", "state-of-the-art", "revolutionary", "guarantee", "guarantees". Use objective, factual descriptions instead. Say what the feature does, not how impressive it is.
 
 ## Formatting Rules
 - **Sub-Bullet Threshold:** When a feature list exceeds 3 items, use nested sub-bullets instead of comma-separated inline lists. Group related items into named categories (e.g., "Security:", "DX:", "Orchestration:").
@@ -275,12 +275,12 @@ const MARKETING_REPLACEMENTS: [RegExp, string][] = [
   [/\bcutting-edge\b/gi, 'modern'],
   [/\bstate-of-the-art\b/gi, 'current'],
   [/\brevolutionary\b/gi, 'significant'],
-  [/\bguarantees\b/gi, 'ensures'],
+  [/\bguarantees?\b/gi, 'ensures'],
 ];
 
 export function stripMarketingTerms(content: string): string {
-  // Split on fenced code blocks to avoid mangling code examples
-  const parts = content.split(/(```[\s\S]*?```|`[^`]+`)/g);
+  // Split on fenced code blocks, inline code, and URLs/link targets to avoid mangling
+  const parts = content.split(/(```[\s\S]*?```|`[^`]+`|https?:\/\/[^\s)]+|\]\([^)]+\))/g);
   return parts
     .map((part, i) => {
       // Odd-indexed parts are code blocks — leave them alone

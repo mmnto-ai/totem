@@ -500,6 +500,22 @@ describe('stripMarketingTerms', () => {
   it('preserves marketing terms inside inline code', () => {
     expect(stripMarketingTerms('Use `comprehensive` flag')).toBe('Use `comprehensive` flag');
   });
+
+  it('replaces singular "guarantee"', () => {
+    expect(stripMarketingTerms('we guarantee compatibility')).toBe('we ensures compatibility');
+  });
+
+  it('preserves marketing terms inside URLs', () => {
+    expect(stripMarketingTerms('See https://example.com/state-of-the-art for details')).toBe(
+      'See https://example.com/state-of-the-art for details',
+    );
+  });
+
+  it('preserves marketing terms inside Markdown link targets', () => {
+    expect(stripMarketingTerms('[guide](https://robust-api.com/docs)')).toBe(
+      '[guide](https://robust-api.com/docs)',
+    );
+  });
 });
 
 // ─── DOCS_SYSTEM_PROMPT includes marketing ban ──────────
