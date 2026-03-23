@@ -1,5 +1,13 @@
 # @mmnto/mcp
 
+## 1.4.2
+
+### Patch Changes
+
+- f1509d3: Post-1.4.0 quality sweep (Proposal 189): security fixes, broken functionality, 154 new tests, quality hardening, DRY cleanup, and compile manifest CI attestation
+- Updated dependencies [f1509d3]
+  - @mmnto/totem@1.4.2
+
 ## 1.4.1
 
 ### Patch Changes
