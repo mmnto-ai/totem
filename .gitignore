@@ -61,3 +61,4 @@ totem-audit.zip
 skills-lock.json
 .claude/skills/autofix/
 .claude/skills/code-review/
+cloc-results.json

@@ -1,0 +1,51 @@
+name: Compile Manifest Attestation
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Compile Manifest Attestation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check for [UPDATE-RULES] bypass
+        id: bypass
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }} # totem-ignore — #875: env mapping IS the safe pattern
+          PR_BODY: ${{ github.event.pull_request.body }} # totem-ignore — #875: env mapping IS the safe pattern
+        run: |
+          if [[ "$PR_TITLE $PR_BODY" == *"[UPDATE-RULES]"* ]]; then # totem-ignore — #875: vars are env-mapped above
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "✅ [UPDATE-RULES] found — skipping manifest verification"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v6
+        if: steps.bypass.outputs.skip != 'true'
+
+      - uses: pnpm/action-setup@v4
+        if: steps.bypass.outputs.skip != 'true'
+
+      - uses: actions/setup-node@v6
+        if: steps.bypass.outputs.skip != 'true'
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+        if: steps.bypass.outputs.skip != 'true'
+
+      - run: pnpm build
+        if: steps.bypass.outputs.skip != 'true'
+
+      - name: Verify compile manifest hashes
+        if: steps.bypass.outputs.skip != 'true'
+        run: node packages/cli/dist/index.js verify-manifest
