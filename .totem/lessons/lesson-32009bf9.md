@@ -1,4 +1,4 @@
-## Lesson — Parsers with legacy fallbacks should treat 'JSON detected
+## Lesson — Treat detected JSON as terminal parse result
 
 **Tags:** llm, parsing, architecture
 
