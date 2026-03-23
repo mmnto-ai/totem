@@ -57,8 +57,17 @@ export function generateInputHash(lessonsDir: string): string {
   const hash = crypto.createHash('sha256');
 
   for (const relPath of files) {
-    const content = fs.readFileSync(path.join(lessonsDir, relPath), 'utf-8').replace(/\r\n/g, '\n');
-    hash.update(`${relPath}\n${content}\n`);
+    try {
+      const content = fs
+        .readFileSync(path.join(lessonsDir, relPath), 'utf-8')
+        .replace(/\r\n/g, '\n');
+      hash.update(`${relPath}\n${content}\n`);
+    } catch (err) {
+      throw new TotemParseError(
+        `Cannot read lesson file ${relPath}: ${getErrorMessage(err)}`,
+        'Ensure all lesson files in .totem/lessons/ are readable.',
+      );
+    }
   }
 
   return hash.digest('hex');
@@ -90,13 +99,15 @@ export function generateOutputHash(rulesPath: string): string {
 
 // ─── I/O ─────────────────────────────────────────────
 
+const FILE_MODE = 0o644;
+
 /**
  * Write a compile manifest to disk as pretty-printed JSON.
  */
 export function writeCompileManifest(manifestPath: string, manifest: CompileManifest): void {
   const json = JSON.stringify(manifest, null, 2) + '\n';
   try {
-    fs.writeFileSync(manifestPath, json, { encoding: 'utf-8', mode: 0o644 });
+    fs.writeFileSync(manifestPath, json, { encoding: 'utf-8', mode: FILE_MODE });
   } catch (err) {
     throw new TotemParseError(
       `Cannot write compile manifest: ${getErrorMessage(err)}`,
