@@ -1,5 +1,5 @@
-## Lesson — Error catch blocks must mirror the successful path's
+## Lesson — Match error and success response formats where possible
 
-**Tags:** error-handling, xml, mcp
+**Tags:** error-handling, xml, api
 
-Error catch blocks must mirror the successful path's response format to ensure client-side XML parsers do not fail when encountering raw text error messages. Inconsistent response structures in error states often break downstream automated consumers.
+Error responses should match the success-path response format where client compatibility allows. Inconsistent structures can break downstream automated consumers. Exception: MCP tools may intentionally use plain-text error responses for client compatibility.

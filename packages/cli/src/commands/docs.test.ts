@@ -357,8 +357,8 @@ describe('docsCommand', () => {
     mockConfig([{ path: 'README.md', description: 'readme', trigger: 'post-release' }]);
     writeDoc(tmpDir, 'README.md', '# Old README\n');
 
-    // vitest runs in non-TTY — should throw without --yes
-    await expect(docsCommand([], {})).rejects.toThrow(/non-interactive/);
+    // Explicitly set isTTY: false for deterministic test behavior
+    await expect(docsCommand([], { isTTY: false })).rejects.toThrow(/non-interactive/);
   });
 });
 
