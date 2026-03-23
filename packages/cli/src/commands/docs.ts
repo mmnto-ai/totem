@@ -299,6 +299,8 @@ export interface DocsOptions {
   only?: string;
   dryRun?: boolean;
   yes?: boolean;
+  /** Override TTY detection for testing. Defaults to process.stdin.isTTY. */
+  isTTY?: boolean;
 }
 
 export async function docsCommand(inputs: string[], options: DocsOptions): Promise<void> {
@@ -405,6 +407,19 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
   // Resolve system prompt (allow .totem/prompts/docs.md override)
   const systemPrompt = getSystemPrompt('docs', DOCS_SYSTEM_PROMPT, cwd, config.totemDir);
 
+  // Hoist interactive prompt import above loop (#847)
+  const isTTY = options.isTTY ?? (process.stdin.isTTY && process.stdout.isTTY) ?? false;
+  const clack = !options.yes && isTTY ? await import('@clack/prompts') : null;
+
+  // Non-interactive safety check (#847)
+  if (!options.yes && !isTTY) {
+    throw new TotemConfigError(
+      'Refusing to write LLM-generated docs in non-interactive mode.',
+      'Use --yes to bypass confirmation, or run in an interactive terminal.',
+      'CONFIG_INVALID',
+    );
+  }
+
   // Process each doc sequentially (separate orchestrator call per doc)
   let updated = 0;
   let failed = 0;
@@ -498,6 +513,15 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
         log.success(TAG, `[dry-run] Preview written to ${options.out}`);
       }
       continue;
+    }
+
+    // Interactive confirmation gate (#847)
+    if (!options.yes && clack) {
+      const accepted = await clack.confirm({ message: `Write changes to ${doc.path}?` });
+      if (clack.isCancel(accepted) || !accepted) {
+        log.dim(TAG, `Skipped ${doc.path} — user declined.`);
+        continue;
+      }
     }
 
     // Write the updated content
