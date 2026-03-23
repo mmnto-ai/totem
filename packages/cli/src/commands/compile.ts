@@ -465,7 +465,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
         // DLP: scrub secrets from lesson content before sending off-machine
         const { maskSecrets } = await import('@mmnto/totem');
         const scrubbedLessons = cloudLessons.map((l) => ({
-          heading: l.heading,
+          heading: maskSecrets(l.heading),
           body: maskSecrets(l.body),
           hash: l.hash,
         }));
