@@ -88,12 +88,12 @@ export async function createSpinner(tag: string, text?: string): Promise<Spinner
 
   let quoteInterval: NodeJS.Timeout | null = null;
 
-  // Cycle quotes every 4 seconds if we are in quote mode
+  // Cycle quotes every 45 seconds if we are in quote mode — let them breathe
   if (isQuoteMode) {
     quoteInterval = setInterval(() => {
       currentText = getRandomSpinnerQuote();
       spinner.text = `${prefix(tag)} ${currentText}`;
-    }, 4000);
+    }, 45_000);
   }
 
   const cleanup = () => {

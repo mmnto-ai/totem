@@ -390,14 +390,14 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
         `All ${lessons.length} lessons already processed (${existingRules.length} compiled, ${nonCompilableSet.size} non-compilable). Use --force to recompile.`,
       ); // totem-ignore
     } else {
-      log.info(
-        TAG,
-        `${toCompile.length} lessons need compilation (${existingRules.length} already compiled)`,
-      );
+      const { createSpinner } = await import('../ui.js');
+      const spinner = await createSpinner(TAG);
 
       let compiled = 0;
       let skipped = 0;
       let failed = 0;
+      let processed = 0;
+      const total = toCompile.length;
       const newRules: CompiledRule[] = [...existingRules];
 
       const currentHashes = new Set(lessons.map((l) => hashLesson(l.heading, l.body)));
@@ -442,6 +442,9 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
               }),
           ),
         );
+
+        processed += batch.length;
+        spinner.update(`${processed}/${total} lessons (${Math.round((processed / total) * 100)}%)`);
 
         for (const { lesson, result } of results) {
           switch (result.status) {
@@ -500,13 +503,8 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
         });
         log.dim(TAG, `Manifest: ${inputHash.slice(0, 8)}…→${outputHash.slice(0, 8)}…`);
 
-        log.info(
-          TAG,
-          `Results: ${compiled} compiled, ${skipped} skipped (conceptual), ${failed} failed, ${freshNonCompilable.length} cached`,
-        );
-        log.success(
-          TAG,
-          `${newRules.length} total rules saved to ${config.totemDir}/${COMPILED_RULES_FILE}`,
+        spinner.succeed(
+          `${newRules.length} rules — ${compiled} compiled, ${skipped} skipped, ${failed} failed`,
         );
       }
     }
