@@ -1,6 +1,6 @@
 #!/bin/bash
-# Hard gate: block PR creation unless totem shield passes.
-# Runs the full LLM shield — not just deterministic lint.
+# Hard gate: block PR creation unless /prepush was run for current HEAD.
+# Checks the .shield-passed flag — does not run shield itself.
 
 SHIELD_FLAG=".totem/cache/.shield-passed"
 CURRENT_HEAD=$(git rev-parse HEAD 2>/dev/null)

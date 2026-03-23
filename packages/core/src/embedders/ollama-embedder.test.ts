@@ -147,7 +147,7 @@ describe('OllamaEmbedder', () => {
 
   // ─── Error handling: model not found ────────────────
 
-  it('throws TotemConfigError when model is not found (404) and individual retry also fails', async () => {
+  it('falls back to zero vector when model is not found (404)', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     // Batch call returns 404 (caught by embedBatch, throws TotemConfigError)
@@ -166,7 +166,7 @@ describe('OllamaEmbedder', () => {
     consoleSpy.mockRestore();
   });
 
-  it('throws TotemConfigError from embedBatch on 404', async () => {
+  it('falls back to zero vector on 400 model error', async () => {
     // Test embedBatch directly via a single-text embed where we intercept
     // We verify the error shape by ensuring both batch AND individual fail with the right error type
     fetchSpy.mockResolvedValue(errorResponse(400, 'no such model'));
