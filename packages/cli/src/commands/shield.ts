@@ -1,7 +1,6 @@
 import * as path from 'node:path';
 
 import type { ContentType, LanceStore, SearchResult } from '@mmnto/totem';
-import { TotemConfigError, TotemError } from '@mmnto/totem';
 
 import {
   extractChangedFiles,
@@ -315,6 +314,7 @@ export async function learnFromVerdict(
 const VALID_FORMATS: ShieldFormat[] = ['text', 'sarif', 'json'];
 
 export async function shieldCommand(options: ShieldOptions): Promise<void> {
+  const { TotemConfigError, TotemError } = await import('@mmnto/totem');
   if (options.mode && options.mode !== 'standard' && options.mode !== 'structural') {
     throw new TotemConfigError(
       `Invalid --mode "${options.mode}". Use "standard" or "structural".`,

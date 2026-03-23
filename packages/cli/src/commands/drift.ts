@@ -1,7 +1,5 @@
 import * as path from 'node:path';
 
-import { detectDrift, readAllLessons, TotemError } from '@mmnto/totem'; // totem-ignore
-
 import { bold, errorColor, log, success as successColor } from '../ui.js';
 import { loadConfig, resolveConfigPath, sanitize } from '../utils.js';
 
@@ -12,6 +10,7 @@ const TAG = 'Drift';
 // ─── Main command ───────────────────────────────────────
 
 export async function driftCommand(): Promise<void> {
+  const { detectDrift, readAllLessons, TotemError } = await import('@mmnto/totem');
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   const config = await loadConfig(configPath);

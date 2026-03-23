@@ -1,5 +1,3 @@
-import { TotemError } from '@mmnto/totem';
-
 import { log } from '../ui.js';
 
 // ─── Constants ──────────────────────────────────────────
@@ -15,6 +13,8 @@ export interface WrapOptions {
 }
 
 export async function wrapCommand(prNumbers: string[], options: WrapOptions): Promise<void> {
+  const { TotemError } = await import('@mmnto/totem');
+
   // Step 1: Learn from PR(s)
   log.info(TAG, `Step 1/6 — Extracting from PR ${prNumbers.join(', ')}...`);
   const { extractCommand } = await import('./extract.js');
