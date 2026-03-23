@@ -175,7 +175,11 @@ export function registerAddLesson(server: McpServer): void {
         const validLesson = parsed.data.lesson;
         const validTags = parsed.data.context_tags;
         const safeLesson = sanitize(validLesson);
-        const safeTags = validTags.map((t) => sanitize(t).replace(/[\n,]/g, ' ').trim()).join(', ');
+        const safeTags =
+          validTags
+            .map((t) => sanitize(t).replace(/[\n,]/g, ' ').trim())
+            .filter(Boolean)
+            .join(', ') || 'untagged';
         const rawHeading = generateLessonHeading(safeLesson);
         const heading = sanitizeHeading(rawHeading);
 
