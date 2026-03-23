@@ -1,5 +1,6 @@
-import { Hono } from 'hono';
+import { serve } from '@hono/node-server';
 import { GoogleGenAI } from '@google/genai';
+import { Hono } from 'hono';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -19,7 +20,7 @@ interface CompileRequest {
 interface CompileResult {
   hash: string;
   response: string | null;
-  error?: string;
+  err?: string;
 }
 
 // ─── Concurrency limiter ────────────────────────────
@@ -45,35 +46,42 @@ async function mapWithConcurrency<T, R>(
 
 // ─── App ────────────────────────────────────────────
 
+const apiKey = process.env['GEMINI_API_KEY'];
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+
 const app = new Hono();
 
 app.get('/', (c) => c.json({ status: 'ok', service: 'totem-compile-worker' }));
 
 app.post('/compile', async (c) => {
-  const apiKey = process.env['GEMINI_API_KEY'];
-  if (!apiKey) {
-    return c.json({ error: 'GEMINI_API_KEY not configured' }, 500);
+  if (!ai) {
+    return c.json({ err: 'GEMINI_API_KEY not configured' }, 500);
   }
 
-  const body = await c.req.json<CompileRequest>();
+  let body: CompileRequest;
+  try {
+    body = await c.req.json<CompileRequest>();
+  } catch {
+    return c.json({ err: 'Invalid JSON payload' }, 400);
+  }
+
   if (!body.lessons?.length || !body.prompt) {
-    return c.json({ error: 'Missing lessons or prompt' }, 400);
+    return c.json({ err: 'Missing lessons or prompt' }, 400);
   }
 
   // Request validation — prevent abuse
   const MAX_LESSONS = 1000;
   const MAX_PAYLOAD_CHARS = 10_000_000; // ~10MB
   if (body.lessons.length > MAX_LESSONS) {
-    return c.json({ error: `Too many lessons (max ${MAX_LESSONS})` }, 400);
+    return c.json({ err: `Too many lessons (max ${MAX_LESSONS})` }, 400);
   }
   const payloadSize = JSON.stringify(body).length;
   if (payloadSize > MAX_PAYLOAD_CHARS) {
-    return c.json({ error: `Payload too large (max ${MAX_PAYLOAD_CHARS} chars)` }, 400);
+    return c.json({ err: `Payload too large (max ${MAX_PAYLOAD_CHARS} chars)` }, 400);
   }
 
   const model = body.model ?? 'gemini-3-flash-preview';
   const concurrency = Math.min(body.concurrency ?? 50, 100);
-  const ai = new GoogleGenAI({ apiKey });
 
   const startTime = Date.now();
 
@@ -95,14 +103,14 @@ app.post('/compile', async (c) => {
 
         const text = response.text ?? null;
         return { hash: lesson.hash, response: text };
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return { hash: lesson.hash, response: null, error: message };
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        return { hash: lesson.hash, response: null, err: message };
       }
     },
   );
 
-  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+  const elapsedMs = Date.now() - startTime;
   const succeeded = results.filter((r) => r.response !== null).length;
   const failed = results.filter((r) => r.response === null).length;
 
@@ -113,12 +121,10 @@ app.post('/compile', async (c) => {
       succeeded,
       failed,
       concurrency,
-      elapsed_seconds: parseFloat(elapsed),
+      elapsed_seconds: Math.round(elapsedMs / 100) / 10,
     },
   });
 });
-
-import { serve } from '@hono/node-server';
 
 const port = parseInt(process.env['PORT'] ?? '8080', 10);
 serve({ fetch: app.fetch, port }, () => {
