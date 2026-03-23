@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-The Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.4.0`. Recent focus has centered on:
+The Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.4.1`. Recent focus has centered on:
 
 - **Orchestration & Workflows:**
   - Implemented invisible sync hooks for smooth orchestration context updates.
@@ -10,6 +10,7 @@ The Data Layer Foundation is complete, and the project is currently at release `
   - Restructured workflow skills into a dedicated directory format.
   - Enforced pre-push validation via pre-tool-use hooks.
 - **Security & Governance:**
+  - Refined manifest attestation CI gates with dedicated separate workflows.
   - Hardened ingestion with trust boundaries and an MCP authentication model.
   - Implemented compile manifest signing to establish a provenance chain.
   - Added Data Loss Prevention (DLP) secret masking middleware for outbound LLM calls.
@@ -21,18 +22,22 @@ The Data Layer Foundation is complete, and the project is currently at release `
   - Upgraded the specification process to utilize a strict checklist format.
   - Introduced a lesson file linter with a pre-compilation gate.
 - **Search & Infrastructure:**
+  - Implemented parallel lesson compilation to optimize processing efficiency.
+  - Resolved functionality gaps across AST queries, process execution handling, and suppression metrics.
+  - Expanded critical test coverage and executed general codebase quality hardening.
   - Configured AST query engines to fail-closed instead of swallowing exceptions.
   - Added a CI wind tunnel SHA lock to ensure fixture integrity.
-  - Enhanced release workflow tag push resilience.
+  - Enhanced release workflow tag push resilience and updated dependency configurations.
   - Introduced index partitions with alias resolution.
   - Added a boundary parameter to the MCP search tool.
   - Established a cross-platform CI matrix supporting multiple environments.
   - Unified error domains and refactored the compiler architecture using a facade pattern.
   - Delivered unified execution tracking following successful readiness audits.
 - **Documentation & DX:**
+  - Extracted and integrated operational lessons from recent codebase quality sweeps.
   - Required explicit confirmation before writing LLM-generated documentation.
   - Configured documentation generation to actively strip marketing terminology.
-  - Regenerated project documentation alongside 5-lesson extraction from PR #829.
+  - Regenerated project documentation alongside 5-lesson extraction.
   - Fixed documentation generation to prevent persistence of stale issue references.
   - Executed developer experience polish targeting onboarding flows and output brevity.
   - Integrated launch metrics and a Docker test harness.
@@ -83,6 +88,10 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Migrated lessons directory to dual-read/single-write and added startup health checks for LanceStore indexes.
   - Automated full sync triggering following embedder configuration changes.
 - **Core & Shift-Left Foundation:**
+  - Implemented parallel lesson compilation utilizing a concurrency flag to optimize processing output.
+  - Expanded critical test coverage and executed codebase quality hardening cleanups.
+  - Resolved execution functionality gaps involving AST queries, process termination handling, and suppression metrics.
+  - Refined the manifest attestation CI gate with isolated workflows and adjusted triggers.
   - Hardened ingestion by establishing trust boundaries and an MCP authentication model.
   - Implemented compile manifest signing to ensure a secure provenance chain.
   - Configured AST query engines to fail-closed, preventing swallowed exceptions during execution.
@@ -160,9 +169,10 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Resolved server connection failures for development and strategy environments.
   - Validated Gemini CLI compliance regarding search calls with lean configurations.
 - **Documentation & DX:**
+  - Extracted and integrated new enforcement lessons from recent codebase quality sweeps.
   - Required explicit confirmation before writing LLM-generated documentation.
   - Configured documentation generation to actively strip marketing terminology.
-  - Regenerated post-1.3.17 README and performed 47-lesson extraction from 8 PRs.
+  - Regenerated post-1.3.17 README and performed 47-lesson extraction.
   - Fixed documentation generation to prevent persistence of stale issue references.
   - Executed Developer Experience (DX) polish to streamline onboarding flows, hide legacy commands, and condense standard output.
   - Regenerated project documentation to integrate launch metrics and reflect the latest context.
