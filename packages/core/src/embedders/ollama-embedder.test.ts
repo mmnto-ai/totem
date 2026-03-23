@@ -148,44 +148,36 @@ describe('OllamaEmbedder', () => {
   // ─── Error handling: model not found ────────────────
 
   it('falls back to zero vector when model is not found (404)', async () => {
-    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
     fetchSpy.mockResolvedValue(errorResponse(404, 'model not found'));
 
-    const embedder = new OllamaEmbedder('nonexistent-model');
+    const warnSpy = vi.fn();
+    const embedder = new OllamaEmbedder('nonexistent-model', undefined, undefined, warnSpy);
 
-    // Zero vector preserves 1:1 alignment with input texts
     const result = await embedder.embed(['test']);
     expect(result).toHaveLength(1);
     expect(result[0]!.every((v) => v === 0)).toBe(true);
-
-    consoleSpy.mockRestore();
   });
 
   it('falls back to zero vector on 400 model error', async () => {
     fetchSpy.mockResolvedValue(errorResponse(400, 'no such model'));
 
-    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const embedder = new OllamaEmbedder('bad-model');
+    const warnSpy = vi.fn();
+    const embedder = new OllamaEmbedder('bad-model', undefined, undefined, warnSpy);
 
     const result = await embedder.embed(['test']);
     expect(result).toHaveLength(1);
     expect(result[0]!.every((v) => v === 0)).toBe(true);
-
-    consoleSpy.mockRestore();
   });
 
   it('falls back to zero vector when server returns 500 persistently', async () => {
     fetchSpy.mockResolvedValue(errorResponse(500, 'internal server error'));
 
-    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const embedder = new OllamaEmbedder();
+    const warnSpy = vi.fn();
+    const embedder = new OllamaEmbedder(undefined, undefined, undefined, warnSpy);
 
     const result = await embedder.embed(['test']);
     expect(result).toHaveLength(1);
     expect(result[0]!.every((v) => v === 0)).toBe(true);
-
-    consoleSpy.mockRestore();
   });
 
   // ─── Retry logic: batch failure → individual retry ─
@@ -209,7 +201,7 @@ describe('OllamaEmbedder', () => {
   // ─── Skip on individual failure ─────────────────────
 
   it('uses zero vector for failed individual text while preserving alignment', async () => {
-    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.fn();
 
     // Batch fails
     fetchSpy.mockRejectedValueOnce(new Error('batch failed'));
@@ -218,7 +210,7 @@ describe('OllamaEmbedder', () => {
     // Second individual fails → zero vector
     fetchSpy.mockRejectedValueOnce(new Error('oversized'));
 
-    const embedder = new OllamaEmbedder();
+    const embedder = new OllamaEmbedder(undefined, undefined, undefined, warnSpy);
     const result = await embedder.embed(['good text', 'bad text']);
 
     // Both texts produce results — alignment preserved
@@ -226,34 +218,25 @@ describe('OllamaEmbedder', () => {
     expect(result[0]!.every((v) => v === 1)).toBe(true);
     expect(result[1]!.every((v) => v === 0)).toBe(true);
 
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[Totem] Zero-vector fallback'),
-    );
-
-    consoleSpy.mockRestore();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Zero-vector fallback'));
   });
 
   it('logs summary warning with count of failed texts', async () => {
-    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.fn();
 
     // Batch fails, then individual also fails
     fetchSpy.mockRejectedValueOnce(new Error('batch failed'));
     fetchSpy.mockRejectedValueOnce(new Error('individual failed'));
 
-    const embedder = new OllamaEmbedder('nomic-embed-text', 'http://localhost:11434', 512);
+    const embedder = new OllamaEmbedder('nomic-embed-text', 'http://localhost:11434', 512, warnSpy);
     const result = await embedder.embed(['problematic text']);
 
     // Zero vector preserves alignment
     expect(result).toHaveLength(1);
     expect(result[0]!.every((v) => v === 0)).toBe(true);
-    expect(result[0]).toHaveLength(512); // custom dimensions
+    expect(result[0]).toHaveLength(512);
 
-    // Verify summary warning was logged
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('1 chunk(s) skipped due to failures'),
-    );
-
-    consoleSpy.mockRestore();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('1 chunk(s) skipped'));
   });
 
   // ─── Custom baseUrl ─────────────────────────────────

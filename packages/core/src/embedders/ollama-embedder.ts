@@ -16,14 +16,18 @@ export class OllamaEmbedder implements Embedder {
   private model: string;
   private baseUrl: string;
 
+  private onWarn?: (msg: string) => void;
+
   constructor(
     model: string = 'nomic-embed-text',
     baseUrl: string = 'http://localhost:11434',
     dimensions?: number,
+    onWarn?: (msg: string) => void,
   ) {
     this.model = model;
     this.baseUrl = baseUrl;
     this.dimensions = dimensions ?? DEFAULT_DIMENSIONS;
+    this.onWarn = onWarn;
   }
 
   private async embedBatch(texts: string[]): Promise<number[][]> {
@@ -86,7 +90,7 @@ export class OllamaEmbedder implements Embedder {
             // Individual text failed — insert zero vector to preserve 1:1 alignment with input
             // Zero vectors have ~0 cosine similarity so they won't pollute search results
             results.push(new Array(this.dimensions).fill(0));
-            console.warn(
+            this.onWarn?.(
               `[Totem] Zero-vector fallback for failed embedding (${text.length} chars): ${text.slice(0, 60)}...`,
             );
             skipped++;
@@ -96,7 +100,9 @@ export class OllamaEmbedder implements Embedder {
     }
 
     if (skipped > 0) {
-      console.warn(`[Totem] Embedding batch complete: ${skipped} chunk(s) skipped due to failures`);
+      this.onWarn?.(
+        `[Totem] Embedding batch complete: ${skipped} chunk(s) skipped due to failures`,
+      );
     }
 
     return results;
