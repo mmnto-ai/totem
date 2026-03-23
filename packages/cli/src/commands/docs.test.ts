@@ -126,7 +126,7 @@ describe('docsCommand', () => {
     writeDoc(tmpDir, 'README.md', '# Old README\n');
     writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
 
-    await docsCommand([], { only: 'readme' });
+    await docsCommand([], { only: 'readme', yes: true });
 
     // Only one orchestrator call (for README.md)
     expect(runOrchestrator).toHaveBeenCalledTimes(1);
@@ -146,8 +146,8 @@ describe('docsCommand', () => {
     vi.mocked(isFileDirty).mockReturnValue(true);
     writeDoc(tmpDir, 'README.md', '# Old README\n');
 
-    // Should not throw
-    await docsCommand([], { dryRun: true });
+    // Should not throw (dry-run still needs --yes for non-TTY)
+    await docsCommand([], { dryRun: true, yes: true });
     expect(runOrchestrator).toHaveBeenCalledTimes(1);
 
     // File should NOT be modified in dry-run
@@ -160,7 +160,7 @@ describe('docsCommand', () => {
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
 
-    await docsCommand([], {});
+    await docsCommand([], { yes: true });
 
     const content = fs.readFileSync(path.join(tmpDir, 'README.md'), 'utf-8');
     expect(content).toContain('Updated README');
@@ -169,8 +169,8 @@ describe('docsCommand', () => {
   it('skips files that do not exist', async () => {
     mockConfig([{ path: 'nonexistent.md', description: 'missing', trigger: 'post-release' }]);
 
-    // Should not throw — just skip
-    await docsCommand([], {});
+    // Should not throw — just skip (needs --yes for non-TTY)
+    await docsCommand([], { yes: true });
     expect(runOrchestrator).not.toHaveBeenCalled();
   });
 
@@ -183,7 +183,7 @@ describe('docsCommand', () => {
     writeDoc(tmpDir, 'README.md', '# Old README\n');
     writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
 
-    await docsCommand([], {});
+    await docsCommand([], { yes: true });
 
     expect(runOrchestrator).toHaveBeenCalledTimes(2);
   });
@@ -199,7 +199,7 @@ describe('docsCommand', () => {
       '<updated_document>\n# Roadmap\n\n- [ ] Phase 1 complete\n- [ ] Phase 2\n</updated_document>',
     );
 
-    await docsCommand([], {});
+    await docsCommand([], { yes: true });
 
     // File should NOT be modified — original preserved
     const content = fs.readFileSync(path.join(tmpDir, 'README.md'), 'utf-8');
@@ -217,7 +217,7 @@ describe('docsCommand', () => {
       '<updated_document>\n# Big Doc\n\nTiny.\n</updated_document>',
     );
 
-    await docsCommand([], {});
+    await docsCommand([], { yes: true });
 
     // File should NOT be modified — original preserved
     const content = fs.readFileSync(path.join(tmpDir, 'README.md'), 'utf-8');
@@ -232,7 +232,7 @@ describe('docsCommand', () => {
     // Simulate truncated response — opening tag but no closing tag
     vi.mocked(runOrchestrator).mockResolvedValue('<updated_document>\n# Truncated content');
 
-    await docsCommand([], {});
+    await docsCommand([], { yes: true });
 
     // File should NOT be modified
     const content = fs.readFileSync(path.join(tmpDir, 'README.md'), 'utf-8');
@@ -250,7 +250,7 @@ describe('docsCommand', () => {
     writeDoc(tmpDir, 'README.md', '# Old README\n');
     writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
 
-    await docsCommand(['README.md'], {});
+    await docsCommand(['README.md'], { yes: true });
 
     expect(runOrchestrator).toHaveBeenCalledTimes(1);
   });
@@ -266,7 +266,7 @@ describe('docsCommand', () => {
     writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
     writeDoc(tmpDir, 'docs/architecture.md', '# Old Arch\n');
 
-    await docsCommand(['README.md', 'docs/roadmap.md'], {});
+    await docsCommand(['README.md', 'docs/roadmap.md'], { yes: true });
 
     expect(runOrchestrator).toHaveBeenCalledTimes(2);
   });
@@ -279,7 +279,7 @@ describe('docsCommand', () => {
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
 
-    await docsCommand(['./README.md'], {});
+    await docsCommand(['./README.md'], { yes: true });
 
     expect(runOrchestrator).toHaveBeenCalledTimes(1);
   });
@@ -297,7 +297,7 @@ describe('docsCommand', () => {
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
 
-    await docsCommand(['README.md', 'README.md'], {});
+    await docsCommand(['README.md', 'README.md'], { yes: true });
 
     expect(runOrchestrator).toHaveBeenCalledTimes(1);
   });
@@ -307,7 +307,7 @@ describe('docsCommand', () => {
 
     writeDoc(tmpDir, 'README.md', '# Old README\n');
 
-    await docsCommand(['README.md', './README.md'], {});
+    await docsCommand(['README.md', './README.md'], { yes: true });
 
     expect(runOrchestrator).toHaveBeenCalledTimes(1);
   });
@@ -329,7 +329,7 @@ describe('docsCommand', () => {
     writeDoc(tmpDir, 'README.md', '# Old README\n');
 
     // Absolute path should resolve to the same relative config key
-    await docsCommand([path.join(tmpDir, 'README.md')], {});
+    await docsCommand([path.join(tmpDir, 'README.md')], { yes: true });
 
     expect(runOrchestrator).toHaveBeenCalledTimes(1);
   });
@@ -346,9 +346,19 @@ describe('docsCommand', () => {
     writeDoc(tmpDir, 'docs/roadmap.md', '# Old Roadmap\n');
 
     // Should succeed — README is not dirty
-    await docsCommand(['README.md'], {});
+    await docsCommand(['README.md'], { yes: true });
 
     expect(runOrchestrator).toHaveBeenCalledTimes(1);
+  });
+
+  // ─── Confirmation gate (#847) ─────────────────────────
+
+  it('rejects docs command without --yes in non-interactive environment', async () => {
+    mockConfig([{ path: 'README.md', description: 'readme', trigger: 'post-release' }]);
+    writeDoc(tmpDir, 'README.md', '# Old README\n');
+
+    // Explicitly set isTTY: false for deterministic test behavior
+    await expect(docsCommand([], { isTTY: false })).rejects.toThrow(/non-interactive/);
   });
 });
 
