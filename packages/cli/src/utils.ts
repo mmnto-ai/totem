@@ -315,6 +315,7 @@ export async function runOrchestrator(opts: {
   config: TotemConfig;
   cwd: string;
   totalResults?: number;
+  temperature?: number;
 }): Promise<string | undefined> {
   const { prompt, tag, options, config, cwd } = opts;
 
@@ -411,7 +412,14 @@ export async function runOrchestrator(opts: {
 
   let result: OrchestratorResult;
   try {
-    result = await invoke({ prompt: safePrompt, model, cwd, tag, totemDir: config.totemDir });
+    result = await invoke({
+      prompt: safePrompt,
+      model,
+      cwd,
+      tag,
+      totemDir: config.totemDir,
+      temperature: opts.temperature,
+    });
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'QuotaError') {
       const rawFallback = config.orchestrator.fallbackModel;
@@ -428,6 +436,7 @@ export async function runOrchestrator(opts: {
             cwd,
             tag,
             totemDir: config.totemDir,
+            temperature: opts.temperature,
           });
           // Update model/invoke so telemetry and cache log the correct values
           model = fallbackResolved.parsed.model;

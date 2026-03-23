@@ -48,10 +48,11 @@ export async function invokeOllamaOrchestrator(
     messages: [{ role: 'user', content: prompt }],
   };
 
-  // Only inject num_ctx if explicitly configured
-  if (numCtx) {
-    body.options = { num_ctx: numCtx };
-  }
+  // Only inject options when explicitly configured
+  const options: Record<string, unknown> = {};
+  if (numCtx) options.num_ctx = numCtx;
+  if (opts.temperature !== undefined) options.temperature = opts.temperature;
+  if (Object.keys(options).length > 0) body.options = options;
 
   let response: Response;
   try {

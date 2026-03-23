@@ -21,6 +21,7 @@ export interface CompileOptions {
   export?: boolean;
   fromCursor?: boolean;
   concurrency?: string;
+  cloud?: string;
 }
 
 interface LessonInput {
@@ -51,6 +52,7 @@ interface CompileLessonDeps {
     options: CompileOptions;
     config: TotemConfig;
     cwd: string;
+    temperature?: number;
   }) => Promise<string | undefined>;
   log: {
     warn: (tag: string, msg: string) => void;
@@ -126,6 +128,7 @@ async function compileLesson(
     options,
     config,
     cwd,
+    temperature: 0, // Compilation is mechanical — strict JSON output, max determinism
   });
 
   if (response == null) {
@@ -423,60 +426,241 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
         cwd,
       };
 
-      // Compile lessons in parallel batches (Proposal 188 Phase 1)
-      const parsed = Number(options.concurrency ?? DEFAULT_CONCURRENCY);
-      const CONCURRENCY = Math.min(
-        MAX_CONCURRENCY,
-        Math.max(1, Number.isNaN(parsed) ? DEFAULT_CONCURRENCY : parsed),
-      );
-      for (let i = 0; i < toCompile.length; i += CONCURRENCY) {
-        const batch = toCompile.slice(i, i + CONCURRENCY);
-        const results = await Promise.all(
-          batch.map((lesson) =>
-            compileLesson(lesson, deps)
-              .then((result) => ({ lesson, result }))
-              .catch((err) => {
-                const message = err instanceof Error ? err.message : String(err);
-                log.warn(TAG, `[${lesson.heading}] ${message} — skipping`);
-                return { lesson, result: { status: 'failed' as const } };
-              }),
-          ),
-        );
+      // ─── Cloud compilation (Proposal 188 Phase 2) ───
+      if (options.cloud) {
+        const cloudUrl = options.cloud;
 
-        processed += batch.length;
-        spinner.update(`${processed}/${total} lessons (${Math.round((processed / total) * 100)}%)`);
-
-        for (const { lesson, result } of results) {
-          switch (result.status) {
-            case 'compiled':
-              // ADR-065: Pipeline 1 error rules require a test fixture
-              if (
-                extractManualPattern(lesson.body) &&
-                result.rule.severity === 'error' &&
-                !testedHashes.has(lesson.hash)
-              ) {
-                result.rule.severity = 'warning';
-                log.warn(
-                  TAG,
-                  `[${lesson.heading}] Downgraded to warning — no test fixture in .totem/tests/ (ADR-065)`,
-                );
-              }
+        // Compile manual patterns locally first (zero LLM, instant)
+        const cloudLessons: LessonInput[] = [];
+        for (const lesson of toCompile) {
+          const manual = extractManualPattern(lesson.body);
+          if (manual) {
+            const result = await compileLesson(lesson, deps);
+            if (result.status === 'compiled') {
               newRules.push(result.rule);
               compiled++;
               logCompiledRule(log, lesson, result.rule);
+            } else if (result.status === 'failed') {
+              failed++;
+            }
+          } else {
+            cloudLessons.push(lesson);
+          }
+        }
+
+        log.info(TAG, `Cloud compile: ${cloudLessons.length} lessons → ${cloudUrl}`);
+
+        // Resolve auth token for Cloud Run (uses gcloud identity token or TOTEM_CLOUD_TOKEN env)
+        const cloudToken =
+          process.env['TOTEM_CLOUD_TOKEN'] ??
+          (await (async () => {
+            try {
+              const { execSync } = await import('node:child_process');
+              return execSync('gcloud auth print-identity-token', { encoding: 'utf-8' }).trim();
+            } catch {
+              return undefined;
+            }
+          })());
+
+        // DLP: scrub secrets from lesson content before sending off-machine
+        const { maskSecrets } = await import('@mmnto/totem');
+        const scrubbedLessons = cloudLessons.map((l) => ({
+          heading: l.heading,
+          body: maskSecrets(l.body),
+          hash: l.hash,
+        }));
+
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (cloudToken) headers['Authorization'] = `Bearer ${cloudToken}`;
+
+        const response = await fetch(`${cloudUrl}/compile`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            lessons: scrubbedLessons,
+            prompt: COMPILER_SYSTEM_PROMPT,
+            model: options.model ?? config.orchestrator?.defaultModel ?? 'gemini-3-flash-preview',
+            concurrency: 50,
+          }),
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new TotemError(
+            'COMPILE_FAILED',
+            `Cloud compile failed: ${text}`,
+            'Check the cloud endpoint.',
+          );
+        }
+
+        const data = (await response.json()) as {
+          results: { hash: string; response: string | null; err?: string }[];
+          stats: { elapsed_seconds: number; succeeded: number; failed: number };
+        };
+
+        log.info(
+          TAG,
+          `Cloud: ${data.stats.succeeded} succeeded, ${data.stats.failed} failed in ${data.stats.elapsed_seconds}s`,
+        );
+
+        for (const cloudResult of data.results) {
+          if (!cloudResult.response) {
+            failed++;
+            continue;
+          }
+
+          const lesson = toCompile.find((l) => l.hash === cloudResult.hash);
+          if (!lesson) continue;
+
+          const localResult = await (async () => {
+            const parsed = parseCompilerResponse(cloudResult.response!);
+            if (!parsed) return { status: 'failed' as const };
+            if (!parsed.compilable) return { status: 'skipped' as const, hash: lesson.hash };
+
+            const severity = parsed.severity ?? 'warning';
+            const engine = parsed.engine ?? 'regex';
+
+            const now = new Date().toISOString();
+            const existing = existingByHash.get(lesson.hash);
+            const sanitizedGlobs = parsed.fileGlobs
+              ? sanitizeFileGlobs(parsed.fileGlobs)
+              : undefined;
+            const globsObj =
+              sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {};
+
+            if (engine === 'ast-grep' && parsed.astGrepPattern && parsed.message) {
+              return {
+                status: 'compiled' as const,
+                rule: {
+                  lessonHash: lesson.hash,
+                  lessonHeading: lesson.heading,
+                  message: parsed.message,
+                  engine: 'ast-grep' as const,
+                  severity,
+                  ...engineFields('ast-grep', parsed.astGrepPattern),
+                  compiledAt: now,
+                  createdAt: existing?.createdAt ?? now,
+                  ...globsObj,
+                } as CompiledRule,
+              };
+            }
+
+            if (engine === 'ast' && parsed.astQuery && parsed.message) {
+              return {
+                status: 'compiled' as const,
+                rule: {
+                  lessonHash: lesson.hash,
+                  lessonHeading: lesson.heading,
+                  message: parsed.message,
+                  engine: 'ast' as const,
+                  severity,
+                  ...engineFields('ast', parsed.astQuery),
+                  compiledAt: now,
+                  createdAt: existing?.createdAt ?? now,
+                  ...globsObj,
+                } as CompiledRule,
+              };
+            }
+
+            if (parsed.pattern && parsed.message) {
+              const validation = validateRegex(parsed.pattern);
+              if (!validation.valid) return { status: 'failed' as const };
+              return {
+                status: 'compiled' as const,
+                rule: {
+                  lessonHash: lesson.hash,
+                  lessonHeading: lesson.heading,
+                  message: parsed.message,
+                  engine: 'regex' as const,
+                  severity,
+                  ...engineFields('regex', parsed.pattern),
+                  compiledAt: now,
+                  createdAt: existing?.createdAt ?? now,
+                  ...globsObj,
+                } as CompiledRule,
+              };
+            }
+
+            return { status: 'failed' as const };
+          })();
+
+          switch (localResult.status) {
+            case 'compiled':
+              newRules.push(localResult.rule!);
+              compiled++;
+              logCompiledRule(log, lesson, localResult.rule!);
               break;
             case 'skipped':
-              nonCompilableSet.add(result.hash);
+              nonCompilableSet.add(localResult.hash!);
               skipped++;
               break;
             case 'failed':
               failed++;
               break;
-            case 'noop':
-              break;
           }
         }
-      }
+
+        spinner.succeed(
+          `${newRules.length} rules — ${compiled} compiled, ${skipped} skipped, ${failed} failed (cloud: ${data.stats.elapsed_seconds}s)`,
+        );
+      } else {
+        // Compile lessons in parallel batches (Proposal 188 Phase 1)
+        const parsed = Number(options.concurrency ?? DEFAULT_CONCURRENCY);
+        const CONCURRENCY = Math.min(
+          MAX_CONCURRENCY,
+          Math.max(1, Number.isNaN(parsed) ? DEFAULT_CONCURRENCY : parsed),
+        );
+        for (let i = 0; i < toCompile.length; i += CONCURRENCY) {
+          const batch = toCompile.slice(i, i + CONCURRENCY);
+          const results = await Promise.all(
+            batch.map((lesson) =>
+              compileLesson(lesson, deps)
+                .then((result) => ({ lesson, result }))
+                .catch((err) => {
+                  const message = err instanceof Error ? err.message : String(err);
+                  log.warn(TAG, `[${lesson.heading}] ${message} — skipping`);
+                  return { lesson, result: { status: 'failed' as const } };
+                }),
+            ),
+          );
+
+          processed += batch.length;
+          spinner.update(
+            `${processed}/${total} lessons (${Math.round((processed / total) * 100)}%)`,
+          );
+
+          for (const { lesson, result } of results) {
+            switch (result.status) {
+              case 'compiled':
+                // ADR-065: Pipeline 1 error rules require a test fixture
+                if (
+                  extractManualPattern(lesson.body) &&
+                  result.rule.severity === 'error' &&
+                  !testedHashes.has(lesson.hash)
+                ) {
+                  result.rule.severity = 'warning';
+                  log.warn(
+                    TAG,
+                    `[${lesson.heading}] Downgraded to warning — no test fixture in .totem/tests/ (ADR-065)`,
+                  );
+                }
+                newRules.push(result.rule);
+                compiled++;
+                logCompiledRule(log, lesson, result.rule);
+                break;
+              case 'skipped':
+                nonCompilableSet.add(result.hash);
+                skipped++;
+                break;
+              case 'failed':
+                failed++;
+                break;
+              case 'noop':
+                break;
+            }
+          }
+        }
+      } // end cloud/local else
 
       if (!options.raw) {
         // Prune stale non-compilable hashes (lesson was edited or removed)

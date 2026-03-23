@@ -54,7 +54,10 @@ export async function invokeGeminiOrchestrator(
     const response = await ai.models.generateContent({
       model,
       contents: prompt,
-      config: { maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS },
+      config: {
+        maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+        ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+      },
     });
 
     const durationMs = Date.now() - startMs;

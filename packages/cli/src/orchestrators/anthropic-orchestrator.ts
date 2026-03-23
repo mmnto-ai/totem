@@ -62,6 +62,7 @@ export async function invokeAnthropicOrchestrator(
       model,
       max_tokens: getMaxTokens(model),
       messages: [{ role: 'user' as const, content: prompt }],
+      ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
     });
 
     const durationMs = Date.now() - startMs;
