@@ -76,3 +76,24 @@ describe('wrapUntrustedXml', () => {
     expect(result).toBe('<tag>\n\n</tag>');
   });
 });
+
+describe('tag name validation', () => {
+  it('accepts valid tag names', () => {
+    expect(() => wrapXml('pr_body', 'x')).not.toThrow();
+    expect(() => wrapUntrustedXml('comment_body', 'x')).not.toThrow();
+    expect(() => wrapXml('mcp:content', 'x')).not.toThrow();
+    expect(() => wrapXml('a.b-c_d', 'x')).not.toThrow();
+  });
+
+  it('rejects invalid tag names in wrapXml', () => {
+    expect(() => wrapXml('', 'x')).toThrow(/Invalid XML tag/);
+    expect(() => wrapXml('<injected>', 'x')).toThrow(/Invalid XML tag/);
+    expect(() => wrapXml('tag with spaces', 'x')).toThrow(/Invalid XML tag/);
+    expect(() => wrapXml('123numeric', 'x')).toThrow(/Invalid XML tag/);
+  });
+
+  it('rejects invalid tag names in wrapUntrustedXml', () => {
+    expect(() => wrapUntrustedXml('</breakout>', 'x')).toThrow(/Invalid XML tag/);
+    expect(() => wrapUntrustedXml('a b', 'x')).toThrow(/Invalid XML tag/);
+  });
+});

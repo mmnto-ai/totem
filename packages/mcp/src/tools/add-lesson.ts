@@ -172,10 +172,12 @@ export function registerAddLesson(server: McpServer): void {
         await fs.promises.mkdir(totemDir, { recursive: true });
 
         const lessonsDir = path.join(totemDir, 'lessons');
-        const safeLesson = sanitize(lesson);
+        const validLesson = parsed.data.lesson;
+        const validTags = parsed.data.context_tags;
+        const safeLesson = sanitize(validLesson);
         const safeTags =
-          context_tags.length > 0
-            ? context_tags.map((t) => sanitize(t).replace(/\n/g, ' ')).join(', ')
+          validTags.length > 0
+            ? validTags.map((t) => sanitize(t).replace(/\n/g, ' ')).join(', ')
             : 'manual';
         const rawHeading = generateLessonHeading(safeLesson);
         const heading = sanitizeHeading(rawHeading);

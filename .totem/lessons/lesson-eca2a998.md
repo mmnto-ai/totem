@@ -1,4 +1,4 @@
-## Lesson — When catching and re-throwing errors, specifically
+## Lesson — Preserve error context when re-throwing
 
 **Tags:** error-handling, debugging, json
 

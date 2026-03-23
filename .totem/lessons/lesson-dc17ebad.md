@@ -1,4 +1,4 @@
-## Lesson — Defining named constants for file permissions (such
+## Lesson — Named constants for file permission literals
 
 **Tags:** security, filesystem, coding-standards
 
