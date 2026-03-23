@@ -2,7 +2,7 @@ const XML_TAG_RE = /^[A-Za-z_][A-Za-z0-9._:-]*$/;
 
 function assertValidTag(tag: string): void {
   if (!XML_TAG_RE.test(tag)) {
-    throw new Error(`Invalid XML tag name: "${tag}"`);
+    throw new Error(`[Totem Error] Invalid XML tag name: "${tag}"`); // totem-ignore — plain Error intentional, xml-format has no TotemError dependency
   }
 }
 
