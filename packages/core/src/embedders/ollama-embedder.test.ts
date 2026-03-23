@@ -148,17 +148,13 @@ describe('OllamaEmbedder', () => {
   // ─── Error handling: model not found ────────────────
 
   it('falls back to zero vector when model is not found (404)', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    // Batch call returns 404 (caught by embedBatch, throws TotemConfigError)
-    // embed() catches batch error → retries individually → also gets 404
     fetchSpy.mockResolvedValue(errorResponse(404, 'model not found'));
 
     const embedder = new OllamaEmbedder('nonexistent-model');
 
-    // Because embed() catches ALL batch errors and falls back to zero vectors,
-    // we get a zero vector instead of an error. This is the actual behavior:
-    // batch fails → individual retry also fails → zero vector fallback.
+    // Zero vector preserves 1:1 alignment with input texts
     const result = await embedder.embed(['test']);
     expect(result).toHaveLength(1);
     expect(result[0]!.every((v) => v === 0)).toBe(true);
@@ -167,14 +163,11 @@ describe('OllamaEmbedder', () => {
   });
 
   it('falls back to zero vector on 400 model error', async () => {
-    // Test embedBatch directly via a single-text embed where we intercept
-    // We verify the error shape by ensuring both batch AND individual fail with the right error type
     fetchSpy.mockResolvedValue(errorResponse(400, 'no such model'));
 
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const embedder = new OllamaEmbedder('bad-model');
 
-    // embed() catches errors and retries individually, then falls back to zero vector
     const result = await embedder.embed(['test']);
     expect(result).toHaveLength(1);
     expect(result[0]!.every((v) => v === 0)).toBe(true);
@@ -185,10 +178,9 @@ describe('OllamaEmbedder', () => {
   it('falls back to zero vector when server returns 500 persistently', async () => {
     fetchSpy.mockResolvedValue(errorResponse(500, 'internal server error'));
 
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const embedder = new OllamaEmbedder();
 
-    // Batch fails → individual retry also fails → zero vector
     const result = await embedder.embed(['test']);
     expect(result).toHaveLength(1);
     expect(result[0]!.every((v) => v === 0)).toBe(true);
@@ -214,10 +206,10 @@ describe('OllamaEmbedder', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(4);
   });
 
-  // ─── Zero-vector fallback on individual failure ─────
+  // ─── Skip on individual failure ─────────────────────
 
-  it('falls back to zero vector when an individual text also fails', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  it('uses zero vector for failed individual text while preserving alignment', async () => {
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     // Batch fails
     fetchSpy.mockRejectedValueOnce(new Error('batch failed'));
@@ -229,23 +221,20 @@ describe('OllamaEmbedder', () => {
     const embedder = new OllamaEmbedder();
     const result = await embedder.embed(['good text', 'bad text']);
 
+    // Both texts produce results — alignment preserved
     expect(result).toHaveLength(2);
-    // First text got a real embedding
     expect(result[0]!.every((v) => v === 1)).toBe(true);
-    // Second text got zero vector (known issue: silent fallback)
-    expect(result[1]!).toHaveLength(768);
     expect(result[1]!.every((v) => v === 0)).toBe(true);
 
-    // Verify the warning was logged
     expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[Totem] Skipping oversized chunk'),
+      expect.stringContaining('[Totem] Zero-vector fallback'),
     );
 
     consoleSpy.mockRestore();
   });
 
-  it('uses the configured dimensions for zero-vector fallback', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  it('logs summary warning with count of failed texts', async () => {
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     // Batch fails, then individual also fails
     fetchSpy.mockRejectedValueOnce(new Error('batch failed'));
@@ -254,9 +243,15 @@ describe('OllamaEmbedder', () => {
     const embedder = new OllamaEmbedder('nomic-embed-text', 'http://localhost:11434', 512);
     const result = await embedder.embed(['problematic text']);
 
+    // Zero vector preserves alignment
     expect(result).toHaveLength(1);
-    expect(result[0]!).toHaveLength(512);
     expect(result[0]!.every((v) => v === 0)).toBe(true);
+    expect(result[0]).toHaveLength(512); // custom dimensions
+
+    // Verify summary warning was logged
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('1 chunk(s) skipped due to failures'),
+    );
 
     consoleSpy.mockRestore();
   });

@@ -1,4 +1,4 @@
-import type { Content, Heading, PhrasingContent, Root } from 'mdast';
+import type { Content, Heading, Root } from 'mdast';
 import remarkFrontmatter from 'remark-frontmatter';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
@@ -7,6 +7,7 @@ import YAML from 'yaml';
 import type { ChunkStrategy, ContentType } from '../config-schema.js';
 import type { Chunk } from '../types.js';
 import type { Chunker } from './chunker.js';
+import { extractPlainText } from './chunker-utils.js';
 
 const MAX_SPLIT_DEPTH = 3;
 
@@ -119,16 +120,6 @@ export class MarkdownChunker implements Chunker {
       return {};
     }
   }
-}
-
-function extractPlainText(nodes: PhrasingContent[]): string {
-  return nodes
-    .map((n) => {
-      if (n.type === 'text') return n.value;
-      if ('children' in n) return extractPlainText(n.children as PhrasingContent[]);
-      return '';
-    })
-    .join('');
 }
 
 function nodeToSourceText(node: Content, lines: string[]): string {

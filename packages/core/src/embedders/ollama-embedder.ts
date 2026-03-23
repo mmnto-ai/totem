@@ -67,6 +67,7 @@ export class OllamaEmbedder implements Embedder {
     );
 
     const results: number[][] = [];
+    let skipped = 0;
 
     // Batch to avoid overwhelming Ollama with large payloads
     for (let i = 0; i < truncated.length; i += MAX_BATCH_SIZE) {
@@ -82,14 +83,20 @@ export class OllamaEmbedder implements Embedder {
             const [embedding] = await this.embedBatch([text]);
             results.push(embedding!);
           } catch {
-            // Individual text exceeds context — use zero vector
-            console.error(
-              `[Totem] Skipping oversized chunk (${text.length} chars): ${text.slice(0, 60)}...`,
-            );
+            // Individual text failed — insert zero vector to preserve 1:1 alignment with input
+            // Zero vectors have ~0 cosine similarity so they won't pollute search results
             results.push(new Array(this.dimensions).fill(0));
+            console.warn(
+              `[Totem] Zero-vector fallback for failed embedding (${text.length} chars): ${text.slice(0, 60)}...`,
+            );
+            skipped++;
           }
         }
       }
+    }
+
+    if (skipped > 0) {
+      console.warn(`[Totem] Embedding batch complete: ${skipped} chunk(s) skipped due to failures`);
     }
 
     return results;

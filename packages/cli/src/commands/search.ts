@@ -32,7 +32,7 @@ export async function searchCommand(
   const results = await store.search({
     query,
     typeFilter: options.type as ContentType | undefined,
-    maxResults: options.maxResults ? parseInt(options.maxResults, 10) : 5,
+    maxResults: options.maxResults ? parseInt(options.maxResults, 10) || 5 : 5,
   });
 
   if (results.length === 0) {

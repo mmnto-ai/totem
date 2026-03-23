@@ -57,7 +57,9 @@ function readLock(filePath: string): LockData | null {
       data !== null &&
       typeof data === 'object' &&
       typeof (data as LockData).pid === 'number' &&
-      typeof (data as LockData).timestamp === 'number'
+      Number.isInteger((data as LockData).pid) &&
+      typeof (data as LockData).timestamp === 'number' &&
+      (data as LockData).timestamp > 0
     ) {
       return data as LockData;
     }
