@@ -75,7 +75,7 @@ describe('listCommand', () => {
 
     listCommand();
 
-    const output = stderrSpy.mock.calls.map((c) => c[0]).join('\n');
+    const output = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n');
     expect(output).toContain('/projects/foo');
     expect(output).toContain('Chunks: 42');
     expect(output).toContain('openai/1536d');
@@ -94,7 +94,7 @@ describe('listCommand', () => {
 
     listCommand();
 
-    const output = stderrSpy.mock.calls.map((c) => c[0]).join('\n');
+    const output = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n');
     expect(output).toContain('[STALE]');
   });
 
@@ -110,7 +110,7 @@ describe('listCommand', () => {
 
     listCommand();
 
-    const output = stderrSpy.mock.calls.map((c) => c[0]).join('\n');
+    const output = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n');
     expect(output).not.toContain('[STALE]');
   });
 
@@ -127,7 +127,7 @@ describe('listCommand', () => {
 
     listCommand();
 
-    const output = stderrSpy.mock.calls.map((c) => c[0]).join('\n');
+    const output = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n');
     expect(output).toContain('[MISSING]');
   });
 
@@ -153,11 +153,11 @@ describe('listCommand', () => {
 
     // Find the calls that contain project paths
     const pathCalls = stderrSpy.mock.calls
-      .map((c) => c[0] as string)
-      .filter((s) => s.includes('/projects/'));
+      .map((c: unknown[]) => c[0] as string)
+      .filter((s: string) => s.includes('/projects/'));
 
-    const newIdx = pathCalls.findIndex((s) => s.includes('/projects/new'));
-    const oldIdx = pathCalls.findIndex((s) => s.includes('/projects/old'));
+    const newIdx = pathCalls.findIndex((s: string) => s.includes('/projects/new'));
+    const oldIdx = pathCalls.findIndex((s: string) => s.includes('/projects/old'));
     expect(newIdx).toBeLessThan(oldIdx);
   });
 });
