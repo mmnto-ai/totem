@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import type { ChunkStrategy, ContentType } from './config-schema.js';
 
 /**
@@ -115,3 +117,44 @@ export interface HealthCheckResult {
   ftsAvailable: boolean;
   issues: string[];
 }
+
+// ─── Lesson Frontmatter Schema (ADR-070) ──────────
+
+export const LessonFrontmatterSchema = z.object({
+  // Core Taxonomy
+  type: z.literal('trap').default('trap'),
+  category: z.enum(['security', 'architecture', 'performance', 'style']).optional(),
+  severity: z.enum(['error', 'warning']).default('error'),
+
+  // Unstructured Metadata (replaces flat **Tags:**)
+  tags: z.array(z.string()).default([]),
+
+  // Scope (replaces inline **Scope:**)
+  scope: z
+    .object({
+      globs: z.array(z.string()).optional(),
+    })
+    .optional(),
+
+  // Ecosystem Targeting
+  ecosystem: z
+    .object({
+      frameworks: z.array(z.string()).optional(),
+      version: z.string().optional(), // Semver matching — DEFERRED past 1.6.0
+    })
+    .optional(),
+
+  // Governance
+  lifecycle: z.enum(['nursery', 'stable', 'deprecated']).default('stable'),
+  rpn: z.number().min(1).max(10).optional(), // Risk Priority Number (ADR-023) — DEFERRED
+
+  // Pipeline 1 Explicit Compilation (replaces inline fields)
+  compilation: z
+    .object({
+      engine: z.enum(['regex', 'ast', 'ast-grep']).optional(),
+      pattern: z.union([z.string(), z.record(z.unknown())]).optional(),
+    })
+    .optional(),
+});
+
+export type LessonFrontmatter = z.infer<typeof LessonFrontmatterSchema>;

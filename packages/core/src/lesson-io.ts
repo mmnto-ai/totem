@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import type { ParsedLesson } from './drift-detector.js';
 import { parseLessonsFile } from './drift-detector.js';
 import { truncateHeading } from './lesson-format.js';
+import { buildFrontmatterFromLegacy, extractFrontmatter } from './lesson-frontmatter.js';
 
 /**
  * Generate a deterministic, idempotent filename for a lesson entry.
@@ -63,7 +64,7 @@ export async function writeLessonFileAsync(lessonsDir: string, entry: string): P
  * and the new `.totem/lessons/*.md` directory. Each lesson gets a `sourcePath`
  * set to its origin file for prune operations.
  */
-export function readAllLessons(totemDir: string): ParsedLesson[] {
+export function readAllLessons(totemDir: string, onWarn?: (msg: string) => void): ParsedLesson[] {
   const allLessons: ParsedLesson[] = [];
 
   // 1. Read legacy .totem/lessons.md if it exists
@@ -72,6 +73,7 @@ export function readAllLessons(totemDir: string): ParsedLesson[] {
     const content = fs.readFileSync(legacyPath, 'utf-8');
     const lessons = parseLessonsFile(content);
     for (const lesson of lessons) {
+      lesson.frontmatter = buildFrontmatterFromLegacy(lesson.tags, lesson.raw);
       lesson.sourcePath = legacyPath;
     }
     allLessons.push(...lessons);
@@ -87,11 +89,30 @@ export function readAllLessons(totemDir: string): ParsedLesson[] {
     for (const file of files) {
       const filePath = path.join(lessonsDir, file);
       const content = fs.readFileSync(filePath, 'utf-8');
-      const lessons = parseLessonsFile(content);
-      for (const lesson of lessons) {
-        lesson.sourcePath = filePath;
+
+      // ADR-070: detect YAML frontmatter for individual lesson files
+      const warn = onWarn ? (msg: string) => onWarn(`${filePath}: ${msg}`) : undefined;
+      const { frontmatter, body: strippedBody, validYaml } = extractFrontmatter(content, warn);
+
+      if (validYaml) {
+        const lessons = parseLessonsFile(strippedBody);
+        for (const lesson of lessons) {
+          lesson.frontmatter = frontmatter;
+          // YAML tags are the source of truth (copy to avoid shared reference)
+          lesson.tags = [...frontmatter.tags];
+          lesson.sourcePath = filePath;
+        }
+        allLessons.push(...lessons);
+      } else {
+        // No YAML or invalid YAML — fall back to legacy field mapping
+        const legacyContent = strippedBody !== content ? strippedBody : content;
+        const lessons = parseLessonsFile(legacyContent);
+        for (const lesson of lessons) {
+          lesson.frontmatter = buildFrontmatterFromLegacy(lesson.tags, lesson.raw);
+          lesson.sourcePath = filePath;
+        }
+        allLessons.push(...lessons);
       }
-      allLessons.push(...lessons);
     }
   }
 
