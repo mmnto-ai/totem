@@ -9,6 +9,7 @@ const TAG = 'Compile';
 const COMPILED_RULES_FILE = 'compiled-rules.json';
 const DEFAULT_CONCURRENCY = 5;
 const MAX_CONCURRENCY = 20;
+const CLOUD_CONCURRENCY = 50;
 
 // ─── Types ──────────────────────────────────────────
 
@@ -494,7 +495,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
               lessons: scrubbedLessons,
               prompt: COMPILER_SYSTEM_PROMPT,
               model: options.model ?? config.orchestrator?.defaultModel ?? 'gemini-3-flash-preview',
-              concurrency: 50,
+              concurrency: CLOUD_CONCURRENCY,
             }),
           });
 

@@ -7,7 +7,7 @@ Totem interacts with LLMs across several different operational phases. Because t
 ## 1. Compilation: The Mechanical Path
 
 **Target Command:** `totem compile`
-**Ideal Temperature:** `0.1` (or `0.0`)
+**Ideal Temperature:** `0.0`
 
 The compilation step is not a creative task; it is a translation task. The goal is to convert a natural language lesson into a mathematically precise Tree-sitter S-expression or Regex pattern, and output it perfectly formatted as JSON.
 
