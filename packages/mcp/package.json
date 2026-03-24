@@ -1,6 +1,6 @@
 {
   "name": "@mmnto/mcp",
-  "version": "1.4.3",
+  "version": "1.5.0",
   "description": "MCP server for Totem — AI persistent memory and context layer",
   "type": "module",
   "main": "./dist/index.js",
