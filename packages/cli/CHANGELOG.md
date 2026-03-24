@@ -1,5 +1,32 @@
 # @mmnto/cli
 
+## 1.4.3
+
+### Patch Changes
+
+- DX hardening, core refactor, and docs overhaul.
+
+  **Core:**
+  - Extract `buildCompiledRule()`, `buildManualRule()`, `compileLesson()` to core package — eliminates duplicated rule-building logic between local and cloud compilation paths
+
+  **CLI:**
+  - Reduce pre-push hook verbosity: dot reporter by default, full output on failure, `TOTEM_DEBUG=1` for verbose mode
+  - Suppress gh CLI stderr leak in multi-repo issue fetch
+  - Extract shared `ghExecOptions()` with `GH_PROMPT_DISABLED=1` to prevent interactive auth hangs
+  - Protect `<manual_content>` blocks from `stripMarketingTerms` mutation
+
+  **Config:**
+  - Remove `**/*.test.ts` from `ignorePatterns` so shield can see test files in diffs
+
+  **Docs:**
+  - Rewrite README as technical spec sheet (~130 lines, zero marketing)
+  - Create SECURITY.md with full 1.4.x audit
+  - Scaffold `docs/wiki/` with enforcement model, MCP setup, cross-repo mesh, troubleshooting
+  - Add 6 placeholder wiki pages for 1.5.0 features
+
+- Updated dependencies
+  - @mmnto/totem@1.4.3
+
 ## 1.4.2
 
 ### Patch Changes
