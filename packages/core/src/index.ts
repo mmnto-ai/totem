@@ -44,10 +44,10 @@ export {
 } from './config-schema.js';
 
 // Lesson Frontmatter (ADR-070)
-export type { LessonFrontmatter } from './types.js';
-export { LessonFrontmatterSchema } from './types.js';
 export type { FrontmatterParseResult } from './lesson-frontmatter.js';
 export { buildFrontmatterFromLegacy, extractFrontmatter } from './lesson-frontmatter.js';
+export type { LessonFrontmatter } from './types.js';
+export { LessonFrontmatterSchema } from './types.js';
 
 // Types
 export type {
