@@ -10,6 +10,7 @@ import {
   formatLessonSection,
   formatResults,
   getSystemPrompt,
+  loadConfig,
   loadEnv,
   partitionLessons,
   reapOrphanedTempFiles,
@@ -237,8 +238,71 @@ describe('resolveConfigPath', () => {
     expect(result).toBe(path.join(tmpDir, 'totem.config.ts'));
   });
 
-  it('throws when totem.config.ts is missing', () => {
-    expect(() => resolveConfigPath(tmpDir)).toThrow('No totem.config.ts found');
+  it('throws when no config file exists', () => {
+    expect(() => resolveConfigPath(tmpDir)).toThrow('No Totem configuration found');
+  });
+
+  it('resolves totem.yaml when totem.config.ts is missing', () => {
+    fs.writeFileSync(path.join(tmpDir, 'totem.yaml'), 'targets: []\n');
+    expect(resolveConfigPath(tmpDir)).toBe(path.join(tmpDir, 'totem.yaml'));
+  });
+
+  it('resolves totem.toml when no ts or yaml exists', () => {
+    fs.writeFileSync(path.join(tmpDir, 'totem.toml'), '[embedding]\nprovider = "openai"\n');
+    expect(resolveConfigPath(tmpDir)).toBe(path.join(tmpDir, 'totem.toml'));
+  });
+
+  it('prioritizes .ts over .yaml when both exist', () => {
+    fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), 'export default {}');
+    fs.writeFileSync(path.join(tmpDir, 'totem.yaml'), 'targets: []\n');
+    expect(resolveConfigPath(tmpDir)).toBe(path.join(tmpDir, 'totem.config.ts'));
+  });
+});
+
+// ─── loadConfig (YAML/TOML) ─────────────────────────
+
+describe('loadConfig', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-loadconfig-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('loads and validates a YAML config', async () => {
+    const yaml = `targets:\n  - glob: "**/*.ts"\n    type: code\n    strategy: typescript-ast\n`;
+    fs.writeFileSync(path.join(tmpDir, 'totem.yaml'), yaml);
+    const config = await loadConfig(path.join(tmpDir, 'totem.yaml'));
+    expect(config.targets).toHaveLength(1);
+    expect(config.targets[0].glob).toBe('**/*.ts');
+  });
+
+  it('loads and validates a TOML config', async () => {
+    const toml = `[[targets]]\nglob = "**/*.rs"\ntype = "code"\nstrategy = "typescript-ast"\n`;
+    fs.writeFileSync(path.join(tmpDir, 'totem.toml'), toml);
+    const config = await loadConfig(path.join(tmpDir, 'totem.toml'));
+    expect(config.targets).toHaveLength(1);
+    expect(config.targets[0].glob).toBe('**/*.rs');
+  });
+
+  it('throws ConfigError for invalid YAML syntax', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'totem.yaml'), 'targets: [invalid yaml: {{');
+    await expect(loadConfig(path.join(tmpDir, 'totem.yaml'))).rejects.toThrow('Failed to parse');
+  });
+
+  it('throws ConfigError for invalid TOML syntax', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'totem.toml'), 'targets = [invalid');
+    await expect(loadConfig(path.join(tmpDir, 'totem.toml'))).rejects.toThrow('Failed to parse');
+  });
+
+  it('formats Zod validation errors with field paths', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'totem.yaml'), 'targets: "not an array"\n');
+    await expect(loadConfig(path.join(tmpDir, 'totem.yaml'))).rejects.toThrow(
+      'Invalid configuration',
+    );
   });
 });
 

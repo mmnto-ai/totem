@@ -4,6 +4,8 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import type { IngestTarget } from '@mmnto/totem';
+
 import {
   UNIVERSAL_BASELINE_LESSONS,
   UNIVERSAL_BASELINE_MARKDOWN,
@@ -21,6 +23,8 @@ import {
   scaffoldMcpConfig,
   upgradeReflexes,
 } from './init.js';
+import { detectProject } from './init-detect.js';
+import { generateConfigForFormat } from './init-templates.js';
 
 const SERVER_ENTRY = { type: 'stdio', command: 'npx', args: ['-y', '@mmnto/mcp'] };
 
@@ -845,5 +849,79 @@ describe('upgradeReflexes', () => {
 describe('REFLEX_VERSION', () => {
   it('is at least 2', () => {
     expect(REFLEX_VERSION).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ─── detectProject config format preference ─────────
+
+describe('detectProject preferredConfigFormat', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-detect-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('prefers ts for Node.js projects with package.json', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{}');
+    expect(detectProject(tmpDir).preferredConfigFormat).toBe('ts');
+  });
+
+  it('prefers toml for Rust projects with Cargo.toml', () => {
+    fs.writeFileSync(path.join(tmpDir, 'Cargo.toml'), '[package]\nname = "test"');
+    expect(detectProject(tmpDir).preferredConfigFormat).toBe('toml');
+  });
+
+  it('prefers toml for Python projects with pyproject.toml', () => {
+    fs.writeFileSync(path.join(tmpDir, 'pyproject.toml'), '[project]\nname = "test"');
+    expect(detectProject(tmpDir).preferredConfigFormat).toBe('toml');
+  });
+
+  it('prefers yaml for Go projects', () => {
+    fs.writeFileSync(path.join(tmpDir, 'go.mod'), 'module example.com/test');
+    expect(detectProject(tmpDir).preferredConfigFormat).toBe('yaml');
+  });
+
+  it('defaults to yaml for unknown ecosystems', () => {
+    expect(detectProject(tmpDir).preferredConfigFormat).toBe('yaml');
+  });
+});
+
+// ─── generateConfigForFormat ────────────────────────
+
+describe('generateConfigForFormat', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gencfg-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const targets: IngestTarget[] = [{ glob: '**/*.py', type: 'code', strategy: 'typescript-ast' }];
+
+  it('generates valid YAML config', async () => {
+    const { content, filename } = await generateConfigForFormat('yaml', targets, 'none', tmpDir);
+    expect(filename).toBe('totem.yaml');
+    expect(content).toContain('**/*.py');
+    expect(content).toContain('# Totem configuration');
+  });
+
+  it('generates valid TOML config', async () => {
+    const { content, filename } = await generateConfigForFormat('toml', targets, 'none', tmpDir);
+    expect(filename).toBe('totem.toml');
+    expect(content).toContain('**/*.py');
+    expect(content).toContain('# Totem configuration');
+  });
+
+  it('generates TS config for ts format', async () => {
+    const { content, filename } = await generateConfigForFormat('ts', targets, 'none', tmpDir);
+    expect(filename).toBe('totem.config.ts');
+    expect(content).toContain('import type');
   });
 });

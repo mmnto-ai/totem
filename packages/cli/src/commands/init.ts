@@ -29,7 +29,6 @@ import {
   GEMINI_BEFORE_TOOL,
   GEMINI_SESSION_START,
   GEMINI_SKILL,
-  generateConfig,
   LEGACY_SENTINEL,
   REFLEX_END,
   REFLEX_START,
@@ -42,7 +41,12 @@ import { installEnforcementHooks, installPostMergeHook } from './install-hooks.j
 // Re-export moved items so existing consumers (including tests) don't break
 export type { AiToolInfo, HookInstallerResult } from './init-detect.js';
 export { buildNpxCommand, detectEmbeddingTier } from './init-detect.js';
-export { AI_PROMPT_BLOCK, generateConfig, REFLEX_VERSION } from './init-templates.js';
+export {
+  AI_PROMPT_BLOCK,
+  generateConfig,
+  generateConfigForFormat,
+  REFLEX_VERSION,
+} from './init-templates.js';
 
 /**
  * Scaffold a file with idempotency — skips if the marker is already present.
@@ -426,9 +430,12 @@ interface InitSummaryEntry {
 
 export async function initCommand(options?: { bare?: boolean }): Promise<void> {
   const cwd = process.cwd();
-  const configPath = path.join(cwd, 'totem.config.ts');
+  const { CONFIG_FILES } = await import('../utils.js');
   const totemDir = path.join(cwd, '.totem');
-  const configExists = fs.existsSync(configPath);
+
+  // Check if ANY config format already exists
+  const existingConfig = CONFIG_FILES.map((f) => path.join(cwd, f)).find((p) => fs.existsSync(p));
+  const configExists = !!existingConfig;
 
   const rl = readline.createInterface({ input, output });
   const summary: InitSummaryEntry[] = [];
@@ -527,7 +534,15 @@ export async function initCommand(options?: { bare?: boolean }): Promise<void> {
         }
       }
 
-      const configContent = await generateConfig(targets, embeddingTier, cwd);
+      const { generateConfigForFormat } = await import('./init-templates.js');
+      const detected = detectProject(cwd);
+      const { content: configContent, filename: configFilename } = await generateConfigForFormat(
+        detected.preferredConfigFormat,
+        targets,
+        embeddingTier,
+        cwd,
+      );
+      const configPath = path.join(cwd, configFilename);
       fs.writeFileSync(configPath, configContent, 'utf-8');
       const tierLabel =
         embeddingTier === 'none'
@@ -536,11 +551,12 @@ export async function initCommand(options?: { bare?: boolean }): Promise<void> {
             ? 'Standard'
             : 'Standard (Ollama)';
       summary.push({
-        file: 'totem.config.ts',
+        file: configFilename,
         action: `Created with auto-detected targets (${tierLabel} tier)`,
       });
     } else {
-      log.dim('Totem', 'totem.config.ts already exists. Checking reflexes and hooks...');
+      const configName = existingConfig ? path.basename(existingConfig) : 'config';
+      log.dim('Totem', `${configName} already exists. Checking reflexes and hooks...`);
     }
 
     // --- Always run: .totem/ directory ---
