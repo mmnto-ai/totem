@@ -7,6 +7,11 @@ dist/
 .lancedb-eval-*/
 .turbo/
 
+# Non-JS ecosystem artifacts (language packs may run locally)
+__pycache__/
+*.pyc
+target/
+
 # Environment
 .env
 .env.local
@@ -22,10 +27,6 @@ dist/
 !.gemini/skills/
 .mcp.json
 .junie/mcp/
-scratchpad/
-
-# Design assets (local only)
-design/
 
 # OS
 .DS_Store
@@ -34,31 +35,23 @@ Thumbs.db
 # Legacy directory (now lives inside .strategy submodule)
 .analysis/
 
-# CLI Dogfooding Artifacts
-specs/
-handoff.md
-session-handoff.md
+# Totem runtime artifacts
 .totem/temp/
 .totem/cache/
+.totem/secrets.json
 .totem/*.log
 .totem/*.jsonl
 .totem/.search-called
 
-# Developer cheatsheets & local scratch
-dev-cheatsheet.txt
-
-# Developer Journal
+# Local scratchpad (personal scratch files go here, not in root)
+scratchpad/
+design/
 .journal/
 
-# Review artifacts
-review-output.md
-totem-audit.zip
-.code-review/
-2026-*
-.totem/cache/.shield-passed
+# Agent & tool artifacts
 .agents/
 .continue/
+.code-review/
 skills-lock.json
 .claude/skills/autofix/
 .claude/skills/code-review/
-cloc-results.json
