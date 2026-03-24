@@ -90,12 +90,14 @@ describe('getFallbackCommand', () => {
   });
 
   it('returns bunx when bun.lockb exists (legacy)', () => {
-    fs.writeFileSync(path.join(tmpDir, 'bun.lockb'), '');
+    // totem-ignore — #918: separate test cases for each lockfile format
+    fs.writeFileSync(path.join(tmpDir, 'bun.lockb'), ''); // totem-ignore — #918
     expect(getFallbackCommand(tmpDir)).toBe('bunx @mmnto/cli');
   });
 
   it('returns bunx when bun.lock exists (Bun >= 1.2)', () => {
-    fs.writeFileSync(path.join(tmpDir, 'bun.lock'), '');
+    // totem-ignore — #918: separate test cases for each lockfile format
+    fs.writeFileSync(path.join(tmpDir, 'bun.lock'), ''); // totem-ignore — #918
     expect(getFallbackCommand(tmpDir)).toBe('bunx @mmnto/cli');
   });
 
@@ -110,13 +112,13 @@ describe('getFallbackCommand', () => {
 
   it('prefers pnpm over bun when both lockfiles exist', () => {
     fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
-    fs.writeFileSync(path.join(tmpDir, 'bun.lock'), '');
+    fs.writeFileSync(path.join(tmpDir, 'bun.lock'), ''); // totem-ignore — #918
     expect(getFallbackCommand(tmpDir)).toBe('pnpm dlx @mmnto/cli');
   });
 
   it('prefers yarn over bun when both lockfiles exist', () => {
     fs.writeFileSync(path.join(tmpDir, 'yarn.lock'), '');
-    fs.writeFileSync(path.join(tmpDir, 'bun.lockb'), '');
+    fs.writeFileSync(path.join(tmpDir, 'bun.lockb'), ''); // totem-ignore — #918
     expect(getFallbackCommand(tmpDir)).toBe('yarn dlx @mmnto/cli');
   });
 });
