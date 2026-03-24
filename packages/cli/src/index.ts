@@ -353,7 +353,7 @@ program
 
 program
   .command('link <path>')
-  .description("Link a neighboring repo's lessons into this project")
+  .description('Link a neighboring repo into this project')
   .option('--unlink', 'Remove a previously linked repo')
   .option('-y, --yes', 'Skip the security confirmation prompt')
   .action(async (targetPath: string, opts: { unlink?: boolean; yes?: boolean }) => {
