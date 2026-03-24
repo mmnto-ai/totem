@@ -52,7 +52,13 @@ If you switch embedding providers (e.g., from OpenAI 1536d to Gemini 768d), the 
 **Fix:**
 
 ```bash
+# macOS / Linux
 rm -rf .lancedb
+
+# Windows (PowerShell)
+Remove-Item -Recurse -Force .lancedb
+
+# Then resync
 totem sync
 ```
 

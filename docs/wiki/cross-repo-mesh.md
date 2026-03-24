@@ -9,7 +9,7 @@ Most governance tools are per-repo. Totem lets you connect repositories into a s
 totem link ../api-server
 ```
 
-This commands configures cross-repo queries in your `totem.config.ts`:
+This command configures cross-repo queries in your `totem.config.ts`:
 
 ```typescript
 linkedIndexes: ['../api-server', '../shared-design-system'],
