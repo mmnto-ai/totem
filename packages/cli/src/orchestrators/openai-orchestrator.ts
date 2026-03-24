@@ -67,6 +67,7 @@ export async function invokeOpenAIOrchestrator(
       model,
       max_tokens: DEFAULT_MAX_TOKENS,
       messages: [{ role: 'user' as const, content: prompt }],
+      ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
     });
 
     const durationMs = Date.now() - startMs;

@@ -19,6 +19,8 @@ export interface OrchestratorInvokeOptions {
   cwd: string;
   tag: string;
   totemDir: string;
+  /** LLM temperature: 0 = deterministic, 0.7 = creative. Caller sets per use case. */
+  temperature?: number;
 }
 
 /** A provider-bound function that invokes an LLM and returns the result. */
