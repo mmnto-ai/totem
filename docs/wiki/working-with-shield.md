@@ -39,9 +39,9 @@ When deterministic checks or stubborn AI rules fail, you can bypass them entirel
 ## 5. Overriding the Prompt (`.totem/prompts/shield.md`)
 
 If you need to apply a repository-wide behavioral change to Shield, you can override its system prompt.
-Create a `.totem/prompts/shield.md` file. Any text placed here will **completely replace** the default instruction set for the `shield` command (it does not augment it). 
+Create a `.totem/prompts/shield.md` file. Any text placed here will **completely replace** the default instruction set for the `shield` command (it does not augment it).
 
-*Critical:* If you override the prompt, you must still include the required JSON verdict format instructions, otherwise Shield will fail to parse the LLM's response.
+_Critical:_ If you override the prompt, you must still include the required JSON verdict format instructions, otherwise Shield will fail to parse the LLM's response.
 
 ## 6. Debugging Shield
 
