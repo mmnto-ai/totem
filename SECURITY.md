@@ -65,23 +65,39 @@ The following are out of scope:
 - **Model name validation** — all model strings are validated against `/^[\w./:_-]+$/` to prevent shell injection
 - **Git hook safety** — hooks never use `--no-verify` or bypass signing
 - **Compiled rules are deterministic** — `totem lint` runs zero-LLM regex/AST checks with no network calls
-- **Secret masking** — `maskSecrets()` strips API keys, tokens, and credentials before embedding into the vector index
+- **Secret masking (DLP)** — `maskSecrets()` strips API keys, tokens, and credentials before embedding into the vector index, before LLM calls, and before cloud compilation requests
 - **Process cleanup** — spawned child processes use process groups on Unix and `taskkill /T /F` on Windows for clean tree-kill on timeout
 
-### MCP Server Security (audited v1.3.1)
+### MCP Server Security (audited v1.4.2)
 
 - **Input validation:** All MCP tool inputs validated via Zod schemas
+- **Rate limiting:** All MCP tool invocations are rate-limited
+- **Provenance tracking:** Lesson additions include source attribution
 - **Query limits:** `max_results` capped to 100 to prevent memory exhaustion
 - **Output capping:** Subprocess output capped to 10KB in both `add_lesson` and `verify_execution`
 - **Timeouts:** 60s for sync operations, 30s for lint
 - **No filesystem writes** beyond lesson files in `.totem/lessons/`
-- **SQL injection:** LanceDB queries use Zod enum-validated type filters — string interpolation is safe given the enum constraint
+- **SQL injection:** LanceDB `deleteByFile()` uses `escapeSqlString()` helper to prevent injection via file paths containing quotes. No raw string interpolation in database operations.
 
-### Shell Orchestrator Security (audited v1.3.1)
+### Shell Orchestrator Security (audited v1.4.2)
 
 - **Model name injection:** `MODEL_NAME_RE = /^[\w./:_-]+$/` blocks all shell metacharacters (`$`, backticks, `;`, `|`, `&`, parentheses). Subshell injection via model names is not possible.
 - **Command template:** The shell command template comes from `totem.config.ts`, which has the same trust level as the codebase itself
 - **Process termination:** Uses safe child process execution (`execFileSync`/`spawn`) with argument arrays (not string interpolation) for `taskkill` on Windows
+- **Stdio isolation:** `stdio: 'pipe'` prevents stderr leakage from child processes; `GH_PROMPT_DISABLED=1` prevents interactive auth hangs
+
+### Extract Pipeline Security (added v1.4.0)
+
+- **XML escaping:** PR content wrapped in `wrapUntrustedXml()` before injection into LLM prompts, preventing XML tag escape attacks
+- **JSON parsing:** LLM output parsed as structured JSON via Zod schema validation with regex fallback. Replaces brittle regex extraction (#873).
+- **Suspicious lesson detection:** `flagSuspiciousLessons()` flags lessons containing injection markers, role-play directives, or override patterns before they enter the knowledge index
+
+### Compilation Pipeline Security (added v1.4.0)
+
+- **Manifest attestation:** `compile-manifest.json` records SHA hashes of input lessons and output rules. CI gate (`verify-manifest`) blocks deployment if the manifest doesn't match (#875).
+- **Temperature pinning:** Compilation uses `temperature: 0` for deterministic output
+- **Regex validation:** All compiled regex patterns are validated before storage. Invalid patterns are rejected, not stored.
+- **Sanitizer hardening:** Regex statefulness fix (#871) and secret pattern ordering fix (#872) prevent bypass via pattern interleaving
 
 ### Totem Mesh (Cross-Repo Linking)
 
