@@ -51,6 +51,8 @@ export function deduplicateViolations(violations: Violation[]): DedupedFinding[]
   const findings: DedupedFinding[] = [];
 
   for (const { violations: group } of groups.values()) {
+    // Sort by lessonHash for deterministic message selection
+    group.sort((a, b) => a.rule.lessonHash.localeCompare(b.rule.lessonHash));
     const first = group[0]!;
     const hasError = group.some((v) => (v.rule.severity ?? 'error') === 'error');
     findings.push({
@@ -174,8 +176,13 @@ export async function upsertPRComment(options: CommentUpsertOptions): Promise<vo
       .map(Number)
       .filter((n) => !isNaN(n));
     if (ids.length > 0) existingId = ids[0]!;
-  } catch {
-    // If listing fails, we'll just create a new comment
+  } catch (err) {
+    // If listing fails (auth, rate limit, etc.), fall back to creating a new comment
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/ENOENT|not found/i.test(msg)) {
+      // Log non-trivial failures for debugging; ENOENT (no gh CLI) is handled by the outer catch
+      process.stderr.write(`[Totem] Warning: could not list PR comments: ${msg}\n`);
+    }
   }
 
   // 2. Update or create — pass body via stdin to avoid ARG_MAX limits and shell quoting issues
