@@ -81,6 +81,27 @@ npx @mmnto/cli lint    # Run compiled rules against staged/uncommitted files
 
 During `init`, Totem installs standard bash hooks into `.git/hooks/` (or integrates with Husky) to block `git push` if AST rule violations are detected.
 
+## Try It
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/mmnto-ai/totem-playground)
+
+Pre-broken Next.js app with architectural violations. Open in Codespaces, run `totem lint --staged`, watch it catch every one.
+
+## Works Without AI
+
+The AI helps you **write** rules. The rules enforce themselves.
+
+| Feature                          | Requires AI? |
+| -------------------------------- | :----------: |
+| `totem lint` (compiled rules)    |      No      |
+| `totem init` (baseline rules)    |      No      |
+| Pre-push git hook                |      No      |
+| AST classification (Tree-sitter) |      No      |
+| `totem sync` (vector index)      |   Embedder   |
+| `totem compile` (rule authoring) |     LLM      |
+| `totem shield` (AI review)       |     LLM      |
+| `totem spec` (planning)          |     LLM      |
+
 ---
 
 ## Commands
