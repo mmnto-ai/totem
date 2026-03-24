@@ -6,15 +6,11 @@
  * @see ADR-067 (ecosystem agnosticism)
  */
 
-export type Ecosystem = 'javascript' | 'python' | 'rust' | 'go';
-
 export interface BaselineLesson {
   heading: string;
   tags: string[];
   body: string;
 }
-
-export const ECOSYSTEMS: readonly Ecosystem[] = ['javascript', 'python', 'rust', 'go'] as const;
 
 // ─── Python Pack ────────────────────────────────────
 
@@ -27,7 +23,7 @@ export const PYTHON_BASELINE: BaselineLesson[] = [
   {
     heading: 'Bare except clauses hide real errors',
     tags: ['python', 'error-handling'],
-    body: 'Using `except:` or `except Exception:` without specifying the error type catches everything including KeyboardInterrupt and SystemExit. This masks bugs and makes debugging impossible. Fix: Always catch specific exception types. Use `except ValueError:` or `except (TypeError, KeyError):` instead of bare except.',
+    body: 'Using bare `except:` catches everything including KeyboardInterrupt and SystemExit, masking bugs and preventing clean shutdown. Even `except Exception:` is too broad for most cases. Fix: Always catch specific exception types. Use `except ValueError:` or `except (TypeError, KeyError):` instead of bare except.',
   },
   {
     heading: 'Import side effects in __init__.py cause circular imports',
@@ -55,9 +51,9 @@ export const PYTHON_BASELINE: BaselineLesson[] = [
     body: 'Installing packages globally with `pip install` pollutes the system Python and causes version conflicts across projects. Fix: Always use `python -m venv .venv` and activate it before installing dependencies. Use `requirements.txt` or `pyproject.toml` to pin versions.',
   },
   {
-    heading: 'f-strings with expressions can execute arbitrary code',
+    heading: 'str.format with untrusted templates leaks attributes',
     tags: ['python', 'security'],
-    body: 'f-strings evaluate expressions at runtime: `f"{os.system(cmd)}"` executes shell commands. Never construct f-strings from untrusted user input. Fix: Use `.format()` or template strings for user-controlled content. Reserve f-strings for developer-authored strings only.',
+    body: '`str.format()` allows attribute access: `"{0.__class__.__init__.__globals__}".format(obj)` can leak sensitive data. Never use `.format()` on user-controlled template strings. Fix: Use f-strings for developer-authored templates. For user-controlled content, use simple string concatenation or `string.Template` which blocks attribute access.',
   },
 ];
 

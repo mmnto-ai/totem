@@ -612,7 +612,8 @@ export async function initCommand(options?: { bare?: boolean }): Promise<void> {
     const detectedEcosystems = detectProject(cwd).ecosystems;
     const baselineResult = await installBaselineLessons(baselinePath, rl, detectedEcosystems);
     if (baselineResult === 'installed') {
-      const packLabel = detectedEcosystems.length > 0 ? ` + ${detectedEcosystems.join(', ')}` : '';
+      const extraPacks = detectedEcosystems.filter((e) => e !== 'javascript');
+      const packLabel = extraPacks.length > 0 ? ` + ${extraPacks.join(', ')}` : '';
       summary.push({
         file: '.totem/lessons/baseline.md',
         action: `Installed baseline lessons (core${packLabel})`,
