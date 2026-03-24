@@ -129,7 +129,6 @@ export interface CommentUpsertOptions {
   prNumber: number;
   markdown: string;
   cwd: string;
-  repo?: string;
 }
 
 /**
@@ -140,8 +139,7 @@ export async function upsertPRComment(options: CommentUpsertOptions): Promise<vo
   const { execFileSync } = await import('node:child_process');
   const { IS_WIN, GH_TIMEOUT_MS } = await import('./utils.js');
 
-  const { prNumber, markdown, cwd, repo } = options;
-  const repoFlag = repo ? ['--repo', repo] : [];
+  const { prNumber, markdown, cwd } = options;
 
   const execOpts = {
     cwd,
@@ -154,13 +152,13 @@ export async function upsertPRComment(options: CommentUpsertOptions): Promise<vo
   };
 
   // 1. List existing comments, find ours by marker
+  // gh api auto-resolves {owner}/{repo} from the local git remote
   let existingId: number | null = null;
   try {
     const raw = execFileSync(
       'gh',
       [
         'api',
-        ...repoFlag.flatMap((f) => ['--header', f === '--repo' ? '' : f]).filter(Boolean),
         `repos/{owner}/{repo}/issues/${prNumber}/comments`,
         '--paginate',
         '--jq',
@@ -211,14 +209,13 @@ export interface PostPRCommentOptions {
   commitSha: string;
   durationMs: number;
   cwd: string;
-  repo?: string;
 }
 
 /**
  * Post-processing step: dedup violations, build markdown, upsert comment.
  */
 export async function postPRComment(options: PostPRCommentOptions): Promise<void> {
-  const { violations, rules, prNumber, commitSha, durationMs, cwd, repo } = options;
+  const { violations, rules, prNumber, commitSha, durationMs, cwd } = options;
 
   const findings = deduplicateViolations(violations);
   const errors = findings.filter((f) => f.severity === 'error').length;
@@ -233,5 +230,5 @@ export async function postPRComment(options: PostPRCommentOptions): Promise<void
     durationMs,
   });
 
-  await upsertPRComment({ prNumber, markdown, cwd, repo });
+  await upsertPRComment({ prNumber, markdown, cwd });
 }

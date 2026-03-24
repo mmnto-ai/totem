@@ -8,7 +8,8 @@ export interface LintOptions {
   out?: string;
   format?: ShieldFormat;
   staged?: boolean;
-  prComment?: number;
+  /** PR number to post a comment on, or `true` to auto-infer from GitHub Actions env */
+  prComment?: number | true;
 }
 
 // ─── Command ────────────────────────────────────────
@@ -53,12 +54,13 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   });
 
   // Post PR comment if requested (zero-API-keys invariant: only behind --pr-comment flag)
-  // Auto-infer PR number from GitHub Actions event payload if --pr-comment is passed without a value
+  if (options.prComment == null) return;
+
+  // Auto-infer PR number from GitHub Actions env if --pr-comment passed without a value
   const prNumber =
-    options.prComment ??
-    (process.env.GITHUB_EVENT_NAME === 'pull_request'
+    options.prComment === true
       ? parseInt(process.env.GITHUB_REF?.match(/refs\/pull\/(\d+)/)?.[1] ?? '', 10) || undefined
-      : undefined);
+      : options.prComment;
 
   if (prNumber) {
     const { log } = await import('../ui.js');

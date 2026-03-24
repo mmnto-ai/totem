@@ -151,19 +151,35 @@ program
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--format <format>', 'Output format: text (default), sarif, or json')
   .option('--staged', 'Lint only staged changes (default: all uncommitted)')
-  .option('--pr-comment [number]', 'Post a summary comment on a PR (auto-infers number in GitHub Actions)')
-  .action(async (opts: { out?: string; format?: string; staged?: boolean; prComment?: string }) => {
-    try {
-      const { lintCommand } = await import('./commands/lint.js');
-      await lintCommand({
-        ...opts,
-        format: opts.format as 'text' | 'sarif' | 'json' | undefined,
-        prComment: opts.prComment ? parseInt(opts.prComment, 10) : undefined,
-      });
-    } catch (err) {
-      handleError(err);
-    }
-  });
+  .option(
+    '--pr-comment [number]',
+    'Post a summary comment on a PR (auto-infers number in GitHub Actions)',
+  )
+  .action(
+    async (opts: {
+      out?: string;
+      format?: string;
+      staged?: boolean;
+      prComment?: string | true;
+    }) => {
+      try {
+        const { lintCommand } = await import('./commands/lint.js');
+        const prComment =
+          opts.prComment === true
+            ? true
+            : opts.prComment
+              ? parseInt(opts.prComment, 10)
+              : undefined;
+        await lintCommand({
+          ...opts,
+          format: opts.format as 'text' | 'sarif' | 'json' | undefined,
+          prComment,
+        });
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
 
 program
   .command('shield')
