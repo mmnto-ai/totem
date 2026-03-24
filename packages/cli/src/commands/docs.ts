@@ -17,6 +17,18 @@ import {
   writeOutput,
 } from '../utils.js';
 
+// ─── Helpers ─────────────────────────────────────────────
+
+/**
+ * Resolve whether a doc target should receive user-facing post-processing
+ * (issue ref stripping, manual content injection, live metrics).
+ * Explicit `userFacing` flag wins; otherwise falls back to readme.md detection.
+ */
+export function resolveIsUserFacing(doc: DocTarget): boolean {
+  if (typeof doc.userFacing === 'boolean') return doc.userFacing;
+  return path.basename(doc.path).toLowerCase() === 'readme.md';
+}
+
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Docs';
@@ -159,8 +171,8 @@ function assemblePrompt(
     sections.push(wrapXml('active_work', activeWork));
   }
 
-  // Manual content — only inject into user-facing docs (README), not internal docs
-  const isUserFacing = path.basename(doc.path).toLowerCase() === 'readme.md';
+  // Manual content — only inject into user-facing docs, not internal docs
+  const isUserFacing = resolveIsUserFacing(doc);
   if (isUserFacing) {
     try {
       const manualPath = path.resolve('docs', 'manual');
@@ -524,7 +536,7 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
     }
 
     // Post-process: deterministic sanitization of LLM output
-    const isUserFacingDoc = path.basename(doc.path).toLowerCase() === 'readme.md';
+    const isUserFacingDoc = resolveIsUserFacing(doc);
     const withoutRefs = isUserFacingDoc ? stripIssueRefs(extracted) : extracted;
     const cleaned = stripMarketingTerms(withoutRefs);
     const trimmedContent = cleaned.trimEnd() + '\n';
