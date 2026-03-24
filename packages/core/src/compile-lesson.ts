@@ -33,14 +33,14 @@ export interface CompileLessonDeps {
 
 /**
  * Build a CompiledRule from parsed compiler output.
- * Returns null if the output is missing required fields or has an invalid regex.
+ * Returns { rule, rejectReason } so callers can report why a rule was rejected.
  */
 export function buildCompiledRule(
   parsed: CompilerOutput,
   lesson: { hash: string; heading: string },
   existingByHash: Map<string, CompiledRule>,
-): CompiledRule | null {
-  if (!parsed.compilable) return null;
+): BuildRuleResult {
+  if (!parsed.compilable) return { rule: null };
 
   const severity = parsed.severity ?? 'warning';
   const engine = parsed.engine ?? 'regex';
@@ -50,50 +50,64 @@ export function buildCompiledRule(
   const globsObj = sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {};
 
   if (engine === 'ast-grep') {
-    if (!parsed.astGrepPattern || !parsed.message) return null;
+    if (!parsed.astGrepPattern || !parsed.message) {
+      return { rule: null, rejectReason: 'Missing astGrepPattern or message' };
+    }
     return {
-      lessonHash: lesson.hash,
-      lessonHeading: lesson.heading,
-      message: parsed.message,
-      engine: 'ast-grep',
-      severity,
-      ...engineFields('ast-grep', parsed.astGrepPattern),
-      compiledAt: now,
-      createdAt: existing?.createdAt ?? now,
-      ...globsObj,
+      rule: {
+        lessonHash: lesson.hash,
+        lessonHeading: lesson.heading,
+        message: parsed.message,
+        engine: 'ast-grep',
+        severity,
+        ...engineFields('ast-grep', parsed.astGrepPattern),
+        compiledAt: now,
+        createdAt: existing?.createdAt ?? now,
+        ...globsObj,
+      },
     };
   }
 
   if (engine === 'ast') {
-    if (!parsed.astQuery || !parsed.message) return null;
+    if (!parsed.astQuery || !parsed.message) {
+      return { rule: null, rejectReason: 'Missing astQuery or message' };
+    }
     return {
-      lessonHash: lesson.hash,
-      lessonHeading: lesson.heading,
-      message: parsed.message,
-      engine: 'ast',
-      severity,
-      ...engineFields('ast', parsed.astQuery),
-      compiledAt: now,
-      createdAt: existing?.createdAt ?? now,
-      ...globsObj,
+      rule: {
+        lessonHash: lesson.hash,
+        lessonHeading: lesson.heading,
+        message: parsed.message,
+        engine: 'ast',
+        severity,
+        ...engineFields('ast', parsed.astQuery),
+        compiledAt: now,
+        createdAt: existing?.createdAt ?? now,
+        ...globsObj,
+      },
     };
   }
 
   // Regex engine (default)
-  if (!parsed.pattern || !parsed.message) return null;
+  if (!parsed.pattern || !parsed.message) {
+    return { rule: null, rejectReason: 'Missing pattern or message' };
+  }
   const validation = validateRegex(parsed.pattern);
-  if (!validation.valid) return null;
+  if (!validation.valid) {
+    return { rule: null, rejectReason: `Rejected regex: ${validation.reason}` };
+  }
 
   return {
-    lessonHash: lesson.hash,
-    lessonHeading: lesson.heading,
-    message: parsed.message,
-    engine: 'regex',
-    severity,
-    ...engineFields('regex', parsed.pattern),
-    compiledAt: now,
-    createdAt: existing?.createdAt ?? now,
-    ...globsObj,
+    rule: {
+      lessonHash: lesson.hash,
+      lessonHeading: lesson.heading,
+      message: parsed.message,
+      engine: 'regex',
+      severity,
+      ...engineFields('regex', parsed.pattern),
+      compiledAt: now,
+      createdAt: existing?.createdAt ?? now,
+      ...globsObj,
+    },
   };
 }
 
@@ -181,20 +195,11 @@ export async function compileLesson(
     return { status: 'skipped', hash: lesson.hash };
   }
 
-  const rule = buildCompiledRule(parsed, lesson, existingByHash);
-  if (!rule) {
-    // Provide specific rejection reason
-    const engine = parsed.engine ?? 'regex';
-    if (engine === 'regex' && parsed.pattern) {
-      const validation = validateRegex(parsed.pattern);
-      if (!validation.valid) {
-        callbacks?.onWarn?.(lesson.heading, `Rejected regex: ${validation.reason} — skipping`);
-        return { status: 'failed' };
-      }
-    }
-    callbacks?.onWarn?.(lesson.heading, `Missing ${engine} fields or invalid pattern — skipping`);
+  const ruleResult = buildCompiledRule(parsed, lesson, existingByHash);
+  if (!ruleResult.rule) {
+    callbacks?.onWarn?.(lesson.heading, `${ruleResult.rejectReason ?? 'Unknown error'} — skipping`);
     return { status: 'failed' };
   }
 
-  return { status: 'compiled', rule };
+  return { status: 'compiled', rule: ruleResult.rule };
 }

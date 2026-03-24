@@ -38,13 +38,13 @@ describe('buildCompiledRule', () => {
       engine: 'regex',
       severity: 'warning',
     };
-    const rule = buildCompiledRule(parsed, lesson, existingByHash);
-    expect(rule).not.toBeNull();
-    expect(rule!.engine).toBe('regex');
-    expect(rule!.pattern).toBe('console\\.log');
-    expect(rule!.message).toBe('No console.log');
-    expect(rule!.lessonHash).toBe('abc123');
-    expect(rule!.severity).toBe('warning');
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).not.toBeNull();
+    expect(result.rule!.engine).toBe('regex');
+    expect(result.rule!.pattern).toBe('console\\.log');
+    expect(result.rule!.message).toBe('No console.log');
+    expect(result.rule!.lessonHash).toBe('abc123');
+    expect(result.rule!.severity).toBe('warning');
   });
 
   it('builds an ast-grep rule', () => {
@@ -54,9 +54,9 @@ describe('buildCompiledRule', () => {
       engine: 'ast-grep',
       astGrepPattern: 'catch($ERR) { $$$ }',
     };
-    const rule = buildCompiledRule(parsed, lesson, existingByHash);
-    expect(rule).not.toBeNull();
-    expect(rule!.engine).toBe('ast-grep');
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).not.toBeNull();
+    expect(result.rule!.engine).toBe('ast-grep');
   });
 
   it('builds an ast rule', () => {
@@ -66,51 +66,69 @@ describe('buildCompiledRule', () => {
       engine: 'ast',
       astQuery: '(catch_clause parameter: (identifier) @name)',
     };
-    const rule = buildCompiledRule(parsed, lesson, existingByHash);
-    expect(rule).not.toBeNull();
-    expect(rule!.engine).toBe('ast');
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).not.toBeNull();
+    expect(result.rule!.engine).toBe('ast');
   });
 
-  it('returns null for non-compilable output', () => {
+  it('returns null rule for non-compilable output', () => {
     const parsed: CompilerOutput = { compilable: false };
-    expect(buildCompiledRule(parsed, lesson, existingByHash)).toBeNull();
+    expect(buildCompiledRule(parsed, lesson, existingByHash).rule).toBeNull();
   });
 
-  it('returns null for regex with missing pattern', () => {
-    const parsed: CompilerOutput = {
-      compilable: true,
-      message: 'test',
-      engine: 'regex',
-    };
-    expect(buildCompiledRule(parsed, lesson, existingByHash)).toBeNull();
+  it('returns rejectReason for regex with missing pattern', () => {
+    const parsed: CompilerOutput = { compilable: true, message: 'test', engine: 'regex' };
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('Missing');
   });
 
-  it('returns null for invalid regex', () => {
+  it('returns rejectReason for invalid regex', () => {
     const parsed: CompilerOutput = {
       compilable: true,
       pattern: '(unclosed',
       message: 'test',
       engine: 'regex',
     };
-    expect(buildCompiledRule(parsed, lesson, existingByHash)).toBeNull();
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('Rejected regex');
   });
 
-  it('returns null for ast-grep with missing pattern', () => {
+  it('returns rejectReason for ast-grep with missing pattern', () => {
+    const parsed: CompilerOutput = { compilable: true, message: 'test', engine: 'ast-grep' };
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('astGrepPattern');
+  });
+
+  it('returns rejectReason for ast-grep with missing message', () => {
     const parsed: CompilerOutput = {
       compilable: true,
-      message: 'test',
       engine: 'ast-grep',
+      astGrepPattern: 'catch($ERR) { $$$ }',
     };
-    expect(buildCompiledRule(parsed, lesson, existingByHash)).toBeNull();
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('message');
   });
 
-  it('returns null for ast with missing query', () => {
+  it('returns rejectReason for ast with missing query', () => {
+    const parsed: CompilerOutput = { compilable: true, message: 'test', engine: 'ast' };
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('astQuery');
+  });
+
+  it('returns rejectReason for ast with missing message', () => {
     const parsed: CompilerOutput = {
       compilable: true,
-      message: 'test',
       engine: 'ast',
+      astQuery: '(catch_clause)',
     };
-    expect(buildCompiledRule(parsed, lesson, existingByHash)).toBeNull();
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('message');
   });
 
   it('preserves createdAt from existing rule', () => {
@@ -130,8 +148,8 @@ describe('buildCompiledRule', () => {
       message: 'No console.log',
       engine: 'regex',
     };
-    const rule = buildCompiledRule(parsed, lesson, existing);
-    expect(rule!.createdAt).toBe('2025-01-01T00:00:00.000Z');
+    const result = buildCompiledRule(parsed, lesson, existing);
+    expect(result.rule!.createdAt).toBe('2025-01-01T00:00:00.000Z');
   });
 
   it('includes sanitized fileGlobs when provided', () => {
@@ -142,8 +160,8 @@ describe('buildCompiledRule', () => {
       engine: 'regex',
       fileGlobs: ['**/*.ts'],
     };
-    const rule = buildCompiledRule(parsed, lesson, existingByHash);
-    expect(rule!.fileGlobs).toEqual(['**/*.ts']);
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule!.fileGlobs).toEqual(['**/*.ts']);
   });
 
   it('defaults severity to warning', () => {
@@ -152,8 +170,8 @@ describe('buildCompiledRule', () => {
       pattern: 'test',
       message: 'test',
     };
-    const rule = buildCompiledRule(parsed, lesson, existingByHash);
-    expect(rule!.severity).toBe('warning');
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule!.severity).toBe('warning');
   });
 });
 

@@ -1,11 +1,5 @@
 import type { CompiledRule, CompiledRulesFile, LessonInput } from '@mmnto/totem';
-import {
-  buildCompiledRule,
-  buildManualRule,
-  compileLesson as compileLessonCore,
-  TotemConfigError,
-  TotemError,
-} from '@mmnto/totem';
+import { TotemConfigError, TotemError } from '@mmnto/totem';
 
 import { COMPILER_SYSTEM_PROMPT } from './compile-templates.js';
 
@@ -89,6 +83,9 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
   const { log } = await import('../ui.js');
   const { loadConfig, loadEnv, resolveConfigPath, runOrchestrator } = await import('../utils.js');
   const {
+    buildCompiledRule,
+    buildManualRule,
+    compileLesson: compileLessonCore,
     exportLessons,
     extractManualPattern,
     hashLesson,
@@ -328,12 +325,15 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
               continue;
             }
 
-            const rule = buildCompiledRule(parsed, lesson, existingByHash);
-            if (rule) {
-              newRules.push(rule);
+            const ruleResult = buildCompiledRule(parsed, lesson, existingByHash);
+            if (ruleResult.rule) {
+              newRules.push(ruleResult.rule);
               compiled++;
-              logCompiledRule(log, lesson, rule);
+              logCompiledRule(log, lesson, ruleResult.rule);
             } else {
+              if (ruleResult.rejectReason) {
+                log.warn(TAG, `[${lesson.heading}] ${ruleResult.rejectReason} — skipping`);
+              }
               failed++;
             }
           }
