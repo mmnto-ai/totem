@@ -51,7 +51,6 @@ const config: TotemConfig = {
     '**/.lancedb/**',
     '**/dist/**',
     '**/__tests__/**',
-    '**/*.test.ts',
     '.strategy/**',
     '.claude/**',
     'tests/**',

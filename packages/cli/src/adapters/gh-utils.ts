@@ -9,6 +9,18 @@ import { GH_TIMEOUT_MS, IS_WIN } from '../utils.js';
 const GH_MAX_BUFFER = 10 * 1024 * 1024; // 10MB — handles paginated API responses
 const GH_PAGINATED_TIMEOUT_MS = 60_000; // 60s — paginated endpoints can be slow
 
+/** Shared exec options for all `gh` CLI calls. */
+function ghExecOptions(cwd: string, timeout: number) {
+  return {
+    cwd,
+    encoding: 'utf-8' as const,
+    timeout,
+    shell: IS_WIN,
+    stdio: 'pipe' as const,
+    env: { ...process.env, GH_PROMPT_DISABLED: '1' },
+  };
+}
+
 /**
  * Shared error handler for all GitHub CLI interactions.
  * Re-throws [Totem Error] as-is, wraps ZodErrors and ENOENT, and
@@ -52,13 +64,7 @@ export function handleGhError(err: unknown, context: string): never {
  */
 export function ghExec(args: string[], cwd: string): void {
   try {
-    execFileSync('gh', args, {
-      cwd,
-      encoding: 'utf-8',
-      timeout: GH_TIMEOUT_MS,
-      shell: IS_WIN,
-      stdio: 'pipe',
-    });
+    execFileSync('gh', args, ghExecOptions(cwd, GH_TIMEOUT_MS));
   } catch (err) {
     const context = args.slice(0, 3).join(' ');
     handleGhError(err, context);
@@ -76,13 +82,10 @@ export function ghFetchAndParse<T>(
 ): T {
   const isPaginated = args.includes('--paginate');
   try {
+    const timeout = isPaginated ? GH_PAGINATED_TIMEOUT_MS : GH_TIMEOUT_MS;
     const raw = execFileSync('gh', args, {
-      cwd,
-      encoding: 'utf-8',
-      timeout: isPaginated ? GH_PAGINATED_TIMEOUT_MS : GH_TIMEOUT_MS,
-      shell: IS_WIN,
+      ...ghExecOptions(cwd, timeout),
       maxBuffer: GH_MAX_BUFFER,
-      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     let parsed: unknown;

@@ -118,13 +118,23 @@ describe('ghFetchAndParse', () => {
     );
   });
 
-  it('suppresses stderr to prevent gh CLI error leaks (#863)', () => {
+  it('pipes stdio to prevent gh CLI stderr leaks (#863)', () => {
     mockedExec.mockReturnValue(JSON.stringify({ id: 1, name: 'test' }));
     ghFetchAndParse(['issue', 'view', '863'], TestSchema, 'issue #863', '/cwd');
     expect(mockedExec).toHaveBeenCalledWith(
       'gh',
       ['issue', 'view', '863'],
-      expect.objectContaining({ stdio: ['pipe', 'pipe', 'pipe'] }),
+      expect.objectContaining({ stdio: 'pipe' }),
+    );
+  });
+
+  it('sets GH_PROMPT_DISABLED to prevent interactive auth hangs', () => {
+    mockedExec.mockReturnValue(JSON.stringify({ id: 1, name: 'test' }));
+    ghFetchAndParse(['issue', 'view', '1'], TestSchema, 'issue #1', '/cwd');
+    expect(mockedExec).toHaveBeenCalledWith(
+      'gh',
+      ['issue', 'view', '1'],
+      expect.objectContaining({ env: expect.objectContaining({ GH_PROMPT_DISABLED: '1' }) }),
     );
   });
 });
