@@ -617,6 +617,14 @@ export async function initCommand(options?: { bare?: boolean }): Promise<void> {
         file: '.totem/lessons/baseline.md',
         action: `Installed baseline lessons (core${packLabel})`,
       });
+      // Non-JS packs don't have pre-compiled rules yet — tell the user
+      const uncompiledPacks = detectedEcosystems.filter((e) => e !== 'javascript');
+      if (uncompiledPacks.length > 0) {
+        log.dim(
+          'Totem',
+          `${uncompiledPacks.join(', ')} lessons require compilation. Run \`totem compile\` to generate lint rules.`,
+        );
+      }
     }
 
     // --- Pre-compiled baseline rules (zero-LLM protection from Day 1) ---
