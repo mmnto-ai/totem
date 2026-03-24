@@ -3921,39 +3921,38 @@
     {
       "lessonHash": "2f8553af87aee751",
       "lessonHeading": "Adding 'edited' to pull_request trigger types ensures",
+      "pattern": "types:\\s*\\[(?![^\\]]*\\bedited\\b)[^\\]]*\\]",
       "message": "GitHub Action pull_request triggers should include the 'edited' type to ensure workflows rerun when the PR title changes (e.g., to detect bypass strings like [UPDATE-RULES]).",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "types:\\s*\\[(?![^\\]]*\\bedited\\b)[^\\]]*\\]",
       "compiledAt": "2026-03-23T21:36:37.757Z",
       "createdAt": "2026-03-23T21:36:37.757Z",
       "fileGlobs": [
         ".github/workflows/*.yml",
         ".github/workflows/*.yaml"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "da5e4b2ad9052b52",
       "lessonHeading": "MCP tools should return plain-text for error paths",
+      "pattern": "",
       "message": "MCP tools should return plain-text for error paths. Do not use XML wrapping (like formatXmlResponse) when isError is true to ensure client compatibility.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "{ $$$ , content: [ { $$$ , text: formatXmlResponse($$$) , $$$ } ] , $$$ , isError: true , $$$ }",
       "compiledAt": "2026-03-23T21:37:47.161Z",
       "createdAt": "2026-03-23T21:37:47.161Z",
       "fileGlobs": [
         "packages/mcp/**/*.ts",
         "!**/*.test.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "9255d609df5aef76",
       "lessonHeading": "Implementing a trap for EXIT, INT, and TERM signals ensures",
+      "pattern": "\\btrap\\s+(['\"].*?['\"]|\\S+)\\s+(?=.*\\b(EXIT|INT|TERM)\\b)(?!(?=.*\\bEXIT\\b)(?=.*\\bINT\\b)(?=.*\\bTERM\\b)).*",
       "message": "When implementing a cleanup trap, ensure you catch EXIT, INT, and TERM signals together to reliably handle interruptions and temporary file cleanup.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\btrap\\s+(['\"].*?['\"]|\\S+)\\s+(?=.*\\b(EXIT|INT|TERM)\\b)(?!(?=.*\\bEXIT\\b)(?=.*\\bINT\\b)(?=.*\\bTERM\\b)).*",
       "compiledAt": "2026-03-23T21:38:01.067Z",
       "createdAt": "2026-03-23T21:38:01.067Z",
       "fileGlobs": [
@@ -3962,15 +3961,15 @@
         "*.zsh",
         "*.yml",
         "*.yaml"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "52b5414764184f25",
       "lessonHeading": "When redacting tokens like sk-proj- and sk-, the longest",
+      "pattern": "\\bsk-(?!proj-).+sk-proj-",
       "message": "Longest patterns must be evaluated first during redaction. Ensure 'sk-proj-' is handled before 'sk-' to prevent partial matching and sensitive data exposure.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bsk-(?!proj-).+sk-proj-",
       "compiledAt": "2026-03-23T21:38:51.342Z",
       "createdAt": "2026-03-23T21:38:51.342Z",
       "fileGlobs": [
@@ -3980,43 +3979,43 @@
         "**/*.jsx",
         "**/*.py",
         "**/*.go"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "2377d2fa9d1cfa6d",
       "lessonHeading": "Map PR metadata to env vars for secure shells",
+      "pattern": "\\bgh\\s+api\\s+.*\\/pulls\\/",
       "message": "Map PR metadata to environment variables instead of using 'gh api' to prevent shell injection and avoid unnecessary 'pull-requests: read' permissions.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bgh\\s+api\\s+.*\\/pulls\\/",
       "compiledAt": "2026-03-23T21:38:09.422Z",
       "createdAt": "2026-03-23T21:38:09.422Z",
       "fileGlobs": [
         "*.sh",
         ".github/workflows/*.yml",
         ".github/workflows/*.yaml"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "8cc714c0c10fbd39",
       "lessonHeading": "Use dynamic await import() inside CLI command handlers",
+      "pattern": "import\\s+.*from\\s+['\"](@|\\.\\./)",
       "message": "Use dynamic await import() inside CLI command handlers for internal packages instead of top-level static imports to ensure fast startup performance.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "import\\s+.*from\\s+['\"](@|\\.\\./)",
       "compiledAt": "2026-03-23T21:38:26.361Z",
       "createdAt": "2026-03-23T21:38:26.361Z",
       "fileGlobs": [
         "packages/cli/**/*.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "358177469f11c272",
       "lessonHeading": "Relying on error name strings for matching is fragile",
+      "pattern": "\\b(err|e|error|exception)\\.name(\\s*[!=]=+\\s*['\"]|\\.(includes|startsWith|endsWith))",
       "message": "Relying on error name strings for matching is fragile. Use 'instanceof' or specific error codes for robust, type-safe error handling.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(err|e|error|exception)\\.name(\\s*[!=]=+\\s*['\"]|\\.(includes|startsWith|endsWith))",
       "compiledAt": "2026-03-23T21:39:19.106Z",
       "createdAt": "2026-03-23T21:39:19.106Z",
       "fileGlobs": [
@@ -4024,15 +4023,15 @@
         "**/*.tsx",
         "**/*.js",
         "**/*.jsx"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "5c5fe9d9060bcb6d",
       "lessonHeading": "Core library modules should use optional callbacks",
+      "pattern": "\\bconsole\\.(log|warn|error|info|debug|trace)\\s*\\(",
       "message": "Use optional callbacks (e.g., onWarn) instead of hardcoded console methods in core library modules to remain environment-agnostic.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bconsole\\.(log|warn|error|info|debug|trace)\\s*\\(",
       "compiledAt": "2026-03-23T21:39:12.701Z",
       "createdAt": "2026-03-23T21:39:12.701Z",
       "fileGlobs": [
@@ -4043,15 +4042,15 @@
         "src/lib/**/*.ts",
         "!**/*.test.ts",
         "!**/*.test.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "7abdd08cc9aea21c",
       "lessonHeading": "Sanitize untrusted PR content by escaping closing tags",
+      "pattern": "<(\\w+)>.*\\$\\{(?!.*(escape|sanitize|encode|format|replace))\\s*(?:pr|payload|pullRequest|issue|comment)\\.[^}]+\\}.*<\\/\\1>",
       "message": "Sanitize untrusted PR content by escaping closing tags (e.g., .replace(/<\\//g, '<\\\\/')) to prevent attackers from breaking out of XML envelopes and injecting malicious instructions.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "<(\\w+)>.*\\$\\{(?!.*(escape|sanitize|encode|format|replace))\\s*(?:pr|payload|pullRequest|issue|comment)\\.[^}]+\\}.*<\\/\\1>",
       "compiledAt": "2026-03-23T21:39:24.636Z",
       "createdAt": "2026-03-23T21:39:24.636Z",
       "fileGlobs": [
@@ -4061,15 +4060,15 @@
         "**/*.jsx",
         "!**/*.test.ts",
         "!**/*.test.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "18999ece8c37d886",
       "lessonHeading": "Using input strings as Map keys in batch processing",
+      "pattern": "",
       "message": "Using input strings as Map keys in batch processing causes data loss when duplicate inputs are provided. Returning an array of results mapped to input indices ensures every call is uniquely handled and preserved.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "new Map($ARR.map($$FUNC))",
       "compiledAt": "2026-03-23T21:39:46.534Z",
       "createdAt": "2026-03-23T21:39:46.534Z",
@@ -4078,15 +4077,15 @@
         "**/*.tsx",
         "**/*.js",
         "**/*.jsx"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "c802b8588ec9d911",
       "lessonHeading": "Reject non-positive PIDs and infinite timestamps",
+      "pattern": "process\\.kill\\(\\s*0\\s*\\)|\\b(pid|PID)\\s*[:=]\\s*(0|-[1-9]\\d*)\\b|\\btimestamp\\s*[:=]\\s*(Infinity|Number\\.POSITIVE_INFINITY)",
       "message": "Reject non-positive PIDs and infinite timestamps in lockfiles to prevent accidental signaling of process groups (via kill(0)) and broken staleness math.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "process\\.kill\\(\\s*0\\s*\\)|\\b(pid|PID)\\s*[:=]\\s*(0|-[1-9]\\d*)\\b|\\btimestamp\\s*[:=]\\s*(Infinity|Number\\.POSITIVE_INFINITY)",
       "compiledAt": "2026-03-23T21:39:59.029Z",
       "createdAt": "2026-03-23T21:39:59.029Z",
       "fileGlobs": [
@@ -4094,15 +4093,15 @@
         "**/*.js",
         "!**/*.test.ts",
         "!**/*.test.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "e56d56efd671f07e",
       "lessonHeading": "Simple string lookups like indexOf('[{') fail to detect",
+      "pattern": "\\.(indexOf|includes|startsWith|match)\\s*\\(\\s*['\"]\\s*\\[\\{\\s*['\"]\\s*\\)",
       "message": "Simple string lookups like indexOf('[{') fail to detect pretty-printed JSON; use a regex search for /\\[\\s*{/ instead to correctly identify the start of an array regardless of whitespace.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(indexOf|includes|startsWith|match)\\s*\\(\\s*['\"]\\s*\\[\\{\\s*['\"]\\s*\\)",
       "compiledAt": "2026-03-23T21:39:44.406Z",
       "createdAt": "2026-03-23T21:39:44.406Z",
       "fileGlobs": [
@@ -4110,15 +4109,15 @@
         "**/*.tsx",
         "**/*.js",
         "**/*.jsx"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "25e28b9f51d1c060",
       "lessonHeading": "Replacing direct process.exit(1) calls with thrown custom",
+      "pattern": "",
       "message": "Avoid direct process.exit() calls; throw custom errors instead to keep logic composable and centralize exit handling at the application boundary.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "process.exit($$$)",
       "compiledAt": "2026-03-23T21:39:35.112Z",
       "createdAt": "2026-03-23T21:39:35.112Z",
@@ -4131,15 +4130,15 @@
         "!**/*.test.js",
         "!**/*.spec.ts",
         "!**/*.spec.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "7a47e69b5ea86122",
       "lessonHeading": "Using parseInt() allows malformed strings like '5foo' to be",
+      "pattern": "",
       "message": "Use Number() or explicit validation instead of parseInt() to prevent parsing malformed strings (e.g., '5foo')",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "parseInt($$$ARGS)",
       "compiledAt": "2026-03-23T21:39:29.275Z",
       "createdAt": "2026-03-23T21:39:29.275Z",
@@ -4148,15 +4147,15 @@
         "**/*.tsx",
         "**/*.js",
         "**/*.jsx"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "14cbc205f8c86d3d",
       "lessonHeading": "Confine dynamic imports to CLI command handlers to maintain",
+      "pattern": "\\bimport\\s*\\(",
       "message": "Dynamic imports must be confined to CLI command handlers to maintain a clean dependency graph and pass security scans.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bimport\\s*\\(",
       "compiledAt": "2026-03-23T21:40:11.466Z",
       "createdAt": "2026-03-23T21:40:11.466Z",
       "fileGlobs": [
@@ -4165,42 +4164,42 @@
         "!packages/cli/src/commands/**/*.ts",
         "!packages/cli/src/commands/**/*.js",
         "!**/*.test.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "78c3bbbdf6659ff4",
       "lessonHeading": "The github.event.pull_request context is immutable",
+      "pattern": "github\\.event\\.pull_request\\.(title|body)",
       "message": "The github.event.pull_request context is immutable for a specific workflow run. Manual re-runs will not reflect title or body edits made after the initial trigger. Fetch the latest PR data via the GitHub API if current values are required.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "github\\.event\\.pull_request\\.(title|body)",
       "compiledAt": "2026-03-23T21:40:06.136Z",
       "createdAt": "2026-03-23T21:40:06.136Z",
       "fileGlobs": [
         ".github/workflows/*.yml",
         ".github/workflows/*.yaml"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "4668d0b7c2436f09",
       "lessonHeading": "In the DataFusion SQL dialect, backslashes are treated",
+      "pattern": "\\\\'",
       "message": "In DataFusion SQL, backslashes are treated as literal characters. Use doubled single quotes ('') instead of '\\'' to escape single quotes within string literals.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\\\'",
       "compiledAt": "2026-03-23T21:40:17.553Z",
       "createdAt": "2026-03-23T21:40:17.553Z",
       "fileGlobs": [
         "**/*.sql"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "db517157e7186b1b",
       "lessonHeading": "Calling .test() on a global regex increments the lastIndex",
+      "pattern": "(\\/[^/]+\\/[a-z]*g[a-z]*|new\\s+RegExp\\s*\\([^)]+['\"][^'\"]*g[^'\"]*['\"]\\s*\\))\\.test\\(",
       "message": "Calling .test() on a global regex increments lastIndex, which can cause subsequent replacements or tests to skip characters. Use a non-global regex instead.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(\\/[^/]+\\/[a-z]*g[a-z]*|new\\s+RegExp\\s*\\([^)]+['\"][^'\"]*g[^'\"]*['\"]\\s*\\))\\.test\\(",
       "compiledAt": "2026-03-23T21:40:40.156Z",
       "createdAt": "2026-03-23T21:40:40.156Z",
       "fileGlobs": [
@@ -4208,15 +4207,15 @@
         "**/*.tsx",
         "**/*.js",
         "**/*.jsx"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "f202f65f8a198f18",
       "lessonHeading": "When testing expected failures, assert the specific error",
+      "pattern": "\\.(toThrow|toThrowError)\\(\\s*\\)",
       "message": "When testing expected failures, assert the specific error message or violation count instead of just checking if an error was thrown to prevent false positives.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(toThrow|toThrowError)\\(\\s*\\)",
       "compiledAt": "2026-03-23T21:40:48.747Z",
       "createdAt": "2026-03-23T21:40:48.747Z",
       "fileGlobs": [
@@ -4226,6 +4225,59 @@
         "**/*.spec.js",
         "**/*.test.tsx",
         "**/*.test.jsx"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "206f85746d7f967d",
+      "lessonHeading": "Instead of re-running a test suite to show failure logs,",
+      "message": "Instead of re-running the test suite to show logs, capture output to a temporary file during the first run and display it on failure to avoid doubling execution time.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\b(vitest|jest|mocha|pytest|npm|pnpm|yarn|go|cargo|make|bun)\\b.*?\\b(test|spec|check|vitest|jest|mocha|pytest)\\b.*?\\|\\|\\s*\\1.*?\\b(test|spec|check|vitest|jest|mocha|pytest)\\b",
+      "compiledAt": "2026-03-24T03:31:19.488Z",
+      "createdAt": "2026-03-24T03:31:19.488Z",
+      "fileGlobs": [
+        "*.sh",
+        "*.bash",
+        "Makefile",
+        ".github/workflows/*.yml",
+        ".github/workflows/*.yaml",
+        ".circleci/config.yml"
+      ]
+    },
+    {
+      "lessonHash": "89184bb5fd960848",
+      "lessonHeading": "BSD sed on macOS does not support the \\x1b hex escape; use",
+      "message": "BSD sed on macOS does not support \\x1b; use perl or col -b to strip ANSI codes.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bsed\\b.*\\\\x1b",
+      "compiledAt": "2026-03-24T03:30:40.052Z",
+      "createdAt": "2026-03-24T03:30:40.052Z",
+      "fileGlobs": [
+        "*.sh",
+        "*.bash",
+        "*.zsh",
+        "*.yml",
+        "*.yaml",
+        "Makefile"
+      ]
+    },
+    {
+      "lessonHash": "d9f921807aae6342",
+      "lessonHeading": "When using stdio: 'pipe' with the GitHub CLI, set",
+      "message": "When using stdio: 'pipe' with the GitHub CLI, set GH_PROMPT_DISABLED=1 to prevent indefinite hangs.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "(?=.*\\bgh\\b)(?!.*\\bGH_PROMPT_DISABLED\\b).*\\bstdio\\s*:\\s*['\"]pipe['\"]",
+      "compiledAt": "2026-03-24T03:32:38.364Z",
+      "createdAt": "2026-03-24T03:32:38.364Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
       ]
     }
   ],
@@ -4722,6 +4774,14 @@
     "238fc21c856fb54d",
     "c5170761107ec71c",
     "9ec0e320821292ea",
-    "e5f79d0298620e19"
+    "e5f79d0298620e19",
+    "1d2a6de9411b3f77",
+    "faaed9bce7b55a0c",
+    "d2903d72fcc1fe3e",
+    "fe06c8f315334d3f",
+    "b38ceed379b48068",
+    "314caa3aa44e4704",
+    "200f1c98d411f80b",
+    "bc86802aa2d2b220"
   ]
 }
