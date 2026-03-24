@@ -49,10 +49,10 @@ describe('dev hooks match consumer templates', () => {
     expect(consumerHook).toContain('"master"');
   });
 
-  it('dev pre-push runs deterministic shield like consumer template', () => {
-    const consumerHook = buildPrePushHook('pnpm exec totem shield --deterministic');
-    expect(devPrePush).toContain('shield --deterministic');
-    expect(consumerHook).toContain('shield --deterministic');
+  it('dev pre-push runs totem lint like consumer template', () => {
+    const consumerHook = buildPrePushHook('pnpm exec totem lint');
+    expect(devPrePush).toContain('totem lint');
+    expect(consumerHook).toContain('totem lint');
   });
 
   it('dev post-merge runs totem sync like consumer template', () => {

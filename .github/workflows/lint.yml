@@ -1,4 +1,4 @@
-name: Shield
+name: Lint
 
 on:
   pull_request:
@@ -9,8 +9,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deterministic-shield:
-    name: Deterministic Shield
+  lint:
+    name: Totem Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -38,14 +38,14 @@ jobs:
         if: always()
         run: |
           git fetch origin ${{ github.base_ref }} --depth=1 2>/dev/null || true
-          node packages/cli/dist/index.js lint --format sarif --out totem-shield.sarif || true
+          node packages/cli/dist/index.js lint --format sarif --out totem-lint.sarif || true
 
       - name: Upload SARIF to GitHub Security
-        if: always() && hashFiles('totem-shield.sarif') != ''
+        if: always() && hashFiles('totem-lint.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: totem-shield.sarif
-          category: totem-shield
+          sarif_file: totem-lint.sarif
+          category: totem-lint
 
       - name: Run drift check
         run: node packages/cli/dist/index.js drift

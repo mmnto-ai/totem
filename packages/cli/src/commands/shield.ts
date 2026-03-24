@@ -154,6 +154,29 @@ export function parseVerdict(content: string): { pass: boolean; reason: string }
   return { pass: match[1] === 'PASS', reason: match[2].trim() };
 }
 
+/**
+ * Write the .shield-passed gate flag on PASS so pre-push hooks can verify.
+ */
+export async function writeShieldPassedFlag(cwd: string, totemDir: string): Promise<void> {
+  try {
+    const fs = await import('node:fs');
+    const { execSync } = await import('node:child_process');
+    const head = execSync('git rev-parse HEAD', { cwd, encoding: 'utf-8' }).trim();
+    const cacheDir = path.join(cwd, totemDir, 'cache');
+    if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(path.join(cacheDir, '.shield-passed'), head);
+  } catch (err) {
+    // Non-fatal — flag is a convenience for pre-push hooks
+    // Log at debug level so failures are diagnosable
+    if (process.env['TOTEM_DEBUG'] === '1') {
+      console.error(
+        '[Shield] Failed to write .shield-passed:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+}
+
 // ─── Main command ───────────────────────────────────────
 
 export type ShieldFormat = 'text' | 'sarif' | 'json';
@@ -164,9 +187,7 @@ export interface ShieldOptions {
   model?: string;
   fresh?: boolean;
   staged?: boolean;
-  deterministic?: boolean;
   mode?: 'standard' | 'structural';
-  format?: ShieldFormat;
   learn?: boolean;
   yes?: boolean;
 }
@@ -231,7 +252,7 @@ export async function learnFromVerdict(
   const prompt = sections.join('\n');
   log.dim(TAG, `Learn prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
-  const content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd });
+  const content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd, temperature: 0 });
   if (content == null) return; // --raw mode
 
   const lessons = parseLessons(content);
@@ -305,8 +326,6 @@ export async function learnFromVerdict(
 
 // ─── Main command ───────────────────────────────────
 
-const VALID_FORMATS: ShieldFormat[] = ['text', 'sarif', 'json'];
-
 export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const { TotemConfigError, TotemError } = await import('@mmnto/totem');
   if (options.mode && options.mode !== 'standard' && options.mode !== 'structural') {
@@ -316,21 +335,6 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       'CONFIG_INVALID',
     );
   }
-  if (options.format && !VALID_FORMATS.includes(options.format)) {
-    throw new TotemConfigError(
-      `Invalid --format "${options.format}". Use "text", "sarif", or "json".`,
-      'Check `totem shield --help` for valid options.',
-      'CONFIG_INVALID',
-    );
-  }
-  if (options.format && options.format !== 'text' && !options.deterministic) {
-    throw new TotemConfigError(
-      '--format sarif/json is only supported with `totem lint`.',
-      'Use `totem lint --format sarif` or `totem lint --format json` instead.',
-      'CONFIG_INVALID',
-    );
-  }
-
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);
@@ -342,25 +346,6 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   if (!diffResult) return;
 
   const { diff, changedFiles } = diffResult;
-
-  // Deterministic mode — DEPRECATED, use `totem lint` instead
-  if (options.deterministic) {
-    log.warn(TAG, '⚠ --deterministic is deprecated. Use `totem lint` instead.');
-    log.warn(TAG, '  This flag will be removed in a future release.');
-    const exportPaths = config.exports ? Object.values(config.exports) : undefined;
-    const { runCompiledRules } = await import('./run-compiled-rules.js');
-    await runCompiledRules({
-      diff,
-      cwd,
-      totemDir: config.totemDir,
-      format: options.format ?? 'text',
-      outPath: options.out,
-      exportPaths,
-      ignorePatterns: [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])],
-      tag: TAG,
-    });
-    return;
-  }
 
   // Structural mode — context-blind LLM review, no embeddings, no Totem knowledge
   if (options.mode === 'structural') {
@@ -375,7 +360,14 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     const prompt = assembleStructuralPrompt(diff, changedFiles, systemPrompt);
     log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
-    const content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd });
+    const content = await runOrchestrator({
+      prompt,
+      tag: TAG,
+      options,
+      config,
+      cwd,
+      temperature: 0,
+    });
     if (content == null && !options.raw) {
       throw new TotemError(
         'SHIELD_FAILED',
@@ -393,7 +385,9 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
           const verdictLabel = verdict.pass ? successColor(bold('PASS')) : errorColor(bold('FAIL'));
           const reason = verdict.reason ? ` — ${verdict.reason}` : '';
           log.info(TAG, `Verdict: ${verdictLabel}${reason}`);
-          if (!verdict.pass) {
+          if (verdict.pass) {
+            await writeShieldPassedFlag(cwd, config.totemDir);
+          } else {
             if (options.learn) await learnFromVerdict(content, diff, options, config, cwd);
             throw new TotemError(
               'SHIELD_FAILED',
@@ -439,7 +433,15 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const prompt = assemblePrompt(diff, changedFiles, context, systemPrompt);
   log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
-  const content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });
+  const content = await runOrchestrator({
+    prompt,
+    tag: TAG,
+    options,
+    config,
+    cwd,
+    totalResults,
+    temperature: 0,
+  });
   if (content != null) {
     writeOutput(content, options.out);
     if (options.out) log.success(TAG, `Written to ${options.out}`);
@@ -451,7 +453,9 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
         const verdictLabel = verdict.pass ? successColor(bold('PASS')) : errorColor(bold('FAIL'));
         const reason = verdict.reason ? ` — ${verdict.reason}` : '';
         log.info(TAG, `Verdict: ${verdictLabel}${reason}`);
-        if (!verdict.pass) {
+        if (verdict.pass) {
+          await writeShieldPassedFlag(cwd, config.totemDir);
+        } else {
           if (options.learn) await learnFromVerdict(content, diff, options, config, cwd);
           throw new TotemError(
             'SHIELD_FAILED',

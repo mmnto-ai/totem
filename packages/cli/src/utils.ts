@@ -47,29 +47,85 @@ export function loadEnv(cwd: string): void {
 }
 
 /**
- * Load and parse totem.config.ts via jiti.
+ * Supported config file names in resolution priority order.
+ * .ts is preferred (full TypeScript support), static formats are fallbacks.
  */
-export async function loadConfig(configPath: string): Promise<TotemConfig> {
-  const { createJiti } = await import('jiti');
-  const jiti = createJiti(import.meta.url);
-  const mod = (await jiti.import(configPath)) as Record<string, unknown>;
-  const raw = mod['default'] ?? mod;
-  return TotemConfigSchema.parse(raw);
+export const CONFIG_FILES = ['totem.config.ts', 'totem.yaml', 'totem.yml', 'totem.toml'] as const;
+
+export type ConfigFormat = 'ts' | 'yaml' | 'toml';
+
+/**
+ * Resolve config path by checking the fallback chain: .ts → .yaml → .yml → .toml
+ */
+export function resolveConfigPath(cwd: string): string {
+  for (const file of CONFIG_FILES) {
+    const candidate = path.join(cwd, file);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  throw new TotemConfigError(
+    'No Totem configuration found.',
+    "Run 'totem init' to create one. Supported: totem.config.ts, totem.yaml, totem.yml, totem.toml",
+    'CONFIG_MISSING',
+  );
 }
 
 /**
- * Resolve config path and validate it exists. Exits if missing.
+ * Load and validate Totem configuration from any supported format.
+ * Routes parsing by file extension: .ts via jiti, .yaml/.yml via yaml, .toml via smol-toml.
  */
-export function resolveConfigPath(cwd: string): string {
-  const configPath = path.join(cwd, 'totem.config.ts');
-  if (!fs.existsSync(configPath)) {
+export async function loadConfig(configPath: string): Promise<TotemConfig> {
+  const ext = path.extname(configPath).toLowerCase();
+
+  let raw: unknown;
+  try {
+    if (ext === '.ts') {
+      const { createJiti } = await import('jiti');
+      const jiti = createJiti(import.meta.url);
+      const mod = (await jiti.import(configPath)) as Record<string, unknown>;
+      raw = mod['default'] ?? mod;
+    } else if (ext === '.yaml' || ext === '.yml') {
+      const { parse } = await import('yaml');
+      const content = fs.readFileSync(configPath, 'utf-8');
+      raw = parse(content);
+    } else if (ext === '.toml') {
+      const { parse } = await import('smol-toml');
+      const content = fs.readFileSync(configPath, 'utf-8');
+      raw = parse(content);
+    } else {
+      throw new TotemConfigError(
+        `Unsupported config format: ${ext}`,
+        'Use totem.config.ts, totem.yaml, totem.yml, or totem.toml.',
+        'CONFIG_INVALID',
+      );
+    }
+  } catch (err) {
+    // Re-throw TotemErrors as-is
+    if (err instanceof TotemConfigError) throw err;
+    // Wrap parse errors with file context
+    const msg = err instanceof Error ? err.message : String(err);
     throw new TotemConfigError(
-      'No totem.config.ts found.',
-      "Run 'totem init' to create one.",
-      'CONFIG_MISSING',
+      `Failed to parse ${path.basename(configPath)}: ${msg}`,
+      'Check the file for syntax errors.',
+      'CONFIG_INVALID',
     );
   }
-  return configPath;
+
+  try {
+    return TotemConfigSchema.parse(raw);
+  } catch (err) {
+    // Format Zod errors into clean, human-readable messages
+    if (err instanceof Error && err.name === 'ZodError' && 'issues' in err) {
+      const issues = (err as { issues: Array<{ path: string[]; message: string }> }).issues
+        .map((i) => `  ${i.path.join('.')}: ${i.message}`)
+        .join('\n');
+      throw new TotemConfigError(
+        `Invalid configuration in ${path.basename(configPath)}:\n${issues}`,
+        'Fix the fields listed above. See docs for the config schema.',
+        'CONFIG_INVALID',
+      );
+    }
+    throw err;
+  }
 }
 
 // Re-export from core — unified embedding guard (#187)

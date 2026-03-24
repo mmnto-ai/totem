@@ -16,6 +16,8 @@ export function buildNpxCommand(isWin: boolean): { command: string; args: string
 
 // ─── Types ───────────────────────────────────────────────
 
+export type ConfigFormat = 'ts' | 'yaml' | 'toml';
+
 export interface DetectedProject {
   hasTypeScript: boolean;
   hasSrc: boolean;
@@ -23,6 +25,7 @@ export interface DetectedProject {
   hasSpecs: boolean;
   hasContext: boolean;
   hasSessions: boolean;
+  preferredConfigFormat: ConfigFormat;
 }
 
 export type AiTool = 'Claude Code' | 'Gemini CLI' | 'Cursor' | 'JetBrains Junie' | 'GitHub Copilot';
@@ -45,6 +48,7 @@ export type EmbeddingTier = 'openai' | 'ollama' | 'gemini' | 'none';
 
 export interface DetectedOrchestrator {
   block: string;
+  config: Record<string, unknown>;
 }
 
 // ─── Helpers ─────────────────────────────────────────────
@@ -129,6 +133,16 @@ export function detectProject(cwd: string): DetectedProject {
     }
   }
 
+  // Determine preferred config format based on ecosystem markers
+  let preferredConfigFormat: ConfigFormat = 'yaml'; // ecosystem-neutral default
+  if (exists('package.json') || hasTypeScript) {
+    preferredConfigFormat = 'ts';
+  } else if (exists('Cargo.toml') || exists('pyproject.toml') || exists('requirements.txt')) {
+    preferredConfigFormat = 'toml';
+  } else if (exists('go.mod')) {
+    preferredConfigFormat = 'yaml';
+  }
+
   return {
     hasTypeScript,
     hasSrc: exists('src'),
@@ -136,6 +150,7 @@ export function detectProject(cwd: string): DetectedProject {
     hasSpecs: exists('specs'),
     hasContext: exists('context'),
     hasSessions: exists('context/sessions'),
+    preferredConfigFormat,
   };
 }
 
@@ -201,7 +216,18 @@ export function detectOrchestrator(cwd: string): DetectedOrchestrator | null {
 
   // 1. Gemini CLI on PATH → shell provider
   if (cliExists('gemini')) {
+    const config = {
+      provider: 'shell',
+      command: 'gemini --model {model} -o json -e none < {file}',
+      defaultModel: 'gemini-3-flash-preview',
+      overrides: {
+        spec: 'gemini-3.1-pro-preview',
+        shield: 'gemini-3.1-pro-preview',
+        triage: 'gemini-3.1-pro-preview',
+      },
+    };
     return {
+      config,
       block: `  orchestrator: {
     provider: 'shell',
     command: 'gemini --model {model} -o json -e none < {file}',
@@ -217,7 +243,13 @@ export function detectOrchestrator(cwd: string): DetectedOrchestrator | null {
 
   // 2. Claude CLI on PATH → shell provider (anthropic)
   if (cliExists('claude')) {
+    const config = {
+      provider: 'shell',
+      command: 'claude -p {file} --model {model} --output-format json',
+      defaultModel: 'sonnet',
+    };
     return {
+      config,
       block: `  orchestrator: {
     provider: 'shell',
     command: 'claude -p {file} --model {model} --output-format json',
@@ -228,7 +260,17 @@ export function detectOrchestrator(cwd: string): DetectedOrchestrator | null {
 
   // 3. API keys → native SDK providers
   if (hasKey(envContent, 'GEMINI_API_KEY', 'GOOGLE_API_KEY')) {
+    const config = {
+      provider: 'gemini',
+      defaultModel: 'gemini-3-flash-preview',
+      overrides: {
+        spec: 'gemini-3.1-pro-preview',
+        shield: 'gemini-3.1-pro-preview',
+        triage: 'gemini-3.1-pro-preview',
+      },
+    };
     return {
+      config,
       block: `  orchestrator: {
     provider: 'gemini',
     defaultModel: 'gemini-3-flash-preview',
@@ -242,7 +284,9 @@ export function detectOrchestrator(cwd: string): DetectedOrchestrator | null {
   }
 
   if (hasKey(envContent, 'ANTHROPIC_API_KEY')) {
+    const config = { provider: 'anthropic', defaultModel: 'claude-sonnet-4-20250514' };
     return {
+      config,
       block: `  orchestrator: {
     provider: 'anthropic',
     defaultModel: 'claude-sonnet-4-20250514',
@@ -251,7 +295,9 @@ export function detectOrchestrator(cwd: string): DetectedOrchestrator | null {
   }
 
   if (hasKey(envContent, 'OPENAI_API_KEY')) {
+    const config = { provider: 'openai', defaultModel: 'gpt-4.1-mini' };
     return {
+      config,
       block: `  orchestrator: {
     provider: 'openai',
     defaultModel: 'gpt-4.1-mini',

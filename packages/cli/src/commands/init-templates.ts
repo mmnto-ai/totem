@@ -3,7 +3,7 @@
 
 import type { IngestTarget } from '@mmnto/totem';
 
-import type { EmbeddingTier } from './init-detect.js';
+import type { ConfigFormat, EmbeddingTier } from './init-detect.js';
 
 // ─── Reflex versioning ────────────────────────────────────
 // Bump REFLEX_VERSION whenever the AI_PROMPT_BLOCK content changes materially.
@@ -183,4 +183,108 @@ ${orchestratorBlock}
 
 export default config;
 `;
+}
+
+/**
+ * Build a plain config object suitable for YAML/TOML serialization.
+ */
+async function buildConfigObject(
+  targets: IngestTarget[],
+  embeddingTier: EmbeddingTier,
+  cwd: string,
+): Promise<Record<string, unknown>> {
+  const { detectOrchestrator } = await import('./init-detect.js');
+  const { DEFAULT_IGNORE_PATTERNS } = await import('@mmnto/totem');
+
+  const config: Record<string, unknown> = {
+    targets: targets.map((t) => {
+      const entry: Record<string, string> = { glob: t.glob, type: t.type };
+      if (t.strategy) entry['strategy'] = t.strategy;
+      return entry;
+    }),
+    ignorePatterns: [...DEFAULT_IGNORE_PATTERNS],
+  };
+
+  // Embedding
+  switch (embeddingTier) {
+    case 'openai':
+      config['embedding'] = { provider: 'openai', model: 'text-embedding-3-small' };
+      break;
+    case 'ollama':
+      config['embedding'] = {
+        provider: 'ollama',
+        model: 'nomic-embed-text',
+        baseUrl: 'http://localhost:11434',
+      };
+      break;
+    case 'gemini':
+      config['embedding'] = {
+        provider: 'gemini',
+        model: 'gemini-embedding-2-preview',
+        dimensions: 768,
+      };
+      break;
+  }
+
+  // Orchestrator
+  const orchestrator = detectOrchestrator(cwd);
+  if (orchestrator) {
+    config['orchestrator'] = orchestrator.config;
+  }
+
+  return config;
+}
+
+/**
+ * Generate a YAML configuration file.
+ */
+export async function generateYamlConfig(
+  targets: IngestTarget[],
+  embeddingTier: EmbeddingTier,
+  cwd: string,
+): Promise<string> {
+  const { stringify } = await import('yaml');
+  const config = await buildConfigObject(targets, embeddingTier, cwd);
+  return `# Totem configuration — https://github.com/mmnto-ai/totem\n${stringify(config)}`;
+}
+
+/**
+ * Generate a TOML configuration file.
+ */
+export async function generateTomlConfig(
+  targets: IngestTarget[],
+  embeddingTier: EmbeddingTier,
+  cwd: string,
+): Promise<string> {
+  const { stringify } = await import('smol-toml');
+  const config = await buildConfigObject(targets, embeddingTier, cwd);
+  return `# Totem configuration — https://github.com/mmnto-ai/totem\n${stringify(config)}`;
+}
+
+/**
+ * Generate config in the specified format.
+ */
+export async function generateConfigForFormat(
+  format: ConfigFormat,
+  targets: IngestTarget[],
+  embeddingTier: EmbeddingTier,
+  cwd: string,
+): Promise<{ content: string; filename: string }> {
+  switch (format) {
+    case 'yaml':
+      return {
+        content: await generateYamlConfig(targets, embeddingTier, cwd),
+        filename: 'totem.yaml',
+      };
+    case 'toml':
+      return {
+        content: await generateTomlConfig(targets, embeddingTier, cwd),
+        filename: 'totem.toml',
+      };
+    default:
+      return {
+        content: await generateConfig(targets, embeddingTier, cwd),
+        filename: 'totem.config.ts',
+      };
+  }
 }
