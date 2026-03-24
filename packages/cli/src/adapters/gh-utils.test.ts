@@ -117,4 +117,14 @@ describe('ghFetchAndParse', () => {
       '[Totem Error] Failed to fetch PR #5: timeout exceeded',
     );
   });
+
+  it('suppresses stderr to prevent gh CLI error leaks (#863)', () => {
+    mockedExec.mockReturnValue(JSON.stringify({ id: 1, name: 'test' }));
+    ghFetchAndParse(['issue', 'view', '863'], TestSchema, 'issue #863', '/cwd');
+    expect(mockedExec).toHaveBeenCalledWith(
+      'gh',
+      ['issue', 'view', '863'],
+      expect.objectContaining({ stdio: ['pipe', 'pipe', 'pipe'] }),
+    );
+  });
 });

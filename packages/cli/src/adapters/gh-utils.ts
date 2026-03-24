@@ -82,6 +82,7 @@ export function ghFetchAndParse<T>(
       timeout: isPaginated ? GH_PAGINATED_TIMEOUT_MS : GH_TIMEOUT_MS,
       shell: IS_WIN,
       maxBuffer: GH_MAX_BUFFER,
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     let parsed: unknown;
