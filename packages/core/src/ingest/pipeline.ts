@@ -121,7 +121,7 @@ function writeSyncState(totemDir: string, state: SyncState): void {
 export async function runSync(
   config: TotemConfig,
   options: SyncOptions,
-): Promise<{ chunksProcessed: number; filesProcessed: number }> {
+): Promise<{ chunksProcessed: number; filesProcessed: number; totalChunks: number }> {
   const { projectRoot, onProgress } = options;
   const log = onProgress ?? (() => {});
   const totemDir = path.join(projectRoot, config.totemDir);
@@ -136,7 +136,7 @@ export async function runSync(
 async function runSyncInner(
   config: TotemConfig,
   options: SyncOptions,
-): Promise<{ chunksProcessed: number; filesProcessed: number }> {
+): Promise<{ chunksProcessed: number; filesProcessed: number; totalChunks: number }> {
   const { projectRoot, onProgress } = options;
   let incremental = options.incremental;
   const log = onProgress ?? (() => {});
@@ -311,8 +311,12 @@ async function runSyncInner(
     lastSync: new Date().toISOString(),
   });
 
+  // Get total chunk count from the store (includes pre-existing chunks from incremental syncs)
+  const totalStoredChunks = await store.count();
+
   return {
     chunksProcessed: totalChunks,
     filesProcessed: filesToProcess.length,
+    totalChunks: totalStoredChunks,
   };
 }

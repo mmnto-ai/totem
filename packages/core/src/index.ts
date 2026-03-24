@@ -238,3 +238,7 @@ export {
   readCompileManifest,
   writeCompileManifest,
 } from './compile-manifest.js';
+
+// Global registry (multi-totem workspace discovery)
+export type { RegistryEntry, TotemRegistry } from './registry.js';
+export { readRegistry, updateRegistryEntry } from './registry.js';

@@ -12,6 +12,7 @@ import {
   rewriteLessonsFile,
   runSync,
   TotemError,
+  updateRegistryEntry,
 } from '@mmnto/totem';
 
 import type { Spinner } from '../ui.js';
@@ -54,6 +55,24 @@ export async function syncCommand(options: {
     });
 
     spinner.succeed(`Done: ${result.chunksProcessed} chunks from ${result.filesProcessed} files`);
+
+    // Update global workspace registry (non-fatal on failure)
+    try {
+      const embedderString = config.embedding
+        ? `${config.embedding.provider}/${config.embedding.dimensions ?? 'auto'}d`
+        : 'none';
+
+      await updateRegistryEntry({
+        path: fs.realpathSync(path.resolve(cwd)),
+        chunkCount: result.totalChunks,
+        lastSync: new Date().toISOString(),
+        embedder: embedderString,
+      });
+    } catch (err) {
+      // Registry update is best-effort — don't break sync
+      const detail = err instanceof Error ? err.message : String(err);
+      log.dim(TAG, `Registry update skipped: ${detail}`);
+    }
   } catch (err) {
     spinner.fail('Sync failed');
     throw err;

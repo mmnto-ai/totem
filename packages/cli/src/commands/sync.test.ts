@@ -22,8 +22,11 @@ vi.mock('../utils.js', () => ({
   requireEmbedding: vi.fn(),
 }));
 
+const mockUpdateRegistryEntry = vi.fn().mockResolvedValue(undefined);
+
 vi.mock('@mmnto/totem', () => ({
-  runSync: vi.fn().mockResolvedValue({ chunksProcessed: 10, filesProcessed: 3 }),
+  runSync: vi.fn().mockResolvedValue({ chunksProcessed: 10, filesProcessed: 3, totalChunks: 42 }),
+  updateRegistryEntry: (...args: unknown[]) => mockUpdateRegistryEntry(...args),
   TotemError: class TotemError extends Error {
     constructor(
       public code: string,
@@ -77,5 +80,23 @@ describe('syncCommand', () => {
   it('still completes sync successfully when quiet is true', async () => {
     // Should not throw
     await expect(syncCommand({ quiet: true })).resolves.toBeUndefined();
+  });
+
+  it('calls updateRegistryEntry after successful sync', async () => {
+    await syncCommand({});
+    expect(mockUpdateRegistryEntry).toHaveBeenCalledTimes(1);
+    expect(mockUpdateRegistryEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chunkCount: 42,
+        embedder: expect.any(String),
+        lastSync: expect.any(String),
+        path: expect.any(String),
+      }),
+    );
+  });
+
+  it('survives registry update failure without breaking sync', async () => {
+    mockUpdateRegistryEntry.mockRejectedValueOnce(new Error('EACCES'));
+    await expect(syncCommand({})).resolves.toBeUndefined();
   });
 });

@@ -384,6 +384,18 @@ program
   });
 
 program
+  .command('list')
+  .description('List all known Totem workspaces from the global registry')
+  .action(async () => {
+    try {
+      const { listCommand } = await import('./commands/list.js');
+      listCommand();
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('eject')
   .description('Remove all Totem hooks, config, and data from this project')
   .option('--force', 'Skip confirmation prompt')
@@ -525,7 +537,7 @@ program.addHelpText(
   'after',
   `
 Commands by tier:
-  Core (no API keys):    init, sync, lint, compile, test, verify-manifest, hooks, link, stats, drift
+  Core (no API keys):    init, sync, lint, compile, test, verify-manifest, hooks, link, stats, list, drift
   AI-Powered (needs LLM): shield, spec, handoff, docs, compile (with LLM)
   GitHub Workflows:      extract, triage, wrap
   Utilities:             add-lesson, explain, eject

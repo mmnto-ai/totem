@@ -110,6 +110,20 @@ describe('LanceStore', () => {
     });
   });
 
+  describe('count', () => {
+    it('returns 0 when empty', async () => {
+      expect(await store.count()).toBe(0);
+    });
+
+    it('returns total row count after inserts', async () => {
+      await store.insert([
+        makeChunk({ type: 'code', content: 'a' }),
+        makeChunk({ type: 'spec', content: 'b' }),
+      ]);
+      expect(await store.count()).toBe(2);
+    });
+  });
+
   describe('deleteByFile', () => {
     it('deletes chunks for a specific file', async () => {
       await store.insert([
