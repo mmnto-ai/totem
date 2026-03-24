@@ -4,6 +4,12 @@ on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, edited]
+    paths:
+      - '.totem/compiled-rules.json'
+      - '.totem/compile-manifest.json'
+      - '.totem/lessons/**'
+      - 'packages/core/src/compiler*'
+      - 'packages/cli/src/commands/compile.ts'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
