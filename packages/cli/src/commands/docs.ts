@@ -292,8 +292,10 @@ function casePreservingReplace(original: string, replacement: string): string {
 }
 
 export function stripMarketingTerms(content: string): string {
-  // Split on fenced code blocks, inline code, and URLs/link targets to avoid mangling
-  const parts = content.split(/(```[\s\S]*?```|`[^`]+`|https?:\/\/[^\s)]+|\]\([^)]+\))/g);
+  // Split on protected spans: manual_content blocks, fenced code, inline code, URLs/link targets
+  const parts = content.split(
+    /(<manual_content\b[^>]*>[\s\S]*?<\/manual_content>|```[\s\S]*?```|`[^`]+`|https?:\/\/[^\s)]+|\]\([^)]+\))/g,
+  );
   return parts
     .map((part, i) => {
       // Odd-indexed parts are protected spans — leave them alone

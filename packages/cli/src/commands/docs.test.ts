@@ -517,6 +517,26 @@ describe('stripMarketingTerms', () => {
       '[guide](https://robust-api.com/docs)',
     );
   });
+
+  it('preserves manual_content blocks from marketing term replacement (#866)', () => {
+    const input =
+      'A comprehensive guide. <manual_content>comprehensive and robust</manual_content> A robust API.';
+    const result = stripMarketingTerms(input);
+    expect(result).toContain('<manual_content>comprehensive and robust</manual_content>');
+    expect(result).toContain('A thorough guide.');
+    expect(result).toContain('A reliable API.');
+  });
+
+  it('preserves manual_content blocks with attributes (#866)', () => {
+    const input = '<manual_content id="intro">comprehensive overview</manual_content>';
+    expect(stripMarketingTerms(input)).toBe(input);
+  });
+
+  it('preserves manual_content blocks containing code blocks (#866)', () => {
+    const input =
+      '<manual_content>\n```js\nconst comprehensive = true;\n```\nA comprehensive guide.\n</manual_content>';
+    expect(stripMarketingTerms(input)).toBe(input);
+  });
 });
 
 // ─── DOCS_SYSTEM_PROMPT includes marketing ban ──────────
