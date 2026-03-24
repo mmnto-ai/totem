@@ -35,12 +35,14 @@ else
 fi
 TEST_EXIT=$?
 if [ $TEST_EXIT -ne 0 ]; then
-  echo "[totem] ❌ Tests failed. Re-running with full output:"
-  pnpm run test 2>&1 | tail -40
+  echo "[totem] ❌ Tests failed. See output below:"
+  cat "$TEST_OUTPUT"
   exit 1
 fi
-# Count passed tests from vitest summary lines (match "Tests" but not "Test Files")
-PASSED=$(sed 's/\x1b\[[0-9;]*m//g' "$TEST_OUTPUT" | grep 'Tests ' | grep -v 'Test Files' | grep -oE '[0-9]+ passed' | awk '{s+=$1} END {print s}')
+# Count passed tests from vitest summary lines.
+# Expected format: "      Tests  577 passed (577)" — falls back to "all" if parsing fails.
+# Uses perl for portable ANSI stripping (BSD sed on macOS doesn't support \x1b).
+PASSED=$(perl -pe 's/\e\[[0-9;]*m//g' "$TEST_OUTPUT" | grep 'Tests ' | grep -v 'Test Files' | grep -oE '[0-9]+ passed' | awk '{s+=$1} END {print s}')
 echo "[totem] ✓ ${PASSED:-all} tests passed"
 
 echo "[totem] ✅ All pre-push checks passed."
