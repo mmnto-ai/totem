@@ -11,6 +11,7 @@ import {
   buildPrePushHook,
   checkHooksInstalled,
   detectTotemPrefix,
+  generateHookHelpers,
   installGitHook,
   installHooksNonInteractive,
   TOTEM_PRECOMMIT_MARKER,
@@ -587,5 +588,213 @@ describe('post-checkout hook content', () => {
 
     expect(result).not.toBeNull();
     expect(result!.postCheckout).toBe('installed');
+  });
+});
+
+// ─── generateHookHelpers ────────────────────────────
+
+describe('generateHookHelpers', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-helpers-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('creates .totem/hooks/ directory and writes all 4 .sh files', () => {
+    generateHookHelpers(
+      tmpDir,
+      'pnpm exec totem sync --incremental --quiet',
+      'pnpm exec totem lint',
+    );
+
+    const hooksDir = path.join(tmpDir, '.totem', 'hooks');
+    expect(fs.existsSync(path.join(hooksDir, 'post-merge.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'post-checkout.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'pre-commit.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'pre-push.sh'))).toBe(true);
+  });
+
+  it('is idempotent — calling twice does not error', () => {
+    const syncCmd = 'pnpm exec totem sync --incremental --quiet';
+    const shieldCmd = 'pnpm exec totem lint';
+
+    generateHookHelpers(tmpDir, syncCmd, shieldCmd);
+    generateHookHelpers(tmpDir, syncCmd, shieldCmd);
+
+    const hooksDir = path.join(tmpDir, '.totem', 'hooks');
+    expect(fs.existsSync(path.join(hooksDir, 'post-merge.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'post-checkout.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'pre-commit.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'pre-push.sh'))).toBe(true);
+  });
+
+  it('post-merge.sh matches buildHookContent output', () => {
+    const syncCmd = 'pnpm exec totem sync --incremental --quiet';
+    const shieldCmd = 'pnpm exec totem lint';
+
+    generateHookHelpers(tmpDir, syncCmd, shieldCmd);
+
+    const written = fs.readFileSync(path.join(tmpDir, '.totem', 'hooks', 'post-merge.sh'), 'utf-8');
+    expect(written).toContain('[totem] post-merge hook');
+    expect(written).toContain('ORIG_HEAD');
+    expect(written).toContain(syncCmd);
+  });
+
+  it('post-checkout.sh matches buildPostCheckoutHookContent output', () => {
+    const syncCmd = 'pnpm exec totem sync --incremental --quiet';
+    const shieldCmd = 'pnpm exec totem lint';
+
+    generateHookHelpers(tmpDir, syncCmd, shieldCmd);
+
+    const written = fs.readFileSync(
+      path.join(tmpDir, '.totem', 'hooks', 'post-checkout.sh'),
+      'utf-8',
+    );
+    const expected = buildPostCheckoutHookContent(syncCmd);
+    expect(written).toBe(expected);
+  });
+
+  it('pre-commit.sh matches buildPreCommitHook output', () => {
+    const syncCmd = 'pnpm exec totem sync --incremental --quiet';
+    const shieldCmd = 'pnpm exec totem lint';
+
+    generateHookHelpers(tmpDir, syncCmd, shieldCmd);
+
+    const written = fs.readFileSync(path.join(tmpDir, '.totem', 'hooks', 'pre-commit.sh'), 'utf-8');
+    const expected = buildPreCommitHook();
+    expect(written).toBe(expected);
+  });
+
+  it('pre-push.sh matches buildPrePushHook output', () => {
+    const syncCmd = 'pnpm exec totem sync --incremental --quiet';
+    const shieldCmd = 'pnpm exec totem lint';
+
+    generateHookHelpers(tmpDir, syncCmd, shieldCmd);
+
+    const written = fs.readFileSync(path.join(tmpDir, '.totem', 'hooks', 'pre-push.sh'), 'utf-8');
+    const expected = buildPrePushHook(shieldCmd);
+    expect(written).toBe(expected);
+  });
+});
+
+// ─── installHooksNonInteractive + hook manager helpers ─
+
+describe('installHooksNonInteractive with hook manager', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hooks-mgr-'));
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('generates .totem/hooks/*.sh when husky is detected', () => {
+    fs.mkdirSync(path.join(tmpDir, '.husky'), { recursive: true });
+
+    installHooksNonInteractive(tmpDir);
+
+    const hooksDir = path.join(tmpDir, '.totem', 'hooks');
+    expect(fs.existsSync(path.join(hooksDir, 'post-merge.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'post-checkout.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'pre-commit.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'pre-push.sh'))).toBe(true);
+  });
+
+  it('generates .totem/hooks/*.sh when lefthook is detected', () => {
+    fs.writeFileSync(path.join(tmpDir, 'lefthook.yml'), '');
+
+    installHooksNonInteractive(tmpDir);
+
+    const hooksDir = path.join(tmpDir, '.totem', 'hooks');
+    expect(fs.existsSync(path.join(hooksDir, 'post-merge.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'post-checkout.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'pre-commit.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'pre-push.sh'))).toBe(true);
+  });
+
+  it('generates .totem/hooks/*.sh when simple-git-hooks is detected', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({ 'simple-git-hooks': { 'pre-commit': 'echo hi' } }),
+    );
+
+    installHooksNonInteractive(tmpDir);
+
+    const hooksDir = path.join(tmpDir, '.totem', 'hooks');
+    expect(fs.existsSync(path.join(hooksDir, 'post-merge.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'post-checkout.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'pre-commit.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'pre-push.sh'))).toBe(true);
+  });
+
+  it('guidance references .totem/hooks/*.sh paths for husky', () => {
+    fs.mkdirSync(path.join(tmpDir, '.husky'), { recursive: true });
+
+    const stderrOutput: string[] = [];
+    const origError = console.error;
+    console.error = (...args: unknown[]) => stderrOutput.push(args.join(' '));
+
+    try {
+      installHooksNonInteractive(tmpDir);
+    } finally {
+      console.error = origError;
+    }
+
+    const output = stderrOutput.join('\n');
+    expect(output).toContain('sh .totem/hooks/pre-commit.sh');
+    expect(output).toContain('sh .totem/hooks/pre-push.sh');
+    expect(output).toContain('sh .totem/hooks/post-merge.sh');
+    expect(output).toContain('sh .totem/hooks/post-checkout.sh');
+  });
+
+  it('guidance references .totem/hooks/*.sh paths for lefthook', () => {
+    fs.writeFileSync(path.join(tmpDir, 'lefthook.yml'), '');
+
+    const stderrOutput: string[] = [];
+    const origError = console.error;
+    console.error = (...args: unknown[]) => stderrOutput.push(args.join(' '));
+
+    try {
+      installHooksNonInteractive(tmpDir);
+    } finally {
+      console.error = origError;
+    }
+
+    const output = stderrOutput.join('\n');
+    expect(output).toContain('sh .totem/hooks/pre-commit.sh');
+    expect(output).toContain('sh .totem/hooks/pre-push.sh');
+    expect(output).toContain('sh .totem/hooks/post-merge.sh');
+    expect(output).toContain('sh .totem/hooks/post-checkout.sh');
+  });
+
+  it('guidance references .totem/hooks/*.sh paths for simple-git-hooks', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({ 'simple-git-hooks': { 'pre-commit': 'echo hi' } }),
+    );
+
+    const stderrOutput: string[] = [];
+    const origError = console.error;
+    console.error = (...args: unknown[]) => stderrOutput.push(args.join(' '));
+
+    try {
+      installHooksNonInteractive(tmpDir);
+    } finally {
+      console.error = origError;
+    }
+
+    const output = stderrOutput.join('\n');
+    expect(output).toContain('sh .totem/hooks/pre-commit.sh');
+    expect(output).toContain('sh .totem/hooks/pre-push.sh');
+    expect(output).toContain('sh .totem/hooks/post-merge.sh');
+    expect(output).toContain('sh .totem/hooks/post-checkout.sh');
   });
 });

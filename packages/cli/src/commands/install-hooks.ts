@@ -90,61 +90,69 @@ function detectHookManager(cwd: string): HookManager | null {
   return null;
 }
 
-function printHookManagerGuidance(manager: HookManager, syncCmd: string, shieldCmd: string): void {
+/**
+ * Generate helper shell scripts under `.totem/hooks/` for hook manager integration.
+ * These scripts contain the full guard logic (diff checks, null-SHA guards) that
+ * bare inline commands would skip.
+ */
+export function generateHookHelpers(gitRoot: string, syncCmd: string, shieldCmd: string): void {
+  const hooksDir = path.join(gitRoot, '.totem', 'hooks');
+  fs.mkdirSync(hooksDir, { recursive: true });
+
+  const postMerge = buildHookContent(syncCmd);
+  const postCheckout = buildPostCheckoutHookContent(syncCmd);
+  const preCommit = buildPreCommitHook();
+  const prePush = buildPrePushHook(shieldCmd);
+
+  fs.writeFileSync(path.join(hooksDir, 'post-merge.sh'), postMerge, { mode: 0o755 });
+  fs.writeFileSync(path.join(hooksDir, 'post-checkout.sh'), postCheckout, { mode: 0o755 });
+  fs.writeFileSync(path.join(hooksDir, 'pre-commit.sh'), preCommit, { mode: 0o755 });
+  fs.writeFileSync(path.join(hooksDir, 'pre-push.sh'), prePush, { mode: 0o755 });
+}
+
+function printHookManagerGuidance(manager: HookManager): void {
   switch (manager) {
     case 'husky':
       console.error('[Totem] Detected husky. Add the following to your hook files:');
       console.error('');
-      console.error('  # .husky/pre-commit — block direct commits to main/master');
-      console.error('  branch=$(git rev-parse --abbrev-ref HEAD)');
-      console.error('  if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then');
-      console.error('    echo "[Totem] Direct commits to $branch blocked."');
-      console.error('    exit 1');
-      console.error('  fi');
+      console.error('  # .husky/pre-commit');
+      console.error('  sh .totem/hooks/pre-commit.sh');
       console.error('');
-      console.error('  # .husky/pre-push — totem lint gate');
-      console.error('  if [ -f ".totem/compiled-rules.json" ]; then');
-      console.error(`    ${shieldCmd}`);
-      console.error('  fi');
+      console.error('  # .husky/pre-push');
+      console.error('  sh .totem/hooks/pre-push.sh');
       console.error('');
-      console.error('  # .husky/post-merge — background re-index');
-      console.error(`  ${syncCmd}`);
+      console.error('  # .husky/post-merge');
+      console.error('  sh .totem/hooks/post-merge.sh');
       console.error('');
-      console.error('  # .husky/post-checkout — background re-index on branch switch');
-      console.error(`  ${syncCmd}`);
+      console.error('  # .husky/post-checkout');
+      console.error('  sh .totem/hooks/post-checkout.sh');
       break;
     case 'lefthook':
       console.error('[Totem] Detected lefthook. Add to your lefthook.yml:');
       console.error('  pre-commit:');
       console.error('    commands:');
       console.error('      totem-block-main:');
-      console.error(
-        '        run: branch=$(git rev-parse --abbrev-ref HEAD); if [ "$branch" = main ] || [ "$branch" = master ]; then echo "[Totem] Direct commits to $branch blocked." && exit 1; fi',
-      );
+      console.error('        run: sh .totem/hooks/pre-commit.sh');
       console.error('  pre-push:');
       console.error('    commands:');
       console.error('      totem-shield:');
-      console.error(`        run: 'if [ -f ".totem/compiled-rules.json" ]; then ${shieldCmd}; fi'`);
+      console.error('        run: sh .totem/hooks/pre-push.sh');
       console.error('  post-merge:');
       console.error('    commands:');
       console.error('      totem-sync:');
-      console.error(`        run: ${syncCmd}`);
+      console.error('        run: sh .totem/hooks/post-merge.sh');
       console.error('  post-checkout:');
       console.error('    commands:');
       console.error('      totem-sync-checkout:');
-      console.error(`        run: ${syncCmd}`);
+      console.error('        run: sh .totem/hooks/post-checkout.sh');
       break;
     case 'simple-git-hooks':
       console.error('[Totem] Detected simple-git-hooks. Add to your package.json:');
       console.error('  "simple-git-hooks": {');
-      console.error(
-        '    "pre-commit": "branch=$(git rev-parse --abbrev-ref HEAD); if [ \\"$branch\\" = main ] || [ \\"$branch\\" = master ]; then echo \\"[Totem] Direct commits to $branch blocked.\\" && exit 1; fi",',
-      );
-      console.error(
-        `    "pre-push": "if [ -f \\".totem/compiled-rules.json\\" ]; then ${shieldCmd}; fi",`,
-      );
-      console.error(`    "post-merge": "${syncCmd}",`);
-      console.error(`    "post-checkout": "${syncCmd}"`);
+      console.error('    "pre-commit": "sh .totem/hooks/pre-commit.sh",');
+      console.error('    "pre-push": "sh .totem/hooks/pre-push.sh",');
+      console.error('    "post-merge": "sh .totem/hooks/post-merge.sh",');
+      console.error('    "post-checkout": "sh .totem/hooks/post-checkout.sh"');
       console.error('  }');
       break;
   }
@@ -163,7 +171,8 @@ export async function installPostMergeHook(cwd: string, rl: readline.Interface):
   const manager = detectHookManager(gitRoot);
 
   if (manager) {
-    printHookManagerGuidance(manager, syncCmd, shieldCmd);
+    generateHookHelpers(gitRoot, syncCmd, shieldCmd);
+    printHookManagerGuidance(manager);
     return;
   }
 
@@ -409,19 +418,19 @@ export function installHooksNonInteractive(cwd: string): HooksCommandResult | nu
     return null;
   }
 
-  // Hook managers handle their own installation — print guidance only
+  const prefix = detectTotemPrefix(gitRoot);
+  const shieldCmd = `${prefix} lint`;
+  const syncCmd = detectSyncCommand(gitRoot);
+
+  // Hook managers handle their own installation — generate helper scripts + print guidance
   const manager = detectHookManager(gitRoot);
   if (manager) {
-    const syncCmd = detectSyncCommand(gitRoot);
-    const shieldCmd = `${detectTotemPrefix(gitRoot)} lint`;
-    printHookManagerGuidance(manager, syncCmd, shieldCmd);
+    generateHookHelpers(gitRoot, syncCmd, shieldCmd);
+    printHookManagerGuidance(manager);
     return null;
   }
 
   const hooksDir = path.join(gitRoot, '.git', 'hooks');
-  const prefix = detectTotemPrefix(gitRoot);
-  const shieldCmd = `${prefix} lint`;
-  const syncCmd = detectSyncCommand(gitRoot);
 
   const preCommit = installGitHook(
     hooksDir,
