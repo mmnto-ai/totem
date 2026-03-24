@@ -523,7 +523,14 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
     log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
     // Run orchestrator (handles --raw mode, validation, invocation, telemetry)
-    const content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd });
+    const content = await runOrchestrator({
+      prompt,
+      tag: TAG,
+      options,
+      config,
+      cwd,
+      temperature: 0.4,
+    });
     if (content == null) continue; // --raw mode — prompt already output, process next PR
 
     // Parse lessons from LLM output

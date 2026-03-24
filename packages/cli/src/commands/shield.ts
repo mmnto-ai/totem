@@ -158,7 +158,7 @@ export function parseVerdict(content: string): { pass: boolean; reason: string }
 /**
  * Write the .shield-passed gate flag on PASS so pre-push hooks can verify.
  */
-async function writeShieldPassedFlag(cwd: string, totemDir: string): Promise<void> {
+export async function writeShieldPassedFlag(cwd: string, totemDir: string): Promise<void> {
   try {
     const { execSync } = await import('node:child_process');
     const head = execSync('git rev-parse HEAD', { cwd, encoding: 'utf-8' }).trim();
