@@ -1,4 +1,3 @@
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { ContentType, LanceStore, SearchResult } from '@mmnto/totem';
@@ -160,13 +159,21 @@ export function parseVerdict(content: string): { pass: boolean; reason: string }
  */
 export async function writeShieldPassedFlag(cwd: string, totemDir: string): Promise<void> {
   try {
+    const fs = await import('node:fs');
     const { execSync } = await import('node:child_process');
     const head = execSync('git rev-parse HEAD', { cwd, encoding: 'utf-8' }).trim();
     const cacheDir = path.join(cwd, totemDir, 'cache');
     if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(path.join(cacheDir, '.shield-passed'), head);
-  } catch {
+  } catch (err) {
     // Non-fatal — flag is a convenience for pre-push hooks
+    // Log at debug level so failures are diagnosable
+    if (process.env['TOTEM_DEBUG'] === '1') {
+      console.error(
+        '[Shield] Failed to write .shield-passed:',
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 }
 
