@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { ghFetchAndParse, handleGhError } from './gh-utils.js';
+import { ghExec, ghFetchAndParse, handleGhError } from './gh-utils.js';
 
 vi.mock('node:child_process', () => ({
   execFileSync: vi.fn(),
@@ -65,6 +65,23 @@ describe('handleGhError', () => {
   });
 });
 
+// ─── ghExec ─────────────────────────────────────────────
+
+describe('ghExec', () => {
+  it('uses shared exec options with stdio pipe and GH_PROMPT_DISABLED', () => {
+    mockedExec.mockReturnValue('');
+    ghExec(['issue', 'comment', '1', '-b', 'test'], '/cwd');
+    expect(mockedExec).toHaveBeenCalledWith(
+      'gh',
+      ['issue', 'comment', '1', '-b', 'test'],
+      expect.objectContaining({
+        stdio: 'pipe',
+        env: expect.objectContaining({ GH_PROMPT_DISABLED: '1' }),
+      }),
+    );
+  });
+});
+
 // ─── ghFetchAndParse ────────────────────────────────────
 
 const TestSchema = z.object({ id: z.number(), name: z.string() });
@@ -115,6 +132,26 @@ describe('ghFetchAndParse', () => {
     });
     expect(() => ghFetchAndParse(['test'], TestSchema, 'PR #5', '/cwd')).toThrow(
       '[Totem Error] Failed to fetch PR #5: timeout exceeded',
+    );
+  });
+
+  it('pipes stdio to prevent gh CLI stderr leaks (#863)', () => {
+    mockedExec.mockReturnValue(JSON.stringify({ id: 1, name: 'test' }));
+    ghFetchAndParse(['issue', 'view', '863'], TestSchema, 'issue #863', '/cwd');
+    expect(mockedExec).toHaveBeenCalledWith(
+      'gh',
+      ['issue', 'view', '863'],
+      expect.objectContaining({ stdio: 'pipe' }),
+    );
+  });
+
+  it('sets GH_PROMPT_DISABLED to prevent interactive auth hangs', () => {
+    mockedExec.mockReturnValue(JSON.stringify({ id: 1, name: 'test' }));
+    ghFetchAndParse(['issue', 'view', '1'], TestSchema, 'issue #1', '/cwd');
+    expect(mockedExec).toHaveBeenCalledWith(
+      'gh',
+      ['issue', 'view', '1'],
+      expect.objectContaining({ env: expect.objectContaining({ GH_PROMPT_DISABLED: '1' }) }),
     );
   });
 });
