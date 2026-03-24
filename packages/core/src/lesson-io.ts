@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import type { ParsedLesson } from './drift-detector.js';
 import { parseLessonsFile } from './drift-detector.js';
 import { truncateHeading } from './lesson-format.js';
+import { buildFrontmatterFromLegacy, extractFrontmatter } from './lesson-frontmatter.js';
 
 /**
  * Generate a deterministic, idempotent filename for a lesson entry.
@@ -72,6 +73,7 @@ export function readAllLessons(totemDir: string): ParsedLesson[] {
     const content = fs.readFileSync(legacyPath, 'utf-8');
     const lessons = parseLessonsFile(content);
     for (const lesson of lessons) {
+      lesson.frontmatter = buildFrontmatterFromLegacy(lesson.tags, lesson.raw);
       lesson.sourcePath = legacyPath;
     }
     allLessons.push(...lessons);
@@ -87,11 +89,29 @@ export function readAllLessons(totemDir: string): ParsedLesson[] {
     for (const file of files) {
       const filePath = path.join(lessonsDir, file);
       const content = fs.readFileSync(filePath, 'utf-8');
-      const lessons = parseLessonsFile(content);
-      for (const lesson of lessons) {
-        lesson.sourcePath = filePath;
+
+      // ADR-070: detect YAML frontmatter for individual lesson files
+      const { frontmatter, body: strippedBody, hadYaml } = extractFrontmatter(content);
+
+      if (hadYaml) {
+        const lessons = parseLessonsFile(strippedBody);
+        for (const lesson of lessons) {
+          lesson.frontmatter = frontmatter;
+          // YAML tags override empty inline tags
+          if (frontmatter.tags.length > 0 && lesson.tags.length === 0) {
+            lesson.tags = frontmatter.tags;
+          }
+          lesson.sourcePath = filePath;
+        }
+        allLessons.push(...lessons);
+      } else {
+        const lessons = parseLessonsFile(content);
+        for (const lesson of lessons) {
+          lesson.frontmatter = buildFrontmatterFromLegacy(lesson.tags, lesson.raw);
+          lesson.sourcePath = filePath;
+        }
+        allLessons.push(...lessons);
       }
-      allLessons.push(...lessons);
     }
   }
 

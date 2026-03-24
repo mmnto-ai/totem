@@ -1,6 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import type { LessonFrontmatter } from './types.js';
+
 // ─── Types ─────────────────────────────────────────────
 
 export interface ParsedLesson {
@@ -16,6 +18,8 @@ export interface ParsedLesson {
   index: number;
   /** Source file path this lesson was read from (for prune operations) */
   sourcePath?: string;
+  /** Structured metadata from YAML frontmatter or legacy field mapping (ADR-070) */
+  frontmatter?: LessonFrontmatter;
 }
 
 export interface DriftResult {
