@@ -364,9 +364,22 @@ describe('writeShieldPassedFlag', () => {
   });
 
   it('silently handles non-git directories', async () => {
-    // Should not throw — error is caught internally
     await writeShieldPassedFlag(tmpDir, '.totem');
     expect(fs.existsSync(path.join(tmpDir, '.totem', 'cache', '.shield-passed'))).toBe(false);
+  });
+
+  it('writes HEAD hash in a git repository', async () => {
+    const { execSync } = await import('node:child_process');
+    execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
+    execSync('git -c user.name="test" -c user.email="test@test" commit --allow-empty -m "init"', {
+      cwd: tmpDir,
+      stdio: 'pipe',
+    });
+    await writeShieldPassedFlag(tmpDir, '.totem');
+    const flagPath = path.join(tmpDir, '.totem', 'cache', '.shield-passed');
+    expect(fs.existsSync(flagPath)).toBe(true);
+    const content = fs.readFileSync(flagPath, 'utf-8');
+    expect(content).toMatch(/^[a-f0-9]{40}$/);
   });
 });
 
