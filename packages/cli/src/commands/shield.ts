@@ -164,9 +164,7 @@ export interface ShieldOptions {
   model?: string;
   fresh?: boolean;
   staged?: boolean;
-  deterministic?: boolean;
   mode?: 'standard' | 'structural';
-  format?: ShieldFormat;
   learn?: boolean;
   yes?: boolean;
 }
@@ -305,8 +303,6 @@ export async function learnFromVerdict(
 
 // ─── Main command ───────────────────────────────────
 
-const VALID_FORMATS: ShieldFormat[] = ['text', 'sarif', 'json'];
-
 export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const { TotemConfigError, TotemError } = await import('@mmnto/totem');
   if (options.mode && options.mode !== 'standard' && options.mode !== 'structural') {
@@ -316,21 +312,6 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       'CONFIG_INVALID',
     );
   }
-  if (options.format && !VALID_FORMATS.includes(options.format)) {
-    throw new TotemConfigError(
-      `Invalid --format "${options.format}". Use "text", "sarif", or "json".`,
-      'Check `totem shield --help` for valid options.',
-      'CONFIG_INVALID',
-    );
-  }
-  if (options.format && options.format !== 'text' && !options.deterministic) {
-    throw new TotemConfigError(
-      '--format sarif/json is only supported with `totem lint`.',
-      'Use `totem lint --format sarif` or `totem lint --format json` instead.',
-      'CONFIG_INVALID',
-    );
-  }
-
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);
@@ -342,25 +323,6 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   if (!diffResult) return;
 
   const { diff, changedFiles } = diffResult;
-
-  // Deterministic mode — DEPRECATED, use `totem lint` instead
-  if (options.deterministic) {
-    log.warn(TAG, '⚠ --deterministic is deprecated. Use `totem lint` instead.');
-    log.warn(TAG, '  This flag will be removed in a future release.');
-    const exportPaths = config.exports ? Object.values(config.exports) : undefined;
-    const { runCompiledRules } = await import('./run-compiled-rules.js');
-    await runCompiledRules({
-      diff,
-      cwd,
-      totemDir: config.totemDir,
-      format: options.format ?? 'text',
-      outPath: options.out,
-      exportPaths,
-      ignorePatterns: [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])],
-      tag: TAG,
-    });
-    return;
-  }
 
   // Structural mode — context-blind LLM review, no embeddings, no Totem knowledge
   if (options.mode === 'structural') {

@@ -28,8 +28,7 @@ const COMPILED_RULES_FILE = 'compiled-rules.json';
 // ─── Core logic ─────────────────────────────────────
 
 /**
- * Shared compiled-rules execution engine used by both `totem lint` and
- * `totem shield --deterministic`. Loads rules, extracts additions, enriches
+ * Compiled-rules execution engine used by `totem lint`. Loads rules, extracts additions, enriches
  * with AST context, records metrics, and formats output.
  */
 export async function runCompiledRules(

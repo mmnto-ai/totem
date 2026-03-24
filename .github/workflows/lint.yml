@@ -1,4 +1,4 @@
-name: Shield
+name: Lint
 
 on:
   pull_request:
@@ -9,8 +9,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deterministic-shield:
-    name: Deterministic Shield
+  lint:
+    name: Totem Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

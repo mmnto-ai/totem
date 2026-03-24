@@ -95,7 +95,7 @@ describe('buildPreCommitHook', () => {
 });
 
 describe('buildPrePushHook', () => {
-  const shieldCmd = 'pnpm exec totem shield --deterministic';
+  const shieldCmd = 'pnpm exec totem lint';
 
   it('contains the marker for idempotency', () => {
     const hook = buildPrePushHook(shieldCmd);
@@ -126,11 +126,11 @@ describe('buildPrePushHook', () => {
   });
 
   it('uses the provided shield command (respects package manager)', () => {
-    const npxHook = buildPrePushHook('npx totem shield --deterministic');
-    expect(npxHook).toContain('npx totem shield --deterministic');
+    const npxHook = buildPrePushHook('npx totem lint');
+    expect(npxHook).toContain('npx totem lint');
 
-    const yarnHook = buildPrePushHook('yarn totem shield --deterministic');
-    expect(yarnHook).toContain('yarn totem shield --deterministic');
+    const yarnHook = buildPrePushHook('yarn totem lint');
+    expect(yarnHook).toContain('yarn totem lint');
   });
 });
 
@@ -200,12 +200,7 @@ describe('installGitHook', () => {
     const userHook = '#!/bin/sh\nrun_my_tests\n';
     fs.writeFileSync(hookPath, userHook);
 
-    installGitHook(
-      hooksDir,
-      'pre-push',
-      buildPrePushHook('npx totem shield --deterministic'),
-      TOTEM_PREPUSH_MARKER,
-    );
+    installGitHook(hooksDir, 'pre-push', buildPrePushHook('npx totem lint'), TOTEM_PREPUSH_MARKER);
 
     const written = fs.readFileSync(hookPath, 'utf-8');
     expect(written).toContain('run_my_tests');
@@ -213,7 +208,7 @@ describe('installGitHook', () => {
   });
 
   it('is idempotent — double install does not duplicate', () => {
-    const content = buildPrePushHook('npx totem shield --deterministic');
+    const content = buildPrePushHook('npx totem lint');
     installGitHook(hooksDir, 'pre-push', content, TOTEM_PREPUSH_MARKER);
     installGitHook(hooksDir, 'pre-push', content, TOTEM_PREPUSH_MARKER);
 
@@ -249,7 +244,7 @@ describe('installGitHook', () => {
     const result = installGitHook(
       hooksDir,
       'pre-push',
-      buildPrePushHook('npx totem shield --deterministic'),
+      buildPrePushHook('npx totem lint'),
       TOTEM_PREPUSH_MARKER,
     );
 
@@ -323,7 +318,7 @@ describe('installGitHook', () => {
     installGitHook(
       hooksDir,
       'pre-push',
-      buildPrePushHook('pnpm exec totem shield --deterministic'),
+      buildPrePushHook('pnpm exec totem lint'),
       TOTEM_PREPUSH_MARKER,
     );
 

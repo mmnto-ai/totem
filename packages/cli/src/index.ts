@@ -171,12 +171,12 @@ program
   .option('--model <name>', 'Override the default model for the orchestrator')
   .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
   .option('--staged', 'Review only staged changes (default: all uncommitted)')
-  .option('--deterministic', '[DEPRECATED] Use `totem lint` instead')
+  .option('--deterministic', 'REMOVED — use `totem lint` instead', false)
+  .option('--format <format>', 'REMOVED — use `totem lint --format` instead')
   .option(
     '--mode <mode>',
     'Review mode: standard (default, with Totem knowledge) or structural (context-blind paranoia)',
   )
-  .option('--format <format>', 'Output format: text (default), sarif, or json (deterministic only)')
   .option('--learn', 'Extract lessons from failed verdicts into .totem/lessons/')
   .option('--yes', 'Auto-accept extracted lessons (for CI; suspicious lessons are dropped)')
   .action(
@@ -187,17 +187,35 @@ program
       fresh?: boolean;
       staged?: boolean;
       deterministic?: boolean;
-      mode?: string;
       format?: string;
+      mode?: string;
       learn?: boolean;
       yes?: boolean;
     }) => {
       try {
+        // Redirect removed --deterministic flag to totem lint
+        if (opts.deterministic) {
+          console.error('[Shield] --deterministic has been removed. Redirecting to `totem lint`.');
+          const { lintCommand } = await import('./commands/lint.js');
+          await lintCommand({
+            format: (opts.format as 'text' | 'sarif' | 'json') ?? 'text',
+            staged: opts.staged,
+          });
+          return;
+        }
+        // --format is only valid with totem lint, not shield
+        if (opts.format) {
+          const { TotemConfigError } = await import('@mmnto/totem');
+          throw new TotemConfigError(
+            '--format is not supported by totem shield. Use `totem lint --format sarif` instead.',
+            'Shield outputs human-readable text. Use `totem lint` for SARIF/JSON output.',
+            'CONFIG_INVALID',
+          );
+        }
         const { shieldCommand } = await import('./commands/shield.js');
         await shieldCommand({
           ...opts,
           mode: opts.mode as 'standard' | 'structural' | undefined,
-          format: opts.format as 'text' | 'sarif' | 'json' | undefined,
         });
       } catch (err) {
         handleError(err);

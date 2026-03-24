@@ -102,7 +102,7 @@ function printHookManagerGuidance(manager: HookManager, syncCmd: string, shieldC
       console.error('    exit 1');
       console.error('  fi');
       console.error('');
-      console.error('  # .husky/pre-push — deterministic shield gate');
+      console.error('  # .husky/pre-push — totem lint gate');
       console.error('  if [ -f ".totem/compiled-rules.json" ]; then');
       console.error(`    ${shieldCmd}`);
       console.error('  fi');
@@ -295,7 +295,7 @@ export interface EnforcementHookResult {
 }
 
 /**
- * Install pre-commit (block main) and pre-push (deterministic shield) hooks.
+ * Install pre-commit (block main) and pre-push (totem lint) hooks.
  * Respects hook managers by printing guidance instead of writing raw hooks.
  * Returns actions taken for reporting in init summary.
  */
@@ -320,7 +320,7 @@ export async function installEnforcementHooks(
 
   // Ask user — default to yes for safety
   const answer = await rl.question(
-    '\nInstall git enforcement hooks (block main commits + deterministic shield)? (Y/n): ',
+    '\nInstall git enforcement hooks (block main commits + totem lint)? (Y/n): ',
   );
 
   if (answer.trim().toLowerCase() === 'n' || answer.trim().toLowerCase() === 'no') {

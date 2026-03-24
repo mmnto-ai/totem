@@ -125,9 +125,9 @@ describe('parseVerdict', () => {
   });
 });
 
-// ─── Deterministic shield (compiled rules) ──────────
+// ─── Compiled rules engine (shared with totem lint) ──
 
-describe('deterministic shield integration', () => {
+describe('compiled rules engine', () => {
   let tmpDir: string;
 
   beforeEach(() => {
