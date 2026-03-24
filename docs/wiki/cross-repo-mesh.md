@@ -17,6 +17,12 @@ linkedIndexes: ['../api-server', '../shared-design-system'],
 
 Now, `totem spec` and `totem shield` in your frontend repo can query lessons from your API repo. An architectural mistake in one codebase becomes a rule protecting all others. Strategy docs can inform code decisions, and shared design systems can inform component repositories.
 
+## Discovering the Mesh (`totem list`)
+
+As you initialize Totem across different repositories on your machine, Totem maintains a global registry (`~/.totem/registry.json`).
+
+You can run `totem list` from anywhere to discover all available Totem workspaces and their paths. This makes it easy to find indexes to link when setting up a new repository in your mesh.
+
 ## Context Isolation (Partitions)
 
 When multiple AI agents (or one agent across packages) share a knowledge index, you can restrict search results to specific boundaries. This prevents a frontend agent from hallucinating based on backend database schemas.

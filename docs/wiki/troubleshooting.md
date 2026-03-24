@@ -1,5 +1,15 @@
 # Troubleshooting
 
+## System Health (`totem doctor`)
+
+Before diving into specific troubleshooting steps, run the built-in diagnostic tool:
+
+```bash
+totem doctor
+```
+
+This command runs a battery of automated health checks to verify config bloat, index health, hook wiring, and secret hygiene. If you are experiencing strange behavior or failed checks, `totem doctor` will often pinpoint the root cause immediately. Use the `--ci` flag to exit with a non-zero status code if critical checks fail.
+
 ## Git Hooks
 
 ### Hooks not firing on Mac/Linux

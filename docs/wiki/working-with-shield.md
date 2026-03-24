@@ -39,11 +39,13 @@ When deterministic checks or stubborn AI rules fail, you can bypass them entirel
 ## 5. Overriding the Prompt (`.totem/prompts/shield.md`)
 
 If you need to apply a repository-wide behavioral change to Shield, you can override its system prompt.
-Create a `.totem/prompts/shield.md` file. Any text placed here will completely override the default instruction set for the `shield` command.
+Create a `.totem/prompts/shield.md` file. Any text placed here will **completely replace** the default instruction set for the `shield` command (it does not augment it). 
+
+*Critical:* If you override the prompt, you must still include the required JSON verdict format instructions, otherwise Shield will fail to parse the LLM's response.
 
 ## 6. Debugging Shield
 
 If you need to understand exactly what context Shield is receiving or how it is parsing your code, use the debugging flags:
 
-- `--raw`: Prints the raw, unformatted LLM response and prompt assembly, allowing you to see the exact context injected.
+- `--raw`: Prints the raw, assembled prompt that is sent to the LLM (including all injected hints and context), allowing you to verify exactly what the AI sees.
 - `--mode structural`: Forces Shield to focus purely on architectural and structural rules rather than stylistic nits.
