@@ -10,6 +10,7 @@ import {
   DOCS_SYSTEM_PROMPT,
   docsCommand,
   extractUpdatedDocument,
+  resolveIsUserFacing,
   stripIssueRefs,
   stripMarketingTerms,
 } from './docs.js';
@@ -547,5 +548,60 @@ describe('DOCS_SYSTEM_PROMPT marketing ban', () => {
     expect(DOCS_SYSTEM_PROMPT).toContain('robust');
     expect(DOCS_SYSTEM_PROMPT).toContain('seamless');
     expect(DOCS_SYSTEM_PROMPT).toContain('No Marketing Language');
+  });
+});
+
+// ─── resolveIsUserFacing ────────────────────────────────
+
+describe('resolveIsUserFacing', () => {
+  it('returns true for readme.md when userFacing is undefined', () => {
+    expect(
+      resolveIsUserFacing({ path: 'README.md', description: 'readme', trigger: 'post-release' }),
+    ).toBe(true);
+  });
+
+  it('returns true for readme.md regardless of case when userFacing is undefined', () => {
+    expect(
+      resolveIsUserFacing({ path: 'Readme.md', description: 'readme', trigger: 'post-release' }),
+    ).toBe(true);
+    expect(
+      resolveIsUserFacing({
+        path: 'docs/readme.md',
+        description: 'readme',
+        trigger: 'post-release',
+      }),
+    ).toBe(true);
+  });
+
+  it('returns false for non-readme files when userFacing is undefined', () => {
+    expect(
+      resolveIsUserFacing({
+        path: 'docs/roadmap.md',
+        description: 'roadmap',
+        trigger: 'post-release',
+      }),
+    ).toBe(false);
+  });
+
+  it('returns true for non-readme files when userFacing is true', () => {
+    expect(
+      resolveIsUserFacing({
+        path: 'docs/architecture.md',
+        description: 'arch',
+        trigger: 'post-release',
+        userFacing: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('returns false for readme files when userFacing is false', () => {
+    expect(
+      resolveIsUserFacing({
+        path: 'README.md',
+        description: 'readme',
+        trigger: 'post-release',
+        userFacing: false,
+      }),
+    ).toBe(false);
   });
 });

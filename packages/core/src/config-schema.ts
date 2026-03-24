@@ -137,6 +137,8 @@ export const DocTargetSchema = z.object({
   description: z.string(),
   /** When to remind/auto-run: 'post-release' or 'on-change' */
   trigger: z.enum(['post-release', 'on-change']).default('post-release'),
+  /** Whether this doc receives user-facing post-processing (issue ref stripping, manual content, live metrics). Defaults to true for readme.md files. */
+  userFacing: z.boolean().optional(),
 });
 
 export const ConfigTierSchema = z.enum(['lite', 'standard', 'full']);

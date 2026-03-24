@@ -268,6 +268,12 @@ export class LanceStore {
     return (await this.table.countRows()) === 0;
   }
 
+  /** Return the total number of rows in the store. */
+  async count(): Promise<number> {
+    if (!this.table) return 0;
+    return this.table.countRows();
+  }
+
   /** Return stats about the current index. */
   async stats(): Promise<{ totalChunks: number; byType: Record<string, number> }> {
     if (!this.table) return { totalChunks: 0, byType: {} };

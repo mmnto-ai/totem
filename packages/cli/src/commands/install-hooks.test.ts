@@ -9,8 +9,11 @@ import {
   buildPostCheckoutHookContent,
   buildPreCommitHook,
   buildPrePushHook,
+  buildResolveBlock,
   checkHooksInstalled,
   detectTotemPrefix,
+  generateHookHelpers,
+  getFallbackCommand,
   installGitHook,
   installHooksNonInteractive,
   TOTEM_PRECOMMIT_MARKER,
@@ -65,6 +68,97 @@ describe('detectTotemPrefix', () => {
   });
 });
 
+describe('getFallbackCommand', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-fallback-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns pnpm dlx when pnpm-lock.yaml exists', () => {
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+    expect(getFallbackCommand(tmpDir)).toBe('pnpm dlx @mmnto/cli');
+  });
+
+  it('returns yarn dlx when yarn.lock exists', () => {
+    fs.writeFileSync(path.join(tmpDir, 'yarn.lock'), '');
+    expect(getFallbackCommand(tmpDir)).toBe('yarn dlx @mmnto/cli');
+  });
+
+  // totem-ignore-next-line — #918: separate test cases for each lockfile format
+  it('returns bunx when bun.lockb exists (legacy)', () => {
+    fs.writeFileSync(path.join(tmpDir, 'bun.lockb'), ''); // totem-ignore — #918
+    expect(getFallbackCommand(tmpDir)).toBe('bunx @mmnto/cli');
+  });
+
+  // totem-ignore-next-line — #918: separate test cases for each lockfile format
+  it('returns bunx when bun.lock exists (Bun >= 1.2)', () => {
+    fs.writeFileSync(path.join(tmpDir, 'bun.lock'), ''); // totem-ignore — #918
+    expect(getFallbackCommand(tmpDir)).toBe('bunx @mmnto/cli');
+  });
+
+  it('returns npx when only package.json exists (no lockfile)', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{}');
+    expect(getFallbackCommand(tmpDir)).toBe('npx @mmnto/cli');
+  });
+
+  it('returns bare totem when no lockfile and no package.json exist', () => {
+    expect(getFallbackCommand(tmpDir)).toBe('totem');
+  });
+
+  it('prefers pnpm over bun when both lockfiles exist', () => {
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+    fs.writeFileSync(path.join(tmpDir, 'bun.lock'), ''); // totem-ignore — #918
+    expect(getFallbackCommand(tmpDir)).toBe('pnpm dlx @mmnto/cli');
+  });
+
+  it('prefers yarn over bun when both lockfiles exist', () => {
+    fs.writeFileSync(path.join(tmpDir, 'yarn.lock'), '');
+    fs.writeFileSync(path.join(tmpDir, 'bun.lockb'), ''); // totem-ignore — #918
+    expect(getFallbackCommand(tmpDir)).toBe('yarn dlx @mmnto/cli');
+  });
+});
+
+describe('buildResolveBlock', () => {
+  it('uses command -v (not which) to check for totem', () => {
+    const block = buildResolveBlock('pnpm dlx @mmnto/cli');
+    expect(block).toContain('command -v totem');
+    expect(block).not.toContain('which');
+  });
+
+  it('sets TOTEM_CMD to totem when found on PATH', () => {
+    const block = buildResolveBlock('pnpm dlx @mmnto/cli');
+    expect(block).toContain('TOTEM_CMD="totem"');
+  });
+
+  it('falls back to provided command when package.json exists', () => {
+    const block = buildResolveBlock('yarn dlx @mmnto/cli');
+    expect(block).toContain('TOTEM_CMD="yarn dlx @mmnto/cli"');
+  });
+
+  it('sets TOTEM_CMD="" when unavailable — never exits early or blocks chained hooks', () => {
+    const block = buildResolveBlock('pnpm dlx @mmnto/cli');
+    expect(block).toContain('TOTEM_CMD=""');
+    expect(block).not.toContain('exit 0');
+    expect(block).not.toContain('exit 1');
+  });
+
+  it('prints a warning to stderr when totem is not found', () => {
+    const block = buildResolveBlock('pnpm dlx @mmnto/cli');
+    expect(block).toContain('>&2');
+    expect(block).toContain('[Totem]');
+  });
+
+  it('checks for package.json before falling back', () => {
+    const block = buildResolveBlock('pnpm dlx @mmnto/cli');
+    expect(block).toContain('[ -f package.json ]');
+  });
+});
+
 describe('buildPreCommitHook', () => {
   it('contains the marker for idempotency', () => {
     const hook = buildPreCommitHook();
@@ -95,42 +189,48 @@ describe('buildPreCommitHook', () => {
 });
 
 describe('buildPrePushHook', () => {
-  const shieldCmd = 'pnpm exec totem lint';
+  const fallbackCmd = 'pnpm dlx @mmnto/cli';
 
   it('contains the marker for idempotency', () => {
-    const hook = buildPrePushHook(shieldCmd);
+    const hook = buildPrePushHook(fallbackCmd);
     expect(hook).toContain(TOTEM_PREPUSH_MARKER);
   });
 
   it('only runs shield when compiled-rules.json exists (if/fi, safe for appending)', () => {
-    const hook = buildPrePushHook(shieldCmd);
+    const hook = buildPrePushHook(fallbackCmd);
     expect(hook).toContain('if [ -f ".totem/compiled-rules.json" ]; then');
     expect(hook).toContain('fi');
     // Must use if/fi guard, NOT `&& exit 0` which would terminate appended hooks early
     expect(hook).not.toContain('&& exit 0');
   });
 
-  it('runs the shield command when rules exist', () => {
-    const hook = buildPrePushHook(shieldCmd);
-    expect(hook).toContain(shieldCmd);
+  it('includes the resolve block for dynamic command resolution', () => {
+    const hook = buildPrePushHook(fallbackCmd);
+    expect(hook).toContain('command -v totem');
+    expect(hook).toContain('TOTEM_CMD=');
+  });
+
+  it('runs lint via $TOTEM_CMD', () => {
+    const hook = buildPrePushHook(fallbackCmd);
+    expect(hook).toContain('$TOTEM_CMD lint');
   });
 
   it('mentions --no-verify override', () => {
-    const hook = buildPrePushHook(shieldCmd);
+    const hook = buildPrePushHook(fallbackCmd);
     expect(hook).toContain('git push --no-verify');
   });
 
   it('starts with a shebang', () => {
-    const hook = buildPrePushHook(shieldCmd);
+    const hook = buildPrePushHook(fallbackCmd);
     expect(hook).toMatch(/^#!\/bin\/sh\n/);
   });
 
-  it('uses the provided shield command (respects package manager)', () => {
-    const npxHook = buildPrePushHook('npx totem lint');
-    expect(npxHook).toContain('npx totem lint');
+  it('uses the provided fallback command in the resolve block', () => {
+    const npxHook = buildPrePushHook('npx @mmnto/cli');
+    expect(npxHook).toContain('TOTEM_CMD="npx @mmnto/cli"');
 
-    const yarnHook = buildPrePushHook('yarn totem lint');
-    expect(yarnHook).toContain('yarn totem lint');
+    const yarnHook = buildPrePushHook('yarn dlx @mmnto/cli');
+    expect(yarnHook).toContain('TOTEM_CMD="yarn dlx @mmnto/cli"');
   });
 });
 
@@ -200,7 +300,7 @@ describe('installGitHook', () => {
     const userHook = '#!/bin/sh\nrun_my_tests\n';
     fs.writeFileSync(hookPath, userHook);
 
-    installGitHook(hooksDir, 'pre-push', buildPrePushHook('npx totem lint'), TOTEM_PREPUSH_MARKER);
+    installGitHook(hooksDir, 'pre-push', buildPrePushHook('npx @mmnto/cli'), TOTEM_PREPUSH_MARKER);
 
     const written = fs.readFileSync(hookPath, 'utf-8');
     expect(written).toContain('run_my_tests');
@@ -208,7 +308,7 @@ describe('installGitHook', () => {
   });
 
   it('is idempotent — double install does not duplicate', () => {
-    const content = buildPrePushHook('npx totem lint');
+    const content = buildPrePushHook('npx @mmnto/cli');
     installGitHook(hooksDir, 'pre-push', content, TOTEM_PREPUSH_MARKER);
     installGitHook(hooksDir, 'pre-push', content, TOTEM_PREPUSH_MARKER);
 
@@ -244,7 +344,7 @@ describe('installGitHook', () => {
     const result = installGitHook(
       hooksDir,
       'pre-push',
-      buildPrePushHook('npx totem lint'),
+      buildPrePushHook('npx @mmnto/cli'),
       TOTEM_PREPUSH_MARKER,
     );
 
@@ -318,7 +418,7 @@ describe('installGitHook', () => {
     installGitHook(
       hooksDir,
       'pre-push',
-      buildPrePushHook('pnpm exec totem lint'),
+      buildPrePushHook('pnpm dlx @mmnto/cli'),
       TOTEM_PREPUSH_MARKER,
     );
 
@@ -332,6 +432,51 @@ describe('installGitHook', () => {
     expect(preCommit).not.toContain(TOTEM_PREPUSH_MARKER);
     expect(prePush).toContain(TOTEM_PREPUSH_MARKER);
     expect(prePush).not.toContain(TOTEM_PRECOMMIT_MARKER);
+  });
+});
+
+// ─── generateHookHelpers ────────────────────────────
+
+describe('generateHookHelpers', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-helpers-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('creates .totem/hooks/ directory and writes all 4 .sh files', () => {
+    generateHookHelpers(tmpDir, 'pnpm dlx @mmnto/cli');
+
+    const hooksDir = path.join(tmpDir, '.totem', 'hooks');
+    expect(fs.existsSync(path.join(hooksDir, 'post-merge.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'post-checkout.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'pre-commit.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'pre-push.sh'))).toBe(true);
+  });
+
+  it('generated scripts contain the resolve block', () => {
+    generateHookHelpers(tmpDir, 'pnpm dlx @mmnto/cli');
+
+    const hooksDir = path.join(tmpDir, '.totem', 'hooks');
+    const postMerge = fs.readFileSync(path.join(hooksDir, 'post-merge.sh'), 'utf-8');
+    expect(postMerge).toContain('command -v totem');
+    expect(postMerge).toContain('$TOTEM_CMD');
+
+    const prePush = fs.readFileSync(path.join(hooksDir, 'pre-push.sh'), 'utf-8');
+    expect(prePush).toContain('command -v totem');
+    expect(prePush).toContain('$TOTEM_CMD lint');
+  });
+
+  it('is idempotent — calling twice does not error', () => {
+    generateHookHelpers(tmpDir, 'pnpm dlx @mmnto/cli');
+    generateHookHelpers(tmpDir, 'pnpm dlx @mmnto/cli');
+
+    const hooksDir = path.join(tmpDir, '.totem', 'hooks');
+    expect(fs.existsSync(path.join(hooksDir, 'post-merge.sh'))).toBe(true);
   });
 });
 
@@ -387,12 +532,17 @@ describe('installHooksNonInteractive', () => {
     expect(result!.postCheckout).toBe('exists');
   });
 
-  it('returns null when hook manager is detected', () => {
+  it('returns null and generates helper scripts when hook manager is detected', () => {
     execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     fs.mkdirSync(path.join(tmpDir, '.husky'), { recursive: true });
 
     const result = installHooksNonInteractive(tmpDir);
     expect(result).toBeNull();
+
+    // Verify helper scripts were generated
+    const hooksDir = path.join(tmpDir, '.totem', 'hooks');
+    expect(fs.existsSync(path.join(hooksDir, 'post-merge.sh'))).toBe(true);
+    expect(fs.existsSync(path.join(hooksDir, 'pre-push.sh'))).toBe(true);
   });
 
   it('installs hooks at git root when run from a subdirectory', () => {
@@ -567,7 +717,7 @@ describe('post-checkout hook content', () => {
   });
 
   it('handles null SHA for initial checkout', () => {
-    const hook = buildPostCheckoutHookContent('pnpm exec totem sync --incremental --quiet');
+    const hook = buildPostCheckoutHookContent('pnpm dlx @mmnto/cli');
 
     expect(hook).toContain('0000000000000000000000000000000000000000');
     expect(hook).toContain('.totem');

@@ -274,6 +274,41 @@ describe('DocTargetSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('parses successfully with no userFacing (backward compat)', () => {
+    const result = DocTargetSchema.safeParse({
+      path: 'README.md',
+      description: 'Public README',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.userFacing).toBeUndefined();
+    }
+  });
+
+  it('parses successfully with userFacing: true', () => {
+    const result = DocTargetSchema.safeParse({
+      path: 'docs/architecture.md',
+      description: 'Architecture docs',
+      userFacing: true,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.userFacing).toBe(true);
+    }
+  });
+
+  it('parses successfully with userFacing: false', () => {
+    const result = DocTargetSchema.safeParse({
+      path: 'README.md',
+      description: 'Internal README',
+      userFacing: false,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.userFacing).toBe(false);
+    }
+  });
 });
 
 describe('getConfigTier', () => {

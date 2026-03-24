@@ -19,6 +19,7 @@ import {
   writeOutput,
 } from '../utils.js';
 import { appendLessons, flagSuspiciousLessons, parseLessons, selectLessons } from './extract.js';
+import { extractShieldHints } from './shield-hints.js';
 import {
   MAX_CODE_RESULTS,
   MAX_DIFF_CHARS,
@@ -78,6 +79,7 @@ export function assemblePrompt(
   changedFiles: string[],
   context: RetrievedContext,
   systemPrompt: string,
+  smartHints?: string[],
 ): string {
   const sections: string[] = [systemPrompt];
 
@@ -115,6 +117,17 @@ export function assemblePrompt(
   const lessonSection = formatLessonSection(context.lessons);
   if (lessonSection) sections.push(lessonSection);
 
+  // Smart review hints — auto-detected context to reduce false positives
+  if (smartHints && smartHints.length > 0) {
+    sections.push('\n=== SMART REVIEW HINTS ===');
+    sections.push(
+      'The following context was auto-detected from the diff. Apply these when reviewing:',
+    );
+    for (const hint of smartHints) {
+      sections.push(`- ${hint}`);
+    }
+  }
+
   return sections.join('\n');
 }
 
@@ -124,6 +137,7 @@ export function assembleStructuralPrompt(
   diff: string,
   changedFiles: string[],
   systemPrompt: string,
+  smartHints?: string[],
 ): string {
   const sections: string[] = [systemPrompt];
 
@@ -141,6 +155,17 @@ export function assembleStructuralPrompt(
     );
   } else {
     sections.push(wrapXml('git_diff', diff));
+  }
+
+  // Smart review hints — auto-detected context to reduce false positives
+  if (smartHints && smartHints.length > 0) {
+    sections.push('\n=== SMART REVIEW HINTS ===');
+    sections.push(
+      'The following context was auto-detected from the diff. Apply these when reviewing:',
+    );
+    for (const hint of smartHints) {
+      sections.push(`- ${hint}`);
+    }
   }
 
   return sections.join('\n');
@@ -347,6 +372,12 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
 
   const { diff, changedFiles } = diffResult;
 
+  // Auto-detect smart review hints from the diff
+  const smartHints = extractShieldHints(diff, changedFiles, cwd);
+  if (smartHints.length > 0) {
+    log.dim(TAG, `${smartHints.length} smart hint(s) detected`);
+  }
+
   // Structural mode — context-blind LLM review, no embeddings, no Totem knowledge
   if (options.mode === 'structural') {
     log.info(TAG, 'Running structural review (context-blind, no Totem knowledge)...');
@@ -357,7 +388,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       cwd,
       config.totemDir,
     );
-    const prompt = assembleStructuralPrompt(diff, changedFiles, systemPrompt);
+    const prompt = assembleStructuralPrompt(diff, changedFiles, systemPrompt, smartHints);
     log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
     const content = await runOrchestrator({
@@ -430,7 +461,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const systemPrompt = getSystemPrompt('shield', SYSTEM_PROMPT, cwd, config.totemDir);
 
   // Assemble prompt
-  const prompt = assemblePrompt(diff, changedFiles, context, systemPrompt);
+  const prompt = assemblePrompt(diff, changedFiles, context, systemPrompt, smartHints);
   log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = await runOrchestrator({

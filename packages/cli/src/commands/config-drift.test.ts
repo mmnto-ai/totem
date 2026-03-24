@@ -50,9 +50,10 @@ describe('dev hooks match consumer templates', () => {
   });
 
   it('dev pre-push runs totem lint like consumer template', () => {
-    const consumerHook = buildPrePushHook('pnpm exec totem lint');
+    const consumerHook = buildPrePushHook('pnpm dlx @mmnto/cli');
     expect(devPrePush).toContain('totem lint');
-    expect(consumerHook).toContain('totem lint');
+    // Consumer hook uses dynamic resolution: $TOTEM_CMD lint (unquoted for word splitting)
+    expect(consumerHook).toContain('$TOTEM_CMD lint');
   });
 
   it('dev post-merge runs totem sync like consumer template', () => {
