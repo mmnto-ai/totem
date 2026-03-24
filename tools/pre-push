@@ -28,15 +28,20 @@ fi
 
 echo "[totem] Running tests..."
 TEST_OUTPUT=$(mktemp)
-pnpm run test > "$TEST_OUTPUT" 2>&1
+if [ "${TOTEM_DEBUG:-0}" = "1" ]; then
+  pnpm run test > "$TEST_OUTPUT" 2>&1
+else
+  pnpm run test -- --reporter=dot > "$TEST_OUTPUT" 2>&1
+fi
 TEST_EXIT=$?
 if [ $TEST_EXIT -ne 0 ]; then
-  echo "[totem] ❌ Tests failed. See output below:"
-  cat "$TEST_OUTPUT"
+  echo "[totem] ❌ Tests failed. Re-running with full output:"
+  pnpm run test 2>&1 | tail -40
   exit 1
 fi
-# Show summary only on success
-grep -E "Tests|Test Files|passed|failed" "$TEST_OUTPUT" | tail -6
+# Count passed tests from vitest summary lines (match "Tests" but not "Test Files")
+PASSED=$(sed 's/\x1b\[[0-9;]*m//g' "$TEST_OUTPUT" | grep 'Tests ' | grep -v 'Test Files' | grep -oE '[0-9]+ passed' | awk '{s+=$1} END {print s}')
+echo "[totem] ✓ ${PASSED:-all} tests passed"
 
 echo "[totem] ✅ All pre-push checks passed."
 
