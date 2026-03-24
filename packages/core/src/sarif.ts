@@ -32,6 +32,7 @@ export interface SarifReportingDescriptor {
   id: string;
   shortDescription: { text: string };
   fullDescription?: { text: string };
+  helpUri?: string;
   properties?: Record<string, unknown>;
 }
 
@@ -98,7 +99,10 @@ export function buildSarifLog(
     return {
       id: ruleId(rule),
       shortDescription: { text: rule.message },
-      fullDescription: { text: `Lesson: ${rule.lessonHeading}` },
+      fullDescription: {
+        text: `Lesson: "${rule.lessonHeading}"\nPattern: /${rule.pattern}/\nEngine: ${rule.engine ?? 'regex'}`,
+      },
+      helpUri: `https://github.com/mmnto-ai/totem/wiki/rules#${rule.lessonHash}`,
       properties: {
         engine: rule.engine,
         pattern: rule.pattern,
@@ -120,7 +124,9 @@ export function buildSarifLog(
       ruleId: ruleId(v.rule),
       ruleIndex: idx,
       level: v.rule.severity ?? 'error',
-      message: { text: `${v.rule.message}\nMatched: \`${v.line.trim()}\`` },
+      message: {
+        text: `${v.rule.message}\n\nMatched: \`${v.line.trim()}\`\nLesson: "${v.rule.lessonHeading}"\nRule: \`totem/${v.rule.lessonHash}\``,
+      },
       locations: [
         {
           physicalLocation: {
@@ -146,7 +152,7 @@ export function buildSarifLog(
       {
         tool: {
           driver: {
-            name: 'totem-shield',
+            name: 'totem-lint',
             version: options.version,
             informationUri: 'https://github.com/mmnto-ai/totem',
             rules: sarifRules,

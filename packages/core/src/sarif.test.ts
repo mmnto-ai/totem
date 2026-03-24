@@ -55,7 +55,7 @@ describe('buildSarifLog', () => {
     expect(sarif.runs).toHaveLength(1);
 
     const run = sarif.runs[0]!;
-    expect(run.tool.driver.name).toBe('totem-shield');
+    expect(run.tool.driver.name).toBe('totem-lint');
     expect(run.tool.driver.version).toBe('0.31.0');
     expect(run.tool.driver.properties.llm_calls).toBe(0);
     expect(run.tool.driver.rules).toHaveLength(2);
