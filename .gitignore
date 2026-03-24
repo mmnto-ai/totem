@@ -40,7 +40,6 @@ handoff.md
 session-handoff.md
 .totem/temp/
 .totem/cache/
-**/.totem/cache/
 .totem/*.log
 .totem/*.jsonl
 .totem/.search-called
