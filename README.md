@@ -132,6 +132,7 @@ The AI helps you **write** rules. The rules enforce themselves.
 | `lint-lessons`    | Validate lesson metadata (patterns, scopes, severity)                            |
 | `drift`           | Check lessons for stale file references (CI gate)                                |
 | `hooks`           | Install git hooks (pre-commit, pre-push, post-merge) non-interactively           |
+| `doctor`          | Run workspace health diagnostics                                                 |
 
 <!-- /docs -->
 

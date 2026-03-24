@@ -24,7 +24,7 @@ Installs or updates background git hooks (<!-- docs HOOK_LIST -->`pre-commit`, `
 - **Usage:** Typically run automatically during `pnpm prepare`.
 - **Troubleshooting (Mac/Linux):** If you clone a repository initialized on Windows and the hooks fail to fire, Git may not recognize them as executable. Fix this by running: `chmod +x .git/hooks/pre-commit .git/hooks/pre-push .git/hooks/post-merge .git/hooks/post-checkout`
 
-### `totem doctor` _(Upcoming)_
+### `totem doctor`
 
 Runs a battery of automated health checks to verify config bloat, index health, hook wiring, and secret hygiene.
 
@@ -70,12 +70,15 @@ Interactively documents a context, symptom, and fix. Saves to `.totem/lessons.md
 
 Looks up the original markdown lesson behind a deterministic rule violation. Supports partial hash prefixes. This runs locally in milliseconds with zero LLM overhead, acting as an asynchronous mentor when a junior developer encounters an architectural block.
 
+### `totem lint`
+
+Runs compiled AST/regex rules against a diff. This command requires zero LLM overhead, runs locally in milliseconds, and requires no API keys. It is used primarily in pre-push hooks and CI pipelines.
+
 ### `totem shield`
 
-The core of the Codebase Immune System. Reads your uncommitted diff and checks it against compiled rules and vector DB traps.
+The AI-powered code review and codebase immune system. Reads your uncommitted diff and checks it against compiled rules and vector DB traps. The review temperature is pinned to `0` for consistent analysis.
 
 - **Flags:**
-  - `--deterministic`: Runs lightning-fast zero-LLM checks using `compiled-rules.json` (sub-3 seconds).
   - `--format sarif`: Exports violations in SARIF 2.1.0 format for GitHub Advanced Security integration.
   - `--learn`: (Optional) Prompts you to extract a new lesson if a violation is found.
 
@@ -114,6 +117,17 @@ Captures uncommitted changes and lessons learned today for your next session.
 - **Flags:**
   - `--lite`: An ANSI-sanitized, zero-LLM snapshot (fast).
 
+### `totem list`
+
+Discovers and lists all Totem registries within your cross-repo mesh, allowing for multi-totem context sharing.
+
 ### `totem wrap`
 
 A post-merge workflow chain. Runs `extract`, syncs the database, generates a roadmap, and updates docs in one command.
+
+### `totem docs`
+
+Updates your documentation directly based on the codebase.
+
+- **Flags:**
+  - `--target userFacing`: Updates docs with an objective, plain-text voice suitable for end-users, rather than internal developer jargon.

@@ -1,0 +1,18 @@
+## Lesson — Maintainer Release Process
+
+**Tags:** maintainer, release, changesets
+
+### Maintainer Release Process
+When completing a feature or bug fix, create a changeset manually in the `.changeset/` directory as a Markdown file (e.g., `patch`, `minor`, `major`) rather than using interactive CLIs, as they often fail with piped stdin. 
+
+When preparing a release, NEVER use bare `pnpm version`. Always run the repository script `pnpm run version`, which consumes the changesets and updates `CHANGELOG.md` files.
+
+The "Version Packages" PR flow uses OIDC trusted publishing. GitHub Actions requests a short-lived token from npm. A `RELEASE_TOKEN` PAT is used to create the PR since our org restricts the default `GITHUB_TOKEN`.
+
+Post-Release Checklist:
+1. Extract lessons: `totem extract <pr-numbers> --yes`
+2. Sync wiki: Copy `docs/wiki/*.md` to the GitHub Wiki repo and push.
+3. Verify roadmap matches the Wiki.
+4. Update memory by bumping the version number.
+
+**Source:** mcp (added at 2026-03-24T19:07:57.064Z)
