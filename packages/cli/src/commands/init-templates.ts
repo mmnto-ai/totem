@@ -197,11 +197,11 @@ async function buildConfigObject(
   const { DEFAULT_IGNORE_PATTERNS } = await import('@mmnto/totem');
 
   const config: Record<string, unknown> = {
-    targets: targets.map((t) => ({
-      glob: t.glob,
-      type: t.type,
-      strategy: t.strategy,
-    })),
+    targets: targets.map((t) => {
+      const entry: Record<string, string> = { glob: t.glob, type: t.type };
+      if (t.strategy) entry['strategy'] = t.strategy;
+      return entry;
+    }),
     ignorePatterns: [...DEFAULT_IGNORE_PATTERNS],
   };
 
