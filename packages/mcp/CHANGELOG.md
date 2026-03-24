@@ -2,7 +2,7 @@
 
 ## 1.5.0
 
-### Patch Changes
+### Minor Changes
 
 - Updated dependencies
   - @mmnto/totem@1.5.0
