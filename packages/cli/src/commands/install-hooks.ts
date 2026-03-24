@@ -14,6 +14,22 @@ export const TOTEM_PREPUSH_MARKER = '[totem] pre-push hook';
 
 type HookManager = 'husky' | 'lefthook' | 'simple-git-hooks';
 
+/**
+ * Determine the package-manager fallback command for invoking totem.
+ * Used inside the runtime resolve block when `totem` is not on PATH.
+ *
+ * Priority: pnpm > yarn > bun > npx (with package.json) > bare totem.
+ */
+export function getFallbackCommand(cwd: string): string {
+  if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) return 'pnpm dlx @mmnto/cli';
+  if (fs.existsSync(path.join(cwd, 'yarn.lock'))) return 'yarn dlx @mmnto/cli';
+  if (fs.existsSync(path.join(cwd, 'bun.lockb')) || fs.existsSync(path.join(cwd, 'bun.lock')))
+    return 'bunx @mmnto/cli';
+  if (fs.existsSync(path.join(cwd, 'package.json'))) return 'npx @mmnto/cli';
+  return 'totem';
+}
+
+/** @deprecated Use {@link getFallbackCommand} instead. Kept for backwards compatibility. */
 export function detectTotemPrefix(cwd: string): string {
   if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) return 'pnpm exec totem';
   if (fs.existsSync(path.join(cwd, 'yarn.lock'))) return 'yarn totem';
@@ -22,23 +38,39 @@ export function detectTotemPrefix(cwd: string): string {
   return 'npx totem';
 }
 
-function detectSyncCommand(cwd: string): string {
-  return `${detectTotemPrefix(cwd)} sync --incremental --quiet`;
+/**
+ * Build a POSIX shell block that resolves the totem command at runtime.
+ * Checks PATH first, falls back to package manager dlx if package.json is present.
+ * Sets TOTEM_CMD="" when unavailable — callers must guard with `[ -n "$TOTEM_CMD" ]`.
+ * Never exits early to avoid killing chained user hooks.
+ */
+export function buildResolveBlock(fallbackCmd: string): string {
+  return `# Resolve totem command
+if command -v totem >/dev/null 2>&1; then
+  TOTEM_CMD="totem"
+elif [ -f package.json ]; then
+  TOTEM_CMD="${fallbackCmd}"
+else
+  echo "[Totem] totem not found in PATH and no package.json present." >&2
+  TOTEM_CMD=""
+fi`;
 }
 
-function buildHookContent(syncCmd: string): string {
+function buildHookContent(fallbackCmd: string): string {
   return `#!/bin/sh
 # ${TOTEM_HOOK_MARKER} — background re-index after pull/merge.
 
+${buildResolveBlock(fallbackCmd)}
+
 # Only sync when lessons changed (suppress errors if ORIG_HEAD is missing)
-if git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '\\.totem/lessons/'; then
-  (${syncCmd} > .git/totem-sync.log 2>&1) &
+if [ -n "$TOTEM_CMD" ] && git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null | grep -q '\\.totem/lessons/'; then
+  ($TOTEM_CMD sync --incremental --quiet > .git/totem-sync.log 2>&1) &
 fi
 # ${TOTEM_HOOK_END}
 `;
 }
 
-export function buildPostCheckoutHookContent(syncCmd: string): string {
+export function buildPostCheckoutHookContent(fallbackCmd: string): string {
   return `#!/bin/sh
 # ${TOTEM_CHECKOUT_MARKER} — background re-index on branch switch.
 
@@ -48,20 +80,42 @@ if [ "$3" = "0" ]; then
   exit 0
 fi
 
+${buildResolveBlock(fallbackCmd)}
+
 # Handle initial checkout (null SHA) — sync if .totem/ exists
 if [ "$1" = "0000000000000000000000000000000000000000" ]; then
-  if [ -d ".totem" ]; then
-    (${syncCmd} > .git/totem-sync.log 2>&1) &
+  if [ -n "$TOTEM_CMD" ] && [ -d ".totem" ]; then
+    ($TOTEM_CMD sync --incremental --quiet > .git/totem-sync.log 2>&1) &
   fi
   exit 0
 fi
 
 # Only sync when .totem/ files differ between branches
-if git diff --name-only "$1" "$2" 2>/dev/null | grep -q '\\.totem/'; then
-  (${syncCmd} > .git/totem-sync.log 2>&1) &
+if [ -n "$TOTEM_CMD" ] && git diff --name-only "$1" "$2" 2>/dev/null | grep -q '\\.totem/'; then
+  ($TOTEM_CMD sync --incremental --quiet > .git/totem-sync.log 2>&1) &
 fi
 # ${TOTEM_CHECKOUT_END}
 `;
+}
+
+/**
+ * Generate helper shell scripts under `.totem/hooks/` for hook manager integration.
+ * These scripts contain the full guard logic (diff checks, null-SHA guards) that
+ * bare inline commands would skip.
+ */
+export function generateHookHelpers(gitRoot: string, fallbackCmd: string): void {
+  const hooksDir = path.join(gitRoot, '.totem', 'hooks');
+  fs.mkdirSync(hooksDir, { recursive: true });
+
+  const postMerge = buildHookContent(fallbackCmd);
+  const postCheckout = buildPostCheckoutHookContent(fallbackCmd);
+  const preCommit = buildPreCommitHook();
+  const prePush = buildPrePushHook(fallbackCmd);
+
+  fs.writeFileSync(path.join(hooksDir, 'post-merge.sh'), postMerge, { mode: 0o755 });
+  fs.writeFileSync(path.join(hooksDir, 'post-checkout.sh'), postCheckout, { mode: 0o755 });
+  fs.writeFileSync(path.join(hooksDir, 'pre-commit.sh'), preCommit, { mode: 0o755 });
+  fs.writeFileSync(path.join(hooksDir, 'pre-push.sh'), prePush, { mode: 0o755 });
 }
 
 function detectHookManager(cwd: string): HookManager | null {
@@ -88,26 +142,6 @@ function detectHookManager(cwd: string): HookManager | null {
   }
 
   return null;
-}
-
-/**
- * Generate helper shell scripts under `.totem/hooks/` for hook manager integration.
- * These scripts contain the full guard logic (diff checks, null-SHA guards) that
- * bare inline commands would skip.
- */
-export function generateHookHelpers(gitRoot: string, syncCmd: string, shieldCmd: string): void {
-  const hooksDir = path.join(gitRoot, '.totem', 'hooks');
-  fs.mkdirSync(hooksDir, { recursive: true });
-
-  const postMerge = buildHookContent(syncCmd);
-  const postCheckout = buildPostCheckoutHookContent(syncCmd);
-  const preCommit = buildPreCommitHook();
-  const prePush = buildPrePushHook(shieldCmd);
-
-  fs.writeFileSync(path.join(hooksDir, 'post-merge.sh'), postMerge, { mode: 0o755 });
-  fs.writeFileSync(path.join(hooksDir, 'post-checkout.sh'), postCheckout, { mode: 0o755 });
-  fs.writeFileSync(path.join(hooksDir, 'pre-commit.sh'), preCommit, { mode: 0o755 });
-  fs.writeFileSync(path.join(hooksDir, 'pre-push.sh'), prePush, { mode: 0o755 });
 }
 
 function printHookManagerGuidance(manager: HookManager): void {
@@ -166,12 +200,11 @@ export async function installPostMergeHook(cwd: string, rl: readline.Interface):
     return;
   }
 
-  const syncCmd = detectSyncCommand(gitRoot);
-  const shieldCmd = `${detectTotemPrefix(gitRoot)} lint`;
+  const fallbackCmd = getFallbackCommand(gitRoot);
   const manager = detectHookManager(gitRoot);
 
   if (manager) {
-    generateHookHelpers(gitRoot, syncCmd, shieldCmd);
+    generateHookHelpers(gitRoot, fallbackCmd);
     printHookManagerGuidance(manager);
     return;
   }
@@ -197,7 +230,7 @@ export async function installPostMergeHook(cwd: string, rl: readline.Interface):
 
     // Append to existing hook — reuse buildHookContent, strip shebang
     const separator = existing.endsWith('\n') ? '' : '\n';
-    const appendBlock = buildHookContent(syncCmd)
+    const appendBlock = buildHookContent(fallbackCmd)
       .replace(/^#!\/bin\/sh\n/, '')
       .trimStart();
     fs.appendFileSync(hookPath, separator + '\n' + appendBlock);
@@ -207,7 +240,7 @@ export async function installPostMergeHook(cwd: string, rl: readline.Interface):
 
   // Create new hook
   fs.mkdirSync(hooksDir, { recursive: true });
-  fs.writeFileSync(hookPath, buildHookContent(syncCmd));
+  fs.writeFileSync(hookPath, buildHookContent(fallbackCmd));
 
   // Make executable (no-op on Windows, git bash handles it)
   try {
@@ -236,7 +269,7 @@ fi
 `;
 }
 
-export function buildPrePushHook(shieldCmd: string): string {
+export function buildPrePushHook(fallbackCmd: string): string {
   return `#!/bin/sh
 # ${TOTEM_PREPUSH_MARKER} — run compiled rules before push.
 # Override with: git push --no-verify
@@ -244,7 +277,11 @@ export function buildPrePushHook(shieldCmd: string): string {
 # Only run shield when compiled rules exist (zero Node startup penalty otherwise).
 # Uses if/fi block so this is safe to append to existing hooks without early termination.
 if [ -f ".totem/compiled-rules.json" ]; then
-  ${shieldCmd}
+  ${buildResolveBlock(fallbackCmd)}
+
+  if [ -n "$TOTEM_CMD" ]; then
+    $TOTEM_CMD lint
+  fi
 fi
 `;
 }
@@ -337,7 +374,7 @@ export async function installEnforcementHooks(
   }
 
   const hooksDir = path.join(gitRoot, '.git', 'hooks');
-  const shieldCmd = `${detectTotemPrefix(gitRoot)} lint`;
+  const fallbackCmd = getFallbackCommand(gitRoot);
 
   const preCommit = installGitHook(
     hooksDir,
@@ -349,7 +386,7 @@ export async function installEnforcementHooks(
   const prePush = installGitHook(
     hooksDir,
     'pre-push',
-    buildPrePushHook(shieldCmd),
+    buildPrePushHook(fallbackCmd),
     TOTEM_PREPUSH_MARKER,
   );
 
@@ -361,7 +398,7 @@ export async function installEnforcementHooks(
   }
   if (prePush === 'skipped-non-shell') {
     console.error(
-      '[Totem] Warning: pre-push hook uses a non-shell interpreter. Manually add: ' + shieldCmd,
+      '[Totem] Warning: pre-push hook uses a non-shell interpreter. Manually add: totem lint',
     );
   }
 
@@ -384,11 +421,11 @@ export async function installHooksCommand(): Promise<void> {
       const hasPostMerge =
         fs.existsSync(postMerge) && fs.readFileSync(postMerge, 'utf-8').includes(TOTEM_HOOK_MARKER);
       if (hasPostMerge) {
-        const syncCmd = detectSyncCommand(gitRoot);
+        const fallbackCmd = getFallbackCommand(gitRoot);
         installGitHook(
           hooksDir,
           'post-checkout',
-          buildPostCheckoutHookContent(syncCmd),
+          buildPostCheckoutHookContent(fallbackCmd),
           TOTEM_CHECKOUT_MARKER,
         );
       }
@@ -418,14 +455,12 @@ export function installHooksNonInteractive(cwd: string): HooksCommandResult | nu
     return null;
   }
 
-  const prefix = detectTotemPrefix(gitRoot);
-  const shieldCmd = `${prefix} lint`;
-  const syncCmd = detectSyncCommand(gitRoot);
+  const fallbackCmd = getFallbackCommand(gitRoot);
 
   // Hook managers handle their own installation — generate helper scripts + print guidance
   const manager = detectHookManager(gitRoot);
   if (manager) {
-    generateHookHelpers(gitRoot, syncCmd, shieldCmd);
+    generateHookHelpers(gitRoot, fallbackCmd);
     printHookManagerGuidance(manager);
     return null;
   }
@@ -442,14 +477,14 @@ export function installHooksNonInteractive(cwd: string): HooksCommandResult | nu
   const prePush = installGitHook(
     hooksDir,
     'pre-push',
-    buildPrePushHook(shieldCmd),
+    buildPrePushHook(fallbackCmd),
     TOTEM_PREPUSH_MARKER,
   );
 
-  const postMergeContent = buildHookContent(syncCmd);
+  const postMergeContent = buildHookContent(fallbackCmd);
   const postMerge = installGitHook(hooksDir, 'post-merge', postMergeContent, TOTEM_HOOK_MARKER);
 
-  const postCheckoutContent = buildPostCheckoutHookContent(syncCmd);
+  const postCheckoutContent = buildPostCheckoutHookContent(fallbackCmd);
   const postCheckout = installGitHook(
     hooksDir,
     'post-checkout',
