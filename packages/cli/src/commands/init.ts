@@ -8,7 +8,7 @@ import { z } from 'zod';
 import type { IngestTarget } from '@mmnto/totem';
 
 import {
-  UNIVERSAL_BASELINE_MARKDOWN,
+  UNIVERSAL_BASELINE_LESSONS,
   UNIVERSAL_BASELINE_MARKER,
 } from '../assets/universal-baseline.js';
 import { bold, brand, dim, log, printBanner, success } from '../ui.js';
@@ -19,6 +19,7 @@ import {
   detectAiTools,
   detectEmbeddingTier,
   detectProject,
+  type Ecosystem,
   type EmbeddingTier,
   type HookInstallerResult,
 } from './init-detect.js';
@@ -298,6 +299,7 @@ export function scaffoldMcpConfig(
 export async function installBaselineLessons(
   baselinePath: string,
   rl: readline.Interface,
+  ecosystems?: Ecosystem[],
 ): Promise<'installed' | 'exists' | 'skipped'> {
   try {
     if (fs.existsSync(baselinePath)) {
@@ -312,7 +314,7 @@ export async function installBaselineLessons(
     // In non-TTY mode (CI, piped input), default to installing
     let declined = false;
     if (process.stdin.isTTY) {
-      const answer = await rl.question('Install Universal AI Developer Baseline lessons? (Y/n): ');
+      const answer = await rl.question('Install baseline lessons? (Y/n): ');
       declined = answer.trim().toLowerCase() === 'n' || answer.trim().toLowerCase() === 'no';
     }
 
@@ -322,7 +324,37 @@ export async function installBaselineLessons(
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(baselinePath, UNIVERSAL_BASELINE_MARKDOWN, 'utf-8');
+
+    // Build combined baseline: universal (core + JS) + detected ecosystem packs
+    const { PYTHON_BASELINE, RUST_BASELINE, GO_BASELINE } =
+      await import('../assets/baseline-packs.js');
+    const allLessons = [...UNIVERSAL_BASELINE_LESSONS];
+    const packs: string[] = [];
+    if (ecosystems?.includes('python')) {
+      allLessons.push(...PYTHON_BASELINE);
+      packs.push('Python');
+    }
+    if (ecosystems?.includes('rust')) {
+      allLessons.push(...RUST_BASELINE);
+      packs.push('Rust');
+    }
+    if (ecosystems?.includes('go')) {
+      allLessons.push(...GO_BASELINE);
+      packs.push('Go');
+    }
+    if (packs.length > 0) {
+      log.info('Totem', `Adding ${packs.join(', ')} baseline lessons`);
+    }
+
+    const markdown = [
+      UNIVERSAL_BASELINE_MARKER,
+      '',
+      ...allLessons.map(
+        (l) => `## Lesson — ${l.heading}\n\n**Tags:** ${l.tags.join(', ')}\n\n${l.body}`,
+      ),
+    ].join('\n\n');
+
+    fs.writeFileSync(baselinePath, markdown, 'utf-8');
     return 'installed';
   } catch (err) {
     log.warn(
@@ -575,13 +607,15 @@ export async function initCommand(options?: { bare?: boolean }): Promise<void> {
       summary.push({ file: '.totem/lessons/', action: 'Created lessons directory' });
     }
 
-    // --- Universal Lessons baseline ---
+    // --- Baseline lessons (core + detected ecosystem packs) ---
     const baselinePath = path.join(lessonsDir, 'baseline.md');
-    const baselineResult = await installBaselineLessons(baselinePath, rl);
+    const detectedEcosystems = detectProject(cwd).ecosystems;
+    const baselineResult = await installBaselineLessons(baselinePath, rl, detectedEcosystems);
     if (baselineResult === 'installed') {
+      const packLabel = detectedEcosystems.length > 0 ? ` + ${detectedEcosystems.join(', ')}` : '';
       summary.push({
         file: '.totem/lessons/baseline.md',
-        action: 'Installed Universal Baseline lessons',
+        action: `Installed baseline lessons (core${packLabel})`,
       });
     }
 

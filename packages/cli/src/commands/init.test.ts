@@ -890,6 +890,74 @@ describe('detectProject preferredConfigFormat', () => {
   });
 });
 
+// ─── detectProject ecosystem detection ──────────────
+
+describe('detectProject ecosystems', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-eco-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('detects javascript from package.json', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{}');
+    expect(detectProject(tmpDir).ecosystems).toContain('javascript');
+  });
+
+  it('detects rust from Cargo.toml', () => {
+    fs.writeFileSync(path.join(tmpDir, 'Cargo.toml'), '[package]');
+    expect(detectProject(tmpDir).ecosystems).toContain('rust');
+  });
+
+  it('detects python from pyproject.toml', () => {
+    fs.writeFileSync(path.join(tmpDir, 'pyproject.toml'), '[project]');
+    expect(detectProject(tmpDir).ecosystems).toContain('python');
+  });
+
+  it('detects go from go.mod', () => {
+    fs.writeFileSync(path.join(tmpDir, 'go.mod'), 'module example.com');
+    expect(detectProject(tmpDir).ecosystems).toContain('go');
+  });
+
+  it('detects multiple ecosystems in monorepo', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{}');
+    fs.writeFileSync(path.join(tmpDir, 'Cargo.toml'), '[package]');
+    const ecosystems = detectProject(tmpDir).ecosystems;
+    expect(ecosystems).toContain('javascript');
+    expect(ecosystems).toContain('rust');
+  });
+
+  it('returns empty list for unknown project', () => {
+    expect(detectProject(tmpDir).ecosystems).toEqual([]);
+  });
+});
+
+// ─── baseline packs ─────────────────────────────────
+
+describe('baseline packs', () => {
+  it('exports non-empty packs for all ecosystems', async () => {
+    const { PYTHON_BASELINE, RUST_BASELINE, GO_BASELINE } =
+      await import('../assets/baseline-packs.js');
+    expect(PYTHON_BASELINE.length).toBeGreaterThan(0);
+    expect(RUST_BASELINE.length).toBeGreaterThan(0);
+    expect(GO_BASELINE.length).toBeGreaterThan(0);
+  });
+
+  it('all lessons have heading, tags, and body', async () => {
+    const { PYTHON_BASELINE, RUST_BASELINE, GO_BASELINE } =
+      await import('../assets/baseline-packs.js');
+    for (const lesson of [...PYTHON_BASELINE, ...RUST_BASELINE, ...GO_BASELINE]) {
+      expect(lesson.heading).toBeTruthy();
+      expect(lesson.tags.length).toBeGreaterThan(0);
+      expect(lesson.body).toBeTruthy();
+    }
+  });
+});
+
 // ─── generateConfigForFormat ────────────────────────
 
 describe('generateConfigForFormat', () => {

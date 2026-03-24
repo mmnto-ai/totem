@@ -17,6 +17,7 @@ export function buildNpxCommand(isWin: boolean): { command: string; args: string
 // ─── Types ───────────────────────────────────────────────
 
 export type ConfigFormat = 'ts' | 'yaml' | 'toml';
+export type Ecosystem = 'javascript' | 'python' | 'rust' | 'go';
 
 export interface DetectedProject {
   hasTypeScript: boolean;
@@ -26,6 +27,7 @@ export interface DetectedProject {
   hasContext: boolean;
   hasSessions: boolean;
   preferredConfigFormat: ConfigFormat;
+  ecosystems: Ecosystem[];
 }
 
 export type AiTool = 'Claude Code' | 'Gemini CLI' | 'Cursor' | 'JetBrains Junie' | 'GitHub Copilot';
@@ -133,14 +135,21 @@ export function detectProject(cwd: string): DetectedProject {
     }
   }
 
+  // Detect ecosystems (additive — monorepos can have multiple)
+  const ecosystems: Ecosystem[] = [];
+  if (exists('package.json') || hasTypeScript) ecosystems.push('javascript');
+  if (exists('requirements.txt') || exists('pyproject.toml') || exists('Pipfile')) {
+    ecosystems.push('python');
+  }
+  if (exists('Cargo.toml')) ecosystems.push('rust');
+  if (exists('go.mod')) ecosystems.push('go');
+
   // Determine preferred config format based on ecosystem markers
   let preferredConfigFormat: ConfigFormat = 'yaml'; // ecosystem-neutral default
-  if (exists('package.json') || hasTypeScript) {
+  if (ecosystems.includes('javascript')) {
     preferredConfigFormat = 'ts';
-  } else if (exists('Cargo.toml') || exists('pyproject.toml') || exists('requirements.txt')) {
+  } else if (ecosystems.includes('rust') || ecosystems.includes('python')) {
     preferredConfigFormat = 'toml';
-  } else if (exists('go.mod')) {
-    preferredConfigFormat = 'yaml';
   }
 
   return {
@@ -151,6 +160,7 @@ export function detectProject(cwd: string): DetectedProject {
     hasContext: exists('context'),
     hasSessions: exists('context/sessions'),
     preferredConfigFormat,
+    ecosystems,
   };
 }
 
