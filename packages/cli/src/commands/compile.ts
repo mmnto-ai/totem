@@ -1,5 +1,11 @@
-import type { CompiledRule, CompiledRulesFile, CompilerOutput, TotemConfig } from '@mmnto/totem';
-import { TotemConfigError, TotemError } from '@mmnto/totem';
+import type { CompiledRule, CompiledRulesFile, LessonInput } from '@mmnto/totem';
+import {
+  buildCompiledRule,
+  buildManualRule,
+  compileLesson as compileLessonCore,
+  TotemConfigError,
+  TotemError,
+} from '@mmnto/totem';
 
 import { COMPILER_SYSTEM_PROMPT } from './compile-templates.js';
 
@@ -25,218 +31,10 @@ export interface CompileOptions {
   cloud?: string;
 }
 
-interface LessonInput {
-  index: number;
-  heading: string;
-  body: string;
-  hash: string;
-}
-
-type CompileLessonResult =
-  | { status: 'compiled'; rule: CompiledRule }
-  | { status: 'skipped'; hash: string }
-  | { status: 'failed' }
-  | { status: 'noop' };
-
-interface CompileLessonDeps {
-  extractManualPattern: (body: string) => import('@mmnto/totem').ManualPattern | null;
-  validateRegex: (pattern: string) => import('@mmnto/totem').RegexValidation;
-  parseCompilerResponse: (response: string) => CompilerOutput | null;
-  sanitizeFileGlobs: (globs: string[]) => string[];
-  engineFields: (
-    engine: 'regex' | 'ast' | 'ast-grep',
-    pattern: string | Record<string, unknown>,
-  ) => { pattern: string; astGrepPattern?: string | Record<string, unknown>; astQuery?: string };
-  runOrchestrator: (opts: {
-    prompt: string;
-    tag: string;
-    options: CompileOptions;
-    config: TotemConfig;
-    cwd: string;
-    temperature?: number;
-  }) => Promise<string | undefined>;
-  log: {
-    warn: (tag: string, msg: string) => void;
-    dim: (tag: string, msg: string) => void;
-    success: (tag: string, msg: string) => void;
-  };
-  existingByHash: Map<string, CompiledRule>;
-  options: CompileOptions;
-  config: TotemConfig;
-  cwd: string;
-}
-
-// ─── Single-lesson compilation ──────────────────────
-
-async function compileLesson(
-  lesson: LessonInput,
-  deps: CompileLessonDeps,
-): Promise<CompileLessonResult> {
-  const {
-    extractManualPattern,
-    validateRegex,
-    parseCompilerResponse,
-    sanitizeFileGlobs,
-    engineFields,
-    runOrchestrator,
-    log,
-    existingByHash,
-    options,
-    config,
-    cwd,
-  } = deps;
-
-  // ── Pipeline 1: Manual pattern (zero LLM) ────────
-  const manual = extractManualPattern(lesson.body);
-  if (manual) {
-    // Validate the manually provided pattern
-    if (manual.engine === 'regex') {
-      const validation = validateRegex(manual.pattern);
-      if (!validation.valid) {
-        log.warn(
-          TAG,
-          `[${lesson.heading}] Manual pattern rejected: ${validation.reason} — skipping`,
-        ); // totem-ignore
-        return { status: 'failed' };
-      }
-    }
-
-    const now = new Date().toISOString();
-    const existing = existingByHash.get(lesson.hash);
-    const sanitizedGlobs = manual.fileGlobs ? sanitizeFileGlobs(manual.fileGlobs) : undefined;
-    return {
-      status: 'compiled',
-      rule: {
-        lessonHash: lesson.hash,
-        lessonHeading: lesson.heading,
-        message: lesson.heading,
-        engine: manual.engine,
-        severity: manual.severity,
-        ...engineFields(manual.engine, manual.pattern),
-        compiledAt: now,
-        createdAt: existing?.createdAt ?? now,
-        ...(sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {}),
-      },
-    };
-  }
-
-  // ── Pipeline 2: LLM compilation ──────────────────
-  const prompt = `${COMPILER_SYSTEM_PROMPT}\n\n## Lesson to Compile\n\nHeading: ${lesson.heading}\n\n${lesson.body}`;
-
-  const response = await runOrchestrator({
-    prompt,
-    tag: TAG,
-    options,
-    config,
-    cwd,
-    temperature: 0, // Compilation is mechanical — strict JSON output, max determinism
-  });
-
-  if (response == null) {
-    return { status: 'noop' };
-  }
-
-  const parsed = parseCompilerResponse(response);
-
-  if (!parsed) {
-    log.warn(TAG, `[${lesson.heading}] Failed to parse LLM response — skipping`); // totem-ignore
-    return { status: 'failed' };
-  }
-
-  if (!parsed.compilable) {
-    log.dim(TAG, `[${lesson.heading}] Not compilable (conceptual/architectural) — skipping`); // totem-ignore
-    return { status: 'skipped', hash: lesson.hash };
-  }
-
-  // ── Gate 1: Severity validation (Proposal 184) ──
-  const severity = parsed.severity ?? 'warning';
-  const engine = parsed.engine ?? 'regex';
-
-  // ── ast-grep engine ───────────────────────────
-  if (engine === 'ast-grep') {
-    if (!parsed.astGrepPattern || !parsed.message) {
-      log.warn(TAG, `[${lesson.heading}] Missing astGrepPattern or message — skipping`); // totem-ignore
-      return { status: 'failed' };
-    }
-
-    const now = new Date().toISOString();
-    const existing = existingByHash.get(lesson.hash);
-    const sanitizedGlobs = parsed.fileGlobs ? sanitizeFileGlobs(parsed.fileGlobs) : undefined;
-    return {
-      status: 'compiled',
-      rule: {
-        lessonHash: lesson.hash,
-        lessonHeading: lesson.heading,
-        message: parsed.message,
-        engine: 'ast-grep',
-        severity,
-        ...engineFields('ast-grep', parsed.astGrepPattern),
-        compiledAt: now,
-        createdAt: existing?.createdAt ?? now,
-        ...(sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {}),
-      },
-    };
-  }
-
-  // ── Tree-sitter AST engine ────────────────────
-  if (engine === 'ast') {
-    if (!parsed.astQuery || !parsed.message) {
-      log.warn(TAG, `[${lesson.heading}] Missing astQuery or message — skipping`); // totem-ignore
-      return { status: 'failed' };
-    }
-
-    const now = new Date().toISOString();
-    const existing = existingByHash.get(lesson.hash);
-    const sanitizedGlobs = parsed.fileGlobs ? sanitizeFileGlobs(parsed.fileGlobs) : undefined;
-    return {
-      status: 'compiled',
-      rule: {
-        lessonHash: lesson.hash,
-        lessonHeading: lesson.heading,
-        message: parsed.message,
-        engine: 'ast',
-        severity,
-        ...engineFields('ast', parsed.astQuery),
-        compiledAt: now,
-        createdAt: existing?.createdAt ?? now,
-        ...(sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {}),
-      },
-    };
-  }
-
-  // ── Regex engine (default) ────────────────────
-  if (!parsed.pattern || !parsed.message) {
-    log.warn(TAG, `[${lesson.heading}] Missing pattern or message — skipping`); // totem-ignore
-    return { status: 'failed' };
-  }
-
-  const validation = validateRegex(parsed.pattern);
-  if (!validation.valid) {
-    log.warn(TAG, `[${lesson.heading}] Rejected regex: ${validation.reason} — skipping`); // totem-ignore
-    return { status: 'failed' };
-  }
-
-  const now = new Date().toISOString();
-  const existing = existingByHash.get(lesson.hash);
-  const sanitizedGlobs = parsed.fileGlobs ? sanitizeFileGlobs(parsed.fileGlobs) : undefined;
-  return {
-    status: 'compiled',
-    rule: {
-      lessonHash: lesson.hash,
-      lessonHeading: lesson.heading,
-      message: parsed.message,
-      engine: 'regex',
-      severity,
-      ...engineFields('regex', parsed.pattern),
-      compiledAt: now,
-      createdAt: existing?.createdAt ?? now,
-      ...(sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {}),
-    },
-  };
-}
+// ─── Logging helpers ────────────────────────────────
 
 function logCompiledRule(
-  log: CompileLessonDeps['log'],
+  log: { success: (tag: string, msg: string) => void },
   lesson: LessonInput,
   rule: CompiledRule,
 ): void {
@@ -291,16 +89,13 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
   const { log } = await import('../ui.js');
   const { loadConfig, loadEnv, resolveConfigPath, runOrchestrator } = await import('../utils.js');
   const {
-    engineFields,
     exportLessons,
     extractManualPattern,
     hashLesson,
     loadCompiledRulesFile,
     parseCompilerResponse,
     readAllLessons,
-    sanitizeFileGlobs,
     saveCompiledRulesFile,
-    validateRegex,
   } = await import('@mmnto/totem');
 
   const cwd = process.cwd();
@@ -413,18 +208,15 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
       newRules.length = 0;
       newRules.push(...freshRules);
 
-      const deps: CompileLessonDeps = {
-        extractManualPattern,
-        validateRegex,
+      const coreDeps = {
         parseCompilerResponse,
-        sanitizeFileGlobs,
-        engineFields,
-        runOrchestrator,
-        log,
+        runOrchestrator: (prompt: string) =>
+          runOrchestrator({ prompt, tag: TAG, options, config, cwd, temperature: 0 }),
         existingByHash,
-        options,
-        config,
-        cwd,
+        callbacks: {
+          onWarn: (heading: string, msg: string) => log.warn(TAG, `[${heading}] ${msg}`),
+          onDim: (heading: string, msg: string) => log.dim(TAG, `[${heading}] ${msg}`),
+        },
       };
 
       // ─── Cloud compilation (Proposal 188 Phase 2) ───
@@ -434,24 +226,22 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
         // Compile manual patterns locally first (zero LLM, instant)
         const cloudLessons: LessonInput[] = [];
         for (const lesson of toCompile) {
-          const manual = extractManualPattern(lesson.body);
-          if (manual) {
-            const result = await compileLesson(lesson, deps);
-            if (result.status === 'compiled') {
-              // ADR-065: Pipeline 1 error rules require a test fixture
-              if (result.rule.severity === 'error' && !testedHashes.has(lesson.hash)) {
-                result.rule.severity = 'warning';
-                log.warn(
-                  TAG,
-                  `[${lesson.heading}] Downgraded to warning — no test fixture in .totem/tests/ (ADR-065)`,
-                );
-              }
-              newRules.push(result.rule);
-              compiled++;
-              logCompiledRule(log, lesson, result.rule);
-            } else if (result.status === 'failed') {
-              failed++;
+          const manualResult = buildManualRule(lesson, existingByHash);
+          if (manualResult.rule) {
+            // ADR-065: Pipeline 1 error rules require a test fixture
+            if (manualResult.rule.severity === 'error' && !testedHashes.has(lesson.hash)) {
+              manualResult.rule.severity = 'warning';
+              log.warn(
+                TAG,
+                `[${lesson.heading}] Downgraded to warning — no test fixture in .totem/tests/ (ADR-065)`,
+              );
             }
+            newRules.push(manualResult.rule);
+            compiled++;
+            logCompiledRule(log, lesson, manualResult.rule);
+          } else if (manualResult.rejectReason) {
+            log.warn(TAG, `[${lesson.heading}] ${manualResult.rejectReason}`);
+            failed++;
           } else {
             cloudLessons.push(lesson);
           }
@@ -527,91 +317,24 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
             const lesson = toCompile.find((l) => l.hash === cloudResult.hash);
             if (!lesson) continue;
 
-            const localResult = await (async () => {
-              const parsed = parseCompilerResponse(cloudResult.response!);
-              if (!parsed) return { status: 'failed' as const };
-              if (!parsed.compilable) return { status: 'skipped' as const, hash: lesson.hash };
+            const parsed = parseCompilerResponse(cloudResult.response!);
+            if (!parsed) {
+              failed++;
+              continue;
+            }
+            if (!parsed.compilable) {
+              nonCompilableSet.add(lesson.hash);
+              skipped++;
+              continue;
+            }
 
-              const severity = parsed.severity ?? 'warning';
-              const engine = parsed.engine ?? 'regex';
-
-              const now = new Date().toISOString();
-              const existing = existingByHash.get(lesson.hash);
-              const sanitizedGlobs = parsed.fileGlobs
-                ? sanitizeFileGlobs(parsed.fileGlobs)
-                : undefined;
-              const globsObj =
-                sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {};
-
-              if (engine === 'ast-grep' && parsed.astGrepPattern && parsed.message) {
-                return {
-                  status: 'compiled' as const,
-                  rule: {
-                    lessonHash: lesson.hash,
-                    lessonHeading: lesson.heading,
-                    message: parsed.message,
-                    engine: 'ast-grep' as const,
-                    severity,
-                    ...engineFields('ast-grep', parsed.astGrepPattern),
-                    compiledAt: now,
-                    createdAt: existing?.createdAt ?? now,
-                    ...globsObj,
-                  } as CompiledRule,
-                };
-              }
-
-              if (engine === 'ast' && parsed.astQuery && parsed.message) {
-                return {
-                  status: 'compiled' as const,
-                  rule: {
-                    lessonHash: lesson.hash,
-                    lessonHeading: lesson.heading,
-                    message: parsed.message,
-                    engine: 'ast' as const,
-                    severity,
-                    ...engineFields('ast', parsed.astQuery),
-                    compiledAt: now,
-                    createdAt: existing?.createdAt ?? now,
-                    ...globsObj,
-                  } as CompiledRule,
-                };
-              }
-
-              if (parsed.pattern && parsed.message) {
-                const validation = validateRegex(parsed.pattern);
-                if (!validation.valid) return { status: 'failed' as const };
-                return {
-                  status: 'compiled' as const,
-                  rule: {
-                    lessonHash: lesson.hash,
-                    lessonHeading: lesson.heading,
-                    message: parsed.message,
-                    engine: 'regex' as const,
-                    severity,
-                    ...engineFields('regex', parsed.pattern),
-                    compiledAt: now,
-                    createdAt: existing?.createdAt ?? now,
-                    ...globsObj,
-                  } as CompiledRule,
-                };
-              }
-
-              return { status: 'failed' as const };
-            })();
-
-            switch (localResult.status) {
-              case 'compiled':
-                newRules.push(localResult.rule!);
-                compiled++;
-                logCompiledRule(log, lesson, localResult.rule!);
-                break;
-              case 'skipped':
-                nonCompilableSet.add(localResult.hash!);
-                skipped++;
-                break;
-              case 'failed':
-                failed++;
-                break;
+            const rule = buildCompiledRule(parsed, lesson, existingByHash);
+            if (rule) {
+              newRules.push(rule);
+              compiled++;
+              logCompiledRule(log, lesson, rule);
+            } else {
+              failed++;
             }
           }
 
@@ -630,7 +353,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
           const batch = toCompile.slice(i, i + CONCURRENCY);
           const results = await Promise.all(
             batch.map((lesson) =>
-              compileLesson(lesson, deps)
+              compileLessonCore(lesson, COMPILER_SYSTEM_PROMPT, coreDeps)
                 .then((result) => ({ lesson, result }))
                 .catch((err) => {
                   const message = err instanceof Error ? err.message : String(err);

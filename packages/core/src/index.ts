@@ -219,6 +219,16 @@ export {
   saveRuleMetrics,
 } from './rule-metrics.js';
 
+// Compile lesson (rule builder + single-lesson compiler)
+export type {
+  BuildRuleResult,
+  CompileLessonCallbacks,
+  CompileLessonDeps,
+  CompileLessonResult,
+  LessonInput,
+} from './compile-lesson.js';
+export { buildCompiledRule, buildManualRule, compileLesson } from './compile-lesson.js';
+
 // Compile manifest (signing / provenance)
 export type { CompileManifest } from './compile-manifest.js';
 export {
