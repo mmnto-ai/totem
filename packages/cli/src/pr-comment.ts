@@ -101,7 +101,8 @@ export function buildPRCommentMarkdown(data: PRSummaryData): string {
     for (const f of shown) {
       const sev = f.severity === 'error' ? '🔴 error' : '🟡 warning';
       const rules = f.ruleCount > 1 ? `${f.ruleCount} rules` : '1 rule';
-      const msg = f.message.length > 80 ? f.message.slice(0, 77) + '...' : f.message;
+      const safeMsg = f.message.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|');
+      const msg = safeMsg.length > 80 ? safeMsg.slice(0, 77) + '...' : safeMsg;
       lines.push(`| \`${f.file}\` | ${f.line} | ${msg} | ${sev} | ${rules} |`);
     }
 
