@@ -79,8 +79,9 @@ export function buildFrontmatterFromLegacy(tags: string[], body: string): Lesson
   const severity = extractField(body, 'Severity')?.toLowerCase();
 
   if (pattern) {
+    const validEngines = ['regex', 'ast', 'ast-grep'];
     fm.compilation = {
-      engine: engine || 'regex',
+      engine: validEngines.includes(engine ?? '') ? engine : 'regex',
       pattern,
     };
   }
@@ -98,5 +99,10 @@ export function buildFrontmatterFromLegacy(tags: string[], body: string): Lesson
     fm.severity = severity;
   }
 
-  return LessonFrontmatterSchema.parse(fm);
+  const result = LessonFrontmatterSchema.safeParse(fm);
+  if (!result.success) {
+    // Fail-open: return defaults if legacy fields produce invalid schema
+    return LessonFrontmatterSchema.parse({});
+  }
+  return result.data;
 }

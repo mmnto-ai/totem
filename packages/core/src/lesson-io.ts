@@ -91,15 +91,16 @@ export function readAllLessons(totemDir: string): ParsedLesson[] {
       const content = fs.readFileSync(filePath, 'utf-8');
 
       // ADR-070: detect YAML frontmatter for individual lesson files
-      const { frontmatter, body: strippedBody, hadYaml } = extractFrontmatter(content);
+      const warn = (msg: string) => console.warn(`[Totem Warning] ${filePath}: ${msg}`);
+      const { frontmatter, body: strippedBody, hadYaml } = extractFrontmatter(content, warn);
 
       if (hadYaml) {
         const lessons = parseLessonsFile(strippedBody);
         for (const lesson of lessons) {
           lesson.frontmatter = frontmatter;
-          // YAML tags override empty inline tags
+          // YAML tags override empty inline tags (copy to avoid shared reference)
           if (frontmatter.tags.length > 0 && lesson.tags.length === 0) {
-            lesson.tags = frontmatter.tags;
+            lesson.tags = [...frontmatter.tags];
           }
           lesson.sourcePath = filePath;
         }
