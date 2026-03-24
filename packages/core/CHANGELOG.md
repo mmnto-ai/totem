@@ -1,5 +1,36 @@
 # @mmnto/totem
 
+## 1.5.0
+
+### Minor Changes
+
+- ### 1.5.0 — Open Ecosystem
+
+  **New Commands**
+  - `totem list` — discover all Totem workspaces via global registry (`~/.totem/registry.json`)
+  - `totem doctor` — run 6 diagnostic checks (config, rules, hooks, embedding, index, secret leaks)
+
+  **Features**
+  - Language-agnostic hook installation — hooks resolve `totem` binary at runtime via `command -v`, fall back to package manager `dlx` commands
+  - Hook manager helper scripts — `.totem/hooks/*.sh` generated for Husky/Lefthook/simple-git-hooks integration
+  - `userFacing` flag on DocTarget for scoped post-processing
+  - Smart shield review hints — auto-detects DLP artifacts, test files, new files in diff
+  - `// shield-context:` inline annotations for per-file shield guidance
+  - `.totem/prompts/shield.md` override with verdict format enforcement
+
+  **SARIF Improvements**
+  - Tool name corrected: `totem-shield` → `totem-lint`
+  - `helpUri` per rule links to wiki
+  - Rich annotation messages with lesson context and rule ID
+
+  **Research**
+  - Binary distribution spike: full standalone blocked by LanceDB (144MB native), Lite-tier binary feasible
+
+  **CI/DX**
+  - Compile Manifest Attestation skips docs-only PRs via path filter
+  - Wiki reorganization: internal docs converted to Totem lessons
+  - Shield documentation: new "Working with Shield" wiki page
+
 ## 1.4.3
 
 ### Patch Changes
