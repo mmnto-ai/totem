@@ -268,7 +268,7 @@ Body text.
     expect(lessons[0]!.frontmatter?.tags).toEqual(['foo', 'bar']);
   });
 
-  it('YAML tags override empty inline tags', () => {
+  it('YAML tags are the source of truth', () => {
     const lessonsDir = path.join(tmpDir, 'lessons');
     fs.mkdirSync(lessonsDir, { recursive: true });
     fs.writeFileSync(
@@ -285,6 +285,33 @@ Body without inline tags.
     const lessons = readAllLessons(tmpDir);
     expect(lessons).toHaveLength(1);
     expect(lessons[0]!.tags).toEqual(['from-yaml']);
+  });
+
+  it('falls back to legacy parsing when YAML is invalid', () => {
+    const lessonsDir = path.join(tmpDir, 'lessons');
+    fs.mkdirSync(lessonsDir, { recursive: true });
+    const warnings: string[] = [];
+    fs.writeFileSync(
+      path.join(lessonsDir, 'lesson-bad-yaml.md'),
+      `---
+severity: critical
+---
+## Lesson — Bad yaml fallback
+
+**Tags:** fallback-tag
+
+**Pattern:** \\beval\\(
+**Engine:** regex
+**Severity:** warning
+`,
+      'utf-8',
+    );
+    const lessons = readAllLessons(tmpDir, (msg) => warnings.push(msg));
+    expect(lessons).toHaveLength(1);
+    expect(lessons[0]!.tags).toEqual(['fallback-tag']);
+    expect(lessons[0]!.frontmatter?.compilation?.engine).toBe('regex');
+    expect(lessons[0]!.frontmatter?.severity).toBe('warning');
+    expect(warnings.length).toBeGreaterThan(0);
   });
 
   it('attaches frontmatter to legacy lessons.md entries', () => {

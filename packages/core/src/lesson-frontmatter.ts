@@ -8,14 +8,16 @@ import YAML from 'yaml';
 import { extractField } from './lesson-pattern.js';
 import { type LessonFrontmatter, LessonFrontmatterSchema } from './types.js';
 
-const FRONTMATTER_RE = /^---[ \t]*\r?\n([\s\S]*?)(?:\r?\n)?---/;
+const FRONTMATTER_RE = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 
 export interface FrontmatterParseResult {
   frontmatter: LessonFrontmatter;
   /** Content after the YAML block (or full content if no YAML) */
   body: string;
-  /** Whether YAML frontmatter was detected */
+  /** Whether YAML frontmatter was detected (even if invalid) */
   hadYaml: boolean;
+  /** Whether YAML was both detected AND validated successfully */
+  validYaml: boolean;
 }
 
 /**
@@ -34,6 +36,7 @@ export function extractFrontmatter(
       frontmatter: LessonFrontmatterSchema.parse({}),
       body: content,
       hadYaml: false,
+      validYaml: false,
     };
   }
 
@@ -50,10 +53,11 @@ export function extractFrontmatter(
         frontmatter: LessonFrontmatterSchema.parse({}),
         body,
         hadYaml: true,
+        validYaml: false,
       };
     }
 
-    return { frontmatter: result.data, body, hadYaml: true };
+    return { frontmatter: result.data, body, hadYaml: true, validYaml: true };
   } catch (err) {
     onWarn?.(
       `Failed to parse YAML frontmatter: ${err instanceof Error ? err.message : String(err)}`,
@@ -62,6 +66,7 @@ export function extractFrontmatter(
       frontmatter: LessonFrontmatterSchema.parse({}),
       body,
       hadYaml: true,
+      validYaml: false,
     };
   }
 }

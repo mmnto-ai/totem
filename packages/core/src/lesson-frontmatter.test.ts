@@ -18,6 +18,7 @@ Body text.`;
 
     const result = extractFrontmatter(content);
     expect(result.hadYaml).toBe(true);
+    expect(result.validYaml).toBe(true);
     expect(result.frontmatter.category).toBe('security');
     expect(result.frontmatter.severity).toBe('warning');
     expect(result.frontmatter.tags).toEqual(['auth', 'jwt']);
@@ -35,6 +36,7 @@ Body.`;
 
     const result = extractFrontmatter(content);
     expect(result.hadYaml).toBe(false);
+    expect(result.validYaml).toBe(false);
     expect(result.frontmatter.type).toBe('trap');
     expect(result.frontmatter.severity).toBe('error');
     expect(result.frontmatter.tags).toEqual([]);
@@ -53,6 +55,7 @@ Body.`;
 
     const result = extractFrontmatter(content, (msg) => warnings.push(msg));
     expect(result.hadYaml).toBe(true);
+    expect(result.validYaml).toBe(false);
     expect(result.frontmatter.type).toBe('trap');
     expect(result.body).toContain('## Lesson — Bad yaml');
     expect(warnings.length).toBeGreaterThan(0);
@@ -70,6 +73,7 @@ Body.`;
 
     const result = extractFrontmatter(content, (msg) => warnings.push(msg));
     expect(result.hadYaml).toBe(true);
+    expect(result.validYaml).toBe(false);
     expect(result.frontmatter.severity).toBe('error'); // default
     expect(warnings.length).toBeGreaterThan(0);
   });
@@ -145,6 +149,7 @@ Body.`;
 
   it('applies defaults for empty YAML block', () => {
     const content = `---
+
 ---
 ## Lesson — Empty frontmatter
 
@@ -152,6 +157,7 @@ Body.`;
 
     const result = extractFrontmatter(content);
     expect(result.hadYaml).toBe(true);
+    expect(result.validYaml).toBe(true);
     expect(result.frontmatter.type).toBe('trap');
     expect(result.frontmatter.severity).toBe('error');
     expect(result.frontmatter.lifecycle).toBe('stable');
@@ -169,8 +175,26 @@ Body.`;
 
     const result = extractFrontmatter(content, (msg) => warnings.push(msg));
     expect(result.hadYaml).toBe(true);
+    expect(result.validYaml).toBe(false);
     expect(warnings.length).toBeGreaterThan(0);
     expect(result.frontmatter.rpn).toBeUndefined(); // default, rpn out of range
+  });
+
+  it('does not match --- inside YAML values', () => {
+    const content = `---
+compilation:
+  pattern: "^---$"
+tags: ["a---b"]
+---
+## Lesson — Tricky dashes
+
+Body.`;
+
+    const result = extractFrontmatter(content);
+    expect(result.hadYaml).toBe(true);
+    expect(result.validYaml).toBe(true);
+    expect(result.frontmatter.compilation?.pattern).toBe('^---$');
+    expect(result.frontmatter.tags).toEqual(['a---b']);
   });
 
   it('accepts valid rpn', () => {

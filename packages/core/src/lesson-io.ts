@@ -64,7 +64,7 @@ export async function writeLessonFileAsync(lessonsDir: string, entry: string): P
  * and the new `.totem/lessons/*.md` directory. Each lesson gets a `sourcePath`
  * set to its origin file for prune operations.
  */
-export function readAllLessons(totemDir: string): ParsedLesson[] {
+export function readAllLessons(totemDir: string, onWarn?: (msg: string) => void): ParsedLesson[] {
   const allLessons: ParsedLesson[] = [];
 
   // 1. Read legacy .totem/lessons.md if it exists
@@ -91,22 +91,22 @@ export function readAllLessons(totemDir: string): ParsedLesson[] {
       const content = fs.readFileSync(filePath, 'utf-8');
 
       // ADR-070: detect YAML frontmatter for individual lesson files
-      const warn = (msg: string) => console.warn(`[Totem Warning] ${filePath}: ${msg}`);
-      const { frontmatter, body: strippedBody, hadYaml } = extractFrontmatter(content, warn);
+      const warn = onWarn ? (msg: string) => onWarn(`${filePath}: ${msg}`) : undefined;
+      const { frontmatter, body: strippedBody, validYaml } = extractFrontmatter(content, warn);
 
-      if (hadYaml) {
+      if (validYaml) {
         const lessons = parseLessonsFile(strippedBody);
         for (const lesson of lessons) {
           lesson.frontmatter = frontmatter;
-          // YAML tags override empty inline tags (copy to avoid shared reference)
-          if (frontmatter.tags.length > 0 && lesson.tags.length === 0) {
-            lesson.tags = [...frontmatter.tags];
-          }
+          // YAML tags are the source of truth (copy to avoid shared reference)
+          lesson.tags = [...frontmatter.tags];
           lesson.sourcePath = filePath;
         }
         allLessons.push(...lessons);
       } else {
-        const lessons = parseLessonsFile(content);
+        // No YAML or invalid YAML — fall back to legacy field mapping
+        const legacyContent = strippedBody !== content ? strippedBody : content;
+        const lessons = parseLessonsFile(legacyContent);
         for (const lesson of lessons) {
           lesson.frontmatter = buildFrontmatterFromLegacy(lesson.tags, lesson.raw);
           lesson.sourcePath = filePath;
