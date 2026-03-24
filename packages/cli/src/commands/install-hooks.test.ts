@@ -90,13 +90,13 @@ describe('getFallbackCommand', () => {
   });
 
   it('returns bunx when bun.lockb exists (legacy)', () => {
-    // totem-ignore — #918: separate test cases for each lockfile format
+    // totem-ignore — #918
     fs.writeFileSync(path.join(tmpDir, 'bun.lockb'), ''); // totem-ignore — #918
     expect(getFallbackCommand(tmpDir)).toBe('bunx @mmnto/cli');
   });
 
   it('returns bunx when bun.lock exists (Bun >= 1.2)', () => {
-    // totem-ignore — #918: separate test cases for each lockfile format
+    // totem-ignore — #918
     fs.writeFileSync(path.join(tmpDir, 'bun.lock'), ''); // totem-ignore — #918
     expect(getFallbackCommand(tmpDir)).toBe('bunx @mmnto/cli');
   });
