@@ -175,7 +175,7 @@ export async function upsertPRComment(options: CommentUpsertOptions): Promise<vo
       .filter(Boolean)
       .map(Number)
       .filter((n) => !isNaN(n));
-    if (ids.length > 0) existingId = ids[0]!;
+    if (ids.length > 0) existingId = Math.max(...ids);
   } catch (err) {
     // If listing fails (auth, rate limit, etc.), fall back to creating a new comment
     const msg = err instanceof Error ? err.message : String(err);
