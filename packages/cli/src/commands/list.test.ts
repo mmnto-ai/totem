@@ -55,15 +55,15 @@ describe('listCommand', () => {
     stderrSpy.mockRestore();
   });
 
-  it('prints "No workspaces" when registry is empty', () => {
+  it('prints "No workspaces" when registry is empty', async () => {
     mockReadRegistry.mockReturnValue({});
 
-    listCommand();
+    await listCommand();
 
     expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('No workspaces registered'));
   });
 
-  it('prints workspace entries', () => {
+  it('prints workspace entries', async () => {
     mockReadRegistry.mockReturnValue({
       '/projects/foo': {
         path: '/projects/foo',
@@ -73,7 +73,7 @@ describe('listCommand', () => {
       },
     });
 
-    listCommand();
+    await listCommand();
 
     const output = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n');
     expect(output).toContain('/projects/foo');
@@ -81,7 +81,7 @@ describe('listCommand', () => {
     expect(output).toContain('openai/1536d');
   });
 
-  it('flags entries older than 30 days as [STALE]', () => {
+  it('flags entries older than 30 days as [STALE]', async () => {
     const staleDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
     mockReadRegistry.mockReturnValue({
       '/projects/old': {
@@ -92,13 +92,13 @@ describe('listCommand', () => {
       },
     });
 
-    listCommand();
+    await listCommand();
 
     const output = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n');
     expect(output).toContain('[STALE]');
   });
 
-  it('does not flag recent entries as [STALE]', () => {
+  it('does not flag recent entries as [STALE]', async () => {
     mockReadRegistry.mockReturnValue({
       '/projects/fresh': {
         path: '/projects/fresh',
@@ -108,13 +108,13 @@ describe('listCommand', () => {
       },
     });
 
-    listCommand();
+    await listCommand();
 
     const output = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n');
     expect(output).not.toContain('[STALE]');
   });
 
-  it('flags non-existent paths as [MISSING]', () => {
+  it('flags non-existent paths as [MISSING]', async () => {
     mockExistsSync.mockReturnValue(false);
     mockReadRegistry.mockReturnValue({
       '/projects/gone': {
@@ -125,13 +125,13 @@ describe('listCommand', () => {
       },
     });
 
-    listCommand();
+    await listCommand();
 
     const output = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n');
     expect(output).toContain('[MISSING]');
   });
 
-  it('sorts entries by lastSync descending', () => {
+  it('sorts entries by lastSync descending', async () => {
     const older = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const newer = new Date().toISOString();
     mockReadRegistry.mockReturnValue({
@@ -149,7 +149,7 @@ describe('listCommand', () => {
       },
     });
 
-    listCommand();
+    await listCommand();
 
     // Find the calls that contain project paths
     const pathCalls = stderrSpy.mock.calls

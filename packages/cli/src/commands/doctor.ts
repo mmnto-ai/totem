@@ -147,18 +147,29 @@ export function checkGitHooks(cwd: string): DiagnosticResult {
   };
 }
 
-export function checkEmbeddingConfig(cwd: string): DiagnosticResult {
-  // Try to load config to detect embedding provider
-  let configPath: string | null = null;
+/** Check if a config file content has an embedding provider configured. */
+function hasEmbeddingProvider(content: string): boolean {
+  return /provider:\s*['"]?(openai|gemini|ollama)['"]?/.test(content);
+}
+
+/** Find and read the first totem config file. Returns [path, content] or null. */
+function readConfigFile(cwd: string): [string, string] | null {
   for (const file of CONFIG_FILES) {
     const candidate = path.join(cwd, file);
     if (fs.existsSync(candidate)) {
-      configPath = candidate;
-      break;
+      try {
+        return [candidate, fs.readFileSync(candidate, 'utf-8')];
+      } catch {
+        return null;
+      }
     }
   }
+  return null;
+}
 
-  if (!configPath) {
+export function checkEmbeddingConfig(cwd: string): DiagnosticResult {
+  const configResult = readConfigFile(cwd);
+  if (!configResult) {
     return {
       name: 'Embedding',
       status: 'skip',
@@ -166,41 +177,21 @@ export function checkEmbeddingConfig(cwd: string): DiagnosticResult {
     };
   }
 
-  // Read the config file and look for embedding provider hints
+  const [, content] = configResult;
+
+  if (!hasEmbeddingProvider(content)) {
+    return {
+      name: 'Embedding',
+      status: 'warn',
+      message: 'No embedding configured (Lite tier)',
+    };
+  }
+
   try {
-    const content = fs.readFileSync(configPath, 'utf-8');
-    const hasEmbeddingBlock =
-      content.includes("provider: 'openai'") ||
-      content.includes('provider: "openai"') ||
-      content.includes("provider: 'gemini'") ||
-      content.includes('provider: "gemini"') ||
-      content.includes("provider: 'ollama'") ||
-      content.includes('provider: "ollama"') ||
-      content.includes('provider: openai') ||
-      content.includes('provider: gemini') ||
-      content.includes('provider: ollama');
-
-    if (!hasEmbeddingBlock) {
-      return {
-        name: 'Embedding',
-        status: 'warn',
-        message: 'No embedding configured (Lite tier)',
-      };
-    }
-
     // Detect which provider and check for API keys
-    const isOpenAI =
-      content.includes("provider: 'openai'") ||
-      content.includes('provider: "openai"') ||
-      content.includes('provider: openai');
-    const isGemini =
-      content.includes("provider: 'gemini'") ||
-      content.includes('provider: "gemini"') ||
-      content.includes('provider: gemini');
-    const isOllama =
-      content.includes("provider: 'ollama'") ||
-      content.includes('provider: "ollama"') ||
-      content.includes('provider: ollama');
+    const isOpenAI = /provider:\s*['"]?openai['"]?/.test(content);
+    const isGemini = /provider:\s*['"]?gemini['"]?/.test(content);
+    const isOllama = /provider:\s*['"]?ollama['"]?/.test(content);
 
     // Read .env for key checks
     let envContent = '';
@@ -270,31 +261,8 @@ export function checkEmbeddingConfig(cwd: string): DiagnosticResult {
 }
 
 export function checkIndex(cwd: string, lanceDir = '.lancedb'): DiagnosticResult {
-  // First check if embedding is configured — if not, skip
-  let hasEmbedding = false;
-  for (const file of CONFIG_FILES) {
-    const candidate = path.join(cwd, file);
-    if (fs.existsSync(candidate)) {
-      try {
-        const content = fs.readFileSync(candidate, 'utf-8');
-        hasEmbedding =
-          content.includes("provider: 'openai'") ||
-          content.includes('provider: "openai"') ||
-          content.includes("provider: 'gemini'") ||
-          content.includes('provider: "gemini"') ||
-          content.includes("provider: 'ollama'") ||
-          content.includes('provider: "ollama"') ||
-          content.includes('provider: openai') ||
-          content.includes('provider: gemini') ||
-          content.includes('provider: ollama');
-      } catch {
-        // Can't read config — fall through
-      }
-      break;
-    }
-  }
-
-  if (!hasEmbedding) {
+  const configResult = readConfigFile(cwd);
+  if (!configResult || !hasEmbeddingProvider(configResult[1])) {
     return {
       name: 'Index',
       status: 'skip',

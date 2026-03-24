@@ -59,7 +59,7 @@ export async function syncCommand(options: {
     // Update global workspace registry (non-fatal on failure)
     try {
       const embedderString = config.embedding
-        ? `${config.embedding.provider}/${config.embedding.dimensions ?? 'auto'}d`
+        ? `${config.embedding.provider}/${config.embedding.dimensions ? `${config.embedding.dimensions}d` : 'auto'}`
         : 'none';
 
       await updateRegistryEntry({
