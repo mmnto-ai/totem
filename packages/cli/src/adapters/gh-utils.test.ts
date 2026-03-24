@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { ghFetchAndParse, handleGhError } from './gh-utils.js';
+import { ghExec, ghFetchAndParse, handleGhError } from './gh-utils.js';
 
 vi.mock('node:child_process', () => ({
   execFileSync: vi.fn(),
@@ -62,6 +62,23 @@ describe('handleGhError', () => {
   it('detects 429 as rate limit error', () => {
     const err = new Error('HTTP 429: Too Many Requests');
     expect(() => handleGhError(err, 'PRs')).toThrow('[Totem Error] GitHub API rate limit exceeded');
+  });
+});
+
+// ─── ghExec ─────────────────────────────────────────────
+
+describe('ghExec', () => {
+  it('uses shared exec options with stdio pipe and GH_PROMPT_DISABLED', () => {
+    mockedExec.mockReturnValue('');
+    ghExec(['issue', 'comment', '1', '-b', 'test'], '/cwd');
+    expect(mockedExec).toHaveBeenCalledWith(
+      'gh',
+      ['issue', 'comment', '1', '-b', 'test'],
+      expect.objectContaining({
+        stdio: 'pipe',
+        env: expect.objectContaining({ GH_PROMPT_DISABLED: '1' }),
+      }),
+    );
   });
 });
 
