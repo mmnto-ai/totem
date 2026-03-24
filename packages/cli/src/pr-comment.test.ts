@@ -20,7 +20,7 @@ function makeRule(overrides: Partial<CompiledRule> = {}): CompiledRule {
 }
 
 function makeViolation(
-  overrides: Partial<Violation> & { rule?: Partial<CompiledRule> } = {},
+  overrides: Omit<Partial<Violation>, 'rule'> & { rule?: Partial<CompiledRule> } = {},
 ): Violation {
   const { rule: ruleOverrides, ...rest } = overrides;
   return {
@@ -29,7 +29,7 @@ function makeViolation(
     line: 'const x = 1;',
     lineNumber: 10,
     ...rest,
-  };
+  } as Violation;
 }
 
 // ─── deduplicateViolations ───────────────────────────
