@@ -178,25 +178,20 @@ export async function upsertPRComment(options: CommentUpsertOptions): Promise<vo
     // If listing fails, we'll just create a new comment
   }
 
-  // 2. Update or create
+  // 2. Update or create — pass body via stdin to avoid ARG_MAX limits and shell quoting issues
+  const payload = JSON.stringify({ body: markdown });
+
   if (existingId) {
     execFileSync(
       'gh',
-      [
-        'api',
-        `repos/{owner}/{repo}/issues/comments/${existingId}`,
-        '-X',
-        'PATCH',
-        '-f',
-        `body=${markdown}`,
-      ],
-      execOpts,
+      ['api', `repos/{owner}/{repo}/issues/comments/${existingId}`, '-X', 'PATCH', '--input', '-'],
+      { ...execOpts, input: payload },
     );
   } else {
     execFileSync(
       'gh',
-      ['api', `repos/{owner}/{repo}/issues/${prNumber}/comments`, '-f', `body=${markdown}`],
-      execOpts,
+      ['api', `repos/{owner}/{repo}/issues/${prNumber}/comments`, '--input', '-'],
+      { ...execOpts, input: payload },
     );
   }
 }
