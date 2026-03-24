@@ -4,8 +4,8 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { extractShieldHints } from './shield-hints.js';
 import { assemblePrompt, assembleStructuralPrompt } from './shield.js';
+import { extractShieldHints } from './shield-hints.js';
 
 // ─── extractShieldHints ─────────────────────────────
 

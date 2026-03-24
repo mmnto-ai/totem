@@ -19,6 +19,7 @@ import {
   writeOutput,
 } from '../utils.js';
 import { appendLessons, flagSuspiciousLessons, parseLessons, selectLessons } from './extract.js';
+import { extractShieldHints } from './shield-hints.js';
 import {
   MAX_CODE_RESULTS,
   MAX_DIFF_CHARS,
@@ -33,7 +34,6 @@ import {
   TAG,
   VERDICT_RE,
 } from './shield-templates.js';
-import { extractShieldHints } from './shield-hints.js';
 
 // Re-export constants & prompts so existing consumers are not broken
 export {
