@@ -104,8 +104,8 @@ export function isThreadResolved(thread: CommentThread): boolean {
     /\bintentional\b/i,
     /\bby\s+design\b/i,
     /\bwon'?t\s+fix\b/i,
-    /\bignor/i,
-    /\bdismiss/i,
+    /\bignor(?:e|ed|ing)\s+(?:this|it|the)\b/i,
+    /\bdismiss(?:ed|ing)?\b/i,
     /\bnit\b/i,
   ];
 
