@@ -748,6 +748,14 @@ describe('sanitizeFileGlobs', () => {
   it('normalizes negated shallow globs', () => {
     expect(sanitizeFileGlobs(['!*.test.ts'])).toEqual(['!**/*.test.ts']);
   });
+
+  it('skips non-string entries', () => {
+    expect(sanitizeFileGlobs([42, null, undefined, '*.ts'] as unknown[])).toEqual(['**/*.ts']);
+  });
+
+  it('skips empty strings and bare negation', () => {
+    expect(sanitizeFileGlobs(['', '  ', '!', '*.ts'])).toEqual(['**/*.ts']);
+  });
 });
 
 // ─── engineFields ──────────────────────────────────

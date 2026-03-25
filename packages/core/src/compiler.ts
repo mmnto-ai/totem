@@ -158,11 +158,15 @@ export function saveCompiledRulesFile(rulesPath: string, data: CompiledRulesFile
  * e.g., "**\/*.{ts,js}" → ["**\/*.ts", "**\/*.js"]
  * e.g., "*.ts" → "**\/*.ts" (shallow → recursive)
  */
-export function sanitizeFileGlobs(globs: string[]): string[] {
+export function sanitizeFileGlobs(globs: unknown[]): string[] {
   const result: string[] = [];
   for (const glob of globs) {
+    if (typeof glob !== 'string') continue;
+    const trimmed = glob.trim();
+    if (!trimmed || trimmed === '!') continue;
+
     // Expand brace patterns: **/*.{ts,js} → **/*.ts, **/*.js
-    const braceMatch = /^(.*?)\{([^}]+)\}(.*)$/.exec(glob);
+    const braceMatch = /^(.*?)\{([^}]+)\}(.*)$/.exec(trimmed);
     if (braceMatch) {
       const prefix = braceMatch[1]!;
       const alternatives = braceMatch[2]!.split(',').map((s) => s.trim());
@@ -173,7 +177,7 @@ export function sanitizeFileGlobs(globs: string[]): string[] {
       }
       continue;
     }
-    result.push(normalizeShallowGlob(glob));
+    result.push(normalizeShallowGlob(trimmed));
   }
   return result;
 }
