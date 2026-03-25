@@ -162,7 +162,14 @@ export async function runCompiledRules(
         message: {
           text: `${warnings.length} warning-severity finding(s) detected. Warnings are probationary and not shown in PR reviews. Run \`totem lint\` locally to review.`,
         },
-        locations: [],
+        locations: [
+          {
+            physicalLocation: {
+              artifactLocation: { uri: '.totem/compiled-rules.json' },
+              region: { startLine: 1 },
+            },
+          },
+        ],
       });
     }
 
