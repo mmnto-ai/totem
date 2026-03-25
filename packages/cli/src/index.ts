@@ -27,7 +27,10 @@ function handleError(err: unknown): never {
   const debug = process.env['TOTEM_DEBUG'] === '1' || process.argv.includes('--debug');
 
   if (err instanceof Error) {
-    console.error(err.message);
+    const msg = err.message.startsWith('[Totem Error]')
+      ? err.message
+      : `[Totem Error] ${err.message}`;
+    console.error(msg);
     if ('recoveryHint' in err && typeof err.recoveryHint === 'string') {
       console.error(`  Fix: ${err.recoveryHint}`);
     }

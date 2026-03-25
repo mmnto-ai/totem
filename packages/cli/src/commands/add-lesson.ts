@@ -66,7 +66,7 @@ export async function addLessonCommand(lessonArg?: string): Promise<void> {
   }
 
   if (!lessonText || !lessonText.trim()) {
-    log.error('Totem', 'Lesson text cannot be empty.');
+    log.error('Totem Error', 'Lesson text cannot be empty.');
     return;
   }
 
