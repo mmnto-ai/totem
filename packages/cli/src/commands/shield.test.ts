@@ -580,16 +580,16 @@ describe('computeVerdict', () => {
 // ─── formatVerdictForDisplay ─────────────────────────
 
 describe('formatVerdictForDisplay', () => {
-  it('formats empty findings as clean pass', async () => {
+  it('formats empty findings as clean pass', () => {
     const verdict = { findings: [], summary: 'All good' };
-    const output = await formatVerdictForDisplay(verdict, true);
+    const output = formatVerdictForDisplay(verdict, true);
     expect(output).toContain('Shield Review');
     expect(output).toContain('PASS');
     expect(output).toContain('Summary: All good');
     expect(output).toContain('No issues found');
   });
 
-  it('formats findings grouped by severity', async () => {
+  it('formats findings grouped by severity', () => {
     const verdict = {
       findings: [
         { severity: 'INFO' as const, confidence: 0.3, message: 'Consider retry' },
@@ -598,7 +598,7 @@ describe('formatVerdictForDisplay', () => {
       ],
       summary: 'Multiple issues',
     };
-    const output = await formatVerdictForDisplay(verdict, false);
+    const output = formatVerdictForDisplay(verdict, false);
     const lines = output.split('\n');
     // CRITICAL should come before WARN which should come before INFO
     const criticalIndex = lines.findIndex((l: string) => l.includes('CRITICAL'));
@@ -608,7 +608,7 @@ describe('formatVerdictForDisplay', () => {
     expect(warnIndex).toBeLessThan(infoIndex);
   });
 
-  it('includes file and line when present', async () => {
+  it('includes file and line when present', () => {
     const verdict = {
       findings: [
         {
@@ -621,16 +621,16 @@ describe('formatVerdictForDisplay', () => {
       ],
       summary: 'Auth issue',
     };
-    const output = await formatVerdictForDisplay(verdict, false);
+    const output = formatVerdictForDisplay(verdict, false);
     expect(output).toContain('src/routes.ts:15');
   });
 
-  it('omits file/line when not present', async () => {
+  it('omits file/line when not present', () => {
     const verdict = {
       findings: [{ severity: 'INFO' as const, confidence: 0.5, message: 'General observation' }],
       summary: 'Observation',
     };
-    const output = await formatVerdictForDisplay(verdict, true);
+    const output = formatVerdictForDisplay(verdict, true);
     // Should have the finding line without any file path before the dash
     expect(output).toContain('INFO [0.5] — General observation');
   });
