@@ -1,21 +1,4 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-
 import type { DocTarget, SagaViolation } from '@mmnto/totem';
-import { TotemConfigError, validateDocUpdate } from '@mmnto/totem';
-
-import { GitHubCliAdapter } from '../adapters/github-cli.js';
-import { getGitLogSince, getLatestTag, isFileDirty } from '../git.js';
-import { log } from '../ui.js';
-import {
-  getSystemPrompt,
-  loadConfig,
-  loadEnv,
-  resolveConfigPath,
-  runOrchestrator,
-  wrapXml,
-  writeOutput,
-} from '../utils.js';
 
 // ─── Helpers ─────────────────────────────────────────────
 
@@ -26,7 +9,9 @@ import {
  */
 export function resolveIsUserFacing(doc: DocTarget): boolean {
   if (typeof doc.userFacing === 'boolean') return doc.userFacing;
-  return path.basename(doc.path).toLowerCase() === 'readme.md';
+  // Inline basename logic to avoid top-level `path` import
+  const name = doc.path.replace(/\\/g, '/').split('/').pop() ?? '';
+  return name.toLowerCase() === 'readme.md';
 }
 
 // ─── Constants ──────────────────────────────────────────
@@ -97,7 +82,11 @@ interface ReleaseContext {
   closedIssues: string;
 }
 
-function gatherReleaseContext(cwd: string): ReleaseContext {
+async function gatherReleaseContext(cwd: string): Promise<ReleaseContext> {
+  const { GitHubCliAdapter } = await import('../adapters/github-cli.js');
+  const { getGitLogSince, getLatestTag } = await import('../git.js');
+  const { log } = await import('../ui.js');
+
   const tag = getLatestTag(cwd);
   const gitLog = getGitLogSince(cwd, tag ?? undefined);
 
@@ -119,7 +108,7 @@ function gatherReleaseContext(cwd: string): ReleaseContext {
 
 // ─── Prompt assembly ────────────────────────────────────
 
-function assemblePrompt(
+async function assemblePrompt(
   doc: DocTarget,
   currentContent: string,
   releaseContext: ReleaseContext,
@@ -127,7 +116,11 @@ function assemblePrompt(
   systemPrompt: string,
   cwd: string,
   totemDir: string,
-): string {
+): Promise<string> {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { wrapXml } = await import('../utils.js');
+
   const sections: string[] = [systemPrompt];
 
   // Document metadata
@@ -322,7 +315,9 @@ export function stripMarketingTerms(content: string): string {
 
 // ─── Diff display ───────────────────────────────────────
 
-function showDiff(filePath: string, original: string, updated: string): boolean {
+async function showDiff(filePath: string, original: string, updated: string): Promise<boolean> {
+  const { log } = await import('../ui.js');
+
   if (original === updated) {
     log.dim(TAG, `No changes for ${filePath}.`);
     return false;
@@ -364,6 +359,14 @@ export interface DocsOptions {
 }
 
 export async function docsCommand(inputs: string[], options: DocsOptions): Promise<void> {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { TotemConfigError, validateDocUpdate } = await import('@mmnto/totem');
+  const { isFileDirty } = await import('../git.js');
+  const { log } = await import('../ui.js');
+  const { getSystemPrompt, loadConfig, loadEnv, resolveConfigPath, runOrchestrator, writeOutput } =
+    await import('../utils.js');
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);
@@ -447,7 +450,7 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
 
   // Gather release context (shared across all docs)
   log.info(TAG, 'Gathering release context...');
-  const releaseContext = gatherReleaseContext(cwd);
+  const releaseContext = await gatherReleaseContext(cwd);
   if (releaseContext.tag) {
     log.dim(TAG, `Last release: ${releaseContext.tag}`);
   }
@@ -498,7 +501,7 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
     log.info(TAG, `Processing ${doc.path}...`);
 
     // Assemble prompt for this doc
-    const prompt = assemblePrompt(
+    const prompt = await assemblePrompt(
       doc,
       currentContent,
       releaseContext,
@@ -540,7 +543,7 @@ export async function docsCommand(inputs: string[], options: DocsOptions): Promi
     const withoutRefs = isUserFacingDoc ? stripIssueRefs(extracted) : extracted;
     const cleaned = stripMarketingTerms(withoutRefs);
     const trimmedContent = cleaned.trimEnd() + '\n';
-    const hasChanges = showDiff(doc.path, currentContent, trimmedContent);
+    const hasChanges = await showDiff(doc.path, currentContent, trimmedContent);
     if (!hasChanges) continue;
 
     // Saga checkpoint — validate before writing (#351)

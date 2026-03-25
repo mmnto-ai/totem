@@ -1,9 +1,5 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { stdin as input, stdout as output } from 'node:process';
-import * as readline from 'node:readline/promises';
-
-import { log } from '../ui.js';
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -275,6 +271,10 @@ export interface EjectOptions {
 }
 
 export async function ejectCommand(options: EjectOptions): Promise<void> {
+  const { stdin: input, stdout: output } = await import('node:process');
+  const readline = await import('node:readline/promises');
+  const { log } = await import('../ui.js');
+
   const cwd = process.cwd();
 
   if (!options.force) {

@@ -3,22 +3,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { isCancel, multiselect } from '@clack/prompts';
-
 import { sanitize, TotemConfigError, TotemParseError } from '@mmnto/totem';
 
 import { ghExec } from '../adapters/gh-utils.js';
 import type { StandardIssueListItem } from '../adapters/issue-adapter.js';
 import { log } from '../ui.js';
-import {
-  getSystemPrompt,
-  loadConfig,
-  loadEnv,
-  resolveConfigPath,
-  runOrchestrator,
-  wrapXml,
-  writeOutput,
-} from '../utils.js';
 import {
   ACTION_LABELS,
   GH_ISSUE_LIMIT,
@@ -191,6 +180,8 @@ export async function selectProposals(
   proposals: AuditProposal[],
   opts: { yes?: boolean; isTTY?: boolean },
 ): Promise<AuditProposal[]> {
+  const { isCancel, multiselect } = await import('@clack/prompts');
+
   const actionable = getActionableProposals(proposals);
 
   if (actionable.length === 0) {
@@ -361,6 +352,7 @@ function assemblePrompt(
   issues: StandardIssueListItem[],
   strategicContext: string,
   systemPrompt: string,
+  wrapXml: (tag: string, content: string) => string,
   userContext?: string,
 ): string {
   const sections: string[] = [systemPrompt];
@@ -391,6 +383,16 @@ function assemblePrompt(
 // ─── Main command ───────────────────────────────────────
 
 export async function auditCommand(options: AuditOptions): Promise<void> {
+  const {
+    getSystemPrompt,
+    loadConfig,
+    loadEnv,
+    resolveConfigPath,
+    runOrchestrator,
+    wrapXml,
+    writeOutput,
+  } = await import('../utils.js');
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);
@@ -418,7 +420,7 @@ export async function auditCommand(options: AuditOptions): Promise<void> {
   const systemPrompt = getSystemPrompt('audit', SYSTEM_PROMPT, cwd, config.totemDir);
 
   // Assemble prompt
-  const prompt = assemblePrompt(issues, strategicContext, systemPrompt, options.context);
+  const prompt = assemblePrompt(issues, strategicContext, systemPrompt, wrapXml, options.context);
   log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = await runOrchestrator({

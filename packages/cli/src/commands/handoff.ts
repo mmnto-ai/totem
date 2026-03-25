@@ -2,18 +2,7 @@ import * as path from 'node:path';
 
 import { readAllLessons } from '@mmnto/totem'; // totem-ignore
 
-import { getGitBranch, getGitDiff, getGitDiffStat, getGitLogSince, getGitStatus } from '../git.js';
-import { log } from '../ui.js';
-import {
-  getSystemPrompt,
-  loadConfig,
-  loadEnv,
-  resolveConfigPath,
-  runOrchestrator,
-  sanitize,
-  wrapXml,
-  writeOutput,
-} from '../utils.js';
+import { sanitize, wrapXml } from '../utils.js';
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -192,6 +181,12 @@ export function buildLiteHandoff(
 // ─── Main command ───────────────────────────────────────
 
 export async function handoffCommand(options: HandoffOptions): Promise<void> {
+  const { getGitBranch, getGitDiff, getGitDiffStat, getGitLogSince, getGitStatus } =
+    await import('../git.js');
+  const { log } = await import('../ui.js');
+  const { getSystemPrompt, loadConfig, loadEnv, resolveConfigPath, runOrchestrator, writeOutput } =
+    await import('../utils.js');
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);

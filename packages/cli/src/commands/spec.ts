@@ -1,23 +1,6 @@
-import * as path from 'node:path';
-
-import type { ContentType, SearchResult } from '@mmnto/totem';
-import { createEmbedder, LanceStore, TotemConfigError } from '@mmnto/totem';
+import type { ContentType, LanceStore, SearchResult } from '@mmnto/totem';
 
 import type { StandardIssue } from '../adapters/issue-adapter.js';
-import { log } from '../ui.js';
-import {
-  formatLessonSection,
-  formatResults,
-  getSystemPrompt,
-  loadConfig,
-  loadEnv,
-  partitionLessons,
-  requireEmbedding,
-  resolveConfigPath,
-  runOrchestrator,
-  wrapXml,
-  writeOutput,
-} from '../utils.js';
 import { SYSTEM_PROMPT } from './spec-templates.js';
 
 // ─── Constants ──────────────────────────────────────────
@@ -52,6 +35,8 @@ export async function retrieveContext(
   store: LanceStore,
   linkedStores?: LanceStore[],
 ): Promise<RetrievedContext> {
+  const { log } = await import('../ui.js');
+  const { partitionLessons } = await import('../utils.js');
   const search = (s: LanceStore, typeFilter: ContentType, maxResults: number) =>
     s.search({ query, typeFilter, maxResults });
 
@@ -108,11 +93,12 @@ interface ParsedInput {
 
 // ─── Prompt assembly ────────────────────────────────────
 
-export function assemblePrompt(
+export async function assemblePrompt(
   inputs: ParsedInput[],
   context: RetrievedContext,
   systemPrompt: string,
-): string {
+): Promise<string> {
+  const { formatLessonSection, formatResults, wrapXml } = await import('../utils.js');
   const sections: string[] = [systemPrompt];
 
   for (const { issue, freeText } of inputs) {
@@ -161,6 +147,23 @@ export interface SpecOptions {
 }
 
 export async function specCommand(inputs: string[], options: SpecOptions): Promise<void> {
+  const path = await import('node:path');
+  const {
+    createEmbedder,
+    LanceStore: LanceStoreImpl,
+    TotemConfigError,
+  } = await import('@mmnto/totem');
+  const { log } = await import('../ui.js');
+  const {
+    getSystemPrompt,
+    loadConfig,
+    loadEnv,
+    requireEmbedding,
+    resolveConfigPath,
+    runOrchestrator,
+    writeOutput,
+  } = await import('../utils.js');
+
   const unique = [...new Set(inputs)];
   if (unique.length > MAX_INPUTS) {
     throw new TotemConfigError(
@@ -178,7 +181,7 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   // Connect to LanceDB
   const embedding = requireEmbedding(config);
   const embedder = createEmbedder(embedding);
-  const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
+  const store = new LanceStoreImpl(path.join(cwd, config.lanceDir), embedder);
   await store.connect();
 
   // Connect to linked indexes (cross-totem knowledge)
@@ -192,7 +195,7 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
         const linkedEmbedding = linkedConfig.embedding;
         if (!linkedEmbedding) continue; // Linked totem has no embedder — skip
         const linkedEmbedder = createEmbedder(linkedEmbedding);
-        const linkedStore = new LanceStore(
+        const linkedStore = new LanceStoreImpl(
           path.join(resolvedPath, linkedConfig.lanceDir),
           linkedEmbedder,
         );
@@ -268,7 +271,7 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   const systemPrompt = getSystemPrompt('spec', SYSTEM_PROMPT, cwd, config.totemDir);
 
   // Assemble prompt
-  const prompt = assemblePrompt(parsed, context, systemPrompt);
+  const prompt = await assemblePrompt(parsed, context, systemPrompt);
   log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });

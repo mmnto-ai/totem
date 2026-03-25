@@ -1,6 +1,5 @@
-import fs from 'node:fs';
-
 export async function listCommand(): Promise<void> {
+  const fs = await import('node:fs');
   const { readRegistry } = await import('@mmnto/totem');
 
   const registry = readRegistry();

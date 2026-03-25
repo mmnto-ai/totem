@@ -1,5 +1,3 @@
-import { log } from '../ui.js';
-
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Wrap';
@@ -13,6 +11,7 @@ export interface WrapOptions {
 }
 
 export async function wrapCommand(prNumbers: string[], options: WrapOptions): Promise<void> {
+  const { log } = await import('../ui.js');
   const { TotemError } = await import('@mmnto/totem');
 
   // Step 1: Learn from PR(s)

@@ -1,5 +1,3 @@
-import { TotemConfigError } from '@mmnto/totem';
-
 import type { ShieldFormat } from './shield.js';
 
 // ─── Types ──────────────────────────────────────────
@@ -15,6 +13,7 @@ export interface LintOptions {
 // ─── Command ────────────────────────────────────────
 
 export async function lintCommand(options: LintOptions): Promise<void> {
+  const { TotemConfigError } = await import('@mmnto/totem');
   const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
   const { getDiffForReview } = await import('../git.js');
   const { runCompiledRules } = await import('./run-compiled-rules.js');

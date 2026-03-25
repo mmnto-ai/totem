@@ -1,23 +1,6 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-
-import { isCancel, multiselect } from '@clack/prompts';
-
 import type { DriftResult, TotemConfig } from '@mmnto/totem';
-// totem-ignore-next-line — existing top-level imports for this module
-import {
-  detectDrift,
-  parseLessonsFile,
-  readAllLessons,
-  rewriteLessonsFile,
-  runSync,
-  TotemError,
-  updateRegistryEntry,
-} from '@mmnto/totem';
 
 import type { Spinner } from '../ui.js';
-import { createSpinner, log } from '../ui.js';
-import { loadConfig, loadEnv, requireEmbedding, resolveConfigPath, sanitize } from '../utils.js';
 
 const TAG = 'Sync';
 const PRUNE_LABEL_MAX = 70;
@@ -27,6 +10,12 @@ export async function syncCommand(options: {
   prune?: boolean;
   quiet?: boolean;
 }): Promise<void> {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { runSync, TotemError, updateRegistryEntry } = await import('@mmnto/totem');
+  const { createSpinner, log } = await import('../ui.js');
+  const { loadConfig, loadEnv, requireEmbedding, resolveConfigPath } = await import('../utils.js');
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
 
@@ -97,6 +86,13 @@ export async function syncCommand(options: {
 // ─── Prune flow ──────────────────────────────────────
 
 async function runPrune(cwd: string, config: TotemConfig): Promise<void> {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { detectDrift, parseLessonsFile, readAllLessons, rewriteLessonsFile, runSync } =
+    await import('@mmnto/totem');
+  const { log } = await import('../ui.js');
+  const { sanitize } = await import('../utils.js');
+
   const totemDir = path.join(cwd, config.totemDir);
   const lessons = readAllLessons(totemDir);
 
@@ -201,10 +197,14 @@ async function runPrune(cwd: string, config: TotemConfig): Promise<void> {
 function truncateLabel(text: string): string {
   const oneLine = text.replace(/\n/g, ' ');
   if (oneLine.length <= PRUNE_LABEL_MAX) return oneLine;
-  return oneLine.slice(0, PRUNE_LABEL_MAX - 1) + '…';
+  return oneLine.slice(0, PRUNE_LABEL_MAX - 1) + '\u2026';
 }
 
 async function selectLessonsToPrune(drift: DriftResult[]): Promise<DriftResult[]> {
+  const { isCancel, multiselect } = await import('@clack/prompts');
+  const { log } = await import('../ui.js');
+  const { sanitize } = await import('../utils.js');
+
   if (!process.stdin.isTTY) {
     log.warn(
       TAG,

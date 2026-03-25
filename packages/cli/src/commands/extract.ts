@@ -1,7 +1,3 @@
-import * as path from 'node:path';
-
-import { isCancel, multiselect } from '@clack/prompts';
-
 import type { ExtractedLesson, SearchResult } from '@mmnto/totem';
 import {
   createEmbedder,
@@ -15,7 +11,6 @@ import {
   writeLessonFile,
 } from '@mmnto/totem';
 
-import { GitHubCliPrAdapter } from '../adapters/github-cli-pr.js';
 import type { StandardPr, StandardReviewComment } from '../adapters/pr-adapter.js';
 import { log } from '../ui.js';
 import {
@@ -29,6 +24,12 @@ import {
   sanitize,
   wrapUntrustedXml,
 } from '../utils.js';
+import {
+  MAX_EXISTING_LESSONS,
+  MAX_INPUTS,
+  MAX_REVIEW_BODY_CHARS,
+  SYSTEM_PROMPT,
+} from './extract-templates.js';
 
 // ─── Constants (re-exported from extract-templates) ─────
 
@@ -38,13 +39,6 @@ export {
   MAX_INPUTS,
   MAX_REVIEW_BODY_CHARS,
   SEMANTIC_DEDUP_THRESHOLD,
-  SYSTEM_PROMPT,
-} from './extract-templates.js';
-
-import {
-  MAX_EXISTING_LESSONS,
-  MAX_INPUTS,
-  MAX_REVIEW_BODY_CHARS,
   SYSTEM_PROMPT,
 } from './extract-templates.js';
 
@@ -395,6 +389,7 @@ export async function selectLessons(
     );
   }
 
+  const { isCancel, multiselect } = await import('@clack/prompts');
   const result = await multiselect({
     message: `Select lessons to persist (${lessons.length} extracted):`,
     options: lessons.map((lesson, i) => ({
@@ -432,6 +427,9 @@ export interface ExtractOptions {
 }
 
 export async function extractCommand(prNumbers: string[], options: ExtractOptions): Promise<void> {
+  const path = await import('node:path');
+  const { GitHubCliPrAdapter } = await import('../adapters/github-cli-pr.js');
+
   // Validate and deduplicate PR numbers
   const unique = [...new Set(prNumbers)];
   if (unique.length > MAX_INPUTS) {

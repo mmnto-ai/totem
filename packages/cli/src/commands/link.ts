@@ -5,14 +5,13 @@
  * After linking, `totem sync` will index both local and linked lessons.
  */
 
-import { TotemConfigError, TotemParseError } from '@mmnto/totem';
-
 export interface LinkOptions {
   unlink?: boolean;
   yes?: boolean;
 }
 
 export async function linkCommand(targetPath: string, options: LinkOptions): Promise<void> {
+  const { TotemConfigError, TotemParseError } = await import('@mmnto/totem');
   const fs = await import('node:fs');
   const path = await import('node:path');
   const { log } = await import('../ui.js');

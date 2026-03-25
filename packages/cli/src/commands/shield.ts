@@ -1,8 +1,5 @@
-import * as path from 'node:path';
+import type { ContentType, LanceStore, SearchResult, TotemConfig } from '@mmnto/totem';
 
-import type { ContentType, LanceStore, SearchResult } from '@mmnto/totem';
-
-import { filterDiffByPatterns, getDiffForReview } from '../git.js';
 import { bold, errorColor, log, success as successColor } from '../ui.js';
 import {
   formatLessonSection,
@@ -18,9 +15,6 @@ import {
   wrapXml,
   writeOutput,
 } from '../utils.js';
-import { appendLessons, flagSuspiciousLessons, parseLessons, selectLessons } from './extract.js';
-import { classifyChangedFiles } from './shield-classify.js';
-import { extractShieldHints } from './shield-hints.js';
 import {
   MAX_CODE_RESULTS,
   MAX_DIFF_CHARS,
@@ -69,7 +63,8 @@ async function retrieveContext(query: string, store: LanceStore): Promise<Retrie
   return { specs, sessions, code, lessons };
 }
 
-function buildSearchQuery(changedFiles: string[], diff: string): string {
+async function buildSearchQuery(changedFiles: string[], diff: string): Promise<string> {
+  const path = await import('node:path');
   const fileNames = changedFiles.map((f) => path.basename(f)).join(' ');
   const diffSnippet = diff.slice(0, QUERY_DIFF_TRUNCATE);
   return `${fileNames} ${diffSnippet}`.trim();
@@ -311,6 +306,7 @@ export async function writeShieldPassedFlag(
   configRoot?: string,
 ): Promise<void> {
   try {
+    const path = await import('node:path');
     const fs = await import('node:fs');
     const { execSync } = await import('node:child_process');
     const head = execSync('git rev-parse HEAD', { cwd, encoding: 'utf-8' }).trim();
@@ -352,10 +348,14 @@ export async function learnFromVerdict(
   verdictContent: string,
   diff: string,
   options: ShieldOptions,
-  config: Awaited<ReturnType<typeof loadConfig>>,
+  config: TotemConfig,
   cwd: string,
   configRoot?: string,
 ): Promise<void> {
+  const path = await import('node:path');
+  const { appendLessons, flagSuspiciousLessons, parseLessons, selectLessons } =
+    await import('./extract.js');
+
   log.info(TAG, 'Extracting lessons from failed verdict...'); // totem-ignore: hardcoded string
 
   // Assemble extraction prompt: shield verdict + diff as context
@@ -491,7 +491,7 @@ async function handleVerdictResult(
   content: string,
   diff: string,
   options: ShieldOptions,
-  config: Awaited<ReturnType<typeof loadConfig>>,
+  config: TotemConfig,
   cwd: string,
   configRoot: string | undefined,
   modeLabel: string,
@@ -560,7 +560,12 @@ async function handleVerdictResult(
 // ─── Main command ───────────────────────────────────
 
 export async function shieldCommand(options: ShieldOptions): Promise<void> {
+  const path = await import('node:path');
   const { TotemConfigError, TotemError } = await import('@mmnto/totem');
+  const { filterDiffByPatterns, getDiffForReview } = await import('../git.js');
+  const { classifyChangedFiles } = await import('./shield-classify.js');
+  const { extractShieldHints } = await import('./shield-hints.js');
+
   if (options.mode && options.mode !== 'standard' && options.mode !== 'structural') {
     throw new TotemConfigError(
       `Invalid --mode "${options.mode}". Use "standard" or "structural".`,
@@ -659,7 +664,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   await store.connect();
 
   // Retrieve context from LanceDB — use original changedFiles for better search relevance
-  const query = buildSearchQuery(changedFiles, diff);
+  const query = await buildSearchQuery(changedFiles, diff);
   log.info(TAG, 'Querying Totem index...');
   const context = await retrieveContext(query, store);
   const totalResults =

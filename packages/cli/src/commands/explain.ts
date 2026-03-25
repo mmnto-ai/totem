@@ -1,12 +1,10 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-
-import { bold, dim, log } from '../ui.js';
-import { loadConfig, resolveConfigPath } from '../utils.js';
-
 const TAG = '[Explain]';
 
 export async function explainCommand(hash: string): Promise<void> {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { bold, dim, log } = await import('../ui.js');
+  const { loadConfig, resolveConfigPath } = await import('../utils.js');
   const { loadCompiledRules } = await import('@mmnto/totem');
 
   const cwd = process.cwd();
