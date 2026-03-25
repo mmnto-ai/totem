@@ -91,16 +91,20 @@ Pre-broken Next.js app with architectural violations. Open in Codespaces, run `t
 
 The AI helps you **write** rules. The rules enforce themselves.
 
-| Feature                          | Requires AI? |
-| -------------------------------- | :----------: |
-| `totem lint` (compiled rules)    |      No      |
-| `totem init` (baseline rules)    |      No      |
-| Pre-push git hook                |      No      |
-| AST classification (Tree-sitter) |      No      |
-| `totem sync` (vector index)      |   Embedder   |
-| `totem compile` (rule authoring) |     LLM      |
-| `totem shield` (AI review)       |     LLM      |
-| `totem spec` (planning)          |     LLM      |
+| Feature                           | Requires AI? |
+| --------------------------------- | :----------: |
+| `totem lint` (compiled rules)     |      No      |
+| `totem add-secret` (DLP config)   |      No      |
+| `totem list-secrets` (DLP view)   |      No      |
+| `totem remove-secret` (DLP mgmt)  |      No      |
+| `totem init` (baseline rules)     |      No      |
+| Pre-push git hook                 |      No      |
+| AST classification (Tree-sitter)  |      No      |
+| `totem sync` (vector index)       |   Embedder   |
+| `totem compile` (rule authoring)  |     LLM      |
+| `totem review-learn` (bot→lesson) |     LLM      |
+| `totem shield` (AI review)        |     LLM      |
+| `totem spec` (planning)           |     LLM      |
 
 ### Capability Tiers
 

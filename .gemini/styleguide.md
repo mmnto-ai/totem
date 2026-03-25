@@ -49,6 +49,10 @@ The following suggestions have been repeatedly declined during code review. Do n
 - **Dynamic config loading for hardcoded paths.** Do not suggest making internal file paths (e.g., `.totem/lessons.md`, `.totem/compiled-rules.json`) configurable. These are structural constants of the Totem protocol.
 - **"Unused exports" on test-consumed constants.** Do not flag exported constants, prompt strings, or named limits (e.g., `SPEC_SEARCH_POOL`, `MAX_LESSONS`, `SHIELD_LEARN_SYSTEM_PROMPT`, `assemblePrompt`) as unused. These are deliberately exported so that co-located test files can import and assert against them. This is a standard testing pattern in the project.
 - **Static top-level imports from `@mmnto/totem` in CLI command files.** CLI command files use dynamic `await import('@mmnto/totem')` inside function bodies, not static top-level imports. This is enforced by a compiled shield rule. The core package pulls in LanceDB and other heavy dependencies — top-level imports slow CLI startup for every command, including `--help`.
+  - **EXCEPTION: `import type` statements are free.** TypeScript `import type { ... } from '@mmnto/totem'` is erased at compile time and has zero runtime cost. Do NOT flag type-only imports as violations of the dynamic import rule.
+- **`process.cwd()` in CLI command handlers.** CLI commands resolve paths relative to the user's working directory via `process.cwd()`. This is correct behavior — do not suggest resolving relative to config file location. The config resolution layer (`resolveConfigPath`) already handles config-relative paths.
+- **Dynamic imports in `index.ts` command registration.** The CLI entry point (`packages/cli/src/index.ts`) uses `await import()` inside `.action()` handlers to lazy-load command implementations. This IS the correct pattern — dynamic imports here are command handlers, not utility code. Do not flag them.
+- **Empty catch blocks in core library pure functions.** Core library functions (`packages/core/src/`) sometimes use empty catch blocks when: (a) the function is pure with no logger dependency, (b) validation happens at the schema level, and (c) the catch guards against edge cases only. Do not flag these as violations — the design intent is silent fallback, not logging.
 
 - **Lesson heading truncation.** Do not suggest expanding lesson headings beyond 60 characters. The `HEADING_MAX_CHARS` limit is enforced by `lesson-format.ts`. Headings serve as SARIF identifiers and vector search labels, not prose. Truncation is by design.
 - **Redundant "Lesson:" prefix in lesson headings.** Do not flag `## Lesson — Lesson: ...` as a style issue on auto-generated lesson files. This is a known `sanitizeHeading` improvement tracked separately.
@@ -65,7 +69,18 @@ Every feature, doc, and CLI output must pass this test: **Can a developer workin
 - CLI output should feel like instant gratification, not a compliance report.
 - If a sentence sounds like it belongs in a SOC 2 audit deck, rewrite it so it sounds like a README.
 
-## 8. Error Handling & Logging Conventions
+## 8. Override Directives (ADR-071)
+
+Totem supports inline override directives that suppress rules or provide context to the AI reviewer:
+
+- `// totem-ignore` — suppresses all compiled lint rules on this line (hard suppress, no justification)
+- `// totem-ignore-next-line` — suppresses all rules on the following line
+- `// totem-context: <reason>` — semantic override (ADR-071). Suppresses lint rules AND provides justification to shield. This is the preferred mechanism over `totem-ignore` because it records the "why."
+- `// shield-context: <reason>` — legacy alias for `totem-context:`, deprecated in 1.7.0. Accept both silently.
+
+All overrides are recorded in the Trap Ledger (`.totem/ledger/events.ndjson`) for telemetry.
+
+## 9. Error Handling & Logging Conventions
 
 - `log.error()` calls MUST use `'Totem Error'` as the tag — this is styleguide rule 21. Do not suggest changing it to the command-specific `TAG` constant.
 - `log.info()`, `log.success()`, `log.warn()`, `log.dim()` use the command-specific `TAG` constant (e.g., `'Audit'`, `'Shield'`, `'Triage'`).
