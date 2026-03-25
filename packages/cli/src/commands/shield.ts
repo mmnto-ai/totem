@@ -2,7 +2,7 @@ import * as path from 'node:path';
 
 import type { ContentType, LanceStore, SearchResult } from '@mmnto/totem';
 
-import { getDiffForReview } from '../git.js';
+import { filterDiffByPatterns, getDiffForReview } from '../git.js';
 import { bold, errorColor, log, success as successColor } from '../ui.js';
 import {
   formatLessonSection,
@@ -19,6 +19,7 @@ import {
   writeOutput,
 } from '../utils.js';
 import { appendLessons, flagSuspiciousLessons, parseLessons, selectLessons } from './extract.js';
+import { classifyChangedFiles } from './shield-classify.js';
 import { extractShieldHints } from './shield-hints.js';
 import {
   MAX_CODE_RESULTS,
@@ -28,9 +29,11 @@ import {
   MAX_SPEC_RESULTS,
   QUERY_DIFF_TRUNCATE,
   SHIELD_LEARN_SYSTEM_PROMPT,
+  type ShieldStructuredVerdict,
+  ShieldStructuredVerdictSchema,
   SPEC_SEARCH_POOL,
-  STRUCTURAL_SYSTEM_PROMPT,
-  SYSTEM_PROMPT,
+  STRUCTURAL_SYSTEM_PROMPT_V2,
+  SYSTEM_PROMPT_V2,
   TAG,
   VERDICT_RE,
 } from './shield-templates.js';
@@ -177,6 +180,126 @@ export function parseVerdict(content: string): { pass: boolean; reason: string }
   const match = VERDICT_RE.exec(content);
   if (!match) return null;
   return { pass: match[1] === 'PASS', reason: match[2].trim() };
+}
+
+// ─── V2 Structured verdict parsing ───────────────────
+
+/**
+ * Three-layer JSON extraction from LLM plain-text response.
+ * Layer 1: XML tags, Layer 2: markdown code fences, Layer 3: bare JSON.
+ * Returns null if all layers fail (caller falls back to V1 regex parseVerdict).
+ */
+export function extractStructuredVerdict(content: string): ShieldStructuredVerdict | null {
+  // Layer 1 — XML tags (primary)
+  const xmlMatch = content.match(/<shield_verdict>([\s\S]*?)<\/shield_verdict>/);
+  if (xmlMatch) {
+    try {
+      const parsed = JSON.parse(xmlMatch[1]!);
+      const result = ShieldStructuredVerdictSchema.safeParse(parsed);
+      if (result.success) return result.data;
+    } catch {
+      // Move to next layer
+    }
+  }
+
+  // Layer 2 — Markdown code fences (fallback)
+  const fenceMatch = content.match(/(?:```|~~~)(?:json)?\s*\n([\s\S]*?)\n\s*(?:```|~~~)/);
+  if (fenceMatch) {
+    try {
+      const parsed = JSON.parse(fenceMatch[1]!);
+      const result = ShieldStructuredVerdictSchema.safeParse(parsed);
+      if (result.success) return result.data;
+    } catch {
+      // Move to next layer
+    }
+  }
+
+  // Layer 3 — Bare JSON (last resort, guarded by "findings" keyword)
+  const firstBrace = content.indexOf('{');
+  const lastBrace = content.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace && content.includes('"findings"')) {
+    try {
+      const parsed = JSON.parse(content.slice(firstBrace, lastBrace + 1));
+      const result = ShieldStructuredVerdictSchema.safeParse(parsed);
+      if (result.success) return result.data;
+    } catch {
+      // All layers exhausted
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Deterministic pass/fail based on findings.
+ * CRITICAL = fail, WARN/INFO = pass with advisory.
+ */
+export function computeVerdict(verdict: ShieldStructuredVerdict): {
+  pass: boolean;
+  reason: string;
+} {
+  const criticalCount = verdict.findings.filter((f) => f.severity === 'CRITICAL').length;
+  const warnCount = verdict.findings.filter((f) => f.severity === 'WARN').length;
+  const infoCount = verdict.findings.filter((f) => f.severity === 'INFO').length;
+
+  const pass = criticalCount === 0;
+  let reason: string;
+
+  if (pass && warnCount === 0 && infoCount === 0) {
+    reason = 'No issues found';
+  } else if (pass) {
+    const parts: string[] = [];
+    if (warnCount > 0) parts.push(`${warnCount} warning${warnCount !== 1 ? 's' : ''}`);
+    if (infoCount > 0) parts.push(`${infoCount} info`);
+    reason = `No critical issues (${parts.join(', ')})`;
+  } else {
+    const parts: string[] = [];
+    parts.push(`${criticalCount} critical`);
+    if (warnCount > 0) parts.push(`${warnCount} warning${warnCount !== 1 ? 's' : ''}`);
+    reason = `${parts.join(', ')} found`;
+  }
+
+  return { pass, reason };
+}
+
+/**
+ * Human-readable output for stderr.
+ * Groups findings by severity (CRITICAL → WARN → INFO) with colored header.
+ */
+export function formatVerdictForDisplay(verdict: ShieldStructuredVerdict, pass: boolean): string {
+  const lines: string[] = [];
+
+  // Header
+  const verdictLabel = pass ? successColor(bold('PASS')) : errorColor(bold('FAIL'));
+  lines.push(`Shield Review — ${verdictLabel}`);
+  lines.push('');
+
+  // Summary
+  lines.push(`Summary: ${verdict.summary}`);
+
+  // Group findings by severity order
+  const severityOrder: Array<'CRITICAL' | 'WARN' | 'INFO'> = ['CRITICAL', 'WARN', 'INFO'];
+  const sorted = [...verdict.findings].sort(
+    (a, b) => severityOrder.indexOf(a.severity) - severityOrder.indexOf(b.severity),
+  );
+
+  if (sorted.length > 0) {
+    lines.push('');
+    for (const finding of sorted) {
+      let location = '';
+      if (finding.file) {
+        location = finding.line ? `${finding.file}:${finding.line} ` : `${finding.file} `;
+      }
+      lines.push(`  ${finding.severity} [${finding.confidence}] ${location}— ${finding.message}`);
+    }
+  }
+
+  // Reason line
+  lines.push('');
+  const { reason } = computeVerdict(verdict);
+  lines.push(reason);
+
+  return lines.join('\n');
 }
 
 /**
@@ -362,6 +485,78 @@ export async function learnFromVerdict(
   }
 }
 
+// ─── Shared verdict handler ─────────────────────────
+
+async function handleVerdictResult(
+  content: string,
+  diff: string,
+  options: ShieldOptions,
+  config: Awaited<ReturnType<typeof loadConfig>>,
+  cwd: string,
+  configRoot: string | undefined,
+  modeLabel: string,
+): Promise<void> {
+  const { TotemError } = await import('@mmnto/totem');
+
+  writeOutput(content, options.out);
+  if (options.out) log.success(TAG, `Written to ${options.out}`);
+
+  if (options.raw) return;
+
+  // Try structured parsing first (V2)
+  const structured = extractStructuredVerdict(content);
+  if (structured) {
+    const verdict = computeVerdict(structured);
+    const display = formatVerdictForDisplay(structured, verdict.pass);
+    console.error(display);
+
+    if (verdict.pass) {
+      await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
+    } else {
+      if (options.learn) {
+        await learnFromVerdict(
+          JSON.stringify(structured, null, 2),
+          diff,
+          options,
+          config,
+          cwd,
+          configRoot,
+        );
+      }
+      throw new TotemError(
+        'SHIELD_FAILED',
+        `Shield ${modeLabel} review failed: ${verdict.reason}`,
+        'Fix the issues identified in the review above, then re-run `totem shield`.',
+      );
+    }
+    return;
+  }
+
+  // Fallback: V1 regex parsing (custom prompt overrides)
+  const verdict = parseVerdict(content);
+  if (verdict) {
+    const verdictLabel = verdict.pass ? successColor(bold('PASS')) : errorColor(bold('FAIL'));
+    const reason = verdict.reason ? ` — ${verdict.reason}` : '';
+    log.info(TAG, `Verdict: ${verdictLabel}${reason}`);
+    if (verdict.pass) {
+      await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
+    } else {
+      if (options.learn) await learnFromVerdict(content, diff, options, config, cwd, configRoot);
+      throw new TotemError(
+        'SHIELD_FAILED',
+        `Shield ${modeLabel} review failed: ${verdict.reason || 'no reason given'}`,
+        'Fix the issues identified in the review above, then re-run `totem shield`.',
+      );
+    }
+  } else {
+    throw new TotemError(
+      'SHIELD_FAILED',
+      'Verdict not found in LLM output (defaulting to FAIL).',
+      'Fix LLM output format — expected structured JSON or VERDICT: PASS/FAIL.',
+    );
+  }
+}
+
 // ─── Main command ───────────────────────────────────
 
 export async function shieldCommand(options: ShieldOptions): Promise<void> {
@@ -390,8 +585,32 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
 
   const { diff, changedFiles } = diffResult;
 
-  // Auto-detect smart review hints from the diff
-  const smartHints = extractShieldHints(diff, changedFiles, cwd);
+  // Stage 1: Classify files — fast-path for non-code-only diffs
+  const classification = classifyChangedFiles(changedFiles);
+  if (classification.allNonCode) {
+    log.info(TAG, 'Deterministic fast-path: all changed files are non-code');
+    log.dim(TAG, `Skipped: ${changedFiles.join(', ')}`);
+    await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
+    return;
+  }
+
+  // Stage 2: Filter diff to code-only files for mixed diffs
+  let filteredDiff = diff;
+  let filteredFiles = changedFiles;
+  if (!classification.allCode && classification.nonCodeFiles.length > 0) {
+    filteredDiff = await filterDiffByPatterns(diff, classification.nonCodeFiles);
+    filteredFiles = classification.codeFiles;
+    if (!filteredDiff.trim()) {
+      // After filtering, no code diff remains — fast-path PASS
+      log.info(TAG, 'Deterministic fast-path: no code changes after filtering non-code files');
+      await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
+      return;
+    }
+    log.dim(TAG, `Filtered ${classification.nonCodeFiles.length} non-code file(s) from diff`);
+  }
+
+  // Auto-detect smart review hints from the filtered diff
+  const smartHints = extractShieldHints(filteredDiff, filteredFiles, cwd);
   if (smartHints.length > 0) {
     log.dim(TAG, `${smartHints.length} smart hint(s) detected`);
   }
@@ -402,11 +621,11 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
 
     const systemPrompt = getSystemPrompt(
       'shield-structural',
-      STRUCTURAL_SYSTEM_PROMPT,
+      STRUCTURAL_SYSTEM_PROMPT_V2,
       cwd,
       config.totemDir,
     );
-    const prompt = assembleStructuralPrompt(diff, changedFiles, systemPrompt, smartHints);
+    const prompt = assembleStructuralPrompt(filteredDiff, filteredFiles, systemPrompt, smartHints);
     log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
     const content = await runOrchestrator({
@@ -426,34 +645,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       );
     }
     if (content != null) {
-      writeOutput(content, options.out);
-      if (options.out) log.success(TAG, `Written to ${options.out}`);
-
-      if (!options.raw) {
-        const verdict = parseVerdict(content);
-        if (verdict) {
-          const verdictLabel = verdict.pass ? successColor(bold('PASS')) : errorColor(bold('FAIL'));
-          const reason = verdict.reason ? ` — ${verdict.reason}` : '';
-          log.info(TAG, `Verdict: ${verdictLabel}${reason}`);
-          if (verdict.pass) {
-            await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
-          } else {
-            if (options.learn)
-              await learnFromVerdict(content, diff, options, config, cwd, configRoot);
-            throw new TotemError(
-              'SHIELD_FAILED',
-              `Shield structural review failed: ${verdict.reason || 'no reason given'}`,
-              'Fix the issues identified in the review above, then re-run `totem shield`.',
-            );
-          }
-        } else {
-          throw new TotemError(
-            'SHIELD_FAILED',
-            'Verdict not found in LLM output (defaulting to FAIL).',
-            'Fix LLM output format — expected VERDICT: PASS/FAIL.',
-          );
-        }
-      }
+      await handleVerdictResult(content, diff, options, config, cwd, configRoot, 'structural');
     }
     return;
   }
@@ -466,7 +658,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const store = new Store(path.join(cwd, config.lanceDir), embedder);
   await store.connect();
 
-  // Retrieve context from LanceDB
+  // Retrieve context from LanceDB — use original changedFiles for better search relevance
   const query = buildSearchQuery(changedFiles, diff);
   log.info(TAG, 'Querying Totem index...');
   const context = await retrieveContext(query, store);
@@ -478,10 +670,10 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   );
 
   // Resolve system prompt (allow .totem/prompts/shield.md override)
-  const systemPrompt = getSystemPrompt('shield', SYSTEM_PROMPT, cwd, config.totemDir);
+  const systemPrompt = getSystemPrompt('shield', SYSTEM_PROMPT_V2, cwd, config.totemDir);
 
-  // Assemble prompt
-  const prompt = assemblePrompt(diff, changedFiles, context, systemPrompt, smartHints);
+  // Assemble prompt — use filtered diff/files for LLM review
+  const prompt = assemblePrompt(filteredDiff, filteredFiles, context, systemPrompt, smartHints);
   log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = await runOrchestrator({
@@ -495,34 +687,6 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     temperature: 0,
   });
   if (content != null) {
-    writeOutput(content, options.out);
-    if (options.out) log.success(TAG, `Written to ${options.out}`);
-
-    // Parse verdict and gate on failure (skip in --raw mode — no LLM output)
-    if (!options.raw) {
-      const verdict = parseVerdict(content);
-      if (verdict) {
-        const verdictLabel = verdict.pass ? successColor(bold('PASS')) : errorColor(bold('FAIL'));
-        const reason = verdict.reason ? ` — ${verdict.reason}` : '';
-        log.info(TAG, `Verdict: ${verdictLabel}${reason}`);
-        if (verdict.pass) {
-          await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
-        } else {
-          if (options.learn)
-            await learnFromVerdict(content, diff, options, config, cwd, configRoot);
-          throw new TotemError(
-            'SHIELD_FAILED',
-            `Shield review failed: ${verdict.reason || 'no reason given'}`,
-            'Fix the issues identified in the review above, then re-run `totem shield`.',
-          );
-        }
-      } else {
-        throw new TotemError(
-          'SHIELD_FAILED',
-          'Verdict not found in LLM output (defaulting to FAIL).',
-          'Fix LLM output format — expected VERDICT: PASS/FAIL.',
-        );
-      }
-    }
+    await handleVerdictResult(content, diff, options, config, cwd, configRoot, 'standard');
   }
 }
