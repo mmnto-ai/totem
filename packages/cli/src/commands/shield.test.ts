@@ -9,6 +9,9 @@ import { applyRules, type CompiledRule, loadCompiledRules, saveCompiledRules } f
 import {
   assemblePrompt,
   assembleStructuralPrompt,
+  computeVerdict,
+  extractStructuredVerdict,
+  formatVerdictForDisplay,
   MAX_DIFF_CHARS,
   parseVerdict,
   SHIELD_LEARN_SYSTEM_PROMPT,
@@ -380,6 +383,250 @@ describe('writeShieldPassedFlag', () => {
     expect(fs.existsSync(flagPath)).toBe(true);
     const content = fs.readFileSync(flagPath, 'utf-8');
     expect(content).toMatch(/^[a-f0-9]{40}$/);
+  });
+});
+
+// ─── extractStructuredVerdict ─────────────────────────
+
+describe('extractStructuredVerdict', () => {
+  const validVerdict = {
+    findings: [
+      {
+        severity: 'CRITICAL',
+        confidence: 0.95,
+        message: 'Missing auth middleware',
+        file: 'src/routes.ts',
+        line: 42,
+      },
+    ],
+    summary: 'Added new endpoint without auth',
+  };
+
+  it('parses valid JSON in shield_verdict XML tags', () => {
+    const content = `<shield_verdict>\n${JSON.stringify(validVerdict)}\n</shield_verdict>`;
+    const result = extractStructuredVerdict(content);
+    expect(result).toEqual(validVerdict);
+  });
+
+  it('parses valid JSON in markdown code fences', () => {
+    const content = '```json\n' + JSON.stringify(validVerdict) + '\n```';
+    const result = extractStructuredVerdict(content);
+    expect(result).toEqual(validVerdict);
+  });
+
+  it('parses bare JSON object', () => {
+    const content = JSON.stringify(validVerdict);
+    const result = extractStructuredVerdict(content);
+    expect(result).toEqual(validVerdict);
+  });
+
+  it('returns null for invalid JSON', () => {
+    const content = '<shield_verdict>{not valid json}</shield_verdict>';
+    expect(extractStructuredVerdict(content)).toBeNull();
+  });
+
+  it('returns null for valid JSON failing Zod validation', () => {
+    const badVerdict = {
+      findings: [
+        {
+          severity: 'HIGH',
+          confidence: 0.9,
+          message: 'Something wrong',
+        },
+      ],
+      summary: 'Test',
+    };
+    const content = `<shield_verdict>${JSON.stringify(badVerdict)}</shield_verdict>`;
+    expect(extractStructuredVerdict(content)).toBeNull();
+  });
+
+  it('returns null for empty string', () => {
+    expect(extractStructuredVerdict('')).toBeNull();
+  });
+
+  it('handles LLM preamble before XML tags', () => {
+    const content = `Here is my analysis:\n\n<shield_verdict>\n${JSON.stringify(validVerdict)}\n</shield_verdict>`;
+    const result = extractStructuredVerdict(content);
+    expect(result).toEqual(validVerdict);
+  });
+
+  it('rejects confidence outside 0-1 range', () => {
+    const badVerdict = {
+      findings: [
+        {
+          severity: 'CRITICAL',
+          confidence: 1.5,
+          message: 'Over-confident finding',
+        },
+      ],
+      summary: 'Test',
+    };
+    const content = `<shield_verdict>${JSON.stringify(badVerdict)}</shield_verdict>`;
+    expect(extractStructuredVerdict(content)).toBeNull();
+  });
+
+  it('handles findings with optional fields omitted', () => {
+    const minimalVerdict = {
+      findings: [
+        {
+          severity: 'WARN',
+          confidence: 0.6,
+          message: 'Consider adding retry logic',
+        },
+      ],
+      summary: 'Minor improvements needed',
+    };
+    const content = `<shield_verdict>${JSON.stringify(minimalVerdict)}</shield_verdict>`;
+    const result = extractStructuredVerdict(content);
+    expect(result).toEqual(minimalVerdict);
+    expect(result!.findings[0]!.file).toBeUndefined();
+    expect(result!.findings[0]!.line).toBeUndefined();
+  });
+
+  it('handles empty findings array', () => {
+    const cleanVerdict = {
+      findings: [],
+      summary: 'All changes look good',
+    };
+    const content = `<shield_verdict>${JSON.stringify(cleanVerdict)}</shield_verdict>`;
+    const result = extractStructuredVerdict(content);
+    expect(result).toEqual(cleanVerdict);
+    expect(result!.findings).toHaveLength(0);
+  });
+});
+
+// ─── computeVerdict ──────────────────────────────────
+
+describe('computeVerdict', () => {
+  it('returns PASS with no issues message for empty findings', () => {
+    const result = computeVerdict({ findings: [], summary: 'Clean diff' });
+    expect(result.pass).toBe(true);
+    expect(result.reason).toBe('No issues found');
+  });
+
+  it('returns PASS for INFO-only findings', () => {
+    const result = computeVerdict({
+      findings: [{ severity: 'INFO', confidence: 0.5, message: 'Consider edge case' }],
+      summary: 'Minor observation',
+    });
+    expect(result.pass).toBe(true);
+    expect(result.reason).toBe('No critical issues (1 info)');
+  });
+
+  it('returns PASS for WARN-only findings with warning count', () => {
+    const result = computeVerdict({
+      findings: [{ severity: 'WARN', confidence: 0.6, message: 'Missing test' }],
+      summary: 'Warning',
+    });
+    expect(result.pass).toBe(true);
+    expect(result.reason).toBe('No critical issues (1 warning)');
+  });
+
+  it('returns PASS for mixed WARN and INFO', () => {
+    const result = computeVerdict({
+      findings: [
+        { severity: 'WARN', confidence: 0.7, message: 'Warning 1' },
+        { severity: 'WARN', confidence: 0.6, message: 'Warning 2' },
+        { severity: 'INFO', confidence: 0.3, message: 'Info 1' },
+      ],
+      summary: 'Mixed',
+    });
+    expect(result.pass).toBe(true);
+    expect(result.reason).toBe('No critical issues (2 warnings, 1 info)');
+  });
+
+  it('returns FAIL for any CRITICAL finding', () => {
+    const result = computeVerdict({
+      findings: [{ severity: 'CRITICAL', confidence: 0.95, message: 'Missing auth' }],
+      summary: 'Auth issue',
+    });
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('1 critical');
+    expect(result.reason).toContain('found');
+  });
+
+  it('returns FAIL with correct counts for multiple CRITICALs and WARNs', () => {
+    const result = computeVerdict({
+      findings: [
+        { severity: 'CRITICAL', confidence: 0.95, message: 'Missing auth' },
+        { severity: 'CRITICAL', confidence: 0.85, message: 'SQL injection' },
+        { severity: 'WARN', confidence: 0.6, message: 'No rate limiting' },
+      ],
+      summary: 'Multiple issues',
+    });
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe('2 critical, 1 warning found');
+  });
+
+  it('calculates PASS when only WARN and INFO findings are present', () => {
+    const result = computeVerdict({
+      findings: [
+        { severity: 'WARN', confidence: 0.5, message: 'Minor issue' },
+        { severity: 'INFO', confidence: 0.3, message: 'FYI' },
+      ],
+      summary: 'Soft issues',
+    });
+    expect(result.pass).toBe(true);
+    expect(result.reason).toBe('No critical issues (1 warning, 1 info)');
+  });
+});
+
+// ─── formatVerdictForDisplay ─────────────────────────
+
+describe('formatVerdictForDisplay', () => {
+  it('formats empty findings as clean pass', () => {
+    const verdict = { findings: [], summary: 'All good' };
+    const output = formatVerdictForDisplay(verdict, true);
+    expect(output).toContain('Shield Review');
+    expect(output).toContain('PASS');
+    expect(output).toContain('Summary: All good');
+    expect(output).toContain('No issues found');
+  });
+
+  it('formats findings grouped by severity', () => {
+    const verdict = {
+      findings: [
+        { severity: 'INFO' as const, confidence: 0.3, message: 'Consider retry' },
+        { severity: 'CRITICAL' as const, confidence: 0.95, message: 'Missing auth' },
+        { severity: 'WARN' as const, confidence: 0.6, message: 'No rate limiting' },
+      ],
+      summary: 'Multiple issues',
+    };
+    const output = formatVerdictForDisplay(verdict, false);
+    const lines = output.split('\n');
+    // CRITICAL should come before WARN which should come before INFO
+    const criticalIndex = lines.findIndex((l) => l.includes('CRITICAL'));
+    const warnIndex = lines.findIndex((l) => l.includes('WARN'));
+    const infoIndex = lines.findIndex((l) => l.includes('INFO'));
+    expect(criticalIndex).toBeLessThan(warnIndex);
+    expect(warnIndex).toBeLessThan(infoIndex);
+  });
+
+  it('includes file and line when present', () => {
+    const verdict = {
+      findings: [
+        {
+          severity: 'CRITICAL' as const,
+          confidence: 0.95,
+          message: 'Missing auth',
+          file: 'src/routes.ts',
+          line: 15,
+        },
+      ],
+      summary: 'Auth issue',
+    };
+    const output = formatVerdictForDisplay(verdict, false);
+    expect(output).toContain('src/routes.ts:15');
+  });
+
+  it('omits file/line when not present', () => {
+    const verdict = {
+      findings: [{ severity: 'INFO' as const, confidence: 0.5, message: 'General observation' }],
+      summary: 'Observation',
+    };
+    const output = formatVerdictForDisplay(verdict, true);
+    // Should have the finding line without any file path before the dash
+    expect(output).toContain('INFO [0.5] — General observation');
   });
 });
 
