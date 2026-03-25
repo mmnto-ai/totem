@@ -26,7 +26,7 @@
   - `handleError` now consistently tags errors with guard against double-prefixing
 
 - Updated dependencies
-  - @mmnto/totem@1.5.2
+  - @mmnto/totem@1.5.3
 
 ## 1.5.0
 
