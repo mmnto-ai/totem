@@ -24,18 +24,19 @@ gh pr view $ARGUMENTS --json reviews --jq '.reviews[] | select(.body != "") | {a
 
 Parse each comment and classify by bot:
 
-| Bot Username | Severity Signal | Source |
-|---|---|---|
-| `coderabbitai[bot]` | `🔴 Critical`, `🟠 Major`, `🟡 Minor` in body | inline + review body |
-| `gemini-code-assist[bot]` | `security-high-priority.svg`, `high-priority.svg`, `medium-priority.svg` in body | inline + issue comments |
-| `github-advanced-security[bot]` | SARIF severity in body | inline |
-| `<!-- totem-lint -->` marker | Our managed comment — skip for triage | issue comments |
+| Bot Username                    | Severity Signal                                                                  | Source                  |
+| ------------------------------- | -------------------------------------------------------------------------------- | ----------------------- |
+| `coderabbitai[bot]`             | `🔴 Critical`, `🟠 Major`, `🟡 Minor` in body                                    | inline + review body    |
+| `gemini-code-assist[bot]`       | `security-high-priority.svg`, `high-priority.svg`, `medium-priority.svg` in body | inline + issue comments |
+| `github-advanced-security[bot]` | SARIF severity in body                                                           | inline                  |
+| `<!-- totem-lint -->` marker    | Our managed comment — skip for triage                                            | issue comments          |
 
 For CodeRabbit review bodies: expand `<details>` sections and extract nitpick items. These are often the most valuable findings but easy to miss.
 
 Deduplicate: if multiple comments from the same bot target the same file+line, group them.
 
 Filter out:
+
 - Bot boilerplate/summary headers (CR "Walkthrough", GCA "Summary of Changes")
 - Already-resolved threads (check for `<!-- review_comment_addressed -->` markers in replies)
 - Your own replies (author matches the repo owner)
@@ -63,24 +64,31 @@ Actions: fix <#>, defer <#> [ticket], nit <#>, extract <#>, done
 ## Phase 4: Execute Actions
 
 ### `fix <numbers>`
+
 Mark items as will-fix. No API calls — just acknowledge. The user will make code changes next.
 
 ### `defer <numbers> [ticket]`
+
 Auto-reply on the PR acknowledging the deferral:
+
 - **CodeRabbit items:** Reply inline to each thread with "Tracked in #NNN" or "Deferred — not blocking for this PR."
 - **GCA items:** DO NOT reply inline. Batch ALL GCA responses into ONE issue comment: `@gemini-code-assist` followed by a numbered list addressing each finding. Use `gh api repos/{owner}/{repo}/issues/$ARGUMENTS/comments --input -` with JSON payload.
 - **SARIF items:** No reply needed (our own tool).
 
 ### `nit <numbers>`
+
 Same as defer but reply text is "Acknowledged — nit / by design."
 
 ### `extract <numbers>`
+
 For each selected finding, generate a lesson and call `mcp__totem-dev__add_lesson`:
+
 - Use the bot's finding as the lesson body
 - Add relevant tags from the file path and finding category
 - The lesson will automatically get `lifecycle: nursery` treatment
 
 ### `done`
+
 Print summary of actions taken and exit.
 
 ## CRITICAL: GCA Reply Protocol
