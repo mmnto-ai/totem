@@ -154,8 +154,9 @@ export function saveCompiledRulesFile(rulesPath: string, data: CompiledRulesFile
 // ─── Glob sanitization ─────────────────────────────
 
 /**
- * Expand brace patterns and strip unsupported glob syntax.
+ * Expand brace patterns, normalize shallow globs, and strip unsupported syntax.
  * e.g., "**\/*.{ts,js}" → ["**\/*.ts", "**\/*.js"]
+ * e.g., "*.ts" → "**\/*.ts" (shallow → recursive)
  */
 export function sanitizeFileGlobs(globs: string[]): string[] {
   const result: string[] = [];
@@ -172,9 +173,31 @@ export function sanitizeFileGlobs(globs: string[]): string[] {
       }
       continue;
     }
-    result.push(glob);
+    result.push(normalizeShallowGlob(glob));
   }
   return result;
+}
+
+/**
+ * Normalize shallow glob patterns to recursive form for external tool compatibility.
+ * - `*.ts` → `**\/*.ts` (no `/` and doesn't start with `**\/`)
+ * - `*` → `**\/*` (bare wildcard)
+ * - `src/*.ts` → left alone (contains `/`, intentionally scoped)
+ * - `**\/*.ts` → left alone (already recursive)
+ * - `!*.ts` → `!**\/*.ts` (negated shallow glob)
+ */
+function normalizeShallowGlob(glob: string): string {
+  // Handle negation: strip prefix, normalize, re-add
+  const negated = glob.startsWith('!');
+  const bare = negated ? glob.slice(1) : glob;
+
+  // Already recursive or contains a directory separator → leave alone
+  if (bare.startsWith('**/') || bare.includes('/')) {
+    return glob;
+  }
+
+  // Shallow pattern — prepend **/
+  return `${negated ? '!' : ''}**/${bare}`;
 }
 
 /** Build engine-specific fields for a compiled rule. */

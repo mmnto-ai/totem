@@ -279,6 +279,21 @@ export function buildPrePushHook(fallbackCmd: string): string {
 if [ -f ".totem/compiled-rules.json" ]; then
   ${buildResolveBlock(fallbackCmd)}
 
+  # Auto-verify compile manifest
+  if [ -n "$TOTEM_CMD" ] && [ -f ".totem/compile-manifest.json" ]; then
+    if ! $TOTEM_CMD verify-manifest > /dev/null 2>&1; then
+      echo "[totem] Compile manifest is stale. Running totem compile..."
+      if $TOTEM_CMD compile; then
+        echo "[totem] Push aborted: compile manifest was updated."
+        echo "[totem]    Please commit the updated .totem/ files and push again."
+        exit 1
+      else
+        echo "[totem] Push aborted: auto-compile failed. Run 'totem compile' manually."
+        exit 1
+      fi
+    fi
+  fi
+
   if [ -n "$TOTEM_CMD" ]; then
     $TOTEM_CMD lint
   fi
