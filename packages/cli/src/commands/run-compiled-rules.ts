@@ -57,7 +57,7 @@ export async function runCompiledRules(
   const resolvedTotemDir = path.join(options.configRoot ?? cwd, totemDir);
 
   // Load compiled rules
-  const rulesPath = path.join(cwd, totemDir, COMPILED_RULES_FILE);
+  const rulesPath = path.join(resolvedTotemDir, COMPILED_RULES_FILE);
   const rules = loadCompiledRules(rulesPath);
 
   if (rules.length === 0) {

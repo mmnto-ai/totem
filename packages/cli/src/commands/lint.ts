@@ -31,8 +31,9 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   }
 
   const cwd = process.cwd();
+  const path = await import('node:path');
   const configPath = resolveConfigPath(cwd);
-  const configRoot = (await import('node:path')).dirname(configPath);
+  const configRoot = path.dirname(configPath);
   loadEnv(cwd);
   const config = await loadConfig(configPath);
 
