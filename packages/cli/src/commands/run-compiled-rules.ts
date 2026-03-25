@@ -148,21 +148,21 @@ export async function runCompiledRules(
 
     // Surface warning count as a single note so users know they exist
     if (warnings.length > 0) {
+      const summaryRuleIdx = sarif.runs[0].tool.driver.rules.length;
+      sarif.runs[0].tool.driver.rules.push({
+        id: 'totem/warning-summary',
+        shortDescription: {
+          text: 'Probationary warnings detected — run `totem lint` locally to review',
+        },
+      });
       sarif.runs[0].results.push({
         ruleId: 'totem/warning-summary',
-        ruleIndex: -1,
+        ruleIndex: summaryRuleIdx,
         level: 'note',
         message: {
           text: `${warnings.length} warning-severity finding(s) detected. Warnings are probationary and not shown in PR reviews. Run \`totem lint\` locally to review.`,
         },
-        locations: [
-          {
-            physicalLocation: {
-              artifactLocation: { uri: 'totem.config.yaml' },
-              region: { startLine: 1 },
-            },
-          },
-        ],
+        locations: [],
       });
     }
 
