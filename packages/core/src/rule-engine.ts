@@ -78,9 +78,10 @@ const SUPPRESS_NEXT_LINE_MARKER = 'totem-ignore-next-line';
 
 /**
  * Check if a line should be suppressed via inline directives.
- * Supports two forms:
+ * Supports three forms:
  * - Same-line: code(); // totem-ignore  (suppresses all rules on this line)
  * - Next-line: // totem-ignore-next-line on the preceding line (suppresses all rules on this line)
+ * - Context: // totem-context: <reason> — semantic override that suppresses AND records justification
  *
  * Syntax-agnostic: works with any comment style (//, #, HTML comments, block comments).
  */
@@ -89,10 +90,36 @@ function isSuppressed(line: string, precedingLine: string | null): boolean {
   // so directive lines themselves are inherently suppressed.
   if (line.includes(SUPPRESS_MARKER)) return true;
 
+  // Same-line: totem-context: acts as both suppression and override
+  if (line.includes('totem-context:')) return true;
+
   // Next-line: preceding line (context or added) contains the next-line directive
   if (precedingLine != null && precedingLine.includes(SUPPRESS_NEXT_LINE_MARKER)) return true;
 
+  // Next-line: preceding line contains totem-context: directive
+  if (precedingLine != null && precedingLine.includes('totem-context:')) return true;
+
   return false;
+}
+
+/**
+ * Extract justification text from totem-context: directives.
+ * Checks both the current line and the preceding line.
+ * Returns empty string for plain totem-ignore (no justification).
+ */
+export function extractJustification(line: string, precedingLine: string | null): string {
+  // Check current line for totem-context: <reason>
+  const contextMatch = line.match(/totem-context:\s*(.+)/);
+  if (contextMatch) return contextMatch[1]!.trim();
+
+  // Check preceding line for totem-context:
+  if (precedingLine) {
+    const prevMatch = precedingLine.match(/totem-context:\s*(.+)/);
+    if (prevMatch) return prevMatch[1]!.trim();
+  }
+
+  // Plain totem-ignore has no justification
+  return '';
 }
 
 // ─── Regex rule execution ───────────────────────────
@@ -135,13 +162,20 @@ export function applyRulesToAdditions(
       // Skip if suppressed via inline directive
       if (isSuppressed(addition.line, addition.precedingLine)) {
         if (re.test(addition.line)) {
-          onRuleEvent?.('suppress', rule.lessonHash);
+          onRuleEvent?.('suppress', rule.lessonHash, {
+            file: addition.file,
+            line: addition.lineNumber,
+            justification: extractJustification(addition.line, addition.precedingLine),
+          });
         }
         continue;
       }
 
       if (re.test(addition.line)) {
-        onRuleEvent?.('trigger', rule.lessonHash);
+        onRuleEvent?.('trigger', rule.lessonHash, {
+          file: addition.file,
+          line: addition.lineNumber,
+        });
         violations.push({
           rule,
           file: addition.file,
@@ -229,11 +263,18 @@ export async function applyAstRulesToAdditions(
           for (const match of matches) {
             const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
             if (addition && isSuppressed(addition.line, addition.precedingLine)) {
-              onRuleEvent?.('suppress', rule.lessonHash);
+              onRuleEvent?.('suppress', rule.lessonHash, {
+                file,
+                line: match.lineNumber,
+                justification: extractJustification(addition.line, addition.precedingLine),
+              });
               continue;
             }
 
-            onRuleEvent?.('trigger', rule.lessonHash);
+            onRuleEvent?.('trigger', rule.lessonHash, {
+              file,
+              line: match.lineNumber,
+            });
             violations.push({
               rule,
               file,
@@ -287,11 +328,20 @@ export async function applyAstRulesToAdditions(
             for (const match of matches) {
               const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
               if (addition && isSuppressed(addition.line, addition.precedingLine)) {
-                onRuleEvent?.('suppress', rule.lessonHash);
+                onRuleEvent?.('suppress', rule.lessonHash, {
+                  file,
+                  line: match.lineNumber,
+                  justification: addition
+                    ? extractJustification(addition.line, addition.precedingLine)
+                    : '',
+                });
                 continue;
               }
 
-              onRuleEvent?.('trigger', rule.lessonHash);
+              onRuleEvent?.('trigger', rule.lessonHash, {
+                file,
+                line: match.lineNumber,
+              });
               violations.push({
                 rule,
                 file,

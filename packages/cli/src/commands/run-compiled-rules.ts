@@ -95,11 +95,35 @@ export async function runCompiledRules(
     log.dim(tag, 'AST classification unavailable, falling back to raw matching');
   }
 
-  // Record metrics
+  // Record metrics + Trap Ledger
+  const { appendLedgerEvent } = await import('@mmnto/totem');
   const metrics = loadRuleMetrics(resolvedTotemDir, (msg) => log.dim(tag, msg));
-  const ruleEventCallback = (event: 'trigger' | 'suppress', hash: string) => {
-    if (event === 'trigger') recordTrigger(metrics, hash);
-    else recordSuppression(metrics, hash);
+  const ruleEventCallback = (
+    event: 'trigger' | 'suppress',
+    hash: string,
+    context?: { file: string; line: number; justification?: string },
+  ) => {
+    if (event === 'trigger') {
+      recordTrigger(metrics, hash);
+    } else {
+      recordSuppression(metrics, hash);
+      // Append to Trap Ledger (fire-and-forget)
+      if (context) {
+        appendLedgerEvent(
+          resolvedTotemDir,
+          {
+            timestamp: new Date().toISOString(),
+            type: context.justification ? 'override' : 'suppress',
+            ruleId: hash,
+            file: context.file,
+            line: context.line,
+            justification: context.justification ?? '',
+            source: 'lint',
+          },
+          (msg) => log.dim(tag, msg),
+        );
+      }
+    }
   };
   const regexViolations = applyRulesToAdditions(rules, additions, ruleEventCallback);
 

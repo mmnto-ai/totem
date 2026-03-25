@@ -4,9 +4,18 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { CompiledRule, DiffAddition, RuleEventCallback } from './compiler-schema.js';
+import type {
+  CompiledRule,
+  DiffAddition,
+  RuleEventCallback,
+  RuleEventContext,
+} from './compiler-schema.js';
 import { TotemParseError } from './errors.js';
-import { applyAstRulesToAdditions } from './rule-engine.js';
+import {
+  applyAstRulesToAdditions,
+  applyRulesToAdditions,
+  extractJustification,
+} from './rule-engine.js';
 
 // ─── Helpers ────────────────────────────────────────
 
@@ -146,5 +155,170 @@ describe('applyAstRulesToAdditions', () => {
     const violations = await applyAstRulesToAdditions([rule], additions, tmpDir, onRuleEvent);
     expect(violations).toHaveLength(0);
     expect(events).toEqual([{ event: 'suppress', hash: 'suppress-tree-sitter-test' }]);
+  });
+});
+
+// ─── Regex rule event context ────────────────────────
+
+describe('applyRulesToAdditions — event context', () => {
+  it('onRuleEvent callback receives file and line context on suppress', () => {
+    const rule = makeRule({
+      engine: 'regex',
+      pattern: 'console\\.log',
+      lessonHash: 'ctx-suppress-test',
+    });
+
+    const additions: DiffAddition[] = [
+      {
+        file: 'src/app.ts',
+        line: 'console.log("debug"); // totem-ignore',
+        lineNumber: 42,
+        precedingLine: null,
+      },
+    ];
+
+    const events: Array<{ event: string; hash: string; context?: RuleEventContext }> = [];
+    const onRuleEvent: RuleEventCallback = (event, hash, context) => {
+      events.push({ event, hash, context });
+    };
+
+    const violations = applyRulesToAdditions([rule], additions, onRuleEvent);
+    expect(violations).toHaveLength(0);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.event).toBe('suppress');
+    expect(events[0]!.hash).toBe('ctx-suppress-test');
+    expect(events[0]!.context).toEqual({
+      file: 'src/app.ts',
+      line: 42,
+      justification: '',
+    });
+  });
+
+  it('onRuleEvent callback receives file and line context on trigger', () => {
+    const rule = makeRule({
+      engine: 'regex',
+      pattern: 'console\\.log',
+      lessonHash: 'ctx-trigger-test',
+    });
+
+    const additions: DiffAddition[] = [
+      {
+        file: 'src/handler.ts',
+        line: 'console.log("hello");',
+        lineNumber: 10,
+        precedingLine: null,
+      },
+    ];
+
+    const events: Array<{ event: string; hash: string; context?: RuleEventContext }> = [];
+    const onRuleEvent: RuleEventCallback = (event, hash, context) => {
+      events.push({ event, hash, context });
+    };
+
+    const violations = applyRulesToAdditions([rule], additions, onRuleEvent);
+    expect(violations).toHaveLength(1);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.event).toBe('trigger');
+    expect(events[0]!.context).toEqual({
+      file: 'src/handler.ts',
+      line: 10,
+    });
+  });
+
+  it('totem-context: directive suppresses rule and extracts justification', () => {
+    const rule = makeRule({
+      engine: 'regex',
+      pattern: 'console\\.log',
+      lessonHash: 'ctx-override-test',
+    });
+
+    const additions: DiffAddition[] = [
+      {
+        file: 'src/app.ts',
+        line: 'console.log("debug"); // totem-context: needed for observability',
+        lineNumber: 5,
+        precedingLine: null,
+      },
+    ];
+
+    const events: Array<{ event: string; hash: string; context?: RuleEventContext }> = [];
+    const onRuleEvent: RuleEventCallback = (event, hash, context) => {
+      events.push({ event, hash, context });
+    };
+
+    const violations = applyRulesToAdditions([rule], additions, onRuleEvent);
+    expect(violations).toHaveLength(0);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.event).toBe('suppress');
+    expect(events[0]!.context).toEqual({
+      file: 'src/app.ts',
+      line: 5,
+      justification: 'needed for observability',
+    });
+  });
+
+  it('totem-context: on preceding line suppresses and extracts justification', () => {
+    const rule = makeRule({
+      engine: 'regex',
+      pattern: 'console\\.log',
+      lessonHash: 'ctx-prev-line-test',
+    });
+
+    const additions: DiffAddition[] = [
+      {
+        file: 'src/app.ts',
+        line: 'console.log("debug");',
+        lineNumber: 6,
+        precedingLine: '// totem-context: required for production monitoring',
+      },
+    ];
+
+    const events: Array<{ event: string; hash: string; context?: RuleEventContext }> = [];
+    const onRuleEvent: RuleEventCallback = (event, hash, context) => {
+      events.push({ event, hash, context });
+    };
+
+    const violations = applyRulesToAdditions([rule], additions, onRuleEvent);
+    expect(violations).toHaveLength(0);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.event).toBe('suppress');
+    expect(events[0]!.context).toEqual({
+      file: 'src/app.ts',
+      line: 6,
+      justification: 'required for production monitoring',
+    });
+  });
+});
+
+// ─── extractJustification ────────────────────────────
+
+describe('extractJustification', () => {
+  it('returns empty string for plain totem-ignore', () => {
+    expect(extractJustification('code(); // totem-ignore', null)).toBe('');
+  });
+
+  it('extracts justification from same-line totem-context:', () => {
+    expect(extractJustification('code(); // totem-context: needed for DLP', null)).toBe(
+      'needed for DLP',
+    );
+  });
+
+  it('extracts justification from preceding line totem-context:', () => {
+    expect(extractJustification('code();', '// totem-context: audit trail')).toBe('audit trail');
+  });
+
+  it('prefers same-line over preceding line', () => {
+    expect(
+      extractJustification(
+        'code(); // totem-context: same-line reason',
+        '// totem-context: preceding reason',
+      ),
+    ).toBe('same-line reason');
+  });
+
+  it('trims whitespace from justification', () => {
+    expect(extractJustification('code(); // totem-context:   extra spaces  ', null)).toBe(
+      'extra spaces',
+    );
   });
 });

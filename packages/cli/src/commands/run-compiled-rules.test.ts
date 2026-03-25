@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { CompiledRule } from '@mmnto/totem';
-import { saveCompiledRules } from '@mmnto/totem';
+import { readLedgerEvents, saveCompiledRules } from '@mmnto/totem';
 
 import { runCompiledRules } from './run-compiled-rules.js';
 
@@ -425,5 +425,70 @@ describe('runCompiledRules', () => {
     });
 
     expect(result.violations).toHaveLength(0);
+  });
+
+  // ─── Trap Ledger integration ──────────────────────────
+
+  it('writes suppress event to trap ledger when totem-ignore is encountered', async () => {
+    const rules = [
+      makeRule('console\\.log', 'Remove debug logging', 'No console.log', {
+        lessonHash: 'ledger-suppress-test',
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    const diff = makeDiff('src/app.ts', '  console.log("ok"); // totem-ignore');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    expect(result.violations).toHaveLength(0);
+
+    const resolvedTotemDir = path.join(tmpDir, TOTEM_DIR);
+    const events = readLedgerEvents(resolvedTotemDir);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.type).toBe('suppress');
+    expect(events[0]!.ruleId).toBe('ledger-suppress-test');
+    expect(events[0]!.file).toBe('src/app.ts');
+    expect(events[0]!.justification).toBe('');
+    expect(events[0]!.source).toBe('lint');
+  });
+
+  it('writes override event to trap ledger when totem-context is encountered', async () => {
+    const rules = [
+      makeRule('console\\.log', 'Remove debug logging', 'No console.log', {
+        lessonHash: 'ledger-override-test',
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    const diff = makeDiff(
+      'src/app.ts',
+      '  console.log("ok"); // totem-context: needed for monitoring',
+    );
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    expect(result.violations).toHaveLength(0);
+
+    const resolvedTotemDir = path.join(tmpDir, TOTEM_DIR);
+    const events = readLedgerEvents(resolvedTotemDir);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.type).toBe('override');
+    expect(events[0]!.ruleId).toBe('ledger-override-test');
+    expect(events[0]!.file).toBe('src/app.ts');
+    expect(events[0]!.justification).toBe('needed for monitoring');
+    expect(events[0]!.source).toBe('lint');
   });
 });

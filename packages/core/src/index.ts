@@ -110,6 +110,7 @@ export type {
   CompilerOutput,
   DiffAddition,
   RuleEventCallback,
+  RuleEventContext,
   Violation,
 } from './compiler.js';
 export {
@@ -121,6 +122,7 @@ export {
   CompilerOutputSchema,
   engineFields,
   extractAddedLines,
+  extractJustification,
   hashLesson,
   loadCompiledRules,
   loadCompiledRulesFile,
@@ -253,3 +255,7 @@ export { readRegistry, updateRegistryEntry } from './registry.js';
 // Secrets (user-defined DLP patterns)
 export type { CustomSecret, SecretsFile } from './secrets.js';
 export { CustomSecretSchema, loadCustomSecrets, SecretsFileSchema } from './secrets.js';
+
+// Trap Ledger (suppression/override audit trail)
+export type { LedgerEvent } from './ledger.js';
+export { appendLedgerEvent, LedgerEventSchema, readLedgerEvents } from './ledger.js';
