@@ -1,25 +1,7 @@
-import * as path from 'node:path';
-
 import type { ContentType, SearchResult } from '@mmnto/totem';
-import { createEmbedder, LanceStore } from '@mmnto/totem';
 
-import { GitHubCliPrAdapter } from '../adapters/github-cli-pr.js';
 import type { StandardPrListItem } from '../adapters/pr-adapter.js';
-import { getGitBranch, getGitStatus } from '../git.js';
-import { log } from '../ui.js';
-import {
-  formatLessonSection,
-  formatResults,
-  getSystemPrompt,
-  loadConfig,
-  loadEnv,
-  partitionLessons,
-  requireEmbedding,
-  resolveConfigPath,
-  runOrchestrator,
-  wrapXml,
-  writeOutput,
-} from '../utils.js';
+import { formatLessonSection, formatResults, wrapXml } from '../utils.js';
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -71,7 +53,18 @@ interface RetrievedContext {
   lessons: SearchResult[];
 }
 
-async function retrieveContext(query: string, store: LanceStore): Promise<RetrievedContext> {
+async function retrieveContext(
+  query: string,
+  store: {
+    search: (opts: {
+      query: string;
+      typeFilter: ContentType;
+      maxResults: number;
+    }) => Promise<SearchResult[]>;
+  },
+): Promise<RetrievedContext> {
+  const { partitionLessons } = await import('../utils.js');
+
   const search = (typeFilter: ContentType, maxResults: number) =>
     store.search({ query, typeFilter, maxResults });
 
@@ -139,6 +132,21 @@ export interface BriefingOptions {
 }
 
 export async function briefingCommand(options: BriefingOptions): Promise<void> {
+  const path = await import('node:path');
+  const { createEmbedder, LanceStore } = await import('@mmnto/totem');
+  const { GitHubCliPrAdapter } = await import('../adapters/github-cli-pr.js');
+  const { getGitBranch, getGitStatus } = await import('../git.js');
+  const { log } = await import('../ui.js');
+  const {
+    getSystemPrompt,
+    loadConfig,
+    loadEnv,
+    requireEmbedding,
+    resolveConfigPath,
+    runOrchestrator,
+    writeOutput,
+  } = await import('../utils.js');
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);

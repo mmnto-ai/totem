@@ -1,25 +1,26 @@
-import { spawn } from 'node:child_process';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { stdin as input, stdout as output } from 'node:process';
-import * as readline from 'node:readline/promises';
-
-import { generateLessonHeading, writeLessonFile } from '@mmnto/totem'; // totem-ignore
-
-import { log } from '../ui.js';
-import { IS_WIN, loadConfig, loadEnv, resolveConfigPath, sanitize } from '../utils.js';
-
-function detectSyncCommand(cwd: string): { cmd: string; args: string[] } {
-  if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) {
-    return { cmd: IS_WIN ? 'pnpm.cmd' : 'pnpm', args: ['exec', 'totem', 'sync', '--incremental'] };
-  }
-  if (fs.existsSync(path.join(cwd, 'yarn.lock'))) {
-    return { cmd: IS_WIN ? 'yarn.cmd' : 'yarn', args: ['totem', 'sync', '--incremental'] };
-  }
-  return { cmd: IS_WIN ? 'npx.cmd' : 'npx', args: ['totem', 'sync', '--incremental'] };
-}
-
 export async function addLessonCommand(lessonArg?: string): Promise<void> {
+  const { spawn } = await import('node:child_process');
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { stdin: input, stdout: output } = await import('node:process');
+  const readline = await import('node:readline/promises');
+  const { generateLessonHeading, writeLessonFile } = await import('@mmnto/totem'); // totem-ignore
+  const { log } = await import('../ui.js');
+  const { IS_WIN, loadConfig, loadEnv, resolveConfigPath, sanitize } = await import('../utils.js');
+
+  function detectSyncCommand(cwd: string): { cmd: string; args: string[] } {
+    if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) {
+      return {
+        cmd: IS_WIN ? 'pnpm.cmd' : 'pnpm',
+        args: ['exec', 'totem', 'sync', '--incremental'],
+      };
+    }
+    if (fs.existsSync(path.join(cwd, 'yarn.lock'))) {
+      return { cmd: IS_WIN ? 'yarn.cmd' : 'yarn', args: ['totem', 'sync', '--incremental'] };
+    }
+    return { cmd: IS_WIN ? 'npx.cmd' : 'npx', args: ['totem', 'sync', '--incremental'] };
+  }
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);

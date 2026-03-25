@@ -1,7 +1,4 @@
 import type { CompiledRule, CompiledRulesFile, LessonInput } from '@mmnto/totem';
-import { TotemConfigError, TotemError } from '@mmnto/totem';
-
-import { COMPILER_SYSTEM_PROMPT } from './compile-templates.js';
 
 // ─── Constants ──────────────────────────────────────
 
@@ -78,6 +75,8 @@ function getTestedHashes(
 // ─── Main command ───────────────────────────────────
 
 export async function compileCommand(options: CompileOptions): Promise<void> {
+  const { TotemConfigError, TotemError } = await import('@mmnto/totem');
+  const { COMPILER_SYSTEM_PROMPT } = await import('./compile-templates.js');
   const fs = await import('node:fs');
   const path = await import('node:path');
   const { log } = await import('../ui.js');

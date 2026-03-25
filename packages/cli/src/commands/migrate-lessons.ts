@@ -1,12 +1,3 @@
-import * as fs from 'node:fs'; // totem-ignore
-import * as path from 'node:path'; // totem-ignore
-
-import { parseLessonsFile, writeLessonFile } from '@mmnto/totem'; // totem-ignore
-
-import { BASELINE_MARKER } from '../assets/universal-lessons.js'; // totem-ignore
-import { log } from '../ui.js'; // totem-ignore
-import { loadConfig, resolveConfigPath } from '../utils.js'; // totem-ignore
-
 const TAG = 'Migrate';
 
 /**
@@ -20,6 +11,13 @@ const TAG = 'Migrate';
  * 6. Log summary
  */
 export async function migrateLessonsCommand(): Promise<void> {
+  const fs = await import('node:fs'); // totem-ignore
+  const path = await import('node:path'); // totem-ignore
+  const { parseLessonsFile, writeLessonFile } = await import('@mmnto/totem'); // totem-ignore
+  const { BASELINE_MARKER } = await import('../assets/universal-lessons.js'); // totem-ignore
+  const { log } = await import('../ui.js'); // totem-ignore
+  const { loadConfig, resolveConfigPath } = await import('../utils.js'); // totem-ignore
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   const config = await loadConfig(configPath);

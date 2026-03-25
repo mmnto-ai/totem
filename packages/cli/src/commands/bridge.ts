@@ -1,12 +1,3 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-
-import { TotemGitError } from '@mmnto/totem';
-
-import { getGitBranch, getGitStatus } from '../git.js';
-import { log } from '../ui.js';
-import { writeOutput } from '../utils.js';
-
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Bridge';
@@ -52,7 +43,14 @@ export interface BridgeOptions {
   out?: string;
 }
 
-export function bridgeCommand(options: BridgeOptions): void {
+export async function bridgeCommand(options: BridgeOptions): Promise<void> {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { TotemGitError } = await import('@mmnto/totem');
+  const { getGitBranch, getGitStatus } = await import('../git.js');
+  const { log } = await import('../ui.js');
+  const { writeOutput } = await import('../utils.js');
+
   const cwd = process.cwd();
 
   if (!fs.existsSync(path.join(cwd, '.git'))) {

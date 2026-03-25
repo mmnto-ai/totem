@@ -601,9 +601,9 @@ describe('formatVerdictForDisplay', () => {
     const output = formatVerdictForDisplay(verdict, false);
     const lines = output.split('\n');
     // CRITICAL should come before WARN which should come before INFO
-    const criticalIndex = lines.findIndex((l) => l.includes('CRITICAL'));
-    const warnIndex = lines.findIndex((l) => l.includes('WARN'));
-    const infoIndex = lines.findIndex((l) => l.includes('INFO'));
+    const criticalIndex = lines.findIndex((l: string) => l.includes('CRITICAL'));
+    const warnIndex = lines.findIndex((l: string) => l.includes('WARN'));
+    const infoIndex = lines.findIndex((l: string) => l.includes('INFO'));
     expect(criticalIndex).toBeLessThan(warnIndex);
     expect(warnIndex).toBeLessThan(infoIndex);
   });

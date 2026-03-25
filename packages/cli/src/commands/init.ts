@@ -1,24 +1,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { stdin as input, stdout as output } from 'node:process';
-import * as readline from 'node:readline/promises';
 
 import { z } from 'zod';
 
 import type { IngestTarget } from '@mmnto/totem';
 
 import {
-  UNIVERSAL_BASELINE_LESSONS,
-  UNIVERSAL_BASELINE_MARKER,
-} from '../assets/universal-baseline.js';
-import { bold, brand, dim, log, printBanner, success } from '../ui.js';
-import {
   AI_TOOLS,
   type AiToolInfo,
-  buildTargets,
-  detectAiTools,
-  detectEmbeddingTier,
-  detectProject,
   type Ecosystem,
   type EmbeddingTier,
   type HookInstallerResult,
@@ -37,7 +26,6 @@ import {
   REFLEX_VERSION_RE,
   TOTEM_FILE_MARKER,
 } from './init-templates.js';
-import { installEnforcementHooks, installPostMergeHook } from './install-hooks.js';
 
 // Re-export moved items so existing consumers (including tests) don't break
 export type { AiToolInfo, HookInstallerResult } from './init-detect.js';
@@ -298,9 +286,13 @@ export function scaffoldMcpConfig(
  */
 export async function installBaselineLessons(
   baselinePath: string,
-  rl: readline.Interface,
+  rl: import('node:readline/promises').Interface,
   ecosystems?: Ecosystem[],
 ): Promise<'installed' | 'exists' | 'skipped'> {
+  const { UNIVERSAL_BASELINE_LESSONS, UNIVERSAL_BASELINE_MARKER } =
+    await import('../assets/universal-baseline.js');
+  const { log } = await import('../ui.js');
+
   try {
     if (fs.existsSync(baselinePath)) {
       const existing = fs.readFileSync(baselinePath, 'utf-8');
@@ -461,6 +453,13 @@ interface InitSummaryEntry {
 }
 
 export async function initCommand(options?: { bare?: boolean }): Promise<void> {
+  const { stdin: input, stdout: output } = await import('node:process');
+  const readline = await import('node:readline/promises');
+  const { bold, brand, dim, log, printBanner, success } = await import('../ui.js');
+  const { buildTargets, detectAiTools, detectEmbeddingTier, detectProject } =
+    await import('./init-detect.js');
+  const { installEnforcementHooks, installPostMergeHook } = await import('./install-hooks.js');
+
   const cwd = process.cwd();
   const { CONFIG_FILES } = await import('../utils.js');
   const totemDir = path.join(cwd, '.totem');

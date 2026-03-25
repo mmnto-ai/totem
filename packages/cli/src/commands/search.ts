@@ -1,14 +1,15 @@
-import * as path from 'node:path';
-
 import type { ContentType } from '@mmnto/totem';
-import { ContentTypeSchema, createEmbedder, LanceStore, TotemConfigError } from '@mmnto/totem';
-
-import { loadConfig, loadEnv, requireEmbedding, resolveConfigPath, sanitize } from '../utils.js';
 
 export async function searchCommand(
   query: string,
   options: { type?: string; maxResults?: string },
 ): Promise<void> {
+  const path = await import('node:path');
+  const { ContentTypeSchema, createEmbedder, LanceStore, TotemConfigError } =
+    await import('@mmnto/totem');
+  const { loadConfig, loadEnv, requireEmbedding, resolveConfigPath, sanitize } =
+    await import('../utils.js');
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
 

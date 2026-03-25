@@ -76,18 +76,22 @@ describe('SPEC_SYSTEM_PROMPT', () => {
 // ─── assemblePrompt ──────────────────────────────────────
 
 describe('assemblePrompt', () => {
-  it('includes lessons section when lessons are present', () => {
+  it('includes lessons section when lessons are present', async () => {
     const ctx: RetrievedContext = {
       ...emptyContext(),
       lessons: [makeLesson()],
     };
-    const result = assemblePrompt([{ issue: null, freeText: 'test topic' }], ctx, 'system prompt');
+    const result = await assemblePrompt(
+      [{ issue: null, freeText: 'test topic' }],
+      ctx,
+      'system prompt',
+    );
     expect(result).toContain('RELEVANT LESSONS (HARD CONSTRAINTS)');
     expect(result).toContain('Always validate input at boundaries.');
   });
 
-  it('omits lessons section when no lessons found', () => {
-    const result = assemblePrompt(
+  it('omits lessons section when no lessons found', async () => {
+    const result = await assemblePrompt(
       [{ issue: null, freeText: 'test topic' }],
       emptyContext(),
       'system prompt',
@@ -95,68 +99,68 @@ describe('assemblePrompt', () => {
     expect(result).not.toContain('RELEVANT LESSONS');
   });
 
-  it('includes full lesson body without truncation', () => {
+  it('includes full lesson body without truncation', async () => {
     const longBody = 'A'.repeat(500);
     const ctx: RetrievedContext = {
       ...emptyContext(),
       lessons: [makeLesson({ content: longBody })],
     };
-    const result = assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
+    const result = await assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
     expect(result).toContain(longBody);
   });
 
-  it('includes lesson score in output', () => {
+  it('includes lesson score in output', async () => {
     const ctx: RetrievedContext = {
       ...emptyContext(),
       lessons: [makeLesson({ score: 0.789 })],
     };
-    const result = assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
+    const result = await assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
     expect(result).toContain('0.789');
   });
 
-  it('respects MAX_LESSON_CHARS budget', () => {
+  it('respects MAX_LESSON_CHARS budget', async () => {
     // Create lessons that individually fit but collectively exceed the budget
     const bigLesson = makeLesson({ content: 'X'.repeat(2000) });
     const lessons = Array.from({ length: 10 }, () => ({ ...bigLesson }));
     const ctx: RetrievedContext = { ...emptyContext(), lessons };
 
-    const result = assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
+    const result = await assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
 
     // Extract just the lessons section
     const lessonSection = result.split('RELEVANT LESSONS (HARD CONSTRAINTS)')[1] ?? '';
     expect(lessonSection.length).toBeLessThan(MAX_LESSON_CHARS + 200); // small margin for headers
   });
 
-  it('skips oversized lessons but includes smaller ones after', () => {
+  it('skips oversized lessons but includes smaller ones after', async () => {
     const hugeLesson = makeLesson({ content: 'H'.repeat(MAX_LESSON_CHARS + 1), label: 'Huge' });
     const smallLesson = makeLesson({ content: 'Small lesson body', label: 'Small' });
     const ctx: RetrievedContext = {
       ...emptyContext(),
       lessons: [hugeLesson, smallLesson],
     };
-    const result = assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
+    const result = await assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
     expect(result).toContain('RELEVANT LESSONS');
     expect(result).toContain('Small lesson body');
     expect(result).not.toContain('H'.repeat(100));
   });
 
-  it('includes both specs and lessons as separate sections', () => {
+  it('includes both specs and lessons as separate sections', async () => {
     const ctx: RetrievedContext = {
       ...emptyContext(),
       specs: [makeSpec()],
       lessons: [makeLesson()],
     };
-    const result = assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
+    const result = await assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
     expect(result).toContain('RELATED SPECS & ADRs');
     expect(result).toContain('RELEVANT LESSONS (HARD CONSTRAINTS)');
   });
 
-  it('includes issue context when provided', () => {
+  it('includes issue context when provided', async () => {
     const ctx: RetrievedContext = {
       ...emptyContext(),
       lessons: [makeLesson()],
     };
-    const result = assemblePrompt(
+    const result = await assemblePrompt(
       [
         {
           issue: {
@@ -261,7 +265,7 @@ describe('retrieveContext — cross-totem linked stores', () => {
 });
 
 describe('retrieveContext partitioning', () => {
-  it('lessons from lessons.md are separated from regular specs', () => {
+  it('lessons from lessons.md are separated from regular specs', async () => {
     // Simulate what retrieveContext produces: lessons in lessons array, specs in specs array
     const ctx: RetrievedContext = {
       specs: [makeSpec({ filePath: 'docs/architecture.md' })],
@@ -269,7 +273,7 @@ describe('retrieveContext partitioning', () => {
       code: [],
       lessons: [makeLesson({ filePath: '.totem/lessons.md' })],
     };
-    const result = assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
+    const result = await assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
     // Lessons appear in their own section, not mixed with specs
     const specSection = result.split('RELATED SPECS & ADRs')[1]?.split('===')[0] ?? '';
     expect(specSection).not.toContain('lessons.md');

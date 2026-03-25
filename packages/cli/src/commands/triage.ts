@@ -1,23 +1,7 @@
-import * as path from 'node:path';
-
-import type { ContentType, SearchResult } from '@mmnto/totem';
-import { createEmbedder, LanceStore } from '@mmnto/totem';
+import type { ContentType, LanceStore, SearchResult } from '@mmnto/totem';
 
 import type { StandardIssueListItem } from '../adapters/issue-adapter.js';
-import { log } from '../ui.js';
-import {
-  formatLessonSection,
-  formatResults,
-  getSystemPrompt,
-  loadConfig,
-  loadEnv,
-  partitionLessons,
-  requireEmbedding,
-  resolveConfigPath,
-  runOrchestrator,
-  wrapXml,
-  writeOutput,
-} from '../utils.js';
+import { formatLessonSection, formatResults, partitionLessons, wrapXml } from '../utils.js';
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -146,6 +130,19 @@ export interface TriageOptions {
 }
 
 export async function triageCommand(options: TriageOptions): Promise<void> {
+  const path = await import('node:path');
+  const { createEmbedder, LanceStore } = await import('@mmnto/totem');
+  const { log } = await import('../ui.js');
+  const {
+    getSystemPrompt,
+    loadConfig,
+    loadEnv,
+    requireEmbedding,
+    resolveConfigPath,
+    runOrchestrator,
+    writeOutput,
+  } = await import('../utils.js');
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);
