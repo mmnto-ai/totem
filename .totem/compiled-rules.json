@@ -4283,23 +4283,22 @@
     {
       "lessonHash": "c360340b1b8ff1c7",
       "lessonHeading": "Manual lessons must use the '## Lesson — <Heading>'",
+      "pattern": "^## Lesson(?!\\s+—\\s+)",
       "message": "Manual lessons must use the '## Lesson — <Heading>' structure and include a 'Tags' field.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^## Lesson(?!\\s+—\\s+)",
       "compiledAt": "2026-03-24T20:52:47.923Z",
       "createdAt": "2026-03-24T20:52:47.923Z",
       "fileGlobs": [
         "*.md"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "53b9397e971ec97d",
       "lessonHeading": "Hardcoded vendor-shaped secrets in test fixtures",
+      "pattern": "['\"](?:sk_(?:live|test)_|ghp_|AIza|AKIA)[a-zA-Z0-9_\\-]{6,}['\"]",
       "message": "Hardcoded vendor-shaped secrets in test fixtures can trigger false positives. Construct these strings at runtime via concatenation (e.g., 'sk_' + 'live_...') to avoid detection.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "['\"](?:sk_(?:live|test)_|ghp_|AIza|AKIA)[a-zA-Z0-9_\\-]{6,}['\"]",
       "compiledAt": "2026-03-24T20:53:01.434Z",
       "createdAt": "2026-03-24T20:53:01.434Z",
       "fileGlobs": [
@@ -4309,15 +4308,15 @@
         "**/*.spec.js",
         "**/tests/**",
         "**/fixtures/**"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "884becd45e6380bd",
       "lessonHeading": "Using 'pnpm run version' instead of the bare 'pnpm version'",
+      "pattern": "\\bpnpm\\s+version\\b",
       "message": "Use 'pnpm run version' instead of 'pnpm version' to ensure Changesets workflow triggers correctly and updates changelogs.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bpnpm\\s+version\\b",
       "compiledAt": "2026-03-24T20:52:55.542Z",
       "createdAt": "2026-03-24T20:52:55.542Z",
       "fileGlobs": [
@@ -4326,28 +4325,28 @@
         ".github/workflows/*.yaml",
         "*.sh",
         "*.bash"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "e533191ba7c58614",
       "lessonHeading": "Use a '## Lesson — <Heading>' format and 'Tags' field",
+      "pattern": "^\\+?\\s*(##\\s+(lesson\\b|Lesson\\b(?!\\s+—\\s+))|\\b(Tag|tags|TAGS|TAG)\\s*:)",
       "message": "Lesson files must use the '## Lesson — <Heading>' format (with an em-dash) and a 'Tags:' field (capitalized, plural).",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^\\+?\\s*(##\\s+(lesson\\b|Lesson\\b(?!\\s+—\\s+))|\\b(Tag|tags|TAGS|TAG)\\s*:)",
       "compiledAt": "2026-03-24T20:54:34.839Z",
       "createdAt": "2026-03-24T20:54:34.839Z",
       "fileGlobs": [
         "**/*.md"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "7056157a6bf72fa8",
       "lessonHeading": "Instead of hardcoding .git/hooks, use 'git rev-parse",
+      "pattern": "\\.git/hooks",
       "message": "Avoid hardcoding '.git/hooks'. Use 'git rev-parse --git-path hooks' to support custom hook paths and worktrees correctly.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.git/hooks",
       "compiledAt": "2026-03-24T20:54:44.532Z",
       "createdAt": "2026-03-24T20:54:44.532Z",
       "fileGlobs": [
@@ -4358,15 +4357,15 @@
         "*.ts",
         "*.js",
         "*.json"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "db983128cd04ff63",
       "lessonHeading": "Using runtime binary resolution for hooks instead",
+      "pattern": "\\/(?:usr\\/(?:local\\/)?|)(?:bin|sbin)\\/(?!env\\b)[\\w\\.-]+",
       "message": "Use runtime binary resolution instead of hardcoded absolute paths for binaries (e.g., use 'python3' or '/usr/bin/env python3' instead of '/usr/bin/python3') to ensure language-agnostic support.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\/(?:usr\\/(?:local\\/)?|)(?:bin|sbin)\\/(?!env\\b)[\\w\\.-]+",
       "compiledAt": "2026-03-24T20:55:05.608Z",
       "createdAt": "2026-03-24T20:55:05.608Z",
       "fileGlobs": [
@@ -4377,29 +4376,29 @@
         "**/*.py",
         "**/*.yml",
         "**/*.yaml"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "9d11bb846da8a278",
       "lessonHeading": "Store the actual resolved vector size in the registry",
+      "pattern": "\\b(size|dimensions|vectorSize)\\s*[:=]\\s*['\"]auto['\"]",
       "message": "Store the actual resolved vector size in the registry instead of 'auto' placeholders to provide accurate diagnostic information about the embedding configuration.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(size|dimensions|vectorSize)\\s*[:=]\\s*['\"]auto['\"]",
       "compiledAt": "2026-03-24T20:55:17.446Z",
       "createdAt": "2026-03-24T20:55:17.446Z",
       "fileGlobs": [
         "**/*.ts",
         "**/*.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "5d5e14b8ea612c2f",
       "lessonHeading": "Set LLM temperature to zero during build",
+      "pattern": "\\btemperature\\s*[:=]\\s*(?:0*[1-9][0-9]*\\.?[0-9]*|0*\\.[0-9]*[1-9][0-9]*)",
       "message": "LLM temperature must be set to 0 during build/compilation to ensure deterministic output and stable manifest hashes.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\btemperature\\s*[:=]\\s*(?:0*[1-9][0-9]*\\.?[0-9]*|0*\\.[0-9]*[1-9][0-9]*)",
       "compiledAt": "2026-03-24T20:55:39.176Z",
       "createdAt": "2026-03-24T20:55:39.176Z",
       "fileGlobs": [
@@ -4410,29 +4409,29 @@
         "*.yaml",
         "*.yml",
         "*.json"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "9dbc00ec4e637769",
       "lessonHeading": "Use a Personal Access Token (PAT) for automated PR creation",
+      "pattern": "secrets\\.GITHUB_TOKEN",
       "message": "Use a Personal Access Token (PAT) instead of GITHUB_TOKEN for automated PR creation if organization restrictions are in place.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "secrets\\.GITHUB_TOKEN",
       "compiledAt": "2026-03-24T20:55:56.427Z",
       "createdAt": "2026-03-24T20:55:56.427Z",
       "fileGlobs": [
         ".github/workflows/*.yml",
         ".github/workflows/*.yaml"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "d2f88c8528441069",
       "lessonHeading": "Avoid hardcoding .git/hooks paths as repositories may use",
+      "pattern": "\\.git/hooks",
       "message": "Avoid hardcoding '.git/hooks'; use 'git rev-parse --git-path hooks' to account for custom core.hooksPath configurations.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.git/hooks",
       "compiledAt": "2026-03-24T20:55:53.997Z",
       "createdAt": "2026-03-24T20:55:53.997Z",
       "fileGlobs": [
@@ -4444,15 +4443,15 @@
         "**/*.yaml",
         "package.json",
         "!**/*.md"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "f2585365969e3244",
       "lessonHeading": "Swallowing read errors during security scans can lead",
+      "pattern": "",
       "message": "Swallowing read errors during security scans can lead to false passes. Explicitly record failure states if files are unreadable.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "try { $$$ } catch ($E) {}",
       "compiledAt": "2026-03-24T20:56:37.212Z",
       "createdAt": "2026-03-24T20:56:37.212Z",
@@ -4461,30 +4460,30 @@
         "**/*.js",
         "!**/*.test.ts",
         "!**/*.test.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "12db8ce84294bfca",
       "lessonHeading": "Creating changeset Markdown files manually",
+      "pattern": "\\b(npx|pnpm|yarn|bun)\\s+changeset(?!\\s+(version|publish|status|tag|pre|post))\\b",
       "message": "Create changeset Markdown files manually in .changeset/ instead of using the interactive CLI to avoid stdin piping failures.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(npx|pnpm|yarn|bun)\\s+changeset(?!\\s+(version|publish|status|tag|pre|post))\\b",
       "compiledAt": "2026-03-24T20:57:17.935Z",
       "createdAt": "2026-03-24T20:57:17.935Z",
       "fileGlobs": [
         "package.json",
         "*.yml",
         "*.sh"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "e21933d263748874",
       "lessonHeading": "Hardcoding vendor-shaped secret literals in test fixtures",
+      "pattern": "\\b(AKIA[0-9A-Z]{16}|sk_(test|live)_[0-9a-zA-Z]{24,}|ghp_[0-9a-zA-Z]{36}|xox[baprs]-[0-9a-zA-Z]{10,48})\\b",
       "message": "Avoid hardcoding vendor-shaped secret literals in test fixtures; construct these strings dynamically at runtime to avoid triggering security scanners.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(AKIA[0-9A-Z]{16}|sk_(test|live)_[0-9a-zA-Z]{24,}|ghp_[0-9a-zA-Z]{36}|xox[baprs]-[0-9a-zA-Z]{10,48})\\b",
       "compiledAt": "2026-03-24T20:56:53.218Z",
       "createdAt": "2026-03-24T20:56:53.218Z",
       "fileGlobs": [
@@ -4494,6 +4493,22 @@
         "*.spec.js",
         "*.test.tsx",
         "*.spec.tsx"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "e74e3a1ab95d2dd7",
+      "lessonHeading": "Tools and agents that write files must resolve paths",
+      "message": "Do not use process.cwd() for path resolution. Use the project root or config-defined paths (e.g., totemDir) to prevent orphaned artifacts in monorepo subdirectories.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "process.cwd()",
+      "compiledAt": "2026-03-25T00:19:09.894Z",
+      "createdAt": "2026-03-25T00:19:09.894Z",
+      "fileGlobs": [
+        "packages/mcp/**/*.ts",
+        "!**/*.test.ts"
       ]
     }
   ],
