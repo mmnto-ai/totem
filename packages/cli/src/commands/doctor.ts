@@ -1,7 +1,10 @@
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import pc from 'picocolors';
+
+import { compileCustomSecrets, loadCustomSecrets } from '@mmnto/totem';
 
 import { resolveGitRoot } from '../git.js';
 import { CONFIG_FILES } from '../utils.js';
@@ -341,12 +344,17 @@ export function checkSecretLeaks(cwd: string, totemDir = '.totem'): DiagnosticRe
     };
   }
 
+  // Load user-defined custom secrets
+  const customSecrets = loadCustomSecrets(cwd, totemDir);
+  const customPatterns = compileCustomSecrets(customSecrets);
+
+  const allPatterns = [...SECRET_PATTERNS, ...customPatterns];
   const leaks: string[] = [];
 
   for (const filePath of filesToScan) {
     try {
       const content = fs.readFileSync(filePath, 'utf-8');
-      for (const pattern of SECRET_PATTERNS) {
+      for (const pattern of allPatterns) {
         const matches = content.match(new RegExp(pattern.source, 'g'));
         if (matches) {
           for (const match of matches) {
@@ -377,6 +385,33 @@ export function checkSecretLeaks(cwd: string, totemDir = '.totem'): DiagnosticRe
     name: 'Secret Scan',
     status: 'pass',
     message: 'No leaked keys detected',
+  };
+}
+
+export function checkSecretsFileTracked(cwd: string, totemDir = '.totem'): DiagnosticResult {
+  const secretsPath = path.join(totemDir, 'secrets.json');
+  try {
+    const result = spawnSync('git', ['ls-files', '--recurse-submodules', secretsPath], {
+      cwd,
+      encoding: 'utf-8',
+    });
+    if (result.error) throw result.error;
+    const output = (result.stdout ?? '').trim();
+    if (output.length > 0) {
+      return {
+        name: 'Secrets File Security',
+        status: 'fail',
+        message: `${secretsPath} is tracked by git — secrets may be exposed`,
+        remediation: `Run: git rm --cached ${secretsPath}`,
+      };
+    }
+  } catch {
+    // git not available or not a repo — skip
+  }
+  return {
+    name: 'Secrets File Security',
+    status: 'pass',
+    message: 'secrets.json is not tracked by git',
   };
 }
 
@@ -433,6 +468,7 @@ export async function doctorCommand(): Promise<DiagnosticResult[]> {
     checkEmbeddingConfig(cwd),
     checkIndex(cwd),
     checkSecretLeaks(cwd),
+    checkSecretsFileTracked(cwd),
   ];
 
   for (const result of results) {

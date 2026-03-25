@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { ContentType } from './config-schema.js';
 import { maskSecrets, sanitize, sanitizeForIngestion } from './sanitize.js';
+import type { CustomSecret } from './secrets.js';
 
 // ─── Base sanitize() ────────────────────────────────
 
@@ -273,5 +274,54 @@ describe('maskSecrets', () => {
     const result = maskSecrets(`key is ${token}`);
     expect(result).toBe('key is [REDACTED]');
     expect(result).not.toContain('sk-');
+  });
+
+  // --- Custom secrets (user-defined DLP patterns) ---
+
+  describe('custom secrets', () => {
+    it('properly escapes literal secrets with regex control characters', () => {
+      const customs: CustomSecret[] = [{ type: 'literal', value: 'sk_token+xyz$' }];
+      const result = maskSecrets('my key is sk_token+xyz$ ok', customs);
+      expect(result).toBe('my key is [REDACTED_CUSTOM] ok');
+    });
+
+    it('handles pattern type secrets', () => {
+      const customs: CustomSecret[] = [{ type: 'pattern', value: 'internal-service-\\d+' }];
+      const result = maskSecrets('calling internal-service-42 now', customs);
+      expect(result).toBe('calling [REDACTED_CUSTOM] now');
+    });
+
+    it('applies custom secrets after built-in patterns', () => {
+      const customs: CustomSecret[] = [{ type: 'literal', value: 'my-corp-token-abc123' }];
+      const input = 'keys: sk-abc123def456ghi789jkl012mno and my-corp-token-abc123';
+      const result = maskSecrets(input, customs);
+      expect(result).toContain('[REDACTED]');
+      expect(result).toContain('[REDACTED_CUSTOM]');
+      expect(result).not.toContain('sk-abc123def456ghi789jkl012mno');
+      expect(result).not.toContain('my-corp-token-abc123');
+    });
+
+    it('ignores invalid regex patterns without crashing', () => {
+      const customs: CustomSecret[] = [
+        { type: 'pattern', value: '[unclosed bracket' },
+        { type: 'literal', value: 'valid-secret-1234' },
+      ];
+      const result = maskSecrets('found valid-secret-1234 here', customs);
+      expect(result).toBe('found [REDACTED_CUSTOM] here');
+    });
+
+    it('with no custom secrets works as before', () => {
+      const text = 'This is a normal code comment about authentication.';
+      expect(maskSecrets(text)).toBe(text);
+      expect(maskSecrets(text, undefined)).toBe(text);
+      expect(maskSecrets(text, [])).toBe(text);
+    });
+
+    it('uses [REDACTED_CUSTOM] tag for custom secrets', () => {
+      const customs: CustomSecret[] = [{ type: 'literal', value: 'super-secret-value!' }];
+      const result = maskSecrets('data: super-secret-value! end', customs);
+      expect(result).toBe('data: [REDACTED_CUSTOM] end');
+      expect(result).not.toContain('[REDACTED]');
+    });
   });
 });

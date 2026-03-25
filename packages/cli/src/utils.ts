@@ -2,7 +2,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import type { SearchResult, TotemConfig } from '@mmnto/totem';
+import type { CustomSecret, SearchResult, TotemConfig } from '@mmnto/totem';
 import {
   maskSecrets,
   TotemConfigError,
@@ -374,6 +374,8 @@ export async function runOrchestrator(opts: {
   configRoot?: string;
   totalResults?: number;
   temperature?: number;
+  /** User-defined custom secrets to redact via DLP before outbound LLM calls (#921). */
+  customSecrets?: CustomSecret[];
 }): Promise<string | undefined> {
   const { prompt, tag, options, config, cwd } = opts;
   const configRoot = opts.configRoot ?? cwd;
@@ -457,7 +459,7 @@ export async function runOrchestrator(opts: {
   let safePrompt = prompt;
   if (!isLocalProvider) {
     try {
-      safePrompt = maskSecrets(prompt);
+      safePrompt = maskSecrets(prompt, opts.customSecrets);
       if (safePrompt !== prompt) {
         log.warn(tag, 'DLP: secrets detected and redacted before LLM call');
       }

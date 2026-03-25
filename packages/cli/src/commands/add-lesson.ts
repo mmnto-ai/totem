@@ -1,3 +1,5 @@
+const TAG = 'AddLesson';
+
 export async function addLessonCommand(lessonArg?: string): Promise<void> {
   const { spawn } = await import('node:child_process');
   const fs = await import('node:fs');
@@ -21,10 +23,15 @@ export async function addLessonCommand(lessonArg?: string): Promise<void> {
     return { cmd: IS_WIN ? 'npx.cmd' : 'npx', args: ['totem', 'sync', '--incremental'] };
   }
 
+  const { loadCustomSecrets, maskSecrets } = await import('@mmnto/totem'); // totem-ignore
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);
   const config = await loadConfig(configPath);
+
+  // Load user-defined custom secrets for DLP (#921)
+  const customSecrets = loadCustomSecrets(cwd, config.totemDir, (msg) => log.warn(TAG, msg));
 
   const totemDir = path.join(cwd, config.totemDir);
   if (!fs.existsSync(totemDir)) {
@@ -68,6 +75,18 @@ export async function addLessonCommand(lessonArg?: string): Promise<void> {
   if (!lessonText || !lessonText.trim()) {
     log.error('Totem Error', 'Lesson text cannot be empty.');
     return;
+  }
+
+  // Warn and redact if lesson text contains custom secret patterns (#921)
+  if (customSecrets.length > 0) {
+    const redacted = maskSecrets(lessonText, customSecrets);
+    if (redacted !== lessonText) {
+      log.warn(
+        TAG,
+        'Custom secret pattern detected in lesson text. The text will be automatically redacted.',
+      );
+      lessonText = redacted;
+    }
   }
 
   const safeLesson = sanitize(lessonText);

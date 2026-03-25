@@ -4,6 +4,9 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import type { CustomSecret } from '@mmnto/totem';
+import { maskSecrets } from '@mmnto/totem';
+
 import {
   appendLessons,
   assemblePrompt,
@@ -934,5 +937,66 @@ describe('deduplicateLessons', () => {
 
   it('exports threshold constant at 0.92', () => {
     expect(SEMANTIC_DEDUP_THRESHOLD).toBe(0.92);
+  });
+});
+
+// ─── Custom secrets DLP in extract pipeline (#921) ────
+
+describe('extract redacts custom secrets before LLM call', () => {
+  const customSecrets: CustomSecret[] = [
+    { type: 'literal', value: 'SUPER_SECRET_API_KEY_12345' },
+    { type: 'pattern', value: 'internal-token-[a-f0-9]+' },
+  ];
+
+  it('redacts literal custom secrets from assembled prompt', () => {
+    const pr = {
+      number: 42,
+      title: 'Fix auth using SUPER_SECRET_API_KEY_12345',
+      state: 'closed',
+      body: 'Updated config with SUPER_SECRET_API_KEY_12345',
+      reviews: [] as { author: string; state: string; body: string }[],
+      comments: [] as { author: string; body: string }[],
+    };
+
+    const prompt = assemblePrompt(pr, [], [], SYSTEM_PROMPT);
+    // Prompt contains the secret before masking
+    expect(prompt).toContain('SUPER_SECRET_API_KEY_12345');
+
+    // After maskSecrets with custom secrets, the value is redacted
+    const safePrompt = maskSecrets(prompt, customSecrets);
+    expect(safePrompt).not.toContain('SUPER_SECRET_API_KEY_12345');
+    expect(safePrompt).toContain('[REDACTED_CUSTOM]');
+  });
+
+  it('redacts pattern-based custom secrets from assembled prompt', () => {
+    const pr = {
+      number: 99,
+      title: 'Update token handling',
+      state: 'closed',
+      body: 'Uses internal-token-deadbeef42 for auth',
+      reviews: [] as { author: string; state: string; body: string }[],
+      comments: [] as { author: string; body: string }[],
+    };
+
+    const prompt = assemblePrompt(pr, [], [], SYSTEM_PROMPT);
+    const safePrompt = maskSecrets(prompt, customSecrets);
+    expect(safePrompt).not.toContain('internal-token-deadbeef42');
+    expect(safePrompt).toContain('[REDACTED_CUSTOM]');
+  });
+
+  it('leaves prompt unchanged when no custom secrets match', () => {
+    const pr = {
+      number: 10,
+      title: 'Refactor utils',
+      state: 'closed',
+      body: 'Clean up helper functions',
+      reviews: [] as { author: string; state: string; body: string }[],
+      comments: [] as { author: string; body: string }[],
+    };
+
+    const prompt = assemblePrompt(pr, [], [], SYSTEM_PROMPT);
+    const safePrompt = maskSecrets(prompt, customSecrets);
+    // No custom secrets present, so no [REDACTED_CUSTOM] tags
+    expect(safePrompt).not.toContain('[REDACTED_CUSTOM]');
   });
 });

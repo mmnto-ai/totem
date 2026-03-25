@@ -836,6 +836,21 @@ export async function initCommand(options?: { bare?: boolean }): Promise<void> {
           fs.appendFileSync(gitignorePath, '\n# Totem\n.lancedb/\n');
           summary.push({ file: '.gitignore', action: 'Added .lancedb/ exclusion' });
         }
+        // Ensure secrets.json is gitignored (safety net — add-secret also does this)
+        const refreshed = fs.readFileSync(gitignorePath, 'utf-8');
+        const lines = refreshed.split(/\r?\n/);
+        if (!lines.some((line) => line.trim() === '.totem/secrets.json')) {
+          const separator = refreshed.endsWith('\n') ? '' : '\n';
+          fs.writeFileSync(gitignorePath, `${refreshed}${separator}.totem/secrets.json\n`, 'utf-8');
+          summary.push({ file: '.gitignore', action: 'Added .totem/secrets.json exclusion' });
+        }
+      } else {
+        // No .gitignore exists yet — create one with .lancedb/ and secrets entry
+        fs.writeFileSync(gitignorePath, '# Totem\n.lancedb/\n.totem/secrets.json\n', 'utf-8');
+        summary.push({
+          file: '.gitignore',
+          action: 'Created with .lancedb/ and .totem/secrets.json exclusions',
+        });
       }
 
       // --- Auto-ingest cursor rules (ADR-048) ---

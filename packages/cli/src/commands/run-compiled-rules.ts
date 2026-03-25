@@ -141,7 +141,38 @@ export async function runCompiledRules(
     const req = createRequire(import.meta.url);
     const version = (req('../../package.json') as { version: string }).version;
     const commitHash = getHeadSha(cwd) ?? undefined;
-    const sarif = buildSarifLog(violations, rules, { version, commitHash });
+    // SARIF is a strict channel for error-severity findings only.
+    // Warnings are probationary (Rule Nursery) and stay as local telemetry
+    // to prevent alert fatigue in the PR UI (Proposal 190).
+    const sarif = buildSarifLog(errors, rules, { version, commitHash });
+
+    // Surface warning count as a single note so users know they exist
+    if (warnings.length > 0) {
+      const summaryRuleIdx = sarif.runs[0].tool.driver.rules.length;
+      sarif.runs[0].tool.driver.rules.push({
+        id: 'totem/warning-summary',
+        shortDescription: {
+          text: 'Probationary warnings detected — run `totem lint` locally to review',
+        },
+      });
+      sarif.runs[0].results.push({
+        ruleId: 'totem/warning-summary',
+        ruleIndex: summaryRuleIdx,
+        level: 'note',
+        message: {
+          text: `${warnings.length} warning-severity finding(s) detected. Warnings are probationary and not shown in PR reviews. Run \`totem lint\` locally to review.`,
+        },
+        locations: [
+          {
+            physicalLocation: {
+              artifactLocation: { uri: '.totem/compiled-rules.json' },
+              region: { startLine: 1 },
+            },
+          },
+        ],
+      });
+    }
+
     output = JSON.stringify(sarif, null, 2);
   } else if (format === 'json') {
     output = JSON.stringify(
