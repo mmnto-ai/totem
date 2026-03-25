@@ -312,6 +312,7 @@ severity: critical
     expect(lessons[0]!.frontmatter?.compilation?.engine).toBe('regex');
     expect(lessons[0]!.frontmatter?.severity).toBe('warning');
     expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toContain('lesson-bad-yaml.md');
   });
 
   it('attaches frontmatter to legacy lessons.md entries', () => {

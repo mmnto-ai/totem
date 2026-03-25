@@ -322,7 +322,9 @@
         "*.js",
         "*.sh",
         "*.yml",
-        "*.yaml"
+        "*.yaml",
+        "!**/*.test.*",
+        "!**/*.spec.*"
       ],
       "severity": "warning"
     },
@@ -770,7 +772,9 @@
         "**/*.sh",
         "**/*.yml",
         "**/*.yaml",
-        "Dockerfile*"
+        "Dockerfile*",
+        "!**/*.test.*",
+        "!**/*.spec.*"
       ],
       "severity": "error"
     },
