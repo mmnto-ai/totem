@@ -428,6 +428,37 @@ program
   );
 
 program
+  .command('review-learn <pr-number>')
+  .description('Extract lessons from resolved bot review comments on a merged PR')
+  .option('--raw', 'Output assembled prompt without LLM synthesis')
+  .option('--out <path>', 'Write output to a file instead of stdout')
+  .option('--model <name>', 'Override the default model for the orchestrator')
+  .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
+  .option('--dry-run', 'Show extracted lessons without writing to disk')
+  .option('--yes', 'Skip confirmation prompt (use in scripts/CI)')
+  .action(
+    async (
+      prNumber: string,
+      opts: {
+        raw?: boolean;
+        out?: string;
+        model?: string;
+        fresh?: boolean;
+        dryRun?: boolean;
+        yes?: boolean;
+      },
+    ) => {
+      requireGhCli();
+      try {
+        const { reviewLearnCommand } = await import('./commands/review-learn.js');
+        await reviewLearnCommand(prNumber, opts);
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
+
+program
   .command('link <path>')
   .description('Link a neighboring repo into this project')
   .option('--unlink', 'Remove a previously linked repo')
@@ -597,7 +628,7 @@ program.addHelpText(
 Commands by tier:
   Core (no API keys):    init, sync, lint, compile, test, verify-manifest, hooks, link, stats, drift, doctor
   AI-Powered (needs LLM): shield, spec, handoff, docs, compile (with LLM)
-  GitHub Workflows:      extract, triage, wrap
+  GitHub Workflows:      extract, review-learn, triage, wrap
   Utilities:             add-lesson, add-secret, list-secrets, remove-secret, explain, eject
 `,
 );
