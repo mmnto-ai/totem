@@ -391,7 +391,10 @@ export function checkSecretLeaks(cwd: string, totemDir = '.totem'): DiagnosticRe
 export function checkSecretsFileTracked(cwd: string, totemDir = '.totem'): DiagnosticResult {
   const secretsPath = path.join(totemDir, 'secrets.json');
   try {
-    const result = execSync(`git ls-files --recurse-submodules "${secretsPath}"`, { cwd, encoding: 'utf-8' }).trim();
+    const result = execSync(`git ls-files --recurse-submodules "${secretsPath}"`, {
+      cwd,
+      encoding: 'utf-8',
+    }).trim();
     if (result.length > 0) {
       return {
         name: 'Secrets File Security',
