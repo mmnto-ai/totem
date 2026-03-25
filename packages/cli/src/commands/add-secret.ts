@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { SecretsFileSchema } from '@mmnto/totem';
 import type { SecretsFile } from '@mmnto/totem';
 
 // ─── Constants ──────────────────────────────────────────
@@ -71,9 +72,13 @@ export async function addSecretCommand(
   if (fs.existsSync(secretsPath)) {
     try {
       const content = fs.readFileSync(secretsPath, 'utf-8');
-      data = JSON.parse(content) as SecretsFile;
-      if (!Array.isArray(data.secrets)) {
-        data.secrets = [];
+      const parsed = JSON.parse(content) as unknown;
+      const result = SecretsFileSchema.safeParse(parsed);
+      if (result.success) {
+        data = result.data;
+      } else {
+        log.warn(TAG, 'secrets.json has invalid structure; starting fresh.');
+        data = { secrets: [] };
       }
     } catch (err) {
       log.warn(

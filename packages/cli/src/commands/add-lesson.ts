@@ -82,7 +82,7 @@ export async function addLessonCommand(lessonArg?: string): Promise<void> {
     const redacted = maskSecrets(lessonText, customSecrets);
     if (redacted !== lessonText) {
       log.warn(
-        'Totem',
+        TAG,
         'Custom secret pattern detected in lesson text. The text will be automatically redacted.',
       );
       lessonText = redacted;
