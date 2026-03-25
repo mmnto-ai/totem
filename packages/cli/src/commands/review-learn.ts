@@ -26,14 +26,13 @@ import {
   sanitize,
   wrapUntrustedXml,
 } from '../utils.js';
+// Reuse parsing and selection helpers from extract (they are exported)
+import { parseLessons, selectLessons } from './extract.js';
 import {
   MAX_EXISTING_LESSONS,
   MAX_PROMPT_CHARS,
   REVIEW_LEARN_SYSTEM_PROMPT,
 } from './review-learn-templates.js';
-
-// Reuse parsing and selection helpers from extract (they are exported)
-import { appendLessons, parseLessons, selectLessons } from './extract.js';
 
 const TAG = 'ReviewLearn';
 

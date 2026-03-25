@@ -6,9 +6,9 @@ import {
   extractResolvedBotFindings,
   extractSuggestion,
   isBotComment,
+  isThreadResolved,
   parseCRSeverity,
   parseGCASeverity,
-  isThreadResolved,
   stripHtmlWrappers,
 } from './bot-review-parser.js';
 

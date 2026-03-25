@@ -6,7 +6,6 @@ import {
   isBotComment,
   isThreadResolved,
 } from '../parsers/bot-review-parser.js';
-
 import { assembleReviewLearnPrompt } from './review-learn.js';
 import { REVIEW_LEARN_SYSTEM_PROMPT } from './review-learn-templates.js';
 
