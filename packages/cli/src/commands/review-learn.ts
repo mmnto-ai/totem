@@ -167,7 +167,7 @@ export async function reviewLearnCommand(
 
   // 1. Parse and validate PR number
   const num = parseInt(prNumber, 10);
-  if (isNaN(num) || num <= 0) {
+  if (isNaN(num) || num <= 0 || String(num) !== prNumber) {
     throw new TotemConfigError(
       `Invalid PR number: '${prNumber}'. Must be a positive integer.`,
       'Pass a numeric PR number, e.g. `totem review-learn 123`.',
@@ -214,17 +214,18 @@ export async function reviewLearnCommand(
   const reviewComments = adapter.fetchReviewComments(num);
   log.info(TAG, `Found ${reviewComments.length} inline review comments`);
 
-  // 5. Filter to bot comments only
-  const botComments = reviewComments.filter((c) => isBotComment(c.author));
-  if (botComments.length === 0) {
+  // 5. Group ALL comments into threads first (need human replies for resolution detection)
+  const allThreads = groupIntoThreads(reviewComments);
+
+  // 6. Filter to threads that START with a bot comment
+  const threads = allThreads.filter(
+    (t) => t.comments.length > 0 && isBotComment(t.comments[0]!.author),
+  );
+  if (threads.length === 0) {
     log.dim(TAG, 'No bot review comments found. Nothing to learn from.');
     return;
   }
-  log.info(TAG, `Found ${botComments.length} bot comment(s)`);
-
-  // 6. Group into threads
-  const threads = groupIntoThreads(botComments);
-  log.info(TAG, `Grouped into ${threads.length} bot review thread(s)`);
+  log.info(TAG, `Found ${threads.length} bot review thread(s)`);
 
   // 7. Apply resolution filter
   const findings = extractResolvedBotFindings(threads);

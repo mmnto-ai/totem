@@ -100,7 +100,6 @@ export function isThreadResolved(thread: CommentThread): boolean {
 
   // If human pushed back, NOT resolved
   const pushbackPatterns = [
-    /\bno\b/i,
     /\bnot\s+(?:applicable|relevant|needed|correct)\b/i,
     /\bintentional\b/i,
     /\bby\s+design\b/i,
