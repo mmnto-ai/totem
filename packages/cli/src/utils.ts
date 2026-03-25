@@ -370,10 +370,13 @@ export async function runOrchestrator(opts: {
   options: OrchestratorRunOptions;
   config: TotemConfig;
   cwd: string;
+  /** Absolute path to the directory containing totem.config.* — used for cache paths instead of cwd */
+  configRoot?: string;
   totalResults?: number;
   temperature?: number;
 }): Promise<string | undefined> {
   const { prompt, tag, options, config, cwd } = opts;
+  const configRoot = opts.configRoot ?? cwd;
 
   // --raw mode: output context only
   if (options.raw) {
@@ -424,7 +427,7 @@ export async function runOrchestrator(opts: {
       .update(qualifiedModel)
       .digest('hex')
       .slice(0, 16);
-    const cacheDir = path.join(cwd, config.totemDir, 'cache');
+    const cacheDir = path.join(configRoot, config.totemDir, 'cache');
     cachePath = path.join(cacheDir, `${tagKey}-${hash}.json`);
 
     if (fs.existsSync(cachePath)) {
@@ -532,7 +535,7 @@ export async function runOrchestrator(opts: {
         .update(model)
         .digest('hex')
         .slice(0, 16);
-      const cacheDir = path.join(cwd, config.totemDir, 'cache');
+      const cacheDir = path.join(configRoot, config.totemDir, 'cache');
       const finalCachePath = path.join(cacheDir, `${tagKey}-${cacheHash}.json`);
       fs.mkdirSync(cacheDir, { recursive: true });
       fs.writeFileSync(

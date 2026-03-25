@@ -322,7 +322,9 @@
         "*.js",
         "*.sh",
         "*.yml",
-        "*.yaml"
+        "*.yaml",
+        "!**/*.test.*",
+        "!**/*.spec.*"
       ],
       "severity": "warning"
     },
@@ -770,7 +772,9 @@
         "**/*.sh",
         "**/*.yml",
         "**/*.yaml",
-        "Dockerfile*"
+        "Dockerfile*",
+        "!**/*.test.*",
+        "!**/*.spec.*"
       ],
       "severity": "error"
     },
@@ -4499,10 +4503,9 @@
     {
       "lessonHash": "0a38e0984b5a7c87",
       "lessonHeading": "Explicitly capture stderr when a tool probes multiple",
+      "pattern": "\\bexec(?:Sync)?\\s*\\(\\s*['\"`]\\s*(?:gh|git)\\s+(?:(?![2&]>)[^'\"`])*['\"`]\\s*\\)",
       "message": "Explicitly capture or redirect stderr (e.g., 2>/dev/null) when probing repositories with gh/git to prevent terminal pollution from 'not found' or GraphQL errors.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bexec(?:Sync)?\\s*\\(\\s*['\"`]\\s*(?:gh|git)\\s+(?:(?![2&]>)[^'\"`])*['\"`]\\s*\\)",
       "compiledAt": "2026-03-25T00:39:20.840Z",
       "createdAt": "2026-03-25T00:39:20.840Z",
       "fileGlobs": [
@@ -4510,17 +4513,18 @@
         "**/*.js",
         "!**/*.test.ts",
         "!**/*.test.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
-      "lessonHash": "75f836e68384dc4b",
+      "lessonHash": "61975bb96c9bf27f",
       "lessonHeading": "CWD-relative writes cause monorepo chaos",
       "message": "Do not use process.cwd() to resolve paths; use the project root from the config loader to prevent orphaned artifacts in monorepo subdirectories.",
       "engine": "regex",
       "severity": "warning",
       "pattern": "\\bprocess\\.cwd\\(\\)",
-      "compiledAt": "2026-03-25T00:38:48.218Z",
-      "createdAt": "2026-03-25T00:38:48.218Z",
+      "compiledAt": "2026-03-25T01:46:35.529Z",
+      "createdAt": "2026-03-25T01:46:35.529Z",
       "fileGlobs": [
         "packages/mcp/**/*.ts",
         "packages/mcp/**/*.js",

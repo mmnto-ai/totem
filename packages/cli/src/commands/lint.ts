@@ -31,7 +31,9 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   }
 
   const cwd = process.cwd();
+  const path = await import('node:path');
   const configPath = resolveConfigPath(cwd);
+  const configRoot = path.dirname(configPath);
   loadEnv(cwd);
   const config = await loadConfig(configPath);
 
@@ -51,6 +53,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     exportPaths,
     ignorePatterns: allIgnore,
     tag: TAG,
+    configRoot,
   });
 
   // Post PR comment if requested (zero-API-keys invariant: only behind --pr-comment flag)

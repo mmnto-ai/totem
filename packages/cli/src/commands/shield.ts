@@ -182,12 +182,16 @@ export function parseVerdict(content: string): { pass: boolean; reason: string }
 /**
  * Write the .shield-passed gate flag on PASS so pre-push hooks can verify.
  */
-export async function writeShieldPassedFlag(cwd: string, totemDir: string): Promise<void> {
+export async function writeShieldPassedFlag(
+  cwd: string,
+  totemDir: string,
+  configRoot?: string,
+): Promise<void> {
   try {
     const fs = await import('node:fs');
     const { execSync } = await import('node:child_process');
     const head = execSync('git rev-parse HEAD', { cwd, encoding: 'utf-8' }).trim();
-    const cacheDir = path.join(cwd, totemDir, 'cache');
+    const cacheDir = path.join(configRoot ?? cwd, totemDir, 'cache');
     if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(path.join(cacheDir, '.shield-passed'), head);
   } catch (err) {
@@ -227,6 +231,7 @@ export async function learnFromVerdict(
   options: ShieldOptions,
   config: Awaited<ReturnType<typeof loadConfig>>,
   cwd: string,
+  configRoot?: string,
 ): Promise<void> {
   log.info(TAG, 'Extracting lessons from failed verdict...'); // totem-ignore: hardcoded string
 
@@ -277,7 +282,15 @@ export async function learnFromVerdict(
   const prompt = sections.join('\n');
   log.dim(TAG, `Learn prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
-  const content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd, temperature: 0 });
+  const content = await runOrchestrator({
+    prompt,
+    tag: TAG,
+    options,
+    config,
+    cwd,
+    configRoot,
+    temperature: 0,
+  });
   if (content == null) return; // --raw mode
 
   const lessons = parseLessons(content);
@@ -362,6 +375,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   }
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
+  const configRoot = path.dirname(configPath);
   loadEnv(cwd);
   const config = await loadConfig(configPath);
 
@@ -370,7 +384,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const diffResult = await getDiffForReview(options, config, cwd, TAG);
   if (!diffResult) {
     // No changes = trivial pass — stamp so pre-push hooks don't block
-    await writeShieldPassedFlag(cwd, config.totemDir);
+    await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
     return;
   }
 
@@ -401,6 +415,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       options,
       config,
       cwd,
+      configRoot,
       temperature: 0,
     });
     if (content == null && !options.raw) {
@@ -421,9 +436,10 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
           const reason = verdict.reason ? ` — ${verdict.reason}` : '';
           log.info(TAG, `Verdict: ${verdictLabel}${reason}`);
           if (verdict.pass) {
-            await writeShieldPassedFlag(cwd, config.totemDir);
+            await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
           } else {
-            if (options.learn) await learnFromVerdict(content, diff, options, config, cwd);
+            if (options.learn)
+              await learnFromVerdict(content, diff, options, config, cwd, configRoot);
             throw new TotemError(
               'SHIELD_FAILED',
               `Shield structural review failed: ${verdict.reason || 'no reason given'}`,
@@ -474,6 +490,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     options,
     config,
     cwd,
+    configRoot,
     totalResults,
     temperature: 0,
   });
@@ -489,9 +506,10 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
         const reason = verdict.reason ? ` — ${verdict.reason}` : '';
         log.info(TAG, `Verdict: ${verdictLabel}${reason}`);
         if (verdict.pass) {
-          await writeShieldPassedFlag(cwd, config.totemDir);
+          await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
         } else {
-          if (options.learn) await learnFromVerdict(content, diff, options, config, cwd);
+          if (options.learn)
+            await learnFromVerdict(content, diff, options, config, cwd, configRoot);
           throw new TotemError(
             'SHIELD_FAILED',
             `Shield review failed: ${verdict.reason || 'no reason given'}`,

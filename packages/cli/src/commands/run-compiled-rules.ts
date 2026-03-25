@@ -13,6 +13,8 @@ export interface RunCompiledRulesOptions {
   exportPaths?: string[];
   ignorePatterns?: string[];
   tag: string;
+  /** Absolute path to config root — used for cache paths instead of cwd */
+  configRoot?: string;
 }
 
 export interface RunCompiledRulesResult {
@@ -52,9 +54,10 @@ export async function runCompiledRules(
   } = await import('@mmnto/totem');
 
   const { diff, cwd, totemDir, format, outPath, exportPaths, ignorePatterns, tag } = options;
+  const resolvedTotemDir = path.join(options.configRoot ?? cwd, totemDir);
 
   // Load compiled rules
-  const rulesPath = path.join(cwd, totemDir, COMPILED_RULES_FILE);
+  const rulesPath = path.join(resolvedTotemDir, COMPILED_RULES_FILE);
   const rules = loadCompiledRules(rulesPath);
 
   if (rules.length === 0) {
@@ -93,7 +96,7 @@ export async function runCompiledRules(
   }
 
   // Record metrics
-  const metrics = loadRuleMetrics(totemDir, (msg) => log.dim(tag, msg));
+  const metrics = loadRuleMetrics(resolvedTotemDir, (msg) => log.dim(tag, msg));
   const ruleEventCallback = (event: 'trigger' | 'suppress', hash: string) => {
     if (event === 'trigger') recordTrigger(metrics, hash);
     else recordSuppression(metrics, hash);
@@ -117,7 +120,7 @@ export async function runCompiledRules(
   const violations = [...regexViolations, ...astViolations];
 
   try {
-    saveRuleMetrics(totemDir, metrics);
+    saveRuleMetrics(resolvedTotemDir, metrics);
   } catch (err) {
     log.warn(
       tag,
