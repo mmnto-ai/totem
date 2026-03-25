@@ -1,4 +1,4 @@
-## Lesson — Tools and agents that write files must resolve paths
+## Lesson — CWD-relative writes cause monorepo chaos
 
 **Tags:** agent-discipline, file-io, monorepo, cwd, trap
 

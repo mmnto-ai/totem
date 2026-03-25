@@ -4497,17 +4497,33 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "e74e3a1ab95d2dd7",
-      "lessonHeading": "Tools and agents that write files must resolve paths",
-      "message": "Do not use process.cwd() for path resolution. Use the project root or config-defined paths (e.g., totemDir) to prevent orphaned artifacts in monorepo subdirectories.",
-      "engine": "ast-grep",
+      "lessonHash": "0a38e0984b5a7c87",
+      "lessonHeading": "Explicitly capture stderr when a tool probes multiple",
+      "message": "Explicitly capture or redirect stderr (e.g., 2>/dev/null) when probing repositories with gh/git to prevent terminal pollution from 'not found' or GraphQL errors.",
+      "engine": "regex",
       "severity": "warning",
-      "pattern": "",
-      "astGrepPattern": "process.cwd()",
-      "compiledAt": "2026-03-25T00:19:09.894Z",
-      "createdAt": "2026-03-25T00:19:09.894Z",
+      "pattern": "\\bexec(?:Sync)?\\s*\\(\\s*['\"`]\\s*(?:gh|git)\\s+(?:(?![2&]>)[^'\"`])*['\"`]\\s*\\)",
+      "compiledAt": "2026-03-25T00:39:20.840Z",
+      "createdAt": "2026-03-25T00:39:20.840Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "!**/*.test.ts",
+        "!**/*.test.js"
+      ]
+    },
+    {
+      "lessonHash": "75f836e68384dc4b",
+      "lessonHeading": "CWD-relative writes cause monorepo chaos",
+      "message": "Do not use process.cwd() to resolve paths; use the project root from the config loader to prevent orphaned artifacts in monorepo subdirectories.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bprocess\\.cwd\\(\\)",
+      "compiledAt": "2026-03-25T00:38:48.218Z",
+      "createdAt": "2026-03-25T00:38:48.218Z",
       "fileGlobs": [
         "packages/mcp/**/*.ts",
+        "packages/mcp/**/*.js",
         "!**/*.test.ts"
       ]
     }
