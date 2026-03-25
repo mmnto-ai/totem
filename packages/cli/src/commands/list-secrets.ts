@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import type { CustomSecret, SecretsFile } from '@mmnto/totem';
+import { SecretsFileSchema } from '@mmnto/totem';
+import type { CustomSecret } from '@mmnto/totem';
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -61,9 +62,10 @@ function loadJsonSecrets(cwd: string, totemDir: string): CustomSecret[] {
 
   try {
     const content = fs.readFileSync(jsonPath, 'utf-8');
-    const parsed = JSON.parse(content) as SecretsFile;
-    if (parsed && Array.isArray(parsed.secrets)) {
-      return parsed.secrets;
+    const parsed = JSON.parse(content) as unknown;
+    const result = SecretsFileSchema.safeParse(parsed);
+    if (result.success) {
+      return result.data.secrets;
     }
     return [];
   } catch {

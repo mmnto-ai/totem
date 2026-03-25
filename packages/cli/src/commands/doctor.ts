@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -391,9 +391,13 @@ export function checkSecretLeaks(cwd: string, totemDir = '.totem'): DiagnosticRe
 export function checkSecretsFileTracked(cwd: string, totemDir = '.totem'): DiagnosticResult {
   const secretsPath = path.join(totemDir, 'secrets.json');
   try {
-    const cmd = ['git', 'ls-files', '--recurse-submodules', `"${secretsPath}"`].join(' ');
-    const result = execSync(cmd, { cwd, encoding: 'utf-8' }).trim();
-    if (result.length > 0) {
+    const result = spawnSync('git', ['ls-files', '--recurse-submodules', secretsPath], {
+      cwd,
+      encoding: 'utf-8',
+    });
+    if (result.error) throw result.error;
+    const output = (result.stdout ?? '').trim();
+    if (output.length > 0) {
       return {
         name: 'Secrets File Security',
         status: 'fail',

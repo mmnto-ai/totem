@@ -23,7 +23,10 @@ export async function removeSecretCommand(
 
   const index = parseInt(indexStr, 10);
   if (isNaN(index) || index < 1 || index > entries.length) {
-    log.error(TAG, `Index ${indexStr} is out of range. Valid range: 1–${entries.length || 0}.`);
+    log.error(
+      'Totem Error',
+      `Index ${indexStr} is out of range. Valid range: 1–${entries.length || 0}.`,
+    );
     process.exit(1);
   }
 
@@ -31,7 +34,10 @@ export async function removeSecretCommand(
 
   // 2. Reject shared/yaml secrets
   if (target.source === 'shared/yaml') {
-    log.error(TAG, 'Cannot remove shared secrets from CLI. Edit your totem.config.yaml directly.');
+    log.error(
+      'Totem Error',
+      'Cannot remove shared secrets from CLI. Edit your totem.config.yaml directly.',
+    );
     process.exit(1);
   }
 
@@ -45,7 +51,7 @@ export async function removeSecretCommand(
       data.secrets = [];
     }
   } catch {
-    log.error(TAG, `Failed to read ${SECRETS_REL_PATH}.`);
+    log.error('Totem Error', `Failed to read ${SECRETS_REL_PATH}.`);
     process.exit(1);
   }
 
@@ -56,7 +62,7 @@ export async function removeSecretCommand(
   const localIndex = index - 1 - yamlCount;
 
   if (localIndex < 0 || localIndex >= data.secrets.length) {
-    log.error(TAG, `Index ${indexStr} is out of range for local secrets.`);
+    log.error('Totem Error', `Index ${indexStr} is out of range for local secrets.`);
     process.exit(1);
   }
 

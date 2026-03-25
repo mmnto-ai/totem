@@ -44,7 +44,10 @@ export async function addSecretCommand(
 
   // 1. Validate length
   if (value.length < MIN_LENGTH) {
-    log.error(TAG, `Secret must be at least ${MIN_LENGTH} characters to prevent over-redaction.`);
+    log.error(
+      'Totem Error',
+      `Secret must be at least ${MIN_LENGTH} characters to prevent over-redaction.`,
+    );
     return;
   }
 
@@ -55,7 +58,7 @@ export async function addSecretCommand(
       new RegExp(value);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      log.error(TAG, `Invalid regex pattern: ${msg}`);
+      log.error('Totem Error', `Invalid regex pattern: ${msg}`);
       return;
     }
   }
@@ -72,8 +75,11 @@ export async function addSecretCommand(
       if (!Array.isArray(data.secrets)) {
         data.secrets = [];
       }
-    } catch {
-      // Corrupted file — start fresh
+    } catch (err) {
+      log.warn(
+        TAG,
+        `Existing secrets.json was corrupted; starting fresh. ${err instanceof Error ? err.message : String(err)}`,
+      );
       data = { secrets: [] };
     }
   }

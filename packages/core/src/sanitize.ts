@@ -154,7 +154,7 @@ export function compileCustomSecrets(secrets: CustomSecret[]): RegExp[] {
         compiled.push(new RegExp(secret.value, 'g'));
       }
     } catch {
-      // Invalid regex — skip silently (validated at load time)
+      // Invalid regex — skip (validated at schema level, this guards against edge cases)
     }
   }
   return compiled;

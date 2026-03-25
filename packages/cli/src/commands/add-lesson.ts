@@ -1,3 +1,5 @@
+const TAG = 'AddLesson';
+
 export async function addLessonCommand(lessonArg?: string): Promise<void> {
   const { spawn } = await import('node:child_process');
   const fs = await import('node:fs');
@@ -29,7 +31,7 @@ export async function addLessonCommand(lessonArg?: string): Promise<void> {
   const config = await loadConfig(configPath);
 
   // Load user-defined custom secrets for DLP (#921)
-  const customSecrets = loadCustomSecrets(cwd, config.totemDir, (msg) => log.warn('Totem', msg));
+  const customSecrets = loadCustomSecrets(cwd, config.totemDir, (msg) => log.warn(TAG, msg));
 
   const totemDir = path.join(cwd, config.totemDir);
   if (!fs.existsSync(totemDir)) {

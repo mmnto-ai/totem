@@ -845,9 +845,12 @@ export async function initCommand(options?: { bare?: boolean }): Promise<void> {
           summary.push({ file: '.gitignore', action: 'Added .totem/secrets.json exclusion' });
         }
       } else {
-        // No .gitignore exists yet — create one with secrets entry
-        fs.writeFileSync(gitignorePath, '# Totem\n.totem/secrets.json\n', 'utf-8');
-        summary.push({ file: '.gitignore', action: 'Created with .totem/secrets.json exclusion' });
+        // No .gitignore exists yet — create one with .lancedb/ and secrets entry
+        fs.writeFileSync(gitignorePath, '# Totem\n.lancedb/\n.totem/secrets.json\n', 'utf-8');
+        summary.push({
+          file: '.gitignore',
+          action: 'Created with .lancedb/ and .totem/secrets.json exclusions',
+        });
       }
 
       // --- Auto-ingest cursor rules (ADR-048) ---
