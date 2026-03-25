@@ -232,6 +232,29 @@ describe('buildPrePushHook', () => {
     const yarnHook = buildPrePushHook('yarn dlx @mmnto/cli');
     expect(yarnHook).toContain('TOTEM_CMD="yarn dlx @mmnto/cli"');
   });
+
+  it('includes verify-manifest block before lint', () => {
+    const hook = buildPrePushHook(fallbackCmd);
+    expect(hook).toContain('verify-manifest');
+    expect(hook).toContain('compile-manifest.json');
+    expect(hook).toContain('$TOTEM_CMD compile');
+    // verify-manifest block must appear before lint
+    const verifyIdx = hook.indexOf('verify-manifest');
+    const lintIdx = hook.indexOf('$TOTEM_CMD lint');
+    expect(verifyIdx).toBeLessThan(lintIdx);
+  });
+
+  it('aborts push after auto-compile so updated files can be committed', () => {
+    const hook = buildPrePushHook(fallbackCmd);
+    expect(hook).toContain('Push aborted: compile manifest was updated');
+    expect(hook).toContain('Please commit the updated .totem/ files and push again');
+    expect(hook).toContain('exit 1');
+  });
+
+  it('aborts push when auto-compile fails', () => {
+    const hook = buildPrePushHook(fallbackCmd);
+    expect(hook).toContain("Push aborted: auto-compile failed. Run 'totem compile' manually.");
+  });
 });
 
 describe('installGitHook', () => {

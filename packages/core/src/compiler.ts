@@ -154,14 +154,19 @@ export function saveCompiledRulesFile(rulesPath: string, data: CompiledRulesFile
 // ─── Glob sanitization ─────────────────────────────
 
 /**
- * Expand brace patterns and strip unsupported glob syntax.
+ * Expand brace patterns, normalize shallow globs, and strip unsupported syntax.
  * e.g., "**\/*.{ts,js}" → ["**\/*.ts", "**\/*.js"]
+ * e.g., "*.ts" → "**\/*.ts" (shallow → recursive)
  */
-export function sanitizeFileGlobs(globs: string[]): string[] {
+export function sanitizeFileGlobs(globs: unknown[]): string[] {
   const result: string[] = [];
   for (const glob of globs) {
+    if (typeof glob !== 'string') continue;
+    const trimmed = glob.trim();
+    if (!trimmed || trimmed === '!') continue;
+
     // Expand brace patterns: **/*.{ts,js} → **/*.ts, **/*.js
-    const braceMatch = /^(.*?)\{([^}]+)\}(.*)$/.exec(glob);
+    const braceMatch = /^(.*?)\{([^}]+)\}(.*)$/.exec(trimmed);
     if (braceMatch) {
       const prefix = braceMatch[1]!;
       const alternatives = braceMatch[2]!.split(',').map((s) => s.trim());
@@ -172,9 +177,31 @@ export function sanitizeFileGlobs(globs: string[]): string[] {
       }
       continue;
     }
-    result.push(glob);
+    result.push(normalizeShallowGlob(trimmed));
   }
   return result;
+}
+
+/**
+ * Normalize shallow glob patterns to recursive form for external tool compatibility.
+ * - `*.ts` → `**\/*.ts` (no `/` and doesn't start with `**\/`)
+ * - `*` → `**\/*` (bare wildcard)
+ * - `src/*.ts` → left alone (contains `/`, intentionally scoped)
+ * - `**\/*.ts` → left alone (already recursive)
+ * - `!*.ts` → `!**\/*.ts` (negated shallow glob)
+ */
+function normalizeShallowGlob(glob: string): string {
+  // Handle negation: strip prefix, normalize, re-add
+  const negated = glob.startsWith('!');
+  const bare = negated ? glob.slice(1) : glob;
+
+  // Already recursive or contains a directory separator → leave alone
+  if (bare.startsWith('**/') || bare.includes('/')) {
+    return glob;
+  }
+
+  // Shallow pattern — prepend **/
+  return `${negated ? '!' : ''}**/${bare}`;
 }
 
 /** Build engine-specific fields for a compiled rule. */

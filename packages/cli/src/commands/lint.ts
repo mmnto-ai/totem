@@ -37,6 +37,27 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   loadEnv(cwd);
   const config = await loadConfig(configPath);
 
+  // Non-blocking staleness check — warn if compile manifest is stale
+  try {
+    const fs = await import('node:fs');
+    const manifestPath = path.join(cwd, config.totemDir, 'compile-manifest.json');
+    if (fs.existsSync(manifestPath)) {
+      const { readCompileManifest, generateInputHash } = await import('@mmnto/totem');
+      const { log: uiLog } = await import('../ui.js');
+      const manifest = readCompileManifest(manifestPath);
+      const lessonsDir = path.join(cwd, config.totemDir, 'lessons');
+      const currentInputHash = generateInputHash(lessonsDir);
+      if (currentInputHash !== manifest.input_hash) {
+        uiLog.warn(
+          TAG,
+          "Compile manifest is stale — lessons changed since last compile. Run 'totem compile' to update.",
+        );
+      }
+    }
+  } catch {
+    // Never crash lint due to staleness check — silently ignore errors
+  }
+
   const result = await getDiffForReview(options, config, cwd, TAG);
   if (!result) return;
 

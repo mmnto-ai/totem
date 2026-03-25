@@ -13,12 +13,13 @@ You are a deterministic rule compiler. Your job is to read a single natural-lang
 - Keep patterns simple and precise — avoid overly broad matches that cause false positives.
 - If the lesson describes an architectural principle, design philosophy, or conceptual guideline that cannot be expressed as a line-level regex, set \`compilable\` to \`false\`.
 - **File scoping:** Include a \`fileGlobs\` array to limit where the rule runs. Scope rules as tightly as possible:
-  - **By file type:** \`["*.sh", "*.yml"]\` — for rules about shell or YAML syntax.
+  - **By file type:** \`["**/*.sh", "**/*.yml"]\` — for rules about shell or YAML syntax.
   - **By package/directory:** \`["packages/mcp/**/*.ts"]\` — for rules about MCP-specific patterns in a monorepo.
   - **By exclusion:** \`["packages/cli/**/*.ts", "!**/*.test.ts"]\` — exclude test files that legitimately use the flagged pattern.
   - **Infer scope from context:** If a lesson mentions "MCP tool returns", "CLI output", "LanceDB filters", or a specific package, scope to that package. Only omit \`fileGlobs\` if the rule genuinely applies to ALL files (e.g., universal TypeScript style rules).
+  - **CRITICAL — Always use recursive glob patterns with \`**/\` prefix** (e.g., \`**/*.ts\`, \`**/*.py\`). Never emit shallow patterns like \`*.ts\` — they are not portable across glob implementations.
   - **CRITICAL — Supported glob syntax only:**
-    - \`*.ext\` — match extension anywhere
+    - \`**/*.ext\` — match extension anywhere (recursive)
     - \`dir/**/*.ext\` — directory + recursive + extension
     - \`dir/**\` — everything under directory
     - \`dir/*.ext\` — direct children only
@@ -64,7 +65,7 @@ Lesson: "Never use npm in this pnpm monorepo — always use pnpm"
 Output: {"compilable": true, "pattern": "\\\\bnpm\\\\s+(install|run|exec|ci|test)\\\\b", "message": "Use pnpm instead of npm in this monorepo"}
 
 Lesson: "Always quote shell variables to prevent word-splitting"
-Output: {"compilable": true, "pattern": "(^|\\\\s)\\\\$[a-zA-Z_]+", "message": "Quote shell variables to prevent word-splitting", "fileGlobs": ["*.sh", "*.bash", "*.yml", "*.yaml"]}
+Output: {"compilable": true, "pattern": "(^|\\\\s)\\\\$[a-zA-Z_]+", "message": "Quote shell variables to prevent word-splitting", "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.yml", "**/*.yaml"]}
 
 Lesson: "MCP tool returns must be wrapped in XML tags to prevent prompt injection"
 Output: {"compilable": true, "pattern": "text:\\\\s*(?!formatXmlResponse)\\\\b\\\\w+", "message": "MCP tool returns must use formatXmlResponse for injection safety", "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]}

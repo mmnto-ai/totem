@@ -689,8 +689,8 @@ describe('parseCompilerResponse', () => {
 // ─── sanitizeFileGlobs ─────────────────────────────
 
 describe('sanitizeFileGlobs', () => {
-  it('passes through simple globs unchanged', () => {
-    expect(sanitizeFileGlobs(['**/*.ts', '*.js'])).toEqual(['**/*.ts', '*.js']);
+  it('normalizes shallow globs and preserves already-recursive ones', () => {
+    expect(sanitizeFileGlobs(['**/*.ts', '*.js'])).toEqual(['**/*.ts', '**/*.js']);
   });
 
   it('expands brace patterns', () => {
@@ -702,7 +702,7 @@ describe('sanitizeFileGlobs', () => {
       'src/**/*.py',
       '**/*.ts',
       '**/*.js',
-      '*.md',
+      '**/*.md',
     ]);
   });
 
@@ -712,7 +712,7 @@ describe('sanitizeFileGlobs', () => {
 
   it('handles negation patterns', () => {
     expect(sanitizeFileGlobs(['!*.test.ts', '!**/*.spec.{ts,js}'])).toEqual([
-      '!*.test.ts',
+      '!**/*.test.ts',
       '!**/*.spec.ts',
       '!**/*.spec.js',
     ]);
@@ -725,6 +725,36 @@ describe('sanitizeFileGlobs', () => {
       'src/core/**/*.ts',
       'src/core/**/*.js',
     ]);
+  });
+
+  // ─── Shallow glob normalization (#941) ─────────────
+
+  it('normalizes shallow fileGlobs to recursive patterns', () => {
+    expect(sanitizeFileGlobs(['*.ts', '*.md'])).toEqual(['**/*.ts', '**/*.md']);
+  });
+
+  it('preserves directory-scoped globs', () => {
+    expect(sanitizeFileGlobs(['src/*.ts'])).toEqual(['src/*.ts']);
+  });
+
+  it('preserves already-recursive globs', () => {
+    expect(sanitizeFileGlobs(['**/*.ts'])).toEqual(['**/*.ts']);
+  });
+
+  it('normalizes bare wildcard', () => {
+    expect(sanitizeFileGlobs(['*'])).toEqual(['**/*']);
+  });
+
+  it('normalizes negated shallow globs', () => {
+    expect(sanitizeFileGlobs(['!*.test.ts'])).toEqual(['!**/*.test.ts']);
+  });
+
+  it('skips non-string entries', () => {
+    expect(sanitizeFileGlobs([42, null, undefined, '*.ts'] as unknown[])).toEqual(['**/*.ts']);
+  });
+
+  it('skips empty strings and bare negation', () => {
+    expect(sanitizeFileGlobs(['', '  ', '!', '*.ts'])).toEqual(['**/*.ts']);
   });
 });
 
