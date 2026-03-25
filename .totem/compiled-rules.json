@@ -4519,16 +4519,109 @@
     {
       "lessonHash": "61975bb96c9bf27f",
       "lessonHeading": "CWD-relative writes cause monorepo chaos",
+      "pattern": "\\bprocess\\.cwd\\(\\)",
       "message": "Do not use process.cwd() to resolve paths; use the project root from the config loader to prevent orphaned artifacts in monorepo subdirectories.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bprocess\\.cwd\\(\\)",
       "compiledAt": "2026-03-25T01:46:35.529Z",
       "createdAt": "2026-03-25T01:46:35.529Z",
       "fileGlobs": [
         "packages/mcp/**/*.ts",
         "packages/mcp/**/*.js",
         "!**/*.test.ts"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "ad9d255418e9b886",
+      "lessonHeading": "Library code should use an onWarn callback instead",
+      "message": "Use an onWarn callback instead of hardcoding console.warn in library code to allow consumers to route or suppress output.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "console.warn($$$ARGS)",
+      "compiledAt": "2026-03-25T02:11:54.430Z",
+      "createdAt": "2026-03-25T02:11:54.430Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
+        "!**/*.test.ts",
+        "!**/*.test.js",
+        "!**/*.spec.ts",
+        "!**/*.spec.js"
+      ]
+    },
+    {
+      "lessonHash": "3352372057b774ae",
+      "lessonHeading": "When testing diagnostic output, assert that warnings",
+      "message": "When testing diagnostic output, assert that warnings include the specific file path prefix (e.g., 'path/to/file: warning') to ensure correct attribution.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\.(?:toContain|toMatch|includes?)\\(\\s*['\"/](?![^'\"/]*[:/])[^'\"/]*[Ww][Aa][Rr][Nn][Ii][Nn][Gg][^'\"/]*['\"/]\\)",
+      "compiledAt": "2026-03-25T02:13:15.417Z",
+      "createdAt": "2026-03-25T02:13:15.417Z",
+      "fileGlobs": [
+        "**/*.test.ts",
+        "**/*.test.js",
+        "**/*.spec.ts",
+        "**/*.spec.js"
+      ]
+    },
+    {
+      "lessonHash": "c2613efa86f914a0",
+      "lessonHeading": "Frontmatter delimiters must be anchored to the start",
+      "message": "Frontmatter delimiters must be anchored to the start of the line (no leading whitespace) to prevent misinterpretation.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "^\\s+---",
+      "compiledAt": "2026-03-25T02:13:41.887Z",
+      "createdAt": "2026-03-25T02:13:41.887Z",
+      "fileGlobs": [
+        "*.md",
+        "*.mdx",
+        "*.yml",
+        "*.yaml"
+      ]
+    },
+    {
+      "lessonHash": "f5a75d98a43e0721",
+      "lessonHeading": "Resolve persistent directories like caches relative",
+      "message": "Resolve persistent directories (like caches) relative to the configuration file's location rather than process.cwd() to prevent orphaned directories when executed from different subdirectories.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bprocess\\.cwd\\(\\)",
+      "compiledAt": "2026-03-25T02:14:05.368Z",
+      "createdAt": "2026-03-25T02:14:05.368Z",
+      "fileGlobs": [
+        "*.ts",
+        "*.js",
+        "*.tsx",
+        "*.jsx",
+        "!*.test.ts",
+        "!*.test.js",
+        "!*.spec.ts",
+        "!*.spec.js"
+      ]
+    },
+    {
+      "lessonHash": "f6739f9ad356067a",
+      "lessonHeading": "Dynamic imports used for CLI startup performance should be",
+      "message": "Dynamic imports should be restricted to command entry points to maintain a clean dependency graph and pass security scans in utility layers.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bimport\\s*\\(",
+      "compiledAt": "2026-03-25T02:14:04.070Z",
+      "createdAt": "2026-03-25T02:14:04.070Z",
+      "fileGlobs": [
+        "packages/cli/**/*.ts",
+        "packages/cli/**/*.tsx",
+        "!packages/cli/src/commands/**/*.ts",
+        "!packages/cli/src/commands/**/*.tsx",
+        "!packages/cli/src/bin/**/*.ts",
+        "!packages/cli/src/bin/**/*.tsx",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
       ]
     }
   ],
@@ -5060,6 +5153,17 @@
     "86e3c3cfa14b8ef0",
     "9f45f9d6278a9d79",
     "3a4f817695b33ae0",
-    "cdffa65582894d25"
+    "cdffa65582894d25",
+    "854b662bbce80382",
+    "8e9f9726bf6ff64d",
+    "c1f0fe5fe9200e89",
+    "a497a0c535b9931c",
+    "8b5f4f13a52a5e60",
+    "864d04a4b30d3263",
+    "ca02f740abbf0858",
+    "29149c517d9511e8",
+    "cb54a655f25100ab",
+    "04237f698b40b2ec",
+    "fe0ec525bb377c3b"
   ]
 }
