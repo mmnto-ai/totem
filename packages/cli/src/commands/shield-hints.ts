@@ -47,10 +47,6 @@ export function extractShieldContextAnnotations(
 
 /**
  * Auto-detect contextual hints from the diff and changed files.
- * These are injected into the shield prompt to reduce false positives.
- */
-/**
- * Auto-detect contextual hints from the diff and changed files.
  * Accepts optional pre-computed annotations to avoid double file reads.
  */
 export function extractShieldHints(

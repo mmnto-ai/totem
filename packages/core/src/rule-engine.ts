@@ -266,9 +266,7 @@ export async function applyAstRulesToAdditions(
               onRuleEvent?.('suppress', rule.lessonHash, {
                 file,
                 line: match.lineNumber,
-                justification: addition
-                  ? extractJustification(addition.line, addition.precedingLine)
-                  : '',
+                justification: extractJustification(addition.line, addition.precedingLine),
               });
               continue;
             }
