@@ -4780,23 +4780,6 @@
       ]
     },
     {
-      "lessonHash": "782093dda0c7d80f",
-      "lessonHeading": "The parseInt function accepts strings with trailing",
-      "message": "parseInt() is lenient and accepts trailing non-numeric characters. Use Number() or validate the input with /^\\d+$/ before conversion for strict numeric parsing.",
-      "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
-      "astGrepPattern": "parseInt($$$)",
-      "compiledAt": "2026-03-25T21:13:20.174Z",
-      "createdAt": "2026-03-25T21:13:20.174Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ]
-    },
-    {
       "lessonHash": "b87f484e02ae3593",
       "lessonHeading": "Updating comment-matching regex to support trailing inline",
       "message": "Comment-matching regex should not be anchored to the start of the line (^) to support trailing inline directives.",

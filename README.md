@@ -141,6 +141,10 @@ The key distinction: **"No AI at runtime"** is the Enforce tier's claim, not "no
 | `verify-manifest` | Verify compiled-rules.json matches the compile manifest (CI gate)                |
 | `test`            | Run test fixtures against compiled rules (TDD for governance rules)              |
 | `extract`         | Extract lessons from PR review(s) into .totem/lessons/ (interactive cherry-pick) |
+| `review-learn`    | Extract lessons from resolved bot review comments on merged PRs                  |
+| `add-secret`      | Add a custom secret pattern to .totem/secrets.json (local, gitignored)           |
+| `list-secrets`    | List all configured custom secrets (shared + local) with source labels           |
+| `remove-secret`   | Remove a local secret by index                                                   |
 | `link`            | Link a neighboring repo into this project                                        |
 | `eject`           | Remove all Totem hooks, config, and data from this project                       |
 | `wrap`            | Post-merge workflow: learn from PR(s), sync index, then triage                   |

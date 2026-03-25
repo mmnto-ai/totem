@@ -51,7 +51,7 @@ The following suggestions have been repeatedly declined during code review. Do n
 - **Static top-level imports from `@mmnto/totem` in CLI command files.** CLI command files use dynamic `await import('@mmnto/totem')` inside function bodies, not static top-level imports. This is enforced by a compiled shield rule. The core package pulls in LanceDB and other heavy dependencies — top-level imports slow CLI startup for every command, including `--help`.
   - **EXCEPTION: `import type` statements are free.** TypeScript `import type { ... } from '@mmnto/totem'` is erased at compile time and has zero runtime cost. Do NOT flag type-only imports as violations of the dynamic import rule.
 - **`process.cwd()` in CLI command handlers.** CLI commands resolve paths relative to the user's working directory via `process.cwd()`. This is correct behavior — do not suggest resolving relative to config file location. The config resolution layer (`resolveConfigPath`) already handles config-relative paths.
-- **Dynamic imports in `index.ts` command registration.** The CLI entry point (`packages/cli/src/index.ts`) uses `await import()` inside `.action()` handlers to lazy-load command implementations. This IS the correct pattern — dynamic imports here are command handlers, not utility code. Do not flag them.
+- **Dynamic imports in `index.ts` command registration.** The CLI entry point (`packages/cli/src/index.ts`) should use `await import()` inside `.action()` handlers to lazy-load command implementations. Dynamic imports in `.action()` handlers are the target pattern — do not flag them as violations.
 - **Empty catch blocks in core library pure functions.** Core library functions (`packages/core/src/`) sometimes use empty catch blocks when: (a) the function is pure with no logger dependency, (b) validation happens at the schema level, and (c) the catch guards against edge cases only. Do not flag these as violations — the design intent is silent fallback, not logging.
 
 - **Lesson heading truncation.** Do not suggest expanding lesson headings beyond 60 characters. The `HEADING_MAX_CHARS` limit is enforced by `lesson-format.ts`. Headings serve as SARIF identifiers and vector search labels, not prose. Truncation is by design.
@@ -77,6 +77,8 @@ Totem supports inline override directives that suppress rules or provide context
 - `// totem-ignore-next-line` — suppresses all rules on the following line
 - `// totem-context: <reason>` — semantic override (ADR-071). Suppresses lint rules AND provides justification to shield. This is the preferred mechanism over `totem-ignore` because it records the "why."
 - `// shield-context: <reason>` — legacy alias for `totem-context:`, deprecated in 1.7.0. Accept both silently.
+
+**IMPORTANT:** Every `totem-ignore` MUST be accompanied by a follow-up ticket to address the underlying issue. Using `totem-ignore` without a ticket is a project rule violation. `totem-context:` is preferred because it records the justification inline.
 
 All overrides are recorded in the Trap Ledger (`.totem/ledger/events.ndjson`) for telemetry.
 
