@@ -368,7 +368,11 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   // Get git diff — shared helper merges ignore patterns, tries staged/all
   // then falls back to branch diff, and extracts changed file paths.
   const diffResult = await getDiffForReview(options, config, cwd, TAG);
-  if (!diffResult) return;
+  if (!diffResult) {
+    // No changes = trivial pass — stamp so pre-push hooks don't block
+    await writeShieldPassedFlag(cwd, config.totemDir);
+    return;
+  }
 
   const { diff, changedFiles } = diffResult;
 
