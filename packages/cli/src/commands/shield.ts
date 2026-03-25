@@ -564,7 +564,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const { TotemConfigError, TotemError } = await import('@mmnto/totem');
   const { filterDiffByPatterns, getDiffForReview } = await import('../git.js');
   const { classifyChangedFiles } = await import('./shield-classify.js');
-  const { extractShieldHints } = await import('./shield-hints.js');
+  const { extractShieldContextAnnotations, extractShieldHints } = await import('./shield-hints.js');
 
   if (options.mode && options.mode !== 'standard' && options.mode !== 'structural') {
     throw new TotemConfigError(
@@ -614,10 +614,35 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     log.dim(TAG, `Filtered ${classification.nonCodeFiles.length} non-code file(s) from diff`);
   }
 
+  // Extract annotations once (shared between hints and ledger)
+  const annotations = extractShieldContextAnnotations(filteredFiles, cwd);
+
   // Auto-detect smart review hints from the filtered diff
-  const smartHints = extractShieldHints(filteredDiff, filteredFiles, cwd);
+  const smartHints = extractShieldHints(filteredDiff, filteredFiles, cwd, annotations);
   if (smartHints.length > 0) {
     log.dim(TAG, `${smartHints.length} smart hint(s) detected`);
+  }
+
+  // Trap Ledger: record override events for shield-context / totem-context annotations
+  if (annotations.length > 0) {
+    const { appendLedgerEvent } = await import('@mmnto/totem');
+    const resolvedTotemDir = path.join(configRoot, config.totemDir);
+    for (const ann of annotations) {
+      appendLedgerEvent(
+        resolvedTotemDir,
+        {
+          timestamp: new Date().toISOString(),
+          type: 'override',
+          ruleId: 'shield-context',
+          file: ann.file,
+          line: ann.line,
+          justification: ann.text,
+          source: 'shield',
+        },
+        (msg) => log.dim(TAG, msg),
+      );
+    }
+    log.dim(TAG, `${annotations.length} annotation(s) recorded in Trap Ledger`);
   }
 
   // Structural mode — context-blind LLM review, no embeddings, no Totem knowledge

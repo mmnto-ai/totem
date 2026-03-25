@@ -91,5 +91,16 @@ export interface RegexValidation {
   reason?: string;
 }
 
+/** Context passed alongside rule events for Trap Ledger integration. */
+export interface RuleEventContext {
+  file: string;
+  line: number;
+  justification?: string;
+}
+
 /** Callback for observability — invoked when a rule is suppressed or triggered. */
-export type RuleEventCallback = (event: 'trigger' | 'suppress', lessonHash: string) => void;
+export type RuleEventCallback = (
+  event: 'trigger' | 'suppress',
+  lessonHash: string,
+  context?: RuleEventContext,
+) => void;

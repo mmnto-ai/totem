@@ -33,6 +33,7 @@ export type {
   DiffAddition,
   RegexValidation,
   RuleEventCallback,
+  RuleEventContext,
   Violation,
 } from './compiler-schema.js';
 export {
@@ -45,6 +46,7 @@ export {
   applyAstRulesToAdditions,
   applyRules,
   applyRulesToAdditions,
+  extractJustification,
   matchesGlob,
 } from './rule-engine.js';
 

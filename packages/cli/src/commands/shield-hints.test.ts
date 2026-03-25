@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { assemblePrompt, assembleStructuralPrompt } from './shield.js';
-import { extractShieldHints } from './shield-hints.js';
+import { extractShieldContextAnnotations, extractShieldHints } from './shield-hints.js';
 
 // ─── extractShieldHints ─────────────────────────────
 
@@ -121,6 +121,97 @@ new file mode 100644
     const hints = extractShieldHints('diff', ['indented.ts'], tmpDir);
     expect(hints).toHaveLength(1);
     expect(hints[0]).toContain('indented hint');
+  });
+
+  it('matches totem-context annotations (ADR-071 unified override)', () => {
+    const filePath = path.join(tmpDir, 'unified.ts');
+    fs.writeFileSync(filePath, '// totem-context: unified override hint\nexport {};');
+    const hints = extractShieldHints('diff', ['unified.ts'], tmpDir);
+    expect(hints).toHaveLength(1);
+    expect(hints[0]).toContain('[unified.ts]');
+    expect(hints[0]).toContain('unified override hint');
+  });
+});
+
+// ─── extractShieldContextAnnotations ─────────────────
+
+describe('extractShieldContextAnnotations', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-shield-ann-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns structured annotations with file and line', () => {
+    const filePath = path.join(tmpDir, 'api.ts');
+    fs.writeFileSync(
+      filePath,
+      ['export const x = 1;', '// shield-context: thin wrapper around fetch', 'export {};'].join(
+        '\n',
+      ),
+    );
+    const annotations = extractShieldContextAnnotations(['api.ts'], tmpDir);
+    expect(annotations).toHaveLength(1);
+    expect(annotations[0]).toEqual({
+      file: 'api.ts',
+      line: 2,
+      text: 'thin wrapper around fetch',
+    });
+  });
+
+  it('matches both shield-context and totem-context (ADR-071)', () => {
+    const filePath = path.join(tmpDir, 'dual.ts');
+    fs.writeFileSync(
+      filePath,
+      [
+        '// shield-context: legacy annotation',
+        'const a = 1;',
+        '// totem-context: unified annotation',
+        'const b = 2;',
+      ].join('\n'),
+    );
+    const annotations = extractShieldContextAnnotations(['dual.ts'], tmpDir);
+    expect(annotations).toHaveLength(2);
+    expect(annotations[0]).toEqual({ file: 'dual.ts', line: 1, text: 'legacy annotation' });
+    expect(annotations[1]).toEqual({ file: 'dual.ts', line: 3, text: 'unified annotation' });
+  });
+
+  it('returns empty array when no annotations present', () => {
+    const filePath = path.join(tmpDir, 'clean.ts');
+    fs.writeFileSync(filePath, 'export const x = 1;\n// regular comment\n');
+    const annotations = extractShieldContextAnnotations(['clean.ts'], tmpDir);
+    expect(annotations).toEqual([]);
+  });
+
+  it('returns empty array for nonexistent files', () => {
+    const annotations = extractShieldContextAnnotations(['missing.ts'], tmpDir);
+    expect(annotations).toEqual([]);
+  });
+
+  it('handles multiple annotations across multiple files', () => {
+    fs.writeFileSync(path.join(tmpDir, 'a.ts'), '// shield-context: hint A\nexport {};');
+    fs.writeFileSync(path.join(tmpDir, 'b.ts'), '// totem-context: hint B\nexport {};');
+    const annotations = extractShieldContextAnnotations(['a.ts', 'b.ts'], tmpDir);
+    expect(annotations).toHaveLength(2);
+    expect(annotations[0]!.file).toBe('a.ts');
+    expect(annotations[0]!.text).toBe('hint A');
+    expect(annotations[1]!.file).toBe('b.ts');
+    expect(annotations[1]!.text).toBe('hint B');
+  });
+
+  it('handles indented annotations with correct line numbers', () => {
+    const filePath = path.join(tmpDir, 'indented.ts');
+    fs.writeFileSync(
+      filePath,
+      ['function foo() {', '  // totem-context: indented override', '  return 1;', '}'].join('\n'),
+    );
+    const annotations = extractShieldContextAnnotations(['indented.ts'], tmpDir);
+    expect(annotations).toHaveLength(1);
+    expect(annotations[0]).toEqual({ file: 'indented.ts', line: 2, text: 'indented override' });
   });
 });
 
