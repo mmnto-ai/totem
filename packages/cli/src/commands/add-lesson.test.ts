@@ -1,6 +1,7 @@
+import { describe, expect, it } from 'vitest';
+
 import type { CustomSecret } from '@mmnto/totem';
 import { compileCustomSecrets, maskSecrets } from '@mmnto/totem';
-import { describe, expect, it } from 'vitest';
 
 // ─── Custom secrets DLP in add-lesson pipeline (#921) ──
 
