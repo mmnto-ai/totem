@@ -106,7 +106,7 @@ export function isThreadResolved(thread: CommentThread): boolean {
     /\bwon'?t\s+fix\b/i,
     /\bignor(?:e|ed|ing)\s+(?:this|it|the)\b/i,
     /\bdismiss(?:ed|ing)?\b/i,
-    /\bnit\b/i,
+    /\bjust\s+a\s+nit\b/i,
   ];
 
   for (const reply of humanReplies) {
@@ -153,10 +153,15 @@ export function extractResolvedBotFindings(threads: CommentThread[]): Normalized
     const body = stripHtmlWrappers(botComment.body);
     const suggestion = extractSuggestion(botComment.body);
 
+    // Extract line number from diff hunk header (@@ -a,b +c,d @@)
+    const hunkMatch = thread.diffHunk.match(/@@ .+?\+(\d+)/);
+    const line = hunkMatch ? parseInt(hunkMatch[1]!, 10) : undefined;
+
     findings.push({
       tool,
       severity,
       file: thread.path,
+      line,
       body,
       suggestion,
       resolutionSignal: 'reply',
