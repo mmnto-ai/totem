@@ -145,6 +145,27 @@ export async function runCompiledRules(
     // Warnings are probationary (Rule Nursery) and stay as local telemetry
     // to prevent alert fatigue in the PR UI (Proposal 190).
     const sarif = buildSarifLog(errors, rules, { version, commitHash });
+
+    // Surface warning count as a single note so users know they exist
+    if (warnings.length > 0) {
+      sarif.runs[0].results.push({
+        ruleId: 'totem/warning-summary',
+        ruleIndex: -1,
+        level: 'note',
+        message: {
+          text: `${warnings.length} warning-severity finding(s) detected. Warnings are probationary and not shown in PR reviews. Run \`totem lint\` locally to review.`,
+        },
+        locations: [
+          {
+            physicalLocation: {
+              artifactLocation: { uri: 'totem.config.yaml' },
+              region: { startLine: 1 },
+            },
+          },
+        ],
+      });
+    }
+
     output = JSON.stringify(sarif, null, 2);
   } else if (format === 'json') {
     output = JSON.stringify(

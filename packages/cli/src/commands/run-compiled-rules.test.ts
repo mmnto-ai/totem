@@ -398,9 +398,13 @@ describe('runCompiledRules', () => {
     });
 
     const sarif = JSON.parse(result.output);
-    // Warning-only violations should produce zero SARIF results
     const results = sarif.runs[0].results;
-    expect(results).toHaveLength(0);
+    // Warning-only violations produce a single summary note, not individual annotations
+    expect(results).toHaveLength(1);
+    expect(results[0].level).toBe('note');
+    expect(results[0].ruleId).toBe('totem/warning-summary');
+    expect(results[0].message.text).toContain('1 warning-severity finding(s) detected');
+    expect(results[0].message.text).toContain('totem lint');
   });
 
   // ─── Ignore patterns ────────────────────────────────
