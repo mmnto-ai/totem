@@ -115,7 +115,6 @@ describe('appendLedgerEvent', () => {
   it('logs warning on I/O failure without throwing', () => {
     const onWarn = vi.fn();
     // Use a path that cannot be created (file as parent directory)
-    const fakePath = path.join(tmpDir, 'ledger', 'events.ndjson');
     // Create a file where the ledger directory should be, blocking mkdirSync
     fs.writeFileSync(path.join(tmpDir, 'ledger'), 'not-a-directory');
 
