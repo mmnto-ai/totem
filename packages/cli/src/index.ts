@@ -299,6 +299,43 @@ program
   });
 
 program
+  .command('add-secret <value>')
+  .description('Add a custom secret pattern to .totem/secrets.json (local, gitignored)')
+  .option('--pattern', 'Treat value as a regex pattern instead of a literal string')
+  .action(async (value: string, opts: { pattern?: boolean }) => {
+    try {
+      const { addSecretCommand } = await import('./commands/add-secret.js');
+      await addSecretCommand(value, opts);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
+  .command('list-secrets')
+  .description('List all configured custom secrets (shared + local) with source labels')
+  .action(async () => {
+    try {
+      const { listSecretsCommand } = await import('./commands/list-secrets.js');
+      await listSecretsCommand();
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
+  .command('remove-secret <index>')
+  .description('Remove a custom secret from .totem/secrets.json by index (from list-secrets)')
+  .action(async (index: string) => {
+    try {
+      const { removeSecretCommand } = await import('./commands/remove-secret.js');
+      await removeSecretCommand(index);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('compile')
   .description('Compile lessons into deterministic regex rules for zero-LLM shield checks')
   .option('--raw', 'Output compiler prompts without LLM synthesis')
@@ -561,7 +598,7 @@ Commands by tier:
   Core (no API keys):    init, sync, lint, compile, test, verify-manifest, hooks, link, stats, drift, doctor
   AI-Powered (needs LLM): shield, spec, handoff, docs, compile (with LLM)
   GitHub Workflows:      extract, triage, wrap
-  Utilities:             add-lesson, explain, eject
+  Utilities:             add-lesson, add-secret, list-secrets, remove-secret, explain, eject
 `,
 );
 

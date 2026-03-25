@@ -189,6 +189,7 @@ export { extractField, extractManualPattern } from './lesson-pattern.js';
 export type { IngestionSanitizeOptions } from './sanitize.js';
 export {
   BASE64_BLOB_RE,
+  compileCustomSecrets,
   INSTRUCTIONAL_LEAKAGE_RE,
   maskSecrets,
   sanitize,
@@ -248,3 +249,7 @@ export {
 // Global registry (multi-totem workspace discovery)
 export type { RegistryEntry, TotemRegistry } from './registry.js';
 export { readRegistry, updateRegistryEntry } from './registry.js';
+
+// Secrets (user-defined DLP patterns)
+export type { CustomSecret, SecretsFile } from './secrets.js';
+export { CustomSecretSchema, loadCustomSecrets, SecretsFileSchema } from './secrets.js';

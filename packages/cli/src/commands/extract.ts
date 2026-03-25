@@ -5,6 +5,7 @@ import {
   flagSuspiciousLessons,
   generateLessonHeading,
   LanceStore,
+  loadCustomSecrets,
   runSync,
   TotemConfigError,
   truncateHeading,
@@ -458,6 +459,9 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
   loadEnv(cwd);
   const config = await loadConfig(configPath);
 
+  // Load user-defined custom secrets for DLP (#921)
+  const customSecrets = loadCustomSecrets(cwd, config.totemDir, (msg) => log.warn(TAG, msg));
+
   // Use project-configured bot markers if provided, otherwise keep defaults
   const botMarkers: readonly string[] = config.botMarkers ?? DEFAULT_BOT_MARKERS;
 
@@ -528,6 +532,7 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
       config,
       cwd,
       temperature: 0.4,
+      customSecrets,
     });
     if (content == null) continue; // --raw mode — prompt already output, process next PR
 

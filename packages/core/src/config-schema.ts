@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { TotemConfigError } from './errors.js';
+import { CustomSecretSchema } from './secrets.js';
 
 /**
  * Zod schema for totem.config.ts — lives at the root of consuming projects.
@@ -186,6 +187,9 @@ export const TotemConfigSchema = z.object({
 
   /** Optional: named partitions mapping logical aliases to file path prefixes for context isolation (e.g., { core: ['packages/core/'], mcp: ['packages/mcp/'] }) */
   partitions: z.record(z.array(z.string().min(1)).min(1)).optional(),
+
+  /** Optional: custom secret patterns for DLP redaction (shared, version-controlled) */
+  secrets: z.array(CustomSecretSchema).optional(),
 });
 
 export type ChunkStrategy = z.infer<typeof ChunkStrategySchema>;

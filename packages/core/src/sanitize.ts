@@ -1,4 +1,5 @@
 import type { ContentType } from './config-schema.js';
+import type { CustomSecret } from './secrets.js';
 
 /** Strip ANSI escape sequences, control characters, and BiDi overrides to prevent terminal injection. */
 const CONTROL_RE =
@@ -140,14 +141,42 @@ const SECRET_PATTERNS: Array<{ name: string; re: RegExp; replacement?: string }>
   },
 ];
 
+/** Compile user-defined custom secrets into executable RegExp instances. */
+export function compileCustomSecrets(secrets: CustomSecret[]): RegExp[] {
+  const compiled: RegExp[] = [];
+  for (const secret of secrets) {
+    try {
+      if (secret.type === 'literal') {
+        // Escape regex special characters for literal matching
+        const escaped = secret.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        compiled.push(new RegExp(escaped, 'g'));
+      } else {
+        compiled.push(new RegExp(secret.value, 'g'));
+      }
+    } catch {
+      // Invalid regex — skip silently (validated at load time)
+    }
+  }
+  return compiled;
+}
+
 /** Mask detected secrets with [REDACTED]. Returns the cleaned text. */
-export function maskSecrets(text: string): string {
+export function maskSecrets(text: string, customSecrets?: CustomSecret[]): string {
   let result = text;
+  // Built-in patterns first
   for (const pattern of SECRET_PATTERNS) {
     // Reset lastIndex for global regexes
     pattern.re.lastIndex = 0;
     const replacement = pattern.replacement ?? '[REDACTED]';
     result = result.replace(pattern.re, replacement);
+  }
+  // Custom user-defined secrets
+  if (customSecrets && customSecrets.length > 0) {
+    const compiled = compileCustomSecrets(customSecrets);
+    for (const re of compiled) {
+      re.lastIndex = 0;
+      result = result.replace(re, '[REDACTED_CUSTOM]');
+    }
   }
   return result;
 }

@@ -102,6 +102,18 @@ The AI helps you **write** rules. The rules enforce themselves.
 | `totem shield` (AI review)       |     LLM      |
 | `totem spec` (planning)          |     LLM      |
 
+### Capability Tiers
+
+Totem's features fall into three tiers based on when (and whether) AI is involved:
+
+| Tier        | Requires AI    | What you get                                                                            |
+| ----------- | -------------- | --------------------------------------------------------------------------------------- |
+| **Enforce** | No             | Lint + hooks + CI gate with existing compiled rules. Deterministic, offline, fast.      |
+| **Learn**   | Yes (one-time) | Lesson extraction from PRs + compilation into rules. AI at authoring time, not runtime. |
+| **Review**  | Yes (per-push) | Shield reviews diffs with full LLM reasoning. Real-time, context-aware.                 |
+
+The key distinction: **"No AI at runtime"** is the Enforce tier's claim, not "no AI ever." The AI helps you _write_ and _compile_ rules (Learn), and can optionally _review_ diffs in real time (Review). But once rules are compiled, the Enforce tier runs with zero LLM calls — no API keys, no network, no model. No other AI governance tool can make that claim.
+
 ---
 
 ## Commands

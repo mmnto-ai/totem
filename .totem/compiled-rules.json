@@ -4534,10 +4534,9 @@
     {
       "lessonHash": "ad9d255418e9b886",
       "lessonHeading": "Library code should use an onWarn callback instead",
+      "pattern": "",
       "message": "Use an onWarn callback instead of hardcoding console.warn in library code to allow consumers to route or suppress output.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "console.warn($$$ARGS)",
       "compiledAt": "2026-03-25T02:11:54.430Z",
       "createdAt": "2026-03-25T02:11:54.430Z",
@@ -4550,15 +4549,15 @@
         "!**/*.test.js",
         "!**/*.spec.ts",
         "!**/*.spec.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "3352372057b774ae",
       "lessonHeading": "When testing diagnostic output, assert that warnings",
+      "pattern": "\\.(?:toContain|toMatch|includes?)\\(\\s*['\"/](?![^'\"/]*[:/])[^'\"/]*[Ww][Aa][Rr][Nn][Ii][Nn][Gg][^'\"/]*['\"/]\\)",
       "message": "When testing diagnostic output, assert that warnings include the specific file path prefix (e.g., 'path/to/file: warning') to ensure correct attribution.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(?:toContain|toMatch|includes?)\\(\\s*['\"/](?![^'\"/]*[:/])[^'\"/]*[Ww][Aa][Rr][Nn][Ii][Nn][Gg][^'\"/]*['\"/]\\)",
       "compiledAt": "2026-03-25T02:13:15.417Z",
       "createdAt": "2026-03-25T02:13:15.417Z",
       "fileGlobs": [
@@ -4566,15 +4565,15 @@
         "**/*.test.js",
         "**/*.spec.ts",
         "**/*.spec.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "c2613efa86f914a0",
       "lessonHeading": "Frontmatter delimiters must be anchored to the start",
+      "pattern": "^\\s+---",
       "message": "Frontmatter delimiters must be anchored to the start of the line (no leading whitespace) to prevent misinterpretation.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^\\s+---",
       "compiledAt": "2026-03-25T02:13:41.887Z",
       "createdAt": "2026-03-25T02:13:41.887Z",
       "fileGlobs": [
@@ -4582,15 +4581,15 @@
         "*.mdx",
         "*.yml",
         "*.yaml"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "f5a75d98a43e0721",
       "lessonHeading": "Resolve persistent directories like caches relative",
+      "pattern": "\\bprocess\\.cwd\\(\\)",
       "message": "Resolve persistent directories (like caches) relative to the configuration file's location rather than process.cwd() to prevent orphaned directories when executed from different subdirectories.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bprocess\\.cwd\\(\\)",
       "compiledAt": "2026-03-25T02:14:05.368Z",
       "createdAt": "2026-03-25T02:14:05.368Z",
       "fileGlobs": [
@@ -4602,15 +4601,15 @@
         "!*.test.js",
         "!*.spec.ts",
         "!*.spec.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "f6739f9ad356067a",
       "lessonHeading": "Dynamic imports used for CLI startup performance should be",
+      "pattern": "\\bimport\\s*\\(",
       "message": "Dynamic imports should be restricted to command entry points to maintain a clean dependency graph and pass security scans in utility layers.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bimport\\s*\\(",
       "compiledAt": "2026-03-25T02:14:04.070Z",
       "createdAt": "2026-03-25T02:14:04.070Z",
       "fileGlobs": [
@@ -4622,6 +4621,92 @@
         "!packages/cli/src/bin/**/*.tsx",
         "!**/*.test.ts",
         "!**/*.spec.ts"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "d44d72c6da1d1b63",
+      "lessonHeading": "Using a unified 'Totem Error' tag across all CLI commands",
+      "message": "CLI error logs must include the 'Totem Error' tag for consistent filtering (e.g., console.error('Totem Error: <message>'))",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\b(console\\.error|logger\\.error|process\\.stderr\\.write)\\s*\\(\\s*['\"\\x60](?![^'\"\\x60]*Totem Error)",
+      "compiledAt": "2026-03-25T16:00:50.831Z",
+      "createdAt": "2026-03-25T16:00:50.831Z",
+      "fileGlobs": [
+        "**/cli/**/*.ts",
+        "**/cli/**/*.js",
+        "!**/*.test.ts"
+      ]
+    },
+    {
+      "lessonHash": "a7c637cef70da666",
+      "lessonHeading": "Normalizing shallow patterns like .ts to /.ts ensures",
+      "message": "Normalize shallow patterns like '*.ts' to '**/*.ts' to ensure consistent recursive behavior across tools like SARIF and picomatch.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "(?:^|\\s|['\"])\\*\\.[a-zA-Z0-9.-]+(?:$|\\s|['\",])",
+      "compiledAt": "2026-03-25T16:00:53.249Z",
+      "createdAt": "2026-03-25T16:00:53.249Z",
+      "fileGlobs": [
+        "**/*.json",
+        "**/*.yaml",
+        "**/*.yml",
+        "**/*.js",
+        "**/*.ts",
+        "**/*.jsonc"
+      ]
+    },
+    {
+      "lessonHash": "495738a6cca527de",
+      "lessonHeading": "When applying global error prefixes, check for existing",
+      "message": "Check for existing '[Error]' tags (e.g., using .startsWith()) before prepending to avoid redundant prefixes like '[Error] [Error] message'.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "^(?!.*startsWith).*(\\\\[Error\\\\]\\\\s*\\\\${|['\\\"]\\\\[Error\\\\]\\\\s*['\\\"]\\\\s*\\\\+)",
+      "compiledAt": "2026-03-25T16:01:42.625Z",
+      "createdAt": "2026-03-25T16:01:42.625Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "c962ead45bcec3a0",
+      "lessonHeading": "Silent failures in 'best-effort' operations like staleness",
+      "message": "Use non-blocking logging instead of empty catch blocks to ensure IO failures are traceable without crashing the primary command execution.",
+      "engine": "ast",
+      "severity": "warning",
+      "pattern": "",
+      "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
+      "compiledAt": "2026-03-25T16:02:57.312Z",
+      "createdAt": "2026-03-25T16:02:57.312Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx",
+        "!**/*.test.ts",
+        "!**/*.test.js"
+      ]
+    },
+    {
+      "lessonHash": "279eab8404d55949",
+      "lessonHeading": "Differentiating between */.ext and dir/*.ext in LLM prompts",
+      "message": "Use recursive glob patterns (e.g., '**/*.ts') or directory-scoped patterns (e.g., 'dir/*.ts') instead of shallow patterns (e.g., '*.ts') to ensure portability across environments.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\"!?\\*\\.[a-zA-Z0-9]+\"",
+      "compiledAt": "2026-03-25T16:02:09.598Z",
+      "createdAt": "2026-03-25T16:02:09.598Z",
+      "fileGlobs": [
+        "**/*.json",
+        "**/*.ts",
+        "**/*.js"
       ]
     }
   ],
@@ -5164,6 +5249,12 @@
     "29149c517d9511e8",
     "cb54a655f25100ab",
     "04237f698b40b2ec",
-    "fe0ec525bb377c3b"
+    "fe0ec525bb377c3b",
+    "db00f55ef888ed9f",
+    "35589669fb5af4b9",
+    "01dcddb5454bb3ac",
+    "183b29be97d7637b",
+    "60789cbb39aa3bba",
+    "aa7a588d48e74503"
   ]
 }

@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -12,6 +13,7 @@ import {
   checkGitHooks,
   checkIndex,
   checkSecretLeaks,
+  checkSecretsFileTracked,
   doctorCommand,
 } from './doctor.js';
 
@@ -291,7 +293,7 @@ describe('doctorCommand', () => {
   it('runs without throwing', async () => {
     const results = await doctorCommand();
     expect(results).toBeDefined();
-    expect(results.length).toBe(6);
+    expect(results.length).toBe(7);
   });
 
   it('returns correct check names', async () => {
@@ -303,6 +305,7 @@ describe('doctorCommand', () => {
     expect(names).toContain('Embedding');
     expect(names).toContain('Index');
     expect(names).toContain('Secret Scan');
+    expect(names).toContain('Secrets File Security');
   });
 });
 
@@ -344,6 +347,7 @@ describe('doctorCommand output', () => {
     expect(output).toContain('Embedding');
     expect(output).toContain('Index');
     expect(output).toContain('Secret Scan');
+    expect(output).toContain('Secrets File Security');
   });
 
   it('outputs summary line with pass/warn/fail counts', async () => {
@@ -352,5 +356,127 @@ describe('doctorCommand output', () => {
     expect(output).toMatch(/\d+ passed/);
     expect(output).toMatch(/\d+ warnings/);
     expect(output).toMatch(/\d+ failures/);
+  });
+});
+
+// ─── Secrets file tracking check ────────────────────────
+
+describe('checkSecretsFileTracked', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('fails if secrets.json is tracked by git', () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+
+    // Create and track .totem/secrets.json
+    const totemDir = path.join(tmpDir, '.totem');
+    fs.mkdirSync(totemDir, { recursive: true });
+    fs.writeFileSync(path.join(totemDir, 'secrets.json'), JSON.stringify({ secrets: [] }));
+    execSync('git add .totem/secrets.json', { cwd: tmpDir, stdio: 'ignore' });
+
+    const result = checkSecretsFileTracked(tmpDir);
+    expect(result.status).toBe('fail');
+    expect(result.name).toBe('Secrets File Security');
+    expect(result.message).toContain('tracked by git');
+    expect(result.remediation).toContain('git rm --cached');
+  });
+
+  it('passes if secrets.json is not tracked', () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+
+    const result = checkSecretsFileTracked(tmpDir);
+    expect(result.status).toBe('pass');
+    expect(result.message).toContain('not tracked');
+  });
+
+  it('passes when not in a git repo', () => {
+    // tmpDir is not a git repo — execSync will throw, which we catch
+    const result = checkSecretsFileTracked(tmpDir);
+    expect(result.status).toBe('pass');
+  });
+});
+
+// ─── Custom secret scanning ────────────────────────────
+
+describe('checkSecretLeaks with custom secrets', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('detects custom literal secrets in lesson files', () => {
+    // Create a custom secrets.json with a literal pattern
+    const totemDir = path.join(tmpDir, '.totem');
+    const lessonsDir = path.join(totemDir, 'lessons');
+    fs.mkdirSync(lessonsDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(totemDir, 'secrets.json'),
+      JSON.stringify({
+        secrets: [{ type: 'literal', value: 'SUPER_SECRET_TOKEN_1234' }],
+      }),
+    );
+
+    // Create a lesson file that contains the literal secret
+    fs.writeFileSync(
+      path.join(lessonsDir, 'leaked-lesson.md'),
+      '# Lesson\nDo not use SUPER_SECRET_TOKEN_1234 in production.',
+    );
+
+    const result = checkSecretLeaks(tmpDir);
+    expect(result.status).toBe('fail');
+    expect(result.message).toContain('potential leaked key');
+  });
+
+  it('detects custom regex pattern secrets in lesson files', () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    const lessonsDir = path.join(totemDir, 'lessons');
+    fs.mkdirSync(lessonsDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(totemDir, 'secrets.json'),
+      JSON.stringify({
+        secrets: [{ type: 'pattern', value: 'CORP-[A-Z0-9]{10,}' }],
+      }),
+    );
+
+    fs.writeFileSync(
+      path.join(lessonsDir, 'corp-leak.md'),
+      '# Lesson\nFound token: CORP-ABCDEF1234567890',
+    );
+
+    const result = checkSecretLeaks(tmpDir);
+    expect(result.status).toBe('fail');
+    expect(result.message).toContain('potential leaked key');
+  });
+
+  it('passes when custom secrets do not match any files', () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    const lessonsDir = path.join(totemDir, 'lessons');
+    fs.mkdirSync(lessonsDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(totemDir, 'secrets.json'),
+      JSON.stringify({
+        secrets: [{ type: 'literal', value: 'UNIQUE_SECRET_WONT_MATCH' }],
+      }),
+    );
+
+    fs.writeFileSync(path.join(lessonsDir, 'clean-lesson.md'), '# Lesson\nNothing sensitive here.');
+
+    const result = checkSecretLeaks(tmpDir);
+    expect(result.status).toBe('pass');
   });
 });
