@@ -346,6 +346,65 @@ describe('runCompiledRules', () => {
 
   // ─── Ignore patterns ────────────────────────────────
 
+  // ─── SARIF output ──────────────────────────────────
+
+  it('SARIF output excludes warning-severity findings', async () => {
+    const rules = [
+      makeRule('errorPattern', 'This is an error', 'Error rule', { severity: 'error' }),
+      makeRule('warnPattern', 'This is a warning', 'Warning rule', { severity: 'warning' }),
+    ];
+    writeRules(tmpDir, rules);
+
+    const diff = [
+      'diff --git a/src/app.ts b/src/app.ts',
+      '--- a/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -1,3 +1,5 @@',
+      ' // existing code',
+      '+  errorPattern();',
+      '+  warnPattern();',
+      ' // end',
+    ].join('\n');
+
+    // Error-severity violations cause a throw, but we need the SARIF output
+    let caughtErr: unknown;
+    try {
+      await runCompiledRules({
+        diff,
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'sarif',
+        tag: 'Test',
+      });
+    } catch (err) {
+      caughtErr = err;
+    }
+
+    expect(caughtErr).toBeDefined();
+
+    // Read the SARIF output from the error or capture it via --out
+    // Since the function throws, check that warning-only runs produce clean SARIF
+    const warningOnlyRules = [
+      makeRule('warnPattern', 'This is a warning', 'Warning rule', { severity: 'warning' }),
+    ];
+    writeRules(tmpDir, warningOnlyRules);
+
+    const result = await runCompiledRules({
+      diff: makeDiff('src/app.ts', '  warnPattern();'),
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'sarif',
+      tag: 'Test',
+    });
+
+    const sarif = JSON.parse(result.output);
+    // Warning-only violations should produce zero SARIF results
+    const results = sarif.runs[0].results;
+    expect(results).toHaveLength(0);
+  });
+
+  // ─── Ignore patterns ────────────────────────────────
+
   it('respects ignorePatterns to skip matching files', async () => {
     const rules = [makeRule('TODO', 'No TODOs', 'No TODOs')];
     writeRules(tmpDir, rules);

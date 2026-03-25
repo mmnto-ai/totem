@@ -141,7 +141,10 @@ export async function runCompiledRules(
     const req = createRequire(import.meta.url);
     const version = (req('../../package.json') as { version: string }).version;
     const commitHash = getHeadSha(cwd) ?? undefined;
-    const sarif = buildSarifLog(violations, rules, { version, commitHash });
+    // SARIF is a strict channel for error-severity findings only.
+    // Warnings are probationary (Rule Nursery) and stay as local telemetry
+    // to prevent alert fatigue in the PR UI (Proposal 190).
+    const sarif = buildSarifLog(errors, rules, { version, commitHash });
     output = JSON.stringify(sarif, null, 2);
   } else if (format === 'json') {
     output = JSON.stringify(
