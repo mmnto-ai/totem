@@ -3,7 +3,7 @@ You are reviewing a diff for the Totem project.
 You MUST respond with ONLY a JSON object wrapped in <shield_verdict> XML tags.
 Do NOT include any text before or after the tags. No preamble, no closing remarks.
 
-```
+```json
 <shield_verdict>
 {
   "findings": [

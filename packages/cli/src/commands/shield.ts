@@ -203,7 +203,7 @@ export function extractStructuredVerdict(content: string): ShieldStructuredVerdi
   }
 
   // Layer 2 — Markdown code fences (fallback)
-  const fenceMatch = content.match(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/);
+  const fenceMatch = content.match(/(?:```|~~~)(?:json)?\s*\n([\s\S]*?)\n\s*(?:```|~~~)/);
   if (fenceMatch) {
     try {
       const parsed = JSON.parse(fenceMatch[1]!);
@@ -286,11 +286,10 @@ export function formatVerdictForDisplay(verdict: ShieldStructuredVerdict, pass: 
   if (sorted.length > 0) {
     lines.push('');
     for (const finding of sorted) {
-      const location = finding.file
-        ? finding.line
-          ? `${finding.file}:${finding.line} `
-          : `${finding.file} `
-        : '';
+      let location = '';
+      if (finding.file) {
+        location = finding.line ? `${finding.file}:${finding.line} ` : `${finding.file} `;
+      }
       lines.push(`  ${finding.severity} [${finding.confidence}] ${location}— ${finding.message}`);
     }
   }

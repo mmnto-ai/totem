@@ -100,10 +100,6 @@ const NON_CODE_FILENAMES = new Set<string>([
   '.editorconfig',
   '.prettierrc',
   '.eslintignore',
-  'bun.lockb',
-  'package-lock.json',
-  'yarn.lock',
-  'pnpm-lock.yaml',
 ]);
 
 // ─── Compound extension check ───────────────────────

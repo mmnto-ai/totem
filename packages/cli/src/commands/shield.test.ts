@@ -408,8 +408,14 @@ describe('extractStructuredVerdict', () => {
     expect(result).toEqual(validVerdict);
   });
 
-  it('parses valid JSON in markdown code fences', () => {
+  it('parses valid JSON in markdown code fences (backticks)', () => {
     const content = '```json\n' + JSON.stringify(validVerdict) + '\n```';
+    const result = extractStructuredVerdict(content);
+    expect(result).toEqual(validVerdict);
+  });
+
+  it('parses valid JSON in markdown code fences (tilde)', () => {
+    const content = '~~~json\n' + JSON.stringify(validVerdict) + '\n~~~';
     const result = extractStructuredVerdict(content);
     expect(result).toEqual(validVerdict);
   });
