@@ -1,8 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { SecretsFileSchema } from '@mmnto/totem';
 import type { SecretsFile } from '@mmnto/totem';
+import { SecretsFileSchema } from '@mmnto/totem';
 
 // ─── Constants ──────────────────────────────────────────
 
