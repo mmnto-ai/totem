@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { z } from 'zod';
 
 import { getErrorMessage, TotemParseError } from './errors.js';
+import { readJsonSafe } from './sys/fs.js';
 
 // ─── Schema ──────────────────────────────────────────
 
@@ -126,42 +127,32 @@ export function writeCompileManifest(manifestPath: string, manifest: CompileMani
  * @throws {TotemParseError} if the file is missing or contains invalid JSON/schema.
  */
 export function readCompileManifest(manifestPath: string): CompileManifest {
-  let raw: string;
   try {
-    raw = fs.readFileSync(manifestPath, 'utf-8');
+    return readJsonSafe(manifestPath, CompileManifestSchema);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+    if (!(err instanceof TotemParseError)) throw err;
+    // Re-throw with manifest-specific recovery hints
+    if (err.message.includes('File not found')) {
       throw new TotemParseError(
         `Compile manifest not found: ${manifestPath}`,
         'Run "totem compile" to generate the manifest.',
-        err,
+        err.cause,
       );
     }
-    throw new TotemParseError(
-      `Cannot read compile manifest: ${getErrorMessage(err)}`,
-      `Check file permissions for ${manifestPath}.`,
-      err,
-    );
+    if (err.message.includes('Invalid JSON')) {
+      throw new TotemParseError(
+        `Invalid JSON in compile manifest: ${manifestPath}`,
+        'The manifest file is corrupted. Re-run "totem compile".',
+        err.cause,
+      );
+    }
+    if (err.message.includes('Schema validation failed')) {
+      throw new TotemParseError(
+        `Invalid compile manifest schema: ${err.message.replace('[Totem Error] ', '')}`,
+        'The manifest file has an unexpected structure. Re-run "totem compile".',
+        err.cause,
+      );
+    }
+    throw err;
   }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    throw new TotemParseError(
-      `Invalid JSON in compile manifest: ${manifestPath} (${getErrorMessage(err)})`,
-      'The manifest file is corrupted. Re-run "totem compile".',
-      err,
-    );
-  }
-
-  const result = CompileManifestSchema.safeParse(parsed);
-  if (!result.success) {
-    throw new TotemParseError(
-      `Invalid compile manifest schema: ${result.error.message}`,
-      'The manifest file has an unexpected structure. Re-run "totem compile".',
-    );
-  }
-
-  return result.data;
 }

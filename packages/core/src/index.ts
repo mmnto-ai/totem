@@ -270,3 +270,6 @@ export { appendLedgerEvent, LedgerEventSchema, readLedgerEvents } from './ledger
 // Shell execution (cross-platform safe wrapper)
 export type { SafeExecOptions } from './sys/exec.js';
 export { safeExec } from './sys/exec.js';
+
+// Filesystem helpers
+export { readJsonSafe } from './sys/fs.js';
