@@ -41,6 +41,7 @@ vi.mock('@mmnto/totem', async () => {
 
 // ─── Import after mocks ─────────────────────────────
 
+import { cleanTmpDir } from '../test-utils.js';
 import { learnFromVerdict } from './shield.js';
 
 // ─── Tests ──────────────────────────────────────────
@@ -89,7 +90,7 @@ FAIL — Missing test coverage for new utility function.
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('extracts and appends lessons from LLM output', async () => {

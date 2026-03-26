@@ -24,6 +24,7 @@ vi.mock('../utils.js', async () => {
   };
 });
 
+import { cleanTmpDir } from '../test-utils.js';
 import { migrateLessonsCommand } from './migrate-lessons.js';
 
 describe('migrateLessonsCommand', () => {
@@ -40,7 +41,7 @@ describe('migrateLessonsCommand', () => {
 
   afterEach(() => {
     process.chdir(savedCwd);
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('does nothing when no lessons.md exists', async () => {

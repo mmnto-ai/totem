@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { cleanTmpDir } from '../test-utils.js';
 import { listSecretsCommand, maskLiteral } from './list-secrets.js';
 
 // ─── Helpers ────────────────────────────────────────────
@@ -42,7 +43,7 @@ describe('listSecretsCommand', () => {
   afterEach(() => {
     stderrSpy.mockRestore();
     for (const dir of tmpDirs) {
-      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      cleanTmpDir(dir);
     }
     tmpDirs = [];
   });

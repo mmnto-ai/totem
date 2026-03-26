@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { TotemConfig } from '../config-schema.js';
 import { TotemConfigSchema } from '../config-schema.js';
+import { cleanTmpDir } from '../test-utils.js';
 import { runSync } from './pipeline.js';
 
 // Import the internal helpers via a workaround — we test the state file contract
@@ -21,7 +22,7 @@ describe('sync state persistence', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('creates cache directory and writes valid JSON', () => {

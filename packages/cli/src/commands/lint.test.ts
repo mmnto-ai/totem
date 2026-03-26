@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { generateInputHash, generateOutputHash, writeCompileManifest } from '@mmnto/totem';
 
+import { cleanTmpDir } from '../test-utils.js';
+
 // ─── Mock utils to bypass real config loading ───────────
 
 vi.mock('../utils.js', async () => {
@@ -88,7 +90,7 @@ describe('lintCommand staleness check', () => {
 
   afterEach(() => {
     process.chdir(originalCwd);
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
     vi.restoreAllMocks();
   });
 

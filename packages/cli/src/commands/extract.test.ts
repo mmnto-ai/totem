@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { CustomSecret } from '@mmnto/totem';
 import { maskSecrets } from '@mmnto/totem';
 
+import { cleanTmpDir } from '../test-utils.js';
 import {
   appendLessons,
   assemblePrompt,
@@ -525,7 +526,7 @@ describe('appendLessons', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('creates directory and files if they do not exist', () => {

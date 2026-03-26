@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { cleanTmpDir } from '../test-utils.js';
 import { log } from '../ui.js';
 import { assemblePrompt, assembleStructuralPrompt } from './shield.js';
 import {
@@ -22,7 +23,7 @@ describe('extractShieldHints', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('returns DLP hint when diff contains [REDACTED]', () => {
@@ -148,7 +149,7 @@ describe('extractShieldContextAnnotations', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('returns structured annotations with file and line', () => {

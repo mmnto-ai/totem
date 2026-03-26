@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { cleanTmpDir } from '../test-utils.js';
 import type { EjectSummary } from './eject.js';
 import { ejectCommand, scrubPostCheckoutHook, scrubPostMergeHook } from './eject.js';
 
@@ -25,7 +26,7 @@ describe('ejectCommand', () => {
 
   afterEach(() => {
     process.chdir(originalCwd);
-    fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(cwd);
   });
 
   it('removes post-merge hook when it only contains Totem content', async () => {
@@ -197,7 +198,7 @@ describe('scrubPostMergeHook', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(cwd);
   });
 
   it('scrubs new conditional hook format (if/fi block)', () => {
@@ -274,7 +275,7 @@ describe('scrubPostCheckoutHook', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(cwd);
   });
 
   it('removes post-checkout hook with end marker', () => {

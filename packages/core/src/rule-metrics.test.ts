@@ -11,6 +11,7 @@ import {
   recordTrigger,
   saveRuleMetrics,
 } from './rule-metrics.js';
+import { cleanTmpDir } from './test-utils.js';
 
 // ─── Helpers ────────────────────────────────────────────
 
@@ -21,7 +22,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  cleanTmpDir(tmpDir);
 });
 
 function emptyMetrics(): RuleMetricsFile {

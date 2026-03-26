@@ -5,6 +5,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { cleanTmpDir } from '../test-utils.js';
 import { invokeShellOrchestrator, tryParseGeminiJson } from './shell-orchestrator.js';
 
 // ─── Mock spawn ──────────────────────────────────────
@@ -49,7 +50,7 @@ describe('invokeShellOrchestrator', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
     vi.restoreAllMocks();
   });
 

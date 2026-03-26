@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DocTarget } from '@mmnto/totem';
 
+import { cleanTmpDir } from '../test-utils.js';
 import {
   DOCS_SYSTEM_PROMPT,
   docsCommand,
@@ -101,7 +102,7 @@ describe('docsCommand', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('throws when no docs configured', async () => {

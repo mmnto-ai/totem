@@ -17,6 +17,8 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { cleanTmpDir } from '../test-utils.js';
+
 // ─── Helpers ────────────────────────────────────────────
 
 const CLI_PATH = path.resolve(__dirname, '../../dist/index.js');
@@ -50,7 +52,7 @@ describe('totem hooks CLI entrypoint', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('prints "not a git repository" outside a git repo', () => {

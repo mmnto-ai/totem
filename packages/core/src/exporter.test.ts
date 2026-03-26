@@ -12,6 +12,7 @@ import {
   SENTINEL_END,
   SENTINEL_START,
 } from './exporter.js';
+import { cleanTmpDir } from './test-utils.js';
 
 // ─── Test fixtures ─────────────────────────────────
 
@@ -134,7 +135,7 @@ describe('exportLessons', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('creates file and directories when they do not exist', () => {

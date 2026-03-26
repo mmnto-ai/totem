@@ -46,8 +46,10 @@ export {
   applyAstRulesToAdditions,
   applyRules,
   applyRulesToAdditions,
+  type CoreLogger,
   extractJustification,
   matchesGlob,
+  setCoreLogger,
 } from './rule-engine.js';
 
 // ─── Hashing ────────────────────────────────────────

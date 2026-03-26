@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { Embedder } from '../embedders/embedder.js';
+import { cleanTmpDir } from '../test-utils.js';
 import type { Chunk } from '../types.js';
 import { escapeSqlString, LanceStore } from './lance-store.js';
 
@@ -76,7 +77,7 @@ describe('LanceStore', () => {
   });
 
   afterEach(async () => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   describe('insert + isEmpty', () => {

@@ -52,10 +52,14 @@ export async function runCompiledRules(
     recordSuppression,
     recordTrigger,
     saveRuleMetrics,
+    setCoreLogger,
     TotemError,
   } = await import('@mmnto/totem');
 
   const { diff, cwd, totemDir, format, outPath, exportPaths, ignorePatterns, tag } = options;
+
+  // Wire core logger to CLI UI (ADR-071: core must not use console.warn directly)
+  setCoreLogger({ warn: (msg) => log.warn(tag, msg) });
   const resolvedTotemDir = path.join(options.configRoot ?? cwd, totemDir);
 
   // Load compiled rules

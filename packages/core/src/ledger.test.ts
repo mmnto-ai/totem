@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { LedgerEvent } from './ledger.js';
 import { appendLedgerEvent, LedgerEventSchema, readLedgerEvents } from './ledger.js';
+import { cleanTmpDir } from './test-utils.js';
 
 // ─── Helpers ────────────────────────────────────────────
 
@@ -16,7 +17,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  cleanTmpDir(tmpDir);
 });
 
 function makeEvent(overrides: Partial<LedgerEvent> = {}): LedgerEvent {

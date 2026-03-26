@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { matchAstQueriesBatch, matchAstQuery } from './ast-query.js';
 import { TotemParseError } from './errors.js';
+import { cleanTmpDir } from './test-utils.js';
 
 // ─── Helpers ────────────────────────────────────────
 
@@ -16,7 +17,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  cleanTmpDir(tmpDir);
 });
 
 function writeFile(name: string, content: string): string {

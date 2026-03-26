@@ -124,6 +124,7 @@ export {
   CompiledRuleSchema,
   CompiledRulesFileSchema,
   CompilerOutputSchema,
+  type CoreLogger,
   engineFields,
   extractAddedLines,
   extractJustification,
@@ -136,6 +137,7 @@ export {
   sanitizeFileGlobs,
   saveCompiledRules,
   saveCompiledRulesFile,
+  setCoreLogger,
   validateRegex,
 } from './compiler.js';
 

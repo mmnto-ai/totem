@@ -10,6 +10,7 @@ import {
   parseLessonsFile,
   rewriteLessonsFile,
 } from './drift-detector.js';
+import { cleanTmpDir } from './test-utils.js';
 
 // ─── parseLessonsFile ─────────────────────────────────
 
@@ -177,7 +178,7 @@ describe('detectDrift', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('returns empty array when all references exist', () => {

@@ -62,6 +62,7 @@ vi.mock('node:child_process', () => ({
 
 // ─── Import orchestrators ───────────────────────────
 
+import { cleanTmpDir } from '../test-utils.js';
 import { invokeAnthropicOrchestrator } from './anthropic-orchestrator.js';
 import { invokeGeminiOrchestrator } from './gemini-orchestrator.js';
 import { invokeOpenAIOrchestrator } from './openai-orchestrator.js';
@@ -217,7 +218,7 @@ describe('shell provider conformance', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
     vi.restoreAllMocks();
   });
 

@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { RegistryEntry } from './registry.js';
+import { cleanTmpDir } from './test-utils.js';
 
 // Mock os.homedir() so tests don't touch the real ~/.totem
 let tmpDir: string;
@@ -32,7 +33,7 @@ describe('readRegistry', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('returns empty object when file does not exist', () => {
@@ -77,7 +78,7 @@ describe('updateRegistryEntry', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('creates registry file and writes entry', async () => {
