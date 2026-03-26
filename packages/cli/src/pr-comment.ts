@@ -39,9 +39,10 @@ const MAX_TABLE_ROWS = 50;
 export function deduplicateFindings(input: TotemFinding[]): DedupedFinding[] {
   const groups = new Map<string, { findings: TotemFinding[] }>();
 
+  let unlocatedIdx = 0;
   for (const f of input) {
     // Findings without file/line get unique keys to avoid incorrect grouping
-    const key = f.file && f.line ? `${f.file}:${f.line}` : `__unlocated__${f.id}`;
+    const key = f.file && f.line ? `${f.file}:${f.line}` : `__unlocated__${unlocatedIdx++}`;
     const existing = groups.get(key);
     if (existing) {
       existing.findings.push(f);
