@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CompiledRule, Violation } from '@mmnto/totem';
+import type { TotemFinding } from '@mmnto/totem';
 
-import { buildPRCommentMarkdown, deduplicateViolations, type PRSummaryData } from './pr-comment.js';
+import {
+  buildPRCommentMarkdown,
+  deduplicateFindings,
+  deduplicateViolations,
+  type PRSummaryData,
+} from './pr-comment.js';
 
 // ─── Helpers ─────────────────────────────────────────
 
@@ -195,5 +201,55 @@ describe('buildPRCommentMarkdown', () => {
     expect(md).toContain('abc1234');
     expect(md).toContain('1.5s');
     expect(md).toContain('zero LLM calls');
+  });
+});
+
+// ─── deduplicateFindings (ADR-071) ─────────────────
+
+describe('deduplicateFindings', () => {
+  function makeFinding(overrides: Partial<TotemFinding> = {}): TotemFinding {
+    return {
+      id: 'rule1',
+      source: 'lint',
+      severity: 'error',
+      message: 'Test finding',
+      file: 'src/foo.ts',
+      line: 10,
+      confidence: 1.0,
+      ...overrides,
+    };
+  }
+
+  it('deduplicates findings at the same file:line', () => {
+    const findings = [makeFinding({ id: 'rule1' }), makeFinding({ id: 'rule2' })];
+    const result = deduplicateFindings(findings);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.ruleCount).toBe(2);
+  });
+
+  it('preserves highest severity when deduplicating', () => {
+    const findings = [
+      makeFinding({ id: 'rule1', severity: 'warning' }),
+      makeFinding({ id: 'rule2', severity: 'error' }),
+    ];
+    const result = deduplicateFindings(findings);
+    expect(result[0]!.severity).toBe('error');
+  });
+
+  it('keeps findings at different locations separate', () => {
+    const findings = [
+      makeFinding({ file: 'a.ts', line: 1 }),
+      makeFinding({ file: 'b.ts', line: 2 }),
+    ];
+    const result = deduplicateFindings(findings);
+    expect(result).toHaveLength(2);
+  });
+
+  it('handles findings with optional file/line', () => {
+    const findings = [makeFinding({ file: undefined, line: undefined })];
+    const result = deduplicateFindings(findings);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.file).toBe('');
+    expect(result[0]!.line).toBe(0);
   });
 });

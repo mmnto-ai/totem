@@ -3,9 +3,9 @@ import * as path from 'node:path';
 
 import { log } from '../ui.js';
 
-// ─── Annotation regex (ADR-071: match both shield-context and totem-context) ─
+// ─── Annotation regex (ADR-071: totem-context is primary, shield-context is legacy alias) ─
 
-const CONTEXT_ANNOTATION_RE = /\/\/\s*(?:shield-context|totem-context):\s*(.+)/;
+const CONTEXT_ANNOTATION_RE = /\/\/\s*(?:totem-context|shield-context):\s*(.+)/;
 
 // ─── Structured annotation type ─────────────────────
 

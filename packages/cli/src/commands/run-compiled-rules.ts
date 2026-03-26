@@ -1,4 +1,4 @@
-import type { CompiledRule, Violation } from '@mmnto/totem';
+import type { CompiledRule, TotemFinding, Violation } from '@mmnto/totem';
 
 import type { ShieldFormat } from './shield.js';
 
@@ -19,6 +19,8 @@ export interface RunCompiledRulesOptions {
 
 export interface RunCompiledRulesResult {
   violations: Violation[];
+  /** Unified findings (ADR-071) — same data as violations, normalized shape */
+  findings: TotemFinding[];
   rules: CompiledRule[];
   output: string;
 }
@@ -199,12 +201,14 @@ export async function runCompiledRules(
 
     output = JSON.stringify(sarif, null, 2);
   } else if (format === 'json') {
+    const { violationToFinding } = await import('@mmnto/totem');
     output = JSON.stringify(
       {
         pass: errors.length === 0,
         rules: rules.length,
         errors: errors.length,
         warnings: warnings.length,
+        findings: violations.map(violationToFinding),
         violations,
       },
       null,
@@ -281,5 +285,9 @@ export async function runCompiledRules(
     log.info(tag, `Verdict: ${verdictLabel} — ${rules.length} rules, 0 violations`);
   }
 
-  return { violations, rules, output };
+  // Convert to unified findings model (ADR-071)
+  const { violationToFinding } = await import('@mmnto/totem');
+  const findings = violations.map(violationToFinding);
+
+  return { violations, findings, rules, output };
 }

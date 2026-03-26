@@ -623,7 +623,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     log.dim(TAG, `${smartHints.length} smart hint(s) detected`);
   }
 
-  // Trap Ledger: record override events for shield-context / totem-context annotations
+  // Trap Ledger: record override events for totem-context annotations (ADR-071)
   if (annotations.length > 0) {
     const { appendLedgerEvent } = await import('@mmnto/totem');
     const resolvedTotemDir = path.join(configRoot, config.totemDir);
@@ -633,7 +633,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
         {
           timestamp: new Date().toISOString(),
           type: 'override',
-          ruleId: 'shield-context',
+          ruleId: 'totem-context',
           file: ann.file,
           line: ann.line,
           justification: ann.text,

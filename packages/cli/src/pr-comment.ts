@@ -3,7 +3,7 @@
  * Implements #923: deduplicates violations, builds markdown, upserts via gh CLI.
  */
 
-import type { CompiledRule, Violation } from '@mmnto/totem';
+import type { CompiledRule, TotemFinding, Violation } from '@mmnto/totem';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -32,46 +32,65 @@ const MAX_TABLE_ROWS = 50;
 // ─── Deduplication ──────────────────────────────────
 
 /**
- * Deduplicate violations by file + line. Multiple rules matching the same
- * location collapse into one finding with the highest severity and a rule count.
+ * Deduplicate unified findings by file + line. Multiple findings at the same
+ * location collapse into one with the highest severity and a rule count.
+ * Canonical dedup implementation (ADR-071).
  */
-export function deduplicateViolations(violations: Violation[]): DedupedFinding[] {
-  const groups = new Map<string, { violations: Violation[] }>();
+export function deduplicateFindings(input: TotemFinding[]): DedupedFinding[] {
+  const groups = new Map<string, { findings: TotemFinding[] }>();
 
-  for (const v of violations) {
-    const key = `${v.file}:${v.lineNumber}`;
+  for (const f of input) {
+    const key = `${f.file ?? ''}:${f.line ?? 0}`;
     const existing = groups.get(key);
     if (existing) {
-      existing.violations.push(v);
+      existing.findings.push(f);
     } else {
-      groups.set(key, { violations: [v] });
+      groups.set(key, { findings: [f] });
     }
   }
 
-  const findings: DedupedFinding[] = [];
+  const deduped: DedupedFinding[] = [];
 
-  for (const { violations: group } of groups.values()) {
-    // Sort by lessonHash for deterministic message selection
-    group.sort((a, b) => a.rule.lessonHash.localeCompare(b.rule.lessonHash));
+  for (const { findings: group } of groups.values()) {
+    group.sort((a, b) => a.id.localeCompare(b.id));
     const first = group[0]!;
-    const hasError = group.some((v) => (v.rule.severity ?? 'error') === 'error');
-    findings.push({
-      file: first.file,
-      line: first.lineNumber,
-      message: first.rule.message,
+    const hasError = group.some((f) => f.severity === 'error');
+    deduped.push({
+      file: first.file ?? '',
+      line: first.line ?? 0,
+      message: first.message,
       severity: hasError ? 'error' : 'warning',
       ruleCount: group.length,
     });
   }
 
-  // Sort: errors first, then by file, then by line
-  findings.sort((a, b) => {
+  deduped.sort((a, b) => {
     if (a.severity !== b.severity) return a.severity === 'error' ? -1 : 1;
     if (a.file !== b.file) return a.file.localeCompare(b.file);
     return a.line - b.line;
   });
 
-  return findings;
+  return deduped;
+}
+
+/**
+ * Deduplicate violations by file + line. Converts to unified findings
+ * and delegates to deduplicateFindings.
+ */
+export function deduplicateViolations(violations: Violation[]): DedupedFinding[] {
+  const findings: TotemFinding[] = violations.map((v) => ({
+    id: v.rule.lessonHash,
+    source: 'lint' as const,
+    severity: (v.rule.severity ?? 'error') as 'error' | 'warning',
+    message: v.rule.message,
+    file: v.file,
+    line: v.lineNumber,
+    matchedLine: v.line,
+    ruleHeading: v.rule.lessonHeading,
+    confidence: 1.0,
+    category: v.rule.category as TotemFinding['category'],
+  }));
+  return deduplicateFindings(findings);
 }
 
 // ─── Markdown builder ───────────────────────────────
