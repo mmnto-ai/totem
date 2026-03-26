@@ -41,51 +41,51 @@ function makeViolation(
 // ─── deduplicateViolations ───────────────────────────
 
 describe('deduplicateViolations', () => {
-  it('deduplicates findings with identical file and line', () => {
+  it('deduplicates findings with identical file and line', async () => {
     const violations = [
       makeViolation({ rule: { lessonHash: 'a', message: 'Rule A' } }),
       makeViolation({ rule: { lessonHash: 'b', message: 'Rule B' } }),
       makeViolation({ rule: { lessonHash: 'c', message: 'Rule C' } }),
     ];
 
-    const findings = deduplicateViolations(violations);
+    const findings = await deduplicateViolations(violations);
     expect(findings).toHaveLength(1);
     expect(findings[0]!.ruleCount).toBe(3);
     expect(findings[0]!.file).toBe('src/index.ts');
     expect(findings[0]!.line).toBe(10);
   });
 
-  it('escalates severity to error if any rule is error', () => {
+  it('escalates severity to error if any rule is error', async () => {
     const violations = [
       makeViolation({ rule: { lessonHash: 'a', severity: 'warning' } }),
       makeViolation({ rule: { lessonHash: 'b', severity: 'error' } }),
       makeViolation({ rule: { lessonHash: 'c', severity: 'warning' } }),
     ];
 
-    const findings = deduplicateViolations(violations);
+    const findings = await deduplicateViolations(violations);
     expect(findings).toHaveLength(1);
     expect(findings[0]!.severity).toBe('error');
   });
 
-  it('keeps distinct file+line combinations separate', () => {
+  it('keeps distinct file+line combinations separate', async () => {
     const violations = [
       makeViolation({ file: 'a.ts', lineNumber: 1 }),
       makeViolation({ file: 'a.ts', lineNumber: 2 }),
       makeViolation({ file: 'b.ts', lineNumber: 1 }),
     ];
 
-    const findings = deduplicateViolations(violations);
+    const findings = await deduplicateViolations(violations);
     expect(findings).toHaveLength(3);
   });
 
-  it('sorts errors before warnings, then by file and line', () => {
+  it('sorts errors before warnings, then by file and line', async () => {
     const violations = [
       makeViolation({ file: 'z.ts', lineNumber: 1, rule: { severity: 'warning' } }),
       makeViolation({ file: 'a.ts', lineNumber: 1, rule: { severity: 'error' } }),
       makeViolation({ file: 'a.ts', lineNumber: 2, rule: { severity: 'warning' } }),
     ];
 
-    const findings = deduplicateViolations(violations);
+    const findings = await deduplicateViolations(violations);
     expect(findings[0]!.file).toBe('a.ts');
     expect(findings[0]!.severity).toBe('error');
     expect(findings[1]!.file).toBe('a.ts');
@@ -93,14 +93,14 @@ describe('deduplicateViolations', () => {
     expect(findings[2]!.file).toBe('z.ts');
   });
 
-  it('returns empty array for no violations', () => {
-    expect(deduplicateViolations([])).toEqual([]);
+  it('returns empty array for no violations', async () => {
+    expect(await deduplicateViolations([])).toEqual([]);
   });
 
-  it('treats missing severity as error', () => {
+  it('treats missing severity as error', async () => {
     const violations = [makeViolation({ rule: { severity: undefined } })];
 
-    const findings = deduplicateViolations(violations);
+    const findings = await deduplicateViolations(violations);
     expect(findings[0]!.severity).toBe('error');
   });
 });

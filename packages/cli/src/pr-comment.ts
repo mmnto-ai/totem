@@ -4,7 +4,6 @@
  */
 
 import type { CompiledRule, TotemFinding, Violation } from '@mmnto/totem';
-import { violationToFinding } from '@mmnto/totem';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -79,7 +78,8 @@ export function deduplicateFindings(input: TotemFinding[]): DedupedFinding[] {
  * Deduplicate violations by file + line. Converts to unified findings
  * and delegates to deduplicateFindings.
  */
-export function deduplicateViolations(violations: Violation[]): DedupedFinding[] {
+export async function deduplicateViolations(violations: Violation[]): Promise<DedupedFinding[]> {
+  const { violationToFinding } = await import('@mmnto/totem');
   return deduplicateFindings(violations.map(violationToFinding));
 }
 
@@ -229,7 +229,7 @@ export interface PostPRCommentOptions {
 export async function postPRComment(options: PostPRCommentOptions): Promise<void> {
   const { violations, rules, prNumber, commitSha, durationMs, cwd } = options;
 
-  const findings = deduplicateViolations(violations);
+  const findings = await deduplicateViolations(violations);
   const errors = findings.filter((f) => f.severity === 'error').length;
   const warnings = findings.filter((f) => f.severity === 'warning').length;
 
