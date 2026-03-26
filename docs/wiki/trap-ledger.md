@@ -1,6 +1,6 @@
 # Trap Ledger & Self-Healing Rules
 
-The true power of Totem lies not just in enforcing architectural boundaries, but in **telemetry-driven adaptation**. 
+The true power of Totem lies not just in enforcing architectural boundaries, but in **telemetry-driven adaptation**.
 
 If a compiled rule is too strict or hallucinates false positives, it will cause developer friction. Instead of forcing developers to manually edit configuration files or blindly bypass the system, Totem uses developer friction as data to automatically heal itself.
 
@@ -9,15 +9,19 @@ If a compiled rule is too strict or hallucinates false positives, it will cause 
 The Trap Ledger is an immutable, append-only event stream located at `.totem/ledger/events.ndjson`. It operates locally on your machine and tracks how the deterministic enforcement layer is interacting with your codebase.
 
 ### What gets recorded?
+
 The Ledger actively monitors your usage of Totem override directives:
-*   `// totem-ignore` (Hard suppression)
-*   `// totem-context:` (Semantic suppression)
-*   `// shield-context:` (Legacy semantic suppression)
+
+- `// totem-ignore` (Hard suppression)
+- `// totem-context:` (Semantic suppression)
+- `// shield-context:` (Legacy semantic suppression)
 
 Whenever `totem lint` or `totem shield` encounters one of these directives, it logs an `exception` event to the ledger.
 
 ### Event Schema
+
 The NDJSON records contain high-fidelity context about the friction event:
+
 ```json
 {
   "timestamp": "2026-03-25T14:32:00.000Z",
@@ -34,17 +38,20 @@ The NDJSON records contain high-fidelity context about the friction event:
 
 ## 2. The Self-Healing Loop (`totem doctor --pr`)
 
-The Trap Ledger provides the raw telemetry, but the **Doctor** provides the cure. 
+The Trap Ledger provides the raw telemetry, but the **Doctor** provides the cure.
 
 By running `totem doctor --pr`, you initiate the self-healing sequence. The command aggregates the local telemetry, calculates bypass rates for every compiled rule, and takes autonomous action.
 
 ### The Algorithm
-1.  **Thresholds:** The Doctor looks for rules that have been evaluated a minimum number of times (e.g., 5 events) and have a **Bypass Rate > 30%**. 
-2.  **Downgrade:** If a rule is bypassed that frequently, it is deemed mathematically noisy. The Doctor modifies `compiled-rules.json`, downgrading the rule's severity from `error` to `warning`. 
-3.  **Human Review:** Crucially, following **ADR-027 (Rule Lifecycle)**, Totem never auto-deletes rules or forcefully alters the architecture without human review. The Doctor creates a new git branch, commits the downgrade, and opens a Pull Request detailing the exact numeric rationale (e.g., *"Rule X has a 42% bypass rate"*).
+
+1.  **Thresholds:** The Doctor looks for rules that have been evaluated a minimum number of times (e.g., 5 events) and have a **Bypass Rate > 30%**.
+2.  **Downgrade:** If a rule is bypassed that frequently, it is deemed mathematically noisy. The Doctor modifies `compiled-rules.json`, downgrading the rule's severity from `error` to `warning`.
+3.  **Human Review:** Crucially, following **ADR-027 (Rule Lifecycle)**, Totem never auto-deletes rules or forcefully alters the architecture without human review. The Doctor creates a new git branch, commits the downgrade, and opens a Pull Request detailing the exact numeric rationale (e.g., _"Rule X has a 42% bypass rate"_).
 
 ### The Full Cycle
+
 This creates an autonomous, self-regulating ecosystem:
+
 1. **Developer writes code.**
 2. **`totem lint` catches a violation.**
 3. **Developer overrides it** with `// totem-context: this is an edge case`.
