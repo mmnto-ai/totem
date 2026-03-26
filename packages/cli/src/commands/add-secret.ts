@@ -62,6 +62,15 @@ export async function addSecretCommand(
       log.error('Totem Error', `Invalid regex pattern: ${msg}`);
       return;
     }
+    // Check for catastrophic backtracking (ReDoS)
+    const { isRegexSafe } = await import('@mmnto/totem');
+    if (!isRegexSafe(value)) {
+      log.error(
+        'Totem Error',
+        `Pattern rejected: potential ReDoS vulnerability (catastrophic backtracking). Simplify the pattern or use a literal secret instead.`,
+      );
+      return;
+    }
   }
 
   // 3. Read existing secrets.json

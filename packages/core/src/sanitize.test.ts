@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ContentType } from './config-schema.js';
-import { maskSecrets, sanitize, sanitizeForIngestion } from './sanitize.js';
+import {
+  compileCustomSecrets,
+  isRegexSafe,
+  maskSecrets,
+  sanitize,
+  sanitizeForIngestion,
+} from './sanitize.js';
 import type { CustomSecret } from './secrets.js';
 
 // ─── Base sanitize() ────────────────────────────────
@@ -323,5 +329,56 @@ describe('maskSecrets', () => {
       expect(result).toBe('data: [REDACTED_CUSTOM] end');
       expect(result).not.toContain('[REDACTED]');
     });
+  });
+});
+
+// ─── isRegexSafe() ─────────────────────────────────
+
+describe('isRegexSafe', () => {
+  it('accepts safe patterns', () => {
+    expect(isRegexSafe('[A-Z0-9]{10,}')).toBe(true);
+    expect(isRegexSafe('CORP-[A-Z]{5}')).toBe(true);
+    expect(isRegexSafe('sk-[a-zA-Z0-9_-]{20,}')).toBe(true);
+  });
+
+  it('rejects catastrophic backtracking patterns', () => {
+    expect(isRegexSafe('(a+)+$')).toBe(false);
+    expect(isRegexSafe('(a+){10,}$')).toBe(false);
+    expect(isRegexSafe('(.*a){20}')).toBe(false);
+  });
+
+  it('returns false for invalid regex', () => {
+    expect(isRegexSafe('[unclosed')).toBe(false);
+  });
+});
+
+// ─── compileCustomSecrets() safe-regex ─────────────
+
+describe('compileCustomSecrets safe-regex validation', () => {
+  it('skips unsafe patterns and calls onWarn', () => {
+    const warnings: string[] = [];
+    const secrets: CustomSecret[] = [
+      { type: 'pattern', value: '(a+)+$' },
+      { type: 'pattern', value: '[A-Z]{5}' },
+    ];
+    const result = compileCustomSecrets(secrets, (msg) => warnings.push(msg));
+    expect(result).toHaveLength(1);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('ReDoS');
+  });
+
+  it('allows safe patterns through', () => {
+    const secrets: CustomSecret[] = [
+      { type: 'pattern', value: 'CORP-[A-Z0-9]{10,}' },
+      { type: 'literal', value: 'my-secret' },
+    ];
+    const result = compileCustomSecrets(secrets);
+    expect(result).toHaveLength(2);
+  });
+
+  it('does not validate literal secrets (they are escaped)', () => {
+    const secrets: CustomSecret[] = [{ type: 'literal', value: '(a+)+$' }];
+    const result = compileCustomSecrets(secrets);
+    expect(result).toHaveLength(1);
   });
 });
