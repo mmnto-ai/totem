@@ -1625,24 +1625,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "f81edd8937285d99",
-      "lessonHeading": "Avoid using dynamic imports in shared utility modules",
-      "pattern": "\\bimport\\s*\\(",
-      "message": "Avoid using dynamic imports in shared utility modules. Dynamic imports are most effective when used inside specific command handlers to defer loading of heavy dependencies.",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T07:31:13.231Z",
-      "createdAt": "2026-03-21T07:31:13.231Z",
-      "fileGlobs": [
-        "utils/**/*.ts",
-        "utils/**/*.js",
-        "shared/**/*.ts",
-        "shared/**/*.js",
-        "helpers/**/*.ts",
-        "helpers/**/*.js"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "4706b1b4d34c9e63",
       "lessonHeading": "When parsing diff --git headers, extract the destination",
       "pattern": "diff --git a\\/(\\.\\*|\\S+)",
@@ -1946,19 +1928,6 @@
         "**/*.jsx"
       ],
       "severity": "error"
-    },
-    {
-      "lessonHash": "411562e8bdcec9a2",
-      "lessonHeading": "CLI command actions must wrap asynchronous logic",
-      "pattern": "\\.action\\(\\s*async\\b[^{]*\\{\\s*(?!try\\b)",
-      "message": "CLI command actions must wrap asynchronous logic in a try/catch block that delegates to a centralized error handler to ensure consistent error reporting.",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T07:41:43.357Z",
-      "createdAt": "2026-03-21T07:41:43.357Z",
-      "fileGlobs": [
-        "packages/cli/src/index.ts"
-      ],
-      "severity": "warning"
     },
     {
       "lessonHash": "547431b89da28c4d",
@@ -2817,24 +2786,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "be6cdf607465c930",
-      "lessonHeading": "Avoid bypassing visibility checks with bracket notation",
-      "pattern": "\\[['\"](?:_|init|setup|bootstrap|initialize)\\w*['\"]\\]\\s*\\(",
-      "message": "Avoid bypassing visibility checks with bracket notation for private or initialization methods. Use a public static factory method for clean, type-safe instantiation instead.",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T08:04:41.670Z",
-      "createdAt": "2026-03-21T08:04:41.670Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "d028ccfe660860fd",
       "lessonHeading": "When executing child processes via execSync with stdio:",
       "pattern": "",
@@ -3318,23 +3269,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "7418ff7c3005d543",
-      "lessonHeading": "Static top-level imports in CLI command files increase",
-      "pattern": "",
-      "message": "Static top-level imports in CLI command files increase startup latency. Use dynamic import() within the command handler to ensure heavy modules are only loaded when executed.",
-      "engine": "ast-grep",
-      "astGrepPattern": "import $BINDINGS from '$SOURCE'",
-      "compiledAt": "2026-03-22T17:35:34.269Z",
-      "createdAt": "2026-03-22T17:35:34.269Z",
-      "fileGlobs": [
-        "packages/cli/src/commands/**/*.ts",
-        "packages/cli/src/commands/**/*.js",
-        "packages/cli/commands/**/*.ts",
-        "packages/cli/commands/**/*.js"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "213f7ef6c8cf30c3",
       "lessonHeading": "Move large imports, such as multi-line prompt templates,",
       "pattern": "\\b(?:const|let|var)\\s+\\w+\\s+=\\s+`[^`]*$",
@@ -3593,20 +3527,6 @@
         "**/*.ts",
         "**/*.jsx",
         "**/*.tsx"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "1061e953cb99a0ec",
-      "lessonHeading": "Always use dynamic imports for heavy logic or detection",
-      "pattern": "import\\s+.*from\\s+['\"][^'\"]*detection[^'\"]*['\"]",
-      "message": "Always use dynamic imports (await import(...)) for heavy logic or detection modules within CLI command functions to ensure fast startup performance.",
-      "engine": "regex",
-      "compiledAt": "2026-03-22T17:43:30.348Z",
-      "createdAt": "2026-03-22T17:43:30.348Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "!**/*.test.ts"
       ],
       "severity": "warning"
     },
@@ -3987,19 +3907,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "8cc714c0c10fbd39",
-      "lessonHeading": "Use dynamic await import() inside CLI command handlers",
-      "pattern": "import\\s+.*from\\s+['\"](@|\\.\\./)",
-      "message": "Use dynamic await import() inside CLI command handlers for internal packages instead of top-level static imports to ensure fast startup performance.",
-      "engine": "regex",
-      "compiledAt": "2026-03-23T21:38:26.361Z",
-      "createdAt": "2026-03-23T21:38:26.361Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "358177469f11c272",
       "lessonHeading": "Relying on error name strings for matching is fragile",
       "pattern": "\\b(err|e|error|exception)\\.name(\\s*[!=]=+\\s*['\"]|\\.(includes|startsWith|endsWith))",
@@ -4119,23 +4026,6 @@
         "!**/*.test.js",
         "!**/*.spec.ts",
         "!**/*.spec.js"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "14cbc205f8c86d3d",
-      "lessonHeading": "Confine dynamic imports to CLI command handlers to maintain",
-      "pattern": "\\bimport\\s*\\(",
-      "message": "Dynamic imports must be confined to CLI command handlers to maintain a clean dependency graph and pass security scans.",
-      "engine": "regex",
-      "compiledAt": "2026-03-23T21:40:11.466Z",
-      "createdAt": "2026-03-23T21:40:11.466Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts",
-        "packages/cli/**/*.js",
-        "!packages/cli/src/commands/**/*.ts",
-        "!packages/cli/src/commands/**/*.js",
-        "!**/*.test.ts"
       ],
       "severity": "warning"
     },
@@ -4903,21 +4793,6 @@
         "**/*.yaml"
       ],
       "severity": "warning"
-    },
-    {
-      "lessonHash": "d5b7c8b5391ffb9f",
-      "lessonHeading": "Re-thrown errors must preserve the original cause",
-      "message": "Re-thrown errors must preserve the original cause",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "throw\\s+new\\s+\\w*Error\\([^)]*\\+\\s*(?:err|e|error)\\.message",
-      "compiledAt": "2026-03-26T20:49:21.667Z",
-      "createdAt": "2026-03-26T20:49:21.667Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ]
     }
   ],
   "nonCompilable": [
@@ -5129,7 +5004,6 @@
     "9062fad55a37cb2d",
     "2edfe07ac61f9afc",
     "a78d62a9ad8f06f5",
-    "a9ff3a522c673ca9",
     "d797fc524c96d792",
     "9b29e05c8c7f4001",
     "a1521a3e37a003a8",
@@ -5143,7 +5017,6 @@
     "f8c53e032f631be1",
     "2f88d9d72e39958d",
     "fc11cdeaf4f519b4",
-    "e383aa297e35d91d",
     "f6e7690697b878fa",
     "88b4fae72df66823",
     "3182da2eca4d005c",
@@ -5160,7 +5033,6 @@
     "752c452a3d50fc04",
     "2faa3a027195314b",
     "3724466250f920f4",
-    "0ac6b6e79da9d9ee",
     "e5bff6558908b772",
     "5e7216eaf4e5e5b4",
     "fe0888d1293c7c6e",
@@ -5175,7 +5047,6 @@
     "b81f2564998356a7",
     "0e7d38e7457f8f0b",
     "99c9edfcc7d2d542",
-    "0d52f112582db9da",
     "f1a1f40f7961134e",
     "d863bf839d6574b4",
     "ae5c4c2caa5023c2",
@@ -5212,13 +5083,11 @@
     "861cbab68cf113f8",
     "6f2f7e6b53b57d1a",
     "43a7d6a5b21e0f81",
-    "2816e5b6ecc50ec8",
     "25394b3e62dbc69a",
     "3786de834e401fc6",
     "7588f6f331f3422d",
     "32881593e2493be1",
     "9a0a69c8fb9fa797",
-    "b24285e738daaa27",
     "11c251b71c0e8172",
     "789bb096819b4218",
     "b91578765ac08d58",
@@ -5301,7 +5170,6 @@
     "02d45ec49e42dc0e",
     "68d11cfeed34a75d",
     "983059ed53d609cb",
-    "0ec34c9200bf289d",
     "0f57f8bf9307e36b",
     "bb435b568e09bedb",
     "541a56213e186fa9",
@@ -5320,8 +5188,6 @@
     "1210f02da9f16e5b",
     "72be26d1c4b264a3",
     "28de64ad6b2d0dbf",
-    "533e817e87a7a519",
-    "2289704c6db99704",
     "53b02e5bd3044e6d",
     "84e41d41ae92a50b",
     "56c801dfda484c75",
@@ -5340,7 +5206,6 @@
     "16d10e42d757de78",
     "cbb308940a59e34a",
     "5d34d2d1c2262add",
-    "d8e71d6900e46d8c",
     "1c4b3232555e41c8",
     "bd31e87e32cfeefd",
     "f52f5615a0543837",
@@ -5352,9 +5217,7 @@
     "9eabec8fb748d2a5",
     "9056229f945c425b",
     "b2d2d79023432eb9",
-    "28adb06a2b879edc",
     "e88b974f187ba484",
-    "45a50e604b60963a",
     "6df0a3b68a5f0cb1",
     "009679a6abb474e2",
     "24d9d2ae3496bd95",
@@ -5391,7 +5254,6 @@
     "ad49f0c091873e54",
     "7de9d523b729fd3d",
     "be998ce2115e328e",
-    "013a54c81f7e31eb",
     "fe0b15605e75b256",
     "e818b724bdc69cf2",
     "0489df174883d85c",
@@ -5430,7 +5292,6 @@
     "7436c613d11233a2",
     "de2c142c49422154",
     "b0630c7b34c74bde",
-    "1eefa9b582140bca",
     "3d4aa7ab26d9ea60",
     "91dba29011d12b08",
     "65a072bc11e08a27",
@@ -5448,7 +5309,6 @@
     "86e3c3cfa14b8ef0",
     "9f45f9d6278a9d79",
     "3a4f817695b33ae0",
-    "cdffa65582894d25",
     "854b662bbce80382",
     "8e9f9726bf6ff64d",
     "c1f0fe5fe9200e89",
@@ -5483,9 +5343,16 @@
     "2bd74fd2f943d626",
     "859b1ac1a2756d4e",
     "477002cc90d406af",
-    "e02d13a8aecf38ee",
     "0547f897d1582b32",
-    "d1ceee8a321a9eff",
-    "41cc57e1a3cd4cef"
+    "41cc57e1a3cd4cef",
+    "6497f14272d1145b",
+    "f07e7c7c16ee5a6b",
+    "5ea9d6f361632a64",
+    "45358860ce2d6c97",
+    "a425b4aa8f43db13",
+    "6f8e072e8dab0d70",
+    "8dbd3d9fc000e4fd",
+    "3dfb5180e28bd237",
+    "07f804fe68e04754"
   ]
 }
