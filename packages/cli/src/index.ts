@@ -598,10 +598,11 @@ program
 program
   .command('doctor')
   .description('Run workspace health diagnostics')
-  .action(async () => {
+  .option('--pr', 'Auto-downgrade noisy rules and open a PR')
+  .action(async (opts: { pr?: boolean }) => {
     try {
       const { doctorCommand } = await import('./commands/doctor.js');
-      await doctorCommand();
+      await doctorCommand(opts);
     } catch (err) {
       handleError(err);
     }
