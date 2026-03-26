@@ -86,7 +86,7 @@ The core of the Codebase Immune System. Reads your uncommitted diff and checks i
 Adds a user-defined secret to the local DLP pipeline (`.totem/secrets.json`). Secrets are automatically masked during lesson ingestion and shield reviews.
 
 - **Flags:**
-  - `--pattern`: Treat the value as a regex pattern instead of a literal string. Patterns are validated for syntax and **ReDoS safety** — catastrophic backtracking patterns like `(a+)+$` are rejected at input time, displaying the error: `[Totem Error] Regex is vulnerable to ReDoS (catastrophic backtracking)`.
+  - `--pattern`: Treat the value as a regex pattern instead of a literal string. Patterns are validated for syntax and **ReDoS safety** — catastrophic backtracking patterns like `(a+)+$` are rejected at input time.
 - **Related:** `totem list-secrets`, `totem remove-secret`
 
 ### `totem spec <issue-ids...>`
