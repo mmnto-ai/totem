@@ -36,7 +36,7 @@ describe('checkConfig', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('returns pass when totem.config.ts exists', () => {
@@ -70,7 +70,7 @@ describe('checkCompiledRules', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('returns pass with rule count when compiled-rules.json exists', () => {
@@ -102,7 +102,7 @@ describe('checkGitHooks', () => {
       expect(result.status).toBe('skip');
       expect(result.message).toBe('Not a git repository');
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     }
   });
 
@@ -116,7 +116,7 @@ describe('checkGitHooks', () => {
       expect(result.message).toContain('missing');
       expect(result.remediation).toBe('totem hooks');
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     }
   });
 
@@ -140,7 +140,7 @@ describe('checkGitHooks', () => {
       expect(result.status).toBe('pass');
       expect(result.message).toContain('All 4 hooks');
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     }
   });
 });
@@ -155,7 +155,7 @@ describe('checkSecretLeaks', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('returns pass when no secrets are found', async () => {
@@ -227,7 +227,7 @@ describe('checkEmbeddingConfig', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('returns skip when no config exists', () => {
@@ -256,7 +256,7 @@ describe('checkIndex', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('returns skip when no embedding is configured (Lite tier)', () => {
@@ -290,7 +290,7 @@ describe('doctorCommand', () => {
 
   afterEach(() => {
     process.chdir(originalCwd);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('runs without throwing', async () => {
@@ -337,7 +337,7 @@ describe('doctorCommand output', () => {
 
   afterEach(() => {
     process.chdir(originalCwd);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     stderrSpy.mockRestore();
   });
 
@@ -372,7 +372,7 @@ describe('checkSecretsFileTracked', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('fails if secrets.json is tracked by git', () => {
@@ -416,7 +416,7 @@ describe('checkSecretLeaks with custom secrets', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('detects custom literal secrets in lesson files', async () => {
@@ -596,7 +596,7 @@ describe('runSelfHealing', () => {
 
   afterEach(() => {
     process.chdir(originalCwd);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     stderrSpy.mockRestore();
   });
 
