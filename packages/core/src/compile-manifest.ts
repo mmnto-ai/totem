@@ -66,6 +66,7 @@ export function generateInputHash(lessonsDir: string): string {
       throw new TotemParseError(
         `Cannot read lesson file ${relPath}: ${getErrorMessage(err)}`,
         'Ensure all lesson files in .totem/lessons/ are readable.',
+        err,
       );
     }
   }
@@ -88,11 +89,13 @@ export function generateOutputHash(rulesPath: string): string {
       throw new TotemParseError(
         `Cannot hash compiled rules: ${rulesPath} not found`,
         'Run "totem compile" to generate compiled-rules.json.',
+        err,
       );
     }
     throw new TotemParseError(
       `Cannot read compiled rules: ${getErrorMessage(err)}`,
       `Check file permissions for ${rulesPath}.`,
+      err,
     );
   }
 }
@@ -112,6 +115,7 @@ export function writeCompileManifest(manifestPath: string, manifest: CompileMani
     throw new TotemParseError(
       `Cannot write compile manifest: ${getErrorMessage(err)}`,
       `Check write permissions for ${manifestPath}.`,
+      err,
     );
   }
 }
@@ -130,11 +134,13 @@ export function readCompileManifest(manifestPath: string): CompileManifest {
       throw new TotemParseError(
         `Compile manifest not found: ${manifestPath}`,
         'Run "totem compile" to generate the manifest.',
+        err,
       );
     }
     throw new TotemParseError(
       `Cannot read compile manifest: ${getErrorMessage(err)}`,
       `Check file permissions for ${manifestPath}.`,
+      err,
     );
   }
 
@@ -145,6 +151,7 @@ export function readCompileManifest(manifestPath: string): CompileManifest {
     throw new TotemParseError(
       `Invalid JSON in compile manifest: ${manifestPath} (${getErrorMessage(err)})`,
       'The manifest file is corrupted. Re-run "totem compile".',
+      err,
     );
   }
 

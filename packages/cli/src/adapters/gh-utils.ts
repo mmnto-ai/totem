@@ -34,6 +34,7 @@ export function handleGhError(err: unknown, context: string): never {
     throw new TotemParseError(
       `Failed to parse GitHub ${context}`,
       'Check that the GitHub API response format has not changed and your gh CLI is up to date.',
+      err,
     );
   }
   const msg = err instanceof Error ? err.message : String(err);
@@ -42,6 +43,7 @@ export function handleGhError(err: unknown, context: string): never {
       'GitHub CLI (gh) is required but was not found.',
       'Install the GitHub CLI: https://cli.github.com',
       'CONFIG_MISSING',
+      err,
     );
   }
   if (/\b(403|429)\b/.test(msg) || /rate.limit/i.test(msg)) {
@@ -49,12 +51,14 @@ export function handleGhError(err: unknown, context: string): never {
       'SHIELD_FAILED',
       'GitHub API rate limit exceeded.',
       'Wait a few minutes and try again, or authenticate with `gh auth login` for a higher rate limit.',
+      err,
     );
   }
   throw new TotemError(
     'SHIELD_FAILED',
     `Failed to fetch ${context}: ${msg}`,
     'Run `gh auth status` to verify authentication, then retry.',
+    err,
   );
 }
 

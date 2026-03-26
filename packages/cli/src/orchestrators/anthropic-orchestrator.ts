@@ -90,6 +90,7 @@ export async function invokeAnthropicOrchestrator(
     throw new TotemOrchestratorError(
       `Anthropic API call failed: ${msg}`,
       'Check your ANTHROPIC_API_KEY, network connection, and model name.',
+      err,
     );
   }
 }

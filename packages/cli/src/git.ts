@@ -16,6 +16,7 @@ function throwIfGitMissing(err: unknown): void {
     throw new TotemGitError(
       "'git' command not found.",
       'Ensure Git is installed and in your PATH.',
+      err,
     );
   }
 }
@@ -62,6 +63,7 @@ export function getGitDiff(mode: 'staged' | 'all', cwd: string): string {
     throw new TotemGitError(
       `Failed to get git diff: ${msg}`,
       'Check that you are inside a Git repository with at least one commit.',
+      err,
     );
   }
 }
@@ -140,6 +142,7 @@ export function getGitBranchDiff(cwd: string, base?: string): string {
         throw new TotemGitError(
           `Failed to get branch diff (${baseBranch}...HEAD): ${msg}`,
           `Ensure the base branch '${baseBranch}' exists locally or as a remote ref. Try 'git fetch origin ${baseBranch}'.`,
+          err,
         );
       }
     }
