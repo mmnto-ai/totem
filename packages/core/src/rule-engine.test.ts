@@ -355,4 +355,12 @@ describe('matchesGlob', () => {
     expect(matchesGlob('Dockerfile', 'Dockerfile')).toBe(true);
     expect(matchesGlob('src/Dockerfile', 'Dockerfile')).toBe(true);
   });
+
+  it('matches dir/*.test.* (single-star with trailing wildcard)', () => {
+    expect(matchesGlob('src/foo.test.ts', 'src/*.test.*')).toBe(true);
+    expect(matchesGlob('src/foo.test.js', 'src/*.test.*')).toBe(true);
+    expect(matchesGlob('src/foo.ts', 'src/*.test.*')).toBe(false);
+    // Nested files should NOT match single-star
+    expect(matchesGlob('src/sub/foo.test.ts', 'src/*.test.*')).toBe(false);
+  });
 });

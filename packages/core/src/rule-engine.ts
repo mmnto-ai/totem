@@ -62,8 +62,13 @@ export function matchesGlob(filePath: string, glob: string): boolean {
     const ext = glob.slice(singleStarIdx + 2); // "*.ext" portion
     if (!normalized.startsWith(prefix + '/')) return false;
     const rest = normalized.slice(prefix.length + 1);
-    // Must be a direct child (no further slashes) and match the extension
-    return !rest.includes('/') && rest.endsWith(ext); // totem-ignore — this IS the glob matcher
+    if (rest.includes('/')) return false; // totem-context: this IS the glob matcher — slash check is intentional
+    // Handle trailing wildcard (e.g., dir/*.test.*)
+    if (ext.endsWith('.*')) {
+      const infix = ext.slice(0, -1); // ".test."
+      return rest.includes(infix); // totem-ignore — this IS the glob matcher
+    }
+    return rest.endsWith(ext); // totem-ignore — this IS the glob matcher
   }
 
   // Literal filename match (e.g., "Dockerfile")
