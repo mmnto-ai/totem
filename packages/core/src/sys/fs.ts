@@ -47,6 +47,7 @@ export function readJsonSafe<T = unknown>(filePath: string, schema?: ZodSchema<T
     throw new TotemParseError(
       `Schema validation failed for ${filePath}: ${issues}`,
       'The file structure does not match the expected schema.',
+      result.error,
     );
   }
 

@@ -38,7 +38,7 @@ function handleError(err: unknown): never {
       console.error('\nStack trace:');
       console.error(err.stack);
       // Traverse cause chain
-      const seen = new Set<unknown>();
+      const seen = new Set<unknown>([err]);
       let current: unknown = err.cause;
       while (current instanceof Error && !seen.has(current)) {
         seen.add(current);

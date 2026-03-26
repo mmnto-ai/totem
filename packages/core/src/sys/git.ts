@@ -100,6 +100,7 @@ export function getDefaultBranch(cwd: string): string {
     throw new TotemGitError(
       "Could not determine default branch. Neither 'main' nor 'master' found locally, and 'git symbolic-ref' failed.",
       "Run 'git remote set-head origin --auto' to configure the default branch, or pass --base explicitly.",
+      err,
     );
   }
 }
