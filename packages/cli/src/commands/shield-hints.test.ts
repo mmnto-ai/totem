@@ -190,7 +190,7 @@ describe('extractShieldContextAnnotations', () => {
     const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
     fs.writeFileSync(path.join(tmpDir, 'legacy.ts'), '// shield-context: old style\nexport {};');
     extractShieldContextAnnotations(['legacy.ts'], tmpDir);
-    expect(warnSpy).toHaveBeenCalledWith('Deprecation', expect.stringContaining('shield-context'));
+    expect(warnSpy).toHaveBeenCalledWith('Shield', expect.stringContaining('shield-context'));
     warnSpy.mockRestore();
     resetShieldContextHintsWarning();
   });

@@ -398,10 +398,17 @@ describe('extractJustification', () => {
     resetShieldContextWarning();
   });
 
-  it('prefers totem-context: over shield-context: on same line', () => {
-    expect(extractJustification('code(); // totem-context: preferred reason', null)).toBe(
-      'preferred reason',
-    );
+  it('prefers totem-context: over shield-context: (precedence)', () => {
+    resetShieldContextWarning();
+    const warnings: string[] = [];
+    setOnWarn((msg) => warnings.push(msg));
+    // Same-line totem-context wins over preceding-line shield-context
+    expect(
+      extractJustification('code(); // totem-context: new reason', '// shield-context: old reason'),
+    ).toBe('new reason');
+    // totem-context matched first — shield-context deprecation warning should NOT fire
+    expect(warnings).toHaveLength(0);
+    resetShieldContextWarning();
   });
 });
 

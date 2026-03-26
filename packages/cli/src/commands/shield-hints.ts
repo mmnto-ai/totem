@@ -48,8 +48,8 @@ export function extractShieldContextAnnotations(
           if (!shieldContextHintsWarned && LEGACY_SHIELD_CONTEXT_RE.test(lines[i]!)) {
             shieldContextHintsWarned = true;
             log.warn(
-              'Deprecation',
-              '"// shield-context:" is deprecated. Use "// totem-context:" instead. (See ADR-071)',
+              'Shield',
+              'Deprecation: "// shield-context:" is deprecated. Use "// totem-context:" instead. (See ADR-071)',
             );
           }
           annotations.push({ file, line: i + 1, text: match[1]!.trim() });
