@@ -312,7 +312,12 @@ async function runSyncInner(
   });
 
   // Get total chunk count from the store (includes pre-existing chunks from incremental syncs)
-  const totalStoredChunks = await store.count();
+  let totalStoredChunks = totalChunks;
+  try {
+    totalStoredChunks = await store.count();
+  } catch {
+    // Count failure should not break sync — fall back to chunks processed this run
+  }
 
   return {
     chunksProcessed: totalChunks,
