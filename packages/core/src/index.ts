@@ -193,6 +193,7 @@ export {
   BASE64_BLOB_RE,
   compileCustomSecrets,
   INSTRUCTIONAL_LEAKAGE_RE,
+  isRegexSafe,
   maskSecrets,
   sanitize,
   sanitizeForIngestion,

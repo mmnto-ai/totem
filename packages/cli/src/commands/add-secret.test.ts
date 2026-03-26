@@ -127,4 +127,23 @@ describe('addSecretCommand', () => {
     const matches = gitignore.split('\n').filter((line) => line.trim() === '.totem/secrets.json');
     expect(matches).toHaveLength(1);
   });
+
+  it('rejects regex patterns with catastrophic backtracking', async () => {
+    await addSecretCommand('(a+)+$', { pattern: true }, tmpDir);
+
+    // Should NOT create the secret
+    const secretsPath = path.join(tmpDir, '.totem', 'secrets.json');
+    expect(fs.existsSync(secretsPath)).toBe(false);
+
+    // Should have logged an error about ReDoS
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('ReDoS'));
+  });
+
+  it('accepts safe regex patterns', async () => {
+    await addSecretCommand('CORP-[A-Z0-9]{10,}', { pattern: true }, tmpDir);
+
+    const data = readSecrets(tmpDir);
+    expect(data.secrets).toHaveLength(1);
+    expect(data.secrets[0]!.type).toBe('pattern');
+  });
 });

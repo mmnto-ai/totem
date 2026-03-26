@@ -1,3 +1,5 @@
+import safeRegex from 'safe-regex2';
+
 import type { ContentType } from './config-schema.js';
 import type { CustomSecret } from './secrets.js';
 
@@ -141,8 +143,20 @@ const SECRET_PATTERNS: Array<{ name: string; re: RegExp; replacement?: string }>
   },
 ];
 
+/** Check whether a regex pattern is safe from catastrophic backtracking (ReDoS). */
+export function isRegexSafe(pattern: string): boolean {
+  try {
+    return safeRegex(pattern);
+  } catch {
+    return false;
+  }
+}
+
 /** Compile user-defined custom secrets into executable RegExp instances. */
-export function compileCustomSecrets(secrets: CustomSecret[]): RegExp[] {
+export function compileCustomSecrets(
+  secrets: CustomSecret[],
+  onWarn?: (message: string) => void,
+): RegExp[] {
   const compiled: RegExp[] = [];
   for (const secret of secrets) {
     try {
@@ -151,6 +165,10 @@ export function compileCustomSecrets(secrets: CustomSecret[]): RegExp[] {
         const escaped = secret.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         compiled.push(new RegExp(escaped, 'g'));
       } else {
+        if (!isRegexSafe(secret.value)) {
+          onWarn?.(`Skipping unsafe regex pattern (potential ReDoS): ${secret.value}`);
+          continue;
+        }
         compiled.push(new RegExp(secret.value, 'g'));
       }
     } catch {
