@@ -24,7 +24,13 @@ export function matchesGlob(filePath: string, glob: string): boolean {
   const normalized = filePath.replace(/\\/g, '/');
   // *.ext — match file extension anywhere
   if (glob.startsWith('*.')) {
-    return normalized.endsWith(glob.slice(1));
+    const suffix = glob.slice(1); // e.g., ".ts" or ".test.*"
+    if (suffix.endsWith('.*')) {
+      // *.test.* — match files containing ".test." (infix) followed by any extension
+      const infix = suffix.slice(0, -1); // ".test."
+      return normalized.includes(infix);
+    }
+    return normalized.endsWith(suffix);
   }
   // **/*.ext — same as *.ext (match extension anywhere in path)
   if (glob.startsWith('**/')) {

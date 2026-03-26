@@ -15,6 +15,7 @@ import {
   applyAstRulesToAdditions,
   applyRulesToAdditions,
   extractJustification,
+  matchesGlob,
 } from './rule-engine.js';
 
 // ─── Helpers ────────────────────────────────────────
@@ -320,5 +321,36 @@ describe('extractJustification', () => {
     expect(extractJustification('code(); // totem-context:   extra spaces  ', null)).toBe(
       'extra spaces',
     );
+  });
+});
+
+// ─── matchesGlob ──────────────────────────────────
+
+describe('matchesGlob', () => {
+  it('matches *.ext anywhere in path', () => {
+    expect(matchesGlob('src/foo.ts', '*.ts')).toBe(true);
+    expect(matchesGlob('src/foo.js', '*.ts')).toBe(false);
+  });
+
+  it('matches *.test.* for test file patterns', () => {
+    expect(matchesGlob('src/foo.test.ts', '*.test.*')).toBe(true);
+    expect(matchesGlob('src/foo.test.js', '*.test.*')).toBe(true);
+    expect(matchesGlob('src/foo.spec.tsx', '*.spec.*')).toBe(true);
+    expect(matchesGlob('src/foo.ts', '*.test.*')).toBe(false);
+  });
+
+  it('matches **/*.test.* recursively', () => {
+    expect(matchesGlob('packages/cli/src/install-hooks.test.ts', '**/*.test.*')).toBe(true);
+    expect(matchesGlob('packages/cli/src/install-hooks.ts', '**/*.test.*')).toBe(false);
+  });
+
+  it('matches directory prefixed globs', () => {
+    expect(matchesGlob('packages/cli/src/foo.ts', 'packages/cli/**/*.ts')).toBe(true);
+    expect(matchesGlob('packages/core/src/foo.ts', 'packages/cli/**/*.ts')).toBe(false);
+  });
+
+  it('matches literal filenames', () => {
+    expect(matchesGlob('Dockerfile', 'Dockerfile')).toBe(true);
+    expect(matchesGlob('src/Dockerfile', 'Dockerfile')).toBe(true);
   });
 });

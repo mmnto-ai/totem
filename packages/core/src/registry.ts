@@ -32,7 +32,7 @@ function registryPath(): string {
 export function readRegistry(): TotemRegistry {
   try {
     const raw = fs.readFileSync(registryPath(), 'utf-8');
-    const parsed = JSON.parse(raw) as unknown; // totem-ignore — Zod safeParse handles validation
+    const parsed = JSON.parse(raw) as unknown;
     const result = RegistrySchema.safeParse(parsed);
     return result.success ? result.data : {};
   } catch {
@@ -57,7 +57,7 @@ export async function updateRegistryEntry(entry: RegistryEntry): Promise<void> {
     let registry: TotemRegistry = {};
     if (fs.existsSync(filePath)) {
       const raw = fs.readFileSync(filePath, 'utf-8');
-      const parsed = JSON.parse(raw) as unknown; // totem-ignore — Zod safeParse handles validation
+      const parsed = JSON.parse(raw) as unknown;
       const result = RegistrySchema.safeParse(parsed);
       if (!result.success) {
         throw new Error(
