@@ -1,153 +1,41 @@
-import { execFileSync } from 'node:child_process';
-
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-vi.mock('node:child_process', () => ({
-  execFileSync: vi.fn(),
-  execFile: vi.fn(),
-  execSync: vi.fn(),
-}));
+import { describe, expect, it } from 'vitest';
 
 import {
+  extractChangedFiles,
   filterDiffByPatterns,
+  getDefaultBranch,
+  getDiffForReview,
+  getGitBranch,
+  getGitBranchDiff,
+  getGitDiff,
+  getGitDiffStat,
   getGitLogSince,
+  getGitStatus,
   getLatestTag,
   getTagDate,
   isFileDirty,
+  resolveGitRoot,
 } from './git.js';
 
-describe('getLatestTag', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('returns the latest tag', () => {
-    vi.mocked(execFileSync).mockReturnValue('v0.14.0\n');
-    expect(getLatestTag('/tmp')).toBe('v0.14.0');
+describe('git re-exports', () => {
+  it('re-exports all pure git utilities from core', () => {
+    // Verify all re-exported functions are defined
+    expect(typeof extractChangedFiles).toBe('function');
+    expect(typeof filterDiffByPatterns).toBe('function');
+    expect(typeof getDefaultBranch).toBe('function');
+    expect(typeof getGitBranch).toBe('function');
+    expect(typeof getGitBranchDiff).toBe('function');
+    expect(typeof getGitDiff).toBe('function');
+    expect(typeof getGitDiffStat).toBe('function');
+    expect(typeof getGitLogSince).toBe('function');
+    expect(typeof getGitStatus).toBe('function');
+    expect(typeof getLatestTag).toBe('function');
+    expect(typeof getTagDate).toBe('function');
+    expect(typeof isFileDirty).toBe('function');
+    expect(typeof resolveGitRoot).toBe('function');
   });
 
-  it('returns null when no tags exist', () => {
-    vi.mocked(execFileSync).mockImplementation(() => {
-      throw new Error('fatal: no tags');
-    });
-    expect(getLatestTag('/tmp')).toBeNull();
-  });
-
-  it('returns null for empty output', () => {
-    vi.mocked(execFileSync).mockReturnValue('\n');
-    expect(getLatestTag('/tmp')).toBeNull();
-  });
-});
-
-describe('getTagDate', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('returns YYYY-MM-DD date for a valid tag', () => {
-    vi.mocked(execFileSync).mockReturnValue('2026-03-01T12:00:00-05:00\n');
-    expect(getTagDate('/tmp', 'v0.14.0')).toBe('2026-03-01');
-  });
-
-  it('returns null when tag does not exist', () => {
-    vi.mocked(execFileSync).mockImplementation(() => {
-      throw new Error('fatal: bad object');
-    });
-    expect(getTagDate('/tmp', 'v999.0.0')).toBeNull();
-  });
-});
-
-describe('getGitLogSince', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('returns log since a tag', () => {
-    vi.mocked(execFileSync).mockReturnValue('abc1234 feat: thing\ndef5678 fix: bug\n');
-    const result = getGitLogSince('/tmp', 'v0.14.0');
-    expect(result).toContain('abc1234');
-    expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
-      'git',
-      ['log', 'v0.14.0..HEAD', '--oneline', '--max-count=50'],
-      expect.any(Object),
-    );
-  });
-
-  it('returns recent commits when no since ref provided', () => {
-    vi.mocked(execFileSync).mockReturnValue('abc1234 feat: thing\n');
-    getGitLogSince('/tmp');
-    expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
-      'git',
-      ['log', '--oneline', '-50'],
-      expect.any(Object),
-    );
-  });
-
-  it('returns empty string on error', () => {
-    vi.mocked(execFileSync).mockImplementation(() => {
-      throw new Error('not a git repo');
-    });
-    expect(getGitLogSince('/tmp')).toBe('');
-  });
-});
-
-describe('filterDiffByPatterns', () => {
-  const DIFF_WITH_STRATEGY = [
-    'diff --git a/.strategy b/.strategy',
-    'index abc1234..def5678 160000',
-    '--- a/.strategy',
-    '+++ b/.strategy',
-    '@@ -1 +1 @@',
-    '-Subproject commit aaa',
-    '+Subproject commit bbb',
-  ].join('\n');
-
-  const DIFF_WITH_CODE = [
-    'diff --git a/packages/cli/src/commands/lint.ts b/packages/cli/src/commands/lint.ts',
-    'index 1234567..abcdef0 100644',
-    '--- a/packages/cli/src/commands/lint.ts',
-    '+++ b/packages/cli/src/commands/lint.ts',
-    '@@ -1,3 +1,4 @@',
-    ' import { foo } from "bar";',
-    '+const x = 1;',
-  ].join('\n');
-
-  it('removes sections matching ignore patterns', async () => {
-    const combined = DIFF_WITH_STRATEGY + '\n' + DIFF_WITH_CODE;
-    const result = await filterDiffByPatterns(combined, ['.strategy']);
-    expect(result).not.toContain('.strategy');
-    expect(result).toContain('lint.ts');
-  });
-
-  it('returns full diff when no patterns match', async () => {
-    const result = await filterDiffByPatterns(DIFF_WITH_CODE, ['*.md']);
-    expect(result).toContain('lint.ts');
-  });
-
-  it('returns full diff when patterns array is empty', async () => {
-    const combined = DIFF_WITH_STRATEGY + '\n' + DIFF_WITH_CODE;
-    const result = await filterDiffByPatterns(combined, []);
-    expect(result).toContain('.strategy');
-    expect(result).toContain('lint.ts');
-  });
-
-  it('returns empty string when all sections are filtered out', async () => {
-    const result = await filterDiffByPatterns(DIFF_WITH_STRATEGY, ['.strategy']);
-    expect(result.trim()).toBe('');
-  });
-});
-
-describe('isFileDirty', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('returns true when file has changes', () => {
-    vi.mocked(execFileSync).mockReturnValue(' M README.md\n');
-    expect(isFileDirty('/tmp', 'README.md')).toBe(true);
-  });
-
-  it('returns false when file is clean', () => {
-    vi.mocked(execFileSync).mockReturnValue('');
-    expect(isFileDirty('/tmp', 'README.md')).toBe(false);
-  });
-
-  it('returns false on error', () => {
-    vi.mocked(execFileSync).mockImplementation(() => {
-      throw new Error('not a git repo');
-    });
-    expect(isFileDirty('/tmp', 'README.md')).toBe(false);
+  it('still exports getDiffForReview locally', () => {
+    expect(typeof getDiffForReview).toBe('function');
   });
 });
