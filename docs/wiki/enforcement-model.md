@@ -12,6 +12,23 @@ Your AI doesn't have to be obedient. It just has to push code.
 
 Totem doesn't try to control the agent in real-time. It enforces a strict final output state — like a compiler, not a linter.
 
+## Handling False Positives
+
+Sometimes, breaking an architectural rule is the correct technical decision. To support edge cases without degrading your codebase's immune system, use the Semantic Overlay.
+
+Instead of a naked `// totem-ignore`, provide your reasoning:
+
+```typescript
+// totem-context: We are interacting with a legacy 3rd-party API that requires this mutable state.
+globalThis.__legacyAPIState = {};
+```
+
+This functions as a local exception, allowing your code to pass the `totem lint` deterministic gate.
+
+Crucially, **every override is recorded as telemetry in the local Trap Ledger.** If a rule generates too much developer friction (e.g., it is overridden frequently), running `totem doctor --pr` will recognize the high bypass rate and automatically generate a Pull Request to downgrade the noisy rule to a warning.
+
+This creates a **Self-Healing Loop**: Totem learns from your context and automatically steps out of your way.
+
 ## Works Without AI
 
 Totem's enforcement layer is **100% deterministic** — no LLM, no API keys, no network required.

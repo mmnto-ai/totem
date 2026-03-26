@@ -134,17 +134,18 @@ The key distinction: **"No AI at runtime"** is the Enforce tier's claim, not "no
 | `spec`            | Generate a pre-work spec briefing for GitHub issue(s) or topic(s)                |
 | `lint`            | Run compiled rules against your diff (zero LLM, fast)                            |
 | `shield`          | AI-powered code review: analyze your diff against Totem knowledge                |
+| `triage-pr`       | Categorized triage view of bot review comments on a PR                           |
 | `triage`          | Prioritize open issues into an active work roadmap                               |
 | `handoff`         | Generate an end-of-session handoff snapshot for the next session                 |
 | `add-lesson`      | Interactively add a lesson to project memory (or pass string as argument)        |
+| `add-secret`      | Add a custom secret pattern to .totem/secrets.json (local, gitignored)           |
+| `list-secrets`    | List all configured custom secrets (shared + local) with source labels           |
+| `remove-secret`   | Remove a custom secret from .totem/secrets.json by index (from list-secrets)     |
 | `compile`         | Compile lessons into deterministic regex rules for zero-LLM shield checks        |
 | `verify-manifest` | Verify compiled-rules.json matches the compile manifest (CI gate)                |
 | `test`            | Run test fixtures against compiled rules (TDD for governance rules)              |
 | `extract`         | Extract lessons from PR review(s) into .totem/lessons/ (interactive cherry-pick) |
-| `review-learn`    | Extract lessons from resolved bot review comments on merged PRs                  |
-| `add-secret`      | Add a custom secret pattern to .totem/secrets.json (local, gitignored)           |
-| `list-secrets`    | List all configured custom secrets (shared + local) with source labels           |
-| `remove-secret`   | Remove a local secret by index                                                   |
+| `review-learn`    | Extract lessons from resolved bot review comments on a merged PR                 |
 | `link`            | Link a neighboring repo into this project                                        |
 | `eject`           | Remove all Totem hooks, config, and data from this project                       |
 | `wrap`            | Post-merge workflow: learn from PR(s), sync index, then triage                   |
@@ -152,6 +153,7 @@ The key distinction: **"No AI at runtime"** is the Enforce tier's claim, not "no
 | `lint-lessons`    | Validate lesson metadata (patterns, scopes, severity)                            |
 | `drift`           | Check lessons for stale file references (CI gate)                                |
 | `hooks`           | Install git hooks (pre-commit, pre-push, post-merge) non-interactively           |
+| `doctor`          | Run workspace health diagnostics                                                 |
 
 <!-- /docs -->
 

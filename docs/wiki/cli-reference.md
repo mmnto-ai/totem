@@ -24,12 +24,13 @@ Installs or updates background git hooks (<!-- docs HOOK_LIST -->`pre-commit`, `
 - **Usage:** Typically run automatically during `pnpm prepare`.
 - **Troubleshooting (Mac/Linux):** If you clone a repository initialized on Windows and the hooks fail to fire, Git may not recognize them as executable. Fix this by running: `chmod +x .git/hooks/pre-commit .git/hooks/pre-push .git/hooks/post-merge .git/hooks/post-checkout`
 
-### `totem doctor` _(Upcoming)_
+### `totem doctor`
 
 Runs a battery of automated health checks to verify config bloat, index health, hook wiring, and secret hygiene.
 
 - **Flags:**
   - `--ci`: Exits with a non-zero status code if critical checks fail.
+  - `--pr`: Analyzes the Trap Ledger and auto-downgrades rules with a >30% bypass rate by generating a GitHub Pull Request (Self-Healing Loop).
 
 ### `totem eject`
 
@@ -98,6 +99,14 @@ Fetches your current git branch, uncommitted changes, open PRs, and recent sessi
 ### `totem triage`
 
 Fetches open GitHub issues and generates a prioritized roadmap. Ideal for planning your next task in `docs/active_work.md`.
+
+### `totem triage-pr <pr-number>`
+
+Categorized bot review triage. Fetches CodeRabbit and GCA comments, heuristically maps their severities, and groups them by impact to prevent alert fatigue.
+
+### `totem review-learn <pr-number>`
+
+Extracts systemic lessons from resolved bot review comments on a merged PR. The other half of the Self-Healing Loop.
 
 ### `totem audit`
 
