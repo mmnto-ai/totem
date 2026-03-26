@@ -1,6 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { log } from '../ui.js';
+
 // ─── Annotation regex (ADR-071: match both shield-context and totem-context) ─
 
 const CONTEXT_ANNOTATION_RE = /\/\/\s*(?:shield-context|totem-context):\s*(.+)/;
@@ -39,8 +41,7 @@ export function extractShieldContextAnnotations(
         }
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`\x1b[2m[Shield] Skipping ${file}: ${msg}\x1b[0m`);
+      log.dim('Shield', `Skipping ${file}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   return annotations;
