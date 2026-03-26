@@ -4,8 +4,6 @@ import * as path from 'node:path';
 
 import pc from 'picocolors';
 
-import { compileCustomSecrets, loadCustomSecrets } from '@mmnto/totem';
-
 import { resolveGitRoot } from '../git.js';
 import { CONFIG_FILES } from '../utils.js';
 
@@ -309,7 +307,10 @@ export function checkIndex(cwd: string, lanceDir = '.lancedb'): DiagnosticResult
   };
 }
 
-export function checkSecretLeaks(cwd: string, totemDir = '.totem'): DiagnosticResult {
+export async function checkSecretLeaks(
+  cwd: string,
+  totemDir = '.totem',
+): Promise<DiagnosticResult> {
   const filesToScan: string[] = [];
 
   // Collect files to scan
@@ -344,7 +345,8 @@ export function checkSecretLeaks(cwd: string, totemDir = '.totem'): DiagnosticRe
     };
   }
 
-  // Load user-defined custom secrets
+  // Load user-defined custom secrets (dynamic import to avoid top-level @mmnto/totem dep)
+  const { loadCustomSecrets, compileCustomSecrets } = await import('@mmnto/totem');
   const customSecrets = loadCustomSecrets(cwd, totemDir);
   const customPatterns = compileCustomSecrets(customSecrets);
 
@@ -644,7 +646,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     checkGitHooks(cwd),
     checkEmbeddingConfig(cwd),
     checkIndex(cwd),
-    checkSecretLeaks(cwd),
+    await checkSecretLeaks(cwd),
     checkSecretsFileTracked(cwd),
   ];
 
