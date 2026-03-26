@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   CompiledRule,
@@ -16,6 +16,7 @@ import {
   applyRulesToAdditions,
   extractJustification,
   matchesGlob,
+  resetShieldContextWarning,
 } from './rule-engine.js';
 
 // ─── Helpers ────────────────────────────────────────
@@ -289,6 +290,60 @@ describe('applyRulesToAdditions — event context', () => {
       justification: 'required for production monitoring',
     });
   });
+
+  it('shield-context: legacy alias suppresses rule with deprecation warning', () => {
+    resetShieldContextWarning();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const rule = makeRule({
+      engine: 'regex',
+      pattern: 'console\\.log',
+      lessonHash: 'legacy-ctx-test',
+    });
+
+    const additions: DiffAddition[] = [
+      {
+        file: 'src/app.ts',
+        line: 'console.log("debug"); // shield-context: legacy reason',
+        lineNumber: 5,
+        precedingLine: null,
+      },
+    ];
+
+    const violations = applyRulesToAdditions([rule], additions);
+    expect(violations).toHaveLength(0);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('shield-context'));
+
+    warnSpy.mockRestore();
+    resetShieldContextWarning();
+  });
+
+  it('shield-context: on preceding line suppresses with deprecation warning', () => {
+    resetShieldContextWarning();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const rule = makeRule({
+      engine: 'regex',
+      pattern: 'console\\.log',
+      lessonHash: 'legacy-prev-test',
+    });
+
+    const additions: DiffAddition[] = [
+      {
+        file: 'src/app.ts',
+        line: 'console.log("debug");',
+        lineNumber: 6,
+        precedingLine: '// shield-context: legacy preceding reason',
+      },
+    ];
+
+    const violations = applyRulesToAdditions([rule], additions);
+    expect(violations).toHaveLength(0);
+    expect(warnSpy).toHaveBeenCalledOnce();
+
+    warnSpy.mockRestore();
+    resetShieldContextWarning();
+  });
 });
 
 // ─── extractJustification ────────────────────────────
@@ -320,6 +375,30 @@ describe('extractJustification', () => {
   it('trims whitespace from justification', () => {
     expect(extractJustification('code(); // totem-context:   extra spaces  ', null)).toBe(
       'extra spaces',
+    );
+  });
+
+  it('extracts justification from same-line shield-context: (legacy)', () => {
+    resetShieldContextWarning();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(extractJustification('code(); // shield-context: legacy DLP', null)).toBe('legacy DLP');
+    expect(warnSpy).toHaveBeenCalledOnce();
+    warnSpy.mockRestore();
+    resetShieldContextWarning();
+  });
+
+  it('extracts justification from preceding line shield-context: (legacy)', () => {
+    resetShieldContextWarning();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(extractJustification('code();', '// shield-context: legacy audit')).toBe('legacy audit');
+    expect(warnSpy).toHaveBeenCalledOnce();
+    warnSpy.mockRestore();
+    resetShieldContextWarning();
+  });
+
+  it('prefers totem-context: over shield-context: on same line', () => {
+    expect(extractJustification('code(); // totem-context: preferred reason', null)).toBe(
+      'preferred reason',
     );
   });
 });

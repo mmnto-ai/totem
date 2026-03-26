@@ -90,6 +90,22 @@ function fileMatchesGlobs(filePath: string, globs: string[]): boolean {
 const SUPPRESS_MARKER = 'totem-ignore';
 const SUPPRESS_NEXT_LINE_MARKER = 'totem-ignore-next-line';
 
+let shieldContextDeprecationWarned = false;
+
+function warnShieldContextDeprecation(): void {
+  if (!shieldContextDeprecationWarned) {
+    shieldContextDeprecationWarned = true;
+    console.warn(
+      '⚠ Deprecation: "// shield-context:" is deprecated. Use "// totem-context:" instead. (See ADR-071)',
+    );
+  }
+}
+
+/** @internal — exposed for testing only */
+export function resetShieldContextWarning(): void {
+  shieldContextDeprecationWarned = false;
+}
+
 /**
  * Check if a line should be suppressed via inline directives.
  * Supports three forms:
@@ -107,11 +123,23 @@ function isSuppressed(line: string, precedingLine: string | null): boolean {
   // Same-line: totem-context: acts as both suppression and override
   if (line.includes('totem-context:')) return true;
 
+  // Same-line: shield-context: legacy alias (ADR-071 Phase 2 — deprecated)
+  if (line.includes('shield-context:')) {
+    warnShieldContextDeprecation();
+    return true;
+  }
+
   // Next-line: preceding line (context or added) contains the next-line directive
   if (precedingLine != null && precedingLine.includes(SUPPRESS_NEXT_LINE_MARKER)) return true;
 
   // Next-line: preceding line contains totem-context: directive
   if (precedingLine != null && precedingLine.includes('totem-context:')) return true;
+
+  // Next-line: preceding line contains shield-context: legacy alias
+  if (precedingLine != null && precedingLine.includes('shield-context:')) {
+    warnShieldContextDeprecation();
+    return true;
+  }
 
   return false;
 }
@@ -126,10 +154,24 @@ export function extractJustification(line: string, precedingLine: string | null)
   const contextMatch = line.match(/totem-context:\s*(.+)/);
   if (contextMatch) return contextMatch[1]!.trim();
 
+  // Check current line for shield-context: legacy alias
+  const legacyMatch = line.match(/shield-context:\s*(.+)/);
+  if (legacyMatch) {
+    warnShieldContextDeprecation();
+    return legacyMatch[1]!.trim();
+  }
+
   // Check preceding line for totem-context:
   if (precedingLine) {
     const prevMatch = precedingLine.match(/totem-context:\s*(.+)/);
     if (prevMatch) return prevMatch[1]!.trim();
+
+    // Preceding line: shield-context: legacy alias
+    const prevLegacy = precedingLine.match(/shield-context:\s*(.+)/);
+    if (prevLegacy) {
+      warnShieldContextDeprecation();
+      return prevLegacy[1]!.trim();
+    }
   }
 
   // Plain totem-ignore has no justification

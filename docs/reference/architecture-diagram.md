@@ -15,7 +15,7 @@ graph TD
     subgraph "Layer 1: Semantic Overlay"
         Shield[totem shield<br/>LLM PR Review]
         Triage[/review-reply<br/>Multi-Bot Triage/]
-        Hints[Smart Hints<br/>// shield-context:]
+        Hints[Smart Hints<br/>// totem-context:]
         Extract[Pipeline 6<br/>Bot → Lesson Extraction]
     end
 

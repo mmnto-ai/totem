@@ -2,10 +2,15 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { log } from '../ui.js';
 import { assemblePrompt, assembleStructuralPrompt } from './shield.js';
-import { extractShieldContextAnnotations, extractShieldHints } from './shield-hints.js';
+import {
+  extractShieldContextAnnotations,
+  extractShieldHints,
+  resetShieldContextHintsWarning,
+} from './shield-hints.js';
 
 // ─── extractShieldHints ─────────────────────────────
 
@@ -178,6 +183,27 @@ describe('extractShieldContextAnnotations', () => {
     expect(annotations).toHaveLength(2);
     expect(annotations[0]).toEqual({ file: 'dual.ts', line: 1, text: 'legacy annotation' });
     expect(annotations[1]).toEqual({ file: 'dual.ts', line: 3, text: 'unified annotation' });
+  });
+
+  it('emits deprecation warning for shield-context: (ADR-071 Phase 2)', () => {
+    resetShieldContextHintsWarning();
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    fs.writeFileSync(path.join(tmpDir, 'legacy.ts'), '// shield-context: old style\nexport {};');
+    extractShieldContextAnnotations(['legacy.ts'], tmpDir);
+    expect(warnSpy).toHaveBeenCalledWith('Deprecation', expect.stringContaining('shield-context'));
+    warnSpy.mockRestore();
+    resetShieldContextHintsWarning();
+  });
+
+  it('emits deprecation warning only once per process', () => {
+    resetShieldContextHintsWarning();
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    fs.writeFileSync(path.join(tmpDir, 'a.ts'), '// shield-context: first\nexport {};');
+    fs.writeFileSync(path.join(tmpDir, 'b.ts'), '// shield-context: second\nexport {};');
+    extractShieldContextAnnotations(['a.ts', 'b.ts'], tmpDir);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+    resetShieldContextHintsWarning();
   });
 
   it('returns empty array when no annotations present', () => {

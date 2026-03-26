@@ -40,9 +40,9 @@ Similar to `totem-ignore`, but strictly scoped to the immediate next line of cod
 const payload = JSON.parse(rawInput);
 ```
 
-## `// shield-context: <reason>` (Legacy)
+## `// shield-context: <reason>` (Deprecated)
 
-This is the legacy alias for `totem-context:`.
+This is the deprecated alias for `totem-context:`.
 
-- **Behavior:** It functions identically to `totem-context:`.
-- **Status:** **Deprecated.** This directive will be fully removed in the `1.7.0` release. Please migrate all instances to `// totem-context:` to utilize the Unified Findings Model.
+- **Behavior:** It functions identically to `totem-context:`, but emits a one-time console deprecation warning as of 1.6.0.
+- **Status:** **Deprecated.** This directive will be fully removed in `2.0.0`. Please migrate all instances to `// totem-context:`.
