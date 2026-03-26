@@ -3,9 +3,17 @@ import * as path from 'node:path';
 
 import { log } from '../ui.js';
 
-// ─── Annotation regex (ADR-071: totem-context is primary, shield-context is legacy alias) ─
+// ─── Annotation regex (ADR-071: totem-context is primary, shield-context is deprecated alias) ─
 
 const CONTEXT_ANNOTATION_RE = /\/\/\s*(?:totem-context|shield-context):\s*(.+)/;
+const LEGACY_SHIELD_CONTEXT_RE = /\/\/\s*shield-context:/;
+
+let shieldContextHintsWarned = false;
+
+/** @internal — exposed for testing only */
+export function resetShieldContextHintsWarning(): void {
+  shieldContextHintsWarned = false;
+}
 
 // ─── Structured annotation type ─────────────────────
 
@@ -37,6 +45,13 @@ export function extractShieldContextAnnotations(
       for (let i = 0; i < lines.length; i++) {
         const match = lines[i]!.match(CONTEXT_ANNOTATION_RE);
         if (match) {
+          if (!shieldContextHintsWarned && LEGACY_SHIELD_CONTEXT_RE.test(lines[i]!)) {
+            shieldContextHintsWarned = true;
+            log.warn(
+              'Shield',
+              'Deprecation: "// shield-context:" is deprecated. Use "// totem-context:" instead. (See ADR-071)',
+            );
+          }
           annotations.push({ file, line: i + 1, text: match[1]!.trim() });
         }
       }

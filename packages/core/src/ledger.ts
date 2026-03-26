@@ -16,7 +16,7 @@ export const LedgerEventSchema = z.object({
   file: z.string().min(1),
   /** Line number in the file */
   line: z.number().int().positive().optional(),
-  /** The justification text from totem-context: or shield-context: (empty for totem-ignore) */
+  /** The justification text from totem-context: (or deprecated shield-context: alias). Empty for totem-ignore. */
   justification: z.string().default(''),
   /** Source of the event */
   source: z.enum(['lint', 'shield']),

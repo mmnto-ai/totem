@@ -25,7 +25,7 @@ describe('ejectCommand', () => {
 
   afterEach(() => {
     process.chdir(originalCwd);
-    fs.rmSync(cwd, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('removes post-merge hook when it only contains Totem content', async () => {
@@ -197,7 +197,7 @@ describe('scrubPostMergeHook', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(cwd, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('scrubs new conditional hook format (if/fi block)', () => {
@@ -274,7 +274,7 @@ describe('scrubPostCheckoutHook', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(cwd, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('removes post-checkout hook with end marker', () => {

@@ -89,6 +89,34 @@ function fileMatchesGlobs(filePath: string, globs: string[]): boolean {
 
 const SUPPRESS_MARKER = 'totem-ignore';
 const SUPPRESS_NEXT_LINE_MARKER = 'totem-ignore-next-line';
+const CONTEXT_MARKER = 'totem-context:';
+const CONTEXT_RE = /totem-context:\s*(.+)/;
+const LEGACY_CONTEXT_MARKER = 'shield-context:';
+const LEGACY_CONTEXT_RE = /shield-context:\s*(.+)/;
+
+let shieldContextDeprecationWarned = false;
+const defaultOnWarn = (msg: string): void => console.warn(msg); // totem-context: core must default to console.warn; consumers override via setOnWarn
+let onWarn: (msg: string) => void = defaultOnWarn;
+
+function warnShieldContextDeprecation(): void {
+  if (!shieldContextDeprecationWarned) {
+    shieldContextDeprecationWarned = true;
+    onWarn(
+      '⚠ Deprecation: "// shield-context:" is deprecated. Use "// totem-context:" instead. (See ADR-071)',
+    );
+  }
+}
+
+/** Allow consumers to inject their own warning handler (e.g., CLI log.warn). */
+export function setOnWarn(fn: (msg: string) => void): void {
+  onWarn = fn;
+}
+
+/** @internal — exposed for testing only */
+export function resetShieldContextWarning(): void {
+  shieldContextDeprecationWarned = false;
+  onWarn = defaultOnWarn;
+}
 
 /**
  * Check if a line should be suppressed via inline directives.
@@ -99,19 +127,41 @@ const SUPPRESS_NEXT_LINE_MARKER = 'totem-ignore-next-line';
  *
  * Syntax-agnostic: works with any comment style (//, #, HTML comments, block comments).
  */
+/** Check if a line contains a context directive (totem-context or legacy shield-context). */
+function hasContextDirective(l: string): boolean {
+  if (l.includes(CONTEXT_MARKER)) return true;
+  if (l.includes(LEGACY_CONTEXT_MARKER)) {
+    warnShieldContextDeprecation();
+    return true;
+  }
+  return false;
+}
+
+/** Extract justification from a context directive on a single line, or null if none. */
+function matchContextDirective(l: string): string | null {
+  const primary = l.match(CONTEXT_RE);
+  if (primary) return primary[1]!.trim();
+  const legacy = l.match(LEGACY_CONTEXT_RE);
+  if (legacy) {
+    warnShieldContextDeprecation();
+    return legacy[1]!.trim();
+  }
+  return null;
+}
+
 function isSuppressed(line: string, precedingLine: string | null): boolean {
   // Same-line: 'totem-ignore' substring also matches 'totem-ignore-next-line',
   // so directive lines themselves are inherently suppressed.
   if (line.includes(SUPPRESS_MARKER)) return true;
 
-  // Same-line: totem-context: acts as both suppression and override
-  if (line.includes('totem-context:')) return true;
+  // Same-line: totem-context: or shield-context: (legacy)
+  if (hasContextDirective(line)) return true;
 
-  // Next-line: preceding line (context or added) contains the next-line directive
+  // Next-line: preceding line contains the next-line directive
   if (precedingLine != null && precedingLine.includes(SUPPRESS_NEXT_LINE_MARKER)) return true;
 
-  // Next-line: preceding line contains totem-context: directive
-  if (precedingLine != null && precedingLine.includes('totem-context:')) return true;
+  // Next-line: preceding line contains a context directive
+  if (precedingLine != null && hasContextDirective(precedingLine)) return true;
 
   return false;
 }
@@ -122,14 +172,14 @@ function isSuppressed(line: string, precedingLine: string | null): boolean {
  * Returns empty string for plain totem-ignore (no justification).
  */
 export function extractJustification(line: string, precedingLine: string | null): string {
-  // Check current line for totem-context: <reason>
-  const contextMatch = line.match(/totem-context:\s*(.+)/);
-  if (contextMatch) return contextMatch[1]!.trim();
+  // Check current line for context directive
+  const sameLine = matchContextDirective(line);
+  if (sameLine) return sameLine;
 
-  // Check preceding line for totem-context:
+  // Check preceding line for context directive
   if (precedingLine) {
-    const prevMatch = precedingLine.match(/totem-context:\s*(.+)/);
-    if (prevMatch) return prevMatch[1]!.trim();
+    const prevLine = matchContextDirective(precedingLine);
+    if (prevLine) return prevLine;
   }
 
   // Plain totem-ignore has no justification

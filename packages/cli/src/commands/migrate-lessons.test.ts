@@ -40,7 +40,7 @@ describe('migrateLessonsCommand', () => {
 
   afterEach(() => {
     process.chdir(savedCwd);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('does nothing when no lessons.md exists', async () => {

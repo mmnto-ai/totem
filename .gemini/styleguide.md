@@ -76,7 +76,7 @@ Totem supports inline override directives that suppress rules or provide context
 - `// totem-ignore` — suppresses all compiled lint rules on this line (hard suppress, no justification)
 - `// totem-ignore-next-line` — suppresses all rules on the following line
 - `// totem-context: <reason>` — semantic override (ADR-071). Suppresses lint rules AND provides justification to shield. This is the preferred mechanism over `totem-ignore` because it records the "why."
-- `// shield-context: <reason>` — legacy alias for `totem-context:`, deprecated in 1.7.0. Accept both silently.
+- `// shield-context: <reason>` — deprecated alias for `totem-context:`. Still works but emits a console warning as of 1.6.0. Will be removed in 2.0.0.
 
 **IMPORTANT:** Every `totem-ignore` MUST be accompanied by a follow-up ticket to address the underlying issue. Using `totem-ignore` without a ticket is a project rule violation. `totem-context:` is preferred because it records the justification inline.
 

@@ -16,6 +16,8 @@ import {
   applyRulesToAdditions,
   extractJustification,
   matchesGlob,
+  resetShieldContextWarning,
+  setOnWarn,
 } from './rule-engine.js';
 
 // ─── Helpers ────────────────────────────────────────
@@ -28,7 +30,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 });
 
 function makeRule(overrides: Partial<CompiledRule>): CompiledRule {
@@ -289,6 +291,61 @@ describe('applyRulesToAdditions — event context', () => {
       justification: 'required for production monitoring',
     });
   });
+
+  it('shield-context: legacy alias suppresses rule with deprecation warning', () => {
+    resetShieldContextWarning();
+    const warnings: string[] = [];
+    setOnWarn((msg) => warnings.push(msg));
+
+    const rule = makeRule({
+      engine: 'regex',
+      pattern: 'console\\.log',
+      lessonHash: 'legacy-ctx-test',
+    });
+
+    const additions: DiffAddition[] = [
+      {
+        file: 'src/app.ts',
+        line: 'console.log("debug"); // shield-context: legacy reason',
+        lineNumber: 5,
+        precedingLine: null,
+      },
+    ];
+
+    const violations = applyRulesToAdditions([rule], additions);
+    expect(violations).toHaveLength(0);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('shield-context');
+
+    resetShieldContextWarning();
+  });
+
+  it('shield-context: on preceding line suppresses with deprecation warning', () => {
+    resetShieldContextWarning();
+    const warnings: string[] = [];
+    setOnWarn((msg) => warnings.push(msg));
+
+    const rule = makeRule({
+      engine: 'regex',
+      pattern: 'console\\.log',
+      lessonHash: 'legacy-prev-test',
+    });
+
+    const additions: DiffAddition[] = [
+      {
+        file: 'src/app.ts',
+        line: 'console.log("debug");',
+        lineNumber: 6,
+        precedingLine: '// shield-context: legacy preceding reason',
+      },
+    ];
+
+    const violations = applyRulesToAdditions([rule], additions);
+    expect(violations).toHaveLength(0);
+    expect(warnings).toHaveLength(1);
+
+    resetShieldContextWarning();
+  });
 });
 
 // ─── extractJustification ────────────────────────────
@@ -321,6 +378,37 @@ describe('extractJustification', () => {
     expect(extractJustification('code(); // totem-context:   extra spaces  ', null)).toBe(
       'extra spaces',
     );
+  });
+
+  it('extracts justification from same-line shield-context: (legacy)', () => {
+    resetShieldContextWarning();
+    const warnings: string[] = [];
+    setOnWarn((msg) => warnings.push(msg));
+    expect(extractJustification('code(); // shield-context: legacy DLP', null)).toBe('legacy DLP');
+    expect(warnings).toHaveLength(1);
+    resetShieldContextWarning();
+  });
+
+  it('extracts justification from preceding line shield-context: (legacy)', () => {
+    resetShieldContextWarning();
+    const warnings: string[] = [];
+    setOnWarn((msg) => warnings.push(msg));
+    expect(extractJustification('code();', '// shield-context: legacy audit')).toBe('legacy audit');
+    expect(warnings).toHaveLength(1);
+    resetShieldContextWarning();
+  });
+
+  it('prefers totem-context: over shield-context: (precedence)', () => {
+    resetShieldContextWarning();
+    const warnings: string[] = [];
+    setOnWarn((msg) => warnings.push(msg));
+    // Same-line totem-context wins over preceding-line shield-context
+    expect(
+      extractJustification('code(); // totem-context: new reason', '// shield-context: old reason'),
+    ).toBe('new reason');
+    // totem-context matched first — shield-context deprecation warning should NOT fire
+    expect(warnings).toHaveLength(0);
+    resetShieldContextWarning();
   });
 });
 

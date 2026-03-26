@@ -34,7 +34,7 @@ This creates a **Self-Healing Loop**: Totem learns from your context and automat
 Starting with 1.5.6, both `totem lint` and `totem shield` produce findings in a common `TotemFinding` schema (ADR-071). This means:
 
 - **`totem lint --format json`** includes a `findings[]` array with normalized `id`, `source`, `severity`, `message`, `file`, `line`, and `confidence` fields alongside the raw `violations[]` array.
-- **`totem-context:`** is the single override directive for both lint and shield. The legacy `shield-context:` alias still works silently.
+- **`totem-context:`** is the single override directive for both lint and shield. The legacy `shield-context:` alias still works but emits a deprecation warning as of 1.6.0.
 - **PR comments and SARIF output** consume the unified model, ensuring consistent reporting regardless of source.
 
 ## Works Without AI
@@ -53,3 +53,5 @@ Totem's enforcement layer is **100% deterministic** — no LLM, no API keys, no 
 | `totem spec` (planning)          |   Yes (LLM)    |
 
 The AI helps you **write** rules. The rules enforce themselves.
+
+For the full three-tier breakdown (Enforce / Learn / Review), see the [Capability Tiers table in the README](../../README.md#capability-tiers).

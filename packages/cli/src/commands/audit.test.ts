@@ -309,7 +309,7 @@ describe('loadStrategicDocs', () => {
       const result = loadStrategicDocs(tmpDir);
       expect(result.length).toBeLessThanOrEqual(MAX_STRATEGIC_CONTEXT_CHARS);
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     }
   });
 
@@ -319,7 +319,7 @@ describe('loadStrategicDocs', () => {
       const result = loadStrategicDocs(tmpDir);
       expect(result).toBe('');
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     }
   });
 });

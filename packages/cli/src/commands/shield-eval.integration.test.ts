@@ -240,7 +240,7 @@ describe('Adversarial Eval — Deterministic', () => {
       const violations = applyRules(TRAP_RULES, diff);
       expect(violations.length).toBeGreaterThanOrEqual(4); // totem-ignore
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     }
   });
 });
@@ -260,7 +260,7 @@ describe.runIf(process.env['CI_INTEGRATION'] === 'true')(
     });
 
     afterEach(() => {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     });
 
     /**

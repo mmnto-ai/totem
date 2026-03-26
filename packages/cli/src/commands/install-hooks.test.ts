@@ -28,7 +28,7 @@ describe('detectTotemPrefix', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('returns pnpm exec when pnpm-lock.yaml exists', () => {
@@ -76,7 +76,7 @@ describe('getFallbackCommand', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('returns pnpm dlx when pnpm-lock.yaml exists', () => {
@@ -265,7 +265,7 @@ describe('installGitHook', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('creates a new hook file when none exists', () => {
@@ -466,7 +466,7 @@ describe('generateHookHelpers', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('creates .totem/hooks/ directory and writes all 4 .sh files', () => {
@@ -511,7 +511,7 @@ describe('installHooksNonInteractive', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('returns null when not a git repo', () => {
@@ -625,7 +625,7 @@ describe('checkHooksInstalled', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('returns false when no hooks are installed', () => {
@@ -668,7 +668,7 @@ describe('post-merge hook content', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('generates post-merge hook with git diff-tree lesson check', () => {
@@ -722,7 +722,7 @@ describe('post-checkout hook content', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('generates post-checkout hook with branch switch guard', () => {

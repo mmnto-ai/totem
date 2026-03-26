@@ -38,7 +38,7 @@ describe('writeLessonFile', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('creates directory if missing and writes file', () => {
@@ -94,7 +94,7 @@ describe('writeLessonFileAsync', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('creates directory and writes file asynchronously', async () => {
@@ -116,7 +116,7 @@ describe('readAllLessons', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('returns empty array when totemDir does not exist', () => {
@@ -218,7 +218,7 @@ describe('readAllLessons — YAML frontmatter (ADR-070)', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('parses YAML frontmatter from individual lesson files', () => {

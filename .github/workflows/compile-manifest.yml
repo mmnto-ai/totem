@@ -34,13 +34,13 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         if: steps.bypass.outputs.skip != 'true'
 
       - uses: pnpm/action-setup@v5
         if: steps.bypass.outputs.skip != 'true'
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v4
         if: steps.bypass.outputs.skip != 'true'
         with:
           node-version: 20

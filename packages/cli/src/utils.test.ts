@@ -196,7 +196,7 @@ describe('writeOutput', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('writes content to file when outPath is provided', () => {
@@ -229,7 +229,7 @@ describe('resolveConfigPath', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('returns config path when totem.config.ts exists', () => {
@@ -269,7 +269,7 @@ describe('loadConfig', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('loads and validates a YAML config', async () => {
@@ -318,7 +318,7 @@ describe('loadEnv', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     delete process.env[TEST_KEY];
   });
 
@@ -382,7 +382,7 @@ describe('getSystemPrompt', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('returns default when override file does not exist', () => {
@@ -466,7 +466,7 @@ describe('reapOrphanedTempFiles', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpRoot, { recursive: true, force: true });
+    fs.rmSync(tmpRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   function writeTempFile(name: string, ageMs: number): string {
@@ -610,7 +610,7 @@ describe('runOrchestrator', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('uses default provider and model when no overrides', async () => {
