@@ -158,61 +158,61 @@ describe('checkSecretLeaks', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('returns pass when no secrets are found', () => {
+  it('returns pass when no secrets are found', async () => {
     fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '# Project\nNo secrets here.');
-    const result = checkSecretLeaks(tmpDir);
+    const result = await checkSecretLeaks(tmpDir);
     expect(result.status).toBe('pass');
     expect(result.message).toBe('No leaked keys detected');
   });
 
-  it('returns fail when a real key pattern is found', () => {
+  it('returns fail when a real key pattern is found', async () => {
     fs.writeFileSync(
       path.join(tmpDir, 'CLAUDE.md'),
       'Use this key: sk-abcdefghijklmnopqrstuvwxyz1234567890',
     );
-    const result = checkSecretLeaks(tmpDir);
+    const result = await checkSecretLeaks(tmpDir);
     expect(result.status).toBe('fail');
     expect(result.message).toContain('potential leaked key');
   });
 
-  it('does NOT flag placeholder strings as leaks', () => {
+  it('does NOT flag placeholder strings as leaks', async () => {
     fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), 'Set your key: sk-your-key-here-placeholder');
-    const result = checkSecretLeaks(tmpDir);
+    const result = await checkSecretLeaks(tmpDir);
     expect(result.status).toBe('pass');
   });
 
-  it('returns pass when no files to scan exist', () => {
-    const result = checkSecretLeaks(tmpDir);
+  it('returns pass when no files to scan exist', async () => {
+    const result = await checkSecretLeaks(tmpDir);
     expect(result.status).toBe('pass');
     expect(result.message).toBe('No files to scan');
   });
 
-  it('detects GitHub personal access tokens', () => {
+  it('detects GitHub personal access tokens', async () => {
     fs.writeFileSync(
       path.join(tmpDir, 'CLAUDE.md'),
       'token: ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ012345678a',
     );
-    const result = checkSecretLeaks(tmpDir);
+    const result = await checkSecretLeaks(tmpDir);
     expect(result.status).toBe('fail');
   });
 
-  it('detects Google API keys', () => {
+  it('detects Google API keys', async () => {
     fs.writeFileSync(
       path.join(tmpDir, 'CLAUDE.md'),
       'key: AIzaSyA1234567890abcdefghijklmnopqrstuvw',
     );
-    const result = checkSecretLeaks(tmpDir);
+    const result = await checkSecretLeaks(tmpDir);
     expect(result.status).toBe('fail');
   });
 
-  it('scans lesson files in .totem/lessons/', () => {
+  it('scans lesson files in .totem/lessons/', async () => {
     const lessonsDir = path.join(tmpDir, '.totem', 'lessons');
     fs.mkdirSync(lessonsDir, { recursive: true });
     fs.writeFileSync(
       path.join(lessonsDir, 'secret-lesson.md'),
       'Do not use: sk-ant-abcdefghijklmnopqrstuvwxyz',
     );
-    const result = checkSecretLeaks(tmpDir);
+    const result = await checkSecretLeaks(tmpDir);
     expect(result.status).toBe('fail');
   });
 });
@@ -419,7 +419,7 @@ describe('checkSecretLeaks with custom secrets', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('detects custom literal secrets in lesson files', () => {
+  it('detects custom literal secrets in lesson files', async () => {
     // Create a custom secrets.json with a literal pattern
     const totemDir = path.join(tmpDir, '.totem');
     const lessonsDir = path.join(totemDir, 'lessons');
@@ -438,12 +438,12 @@ describe('checkSecretLeaks with custom secrets', () => {
       '# Lesson\nDo not use SUPER_SECRET_TOKEN_1234 in production.',
     );
 
-    const result = checkSecretLeaks(tmpDir);
+    const result = await checkSecretLeaks(tmpDir);
     expect(result.status).toBe('fail');
     expect(result.message).toContain('potential leaked key');
   });
 
-  it('detects custom regex pattern secrets in lesson files', () => {
+  it('detects custom regex pattern secrets in lesson files', async () => {
     const totemDir = path.join(tmpDir, '.totem');
     const lessonsDir = path.join(totemDir, 'lessons');
     fs.mkdirSync(lessonsDir, { recursive: true });
@@ -460,12 +460,12 @@ describe('checkSecretLeaks with custom secrets', () => {
       '# Lesson\nFound token: CORP-ABCDEF1234567890',
     );
 
-    const result = checkSecretLeaks(tmpDir);
+    const result = await checkSecretLeaks(tmpDir);
     expect(result.status).toBe('fail');
     expect(result.message).toContain('potential leaked key');
   });
 
-  it('passes when custom secrets do not match any files', () => {
+  it('passes when custom secrets do not match any files', async () => {
     const totemDir = path.join(tmpDir, '.totem');
     const lessonsDir = path.join(totemDir, 'lessons');
     fs.mkdirSync(lessonsDir, { recursive: true });
@@ -479,7 +479,7 @@ describe('checkSecretLeaks with custom secrets', () => {
 
     fs.writeFileSync(path.join(lessonsDir, 'clean-lesson.md'), '# Lesson\nNothing sensitive here.');
 
-    const result = checkSecretLeaks(tmpDir);
+    const result = await checkSecretLeaks(tmpDir);
     expect(result.status).toBe('pass');
   });
 });
