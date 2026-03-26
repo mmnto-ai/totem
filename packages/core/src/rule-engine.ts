@@ -91,14 +91,20 @@ const SUPPRESS_MARKER = 'totem-ignore';
 const SUPPRESS_NEXT_LINE_MARKER = 'totem-ignore-next-line';
 
 let shieldContextDeprecationWarned = false;
+let onWarn: (msg: string) => void = (msg) => console.warn(msg); // totem-context: core must default to console.warn; consumers override via setOnWarn
 
 function warnShieldContextDeprecation(): void {
   if (!shieldContextDeprecationWarned) {
     shieldContextDeprecationWarned = true;
-    console.warn(
+    onWarn(
       '⚠ Deprecation: "// shield-context:" is deprecated. Use "// totem-context:" instead. (See ADR-071)',
     );
   }
+}
+
+/** Allow consumers to inject their own warning handler (e.g., CLI log.warn). */
+export function setOnWarn(fn: (msg: string) => void): void {
+  onWarn = fn;
 }
 
 /** @internal — exposed for testing only */

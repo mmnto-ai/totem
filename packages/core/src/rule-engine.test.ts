@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type {
   CompiledRule,
@@ -17,6 +17,7 @@ import {
   extractJustification,
   matchesGlob,
   resetShieldContextWarning,
+  setOnWarn,
 } from './rule-engine.js';
 
 // ─── Helpers ────────────────────────────────────────
@@ -293,7 +294,8 @@ describe('applyRulesToAdditions — event context', () => {
 
   it('shield-context: legacy alias suppresses rule with deprecation warning', () => {
     resetShieldContextWarning();
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnings: string[] = [];
+    setOnWarn((msg) => warnings.push(msg));
 
     const rule = makeRule({
       engine: 'regex',
@@ -312,15 +314,16 @@ describe('applyRulesToAdditions — event context', () => {
 
     const violations = applyRulesToAdditions([rule], additions);
     expect(violations).toHaveLength(0);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('shield-context'));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('shield-context');
 
-    warnSpy.mockRestore();
     resetShieldContextWarning();
   });
 
   it('shield-context: on preceding line suppresses with deprecation warning', () => {
     resetShieldContextWarning();
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnings: string[] = [];
+    setOnWarn((msg) => warnings.push(msg));
 
     const rule = makeRule({
       engine: 'regex',
@@ -339,9 +342,8 @@ describe('applyRulesToAdditions — event context', () => {
 
     const violations = applyRulesToAdditions([rule], additions);
     expect(violations).toHaveLength(0);
-    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnings).toHaveLength(1);
 
-    warnSpy.mockRestore();
     resetShieldContextWarning();
   });
 });
@@ -380,19 +382,19 @@ describe('extractJustification', () => {
 
   it('extracts justification from same-line shield-context: (legacy)', () => {
     resetShieldContextWarning();
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnings: string[] = [];
+    setOnWarn((msg) => warnings.push(msg));
     expect(extractJustification('code(); // shield-context: legacy DLP', null)).toBe('legacy DLP');
-    expect(warnSpy).toHaveBeenCalledOnce();
-    warnSpy.mockRestore();
+    expect(warnings).toHaveLength(1);
     resetShieldContextWarning();
   });
 
   it('extracts justification from preceding line shield-context: (legacy)', () => {
     resetShieldContextWarning();
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnings: string[] = [];
+    setOnWarn((msg) => warnings.push(msg));
     expect(extractJustification('code();', '// shield-context: legacy audit')).toBe('legacy audit');
-    expect(warnSpy).toHaveBeenCalledOnce();
-    warnSpy.mockRestore();
+    expect(warnings).toHaveLength(1);
     resetShieldContextWarning();
   });
 
