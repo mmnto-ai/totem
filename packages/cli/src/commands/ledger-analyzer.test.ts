@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { cleanTmpDir } from '../test-utils.js';
 import type { RuleBypassStats } from './ledger-analyzer.js';
 import { analyzeLedger, readLedgerBypassCounts } from './ledger-analyzer.js';
 
@@ -67,7 +68,7 @@ describe('readLedgerBypassCounts', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('returns empty map when ledger does not exist', async () => {
@@ -134,7 +135,7 @@ describe('analyzeLedger', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('returns empty map when no ledger or metrics exist', async () => {

@@ -20,6 +20,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { cleanTmpDir } from './test-utils.js';
+
 describe('mdc file parsing', () => {
   let tmpDir: string;
 
@@ -28,7 +30,7 @@ describe('mdc file parsing', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('parses .mdc file with frontmatter', () => {

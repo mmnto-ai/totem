@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { detectDrift, parseLessonsFile } from '@mmnto/totem';
 
+import { cleanTmpDir } from '../test-utils.js';
+
 // ─── detectDrift integration (via core) ──────────────
 
 describe('drift gate', () => {
@@ -19,7 +21,7 @@ describe('drift gate', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('passes when all file references exist', () => {

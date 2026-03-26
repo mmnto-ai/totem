@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { cleanTmpDir } from '../test-utils.js';
 import { buildLiteHandoff, readRecentLessons } from './handoff.js';
 
 describe('readRecentLessons', () => {
@@ -15,7 +16,7 @@ describe('readRecentLessons', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('returns empty string when no lessons exist', () => {

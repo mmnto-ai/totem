@@ -20,6 +20,8 @@ vi.mock('../utils.js', async () => {
   };
 });
 
+import { cleanTmpDir } from '../test-utils.js';
+
 // ─── Helpers ────────────────────────────────────────────
 
 function makeTmpDir(): string {
@@ -84,7 +86,7 @@ describe('verify-manifest', () => {
 
   afterEach(() => {
     process.chdir(originalCwd);
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
     vi.restoreAllMocks();
   });
 

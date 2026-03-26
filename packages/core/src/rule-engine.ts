@@ -94,28 +94,32 @@ const CONTEXT_RE = /totem-context:\s*(.+)/;
 const LEGACY_CONTEXT_MARKER = 'shield-context:';
 const LEGACY_CONTEXT_RE = /shield-context:\s*(.+)/;
 
+/** Injectable logger for core library diagnostics. */
+export interface CoreLogger {
+  warn(message: string): void;
+}
+
 let shieldContextDeprecationWarned = false;
-const defaultOnWarn = (msg: string): void => console.warn(msg); // totem-context: core must default to console.warn; consumers override via setOnWarn
-let onWarn: (msg: string) => void = defaultOnWarn;
+let coreLogger: CoreLogger = { warn: () => {} }; // no-op default — CLI must wire its own logger
 
 function warnShieldContextDeprecation(): void {
   if (!shieldContextDeprecationWarned) {
     shieldContextDeprecationWarned = true;
-    onWarn(
+    coreLogger.warn(
       '⚠ Deprecation: "// shield-context:" is deprecated. Use "// totem-context:" instead. (See ADR-071)',
     );
   }
 }
 
-/** Allow consumers to inject their own warning handler (e.g., CLI log.warn). */
-export function setOnWarn(fn: (msg: string) => void): void {
-  onWarn = fn;
+/** Set the logger for core diagnostics. CLI should call this at startup. */
+export function setCoreLogger(logger: CoreLogger): void {
+  coreLogger = logger;
 }
 
 /** @internal — exposed for testing only */
 export function resetShieldContextWarning(): void {
   shieldContextDeprecationWarned = false;
-  onWarn = defaultOnWarn;
+  coreLogger = { warn: () => {} };
 }
 
 /**

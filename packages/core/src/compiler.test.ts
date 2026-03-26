@@ -16,6 +16,7 @@ import {
   saveCompiledRules,
   validateRegex,
 } from './compiler.js';
+import { cleanTmpDir } from './test-utils.js';
 
 // ─── hashLesson ──────────────────────────────────────
 
@@ -584,7 +585,7 @@ describe('compiled rules file I/O', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('round-trips rules through save and load', () => {

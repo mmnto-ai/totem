@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { acquireLock, withLock } from './lock.js';
+import { cleanTmpDir } from './test-utils.js';
 
 describe('acquireLock', () => {
   let tmpDir: string;
@@ -14,7 +15,7 @@ describe('acquireLock', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('acquires and releases a lock', async () => {

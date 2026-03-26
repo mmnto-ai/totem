@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { enrichWithAstContext } from './ast-gate.js';
 import type { DiffAddition } from './compiler.js';
+import { cleanTmpDir } from './test-utils.js';
 
 // ─── enrichWithAstContext ───────────────────────────
 
@@ -18,7 +19,7 @@ describe('enrichWithAstContext', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('classifies code lines in a TypeScript file', async () => {

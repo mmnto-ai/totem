@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { CompiledRule } from '@mmnto/totem';
 import { readLedgerEvents, saveCompiledRules } from '@mmnto/totem';
 
+import { cleanTmpDir } from '../test-utils.js';
 import { runCompiledRules } from './run-compiled-rules.js';
 
 // ─── Helpers ─────────────────────────────────────────
@@ -61,7 +62,7 @@ describe('runCompiledRules', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   // ─── Regex matching ──────────────────────────────────

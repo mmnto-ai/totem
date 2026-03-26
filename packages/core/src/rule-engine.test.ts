@@ -17,8 +17,9 @@ import {
   extractJustification,
   matchesGlob,
   resetShieldContextWarning,
-  setOnWarn,
+  setCoreLogger,
 } from './rule-engine.js';
+import { cleanTmpDir } from './test-utils.js';
 
 // ─── Helpers ────────────────────────────────────────
 
@@ -30,7 +31,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  cleanTmpDir(tmpDir);
+  resetShieldContextWarning();
 });
 
 function makeRule(overrides: Partial<CompiledRule>): CompiledRule {
@@ -295,7 +297,7 @@ describe('applyRulesToAdditions — event context', () => {
   it('shield-context: legacy alias suppresses rule with deprecation warning', () => {
     resetShieldContextWarning();
     const warnings: string[] = [];
-    setOnWarn((msg) => warnings.push(msg));
+    setCoreLogger({ warn: (msg) => warnings.push(msg) });
 
     const rule = makeRule({
       engine: 'regex',
@@ -323,7 +325,7 @@ describe('applyRulesToAdditions — event context', () => {
   it('shield-context: on preceding line suppresses with deprecation warning', () => {
     resetShieldContextWarning();
     const warnings: string[] = [];
-    setOnWarn((msg) => warnings.push(msg));
+    setCoreLogger({ warn: (msg) => warnings.push(msg) });
 
     const rule = makeRule({
       engine: 'regex',
@@ -383,7 +385,7 @@ describe('extractJustification', () => {
   it('extracts justification from same-line shield-context: (legacy)', () => {
     resetShieldContextWarning();
     const warnings: string[] = [];
-    setOnWarn((msg) => warnings.push(msg));
+    setCoreLogger({ warn: (msg) => warnings.push(msg) });
     expect(extractJustification('code(); // shield-context: legacy DLP', null)).toBe('legacy DLP');
     expect(warnings).toHaveLength(1);
     resetShieldContextWarning();
@@ -392,7 +394,7 @@ describe('extractJustification', () => {
   it('extracts justification from preceding line shield-context: (legacy)', () => {
     resetShieldContextWarning();
     const warnings: string[] = [];
-    setOnWarn((msg) => warnings.push(msg));
+    setCoreLogger({ warn: (msg) => warnings.push(msg) });
     expect(extractJustification('code();', '// shield-context: legacy audit')).toBe('legacy audit');
     expect(warnings).toHaveLength(1);
     resetShieldContextWarning();
@@ -401,7 +403,7 @@ describe('extractJustification', () => {
   it('prefers totem-context: over shield-context: (precedence)', () => {
     resetShieldContextWarning();
     const warnings: string[] = [];
-    setOnWarn((msg) => warnings.push(msg));
+    setCoreLogger({ warn: (msg) => warnings.push(msg) });
     // Same-line totem-context wins over preceding-line shield-context
     expect(
       extractJustification('code(); // totem-context: new reason', '// shield-context: old reason'),

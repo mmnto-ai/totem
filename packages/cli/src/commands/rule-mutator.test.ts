@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { cleanTmpDir } from '../test-utils.js';
 import { downgradeRuleToWarning } from './rule-mutator.js';
 
 // ─── Helpers ────────────────────────────────────────────
@@ -50,7 +51,7 @@ describe('downgradeRuleToWarning', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('changes error to warning', () => {

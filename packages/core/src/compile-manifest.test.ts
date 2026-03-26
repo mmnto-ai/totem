@@ -12,6 +12,7 @@ import {
   writeCompileManifest,
 } from './compile-manifest.js';
 import { TotemParseError } from './errors.js';
+import { cleanTmpDir } from './test-utils.js';
 
 describe('generateInputHash', () => {
   let tmpDir: string;
@@ -21,7 +22,7 @@ describe('generateInputHash', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('is deterministic across CRLF and LF', () => {
@@ -61,7 +62,7 @@ describe('generateOutputHash', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('normalizes line endings', () => {
@@ -83,7 +84,7 @@ describe('writeCompileManifest + readCompileManifest', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('roundtrips a valid manifest', () => {
@@ -111,7 +112,7 @@ describe('readCompileManifest error handling', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('throws TotemParseError on missing file', () => {

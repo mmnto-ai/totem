@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { applyRules, type CompiledRule, loadCompiledRules, saveCompiledRules } from '@mmnto/totem';
 
+import { cleanTmpDir } from '../test-utils.js';
 import {
   assemblePrompt,
   assembleStructuralPrompt,
@@ -139,7 +140,7 @@ describe('compiled rules engine', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   const makeRule = (pattern: string, message: string, heading: string): CompiledRule => ({
@@ -358,7 +359,7 @@ describe('writeShieldPassedFlag', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(tmpDir);
   });
 
   it('does not throw on success or failure', async () => {

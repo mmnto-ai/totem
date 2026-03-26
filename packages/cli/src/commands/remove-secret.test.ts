@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { SecretsFile } from '@mmnto/totem';
 
+import { cleanTmpDir } from '../test-utils.js';
 import { removeSecretCommand } from './remove-secret.js';
 
 // ─── Helpers ────────────────────────────────────────────
@@ -50,7 +51,7 @@ describe('removeSecretCommand', () => {
     stderrSpy.mockRestore();
     exitSpy.mockRestore();
     for (const dir of tmpDirs) {
-      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      cleanTmpDir(dir);
     }
     tmpDirs = [];
   });

@@ -30,6 +30,7 @@ import {
   hashLesson,
 } from '@mmnto/totem';
 
+import { cleanTmpDir } from '../test-utils.js';
 import { parseVerdict } from './shield.js';
 
 // ─── Adversarial Fixtures ────────────────────────────
@@ -240,7 +241,7 @@ describe('Adversarial Eval — Deterministic', () => {
       const violations = applyRules(TRAP_RULES, diff);
       expect(violations.length).toBeGreaterThanOrEqual(4); // totem-ignore
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      cleanTmpDir(tmpDir);
     }
   });
 });
@@ -260,7 +261,7 @@ describe.runIf(process.env['CI_INTEGRATION'] === 'true')(
     });
 
     afterEach(() => {
-      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      cleanTmpDir(tmpDir);
     });
 
     /**

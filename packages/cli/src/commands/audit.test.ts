@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { cleanTmpDir } from '../test-utils.js';
 import type { AuditProposal } from './audit.js';
 import {
   executeProposals,
@@ -309,7 +310,7 @@ describe('loadStrategicDocs', () => {
       const result = loadStrategicDocs(tmpDir);
       expect(result.length).toBeLessThanOrEqual(MAX_STRATEGIC_CONTEXT_CHARS);
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      cleanTmpDir(tmpDir);
     }
   });
 
@@ -319,7 +320,7 @@ describe('loadStrategicDocs', () => {
       const result = loadStrategicDocs(tmpDir);
       expect(result).toBe('');
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      cleanTmpDir(tmpDir);
     }
   });
 });

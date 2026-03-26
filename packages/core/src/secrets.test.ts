@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CustomSecretSchema, loadCustomSecrets } from './secrets.js';
+import { cleanTmpDir } from './test-utils.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -20,7 +21,7 @@ function makeTmpDir(): string {
 
 afterEach(() => {
   for (const dir of tmpDirs) {
-    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleanTmpDir(dir);
   }
   tmpDirs = [];
 });
