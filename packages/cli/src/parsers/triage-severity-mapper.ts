@@ -69,7 +69,9 @@ export const NIT_KEYWORDS = [
 ];
 
 export function mapToTriageCategory(finding: NormalizedBotFinding): TriageCategory {
-  const text = (finding.body + ' ' + (finding.severity || '')).toLowerCase();
+  // Only search the body for keywords — NOT severity, which would cause
+  // 'minor' severity to match NIT_KEYWORDS and misbucket
+  const text = finding.body.toLowerCase();
 
   // Check in priority order — security first
   if (SECURITY_KEYWORDS.some((kw) => text.includes(kw))) return 'security';
@@ -77,7 +79,7 @@ export function mapToTriageCategory(finding: NormalizedBotFinding): TriageCatego
   if (CONVENTION_KEYWORDS.some((kw) => text.includes(kw))) return 'convention';
   if (NIT_KEYWORDS.some((kw) => text.includes(kw))) return 'nit';
 
-  // Also check the original bot severity
+  // Fall back to bot-assigned severity
   if (finding.severity === 'critical' || finding.severity === 'high') return 'security';
   if (finding.severity === 'major' || finding.severity === 'medium') return 'architecture';
   if (finding.severity === 'minor' || finding.severity === 'low') return 'convention';

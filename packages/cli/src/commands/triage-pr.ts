@@ -336,7 +336,9 @@ export async function triagePrCommand(prNumber: string): Promise<void> {
   log.info(TAG, `${categorized.length} distinct finding(s) after dedup`);
 
   // 8. Render output to stdout
-  const output = formatTriageOutput(num, categorized, reviewComments.length, {
+  // Count bot comments (not all review comments)
+  const botCommentCount = reviewComments.filter((c) => isBotComment(c.author)).length;
+  const output = formatTriageOutput(num, categorized, botCommentCount, {
     red: pc.default.red,
     yellow: pc.default.yellow,
     blue: pc.default.blue,

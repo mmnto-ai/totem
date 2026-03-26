@@ -107,11 +107,15 @@ export function deduplicateFindings(findings: NormalizedBotFinding[]): Categoriz
       // Must be same file
       if (candidate.file !== primary.file) continue;
 
-      // Check line proximity (or both file-level)
+      // Check line proximity
       if (primary.line != null && candidate.line != null) {
         if (Math.abs(primary.line - candidate.line) > PROXIMITY_THRESHOLD) continue;
-      } else if (primary.line != null || candidate.line != null) {
-        // One has a line, one doesn't — only merge if body is very similar
+      } else if (primary.line == null && candidate.line == null) {
+        // Both file-level — require high similarity to merge
+        const sim = jaccardSimilarity(primaryKw, extractKeywords(candidate.body));
+        if (sim < 0.8) continue;
+      } else {
+        // One has a line, one doesn't — require high similarity
         const sim = jaccardSimilarity(primaryKw, extractKeywords(candidate.body));
         if (sim < 0.8) continue;
       }
