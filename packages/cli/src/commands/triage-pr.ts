@@ -7,8 +7,8 @@
  * and renders a compact inbox to stdout.
  */
 
-import type { NormalizedBotFinding } from '../parsers/bot-review-parser.js';
 import type { StandardReviewComment } from '../adapters/pr-adapter.js';
+import type { NormalizedBotFinding } from '../parsers/bot-review-parser.js';
 import type { CategorizedFinding, TriageCategory } from '../parsers/triage-types.js';
 
 // ─── Constants ───────────────────────────────────────

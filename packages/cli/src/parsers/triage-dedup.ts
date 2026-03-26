@@ -1,6 +1,6 @@
 import type { NormalizedBotFinding } from './bot-review-parser.js';
-import type { CategorizedFinding } from './triage-types.js';
 import { mapToTriageCategory } from './triage-severity-mapper.js';
+import type { CategorizedFinding } from './triage-types.js';
 
 const PROXIMITY_THRESHOLD = 3; // lines
 const KEYWORD_OVERLAP_THRESHOLD = 0.3; // 30% Jaccard similarity
