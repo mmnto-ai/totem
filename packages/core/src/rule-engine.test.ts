@@ -337,6 +337,8 @@ describe('matchesGlob', () => {
     expect(matchesGlob('src/foo.test.js', '*.test.*')).toBe(true);
     expect(matchesGlob('src/foo.spec.tsx', '*.spec.*')).toBe(true);
     expect(matchesGlob('src/foo.ts', '*.test.*')).toBe(false);
+    // Directory segments containing ".test." should NOT match
+    expect(matchesGlob('src/.test.fixtures/foo.ts', '*.test.*')).toBe(false);
   });
 
   it('matches **/*.test.* recursively', () => {

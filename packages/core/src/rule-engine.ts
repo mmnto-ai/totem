@@ -26,9 +26,12 @@ export function matchesGlob(filePath: string, glob: string): boolean {
   if (glob.startsWith('*.')) {
     const suffix = glob.slice(1); // e.g., ".ts" or ".test.*"
     if (suffix.endsWith('.*')) {
-      // *.test.* — match files containing ".test." (infix) followed by any extension
+      // *.test.* — match files with ".test." in the basename (not directory segments)
       const infix = suffix.slice(0, -1); // ".test."
-      return normalized.includes(infix);
+      const basename = normalized.includes('/') // totem-context: this IS the glob matcher — slash check is intentional
+        ? normalized.slice(normalized.lastIndexOf('/') + 1)
+        : normalized;
+      return basename.includes(infix);
     }
     return normalized.endsWith(suffix);
   }
