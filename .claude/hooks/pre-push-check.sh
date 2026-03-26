@@ -41,8 +41,8 @@ if [[ "$COMMAND" =~ (^|[[:space:]])git[[:space:]].*push ]]; then
     exit 2
   fi
 
-  # Consume the flag — next push requires a fresh /prepush
-  rm -f "$SHIELD_FLAG"
+  # Flag is a certificate of compliance for this commit — don't consume it.
+  # PR creation gate also needs it, and re-pushes of the same commit are valid.
 fi
 
 # ─── Gate 3: Shield before PR creation via gh CLI (hard block) ──
