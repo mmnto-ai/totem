@@ -587,6 +587,9 @@ describe('runSelfHealing', () => {
 
     // Init a git repo so the git status check doesn't fail
     execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    // Configure git user for CI environments where global config is missing
+    execSync('git config user.email "test@test.com"', { cwd: tmpDir, stdio: 'ignore' });
+    execSync('git config user.name "Test"', { cwd: tmpDir, stdio: 'ignore' });
 
     stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
   });
