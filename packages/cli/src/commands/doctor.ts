@@ -107,7 +107,19 @@ export function checkGitHooks(cwd: string): DiagnosticResult {
     };
   }
 
-  const hooksDir = path.join(gitRoot, '.git', 'hooks');
+  let hooksDir: string;
+  try {
+    const resolved = spawnSync('git', ['rev-parse', '--git-path', 'hooks'], {
+      cwd: gitRoot,
+      encoding: 'utf-8',
+    });
+    hooksDir =
+      resolved.status === 0 && resolved.stdout.trim()
+        ? path.resolve(gitRoot, resolved.stdout.trim())
+        : path.join(gitRoot, '.git', 'hooks');
+  } catch {
+    hooksDir = path.join(gitRoot, '.git', 'hooks');
+  }
   const markers: { file: string; marker: string }[] = [
     { file: 'pre-commit', marker: '[totem] pre-commit hook' },
     { file: 'pre-push', marker: '[totem] pre-push hook' },

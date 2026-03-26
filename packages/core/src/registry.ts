@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { z } from 'zod';
 
+import { TotemDatabaseError } from './errors.js';
 import { acquireLock } from './lock.js';
 
 export const RegistryEntrySchema = z
@@ -35,7 +36,12 @@ export function readRegistry(): TotemRegistry {
     const parsed = JSON.parse(raw) as unknown; // totem-ignore — Zod safeParse handles validation
     const result = RegistrySchema.safeParse(parsed);
     return result.success ? result.data : {};
-  } catch {
+  } catch (err) {
+    // ENOENT (file not found) is expected on first run — silently return empty
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code && code !== 'ENOENT') {
+      console.error(`[Totem] Warning: cannot read registry (${code}) — using empty registry`);
+    }
     return {};
   }
 }
@@ -60,8 +66,10 @@ export async function updateRegistryEntry(entry: RegistryEntry): Promise<void> {
       const parsed = JSON.parse(raw) as unknown; // totem-ignore — Zod safeParse handles validation
       const result = RegistrySchema.safeParse(parsed);
       if (!result.success) {
-        throw new Error(
-          'Registry file has invalid schema — refusing to overwrite. Delete ~/.totem/registry.json to reset.',
+        throw new TotemDatabaseError(
+          'Registry file has invalid schema — refusing to overwrite.',
+          'Delete ~/.totem/registry.json to reset.',
+          'DATABASE_CORRUPT',
         );
       }
       registry = result.data;

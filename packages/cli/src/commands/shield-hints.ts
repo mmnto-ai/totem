@@ -38,8 +38,9 @@ export function extractShieldContextAnnotations(
           annotations.push({ file, line: i + 1, text: match[1]!.trim() });
         }
       }
-    } catch {
-      // File unreadable — skip
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`\x1b[2m[Shield] Skipping ${file}: ${msg}\x1b[0m`);
     }
   }
   return annotations;
