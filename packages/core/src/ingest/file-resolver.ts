@@ -1,10 +1,10 @@
-import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 
 import { globSync } from 'glob';
 
 import type { IngestTarget } from '../config-schema.js';
 import { DEFAULT_IGNORE_PATTERNS } from '../config-schema.js';
+import { safeExec } from '../sys/exec.js';
 
 export interface ResolvedFile {
   absolutePath: string;
@@ -31,16 +31,11 @@ function getGitNonIgnoredFiles(
   projectRoot: string,
   onWarn?: (msg: string) => void,
 ): Set<string> | null {
-  const execOpts = {
-    cwd: projectRoot,
-    encoding: 'utf-8' as const,
-    maxBuffer: 10 * 1024 * 1024,
-    shell: process.platform === 'win32',
-  };
+  const execOpts = { cwd: projectRoot };
 
   try {
     // Parent repo: tracked + untracked (non-ignored) files
-    const output = execFileSync(
+    const output = safeExec(
       'git',
       ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
       execOpts,
@@ -50,7 +45,7 @@ function getGitNonIgnoredFiles(
     // Submodules: --recurse-submodules only supports --cached,
     // but submodule files we care about are always committed.
     try {
-      const subOutput = execFileSync(
+      const subOutput = safeExec(
         'git',
         ['ls-files', '-z', '--cached', '--recurse-submodules'],
         execOpts,
@@ -132,19 +127,15 @@ export function getChangedFiles(
   }
 
   try {
-    const diffOutput = execFileSync('git', ['diff', '-z', '--name-only', sinceRef], {
+    const diffOutput = safeExec('git', ['diff', '-z', '--name-only', sinceRef], {
       cwd: projectRoot,
-      encoding: 'utf-8',
-      shell: process.platform === 'win32',
     });
 
     // Also pick up untracked files (new files not yet committed)
     let untrackedOutput = '';
     try {
-      untrackedOutput = execFileSync('git', ['ls-files', '-z', '--others', '--exclude-standard'], {
+      untrackedOutput = safeExec('git', ['ls-files', '-z', '--others', '--exclude-standard'], {
         cwd: projectRoot,
-        encoding: 'utf-8',
-        shell: process.platform === 'win32',
       });
     } catch (err) {
       if (onWarn) {
@@ -176,11 +167,9 @@ export function getChangedFiles(
  */
 export function getHeadSha(projectRoot: string, onWarn?: (msg: string) => void): string | null {
   try {
-    return execFileSync('git', ['rev-parse', 'HEAD'], {
+    return safeExec('git', ['rev-parse', 'HEAD'], {
       cwd: projectRoot,
-      encoding: 'utf-8',
-      shell: process.platform === 'win32',
-    }).trim();
+    });
   } catch (err) {
     if (onWarn) {
       onWarn(`Failed to read HEAD SHA: ${err instanceof Error ? err.message : String(err)}`);

@@ -1,8 +1,8 @@
-import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { IngestTarget } from '@mmnto/totem';
+import { safeExec } from '@mmnto/totem';
 
 import { IS_WIN } from '../utils.js';
 
@@ -58,8 +58,8 @@ export interface DetectedOrchestrator {
 /** Check whether a CLI command exists on PATH. */
 function cliExists(name: string): boolean {
   try {
-    const cmd = IS_WIN ? `where ${name}` : `which ${name}`;
-    execSync(cmd, { stdio: 'ignore', timeout: 3000 });
+    const cmd = IS_WIN ? 'where' : 'which';
+    safeExec(cmd, [name], { timeout: 3000, stdio: 'ignore' });
     return true;
   } catch {
     return false;

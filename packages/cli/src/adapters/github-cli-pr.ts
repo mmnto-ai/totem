@@ -1,8 +1,8 @@
-import { execFileSync } from 'node:child_process';
-
 import { z } from 'zod';
 
-import { GH_TIMEOUT_MS, IS_WIN } from '../utils.js';
+import { safeExec } from '@mmnto/totem';
+
+import { GH_TIMEOUT_MS } from '../utils.js';
 import { ghFetchAndParse, handleGhError } from './gh-utils.js';
 import type {
   PrAdapter,
@@ -106,12 +106,10 @@ export class GitHubCliPrAdapter implements PrAdapter {
 
   private getRepoNwo(): string {
     try {
-      const result = execFileSync(
-        'gh',
-        ['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'],
-        { cwd: this.cwd, encoding: 'utf-8', timeout: GH_TIMEOUT_MS, shell: IS_WIN },
-      );
-      return result.trim();
+      return safeExec('gh', ['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'], {
+        cwd: this.cwd,
+        timeout: GH_TIMEOUT_MS,
+      });
     } catch (err) {
       handleGhError(err, 'repository info');
     }

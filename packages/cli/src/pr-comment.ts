@@ -149,17 +149,14 @@ export interface CommentUpsertOptions {
  * Uses `gh api` for reliable JSON output.
  */
 export async function upsertPRComment(options: CommentUpsertOptions): Promise<void> {
-  const { execFileSync } = await import('node:child_process');
-  const { IS_WIN, GH_TIMEOUT_MS } = await import('./utils.js');
+  const { safeExec } = await import('@mmnto/totem');
+  const { GH_TIMEOUT_MS } = await import('./utils.js');
 
   const { prNumber, markdown, cwd } = options;
 
   const execOpts = {
     cwd,
-    encoding: 'utf-8' as const,
     timeout: GH_TIMEOUT_MS,
-    shell: IS_WIN,
-    stdio: 'pipe' as const,
     env: { ...process.env, GH_PROMPT_DISABLED: '1' },
     maxBuffer: 5 * 1024 * 1024,
   };
@@ -168,7 +165,7 @@ export async function upsertPRComment(options: CommentUpsertOptions): Promise<vo
   // gh api auto-resolves {owner}/{repo} from the local git remote
   let existingId: number | null = null;
   try {
-    const raw = execFileSync(
+    const raw = safeExec(
       'gh',
       [
         'api',
@@ -180,7 +177,6 @@ export async function upsertPRComment(options: CommentUpsertOptions): Promise<vo
       execOpts,
     );
     const ids = raw
-      .trim()
       .split('\n')
       .filter(Boolean)
       .map(Number)
@@ -199,17 +195,16 @@ export async function upsertPRComment(options: CommentUpsertOptions): Promise<vo
   const payload = JSON.stringify({ body: markdown });
 
   if (existingId) {
-    execFileSync(
+    safeExec(
       'gh',
       ['api', `repos/{owner}/{repo}/issues/comments/${existingId}`, '-X', 'PATCH', '--input', '-'],
       { ...execOpts, input: payload },
     );
   } else {
-    execFileSync(
-      'gh',
-      ['api', `repos/{owner}/{repo}/issues/${prNumber}/comments`, '--input', '-'],
-      { ...execOpts, input: payload },
-    );
+    safeExec('gh', ['api', `repos/{owner}/{repo}/issues/${prNumber}/comments`, '--input', '-'], {
+      ...execOpts,
+      input: payload,
+    });
   }
 }
 

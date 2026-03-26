@@ -1,9 +1,6 @@
-import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 
-import { TotemGitError } from '@mmnto/totem';
-
-import { IS_WIN } from './utils.js';
+import { safeExec, TotemGitError } from '@mmnto/totem';
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -25,11 +22,7 @@ function throwIfGitMissing(err: unknown): void {
 
 export function getGitBranch(cwd: string): string {
   try {
-    return execFileSync('git', ['branch', '--show-current'], {
-      cwd,
-      encoding: 'utf-8',
-      shell: IS_WIN,
-    }).trim();
+    return safeExec('git', ['branch', '--show-current'], { cwd });
   } catch {
     return '(unknown)';
   }
@@ -37,11 +30,7 @@ export function getGitBranch(cwd: string): string {
 
 export function getGitStatus(cwd: string): string {
   try {
-    return execFileSync('git', ['status', '--porcelain'], {
-      cwd,
-      encoding: 'utf-8',
-      shell: IS_WIN,
-    }).trim();
+    return safeExec('git', ['status', '--porcelain'], { cwd });
   } catch {
     return '';
   }
@@ -50,12 +39,10 @@ export function getGitStatus(cwd: string): string {
 export function getGitDiff(mode: 'staged' | 'all', cwd: string): string {
   const args = mode === 'staged' ? ['diff', '--staged'] : ['diff', 'HEAD'];
   try {
-    return execFileSync('git', args, {
+    return safeExec('git', args, {
       cwd,
-      encoding: 'utf-8',
       timeout: GIT_COMMAND_TIMEOUT_MS,
       maxBuffer: GIT_DIFF_MAX_BUFFER,
-      shell: IS_WIN,
     });
   } catch (err) {
     throwIfGitMissing(err);
@@ -70,12 +57,10 @@ export function getGitDiff(mode: 'staged' | 'all', cwd: string): string {
 
 export function getGitDiffStat(cwd: string): string {
   try {
-    return execFileSync('git', ['diff', 'HEAD', '--stat'], {
+    return safeExec('git', ['diff', 'HEAD', '--stat'], {
       cwd,
-      encoding: 'utf-8',
       timeout: GIT_COMMAND_TIMEOUT_MS,
-      shell: IS_WIN,
-    }).trim();
+    });
   } catch {
     return '';
   }
@@ -87,12 +72,10 @@ export function getGitDiffStat(cwd: string): string {
  */
 export function getDefaultBranch(cwd: string): string {
   try {
-    const ref = execFileSync('git', ['symbolic-ref', 'refs/remotes/origin/HEAD', '--short'], {
+    const ref = safeExec('git', ['symbolic-ref', 'refs/remotes/origin/HEAD', '--short'], {
       cwd,
-      encoding: 'utf-8',
       timeout: GIT_COMMAND_TIMEOUT_MS,
-      shell: IS_WIN,
-    }).trim();
+    });
     // ref is like "origin/main" — strip the remote prefix
     return ref.replace(/^origin\//, '');
   } catch (err) {
@@ -102,11 +85,9 @@ export function getDefaultBranch(cwd: string): string {
     for (const branch of ['main', 'master']) {
       for (const ref of [branch, `origin/${branch}`]) {
         try {
-          execFileSync('git', ['rev-parse', '--verify', ref], {
+          safeExec('git', ['rev-parse', '--verify', ref], {
             cwd,
-            encoding: 'utf-8',
             timeout: GIT_COMMAND_TIMEOUT_MS,
-            shell: IS_WIN,
           });
           return branch;
         } catch {
@@ -127,12 +108,10 @@ export function getGitBranchDiff(cwd: string, base?: string): string {
   const refs = [baseBranch, `origin/${baseBranch}`];
   for (const ref of refs) {
     try {
-      return execFileSync('git', ['diff', `${ref}...HEAD`], {
+      return safeExec('git', ['diff', `${ref}...HEAD`], {
         cwd,
-        encoding: 'utf-8',
         timeout: GIT_COMMAND_TIMEOUT_MS,
         maxBuffer: GIT_DIFF_MAX_BUFFER,
-        shell: IS_WIN,
       });
     } catch (err) {
       throwIfGitMissing(err);
@@ -157,12 +136,10 @@ export function getGitBranchDiff(cwd: string, base?: string): string {
  */
 export function getTagDate(cwd: string, tag: string): string | null {
   try {
-    const date = execFileSync('git', ['log', '-1', '--format=%aI', tag], {
+    const date = safeExec('git', ['log', '-1', '--format=%aI', tag], {
       cwd,
-      encoding: 'utf-8',
       timeout: GIT_COMMAND_TIMEOUT_MS,
-      shell: IS_WIN,
-    }).trim();
+    });
     return date.slice(0, 10) || null;
   } catch {
     return null;
@@ -176,12 +153,10 @@ export function getTagDate(cwd: string, tag: string): string | null {
 export function getLatestTag(cwd: string): string | null {
   try {
     return (
-      execFileSync('git', ['describe', '--tags', '--abbrev=0'], {
+      safeExec('git', ['describe', '--tags', '--abbrev=0'], {
         cwd,
-        encoding: 'utf-8',
         timeout: GIT_COMMAND_TIMEOUT_MS,
-        shell: IS_WIN,
-      }).trim() || null
+      }) || null
     );
   } catch {
     return null;
@@ -197,12 +172,10 @@ export function getGitLogSince(cwd: string, since?: string, maxCommits = 50): st
     ? ['log', `${since}..HEAD`, '--oneline', `--max-count=${maxCommits}`]
     : ['log', '--oneline', `-${maxCommits}`];
   try {
-    return execFileSync('git', args, {
+    return safeExec('git', args, {
       cwd,
-      encoding: 'utf-8',
       timeout: GIT_COMMAND_TIMEOUT_MS,
-      shell: IS_WIN,
-    }).trim();
+    });
   } catch {
     return '';
   }
@@ -213,12 +186,10 @@ export function getGitLogSince(cwd: string, since?: string, maxCommits = 50): st
  */
 export function isFileDirty(cwd: string, filePath: string): boolean {
   try {
-    const output = execFileSync('git', ['status', '--porcelain', '--', filePath], {
+    const output = safeExec('git', ['status', '--porcelain', '--', filePath], {
       cwd,
-      encoding: 'utf-8',
       timeout: GIT_COMMAND_TIMEOUT_MS,
-      shell: IS_WIN,
-    }).trim();
+    });
     return output.length > 0;
   } catch {
     return false;
@@ -231,12 +202,10 @@ export function isFileDirty(cwd: string, filePath: string): boolean {
  */
 export function resolveGitRoot(cwd: string): string | null {
   try {
-    const root = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+    const root = safeExec('git', ['rev-parse', '--show-toplevel'], {
       cwd,
-      encoding: 'utf-8',
       timeout: GIT_COMMAND_TIMEOUT_MS,
-      shell: IS_WIN,
-    }).trim();
+    });
     // git returns forward slashes even on Windows — normalize for fs operations
     return path.normalize(root);
   } catch {

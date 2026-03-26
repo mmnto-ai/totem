@@ -75,8 +75,8 @@ async function classifyFile(
   try {
     // Prefer staged content (git show :path) over disk file to match the diff being evaluated.
     // Falls back to disk if git is unavailable or file isn't staged.
-    const { execFileSync } = await import('node:child_process');
-    content = execFileSync('git', ['show', `:${file}`], { cwd, encoding: 'utf-8' }); // totem-ignore — execFileSync resolves git via PATH, no shell needed
+    const { safeExec } = await import('./sys/exec.js');
+    content = safeExec('git', ['show', `:${file}`], { cwd });
   } catch {
     try {
       content = fs.readFileSync(fullPath, 'utf-8');
