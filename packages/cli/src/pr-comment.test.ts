@@ -245,11 +245,12 @@ describe('deduplicateFindings', () => {
     expect(result).toHaveLength(2);
   });
 
-  it('handles findings with optional file/line', () => {
-    const findings = [makeFinding({ file: undefined, line: undefined })];
+  it('keeps findings without file/line separate (no false grouping)', () => {
+    const findings = [
+      makeFinding({ id: 'rule1', file: undefined, line: undefined }),
+      makeFinding({ id: 'rule2', file: undefined, line: undefined }),
+    ];
     const result = deduplicateFindings(findings);
-    expect(result).toHaveLength(1);
-    expect(result[0]!.file).toBe('');
-    expect(result[0]!.line).toBe(0);
+    expect(result).toHaveLength(2);
   });
 });

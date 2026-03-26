@@ -4,6 +4,7 @@
  */
 
 import type { CompiledRule, TotemFinding, Violation } from '@mmnto/totem';
+import { violationToFinding } from '@mmnto/totem';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -40,7 +41,8 @@ export function deduplicateFindings(input: TotemFinding[]): DedupedFinding[] {
   const groups = new Map<string, { findings: TotemFinding[] }>();
 
   for (const f of input) {
-    const key = `${f.file ?? ''}:${f.line ?? 0}`;
+    // Findings without file/line get unique keys to avoid incorrect grouping
+    const key = f.file && f.line ? `${f.file}:${f.line}` : `__unlocated__${f.id}`;
     const existing = groups.get(key);
     if (existing) {
       existing.findings.push(f);
@@ -78,19 +80,7 @@ export function deduplicateFindings(input: TotemFinding[]): DedupedFinding[] {
  * and delegates to deduplicateFindings.
  */
 export function deduplicateViolations(violations: Violation[]): DedupedFinding[] {
-  const findings: TotemFinding[] = violations.map((v) => ({
-    id: v.rule.lessonHash,
-    source: 'lint' as const,
-    severity: (v.rule.severity ?? 'error') as 'error' | 'warning',
-    message: v.rule.message,
-    file: v.file,
-    line: v.lineNumber,
-    matchedLine: v.line,
-    ruleHeading: v.rule.lessonHeading,
-    confidence: 1.0,
-    category: v.rule.category as TotemFinding['category'],
-  }));
-  return deduplicateFindings(findings);
+  return deduplicateFindings(violations.map(violationToFinding));
 }
 
 // ─── Markdown builder ───────────────────────────────
