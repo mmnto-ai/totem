@@ -1,29 +1,31 @@
 #!/bin/bash
 # Phase-gate enforcement (ADR-063):
-# 1. Block git push if /prepush hasn't been run
-# 2. Warn on git commit if /preflight hasn't been run on a feature branch
+# 1. Block git commit if /preflight hasn't been run on a feature branch
+# 2. Block git push if /prepush hasn't been run
 
 TOOL_INPUT=$(cat)
 COMMAND=$(echo "$TOOL_INPUT" | grep -o '"command":"[^"]*"' | head -1 | sed 's/"command":"//;s/"//')
 
-# ─── Gate 1: Spec before commit (warning) ──
-if [[ "$COMMAND" == "git commit"* ]]; then
+# ─── Gate 1: Spec before commit (hard block) ──
+if [[ "$COMMAND" =~ (^|[[:space:]])git[[:space:]].*commit ]]; then
   SPEC_FLAG=".totem/cache/.spec-completed"
   BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 
-  # Skip: main/master, hotfix/docs/chore branches, detached HEAD
+  # Skip: main/master, hotfix/docs branches, detached HEAD
   case "$BRANCH" in
-    main|master|HEAD|""|hotfix/*|docs/*|chore/*|fix/*) ;;
+    main|master|HEAD|hotfix/*|docs/*) ;;
     *)
       if [ ! -f "$SPEC_FLAG" ]; then
-        echo "⚠️  No /preflight run on this branch. Consider running /preflight <issue> first." >&2
+        echo "BLOCKED: /preflight has not been run on branch '$BRANCH'. Run /preflight <issue> first." >&2
+        echo "This gate enforces ADR-063: totem spec must generate an execution plan before any code is written." >&2
+        exit 2
       fi
       ;;
   esac
 fi
 
 # ─── Gate 2: Shield before push (hard block) ──
-if [[ "$COMMAND" == "git push"* ]]; then
+if [[ "$COMMAND" =~ (^|[[:space:]])git[[:space:]].*push ]]; then
   SHIELD_FLAG=".totem/cache/.shield-passed"
 
   if [ ! -f "$SHIELD_FLAG" ]; then

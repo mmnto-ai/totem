@@ -67,11 +67,13 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 
 ## Hooks (Enforced by Harness)
 
-| Hook               | Event                     | Purpose                                                | Status |
-| ------------------ | ------------------------- | ------------------------------------------------------ | ------ |
-| `PostCompact`      | After context compression | Re-inject rules + capability manifest (ADR-063)        | Active |
-| `PreToolUse(Bash)` | Before `git commit`       | Warn if `/preflight` hasn't been run on feature branch | Active |
-| `PreToolUse(Bash)` | Before `git push`         | Block if `/prepush` hasn't been run                    | Active |
+| Hook               | Event                     | Purpose                                                     | Status |
+| ------------------ | ------------------------- | ----------------------------------------------------------- | ------ |
+| `PostCompact`      | After context compression | Re-inject rules + capability manifest (ADR-063)             | Active |
+| `PreToolUse(Bash)` | Before `git commit`       | **Block** if `/preflight` hasn't been run on feature branch | Active |
+| `PreToolUse(Bash)` | Before `git push`         | **Block** if `/prepush` hasn't been run                     | Active |
+
+Exempt branches (commit gate only): `main`, `master`, `hotfix/*`, `docs/*`, detached HEAD.
 
 ## Skills (User-Invoked)
 
