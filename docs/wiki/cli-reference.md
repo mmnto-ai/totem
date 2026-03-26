@@ -78,7 +78,16 @@ The core of the Codebase Immune System. Reads your uncommitted diff and checks i
 - **Flags:**
   - `--deterministic`: Runs lightning-fast zero-LLM checks using `compiled-rules.json` (sub-3 seconds).
   - `--format sarif`: Exports violations in SARIF 2.1.0 format for GitHub Advanced Security integration.
+  - `--format json`: Exports structured JSON including a unified `findings[]` array (ADR-071 Unified Findings Model) alongside raw `violations[]`.
   - `--learn`: (Optional) Prompts you to extract a new lesson if a violation is found.
+
+### `totem add-secret <value>`
+
+Adds a user-defined secret to the local DLP pipeline (`.totem/secrets.json`). Secrets are automatically masked during lesson ingestion and shield reviews.
+
+- **Flags:**
+  - `--pattern`: Treat the value as a regex pattern instead of a literal string. Patterns are validated for syntax and **ReDoS safety** — catastrophic backtracking patterns like `(a+)+$` are rejected at input time.
+- **Related:** `totem list-secrets`, `totem remove-secret`
 
 ### `totem spec <issue-ids...>`
 
