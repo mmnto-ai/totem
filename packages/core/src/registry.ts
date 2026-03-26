@@ -37,10 +37,16 @@ export function readRegistry(onWarn?: (msg: string) => void): TotemRegistry {
     const result = RegistrySchema.safeParse(parsed);
     return result.success ? result.data : {};
   } catch (err) {
-    // ENOENT (file not found) is expected on first run — silently return empty
     const code = (err as NodeJS.ErrnoException).code;
-    if (code && code !== 'ENOENT') {
+    if (code === 'ENOENT') {
+      // Expected on first run — silently return empty
+    } else if (code) {
       onWarn?.(`Cannot read registry (${code}) — using empty registry`);
+    } else {
+      // SyntaxError from JSON.parse or other non-fs errors
+      onWarn?.(
+        `Cannot parse registry: ${err instanceof Error ? err.message : String(err)} — using empty registry`,
+      );
     }
     return {};
   }
