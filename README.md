@@ -13,9 +13,12 @@ Totem doesn't ship with your app. It lives in your workflow. It also works on no
 Totem is a two-part governance system: a probabilistic **Memory Layer** for AI agents, and a deterministic **Enforcement Compiler** for Git pipelines.
 
 - **Zero-LLM Enforcement:** Rules compile into Tree-sitter AST and regular expressions. `totem lint` executes in <2 seconds without API keys, network access, or an LLM.
+- **Unified Findings Model:** Outputs a standardized `TotemFinding` schema across both fast deterministic rules and AI shield reviews (ADR-071).
 - **Air-Gapped Operation:** Supports fully offline embedding via Ollama and local LLM execution.
 - **Cross-Repository Mesh:** Use `totem link` to share compiled invariants across multiple codebases.
 - **Editor Agnostic:** Enforces boundaries at the Git layer (`pre-push`), neutralizing agent divergence regardless of whether code was written by Cursor, Copilot, or Claude Code.
+- **Secure Secret Redaction:** Employs `safe-regex2` validation to reject ReDoS-vulnerable custom patterns (`add-secret --pattern`) and prevents catastrophic backtracking during scans.
+- **Semantic Overrides:** Use `// totem-context: <reason>` as the primary, universal directive to suppress rules deterministically while passing architectural intent to the AI layer.
 - **Compliance Ready:** Outputs standard SARIF 2.1.0 for native integration into GitHub Advanced Security and enterprise DORA dashboards.
 
 ## Example: Rule Compilation

@@ -6,13 +6,13 @@ To support this without destroying velocity or codebase integrity, Totem provide
 
 ## `// totem-context: <reason>` (Preferred)
 
-This is the **Semantic Overlay**. It is the unified, primary mechanism for overriding Totem's rules (per ADR-071).
+This is the **Semantic Overlay**. It is the unified, primary mechanism for overriding Totem's rules everywhere (per ADR-071).
 
 When you use `totem-context:`, you are telling the system: _"I know this breaks a rule, and here is my exact architectural reasoning for why it is necessary."_
 
-- **Behavior:** It suppresses the deterministic linter error for the following block of code.
+- **Rule Engine:** It strictly suppresses the deterministic `totem lint` error for the following block of code.
 - **Telemetry:** It writes an `exception` event into the **Trap Ledger**, capturing your reason. If a rule accumulates too many of these contexts, Totem will automatically downgrade the rule via `totem doctor --pr`.
-- **Review Layer:** During an AI-powered `totem shield` review, the LLM reads your context and incorporates your logic into its evaluation, rather than blindly flagging the violation.
+- **Review Layer:** During an AI-powered `totem shield` review, the LLM reads your context as a semantic hint and incorporates your logic into its evaluation, rather than blindly flagging the violation.
 
 **Example:**
 

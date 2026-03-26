@@ -52,6 +52,7 @@ export function getGitDiff(mode: 'staged' | 'all', cwd: string): string {
       cwd,
       encoding: 'utf-8',
       timeout: GIT_COMMAND_TIMEOUT_MS,
+      maxBuffer: 10 * 1024 * 1024, // 10MB — large staged diffs
       shell: IS_WIN,
     });
   } catch (err) {
@@ -127,6 +128,7 @@ export function getGitBranchDiff(cwd: string, base?: string): string {
         cwd,
         encoding: 'utf-8',
         timeout: GIT_COMMAND_TIMEOUT_MS,
+        maxBuffer: 10 * 1024 * 1024, // 10MB — large branch diffs (e.g., compiled-rules.json)
         shell: IS_WIN,
       });
     } catch (err) {
