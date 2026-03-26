@@ -158,6 +158,10 @@ export async function runCompiledRules(
   const errors = violations.filter((v) => (v.rule.severity ?? 'error') === 'error');
   const warnings = violations.filter((v) => (v.rule.severity ?? 'error') === 'warning');
 
+  // Convert to unified findings model once (ADR-071)
+  const { violationToFinding } = await import('@mmnto/totem');
+  const findings = violations.map(violationToFinding);
+
   // Build output
   let output: string;
 
@@ -201,14 +205,13 @@ export async function runCompiledRules(
 
     output = JSON.stringify(sarif, null, 2);
   } else if (format === 'json') {
-    const { violationToFinding } = await import('@mmnto/totem');
     output = JSON.stringify(
       {
         pass: errors.length === 0,
         rules: rules.length,
         errors: errors.length,
         warnings: warnings.length,
-        findings: violations.map(violationToFinding),
+        findings,
         violations,
       },
       null,
@@ -284,10 +287,6 @@ export async function runCompiledRules(
     const verdictLabel = successColor(bold('PASS'));
     log.info(tag, `Verdict: ${verdictLabel} — ${rules.length} rules, 0 violations`);
   }
-
-  // Convert to unified findings model (ADR-071)
-  const { violationToFinding } = await import('@mmnto/totem');
-  const findings = violations.map(violationToFinding);
 
   return { violations, findings, rules, output };
 }
