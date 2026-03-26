@@ -245,6 +245,19 @@ program
   );
 
 program
+  .command('triage-pr <pr-number>')
+  .description('Categorized triage view of bot review comments on a PR')
+  .action(async (prNumber: string) => {
+    requireGhCli();
+    try {
+      const { triagePrCommand } = await import('./commands/triage-pr.js');
+      await triagePrCommand(prNumber);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('triage')
   .description('Prioritize open issues into an active work roadmap')
   .option('--raw', 'Output retrieved context without LLM synthesis')
@@ -628,7 +641,7 @@ program.addHelpText(
 Commands by tier:
   Core (no API keys):    init, sync, lint, compile, test, verify-manifest, hooks, link, stats, drift, doctor
   AI-Powered (needs LLM): shield, spec, handoff, docs, compile (with LLM)
-  GitHub Workflows:      extract, review-learn, triage, wrap
+  GitHub Workflows:      extract, review-learn, triage, triage-pr, wrap
   Utilities:             add-lesson, add-secret, list-secrets, remove-secret, explain, eject
 `,
 );
