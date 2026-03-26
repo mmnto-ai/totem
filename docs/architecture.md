@@ -88,7 +88,7 @@ All commands feature proper `--help` output documentation.
 - **Setup & Infrastructure:**
   - **Initialization:** Scaffolds configs, hooks, and AI tools with an onboarding workflow, supporting a `--bare` flag and hiding legacy configurations. It relies on an ordered provider detection schema and automatically ingests `.cursorrules`.
   - **Environment Support:** Package manager auto-detection fully supports Bun and safely detects non-bash environments. Dynamic imports boost CLI startup performance, while process exits are explicitly managed to prevent execution hangs.
-  - **Error Handling:** Implements a unified error domain with typed `TotemError` subclasses for standardized logging. It actively mitigates command injection, taskkill exploitation, and broader vulnerabilities to establish safe boundaries for shell execution.
+  - **Error Handling & Wiring:** Implements a unified error domain with typed `TotemError` subclasses and Dependency Injection (DI) via `CoreLogger` for standardized logging. It actively mitigates command injection, incorporates a `cleanTmpDir` helper, and utilizes `rmSync` sweeps for secure, reliable temporary file management.
 - **Data & Context Management:**
   - **Indexing & Sharing:** `totem sync` crawls, chunks, and embeds targets into LanceDB, supporting cross-totem queries via the `linkedIndexes` config. `totem link` shares lessons and local knowledge between multiple local repositories.
   - **Session Management:** `totem briefing` and `totem handoff` capture state snapshots, featuring brief output formatting for improved readability. The `--lite` flag enables zero-LLM capture with ANSI sanitization.
@@ -97,10 +97,10 @@ All commands feature proper `--help` output documentation.
   - **Planning & Orchestration:**
     - _Workflows:_ Orchestrates workflows with human approval gates, supporting configurable issue sources across repositories. Integrates mandatory verify steps and `verify_execution` pipelines.
     - _Automation:_ Structures capabilities using directory-based skills (`SKILL.md` per directory) to cleanly scope execution context. Workflow automation removes stale commands for a leaner toolset.
-    - _Hooks:_ Enforces lifecycle events like `/prepush` via `PreToolUse` hooks, integrating phase-gate enforcement to actively warn on commits lacking proper preflight. Pipeline reliability is bolstered by structured `PostCompact` formatting.
+    - _Hooks:_ Enforces lifecycle events like `/prepush` via `PreToolUse` hooks, integrating hardened phase-gate enforcement to actively warn on commits lacking proper preflight. Pipeline reliability is bolstered by structured `PostCompact` formatting.
   - **Review & Quality:**
     - **`totem lint`**: Runs compiled rules against diffs. Strictly zero LLM, fast, explicitly recommended for pre-push hooks and CI, and natively supports SARIF/JSON outputs.
-    - **`totem shield`**: Conducts AI-powered code review using LanceDB context before PRs. Enforces explicit severity levels, cleanly demotes false positives to warnings, and formats output via standard Totem Errors.
+    - **`totem shield`**: Conducts AI-powered code review using LanceDB context before PRs, having cleanly deprecated legacy `shield-context` configurations. Enforces explicit severity levels, cleanly demotes false positives to warnings, and formats output via standard Totem Errors.
     - **`totem explain`**: Looks up the specific lesson behind a rule violation to provide immediate developer context.
   - **Documentation:** Automates transactional document syncs using a Saga validator to prevent partial updates. It safely strips known-not-shipped references and marketing terminology from generated content.
   - **Telemetry & Stats:** Surfaces local metrics powered by the Trap Ledger, tracking launch data and rule suppression metrics. Displays baseline CIS compliance percentages alongside violation histories.
@@ -111,7 +111,7 @@ All commands feature proper `--help` output documentation.
 
 ### 3. Deterministic Compiler & Zero-LLM Lint
 
-`totem compile` reads architectural constraints and translates each lesson into a rule or marks it as non-compilable. It incorporates a strict lesson file linter acting as a pre-compilation gate to ensure structural integrity before processing. The compilation process integrates manifest signing to establish a secure provenance chain and supports parallel execution via a `--concurrency` flag to optimize performance. It utilizes a facade pattern in `compiler.ts` to cleanly orchestrate rule translation. The compiler supports manual pattern definitions in lessons and reverse-compiles curated rules to ensure high-fidelity enforcement. The system incorporates a backfill of body text for 125 core architectural lessons to enrich rule context. It integrates a Tier 2 AST engine alongside its regex capabilities for advanced structural pattern matching. These AST query engines explicitly fail-closed and strictly manage process exits rather than swallowing exceptions. Rules are stored in `.totem/compiled-rules.json`—now extended with advanced telemetry fields and Semantic Rule Observability.
+`totem compile` reads architectural constraints and translates each lesson into a rule or marks it as non-compilable. It incorporates a strict lesson file linter acting as a pre-compilation gate to ensure structural integrity before processing. The compilation process integrates manifest signing to establish a secure provenance chain and supports parallel execution via a `--concurrency` flag to optimize performance. It utilizes a facade pattern in `compiler.ts` to cleanly orchestrate rule translation. The compiler supports manual pattern definitions in lessons and reverse-compiles curated rules to ensure high-fidelity enforcement. The system incorporates a backfill of body text for 125 core architectural lessons to enrich rule context. It integrates a Tier 2 AST engine alongside its regex capabilities for advanced structural pattern matching. These AST query engines implement graceful degradation and strictly manage process exits rather than swallowing exceptions. Rules are stored in `.totem/compiled-rules.json`—now extended with advanced telemetry fields and Semantic Rule Observability.
 
 The compilation process is context-aware, reading files directly from disk instead of parsing staged diffs to prevent AST gating false positives. It actively filters ignored patterns before checking for an empty diff. Developers can bypass false positives using audited inline suppression directives or negated patterns. Rules are strictly scoped using anchored glob matching, preventing `fileGlobs` from leaking outside specified directories. During execution, the loading engine applies an `onWarn` callback to filter valid structural warnings and suppress false positives. Duplicate, vulnerable, or overly broad match/exec patterns are actively consolidated, audited, and rejected. The system relies on a strictly curated 147-rule set for baseline enforcement.
 
@@ -155,7 +155,7 @@ A stdio-based server for LLM integration providing primary tools and strict acce
 
 ## Configuration Tiers
 
-Totem supports three configuration tiers, auto-detected from the environment during `totem init`. The available command list is routinely audited to prune stale tasks and preserve a streamlined interface:
+Totem supports three explicit capability tiers, auto-detected from the environment during `totem init`. The available command list is routinely audited to prune stale tasks and preserve a streamlined interface:
 
 | Tier         | Requirements                               | Available Commands                                                                                               |
 | ------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |

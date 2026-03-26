@@ -1,8 +1,9 @@
 ### Active Work Summary
 
-The Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.4.1`. Recent focus has centered on:
+The Data Layer Foundation is complete, and the project is currently at release `@mmnto/cli@1.5.6`. Recent focus has centered on:
 
 - **Orchestration & Workflows:**
+  - Deprecated legacy shield contexts and established formalized capability tiers.
   - Implemented invisible sync hooks for smooth orchestration context updates.
   - Integrated CodeRabbit configuration for automated PR reviews.
   - Expanded the post-compaction hook with a capability manifest.
@@ -10,6 +11,7 @@ The Data Layer Foundation is complete, and the project is currently at release `
   - Restructured workflow skills into a dedicated directory format.
   - Enforced pre-push validation via pre-tool-use hooks.
 - **Security & Governance:**
+  - Hardened phase-gate hooks for stricter commit validation.
   - Refined manifest attestation CI gates with dedicated separate workflows.
   - Hardened ingestion with trust boundaries and an MCP authentication model.
   - Implemented compile manifest signing to establish a provenance chain.
@@ -22,6 +24,9 @@ The Data Layer Foundation is complete, and the project is currently at release `
   - Upgraded the specification process to utilize a strict checklist format.
   - Introduced a lesson file linter with a pre-compilation gate.
 - **Search & Infrastructure:**
+  - Implemented graceful AST query degradation to prevent execution failures during complex parsing.
+  - Remedied specification gaps with dependency injection for the core logger and CLI wiring fixes.
+  - Executed filesystem cleanup sweeps to replace legacy synchronization calls.
   - Implemented parallel lesson compilation to optimize processing efficiency.
   - Resolved functionality gaps across AST queries, process execution handling, and suppression metrics.
   - Expanded critical test coverage and executed general codebase quality hardening.
@@ -34,6 +39,7 @@ The Data Layer Foundation is complete, and the project is currently at release `
   - Unified error domains and refactored the compiler architecture using a facade pattern.
   - Delivered unified execution tracking following successful readiness audits.
 - **Documentation & DX:**
+  - Executed targeted continuous integration fixes and related capability tier updates.
   - Extracted and integrated operational lessons from recent codebase quality sweeps.
   - Required explicit confirmation before writing LLM-generated documentation.
   - Configured documentation generation to actively strip marketing terminology.
@@ -88,6 +94,10 @@ The following sequence was determined by cross-referencing the competitive moat 
   - Migrated lessons directory to dual-read/single-write and added startup health checks for LanceStore indexes.
   - Automated full sync triggering following embedder configuration changes.
 - **Core & Shift-Left Foundation:**
+  - Hardened phase-gate hooks and implemented graceful AST query degradation to prevent execution failures.
+  - Remedied specification gaps via core logger dependency injection, temporary directory cleanup helpers, and CLI wiring updates.
+  - Deprecated legacy shield contexts in favor of standardized capability tiers.
+  - Executed continuous integration fixes and swept the codebase to remove legacy filesystem synchronization calls.
   - Implemented parallel lesson compilation utilizing a concurrency flag to optimize processing output.
   - Expanded critical test coverage and executed codebase quality hardening cleanups.
   - Resolved execution functionality gaps involving AST queries, process termination handling, and suppression metrics.
