@@ -41,15 +41,19 @@ const mockedSpawn = vi.mocked(spawn);
 describe('invokeShellOrchestrator', () => {
   let tmpDir: string;
   const totemDir = '.totem';
+  let originalProcessKill: typeof process.kill;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-orch-'));
+    originalProcessKill = process.kill;
     vi.spyOn(console, 'error').mockImplementation(() => {});
     mockChild = createMockChild();
     mockedSpawn.mockClear();
   });
 
   afterEach(() => {
+    process.kill = originalProcessKill;
+    vi.useRealTimers();
     cleanTmpDir(tmpDir);
     vi.restoreAllMocks();
   });

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { EmbeddingProvider } from '../config-schema.js';
 import { createEmbedder } from './embedder.js';
@@ -21,6 +21,10 @@ vi.mock('./openai-embedder.js', () => ({
 // ─── Tests ─────────────────────────────────────────
 
 describe('createEmbedder', () => {
+  afterEach(() => {
+    delete process.env['OPENAI_API_KEY'];
+  });
+
   it('returns an embedder for ollama (direct, no lazy wrapper)', () => {
     const config: EmbeddingProvider = {
       provider: 'ollama',
@@ -42,6 +46,10 @@ describe('createEmbedder', () => {
 });
 
 describe('LazyEmbedder concurrency', () => {
+  afterEach(() => {
+    delete process.env['OPENAI_API_KEY'];
+  });
+
   it('concurrent embed() calls share the same init promise (no race condition)', async () => {
     process.env['OPENAI_API_KEY'] = 'test-key';
     const config: EmbeddingProvider = { provider: 'openai', model: 'text-embedding-3-small' };
