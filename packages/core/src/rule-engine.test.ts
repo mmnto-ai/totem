@@ -32,6 +32,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanTmpDir(tmpDir);
+  resetShieldContextWarning();
 });
 
 function makeRule(overrides: Partial<CompiledRule>): CompiledRule {

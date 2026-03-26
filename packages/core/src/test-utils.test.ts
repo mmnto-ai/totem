@@ -10,9 +10,7 @@ describe('cleanTmpDir', () => {
   let tmpDir: string | undefined;
 
   afterEach(() => {
-    if (tmpDir && fs.existsSync(tmpDir)) {
-      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
-    }
+    cleanTmpDir(tmpDir);
   });
 
   it('removes a directory', () => {
