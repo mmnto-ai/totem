@@ -75,8 +75,8 @@ partitions: {
 
 Agents pass the partition name when searching:
 
-```
-search_knowledge({ query: "error handling", boundary: "mcp" })
+```javascript
+search_knowledge({ query: 'error handling', boundary: 'mcp' });
 ```
 
 Results are restricted to `packages/mcp/` files. Unknown boundary names fall back to raw path prefix matching. Partitions work alongside `linkedIndexes` — a boundary is just a scoped slice of knowledge, whether local or remote.
@@ -106,7 +106,7 @@ Or run locally:
 ```bash
 git clone https://github.com/mmnto-ai/totem-playground.git
 cd totem-playground
-git reset HEAD~1 && git add -A
+git reset HEAD~1 && git add -A   # recreate a "broken" diff for lint to catch
 npx @mmnto/cli lint --staged
 ```
 
@@ -243,8 +243,8 @@ During `init`, Totem installs standard bash hooks into `.git/hooks/` (or integra
 
 # Troubleshooting
 
-Manually maintained content that `totem docs` must include in the wiki.
-This file is the source of truth for troubleshooting notes — edit here, not in the generated wiki.
+<!-- Maintainer note: this section is the source of truth for troubleshooting.
+     totem docs injects generated content at the marker comments below. -->
 
 ## Git Hooks
 
