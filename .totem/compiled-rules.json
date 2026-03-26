@@ -4138,23 +4138,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "7a47e69b5ea86122",
-      "lessonHeading": "Using parseInt() allows malformed strings like '5foo' to be",
-      "pattern": "",
-      "message": "Use Number() or explicit validation instead of parseInt() to prevent parsing malformed strings (e.g., '5foo')",
-      "engine": "ast-grep",
-      "astGrepPattern": "parseInt($$$ARGS)",
-      "compiledAt": "2026-03-23T21:39:29.275Z",
-      "createdAt": "2026-03-23T21:39:29.275Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "14cbc205f8c86d3d",
       "lessonHeading": "Confine dynamic imports to CLI command handlers to maintain",
       "pattern": "\\bimport\\s*\\(",
@@ -4712,10 +4695,9 @@
     {
       "lessonHash": "b72a0b3300871bb6",
       "lessonHeading": "Avoid broad negative tokens like \\bno\\b when detecting",
+      "pattern": "\\\\bno\\\\b",
       "message": "Avoid broad negative tokens like '\\bno\\b' when detecting pushback to prevent false positives on phrases like 'No worries'.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\\\bno\\\\b",
       "compiledAt": "2026-03-25T21:11:50.161Z",
       "createdAt": "2026-03-25T21:11:50.161Z",
       "fileGlobs": [
@@ -4724,15 +4706,15 @@
         "**/*.py",
         "**/*.yml",
         "**/*.yaml"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "37615db2f07968ce",
       "lessonHeading": "Manually joining strings for YAML frontmatter can break",
+      "pattern": "([\"'`]|`)---\\s*.*(\\+|\\${)",
       "message": "Avoid manual string joining for YAML frontmatter. Use a proper serializer (like js-yaml) to handle special characters and escaping.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "([\"'`]|`)---\\s*.*(\\+|\\${)",
       "compiledAt": "2026-03-25T21:13:10.048Z",
       "createdAt": "2026-03-25T21:13:10.048Z",
       "fileGlobs": [
@@ -4744,15 +4726,15 @@
         "!**/*.test.js",
         "!**/*.spec.ts",
         "!**/*.spec.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "fb008f77a1f5a49a",
       "lessonHeading": "Constructing shell commands with string interpolation",
+      "pattern": "\\b(exec|execSync|spawn|spawnSync)\\s*\\(\\s*`[^`]*\\$\\{",
       "message": "Avoid string interpolation in shell commands. Use argument arrays with spawnSync to prevent command injection and handle spaces/metacharacters safely.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(exec|execSync|spawn|spawnSync)\\s*\\(\\s*`[^`]*\\$\\{",
       "compiledAt": "2026-03-25T21:12:40.833Z",
       "createdAt": "2026-03-25T21:12:40.833Z",
       "fileGlobs": [
@@ -4760,15 +4742,15 @@
         "**/*.js",
         "**/*.tsx",
         "**/*.jsx"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "80f165f152246f14",
       "lessonHeading": "Reporting malformed records via an onWarn callback instead",
+      "pattern": "",
       "message": "Avoid silent catch blocks. Use an onWarn callback to report malformed records or corrupted NDJSON streams to allow debugging without interrupting execution.",
       "engine": "ast",
-      "severity": "warning",
-      "pattern": "",
       "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
       "compiledAt": "2026-03-25T21:13:31.891Z",
       "createdAt": "2026-03-25T21:13:31.891Z",
@@ -4777,15 +4759,15 @@
         "**/*.js",
         "**/*.tsx",
         "**/*.jsx"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "b87f484e02ae3593",
       "lessonHeading": "Updating comment-matching regex to support trailing inline",
+      "pattern": "(\\/\\^|[\\\"']\\^).*(?:@|eslint-|ts-|ignore|suppress|nosemgrep)",
       "message": "Comment-matching regex should not be anchored to the start of the line (^) to support trailing inline directives.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(\\/\\^|[\\\"']\\^).*(?:@|eslint-|ts-|ignore|suppress|nosemgrep)",
       "compiledAt": "2026-03-25T21:13:58.160Z",
       "createdAt": "2026-03-25T21:13:58.160Z",
       "fileGlobs": [
@@ -4796,7 +4778,8 @@
         "**/*.go",
         "**/*.yml",
         "**/*.yaml"
-      ]
+      ],
+      "severity": "warning"
     }
   ],
   "nonCompilable": [
@@ -5348,12 +5331,14 @@
     "2b066d6c70dff4c0",
     "a9ef9c992f1b01e3",
     "1eff7037c6890389",
-    "c2ff0a86b0e0bcf0",
     "58bba7aebec1a596",
     "8496654c35df45e5",
     "d99c786f46c2db8c",
     "c2d8348b60b9588e",
     "df84804e743586b6",
-    "32ae33b3d062163b"
+    "32ae33b3d062163b",
+    "4cd30dc35598e6c3",
+    "3cce787e56e2e97e",
+    "9f4361e1be4b65b3"
   ]
 }
