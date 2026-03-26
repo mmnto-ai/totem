@@ -4841,10 +4841,9 @@
     {
       "lessonHash": "b84fb92bc2313a47",
       "lessonHeading": "Perform explicit null and type checks on the results",
+      "pattern": "",
       "message": "Perform explicit null and type checks on the results",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "JSON.parse($A) as $B",
       "compiledAt": "2026-03-26T06:56:35.966Z",
       "createdAt": "2026-03-26T06:56:35.966Z",
@@ -4852,7 +4851,8 @@
         "**/*.ts",
         "**/*.tsx",
         "!**/registry.ts"
-      ]
+      ],
+      "severity": "warning"
     }
   ],
   "nonCompilable": [
