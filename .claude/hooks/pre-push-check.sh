@@ -7,13 +7,13 @@ TOOL_INPUT=$(cat)
 COMMAND=$(echo "$TOOL_INPUT" | grep -o '"command":"[^"]*"' | head -1 | sed 's/"command":"//;s/"//')
 
 # ─── Gate 1: Spec before commit (hard block) ──
-if [[ "$COMMAND" == "git commit"* ]]; then
+if [[ "$COMMAND" == *"commit"* && "$COMMAND" == *"git"* ]]; then
   SPEC_FLAG=".totem/cache/.spec-completed"
   BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 
   # Skip: main/master, hotfix/docs branches, detached HEAD
   case "$BRANCH" in
-    main|master|HEAD|""|hotfix/*|docs/*) ;;
+    main|master|HEAD|hotfix/*|docs/*) ;;
     *)
       if [ ! -f "$SPEC_FLAG" ]; then
         echo "BLOCKED: /preflight has not been run on branch '$BRANCH'. Run /preflight <issue> first." >&2
@@ -25,7 +25,7 @@ if [[ "$COMMAND" == "git commit"* ]]; then
 fi
 
 # ─── Gate 2: Shield before push (hard block) ──
-if [[ "$COMMAND" == "git push"* ]]; then
+if [[ "$COMMAND" == *"push"* && "$COMMAND" == *"git"* ]]; then
   SHIELD_FLAG=".totem/cache/.shield-passed"
 
   if [ ! -f "$SHIELD_FLAG" ]; then

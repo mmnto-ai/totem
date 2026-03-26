@@ -174,7 +174,7 @@ export async function matchAstQueriesBatch(
   filePath: string,
   queries: Array<{ astQuery: string; addedLineNumbers: number[] }>,
   cwd: string,
-  onWarn?: (msg: string) => void,
+  onWarn: (msg: string) => void = console.warn, // totem-context: fallback ensures query failures are never silently swallowed
 ): Promise<AstMatch[][]> {
   if (queries.length === 0) return [];
 

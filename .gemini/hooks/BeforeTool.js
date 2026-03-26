@@ -1,6 +1,6 @@
 // [totem] Phase-gate enforcement — Gemini CLI BeforeTool hook (ADR-063)
 // Gate 1: Block git commit if /preflight hasn't been run
-// Gate 2: Run totem lint before git push
+// Gate 2: Run totem shield before git push
 const { execSync } = require('child_process');
 const fs = require('fs');
 
@@ -8,8 +8,8 @@ module.exports = function beforeTool(toolName, toolInput) {
   if (toolName !== 'run_shell_command') return;
   const cmd = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput);
 
-  const isCommit = /git\s+commit/.test(cmd) || /["']git["'].*["']commit["']/.test(cmd);
-  const isPush = /git\s+push/.test(cmd) || /["']git["'].*["']push["']/.test(cmd);
+  const isCommit = /\bgit\b.*\bcommit\b/.test(cmd);
+  const isPush = /\bgit\b.*\bpush\b/.test(cmd);
 
   if (!isCommit && !isPush) return;
 
@@ -17,7 +17,7 @@ module.exports = function beforeTool(toolName, toolInput) {
   if (isCommit) {
     try {
       const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
-      const exempt = /^(main|master|HEAD)$|^(hotfix|docs)\//.test(branch) || !branch;
+      const exempt = /^(main|master|HEAD)$|^(hotfix|docs)\//.test(branch);
       if (!exempt && !fs.existsSync('.totem/cache/.spec-completed')) {
         throw new Error(
           `[Totem Error] BLOCKED: /preflight has not been run on branch '${branch}'.\n` +
@@ -25,8 +25,8 @@ module.exports = function beforeTool(toolName, toolInput) {
         );
       }
     } catch (err) {
-      if (err.message.includes('BLOCKED')) throw err;
-      // Graceful fallback if git fails (detached HEAD, etc.)
+      // Re-throw all errors — if we can't determine the branch, fail-closed
+      throw err;
     }
   }
 
