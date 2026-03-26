@@ -115,7 +115,14 @@ All commands feature proper `--help` output documentation.
 
 The compilation process is context-aware, reading files directly from disk instead of parsing staged diffs to prevent AST gating false positives. It actively filters ignored patterns before checking for an empty diff. Developers can bypass false positives using audited inline suppression directives or negated patterns. Rules are strictly scoped using anchored glob matching, preventing `fileGlobs` from leaking outside specified directories. During execution, the loading engine applies an `onWarn` callback to filter valid structural warnings and suppress false positives. Duplicate, vulnerable, or overly broad match/exec patterns are actively consolidated, audited, and rejected. The system relies on a strictly curated 147-rule set for baseline enforcement.
 
-`totem lint` applies these compiled rules against `git diff` additions with zero LLM calls. It shares a core `runCompiledRules` engine with `totem shield` for execution consistency across the pipeline. This physically blocks main branch commits and pre-push violations locally. It generates standard SARIF 2.1.0 or JSON formatted outputs (`Violation[]`) to enable enterprise security integration.
+`totem lint` applies these compiled rules against `git diff` additions with zero LLM calls. It shares a core `runCompiledRules` engine with `totem shield` for execution consistency across the pipeline. This physically blocks main branch commits and pre-push violations locally.
+
+**Unified Findings Model:** All violations are normalized into a canonical `TotemFinding` interface (defined in `packages/core/src/finding.ts`). This ensures consistent severity mapping across engines:
+
+- **Lint:** `error` → `error`, `warning` → `warning`
+- **Shield:** `CRITICAL` → `error`, `WARN` → `warning`, `INFO` → `info`
+
+It generates standard SARIF 2.1.0 or JSON formatted outputs (`findings[]` alongside raw `violations[]`) to enable enterprise security integration.
 
 ### 4. Lint GitHub Action & CI Drift Gate
 

@@ -4853,6 +4853,56 @@
         "!**/registry.ts"
       ],
       "severity": "warning"
+    },
+    {
+      "lessonHash": "87eb500b020f556b",
+      "lessonHeading": "When generating ast-grep patterns programmatically,",
+      "message": "ast-grep patterns must be raw code strings. Do not wrap the pattern in extra backticks (e.g., use \"JSON.parse($A)\" instead of \"`JSON.parse($A)`\") as this causes ast-grep to match a template literal instead of the intended code structure.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "['\"\\`]\\s*`[^`]*\\$[A-Z_]+[^`]*`\\s*['\"\\`]",
+      "compiledAt": "2026-03-26T09:17:48.694Z",
+      "createdAt": "2026-03-26T09:17:48.694Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx",
+        "**/*.json",
+        "**/*.yml",
+        "**/*.yaml"
+      ]
+    },
+    {
+      "lessonHash": "7d43877c48f594d2",
+      "lessonHeading": "When identifying files by naming conventions (e.g.,",
+      "message": "Match file naming conventions (like .test. or .spec.) against the basename (e.g., using path.basename()) rather than the full path to avoid false positives from directory segments.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\.(includes|indexOf)\\(['\"]\\.(test|spec)\\.['\"]\\)",
+      "compiledAt": "2026-03-26T09:18:14.494Z",
+      "createdAt": "2026-03-26T09:18:14.494Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
+    },
+    {
+      "lessonHash": "341ad6e61499f67f",
+      "lessonHeading": "When generating ast-grep patterns, the pattern must be",
+      "message": "ast-grep patterns must be plain code strings. Do not wrap the pattern in backticks (e.g., \"`code`\"), as this causes the engine to match a template literal node instead of the intended structural code expression.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "(astGrepPattern|pattern):\\s*\"`",
+      "compiledAt": "2026-03-26T09:18:26.909Z",
+      "createdAt": "2026-03-26T09:18:26.909Z",
+      "fileGlobs": [
+        "**/*.json",
+        "**/*.yml",
+        "**/*.yaml"
+      ]
     }
   ],
   "nonCompilable": [
@@ -5416,6 +5466,11 @@
     "2e4d394b2cd13c0d",
     "81ceb2c00045ee90",
     "2bd74fd2f943d626",
-    "859b1ac1a2756d4e"
+    "859b1ac1a2756d4e",
+    "477002cc90d406af",
+    "e02d13a8aecf38ee",
+    "0547f897d1582b32",
+    "d1ceee8a321a9eff",
+    "41cc57e1a3cd4cef"
   ]
 }

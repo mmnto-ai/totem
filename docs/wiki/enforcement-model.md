@@ -29,6 +29,14 @@ Crucially, **every override is recorded as telemetry in the local Trap Ledger.**
 
 This creates a **Self-Healing Loop**: Totem learns from your context and automatically steps out of your way.
 
+## Unified Findings Model
+
+Starting with 1.5.6, both `totem lint` and `totem shield` produce findings in a common `TotemFinding` schema (ADR-071). This means:
+
+- **`totem lint --format json`** includes a `findings[]` array with normalized `id`, `source`, `severity`, `message`, `file`, `line`, and `confidence` fields alongside the raw `violations[]` array.
+- **`totem-context:`** is the single override directive for both lint and shield. The legacy `shield-context:` alias still works silently.
+- **PR comments and SARIF output** consume the unified model, ensuring consistent reporting regardless of source.
+
 ## Works Without AI
 
 Totem's enforcement layer is **100% deterministic** — no LLM, no API keys, no network required.

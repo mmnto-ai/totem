@@ -8,6 +8,7 @@ import { IS_WIN } from './utils.js';
 // ─── Constants ──────────────────────────────────────────
 
 const GIT_COMMAND_TIMEOUT_MS = 15_000;
+const GIT_DIFF_MAX_BUFFER = 10 * 1024 * 1024; // 10MB — large diffs (e.g., compiled-rules.json)
 
 function throwIfGitMissing(err: unknown): void {
   const msg = err instanceof Error ? err.message : String(err);
@@ -52,6 +53,7 @@ export function getGitDiff(mode: 'staged' | 'all', cwd: string): string {
       cwd,
       encoding: 'utf-8',
       timeout: GIT_COMMAND_TIMEOUT_MS,
+      maxBuffer: GIT_DIFF_MAX_BUFFER,
       shell: IS_WIN,
     });
   } catch (err) {
@@ -127,6 +129,7 @@ export function getGitBranchDiff(cwd: string, base?: string): string {
         cwd,
         encoding: 'utf-8',
         timeout: GIT_COMMAND_TIMEOUT_MS,
+        maxBuffer: GIT_DIFF_MAX_BUFFER,
         shell: IS_WIN,
       });
     } catch (err) {
