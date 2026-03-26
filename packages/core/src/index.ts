@@ -1,3 +1,7 @@
+// Unified findings model (ADR-071)
+export type { FindingCategory, FindingSeverity, FindingSource, TotemFinding } from './finding.js';
+export { findingToViolation, violationToFinding } from './finding.js';
+
 // Error hierarchy
 export type { TotemErrorCode } from './errors.js';
 export {
