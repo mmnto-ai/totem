@@ -4767,16 +4767,90 @@
     {
       "lessonHash": "80f165f152246f14",
       "lessonHeading": "Reporting malformed records via an onWarn callback instead",
+      "pattern": "",
       "message": "Avoid silent catch blocks. Use an onWarn callback to report malformed records or corrupted NDJSON streams.",
       "engine": "ast",
-      "severity": "warning",
-      "pattern": "",
       "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
       "compiledAt": "2026-03-26T02:02:35.823Z",
       "createdAt": "2026-03-26T02:02:35.823Z",
       "fileGlobs": [
         "**/*.ts",
         "**/*.js"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "f6f89826aab037c4",
+      "lessonHeading": "System calls in automation scripts often fail silently",
+      "message": "System calls in automation scripts often fail silently. Always validate spawnSync results (check 'status' or 'error') instead of ignoring the return value.",
+      "engine": "ast",
+      "severity": "warning",
+      "pattern": "",
+      "astQuery": "((expression_statement (call_expression function: [(identifier) @f (member_expression property: (property_identifier) @f)])) @violation (#eq? @f \"spawnSync\"))",
+      "compiledAt": "2026-03-26T04:22:01.522Z",
+      "createdAt": "2026-03-26T04:22:01.522Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx",
+        "**/*.cjs",
+        "**/*.mjs",
+        "!**/*.test.ts",
+        "!**/*.test.js",
+        "!**/*.spec.ts",
+        "!**/*.spec.js"
+      ]
+    },
+    {
+      "lessonHash": "6607ffdc696196f0",
+      "lessonHeading": "Silently ignoring Git checkout errors in cleanup blocks",
+      "message": "Silently ignoring Git checkout errors can leave users stranded on temporary branches. Always log a warning with recovery instructions (e.g., 'Failed to restore branch. Please run git checkout <branch> manually') in the catch block.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "try { $$$A; $GIT.checkout($$$B); $$$C; } catch ($E) { }",
+      "compiledAt": "2026-03-26T04:23:20.269Z",
+      "createdAt": "2026-03-26T04:23:20.269Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
+    },
+    {
+      "lessonHash": "a3935d585c6e2ca3",
+      "lessonHeading": "Adhering to project-specific error formatting, such",
+      "message": "Error messages must be prefixed with '[Totem Error]' to ensure consistent diagnostic parsing and prevent errors from being swallowed.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bnew\\s+Error\\(\\s*['\"`](?!\\[Totem Error\\])",
+      "compiledAt": "2026-03-26T04:22:13.798Z",
+      "createdAt": "2026-03-26T04:22:13.798Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ]
+    },
+    {
+      "lessonHash": "5888612c86a4cd02",
+      "lessonHeading": "Concatenating severity strings with comment bodies",
+      "message": "Do not concatenate severity strings with comment bodies before keyword matching; this can cause false positives (e.g., 'minor' + ' it' matching 'nit').",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "(\\b(severity|level)\\b.*\\+.*\\b(body|comment|text|msg)\\b)|(\\$\\{\\s*(severity|level)\\s*\\}.*\\$\\{\\s*(body|comment|text|msg)\\s*\\})",
+      "compiledAt": "2026-03-26T04:23:59.345Z",
+      "createdAt": "2026-03-26T04:23:59.345Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx",
+        "!**/*.test.ts",
+        "!**/*.test.js"
       ]
     }
   ],
@@ -5337,6 +5411,10 @@
     "32ae33b3d062163b",
     "4cd30dc35598e6c3",
     "3cce787e56e2e97e",
-    "9f4361e1be4b65b3"
+    "9f4361e1be4b65b3",
+    "2e4d394b2cd13c0d",
+    "81ceb2c00045ee90",
+    "2bd74fd2f943d626",
+    "859b1ac1a2756d4e"
   ]
 }
