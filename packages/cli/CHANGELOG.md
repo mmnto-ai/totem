@@ -1,5 +1,15 @@
 # @mmnto/cli
 
+## 1.5.5
+
+### Patch Changes
+
+- 19de6b1: feat: categorized triage UX for bot review comments (#956)
+  feat: doctor --pr — autonomous rule downgrading (#961)
+  feat: auto-format staged files in pre-commit hook
+- Updated dependencies [19de6b1]
+  - @mmnto/totem@1.5.5
+
 ## 1.5.4
 
 ### Patch Changes
