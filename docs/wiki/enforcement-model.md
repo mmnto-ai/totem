@@ -53,3 +53,5 @@ Totem's enforcement layer is **100% deterministic** — no LLM, no API keys, no 
 | `totem spec` (planning)          |   Yes (LLM)    |
 
 The AI helps you **write** rules. The rules enforce themselves.
+
+For the full three-tier breakdown (Enforce / Learn / Review), see the [Capability Tiers table in the README](../../README.md#capability-tiers).

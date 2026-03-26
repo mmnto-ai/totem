@@ -21,6 +21,18 @@ Totem is a two-part governance system: a probabilistic **Memory Layer** for AI a
 - **Semantic Overrides:** Use `// totem-context: <reason>` as the primary, universal directive to suppress rules deterministically while passing architectural intent to the AI layer.
 - **Compliance Ready:** Outputs standard SARIF 2.1.0 for native integration into GitHub Advanced Security and enterprise DORA dashboards.
 
+## Capability Tiers
+
+Totem's features fall into three tiers based on when — and whether — AI is involved:
+
+| Tier        | Requires AI    | What you get                                                                                                                                             |
+| ----------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Enforce** | No             | `totem lint` runs compiled regex/AST rules. Pre-push hook gates CI. Deterministic, offline, fast.                                                        |
+| **Learn**   | Yes (one-time) | `totem extract` + `totem compile` use an LLM to author rules. AI at authoring time only — compiled output is static JSON.                                |
+| **Review**  | Yes (per-push) | `totem shield` sends diffs through the three-stage LLM pipeline (file classifier, hybrid diff filter, Zod-validated findings). Real-time, context-aware. |
+
+The Enforce tier is the moat: **once rules compile, the AI is gone.** Projects that need zero-LLM guarantees can run Enforce alone — no API keys, no network, no model.
+
 ## Example: Rule Compilation
 
 Totem translates natural language constraints into explicit AST execution arrays.
@@ -108,18 +120,6 @@ The AI helps you **write** rules. The rules enforce themselves.
 | `totem review-learn` (bot→lesson) |     LLM      |
 | `totem shield` (AI review)        |     LLM      |
 | `totem spec` (planning)           |     LLM      |
-
-### Capability Tiers
-
-Totem's features fall into three tiers based on when (and whether) AI is involved:
-
-| Tier        | Requires AI    | What you get                                                                            |
-| ----------- | -------------- | --------------------------------------------------------------------------------------- |
-| **Enforce** | No             | Lint + hooks + CI gate with existing compiled rules. Deterministic, offline, fast.      |
-| **Learn**   | Yes (one-time) | Lesson extraction from PRs + compilation into rules. AI at authoring time, not runtime. |
-| **Review**  | Yes (per-push) | Shield reviews diffs with full LLM reasoning. Real-time, context-aware.                 |
-
-The key distinction: **"No AI at runtime"** is the Enforce tier's claim, not "no AI ever." The AI helps you _write_ and _compile_ rules (Learn), and can optionally _review_ diffs in real time (Review). But once rules are compiled, the Enforce tier runs with zero LLM calls — no API keys, no network, no model.
 
 ---
 
