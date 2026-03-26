@@ -17,7 +17,7 @@ describe('extractShieldHints', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('returns DLP hint when diff contains [REDACTED]', () => {
@@ -143,7 +143,7 @@ describe('extractShieldContextAnnotations', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('returns structured annotations with file and line', () => {

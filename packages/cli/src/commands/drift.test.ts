@@ -19,7 +19,7 @@ describe('drift gate', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('passes when all file references exist', () => {

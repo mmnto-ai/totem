@@ -84,7 +84,7 @@ describe('verify-manifest', () => {
 
   afterEach(() => {
     process.chdir(originalCwd);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     vi.restoreAllMocks();
   });
 

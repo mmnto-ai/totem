@@ -525,7 +525,7 @@ describe('appendLessons', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('creates directory and files if they do not exist', () => {

@@ -28,7 +28,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 });
 
 function makeRule(overrides: Partial<CompiledRule>): CompiledRule {

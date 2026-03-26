@@ -21,7 +21,7 @@ describe('generateInputHash', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('is deterministic across CRLF and LF', () => {
@@ -61,7 +61,7 @@ describe('generateOutputHash', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('normalizes line endings', () => {
@@ -83,7 +83,7 @@ describe('writeCompileManifest + readCompileManifest', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('roundtrips a valid manifest', () => {
@@ -111,7 +111,7 @@ describe('readCompileManifest error handling', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('throws TotemParseError on missing file', () => {

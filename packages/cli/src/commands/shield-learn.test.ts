@@ -89,7 +89,7 @@ FAIL — Missing test coverage for new utility function.
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('extracts and appends lessons from LLM output', async () => {

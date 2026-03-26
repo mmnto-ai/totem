@@ -139,7 +139,7 @@ describe('compiled rules engine', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   const makeRule = (pattern: string, message: string, heading: string): CompiledRule => ({
@@ -358,7 +358,7 @@ describe('writeShieldPassedFlag', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('does not throw on success or failure', async () => {

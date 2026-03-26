@@ -50,7 +50,7 @@ describe('scaffoldMcpConfig', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('creates a new file when none exists', () => {
@@ -151,7 +151,7 @@ describe('scaffoldFile', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   const MARKER = '// [totem] auto-generated';
@@ -226,7 +226,7 @@ describe('scaffoldClaudeHooks', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('creates settings.local.json when none exists', () => {
@@ -361,7 +361,7 @@ describe('Claude shield-gate script scaffolding', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('creates shield-gate.cjs with correct content', () => {
@@ -394,7 +394,7 @@ describe('Gemini hook scaffolding', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('scaffolds all three files', () => {
@@ -458,7 +458,7 @@ describe('detectEmbeddingTier', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     for (const [key, val] of [
       ['OPENAI_API_KEY', SAVED_OPENAI],
       ['GEMINI_API_KEY', SAVED_GEMINI],
@@ -517,7 +517,7 @@ describe('generateConfig', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   const targets = [
@@ -633,7 +633,7 @@ describe('installBaselineLessons', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     Object.defineProperty(process.stdin, 'isTTY', { value: savedIsTTY, configurable: true });
   });
 
@@ -862,7 +862,7 @@ describe('detectProject preferredConfigFormat', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('prefers ts for Node.js projects with package.json', () => {
@@ -900,7 +900,7 @@ describe('detectProject ecosystems', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('detects javascript from package.json', () => {
@@ -968,7 +968,7 @@ describe('generateConfigForFormat', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   const targets: IngestTarget[] = [{ glob: '**/*.py', type: 'code', strategy: 'typescript-ast' }];
