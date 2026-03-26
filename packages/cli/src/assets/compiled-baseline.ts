@@ -338,7 +338,7 @@ export const COMPILED_BASELINE_RULES: CompiledRule[] = [
     category: 'style',
   },
   {
-    lessonHash: 'df326a7c29885525',
+    lessonHash: 'b84fb92bc2313a47',
     lessonHeading: 'Perform explicit null and type checks on the results',
     pattern: '',
     message: 'Perform explicit null and type checks on the results',
@@ -346,7 +346,7 @@ export const COMPILED_BASELINE_RULES: CompiledRule[] = [
     astGrepPattern: 'JSON.parse($A) as $B',
     compiledAt: '2026-03-22T00:00:00.000Z',
     createdAt: '2026-03-22T00:00:00.000Z',
-    fileGlobs: ['**/*.ts', '**/*.tsx'],
+    fileGlobs: ['**/*.ts', '**/*.tsx', '!**/registry.ts'],
     severity: 'warning',
     category: 'style',
   },

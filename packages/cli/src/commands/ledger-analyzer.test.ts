@@ -67,7 +67,7 @@ describe('readLedgerBypassCounts', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('returns empty map when ledger does not exist', async () => {
@@ -134,7 +134,7 @@ describe('analyzeLedger', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
   it('returns empty map when no ledger or metrics exist', async () => {
