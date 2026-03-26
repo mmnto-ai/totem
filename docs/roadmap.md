@@ -51,7 +51,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
 - **AST & Orchestration:**
   - **AST Governance:**
     - Universal Tree-sitter parsing and AST gating for zero-LLM `totem lint`. Shared execution logic unifies the underlying rule runner.
-    - Advanced by the syntax-aware AST engine. Added fail-closed logic for AST query engines to prevent exception swallowing.
+    - Advanced by the syntax-aware AST engine. Added fail-closed logic and graceful degradation for AST query engines to prevent exception swallowing.
     - Resolved execution wrapper, process exit handling, and AST query stability issues.
   - **Graceful Degradation:** Cross-provider LLM routing with SDK-to-CLI and Ollama fallbacks.
   - **Provider Coverage:** Supported Cloud Providers including Gemini, Anthropic, and OpenAI. Supported Local Providers via Ollama fallbacks.
@@ -64,10 +64,10 @@ This phase fortified the core architecture, delivering native orchestration, zer
   - **Adversarial Hardening:**
     - **Scrubbing & Detection:** Adversarial ingestion scrubbing, extraction hardening, and suspicious lesson detection algorithms.
     - **Trust Boundaries:** Added trust boundaries and an MCP authorization model to harden ingestion pipelines.
-    - **Execution Constraints:** MCP taskkill injection prevention and capability caps.
-  - **Git Enforcements:** Native Git hook enforcement prioritizing zero-LLM `totem lint` for fast validation. Added monorepo and Bun support.
+    - **Execution Constraints:** MCP taskkill injection prevention, structured capability tiers, and strict capability caps.
+  - **Git Enforcements:** Native Git hook enforcement prioritizing zero-LLM `totem lint` for fast validation. Hardened phase-gate hooks with preflight commit warnings and added monorepo support.
   - **Installation & Verification:**
-    - **CI Workflows:** Expanded drift gating with a cross-platform matrix and auto-installation of `totem hooks`.
+    - **CI Workflows:** Expanded drift gating with a cross-platform matrix and auto-installation of `totem hooks`. Improved CLI wiring and dependency injection for core logging.
     - **Security Gates:** Added CI wind tunnel SHA locks for fixture integrity and hardened manifest attestation workflows.
 
 ## Phase 3: Workflow Expansion (Power User Tools)
@@ -93,7 +93,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [x] **Toolchain Exports:** Exported compiled lessons to code assistant instructions.
     - [x] **Local Sharing:** Introduced `totem link` to securely share compiled lessons across repositories. Enabled cross-totem queries via linked indexes.
   - **Task Orchestration:**
-    - [x] **Automation & Skills:** Restructured skills into a directory format and cleaned up stale commands. Upgraded `totem spec` to a strict checklist format. Refactored agent instructions to a lean root router pattern and expanded hooks with a capability manifest.
+    - [x] **Automation & Skills:** Restructured skills into a directory format. Upgraded `totem spec` to a strict checklist format with gap remediation capabilities. Refactored agent instructions to a lean root router pattern, established capability tiers, and deprecated legacy shield contexts.
     - [ ] **totem run <workflow>:** Introduce a custom AI task runner to execute user-defined markdown workflows via the orchestrator.
     - [ ] **totem oracle:** Add a frictionless Q&A command to query the vector database without strict personas.
     - [ ] **totem review:** Implement full codebase review powered by external context mixers and vector database lessons.
@@ -118,7 +118,7 @@ This phase fortified the core architecture, delivering native orchestration, zer
     - [x] **Compilation Optimization:**
       - Implemented a compiler facade pattern and cached non-compilable lessons to optimize performance. Added compile manifest signing to establish a provenance chain.
       - Refined glob boundaries and introduced a pre-compilation lesson file linter to ensure structural validity.
-      - Enabled parallel lesson compilation utilizing concurrency flags to accelerate execution.
+      - Enabled parallel lesson compilation utilizing concurrency flags and integrated cleanup helpers to safely handle temporary files.
     - [x] **Core Rule Engine:** Integrated manual patterns and reverse-compiled curated rules into the primary execution pipeline. Streamlined compilation by extracting engine helper fields and enriched context with body-text backfills.
     - [ ] **Rule Exports:** Export compiled rules to standard linter configurations. Deferred until core governance is finalized.
     - [ ] **Lesson Packs Prototype:** Mine open-source projects as a proof of concept for distributable rule sets.
