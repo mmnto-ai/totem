@@ -37,6 +37,15 @@ function handleError(err: unknown): never {
     if (debug && err.stack) {
       console.error('\nStack trace:');
       console.error(err.stack);
+      // Traverse cause chain
+      const seen = new Set<unknown>([err]);
+      let current: unknown = err.cause;
+      while (current instanceof Error && !seen.has(current)) {
+        seen.add(current);
+        console.error(`\nCaused by: ${current.message}`);
+        if (current.stack) console.error(current.stack);
+        current = current.cause;
+      }
     }
   } else {
     console.error('[Totem Error] An unknown error occurred:', err);

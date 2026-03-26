@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { TotemParseError } from './errors.js';
 import { acquireLock } from './lock.js';
+import { readJsonSafe } from './sys/fs.js';
 
 export const RegistryEntrySchema = z
   .object({
@@ -32,22 +33,15 @@ function registryPath(): string {
 
 export function readRegistry(onWarn?: (msg: string) => void): TotemRegistry {
   try {
-    const raw = fs.readFileSync(registryPath(), 'utf-8');
-    const parsed = JSON.parse(raw) as unknown; // Safe: Zod safeParse validates on next line; lesson scope excludes this file
-    const result = RegistrySchema.safeParse(parsed);
-    return result.success ? result.data : {};
+    return readJsonSafe(registryPath(), RegistrySchema);
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') {
+    if (err instanceof TotemParseError && err.message.includes('File not found')) {
       // Expected on first run — silently return empty
-    } else if (code) {
-      onWarn?.(`Cannot read registry (${code}) — using empty registry`);
-    } else {
-      // SyntaxError from JSON.parse or other non-fs errors
-      onWarn?.(
-        `Cannot parse registry: ${err instanceof Error ? err.message : String(err)} — using empty registry`,
-      );
+      return {};
     }
+    onWarn?.(
+      `Cannot read registry: ${err instanceof Error ? err.message : String(err)} — using empty registry`,
+    );
     return {};
   }
 }
@@ -68,16 +62,18 @@ export async function updateRegistryEntry(entry: RegistryEntry): Promise<void> {
     // The caller (sync.ts) wraps this in try/catch and logs the warning.
     let registry: TotemRegistry = {};
     if (fs.existsSync(filePath)) {
-      const raw = fs.readFileSync(filePath, 'utf-8');
-      const parsed = JSON.parse(raw) as unknown; // Safe: Zod safeParse validates on next line; lesson scope excludes this file
-      const result = RegistrySchema.safeParse(parsed);
-      if (!result.success) {
-        throw new TotemParseError(
-          'Registry file has invalid schema — refusing to overwrite.',
-          'Delete ~/.totem/registry.json to reset.',
-        );
+      try {
+        registry = readJsonSafe(filePath, RegistrySchema);
+      } catch (err) {
+        if (err instanceof TotemParseError && err.message.includes('Schema validation failed')) {
+          throw new TotemParseError(
+            'Registry file has invalid schema — refusing to overwrite.',
+            'Delete ~/.totem/registry.json to reset.',
+            err.cause,
+          );
+        }
+        throw err;
       }
-      registry = result.data;
     }
 
     registry[entry.path] = entry;

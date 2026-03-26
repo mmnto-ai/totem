@@ -89,6 +89,7 @@ export async function invokeOpenAIOrchestrator(
     throw new TotemOrchestratorError(
       `OpenAI API call failed: ${msg}`,
       'Check your OPENAI_API_KEY, network connection, and model name.',
+      err,
     );
   }
 }

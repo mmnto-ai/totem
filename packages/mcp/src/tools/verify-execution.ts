@@ -29,7 +29,6 @@ function detectLintCommand(
  */
 function checkUnstagedChanges(projectRoot: string): string | null {
   try {
-    // execFileSync imported at top level
     const output = execFileSync('git', ['diff', '--name-only'], {
       cwd: projectRoot,
       encoding: 'utf-8',

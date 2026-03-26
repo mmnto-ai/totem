@@ -266,3 +266,27 @@ export { CustomSecretSchema, loadCustomSecrets, SecretsFileSchema } from './secr
 // Trap Ledger (suppression/override audit trail)
 export type { LedgerEvent } from './ledger.js';
 export { appendLedgerEvent, LedgerEventSchema, readLedgerEvents } from './ledger.js';
+
+// Shell execution (cross-platform safe wrapper)
+export type { SafeExecOptions } from './sys/exec.js';
+export { safeExec } from './sys/exec.js';
+
+// Git utilities (pure helpers — no CLI dependencies)
+export {
+  extractChangedFiles,
+  filterDiffByPatterns,
+  getDefaultBranch,
+  getGitBranch,
+  getGitBranchDiff,
+  getGitDiff,
+  getGitDiffStat,
+  getGitLogSince,
+  getGitStatus,
+  getLatestTag,
+  getTagDate,
+  isFileDirty,
+  resolveGitRoot,
+} from './sys/git.js';
+
+// Filesystem helpers
+export { readJsonSafe } from './sys/fs.js';

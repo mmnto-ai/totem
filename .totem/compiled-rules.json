@@ -4857,10 +4857,9 @@
     {
       "lessonHash": "87eb500b020f556b",
       "lessonHeading": "When generating ast-grep patterns programmatically,",
+      "pattern": "['\"\\`]\\s*`[^`]*\\$[A-Z_]+[^`]*`\\s*['\"\\`]",
       "message": "ast-grep patterns must be raw code strings. Do not wrap the pattern in extra backticks (e.g., use \"JSON.parse($A)\" instead of \"`JSON.parse($A)`\") as this causes ast-grep to match a template literal instead of the intended code structure.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "['\"\\`]\\s*`[^`]*\\$[A-Z_]+[^`]*`\\s*['\"\\`]",
       "compiledAt": "2026-03-26T09:17:48.694Z",
       "createdAt": "2026-03-26T09:17:48.694Z",
       "fileGlobs": [
@@ -4871,15 +4870,15 @@
         "**/*.json",
         "**/*.yml",
         "**/*.yaml"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "7d43877c48f594d2",
       "lessonHeading": "When identifying files by naming conventions (e.g.,",
+      "pattern": "\\.(includes|indexOf)\\(['\"]\\.(test|spec)\\.['\"]\\)",
       "message": "Match file naming conventions (like .test. or .spec.) against the basename (e.g., using path.basename()) rather than the full path to avoid false positives from directory segments.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.(includes|indexOf)\\(['\"]\\.(test|spec)\\.['\"]\\)",
       "compiledAt": "2026-03-26T09:18:14.494Z",
       "createdAt": "2026-03-26T09:18:14.494Z",
       "fileGlobs": [
@@ -4887,21 +4886,37 @@
         "**/*.js",
         "**/*.tsx",
         "**/*.jsx"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "341ad6e61499f67f",
       "lessonHeading": "When generating ast-grep patterns, the pattern must be",
+      "pattern": "(astGrepPattern|pattern):\\s*\"`",
       "message": "ast-grep patterns must be plain code strings. Do not wrap the pattern in backticks (e.g., \"`code`\"), as this causes the engine to match a template literal node instead of the intended structural code expression.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(astGrepPattern|pattern):\\s*\"`",
       "compiledAt": "2026-03-26T09:18:26.909Z",
       "createdAt": "2026-03-26T09:18:26.909Z",
       "fileGlobs": [
         "**/*.json",
         "**/*.yml",
         "**/*.yaml"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "d5b7c8b5391ffb9f",
+      "lessonHeading": "Re-thrown errors must preserve the original cause",
+      "message": "Re-thrown errors must preserve the original cause",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "throw\\s+new\\s+\\w*Error\\([^)]*\\+\\s*(?:err|e|error)\\.message",
+      "compiledAt": "2026-03-26T20:49:21.667Z",
+      "createdAt": "2026-03-26T20:49:21.667Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
       ]
     }
   ],

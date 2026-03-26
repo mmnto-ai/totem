@@ -256,8 +256,8 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
             process.env['TOTEM_CLOUD_TOKEN'] ??
             (await (async () => {
               try {
-                const { execSync } = await import('node:child_process');
-                return execSync('gcloud auth print-identity-token', { encoding: 'utf-8' }).trim();
+                const { safeExec } = await import('@mmnto/totem');
+                return safeExec('gcloud', ['auth', 'print-identity-token']);
               } catch {
                 return undefined;
               }

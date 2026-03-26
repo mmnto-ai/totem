@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { EmbeddingProvider } from '../config-schema.js';
 import { createEmbedder } from './embedder.js';
@@ -21,6 +21,20 @@ vi.mock('./openai-embedder.js', () => ({
 // ─── Tests ─────────────────────────────────────────
 
 describe('createEmbedder', () => {
+  let originalApiKey: string | undefined;
+
+  beforeEach(() => {
+    originalApiKey = process.env['OPENAI_API_KEY'];
+  });
+
+  afterEach(() => {
+    if (originalApiKey !== undefined) {
+      process.env['OPENAI_API_KEY'] = originalApiKey;
+    } else {
+      delete process.env['OPENAI_API_KEY'];
+    }
+  });
+
   it('returns an embedder for ollama (direct, no lazy wrapper)', () => {
     const config: EmbeddingProvider = {
       provider: 'ollama',
@@ -37,11 +51,24 @@ describe('createEmbedder', () => {
     const config: EmbeddingProvider = { provider: 'openai', model: 'text-embedding-3-small' };
     const embedder = createEmbedder(config);
     expect(embedder.dimensions).toBe(1536);
-    delete process.env['OPENAI_API_KEY'];
   });
 });
 
 describe('LazyEmbedder concurrency', () => {
+  let originalApiKey: string | undefined;
+
+  beforeEach(() => {
+    originalApiKey = process.env['OPENAI_API_KEY'];
+  });
+
+  afterEach(() => {
+    if (originalApiKey !== undefined) {
+      process.env['OPENAI_API_KEY'] = originalApiKey;
+    } else {
+      delete process.env['OPENAI_API_KEY'];
+    }
+  });
+
   it('concurrent embed() calls share the same init promise (no race condition)', async () => {
     process.env['OPENAI_API_KEY'] = 'test-key';
     const config: EmbeddingProvider = { provider: 'openai', model: 'text-embedding-3-small' };
@@ -58,7 +85,5 @@ describe('LazyEmbedder concurrency', () => {
     expect(r1).toHaveLength(1);
     expect(r2).toHaveLength(1);
     expect(r3).toHaveLength(1);
-
-    delete process.env['OPENAI_API_KEY'];
   });
 });

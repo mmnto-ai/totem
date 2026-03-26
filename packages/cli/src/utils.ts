@@ -107,6 +107,7 @@ export async function loadConfig(configPath: string): Promise<TotemConfig> {
       `Failed to parse ${path.basename(configPath)}: ${msg}`,
       'Check the file for syntax errors.',
       'CONFIG_INVALID',
+      err,
     );
   }
 
@@ -122,6 +123,7 @@ export async function loadConfig(configPath: string): Promise<TotemConfig> {
         `Invalid configuration in ${path.basename(configPath)}:\n${issues}`,
         'Fix the fields listed above. See docs for the config schema.',
         'CONFIG_INVALID',
+        err,
       );
     }
     throw err;
@@ -467,6 +469,7 @@ export async function runOrchestrator(opts: {
       throw new TotemOrchestratorError(
         `DLP scan failed: ${err instanceof Error ? err.message : String(err)}`,
         'DLP masking is mandatory for remote providers. Fix the error or use a local provider.',
+        err,
       );
     }
   }
@@ -512,6 +515,7 @@ export async function runOrchestrator(opts: {
             `Primary model '${rawModel}' failed and fallback model '${rawFallback}' also failed.\n\n` +
               `Primary error:\n${originalMsg}\n\nFallback error:\n${fallbackMsg}`,
             'Check API quotas and model availability, or try a different model with --model.',
+            fallbackErr,
           );
         }
       } else {

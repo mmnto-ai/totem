@@ -214,6 +214,7 @@ function withCliFallback(provider: string, sdkInvoker: InvokeOrchestrator): Invo
         throw new TotemOrchestratorError(
           `CLI fallback for '${provider}' unavailable: '${binary}' not found on PATH. Original error: ${msg}`,
           `Install the ${provider} CLI or its SDK to use this provider.`,
+          err,
         );
       }
 

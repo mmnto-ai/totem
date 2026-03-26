@@ -88,3 +88,4 @@ All overrides are recorded in the Trap Ledger (`.totem/ledger/events.ndjson`) fo
 - `log.info()`, `log.success()`, `log.warn()`, `log.dim()` use the command-specific `TAG` constant (e.g., `'Audit'`, `'Shield'`, `'Triage'`).
 - Defense-in-depth guards in batch processing loops should use `log.warn()` + counter increments, NOT `throw`. The design intent is resilient continuation, not fail-fast. Only suggest `throw` for guards that should halt the entire operation.
 - Library code (`@mmnto/totem` core) uses `onWarn` callbacks, never direct `console.warn`.
+- **Error cause chains (ES2022):** When re-throwing errors in `catch` blocks, always pass the original error as the `cause` property: `throw new TotemError('...', '...', err)`. NEVER concatenate `err.message` into a new error string — this destroys the original stack trace. The `handleError` debug logger traverses `.cause` chains automatically.

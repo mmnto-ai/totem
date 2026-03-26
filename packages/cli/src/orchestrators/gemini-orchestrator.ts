@@ -77,6 +77,7 @@ export async function invokeGeminiOrchestrator(
     throw new TotemOrchestratorError(
       `Gemini API call failed: ${msg}`,
       'Check your GEMINI_API_KEY, network connection, and model name.',
+      err,
     );
   }
 }

@@ -2,9 +2,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CompiledRule } from '@mmnto/totem';
+import * as totem from '@mmnto/totem';
 import { readLedgerEvents, saveCompiledRules } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
@@ -458,6 +459,34 @@ describe('runCompiledRules', () => {
     expect(events[0]!.file).toBe('src/app.ts');
     expect(events[0]!.justification).toBe('');
     expect(events[0]!.source).toBe('lint');
+  });
+
+  // ─── setCoreLogger wiring ──────────────────────────
+
+  it('calls setCoreLogger with a warn method during execution', async () => {
+    const spy = vi.spyOn(totem, 'setCoreLogger');
+    try {
+      const rules = [makeRule('neverMatchXYZ123', 'No match', 'No match rule')];
+      writeRules(tmpDir, rules);
+
+      const diff = makeDiff('src/app.ts', '  const x = 1;');
+
+      await runCompiledRules({
+        diff,
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'json',
+        tag: 'Test',
+      });
+
+      // setCoreLogger is called once to wire the logger, once in finally to reset
+      expect(spy).toHaveBeenCalled();
+      const firstCall = spy.mock.calls[0]![0];
+      expect(firstCall).toHaveProperty('warn');
+      expect(typeof firstCall.warn).toBe('function');
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('writes override event to trap ledger when totem-context is encountered', async () => {

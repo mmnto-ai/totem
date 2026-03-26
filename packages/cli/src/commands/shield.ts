@@ -308,8 +308,8 @@ export async function writeShieldPassedFlag(
   try {
     const path = await import('node:path');
     const fs = await import('node:fs');
-    const { execSync } = await import('node:child_process');
-    const head = execSync('git rev-parse HEAD', { cwd, encoding: 'utf-8' }).trim();
+    const { safeExec } = await import('@mmnto/totem');
+    const head = safeExec('git', ['rev-parse', 'HEAD'], { cwd });
     const cacheDir = path.join(configRoot ?? cwd, totemDir, 'cache');
     if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(path.join(cacheDir, '.shield-passed'), head);

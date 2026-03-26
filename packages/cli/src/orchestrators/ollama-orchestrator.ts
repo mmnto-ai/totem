@@ -66,6 +66,7 @@ export async function invokeOllamaOrchestrator(
     throw new TotemOrchestratorError(
       `Cannot connect to Ollama at ${base}. Details: ${msg}`,
       'Is Ollama running? Start it with: ollama serve',
+      err,
     );
   }
 
