@@ -4743,24 +4743,7 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "80f165f152246f14",
-      "lessonHeading": "Reporting malformed records via an onWarn callback instead",
-      "pattern": "",
-      "message": "Avoid silent catch blocks. Use an onWarn callback to report malformed records or corrupted NDJSON streams to allow debugging without interrupting execution.",
-      "engine": "ast",
-      "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
-      "compiledAt": "2026-03-25T21:13:31.891Z",
-      "createdAt": "2026-03-25T21:13:31.891Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
-      "severity": "warning"
+      "severity": "error"
     },
     {
       "lessonHash": "b87f484e02ae3593",
@@ -4780,6 +4763,21 @@
         "**/*.yaml"
       ],
       "severity": "warning"
+    },
+    {
+      "lessonHash": "80f165f152246f14",
+      "lessonHeading": "Reporting malformed records via an onWarn callback instead",
+      "message": "Avoid silent catch blocks. Use an onWarn callback to report malformed records or corrupted NDJSON streams.",
+      "engine": "ast",
+      "severity": "warning",
+      "pattern": "",
+      "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
+      "compiledAt": "2026-03-26T02:02:35.823Z",
+      "createdAt": "2026-03-26T02:02:35.823Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js"
+      ]
     }
   ],
   "nonCompilable": [
