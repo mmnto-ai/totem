@@ -4138,23 +4138,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "7a47e69b5ea86122",
-      "lessonHeading": "Using parseInt() allows malformed strings like '5foo' to be",
-      "pattern": "",
-      "message": "Use Number() or explicit validation instead of parseInt() to prevent parsing malformed strings (e.g., '5foo')",
-      "engine": "ast-grep",
-      "astGrepPattern": "parseInt($$$ARGS)",
-      "compiledAt": "2026-03-23T21:39:29.275Z",
-      "createdAt": "2026-03-23T21:39:29.275Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "14cbc205f8c86d3d",
       "lessonHeading": "Confine dynamic imports to CLI command handlers to maintain",
       "pattern": "\\bimport\\s*\\(",
@@ -4627,25 +4610,24 @@
     {
       "lessonHash": "d44d72c6da1d1b63",
       "lessonHeading": "Using a unified 'Totem Error' tag across all CLI commands",
+      "pattern": "\\b(console\\.error|logger\\.error|process\\.stderr\\.write)\\s*\\(\\s*['\"\\x60](?![^'\"\\x60]*Totem Error)",
       "message": "CLI error logs must include the 'Totem Error' tag for consistent filtering (e.g., console.error('Totem Error: <message>'))",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(console\\.error|logger\\.error|process\\.stderr\\.write)\\s*\\(\\s*['\"\\x60](?![^'\"\\x60]*Totem Error)",
       "compiledAt": "2026-03-25T16:00:50.831Z",
       "createdAt": "2026-03-25T16:00:50.831Z",
       "fileGlobs": [
         "**/cli/**/*.ts",
         "**/cli/**/*.js",
         "!**/*.test.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "a7c637cef70da666",
       "lessonHeading": "Normalizing shallow patterns like .ts to /.ts ensures",
+      "pattern": "(?:^|\\s|['\"])\\*\\.[a-zA-Z0-9.-]+(?:$|\\s|['\",])",
       "message": "Normalize shallow patterns like '*.ts' to '**/*.ts' to ensure consistent recursive behavior across tools like SARIF and picomatch.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(?:^|\\s|['\"])\\*\\.[a-zA-Z0-9.-]+(?:$|\\s|['\",])",
       "compiledAt": "2026-03-25T16:00:53.249Z",
       "createdAt": "2026-03-25T16:00:53.249Z",
       "fileGlobs": [
@@ -4655,15 +4637,15 @@
         "**/*.js",
         "**/*.ts",
         "**/*.jsonc"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "495738a6cca527de",
       "lessonHeading": "When applying global error prefixes, check for existing",
+      "pattern": "^(?!.*startsWith).*(\\\\[Error\\\\]\\\\s*\\\\${|['\\\"]\\\\[Error\\\\]\\\\s*['\\\"]\\\\s*\\\\+)",
       "message": "Check for existing '[Error]' tags (e.g., using .startsWith()) before prepending to avoid redundant prefixes like '[Error] [Error] message'.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^(?!.*startsWith).*(\\\\[Error\\\\]\\\\s*\\\\${|['\\\"]\\\\[Error\\\\]\\\\s*['\\\"]\\\\s*\\\\+)",
       "compiledAt": "2026-03-25T16:01:42.625Z",
       "createdAt": "2026-03-25T16:01:42.625Z",
       "fileGlobs": [
@@ -4673,15 +4655,15 @@
         "**/*.jsx",
         "!**/*.test.ts",
         "!**/*.spec.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "c962ead45bcec3a0",
       "lessonHeading": "Silent failures in 'best-effort' operations like staleness",
+      "pattern": "",
       "message": "Use non-blocking logging instead of empty catch blocks to ensure IO failures are traceable without crashing the primary command execution.",
       "engine": "ast",
-      "severity": "warning",
-      "pattern": "",
       "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
       "compiledAt": "2026-03-25T16:02:57.312Z",
       "createdAt": "2026-03-25T16:02:57.312Z",
@@ -4692,19 +4674,107 @@
         "**/*.jsx",
         "!**/*.test.ts",
         "!**/*.test.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "279eab8404d55949",
       "lessonHeading": "Differentiating between */.ext and dir/*.ext in LLM prompts",
+      "pattern": "\"!?\\*\\.[a-zA-Z0-9]+\"",
       "message": "Use recursive glob patterns (e.g., '**/*.ts') or directory-scoped patterns (e.g., 'dir/*.ts') instead of shallow patterns (e.g., '*.ts') to ensure portability across environments.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\"!?\\*\\.[a-zA-Z0-9]+\"",
       "compiledAt": "2026-03-25T16:02:09.598Z",
       "createdAt": "2026-03-25T16:02:09.598Z",
       "fileGlobs": [
         "**/*.json",
+        "**/*.ts",
+        "**/*.js"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "b72a0b3300871bb6",
+      "lessonHeading": "Avoid broad negative tokens like \\bno\\b when detecting",
+      "pattern": "\\\\bno\\\\b",
+      "message": "Avoid broad negative tokens like '\\bno\\b' when detecting pushback to prevent false positives on phrases like 'No worries'.",
+      "engine": "regex",
+      "compiledAt": "2026-03-25T21:11:50.161Z",
+      "createdAt": "2026-03-25T21:11:50.161Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.py",
+        "**/*.yml",
+        "**/*.yaml"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "37615db2f07968ce",
+      "lessonHeading": "Manually joining strings for YAML frontmatter can break",
+      "pattern": "([\"'`]|`)---\\s*.*(\\+|\\${)",
+      "message": "Avoid manual string joining for YAML frontmatter. Use a proper serializer (like js-yaml) to handle special characters and escaping.",
+      "engine": "regex",
+      "compiledAt": "2026-03-25T21:13:10.048Z",
+      "createdAt": "2026-03-25T21:13:10.048Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx",
+        "!**/*.test.ts",
+        "!**/*.test.js",
+        "!**/*.spec.ts",
+        "!**/*.spec.js"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "fb008f77a1f5a49a",
+      "lessonHeading": "Constructing shell commands with string interpolation",
+      "pattern": "\\b(exec|execSync|spawn|spawnSync)\\s*\\(\\s*`[^`]*\\$\\{",
+      "message": "Avoid string interpolation in shell commands. Use argument arrays with spawnSync to prevent command injection and handle spaces/metacharacters safely.",
+      "engine": "regex",
+      "compiledAt": "2026-03-25T21:12:40.833Z",
+      "createdAt": "2026-03-25T21:12:40.833Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ],
+      "severity": "error"
+    },
+    {
+      "lessonHash": "b87f484e02ae3593",
+      "lessonHeading": "Updating comment-matching regex to support trailing inline",
+      "pattern": "(\\/\\^|[\\\"']\\^).*(?:@|eslint-|ts-|ignore|suppress|nosemgrep)",
+      "message": "Comment-matching regex should not be anchored to the start of the line (^) to support trailing inline directives.",
+      "engine": "regex",
+      "compiledAt": "2026-03-25T21:13:58.160Z",
+      "createdAt": "2026-03-25T21:13:58.160Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.py",
+        "**/*.sh",
+        "**/*.go",
+        "**/*.yml",
+        "**/*.yaml"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "80f165f152246f14",
+      "lessonHeading": "Reporting malformed records via an onWarn callback instead",
+      "message": "Avoid silent catch blocks. Use an onWarn callback to report malformed records or corrupted NDJSON streams.",
+      "engine": "ast",
+      "severity": "warning",
+      "pattern": "",
+      "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
+      "compiledAt": "2026-03-26T02:02:35.823Z",
+      "createdAt": "2026-03-26T02:02:35.823Z",
+      "fileGlobs": [
         "**/*.ts",
         "**/*.js"
       ]
@@ -5255,6 +5325,18 @@
     "01dcddb5454bb3ac",
     "183b29be97d7637b",
     "60789cbb39aa3bba",
-    "aa7a588d48e74503"
+    "aa7a588d48e74503",
+    "2b066d6c70dff4c0",
+    "a9ef9c992f1b01e3",
+    "1eff7037c6890389",
+    "58bba7aebec1a596",
+    "8496654c35df45e5",
+    "d99c786f46c2db8c",
+    "c2d8348b60b9588e",
+    "df84804e743586b6",
+    "32ae33b3d062163b",
+    "4cd30dc35598e6c3",
+    "3cce787e56e2e97e",
+    "9f4361e1be4b65b3"
   ]
 }

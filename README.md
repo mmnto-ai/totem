@@ -91,16 +91,20 @@ Pre-broken Next.js app with architectural violations. Open in Codespaces, run `t
 
 The AI helps you **write** rules. The rules enforce themselves.
 
-| Feature                          | Requires AI? |
-| -------------------------------- | :----------: |
-| `totem lint` (compiled rules)    |      No      |
-| `totem init` (baseline rules)    |      No      |
-| Pre-push git hook                |      No      |
-| AST classification (Tree-sitter) |      No      |
-| `totem sync` (vector index)      |   Embedder   |
-| `totem compile` (rule authoring) |     LLM      |
-| `totem shield` (AI review)       |     LLM      |
-| `totem spec` (planning)          |     LLM      |
+| Feature                           | Requires AI? |
+| --------------------------------- | :----------: |
+| `totem lint` (compiled rules)     |      No      |
+| `totem add-secret` (DLP config)   |      No      |
+| `totem list-secrets` (DLP view)   |      No      |
+| `totem remove-secret` (DLP mgmt)  |      No      |
+| `totem init` (baseline rules)     |      No      |
+| Pre-push git hook                 |      No      |
+| AST classification (Tree-sitter)  |      No      |
+| `totem sync` (vector index)       |   Embedder   |
+| `totem compile` (rule authoring)  |     LLM      |
+| `totem review-learn` (bot→lesson) |     LLM      |
+| `totem shield` (AI review)        |     LLM      |
+| `totem spec` (planning)           |     LLM      |
 
 ### Capability Tiers
 
@@ -137,6 +141,10 @@ The key distinction: **"No AI at runtime"** is the Enforce tier's claim, not "no
 | `verify-manifest` | Verify compiled-rules.json matches the compile manifest (CI gate)                |
 | `test`            | Run test fixtures against compiled rules (TDD for governance rules)              |
 | `extract`         | Extract lessons from PR review(s) into .totem/lessons/ (interactive cherry-pick) |
+| `review-learn`    | Extract lessons from resolved bot review comments on merged PRs                  |
+| `add-secret`      | Add a custom secret pattern to .totem/secrets.json (local, gitignored)           |
+| `list-secrets`    | List all configured custom secrets (shared + local) with source labels           |
+| `remove-secret`   | Remove a local secret by index                                                   |
 | `link`            | Link a neighboring repo into this project                                        |
 | `eject`           | Remove all Totem hooks, config, and data from this project                       |
 | `wrap`            | Post-merge workflow: learn from PR(s), sync index, then triage                   |

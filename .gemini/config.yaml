@@ -1,16 +1,16 @@
 # Gemini Code Assist Configuration for Totem
 # Docs: https://developers.google.com/gemini-code-assist/docs/customize-gemini-behavior-github
 
-# Review Settings
-comment_severity_threshold: HIGH # Only HIGH severity issues trigger comments (not MEDIUM/LOW)
-max_review_comments: 3 # Limit comments per PR to reduce noise
-
-# Pull Request Behavior
-pull_request_opened:
-  help: false # Don't post help message on every PR
-  summary: true # Post PR summary
-  code_review: true # GCA ignores invoke commands when disabled, so must stay enabled
-  include_drafts: true # Review draft PRs too
+code_review:
+  # Only HIGH+ severity issues trigger comments (not MEDIUM/LOW)
+  comment_severity_threshold: HIGH
+  # Limit comments per PR to reduce noise
+  max_review_comments: 5
+  pull_request_opened:
+    help: false # Don't post help message on every PR
+    summary: true # Post PR summary
+    code_review: true # GCA ignores invoke commands when disabled, so must stay enabled
+    include_drafts: true # Review draft PRs too
 
 # File Exclusions (glob patterns)
 ignore_patterns:
@@ -30,13 +30,12 @@ ignore_patterns:
   - '**/node_modules/**'
   - 'pnpm-lock.yaml'
 
-custom_rules:
-  - rule: allow_console_log_in_cli
-    paths: ['packages/cli/**/*']
-    rationale: 'CLI applications require console.log and console.error for user output.'
+  # Test files (CR handles these, GCA adds noise)
+  - '**/*.test.ts'
+  - '**/*.spec.ts'
 
-  - rule: mcp_stdio_transport
-    paths: ['packages/mcp/**/*']
-    rationale: 'MCP servers must use stdio transport and must not log arbitrary text to stdout, as it breaks the MCP protocol.'
+# Persistent memory
+memory_config:
+  disabled: false
 
 have_fun: false

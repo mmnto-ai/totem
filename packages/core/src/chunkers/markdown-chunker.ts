@@ -76,6 +76,14 @@ export class MarkdownChunker implements Chunker {
 
       if (node.type === 'heading') {
         const h = node as Heading;
+
+        // Stop at bibliography sections — prevents citation noise in vector index (#963)
+        const headingText = extractPlainText(h.children).toLowerCase();
+        if (headingText === 'works cited' || headingText === 'references') {
+          flush();
+          break;
+        }
+
         // Only split on headings up to depth 3
         if (h.depth <= MAX_SPLIT_DEPTH) {
           flush();

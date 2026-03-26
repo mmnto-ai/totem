@@ -215,6 +215,20 @@ Deeply nested content.
     expect(deepChunk!.label).toBe('Level 1 > Level 2 > Level 3');
   });
 
+  it('stops chunking at Works cited heading', () => {
+    const md = `# Title\n\nContent here.\n\n#### Works cited\n\n1. Some citation\n2. Another citation`;
+    const chunks = chunker.chunk(md, 'test.md', 'spec');
+    // Should only have the content before Works cited
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks.every((c) => !c.content.includes('citation'))).toBe(true);
+  });
+
+  it('stops chunking at References heading', () => {
+    const md = `# Title\n\nContent here.\n\n## References\n\n- Ref 1\n- Ref 2`;
+    const chunks = chunker.chunk(md, 'test.md', 'spec');
+    expect(chunks.every((c) => !c.content.includes('Ref 1'))).toBe(true);
+  });
+
   it('correctly builds breadcrumbs for skipped heading levels', () => {
     const md = `# Level 1
 
