@@ -54,7 +54,7 @@ function makeAddition(file: string, line: string, lineNumber: number): DiffAddit
 // ─── Error propagation (fail-closed) ────────────────
 
 describe('applyAstRulesToAdditions', () => {
-  it('propagates tree-sitter query errors instead of swallowing them (fail-closed)', async () => {
+  it('gracefully degrades on invalid tree-sitter queries and emits warning (#988)', async () => {
     fs.writeFileSync(path.join(tmpDir, 'src', 'app.ts'), 'const x = 1;\n');
 
     const rule = makeRule({
@@ -64,9 +64,15 @@ describe('applyAstRulesToAdditions', () => {
 
     const additions = [makeAddition('src/app.ts', 'const x = 1;', 1)];
 
-    await expect(applyAstRulesToAdditions([rule], additions, tmpDir)).rejects.toThrow(
-      TotemParseError,
+    // Bad queries return empty results with a warning — prevents TS-specific node names
+    // from crashing lint when run against JS files (#988)
+    const warnings: string[] = [];
+    const violations = await applyAstRulesToAdditions([rule], additions, tmpDir, undefined, (msg) =>
+      warnings.push(msg),
     );
+    expect(violations).toEqual([]);
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toContain('AST query skipped');
   });
 
   it('propagates ast-grep query errors instead of swallowing them (fail-closed)', async () => {

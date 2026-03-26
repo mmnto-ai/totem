@@ -174,6 +174,7 @@ export async function matchAstQueriesBatch(
   filePath: string,
   queries: Array<{ astQuery: string; addedLineNumbers: number[] }>,
   cwd: string,
+  onWarn?: (msg: string) => void,
 ): Promise<AstMatch[][]> {
   if (queries.length === 0) return [];
 
@@ -207,9 +208,25 @@ export async function matchAstQueriesBatch(
       const lines = content.split('\n');
 
       try {
-        return queries.map(({ astQuery, addedLineNumbers }) =>
-          runQuery(QueryClass, grammar, tree.rootNode, lines, astQuery, new Set(addedLineNumbers)),
-        );
+        return queries.map(({ astQuery, addedLineNumbers }) => {
+          try {
+            return runQuery(
+              QueryClass,
+              grammar,
+              tree.rootNode,
+              lines,
+              astQuery,
+              new Set(addedLineNumbers),
+            );
+          } catch (err) {
+            // Per-query degradation: TS-specific node names crash on JS files, etc.
+            // Warn (not silent) so typos in user queries are visible (#988)
+            onWarn?.(
+              `AST query skipped for ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+            return [];
+          }
+        });
       } finally {
         tree.delete();
       }

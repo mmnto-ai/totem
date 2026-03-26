@@ -321,7 +321,7 @@ export async function applyAstRulesToAdditions(
           addedLineNumbers,
         }));
 
-        const batchResults = await matchAstQueriesBatch(file, queries, cwd);
+        const batchResults = await matchAstQueriesBatch(file, queries, cwd, onWarn);
 
         // Map results back to violations
         for (let i = 0; i < applicableTreeSitter.length; i++) {
