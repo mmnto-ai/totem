@@ -4845,7 +4845,7 @@
       "engine": "ast-grep",
       "severity": "warning",
       "pattern": "",
-      "astGrepPattern": "`JSON.parse($A) as $B`",
+      "astGrepPattern": "JSON.parse($A) as $B",
       "compiledAt": "2026-03-26T06:56:35.966Z",
       "createdAt": "2026-03-26T06:56:35.966Z",
       "fileGlobs": [
