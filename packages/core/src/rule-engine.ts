@@ -89,6 +89,8 @@ function fileMatchesGlobs(filePath: string, globs: string[]): boolean {
 
 const SUPPRESS_MARKER = 'totem-ignore';
 const SUPPRESS_NEXT_LINE_MARKER = 'totem-ignore-next-line';
+const LEGACY_CONTEXT_MARKER = 'shield-context:';
+const LEGACY_CONTEXT_RE = /shield-context:\s*(.+)/;
 
 let shieldContextDeprecationWarned = false;
 const defaultOnWarn = (msg: string): void => console.warn(msg); // totem-context: core must default to console.warn; consumers override via setOnWarn
@@ -132,7 +134,7 @@ function isSuppressed(line: string, precedingLine: string | null): boolean {
   if (line.includes('totem-context:')) return true;
 
   // Same-line: shield-context: legacy alias (ADR-071 Phase 2 — deprecated)
-  if (line.includes('shield-context:')) {
+  if (line.includes(LEGACY_CONTEXT_MARKER)) {
     warnShieldContextDeprecation();
     return true;
   }
@@ -144,7 +146,7 @@ function isSuppressed(line: string, precedingLine: string | null): boolean {
   if (precedingLine != null && precedingLine.includes('totem-context:')) return true;
 
   // Next-line: preceding line contains shield-context: legacy alias
-  if (precedingLine != null && precedingLine.includes('shield-context:')) {
+  if (precedingLine != null && precedingLine.includes(LEGACY_CONTEXT_MARKER)) {
     warnShieldContextDeprecation();
     return true;
   }
@@ -163,7 +165,7 @@ export function extractJustification(line: string, precedingLine: string | null)
   if (contextMatch) return contextMatch[1]!.trim();
 
   // Check current line for shield-context: legacy alias
-  const legacyMatch = line.match(/shield-context:\s*(.+)/);
+  const legacyMatch = line.match(LEGACY_CONTEXT_RE);
   if (legacyMatch) {
     warnShieldContextDeprecation();
     return legacyMatch[1]!.trim();
@@ -175,7 +177,7 @@ export function extractJustification(line: string, precedingLine: string | null)
     if (prevMatch) return prevMatch[1]!.trim();
 
     // Preceding line: shield-context: legacy alias
-    const prevLegacy = precedingLine.match(/shield-context:\s*(.+)/);
+    const prevLegacy = precedingLine.match(LEGACY_CONTEXT_RE);
     if (prevLegacy) {
       warnShieldContextDeprecation();
       return prevLegacy[1]!.trim();
