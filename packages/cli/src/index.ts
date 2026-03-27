@@ -624,6 +624,37 @@ program
   });
 
 program
+  .command('status')
+  .description('Show current project health (manifest, shield, rules)')
+  .action(async () => {
+    try {
+      const { statusCommand } = await import('./commands/status.js');
+      await statusCommand();
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
+  .command('check')
+  .description('Run lint + shield sequentially')
+  .option('--staged', 'Only check staged changes')
+  .option('-m, --model <model>', 'Override orchestrator model')
+  .option('--fresh', 'Skip cache')
+  .action(async (opts) => {
+    try {
+      const { checkCommand } = await import('./commands/check.js');
+      await checkCommand({
+        model: opts.model,
+        fresh: opts.fresh,
+        staged: opts.staged,
+      });
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('demo', { hidden: true })
   .description('Show the Totem spinner with movie quotes')
   .option('--duration <seconds>', 'How long to run (default: 6)', '6')
@@ -655,8 +686,8 @@ program.addHelpText(
   'after',
   `
 Commands by tier:
-  Core (no API keys):    init, sync, lint, compile, test, verify-manifest, hooks, link, stats, drift, doctor
-  AI-Powered (needs LLM): shield, spec, handoff, docs, compile (with LLM)
+  Core (no API keys):    init, sync, lint, compile, test, verify-manifest, hooks, link, stats, drift, doctor, status
+  AI-Powered (needs LLM): shield, spec, handoff, docs, compile (with LLM), check
   GitHub Workflows:      extract, review-learn, triage, triage-pr, wrap
   Utilities:             add-lesson, add-secret, list-secrets, remove-secret, explain, eject
 `,

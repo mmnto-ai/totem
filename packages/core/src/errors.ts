@@ -24,6 +24,7 @@ export type TotemErrorCode =
   | 'LINT_LESSONS_FAILED'
   | 'DRIFT_FAILED'
   | 'TEST_FAILED'
+  | 'CHECK_FAILED'
   | 'MCP_ERROR';
 
 export class TotemError extends Error {
