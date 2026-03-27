@@ -215,23 +215,8 @@ export async function reviewLearnCommand(
   log.info(TAG, `Found ${reviewComments.length} inline review comments`);
 
   // 4b. Extract findings from CodeRabbit review bodies (outside-diff + nits)
-  const { parseCodeRabbitReviewFindings } = await import('../parse-nits.js');
-  const reviewBodyFindings: NormalizedBotFinding[] = [];
-  for (const review of pr.reviews) {
-    if (!review.author?.toLowerCase().includes('coderabbit')) continue;
-    const parsed = parseCodeRabbitReviewFindings(review.body);
-    for (const finding of parsed) {
-      reviewBodyFindings.push({
-        tool: 'coderabbit',
-        severity: finding.type === 'outside-diff' ? 'warning' : 'info',
-        file: '(review body)',
-        line: undefined,
-        body: finding.content,
-        suggestion: undefined,
-        resolutionSignal: 'none',
-      });
-    }
-  }
+  const { extractReviewBodyFindings } = await import('../parsers/bot-review-parser.js');
+  const reviewBodyFindings = extractReviewBodyFindings(pr.reviews);
   if (reviewBodyFindings.length > 0) {
     log.info(TAG, `Found ${reviewBodyFindings.length} finding(s) in review bodies`);
   }
