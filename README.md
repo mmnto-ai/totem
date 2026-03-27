@@ -1,12 +1,10 @@
 # Totem
 
-**Your AI agents keep making the same mistakes.**
+_AI coding agents are brilliant goldfish. Totem gives them a memory._
 
-An AI coding agent is brilliant at solving the 100 lines of code in front of it. But it is terrible at asking: _"Does a shared helper already exist for this?"_
+**Your AI agents keep making the same mistakes.** They're brilliant at the 100 lines in front of them, but terrible at asking: _"Does a shared helper already exist for this?"_
 
-This creates a massive **"Bot-Tax."** Every PR becomes a back-and-forth with review bots about architectural "nits"—missing lazy imports, improper error tagging, or reinventing the wheel.
-
-**Totem is the immune system that stops your agents from repeating themselves.**
+Every PR becomes a back-and-forth with review bots about the same architectural nits — missing lazy imports, improper error tagging, reinventing the wheel. That's the **"Bot-Tax."**
 
 Write what you learned in plain English. Totem compiles it into a rule. That mistake physically cannot happen again.
 
@@ -98,6 +96,10 @@ Stop reading manuals and start solving friction. See the Wiki for how to use Tot
 - [Architecture & Workflows](https://github.com/mmnto-ai/totem/blob/main/docs/reference/architecture-diagram.md)
 - [MCP Server Setup](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/mcp-setup.md)
 - [CI/CD Integration](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/ci-integration.md)
+
+## Open Core Covenant
+
+**Single-repo local use is free. Multi-repo centralized governance is paid.** The enforcement engine, lesson pipeline, MCP server, and self-healing loop are Apache 2.0 and will remain free and open. See [`COVENANT.md`](https://github.com/mmnto-ai/totem/blob/main/COVENANT.md) for full details.
 
 ## License
 
