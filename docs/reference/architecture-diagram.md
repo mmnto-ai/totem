@@ -95,7 +95,7 @@ graph LR
 
     Developer((Developer)):::dev
     Lint[totem lint / shield]:::system
-    Override[// totem-context:<br/>or --override]:::action
+    Override["totem-context directive<br/>or --override flag"]:::action
     Ledger[(Trap Ledger<br/>events.ndjson)]:::data
     Doctor[totem doctor --pr]:::system
     Nursery[Rule Nursery]:::action
