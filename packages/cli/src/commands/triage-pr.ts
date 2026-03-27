@@ -300,7 +300,14 @@ export async function triagePrCommand(prNumber: string): Promise<void> {
   const reviewComments = adapter.fetchReviewComments(num);
   log.info(TAG, `Found ${reviewComments.length} inline review comments`);
 
-  if (reviewComments.length === 0) {
+  // 3b. Extract findings from CodeRabbit review bodies (outside-diff + nits)
+  const { extractReviewBodyFindings } = await import('../parsers/bot-review-parser.js');
+  const reviewBodyFindings = extractReviewBodyFindings(pr.reviews);
+  if (reviewBodyFindings.length > 0) {
+    log.info(TAG, `Found ${reviewBodyFindings.length} finding(s) in review bodies`);
+  }
+
+  if (reviewComments.length === 0 && reviewBodyFindings.length === 0) {
     log.dim(TAG, 'No review comments found. Nothing to triage.');
     return;
   }
@@ -313,11 +320,13 @@ export async function triagePrCommand(prNumber: string): Promise<void> {
     (t) => t.comments.length > 0 && isBotComment(t.comments[0]!.author),
   );
 
-  if (botThreads.length === 0) {
+  if (botThreads.length === 0 && reviewBodyFindings.length === 0) {
     log.dim(TAG, 'No bot review comments found. Nothing to triage.');
     return;
   }
-  log.info(TAG, `Found ${botThreads.length} bot review thread(s)`);
+  if (botThreads.length > 0) {
+    log.info(TAG, `Found ${botThreads.length} bot review thread(s)`);
+  }
 
   // 6. Normalize into findings
   const findings = normalizeBotFindings(
@@ -329,6 +338,10 @@ export async function triagePrCommand(prNumber: string): Promise<void> {
     stripHtmlWrappers,
     extractSuggestion,
   );
+
+  // Append review body findings
+  findings.push(...reviewBodyFindings);
+
   log.info(TAG, `Normalized ${findings.length} bot finding(s)`);
 
   // 7. Deduplicate and categorize
@@ -336,8 +349,10 @@ export async function triagePrCommand(prNumber: string): Promise<void> {
   log.info(TAG, `${categorized.length} distinct finding(s) after dedup`);
 
   // 8. Render output to stdout
-  // Count bot comments (not all review comments)
-  const botCommentCount = reviewComments.filter((c) => isBotComment(c.author)).length;
+  // Count bot comments (not all review comments) + review bodies with findings
+  const reviewBodiesWithFindings = reviewBodyFindings.length > 0 ? 1 : 0;
+  const botCommentCount =
+    reviewComments.filter((c) => isBotComment(c.author)).length + reviewBodiesWithFindings;
   const output = formatTriageOutput(num, categorized, botCommentCount, {
     red: pc.default.red,
     yellow: pc.default.yellow,

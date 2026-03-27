@@ -66,6 +66,8 @@ function runLint(
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
       detached: !isWin, // process group for clean tree-kill on Unix
+      env: { ...process.env },
+      shell: isWin, // resolve .cmd shims on Windows (#1023)
     });
 
     const capture = (data: Buffer) => {

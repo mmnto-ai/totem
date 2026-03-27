@@ -151,6 +151,64 @@ function lintLesson(lesson: ParsedLesson): LessonLintDiagnostic[] {
     });
   }
 
+  // ── Test exclusion check ──
+  if (scopeRaw) {
+    const hasSourceDir = /(?:^|,\s*)(?:\*\*\/)?(?:src|commands)\//.test(scopeRaw);
+    const hasTestExclusion = /!\*\*\/\*\.(?:test|spec)\.[\w*]+|!\*\*\/__tests__\//.test(scopeRaw);
+    if (hasSourceDir && !hasTestExclusion) {
+      diags.push({
+        ...base,
+        severity: 'warning',
+        field: 'Scope',
+        message:
+          'Scope targets src/ or commands/ without a test file exclusion (e.g. !**/*.test.*)',
+      });
+    }
+  }
+
+  // ── Cross-language sync ──
+  if (scopeRaw) {
+    const hasTs = /\*\.tsx?\b/.test(scopeRaw);
+    const hasJs = /\*\.jsx?\b/.test(scopeRaw);
+    if (hasTs && !hasJs) {
+      diags.push({
+        ...base,
+        severity: 'warning',
+        field: 'Scope',
+        message:
+          'Scope targets .ts files but not .js — consider adding **/*.js for compiled output',
+      });
+    }
+    if (hasJs && !hasTs) {
+      diags.push({
+        ...base,
+        severity: 'warning',
+        field: 'Scope',
+        message: 'Scope targets .js files but not .ts — consider adding **/*.ts for source files',
+      });
+    }
+  }
+
+  // ── Drift safety: bare file paths ──
+  {
+    // Strip fenced code blocks, inline code, and URLs to avoid false positives
+    const strippedBody = body
+      .replace(/```[\s\S]*?```/g, '')
+      .replace(/`[^`]+`/g, '')
+      .replace(/https?:\/\/\S+/g, '');
+    // Match path-like strings: word/word/word.ext
+    const barePathRe = /(?:[\w.-]+\/){2,}[\w.-]+\.\w{1,10}/g;
+    const bareMatches = strippedBody.match(barePathRe);
+    if (bareMatches && bareMatches.length > 0) {
+      diags.push({
+        ...base,
+        severity: 'warning',
+        field: 'body',
+        message: `${bareMatches.length} bare file path(s) found — wrap in backticks to prevent drift (e.g. \`${bareMatches[0]}\`)`,
+      });
+    }
+  }
+
   // ── Engine vs examples ──
   if ((exampleHits.length > 0 || exampleMisses.length > 0) && engine && engine !== 'regex') {
     diags.push({

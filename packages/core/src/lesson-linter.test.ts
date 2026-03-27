@@ -78,7 +78,7 @@ describe('lesson-linter', () => {
     it('passes with all required fields', () => {
       const result = validateLessons([
         makeParsedLesson({
-          raw: '## Lesson — Test\n\n**Pattern:** \\bfoo\\b\n**Engine:** regex\n**Scope:** **/*.ts\n**Severity:** warning',
+          raw: '## Lesson — Test\n\n**Pattern:** \\bfoo\\b\n**Engine:** regex\n**Scope:** **/*.ts, **/*.js\n**Severity:** warning',
         }),
       ]);
       expect(result.valid).toBe(true);
@@ -198,8 +198,10 @@ describe('lesson-linter', () => {
           raw: '## Lesson — Test\n\n**Pattern:** foo\n**Engine:** regex\n**Scope:** **/*.ts, **/*.tsx, !**/*.test.ts\n**Severity:** warning',
         }),
       ]);
-      const scopeDiags = result.diagnostics.filter((d) => d.field === 'Scope');
-      expect(scopeDiags).toHaveLength(0);
+      const scopeErrors = result.diagnostics.filter(
+        (d) => d.field === 'Scope' && d.severity === 'error',
+      );
+      expect(scopeErrors).toHaveLength(0);
     });
   });
 
@@ -266,16 +268,158 @@ describe('lesson-linter', () => {
     });
   });
 
+  describe('test exclusion check', () => {
+    it('warns when src/ is targeted without a test file exclusion pattern', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Pattern:** \\bfoo\\b\n**Engine:** regex\n**Scope:** src/**/*.ts\n**Severity:** warning\n\nSome body text.',
+        }),
+      ]);
+      expect(result.valid).toBe(true); // warning, not error
+      const scopeWarnings = result.diagnostics.filter(
+        (d) =>
+          d.field === 'Scope' &&
+          d.severity === 'warning' &&
+          d.message.includes('test file exclusion'),
+      );
+      expect(scopeWarnings).toHaveLength(1);
+    });
+
+    it('passes when src/ scope includes test exclusion', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Pattern:** \\bfoo\\b\n**Engine:** regex\n**Scope:** src/**/*.ts, !**/*.test.ts\n**Severity:** warning\n\nSome body text.',
+        }),
+      ]);
+      const scopeWarnings = result.diagnostics.filter(
+        (d) => d.field === 'Scope' && d.message.includes('test file exclusion'),
+      );
+      expect(scopeWarnings).toHaveLength(0);
+    });
+
+    it('passes when scope does not target src/ or commands/', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Pattern:** \\bfoo\\b\n**Engine:** regex\n**Scope:** **/*.ts\n**Severity:** warning\n\nSome body text.',
+        }),
+      ]);
+      const scopeWarnings = result.diagnostics.filter(
+        (d) => d.field === 'Scope' && d.message.includes('test file exclusion'),
+      );
+      expect(scopeWarnings).toHaveLength(0);
+    });
+  });
+
+  describe('cross-language sync', () => {
+    it('warns when only .ts is targeted', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Pattern:** \\bfoo\\b\n**Engine:** regex\n**Scope:** **/*.ts\n**Severity:** warning\n\nSome body text.',
+        }),
+      ]);
+      const syncWarnings = result.diagnostics.filter(
+        (d) => d.field === 'Scope' && d.message.includes('.ts files but not .js'),
+      );
+      expect(syncWarnings).toHaveLength(1);
+    });
+
+    it('warns when only .js is targeted', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Pattern:** \\bfoo\\b\n**Engine:** regex\n**Scope:** **/*.js\n**Severity:** warning\n\nSome body text.',
+        }),
+      ]);
+      const syncWarnings = result.diagnostics.filter(
+        (d) => d.field === 'Scope' && d.message.includes('.js files but not .ts'),
+      );
+      expect(syncWarnings).toHaveLength(1);
+    });
+
+    it('passes when both .ts and .js are targeted', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Pattern:** \\bfoo\\b\n**Engine:** regex\n**Scope:** **/*.ts, **/*.js\n**Severity:** warning\n\nSome body text.',
+        }),
+      ]);
+      const syncWarnings = result.diagnostics.filter(
+        (d) => d.field === 'Scope' && d.message.includes('consider adding'),
+      );
+      expect(syncWarnings).toHaveLength(0);
+    });
+
+    it('passes when using wildcards that cover both', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Pattern:** \\bfoo\\b\n**Engine:** regex\n**Scope:** **/*.{ts,js}\n**Severity:** warning\n\nSome body text.',
+        }),
+      ]);
+      const syncWarnings = result.diagnostics.filter(
+        (d) => d.field === 'Scope' && d.message.includes('consider adding'),
+      );
+      expect(syncWarnings).toHaveLength(0);
+    });
+  });
+
+  describe('drift safety: bare file paths', () => {
+    it('warns on bare unquoted file paths in lesson body', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Pattern:** \\bfoo\\b\n**Engine:** regex\n**Scope:** **/*.ts, **/*.js\n**Severity:** warning\n\nDo not modify packages/cli/src/index.ts directly.',
+        }),
+      ]);
+      const driftWarnings = result.diagnostics.filter(
+        (d) => d.field === 'body' && d.message.includes('bare file path'),
+      );
+      expect(driftWarnings).toHaveLength(1);
+    });
+
+    it('passes when file paths are in backticks', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Pattern:** \\bfoo\\b\n**Engine:** regex\n**Scope:** **/*.ts, **/*.js\n**Severity:** warning\n\nDo not modify `packages/cli/src/index.ts` directly.',
+        }),
+      ]);
+      const driftWarnings = result.diagnostics.filter(
+        (d) => d.field === 'body' && d.message.includes('bare file path'),
+      );
+      expect(driftWarnings).toHaveLength(0);
+    });
+
+    it('passes when file paths are in code blocks', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Pattern:** \\bfoo\\b\n**Engine:** regex\n**Scope:** **/*.ts, **/*.js\n**Severity:** warning\n\n```\npackages/cli/src/index.ts\n```',
+        }),
+      ]);
+      const driftWarnings = result.diagnostics.filter(
+        (d) => d.field === 'body' && d.message.includes('bare file path'),
+      );
+      expect(driftWarnings).toHaveLength(0);
+    });
+
+    it('does not warn on URLs', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Pattern:** \\bfoo\\b\n**Engine:** regex\n**Scope:** **/*.ts, **/*.js\n**Severity:** warning\n\nSee https://github.com/foo/bar/baz.ts for details.',
+        }),
+      ]);
+      const driftWarnings = result.diagnostics.filter(
+        (d) => d.field === 'body' && d.message.includes('bare file path'),
+      );
+      expect(driftWarnings).toHaveLength(0);
+    });
+  });
+
   describe('multiple lessons', () => {
     it('aggregates diagnostics across lessons', () => {
       const result = validateLessons([
         makeParsedLesson({
           heading: 'Good lesson',
-          raw: '## Lesson — Good lesson\n\n**Pattern:** foo\n**Engine:** regex\n**Scope:** **/*.ts\n**Severity:** warning',
+          raw: '## Lesson — Good lesson\n\n**Pattern:** foo\n**Engine:** regex\n**Scope:** **/*.ts, **/*.js\n**Severity:** warning',
         }),
         makeParsedLesson({
           heading: 'Bad lesson',
-          raw: '## Lesson — Bad lesson\n\n**Pattern:** \\b(broken\n**Engine:** regex\n**Scope:** **/*.ts\n**Severity:** error',
+          raw: '## Lesson — Bad lesson\n\n**Pattern:** \\b(broken\n**Engine:** regex\n**Scope:** **/*.ts, **/*.js\n**Severity:** error',
         }),
       ]);
       expect(result.valid).toBe(false);

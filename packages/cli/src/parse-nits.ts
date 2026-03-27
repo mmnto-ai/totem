@@ -60,6 +60,7 @@ function stripWrapperTags(html: string): string {
  * Returns an array of cleaned nit text strings.
  */
 export function parseCodeRabbitNits(body: string): string[] {
+  if (!body) return [];
   // Strip fenced code blocks to avoid extracting fake nits from examples
   const stripped = body.replace(/```[\s\S]*?```/g, '');
   const nits: string[] = [];
@@ -78,4 +79,53 @@ export function parseCodeRabbitNits(body: string): string[] {
   }
 
   return nits;
+}
+
+/**
+ * Extract "outside diff range" content from CodeRabbit review bodies.
+ * Finds all `<details>` blocks whose `<summary>` contains "outside the diff"
+ * or "Outside diff range" (case-insensitive).
+ * Returns an array of cleaned text strings.
+ */
+export function parseCodeRabbitOutsideDiff(body: string): string[] {
+  if (!body) return [];
+  // Strip fenced code blocks to avoid extracting fake matches from examples
+  const stripped = body.replace(/```[\s\S]*?```/g, '');
+  const results: string[] = [];
+  const outsideDiffRe =
+    /<details>\s*<summary>[^<]*(?:outside\s+the\s+diff|outside\s+diff\s+range)[^<]*<\/summary>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = outsideDiffRe.exec(stripped)) !== null) {
+    const afterSummary = match.index + match[0].length;
+    const innerContent = extractNestedBlock(stripped, afterSummary);
+    if (innerContent) {
+      const cleaned = stripWrapperTags(innerContent);
+      if (cleaned) {
+        results.push(cleaned);
+      }
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Combined parser that extracts both nitpick and outside-diff findings
+ * from a CodeRabbit review body, returning typed results.
+ */
+export function parseCodeRabbitReviewFindings(
+  body: string,
+): Array<{ type: 'nitpick' | 'outside-diff'; content: string }> {
+  const findings: Array<{ type: 'nitpick' | 'outside-diff'; content: string }> = [];
+
+  for (const content of parseCodeRabbitNits(body)) {
+    findings.push({ type: 'nitpick', content });
+  }
+
+  for (const content of parseCodeRabbitOutsideDiff(body)) {
+    findings.push({ type: 'outside-diff', content });
+  }
+
+  return findings;
 }

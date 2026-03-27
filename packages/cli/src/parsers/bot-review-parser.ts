@@ -7,6 +7,8 @@
  * developer actually fixed.
  */
 
+import { parseCodeRabbitReviewFindings } from '../parse-nits.js';
+
 // ─── Types ──────────────────────────────────────────
 
 export interface NormalizedBotFinding {
@@ -135,6 +137,40 @@ export function isThreadResolved(thread: CommentThread): boolean {
  * Normalize bot review comments into structured findings.
  * Only returns findings from threads that were resolved positively.
  */
+/**
+ * Extract findings from CodeRabbit review bodies (outside-diff + nits).
+ * Shared by triage-pr and review-learn to avoid duplication.
+ */
+export function extractReviewBodyFindings(
+  reviews: Array<{ author: string; body: string }>,
+): NormalizedBotFinding[] {
+  const findings: NormalizedBotFinding[] = [];
+  for (const review of reviews) {
+    if (!review.author || !isBotComment(review.author)) continue;
+
+    const tool = detectBot(review.author);
+    let parsed: Array<{ type: 'nitpick' | 'outside-diff'; content: string }> = [];
+
+    // Only CodeRabbit parser is implemented for now
+    if (tool === 'coderabbit') {
+      parsed = parseCodeRabbitReviewFindings(review.body);
+    }
+
+    for (const finding of parsed) {
+      findings.push({
+        tool,
+        severity: finding.type === 'outside-diff' ? 'warning' : 'info',
+        file: '(review body)',
+        line: undefined,
+        body: finding.content,
+        suggestion: undefined,
+        resolutionSignal: 'none',
+      });
+    }
+  }
+  return findings;
+}
+
 export function extractResolvedBotFindings(threads: CommentThread[]): NormalizedBotFinding[] {
   const findings: NormalizedBotFinding[] = [];
 

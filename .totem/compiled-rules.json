@@ -5646,10 +5646,9 @@
     {
       "lessonHash": "10982cd7b344f34f",
       "lessonHeading": "Always use the !**/*.ext pattern for recursive exclusions",
+      "pattern": "!\\s*(?!\\*\\*\\/)[a-zA-Z0-9_\\-\\.\\/]+\\.[a-z]+",
       "message": "Always use recursive glob patterns with a **/ prefix for exclusions (e.g., !**/*.ts) to ensure consistency and prevent shallow matching.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "!\\s*(?!\\*\\*\\/)[a-zA-Z0-9_\\-\\.\\/]+\\.[a-z]+",
       "compiledAt": "2026-03-27T05:31:37.734Z",
       "createdAt": "2026-03-27T05:31:37.734Z",
       "fileGlobs": [
@@ -5657,20 +5656,35 @@
         "**/*.yml",
         "**/*.yaml",
         "**/*.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "f89eb73710c99352",
       "lessonHeading": "The fileGlobs array can contain objects for ast-grep rules,",
+      "pattern": "fileGlobs\\.(?:filter|map|find|some|every|forEach)\\(\\s*(\\w+)\\s*=>\\s*(?![^)]*typeof\\s+\\1)\\1\\.startsWith\\b",
       "message": "fileGlobs entries can be objects (for ast-grep rules); verify they are strings (e.g., typeof entry === 'string') before calling .startsWith()",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "fileGlobs\\.(?:filter|map|find|some|every|forEach)\\(\\s*(\\w+)\\s*=>\\s*(?![^)]*typeof\\s+\\1)\\1\\.startsWith\\b",
       "compiledAt": "2026-03-27T05:33:29.483Z",
       "createdAt": "2026-03-27T05:33:29.483Z",
       "fileGlobs": [
         "**/*.ts",
         "**/*.js"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "25e2129206bb9979",
+      "lessonHeading": "GitHub Closes keyword only applies to the first issue",
+      "message": "GitHub closing keywords (Closes, Fixes, Resolves) only apply to the first issue in a comma-separated list. Repeat the keyword for each issue (e.g., 'Closes #101, closes #102').",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\b([Cc]loses?|[Ff]ixes?|[Rr]esolves?)\\s+#\\d+,\\s*#\\d+",
+      "compiledAt": "2026-03-27T18:29:08.612Z",
+      "createdAt": "2026-03-27T18:29:08.612Z",
+      "fileGlobs": [
+        "**/*.md",
+        "**/.github/**"
       ]
     }
   ],

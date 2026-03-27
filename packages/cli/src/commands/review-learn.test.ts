@@ -124,6 +124,58 @@ describe('assembleReviewLearnPrompt', () => {
     expect(prompt.length).toBeLessThanOrEqual(100_000 + 50); // small margin for truncation suffix
     expect(prompt).toContain('... [content truncated] ...');
   });
+
+  it('includes review body findings in the prompt', () => {
+    const reviewBodyFindings: NormalizedBotFinding[] = [
+      {
+        tool: 'coderabbit',
+        severity: 'warning',
+        file: '(review body)',
+        body: 'The processData function has a potential memory leak when handling large arrays.',
+        resolutionSignal: 'none',
+      },
+      {
+        tool: 'coderabbit',
+        severity: 'info',
+        file: '(review body)',
+        body: 'Consider using a Map instead of plain object for iteration guarantees.',
+        resolutionSignal: 'none',
+      },
+    ];
+
+    const prompt = assembleReviewLearnPrompt(reviewBodyFindings, [], REVIEW_LEARN_SYSTEM_PROMPT);
+
+    expect(prompt).toContain('Finding 1 [coderabbit/warning] (review body)');
+    expect(prompt).toContain('Finding 2 [coderabbit/info] (review body)');
+    expect(prompt).toContain('processData function has a potential memory leak');
+    expect(prompt).toContain('Consider using a Map');
+  });
+
+  it('combines inline and review body findings in the prompt', () => {
+    const combinedFindings: NormalizedBotFinding[] = [
+      {
+        tool: 'coderabbit',
+        severity: 'major',
+        file: 'src/handler.ts',
+        body: 'Avoid using `any` type here.',
+        suggestion: 'Use `unknown` instead.',
+        resolutionSignal: 'reply',
+      },
+      {
+        tool: 'coderabbit',
+        severity: 'warning',
+        file: '(review body)',
+        body: 'Missing null check on config.options outside the changed diff.',
+        resolutionSignal: 'none',
+      },
+    ];
+
+    const prompt = assembleReviewLearnPrompt(combinedFindings, [], REVIEW_LEARN_SYSTEM_PROMPT);
+
+    expect(prompt).toContain('Finding 1 [coderabbit/major] src/handler.ts');
+    expect(prompt).toContain('Finding 2 [coderabbit/warning] (review body)');
+    expect(prompt).toContain('Missing null check on config.options');
+  });
 });
 
 // ─── isBotComment ────────────────────────────────────

@@ -180,4 +180,19 @@ describe('add_lesson auth model (#844)', () => {
     expect(headingLine).not.toMatch(/<(?!\/)/); // no opening angle brackets
     expect(headingLine).not.toContain('>');
   });
+
+  // --- Spawn options (#1023) ---
+
+  it('passes env and shell options to spawn for Windows compat (#1023)', async () => {
+    const { spawn } = await import('node:child_process');
+
+    await handle({ lesson: 'Windows compat test', context_tags: ['test'] });
+
+    const lastCall = vi.mocked(spawn).mock.calls.at(-1)!;
+    const opts = lastCall[2] as Record<string, unknown>;
+    const env = opts.env as Record<string, unknown>;
+    expect(env).toBeDefined();
+    expect(Object.keys(env).some((k) => k.toLowerCase() === 'path')).toBe(true);
+    expect(typeof opts.shell).toBe('boolean');
+  });
 });

@@ -88,6 +88,8 @@ function runSync(projectRoot: string): Promise<{ success: boolean; output: strin
       detached: process.platform !== 'win32', // enables process group kill on Unix
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
+      env: { ...process.env },
+      shell: process.platform === 'win32', // resolve .cmd shims on Windows (#1023)
     });
 
     const capture = (data: Buffer) => {
