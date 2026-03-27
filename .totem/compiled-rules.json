@@ -5722,6 +5722,19 @@
         "**/*.jsonc"
       ],
       "severity": "warning"
+    },
+    {
+      "lessonHash": "ca8af19955c5722b",
+      "lessonHeading": "HTML comment totem-context directives are not parsed by lint",
+      "message": "totem-context and totem-ignore directives are not supported in Markdown files. Use ignorePatterns in the config instead.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "(<!--|//)\\s*totem-(context|ignore)",
+      "compiledAt": "2026-03-27T20:45:47.092Z",
+      "createdAt": "2026-03-27T20:45:47.092Z",
+      "fileGlobs": [
+        "**/*.md"
+      ]
     }
   ],
   "nonCompilable": [
@@ -6307,9 +6320,8 @@
     "71213ff7582a7dea",
     "b54879043b6d0e46",
     "5c1a32a9957d5470",
-    "e6df46c83c29d2ef",
-    "1d29eaddc8fff4d2",
     "57e17f41422fa06c",
-    "4c4bbb2c2adff887"
+    "4c4bbb2c2adff887",
+    "486a977cffc2714a"
   ]
 }
