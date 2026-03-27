@@ -190,8 +190,9 @@ describe('add_lesson auth model (#844)', () => {
 
     const lastCall = vi.mocked(spawn).mock.calls.at(-1)!;
     const opts = lastCall[2] as Record<string, unknown>;
-    expect(opts.env).toBeDefined();
-    expect(opts.env).toHaveProperty('PATH');
+    const env = opts.env as Record<string, unknown>;
+    expect(env).toBeDefined();
+    expect(Object.keys(env).some((k) => k.toLowerCase() === 'path')).toBe(true);
     expect(typeof opts.shell).toBe('boolean');
   });
 });
