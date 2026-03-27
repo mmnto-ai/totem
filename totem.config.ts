@@ -33,10 +33,6 @@ const config: TotemConfig = {
   },
 
   docs: [
-    {
-      path: 'README.md',
-      description: 'Public-facing README with install, usage, and feature overview',
-    },
     { path: 'docs/roadmap.md', description: 'Strategic roadmap with phase progress' },
     {
       path: 'docs/active_work.md',
@@ -57,6 +53,7 @@ const config: TotemConfig = {
     'scripts/**',
     '.totem/compiled-rules.json',
     '.coderabbit.yaml',
+    'README.md',
   ],
 
   repositories: ['mmnto-ai/totem', 'mmnto-ai/totem-strategy'],
