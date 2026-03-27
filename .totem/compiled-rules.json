@@ -5554,10 +5554,9 @@
     {
       "lessonHash": "008312ceeaf553d8",
       "lessonHeading": "Hardcoding specific field names in diagnostics",
+      "pattern": "(['\"])[^'\"]*\\b(Example Hit|Example Miss)\\b[^'\"]*\\1",
       "message": "Avoid hardcoding specific field names like 'Example Hit' or 'Example Miss' in diagnostic messages. Use generic terms or dynamic field names to ensure the message is accurate for all related fields.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(['\"])[^'\"]*\\b(Example Hit|Example Miss)\\b[^'\"]*\\1",
       "compiledAt": "2026-03-27T04:59:46.523Z",
       "createdAt": "2026-03-27T04:59:46.523Z",
       "fileGlobs": [
@@ -5565,15 +5564,15 @@
         "**/*.tsx",
         "**/*.js",
         "**/*.jsx"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "32e90839c8057a47",
       "lessonHeading": "Architectural gate rules, such as forbidding direct",
+      "pattern": "['\"]child_process['\"].*?['\"]warn['\"]|['\"]warn['\"].*?['\"]child_process['\"]",
       "message": "Architectural gate rules (e.g., forbidding child_process) must be set to 'error' severity. 'warn' only logs and does not block at runtime.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "['\"]child_process['\"].*?['\"]warn['\"]|['\"]warn['\"].*?['\"]child_process['\"]",
       "compiledAt": "2026-03-27T05:00:37.608Z",
       "createdAt": "2026-03-27T05:00:37.608Z",
       "fileGlobs": [
@@ -5584,34 +5583,15 @@
         "**/package.json",
         "**/.dependency-cruiser.js",
         "**/.dependency-cruiser.json"
-      ]
-    },
-    {
-      "lessonHash": "a58e0cf71a61e6ca",
-      "lessonHeading": "Always use the !*/.ext pattern for recursive exclusions",
-      "message": "Always use the !**/*.ext pattern for recursive exclusions to ensure consistency and prevent shallow matching.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "^!\\s*(?!\\*\\*\\/)",
-      "compiledAt": "2026-03-27T05:00:20.619Z",
-      "createdAt": "2026-03-27T05:00:20.619Z",
-      "fileGlobs": [
-        "**/.gitignore",
-        "**/.eslintignore",
-        "**/.prettierignore",
-        "**/*.ignore",
-        "**/*.json",
-        "**/*.yml",
-        "**/*.yaml"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "d940b2c9ffe92e99",
       "lessonHeading": "Removing stdio from execution options and hardcoding pipe",
+      "pattern": "",
       "message": "Remove 'stdio' from execution options. Pipe mode is hardcoded to ensure return values match string-based type contracts and normalization logic.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "stdio: $VAL",
       "compiledAt": "2026-03-27T05:01:26.479Z",
       "createdAt": "2026-03-27T05:01:26.479Z",
@@ -5624,15 +5604,15 @@
         "!**/*.test.js",
         "!**/*.spec.ts",
         "!**/*.spec.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "d4b86f844e149484",
       "lessonHeading": "Raw child process output can be a Buffer or null; adding",
+      "pattern": "\\b(stdout|stderr)\\.trim\\(",
       "message": "Raw child process output (stdout/stderr) can be a Buffer or null. Use a type guard or convert to a string before calling .trim() to prevent runtime crashes.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(stdout|stderr)\\.trim\\(",
       "compiledAt": "2026-03-27T05:02:02.527Z",
       "createdAt": "2026-03-27T05:02:02.527Z",
       "fileGlobs": [
@@ -5640,15 +5620,15 @@
         "**/*.js",
         "**/*.tsx",
         "**/*.jsx"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "a665d1d096ff18eb",
       "lessonHeading": "Markdown field extractors should allow zero-length matches",
+      "pattern": "#+.*\\([^)]+\\+\\)",
       "message": "Markdown field extractors should use (.*) instead of (.+) to allow zero-length matches for empty headings.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "#+.*\\([^)]+\\+\\)",
       "compiledAt": "2026-03-27T05:02:50.174Z",
       "createdAt": "2026-03-27T05:02:50.174Z",
       "fileGlobs": [
@@ -5660,6 +5640,37 @@
         "!**/*.test.js",
         "!**/*.spec.ts",
         "!**/*.spec.js"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "10982cd7b344f34f",
+      "lessonHeading": "Always use the !**/*.ext pattern for recursive exclusions",
+      "message": "Always use recursive glob patterns with a **/ prefix for exclusions (e.g., !**/*.ts) to ensure consistency and prevent shallow matching.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "!\\s*(?!\\*\\*\\/)[a-zA-Z0-9_\\-\\.\\/]+\\.[a-z]+",
+      "compiledAt": "2026-03-27T05:31:37.734Z",
+      "createdAt": "2026-03-27T05:31:37.734Z",
+      "fileGlobs": [
+        "**/*.json",
+        "**/*.yml",
+        "**/*.yaml",
+        "**/*.ts"
+      ]
+    },
+    {
+      "lessonHash": "f89eb73710c99352",
+      "lessonHeading": "The fileGlobs array can contain objects for ast-grep rules,",
+      "message": "fileGlobs entries can be objects (for ast-grep rules); verify they are strings (e.g., typeof entry === 'string') before calling .startsWith()",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "fileGlobs\\.(?:filter|map|find|some|every|forEach)\\(\\s*(\\w+)\\s*=>\\s*(?![^)]*typeof\\s+\\1)\\1\\.startsWith\\b",
+      "compiledAt": "2026-03-27T05:33:29.483Z",
+      "createdAt": "2026-03-27T05:33:29.483Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js"
       ]
     }
   ],

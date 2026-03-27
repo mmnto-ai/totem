@@ -1,4 +1,4 @@
-## Lesson — Always use the !*/.ext pattern for recursive exclusions
+## Lesson — Always use the !**/*.ext pattern for recursive exclusions
 
 **Tags:** glob, testing
 
