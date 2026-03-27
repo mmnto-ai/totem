@@ -1,4 +1,4 @@
-## Lesson — Explicitly exclude test files (e.g., !*/.test.ts)
+## Lesson — Explicitly exclude test files (e.g., !**/*.test.ts)
 
 **Tags:** linting, dx
 

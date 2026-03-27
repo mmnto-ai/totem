@@ -57,7 +57,7 @@ export function extractManualPattern(body: string): ManualPattern | null {
  */
 export function extractAllFields(body: string, field: string): string[] {
   const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`^(?:\\*{2})?${safeField}:(?:\\*{2})?\\s+(.+)$`, 'gim');
+  const re = new RegExp(`^(?:\\*{2})?${safeField}:(?:\\*{2})?[ \\t]*(.*)$`, 'gim');
   return Array.from(body.matchAll(re), (m) => m[1]!.trim());
 }
 

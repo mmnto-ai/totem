@@ -86,6 +86,11 @@ describe('extractAllFields', () => {
     const body = 'Example Hit: hit1\nExample Hit: hit2';
     expect(extractAllFields(body, 'Example Hit')).toEqual(['hit1', 'hit2']);
   });
+
+  it('captures empty values for bare field declarations', () => {
+    const body = '**Example Hit:**\n**Example Hit:** valid';
+    expect(extractAllFields(body, 'Example Hit')).toEqual(['', 'valid']);
+  });
 });
 
 describe('stripInlineCode', () => {

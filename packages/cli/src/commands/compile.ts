@@ -255,7 +255,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
         // Skip cloud call if all lessons were manual
         if (cloudLessons.length === 0) {
           spinner.succeed(
-            `${newRules.length} rules — ${compiled} compiled (all manual, no cloud call needed)`,
+            `${newRules.length} rules — ${compiled} compiled${failed > 0 ? `, ${failed} failed` : ''} (all manual, no cloud call needed)`,
           );
         } else {
           log.info(TAG, `Cloud compile: ${cloudLessons.length} lessons → ${cloudUrl}`);
