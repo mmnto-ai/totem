@@ -41,6 +41,14 @@ describe('handleGhError', () => {
     expect(() => handleGhError(err, 'test')).toThrow('[Totem Error] GitHub CLI (gh) is required');
   });
 
+  it('detects ENOENT from safeExec error chain (cause wrapping)', () => {
+    const cause = new Error('spawn gh ENOENT');
+    const wrapper = new Error('Command failed: gh repo view', { cause });
+    expect(() => handleGhError(wrapper, 'test')).toThrow(
+      '[Totem Error] GitHub CLI (gh) is required',
+    );
+  });
+
   it('wraps unknown errors with context', () => {
     const err = new Error('connection refused');
     expect(() => handleGhError(err, 'open PRs')).toThrow(
@@ -131,7 +139,7 @@ describe('ghFetchAndParse', () => {
       throw new Error('timeout exceeded');
     });
     expect(() => ghFetchAndParse(['test'], TestSchema, 'PR #5', '/cwd')).toThrow(
-      '[Totem Error] Failed to fetch PR #5: timeout exceeded',
+      /\[Totem Error\] Failed to fetch PR #5:.*timeout exceeded/,
     );
   });
 

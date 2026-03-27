@@ -4,11 +4,17 @@
 # 2. Block git push if /prepush hasn't been run
 
 TOOL_INPUT=$(cat)
-COMMAND=$(echo "$TOOL_INPUT" | grep -o '"command":"[^"]*"' | head -1 | sed 's/"command":"//;s/"//')
+GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
+
+if command -v jq &>/dev/null; then
+  COMMAND=$(echo "$TOOL_INPUT" | jq -r '.command // empty')
+else
+  COMMAND=$(echo "$TOOL_INPUT" | grep -o '"command":"[^"]*"' | head -1 | sed 's/"command":"//;s/"//')
+fi
 
 # ─── Gate 1: Spec before commit (hard block) ──
-if [[ "$COMMAND" =~ (^|[[:space:]])git[[:space:]].*commit ]]; then
-  SPEC_FLAG=".totem/cache/.spec-completed"
+if [[ "$COMMAND" =~ (^|[[:space:]])git[[:space:]]+commit([[:space:]]|$) ]]; then
+  SPEC_FLAG="$GIT_ROOT/.totem/cache/.spec-completed"
   BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 
   # Skip: main/master, hotfix/docs branches, detached HEAD
@@ -25,8 +31,8 @@ if [[ "$COMMAND" =~ (^|[[:space:]])git[[:space:]].*commit ]]; then
 fi
 
 # ─── Gate 2: Shield before push (hard block) ──
-if [[ "$COMMAND" =~ (^|[[:space:]])git[[:space:]].*push ]]; then
-  SHIELD_FLAG=".totem/cache/.shield-passed"
+if [[ "$COMMAND" =~ (^|[[:space:]])git[[:space:]]+push([[:space:]]|$) ]]; then
+  SHIELD_FLAG="$GIT_ROOT/.totem/cache/.shield-passed"
 
   if [ ! -f "$SHIELD_FLAG" ]; then
     echo "BLOCKED: Run /prepush before pushing." >&2
@@ -47,7 +53,7 @@ fi
 
 # ─── Gate 3: Shield before PR creation via gh CLI (hard block) ──
 if [[ "$COMMAND" == *"gh pr create"* ]]; then
-  SHIELD_FLAG=".totem/cache/.shield-passed"
+  SHIELD_FLAG="$GIT_ROOT/.totem/cache/.shield-passed"
   CURRENT_HEAD=$(git rev-parse HEAD 2>/dev/null)
   FLAG_CONTENT=$(cat "$SHIELD_FLAG" 2>/dev/null)
   if [ "$FLAG_CONTENT" != "$CURRENT_HEAD" ]; then

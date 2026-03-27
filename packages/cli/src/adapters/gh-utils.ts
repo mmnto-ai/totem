@@ -32,9 +32,11 @@ export function handleGhError(err: unknown, context: string): never {
       err,
     );
   }
-  // Unwrap safeExec error chain to get the original child process error
-  const root = err instanceof Error && err.cause instanceof Error ? err.cause : err;
-  const msg = root instanceof Error ? root.message : String(root);
+  // safeExec wraps child-process errors: message includes stderr, cause is the original.
+  // Check both the wrapper and the cause so detection (ENOENT, rate-limit) works regardless.
+  const wrapperMsg = err instanceof Error ? err.message : String(err);
+  const causeMsg = err instanceof Error && err.cause instanceof Error ? err.cause.message : '';
+  const msg = `${wrapperMsg}\n${causeMsg}`;
   if (msg.includes('ENOENT')) {
     throw new TotemConfigError(
       'GitHub CLI (gh) is required but was not found.',
@@ -53,7 +55,7 @@ export function handleGhError(err: unknown, context: string): never {
   }
   throw new TotemError(
     'SHIELD_FAILED',
-    `Failed to fetch ${context}: ${msg}`,
+    `Failed to fetch ${context}: ${wrapperMsg}`,
     'Run `gh auth status` to verify authentication, then retry.',
     err,
   );
