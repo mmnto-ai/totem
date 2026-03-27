@@ -34,6 +34,8 @@ import {
   VERDICT_RE,
 } from './shield-templates.js';
 
+const INCREMENTAL_MAX_LINES = 15;
+
 // Re-export constants & prompts so existing consumers are not broken
 export {
   MAX_DIFF_CHARS,
@@ -670,6 +672,88 @@ async function handleVerdictResult(
   }
 }
 
+// ─── Incremental shield eligibility (#1010) ─────────
+
+interface IncrementalResult {
+  eligible: boolean;
+  reason?: string;
+  deltaDiff?: string;
+  changedFiles?: string[];
+  linesChanged?: number;
+}
+
+export async function evaluateIncrementalEligibility(
+  cwd: string,
+  totemDir: string,
+  configRoot?: string,
+): Promise<IncrementalResult> {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { safeExec } = await import('@mmnto/totem');
+  const { isAncestor, getShortstat, getNameStatus, getDiffBetween } = await import('../git.js');
+
+  // 1. Read last passed SHA
+  const flagPath = path.join(configRoot ?? cwd, totemDir, 'cache', '.shield-passed');
+  let lastSha: string;
+  try {
+    lastSha = fs.readFileSync(flagPath, 'utf-8').trim();
+  } catch {
+    return { eligible: false, reason: 'No previous shield state' };
+  }
+
+  if (!lastSha || lastSha.length < 7) {
+    return { eligible: false, reason: 'Invalid shield state' };
+  }
+
+  // 2. Check if already at same commit
+  let head: string;
+  try {
+    head = safeExec('git', ['rev-parse', 'HEAD'], { cwd });
+  } catch {
+    return { eligible: false, reason: 'Cannot resolve HEAD' };
+  }
+  if (head === lastSha) {
+    return { eligible: false, reason: 'Already at passed commit' };
+  }
+
+  // 3. Verify ancestry
+  if (!isAncestor(cwd, lastSha)) {
+    return { eligible: false, reason: 'Last passed commit is not an ancestor (rebase detected)' };
+  }
+
+  // 4. Check for new/deleted files
+  const nameStatus = getNameStatus(cwd, lastSha);
+  const hasNewOrDeleted = nameStatus.some((f) => f.status !== 'M');
+  if (hasNewOrDeleted) {
+    return { eligible: false, reason: 'Diff contains new or deleted files' };
+  }
+
+  // 5. Check line count
+  const stats = getShortstat(cwd, lastSha);
+  const totalLines = stats.insertions + stats.deletions;
+  if (totalLines > INCREMENTAL_MAX_LINES) {
+    return {
+      eligible: false,
+      reason: `Diff exceeds ${INCREMENTAL_MAX_LINES} lines (${totalLines})`,
+    };
+  }
+
+  // 6. Get the delta diff
+  const deltaDiff = getDiffBetween(cwd, lastSha);
+  if (!deltaDiff.trim()) {
+    return { eligible: false, reason: 'No diff content' };
+  }
+
+  const changedFiles = nameStatus.map((f) => f.file);
+
+  return {
+    eligible: true,
+    deltaDiff,
+    changedFiles,
+    linesChanged: totalLines,
+  };
+}
+
 // ─── Main command ───────────────────────────────────
 
 export async function shieldCommand(options: ShieldOptions): Promise<void> {
@@ -699,16 +783,32 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   loadEnv(cwd);
   const config = await loadConfig(configPath);
 
-  // Get git diff — shared helper merges ignore patterns, tries staged/all
-  // then falls back to branch diff, and extracts changed file paths.
-  const diffResult = await getDiffForReview(options, config, cwd, TAG);
-  if (!diffResult) {
-    // No changes = trivial pass — stamp so pre-push hooks don't block
-    await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
-    return;
-  }
+  // --- Incremental shield fast-path (#1010) ---
+  // If the change since the last passed shield is small enough (< 15 lines,
+  // no new files), only evaluate the delta instead of the full branch diff.
+  let diff: string;
+  let changedFiles: string[];
 
-  const { diff, changedFiles } = diffResult;
+  const incremental = await evaluateIncrementalEligibility(cwd, config.totemDir, configRoot);
+  if (incremental.eligible && incremental.deltaDiff && incremental.changedFiles) {
+    log.info(TAG, `Incremental review: ${incremental.linesChanged} line(s) since last pass`);
+    diff = incremental.deltaDiff;
+    changedFiles = incremental.changedFiles;
+  } else {
+    if (incremental.reason && incremental.reason !== 'No previous shield state') {
+      log.dim(TAG, `Full review: ${incremental.reason}`);
+    }
+    // Get git diff — shared helper merges ignore patterns, tries staged/all
+    // then falls back to branch diff, and extracts changed file paths.
+    const diffResult = await getDiffForReview(options, config, cwd, TAG);
+    if (!diffResult) {
+      // No changes = trivial pass — stamp so pre-push hooks don't block
+      await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
+      return;
+    }
+    diff = diffResult.diff;
+    changedFiles = diffResult.changedFiles;
+  }
 
   // Stage 1: Classify files — fast-path for non-code-only diffs
   const classification = classifyChangedFiles(changedFiles);
