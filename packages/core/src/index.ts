@@ -192,8 +192,14 @@ export {
 } from './lesson-format.js';
 export type { LessonLintDiagnostic, LessonLintResult } from './lesson-linter.js';
 export { validateLessons } from './lesson-linter.js';
-export type { ManualPattern } from './lesson-pattern.js';
-export { extractField, extractManualPattern } from './lesson-pattern.js';
+export type { ManualPattern, RuleExamples } from './lesson-pattern.js';
+export {
+  extractAllFields,
+  extractField,
+  extractManualPattern,
+  extractRuleExamples,
+  stripInlineCode,
+} from './lesson-pattern.js';
 export type { IngestionSanitizeOptions } from './sanitize.js';
 export {
   BASE64_BLOB_RE,
@@ -243,7 +249,13 @@ export type {
   CompileLessonResult,
   LessonInput,
 } from './compile-lesson.js';
-export { buildCompiledRule, buildManualRule, compileLesson } from './compile-lesson.js';
+export {
+  buildCompiledRule,
+  buildManualRule,
+  compileLesson,
+  formatExampleFailure,
+  verifyRuleExamples,
+} from './compile-lesson.js';
 
 // Compile manifest (signing / provenance)
 export type { CompileManifest } from './compile-manifest.js';

@@ -50,3 +50,34 @@ export function extractManualPattern(body: string): ManualPattern | null {
 
   return { pattern, engine, fileGlobs, severity };
 }
+
+/**
+ * Extract ALL values for a repeated field from a lesson body.
+ * Unlike extractField (first match only), this returns every match.
+ */
+export function extractAllFields(body: string, field: string): string[] {
+  const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`^(?:\\*{2})?${safeField}:(?:\\*{2})?[ \\t]*(.*)$`, 'gim');
+  return Array.from(body.matchAll(re), (m) => m[1]!.trim());
+}
+
+/** Strip surrounding backticks from an inline code value. */
+export function stripInlineCode(value: string): string {
+  return value.replace(/^`(.*)`$/, '$1');
+}
+
+export interface RuleExamples {
+  hits: string[];
+  misses: string[];
+}
+
+/**
+ * Extract Example Hit/Miss lines from a lesson body.
+ * Returns null if no examples are present (backward compatible).
+ */
+export function extractRuleExamples(body: string): RuleExamples | null {
+  const hits = extractAllFields(body, 'Example Hit').map(stripInlineCode);
+  const misses = extractAllFields(body, 'Example Miss').map(stripInlineCode);
+  if (hits.length === 0 && misses.length === 0) return null;
+  return { hits, misses };
+}

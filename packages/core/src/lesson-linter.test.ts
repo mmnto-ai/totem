@@ -203,6 +203,69 @@ describe('lesson-linter', () => {
     });
   });
 
+  describe('Example Hit/Miss validation', () => {
+    it('errors for empty Example Hit value', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Pattern:** foo\n**Engine:** regex\n**Scope:** **/*.ts\n**Severity:** warning\n**Example Hit:** ``',
+        }),
+      ]);
+      expect(result.valid).toBe(false);
+      expect(
+        result.diagnostics.some((d) => d.field === 'Example Hit' && d.message.includes('empty')),
+      ).toBe(true);
+    });
+
+    it('errors for empty Example Miss value', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Pattern:** foo\n**Engine:** regex\n**Scope:** **/*.ts\n**Severity:** warning\n**Example Miss:** ``',
+        }),
+      ]);
+      expect(result.valid).toBe(false);
+      expect(
+        result.diagnostics.some((d) => d.field === 'Example Miss' && d.message.includes('empty')),
+      ).toBe(true);
+    });
+
+    it('passes for valid Example Hit/Miss values', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Pattern:** console\\.log\n**Engine:** regex\n**Scope:** **/*.ts\n**Severity:** warning\n**Example Hit:** `console.log("bad")`\n**Example Miss:** `logger.info("ok")`',
+        }),
+      ]);
+      expect(result.valid).toBe(true);
+      expect(
+        result.diagnostics.filter((d) => d.field === 'Example Hit' || d.field === 'Example Miss'),
+      ).toHaveLength(0);
+    });
+
+    it('warns when examples are used with non-regex engine', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Pattern:** console.log($ARG)\n**Engine:** ast-grep\n**Scope:** **/*.ts\n**Severity:** warning\n**Example Hit:** console.log(x)',
+        }),
+      ]);
+      expect(
+        result.diagnostics.some(
+          (d) => d.field === 'Example Hit' && d.message.includes('only verified for regex'),
+        ),
+      ).toBe(true);
+    });
+
+    it('validates examples for Pipeline 2 lessons too', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Conversational lesson\n\n**Tags:** architecture\n\nSome text\n**Example Hit:** ``',
+        }),
+      ]);
+      expect(result.valid).toBe(false);
+      expect(
+        result.diagnostics.some((d) => d.field === 'Example Hit' && d.message.includes('empty')),
+      ).toBe(true);
+    });
+  });
+
   describe('multiple lessons', () => {
     it('aggregates diagnostics across lessons', () => {
       const result = validateLessons([

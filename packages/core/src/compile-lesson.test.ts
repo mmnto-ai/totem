@@ -6,6 +6,7 @@ import {
   compileLesson,
   type CompileLessonDeps,
   type LessonInput,
+  verifyRuleExamples,
 } from './compile-lesson.js';
 import type { CompiledRule, CompilerOutput } from './compiler-schema.js';
 
@@ -282,5 +283,214 @@ describe('compileLesson', () => {
       lesson.heading,
       expect.stringContaining('parse'),
     );
+  });
+});
+
+// ─── verifyRuleExamples ──────────────────────────────
+
+describe('verifyRuleExamples', () => {
+  it('returns null when lesson has no examples', () => {
+    const rule: CompiledRule = {
+      lessonHash: 'h1',
+      lessonHeading: 'test',
+      pattern: 'console\\.log',
+      message: 'no console.log',
+      engine: 'regex',
+      compiledAt: new Date().toISOString(),
+    };
+    const result = verifyRuleExamples(rule, 'no examples here');
+    expect(result).toBeNull();
+  });
+
+  it('returns null for non-regex engine', () => {
+    const rule: CompiledRule = {
+      lessonHash: 'h2',
+      lessonHeading: 'test',
+      message: 'ast rule',
+      engine: 'ast-grep',
+      astGrepPattern: 'console.log($A)',
+      pattern: '',
+      compiledAt: new Date().toISOString(),
+    };
+    const body = '**Example Hit:** console.log(x)';
+    expect(verifyRuleExamples(rule, body)).toBeNull();
+  });
+
+  it('passes when hits match and misses do not', () => {
+    const rule: CompiledRule = {
+      lessonHash: 'h3',
+      lessonHeading: 'test',
+      pattern: 'console\\.log',
+      message: 'no console.log',
+      engine: 'regex',
+      compiledAt: new Date().toISOString(),
+    };
+    const body = '**Example Hit:** console.log("test")\n**Example Miss:** logger.info("test")';
+    const result = verifyRuleExamples(rule, body);
+    expect(result).not.toBeNull();
+    expect(result!.passed).toBe(true);
+  });
+
+  it('fails when a hit does not match', () => {
+    const rule: CompiledRule = {
+      lessonHash: 'h4',
+      lessonHeading: 'test',
+      pattern: 'console\\.log',
+      message: 'no console.log',
+      engine: 'regex',
+      compiledAt: new Date().toISOString(),
+    };
+    const body = '**Example Hit:** logger.info("test")';
+    const result = verifyRuleExamples(rule, body);
+    expect(result).not.toBeNull();
+    expect(result!.passed).toBe(false);
+    expect(result!.missedFails.length).toBeGreaterThan(0);
+  });
+
+  it('fails when a miss matches', () => {
+    const rule: CompiledRule = {
+      lessonHash: 'h5',
+      lessonHeading: 'test',
+      pattern: 'console\\.log',
+      message: 'no console.log',
+      engine: 'regex',
+      compiledAt: new Date().toISOString(),
+    };
+    const body = '**Example Miss:** console.log("oops")';
+    const result = verifyRuleExamples(rule, body);
+    expect(result).not.toBeNull();
+    expect(result!.passed).toBe(false);
+    expect(result!.falsePositives.length).toBeGreaterThan(0);
+  });
+
+  it('respects fileGlobs when deriving virtual file path', () => {
+    const rule: CompiledRule = {
+      lessonHash: 'h6',
+      lessonHeading: 'test',
+      pattern: 'console\\.log',
+      message: 'no console.log',
+      engine: 'regex',
+      compiledAt: new Date().toISOString(),
+      fileGlobs: ['**/*.py'],
+    };
+    const body = '**Example Hit:** console.log("test")';
+    const result = verifyRuleExamples(rule, body);
+    expect(result).not.toBeNull();
+    expect(result!.passed).toBe(true);
+  });
+
+  it('handles compound extension globs like **/*.test.ts', () => {
+    const rule: CompiledRule = {
+      lessonHash: 'h7',
+      lessonHeading: 'test',
+      pattern: 'console\\.log',
+      message: 'no console.log',
+      engine: 'regex',
+      compiledAt: new Date().toISOString(),
+      fileGlobs: ['**/*.test.ts'],
+    };
+    const body = '**Example Hit:** console.log("test")';
+    const result = verifyRuleExamples(rule, body);
+    expect(result).not.toBeNull();
+    expect(result!.passed).toBe(true);
+  });
+
+  it('handles exact file globs like package.json', () => {
+    const rule: CompiledRule = {
+      lessonHash: 'h8',
+      lessonHeading: 'test',
+      pattern: '"version"',
+      message: 'version field',
+      engine: 'regex',
+      compiledAt: new Date().toISOString(),
+      fileGlobs: ['package.json'],
+    };
+    const body = '**Example Hit:** "version": "1.0.0"';
+    const result = verifyRuleExamples(rule, body);
+    expect(result).not.toBeNull();
+    expect(result!.passed).toBe(true);
+  });
+});
+
+// ─── compileLesson with inline examples ─────────────
+
+describe('compileLesson with inline examples', () => {
+  const makeDeps = (response: string | undefined): CompileLessonDeps => ({
+    parseCompilerResponse: vi.fn().mockReturnValue(
+      response
+        ? {
+            compilable: true,
+            pattern: 'console\\.log',
+            message: 'No console.log',
+            engine: 'regex' as const,
+          }
+        : null,
+    ),
+    runOrchestrator: vi.fn().mockResolvedValue(response),
+    existingByHash: new Map(),
+    callbacks: {
+      onWarn: vi.fn(),
+      onDim: vi.fn(),
+    },
+  });
+
+  it('compiles when examples pass for manual pattern', async () => {
+    const lessonWithExamples: LessonInput = {
+      index: 0,
+      heading: 'No console.log',
+      hash: 'ex1',
+      body: '**Pattern:** console\\.log\n**Engine:** regex\n**Severity:** warning\n**Scope:** **/*.ts\n**Example Hit:** console.log("test")\n**Example Miss:** logger.info("test")',
+    };
+    const deps = makeDeps(undefined);
+    const result = await compileLesson(lessonWithExamples, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+  });
+
+  it('fails when example hit does not match manual pattern', async () => {
+    const lessonBadHit: LessonInput = {
+      index: 0,
+      heading: 'No console.log',
+      hash: 'ex2',
+      body: '**Pattern:** console\\.log\n**Engine:** regex\n**Severity:** warning\n**Scope:** **/*.ts\n**Example Hit:** logger.info("test")',
+    };
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn(),
+      runOrchestrator: vi.fn(),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(lessonBadHit, 'system prompt', deps);
+    expect(result.status).toBe('failed');
+    expect(deps.callbacks!.onWarn).toHaveBeenCalledWith(
+      lessonBadHit.heading,
+      expect.stringContaining('Example Hit'),
+    );
+  });
+
+  it('fails when example miss matches the pattern', async () => {
+    const lessonBadMiss: LessonInput = {
+      index: 0,
+      heading: 'No console.log',
+      hash: 'ex3',
+      body: '**Pattern:** console\\.log\n**Engine:** regex\n**Severity:** warning\n**Scope:** **/*.ts\n**Example Miss:** console.log("oops")',
+    };
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn(),
+      runOrchestrator: vi.fn(),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(lessonBadMiss, 'system prompt', deps);
+    expect(result.status).toBe('failed');
+    expect(deps.callbacks!.onWarn).toHaveBeenCalledWith(
+      lessonBadMiss.heading,
+      expect.stringContaining('Example Miss'),
+    );
+  });
+
+  it('compiles without verification when no examples present (backward compat)', async () => {
+    const deps = makeDeps('{"compilable": true}');
+    const result = await compileLesson(lesson, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
   });
 });
