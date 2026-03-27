@@ -46,7 +46,8 @@ export function safeExec(
       input: rest.input,
     });
 
-    return shouldTrim ? (typeof result === 'string' ? result.trim() : '') : (result as string);
+    const output = typeof result === 'string' ? result : '';
+    return shouldTrim ? output.trim() : output;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     // Extract stderr from child process error if available
