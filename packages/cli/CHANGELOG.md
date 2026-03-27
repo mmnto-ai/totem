@@ -1,5 +1,23 @@
 # @mmnto/cli
 
+## 1.5.7
+
+### Patch Changes
+
+- Codebase audit remediation and foundation hardening
+  - New `core/src/sys/` standard library: `safeExec()`, `readJsonSafe()`, git adapter (13 functions moved from CLI to core)
+  - Error cause chains (ES2022): TotemError hierarchy accepts `cause`, 22 catch blocks updated
+  - Forbidden native module rules: 3 compiled rules enforce shared helper usage
+  - Phase-gate hooks hardened: `fix/*` exemption removed, warning upgraded to block
+  - CoreLogger DI: `setCoreLogger()` replaces `console.warn` in core
+  - CRLF fixed: `.gitattributes` forces LF, prettier `endOfLine: "lf"`
+  - Shield flag verify-not-consume: push no longer deletes the flag
+  - AST query graceful degradation: tree-sitter failures no longer crash compilation
+  - Spec gap remediation: `cleanTmpDir` helper, CLI wiring fixes
+
+- Updated dependencies
+  - @mmnto/totem@1.5.7
+
 ## 1.5.6
 
 ### Patch Changes
