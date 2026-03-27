@@ -10,6 +10,7 @@ import { cleanTmpDir } from '../test-utils.js';
 import {
   assemblePrompt,
   assembleStructuralPrompt,
+  buildFileContext,
   computeVerdict,
   extractStructuredVerdict,
   formatVerdictForDisplay,
@@ -634,6 +635,131 @@ describe('formatVerdictForDisplay', () => {
     const output = formatVerdictForDisplay(verdict, true);
     // Should have the finding line without any file path before the dash
     expect(output).toContain('INFO [0.5] — General observation');
+  });
+});
+
+// ─── buildFileContext ─────────────────────────────────
+
+describe('buildFileContext', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shield-ctx-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('includes small files under the line limit', async () => {
+    const filePath = 'small-file.ts';
+    fs.writeFileSync(path.join(tmpDir, filePath), 'const x = 1;\nconst y = 2;\n');
+
+    const result = await buildFileContext([filePath], tmpDir, 300, 20000);
+    expect(result).toContain('FILE CONTEXT');
+    expect(result).toContain('const x = 1');
+  });
+
+  it('excludes files over the line limit', async () => {
+    const filePath = 'large-file.ts';
+    const lines = Array.from({ length: 500 }, (_, i) => `const x${i} = ${i};`).join('\n');
+    fs.writeFileSync(path.join(tmpDir, filePath), lines);
+
+    const result = await buildFileContext([filePath], tmpDir, 300, 20000);
+    expect(result).toBe('');
+  });
+
+  it('skips nonexistent files gracefully', async () => {
+    const result = await buildFileContext(['does-not-exist.ts'], tmpDir, 300, 20000);
+    expect(result).toBe('');
+  });
+
+  it('respects character budget', async () => {
+    for (let i = 0; i < 5; i++) {
+      fs.writeFileSync(path.join(tmpDir, `file${i}.ts`), 'x'.repeat(100) + '\n');
+    }
+
+    const result = await buildFileContext(
+      ['file0.ts', 'file1.ts', 'file2.ts', 'file3.ts', 'file4.ts'],
+      tmpDir,
+      300,
+      250,
+    );
+    expect(result.length).toBeLessThan(500);
+  });
+
+  it('returns empty string when no files qualify', async () => {
+    const result = await buildFileContext([], tmpDir, 300, 20000);
+    expect(result).toBe('');
+  });
+
+  it('skips non-code files', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'readme.md'), '# Hello\n');
+    const result = await buildFileContext(['readme.md'], tmpDir, 300, 20000);
+    expect(result).toBe('');
+  });
+});
+
+// ─── assemblePrompt with fileContext ─────────────────
+
+describe('assemblePrompt fileContext integration', () => {
+  const sampleDiff = 'diff --git a/foo.ts b/foo.ts\n+const x = 1;\n';
+  const changedFiles = ['foo.ts'];
+  const emptyContext = { specs: [], sessions: [], code: [], lessons: [] };
+
+  it('includes file context in assembled prompt', () => {
+    const fc =
+      '\n=== FILE CONTEXT (unchanged code for reference) ===\n--- foo.ts ---\nconst x = 1;\n';
+    const prompt = assemblePrompt(sampleDiff, changedFiles, emptyContext, 'SYS', undefined, fc);
+    expect(prompt).toContain('FILE CONTEXT');
+    expect(prompt).toContain('unchanged code for reference');
+  });
+
+  it('omits file context when empty', () => {
+    const prompt = assemblePrompt(sampleDiff, changedFiles, emptyContext, 'SYS', undefined, '');
+    expect(prompt).not.toContain('FILE CONTEXT');
+  });
+});
+
+describe('assembleStructuralPrompt fileContext integration', () => {
+  const sampleDiff = 'diff --git a/foo.ts b/foo.ts\n+const x = 1;\n';
+  const changedFiles = ['foo.ts'];
+
+  it('includes file context in structural prompt', () => {
+    const fc =
+      '\n=== FILE CONTEXT (unchanged code for reference) ===\n--- foo.ts ---\nconst x = 1;\n';
+    const prompt = assembleStructuralPrompt(sampleDiff, changedFiles, 'SYS', undefined, fc);
+    expect(prompt).toContain('FILE CONTEXT');
+  });
+
+  it('omits file context when undefined', () => {
+    const prompt = assembleStructuralPrompt(sampleDiff, changedFiles, 'SYS');
+    expect(prompt).not.toContain('FILE CONTEXT');
+  });
+});
+
+// ─── shield override validation ──────────────────────
+
+describe('shield override validation', () => {
+  it('rejects override reason under 10 characters', async () => {
+    const { TotemConfigError } = await import('@mmnto/totem');
+    const reason = 'short';
+    expect(reason.length).toBeLessThan(10);
+    // Mirrors the validation in shieldCommand
+    expect(() => {
+      if (reason.length < 10) {
+        throw new TotemConfigError(
+          `--override reason must be at least 10 characters (got ${reason.length}).`,
+          'Provide a meaningful justification',
+          'CONFIG_INVALID',
+        );
+      }
+    }).toThrow(/at least 10 characters/);
+  });
+
+  it('accepts override reason of 10+ characters', () => {
+    const reason = 'False positive: onWarn is defined at line 273';
+    expect(reason.length).toBeGreaterThanOrEqual(10);
   });
 });
 

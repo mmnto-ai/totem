@@ -10,6 +10,8 @@ export const MAX_SPEC_RESULTS = 3;
 export const MAX_LESSONS = 10;
 export const MAX_SESSION_RESULTS = 5;
 export const MAX_CODE_RESULTS = 5;
+export const MAX_FILE_CONTEXT_CHARS = 20_000;
+export const MAX_FILE_LINES = 300;
 
 // ─── Zod schemas (V2 structured output) ─────────────────
 
@@ -122,6 +124,7 @@ Do NOT include any text before or after the tags. No preamble, no closing remark
 - Use Totem knowledge when it directly applies (cite session/spec in the message).
 - If no issues found, return an empty findings array with a summary of what the diff does.
 - DO NOT emit findings about documentation, formatting, or non-code files.
+- If a FILE CONTEXT section is provided, use it to verify that referenced symbols (variables, parameters, imports) actually exist in the file before flagging them as undefined or unused.
 `;
 
 // ─── Structural system prompt ────────────────────────────
@@ -225,6 +228,7 @@ Do NOT include any text before or after the tags. No preamble, no closing remark
 - Only comment on code that is actually changing. Reference specific files and hunks.
 - If no issues found, return an empty findings array with a summary of what the diff does.
 - DO NOT emit findings about documentation, formatting, or non-code files.
+- If a FILE CONTEXT section is provided, use it to verify that referenced symbols (variables, parameters, imports) actually exist in the file before flagging them as undefined or unused.
 `;
 
 // ─── Shield Learn system prompt ──────────────────────

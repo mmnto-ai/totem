@@ -209,6 +209,10 @@ program
   )
   .option('--learn', 'Extract lessons from failed verdicts into .totem/lessons/')
   .option('--yes', 'Auto-accept extracted lessons (for CI; suspicious lessons are dropped)')
+  .option(
+    '--override <reason>',
+    'Override shield FAIL with a reason (min 10 chars, logged to trap ledger)',
+  )
   .action(
     async (opts: {
       raw?: boolean;
@@ -221,6 +225,7 @@ program
       mode?: string;
       learn?: boolean;
       yes?: boolean;
+      override?: string;
     }) => {
       try {
         // Redirect removed --deterministic flag to totem lint

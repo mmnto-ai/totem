@@ -18,6 +18,8 @@ import {
 import {
   MAX_CODE_RESULTS,
   MAX_DIFF_CHARS,
+  MAX_FILE_CONTEXT_CHARS,
+  MAX_FILE_LINES,
   MAX_LESSONS,
   MAX_SESSION_RESULTS,
   MAX_SPEC_RESULTS,
@@ -70,6 +72,57 @@ async function buildSearchQuery(changedFiles: string[], diff: string): Promise<s
   return `${fileNames} ${diffSnippet}`.trim();
 }
 
+// ─── File context for false-positive reduction ──────────
+
+export async function buildFileContext(
+  changedFiles: string[],
+  cwd: string,
+  maxLines: number,
+  maxChars: number,
+): Promise<string> {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { classifyFile } = await import('./shield-classify.js');
+
+  const entries: string[] = [];
+  let totalChars = 0;
+
+  for (const file of changedFiles) {
+    if (totalChars >= maxChars) break;
+
+    // Skip non-code files
+    if (classifyFile(file) === 'NON_CODE') continue;
+
+    const fullPath = path.join(cwd, file);
+
+    // Skip deleted files
+    if (!fs.existsSync(fullPath)) continue;
+
+    let content: string;
+    try {
+      content = fs.readFileSync(fullPath, 'utf-8');
+    } catch {
+      continue;
+    }
+
+    // Skip binary files (null byte check)
+    if (content.includes('\0')) continue;
+
+    // Skip large files
+    const lines = content.split('\n');
+    if (lines.length > maxLines) continue;
+
+    const entry = `--- ${file} ---\n${content}`;
+    if (totalChars + entry.length > maxChars) continue;
+
+    entries.push(entry);
+    totalChars += entry.length;
+  }
+
+  if (entries.length === 0) return '';
+  return `\n=== FILE CONTEXT (unchanged code for reference) ===\n${entries.join('\n\n')}`;
+}
+
 // ─── Prompt assembly ────────────────────────────────────
 
 export function assemblePrompt(
@@ -78,6 +131,7 @@ export function assemblePrompt(
   context: RetrievedContext,
   systemPrompt: string,
   smartHints?: string[],
+  fileContext?: string,
 ): string {
   const sections: string[] = [systemPrompt];
 
@@ -94,6 +148,11 @@ export function assemblePrompt(
     );
   } else {
     sections.push(wrapXml('git_diff', diff));
+  }
+
+  // File context — full source for small changed files
+  if (fileContext) {
+    sections.push(fileContext);
   }
 
   // Totem knowledge
@@ -136,6 +195,7 @@ export function assembleStructuralPrompt(
   changedFiles: string[],
   systemPrompt: string,
   smartHints?: string[],
+  fileContext?: string,
 ): string {
   const sections: string[] = [systemPrompt];
 
@@ -153,6 +213,11 @@ export function assembleStructuralPrompt(
     );
   } else {
     sections.push(wrapXml('git_diff', diff));
+  }
+
+  // File context — full source for small changed files
+  if (fileContext) {
+    sections.push(fileContext);
   }
 
   // Smart review hints — auto-detected context to reduce false positives
@@ -338,6 +403,7 @@ export interface ShieldOptions {
   mode?: 'standard' | 'structural';
   learn?: boolean;
   yes?: boolean;
+  override?: string;
 }
 
 // ─── Deterministic mode (delegates to shared engine) ─
@@ -512,6 +578,32 @@ async function handleVerdictResult(
 
     if (verdict.pass) {
       await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
+    } else if (options.override) {
+      const { appendLedgerEvent } = await import('@mmnto/totem');
+      const pathMod = await import('node:path');
+      const resolvedTotemDir = pathMod.join(configRoot ?? cwd, config.totemDir);
+
+      log.warn(TAG, `SHIELD OVERRIDE APPLIED: ${options.override}`);
+      for (const finding of structured.findings.filter(
+        (f: { severity: string }) => f.severity === 'CRITICAL',
+      )) {
+        log.warn(TAG, `  [overridden] ${finding.message}`);
+      }
+
+      appendLedgerEvent(
+        resolvedTotemDir,
+        {
+          timestamp: new Date().toISOString(),
+          type: 'override',
+          ruleId: 'shield-override',
+          file: '(shield)',
+          justification: options.override,
+          source: 'shield',
+        },
+        (msg) => log.dim(TAG, msg),
+      );
+
+      await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
     } else {
       if (options.learn) {
         await learnFromVerdict(
@@ -539,6 +631,27 @@ async function handleVerdictResult(
     const reason = verdict.reason ? ` — ${verdict.reason}` : '';
     log.info(TAG, `Verdict: ${verdictLabel}${reason}`);
     if (verdict.pass) {
+      await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
+    } else if (options.override) {
+      const { appendLedgerEvent } = await import('@mmnto/totem');
+      const pathMod = await import('node:path');
+      const resolvedTotemDir = pathMod.join(configRoot ?? cwd, config.totemDir);
+
+      log.warn(TAG, `SHIELD OVERRIDE APPLIED: ${options.override}`);
+
+      appendLedgerEvent(
+        resolvedTotemDir,
+        {
+          timestamp: new Date().toISOString(),
+          type: 'override',
+          ruleId: 'shield-override',
+          file: '(shield)',
+          justification: options.override,
+          source: 'shield',
+        },
+        (msg) => log.dim(TAG, msg),
+      );
+
       await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
     } else {
       if (options.learn) await learnFromVerdict(content, diff, options, config, cwd, configRoot);
@@ -570,6 +683,13 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     throw new TotemConfigError(
       `Invalid --mode "${options.mode}". Use "standard" or "structural".`,
       'Check `totem shield --help` for valid options.',
+      'CONFIG_INVALID',
+    );
+  }
+  if (options.override !== undefined && options.override.length < 10) {
+    throw new TotemConfigError(
+      `--override reason must be at least 10 characters (got ${options.override.length}).`,
+      'Provide a meaningful justification, e.g., --override "False positive: onWarn param visible at line 273"',
       'CONFIG_INVALID',
     );
   }
@@ -645,6 +765,17 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     log.dim(TAG, `${annotations.length} annotation(s) recorded in Trap Ledger`);
   }
 
+  // Build full-file context for small changed files (reduces false positives)
+  const fileContext = await buildFileContext(
+    filteredFiles.length > 0 ? filteredFiles : changedFiles,
+    cwd,
+    MAX_FILE_LINES,
+    MAX_FILE_CONTEXT_CHARS,
+  );
+  if (fileContext) {
+    log.dim(TAG, `File context: ${(fileContext.length / 1024).toFixed(0)}KB`);
+  }
+
   // Structural mode — context-blind LLM review, no embeddings, no Totem knowledge
   if (options.mode === 'structural') {
     log.info(TAG, 'Running structural review (context-blind, no Totem knowledge)...');
@@ -655,7 +786,13 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       cwd,
       config.totemDir,
     );
-    const prompt = assembleStructuralPrompt(filteredDiff, filteredFiles, systemPrompt, smartHints);
+    const prompt = assembleStructuralPrompt(
+      filteredDiff,
+      filteredFiles,
+      systemPrompt,
+      smartHints,
+      fileContext,
+    );
     log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
     const content = await runOrchestrator({
@@ -703,7 +840,14 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const systemPrompt = getSystemPrompt('shield', SYSTEM_PROMPT_V2, cwd, config.totemDir);
 
   // Assemble prompt — use filtered diff/files for LLM review
-  const prompt = assemblePrompt(filteredDiff, filteredFiles, context, systemPrompt, smartHints);
+  const prompt = assemblePrompt(
+    filteredDiff,
+    filteredFiles,
+    context,
+    systemPrompt,
+    smartHints,
+    fileContext,
+  );
   log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = await runOrchestrator({
