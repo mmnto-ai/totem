@@ -1,5 +1,21 @@
 # @mmnto/mcp
 
+## 1.5.9
+
+### Patch Changes
+
+- 59a605c: Pipeline integrity fixes, docs storefront rewrite, COSS covenant.
+  - fix: MCP spawn ENOENT on Windows — env + shell options (#1023)
+  - fix: triage-pr and review-learn surface outside-diff findings (#984)
+  - feat: lesson linter semantic heuristics + --strict flag (#1013)
+  - docs: README storefront rewrite with flywheel diagram
+  - docs: workflow wiki pages (learning loop, self-healing, agent governance)
+  - docs: COSS covenant and maintainer policy
+  - chore: 354 compiled rules, 953 lessons
+
+- Updated dependencies [59a605c]
+  - @mmnto/totem@1.5.9
+
 ## 1.5.8
 
 ### Patch Changes
