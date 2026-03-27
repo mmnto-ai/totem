@@ -5676,15 +5676,51 @@
     {
       "lessonHash": "25e2129206bb9979",
       "lessonHeading": "GitHub Closes keyword only applies to the first issue",
+      "pattern": "\\b([Cc]loses?|[Ff]ixes?|[Rr]esolves?)\\s+#\\d+,\\s*#\\d+",
       "message": "GitHub closing keywords (Closes, Fixes, Resolves) only apply to the first issue in a comma-separated list. Repeat the keyword for each issue (e.g., 'Closes #101, closes #102').",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b([Cc]loses?|[Ff]ixes?|[Rr]esolves?)\\s+#\\d+,\\s*#\\d+",
       "compiledAt": "2026-03-27T18:29:08.612Z",
       "createdAt": "2026-03-27T18:29:08.612Z",
       "fileGlobs": [
         "**/*.md",
         "**/.github/**"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "7f24313c1ae3dc50",
+      "lessonHeading": "While using shell: true fixes Windows ENOENT errors",
+      "message": "Avoid 'shell: true' to prevent injection risks and process overhead. Manually append '.cmd' to the executable for Windows compatibility instead.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bshell:\\s*true\\b",
+      "compiledAt": "2026-03-27T19:34:01.652Z",
+      "createdAt": "2026-03-27T19:34:01.652Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
+        "**/*.mjs",
+        "**/*.cjs"
+      ]
+    },
+    {
+      "lessonHash": "92e023cf49a3800d",
+      "lessonHeading": "Simple regex patterns for file extensions often fail",
+      "message": "Avoid brace expansion in glob patterns (e.g., use separate entries instead of {ts,tsx}) to ensure compatibility with simple regex matchers.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\.\\{[a-zA-Z0-9]+,[a-zA-Z0-9,]+\\}",
+      "compiledAt": "2026-03-27T19:33:54.414Z",
+      "createdAt": "2026-03-27T19:33:54.414Z",
+      "fileGlobs": [
+        "**/*.json",
+        "**/*.yml",
+        "**/*.yaml",
+        "**/*.js",
+        "**/*.ts",
+        "**/*.jsonc"
       ]
     }
   ],
@@ -6267,6 +6303,8 @@
     "b72bc42176bdaff7",
     "9c5820e43b882280",
     "670eeb6780a3ff21",
-    "4742e8ce937e2b7d"
+    "4742e8ce937e2b7d",
+    "71213ff7582a7dea",
+    "b54879043b6d0e46"
   ]
 }
