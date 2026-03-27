@@ -36,7 +36,8 @@ Given a documentation file, its purpose, and recent project changes (git log, cl
 - **Preserve Structure:** Maintain the existing document's structure, tone, and formatting conventions unless changes require restructuring.
 - **Evidence-Based:** Only update information that is supported by the provided git log, closed issues, or active work context. Do NOT invent features or status changes.
 - **Phase Numbering:** If the document references phases, use ONLY the phase numbering from the provided active_work.md context. Do NOT change or renumber phases.
-- **Conservative Updates:** When in doubt, keep the existing text. Only change what the evidence supports.
+- **Staleness Protocol:** The provided active_work context is the Ground Truth for what is currently in progress. If the existing document references tickets, milestones, or features as "upcoming", "planned", or "in progress" but they DO NOT appear in the active_work context, treat them as completed or removed. Aggressively rewrite forward-looking sections (roadmaps, active work, upcoming features) to match the Ground Truth. Preserve historical sections (changelogs, completed milestones) as-is.
+- **Empty Context Safety:** If the active_work context is not provided, do not delete roadmap sections. Instead, preserve existing content and add a note that the information may be stale.
 - **Manual Content:** If \`<manual_content>\` blocks are provided, include them VERBATIM in the appropriate section of the document. Do NOT rewrite, summarize, or omit any part of manual content. These are hand-written by the maintainer and must survive regeneration.
 - **Checkbox Integrity:** NEVER change the checked/unchecked state of markdown checkboxes (\`[x]\` / \`[ ]\`) unless the commit history explicitly contains a revert, deprecation, or re-opening of the referenced item. Priority rankings in active_work.md are NOT evidence of completion status.
 - **XML Wrapper (MANDATORY):** Wrap your ENTIRE output inside \`<updated_document>\` and \`</updated_document>\` tags. No text before or after the tags. No markdown code fences. Example:
@@ -49,13 +50,11 @@ Updated content here...
 \`\`\`
 
 ## Pinned Content (DO NOT change)
-- **README hero**: The tagline is: "Stop repeating yourself to your AI." followed by the goldfish subtitle: "AI coding agents are brilliant goldfish. Totem gives them a memory." Do not replace, rephrase, or revert these lines.
-- **README identity**: "Totem doesn't ship with your app. It lives in your workflow." Do not remove this line.
-- **3-Layer pitch**: "Your AI doesn't have to be obedient. It just has to push code." Do not remove or rephrase this line.
-- **Performance claim**: The rule count changes with each compile. Read the current count from \`.totem/compiled-rules.json\` if available in context, otherwise keep the existing number. The "under 2 seconds" benchmark is stable.
-- **Why Totem pillars**: The three pillars are: (1) Zero-LLM enforcement, (2) Shared memory across repos, (3) Works with any AI agent. These must appear near the top of the README.
-- **Works Without AI**: Totem's enforcement layer requires no AI/API keys/network. The AI helps write rules; the rules enforce themselves. Do not remove this distinction.
-- **Totem Mesh**: The "totem link" command connects repos into a shared knowledge mesh. Do not remove or bury this section.
+- **README hook**: The opening italic is: "AI coding agents are brilliant goldfish. Totem gives them a memory." Do not remove or rephrase this line.
+- **README value prop**: The core pitch ends with: "Write what you learned in plain English. Totem compiles it into a rule. That mistake physically cannot happen again." Do not weaken this language.
+- **Flywheel diagram**: The mermaid diagram showing Observe → Learn → Enforce must remain. Do not remove or replace it.
+- **Performance claim**: The rule count changes with each compile. Read the current count from the LIVE METRICS section if available, otherwise keep the existing number.
+- **COSS Covenant**: The "Open Core Covenant" section near the bottom links to COVENANT.md. Do not remove it.
 
 ## Command Glossary (DO NOT confuse these)
 - **\`totem lint\`**: Runs compiled AST/regex rules against a diff. Zero LLM. Fast (~2s). No API keys needed. Used in pre-push hooks and CI. Lives in the Lite configuration tier.
@@ -108,7 +107,7 @@ async function gatherReleaseContext(cwd: string): Promise<ReleaseContext> {
 
 // ─── Prompt assembly ────────────────────────────────────
 
-async function assemblePrompt(
+export async function assemblePrompt(
   doc: DocTarget,
   currentContent: string,
   releaseContext: ReleaseContext,
@@ -160,8 +159,18 @@ async function assemblePrompt(
 
   // Active work context
   if (activeWork) {
-    sections.push('\n=== ACTIVE WORK (SOURCE OF TRUTH FOR PHASES & PRIORITIES) ===');
+    sections.push(
+      '\n=== ACTIVE WORK (GROUND TRUTH — items NOT listed here are completed/removed) ===',
+    );
     sections.push(wrapXml('active_work', activeWork));
+  } else {
+    sections.push('\n=== ACTIVE WORK ===');
+    sections.push(
+      wrapXml(
+        'context_note',
+        'No active work context provided. If the document has a roadmap or "upcoming" section, preserve the existing content but add a note that the information may be stale.',
+      ),
+    );
   }
 
   // Manual content — only inject into user-facing docs, not internal docs
