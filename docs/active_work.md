@@ -1,8 +1,8 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.5.7` with 922 lessons, 344 compiled rules, and 1,920 tests. The 1.6.0 milestone theme is **Pipeline Maturity** — improving rule quality, shield reliability, and bot review workflows.
+The project is at release `@mmnto/cli@1.5.8` with 938 lessons, 350 compiled rules, and 1,934 tests. The 1.6.0 milestone theme is **Pipeline Maturity** — improving rule quality, shield reliability, and bot review workflows.
 
-Recent completed work (1.5.6–1.5.7):
+Recent completed work (1.5.6–1.5.8):
 
 - **Agent Governance (ADR-076 / Proposal 195):**
   - Rule unit testing — inline `**Example Hit:**`/`**Example Miss:**` verification at compile time (#1012)
@@ -18,6 +18,16 @@ Recent completed work (1.5.6–1.5.7):
   - `totem doctor --pr` — autonomous rule downgrading for noisy rules
   - Triage UX Phase 1 — categorized inbox with severity mapping
   - Review-learn — extract lessons from resolved bot findings
+- **Shield Hardening:**
+  - Context enrichment — full file content for small changed files in shield prompt
+  - `--override <reason>` flag — audited bypass for LLM false positives, logged to trap ledger
+  - safeExec forced pipe mode, type-safe return guard
+  - gh-utils error unwrapping matches safeExec error chain
+  - GH_PROMPT_DISABLED on all direct gh invocations
+  - Hook paths resolved from git root, not cwd
+  - jq for JSON parsing in hooks with grep/sed fallback
+  - Hook regex tightened to match git subcommand only
+  - `.claude/worktrees/` excluded from prettier
 - **Ecosystem:**
   - Unified findings model — `TotemFinding` interface, `deduplicateFindings()`
   - User-defined secrets with DLP at every LLM boundary
@@ -26,14 +36,15 @@ Recent completed work (1.5.6–1.5.7):
 
 ### Prioritized Roadmap
 
-**Bug Fixes (next patch: 1.5.8)**
+**Bug Fixes (shipped in 1.5.8)**
 
-- #992 — Shield false positive when diff references symbols from unchanged code (tier-1)
-- #1006 — safeExec result.trim() crashes if stdio overridden to non-pipe mode
-- #1005 — gh-utils error unwrapping doesn't match safeExec error chain structure
-- #1007 — github-cli-pr.ts missing GH_PROMPT_DISABLED on direct gh invocation
-- #989 — Resolve .spec-completed path relative to git root, not cwd
-- #991 — Use jq for JSON parsing in pre-push-check.sh hook
+- ~~#992 — Shield false positive~~ SHIPPED (PR #1019)
+- ~~#1006 — safeExec trim crash~~ SHIPPED (PR #1022)
+- ~~#1005 — gh-utils error unwrapping~~ SHIPPED (PR #1022)
+- ~~#1007 — GH_PROMPT_DISABLED~~ SHIPPED (PR #1022)
+- ~~#989 — .spec-completed path~~ SHIPPED (PR #1022)
+- ~~#991 — jq hook parsing~~ SHIPPED (PR #1022)
+- ~~#1021 — Hook regex too broad~~ SHIPPED (PR #1022)
 
 **Pipeline Integrity (Proposal 195, continued)**
 
