@@ -8,21 +8,21 @@ export async function checkCommand(options: {
   const { log } = await import('../ui.js');
 
   log.info(TAG, 'Running lint...');
-  let lintFailed = false;
+  let lintFailed: Error | null = null;
   try {
     const { lintCommand } = await import('./lint.js');
     await lintCommand({ staged: options.staged });
-  } catch {
-    lintFailed = true;
+  } catch (err) {
+    lintFailed = err instanceof Error ? err : new Error(String(err));
   }
 
   log.info(TAG, 'Running shield...');
-  let shieldFailed = false;
+  let shieldFailed: Error | null = null;
   try {
     const { shieldCommand } = await import('./shield.js');
     await shieldCommand({ model: options.model, fresh: options.fresh, staged: options.staged });
-  } catch {
-    shieldFailed = true;
+  } catch (err) {
+    shieldFailed = err instanceof Error ? err : new Error(String(err));
   }
 
   if (lintFailed || shieldFailed) {
@@ -30,10 +30,12 @@ export async function checkCommand(options: {
     const parts: string[] = [];
     if (lintFailed) parts.push('lint');
     if (shieldFailed) parts.push('shield');
+    const cause = lintFailed ?? shieldFailed;
     throw new TotemError(
       'CHECK_FAILED',
       `Check failed: ${parts.join(' + ')} reported violations.`,
       `Run \`totem ${parts[0]}\` for details.`,
+      { cause },
     );
   }
 
