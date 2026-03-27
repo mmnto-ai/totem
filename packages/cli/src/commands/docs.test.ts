@@ -8,6 +8,7 @@ import type { DocTarget } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import {
+  assemblePrompt,
   DOCS_SYSTEM_PROMPT,
   docsCommand,
   extractUpdatedDocument,
@@ -404,8 +405,48 @@ describe('DOCS_SYSTEM_PROMPT', () => {
 
   it('includes pinned content to protect the tagline', () => {
     expect(DOCS_SYSTEM_PROMPT).toContain('## Pinned Content');
-    expect(DOCS_SYSTEM_PROMPT).toContain('Stop repeating yourself');
     expect(DOCS_SYSTEM_PROMPT).toContain('brilliant goldfish');
+    expect(DOCS_SYSTEM_PROMPT).toContain('COSS Covenant');
+  });
+
+  it('injects staleness protocol into system prompt', () => {
+    expect(DOCS_SYSTEM_PROMPT).toContain('Staleness Protocol');
+    expect(DOCS_SYSTEM_PROMPT).toContain('Ground Truth');
+    expect(DOCS_SYSTEM_PROMPT).not.toContain('Conservative Updates');
+  });
+});
+
+// ─── assemblePrompt ─────────────────────────────────────
+
+describe('assemblePrompt', () => {
+  it('includes ground truth header when activeWork is provided', async () => {
+    const doc = { path: 'README.md', description: 'readme', trigger: 'post-release' as const };
+    const result = await assemblePrompt(
+      doc,
+      '# README\n',
+      { tag: 'v1.0.0', gitLog: 'abc feat: test', closedIssues: '' },
+      '# Active Work\n- ticket 1',
+      'system prompt',
+      '/fake/cwd',
+      '.totem',
+    );
+    expect(result).toContain('GROUND TRUTH');
+    expect(result).toContain('active_work');
+  });
+
+  it('includes safety instruction when activeWork is empty', async () => {
+    const doc = { path: 'README.md', description: 'readme', trigger: 'post-release' as const };
+    const result = await assemblePrompt(
+      doc,
+      '# README\n',
+      { tag: 'v1.0.0', gitLog: 'abc feat: test', closedIssues: '' },
+      '',
+      'system prompt',
+      '/fake/cwd',
+      '.totem',
+    );
+    expect(result).toContain('may be stale');
+    expect(result).not.toContain('GROUND TRUTH');
   });
 });
 
