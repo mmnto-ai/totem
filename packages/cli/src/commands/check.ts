@@ -20,7 +20,7 @@ export async function checkCommand(options: {
   let shieldFailed = false;
   try {
     const { shieldCommand } = await import('./shield.js');
-    await shieldCommand({ model: options.model, fresh: options.fresh });
+    await shieldCommand({ model: options.model, fresh: options.fresh, staged: options.staged });
   } catch {
     shieldFailed = true;
   }

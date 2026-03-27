@@ -9,8 +9,9 @@ export async function statusCommand(): Promise<void> {
 
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
+  const configRoot = path.dirname(configPath);
   const config = await loadConfig(configPath);
-  const totemDir = path.join(cwd, config.totemDir);
+  const totemDir = path.join(configRoot, config.totemDir);
 
   // Git state
   let branch = 'unknown';

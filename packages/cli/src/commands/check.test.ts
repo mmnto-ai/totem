@@ -66,6 +66,10 @@ describe('checkCommand', () => {
     await checkCommand({ model: 'gemini-3-flash', fresh: true, staged: true });
 
     expect(lintCommand).toHaveBeenCalledWith({ staged: true });
-    expect(shieldCommand).toHaveBeenCalledWith({ model: 'gemini-3-flash', fresh: true });
+    expect(shieldCommand).toHaveBeenCalledWith({
+      model: 'gemini-3-flash',
+      fresh: true,
+      staged: true,
+    });
   });
 });
