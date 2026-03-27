@@ -134,8 +134,8 @@ describe('add_lesson auth model (#844)', () => {
   // --- Rate limiting ---
 
   it('rejects after rate limit exceeded', async () => {
-    // Add 10 lessons successfully
-    for (let i = 0; i < 10; i++) {
+    // Add 25 lessons successfully
+    for (let i = 0; i < 25; i++) {
       const res = (await handle({
         lesson: `Lesson number ${i + 1}`,
         context_tags: ['test'],
@@ -143,13 +143,13 @@ describe('add_lesson auth model (#844)', () => {
       expect(res.isError).toBeUndefined();
     }
 
-    // 11th should fail
+    // 26th should fail
     const result = (await handle({
       lesson: 'One too many',
       context_tags: ['test'],
     })) as { isError: boolean; content: Array<{ text: string }> };
     expect(result.isError).toBe(true);
-    expect(result.content[0]!.text).toBe('Rate limit exceeded: maximum 10 lessons per session');
+    expect(result.content[0]!.text).toBe('Rate limit exceeded: maximum 25 lessons per session');
   });
 
   // --- Source provenance ---

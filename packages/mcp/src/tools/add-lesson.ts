@@ -14,7 +14,7 @@ import { formatXmlResponse } from '../xml-format.js';
 // ---------------------------------------------------------------------------
 // Rate limiting (#844) — simple in-memory session counter
 // ---------------------------------------------------------------------------
-const MAX_LESSONS_PER_SESSION = 10;
+const MAX_LESSONS_PER_SESSION = 25;
 let sessionLessonCount = 0;
 
 /** Exported for testing — reset the rate-limit counter between test runs. */
@@ -148,7 +148,7 @@ export function registerAddLesson(server: McpServer): void {
           content: [
             {
               type: 'text' as const,
-              text: 'Rate limit exceeded: maximum 10 lessons per session',
+              text: `Rate limit exceeded: maximum ${MAX_LESSONS_PER_SESSION} lessons per session`,
             },
           ],
           isError: true,
