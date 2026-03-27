@@ -166,7 +166,10 @@ export async function assemblePrompt(
   } else {
     sections.push('\n=== ACTIVE WORK ===');
     sections.push(
-      'No active work context provided. If the document has a roadmap or "upcoming" section, preserve the existing content but add a note that the information may be stale.',
+      wrapXml(
+        'context_note',
+        'No active work context provided. If the document has a roadmap or "upcoming" section, preserve the existing content but add a note that the information may be stale.',
+      ),
     );
   }
 
