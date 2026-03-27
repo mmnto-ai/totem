@@ -7,7 +7,7 @@
 import { validateRegex } from './compiler.js';
 import type { ParsedLesson } from './drift-detector.js';
 import { HEADING_MAX_CHARS } from './lesson-format.js';
-import { extractField } from './lesson-pattern.js';
+import { extractAllFields, extractField, stripInlineCode } from './lesson-pattern.js';
 
 export interface LessonLintDiagnostic {
   lessonHeading: string;
@@ -44,10 +44,34 @@ function lintLesson(lesson: ParsedLesson): LessonLintDiagnostic[] {
     });
   }
 
-  // Only apply Pipeline 1 checks if the lesson has a Pattern field
-  if (!isPipeline1(lesson.raw)) return diags;
-
+  // ── Example Hit/Miss validation (applies to ALL lessons) ──
   const body = lesson.raw;
+  const exampleHits = extractAllFields(body, 'Example Hit');
+  const exampleMisses = extractAllFields(body, 'Example Miss');
+
+  for (const hit of exampleHits) {
+    if (!stripInlineCode(hit).trim()) {
+      diags.push({
+        ...base,
+        severity: 'error',
+        field: 'Example Hit',
+        message: 'Example Hit value is empty',
+      });
+    }
+  }
+  for (const miss of exampleMisses) {
+    if (!stripInlineCode(miss).trim()) {
+      diags.push({
+        ...base,
+        severity: 'error',
+        field: 'Example Miss',
+        message: 'Example Miss value is empty',
+      });
+    }
+  }
+
+  // Only apply Pipeline 1 checks if the lesson has a Pattern field
+  if (!isPipeline1(body)) return diags;
 
   // ── Required fields ──
   // Pattern is guaranteed by isPipeline1 check above
@@ -124,6 +148,16 @@ function lintLesson(lesson: ParsedLesson): LessonLintDiagnostic[] {
       severity: 'warning',
       field: 'Scope',
       message: 'Missing **Scope:** field — rule will match all files',
+    });
+  }
+
+  // ── Engine vs examples ──
+  if ((exampleHits.length > 0 || exampleMisses.length > 0) && engine && engine !== 'regex') {
+    diags.push({
+      ...base,
+      severity: 'warning',
+      field: 'Example Hit',
+      message: 'Example Hit/Miss lines are only verified for regex-engine rules',
     });
   }
 

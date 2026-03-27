@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { extractManualPattern } from './lesson-pattern.js';
+import {
+  extractAllFields,
+  extractManualPattern,
+  extractRuleExamples,
+  stripInlineCode,
+} from './lesson-pattern.js';
 
 describe('extractManualPattern', () => {
   it('extracts all fields from a well-formed lesson body', () => {
@@ -64,5 +69,57 @@ describe('extractManualPattern', () => {
     const body = '**Pattern:** foo\\.bar';
     const result = extractManualPattern(body);
     expect(result?.fileGlobs).toBeUndefined();
+  });
+});
+
+describe('extractAllFields', () => {
+  it('returns all matching fields in order', () => {
+    const body = '**Example Hit:** `foo()`\n**Example Hit:** `bar()`\n**Example Miss:** `baz()`';
+    expect(extractAllFields(body, 'Example Hit')).toEqual(['`foo()`', '`bar()`']);
+  });
+
+  it('returns empty array when no matches', () => {
+    expect(extractAllFields('no examples here', 'Example Hit')).toEqual([]);
+  });
+
+  it('handles non-bold syntax', () => {
+    const body = 'Example Hit: hit1\nExample Hit: hit2';
+    expect(extractAllFields(body, 'Example Hit')).toEqual(['hit1', 'hit2']);
+  });
+});
+
+describe('stripInlineCode', () => {
+  it('strips surrounding backticks', () => {
+    expect(stripInlineCode('`console.log()`')).toBe('console.log()');
+  });
+
+  it('leaves non-backtick text unchanged', () => {
+    expect(stripInlineCode('console.log()')).toBe('console.log()');
+  });
+
+  it('does not strip partial backticks', () => {
+    expect(stripInlineCode('`partial')).toBe('`partial');
+  });
+});
+
+describe('extractRuleExamples', () => {
+  it('returns hits and misses with backticks stripped', () => {
+    const body = '**Example Hit:** `console.log("bad")`\n**Example Miss:** `logger.info("good")`';
+    const result = extractRuleExamples(body);
+    expect(result).toEqual({
+      hits: ['console.log("bad")'],
+      misses: ['logger.info("good")'],
+    });
+  });
+
+  it('returns null when no examples exist', () => {
+    expect(extractRuleExamples('plain body')).toBeNull();
+  });
+
+  it('handles multiple hits and zero misses', () => {
+    const body = '**Example Hit:** a\n**Example Hit:** b';
+    const result = extractRuleExamples(body);
+    expect(result!.hits).toEqual(['a', 'b']);
+    expect(result!.misses).toEqual([]);
   });
 });

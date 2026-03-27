@@ -4981,10 +4981,9 @@
     {
       "lessonHash": "fb05f895862808e6",
       "lessonHeading": "Forbid direct child_process — use safeExec",
+      "pattern": "(?:from|require\\()\\s*['\"](?:node:)?child_process['\"]",
       "message": "Forbid direct child_process — use safeExec",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(?:from|require\\()\\s*['\"](?:node:)?child_process['\"]",
       "compiledAt": "2026-03-26T23:54:52.204Z",
       "createdAt": "2026-03-26T23:54:52.204Z",
       "fileGlobs": [
@@ -4995,15 +4994,15 @@
         "!**/*.spec.ts",
         "!**/*.test.js",
         "!**/*.spec.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "cf65e2b445329be2",
       "lessonHeading": "Forbid inline JSON.parse(readFileSync) — use readJsonSafe",
+      "pattern": "JSON\\.parse\\(\\s*\\S*readFileSync",
       "message": "Forbid inline JSON.parse(readFileSync) — use readJsonSafe",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "JSON\\.parse\\(\\s*\\S*readFileSync",
       "compiledAt": "2026-03-26T23:54:52.205Z",
       "createdAt": "2026-03-26T23:54:52.205Z",
       "fileGlobs": [
@@ -5011,6 +5010,562 @@
         "!packages/core/src/sys/**",
         "!**/*.test.ts",
         "!**/*.spec.ts"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "902327c1e2a79231",
+      "lessonHeading": "Custom .env parsers must strip CRLF and quotes",
+      "message": "Custom .env parsers must handle CRLF (use /\\r?\\n/ or strip \\r), strip surrounding quotes, and avoid overriding existing process.env keys.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\.split\\(['\"]\\\\n['\"]\\)",
+      "compiledAt": "2026-03-27T00:39:45.884Z",
+      "createdAt": "2026-03-27T00:39:45.884Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "e99b55cacdba1707",
+      "lessonHeading": "When using ES2022 error causes, concatenating the original",
+      "message": "Do not concatenate the original error message when using ES2022 error causes; the cause chain already preserves this information.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "new\\s+\\w*Error\\s*\\([^,]*?(\\b\\w+)\\.message[^,]*?,\\s*\\{[^}]*cause\\s*:\\s*\\1[^}]*\\}\\s*\\)",
+      "compiledAt": "2026-03-27T00:38:59.314Z",
+      "createdAt": "2026-03-27T00:38:59.314Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ]
+    },
+    {
+      "lessonHash": "4f283f5495489a19",
+      "lessonHeading": "Replacing inline fs.rmSync calls with a shared helper",
+      "message": "Use the shared helper instead of calling fs.rmSync directly to ensure consistent retry logic and error handling.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\brmSync\\s*\\(",
+      "compiledAt": "2026-03-27T00:40:04.829Z",
+      "createdAt": "2026-03-27T00:40:04.829Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
+    },
+    {
+      "lessonHash": "b0cf9dc0da0f6fc1",
+      "lessonHeading": "Use a centralized cleanup helper with retry semantics",
+      "message": "Use a centralized cleanup helper with retry semantics for temporary directories to prevent intermittent test failures on Windows.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\b(fs\\.rmSync|fs\\.promises\\.rm|fs\\.rmdirSync|rimraf|rmSync|rmdirSync)\\s*\\(",
+      "compiledAt": "2026-03-27T00:39:58.470Z",
+      "createdAt": "2026-03-27T00:39:58.470Z",
+      "fileGlobs": [
+        "**/*.test.ts",
+        "**/*.test.js",
+        "**/*.spec.ts",
+        "**/*.spec.js"
+      ]
+    },
+    {
+      "lessonHash": "048fab1fa662ff2b",
+      "lessonHeading": "When using optional diagnostic callbacks like 'onWarn?.()',",
+      "message": "Always provide a fallback to 'console.warn' when using optional diagnostic callbacks like 'onWarn?.()' (e.g. '(onWarn ?? console.warn)(...)') to prevent silent degradation of diagnostics.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "onWarn?.($ARGS)",
+      "compiledAt": "2026-03-27T00:40:09.944Z",
+      "createdAt": "2026-03-27T00:40:09.944Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ]
+    },
+    {
+      "lessonHash": "3845961d6de9c21c",
+      "lessonHeading": "Static top-level imports in CLI command files increase",
+      "message": "Static top-level imports in CLI commands increase startup latency. Use dynamic import() inside the command handler instead.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "^import\\s+(?!type\\b|\\()",
+      "compiledAt": "2026-03-27T00:40:35.148Z",
+      "createdAt": "2026-03-27T00:40:35.148Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "483a8df7ee034ba1",
+      "lessonHeading": "Unconditionally deleting environment variables in test",
+      "message": "Avoid unconditionally deleting environment variables in tests. Capture the original value and restore it to ensure test isolation.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bdelete\\s+process\\.env",
+      "compiledAt": "2026-03-27T00:40:52.377Z",
+      "createdAt": "2026-03-27T00:40:52.377Z",
+      "fileGlobs": [
+        "**/*.test.ts",
+        "**/*.test.js",
+        "**/*.spec.ts",
+        "**/*.spec.js",
+        "**/tests/**/*.ts",
+        "**/tests/**/*.js"
+      ]
+    },
+    {
+      "lessonHash": "861a40712643e255",
+      "lessonHeading": "Avoid including empty strings in branch whitelists or using",
+      "message": "Avoid empty strings in branch whitelists or as truthy fallbacks; these can cause security gates to be bypassed if branch resolution fails.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "(\\[|,)\\s*['\"]['\"]\\s*(,|\\])|-\\s*['\"]['\"]|(\\|\\||\\?\\?)\\s*['\"]['\"]",
+      "compiledAt": "2026-03-27T00:40:47.113Z",
+      "createdAt": "2026-03-27T00:40:47.113Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.yml",
+        "**/*.yaml",
+        "**/*.json"
+      ]
+    },
+    {
+      "lessonHash": "94acc9860d6b56e1",
+      "lessonHeading": "CLI command modules should use dynamic imports for core",
+      "message": "CLI command modules should use dynamic imports for core library values to prevent unnecessary overhead at startup.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "import\\s+(?!type\\s).*from\\s+['\"].*core.*['\"]",
+      "compiledAt": "2026-03-27T00:40:55.336Z",
+      "createdAt": "2026-03-27T00:40:55.336Z",
+      "fileGlobs": [
+        "packages/cli/**/*.ts"
+      ]
+    },
+    {
+      "lessonHash": "73b64c966fa24c74",
+      "lessonHeading": "Core libraries should avoid direct console.warn calls",
+      "message": "Avoid direct console.warn calls in core libraries; use injectable handlers or status objects instead.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "console.warn($ARGS)",
+      "compiledAt": "2026-03-27T00:41:03.181Z",
+      "createdAt": "2026-03-27T00:41:03.181Z",
+      "fileGlobs": [
+        "**/core/**/*.ts",
+        "**/core/**/*.tsx",
+        "**/core/**/*.js",
+        "**/core/**/*.jsx"
+      ]
+    },
+    {
+      "lessonHash": "29e530ba79e2dfae",
+      "lessonHeading": "Trimming output from commands like 'git ls-files -z'",
+      "message": "Trimming 'git ls-files -z' or 'git show' output can corrupt NUL-delimited paths or strip intentional whitespace. Always pass 'trim: false' to the execution wrapper.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "['\"]git\\s+(ls-files\\s+-z|show\\b).*?['\"](?![^)]*trim:\\s*false)",
+      "compiledAt": "2026-03-27T00:41:41.220Z",
+      "createdAt": "2026-03-27T00:41:41.220Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
+    },
+    {
+      "lessonHash": "d8b9a2ac9b1d003f",
+      "lessonHeading": "Avoid using dynamic imports in shared utility modules",
+      "message": "Avoid using dynamic imports in shared utility modules. Dynamic imports should be deferred to command handlers to optimize CLI startup performance.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bimport\\s*\\(",
+      "compiledAt": "2026-03-27T00:42:15.314Z",
+      "createdAt": "2026-03-27T00:42:15.314Z",
+      "fileGlobs": [
+        "packages/cli/src/**/*.ts",
+        "!packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "6467c35159c1504d",
+      "lessonHeading": "Restrict dynamic imports to CLI command entry points",
+      "message": "Dynamic imports are restricted to CLI command entry points. Use standard top-level imports in utility and adapter layers to maintain structural clarity and pass security audits.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "import($ARG)",
+      "compiledAt": "2026-03-27T00:41:22.095Z",
+      "createdAt": "2026-03-27T00:41:22.095Z",
+      "fileGlobs": [
+        "packages/cli/src/**/*.ts",
+        "!packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "7fe81b362281cbfd",
+      "lessonHeading": "Explicitly exclude test files (e.g., !*/.test.ts)",
+      "message": "Explicitly exclude test files (e.g., '!**/*.test.ts') from linting rule scopes to prevent false positives.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bfileGlobs\\b\\s*[:=]\\s*\\[(?![^\\]]*['\"]!\\*\\*\\/[^'\"]*test)[^\\]]+\\]",
+      "compiledAt": "2026-03-27T00:42:54.141Z",
+      "createdAt": "2026-03-27T00:42:54.141Z",
+      "fileGlobs": [
+        "**/*.json",
+        "**/*.yaml",
+        "**/*.yml",
+        "**/*.ts",
+        "**/*.js"
+      ]
+    },
+    {
+      "lessonHash": "12064b904eacbdc8",
+      "lessonHeading": "Matching error message substrings couples logic",
+      "message": "Avoid matching error message substrings as it couples logic to brittle string values. Use exported error codes or discriminated properties for resilient and type-safe error handling.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\.message(\\.(includes|match|startsWith|indexOf|search)\\s*\\(|\\s*(===|==|!==|!=))",
+      "compiledAt": "2026-03-27T00:42:28.834Z",
+      "createdAt": "2026-03-27T00:42:28.834Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ]
+    },
+    {
+      "lessonHash": "3bb96274aa5aca93",
+      "lessonHeading": "Use dynamic await import() inside CLI command handlers",
+      "message": "Use dynamic await import() inside CLI command handlers for large internal packages instead of top-level static imports to improve CLI responsiveness.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "import\\s+(?!type\\s+).*from\\s+['\"](@|\\.\\.?\\/)",
+      "compiledAt": "2026-03-27T00:42:59.402Z",
+      "createdAt": "2026-03-27T00:42:59.402Z",
+      "fileGlobs": [
+        "**/packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "a3d0d61011ee543d",
+      "lessonHeading": "CLI command actions must wrap asynchronous logic",
+      "message": "CLI command actions must wrap asynchronous logic in a try/catch block that delegates to a centralized error handler",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\.action\\(\\s*async\\b[^{]*\\{\\s*(?!try\\b)",
+      "compiledAt": "2026-03-27T00:44:34.111Z",
+      "createdAt": "2026-03-27T00:44:34.111Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "4467edfb0c4a1a7d",
+      "lessonHeading": "Shell execution wrappers that automatically trim output",
+      "message": "Shell execution results with 'inherit' or 'ignore' stdio can be null, undefined, or Buffers. Check the result type before calling string methods like .trim() to prevent runtime errors.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\b(execSync|spawnSync)\\(.*?stdio:\\s*['\"](inherit|ignore)['\"].*?\\)(\\.stdout)?\\.trim\\(",
+      "compiledAt": "2026-03-27T00:43:54.637Z",
+      "createdAt": "2026-03-27T00:43:54.637Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
+    },
+    {
+      "lessonHash": "efdd9300f140a783",
+      "lessonHeading": "Do not replace Zod validation with static type assertions",
+      "message": "Do not use type assertions ('as') for untrusted inputs; use Zod validation for runtime safety.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "$EXPR as $TYPE",
+      "compiledAt": "2026-03-27T00:43:34.037Z",
+      "createdAt": "2026-03-27T00:43:34.037Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "18680ad92f119950",
+      "lessonHeading": "Use dynamic import() within CLI command handlers instead",
+      "message": "Use dynamic import() within CLI command handlers instead of top-level static imports to minimize startup latency and improve responsiveness.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "import $BINDING from '$SOURCE'",
+      "compiledAt": "2026-03-27T00:44:28.586Z",
+      "createdAt": "2026-03-27T00:44:28.586Z",
+      "fileGlobs": [
+        "**/cli/**/*.ts",
+        "**/cli/**/*.js",
+        "!**/*.test.ts",
+        "!**/*.test.js"
+      ]
+    },
+    {
+      "lessonHash": "c7ef92f291a1d8a3",
+      "lessonHeading": "Restricting dynamic imports to CLI command entry points",
+      "message": "Dynamic imports are restricted to CLI command entry points. Use static top-level imports in utility and adapter layers.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "import($ARG)",
+      "compiledAt": "2026-03-27T00:45:09.377Z",
+      "createdAt": "2026-03-27T00:45:09.377Z",
+      "fileGlobs": [
+        "packages/cli/**/*.ts",
+        "!packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "6372ca93a7cda772",
+      "lessonHeading": "The use of dynamic imports inside CLI command handlers",
+      "message": "Use dynamic imports (await import(...)) inside command handlers for heavy dependencies and core logic to maintain fast CLI boot times.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bimport\\s+(?!type\\b).*['\"]\\.\\.\\/",
+      "compiledAt": "2026-03-27T00:45:29.232Z",
+      "createdAt": "2026-03-27T00:45:29.232Z",
+      "fileGlobs": [
+        "**/packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "f593e850e04fb06a",
+      "lessonHeading": "For data structures with few fields (e.g., < 10), use type",
+      "message": "Use type assertions instead of Zod for small data structures (< 10 fields) in CLI commands to reduce dependency overhead and dynamic imports.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "z.object($$$)",
+      "compiledAt": "2026-03-27T00:45:37.420Z",
+      "createdAt": "2026-03-27T00:45:37.420Z",
+      "fileGlobs": [
+        "**/packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "dfc0558a23dbd2f8",
+      "lessonHeading": "Top-level imports of heavy classes or modules",
+      "message": "Use dynamic imports inside command function bodies for heavy modules to improve CLI startup performance.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bimport\\s+(?!type\\b)",
+      "compiledAt": "2026-03-27T00:46:59.789Z",
+      "createdAt": "2026-03-27T00:46:59.789Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "65ede9bfdf6995fe",
+      "lessonHeading": "Confine dynamic imports to CLI command handlers to maintain",
+      "message": "Confine dynamic imports to CLI command handlers to maintain a clean dependency graph and prevent shared utility layers from triggering security scanner flags.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "import($ARG)",
+      "compiledAt": "2026-03-27T00:46:09.401Z",
+      "createdAt": "2026-03-27T00:46:09.401Z",
+      "fileGlobs": [
+        "packages/cli/**/*.ts",
+        "!packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "75266f8811d238d4",
+      "lessonHeading": "Utilize jq instead of standard string manipulation tools",
+      "message": "Use 'jq' instead of 'grep' or 'sed' for processing JSON files to ensure reliable data extraction.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\b(grep|sed)\\b.*\\.json\\b|\\.json\\b.*\\b(grep|sed)\\b",
+      "compiledAt": "2026-03-27T00:45:49.942Z",
+      "createdAt": "2026-03-27T00:45:49.942Z",
+      "fileGlobs": [
+        "**/*.sh",
+        "**/*.bash",
+        "**/*.yml",
+        "**/*.yaml"
+      ]
+    },
+    {
+      "lessonHash": "bf6086ac0cf0b501",
+      "lessonHeading": "Centralize repeated filesystem cleanup options into named",
+      "message": "Centralize filesystem cleanup options (like maxRetries or retryDelay) into named constants to avoid magic numbers and enable global tuning.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\b(maxRetries|retryDelay)\\s*[:=]\\s*\\d+",
+      "compiledAt": "2026-03-27T00:46:02.392Z",
+      "createdAt": "2026-03-27T00:46:02.392Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx",
+        "!**/*.test.ts",
+        "!**/*.test.js",
+        "!**/*.spec.ts",
+        "!**/*.spec.js"
+      ]
+    },
+    {
+      "lessonHash": "59a6db1946eb7bf7",
+      "lessonHeading": "Convert top-level static imports to dynamic import() calls",
+      "message": "Convert top-level static imports to dynamic import() calls inside command handlers to reduce CLI startup latency.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bimport\\s+(?!type\\b)",
+      "compiledAt": "2026-03-27T00:47:33.172Z",
+      "createdAt": "2026-03-27T00:47:33.172Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "c5192192d2ea5219",
+      "lessonHeading": "Moving static imports of heavy internal packages",
+      "message": "Static imports of internal packages in command files increase CLI startup latency. Use dynamic await import() within the command handler instead.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "import\\s+(?!type\\s+).*['\"](\\.\\.?\\/|@).*['\"]",
+      "compiledAt": "2026-03-27T00:47:29.539Z",
+      "createdAt": "2026-03-27T00:47:29.539Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "7fa56299607e1244",
+      "lessonHeading": "Avoid bypassing visibility checks with bracket notation",
+      "message": "Avoid bypassing visibility checks with bracket notation to call private initialization methods. Use a public static factory method to encapsulate asynchronous setup and dynamic imports.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "$OBJ['$METHOD']($$$ARGS)",
+      "compiledAt": "2026-03-27T00:47:22.788Z",
+      "createdAt": "2026-03-27T00:47:22.788Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "222bf3404fc312a5",
+      "lessonHeading": "Use maxRetries and retryDelay in fs.rmSync to prevent",
+      "message": "Use maxRetries and retryDelay in fs.rmSync to prevent ENOTEMPTY flakes on Windows caused by filesystem locks.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\brmSync\\s*\\((?!(?=[^)]*maxRetries)(?=[^)]*retryDelay))[^)]*\\)",
+      "compiledAt": "2026-03-27T00:47:59.454Z",
+      "createdAt": "2026-03-27T00:47:59.454Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
+    },
+    {
+      "lessonHash": "60c2e674222dc4e5",
+      "lessonHeading": "Shell hooks should use word-boundary regex instead",
+      "message": "Use word-boundary regex (e.g., [[ $cmd =~ \\bcommit\\b ]]) instead of simple string matching or wildcards to correctly identify git commands and handle flags.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "==?\\s+['\"]?\\*(?:commit|push)\\*['\"]?|grep\\s+(['\"]?)(?:commit|push)\\1",
+      "compiledAt": "2026-03-27T00:48:35.116Z",
+      "createdAt": "2026-03-27T00:48:35.116Z",
+      "fileGlobs": [
+        "**/*.sh",
+        "**/*.bash",
+        "**/hooks/**",
+        "!**/node_modules/**"
+      ]
+    },
+    {
+      "lessonHash": "089b0c628b330c16",
+      "lessonHeading": "Core packages should use an injectable logger interface",
+      "message": "Core packages should use an injectable logger interface instead of direct console calls to allow consumers to control output routing.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "console.$METHOD($ARGS)",
+      "compiledAt": "2026-03-27T00:49:01.538Z",
+      "createdAt": "2026-03-27T00:49:01.538Z",
+      "fileGlobs": [
+        "packages/core/**/*.ts",
+        "packages/core/**/*.tsx",
+        "packages/core/**/*.js",
+        "packages/core/**/*.jsx",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "1dec0dfe3676f445",
+      "lessonHeading": "Do not include empty strings in branch whitelists,",
+      "message": "Do not include empty strings in branch whitelists; explicit matching ensures environment detection failures result in a hard block.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\b(branch|whitelist|allowed).*[\\\\[,:\\\\(=]\\s*['\"]['\"]",
+      "compiledAt": "2026-03-27T00:49:45.294Z",
+      "createdAt": "2026-03-27T00:49:45.294Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.json",
+        "**/*.yml",
+        "**/*.yaml",
+        "**/*.py",
+        "**/*.sh"
       ]
     }
   ],
@@ -5573,6 +6128,19 @@
     "2ef38ca21779be02",
     "5dbe2c1c015b0bb7",
     "0167a783f75b5ecd",
-    "7e678a388ffceae8"
+    "7e678a388ffceae8",
+    "d98d038cf198e53d",
+    "34c9ee5bc7cdf690",
+    "9c03a183280f2aeb",
+    "b2e371530f539855",
+    "39fd577e75c4eb15",
+    "5cdcc83f6147ea81",
+    "37884014eb3fdf28",
+    "8bbb939ad9c69422",
+    "dcdf305cfc5b1b8c",
+    "53225e9512ae19e5",
+    "13ba772f1905913e",
+    "7db65d7d004dd0f2",
+    "4961beeff23b74c1"
   ]
 }

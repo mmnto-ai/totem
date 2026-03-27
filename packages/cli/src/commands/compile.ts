@@ -87,11 +87,13 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
     compileLesson: compileLessonCore,
     exportLessons,
     extractManualPattern,
+    formatExampleFailure,
     hashLesson,
     loadCompiledRulesFile,
     parseCompilerResponse,
     readAllLessons,
     saveCompiledRulesFile,
+    verifyRuleExamples,
   } = await import('@mmnto/totem');
 
   const cwd = process.cwd();
@@ -224,6 +226,13 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
         for (const lesson of toCompile) {
           const manualResult = buildManualRule(lesson, existingByHash);
           if (manualResult.rule) {
+            // Verify rule against inline Example Hit/Miss lines
+            const testResult = verifyRuleExamples(manualResult.rule, lesson.body);
+            if (testResult && !testResult.passed) {
+              log.warn(TAG, `[${lesson.heading}] ${formatExampleFailure(testResult)}`);
+              failed++;
+              continue;
+            }
             // ADR-065: Pipeline 1 error rules require a test fixture
             if (manualResult.rule.severity === 'error' && !testedHashes.has(lesson.hash)) {
               manualResult.rule.severity = 'warning';
@@ -326,6 +335,13 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
 
             const ruleResult = buildCompiledRule(parsed, lesson, existingByHash);
             if (ruleResult.rule) {
+              // Verify rule against inline Example Hit/Miss lines
+              const testResult = verifyRuleExamples(ruleResult.rule, lesson.body);
+              if (testResult && !testResult.passed) {
+                log.warn(TAG, `[${lesson.heading}] ${formatExampleFailure(testResult)}`);
+                failed++;
+                continue;
+              }
               newRules.push(ruleResult.rule);
               compiled++;
               logCompiledRule(log, lesson, ruleResult.rule);

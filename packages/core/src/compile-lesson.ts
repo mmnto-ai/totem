@@ -1,6 +1,8 @@
 import { engineFields, sanitizeFileGlobs, validateRegex } from './compiler.js';
 import type { CompiledRule, CompilerOutput } from './compiler-schema.js';
-import { extractManualPattern } from './lesson-pattern.js';
+import { extractManualPattern, extractRuleExamples } from './lesson-pattern.js';
+import type { RuleTestResult } from './rule-tester.js';
+import { testRule } from './rule-tester.js';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -119,6 +121,62 @@ export interface BuildRuleResult {
 }
 
 /**
+ * Derive a virtual file path that satisfies a rule's fileGlobs.
+ * Used to construct test fixtures where glob matching is active.
+ */
+function deriveVirtualFilePath(rule: CompiledRule): string {
+  if (!rule.fileGlobs || rule.fileGlobs.length === 0) return 'src/example.ts';
+  const positiveGlob = rule.fileGlobs.find((g) => !g.startsWith('!'));
+  if (!positiveGlob) return 'src/example.ts';
+
+  // Exact file (no glob chars) — return as-is
+  if (!positiveGlob.includes('*') && !positiveGlob.includes('?')) {
+    return positiveGlob;
+  }
+
+  // Replace glob wildcards with concrete segments to produce a path
+  // that satisfies the glob: **/ → src/, * → example
+  // e.g. **/*.test.ts → src/example.test.ts, *.py → example.py
+  return positiveGlob.replace(/\*\*\//g, 'src/').replace(/\*/g, 'example');
+}
+
+/**
+ * Verify a compiled rule against inline Example Hit/Miss lines.
+ * Returns null if no examples exist or engine is not regex.
+ * Returns RuleTestResult if verification was run.
+ */
+export function verifyRuleExamples(rule: CompiledRule, body: string): RuleTestResult | null {
+  const examples = extractRuleExamples(body);
+  if (!examples) return null;
+  if (rule.engine !== 'regex') return null;
+
+  const fixture = {
+    ruleHash: rule.lessonHash,
+    filePath: deriveVirtualFilePath(rule),
+    failLines: examples.hits,
+    passLines: examples.misses,
+    fixturePath: '(inline examples)',
+  };
+
+  return testRule(rule, fixture);
+}
+
+export function formatExampleFailure(result: RuleTestResult): string {
+  const details: string[] = [];
+  if (result.missedFails.length > 0) {
+    details.push(
+      `Example Hits that did NOT match: ${result.missedFails.map((l) => JSON.stringify(l)).join(', ')}`,
+    );
+  }
+  if (result.falsePositives.length > 0) {
+    details.push(
+      `Example Misses that DID match: ${result.falsePositives.map((l) => JSON.stringify(l)).join(', ')}`,
+    );
+  }
+  return `Rule failed inline examples — ${details.join('; ')}`;
+}
+
+/**
  * Build a CompiledRule from a lesson's manually specified pattern.
  * Returns { rule, rejectReason } so callers can report why a pattern was rejected.
  */
@@ -171,7 +229,14 @@ export async function compileLesson(
 
   // ── Pipeline 1: Manual pattern (zero LLM) ────────
   const manualResult = buildManualRule(lesson, existingByHash);
-  if (manualResult.rule) return { status: 'compiled', rule: manualResult.rule };
+  if (manualResult.rule) {
+    const testResult = verifyRuleExamples(manualResult.rule, lesson.body);
+    if (testResult && !testResult.passed) {
+      callbacks?.onWarn?.(lesson.heading, formatExampleFailure(testResult));
+      return { status: 'failed' };
+    }
+    return { status: 'compiled', rule: manualResult.rule };
+  }
   if (manualResult.rejectReason) {
     callbacks?.onWarn?.(lesson.heading, manualResult.rejectReason);
     return { status: 'failed' };
@@ -201,5 +266,10 @@ export async function compileLesson(
     return { status: 'failed' };
   }
 
+  const testResult = verifyRuleExamples(ruleResult.rule, lesson.body);
+  if (testResult && !testResult.passed) {
+    callbacks?.onWarn?.(lesson.heading, formatExampleFailure(testResult));
+    return { status: 'failed' };
+  }
   return { status: 'compiled', rule: ruleResult.rule };
 }
