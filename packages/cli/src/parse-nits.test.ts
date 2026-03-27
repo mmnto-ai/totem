@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseCodeRabbitNits } from './parse-nits.js';
+import {
+  parseCodeRabbitNits,
+  parseCodeRabbitOutsideDiff,
+  parseCodeRabbitReviewFindings,
+} from './parse-nits.js';
 
 // ─── Sample CodeRabbit nit block ─────────────────────────
 
@@ -157,5 +161,131 @@ Overall looks good.`;
 </blockquote></details>`;
     const nits = parseCodeRabbitNits(body);
     expect(nits).toHaveLength(0);
+  });
+});
+
+// ─── Sample outside-diff blocks ──────────────────────────
+
+const SAMPLE_OUTSIDE_DIFF_BLOCK = `<details>
+<summary>⚠️ Potential issue (outside the diff range)</summary>
+
+The \`processData\` function in \`src/utils.ts\` has a potential memory leak when handling large arrays.
+
+</details>`;
+
+const SAMPLE_OUTSIDE_DIFF_RANGE_BLOCK = `<details>
+<summary>Outside diff range comments (3)</summary>
+
+**src/config.ts (line 45):** Missing null check on config.options
+**src/index.ts (line 12):** Unused import
+
+</details>`;
+
+// ─── parseCodeRabbitOutsideDiff ──────────────────────────
+
+describe('parseCodeRabbitOutsideDiff', () => {
+  it('extracts "outside the diff" content from a CR review body', () => {
+    const results = parseCodeRabbitOutsideDiff(SAMPLE_OUTSIDE_DIFF_BLOCK);
+    expect(results).toHaveLength(1);
+    expect(results[0]).toContain('processData');
+    expect(results[0]).toContain('memory leak');
+  });
+
+  it('extracts "Outside diff range" content from a CR review body', () => {
+    const results = parseCodeRabbitOutsideDiff(SAMPLE_OUTSIDE_DIFF_RANGE_BLOCK);
+    expect(results).toHaveLength(1);
+    expect(results[0]).toContain('Missing null check');
+    expect(results[0]).toContain('Unused import');
+  });
+
+  it('returns empty array when no outside-diff blocks exist', () => {
+    const body = `## Summary\n\nNo outside diff blocks here.\n\n<details>\n<summary>Some other section</summary>\nContent.\n</details>`;
+    expect(parseCodeRabbitOutsideDiff(body)).toEqual([]);
+  });
+
+  it('returns empty array for empty string', () => {
+    expect(parseCodeRabbitOutsideDiff('')).toEqual([]);
+  });
+
+  it('matches case-insensitively', () => {
+    const body = `<details>
+<summary>OUTSIDE THE DIFF findings</summary>
+
+An uppercase outside-diff finding.
+
+</details>`;
+    const results = parseCodeRabbitOutsideDiff(body);
+    expect(results).toHaveLength(1);
+    expect(results[0]).toContain('uppercase outside-diff finding');
+  });
+
+  it('handles multiple outside-diff blocks', () => {
+    const body = `${SAMPLE_OUTSIDE_DIFF_BLOCK}
+
+Some text between blocks.
+
+${SAMPLE_OUTSIDE_DIFF_RANGE_BLOCK}`;
+    const results = parseCodeRabbitOutsideDiff(body);
+    expect(results).toHaveLength(2);
+    expect(results[0]).toContain('processData');
+    expect(results[1]).toContain('Missing null check');
+  });
+
+  it('does not match nitpick blocks', () => {
+    const nitsOnly = `<details>
+<summary>🧹 Nitpick comments (1)</summary>
+
+A nit, not an outside-diff finding.
+
+</details>`;
+    expect(parseCodeRabbitOutsideDiff(nitsOnly)).toEqual([]);
+  });
+
+  it('strips wrapper HTML tags but preserves content', () => {
+    const body = `<details>
+<summary>⚠️ outside the diff issue</summary><blockquote>
+
+Important finding here.
+
+</blockquote></details>`;
+    const results = parseCodeRabbitOutsideDiff(body);
+    expect(results).toHaveLength(1);
+    expect(results[0]).not.toMatch(/<\/?blockquote>/);
+    expect(results[0]).toContain('Important finding here');
+  });
+});
+
+// ─── parseCodeRabbitReviewFindings ───────────────────────
+
+describe('parseCodeRabbitReviewFindings', () => {
+  it('returns typed results for both nitpicks and outside-diff findings', () => {
+    const body = `${SAMPLE_NIT_BLOCK}
+
+${SAMPLE_OUTSIDE_DIFF_BLOCK}`;
+    const findings = parseCodeRabbitReviewFindings(body);
+
+    const nits = findings.filter((f) => f.type === 'nitpick');
+    const outsideDiff = findings.filter((f) => f.type === 'outside-diff');
+
+    expect(nits.length).toBeGreaterThanOrEqual(1);
+    expect(outsideDiff).toHaveLength(1);
+    expect(outsideDiff[0]!.content).toContain('processData');
+  });
+
+  it('returns empty array when no matching blocks exist', () => {
+    const body = '## Summary\n\nJust a normal review.';
+    expect(parseCodeRabbitReviewFindings(body)).toEqual([]);
+  });
+
+  it('returns only nitpicks when no outside-diff blocks exist', () => {
+    const findings = parseCodeRabbitReviewFindings(SAMPLE_NIT_BLOCK);
+    expect(findings.every((f) => f.type === 'nitpick')).toBe(true);
+    expect(findings.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('returns only outside-diff when no nitpick blocks exist', () => {
+    const findings = parseCodeRabbitReviewFindings(SAMPLE_OUTSIDE_DIFF_BLOCK);
+    expect(findings.every((f) => f.type === 'outside-diff')).toBe(true);
+    expect(findings).toHaveLength(1);
   });
 });

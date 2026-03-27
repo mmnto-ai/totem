@@ -575,10 +575,11 @@ program
 program
   .command('lint-lessons')
   .description('Validate lesson metadata (patterns, scopes, severity)')
-  .action(async () => {
+  .option('--strict', 'Promote warnings to errors (exit non-zero on any diagnostic)')
+  .action(async (opts) => {
     try {
       const { lintLessonsCommand } = await import('./commands/lint-lessons.js');
-      await lintLessonsCommand();
+      await lintLessonsCommand({ strict: opts.strict ?? false });
     } catch (err) {
       handleError(err);
     }

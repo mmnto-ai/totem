@@ -193,4 +193,54 @@ describe('formatTriageOutput', () => {
     // Full 200 chars should NOT appear
     expect(output).not.toContain(longBody);
   });
+
+  it('renders review body findings with (review body) location', () => {
+    const findings: CategorizedFinding[] = [
+      makeFinding({
+        triageCategory: 'architecture',
+        tool: 'coderabbit',
+        severity: 'warning',
+        file: '(review body)',
+        line: undefined,
+        body: 'The processData function has a potential memory leak.',
+        dedupKey: 'review-body-1',
+      }),
+    ];
+
+    const output = formatTriageOutput(42, findings, 1, noColor);
+
+    expect(output).toContain('(review body)');
+    expect(output).toContain('processData function has a potential memory leak');
+    expect(output).toContain('CR/warning');
+  });
+
+  it('mixes inline and review body findings across categories', () => {
+    const findings: CategorizedFinding[] = [
+      makeFinding({
+        triageCategory: 'security',
+        body: 'SQL injection risk',
+        file: 'src/db.ts',
+        line: 10,
+        dedupKey: 'k1',
+      }),
+      makeFinding({
+        triageCategory: 'architecture',
+        tool: 'coderabbit',
+        severity: 'warning',
+        file: '(review body)',
+        line: undefined,
+        body: 'Missing null check on config.options',
+        dedupKey: 'k2',
+      }),
+    ];
+
+    const output = formatTriageOutput(100, findings, 3, noColor);
+
+    expect(output).toContain('SECURITY');
+    expect(output).toContain('ARCHITECTURE');
+    expect(output).toContain('src/db.ts:10');
+    expect(output).toContain('(review body)');
+    expect(output).toContain('[1]');
+    expect(output).toContain('[2]');
+  });
 });

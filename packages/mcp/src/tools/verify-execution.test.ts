@@ -322,4 +322,21 @@ describe('verify_execution', () => {
     expect(result.content[0]!.text).toContain('Verification: PASS');
     expect(result.content[0]!.text).not.toContain('WARNING');
   });
+
+  // --- Spawn options (#1023) ---
+
+  it('passes env and shell options to spawn for Windows compat (#1023)', async () => {
+    mockSpawnExitCode = 0;
+    mockSpawnStdout = 'ok';
+
+    const { spawn } = await import('node:child_process');
+
+    await handle({ staged_only: true });
+
+    const lastCall = vi.mocked(spawn).mock.calls.at(-1)!;
+    const opts = lastCall[2] as Record<string, unknown>;
+    expect(opts.env).toBeDefined();
+    expect(opts.env).toHaveProperty('PATH');
+    expect(typeof opts.shell).toBe('boolean');
+  });
 });

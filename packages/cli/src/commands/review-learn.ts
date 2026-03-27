@@ -214,6 +214,28 @@ export async function reviewLearnCommand(
   const reviewComments = adapter.fetchReviewComments(num);
   log.info(TAG, `Found ${reviewComments.length} inline review comments`);
 
+  // 4b. Extract findings from CodeRabbit review bodies (outside-diff + nits)
+  const { parseCodeRabbitReviewFindings } = await import('../parse-nits.js');
+  const reviewBodyFindings: NormalizedBotFinding[] = [];
+  for (const review of pr.reviews) {
+    if (!review.author?.toLowerCase().includes('coderabbit')) continue;
+    const parsed = parseCodeRabbitReviewFindings(review.body);
+    for (const finding of parsed) {
+      reviewBodyFindings.push({
+        tool: 'coderabbit',
+        severity: finding.type === 'outside-diff' ? 'warning' : 'info',
+        file: '(review body)',
+        line: undefined,
+        body: finding.content,
+        suggestion: undefined,
+        resolutionSignal: 'none',
+      });
+    }
+  }
+  if (reviewBodyFindings.length > 0) {
+    log.info(TAG, `Found ${reviewBodyFindings.length} finding(s) in review bodies`);
+  }
+
   // 5. Group ALL comments into threads first (need human replies for resolution detection)
   const allThreads = groupIntoThreads(reviewComments);
 
@@ -221,14 +243,20 @@ export async function reviewLearnCommand(
   const threads = allThreads.filter(
     (t) => t.comments.length > 0 && isBotComment(t.comments[0]!.author),
   );
-  if (threads.length === 0) {
+  if (threads.length === 0 && reviewBodyFindings.length === 0) {
     log.dim(TAG, 'No bot review comments found. Nothing to learn from.');
     return;
   }
-  log.info(TAG, `Found ${threads.length} bot review thread(s)`);
+  if (threads.length > 0) {
+    log.info(TAG, `Found ${threads.length} bot review thread(s)`);
+  }
 
   // 7. Apply resolution filter
   const findings = extractResolvedBotFindings(threads);
+
+  // Append review body findings (treat as actionable — no thread/reply to check resolution on)
+  findings.push(...reviewBodyFindings);
+
   if (findings.length === 0) {
     log.dim(TAG, 'No resolved bot findings found. Only fixed findings produce lessons.');
     return;

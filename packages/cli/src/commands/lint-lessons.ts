@@ -1,6 +1,10 @@
 const TAG = '[LintLessons]';
 
-export async function lintLessonsCommand(): Promise<void> {
+export interface LintLessonsOptions {
+  strict?: boolean;
+}
+
+export async function lintLessonsCommand(options: LintLessonsOptions = {}): Promise<void> {
   const path = await import('node:path');
   const { log } = await import('../ui.js');
   const { loadConfig, resolveConfigPath } = await import('../utils.js');
@@ -38,11 +42,12 @@ export async function lintLessonsCommand(): Promise<void> {
     log.warn(TAG, `${d.lessonHeading} ${src}: [${d.field}] ${d.message}`);
   }
 
-  if (errors.length > 0) {
+  if (errors.length > 0 || (options.strict && warnings.length > 0)) {
+    const total = options.strict ? errors.length + warnings.length : errors.length;
     throw new TotemError(
       'LINT_LESSONS_FAILED',
-      `${errors.length} error(s), ${warnings.length} warning(s) across ${lessons.length} lessons.`,
-      'Fix the errors listed above, then re-run `totem lint-lessons`.',
+      `${total} issue(s) across ${lessons.length} lessons${options.strict ? ' (strict mode)' : ''}.`,
+      'Fix the issues listed above, then re-run `totem lint-lessons`.',
     );
   }
 
