@@ -17,7 +17,7 @@ By wiring the `totem briefing` command into your agent's startup hooks (e.g., `.
 ```text
 [Briefing] @mmnto/cli@1.5.7 | main | 2 uncommitted | lint: 0 errors | shield: PASS
 [Briefing] Manifest: STALE (lessons changed since last compile)
-[Briefing] Milestone: 1.6.0 — Pipeline Maturity
+[Briefing] Status: compile required before push
 [Reflex] Compile after extract — CI gate rejects stale manifests
 [Reflex] Hook regex was too broad — tightened in #1021, watch for regressions
 ```

@@ -50,7 +50,7 @@ The next time any developer or AI agent tries to write a static import in a CLI 
 ```bash
 $ git push
 [Lint] Running rules...
-### Warnings
+### Errors
 - **packages/cli/src/commands/init.ts:1** — Lazy load CLI commands
   Pattern: `import fs from 'fs'`
   Lesson: "Never use static imports..."
