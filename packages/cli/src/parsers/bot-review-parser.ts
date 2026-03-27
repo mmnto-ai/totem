@@ -146,11 +146,19 @@ export function extractReviewBodyFindings(
 ): NormalizedBotFinding[] {
   const findings: NormalizedBotFinding[] = [];
   for (const review of reviews) {
-    if (!review.author?.toLowerCase().includes('coderabbit')) continue;
-    const parsed = parseCodeRabbitReviewFindings(review.body);
+    if (!review.author || !isBotComment(review.author)) continue;
+
+    const tool = detectBot(review.author);
+    let parsed: Array<{ type: 'nitpick' | 'outside-diff'; content: string }> = [];
+
+    // Only CodeRabbit parser is implemented for now
+    if (tool === 'coderabbit') {
+      parsed = parseCodeRabbitReviewFindings(review.body);
+    }
+
     for (const finding of parsed) {
       findings.push({
-        tool: 'coderabbit',
+        tool,
         severity: finding.type === 'outside-diff' ? 'warning' : 'info',
         file: '(review body)',
         line: undefined,
