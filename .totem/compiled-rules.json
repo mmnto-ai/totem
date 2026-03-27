@@ -5726,14 +5726,43 @@
     {
       "lessonHash": "ca8af19955c5722b",
       "lessonHeading": "HTML comment totem-context directives are not parsed by lint",
+      "pattern": "(<!--|//)\\s*totem-(context|ignore)",
       "message": "totem-context and totem-ignore directives are not supported in Markdown files. Use ignorePatterns in the config instead.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(<!--|//)\\s*totem-(context|ignore)",
       "compiledAt": "2026-03-27T20:45:47.092Z",
       "createdAt": "2026-03-27T20:45:47.092Z",
       "fileGlobs": [
         "**/*.md"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "14f6c93e4d15e802",
+      "lessonHeading": "README and curated wiki pages must never be LLM-generated",
+      "message": "README.md, COVENANT.md, and CHANGELOG.md are protected documents and must be handcrafted. Exclude them from LLM generation in totem.config.ts.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "['\"`](README\\.md|COVENANT\\.md|CHANGELOG\\.md)['\"`]",
+      "compiledAt": "2026-03-27T22:45:00.054Z",
+      "createdAt": "2026-03-27T22:45:00.054Z",
+      "fileGlobs": [
+        "**/totem.config.ts"
+      ]
+    },
+    {
+      "lessonHash": "1988dee6bee35a4c",
+      "lessonHeading": "Totem is Agent Governance, not an AI documentation writer",
+      "message": "Do not pitch 'totem docs' as a core feature in user-facing copy. It is a Tier 4 power-user feature; focus on the Enforce tier (lint, shield, extract).",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\btotem docs\\b",
+      "compiledAt": "2026-03-27T22:44:50.456Z",
+      "createdAt": "2026-03-27T22:44:50.456Z",
+      "fileGlobs": [
+        "**/README.md",
+        "**/docs/**/*.md",
+        "packages/website/**/*.tsx",
+        "packages/website/**/*.html"
       ]
     }
   ],
@@ -6322,6 +6351,7 @@
     "5c1a32a9957d5470",
     "57e17f41422fa06c",
     "4c4bbb2c2adff887",
-    "486a977cffc2714a"
+    "486a977cffc2714a",
+    "7a4b9e552df2ddf9"
   ]
 }
