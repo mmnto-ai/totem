@@ -52,6 +52,6 @@ Community contributions to core packages and baseline rule packs are welcome und
 ## Contact
 
 - **Repository:** [github.com/mmnto-ai/totem](https://github.com/mmnto-ai/totem)
-- **Commercial Inquiries:** jmatt@mmnto.ai
+- **Commercial Inquiries:** contact@mmnto.ai
 - **Effective Date:** 2026-03-27
 - **Review Cadence:** Quarterly. Changes documented in the repo.
