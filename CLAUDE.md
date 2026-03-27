@@ -11,6 +11,7 @@
 
 - Before starting issue work: run `totem spec <issue>`
 - Before writing code: call `mcp__totem-dev__search_knowledge` with what you're changing
+- After extracting lessons: run `totem compile` before pushing — the CMA CI gate rejects stale manifests.
 - Before pushing: run `totem shield`. Fix violations — never bypass.
 - **NEVER** use `git push --no-verify`, `totem-ignore`, or `eslint-disable` without a ticket.
 

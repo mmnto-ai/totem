@@ -3,6 +3,7 @@
 // Gate 2: Run totem shield before git push
 const { execSync } = require('child_process');
 const fs = require('fs');
+const path = require('path');
 
 module.exports = function beforeTool(toolName, toolInput) {
   if (toolName !== 'run_shell_command') return;
@@ -17,8 +18,10 @@ module.exports = function beforeTool(toolName, toolInput) {
   if (isCommit) {
     try {
       const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
+      const gitRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
+      const specFlag = path.join(gitRoot, '.totem/cache/.spec-completed');
       const exempt = /^(main|master|HEAD)$|^(hotfix|docs)\//.test(branch);
-      if (!exempt && !fs.existsSync('.totem/cache/.spec-completed')) {
+      if (!exempt && !fs.existsSync(specFlag)) {
         throw new Error(
           `[Totem Error] BLOCKED: /preflight has not been run on branch '${branch}'.\n` +
             'Run totem spec <issue> first. This gate enforces ADR-063.',

@@ -51,4 +51,9 @@ describe('safeExec', () => {
       expect(err).toBeInstanceOf(Error);
     }
   });
+
+  it('does not expose stdio option (always forces pipe mode)', () => {
+    const result = safeExec('node', ['-e', "console.log('pipe-ok')"]);
+    expect(result).toBe('pipe-ok');
+  });
 });

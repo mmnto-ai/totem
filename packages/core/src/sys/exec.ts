@@ -1,4 +1,4 @@
-import { execFileSync, type ExecFileSyncOptions } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 const IS_WIN = process.platform === 'win32';
 const DEFAULT_MAX_BUFFER = 10 * 1024 * 1024; // 10 MB
@@ -14,8 +14,6 @@ export interface SafeExecOptions {
   maxBuffer?: number;
   /** Automatically trim the returned string. Defaults to true. */
   trim?: boolean;
-  /** Override stdio (defaults to 'pipe' for safety — never 'inherit' in MCP context) */
-  stdio?: ExecFileSyncOptions['stdio'];
   /** Pass input to stdin */
   input?: string;
 }
@@ -41,14 +39,14 @@ export function safeExec(
       encoding: 'utf-8',
       shell: IS_WIN,
       maxBuffer: rest.maxBuffer ?? DEFAULT_MAX_BUFFER,
-      stdio: rest.stdio ?? 'pipe',
+      stdio: 'pipe',
       cwd: rest.cwd,
       env: rest.env,
       timeout: rest.timeout,
       input: rest.input,
     });
 
-    return shouldTrim ? result.trim() : result;
+    return shouldTrim ? (typeof result === 'string' ? result.trim() : '') : (result as string);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     // Extract stderr from child process error if available

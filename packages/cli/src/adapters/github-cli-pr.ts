@@ -109,6 +109,7 @@ export class GitHubCliPrAdapter implements PrAdapter {
       return safeExec('gh', ['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'], {
         cwd: this.cwd,
         timeout: GH_TIMEOUT_MS,
+        env: { ...process.env, GH_PROMPT_DISABLED: '1' },
       });
     } catch (err) {
       handleGhError(err, 'repository info');

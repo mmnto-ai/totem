@@ -59,7 +59,7 @@ export interface DetectedOrchestrator {
 function cliExists(name: string): boolean {
   try {
     const cmd = IS_WIN ? 'where' : 'which';
-    safeExec(cmd, [name], { timeout: 3000, stdio: 'ignore' });
+    safeExec(cmd, [name], { timeout: 3000 });
     return true;
   } catch {
     return false;
