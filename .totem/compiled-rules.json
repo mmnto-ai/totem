@@ -5690,10 +5690,9 @@
     {
       "lessonHash": "7f24313c1ae3dc50",
       "lessonHeading": "While using shell: true fixes Windows ENOENT errors",
+      "pattern": "\\bshell:\\s*true\\b",
       "message": "Avoid 'shell: true' to prevent injection risks and process overhead. Manually append '.cmd' to the executable for Windows compatibility instead.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bshell:\\s*true\\b",
       "compiledAt": "2026-03-27T19:34:01.652Z",
       "createdAt": "2026-03-27T19:34:01.652Z",
       "fileGlobs": [
@@ -5703,15 +5702,15 @@
         "**/*.jsx",
         "**/*.mjs",
         "**/*.cjs"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "92e023cf49a3800d",
       "lessonHeading": "Simple regex patterns for file extensions often fail",
+      "pattern": "\\.\\{[a-zA-Z0-9]+,[a-zA-Z0-9,]+\\}",
       "message": "Avoid brace expansion in glob patterns (e.g., use separate entries instead of {ts,tsx}) to ensure compatibility with simple regex matchers.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.\\{[a-zA-Z0-9]+,[a-zA-Z0-9,]+\\}",
       "compiledAt": "2026-03-27T19:33:54.414Z",
       "createdAt": "2026-03-27T19:33:54.414Z",
       "fileGlobs": [
@@ -5721,7 +5720,8 @@
         "**/*.js",
         "**/*.ts",
         "**/*.jsonc"
-      ]
+      ],
+      "severity": "warning"
     }
   ],
   "nonCompilable": [
@@ -6305,6 +6305,11 @@
     "670eeb6780a3ff21",
     "4742e8ce937e2b7d",
     "71213ff7582a7dea",
-    "b54879043b6d0e46"
+    "b54879043b6d0e46",
+    "5c1a32a9957d5470",
+    "e6df46c83c29d2ef",
+    "1d29eaddc8fff4d2",
+    "57e17f41422fa06c",
+    "4c4bbb2c2adff887"
   ]
 }
