@@ -16,7 +16,7 @@ When writing regex lint rules that could match inside code examples, either:
 2. Add the file to `ignorePatterns` if it's a marketing/docs file
 3. Consider adding fenced-block awareness to the lint engine
 
-The `totem-context:` directive does NOT suppress lint findings — it only provides context for shield (LLM-based review).
+`// totem-context:` suppresses both lint and shield in code files, but markdown has no line-comment syntax so it cannot be used there. Use `ignorePatterns` for markdown exclusions.
 
 **Example Hit:** `classDef observe fill:#4b3a75,stroke:#9b72cf` — hex colors match `#\d+`
 **Example Miss:** `Closes #1026` — actual issue reference, should match
