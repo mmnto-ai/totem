@@ -144,6 +144,16 @@ export function promoteToShared(
   };
 }
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildManualLabelMatchers(shared: ExemptionShared): RegExp[] {
+  return shared.exemptions
+    .filter((e) => e.patternId.startsWith('manual:'))
+    .map((e) => new RegExp('\\b' + escapeRegExp(e.label.toLowerCase()) + '\\b', 'i'));
+}
+
 export function filterExemptedFindings(
   findings: ShieldFinding[],
   shared: ExemptionShared,
@@ -151,10 +161,7 @@ export function filterExemptedFindings(
   const autoExemptedIds = new Set(
     shared.exemptions.filter((e) => !e.patternId.startsWith('manual:')).map((e) => e.patternId),
   );
-  const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const manualLabelPatterns = shared.exemptions
-    .filter((e) => e.patternId.startsWith('manual:'))
-    .map((e) => new RegExp('\\b' + escapeRegExp(e.label.toLowerCase()) + '\\b', 'i'));
+  const manualLabelPatterns = buildManualLabelMatchers(shared);
 
   const filtered: ShieldFinding[] = [];
   const exempted: ShieldFinding[] = [];
@@ -227,11 +234,7 @@ export function trackFalsePositives(
   const promoted: string[] = [];
   const seenPatternIds = new Set<string>();
 
-  // Build manual label matchers for skip check (same logic as filterExemptedFindings)
-  const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const manualPatterns = shared.exemptions
-    .filter((e) => e.patternId.startsWith('manual:'))
-    .map((e) => new RegExp('\\b' + escapeRe(e.label.toLowerCase()) + '\\b', 'i'));
+  const manualPatterns = buildManualLabelMatchers(shared);
 
   for (const finding of findings) {
     const pid = computePatternId(finding.message);
