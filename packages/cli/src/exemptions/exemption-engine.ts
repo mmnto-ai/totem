@@ -124,9 +124,10 @@ export function promoteToShared(
     return shared;
   }
 
-  const label = localPattern.sampleMessages[0]
+  const keywords = localPattern.sampleMessages[0]
     ? extractKeywords(localPattern.sampleMessages[0]).slice(0, 5).join(' ')
-    : patternId;
+    : '';
+  const label = keywords || patternId;
 
   const entry: SharedExemptionEntry = {
     patternId,
