@@ -801,6 +801,45 @@ describe('upgradePrePushHookIfNeeded', () => {
     cleanTmpDir(tmpDir);
   });
 
+  /**
+   * Helper: extract the totem block from a hook file and compare it against
+   * the canonical output of buildPrePushHook() (shebang stripped, trimmed).
+   * Catches stale shell fragments or splice boundary bugs that toContain would miss.
+   */
+  function extractTotemBlock(hookContent: string): string {
+    const markerIdx = hookContent.indexOf(`# ${TOTEM_PREPUSH_MARKER}`);
+    if (markerIdx === -1) return '';
+
+    const afterMarker = hookContent.slice(markerIdx);
+    const ifFiPattern = /^\s*(if\s|fi\s*$)/gm;
+    let depth = 0;
+    let endOffset = -1;
+    let firstIfFound = false;
+    let match;
+    while ((match = ifFiPattern.exec(afterMarker)) !== null) {
+      const keyword = match[1]!.trim();
+      if (keyword.startsWith('if')) {
+        if (!firstIfFound) firstIfFound = true;
+        depth++;
+      } else if (keyword === 'fi' && firstIfFound) {
+        depth--;
+      }
+      if (firstIfFound && depth === 0) {
+        endOffset = match.index + match[0].length;
+        break;
+      }
+    }
+    if (endOffset === -1) return '';
+    return hookContent.slice(markerIdx, markerIdx + endOffset).trim();
+  }
+
+  /** Canonical totem block: shebang stripped, trimmed — the expected upgrade output. */
+  function expectedTotemBlock(): string {
+    return buildPrePushHook('pnpm dlx @mmnto/cli')
+      .replace(/^#!\/bin\/sh\n/, '')
+      .trim();
+  }
+
   it('upgrades old hook with marker but no auto-refresh', () => {
     // Install an old-style hook that has the marker but lacks shield auto-refresh
     const hooksDir = path.join(tmpDir, '.git', 'hooks');
@@ -824,6 +863,10 @@ fi
     const content = fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8');
     expect(content).toContain('Shield flag stale');
     expect(content).toContain(TOTEM_PREPUSH_MARKER);
+
+    // Full block comparison: extracted totem block must match canonical output
+    const actual = extractTotemBlock(content);
+    expect(actual).toBe(expectedTotemBlock());
   });
 
   it('skips hook without totem marker', () => {
@@ -894,5 +937,98 @@ fi
     // User content should be preserved
     expect(content).toContain('curl -X POST https://hooks.example.com/deploy');
     expect(content).toContain('My custom deploy notification');
+
+    // Full block comparison: extracted totem block must match canonical output
+    const actual = extractTotemBlock(content);
+    expect(actual).toBe(expectedTotemBlock());
+  });
+
+  it('preserves user-appended if/fi blocks without corrupting them', () => {
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    // Old totem block (needs upgrade) PLUS user content that contains its own if/fi structures
+    const oldTotemBlock = `#!/bin/sh
+# ${TOTEM_PREPUSH_MARKER} — run compiled rules before push.
+if [ -f ".totem/compiled-rules.json" ]; then
+  TOTEM_CMD="totem"
+  if [ -n "$TOTEM_CMD" ]; then
+    $TOTEM_CMD lint
+  fi
+fi
+`;
+    const userIfFiBlock = `
+# Custom deploy guard with nested if/fi
+if [ -f ".deploy-lock" ]; then
+  echo "Deploy locked, skipping notification"
+  if [ "$FORCE_DEPLOY" = "1" ]; then
+    echo "Force deploy override"
+    curl -X POST https://hooks.example.com/force-deploy
+  fi
+else
+  curl -X POST https://hooks.example.com/deploy
+fi
+
+# Another independent if block
+if [ -n "$SLACK_WEBHOOK" ]; then
+  curl -X POST "$SLACK_WEBHOOK" -d '{"text":"pushing..."}'
+fi
+`;
+    fs.writeFileSync(path.join(hooksDir, 'pre-push'), oldTotemBlock + userIfFiBlock);
+
+    const upgraded = upgradePrePushHookIfNeeded(tmpDir);
+
+    expect(upgraded).toBe(true);
+    const content = fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8');
+
+    // Totem block must match canonical output exactly
+    const actual = extractTotemBlock(content);
+    expect(actual).toBe(expectedTotemBlock());
+
+    // User if/fi structures must survive intact — check exact fragments
+    expect(content).toContain('if [ -f ".deploy-lock" ]; then');
+    expect(content).toContain('if [ "$FORCE_DEPLOY" = "1" ]; then');
+    expect(content).toContain('curl -X POST https://hooks.example.com/force-deploy');
+    expect(content).toContain('curl -X POST https://hooks.example.com/deploy');
+    expect(content).toContain('if [ -n "$SLACK_WEBHOOK" ]; then');
+    expect(content).toContain('curl -X POST "$SLACK_WEBHOOK"');
+
+    // The user block should appear AFTER the totem block, not interleaved
+    const totemBlockEnd = content.indexOf(actual) + actual.length;
+    const userBlockStart = content.indexOf('# Custom deploy guard');
+    expect(userBlockStart).toBeGreaterThan(totemBlockEnd);
+  });
+
+  it('leaves no stale fi or orphaned shell fragments after upgrade', () => {
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const oldHook = `#!/bin/sh
+# ${TOTEM_PREPUSH_MARKER} — run compiled rules before push.
+# Override with: git push --no-verify
+
+if [ -f ".totem/compiled-rules.json" ]; then
+  TOTEM_CMD="totem"
+  if [ -n "$TOTEM_CMD" ]; then
+    $TOTEM_CMD lint
+  fi
+fi
+`;
+    fs.writeFileSync(path.join(hooksDir, 'pre-push'), oldHook);
+
+    upgradePrePushHookIfNeeded(tmpDir);
+    const content = fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8');
+
+    // Count if/fi balance: every `if` must have a matching `fi`
+    const ifMatches = content.match(/^\s*if\s/gm) ?? [];
+    const fiMatches = content.match(/^\s*fi\s*$/gm) ?? [];
+    expect(ifMatches.length).toBe(fiMatches.length);
+
+    // No duplicate markers — upgrade must not leave the old marker behind
+    const markerPattern = new RegExp(TOTEM_PREPUSH_MARKER.replace(/[[\]]/g, '\\$&'), 'g');
+    const markerHits = content.match(markerPattern) ?? [];
+    expect(markerHits.length).toBe(1);
+
+    // Full block comparison as final sanity check
+    const actual = extractTotemBlock(content);
+    expect(actual).toBe(expectedTotemBlock());
   });
 });
