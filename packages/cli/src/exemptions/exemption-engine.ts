@@ -225,10 +225,20 @@ export function trackFalsePositives(
   let currentLocal = local;
   let currentShared = shared;
   const promoted: string[] = [];
+  const seenPatternIds = new Set<string>();
+
+  // Build manual label matchers for skip check (same logic as filterExemptedFindings)
+  const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const manualPatterns = shared.exemptions
+    .filter((e) => e.patternId.startsWith('manual:'))
+    .map((e) => new RegExp('\\b' + escapeRe(e.label.toLowerCase()) + '\\b', 'i'));
 
   for (const finding of findings) {
     const pid = computePatternId(finding.message);
+    if (seenPatternIds.has(pid)) continue;
+    seenPatternIds.add(pid);
     if (isExempted(pid, currentShared)) continue;
+    if (manualPatterns.some((re) => re.test(finding.message))) continue;
     const { updatedLocal, promoted: didPromote } = recordFalsePositive(
       currentLocal,
       pid,
