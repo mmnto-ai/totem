@@ -105,7 +105,7 @@ export function extractShieldHints(
   );
   if (adapterFiles.length > 0) {
     hints.push(
-      `Adapter files in diff: ${adapterFiles.join(', ')}. These use synchronous gh CLI calls via safeExec (child_process.execSync). handleGhError returns \`never\`. Do not flag missing \`await\` on these methods.`,
+      `Adapter files in diff: ${adapterFiles.join(', ')}. These use synchronous gh CLI calls via safeExec (child_process.execFileSync). handleGhError returns \`never\`. Do not flag missing \`await\` on these methods.`,
     );
   }
 
