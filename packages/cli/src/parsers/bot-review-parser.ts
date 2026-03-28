@@ -21,6 +21,8 @@ export interface NormalizedBotFinding {
   suggestion?: string;
   /** How we determined this was resolved */
   resolutionSignal?: 'reply' | 'resolved_thread' | 'none';
+  /** The root comment ID of the thread this finding originated from */
+  rootCommentId?: number;
 }
 
 export interface CommentThread {
@@ -210,6 +212,7 @@ export function extractPushbackFindings(threads: CommentThread[]): NormalizedBot
       body,
       suggestion: extractSuggestion(botComment.body),
       resolutionSignal: 'none',
+      rootCommentId: botComment.id,
     });
   }
 
@@ -246,6 +249,7 @@ export function extractResolvedBotFindings(threads: CommentThread[]): Normalized
       body,
       suggestion,
       resolutionSignal: 'reply',
+      rootCommentId: botComment.id,
     });
   }
 
