@@ -5768,10 +5768,9 @@
     {
       "lessonHash": "78950a5239894249",
       "lessonHeading": "Shared documentation and lessons should use portable",
+      "pattern": "(/Users/|/home/|[a-zA-Z]:\\\\Users\\\\)",
       "message": "Use portable commands like 'git rev-parse --show-toplevel' instead of hardcoded local file paths (e.g., /Users/..., /home/..., C:\\Users\\...).",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(/Users/|/home/|[a-zA-Z]:\\\\Users\\\\)",
       "compiledAt": "2026-03-28T00:21:11.118Z",
       "createdAt": "2026-03-28T00:21:11.118Z",
       "fileGlobs": [
@@ -5779,15 +5778,15 @@
         "**/*.txt",
         "**/*.markdown",
         "**/*.lesson"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "a6aea3c165ceffde",
       "lessonHeading": "Even when data is missing, wrap the fallback instructions",
+      "pattern": "['\"](?!\\s*<)(?:No context|No data|No results|Information not found)",
       "message": "Wrap fallback instructions or 'no context' notes in XML tags (e.g., <context_note>) to maintain a consistent schema for the LLM and reduce parsing ambiguity.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "['\"](?!\\s*<)(?:No context|No data|No results|Information not found)",
       "compiledAt": "2026-03-28T00:21:02.960Z",
       "createdAt": "2026-03-28T00:21:02.960Z",
       "fileGlobs": [
@@ -5798,15 +5797,15 @@
         "**/*.jsx",
         "!**/*.test.ts",
         "!**/*.test.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "09ee37252a814a09",
       "lessonHeading": "Git commands used for programmatic parsing should be",
+      "pattern": "^(?!.*\\bLC_ALL=C.*\\bgit).*\\bgit\\s+(status|branch|log|diff|show|rev-parse|rev-list|ls-files|tag|describe|remote|config)\\b",
       "message": "Git commands used for programmatic parsing should be prefixed with LC_ALL=C to ensure consistent, locale-independent output.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^(?!.*\\bLC_ALL=C.*\\bgit).*\\bgit\\s+(status|branch|log|diff|show|rev-parse|rev-list|ls-files|tag|describe|remote|config)\\b",
       "compiledAt": "2026-03-28T00:22:51.687Z",
       "createdAt": "2026-03-28T00:22:51.687Z",
       "fileGlobs": [
@@ -5818,15 +5817,15 @@
         "**/*.py",
         "**/*.yml",
         "**/*.yaml"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "00c562ec01f93496",
       "lessonHeading": "Wrap fallback instructions or meta-context in XML tags",
+      "pattern": "\\b(fallback|instructions?|meta[Cc]ontext|meta_context|meta-context)\\b\\s*[:=]\\s*['\"\\x60](?!\\s*<)",
       "message": "Wrap fallback instructions or meta-context in XML tags (e.g., <context_note>) to maintain structural consistency and reduce LLM ambiguity.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(fallback|instructions?|meta[Cc]ontext|meta_context|meta-context)\\b\\s*[:=]\\s*['\"\\x60](?!\\s*<)",
       "compiledAt": "2026-03-28T00:24:27.776Z",
       "createdAt": "2026-03-28T00:24:27.776Z",
       "fileGlobs": [
@@ -5841,15 +5840,15 @@
         "!**/*.test.js",
         "!**/*.spec.ts",
         "!**/*.spec.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "b3e3e2b380a0b1be",
       "lessonHeading": "Git output can vary by system locale, causing parsing logic",
+      "pattern": "^(?!.*LC_ALL=C).*\\bgit\\s+(status|log|branch|diff|show|rev-parse|describe|tag|ls-files|remote)\\b",
       "message": "Git output can vary by system locale; use 'LC_ALL=C git ...' to ensure consistent output format for parsing.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^(?!.*LC_ALL=C).*\\bgit\\s+(status|log|branch|diff|show|rev-parse|describe|tag|ls-files|remote)\\b",
       "compiledAt": "2026-03-28T00:24:23.439Z",
       "createdAt": "2026-03-28T00:24:23.439Z",
       "fileGlobs": [
@@ -5859,15 +5858,15 @@
         "**/*.yaml",
         "**/*.ts",
         "**/*.js"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "22286088db9261b7",
       "lessonHeading": "Hardcoding specific filenames like active_work.md",
+      "pattern": "active_work\\.md",
       "message": "Hardcoding 'active_work.md' limits flexibility; use configuration flags to define document targets.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "active_work\\.md",
       "compiledAt": "2026-03-28T00:24:47.706Z",
       "createdAt": "2026-03-28T00:24:47.706Z",
       "fileGlobs": [
@@ -5876,15 +5875,15 @@
         "**/*.py",
         "**/*.go",
         "!**/*.md"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "46da33204d5c663b",
       "lessonHeading": "Git output parsing should account for localized strings",
+      "pattern": "\\bgit\\s+(status|branch|log|ls-files)\\b(?![^\"']*(--porcelain|--format|-z))",
       "message": "Git output parsing should account for localized strings and special characters. Use --porcelain, --format, or -z for stable, machine-readable output.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bgit\\s+(status|branch|log|ls-files)\\b(?![^\"']*(--porcelain|--format|-z))",
       "compiledAt": "2026-03-28T00:25:41.505Z",
       "createdAt": "2026-03-28T00:25:41.505Z",
       "fileGlobs": [
@@ -5894,6 +5893,24 @@
         "**/*.sh",
         "**/*.bash",
         "**/*.go"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "55797450514d4c3b",
+      "lessonHeading": "Never use git add -A or git add .",
+      "message": "Never use 'git add -A' or 'git add .'. Stage specific files by name (e.g., 'git add packages/*/package.json') to avoid committing artifacts or worktree copies.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bgit\\s+add\\s+(-A|--all|\\.)(?!\\S)",
+      "compiledAt": "2026-03-28T05:44:50.207Z",
+      "createdAt": "2026-03-28T05:44:50.207Z",
+      "fileGlobs": [
+        "**/*.sh",
+        "**/*.yml",
+        "**/*.yaml",
+        "**/package.json",
+        "**/Makefile"
       ]
     }
   ],

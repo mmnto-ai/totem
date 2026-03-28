@@ -20,6 +20,7 @@ function makeMockAdapter(issueUrl = 'https://github.com/owner/repo/issues/42') {
     fetchReviewComments: () => [],
     createIssue: vi.fn().mockReturnValue(issueUrl),
     replyToComment: vi.fn(),
+    addPrComment: vi.fn(),
   } satisfies PrAdapter;
 }
 
