@@ -615,7 +615,7 @@ async function handleVerdictResult(
       const { appendLedgerEvent } = await import('@mmnto/totem');
 
       log.warn(TAG, `SHIELD OVERRIDE APPLIED: ${options.override}`);
-      for (const finding of structured.findings.filter(
+      for (const finding of filtered.filter(
         (f: { severity: string }) => f.severity === 'CRITICAL',
       )) {
         log.warn(TAG, `  [overridden] ${finding.message}`);
