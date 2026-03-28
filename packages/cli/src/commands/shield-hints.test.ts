@@ -85,6 +85,29 @@ new file mode 100644
     expect(hints[0]).toContain('thin wrapper around node:fs');
   });
 
+  it('returns sync adapter hint when adapter files are in changedFiles (#1058)', () => {
+    const diff = 'diff --git a/x b/x\n+line';
+    const hints = extractShieldHints(
+      diff,
+      ['packages/cli/src/adapters/github-cli-pr.ts', 'packages/cli/src/adapters/gh-utils.ts'],
+      tmpDir,
+    );
+    expect(hints.some((h) => h.includes('synchronous gh CLI calls'))).toBe(true);
+    expect(hints.some((h) => h.includes('Do not flag missing `await`'))).toBe(true);
+  });
+
+  it('returns sync adapter hint for github-cli.ts issue adapter (#1058)', () => {
+    const diff = 'diff --git a/x b/x\n+line';
+    const hints = extractShieldHints(diff, ['packages/cli/src/adapters/github-cli.ts'], tmpDir);
+    expect(hints.some((h) => h.includes('synchronous gh CLI calls'))).toBe(true);
+  });
+
+  it('does not return adapter hint for non-adapter files', () => {
+    const diff = 'diff --git a/x b/x\n+line';
+    const hints = extractShieldHints(diff, ['src/commands/shield.ts'], tmpDir);
+    expect(hints.some((h) => h.includes('synchronous gh CLI calls'))).toBe(false);
+  });
+
   it('returns empty array when no hints match', () => {
     const diff = `diff --git a/src/foo.ts b/src/foo.ts
 --- a/src/foo.ts
