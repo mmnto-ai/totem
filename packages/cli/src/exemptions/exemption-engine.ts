@@ -151,18 +151,18 @@ export function filterExemptedFindings(
   const autoExemptedIds = new Set(
     shared.exemptions.filter((e) => !e.patternId.startsWith('manual:')).map((e) => e.patternId),
   );
-  const manualLabels = shared.exemptions
+  const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const manualLabelPatterns = shared.exemptions
     .filter((e) => e.patternId.startsWith('manual:'))
-    .map((e) => e.label.toLowerCase());
+    .map((e) => new RegExp('\\b' + escapeRegExp(e.label.toLowerCase()) + '\\b', 'i'));
 
   const filtered: ShieldFinding[] = [];
   const exempted: ShieldFinding[] = [];
 
   for (const finding of findings) {
     const pid = computePatternId(finding.message);
-    const msgLower = finding.message.toLowerCase();
     const matchesAuto = autoExemptedIds.has(pid);
-    const matchesManual = manualLabels.some((label) => msgLower.includes(label));
+    const matchesManual = manualLabelPatterns.some((re) => re.test(finding.message));
 
     if (matchesAuto || matchesManual) {
       exempted.push({ ...finding, severity: 'INFO' });
@@ -226,6 +226,7 @@ export function trackFalsePositives(
 
   for (const finding of findings) {
     const pid = computePatternId(finding.message);
+    if (isExempted(pid, currentShared)) continue;
     const { updatedLocal, promoted: didPromote } = recordFalsePositive(
       currentLocal,
       pid,
