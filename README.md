@@ -37,7 +37,7 @@ graph LR
 2. **The Brain (Learn):** `totem extract` captures the markdown lesson from the PR. `totem compile` automatically writes the AST/Regex plugin for you. What did we learn?
 3. **The Hand (Enforce):** `totem lint` and Git Hooks physically block the push. Make it impossible to repeat.
 
-## The "Aha!" Moment
+## How a Mistake Becomes Impossible
 
 Documentation is not enforcement. Telling an AI to "follow the style guide" in a README is a suggestion.
 
@@ -56,8 +56,8 @@ Direct use of `node:child_process` is forbidden outside `core/src/sys/`. Use the
 
 ```bash
 $ git push
-[Lint] Running 354 rules (zero LLM)...
-### Errors
+[Lint] Running 305 rules (zero LLM)...
+### Warnings
 - **packages/cli/src/git.ts:22** — Never use native child_process
   Pattern: `import { execSync } from 'node:child_process'`
   Lesson: "Direct use of `node:child_process` is forbidden outside `core/src/sys/`. Use the `safeExec` shared helper instead."
@@ -65,6 +65,11 @@ $ git push
 ```
 
 The "wrong" way becomes the "loud" way.
+
+## COSS Covenant
+
+**The simple rule: Single-repo local use is free. Multi-repo centralized governance is paid.**
+Totem's enforcement engine (local pre-push lint, compiled rules, and the lesson $\rightarrow$ rule pipeline) is Apache-2.0 and will remain free and open. Federation, hosted compile/signing, centralized Trap Ledger ingestion, and enterprise dashboards are commercial features. See [COVENANT.md](./COVENANT.md) for full details.
 
 ## Quickstart
 
