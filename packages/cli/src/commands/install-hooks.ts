@@ -652,16 +652,32 @@ export function upgradePrePushHookIfNeeded(cwd: string): boolean {
     const markerIdx = content.indexOf(`# ${TOTEM_PREPUSH_MARKER}`);
     if (markerIdx === -1) return false;
 
-    // Find the end of the totem block — the last `fi` before any non-totem content.
-    // The block structure is: # marker ... if [ -f ".totem/compiled-rules.json" ]; then ... fi
+    // Find the end of the totem block by balancing if/fi depth.
+    // Can't use first or last `fi` — the block has nested if/fi pairs,
+    // and user content after the block may also contain if/fi.
     const afterMarker = content.slice(markerIdx);
-    // Match the outermost `fi` that closes the compiled-rules.json check.
-    // Use matchAll + pop() to find the LAST `fi` — the block has nested if/fi pairs.
-    const fiPattern = /^fi\s*$/gm;
-    const fiMatches = [...afterMarker.matchAll(fiPattern)];
-    const fiMatch = fiMatches.pop();
-    if (!fiMatch || fiMatch.index == null) return false;
-    const blockEnd = markerIdx + fiMatch.index + fiMatch[0].length;
+    const ifFiPattern = /^\s*(if\s|fi\s*$)/gm;
+    let depth = 0;
+    let endOffset = -1;
+    let firstIfFound = false;
+    let match;
+
+    while ((match = ifFiPattern.exec(afterMarker)) !== null) {
+      const keyword = match[1]!.trim();
+      if (keyword.startsWith('if')) {
+        if (!firstIfFound) firstIfFound = true;
+        depth++;
+      } else if (keyword === 'fi' && firstIfFound) {
+        depth--;
+      }
+      if (firstIfFound && depth === 0) {
+        endOffset = match.index + match[0].length;
+        break;
+      }
+    }
+
+    if (endOffset === -1) return false;
+    const blockEnd = markerIdx + endOffset;
 
     // Build the replacement block (strip shebang — we're splicing into existing file)
     const fallbackCmd = getFallbackCommand(gitRoot);
