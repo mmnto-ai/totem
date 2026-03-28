@@ -37,7 +37,7 @@ graph LR
 2. **The Brain (Learn):** `totem extract` captures the markdown lesson from the PR. `totem compile` automatically writes the AST/Regex plugin for you. What did we learn?
 3. **The Hand (Enforce):** `totem lint` and Git Hooks physically block the push. Make it impossible to repeat.
 
-## The "Aha!" Moment
+## How a Mistake Becomes Impossible
 
 Documentation is not enforcement. Telling an AI to "follow the style guide" in a README is a suggestion.
 
@@ -56,8 +56,8 @@ Direct use of `node:child_process` is forbidden outside `core/src/sys/`. Use the
 
 ```bash
 $ git push
-[Lint] Running 354 rules (zero LLM)...
-### Errors
+[Lint] Running 365 rules (zero LLM)...
+### Warnings
 - **packages/cli/src/git.ts:22** — Never use native child_process
   Pattern: `import { execSync } from 'node:child_process'`
   Lesson: "Direct use of `node:child_process` is forbidden outside `core/src/sys/`. Use the `safeExec` shared helper instead."
@@ -87,7 +87,7 @@ pnpm dlx @mmnto/cli lint
 Stop reading manuals and start solving friction. See the Wiki for how to use Totem to govern your workflows:
 
 - [**It Never Happens Again:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/it-never-happens-again.md) How to turn a PR mistake into a permanent project law in 60 seconds.
-- [**Governing AI Agents:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/governing-ai-agents.md) How to use Smart Briefings and Hooks to lock down Claude and Gemini on Turn 1.
+- [**Governing AI Agents:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/governing-ai-agents.md) How to use hooks and MCP tools to enforce project rules on Claude and Gemini from Turn 1.
 - [**It Stops Crying Wolf:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/it-stops-crying-wolf.md) How the Self-Healing Loop automatically downgrades noisy rules based on developer frustration.
 
 ### Deep Dives

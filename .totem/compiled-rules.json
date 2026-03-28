@@ -5899,10 +5899,9 @@
     {
       "lessonHash": "55797450514d4c3b",
       "lessonHeading": "Never use git add -A or git add .",
+      "pattern": "\\bgit\\s+add\\s+(-A|--all|\\.)(?!\\S)",
       "message": "Never use 'git add -A' or 'git add .'. Stage specific files by name (e.g., 'git add packages/*/package.json') to avoid committing artifacts or worktree copies.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bgit\\s+add\\s+(-A|--all|\\.)(?!\\S)",
       "compiledAt": "2026-03-28T05:44:50.207Z",
       "createdAt": "2026-03-28T05:44:50.207Z",
       "fileGlobs": [
@@ -5911,7 +5910,8 @@
         "**/*.yaml",
         "**/package.json",
         "**/Makefile"
-      ]
+      ],
+      "severity": "warning"
     }
   ],
   "nonCompilable": [
@@ -6519,6 +6519,24 @@
     "c19ec3301c41979a",
     "2e33398cc490aff2",
     "cc4dbe96eb163590",
-    "1fabf989332b2192"
+    "1fabf989332b2192",
+    "6fb5a5b660f4652d",
+    "8b741fcb32c84916",
+    "a4d09302639513a1",
+    "1c519a6ed4caf687",
+    "75d8c9683cbf6a53",
+    "02b318bdb73dbba6",
+    "d6a8bd74a74916d7",
+    "29879c4a6b6d4159",
+    "04d150a25d2163e4",
+    "a24909f57a3d1861",
+    "2b4ba67cb4ad52e2",
+    "847174f98eb86e3f",
+    "9a07a44b866ae7fd",
+    "8812e9aa8f2849ca",
+    "ce661aef564a39c5",
+    "f2a8a5c1534072f2",
+    "977ae6a13859e055",
+    "6289dc3fdda1c391"
   ]
 }
