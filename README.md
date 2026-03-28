@@ -56,7 +56,7 @@ Direct use of `node:child_process` is forbidden outside `core/src/sys/`. Use the
 
 ```bash
 $ git push
-[Lint] Running 305 rules (zero LLM)...
+[Lint] Running 365 rules (zero LLM)...
 ### Warnings
 - **packages/cli/src/git.ts:22** — Never use native child_process
   Pattern: `import { execSync } from 'node:child_process'`
@@ -65,11 +65,6 @@ $ git push
 ```
 
 The "wrong" way becomes the "loud" way.
-
-## COSS Covenant
-
-**The simple rule: Single-repo local use is free. Multi-repo centralized governance is paid.**
-Totem's enforcement engine (local pre-push lint, compiled rules, and the lesson $\rightarrow$ rule pipeline) is Apache-2.0 and will remain free and open. Federation, hosted compile/signing, centralized Trap Ledger ingestion, and enterprise dashboards are commercial features. See [COVENANT.md](./COVENANT.md) for full details.
 
 ## Quickstart
 
@@ -92,7 +87,7 @@ pnpm dlx @mmnto/cli lint
 Stop reading manuals and start solving friction. See the Wiki for how to use Totem to govern your workflows:
 
 - [**It Never Happens Again:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/it-never-happens-again.md) How to turn a PR mistake into a permanent project law in 60 seconds.
-- [**Governing AI Agents:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/governing-ai-agents.md) How to use Smart Briefings and Hooks to lock down Claude and Gemini on Turn 1.
+- [**Governing AI Agents:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/governing-ai-agents.md) How to use hooks and MCP tools to enforce project rules on Claude and Gemini from Turn 1.
 - [**It Stops Crying Wolf:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/it-stops-crying-wolf.md) How the Self-Healing Loop automatically downgrades noisy rules based on developer frustration.
 
 ### Deep Dives
