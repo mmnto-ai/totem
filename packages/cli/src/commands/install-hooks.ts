@@ -654,7 +654,7 @@ export function upgradePrePushHookIfNeeded(cwd: string): boolean {
     const afterMarker = content.slice(markerIdx);
     // Match the outermost `fi` that closes the compiled-rules.json check
     const fiPattern = /^fi\s*$/m;
-    const fiMatch = fiPattern.exec(afterMarker);
+    const fiMatch = fiPattern.exec(afterMarker); // totem-context: RegExp.exec, not child_process
     if (!fiMatch) return false;
     const blockEnd = markerIdx + fiMatch.index + fiMatch[0].length;
 
