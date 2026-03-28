@@ -434,6 +434,8 @@ export async function triagePrCommand(
   }
 
   // Process each selected finding
+  let fixedBotFindings = false;
+
   for (const idx of selectedIndices) {
     const finding = categorized[idx]!;
     const location = finding.line != null ? `${finding.file}:${finding.line}` : finding.file;
@@ -472,23 +474,56 @@ export async function triagePrCommand(
     const commentId = thread?.comments[0]?.id;
 
     if (action === 'fix') {
-      if (commentId) {
-        const ok = await confirm({ message: `Reply "Fixed" on ${location}?` });
-        if (isCancel(ok)) {
-          cancel('Triage cancelled.');
-          return;
-        }
-        if (ok) {
-          try {
-            adapter.replyToComment(num, commentId, 'Fixed');
-            log.success(TAG, `Replied "Fixed" on ${location}`);
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            log.warn(TAG, `Failed to reply: ${msg}`);
+      const ok = await confirm({ message: `Generate and apply fix for ${location}?` });
+      if (isCancel(ok)) {
+        cancel('Triage cancelled.');
+        return;
+      }
+      if (ok) {
+        try {
+          const { dispatchFix } = await import('../services/fix-dispatcher.js');
+          const { loadConfig, resolveConfigPath, loadEnv, runOrchestrator } =
+            await import('../utils.js');
+          const configPath = resolveConfigPath(cwd);
+          loadEnv(cwd);
+          const config = await loadConfig(configPath);
+
+          const result = await dispatchFix({
+            filePath: finding.file,
+            line: finding.line ?? undefined,
+            findingBody: finding.body,
+            findingTool: finding.tool,
+            cwd,
+            runOrchestrator: (prompt) =>
+              runOrchestrator({
+                prompt,
+                tag: TAG,
+                options: {},
+                config,
+                cwd,
+                temperature: 0,
+              }),
+            onLog: (msg) => log.dim(TAG, msg),
+          });
+
+          if (result.applied && result.commitSha) {
+            log.success(TAG, `Fix applied: ${result.commitSha}`);
+            fixedBotFindings = true;
+            if (commentId) {
+              try {
+                adapter.replyToComment(num, commentId, `Fixed in ${result.commitSha}`);
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                log.dim(TAG, `Reply failed (fix still applied): ${msg}`);
+              }
+            }
+          } else {
+            log.warn(TAG, `Fix not applied: ${result.reason ?? 'unknown'}`);
           }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          log.warn(TAG, `Fix dispatch failed: ${msg}`);
         }
-      } else {
-        log.dim(TAG, 'No comment ID available for reply.');
       }
     }
 
@@ -553,6 +588,22 @@ export async function triagePrCommand(
       } else {
         log.dim(TAG, 'No comment ID available for reply.');
       }
+    }
+  }
+
+  // Bot re-trigger: if any bot findings were fixed, post /gemini-review
+  if (fixedBotFindings) {
+    try {
+      const doRetrigger = await confirm({
+        message: 'Bot findings were fixed. Trigger Gemini re-review?',
+      });
+      if (!isCancel(doRetrigger) && doRetrigger) {
+        adapter.addPrComment(num, '/gemini-review');
+        log.success(TAG, 'Posted /gemini-review to re-trigger bot review');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn(TAG, `Failed to trigger re-review: ${msg}`);
     }
   }
 

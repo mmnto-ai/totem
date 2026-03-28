@@ -143,6 +143,10 @@ export class GitHubCliPrAdapter implements PrAdapter {
     );
   }
 
+  addPrComment(prNumber: number, body: string): void {
+    ghExec(['pr', 'comment', String(prNumber), '--body', body], this.cwd);
+  }
+
   private getRepoNwo(): string {
     try {
       return safeExec('gh', ['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'], {

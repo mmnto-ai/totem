@@ -50,4 +50,5 @@ export interface PrAdapter {
     milestone?: string;
   }): string; // returns issue URL
   replyToComment(prNumber: number, commentId: number, body: string): void;
+  addPrComment(prNumber: number, body: string): void;
 }
