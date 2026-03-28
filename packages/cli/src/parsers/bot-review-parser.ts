@@ -83,6 +83,17 @@ export function parseGCASeverity(body: string): string {
 
 // ─── Resolution Filter ──────────────────────────────
 
+/** Patterns indicating human pushback (false positive signal). */
+export const PUSHBACK_PATTERNS = [
+  /\bnot\s+(?:applicable|relevant|needed|correct)\b/i,
+  /\bintentional\b/i,
+  /\bby\s+design\b/i,
+  /\bwon'?t\s+fix\b/i,
+  /\bignor(?:e|ed|ing)\s+(?:this|it|the)\b/i,
+  /\bdismiss(?:ed|ing)?\b/i,
+  /\bjust\s+a\s+nit\b/i,
+];
+
 /**
  * Check if a bot comment thread was "fixed" (resolved positively).
  * Conservative heuristic: requires explicit agreement, not just thread resolution.
@@ -100,19 +111,8 @@ export function isThreadResolved(thread: CommentThread): boolean {
   // No human replies — be conservative, skip
   if (humanReplies.length === 0) return false;
 
-  // If human pushed back, NOT resolved
-  const pushbackPatterns = [
-    /\bnot\s+(?:applicable|relevant|needed|correct)\b/i,
-    /\bintentional\b/i,
-    /\bby\s+design\b/i,
-    /\bwon'?t\s+fix\b/i,
-    /\bignor(?:e|ed|ing)\s+(?:this|it|the)\b/i,
-    /\bdismiss(?:ed|ing)?\b/i,
-    /\bjust\s+a\s+nit\b/i,
-  ];
-
   for (const reply of humanReplies) {
-    if (pushbackPatterns.some((p) => p.test(reply.body))) return false;
+    if (PUSHBACK_PATTERNS.some((p) => p.test(reply.body))) return false;
   }
 
   // Positive signals: "fixed", "done", commit SHA reference, ticket reference
@@ -168,6 +168,51 @@ export function extractReviewBodyFindings(
       });
     }
   }
+  return findings;
+}
+
+/**
+ * Extract findings from threads where the human explicitly pushed back (false positive signals).
+ * Inverse of extractResolvedBotFindings — captures "intentional", "by design", "won't fix" threads.
+ */
+export function extractPushbackFindings(threads: CommentThread[]): NormalizedBotFinding[] {
+  const findings: NormalizedBotFinding[] = [];
+
+  for (const thread of threads) {
+    const botComment = thread.comments[0];
+    if (!botComment || !isBotComment(botComment.author)) continue;
+
+    const humanReplies = thread.comments.slice(1).filter((c) => !isBotComment(c.author));
+    if (humanReplies.length === 0) continue;
+
+    const hasPushback = humanReplies.some((reply) =>
+      PUSHBACK_PATTERNS.some((p) => p.test(reply.body)),
+    );
+    if (!hasPushback) continue;
+
+    const tool = detectBot(botComment.author);
+    const severity =
+      tool === 'coderabbit'
+        ? parseCRSeverity(botComment.body)
+        : tool === 'gca'
+          ? parseGCASeverity(botComment.body)
+          : 'info';
+
+    const body = stripHtmlWrappers(botComment.body);
+    const hunkMatch = thread.diffHunk.match(/@@ .+?\+(\d+)/);
+    const line = hunkMatch ? parseInt(hunkMatch[1]!, 10) : undefined;
+
+    findings.push({
+      tool,
+      severity,
+      file: thread.path,
+      line,
+      body,
+      suggestion: extractSuggestion(botComment.body),
+      resolutionSignal: 'none',
+    });
+  }
+
   return findings;
 }
 

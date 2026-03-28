@@ -8,8 +8,8 @@ import { z } from 'zod';
 export const LedgerEventSchema = z.object({
   /** ISO 8601 timestamp */
   timestamp: z.string().datetime(),
-  /** Event type */
-  type: z.enum(['suppress', 'override']),
+  /** Event type: suppress (inline directive), override (shield --override), exemption (auto/manual pattern exemption) */
+  type: z.enum(['suppress', 'override', 'exemption']),
   /** Rule ID (lessonHash) that was suppressed/overridden */
   ruleId: z.string().min(1),
   /** File where the suppression/override occurred */

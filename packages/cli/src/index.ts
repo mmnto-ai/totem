@@ -213,6 +213,12 @@ program
     '--override <reason>',
     'Override shield FAIL with a reason (min 10 chars, logged to trap ledger)',
   )
+  .option(
+    '--suppress <label>',
+    'Suppress a pattern class by label (repeatable)',
+    (val: string, prev: string[]) => [...prev, val],
+    [] as string[], // totem-context: Commander accumulator default — not untrusted input
+  )
   .action(
     async (opts: {
       raw?: boolean;
@@ -226,6 +232,7 @@ program
       learn?: boolean;
       yes?: boolean;
       override?: string;
+      suppress?: string[];
     }) => {
       try {
         // Redirect removed --deterministic flag to totem lint

@@ -242,6 +242,59 @@ export async function reviewLearnCommand(
   // Append review body findings (treat as actionable — no thread/reply to check resolution on)
   findings.push(...reviewBodyFindings);
 
+  // 7b. Track pushback findings in exemption engine (false positive signals)
+  const { extractPushbackFindings } = await import('../parsers/bot-review-parser.js');
+  const pushbackFindings = extractPushbackFindings(threads);
+  if (pushbackFindings.length > 0) {
+    log.dim(
+      TAG,
+      `Found ${pushbackFindings.length} pushback finding(s) — tracking for exemption engine`,
+    );
+    try {
+      const resolvedTotemDir = path.join(cwd, config.totemDir);
+      const cacheDir = path.join(resolvedTotemDir, 'cache');
+      const {
+        readLocalExemptions,
+        writeLocalExemptions,
+        readSharedExemptions,
+        writeSharedExemptions,
+      } = await import('../exemptions/exemption-store.js');
+      const { trackFalsePositives } = await import('../exemptions/exemption-engine.js');
+      const { PROMOTION_THRESHOLD } = await import('../exemptions/exemption-schema.js');
+
+      const localExemptions = readLocalExemptions(cacheDir, (msg) => log.dim(TAG, msg));
+      const shared = readSharedExemptions(resolvedTotemDir, (msg) => log.dim(TAG, msg));
+
+      const botFindings = pushbackFindings.map((pf) => ({ message: pf.body }));
+      const tracked = trackFalsePositives(botFindings, 'bot', localExemptions, shared);
+
+      for (const msg of tracked.promoted) {
+        log.warn(TAG, `Bot pattern auto-suppressed after ${PROMOTION_THRESHOLD} pushbacks: ${msg}`);
+      }
+
+      writeLocalExemptions(cacheDir, tracked.local, (msg) => log.dim(TAG, msg));
+      if (tracked.promoted.length > 0) {
+        writeSharedExemptions(resolvedTotemDir, tracked.shared, (msg) => log.dim(TAG, msg));
+        const { appendLedgerEvent } = await import('@mmnto/totem');
+        appendLedgerEvent(
+          resolvedTotemDir,
+          {
+            timestamp: new Date().toISOString(),
+            type: 'exemption',
+            ruleId: 'exemption-promoted',
+            file: '(review-learn)',
+            justification: `Auto-promoted after ${PROMOTION_THRESHOLD} bot false positives`,
+            source: 'shield',
+          },
+          (msg) => log.dim(TAG, msg),
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.dim(TAG, `Exemption tracking failed (non-fatal): ${msg}`);
+    }
+  }
+
   if (findings.length === 0) {
     log.dim(TAG, 'No resolved bot findings found. Only fixed findings produce lessons.');
     return;
