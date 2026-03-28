@@ -35,7 +35,12 @@ Thumbs.db
 # Legacy directory (now lives inside .strategy submodule)
 .analysis/
 
+# Claude Code worktrees (agent isolation copies)
+.claude/worktrees/
+
 # Totem runtime artifacts
+.totem/ledger/
+.totem/sync.lock
 .totem/temp/
 .totem/cache/
 .totem/secrets.json
