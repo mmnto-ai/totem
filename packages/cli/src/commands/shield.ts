@@ -628,10 +628,10 @@ async function handleVerdictResult(
     } else if (options.override) {
       const { appendLedgerEvent } = await import('@mmnto/totem');
 
+      const criticalFindings = filtered.filter((f) => f.severity === 'CRITICAL');
+
       log.warn(TAG, `SHIELD OVERRIDE APPLIED: ${options.override}`);
-      for (const finding of filtered.filter(
-        (f: { severity: string }) => f.severity === 'CRITICAL',
-      )) {
+      for (const finding of criticalFindings) {
         log.warn(TAG, `  [overridden] ${finding.message}`);
       }
 
@@ -651,36 +651,19 @@ async function handleVerdictResult(
       // Track overridden findings for exemption engine (only non-exempted findings)
       const { readLocalExemptions, writeLocalExemptions } =
         await import('../exemptions/exemption-store.js');
-      const { computePatternId, recordFalsePositive, promoteToShared } =
-        await import('../exemptions/exemption-engine.js');
+      const { trackFalsePositives } = await import('../exemptions/exemption-engine.js');
       const { PROMOTION_THRESHOLD } = await import('../exemptions/exemption-schema.js');
 
-      let localExemptions = readLocalExemptions(cacheDir, (msg) => log.dim(TAG, msg));
-      let promotedAny = false;
+      const localExemptions = readLocalExemptions(cacheDir, (msg) => log.dim(TAG, msg));
+      const tracked = trackFalsePositives(criticalFindings, 'shield', localExemptions, shared);
 
-      for (const finding of filtered.filter(
-        (f: { severity: string }) => f.severity === 'CRITICAL',
-      )) {
-        const pid = computePatternId(finding.message);
-        const { updatedLocal, promoted } = recordFalsePositive(
-          localExemptions,
-          pid,
-          'shield',
-          finding.message,
-        );
-        localExemptions = updatedLocal;
-        if (promoted) {
-          shared = promoteToShared(shared, pid, updatedLocal.patterns[pid]!);
-          promotedAny = true;
-          log.warn(
-            TAG,
-            `Pattern auto-suppressed after ${PROMOTION_THRESHOLD} overrides: ${finding.message.slice(0, 80)}`,
-          );
-        }
+      for (const msg of tracked.promoted) {
+        log.warn(TAG, `Pattern auto-suppressed after ${PROMOTION_THRESHOLD} overrides: ${msg}`);
       }
 
-      writeLocalExemptions(cacheDir, localExemptions, (msg) => log.dim(TAG, msg));
-      if (promotedAny) {
+      writeLocalExemptions(cacheDir, tracked.local, (msg) => log.dim(TAG, msg));
+      if (tracked.promoted.length > 0) {
+        shared = tracked.shared;
         writeSharedExemptions(resolvedTotemDir, shared, (msg) => log.dim(TAG, msg));
         appendLedgerEvent(
           resolvedTotemDir,

@@ -84,6 +84,7 @@ export async function readLedgerBypassCounts(
       const result = LedgerEventSchema.safeParse(parsed);
       if (!result.success) continue;
       const event = result.data;
+      if (event.type === 'exemption') continue;
       counts.set(event.ruleId, (counts.get(event.ruleId) ?? 0) + 1);
     } catch {
       onWarn?.('Skipping malformed ledger line');

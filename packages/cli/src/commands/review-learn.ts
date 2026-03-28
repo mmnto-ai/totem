@@ -251,45 +251,30 @@ export async function reviewLearnCommand(
       `Found ${pushbackFindings.length} pushback finding(s) — tracking for exemption engine`,
     );
     try {
-      const pathMod = await import('node:path');
-      const resolvedTotemDir = pathMod.join(cwd, config.totemDir);
-      const cacheDir = pathMod.join(resolvedTotemDir, 'cache');
+      const resolvedTotemDir = path.join(cwd, config.totemDir);
+      const cacheDir = path.join(resolvedTotemDir, 'cache');
       const {
         readLocalExemptions,
         writeLocalExemptions,
         readSharedExemptions,
         writeSharedExemptions,
       } = await import('../exemptions/exemption-store.js');
-      const { computePatternId, recordFalsePositive, promoteToShared } =
-        await import('../exemptions/exemption-engine.js');
+      const { trackFalsePositives } = await import('../exemptions/exemption-engine.js');
       const { PROMOTION_THRESHOLD } = await import('../exemptions/exemption-schema.js');
 
-      let localExemptions = readLocalExemptions(cacheDir, (msg) => log.dim(TAG, msg));
-      let shared = readSharedExemptions(resolvedTotemDir, (msg) => log.dim(TAG, msg));
-      let promotedAny = false;
+      const localExemptions = readLocalExemptions(cacheDir, (msg) => log.dim(TAG, msg));
+      const shared = readSharedExemptions(resolvedTotemDir, (msg) => log.dim(TAG, msg));
 
-      for (const pf of pushbackFindings) {
-        const pid = computePatternId(pf.body);
-        const { updatedLocal, promoted } = recordFalsePositive(
-          localExemptions,
-          pid,
-          'bot',
-          pf.body,
-        );
-        localExemptions = updatedLocal;
-        if (promoted) {
-          shared = promoteToShared(shared, pid, updatedLocal.patterns[pid]!);
-          promotedAny = true;
-          log.warn(
-            TAG,
-            `Bot pattern auto-suppressed after ${PROMOTION_THRESHOLD} pushbacks: ${pf.body.slice(0, 80)}`,
-          );
-        }
+      const botFindings = pushbackFindings.map((pf) => ({ message: pf.body }));
+      const tracked = trackFalsePositives(botFindings, 'bot', localExemptions, shared);
+
+      for (const msg of tracked.promoted) {
+        log.warn(TAG, `Bot pattern auto-suppressed after ${PROMOTION_THRESHOLD} pushbacks: ${msg}`);
       }
 
-      writeLocalExemptions(cacheDir, localExemptions, (msg) => log.dim(TAG, msg));
-      if (promotedAny) {
-        writeSharedExemptions(resolvedTotemDir, shared, (msg) => log.dim(TAG, msg));
+      writeLocalExemptions(cacheDir, tracked.local, (msg) => log.dim(TAG, msg));
+      if (tracked.promoted.length > 0) {
+        writeSharedExemptions(resolvedTotemDir, tracked.shared, (msg) => log.dim(TAG, msg));
         const { appendLedgerEvent } = await import('@mmnto/totem');
         appendLedgerEvent(
           resolvedTotemDir,

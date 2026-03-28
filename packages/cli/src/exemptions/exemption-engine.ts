@@ -1,6 +1,7 @@
 import * as crypto from 'node:crypto';
 
 import type { ShieldFinding } from '../commands/shield-templates.js';
+import type { NormalizedBotFinding } from '../parsers/bot-review-parser.js';
 import type {
   ExemptionLocal,
   ExemptionPattern,
@@ -74,8 +75,8 @@ function extractKeywords(message: string): string[] {
 
 export function computePatternId(message: string): string {
   const keywords = extractKeywords(message);
-  const joined = keywords.join(':');
-  const hash = crypto.createHash('sha256').update(joined).digest('hex');
+  const source = keywords.length > 0 ? keywords.join(':') : message.toLowerCase().trim();
+  const hash = crypto.createHash('sha256').update(source).digest('hex');
   return `shield:${hash}`;
 }
 
@@ -202,4 +203,42 @@ export function addManualSuppression(
     ...shared,
     exemptions: [...shared.exemptions, entry],
   };
+}
+
+export interface TrackResult {
+  local: ExemptionLocal;
+  shared: ExemptionShared;
+  promoted: string[];
+}
+
+/**
+ * Track false positives for a batch of findings. Returns updated local/shared
+ * state and a list of promoted pattern messages (for logging).
+ */
+export function trackFalsePositives(
+  findings: Array<{ message: string }>,
+  source: 'shield' | 'bot',
+  local: ExemptionLocal,
+  shared: ExemptionShared,
+): TrackResult {
+  let currentLocal = local;
+  let currentShared = shared;
+  const promoted: string[] = [];
+
+  for (const finding of findings) {
+    const pid = computePatternId(finding.message);
+    const { updatedLocal, promoted: didPromote } = recordFalsePositive(
+      currentLocal,
+      pid,
+      source,
+      finding.message,
+    );
+    currentLocal = updatedLocal;
+    if (didPromote) {
+      currentShared = promoteToShared(currentShared, pid, updatedLocal.patterns[pid]!);
+      promoted.push(finding.message.slice(0, 80));
+    }
+  }
+
+  return { local: currentLocal, shared: currentShared, promoted };
 }
