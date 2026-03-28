@@ -852,6 +852,13 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     );
   }
   const cwd = process.cwd();
+
+  // Silently upgrade the pre-push hook if it lacks shield auto-refresh (#1045)
+  const { upgradePrePushHookIfNeeded } = await import('./install-hooks.js');
+  if (upgradePrePushHookIfNeeded(cwd)) {
+    log.dim(TAG, 'Upgraded pre-push hook with shield auto-refresh');
+  }
+
   const configPath = resolveConfigPath(cwd);
   const configRoot = path.dirname(configPath);
   loadEnv(cwd);

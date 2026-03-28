@@ -297,6 +297,23 @@ if [ -f ".totem/compiled-rules.json" ]; then
   if [ -n "$TOTEM_CMD" ]; then
     $TOTEM_CMD lint
   fi
+
+  # Shield auto-refresh — re-run shield if flag is stale (#1045)
+  if [ -f ".totem/cache/.shield-passed" ] && [ -n "$TOTEM_CMD" ]; then
+    SHIELD_SHA=$(cat .totem/cache/.shield-passed | tr -d '[:space:]')
+    HEAD_SHA=$(git rev-parse HEAD)
+    if [ "$SHIELD_SHA" != "$HEAD_SHA" ]; then
+      if git merge-base --is-ancestor "$SHIELD_SHA" "$HEAD_SHA" 2>/dev/null; then
+        echo "[totem] Shield flag stale. Auto-refreshing..."
+      else
+        echo "[totem] Shield flag stale (rebase detected). Auto-refreshing..."
+      fi
+      if ! $TOTEM_CMD shield; then
+        echo "[totem] Shield auto-refresh failed. Fix issues and retry."
+        exit 1
+      fi
+    fi
+  fi
 fi
 `;
 }
@@ -601,4 +618,41 @@ export function hooksCommand(opts: { check?: boolean }): void {
         break;
     }
   }
+}
+
+// ─── Silent hook upgrade ──────────────────────────────
+
+const SHIELD_AUTO_REFRESH_MARKER = 'Shield flag stale';
+
+/**
+ * Silently upgrade the pre-push hook if it was installed by Totem but lacks
+ * the shield auto-refresh logic added in #1045.
+ *
+ * Returns true if the hook was upgraded, false otherwise.
+ */
+export function upgradePrePushHookIfNeeded(cwd: string): boolean {
+  const gitRoot = resolveGitRoot(cwd);
+  if (!gitRoot) return false;
+
+  const hookPath = path.join(gitRoot, '.git', 'hooks', 'pre-push');
+  if (!fs.existsSync(hookPath)) return false;
+
+  const content = fs.readFileSync(hookPath, 'utf-8');
+
+  // Only upgrade hooks that Totem owns (have our marker) but lack auto-refresh
+  if (!content.includes(TOTEM_PREPUSH_MARKER)) return false;
+  if (content.includes(SHIELD_AUTO_REFRESH_MARKER)) return false;
+
+  // Regenerate the hook with auto-refresh logic
+  const fallbackCmd = getFallbackCommand(gitRoot);
+  const newHook = buildPrePushHook(fallbackCmd);
+  fs.writeFileSync(hookPath, newHook);
+
+  try {
+    fs.chmodSync(hookPath, 0o755);
+  } catch {
+    // chmod may fail on Windows — hooks still work via git bash
+  }
+
+  return true;
 }
