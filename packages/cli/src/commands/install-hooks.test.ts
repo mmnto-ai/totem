@@ -867,4 +867,32 @@ fi
       cleanTmpDir(nonGitDir);
     }
   });
+
+  it('preserves user-appended content when upgrading', () => {
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    // Simulate an old totem hook with user content appended after it
+    const oldTotemBlock = `#!/bin/sh
+# ${TOTEM_PREPUSH_MARKER} — run compiled rules before push.
+if [ -f ".totem/compiled-rules.json" ]; then
+  TOTEM_CMD="totem"
+  if [ -n "$TOTEM_CMD" ]; then
+    $TOTEM_CMD lint
+  fi
+fi
+`;
+    const userAppended =
+      '\n# My custom deploy notification\ncurl -X POST https://hooks.example.com/deploy\n';
+    fs.writeFileSync(path.join(hooksDir, 'pre-push'), oldTotemBlock + userAppended);
+
+    const upgraded = upgradePrePushHookIfNeeded(tmpDir);
+
+    expect(upgraded).toBe(true);
+    const content = fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8');
+    // New totem block should have auto-refresh
+    expect(content).toContain('Shield flag stale');
+    // User content should be preserved
+    expect(content).toContain('curl -X POST https://hooks.example.com/deploy');
+    expect(content).toContain('My custom deploy notification');
+  });
 });

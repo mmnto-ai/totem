@@ -269,6 +269,8 @@ fi
 `;
 }
 
+const SHIELD_AUTO_REFRESH_MARKER = 'Shield flag stale';
+
 export function buildPrePushHook(fallbackCmd: string): string {
   return `#!/bin/sh
 # ${TOTEM_PREPUSH_MARKER} — run compiled rules before push.
@@ -304,9 +306,9 @@ if [ -f ".totem/compiled-rules.json" ]; then
     HEAD_SHA=$(git rev-parse HEAD)
     if [ "$SHIELD_SHA" != "$HEAD_SHA" ]; then
       if git merge-base --is-ancestor "$SHIELD_SHA" "$HEAD_SHA" 2>/dev/null; then
-        echo "[totem] Shield flag stale. Auto-refreshing..."
+        echo "[totem] ${SHIELD_AUTO_REFRESH_MARKER}. Auto-refreshing..."
       else
-        echo "[totem] Shield flag stale (rebase detected). Auto-refreshing..."
+        echo "[totem] ${SHIELD_AUTO_REFRESH_MARKER} (rebase detected). Auto-refreshing..."
       fi
       if ! $TOTEM_CMD shield; then
         echo "[totem] Shield auto-refresh failed. Fix issues and retry."
@@ -622,8 +624,6 @@ export function hooksCommand(opts: { check?: boolean }): void {
 
 // ─── Silent hook upgrade ──────────────────────────────
 
-const SHIELD_AUTO_REFRESH_MARKER = 'Shield flag stale';
-
 /**
  * Silently upgrade the pre-push hook if it was installed by Totem but lacks
  * the shield auto-refresh logic added in #1045.
@@ -644,10 +644,34 @@ export function upgradePrePushHookIfNeeded(cwd: string): boolean {
     if (!content.includes(TOTEM_PREPUSH_MARKER)) return false;
     if (content.includes(SHIELD_AUTO_REFRESH_MARKER)) return false;
 
-    // Regenerate the hook with auto-refresh logic
+    // Splice only the totem-managed block, preserving any user-appended content.
+    // The totem block starts at the marker comment and ends at the matching top-level `fi`.
+    const markerIdx = content.indexOf(`# ${TOTEM_PREPUSH_MARKER}`);
+    if (markerIdx === -1) return false;
+
+    // Find the end of the totem block — the last `fi` before any non-totem content.
+    // The block structure is: # marker ... if [ -f ".totem/compiled-rules.json" ]; then ... fi
+    const afterMarker = content.slice(markerIdx);
+    // Match the outermost `fi` that closes the compiled-rules.json check
+    const fiPattern = /^fi\s*$/m;
+    const fiMatch = fiPattern.exec(afterMarker);
+    if (!fiMatch) return false;
+    const blockEnd = markerIdx + fiMatch.index + fiMatch[0].length;
+
+    // Build the replacement block (strip shebang — we're splicing into existing file)
     const fallbackCmd = getFallbackCommand(gitRoot);
-    const newHook = buildPrePushHook(fallbackCmd);
-    fs.writeFileSync(hookPath, newHook);
+    const newBlock = buildPrePushHook(fallbackCmd)
+      .replace(/^#!\/bin\/sh\n/, '')
+      .trimStart();
+
+    // Splice: preserve everything before and after the totem block
+    const before = content.slice(0, markerIdx);
+    const after = content.slice(blockEnd);
+    const upgraded = before + newBlock.trimEnd() + after;
+
+    // TODO(telemetry): when the Workflow Friction Index (1.8.0) is built,
+    // pass execution context (hook-triggered vs manual) here for measurement
+    fs.writeFileSync(hookPath, upgraded);
 
     try {
       fs.chmodSync(hookPath, 0o755);
