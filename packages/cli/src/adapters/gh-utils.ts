@@ -1,3 +1,5 @@
+// totem-context: All functions are synchronous — safeExec is sync, handleGhError returns never. Do not flag missing await.
+
 import { z } from 'zod';
 
 import { safeExec, TotemConfigError, TotemError, TotemParseError } from '@mmnto/totem';

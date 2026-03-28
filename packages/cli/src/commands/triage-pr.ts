@@ -102,6 +102,7 @@ function normalizeBotFindings(
       body,
       suggestion,
       resolutionSignal,
+      rootCommentId: botComment.id,
     });
   }
 
@@ -485,14 +486,18 @@ export async function triagePrCommand(
 
     if (action === 'skip') continue;
 
-    // Find the thread for this finding (match by file + line)
-    const thread = botThreads.find((t) => {
-      if (t.path !== finding.file) return false;
-      if (finding.line == null) return true;
-      const hunk = t.diffHunk.match(/@@ .+?\+(\d+)/);
-      return hunk ? parseInt(hunk[1]!, 10) === finding.line : true;
-    });
-    const commentId = thread?.comments[0]?.id;
+    // Use the propagated rootCommentId for direct thread reference,
+    // falling back to heuristic file+line lookup for review-body findings
+    const commentId =
+      finding.rootCommentId ??
+      botThreads.find((t) => {
+        if (t.path !== finding.file) return false;
+        if (finding.line == null) return true;
+        const hunk = t.diffHunk.match(/@@ .+?\+(\d+)/);
+        return hunk ? parseInt(hunk[1]!, 10) === finding.line : true;
+      })?.comments[0]?.id;
+    const thread =
+      commentId != null ? botThreads.find((t) => t.comments[0]?.id === commentId) : undefined;
 
     if (action === 'fix') {
       const ok = await confirm({ message: `Generate and apply fix for ${location}?` });

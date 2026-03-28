@@ -284,7 +284,7 @@ export async function reviewLearnCommand(
             ruleId: 'exemption-promoted',
             file: '(review-learn)',
             justification: `Auto-promoted after ${PROMOTION_THRESHOLD} bot false positives`,
-            source: 'shield',
+            source: 'bot',
           },
           (msg) => log.dim(TAG, msg),
         );

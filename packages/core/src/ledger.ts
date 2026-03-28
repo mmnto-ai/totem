@@ -19,7 +19,7 @@ export const LedgerEventSchema = z.object({
   /** The justification text from totem-context: (or deprecated shield-context: alias). Empty for totem-ignore. */
   justification: z.string().default(''),
   /** Source of the event */
-  source: z.enum(['lint', 'shield']),
+  source: z.enum(['lint', 'shield', 'bot']),
 });
 
 export type LedgerEvent = z.infer<typeof LedgerEventSchema>;

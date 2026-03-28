@@ -1,3 +1,5 @@
+// totem-context: All methods are synchronous — ghFetchAndParse uses safeExec (sync). Do not flag missing await.
+
 import { z } from 'zod';
 
 import { getTagDate } from '../git.js';

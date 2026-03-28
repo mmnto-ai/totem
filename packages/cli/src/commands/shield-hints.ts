@@ -97,6 +97,18 @@ export function extractShieldHints(
     );
   }
 
+  // Auto-detect: synchronous adapter files that use gh CLI via safeExec (#1058)
+  const adapterFiles = changedFiles.filter(
+    (f) =>
+      f.includes('adapters/') &&
+      (f.endsWith('gh-utils.ts') || f.endsWith('github-cli-pr.ts') || f.endsWith('github-cli.ts')),
+  );
+  if (adapterFiles.length > 0) {
+    hints.push(
+      `Adapter files in diff: ${adapterFiles.join(', ')}. These use synchronous gh CLI calls via safeExec (child_process.execFileSync). handleGhError returns \`never\`. Do not flag missing \`await\` on these methods.`,
+    );
+  }
+
   // Per-file annotations: use pre-computed or extract fresh
   const annotations = precomputedAnnotations ?? extractShieldContextAnnotations(changedFiles, cwd);
   for (const ann of annotations) {
