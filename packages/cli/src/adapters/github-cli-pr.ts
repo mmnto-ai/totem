@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { safeExec } from '@mmnto/totem';
 
 import { GH_TIMEOUT_MS } from '../utils.js';
-import { ghFetchAndParse, handleGhError } from './gh-utils.js';
+import { ghExec, ghFetchAndParse, handleGhError } from './gh-utils.js';
 import type {
   PrAdapter,
   StandardPr,
@@ -102,6 +102,45 @@ export class GitHubCliPrAdapter implements PrAdapter {
       inReplyToId: c.in_reply_to_id,
       createdAt: c.created_at,
     }));
+  }
+
+  createIssue(params: {
+    title: string;
+    body: string;
+    labels: string[];
+    milestone?: string;
+  }): string {
+    const args = ['issue', 'create', '--title', params.title, '--body', params.body];
+    for (const label of params.labels) {
+      args.push('--label', label);
+    }
+    if (params.milestone) {
+      args.push('--milestone', params.milestone);
+    }
+    try {
+      return safeExec('gh', args, {
+        cwd: this.cwd,
+        timeout: GH_TIMEOUT_MS,
+        env: { ...process.env, GH_PROMPT_DISABLED: '1' },
+      }).trim();
+    } catch (err) {
+      handleGhError(err, 'issue creation');
+    }
+  }
+
+  replyToComment(prNumber: number, commentId: number, body: string): void {
+    const nwo = this.getRepoNwo();
+    ghExec(
+      [
+        'api',
+        `repos/${nwo}/pulls/comments/${commentId}/replies`,
+        '-X',
+        'POST',
+        '-f',
+        `body=${body}`,
+      ],
+      this.cwd,
+    );
   }
 
   private getRepoNwo(): string {

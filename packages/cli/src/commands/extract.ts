@@ -60,7 +60,7 @@ const TAG = 'Extract';
 interface CommentThread {
   path: string;
   diffHunk: string;
-  comments: { author: string; body: string }[];
+  comments: { id?: number; author: string; body: string }[];
 }
 
 function groupIntoThreads(comments: StandardReviewComment[]): CommentThread[] {
@@ -86,7 +86,7 @@ function groupIntoThreads(comments: StandardReviewComment[]): CommentThread[] {
     threads.push({
       path: root.path,
       diffHunk: root.diffHunk,
-      comments: threadComments.map((c) => ({ author: c.author, body: c.body })),
+      comments: threadComments.map((c) => ({ id: c.id, author: c.author, body: c.body })),
     });
   }
 

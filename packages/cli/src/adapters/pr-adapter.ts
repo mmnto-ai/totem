@@ -43,4 +43,11 @@ export interface PrAdapter {
   fetchOpenPRs(): StandardPrListItem[];
   fetchPr(prNumber: number): StandardPr;
   fetchReviewComments(prNumber: number): StandardReviewComment[];
+  createIssue(params: {
+    title: string;
+    body: string;
+    labels: string[];
+    milestone?: string;
+  }): string; // returns issue URL
+  replyToComment(prNumber: number, commentId: number, body: string): void;
 }
