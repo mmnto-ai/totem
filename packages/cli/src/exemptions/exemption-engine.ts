@@ -1,7 +1,6 @@
 import * as crypto from 'node:crypto';
 
 import type { ShieldFinding } from '../commands/shield-templates.js';
-import type { NormalizedBotFinding } from '../parsers/bot-review-parser.js';
 import type {
   ExemptionLocal,
   ExemptionPattern,
