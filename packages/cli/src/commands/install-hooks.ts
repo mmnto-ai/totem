@@ -297,7 +297,9 @@ if [ -f ".totem/compiled-rules.json" ]; then
   fi
 
   if [ -n "$TOTEM_CMD" ]; then
-    $TOTEM_CMD lint
+    if ! $TOTEM_CMD lint; then
+      exit 1
+    fi
   fi
 
   # Shield auto-refresh — re-run shield if flag is stale (#1045)
@@ -310,6 +312,7 @@ if [ -f ".totem/compiled-rules.json" ]; then
       else
         echo "[totem] ${SHIELD_AUTO_REFRESH_MARKER} (rebase detected). Auto-refreshing..."
       fi
+      # TODO(telemetry): pass execution context (hook vs manual) for friction index (1.8.0)
       if ! $TOTEM_CMD shield; then
         echo "[totem] Shield auto-refresh failed. Fix issues and retry."
         exit 1
@@ -652,10 +655,12 @@ export function upgradePrePushHookIfNeeded(cwd: string): boolean {
     // Find the end of the totem block — the last `fi` before any non-totem content.
     // The block structure is: # marker ... if [ -f ".totem/compiled-rules.json" ]; then ... fi
     const afterMarker = content.slice(markerIdx);
-    // Match the outermost `fi` that closes the compiled-rules.json check
-    const fiPattern = /^fi\s*$/m;
-    const fiMatch = fiPattern.exec(afterMarker); // totem-context: RegExp.exec, not child_process
-    if (!fiMatch) return false;
+    // Match the outermost `fi` that closes the compiled-rules.json check.
+    // Use matchAll + pop() to find the LAST `fi` — the block has nested if/fi pairs.
+    const fiPattern = /^fi\s*$/gm;
+    const fiMatches = [...afterMarker.matchAll(fiPattern)];
+    const fiMatch = fiMatches.pop();
+    if (!fiMatch || fiMatch.index == null) return false;
     const blockEnd = markerIdx + fiMatch.index + fiMatch[0].length;
 
     // Build the replacement block (strip shebang — we're splicing into existing file)
