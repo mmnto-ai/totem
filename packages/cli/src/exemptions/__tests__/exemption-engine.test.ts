@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { ShieldFinding } from '../../commands/shield-templates.js';
 import {
@@ -95,21 +95,19 @@ describe('recordFalsePositive', () => {
   it('promoted=true exactly on count 3 (PROMOTION_THRESHOLD)', () => {
     expect(PROMOTION_THRESHOLD).toBe(3);
     let local: ExemptionLocal = { ...EMPTY_LOCAL };
-    let promoted: boolean;
     ({ updatedLocal: local } = recordFalsePositive(local, pid, 'shield', msg));
     ({ updatedLocal: local } = recordFalsePositive(local, pid, 'shield', msg));
-    ({ updatedLocal: local, promoted } = recordFalsePositive(local, pid, 'shield', msg));
+    const { promoted } = recordFalsePositive(local, pid, 'shield', msg);
     expect(promoted).toBe(true);
   });
 
   it('promoted=false for count 4+ (only triggers once)', () => {
     let local: ExemptionLocal = { ...EMPTY_LOCAL };
-    let promoted: boolean;
     for (let i = 0; i < 3; i++) {
       ({ updatedLocal: local } = recordFalsePositive(local, pid, 'shield', msg));
     }
-    ({ updatedLocal: local, promoted } = recordFalsePositive(local, pid, 'shield', msg));
-    expect(local.patterns[pid]?.count).toBe(4);
+    const { updatedLocal, promoted } = recordFalsePositive(local, pid, 'shield', msg);
+    expect(updatedLocal.patterns[pid]?.count).toBe(4);
     expect(promoted).toBe(false);
   });
 
