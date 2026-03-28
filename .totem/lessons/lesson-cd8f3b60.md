@@ -1,8 +1,4 @@
-## Lesson — Lesson — LLM compilation should be the last resort, not
-
-**Tags:** compiler, architecture, stress-test, llm-reliability, rule-generation
-
-## Lesson — LLM compilation should be the last resort, not the primary mechanism for rule generation
+## Lesson — LLM compilation should be last resort for rule gen
 
 **Tags:** compiler, architecture, stress-test
 
