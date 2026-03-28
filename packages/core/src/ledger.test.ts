@@ -50,6 +50,15 @@ describe('LedgerEventSchema', () => {
     }
   });
 
+  it('accepts source: bot for bot-originated events', () => {
+    const event = makeEvent({ source: 'bot', type: 'exemption' });
+    const result = LedgerEventSchema.safeParse(event);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.source).toBe('bot');
+    }
+  });
+
   it('rejects missing required fields', () => {
     const incomplete = { timestamp: '2026-03-25T12:00:00.000Z', type: 'suppress' };
     const result = LedgerEventSchema.safeParse(incomplete);
