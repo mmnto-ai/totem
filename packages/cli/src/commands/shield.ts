@@ -672,7 +672,7 @@ async function handleVerdictResult(
             type: 'exemption',
             ruleId: 'exemption-promoted',
             file: '(shield)',
-            justification: `Auto-promoted after ${PROMOTION_THRESHOLD} false positives`,
+            justification: `Auto-promoted after ${PROMOTION_THRESHOLD} overrides`,
             source: 'shield',
           },
           (msg) => log.dim(TAG, msg),
