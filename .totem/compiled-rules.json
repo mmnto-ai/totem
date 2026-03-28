@@ -5912,6 +5912,114 @@
         "**/Makefile"
       ],
       "severity": "warning"
+    },
+    {
+      "lessonHash": "1a6b43d44d2c9c77",
+      "lessonHeading": "The GitHub API endpoint for replying to pull request",
+      "message": "The GitHub API endpoint for replying to pull request comments does not require the PR number in the path. Use /repos/{owner}/{repo}/pulls/comments/{comment_id}/replies instead.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "pulls\\/[^\\/\\s]+\\/comments\\/[^\\/\\s]+\\/replies",
+      "compiledAt": "2026-03-28T18:35:57.992Z",
+      "createdAt": "2026-03-28T18:35:57.992Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx",
+        "**/*.py",
+        "**/*.go",
+        "**/*.sh",
+        "**/*.rb"
+      ]
+    },
+    {
+      "lessonHash": "271765fe97bafafb",
+      "lessonHeading": "Always stage specific files instead of using 'git add -A'",
+      "message": "Always stage specific files instead of using 'git add -A', 'git add .', or 'git add --all' to prevent accidental inclusion of unrelated changes in automated workflows.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bgit\\s+add\\s+(-A|--all|\\.)(\\s|$)",
+      "compiledAt": "2026-03-28T18:36:22.534Z",
+      "createdAt": "2026-03-28T18:36:22.534Z",
+      "fileGlobs": [
+        "**/*.sh",
+        "**/*.bash",
+        "**/*.yml",
+        "**/*.yaml",
+        "**/Makefile",
+        "**/package.json"
+      ]
+    },
+    {
+      "lessonHash": "b817982af0b5ad08",
+      "lessonHeading": "When shield finds false positives on synchronous adapter",
+      "message": "Method 'replyToComment' is synchronous; do not use 'await'. The Gemini shield model often incorrectly flags this as an async operation. Check pr-adapter.ts for return types.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "await $OBJ.replyToComment($$$)",
+      "compiledAt": "2026-03-28T18:36:28.300Z",
+      "createdAt": "2026-03-28T18:36:28.300Z",
+      "fileGlobs": [
+        "packages/mcp/**/*.ts",
+        "!**/*.test.ts"
+      ]
+    },
+    {
+      "lessonHash": "c0719f100c53d52f",
+      "lessonHeading": "Try local branch references before remote-tracking ones",
+      "message": "Prefer local branch references over remote-tracking ones (e.g., use 'main' instead of 'origin/main') when calculating diffs to maintain consistency.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\borigin\\/[a-zA-Z0-9._\\-\\/]+",
+      "compiledAt": "2026-03-28T18:36:46.301Z",
+      "createdAt": "2026-03-28T18:36:46.301Z",
+      "fileGlobs": [
+        "**/*.sh",
+        "**/*.bash",
+        "**/*.yml",
+        "**/*.yaml",
+        "**/*.ts",
+        "**/*.js",
+        "**/*.py",
+        "**/*.json"
+      ]
+    },
+    {
+      "lessonHash": "b5cb138c293c69e4",
+      "lessonHeading": "Stripping non-ASCII characters during keyword extraction",
+      "message": "Stripping non-ASCII characters causes pattern ID collisions for non-English messages. Use Unicode property escapes (e.g., \\p{L}) and the 'u' flag instead of ASCII-only ranges.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\/\\[\\^a-zA-Z0-9\\][^\\/]*\\/",
+      "compiledAt": "2026-03-28T18:38:13.946Z",
+      "createdAt": "2026-03-28T18:38:13.946Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
+    },
+    {
+      "lessonHash": "82dcda4cbce649bd",
+      "lessonHeading": "Ensure issue numbers are non-empty digit strings",
+      "message": "Issue numbers in 'Deferred to #' markers must be non-empty digit strings (e.g., 'Deferred to #123') to ensure idempotency checks function correctly.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "Deferred to #(?!\\d+\\b)",
+      "compiledAt": "2026-03-28T18:38:16.555Z",
+      "createdAt": "2026-03-28T18:38:16.555Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx",
+        "**/*.md",
+        "**/*.py",
+        "**/*.sh"
+      ]
     }
   ],
   "nonCompilable": [
@@ -6537,6 +6645,11 @@
     "ce661aef564a39c5",
     "f2a8a5c1534072f2",
     "977ae6a13859e055",
-    "6289dc3fdda1c391"
+    "6289dc3fdda1c391",
+    "693e374aec00446e",
+    "7b8203b63ce7fd54",
+    "a065e1af3dd2e7dc",
+    "9bd070bddad26a46",
+    "1955ff8cded1cd2b"
   ]
 }
