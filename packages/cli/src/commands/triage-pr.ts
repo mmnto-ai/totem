@@ -470,9 +470,10 @@ export async function triagePrCommand(
     const action = await select({
       message: `Action for ${location}:`,
       options: [
-        { value: 'fix' as const, label: 'Fix — reply "Fixed" on thread' },
+        { value: 'fix' as const, label: 'Fix — generate and apply code fix' },
         { value: 'defer' as const, label: 'Defer — create issue and reply with link' },
         { value: 'dismiss' as const, label: 'Dismiss — reply with pushback reason' },
+        { value: 'learn' as const, label: 'Learn — extract lesson from this finding' },
         { value: 'skip' as const, label: 'Skip — do nothing' },
       ],
     });
@@ -569,6 +570,40 @@ export async function triagePrCommand(
       }
     }
 
+    if (action === 'learn') {
+      const ok = await confirm({ message: `Save lesson from this finding?` });
+      if (isCancel(ok)) {
+        cancel('Triage cancelled.');
+        return;
+      }
+      if (ok) {
+        try {
+          const { writeLessonFile } = await import('@mmnto/totem');
+          const { loadConfig: loadCfg2, resolveConfigPath: resolveCfg2 } =
+            await import('../utils.js');
+          const cfg = await loadCfg2(resolveCfg2(cwd));
+          const pathMod = await import('node:path');
+          const lessonsDir = pathMod.join(cwd, cfg.totemDir, 'lessons');
+
+          const toolAbbrev =
+            finding.tool === 'coderabbit' ? 'CR' : finding.tool === 'gca' ? 'GCA' : finding.tool;
+          const tags = [finding.triageCategory, toolAbbrev.toLowerCase(), 'bot-review'];
+          const lessonEntry = `## Lesson — ${
+            finding.body
+              .split('\n')
+              .find((l: string) => l.trim())
+              ?.slice(0, 80) ?? 'Bot review finding'
+          }\n\n**Tags:** ${tags.join(', ')}\n\n${finding.body.slice(0, 500)}`;
+
+          const filePath = writeLessonFile(lessonsDir, lessonEntry);
+          log.success(TAG, `Lesson saved: ${filePath}`);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          log.warn(TAG, `Failed to save lesson: ${msg}`);
+        }
+      }
+    }
+
     if (action === 'dismiss') {
       const reason = await text({
         message: 'Pushback reason:',
@@ -619,6 +654,20 @@ export async function triagePrCommand(
       const msg = err instanceof Error ? err.message : String(err);
       log.warn(TAG, `Failed to trigger re-review: ${msg}`);
     }
+  }
+
+  // Offer to run review-learn for full batch lesson extraction
+  try {
+    const doLearn = await confirm({
+      message: 'Run review-learn to extract lessons from all resolved findings?',
+    });
+    if (!isCancel(doLearn) && doLearn) {
+      const { reviewLearnCommand } = await import('./review-learn.js');
+      await reviewLearnCommand(String(num), { yes: false });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.warn(TAG, `review-learn failed: ${msg}`);
   }
 
   outro('Triage complete.');
