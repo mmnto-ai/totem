@@ -15,7 +15,7 @@ export interface LessonInput {
 
 export type CompileLessonResult =
   | { status: 'compiled'; rule: CompiledRule }
-  | { status: 'skipped'; hash: string }
+  | { status: 'skipped'; hash: string; reason?: string }
   | { status: 'failed' }
   | { status: 'noop' };
 
@@ -257,7 +257,7 @@ export async function compileLesson(
 
   if (!parsed.compilable) {
     callbacks?.onDim?.(lesson.heading, 'Not compilable (conceptual/architectural) — skipping');
-    return { status: 'skipped', hash: lesson.hash };
+    return { status: 'skipped', hash: lesson.hash, reason: parsed.reason };
   }
 
   const ruleResult = buildCompiledRule(parsed, lesson, existingByHash);

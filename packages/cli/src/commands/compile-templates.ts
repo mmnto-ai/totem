@@ -49,9 +49,12 @@ Or if the rule genuinely applies to all file types (rare — prefer scoping):
 Or if the lesson cannot be compiled:
 \`\`\`json
 {
-  "compilable": false
+  "compilable": false,
+  "reason": "Lesson describes a conceptual architectural principle, not a detectable code pattern"
 }
 \`\`\`
+
+When setting \`"compilable": false\`, always include a \`"reason"\` field explaining why the lesson cannot be compiled into a regex/AST pattern (e.g., "Lesson describes a conceptual architectural principle, not a detectable code pattern").
 
 ## Examples
 
@@ -59,7 +62,7 @@ Lesson: "Use \`err\` (never \`error\`) in catch blocks"
 Output: {"compilable": true, "pattern": "catch\\\\s*\\\\(\\\\s*error\\\\s*[\\\\):]", "message": "Use 'err' instead of 'error' in catch blocks (project convention)"}
 
 Lesson: "LanceDB does NOT support GROUP BY aggregation"
-Output: {"compilable": false}
+Output: {"compilable": false, "reason": "Lesson describes a database limitation, not a detectable code pattern"}
 
 Lesson: "Never use npm in this pnpm monorepo — always use pnpm"
 Output: {"compilable": true, "pattern": "\\\\bnpm\\\\s+(install|run|exec|ci|test)\\\\b", "message": "Use pnpm instead of npm in this monorepo"}

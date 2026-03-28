@@ -385,6 +385,7 @@ program
   .option('--from-cursor', 'Ingest .cursorrules and .cursor/rules/*.mdc files as lessons')
   .option('--concurrency <n>', 'Number of parallel LLM compilations (default: 5)', '5')
   .option('--cloud <url>', 'Use a cloud compilation endpoint for parallel fan-out')
+  .option('--verbose', 'Show details for skipped (non-compilable) lessons')
   .action(
     async (opts: {
       raw?: boolean;
@@ -396,6 +397,7 @@ program
       fromCursor?: boolean;
       concurrency?: string;
       cloud?: string;
+      verbose?: boolean;
     }) => {
       try {
         const { compileCommand } = await import('./commands/compile.js');

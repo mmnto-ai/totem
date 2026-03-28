@@ -669,6 +669,27 @@ describe('parseCompilerResponse', () => {
     expect(parseCompilerResponse(response)).toBeNull();
   });
 
+  it('parses a non-compilable response with reason', () => {
+    const response = JSON.stringify({
+      compilable: false,
+      reason:
+        'Lesson describes a conceptual architectural principle, not a detectable code pattern',
+    });
+    const result = parseCompilerResponse(response);
+    expect(result).toEqual({
+      compilable: false,
+      reason:
+        'Lesson describes a conceptual architectural principle, not a detectable code pattern',
+    });
+  });
+
+  it('parses a non-compilable response without reason (backward compat)', () => {
+    const response = JSON.stringify({ compilable: false });
+    const result = parseCompilerResponse(response);
+    expect(result).toEqual({ compilable: false });
+    expect(result!.reason).toBeUndefined();
+  });
+
   it('parses a response with fileGlobs', () => {
     const response = JSON.stringify({
       compilable: true,

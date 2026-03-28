@@ -271,6 +271,37 @@ describe('compileLesson', () => {
     expect(deps.callbacks!.onDim).toHaveBeenCalled();
   });
 
+  it('returns reason in skipped result when LLM provides one', async () => {
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: false,
+        reason: 'Describes a conceptual principle, not a code pattern',
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('response'),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(lesson, 'system prompt', deps);
+    expect(result.status).toBe('skipped');
+    if (result.status === 'skipped') {
+      expect(result.reason).toBe('Describes a conceptual principle, not a code pattern');
+    }
+  });
+
+  it('returns undefined reason in skipped result when LLM omits it', async () => {
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({ compilable: false }),
+      runOrchestrator: vi.fn().mockResolvedValue('response'),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(lesson, 'system prompt', deps);
+    expect(result.status).toBe('skipped');
+    if (result.status === 'skipped') {
+      expect(result.reason).toBeUndefined();
+    }
+  });
+
   it('calls onWarn callback on failures', async () => {
     const deps: CompileLessonDeps = {
       parseCompilerResponse: vi.fn().mockReturnValue(null),
