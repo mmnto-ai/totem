@@ -1,157 +1,60 @@
 # Totem Roadmap
 
-This document outlines the strategic phases for the Totem project, focusing on moving from a solid architectural foundation to frictionless user adoption, and eventually enterprise scale.
+This document outlines the strategic milestones for the Totem project.
 
-## Foundations (Functionally Complete)
-
-The core embedded vector database, MCP server, and baseline CLI commands established the foundational architecture and validation workflows.
-
-- **Core Architecture:**
-  - Turborepo scaffolding and syntax-aware LanceDB store.
-  - Incremental synchronization capabilities via `totem sync`.
-- **Integrations:**
-  - MCP Server implementation.
-  - Auto-injection of memory reflexes into AI tools.
-- **CLI & Workflows:**
-  - Ported native orchestrator commands.
-  - PR Learning Loop (`extract`) and Evidence-Based Quality Gate (`shield`).
-- **Validation:**
-  - Validated OpenAI happy path.
-  - Dogfood synchronization with embeddings.
+Totem is shifting from a "smart linter" to an **Enterprise Governance OS** for AI agents. Our roadmap reflects the transition from building the core deterministic engine to building the multi-repo federation and auditability features required by DevSecOps teams.
 
 ---
 
-## Phase 1: The "Magic" Onboarding & Polish (Functionally Complete)
+## 1.6.0 — Pipeline Maturity (Current Release)
 
-**Goal:** If users can't install Totem easily and don't trust what it does, advanced features won't matter. Make onboarding straightforward and the CLI highly functional.
+**Goal:** Establish the "Self-Healing Loop." The engine must learn from developer frustration to prevent alert fatigue.
 
-This phase delivered cross-platform onboarding, automated AI tool configuration, and universal baseline lessons.
+- [x] **The Exemption Engine:** Dual-storage false-positive tracking (local gitignored vs. team committed).
+- [x] **Bot Review Integration:** Auto-extract pushback/arguments with CodeRabbit and route them to the exemption engine.
+- [x] **Trap Ledger Logging:** Cryptographically log all overrides and bypasses for future analysis.
+- [x] **Rule Unit Testing:** Require "Example Hits/Misses" in markdown lessons to prove patterns at compile time.
+- [x] **Standard Library Enforcement:** Compile design tenets (like "Never use native child_process") into physical blocking gates.
 
-- **Onboarding & UX:**
-  - **Tool Automation:** Auto-configured AI tools with JetBrains Junie and Copilot support. Added configurable embedding detection defaulting to Gemini.
-  - **CLI Experience:**
-    - Delivered cross-platform installers and versioned reflex upgrade paths.
-    - Provided CLI UI polish with onboarding dares and brief terminal outputs.
-    - Added `--bare` scaffolding support for streamlined `totem init`.
-- **Host Integration:**
-  - **Agent Hooks:** Agent hooks for Claude Code, Gemini, and Junie.
-  - **Baseline Intelligence:** Universal Baseline delivered, shipping 60 battle-tested lessons automatically during `totem init` alongside harder vector database reflexes.
-  - **Enforcement:** Involuntary enforcement strategy under research.
-- [ ] **Interactive CLI Tutorial:** Build an animated, interactive CLI tutorial (`totem tutorial`). This allows users to pause the walkthrough, ask the AI contextual questions, and resume without interruption.
-- [ ] **Invisible Orchestration:**
-  - **Automated Hooks:** Automate deterministic operations (`sync`, `lint`, `handoff`) via Git hooks. Recent additions include invisible sync hooks for post-merge and post-checkout updates.
-  - **Review Isolation:** The `totem shield` command remains a local review action. It uses LLMs and is explicitly excluded from automated hooks.
+---
 
-## Phase 2: Core Stability & Data Safety (Functionally Complete)
+## 1.7.0 — Developer Experience & Tooling Awareness
 
-**Goal:** Before ingesting enterprise databases, the local vector index and LLM prompts must be bulletproof across all environments.
+**Goal:** Cure "Agent Amnesia." Ensure AI agents (and human developers) start every session with a perfectly hydrated context window.
 
-This phase fortified the core architecture, delivering native orchestration, zero-LLM linting, and rigorous security measures.
+- [ ] **Smart Briefing (`totem briefing`):** Inject live Git state, lint health, and recent Trap Ledger events into the agent's Turn-1 context.
+- [ ] **CLI Taxonomy Refactor:** Subsume overlapping commands (lint/shield $\rightarrow$ check) and move CI plumbing into a `dev` namespace to achieve a "NASA-by-Google" interface.
+- [ ] **Solo Dev Experience Audit:** Optimize the `extract $\rightarrow$ compile` flywheel for developers who don't have PR review bots.
+- [ ] **MCP Tool Hardening:** Embed protocol invariants directly into MCP tool descriptions (e.g., "CRITICAL: Call search_knowledge first").
 
-- **AST & Orchestration:**
-  - **AST Governance:**
-    - Universal Tree-sitter parsing and AST gating for zero-LLM `totem lint`. Shared execution logic unifies the underlying rule runner.
-    - Advanced by the syntax-aware AST engine. Added fail-closed logic and graceful degradation for AST query engines to prevent exception swallowing.
-    - Resolved execution wrapper, process exit handling, and AST query stability issues.
-  - **Graceful Degradation:** Cross-provider LLM routing with SDK-to-CLI and Ollama fallbacks.
-  - **Provider Coverage:** Supported Cloud Providers including Gemini, Anthropic, and OpenAI. Supported Local Providers via Ollama fallbacks.
-- **Data Safety & Memory:**
-  - **Transactions & Sync:** Saga-based document rollbacks and auto-healing database version recovery. Automated sync with dual-read migrations. Filesystem concurrency locks to safely manage operations.
-  - **Integrity & State:** Air-gapped zero-telemetry enforced, alongside index health checks at startup. Enhanced auto-healing with dimension mismatch detection via internal metadata.
-  - **Portability:** Zero-LLM session snapshots via `totem handoff --lite` and cross-model export support. Executed portability audits across Windows, macOS, and Linux.
-- **Security & DX:**
-  - **Data Loss Prevention:** Implemented DLP secret masking middleware. This proactively strips secrets prior to outbound LLM calls and embedding processes.
-  - **Adversarial Hardening:**
-    - **Scrubbing & Detection:** Adversarial ingestion scrubbing, extraction hardening, and suspicious lesson detection algorithms.
-    - **Trust Boundaries:** Added trust boundaries and an MCP authorization model to harden ingestion pipelines.
-    - **Execution Constraints:** MCP taskkill injection prevention, structured capability tiers, and strict capability caps.
-  - **Git Enforcements:** Native Git hook enforcement prioritizing zero-LLM `totem lint` for fast validation. Hardened phase-gate hooks with preflight commit warnings and added monorepo support.
-  - **Installation & Verification:**
-    - **CI Workflows:** Expanded drift gating with a cross-platform matrix and auto-installation of `totem hooks`. Improved CLI wiring and dependency injection for core logging.
-    - **Security Gates:** Added CI wind tunnel SHA locks for fixture integrity and hardened manifest attestation workflows.
+---
 
-## Phase 3: Workflow Expansion (Power User Tools)
+## 1.8.0 — The Pipeline Engine
 
-**Goal:** Give existing users more ways to interact with their data locally and visualize their usage.
+**Goal:** Make the lesson extraction and compilation process hyper-intelligent and context-aware.
 
-- **Observability & Maintenance:**
-  - **Metrics & Diagnostics:**
-    - [x] **Semantic Rule Observability:** Separated zero-LLM `totem lint` from AI-powered `totem shield` for targeted rule enforcement. Introduced `totem explain` for violation lookups and repaired suppression metrics for accurate tracking.
-    - [ ] **CLI Metrics & Observability:** Local CLI metrics (`totem stats`) with terminal output only. Includes violation history, lesson coverage, and rule fire counts from local storage.
-    - [ ] **Database Observability:** Build `totem inspect` or a local UI to visualize vector chunks and track index health.
-  - **System Maintenance:**
-    - [ ] **v1.0 Documentation:** Develop full documentation and extensive wiki migrations covering dev environments and release processes.
-    - [ ] **Automated Memory Consolidation:** Command (`totem consolidate`) to clean up and merge old lessons.
-    - [x] **Documentation Generation:** Stripped known-not-shipped issue references from documentation generation to prevent hallucinations. Added confirmation requirements and automated stripping of marketing terms before writing LLM-generated docs.
-- **Workflow & Execution:**
-  - **Data & Backlog:**
-    - [x] **Strategic Backlog Audit:** Added `totem audit` for backlog auditing with a human approval gate.
-    - [x] **Configurable Issue Sources:** Added support for multiple repositories during triage and extraction workflows.
-  - **Knowledge Integration:**
-    - [x] **Context Injection:** Embedded relevant vector database lessons into orchestrator commands using a recency sandwiching pattern.
-    - [x] **Knowledge Promotion:** Audited local AI memory and promoted contributor knowledge to version-controlled surfaces. Extracted operational knowledge from active quality sweeps.
-    - [x] **Toolchain Exports:** Exported compiled lessons to code assistant instructions.
-    - [x] **Local Sharing:** Introduced `totem link` to securely share compiled lessons across repositories. Enabled cross-totem queries via linked indexes.
-  - **Task Orchestration:**
-    - [x] **Automation & Skills:** Restructured skills into a directory format. Upgraded `totem spec` to a strict checklist format with gap remediation capabilities. Refactored agent instructions to a lean root router pattern, established capability tiers, and deprecated legacy shield contexts.
-    - [ ] **totem run <workflow>:** Introduce a custom AI task runner to execute user-defined markdown workflows via the orchestrator.
-    - [ ] **totem oracle:** Add a frictionless Q&A command to query the vector database without strict personas.
-    - [ ] **totem review:** Implement full codebase review powered by external context mixers and vector database lessons.
-    - [ ] **Dynamic CLI Imports:** Convert static framework imports to dynamic await calls in command files to optimize startup performance.
-  - **Extraction & Authority:**
-    - [ ] **Document Authority Modes:** Implement generated vs. assisted authority modes to protect human-curated strategic decisions.
-    - [ ] **PR Lesson Extraction:** Auto-extract lessons from pull request review comments. Extracted lessons are strictly validated before disk writes.
-- **Shift-Left & Advanced Intelligence:**
-  - **Governance & Verification:**
-    - [ ] **Shift-Left AI Verification:** Define model compatibility and auditing strategy to systematically verify models.
-    - [ ] **Adaptive Agent Governance:** Establish a codebase immune system. Transitions compilation from regex-only to AST-aware rules for complex cases where regex is insufficient.
-    - [x] **Rule Testing Harness:** Implemented a compiled rule testing harness to identify regex false-positives and drive AST requirements. Addressed critical test coverage gaps across the validation pipeline.
-    - [ ] **Adversarial Trap Corpus:** Develop synthetic violations to measure precision and recall of the deterministic engine.
-    - [x] **Quality Control:** Addressed joint code review conditions and deployed a Docker test harness for stability validation. Implemented phase-gate enforcement and integrated security hardening from codebase reviews.
-  - **Rules & Standards:**
-    - [x] **SARIF Output:** Standardized output for continuous integration, enhanced with organizational trap ledgers and linting support.
-    - [x] **External Rule Ingestion:** Built support to automatically ingest external configurations and prompt templates into compiled rules during initialization.
-    - **Rule Invariant Audit:**
-      - Categorized rules by invariant, style, and security to establish strict baseline severity.
-      - Refined to a curated 147-rule set and consolidated near-duplicate rules to reduce false positives.
-      - Introduced "Complete or Broken" guardrails and added baseline fix guidance with mandatory verify steps.
-    - [x] **Compilation Optimization:**
-      - Implemented a compiler facade pattern and cached non-compilable lessons to optimize performance. Added compile manifest signing to establish a provenance chain.
-      - Refined glob boundaries and introduced a pre-compilation lesson file linter to ensure structural validity.
-      - Enabled parallel lesson compilation utilizing concurrency flags and integrated cleanup helpers to safely handle temporary files.
-    - [x] **Core Rule Engine:** Integrated manual patterns and reverse-compiled curated rules into the primary execution pipeline. Streamlined compilation by extracting engine helper fields and enriched context with body-text backfills.
-    - [ ] **Rule Exports:** Export compiled rules to standard linter configurations. Deferred until core governance is finalized.
-    - [ ] **Lesson Packs Prototype:** Mine open-source projects as a proof of concept for distributable rule sets.
-  - **Data Architecture & Agents:**
-    - [x] **Agent-Optimized MCP:** Implemented enforcement tools enabling active self-correction and zombie process harvesting. Hardened with capability caps, pre-push enforcement, and boundary parameters for precise knowledge queries.
-    - [x] **VectorDB Structure:** Defined multi-type schemas, delivered health checks, and integrated local embeddings. Advanced querying by introducing index partitions with alias resolution.
-    - [ ] **Cross-File Knowledge Graph (Blocked):** Implement symbol resolution to enable multi-file architectural reasoning.
+- [ ] **Intelligent Scope Inference:** Use the PR diff during `totem extract` to automatically suggest accurate `fileGlobs` (e.g., automatically excluding `*.test.ts` to prevent noise).
+- [ ] **Prior Art Concierge:** Upgrade `totem spec` to proactively search the Knowledge Mesh and inject shared-helper signatures into the agent's plan before they write code.
+- [ ] **The "Hammer" Stress Test:** Build an adversarial test harness to prove agents cannot jailbreak the AST parser via string obfuscation.
 
-## Phase 4: Enterprise Expansion
+---
 
-**Goal:** Scale Totem from individual developers to entire organizations by ingesting third-party data sources.
+## 1.9.0 — The Invisible Exoskeleton
 
-- **Enterprise Memory & Scaling:**
-  - **Ingestion & Domains:**
-    - [ ] **Documentation Ingestion Pipeline:** Build Pull/Push models for enterprise wikis or internal knowledge bases.
-    - [x] **Rust Core Extraction:** Evaluated high-performance core extraction for enterprise-scale operations.
-    - [x] **Multi-Totem Domains:** Established multi-totem knowledge domains with an indexed strategy repository and consumer playground.
-    - **Quality Hardening:** Executed structural quality hardening and code deduplication to support enterprise operations.
-- **Integration & DevEx:**
-  - **Onboarding Journeys:**
-    - [ ] **Frictionless 10-Minute Init:** Build an onboarding command to generate contextual briefings tailored to a new developer's first ticket.
-    - [x] **Universal Lessons Baseline:** Delivered baseline dataset and refined ignore patterns to ensure predictable bootstrapping.
-  - **Adapters & Guardrails:**
-    - [ ] **Issue Tracking Adapters:** Implement project management adapters using the established internal interface.
-    - [ ] **Universal AI DevEx:** Evolve initialization to inject best practices guardrails like anti-refactor and test coverage triggers.
-- **Governance & Licensing:**
-  - **Policy & Licensing:**
-    - [ ] **Configurable Governance:** Let enterprise teams configure AI review loops. Shield severity thresholds are established for granular control.
-    - [ ] **Open Core & Licensing:** Evaluate open source licensing strategies (resolved to Apache 2.0).
-    - [x] **Relicensing:** Relicensed project from MIT to Apache 2.0.
-  - **Security & Compliance:**
-    - [x] **Security Scanning:** Configured automated dependency updates and enabled advanced security code scanning.
-    - [x] **Governance & Security:** Migrate strategic documentation to a private submodule for secure collaboration and indexing.
-  - **Contributor Workflow:**
-    - [x] **Release Management:** Implement standardized changesets and package publishing. Hardened with release workflow tag push resilience.
-    - [x] **Governance:** Implement Contributor License Agreement automation and contribution guidelines.
+**Goal:** Protect the 3.0-second execution SLA by implementing advanced memory management and rule lifecycle policies.
+
+- [ ] **Rule Garbage Collection:** Implement a mechanism in `totem doctor` to identify and archive dead rules.
+- [ ] **Adaptive Decay Thresholds:** Move away from hardcoded time limits (e.g., 180 days) and base rule decay on "Commit Cycles" or "Scope Touch Frequency."
+- [ ] **Meta-Governance:** Compile our own product messaging tenets (e.g., "Totem is not an AI Doc Writer") into `shield` rules to prevent marketing drift.
+
+---
+
+## 2.0.0 — Federation (The Enterprise Tier)
+
+**Goal:** Fulfill the COSS Covenant. Provide the coordination layer required for enterprises to safely deploy autonomous agents across hundreds of repositories.
+
+- [ ] **Multi-Repo Federation:** Allow a central Strategy Repo to push compiled architectural rules down to microservice repositories via RBAC.
+- [ ] **Centralized Trap Ledger:** Ship `events.ndjson` to an immutable, signed cloud endpoint.
+- [ ] **Agent Compliance Dashboard:** A queryable DevSecOps dashboard visualizing override rates grouped by agent source (Claude vs. Gemini vs. Human).
+- [ ] **Mesh Export:** A portable format for bundling lessons and rules for M&A due diligence and compliance audits.
+- [ ] **`totem ui`:** A local web dashboard for inspecting rule decay, hit/miss rates, and Trap Ledger history.
