@@ -631,28 +631,33 @@ const SHIELD_AUTO_REFRESH_MARKER = 'Shield flag stale';
  * Returns true if the hook was upgraded, false otherwise.
  */
 export function upgradePrePushHookIfNeeded(cwd: string): boolean {
-  const gitRoot = resolveGitRoot(cwd);
-  if (!gitRoot) return false;
-
-  const hookPath = path.join(gitRoot, '.git', 'hooks', 'pre-push');
-  if (!fs.existsSync(hookPath)) return false;
-
-  const content = fs.readFileSync(hookPath, 'utf-8');
-
-  // Only upgrade hooks that Totem owns (have our marker) but lack auto-refresh
-  if (!content.includes(TOTEM_PREPUSH_MARKER)) return false;
-  if (content.includes(SHIELD_AUTO_REFRESH_MARKER)) return false;
-
-  // Regenerate the hook with auto-refresh logic
-  const fallbackCmd = getFallbackCommand(gitRoot);
-  const newHook = buildPrePushHook(fallbackCmd);
-  fs.writeFileSync(hookPath, newHook);
-
   try {
-    fs.chmodSync(hookPath, 0o755);
-  } catch {
-    // chmod may fail on Windows — hooks still work via git bash
-  }
+    const gitRoot = resolveGitRoot(cwd);
+    if (!gitRoot) return false;
 
-  return true;
+    const hookPath = path.join(gitRoot, '.git', 'hooks', 'pre-push');
+    if (!fs.existsSync(hookPath)) return false;
+
+    const content = fs.readFileSync(hookPath, 'utf-8');
+
+    // Only upgrade hooks that Totem owns (have our marker) but lack auto-refresh
+    if (!content.includes(TOTEM_PREPUSH_MARKER)) return false;
+    if (content.includes(SHIELD_AUTO_REFRESH_MARKER)) return false;
+
+    // Regenerate the hook with auto-refresh logic
+    const fallbackCmd = getFallbackCommand(gitRoot);
+    const newHook = buildPrePushHook(fallbackCmd);
+    fs.writeFileSync(hookPath, newHook);
+
+    try {
+      fs.chmodSync(hookPath, 0o755);
+    } catch {
+      // chmod may fail on Windows — hooks still work via git bash
+    }
+
+    return true;
+  } catch {
+    // Silent upgrade is best-effort — never crash shield for a hook upgrade failure
+    return false;
+  }
 }
