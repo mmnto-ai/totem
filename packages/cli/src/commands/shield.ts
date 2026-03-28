@@ -406,6 +406,7 @@ export interface ShieldOptions {
   learn?: boolean;
   yes?: boolean;
   override?: string;
+  suppress?: string[];
 }
 
 // ─── Deterministic mode (delegates to shared engine) ─
@@ -574,16 +575,44 @@ async function handleVerdictResult(
   // Try structured parsing first (V2)
   const structured = extractStructuredVerdict(content);
   if (structured) {
-    const verdict = computeVerdict(structured);
-    const display = formatVerdictForDisplay(structured, verdict.pass);
+    // ─── Exemption filtering ───────────────────────────
+    const pathMod = await import('node:path');
+    const resolvedTotemDir = pathMod.join(configRoot ?? cwd, config.totemDir);
+    const cacheDir = pathMod.join(resolvedTotemDir, 'cache');
+
+    const { readSharedExemptions, writeSharedExemptions } =
+      await import('../exemptions/exemption-store.js');
+    const { filterExemptedFindings, addManualSuppression } =
+      await import('../exemptions/exemption-engine.js');
+
+    let shared = readSharedExemptions(resolvedTotemDir, (msg) => log.dim(TAG, msg));
+
+    // Apply manual --suppress flags
+    if (options.suppress?.length) {
+      for (const label of options.suppress) {
+        shared = addManualSuppression(shared, label, `Manual suppression via --suppress`);
+        log.info(TAG, `Suppression registered: ${label}`);
+      }
+      writeSharedExemptions(resolvedTotemDir, shared, (msg) => log.dim(TAG, msg));
+    }
+
+    // Filter exempted findings
+    const { filtered, exempted } = filterExemptedFindings(structured.findings, shared);
+    if (exempted.length > 0) {
+      log.dim(TAG, `${exempted.length} finding(s) exempted by suppression rules`);
+    }
+
+    // Use filtered verdict for pass/fail, but show all findings in display
+    const filteredVerdict = { ...structured, findings: [...filtered, ...exempted] };
+
+    const verdict = computeVerdict({ ...structured, findings: filtered });
+    const display = formatVerdictForDisplay(filteredVerdict, verdict.pass);
     console.error(display);
 
     if (verdict.pass) {
       await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
     } else if (options.override) {
       const { appendLedgerEvent } = await import('@mmnto/totem');
-      const pathMod = await import('node:path');
-      const resolvedTotemDir = pathMod.join(configRoot ?? cwd, config.totemDir);
 
       log.warn(TAG, `SHIELD OVERRIDE APPLIED: ${options.override}`);
       for (const finding of structured.findings.filter(
@@ -604,6 +633,54 @@ async function handleVerdictResult(
         },
         (msg) => log.dim(TAG, msg),
       );
+
+      // Track overridden findings for exemption engine
+      const { readLocalExemptions, writeLocalExemptions } =
+        await import('../exemptions/exemption-store.js');
+      const { computePatternId, recordFalsePositive, promoteToShared } =
+        await import('../exemptions/exemption-engine.js');
+      const { PROMOTION_THRESHOLD } = await import('../exemptions/exemption-schema.js');
+
+      let localExemptions = readLocalExemptions(cacheDir, (msg) => log.dim(TAG, msg));
+      let promotedAny = false;
+
+      for (const finding of structured.findings.filter(
+        (f: { severity: string }) => f.severity === 'CRITICAL',
+      )) {
+        const pid = computePatternId(finding.message);
+        const { updatedLocal, promoted } = recordFalsePositive(
+          localExemptions,
+          pid,
+          'shield',
+          finding.message,
+        );
+        localExemptions = updatedLocal;
+        if (promoted) {
+          shared = promoteToShared(shared, pid, updatedLocal.patterns[pid]!);
+          promotedAny = true;
+          log.warn(
+            TAG,
+            `Pattern auto-suppressed after ${PROMOTION_THRESHOLD} overrides: ${finding.message.slice(0, 80)}`,
+          );
+        }
+      }
+
+      writeLocalExemptions(cacheDir, localExemptions, (msg) => log.dim(TAG, msg));
+      if (promotedAny) {
+        writeSharedExemptions(resolvedTotemDir, shared, (msg) => log.dim(TAG, msg));
+        appendLedgerEvent(
+          resolvedTotemDir,
+          {
+            timestamp: new Date().toISOString(),
+            type: 'exemption',
+            ruleId: 'exemption-promoted',
+            file: '(shield)',
+            justification: `Auto-promoted after ${PROMOTION_THRESHOLD} false positives`,
+            source: 'shield',
+          },
+          (msg) => log.dim(TAG, msg),
+        );
+      }
 
       await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
     } else {

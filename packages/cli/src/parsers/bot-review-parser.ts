@@ -171,6 +171,61 @@ export function extractReviewBodyFindings(
   return findings;
 }
 
+/**
+ * Extract findings from threads where the human explicitly pushed back (false positive signals).
+ * Inverse of extractResolvedBotFindings — captures "intentional", "by design", "won't fix" threads.
+ */
+export function extractPushbackFindings(threads: CommentThread[]): NormalizedBotFinding[] {
+  const pushbackPatterns = [
+    /\bnot\s+(?:applicable|relevant|needed|correct)\b/i,
+    /\bintentional\b/i,
+    /\bby\s+design\b/i,
+    /\bwon'?t\s+fix\b/i,
+    /\bignor(?:e|ed|ing)\s+(?:this|it|the)\b/i,
+    /\bdismiss(?:ed|ing)?\b/i,
+    /\bjust\s+a\s+nit\b/i,
+  ];
+
+  const findings: NormalizedBotFinding[] = [];
+
+  for (const thread of threads) {
+    const botComment = thread.comments[0];
+    if (!botComment || !isBotComment(botComment.author)) continue;
+
+    const humanReplies = thread.comments.slice(1).filter((c) => !isBotComment(c.author));
+    if (humanReplies.length === 0) continue;
+
+    const hasPushback = humanReplies.some((reply) =>
+      pushbackPatterns.some((p) => p.test(reply.body)),
+    );
+    if (!hasPushback) continue;
+
+    const tool = detectBot(botComment.author);
+    const severity =
+      tool === 'coderabbit'
+        ? parseCRSeverity(botComment.body)
+        : tool === 'gca'
+          ? parseGCASeverity(botComment.body)
+          : 'info';
+
+    const body = stripHtmlWrappers(botComment.body);
+    const hunkMatch = thread.diffHunk.match(/@@ .+?\+(\d+)/);
+    const line = hunkMatch ? parseInt(hunkMatch[1]!, 10) : undefined;
+
+    findings.push({
+      tool,
+      severity,
+      file: thread.path,
+      line,
+      body,
+      suggestion: extractSuggestion(botComment.body),
+      resolutionSignal: 'none',
+    });
+  }
+
+  return findings;
+}
+
 export function extractResolvedBotFindings(threads: CommentThread[]): NormalizedBotFinding[] {
   const findings: NormalizedBotFinding[] = [];
 

@@ -242,6 +242,74 @@ export async function reviewLearnCommand(
   // Append review body findings (treat as actionable — no thread/reply to check resolution on)
   findings.push(...reviewBodyFindings);
 
+  // 7b. Track pushback findings in exemption engine (false positive signals)
+  const { extractPushbackFindings } = await import('../parsers/bot-review-parser.js');
+  const pushbackFindings = extractPushbackFindings(threads);
+  if (pushbackFindings.length > 0) {
+    log.dim(
+      TAG,
+      `Found ${pushbackFindings.length} pushback finding(s) — tracking for exemption engine`,
+    );
+    try {
+      const pathMod = await import('node:path');
+      const resolvedTotemDir = pathMod.join(cwd, config.totemDir);
+      const cacheDir = pathMod.join(resolvedTotemDir, 'cache');
+      const {
+        readLocalExemptions,
+        writeLocalExemptions,
+        readSharedExemptions,
+        writeSharedExemptions,
+      } = await import('../exemptions/exemption-store.js');
+      const { computePatternId, recordFalsePositive, promoteToShared } =
+        await import('../exemptions/exemption-engine.js');
+      const { PROMOTION_THRESHOLD } = await import('../exemptions/exemption-schema.js');
+
+      let localExemptions = readLocalExemptions(cacheDir, (msg) => log.dim(TAG, msg));
+      let shared = readSharedExemptions(resolvedTotemDir, (msg) => log.dim(TAG, msg));
+      let promotedAny = false;
+
+      for (const pf of pushbackFindings) {
+        const pid = computePatternId(pf.body);
+        const { updatedLocal, promoted } = recordFalsePositive(
+          localExemptions,
+          pid,
+          'bot',
+          pf.body,
+        );
+        localExemptions = updatedLocal;
+        if (promoted) {
+          shared = promoteToShared(shared, pid, updatedLocal.patterns[pid]!);
+          promotedAny = true;
+          log.warn(
+            TAG,
+            `Bot pattern auto-suppressed after ${PROMOTION_THRESHOLD} pushbacks: ${pf.body.slice(0, 80)}`,
+          );
+        }
+      }
+
+      writeLocalExemptions(cacheDir, localExemptions, (msg) => log.dim(TAG, msg));
+      if (promotedAny) {
+        writeSharedExemptions(resolvedTotemDir, shared, (msg) => log.dim(TAG, msg));
+        const { appendLedgerEvent } = await import('@mmnto/totem');
+        appendLedgerEvent(
+          resolvedTotemDir,
+          {
+            timestamp: new Date().toISOString(),
+            type: 'exemption',
+            ruleId: 'exemption-promoted',
+            file: '(review-learn)',
+            justification: `Auto-promoted after ${PROMOTION_THRESHOLD} bot false positives`,
+            source: 'shield',
+          },
+          (msg) => log.dim(TAG, msg),
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.dim(TAG, `Exemption tracking failed (non-fatal): ${msg}`);
+    }
+  }
+
   if (findings.length === 0) {
     log.dim(TAG, 'No resolved bot findings found. Only fixed findings produce lessons.');
     return;
