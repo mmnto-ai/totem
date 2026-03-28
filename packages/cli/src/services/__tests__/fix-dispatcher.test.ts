@@ -11,9 +11,7 @@ vi.mock('@mmnto/totem', () => ({
   safeExec: vi.fn().mockReturnValue('abc1234'),
 }));
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 let fsMock: typeof import('node:fs');
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 let totemMock: typeof import('@mmnto/totem');
 
 describe('dispatchFix', () => {

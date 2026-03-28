@@ -433,17 +433,25 @@ export async function triagePrCommand(
     return;
   }
 
-  // Pre-load config for fix dispatch (avoid re-loading per finding)
-  const {
-    loadConfig: loadCfg,
-    resolveConfigPath: resolveCfg,
-    loadEnv: loadE,
-    runOrchestrator: runOrch,
-  } = await import('../utils.js');
-  const { dispatchFix } = await import('../services/fix-dispatcher.js');
-  const cfgPath = resolveCfg(cwd);
-  loadE(cwd);
-  const triageConfig = await loadCfg(cfgPath);
+  // Lazy-loaded fix runtime (only initialized when first "fix" action is selected)
+  let fixRuntime: {
+    dispatchFix: (typeof import('../services/fix-dispatcher.js'))['dispatchFix'];
+    runOrch: (typeof import('../utils.js'))['runOrchestrator'];
+    config: Awaited<ReturnType<(typeof import('../utils.js'))['loadConfig']>>;
+  } | null = null;
+
+  async function getFixRuntime() {
+    if (!fixRuntime) {
+      const { loadConfig, resolveConfigPath, loadEnv, runOrchestrator } =
+        await import('../utils.js');
+      const { dispatchFix } = await import('../services/fix-dispatcher.js');
+      const cfgPath = resolveConfigPath(cwd);
+      loadEnv(cwd);
+      const config = await loadConfig(cfgPath);
+      fixRuntime = { dispatchFix, runOrch: runOrchestrator, config };
+    }
+    return fixRuntime;
+  }
 
   // Process each selected finding
   let fixedBotFindings = false;
@@ -493,18 +501,19 @@ export async function triagePrCommand(
       }
       if (ok) {
         try {
-          const result = await dispatchFix({
+          const rt = await getFixRuntime();
+          const result = await rt.dispatchFix({
             filePath: finding.file,
             line: finding.line ?? undefined,
             findingBody: finding.body,
             findingTool: finding.tool,
             cwd,
             runOrchestrator: (prompt) =>
-              runOrch({
+              rt.runOrch({
                 prompt,
                 tag: TAG,
                 options: {},
-                config: triageConfig,
+                config: rt.config,
                 cwd,
                 temperature: 0,
               }),

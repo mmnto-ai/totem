@@ -33,8 +33,11 @@ export async function dispatchFix(opts: {
 }): Promise<FixResult> {
   const { filePath, line, findingBody, findingTool, cwd, onLog } = opts;
 
-  // 1. Read the target file
-  const absPath = path.join(cwd, filePath);
+  // 1. Validate and read the target file
+  const absPath = path.resolve(cwd, filePath);
+  if (!absPath.startsWith(path.resolve(cwd))) {
+    return { applied: false, reason: `Path traversal blocked: ${filePath}` };
+  }
   let originalContent: string;
   try {
     originalContent = fs.readFileSync(absPath, 'utf-8');
@@ -91,12 +94,13 @@ export async function dispatchFix(opts: {
   // 6. Write fixed file
   fs.writeFileSync(absPath, fixedContent, 'utf-8');
 
-  // 7. Commit
+  // 7. Commit (rollback file on failure)
   const summaryLine =
     findingBody
       .split('\n')
       .find((l) => l.trim())
-      ?.slice(0, 60) ?? 'bot review fix';
+      ?.replace(/^[#*>\-\s]+/, '')
+      .slice(0, 60) ?? 'bot review fix';
   const commitMsg = `fix: ${summaryLine}\n\nFinding: ${findingTool} on ${filePath}${line != null ? `:${line}` : ''}`;
 
   try {
@@ -106,7 +110,14 @@ export async function dispatchFix(opts: {
     onLog?.(`Committed fix: ${sha}`);
     return { applied: true, commitSha: sha };
   } catch (err) {
+    // Rollback: restore original content and unstage
+    try {
+      fs.writeFileSync(absPath, originalContent, 'utf-8');
+      safeExec('git', ['checkout', '--', filePath], { cwd });
+    } catch {
+      // Best-effort rollback
+    }
     const msg = err instanceof Error ? err.message : String(err);
-    return { applied: false, reason: `Git commit failed: ${msg}` };
+    return { applied: false, reason: `Git commit failed (rolled back): ${msg}` };
   }
 }
