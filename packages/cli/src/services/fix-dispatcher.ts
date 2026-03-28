@@ -113,7 +113,7 @@ export async function dispatchFix(opts: {
     // Rollback: restore original content and unstage
     try {
       fs.writeFileSync(absPath, originalContent, 'utf-8');
-      safeExec('git', ['checkout', '--', filePath], { cwd });
+      safeExec('git', ['reset', 'HEAD', '--', filePath], { cwd });
     } catch {
       // Best-effort rollback
     }
