@@ -19,6 +19,7 @@ import {
   installHooksNonInteractive,
   TOTEM_PRECOMMIT_MARKER,
   TOTEM_PREPUSH_MARKER,
+  upgradePrePushHookIfNeeded,
 } from './install-hooks.js';
 
 describe('detectTotemPrefix', () => {
@@ -253,6 +254,29 @@ describe('buildPrePushHook', () => {
   it('aborts push when auto-compile fails', () => {
     const hook = buildPrePushHook(fallbackCmd);
     expect(hook).toContain("Push aborted: auto-compile failed. Run 'totem compile' manually.");
+  });
+
+  it('generates script with shield auto-refresh logic', () => {
+    const hook = buildPrePushHook(fallbackCmd);
+    expect(hook).toContain('Shield flag stale');
+    expect(hook).toContain('.totem/cache/.shield-passed');
+    expect(hook).toContain('git rev-parse HEAD');
+    expect(hook).toContain('$TOTEM_CMD shield');
+    expect(hook).toContain('Shield auto-refresh failed');
+  });
+
+  it('places shield auto-refresh after lint block', () => {
+    const hook = buildPrePushHook(fallbackCmd);
+    const lintIdx = hook.indexOf('$TOTEM_CMD lint');
+    const shieldIdx = hook.indexOf('Shield flag stale');
+    expect(lintIdx).toBeGreaterThan(-1);
+    expect(shieldIdx).toBeGreaterThan(lintIdx);
+  });
+
+  it('checks merge-base ancestry for stale flag detection', () => {
+    const hook = buildPrePushHook(fallbackCmd);
+    expect(hook).toContain('git merge-base --is-ancestor');
+    expect(hook).toContain('rebase detected');
   });
 });
 
@@ -759,5 +783,116 @@ describe('post-checkout hook content', () => {
 
     expect(result).not.toBeNull();
     expect(result!.postCheckout).toBe('installed');
+  });
+});
+
+// ─── upgradePrePushHookIfNeeded ───────────────────────
+
+describe('upgradePrePushHookIfNeeded', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hooks-upgrade-'));
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('upgrades old hook with marker but no auto-refresh', () => {
+    // Install an old-style hook that has the marker but lacks shield auto-refresh
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const oldHook = `#!/bin/sh
+# ${TOTEM_PREPUSH_MARKER} — run compiled rules before push.
+# Override with: git push --no-verify
+
+if [ -f ".totem/compiled-rules.json" ]; then
+  TOTEM_CMD="totem"
+  if [ -n "$TOTEM_CMD" ]; then
+    $TOTEM_CMD lint
+  fi
+fi
+`;
+    fs.writeFileSync(path.join(hooksDir, 'pre-push'), oldHook);
+
+    const upgraded = upgradePrePushHookIfNeeded(tmpDir);
+
+    expect(upgraded).toBe(true);
+    const content = fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8');
+    expect(content).toContain('Shield flag stale');
+    expect(content).toContain(TOTEM_PREPUSH_MARKER);
+  });
+
+  it('skips hook without totem marker', () => {
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const userHook = '#!/bin/sh\necho "user hook"\n';
+    fs.writeFileSync(path.join(hooksDir, 'pre-push'), userHook);
+
+    const upgraded = upgradePrePushHookIfNeeded(tmpDir);
+
+    expect(upgraded).toBe(false);
+    const content = fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8');
+    expect(content).toBe(userHook); // File untouched
+  });
+
+  it('skips hook that already has auto-refresh logic', () => {
+    // Install the current-version hook via non-interactive installer
+    installHooksNonInteractive(tmpDir);
+
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    const beforeContent = fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8');
+
+    const upgraded = upgradePrePushHookIfNeeded(tmpDir);
+
+    expect(upgraded).toBe(false);
+    const afterContent = fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8');
+    expect(afterContent).toBe(beforeContent); // File untouched
+  });
+
+  it('returns false when no pre-push hook exists', () => {
+    const upgraded = upgradePrePushHookIfNeeded(tmpDir);
+    expect(upgraded).toBe(false);
+  });
+
+  it('returns false when not a git repo', () => {
+    const nonGitDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-no-git-'));
+    try {
+      const upgraded = upgradePrePushHookIfNeeded(nonGitDir);
+      expect(upgraded).toBe(false);
+    } finally {
+      cleanTmpDir(nonGitDir);
+    }
+  });
+
+  it('preserves user-appended content when upgrading', () => {
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    // Simulate an old totem hook with user content appended after it
+    const oldTotemBlock = `#!/bin/sh
+# ${TOTEM_PREPUSH_MARKER} — run compiled rules before push.
+if [ -f ".totem/compiled-rules.json" ]; then
+  TOTEM_CMD="totem"
+  if [ -n "$TOTEM_CMD" ]; then
+    $TOTEM_CMD lint
+  fi
+fi
+`;
+    const userAppended =
+      '\n# My custom deploy notification\ncurl -X POST https://hooks.example.com/deploy\n';
+    fs.writeFileSync(path.join(hooksDir, 'pre-push'), oldTotemBlock + userAppended);
+
+    const upgraded = upgradePrePushHookIfNeeded(tmpDir);
+
+    expect(upgraded).toBe(true);
+    const content = fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8');
+    // New totem block should have auto-refresh
+    expect(content).toContain('Shield flag stale');
+    // User content should be preserved
+    expect(content).toContain('curl -X POST https://hooks.example.com/deploy');
+    expect(content).toContain('My custom deploy notification');
   });
 });

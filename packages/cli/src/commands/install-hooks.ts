@@ -269,6 +269,8 @@ fi
 `;
 }
 
+const SHIELD_AUTO_REFRESH_MARKER = 'Shield flag stale';
+
 export function buildPrePushHook(fallbackCmd: string): string {
   return `#!/bin/sh
 # ${TOTEM_PREPUSH_MARKER} — run compiled rules before push.
@@ -295,7 +297,27 @@ if [ -f ".totem/compiled-rules.json" ]; then
   fi
 
   if [ -n "$TOTEM_CMD" ]; then
-    $TOTEM_CMD lint
+    if ! $TOTEM_CMD lint; then
+      exit 1
+    fi
+  fi
+
+  # Shield auto-refresh — re-run shield if flag is stale (#1045)
+  if [ -f ".totem/cache/.shield-passed" ] && [ -n "$TOTEM_CMD" ]; then
+    SHIELD_SHA=$(cat .totem/cache/.shield-passed | tr -d '[:space:]')
+    HEAD_SHA=$(git rev-parse HEAD)
+    if [ "$SHIELD_SHA" != "$HEAD_SHA" ]; then
+      if git merge-base --is-ancestor "$SHIELD_SHA" "$HEAD_SHA" 2>/dev/null; then
+        echo "[totem] ${SHIELD_AUTO_REFRESH_MARKER}. Auto-refreshing..."
+      else
+        echo "[totem] ${SHIELD_AUTO_REFRESH_MARKER} (rebase detected). Auto-refreshing..."
+      fi
+      # TODO(telemetry): pass execution context (hook vs manual) for friction index (1.8.0)
+      if ! $TOTEM_CMD shield; then
+        echo "[totem] Shield auto-refresh failed. Fix issues and retry."
+        exit 1
+      fi
+    fi
   fi
 fi
 `;
@@ -600,5 +622,88 @@ export function hooksCommand(opts: { check?: boolean }): void {
         );
         break;
     }
+  }
+}
+
+// ─── Silent hook upgrade ──────────────────────────────
+
+/**
+ * Silently upgrade the pre-push hook if it was installed by Totem but lacks
+ * the shield auto-refresh logic added in #1045.
+ *
+ * Returns true if the hook was upgraded, false otherwise.
+ */
+export function upgradePrePushHookIfNeeded(cwd: string): boolean {
+  try {
+    const gitRoot = resolveGitRoot(cwd);
+    if (!gitRoot) return false;
+
+    const hookPath = path.join(gitRoot, '.git', 'hooks', 'pre-push');
+    if (!fs.existsSync(hookPath)) return false;
+
+    const content = fs.readFileSync(hookPath, 'utf-8');
+
+    // Only upgrade hooks that Totem owns (have our marker) but lack auto-refresh
+    if (!content.includes(TOTEM_PREPUSH_MARKER)) return false;
+    if (content.includes(SHIELD_AUTO_REFRESH_MARKER)) return false;
+
+    // Splice only the totem-managed block, preserving any user-appended content.
+    // The totem block starts at the marker comment and ends at the matching top-level `fi`.
+    const markerIdx = content.indexOf(`# ${TOTEM_PREPUSH_MARKER}`);
+    if (markerIdx === -1) return false;
+
+    // Find the end of the totem block by balancing if/fi depth.
+    // Can't use first or last `fi` — the block has nested if/fi pairs,
+    // and user content after the block may also contain if/fi.
+    const afterMarker = content.slice(markerIdx);
+    const ifFiPattern = /^\s*(if\s|fi\s*$)/gm;
+    let depth = 0;
+    let endOffset = -1;
+    let firstIfFound = false;
+    let match;
+
+    // totem-context: RegExp.exec, not child_process
+    while ((match = ifFiPattern.exec(afterMarker)) !== null) {
+      const keyword = match[1]!.trim();
+      if (keyword.startsWith('if')) {
+        if (!firstIfFound) firstIfFound = true;
+        depth++;
+      } else if (keyword === 'fi' && firstIfFound) {
+        depth--;
+      }
+      if (firstIfFound && depth === 0) {
+        endOffset = match.index + match[0].length;
+        break;
+      }
+    }
+
+    if (endOffset === -1) return false;
+    const blockEnd = markerIdx + endOffset;
+
+    // Build the replacement block (strip shebang — we're splicing into existing file)
+    const fallbackCmd = getFallbackCommand(gitRoot);
+    const newBlock = buildPrePushHook(fallbackCmd)
+      .replace(/^#!\/bin\/sh\n/, '')
+      .trimStart();
+
+    // Splice: preserve everything before and after the totem block
+    const before = content.slice(0, markerIdx);
+    const after = content.slice(blockEnd);
+    const upgraded = before + newBlock.trimEnd() + after;
+
+    // TODO(telemetry): when the Workflow Friction Index (1.8.0) is built,
+    // pass execution context (hook-triggered vs manual) here for measurement
+    fs.writeFileSync(hookPath, upgraded);
+
+    try {
+      fs.chmodSync(hookPath, 0o755);
+    } catch {
+      // chmod may fail on Windows — hooks still work via git bash
+    }
+
+    return true;
+  } catch {
+    // Silent upgrade is best-effort — never crash shield for a hook upgrade failure
+    return false;
   }
 }
