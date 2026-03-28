@@ -262,7 +262,14 @@ export function formatTriageOutput(
 
 // ─── Main command ────────────────────────────────────
 
-export async function triagePrCommand(prNumber: string): Promise<void> {
+export interface TriagePrOptions {
+  interactive?: boolean;
+}
+
+export async function triagePrCommand(
+  prNumber: string,
+  options: TriagePrOptions = {},
+): Promise<void> {
   const pc = await import('picocolors');
   const { TotemConfigError } = await import('@mmnto/totem');
   const { GitHubCliPrAdapter } = await import('../adapters/github-cli-pr.js');
@@ -362,4 +369,188 @@ export async function triagePrCommand(prNumber: string): Promise<void> {
   });
 
   console.log(output); // totem-ignore — stdout for piping to skill prompt
+
+  // ─── Interactive mode ─────────────────────────────────
+  if (!options.interactive) return;
+
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new TotemConfigError(
+      'Interactive triage requires a TTY.',
+      'Run in an interactive terminal, or omit --interactive for non-interactive output.',
+      'CONFIG_INVALID',
+    );
+  }
+
+  const {
+    intro,
+    outro,
+    select,
+    multiselect,
+    text,
+    confirm,
+    isCancel,
+    cancel,
+    log: clackLog,
+  } = await import('@clack/prompts');
+
+  intro(`PR #${num} Interactive Triage (${categorized.length} findings)`);
+
+  // Build selection options from categorized findings
+  const optionsList = categorized.map((f, i) => {
+    const toolAbbrev = f.tool === 'coderabbit' ? 'CR' : f.tool === 'gca' ? 'GCA' : '??';
+    const location = f.line != null ? `${f.file}:${f.line}` : f.file;
+    const summary =
+      f.body
+        .split('\n')
+        .find((l: string) => l.trim())
+        ?.slice(0, 60) ?? f.body.slice(0, 60);
+    return {
+      value: i,
+      label: `[${toolAbbrev}/${f.severity}] ${location}`,
+      hint: summary.replace(/\n/g, ' '),
+    };
+  });
+
+  if (optionsList.length === 0) {
+    outro('No findings to triage.');
+    return;
+  }
+
+  const selected = await multiselect({
+    message: 'Select findings to act on:',
+    options: optionsList,
+    required: false,
+  });
+
+  if (isCancel(selected)) {
+    cancel('Triage cancelled.');
+    return;
+  }
+
+  const selectedIndices = selected as number[];
+  if (selectedIndices.length === 0) {
+    outro('No findings selected.');
+    return;
+  }
+
+  // Process each selected finding
+  for (const idx of selectedIndices) {
+    const finding = categorized[idx]!;
+    const location = finding.line != null ? `${finding.file}:${finding.line}` : finding.file;
+    const summary =
+      finding.body
+        .split('\n')
+        .find((l: string) => l.trim())
+        ?.slice(0, 80) ?? '';
+
+    clackLog.info(`${location}: ${summary.replace(/\n/g, ' ')}`);
+
+    const action = await select({
+      message: `Action for ${location}:`,
+      options: [
+        { value: 'fix' as const, label: 'Fix — reply "Fixed" on thread' },
+        { value: 'defer' as const, label: 'Defer — create issue and reply with link' },
+        { value: 'dismiss' as const, label: 'Dismiss — reply with pushback reason' },
+        { value: 'skip' as const, label: 'Skip — do nothing' },
+      ],
+    });
+
+    if (isCancel(action)) {
+      cancel('Triage cancelled.');
+      return;
+    }
+
+    if (action === 'skip') continue;
+
+    if (action === 'fix') {
+      const thread = botThreads.find((t) => t.path === finding.file);
+      const commentId = thread?.comments[0]?.id;
+      if (commentId) {
+        const ok = await confirm({ message: `Reply "Fixed" on ${location}?` });
+        if (isCancel(ok)) {
+          cancel('Triage cancelled.');
+          return;
+        }
+        if (ok) {
+          try {
+            adapter.replyToComment(num, commentId, 'Fixed');
+            log.success(TAG, `Replied "Fixed" on ${location}`);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            log.warn(TAG, `Failed to reply: ${msg}`);
+          }
+        }
+      } else {
+        log.dim(TAG, 'No comment ID available for reply.');
+      }
+    }
+
+    if (action === 'defer') {
+      const thread = botThreads.find((t) => t.path === finding.file);
+      if (thread) {
+        const ok = await confirm({ message: `Create deferred issue for ${location}?` });
+        if (isCancel(ok)) {
+          cancel('Triage cancelled.');
+          return;
+        }
+        if (ok) {
+          try {
+            const { createDeferredIssue } = await import('../services/deferred-issuer.js');
+            const result = createDeferredIssue(adapter, num, thread, undefined, (msg) =>
+              log.dim(TAG, msg),
+            );
+            if (result.skipped) {
+              log.dim(TAG, 'Already deferred — skipped.');
+            } else {
+              log.success(TAG, `Created issue: ${result.issueUrl}`);
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            log.warn(TAG, `Failed to create deferred issue: ${msg}`);
+          }
+        }
+      } else {
+        log.dim(TAG, 'No thread found for this finding.');
+      }
+    }
+
+    if (action === 'dismiss') {
+      const reason = await text({
+        message: 'Pushback reason:',
+        placeholder: 'e.g., "Intentional — this is by design"',
+        validate: (val) => {
+          if (!val?.trim()) return 'Reason is required.';
+          return undefined;
+        },
+      });
+
+      if (isCancel(reason)) {
+        cancel('Triage cancelled.');
+        return;
+      }
+
+      const thread = botThreads.find((t) => t.path === finding.file);
+      const commentId = thread?.comments[0]?.id;
+      if (commentId) {
+        const ok = await confirm({ message: `Reply "${reason}" on ${location}?` });
+        if (isCancel(ok)) {
+          cancel('Triage cancelled.');
+          return;
+        }
+        if (ok) {
+          try {
+            adapter.replyToComment(num, commentId, reason as string);
+            log.success(TAG, `Replied on ${location}`);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            log.warn(TAG, `Failed to reply: ${msg}`);
+          }
+        }
+      } else {
+        log.dim(TAG, 'No comment ID available for reply.');
+      }
+    }
+  }
+
+  outro('Triage complete.');
 }
