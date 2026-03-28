@@ -589,9 +589,23 @@ async function handleVerdictResult(
 
     // Apply manual --suppress flags
     if (options.suppress?.length) {
+      const { appendLedgerEvent: appendExemptionEvent } = await import('@mmnto/totem');
       for (const label of options.suppress) {
+        if (!label.trim()) continue;
         shared = addManualSuppression(shared, label, `Manual suppression via --suppress`);
         log.info(TAG, `Suppression registered: ${label}`);
+        appendExemptionEvent(
+          resolvedTotemDir,
+          {
+            timestamp: new Date().toISOString(),
+            type: 'exemption',
+            ruleId: 'exemption-manual',
+            file: '(shield)',
+            justification: `--suppress ${label}`,
+            source: 'shield',
+          },
+          (msg) => log.dim(TAG, msg),
+        );
       }
       writeSharedExemptions(resolvedTotemDir, shared, (msg) => log.dim(TAG, msg));
     }

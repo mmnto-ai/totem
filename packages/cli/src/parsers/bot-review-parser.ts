@@ -83,6 +83,17 @@ export function parseGCASeverity(body: string): string {
 
 // ─── Resolution Filter ──────────────────────────────
 
+/** Patterns indicating human pushback (false positive signal). */
+export const PUSHBACK_PATTERNS = [
+  /\bnot\s+(?:applicable|relevant|needed|correct)\b/i,
+  /\bintentional\b/i,
+  /\bby\s+design\b/i,
+  /\bwon'?t\s+fix\b/i,
+  /\bignor(?:e|ed|ing)\s+(?:this|it|the)\b/i,
+  /\bdismiss(?:ed|ing)?\b/i,
+  /\bjust\s+a\s+nit\b/i,
+];
+
 /**
  * Check if a bot comment thread was "fixed" (resolved positively).
  * Conservative heuristic: requires explicit agreement, not just thread resolution.
@@ -100,19 +111,8 @@ export function isThreadResolved(thread: CommentThread): boolean {
   // No human replies — be conservative, skip
   if (humanReplies.length === 0) return false;
 
-  // If human pushed back, NOT resolved
-  const pushbackPatterns = [
-    /\bnot\s+(?:applicable|relevant|needed|correct)\b/i,
-    /\bintentional\b/i,
-    /\bby\s+design\b/i,
-    /\bwon'?t\s+fix\b/i,
-    /\bignor(?:e|ed|ing)\s+(?:this|it|the)\b/i,
-    /\bdismiss(?:ed|ing)?\b/i,
-    /\bjust\s+a\s+nit\b/i,
-  ];
-
   for (const reply of humanReplies) {
-    if (pushbackPatterns.some((p) => p.test(reply.body))) return false;
+    if (PUSHBACK_PATTERNS.some((p) => p.test(reply.body))) return false;
   }
 
   // Positive signals: "fixed", "done", commit SHA reference, ticket reference
@@ -176,16 +176,6 @@ export function extractReviewBodyFindings(
  * Inverse of extractResolvedBotFindings — captures "intentional", "by design", "won't fix" threads.
  */
 export function extractPushbackFindings(threads: CommentThread[]): NormalizedBotFinding[] {
-  const pushbackPatterns = [
-    /\bnot\s+(?:applicable|relevant|needed|correct)\b/i,
-    /\bintentional\b/i,
-    /\bby\s+design\b/i,
-    /\bwon'?t\s+fix\b/i,
-    /\bignor(?:e|ed|ing)\s+(?:this|it|the)\b/i,
-    /\bdismiss(?:ed|ing)?\b/i,
-    /\bjust\s+a\s+nit\b/i,
-  ];
-
   const findings: NormalizedBotFinding[] = [];
 
   for (const thread of threads) {
@@ -196,7 +186,7 @@ export function extractPushbackFindings(threads: CommentThread[]): NormalizedBot
     if (humanReplies.length === 0) continue;
 
     const hasPushback = humanReplies.some((reply) =>
-      pushbackPatterns.some((p) => p.test(reply.body)),
+      PUSHBACK_PATTERNS.some((p) => p.test(reply.body)),
     );
     if (!hasPushback) continue;
 
