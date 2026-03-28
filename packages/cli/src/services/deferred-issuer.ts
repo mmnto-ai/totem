@@ -74,7 +74,7 @@ export function createDeferredIssue(
 
   // Reply on the thread with the issue link
   const rootCommentId = thread.comments[0]!.id;
-  if (rootCommentId !== undefined) {
+  if (rootCommentId !== undefined && issueNumber) {
     try {
       adapter.replyToComment(prNumber, rootCommentId, `Deferred to #${issueNumber}`);
     } catch (err) {
