@@ -183,7 +183,9 @@ export function addManualSuppression(
   label: string,
   reason: string,
 ): ExemptionShared {
-  const patternId = `manual:${label}`;
+  const trimmed = label.trim();
+  if (!trimmed) return shared;
+  const patternId = `manual:${trimmed}`;
 
   if (shared.exemptions.some((e) => e.patternId === patternId)) {
     return shared;
@@ -191,7 +193,7 @@ export function addManualSuppression(
 
   const entry: SharedExemptionEntry = {
     patternId,
-    label,
+    label: trimmed,
     reason,
     promotedAt: new Date().toISOString(),
     promotedBy: 'manual',
