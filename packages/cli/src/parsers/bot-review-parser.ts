@@ -26,7 +26,7 @@ export interface NormalizedBotFinding {
 export interface CommentThread {
   path: string;
   diffHunk: string;
-  comments: Array<{ author: string; body: string }>;
+  comments: Array<{ id?: number; author: string; body: string }>;
 }
 
 // ─── Bot Detection ──────────────────────────────────
