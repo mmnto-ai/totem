@@ -662,6 +662,7 @@ export function upgradePrePushHookIfNeeded(cwd: string): boolean {
     let firstIfFound = false;
     let match;
 
+    // totem-context: RegExp.exec, not child_process
     while ((match = ifFiPattern.exec(afterMarker)) !== null) {
       const keyword = match[1]!.trim();
       if (keyword.startsWith('if')) {
