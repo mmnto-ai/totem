@@ -634,7 +634,7 @@ async function handleVerdictResult(
         (msg) => log.dim(TAG, msg),
       );
 
-      // Track overridden findings for exemption engine
+      // Track overridden findings for exemption engine (only non-exempted findings)
       const { readLocalExemptions, writeLocalExemptions } =
         await import('../exemptions/exemption-store.js');
       const { computePatternId, recordFalsePositive, promoteToShared } =
@@ -644,7 +644,7 @@ async function handleVerdictResult(
       let localExemptions = readLocalExemptions(cacheDir, (msg) => log.dim(TAG, msg));
       let promotedAny = false;
 
-      for (const finding of structured.findings.filter(
+      for (const finding of filtered.filter(
         (f: { severity: string }) => f.severity === 'CRITICAL',
       )) {
         const pid = computePatternId(finding.message);

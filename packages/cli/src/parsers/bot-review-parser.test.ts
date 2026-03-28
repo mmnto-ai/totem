@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { CommentThread } from './bot-review-parser.js';
 import {
   detectBot,
+  extractPushbackFindings,
   extractResolvedBotFindings,
   extractSuggestion,
   isBotComment,
@@ -301,5 +302,123 @@ describe('extractResolvedBotFindings', () => {
     expect(findings[1]!.tool).toBe('gca');
     expect(findings[1]!.severity).toBe('medium');
     expect(findings[1]!.suggestion).toBeUndefined();
+  });
+});
+
+// ─── extractPushbackFindings ──────────────────────────
+
+describe('extractPushbackFindings', () => {
+  it('extracts findings from threads where human pushed back', () => {
+    const threads: CommentThread[] = [
+      {
+        path: 'src/a.ts',
+        diffHunk: '@@ -1,3 +1,5 @@',
+        comments: [
+          { author: 'coderabbitai[bot]', body: '\u{1F7E0} Major: Add error handling' },
+          { author: 'dev', body: 'This is intentional — we let it throw' },
+        ],
+      },
+      {
+        path: 'src/b.ts',
+        diffHunk: '@@ -10,3 +10,5 @@',
+        comments: [
+          { author: 'coderabbitai[bot]', body: 'Missing null check' },
+          { author: 'dev', body: 'Fixed' },
+        ],
+      },
+    ];
+
+    const findings = extractPushbackFindings(threads);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.file).toBe('src/a.ts');
+    expect(findings[0]!.tool).toBe('coderabbit');
+    expect(findings[0]!.resolutionSignal).toBe('none');
+  });
+
+  it('detects multiple pushback patterns', () => {
+    const patterns = [
+      "Won't fix this",
+      'This is by design',
+      'Not applicable here',
+      'Ignoring this — test fixture',
+      'Dismissed',
+      'Just a nit',
+    ];
+
+    for (const reply of patterns) {
+      const threads: CommentThread[] = [
+        {
+          path: 'src/test.ts',
+          diffHunk: '@@ hunk',
+          comments: [
+            { author: 'coderabbitai[bot]', body: 'Some issue' },
+            { author: 'dev', body: reply },
+          ],
+        },
+      ];
+      expect(extractPushbackFindings(threads)).toHaveLength(1);
+    }
+  });
+
+  it('skips threads with no human replies', () => {
+    const threads: CommentThread[] = [
+      {
+        path: 'src/a.ts',
+        diffHunk: '@@ hunk',
+        comments: [{ author: 'coderabbitai[bot]', body: 'Issue' }],
+      },
+    ];
+    expect(extractPushbackFindings(threads)).toHaveLength(0);
+  });
+
+  it('skips threads starting with human comment', () => {
+    const threads: CommentThread[] = [
+      {
+        path: 'src/a.ts',
+        diffHunk: '@@ hunk',
+        comments: [
+          { author: 'dev', body: 'Question' },
+          { author: 'coderabbitai[bot]', body: 'Answer' },
+        ],
+      },
+    ];
+    expect(extractPushbackFindings(threads)).toHaveLength(0);
+  });
+
+  it('extracts line numbers from diff hunk headers', () => {
+    const threads: CommentThread[] = [
+      {
+        path: 'src/a.ts',
+        diffHunk: '@@ -10,5 +42,7 @@',
+        comments: [
+          { author: 'coderabbitai[bot]', body: 'Issue here' },
+          { author: 'dev', body: 'By design' },
+        ],
+      },
+    ];
+
+    const findings = extractPushbackFindings(threads);
+    expect(findings[0]!.line).toBe(42);
+  });
+
+  it('handles GCA bot findings', () => {
+    const threads: CommentThread[] = [
+      {
+        path: 'src/a.ts',
+        diffHunk: '@@ hunk',
+        comments: [
+          {
+            author: 'gemini-code-assist[bot]',
+            body: '![](https://img/high-priority.svg) Security concern',
+          },
+          { author: 'dev', body: 'Not applicable — internal tool' },
+        ],
+      },
+    ];
+
+    const findings = extractPushbackFindings(threads);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.tool).toBe('gca');
+    expect(findings[0]!.severity).toBe('high');
   });
 });
