@@ -1,0 +1,67 @@
+{
+  "name": "@mmnto/totem",
+  "version": "1.5.5",
+  "description": "Persistent memory and context layer for AI agents",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint src/",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ast-grep/napi": "^0.42.0",
+    "@lancedb/lancedb": "^0.26.2",
+    "apache-arrow": "17.0.0",
+    "glob": "^11.0.0",
+    "openai": "^4.77.0",
+    "remark-frontmatter": "^5.0.0",
+    "remark-parse": "^11.0.0",
+    "safe-regex2": "^5.0.0",
+    "tree-sitter-javascript": "^0.25.0",
+    "tree-sitter-typescript": "^0.23.2",
+    "typescript": "^5.7.0",
+    "unified": "^11.0.0",
+    "web-tree-sitter": "^0.26.6",
+    "yaml": "^2.4.0",
+    "zod": "^3.24.0"
+  },
+  "peerDependencies": {
+    "@google/genai": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@google/genai": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/mdast": "^4.0.0",
+    "vitest": "^3.0.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "Apache-2.0",
+  "author": "mmnto-ai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mmnto-ai/totem.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/mmnto-ai/totem",
+  "bugs": {
+    "url": "https://github.com/mmnto-ai/totem/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

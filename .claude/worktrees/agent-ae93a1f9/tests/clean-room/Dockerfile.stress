@@ -1,0 +1,16 @@
+FROM node:22-slim
+
+RUN apt-get update && apt-get install -y git bc && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+RUN git init && git config user.email "test@test.com" && git config user.name "Test"
+RUN npm init -y
+RUN echo "console.log('hello');" > index.js
+RUN git add -A && git commit -m "init"
+# Create a main branch reference for the branch diff
+RUN git branch -M main
+
+COPY stress-test.sh /app/stress-test.sh
+RUN chmod +x /app/stress-test.sh
+
+ENTRYPOINT ["/app/stress-test.sh"]

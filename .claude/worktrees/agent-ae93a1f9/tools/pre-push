@@ -1,0 +1,60 @@
+#!/bin/sh
+# [totem] pre-push hook — runs format check, lint, tests, and totem lint.
+
+echo "[totem] Running pre-push checks..."
+
+# Ensure temp files are cleaned up on any exit (success, failure, or interrupt)
+LINT_OUTPUT=""
+TEST_OUTPUT=""
+cleanup() { rm -f "$LINT_OUTPUT" "$TEST_OUTPUT"; }
+trap cleanup EXIT INT TERM
+
+echo "[totem] Checking formatting..."
+pnpm run format:check
+if [ $? -ne 0 ]; then
+  echo "[totem] ❌ Formatting check failed. Run 'pnpm run format' to fix."
+  exit 1
+fi
+
+echo "[totem] Running linter..."
+LINT_OUTPUT=$(mktemp)
+pnpm run lint > "$LINT_OUTPUT" 2>&1
+LINT_EXIT=$?
+if [ $LINT_EXIT -ne 0 ]; then
+  echo "[totem] ❌ Lint failed. See output below:"
+  cat "$LINT_OUTPUT"
+  exit 1
+fi
+
+echo "[totem] Running tests..."
+TEST_OUTPUT=$(mktemp)
+if [ "${TOTEM_DEBUG:-0}" = "1" ]; then
+  pnpm run test > "$TEST_OUTPUT" 2>&1
+else
+  pnpm run test -- --reporter=dot > "$TEST_OUTPUT" 2>&1
+fi
+TEST_EXIT=$?
+if [ $TEST_EXIT -ne 0 ]; then
+  echo "[totem] ❌ Tests failed. See output below:"
+  cat "$TEST_OUTPUT"
+  exit 1
+fi
+# Count passed tests from vitest summary lines.
+# Expected format: "      Tests  577 passed (577)" — falls back to "all" if parsing fails.
+# Uses perl for portable ANSI stripping (BSD sed on macOS doesn't support \x1b).
+PASSED=$(perl -pe 's/\e\[[0-9;]*m//g' "$TEST_OUTPUT" | grep 'Tests ' | grep -v 'Test Files' | grep -oE '[0-9]+ passed' | awk '{s+=$1} END {print s}')
+echo "[totem] ✓ ${PASSED:-all} tests passed"
+
+echo "[totem] ✅ All pre-push checks passed."
+
+# Totem lint gate — only runs when compiled rules exist AND CLI is available.
+if [ -f ".totem/compiled-rules.json" ] && pnpm exec totem --version > /dev/null 2>&1; then
+  echo "[totem] Running compiled rules..."
+  pnpm exec totem lint
+  if [ $? -ne 0 ]; then
+    echo "[totem] ❌ Totem lint found violations. Fix before pushing."
+    echo "[totem] If this is a false positive, file a ticket. Do not bypass without approval."
+    exit 1
+  fi
+  echo "[totem] ✅ Totem lint passed."
+fi
