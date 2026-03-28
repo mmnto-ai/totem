@@ -489,6 +489,91 @@ describe('runCompiledRules', () => {
     }
   });
 
+  // ─── Zero-match rule detection (#1061) ──────────────
+
+  it('logs dim message when rules have fileGlobs that match no diff files', async () => {
+    const rules = [
+      makeRule('TODO', 'No TODOs in shell scripts', 'No TODOs in shell', {
+        fileGlobs: ['*.sh'],
+      }),
+      makeRule('console\\.log', 'Remove debug logging', 'No console.log'),
+    ];
+    writeRules(tmpDir, rules);
+
+    // Diff only has a .ts file — the *.sh rule should be zero-match
+    const diff = makeDiff('src/app.ts', '  const x = 1;');
+
+    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await runCompiledRules({
+        diff,
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'json',
+        tag: 'Test',
+      });
+
+      const dimMessages = stderrSpy.mock.calls.map((c) => c[0] as string);
+      const zeroMatchMsg = dimMessages.find((m) => m.includes('rule(s) matched no files'));
+      expect(zeroMatchMsg).toBeDefined();
+      expect(zeroMatchMsg).toContain('1 rule(s)');
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it('does not log zero-match message when all rules match diff files', async () => {
+    const rules = [
+      makeRule('TODO', 'No TODOs in TS', 'No TODOs', {
+        fileGlobs: ['*.ts'],
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    const diff = makeDiff('src/app.ts', '  const x = 1;');
+
+    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await runCompiledRules({
+        diff,
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'json',
+        tag: 'Test',
+      });
+
+      const dimMessages = stderrSpy.mock.calls.map((c) => c[0] as string);
+      const zeroMatchMsg = dimMessages.find((m) => m.includes('rule(s) matched no files'));
+      expect(zeroMatchMsg).toBeUndefined();
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it('does not count rules without fileGlobs as zero-match', async () => {
+    const rules = [makeRule('neverMatchXYZ123', 'Will not match', 'No match rule')];
+    writeRules(tmpDir, rules);
+
+    const diff = makeDiff('src/app.ts', '  const x = 1;');
+
+    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await runCompiledRules({
+        diff,
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'json',
+        tag: 'Test',
+      });
+
+      const dimMessages = stderrSpy.mock.calls.map((c) => c[0] as string);
+      const zeroMatchMsg = dimMessages.find((m) => m.includes('rule(s) matched no files'));
+      expect(zeroMatchMsg).toBeUndefined();
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
   it('writes override event to trap ledger when totem-context is encountered', async () => {
     const rules = [
       makeRule('console\\.log', 'Remove debug logging', 'No console.log', {
