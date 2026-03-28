@@ -463,7 +463,12 @@ export async function triagePrCommand(
     if (action === 'skip') continue;
 
     if (action === 'fix') {
-      const thread = botThreads.find((t) => t.path === finding.file);
+      const thread = botThreads.find((t) => {
+        if (t.path !== finding.file) return false;
+        if (finding.line == null) return true;
+        const hunk = t.diffHunk.match(/@@ .+?\+(\d+)/);
+        return hunk ? parseInt(hunk[1]!, 10) === finding.line : true;
+      });
       const commentId = thread?.comments[0]?.id;
       if (commentId) {
         const ok = await confirm({ message: `Reply "Fixed" on ${location}?` });
@@ -486,7 +491,12 @@ export async function triagePrCommand(
     }
 
     if (action === 'defer') {
-      const thread = botThreads.find((t) => t.path === finding.file);
+      const thread = botThreads.find((t) => {
+        if (t.path !== finding.file) return false;
+        if (finding.line == null) return true;
+        const hunk = t.diffHunk.match(/@@ .+?\+(\d+)/);
+        return hunk ? parseInt(hunk[1]!, 10) === finding.line : true;
+      });
       if (thread) {
         const ok = await confirm({ message: `Create deferred issue for ${location}?` });
         if (isCancel(ok)) {
@@ -529,7 +539,12 @@ export async function triagePrCommand(
         return;
       }
 
-      const thread = botThreads.find((t) => t.path === finding.file);
+      const thread = botThreads.find((t) => {
+        if (t.path !== finding.file) return false;
+        if (finding.line == null) return true;
+        const hunk = t.diffHunk.match(/@@ .+?\+(\d+)/);
+        return hunk ? parseInt(hunk[1]!, 10) === finding.line : true;
+      });
       const commentId = thread?.comments[0]?.id;
       if (commentId) {
         const ok = await confirm({ message: `Reply "${reason}" on ${location}?` });
