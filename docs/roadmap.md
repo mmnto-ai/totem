@@ -2,59 +2,59 @@
 
 This document outlines the strategic milestones for the Totem project.
 
-Totem is shifting from a "smart linter" to an **Enterprise Governance OS** for AI agents. Our roadmap reflects the transition from building the core deterministic engine to building the multi-repo federation and auditability features required by DevSecOps teams.
+Totem is evolving from a deterministic lint engine into a full **governance layer** for AI-assisted development. The roadmap below tracks the progression from enforcement primitives to multi-repo federation.
 
 ---
 
 ## 1.6.0 — Pipeline Maturity (Current Release)
 
-**Goal:** Establish the "Self-Healing Loop." The engine must learn from developer frustration to prevent alert fatigue.
+**Theme:** Close the self-healing loop — the engine learns from developer overrides to reduce false positives over time.
 
 - [x] **The Exemption Engine:** Dual-storage false-positive tracking (local gitignored vs. team committed).
-- [x] **Bot Review Integration:** Auto-extract pushback/arguments with CodeRabbit and route them to the exemption engine.
-- [x] **Trap Ledger Logging:** Cryptographically log all overrides and bypasses for future analysis.
-- [x] **Rule Unit Testing:** Require "Example Hits/Misses" in markdown lessons to prove patterns at compile time.
-- [x] **Standard Library Enforcement:** Compile design tenets (like "Never use native child_process") into physical blocking gates.
+- [x] **Bot Review Integration:** Extract pushback signals from CodeRabbit/GCA and route them to the exemption engine.
+- [x] **Trap Ledger:** Append-only audit log of all overrides and bypasses (`.totem/ledger/events.ndjson`).
+- [x] **Rule Unit Testing:** Inline "Example Hit/Miss" verification at compile time.
+- [x] **Standard Library Enforcement:** Design tenets (e.g., "never use native child_process") compile into blocking lint rules.
 
 ---
 
 ## 1.7.0 — Developer Experience & Tooling Awareness
 
-**Goal:** Cure "Agent Amnesia." Ensure AI agents (and human developers) start every session with a perfectly hydrated context window.
+**Theme:** Reduce friction — make agents and developers productive from the first command.
 
-- [ ] **Smart Briefing (`totem briefing`):** Inject live Git state, lint health, and recent Trap Ledger events into the agent's Turn-1 context.
-- [ ] **CLI Taxonomy Refactor:** Subsume overlapping commands (lint/shield $\rightarrow$ check) and move CI plumbing into a `dev` namespace to achieve a "NASA-by-Google" interface.
-- [ ] **Solo Dev Experience Audit:** Optimize the `extract $\rightarrow$ compile` flywheel for developers who don't have PR review bots.
-- [ ] **MCP Tool Hardening:** Embed protocol invariants directly into MCP tool descriptions (e.g., "CRITICAL: Call search_knowledge first").
+- [ ] **Smart Briefing (`totem briefing`):** Inject live Git state, lint health, and recent Trap Ledger events into the agent's context.
+- [ ] **CLI Taxonomy Refactor:** Clean command grouping with visual help categories and `[LLM]` badges. Subsume overlapping commands (lint/shield → check).
+- [ ] **Solo Dev Experience Audit:** Optimize the extract → compile flywheel for developers without PR review bots.
+- [ ] **MCP Tool Hardening:** Embed protocol invariants directly into MCP tool descriptions.
 
 ---
 
 ## 1.8.0 — The Pipeline Engine
 
-**Goal:** Make the lesson extraction and compilation process hyper-intelligent and context-aware.
+**Theme:** Make rule generation smarter — the compiler should infer scope and context from the codebase, not just the lesson text.
 
-- [ ] **Intelligent Scope Inference:** Use the PR diff during `totem extract` to automatically suggest accurate `fileGlobs` (e.g., automatically excluding `*.test.ts` to prevent noise).
-- [ ] **Prior Art Concierge:** Upgrade `totem spec` to proactively search the Knowledge Mesh and inject shared-helper signatures into the agent's plan before they write code.
-- [ ] **The "Hammer" Stress Test:** Build an adversarial test harness to prove agents cannot jailbreak the AST parser via string obfuscation.
+- [ ] **Scope Inference:** Use the PR diff during `totem extract` to suggest accurate `fileGlobs` (e.g., auto-excluding `*.test.ts`).
+- [ ] **Spec Context Injection:** `totem spec` proactively searches the knowledge index and injects relevant helper signatures into the agent's plan.
+- [ ] **Adversarial Harness:** Stress-test that agents cannot bypass AST rules via string obfuscation or encoding tricks.
 
 ---
 
 ## 1.9.0 — The Invisible Exoskeleton
 
-**Goal:** Protect the 3.0-second execution SLA by implementing advanced memory management and rule lifecycle policies.
+**Theme:** Keep the engine fast and the ruleset healthy as lesson count grows.
 
-- [ ] **Rule Garbage Collection:** Implement a mechanism in `totem doctor` to identify and archive dead rules.
-- [ ] **Adaptive Decay Thresholds:** Move away from hardcoded time limits (e.g., 180 days) and base rule decay on "Commit Cycles" or "Scope Touch Frequency."
-- [ ] **Meta-Governance:** Compile our own product messaging tenets (e.g., "Totem is not an AI Doc Writer") into `shield` rules to prevent marketing drift.
+- [ ] **Rule Garbage Collection:** `totem doctor` identifies and archives rules that no longer trigger.
+- [ ] **Adaptive Decay:** Base rule lifecycle on commit-cycle frequency instead of hardcoded time limits.
+- [ ] **Meta-Governance:** Compile product tenets into shield rules — the governance loop closes on itself.
 
 ---
 
 ## 2.0.0 — Federation (The Enterprise Tier)
 
-**Goal:** Fulfill the COSS Covenant. Provide the coordination layer required for enterprises to safely deploy autonomous agents across hundreds of repositories.
+**Theme:** The COSS Covenant tier — multi-repo coordination for teams running autonomous agents at scale.
 
-- [ ] **Multi-Repo Federation:** Allow a central Strategy Repo to push compiled architectural rules down to microservice repositories via RBAC.
-- [ ] **Centralized Trap Ledger:** Ship `events.ndjson` to an immutable, signed cloud endpoint.
-- [ ] **Agent Compliance Dashboard:** A queryable DevSecOps dashboard visualizing override rates grouped by agent source (Claude vs. Gemini vs. Human).
-- [ ] **Mesh Export:** A portable format for bundling lessons and rules for M&A due diligence and compliance audits.
-- [ ] **`totem ui`:** A local web dashboard for inspecting rule decay, hit/miss rates, and Trap Ledger history.
+- [ ] **Multi-Repo Federation:** Central strategy repo pushes compiled rules to downstream repositories via RBAC.
+- [ ] **Signed Trap Ledger:** Cryptographically signed, immutable cloud endpoint for `events.ndjson` ingestion.
+- [ ] **Compliance Dashboard:** Override rates by agent source (Claude vs. Gemini vs. Human), rule health trends, bypass audit trail.
+- [ ] **Mesh Export:** Portable bundle format for lessons + rules (M&A due diligence, compliance audits).
+- [ ] **`totem ui`:** Local web dashboard for rule decay, hit/miss rates, and ledger history.
