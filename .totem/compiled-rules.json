@@ -6009,15 +6009,58 @@
     {
       "lessonHash": "981ab9170acc2719",
       "lessonHeading": "When shield finds false positives on synchronous adapter",
+      "pattern": "\\bawait\\s+.*\\breplyToComment\\(",
       "message": "Method 'replyToComment' is synchronous; do not use 'await'. Check return types in pr-adapter.ts before adding await to adapter methods.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\bawait\\s+.*\\breplyToComment\\(",
       "compiledAt": "2026-03-28T18:54:27.060Z",
       "createdAt": "2026-03-28T18:54:27.060Z",
       "fileGlobs": [
         "**/packages/cli/src/commands/triage-pr.ts",
         "**/packages/cli/src/services/deferred-issuer.ts"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "e4101b489e88ece9",
+      "lessonHeading": "GitHub's automatic issue closing requires the 'Closes'",
+      "message": "GitHub's automatic issue closing requires the 'Closes' keyword to be repeated for every issue number; listing multiple numbers after a single keyword fails to close subsequent issues.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bCloses\\s+#\\d+[\\s,]+#\\d+",
+      "compiledAt": "2026-03-28T23:53:48.517Z",
+      "createdAt": "2026-03-28T23:53:48.517Z",
+      "fileGlobs": [
+        "**/*.md"
+      ]
+    },
+    {
+      "lessonHash": "2266fc0dfe824f24",
+      "lessonHeading": "Static top-level imports from heavy internal packages delay",
+      "message": "Static top-level imports from heavy internal packages delay CLI startup. Use dynamic 'await import()' inside the command function instead.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "^\\+import\\s+.*from\\s+['\"](@totem/|\\.\\./\\.\\./|@/packages/).*['\"]",
+      "compiledAt": "2026-03-28T23:54:12.828Z",
+      "createdAt": "2026-03-28T23:54:12.828Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "4bd978540dcd9fb6",
+      "lessonHeading": "Static top-level imports from heavy core packages",
+      "message": "Static top-level imports from heavy packages (@totem/core, @totem/mcp) slow down CLI startup. Use dynamic 'await import()' inside the command's run() function instead.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "^import\\s+(?!type\\b).+\\bfrom\\s+['\"]@totem/(core|mcp)['\"]",
+      "compiledAt": "2026-03-28T23:54:30.834Z",
+      "createdAt": "2026-03-28T23:54:30.834Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
       ]
     }
   ],
@@ -6648,6 +6691,8 @@
     "693e374aec00446e",
     "7b8203b63ce7fd54",
     "a065e1af3dd2e7dc",
-    "ee1d6e47929fa6a2"
+    "ee1d6e47929fa6a2",
+    "7d181408c213e8ae",
+    "dd81876ae088c15c"
   ]
 }
