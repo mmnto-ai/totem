@@ -433,6 +433,18 @@ export async function triagePrCommand(
     return;
   }
 
+  // Pre-load config for fix dispatch (avoid re-loading per finding)
+  const {
+    loadConfig: loadCfg,
+    resolveConfigPath: resolveCfg,
+    loadEnv: loadE,
+    runOrchestrator: runOrch,
+  } = await import('../utils.js');
+  const { dispatchFix } = await import('../services/fix-dispatcher.js');
+  const cfgPath = resolveCfg(cwd);
+  loadE(cwd);
+  const triageConfig = await loadCfg(cfgPath);
+
   // Process each selected finding
   let fixedBotFindings = false;
 
@@ -481,13 +493,6 @@ export async function triagePrCommand(
       }
       if (ok) {
         try {
-          const { dispatchFix } = await import('../services/fix-dispatcher.js');
-          const { loadConfig, resolveConfigPath, loadEnv, runOrchestrator } =
-            await import('../utils.js');
-          const configPath = resolveConfigPath(cwd);
-          loadEnv(cwd);
-          const config = await loadConfig(configPath);
-
           const result = await dispatchFix({
             filePath: finding.file,
             line: finding.line ?? undefined,
@@ -495,11 +500,11 @@ export async function triagePrCommand(
             findingTool: finding.tool,
             cwd,
             runOrchestrator: (prompt) =>
-              runOrchestrator({
+              runOrch({
                 prompt,
                 tag: TAG,
                 options: {},
-                config,
+                config: triageConfig,
                 cwd,
                 temperature: 0,
               }),
