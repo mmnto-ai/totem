@@ -5897,20 +5897,20 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "23fa369da4c5b70f",
+      "lessonHash": "55797450514d4c3b",
       "lessonHeading": "Never use git add -A or git add .",
-      "message": "Never use 'git add -A' or 'git add .'. Stage specific files by name (e.g., 'git add packages/*/package.json') to avoid committing unwanted artifacts like worktrees, runtime logs, or cache files.",
+      "message": "Never use 'git add -A' or 'git add .'. Stage specific files by name (e.g., 'git add packages/*/package.json') to avoid committing artifacts or worktree copies.",
       "engine": "regex",
       "severity": "warning",
-      "pattern": "\\bgit\\s+add\\s+(-A|--all|\\.)(?:\\s|$)",
-      "compiledAt": "2026-03-28T05:29:09.537Z",
-      "createdAt": "2026-03-28T05:29:09.537Z",
+      "pattern": "\\bgit\\s+add\\s+(-A|--all|\\.)(?!\\S)",
+      "compiledAt": "2026-03-28T05:44:50.207Z",
+      "createdAt": "2026-03-28T05:44:50.207Z",
       "fileGlobs": [
         "**/*.sh",
-        "**/*.bash",
         "**/*.yml",
         "**/*.yaml",
-        "**/package.json"
+        "**/package.json",
+        "**/Makefile"
       ]
     }
   ],
