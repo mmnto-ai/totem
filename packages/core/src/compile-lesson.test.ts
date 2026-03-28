@@ -236,6 +236,21 @@ describe('validateAstGrepPattern', () => {
     expect(result.valid).toBe(false);
     expect(result.reason).toContain('top-level expressions');
   });
+
+  it('accepts pattern with semicolons inside string literals', () => {
+    const result = validateAstGrepPattern('const x = "a;b"');
+    expect(result.valid).toBe(true);
+  });
+
+  it('accepts pattern with newlines inside template literals', () => {
+    const result = validateAstGrepPattern('const x = `a\nb`');
+    expect(result.valid).toBe(true);
+  });
+
+  it('accepts pattern with braces inside string literals', () => {
+    const result = validateAstGrepPattern('const x = "{ }"');
+    expect(result.valid).toBe(true);
+  });
 });
 
 // ─── buildCompiledRule with ast-grep validation ────

@@ -65,9 +65,26 @@ export function validateAstGrepPattern(pattern: string | Record<string, unknown>
   // Split on statement boundaries (semicolons and newlines outside braces/parens)
   // using a simple brace/paren depth tracker.
   let depth = 0;
+  let inString: string | null = null; // tracks quote char (' or " or `)
   const roots: string[] = [];
   let current = '';
-  for (const ch of trimmed) {
+  for (let i = 0; i < trimmed.length; i++) {
+    const ch = trimmed[i]!;
+    const prev = i > 0 ? trimmed[i - 1] : '';
+
+    // String literal tracking — skip depth/split logic inside strings
+    // Note: escaped backslash edge case ("\\") is not handled — unlikely in ast-grep patterns
+    if (inString) {
+      current += ch;
+      if (ch === inString && prev !== '\\') inString = null;
+      continue;
+    }
+    if ((ch === '"' || ch === "'" || ch === '`') && prev !== '\\') {
+      inString = ch;
+      current += ch;
+      continue;
+    }
+
     if (ch === '(' || ch === '{' || ch === '[') {
       depth++;
       current += ch;
