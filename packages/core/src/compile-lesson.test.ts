@@ -6,6 +6,7 @@ import {
   compileLesson,
   type CompileLessonDeps,
   type LessonInput,
+  validateAstGrepPattern,
   verifyRuleExamples,
 } from './compile-lesson.js';
 import type { CompiledRule, CompilerOutput } from './compiler-schema.js';
@@ -176,6 +177,146 @@ describe('buildCompiledRule', () => {
   });
 });
 
+// ─── validateAstGrepPattern ────────────────────────
+
+describe('validateAstGrepPattern', () => {
+  it('accepts a valid simple string pattern', () => {
+    const result = validateAstGrepPattern('catch($ERR) { $$$ }');
+    expect(result.valid).toBe(true);
+  });
+
+  it('accepts a valid object pattern with rule key', () => {
+    const result = validateAstGrepPattern({ rule: { pattern: 'console.log($A)' } });
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects an empty string pattern', () => {
+    const result = validateAstGrepPattern('');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('empty');
+  });
+
+  it('rejects a whitespace-only string pattern', () => {
+    const result = validateAstGrepPattern('   ');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('empty');
+  });
+
+  it('rejects an object pattern without rule key', () => {
+    const result = validateAstGrepPattern({ pattern: 'console.log($A)' });
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('rule');
+  });
+
+  it('rejects multi-root pattern with semicolons', () => {
+    const result = validateAstGrepPattern('foo(); bar()');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('top-level expressions');
+  });
+
+  it('rejects multi-root pattern with newlines', () => {
+    const result = validateAstGrepPattern('foo()\nbar()');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('top-level expressions');
+  });
+
+  it('accepts pattern with braces containing semicolons (single root)', () => {
+    const result = validateAstGrepPattern('function $NAME($$$) { $$$ }');
+    expect(result.valid).toBe(true);
+  });
+
+  it('accepts pattern with nested parens and braces', () => {
+    const result = validateAstGrepPattern('if ($COND) { $$$BODY }');
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects the componentDidCatch multi-root case from issue #1062', () => {
+    // "componentDidCatch($$$) {}" has a call expression + block → two roots
+    const result = validateAstGrepPattern('componentDidCatch($$$)\n{}');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('top-level expressions');
+  });
+});
+
+// ─── buildCompiledRule with ast-grep validation ────
+
+describe('buildCompiledRule ast-grep validation (#1062)', () => {
+  it('rejects ast-grep rule with empty pattern (falsy check)', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'test',
+      engine: 'ast-grep',
+      astGrepPattern: '',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('Missing astGrepPattern');
+  });
+
+  it('rejects ast-grep rule with whitespace-only pattern', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'test',
+      engine: 'ast-grep',
+      astGrepPattern: '   ',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('Invalid ast-grep pattern');
+    expect(result.rejectReason).toContain('empty');
+  });
+
+  it('rejects ast-grep rule with multi-root pattern', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'test',
+      engine: 'ast-grep',
+      astGrepPattern: 'foo(); bar()',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('Invalid ast-grep pattern');
+    expect(result.rejectReason).toContain('top-level expressions');
+  });
+
+  it('rejects ast-grep rule with object pattern missing rule key', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'test',
+      engine: 'ast-grep',
+      astGrepPattern: { pattern: 'console.log($A)' },
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('Invalid ast-grep pattern');
+    expect(result.rejectReason).toContain('rule');
+  });
+
+  it('accepts valid ast-grep string pattern', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'Use err in catch',
+      engine: 'ast-grep',
+      astGrepPattern: 'catch($ERR) { $$$ }',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).not.toBeNull();
+    expect(result.rule!.engine).toBe('ast-grep');
+  });
+
+  it('accepts valid ast-grep object pattern with rule key', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No console.log',
+      engine: 'ast-grep',
+      astGrepPattern: { rule: { pattern: 'console.log($A)' } },
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).not.toBeNull();
+    expect(result.rule!.engine).toBe('ast-grep');
+  });
+});
+
 // ─── buildManualRule ────────────────────────────────
 
 describe('buildManualRule', () => {
@@ -202,6 +343,31 @@ describe('buildManualRule', () => {
     const result = buildManualRule(invalidLesson, existingByHash);
     expect(result.rule).toBeNull();
     expect(result.rejectReason).toContain('rejected');
+  });
+
+  it('returns rejectReason for invalid manual ast-grep pattern (multi-root)', () => {
+    const invalidLesson: LessonInput = {
+      index: 3,
+      heading: 'Multi-root ast-grep',
+      body: '**Pattern:** foo(); bar()\n**Engine:** ast-grep\n**Severity:** warning',
+      hash: 'astbad1',
+    };
+    const result = buildManualRule(invalidLesson, existingByHash);
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('ast-grep');
+    expect(result.rejectReason).toContain('top-level expressions');
+  });
+
+  it('builds valid manual ast-grep rule', () => {
+    const validLesson: LessonInput = {
+      index: 4,
+      heading: 'Catch err not error',
+      body: '**Pattern:** catch($ERR) { $$$ }\n**Engine:** ast-grep\n**Severity:** warning',
+      hash: 'astgood1',
+    };
+    const result = buildManualRule(validLesson, existingByHash);
+    expect(result.rule).not.toBeNull();
+    expect(result.rule!.engine).toBe('ast-grep');
   });
 });
 

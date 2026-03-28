@@ -1,5 +1,5 @@
 import { engineFields, sanitizeFileGlobs, validateRegex } from './compiler.js';
-import type { CompiledRule, CompilerOutput } from './compiler-schema.js';
+import type { CompiledRule, CompilerOutput, RegexValidation } from './compiler-schema.js';
 import { extractManualPattern, extractRuleExamples } from './lesson-pattern.js';
 import type { RuleTestResult } from './rule-tester.js';
 import { testRule } from './rule-tester.js';
@@ -31,6 +31,68 @@ export interface CompileLessonDeps {
   callbacks?: CompileLessonCallbacks;
 }
 
+// ─── ast-grep pattern validation ───────────────────
+
+/**
+ * Lightweight compile-time validation for ast-grep patterns (#1062).
+ * Catches malformed patterns before they crash lint at runtime.
+ *
+ * String patterns: reject if empty or contains multiple top-level AST roots
+ * (e.g. "componentDidCatch($$$) {}" has a function call + block → multi-root).
+ * Object patterns (NapiConfig): reject if missing `rule` key.
+ */
+export function validateAstGrepPattern(pattern: string | Record<string, unknown>): RegexValidation {
+  // ── Object pattern (NapiConfig / compound rule) ──
+  if (typeof pattern === 'object' && pattern !== null) {
+    if (!('rule' in pattern)) {
+      return { valid: false, reason: 'object pattern missing required "rule" key' };
+    }
+    return { valid: true };
+  }
+
+  // ── String pattern ──
+  if (typeof pattern !== 'string') {
+    return { valid: false, reason: 'pattern must be a string or object' };
+  }
+
+  const trimmed = pattern.trim();
+  if (trimmed.length === 0) {
+    return { valid: false, reason: 'empty pattern' };
+  }
+
+  // Detect multiple top-level statements separated by semicolons or newlines.
+  // ast-grep requires a single root node; multiple roots crash at runtime.
+  // Split on statement boundaries (semicolons and newlines outside braces/parens)
+  // using a simple brace/paren depth tracker.
+  let depth = 0;
+  const roots: string[] = [];
+  let current = '';
+  for (const ch of trimmed) {
+    if (ch === '(' || ch === '{' || ch === '[') {
+      depth++;
+      current += ch;
+    } else if (ch === ')' || ch === '}' || ch === ']') {
+      depth = Math.max(0, depth - 1);
+      current += ch;
+    } else if (depth === 0 && (ch === ';' || ch === '\n')) {
+      if (current.trim().length > 0) roots.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim().length > 0) roots.push(current.trim());
+
+  if (roots.length > 1) {
+    return {
+      valid: false,
+      reason: `pattern has ${roots.length} top-level expressions (ast-grep requires a single root)`,
+    };
+  }
+
+  return { valid: true };
+}
+
 // ─── Rule builder (pure, no I/O) ────────────────────
 
 /**
@@ -55,6 +117,13 @@ export function buildCompiledRule(
     if (!parsed.astGrepPattern || !parsed.message) {
       return { rule: null, rejectReason: 'Missing astGrepPattern or message' };
     }
+
+    // Validate ast-grep pattern at compile time (#1062)
+    const astValidation = validateAstGrepPattern(parsed.astGrepPattern);
+    if (!astValidation.valid) {
+      return { rule: null, rejectReason: `Invalid ast-grep pattern: ${astValidation.reason}` };
+    }
+
     return {
       rule: {
         lessonHash: lesson.hash,
@@ -191,6 +260,13 @@ export function buildManualRule(
     const validation = validateRegex(manual.pattern);
     if (!validation.valid) {
       return { rule: null, rejectReason: `Manual pattern rejected: ${validation.reason}` };
+    }
+  }
+
+  if (manual.engine === 'ast-grep') {
+    const validation = validateAstGrepPattern(manual.pattern);
+    if (!validation.valid) {
+      return { rule: null, rejectReason: `Manual ast-grep pattern rejected: ${validation.reason}` };
     }
   }
 

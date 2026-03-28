@@ -254,6 +254,7 @@ export {
   buildManualRule,
   compileLesson,
   formatExampleFailure,
+  validateAstGrepPattern,
   verifyRuleExamples,
 } from './compile-lesson.js';
 
