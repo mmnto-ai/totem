@@ -268,11 +268,12 @@ program
 program
   .command('triage-pr <pr-number>')
   .description('Categorized triage view of bot review comments on a PR')
-  .action(async (prNumber: string) => {
+  .option('-i, --interactive', 'Interactive mode: triage findings with Clack prompts')
+  .action(async (prNumber: string, opts: { interactive?: boolean }) => {
     requireGhCli();
     try {
       const { triagePrCommand } = await import('./commands/triage-pr.js');
-      await triagePrCommand(prNumber);
+      await triagePrCommand(prNumber, { interactive: opts.interactive });
     } catch (err) {
       handleError(err);
     }
