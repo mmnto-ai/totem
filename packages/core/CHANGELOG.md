@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 1.6.3
+
+### Patch Changes
+
+- Version bump to align with CLI package release
+
 ## 1.6.2
 
 ### Patch Changes

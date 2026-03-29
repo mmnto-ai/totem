@@ -5848,6 +5848,20 @@
         "!**/*.test.ts"
       ],
       "severity": "warning"
+    },
+    {
+      "lessonHash": "7bca4ac148aec25d",
+      "lessonHeading": "Use bash [[ =~ ]] not echo | grep",
+      "message": "Use native bash regex matching [[ $var =~ pattern ]] instead of echo | grep to avoid unnecessary subshells.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\becho\\s+.*\\|\\s*grep\\b",
+      "compiledAt": "2026-03-29T22:00:13.821Z",
+      "createdAt": "2026-03-29T22:00:13.821Z",
+      "fileGlobs": [
+        "**/*.sh",
+        "**/*.bash"
+      ]
     }
   ],
   "nonCompilable": [
@@ -6477,6 +6491,10 @@
     "ce661aef564a39c5",
     "f2a8a5c1534072f2",
     "cc4dbe96eb163590",
-    "1fabf989332b2192"
+    "1fabf989332b2192",
+    "98f2a922ed70d9a7",
+    "68e2a49590ca5879",
+    "515c735776ab998c",
+    "1b5c91dc7d4bd37a"
   ]
 }
