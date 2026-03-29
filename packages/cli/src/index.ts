@@ -342,10 +342,11 @@ program
   );
 
 program
-  .command('add-lesson [lesson]')
-  .description('Interactively add a lesson to project memory (or pass string as argument)')
+  .command('add-lesson [lesson]', { hidden: true })
+  .description('Deprecated alias for `totem lesson add`')
   .action(async (lesson?: string) => {
     try {
+      console.error("\u26a0 'totem add-lesson' is deprecated. Use 'totem lesson add' instead.");
       const { addLessonCommand } = await import('./commands/add-lesson.js');
       await addLessonCommand(lesson);
     } catch (err) {
@@ -391,8 +392,8 @@ program
   });
 
 program
-  .command('compile')
-  .description('Compile lessons into deterministic regex rules for zero-LLM review checks')
+  .command('compile', { hidden: true })
+  .description('Deprecated alias for `totem lesson compile`')
   .option('--raw', 'Output compiler prompts without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
@@ -420,6 +421,7 @@ program
       verbose?: boolean;
     }) => {
       try {
+        console.error("\u26a0 'totem compile' is deprecated. Use 'totem lesson compile' instead.");
         const { compileCommand } = await import('./commands/compile.js');
         await compileCommand(opts);
       } catch (err) {
@@ -454,8 +456,8 @@ program
   });
 
 program
-  .command('extract <pr-numbers...>')
-  .description('Extract lessons from PR review(s) into .totem/lessons/ (interactive cherry-pick)')
+  .command('extract <pr-numbers...>', { hidden: true })
+  .description('Deprecated alias for `totem lesson extract`')
   .option('--raw', 'Output assembled prompt without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
@@ -476,6 +478,7 @@ program
     ) => {
       requireGhCli();
       try {
+        console.error("\u26a0 'totem extract' is deprecated. Use 'totem lesson extract' instead.");
         const { extractCommand } = await import('./commands/extract.js');
         await extractCommand(prNumbers, opts);
       } catch (err) {
@@ -665,6 +668,103 @@ program
     }
   });
 
+// ─── Lesson noun-verb subcommands ────────────────────────
+
+const lessonCmd = program.command('lesson').description('Manage project lessons');
+
+lessonCmd
+  .command('list')
+  .description('List all lessons with hash, heading, and tags')
+  .action(async () => {
+    try {
+      const { lessonListCommand } = await import('./commands/lesson.js');
+      await lessonListCommand();
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+lessonCmd
+  .command('add <text>')
+  .description('Add a lesson to project memory')
+  .action(async (text: string) => {
+    try {
+      const { lessonAddCommand } = await import('./commands/lesson.js');
+      await lessonAddCommand(text);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+lessonCmd
+  .command('compile')
+  .description('Compile lessons into deterministic regex rules')
+  .option('--raw', 'Output compiler prompts without LLM synthesis')
+  .option('--out <path>', 'Write output to a file instead of stdout')
+  .option('--model <name>', 'Override the default model for the orchestrator')
+  .option('--fresh', 'Bypass cache and force a fresh LLM call')
+  .option('--force', 'Recompile all lessons (ignore existing compiled rules)')
+  .option(
+    '--export',
+    'Export lessons as rules to AI assistant config files (uses exports from config)',
+  )
+  .option('--from-cursor', 'Ingest .cursorrules and .cursor/rules/*.mdc files as lessons')
+  .option('--concurrency <n>', 'Number of parallel LLM compilations (default: 5)', '5')
+  .option('--cloud <url>', 'Use a cloud compilation endpoint for parallel fan-out')
+  .option('--verbose', 'Show details for skipped (non-compilable) lessons')
+  .action(
+    async (opts: {
+      raw?: boolean;
+      out?: string;
+      model?: string;
+      fresh?: boolean;
+      force?: boolean;
+      export?: boolean;
+      fromCursor?: boolean;
+      concurrency?: string;
+      cloud?: string;
+      verbose?: boolean;
+    }) => {
+      try {
+        const { compileCommand } = await import('./commands/compile.js');
+        await compileCommand(opts);
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
+
+lessonCmd
+  .command('extract <pr-numbers...>')
+  .description('Extract lessons from PR review(s) into .totem/lessons/')
+  .option('--raw', 'Output assembled prompt without LLM synthesis')
+  .option('--out <path>', 'Write output to a file instead of stdout')
+  .option('--model <name>', 'Override the default model for the orchestrator')
+  .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
+  .option('--dry-run', 'Show extracted lessons without writing to disk')
+  .option('--yes', 'Skip confirmation prompt (use in scripts/CI)')
+  .action(
+    async (
+      prNumbers: string[],
+      opts: {
+        raw?: boolean;
+        out?: string;
+        model?: string;
+        fresh?: boolean;
+        dryRun?: boolean;
+        yes?: boolean;
+      },
+    ) => {
+      requireGhCli();
+      try {
+        const { extractCommand } = await import('./commands/extract.js');
+        await extractCommand(prNumbers, opts);
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
+
 // ─── Rule noun-verb subcommands ──────────────────────────
 const ruleCmd = program.command('rule').description('Manage compiled rules');
 
@@ -755,10 +855,10 @@ program.addHelpText(
   'after',
   `
 Commands by tier:
-  Core (no API keys):    init, sync, lint, compile, test, verify-manifest, hooks, link, stats, drift, doctor, status, rule
-  AI-Powered (needs LLM): review, spec, handoff, docs, compile (with LLM), check
-  GitHub Workflows:      extract, review-learn, triage, triage-pr, wrap
-  Utilities:             add-lesson, add-secret, list-secrets, remove-secret, explain, eject
+  Core (no API keys):    init, sync, lint, test, verify-manifest, hooks, link, stats, drift, doctor, status, lesson, rule
+  AI-Powered (needs LLM): review, spec, handoff, docs, lesson compile (with LLM), check
+  GitHub Workflows:      lesson extract, review-learn, triage, triage-pr, wrap
+  Utilities:             lesson add, add-secret, list-secrets, remove-secret, explain, eject
 `,
 );
 
