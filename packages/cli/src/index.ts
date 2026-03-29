@@ -765,6 +765,47 @@ lessonCmd
     },
   );
 
+// ─── Exemption noun-verb subcommands ────────────────────
+const exemptionCmd = program.command('exemption').description('Manage pattern exemptions');
+
+exemptionCmd
+  .command('list')
+  .description('List all shared and local exemptions')
+  .action(async () => {
+    try {
+      const { exemptionListCommand } = await import('./commands/exemption.js');
+      await exemptionListCommand();
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+exemptionCmd
+  .command('add')
+  .description('Add a manual exemption for a pattern label')
+  .requiredOption('--rule <label>', 'Pattern label to exempt')
+  .requiredOption('--reason <text>', 'Justification for the exemption')
+  .action(async (opts: { rule: string; reason: string }) => {
+    try {
+      const { exemptionAddCommand } = await import('./commands/exemption.js');
+      await exemptionAddCommand(opts);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+exemptionCmd
+  .command('audit')
+  .description('Show exemption audit report with ledger events')
+  .action(async () => {
+    try {
+      const { exemptionAuditCommand } = await import('./commands/exemption.js');
+      await exemptionAuditCommand();
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
 // ─── Rule noun-verb subcommands ──────────────────────────
 const ruleCmd = program.command('rule').description('Manage compiled rules');
 
@@ -855,7 +896,7 @@ program.addHelpText(
   'after',
   `
 Commands by tier:
-  Core (no API keys):    init, sync, lint, test, verify-manifest, hooks, link, stats, drift, doctor, status, lesson, rule
+  Core (no API keys):    init, sync, lint, test, verify-manifest, hooks, link, stats, drift, doctor, status, lesson, rule, exemption
   AI-Powered (needs LLM): review, spec, handoff, docs, lesson compile (with LLM), check
   GitHub Workflows:      lesson extract, review-learn, triage, triage-pr, wrap
   Utilities:             lesson add, add-secret, list-secrets, remove-secret, explain, eject
