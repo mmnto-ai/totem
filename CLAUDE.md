@@ -7,18 +7,34 @@
 - `kebab-case.ts` files, `err` (never `error`) in catch blocks.
 - Run `pnpm run format` before committing.
 
-## Totem Workflow (BLOCKING)
+## Totem Workflow
 
-- Before starting issue work: run `totem spec <issue>`
-- Before writing code: call `mcp__totem-dev__search_knowledge` with what you're changing
-- After extracting lessons: run `totem compile` before pushing — the CMA CI gate rejects stale manifests.
-- Before pushing: run `totem shield`. Fix violations — never bypass.
+These steps are not mechanically enforced — there are no local gates or flag files.
+You follow them because they produce better code and reduce PR bot noise.
+If you skip a step, PR bots and CI will catch it. Fix it then, don't bypass.
+
+### Before coding
+1. Run `/preflight <issue>` (runs `totem spec` + `mcp__totem-dev__search_knowledge`)
+2. Create a feature branch from `main`
+
+### Before pushing
+1. Run `pnpm run format`
+2. Run `totem lint` — fix any errors (the git pre-push hook also runs this)
+3. Run `totem review` — fix any critical findings (voluntary, but saves PR bot loops)
+4. Verify compile manifest is current — if you added/changed lessons, run `totem lesson compile`
+
+### After merging
+1. Run `totem lesson extract <pr-numbers>` to capture lessons from bot reviews
+2. Run `totem lesson compile --cloud <url>` for 6+ lessons (local for ≤5)
+
+### Rules
 - **NEVER** use `git push --no-verify`, `totem-ignore`, or `eslint-disable` without a ticket.
+- The git pre-push hook runs `totem lint` and `totem verify-manifest` — these are stateless, fast, and deterministic. No LLM, no flag files.
 
 ## Skills
 
 - `/preflight <issue>` — spec + search before coding
-- `/prepush` — lint + shield before push
+- `/prepush` — format + lint + review before push
 - `/postmerge <prs>` — extract lessons after merge
 - `/signoff` — end-of-session memory + journal
 
