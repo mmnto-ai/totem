@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.6.0` with 938 lessons, 350 compiled rules, and 1,934 tests. The active milestone themes focus on pipeline maturity, compiler developer experience, and shield reliability.
+The project is at release `@mmnto/cli@1.6.0` with 1,032 lessons, 379 compiled rules, and 2,084 tests. The active milestone themes focus on pipeline maturity, compiler developer experience, and shield reliability.
 
 Recent completed work (1.5.6–1.5.8):
 
