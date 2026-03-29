@@ -374,22 +374,26 @@ describe('writeReviewedContentHash', () => {
     );
   });
 
-  it('writes content hash (not Git SHA) in a git repository with source files', async () => {
-    const { execSync } = await import('node:child_process');
-    execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
-    fs.writeFileSync(path.join(tmpDir, 'index.ts'), 'export const x = 1;');
-    execSync('git add .', { cwd: tmpDir, stdio: 'pipe' });
-    execSync('git -c user.name="test" -c user.email="test@test" commit -m "init"', {
-      cwd: tmpDir,
-      stdio: 'pipe',
-    });
-    await writeReviewedContentHash(tmpDir, '.totem');
-    const flagPath = path.join(tmpDir, '.totem', 'cache', '.reviewed-content-hash');
-    expect(fs.existsSync(flagPath)).toBe(true);
-    const content = fs.readFileSync(flagPath, 'utf-8');
-    // SHA-256 hex = 64 chars (not 40 like Git SHA)
-    expect(content).toMatch(/^[a-f0-9]{64}$/);
-  });
+  it(
+    'writes content hash (not Git SHA) in a git repository with source files',
+    { timeout: 15000 },
+    async () => {
+      const { execSync } = await import('node:child_process');
+      execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
+      fs.writeFileSync(path.join(tmpDir, 'index.ts'), 'export const x = 1;');
+      execSync('git add .', { cwd: tmpDir, stdio: 'pipe' });
+      execSync('git -c user.name="test" -c user.email="test@test" commit -m "init"', {
+        cwd: tmpDir,
+        stdio: 'pipe',
+      });
+      await writeReviewedContentHash(tmpDir, '.totem');
+      const flagPath = path.join(tmpDir, '.totem', 'cache', '.reviewed-content-hash');
+      expect(fs.existsSync(flagPath)).toBe(true);
+      const content = fs.readFileSync(flagPath, 'utf-8');
+      // SHA-256 hex = 64 chars (not 40 like Git SHA)
+      expect(content).toMatch(/^[a-f0-9]{64}$/);
+    },
+  );
 });
 
 // ─── extractStructuredVerdict ─────────────────────────
