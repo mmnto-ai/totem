@@ -7,6 +7,7 @@ import { Command } from 'commander';
 import { z } from 'zod';
 
 import { initCommand } from './commands/init.js';
+import { TotemHelp } from './help.js';
 import { reapOrphanedTempFiles } from './utils.js';
 
 const require = createRequire(import.meta.url);
@@ -63,7 +64,10 @@ const program = new Command();
 program
   .name('totem')
   .description('Totem — persistent memory and context layer for AI agents')
-  .version(version);
+  .version(version)
+  .configureHelp({
+    formatHelp: (cmd, helper) => new TotemHelp().formatHelp(cmd, helper),
+  });
 
 program
   .command('init')
@@ -919,16 +923,5 @@ program
 
 // Fire-and-forget: reap orphaned temp files from previous crashed runs
 reapOrphanedTempFiles(process.cwd(), '.totem').catch(() => {});
-
-program.addHelpText(
-  'after',
-  `
-Commands by tier:
-  Core (no API keys):    init, sync, lint, test, verify-manifest, hooks, link, stats, drift, doctor, status, lesson, rule, exemption, config
-  AI-Powered (needs LLM): review, spec, handoff, docs, lesson compile (with LLM), check
-  GitHub Workflows:      lesson extract, review-learn, triage, triage-pr, wrap
-  Utilities:             lesson add, add-secret, list-secrets, remove-secret, explain, eject
-`,
-);
 
 program.parse();
