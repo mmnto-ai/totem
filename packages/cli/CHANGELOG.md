@@ -1,5 +1,12 @@
 # @mmnto/cli
 
+## 1.6.3
+
+### Patch Changes
+
+- 4c5696f: Gate architecture reset (Proposal 207): replaced SHA-based flag files with stateless git hooks (lint + verify-manifest) and content-hash-based PreToolUse review gate. Added SessionStart hook for automatic knowledge context injection. Removed all flag files (.lint-passed, .shield-passed, .spec-completed) and Claude hook enforcement scripts.
+  - @mmnto/totem@1.6.3
+
 ## 1.6.2
 
 ### Patch Changes
