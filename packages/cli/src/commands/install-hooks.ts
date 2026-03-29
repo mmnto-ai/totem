@@ -45,9 +45,11 @@ export function detectTotemPrefix(cwd: string): string {
  * Never exits early to avoid killing chained user hooks.
  */
 export function buildResolveBlock(fallbackCmd: string): string {
-  return `# Resolve totem command
+  return `# Resolve totem command — prefer local workspace build over published package
 if command -v totem >/dev/null 2>&1; then
   TOTEM_CMD="totem"
+elif [ -f pnpm-workspace.yaml ] && pnpm exec totem --version >/dev/null 2>&1; then
+  TOTEM_CMD="pnpm exec totem"
 elif [ -f package.json ]; then
   TOTEM_CMD="${fallbackCmd}"
 else
