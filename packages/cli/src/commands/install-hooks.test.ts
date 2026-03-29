@@ -157,6 +157,15 @@ describe('buildResolveBlock', () => {
     const block = buildResolveBlock('pnpm dlx @mmnto/cli');
     expect(block).toContain('[ -f package.json ]');
   });
+
+  it('prefers pnpm exec totem in workspace before dlx fallback', () => {
+    const block = buildResolveBlock('pnpm dlx @mmnto/cli');
+    expect(block).toContain('pnpm-workspace.yaml');
+    expect(block).toContain('TOTEM_CMD="pnpm exec totem"');
+    const workspaceIdx = block.indexOf('pnpm-workspace.yaml');
+    const dlxIdx = block.indexOf('pnpm dlx @mmnto/cli');
+    expect(workspaceIdx).toBeLessThan(dlxIdx);
+  });
 });
 
 describe('buildPreCommitHook', () => {
