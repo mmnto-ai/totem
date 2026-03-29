@@ -22,12 +22,6 @@ vi.mock('../utils.js', async () => {
   };
 });
 
-// ─── Helpers ────────────────────────────────────────────
-
-function stripAnsi(str: string): string {
-  return str.replace(/\x1b\[[0-9;]*m/g, ''); // totem-context: ANSI regex — not user input
-}
-
 // ─── Tests ──────────────────────────────────────────────
 
 describe('getNestedValue', () => {
