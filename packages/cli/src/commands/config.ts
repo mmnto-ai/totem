@@ -1,5 +1,3 @@
-const TAG = 'Config';
-
 // ─── Helpers ───────────────────────────────────────────
 
 export function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
