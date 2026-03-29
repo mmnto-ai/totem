@@ -220,6 +220,7 @@ describe('exemption add', () => {
     process.chdir(originalCwd);
     cleanTmpDir(tmpDir);
     vi.restoreAllMocks();
+    process.exitCode = undefined;
   });
 
   it('creates an exemption entry with reason', async () => {
@@ -257,9 +258,6 @@ describe('exemption add', () => {
     const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
     expect(output).toContain('Missing required flag: --rule');
     expect(process.exitCode).toBe(1);
-
-    // Reset exitCode for other tests
-    process.exitCode = undefined;
   });
 
   it('errors when --reason is missing', async () => {
@@ -272,9 +270,6 @@ describe('exemption add', () => {
     const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
     expect(output).toContain('Missing required flag: --reason');
     expect(process.exitCode).toBe(1);
-
-    // Reset exitCode for other tests
-    process.exitCode = undefined;
   });
 });
 

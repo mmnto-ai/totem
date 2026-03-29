@@ -11,7 +11,7 @@ function truncate(text: string, max: number): string {
 
 /** Strip control characters from user input before persistence/display. */
 function sanitizeInput(text: string): string {
-  // eslint-disable-next-line no-control-regex
+  // eslint-disable-next-line no-control-regex -- intentional: stripping control chars from user input (#1074)
   return text.replace(/[\x00-\x1f\x7f]/g, '');
 }
 
