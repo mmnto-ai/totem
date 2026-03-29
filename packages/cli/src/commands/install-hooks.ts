@@ -112,7 +112,7 @@ export function generateHookHelpers(gitRoot: string, fallbackCmd: string): void 
   const postMerge = buildHookContent(fallbackCmd);
   const postCheckout = buildPostCheckoutHookContent(fallbackCmd);
   const preCommit = buildPreCommitHook();
-  const prePush = buildPrePushHook(fallbackCmd);
+  const prePush = buildPrePushHook();
 
   fs.writeFileSync(path.join(hooksDir, 'post-merge.sh'), postMerge, { mode: 0o755 });
   fs.writeFileSync(path.join(hooksDir, 'post-checkout.sh'), postCheckout, { mode: 0o755 });
@@ -271,56 +271,57 @@ fi
 `;
 }
 
-const SHIELD_AUTO_REFRESH_MARKER = 'Shield flag stale';
-
-export function buildPrePushHook(fallbackCmd: string): string {
+export function buildPrePushHook(): string {
   return `#!/bin/sh
-# ${TOTEM_PREPUSH_MARKER} — run compiled rules before push.
+# ${TOTEM_PREPUSH_MARKER} — fast read-only checkpoint.
 # Override with: git push --no-verify
 
-# Only run review when compiled rules exist (zero Node startup penalty otherwise).
-# Uses if/fi block so this is safe to append to existing hooks without early termination.
+# Only gate when compiled rules exist (totem is configured)
 if [ -f ".totem/compiled-rules.json" ]; then
-  ${buildResolveBlock(fallbackCmd)}
 
-  # Auto-verify compile manifest
-  if [ -n "$TOTEM_CMD" ] && [ -f ".totem/compile-manifest.json" ]; then
-    if ! $TOTEM_CMD verify-manifest > /dev/null 2>&1; then
-      echo "[totem] Compile manifest is stale. Running totem compile..."
-      if $TOTEM_CMD compile; then
-        echo "[totem] Push aborted: compile manifest was updated."
-        echo "[totem]    Please commit the updated .totem/ files and push again."
-        exit 1
-      else
-        echo "[totem] Push aborted: auto-compile failed. Run 'totem compile' manually."
+  # Lint must have passed for current HEAD (core gate)
+  if [ ! -f ".totem/cache/.lint-passed" ]; then
+    echo "[totem] Push blocked: lint has not passed. Run 'totem lint' or /prepush." >&2
+    exit 1
+  fi
+  LINT_SHA=$(cat .totem/cache/.lint-passed 2>/dev/null | tr -d '[:space:]')
+  if [ -z "$LINT_SHA" ]; then
+    echo "[totem] Push blocked: lint flag is empty or unreadable. Run 'totem lint' or /prepush." >&2
+    exit 1
+  fi
+  HEAD_SHA=$(git rev-parse HEAD 2>/dev/null)
+  if [ "$LINT_SHA" != "$HEAD_SHA" ]; then
+    # Ancestry check: lint may still be valid if only non-target files changed
+    if git merge-base --is-ancestor "$LINT_SHA" "$HEAD_SHA" 2>/dev/null; then
+      # Read target globs from cache, fall back to common source extensions
+      if [ -f ".totem/cache/.target-globs" ]; then
+        TARGET_GLOBS=$(cat .totem/cache/.target-globs 2>/dev/null | xargs)
+      fi
+      if [ -z "$TARGET_GLOBS" ]; then
+        TARGET_GLOBS="*.ts *.tsx *.js *.jsx"
+      fi
+      # Check if any target files changed since lint passed
+      # shellcheck disable=SC2086
+      set -f  # disable globbing so *.ts is passed as pathspec, not expanded
+      SRC_CHANGES=$(git diff --name-only "$LINT_SHA" "$HEAD_SHA" -- $TARGET_GLOBS 2>/dev/null)
+      set +f
+      if [ -n "$SRC_CHANGES" ]; then
+        echo "[totem] Push blocked: source files changed since lint passed." >&2
+        echo "[totem] Changed files:" >&2
+        echo "$SRC_CHANGES" | while read -r f; do echo "[totem]   $f" >&2; done
+        echo "[totem] Run 'totem lint' or /prepush to re-validate." >&2
         exit 1
       fi
-    fi
-  fi
-
-  if [ -n "$TOTEM_CMD" ]; then
-    if ! $TOTEM_CMD lint; then
+      # Non-target changes only (docs, tests, config) — lint still valid
+    else
+      echo "[totem] Push blocked: lint passed for a non-ancestor commit (rebase?)." >&2
+      echo "[totem]   lint SHA: $LINT_SHA" >&2
+      echo "[totem]   HEAD SHA: $HEAD_SHA" >&2
+      echo "[totem] Run 'totem lint' or /prepush to re-validate." >&2
       exit 1
     fi
   fi
 
-  # Review auto-refresh — re-run review if flag is stale (#1045)
-  if [ -f ".totem/cache/.shield-passed" ] && [ -n "$TOTEM_CMD" ]; then
-    SHIELD_SHA=$(cat .totem/cache/.shield-passed | tr -d '[:space:]')
-    HEAD_SHA=$(git rev-parse HEAD)
-    if [ "$SHIELD_SHA" != "$HEAD_SHA" ]; then
-      if git merge-base --is-ancestor "$SHIELD_SHA" "$HEAD_SHA" 2>/dev/null; then
-        echo "[totem] ${SHIELD_AUTO_REFRESH_MARKER}. Auto-refreshing..."
-      else
-        echo "[totem] ${SHIELD_AUTO_REFRESH_MARKER} (rebase detected). Auto-refreshing..."
-      fi
-      # TODO(telemetry): pass execution context (hook vs manual) for friction index (1.8.0)
-      if ! $TOTEM_CMD review; then
-        echo "[totem] Review auto-refresh failed. Fix issues and retry."
-        exit 1
-      fi
-    fi
-  fi
 fi
 `;
 }
@@ -413,7 +414,6 @@ export async function installEnforcementHooks(
   }
 
   const hooksDir = path.join(gitRoot, '.git', 'hooks');
-  const fallbackCmd = getFallbackCommand(gitRoot);
 
   const preCommit = installGitHook(
     hooksDir,
@@ -422,12 +422,7 @@ export async function installEnforcementHooks(
     TOTEM_PRECOMMIT_MARKER,
   );
 
-  const prePush = installGitHook(
-    hooksDir,
-    'pre-push',
-    buildPrePushHook(fallbackCmd),
-    TOTEM_PREPUSH_MARKER,
-  );
+  const prePush = installGitHook(hooksDir, 'pre-push', buildPrePushHook(), TOTEM_PREPUSH_MARKER);
 
   // Warn about non-shell hooks that Totem cannot safely append to
   if (preCommit === 'skipped-non-shell') {
@@ -513,12 +508,7 @@ export function installHooksNonInteractive(cwd: string): HooksCommandResult | nu
     TOTEM_PRECOMMIT_MARKER,
   );
 
-  const prePush = installGitHook(
-    hooksDir,
-    'pre-push',
-    buildPrePushHook(fallbackCmd),
-    TOTEM_PREPUSH_MARKER,
-  );
+  const prePush = installGitHook(hooksDir, 'pre-push', buildPrePushHook(), TOTEM_PREPUSH_MARKER);
 
   const postMergeContent = buildHookContent(fallbackCmd);
   const postMerge = installGitHook(hooksDir, 'post-merge', postMergeContent, TOTEM_HOOK_MARKER);
@@ -630,8 +620,8 @@ export function hooksCommand(opts: { check?: boolean }): void {
 // ─── Silent hook upgrade ──────────────────────────────
 
 /**
- * Silently upgrade the pre-push hook if it was installed by Totem but lacks
- * the review auto-refresh logic added in #1045.
+ * Silently upgrade the pre-push hook if it was installed by Totem but uses
+ * the old command-executing format instead of the new flag-checking format.
  *
  * Returns true if the hook was upgraded, false otherwise.
  */
@@ -648,19 +638,11 @@ export function upgradePrePushHookIfNeeded(cwd: string): boolean {
     // Only upgrade hooks that Totem owns (have our marker)
     if (!content.includes(TOTEM_PREPUSH_MARKER)) return false;
 
-    // Upgrade if: (a) missing auto-refresh, or (b) uses deprecated `shield` command
-    const needsAutoRefresh = !content.includes(SHIELD_AUTO_REFRESH_MARKER);
-    const needsShieldRename = content.includes('$TOTEM_CMD shield');
-    if (!needsAutoRefresh && !needsShieldRename) return false;
-
     // Splice only the totem-managed block, preserving any user-appended content.
-    // The totem block starts at the marker comment and ends at the matching top-level `fi`.
     const markerIdx = content.indexOf(`# ${TOTEM_PREPUSH_MARKER}`);
     if (markerIdx === -1) return false;
 
     // Find the end of the totem block by balancing if/fi depth.
-    // Can't use first or last `fi` — the block has nested if/fi pairs,
-    // and user content after the block may also contain if/fi.
     const afterMarker = content.slice(markerIdx);
     const ifFiPattern = /^\s*(if\s|fi\s*$)/gm;
     let depth = 0;
@@ -684,11 +666,15 @@ export function upgradePrePushHookIfNeeded(cwd: string): boolean {
     }
 
     if (endOffset === -1) return false;
+
+    // Upgrade if: totem-managed block already uses new format (check block only, not user content)
+    const existingTotemBlock = afterMarker.slice(0, endOffset);
+    if (existingTotemBlock.includes('.lint-passed')) return false;
+
     const blockEnd = markerIdx + endOffset;
 
     // Build the replacement block (strip shebang — we're splicing into existing file)
-    const fallbackCmd = getFallbackCommand(gitRoot);
-    const newBlock = buildPrePushHook(fallbackCmd)
+    const newBlock = buildPrePushHook()
       .replace(/^#!\/bin\/sh\n/, '')
       .trimStart();
 
@@ -697,8 +683,6 @@ export function upgradePrePushHookIfNeeded(cwd: string): boolean {
     const after = content.slice(blockEnd);
     const upgraded = before + newBlock.trimEnd() + after;
 
-    // TODO(telemetry): when the Workflow Friction Index (1.8.0) is built,
-    // pass execution context (hook-triggered vs manual) here for measurement
     fs.writeFileSync(hookPath, upgraded);
 
     try {
