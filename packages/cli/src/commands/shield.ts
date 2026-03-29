@@ -365,9 +365,11 @@ export function formatVerdictForDisplay(verdict: ShieldStructuredVerdict, pass: 
 }
 
 /**
- * Write the .shield-passed gate flag on PASS so pre-push hooks can verify.
+ * Write the .reviewed-content-hash flag on PASS.
+ * Uses a content hash of tracked source files (not Git SHA) so the flag
+ * survives commits, amends, and rebases. Only breaks when source files change.
  */
-export async function writeShieldPassedFlag(
+export async function writeReviewedContentHash(
   cwd: string,
   totemDir: string,
   configRoot?: string,
@@ -376,16 +378,43 @@ export async function writeShieldPassedFlag(
     const path = await import('node:path');
     const fs = await import('node:fs');
     const { safeExec } = await import('@mmnto/totem');
-    const head = safeExec('git', ['rev-parse', 'HEAD'], { cwd });
+
+    // Compute content hash: hash of all tracked source file objects
+    const root = configRoot ?? cwd;
+    const files = safeExec('git', ['ls-files', '-z', '*.ts', '*.tsx', '*.js', '*.jsx'], {
+      cwd: root,
+    });
+    if (!files.trim()) return; // No source files — nothing to stamp
+
+    // Filter out deleted files (still in index but missing on disk)
+    const deleted = new Set(
+      safeExec('git', ['ls-files', '--deleted', '-z', '*.ts', '*.tsx', '*.js', '*.jsx'], {
+        cwd: root,
+      })
+        .split('\0')
+        .filter(Boolean),
+    );
+    const existing = files.split('\0').filter((f) => f && !deleted.has(f));
+    if (existing.length === 0) return;
+
+    const objectHashes = safeExec('git', ['hash-object', '--stdin-paths'], {
+      cwd: root,
+      input: existing.join('\n'),
+    });
+
+    const crypto = await import('node:crypto');
+    // Ensure trailing newline to match bash pipeline output (sha256sum sees it)
+    const normalizedHashes = objectHashes.endsWith('\n') ? objectHashes : objectHashes + '\n';
+    const contentHash = crypto.createHash('sha256').update(normalizedHashes).digest('hex');
+
     const cacheDir = path.join(configRoot ?? cwd, totemDir, 'cache');
     if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
-    fs.writeFileSync(path.join(cacheDir, '.shield-passed'), head);
+    fs.writeFileSync(path.join(cacheDir, '.reviewed-content-hash'), contentHash);
   } catch (err) {
-    // Non-fatal — flag is a convenience for pre-push hooks
-    // Log at debug level so failures are diagnosable
+    // Non-fatal — flag is a convenience for PreToolUse hooks
     if (process.env['TOTEM_DEBUG'] === '1') {
       console.error(
-        '[Shield] Failed to write .shield-passed:',
+        '[Shield] Failed to write .reviewed-content-hash:',
         err instanceof Error ? err.message : err,
       );
     }
@@ -624,7 +653,7 @@ async function handleVerdictResult(
     console.error(display);
 
     if (verdict.pass) {
-      // pass — no action needed
+      await writeReviewedContentHash(cwd, config.totemDir, configRoot);
     } else if (options.override) {
       const { appendLedgerEvent } = await import('@mmnto/totem');
 
@@ -705,7 +734,7 @@ async function handleVerdictResult(
     const reason = verdict.reason ? ` — ${verdict.reason}` : '';
     log.info(TAG, `Verdict: ${verdictLabel}${reason}`);
     if (verdict.pass) {
-      // pass — no action needed
+      await writeReviewedContentHash(cwd, config.totemDir, configRoot);
     } else if (options.override) {
       const { appendLedgerEvent } = await import('@mmnto/totem');
       const pathMod = await import('node:path');
@@ -879,7 +908,8 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     // then falls back to branch diff, and extracts changed file paths.
     const diffResult = await getDiffForReview(options, config, cwd, TAG);
     if (!diffResult) {
-      // No changes = trivial pass
+      // No changes = trivial pass — stamp content hash
+      await writeReviewedContentHash(cwd, config.totemDir, configRoot);
       return;
     }
     diff = diffResult.diff;
@@ -891,6 +921,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   if (classification.allNonCode) {
     log.info(TAG, 'Deterministic fast-path: all changed files are non-code');
     log.dim(TAG, `Skipped: ${changedFiles.join(', ')}`);
+    await writeReviewedContentHash(cwd, config.totemDir, configRoot);
     return;
   }
 
@@ -903,6 +934,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     if (!filteredDiff.trim()) {
       // After filtering, no code diff remains — fast-path PASS
       log.info(TAG, 'Deterministic fast-path: no code changes after filtering non-code files');
+      await writeReviewedContentHash(cwd, config.totemDir, configRoot);
       return;
     }
     log.dim(TAG, `Filtered ${classification.nonCodeFiles.length} non-code file(s) from diff`);
