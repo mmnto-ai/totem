@@ -22,7 +22,10 @@ export async function lessonListCommand(): Promise<void> {
   const lessons = readAllLessons(totemDir);
 
   if (lessons.length === 0) {
-    log.info(TAG, 'No lessons found. Run `totem lesson add` or `totem extract` to create lessons.');
+    log.info(
+      TAG,
+      'No lessons found. Run `totem lesson add` or `totem lesson extract` to create lessons.',
+    );
     return;
   }
 
@@ -70,7 +73,7 @@ export async function lessonAddCommand(text: string): Promise<void> {
 
   const writtenPath = writeLessonFile(lessonsDir, entry);
   const fileName = path.basename(writtenPath);
-  log.success('Totem', `Lesson saved to ${config.totemDir}/lessons/${fileName}`); // totem-ignore
+  log.success(TAG, `Lesson saved to ${config.totemDir}/lessons/${fileName}`);
 
   // Trigger incremental sync in background
   function detectSyncCommand(dir: string): { cmd: string; args: string[] } {
@@ -87,7 +90,7 @@ export async function lessonAddCommand(text: string): Promise<void> {
   }
 
   const logPath = path.join(totemDir, 'mcp-sync.log');
-  log.dim('Totem', 'Triggering background re-index...');
+  log.dim(TAG, 'Triggering background re-index...');
   try {
     const { cmd, args } = detectSyncCommand(cwd);
     const logFd = fs.openSync(logPath, 'a');
@@ -102,6 +105,6 @@ export async function lessonAddCommand(text: string): Promise<void> {
     fs.closeSync(logFd);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    log.warn('Totem', `Failed to trigger background sync: ${message}`);
+    log.warn(TAG, `Failed to trigger background sync: ${message}`);
   }
 }
