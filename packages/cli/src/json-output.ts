@@ -8,6 +8,7 @@ export interface TotemJsonSuccess<T> {
 export interface TotemJsonError {
   status: 'error';
   command: string;
+  // eslint-disable-next-line id-match -- 'error' is the standard JSON API field name for external consumers
   error: {
     message: string;
     fix?: string;
