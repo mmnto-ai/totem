@@ -138,49 +138,18 @@ describe('configGetCommand', () => {
     expect(parsed).toEqual([{ glob: '**/*.ts' }, { glob: '**/*.js' }]);
   });
 
-  it('sets exitCode 1 for missing key', async () => {
+  it('throws TotemConfigError for missing key', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const { configGetCommand } = await import('./config.js');
-    await configGetCommand('nonexistent.key');
-
-    expect(process.exitCode).toBe(1);
-    const output = stripAnsi(errorSpy.mock.calls.map((c) => String(c[0])).join('\n'));
-    expect(output).toContain("No configuration value found for key 'nonexistent.key'");
+    await expect(configGetCommand('nonexistent.key')).rejects.toThrow('nonexistent.key');
   });
 });
 
 describe('configSetCommand', () => {
-  let savedExitCode: typeof process.exitCode;
-
-  beforeEach(() => {
-    savedExitCode = process.exitCode;
-    process.exitCode = undefined;
-  });
-
-  afterEach(() => {
-    process.exitCode = savedExitCode;
-    vi.restoreAllMocks();
-  });
-
-  it('sets exitCode 1', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-
+  it('throws TotemConfigError with not-implemented message', async () => {
     const { configSetCommand } = await import('./config.js');
-    await configSetCommand('foo', 'bar');
-
-    expect(process.exitCode).toBe(1);
-  });
-
-  it('logs not-implemented message', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    const { configSetCommand } = await import('./config.js');
-    await configSetCommand('foo', 'bar');
-
-    const output = stripAnsi(errorSpy.mock.calls.map((c) => String(c[0])).join('\n'));
-    expect(output).toContain('not yet implemented');
-    expect(output).toContain('totem.config.ts');
+    await expect(configSetCommand('foo', 'bar')).rejects.toThrow('not yet implemented');
   });
 });

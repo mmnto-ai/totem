@@ -6,7 +6,9 @@ export function getNestedValue(obj: Record<string, unknown>, path: string): unkn
   let current: unknown = obj;
   for (const part of parts) {
     if (typeof current !== 'object' || current === null) return undefined;
-    current = (current as Record<string, unknown>)[part];
+    const record = current as Record<string, unknown>;
+    if (!Object.prototype.hasOwnProperty.call(record, part)) return undefined;
+    current = record[part];
   }
   return current;
 }
@@ -14,7 +16,7 @@ export function getNestedValue(obj: Record<string, unknown>, path: string): unkn
 // ─── Subcommands ───────────────────────────────────────
 
 export async function configGetCommand(key: string): Promise<void> {
-  const { log } = await import('../ui.js');
+  const { TotemConfigError } = await import('@mmnto/totem');
   const { loadConfig, resolveConfigPath } = await import('../utils.js');
 
   const cwd = process.cwd();
@@ -24,9 +26,11 @@ export async function configGetCommand(key: string): Promise<void> {
   const result = getNestedValue(config as unknown as Record<string, unknown>, key);
 
   if (result === undefined) {
-    log.error('Totem Error', `No configuration value found for key '${key}'`);
-    process.exitCode = 1;
-    return;
+    throw new TotemConfigError(
+      `No configuration value found for key '${key}'`,
+      'Check your totem.config.ts file for available keys.',
+      'CONFIG_INVALID',
+    );
   }
 
   if (typeof result === 'object' && result !== null) {
@@ -37,11 +41,10 @@ export async function configGetCommand(key: string): Promise<void> {
 }
 
 export async function configSetCommand(_key: string, _value: string): Promise<void> {
-  const { log } = await import('../ui.js');
-
-  log.error(
-    'Totem Error',
-    "'totem config set' is not yet implemented. Edit totem.config.ts directly.",
+  const { TotemConfigError } = await import('@mmnto/totem');
+  throw new TotemConfigError(
+    "'totem config set' is not yet implemented.",
+    'Edit your totem.config.ts file directly.',
+    'CONFIG_INVALID',
   );
-  process.exitCode = 1;
 }
