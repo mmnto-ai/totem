@@ -49,12 +49,13 @@ describe('dev hooks match consumer templates', () => {
     expect(consumerHook).toContain('"master"');
   });
 
-  it('dev pre-push runs totem lint and consumer template checks lint-passed flag', () => {
-    const consumerHook = buildPrePushHook();
+  it('dev pre-push runs totem lint and consumer template runs lint stateless', () => {
+    const consumerHook = buildPrePushHook('pnpm dlx @mmnto/cli');
     expect(devPrePush).toContain('totem lint');
-    // Consumer hook is a read-only checkpoint — checks .lint-passed flag, doesn't execute commands
-    expect(consumerHook).toContain('.lint-passed');
-    expect(consumerHook).not.toContain('$TOTEM_CMD');
+    // Consumer hook runs lint directly via $TOTEM_CMD — no flag files
+    expect(consumerHook).toContain('$TOTEM_CMD lint');
+    expect(consumerHook).toContain('verify-manifest');
+    expect(consumerHook).not.toContain('.lint-passed');
   });
 
   it('dev post-merge runs totem sync like consumer template', () => {

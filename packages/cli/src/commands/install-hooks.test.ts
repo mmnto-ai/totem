@@ -198,103 +198,62 @@ describe('buildPreCommitHook', () => {
 });
 
 describe('buildPrePushHook', () => {
+  const FALLBACK = 'pnpm dlx @mmnto/cli';
+
   it('contains the marker for idempotency', () => {
-    const hook = buildPrePushHook();
+    const hook = buildPrePushHook(FALLBACK);
     expect(hook).toContain(TOTEM_PREPUSH_MARKER);
   });
 
   it('starts with a shebang', () => {
-    const hook = buildPrePushHook();
+    const hook = buildPrePushHook(FALLBACK);
     expect(hook).toMatch(/^#!\/bin\/sh\n/);
   });
 
   it('mentions --no-verify override', () => {
-    const hook = buildPrePushHook();
+    const hook = buildPrePushHook(FALLBACK);
     expect(hook).toContain('git push --no-verify');
   });
 
-  it('only gates when compiled-rules.json exists', () => {
-    const hook = buildPrePushHook();
-    expect(hook).toContain('if [ -f ".totem/compiled-rules.json" ]; then');
+  it('contains verify-manifest check', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    expect(hook).toContain('verify-manifest');
+    expect(hook).toContain('compile manifest is stale');
   });
 
-  it('checks .lint-passed flag', () => {
-    const hook = buildPrePushHook();
-    expect(hook).toContain('.totem/cache/.lint-passed');
+  it('contains $TOTEM_CMD lint', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    expect(hook).toContain('$TOTEM_CMD lint');
   });
 
-  it('validates lint flag SHA against HEAD', () => {
-    const hook = buildPrePushHook();
-    expect(hook).toContain('git rev-parse HEAD');
-    expect(hook).toContain('LINT_SHA');
-    expect(hook).toContain('HEAD_SHA');
+  it('does NOT contain old flag-file references', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    expect(hook).not.toContain('.lint-passed');
+    expect(hook).not.toContain('.shield-passed');
+    expect(hook).not.toContain('.target-globs');
   });
 
-  it('does not execute any totem commands', () => {
-    const hook = buildPrePushHook();
-    expect(hook).not.toContain('$TOTEM_CMD');
-    // "totem lint" appears in error messages but not as a command invocation
-    expect(hook).not.toMatch(/^\s+totem\s+(lint|review|shield|compile)\b/m);
-    expect(hook).not.toContain('pnpm');
-    expect(hook).not.toContain('node ');
+  it('does NOT contain merge-base (no ancestry checks)', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    expect(hook).not.toContain('merge-base');
   });
 
-  it('does not include resolve block', () => {
-    const hook = buildPrePushHook();
-    expect(hook).not.toContain('command -v totem');
-    expect(hook).not.toContain('TOTEM_CMD=');
+  it('uses the resolve block', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    expect(hook).toContain('TOTEM_CMD=');
+    expect(hook).toContain('command -v totem');
   });
 
   it('uses POSIX-compatible syntax only', () => {
-    const hook = buildPrePushHook();
+    const hook = buildPrePushHook(FALLBACK);
     // Must use [ ] not [[ ]]
     expect(hook).not.toContain('[[');
     expect(hook).not.toContain(']]');
   });
 
-  it('prints actionable error messages when blocking', () => {
-    const hook = buildPrePushHook();
-    expect(hook).toContain('Push blocked');
-    expect(hook).toContain('/prepush');
-  });
-
-  it('prints diagnostic details when source files changed', () => {
-    const hook = buildPrePushHook();
-    expect(hook).toContain('Changed files');
-  });
-
-  it('prints SHA mismatch details on non-ancestor block', () => {
-    const hook = buildPrePushHook();
-    expect(hook).toContain('lint SHA');
-    expect(hook).toContain('HEAD SHA');
-  });
-
-  it('includes ancestry-aware lint validation', () => {
-    const hook = buildPrePushHook();
-    expect(hook).toContain('git merge-base --is-ancestor');
-    expect(hook).toContain('LINT_SHA');
-  });
-
-  it('reads target globs from cache file', () => {
-    const hook = buildPrePushHook();
-    expect(hook).toContain('.totem/cache/.target-globs');
-    expect(hook).toContain('TARGET_GLOBS');
-  });
-
-  it('falls back to common source extensions when no target-globs cache', () => {
-    const hook = buildPrePushHook();
-    expect(hook).toContain('*.ts *.tsx *.js *.jsx');
-  });
-
-  it('uses git diff to check for source file changes', () => {
-    const hook = buildPrePushHook();
-    expect(hook).toContain('git diff --name-only');
-    expect(hook).toContain('SRC_CHANGES');
-  });
-
-  it('handles non-ancestor commits (rebase)', () => {
-    const hook = buildPrePushHook();
-    expect(hook).toContain('non-ancestor');
+  it('embeds the provided fallback command', () => {
+    const hook = buildPrePushHook('yarn dlx @mmnto/cli');
+    expect(hook).toContain('yarn dlx @mmnto/cli');
   });
 });
 
@@ -364,7 +323,12 @@ describe('installGitHook', () => {
     const userHook = '#!/bin/sh\nrun_my_tests\n';
     fs.writeFileSync(hookPath, userHook);
 
-    installGitHook(hooksDir, 'pre-push', buildPrePushHook(), TOTEM_PREPUSH_MARKER);
+    installGitHook(
+      hooksDir,
+      'pre-push',
+      buildPrePushHook('pnpm dlx @mmnto/cli'),
+      TOTEM_PREPUSH_MARKER,
+    );
 
     const written = fs.readFileSync(hookPath, 'utf-8');
     expect(written).toContain('run_my_tests');
@@ -372,7 +336,7 @@ describe('installGitHook', () => {
   });
 
   it('is idempotent — double install does not duplicate', () => {
-    const content = buildPrePushHook();
+    const content = buildPrePushHook('pnpm dlx @mmnto/cli');
     installGitHook(hooksDir, 'pre-push', content, TOTEM_PREPUSH_MARKER);
     installGitHook(hooksDir, 'pre-push', content, TOTEM_PREPUSH_MARKER);
 
@@ -405,7 +369,12 @@ describe('installGitHook', () => {
     const pythonHook = '#!/usr/bin/env python3\nimport subprocess\n';
     fs.writeFileSync(hookPath, pythonHook);
 
-    const result = installGitHook(hooksDir, 'pre-push', buildPrePushHook(), TOTEM_PREPUSH_MARKER);
+    const result = installGitHook(
+      hooksDir,
+      'pre-push',
+      buildPrePushHook('pnpm dlx @mmnto/cli'),
+      TOTEM_PREPUSH_MARKER,
+    );
 
     expect(result).toBe('skipped-non-shell');
     const written = fs.readFileSync(hookPath, 'utf-8');
@@ -474,7 +443,12 @@ describe('installGitHook', () => {
 
   it('handles pre-commit and pre-push independently', () => {
     installGitHook(hooksDir, 'pre-commit', buildPreCommitHook(), TOTEM_PRECOMMIT_MARKER);
-    installGitHook(hooksDir, 'pre-push', buildPrePushHook(), TOTEM_PREPUSH_MARKER);
+    installGitHook(
+      hooksDir,
+      'pre-push',
+      buildPrePushHook('pnpm dlx @mmnto/cli'),
+      TOTEM_PREPUSH_MARKER,
+    );
 
     expect(fs.existsSync(path.join(hooksDir, 'pre-commit'))).toBe(true);
     expect(fs.existsSync(path.join(hooksDir, 'pre-push'))).toBe(true);
@@ -522,7 +496,7 @@ describe('generateHookHelpers', () => {
 
     const prePush = fs.readFileSync(path.join(hooksDir, 'pre-push.sh'), 'utf-8');
     expect(prePush).toContain(TOTEM_PREPUSH_MARKER);
-    expect(prePush).toContain('.lint-passed');
+    expect(prePush).toContain('verify-manifest');
   });
 
   it('is idempotent — calling twice does not error', () => {
@@ -811,8 +785,12 @@ describe('upgradePrePushHookIfNeeded', () => {
 
   /**
    * Helper: extract the totem block from a hook file and compare it against
-   * the canonical output of buildPrePushHook() (shebang stripped, trimmed).
+   * the canonical output of buildPrePushHook('pnpm dlx @mmnto/cli') (shebang stripped, trimmed).
    * Catches stale shell fragments or splice boundary bugs that toContain would miss.
+   *
+   * The new stateless format has TWO top-level if/fi blocks (resolve block +
+   * guard block). We track to the second balanced fi at depth 0 to capture both.
+   * Old single-block hooks are captured at the first balanced fi.
    */
   function extractTotemBlock(hookContent: string): string {
     const markerIdx = hookContent.indexOf(`# ${TOTEM_PREPUSH_MARKER}`);
@@ -823,6 +801,7 @@ describe('upgradePrePushHookIfNeeded', () => {
     let depth = 0;
     let endOffset = -1;
     let firstIfFound = false;
+    let balancedCount = 0;
     let match;
     while ((match = ifFiPattern.exec(afterMarker)) !== null) {
       const keyword = match[1]!.trim();
@@ -833,8 +812,11 @@ describe('upgradePrePushHookIfNeeded', () => {
         depth--;
       }
       if (firstIfFound && depth === 0) {
+        balancedCount++;
         endOffset = match.index + match[0].length;
-        break;
+        // New format has 2 top-level blocks; old format has 1.
+        // Stop after finding the block count that matches the canonical hook.
+        if (balancedCount >= 2) break;
       }
     }
     if (endOffset === -1) return '';
@@ -843,12 +825,12 @@ describe('upgradePrePushHookIfNeeded', () => {
 
   /** Canonical totem block: shebang stripped, trimmed — the expected upgrade output. */
   function expectedTotemBlock(): string {
-    return buildPrePushHook()
+    return buildPrePushHook(getFallbackCommand(tmpDir))
       .replace(/^#!\/bin\/sh\n/, '')
       .trim();
   }
 
-  it('upgrades old command-executing hook to flag-checking format', () => {
+  it('upgrades old command-executing hook to stateless format', () => {
     // Install an old-style hook that executes $TOTEM_CMD lint
     const hooksDir = path.join(tmpDir, '.git', 'hooks');
     fs.mkdirSync(hooksDir, { recursive: true });
@@ -869,9 +851,11 @@ fi
 
     expect(upgraded).toBe(true);
     const content = fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8');
-    expect(content).toContain('.lint-passed');
-    expect(content).not.toContain('$TOTEM_CMD');
+    expect(content).toContain('verify-manifest');
+    expect(content).toContain('$TOTEM_CMD lint');
     expect(content).toContain(TOTEM_PREPUSH_MARKER);
+    expect(content).not.toContain('.lint-passed');
+    expect(content).not.toContain('.target-globs');
 
     // Full block comparison: extracted totem block must match canonical output
     const actual = extractTotemBlock(content);
@@ -891,7 +875,7 @@ fi
     expect(content).toBe(userHook); // File untouched
   });
 
-  it('skips hook that already uses flag-checking format', () => {
+  it('skips hook that already uses stateless format', () => {
     // Install the current-version hook via non-interactive installer
     installHooksNonInteractive(tmpDir);
 
@@ -941,9 +925,10 @@ fi
 
     expect(upgraded).toBe(true);
     const content = fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8');
-    // New totem block should use flag-checking format
-    expect(content).toContain('.lint-passed');
-    expect(content).not.toContain('$TOTEM_CMD');
+    // New totem block should use stateless format
+    expect(content).toContain('verify-manifest');
+    expect(content).toContain('$TOTEM_CMD lint');
+    expect(content).not.toContain('.lint-passed');
     // User content should be preserved
     expect(content).toContain('curl -X POST https://hooks.example.com/deploy');
     expect(content).toContain('My custom deploy notification');
@@ -1042,7 +1027,41 @@ fi
     expect(actual).toBe(expectedTotemBlock());
   });
 
-  it('upgrades hook with auto-refresh and $TOTEM_CMD to flag-checking format', () => {
+  it('upgrades old flag-checking hook to stateless format', () => {
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    // Simulate the previous flag-checking format that used .lint-passed
+    const oldHook = `#!/bin/sh
+# ${TOTEM_PREPUSH_MARKER} — fast read-only checkpoint.
+# Override with: git push --no-verify
+
+if [ -f ".totem/compiled-rules.json" ]; then
+  if [ ! -f ".totem/cache/.lint-passed" ]; then
+    echo "[totem] Push blocked: lint has not passed." >&2
+    exit 1
+  fi
+  LINT_SHA=$(cat .totem/cache/.lint-passed 2>/dev/null | tr -d '[:space:]')
+  HEAD_SHA=$(git rev-parse HEAD 2>/dev/null)
+  if [ "$LINT_SHA" != "$HEAD_SHA" ]; then
+    exit 1
+  fi
+fi
+`;
+    fs.writeFileSync(path.join(hooksDir, 'pre-push'), oldHook);
+
+    const upgraded = upgradePrePushHookIfNeeded(tmpDir);
+
+    expect(upgraded).toBe(true);
+    const content = fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8');
+    expect(content).toContain('verify-manifest');
+    expect(content).toContain('$TOTEM_CMD lint');
+    expect(content).not.toContain('.lint-passed');
+    // Full block comparison
+    const actual = extractTotemBlock(content);
+    expect(actual).toBe(expectedTotemBlock());
+  });
+
+  it('upgrades hook with auto-refresh and $TOTEM_CMD to stateless format', () => {
     const hooksDir = path.join(tmpDir, '.git', 'hooks');
     fs.mkdirSync(hooksDir, { recursive: true });
     // Simulate a hook with the auto-refresh logic still using $TOTEM_CMD
@@ -1077,9 +1096,10 @@ fi
 
     expect(upgraded).toBe(true);
     const content = fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8');
-    // Must not contain any $TOTEM_CMD — new format is read-only
-    expect(content).not.toContain('$TOTEM_CMD');
-    expect(content).toContain('.lint-passed');
+    expect(content).toContain('verify-manifest');
+    expect(content).toContain('$TOTEM_CMD lint');
+    expect(content).not.toContain('.lint-passed');
+    expect(content).not.toContain('.shield-passed');
     // Full block comparison
     const actual = extractTotemBlock(content);
     expect(actual).toBe(expectedTotemBlock());

@@ -15,7 +15,6 @@ import {
 import {
   AI_PROMPT_BLOCK,
   CLAUDE_PRETOOLUSE_ENTRY,
-  CLAUDE_SHIELD_GATE,
   GEMINI_BEFORE_TOOL,
   GEMINI_SESSION_START,
   GEMINI_SKILL,
@@ -199,24 +198,10 @@ export function scaffoldClaudeHooks(filePath: string): {
   }
 }
 
-async function installClaudeHooks(cwd: string): Promise<HookInstallerResult[]> {
-  const results: HookInstallerResult[] = [];
-
-  // Scaffold the shield-gate script
-  const scriptRel = '.totem/hooks/shield-gate.cjs';
-  const scriptResult = scaffoldFile(
-    path.join(cwd, scriptRel),
-    CLAUDE_SHIELD_GATE,
-    TOTEM_FILE_MARKER,
-  );
-  results.push({ file: scriptRel, ...scriptResult });
-
-  // Scaffold the settings.local.json hook entry
-  const settingsRel = '.claude/settings.local.json';
-  const settingsResult = scaffoldClaudeHooks(path.join(cwd, settingsRel));
-  results.push({ file: settingsRel, ...settingsResult });
-
-  return results;
+async function installClaudeHooks(_cwd: string): Promise<HookInstallerResult[]> {
+  // Gate architecture removed (Proposal 207) — Claude hooks are now
+  // workflow-only instructions in CLAUDE.md, no bash enforcement.
+  return [];
 }
 
 // Wire up hook installers on the AI_TOOLS entries that need them.

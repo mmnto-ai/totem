@@ -624,7 +624,7 @@ async function handleVerdictResult(
     console.error(display);
 
     if (verdict.pass) {
-      await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
+      // pass — no action needed
     } else if (options.override) {
       const { appendLedgerEvent } = await import('@mmnto/totem');
 
@@ -678,8 +678,6 @@ async function handleVerdictResult(
           (msg) => log.dim(TAG, msg),
         );
       }
-
-      await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
     } else {
       if (options.learn) {
         await learnFromVerdict(
@@ -707,7 +705,7 @@ async function handleVerdictResult(
     const reason = verdict.reason ? ` — ${verdict.reason}` : '';
     log.info(TAG, `Verdict: ${verdictLabel}${reason}`);
     if (verdict.pass) {
-      await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
+      // pass — no action needed
     } else if (options.override) {
       const { appendLedgerEvent } = await import('@mmnto/totem');
       const pathMod = await import('node:path');
@@ -727,8 +725,6 @@ async function handleVerdictResult(
         },
         (msg) => log.dim(TAG, msg),
       );
-
-      await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
     } else {
       if (options.learn) await learnFromVerdict(content, diff, options, config, cwd, configRoot);
       throw new TotemError(
@@ -883,8 +879,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     // then falls back to branch diff, and extracts changed file paths.
     const diffResult = await getDiffForReview(options, config, cwd, TAG);
     if (!diffResult) {
-      // No changes = trivial pass — stamp so pre-push hooks don't block
-      await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
+      // No changes = trivial pass
       return;
     }
     diff = diffResult.diff;
@@ -896,7 +891,6 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   if (classification.allNonCode) {
     log.info(TAG, 'Deterministic fast-path: all changed files are non-code');
     log.dim(TAG, `Skipped: ${changedFiles.join(', ')}`);
-    await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
     return;
   }
 
@@ -909,7 +903,6 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     if (!filteredDiff.trim()) {
       // After filtering, no code diff remains — fast-path PASS
       log.info(TAG, 'Deterministic fast-path: no code changes after filtering non-code files');
-      await writeShieldPassedFlag(cwd, config.totemDir, configRoot);
       return;
     }
     log.dim(TAG, `Filtered ${classification.nonCodeFiles.length} non-code file(s) from diff`);
