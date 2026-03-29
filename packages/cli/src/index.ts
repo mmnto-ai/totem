@@ -241,6 +241,7 @@ async function runReview(opts: {
     await lintCommand({
       format: (opts.format as 'text' | 'sarif' | 'json') ?? 'text',
       staged: opts.staged,
+      out: opts.out,
     });
     return;
   }
