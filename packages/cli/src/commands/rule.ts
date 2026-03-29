@@ -68,6 +68,25 @@ export async function ruleListCommand(): Promise<void> {
   const { log, dim, bold } = await import('../ui.js');
   const { rules } = await loadRulesOrExit();
 
+  // JSON mode — output structured data and return
+  const { isJsonMode, printJson } = await import('../json-output.js');
+  if (isJsonMode()) {
+    printJson({
+      status: 'success',
+      command: 'rule list',
+      data: {
+        rules: rules.map((r) => ({
+          hash: r.lessonHash,
+          heading: r.lessonHeading,
+          engine: r.engine,
+          severity: r.severity,
+          fileGlobs: r.fileGlobs,
+        })),
+      },
+    });
+    return;
+  }
+
   if (rules.length === 0) {
     log.error('Totem Error', 'No compiled rules found. Run `totem compile` first.');
     return;
