@@ -56,8 +56,10 @@ export class TotemHelp extends Help {
     const visibleNames = new Set(visible.map((c) => c.name));
     const usedNames = new Set<string>();
 
-    let output = `Totem — governance engine for AI-assisted codebases\n\n`;
-    output += `Usage: totem [command]\n\n`;
+    const cliName = cmd.name();
+    const cliDescription = cmd.description() || 'Totem';
+    let output = `${cliDescription}\n\n`;
+    output += `Usage: ${cliName} [command]\n\n`;
 
     const COLUMN_PADDING = 2;
 
@@ -99,7 +101,7 @@ export class TotemHelp extends Help {
       output += '\n';
     }
 
-    output += `Run 'totem <command> --help' for details on a specific command.\n`;
+    output += `Run '${cliName} <command> --help' for details on a specific command.\n`;
     output += `Version: ${cmd.version()}\n`;
 
     return output;
