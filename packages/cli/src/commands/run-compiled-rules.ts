@@ -156,8 +156,10 @@ export async function runCompiledRules(
     const zeroMatchRules: CompiledRule[] = [];
     for (const rule of rules) {
       if (rule.fileGlobs && rule.fileGlobs.length > 0) {
-        const positive = rule.fileGlobs.filter((g) => !g.startsWith('!'));
-        const negative = rule.fileGlobs.filter((g) => g.startsWith('!')).map((g) => g.slice(1));
+        const positive = rule.fileGlobs.filter((g) => typeof g === 'string' && !g.startsWith('!'));
+        const negative = rule.fileGlobs
+          .filter((g): g is string => typeof g === 'string' && g.startsWith('!'))
+          .map((g) => g.slice(1));
         const hasMatch = diffFiles.some((file) => {
           const positiveMatch = positive.length === 0 || positive.some((g) => matchesGlob(file, g));
           const negativeMatch = negative.some((g) => matchesGlob(file, g));

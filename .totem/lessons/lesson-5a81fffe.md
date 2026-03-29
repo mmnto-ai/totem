@@ -1,8 +1,4 @@
-## Lesson — Lesson — Use sequential agents on a shared branch
-
-**Tags:** workflow, agents, git, worktree, delegation
-
-## Lesson — Use sequential agents on a shared branch for batched PRs
+## Lesson — Use sequential agents for batched PRs
 
 **Tags:** workflow, agents, git
 
