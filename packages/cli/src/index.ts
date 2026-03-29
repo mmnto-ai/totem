@@ -634,7 +634,8 @@ program
   .command('hooks')
   .description('Install git hooks (pre-commit, pre-push, post-merge) non-interactively')
   .option('--check', 'Verify hooks are installed (exit 1 if missing)')
-  .action(async (opts: { check?: boolean }) => {
+  .option('-f, --force', 'Force overwrite existing hooks')
+  .action(async (opts: { check?: boolean; force?: boolean }) => {
     try {
       const { hooksCommand } = await import('./commands/install-hooks.js');
       hooksCommand(opts);

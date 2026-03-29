@@ -307,12 +307,23 @@ export function installGitHook(
   hookName: string,
   hookContent: string,
   marker: string,
-): 'installed' | 'exists' | 'appended' | 'skipped-non-shell' {
+  force?: boolean,
+): 'installed' | 'exists' | 'appended' | 'skipped-non-shell' | 'overwritten' {
   const hookPath = path.join(hooksDir, hookName);
 
   if (fs.existsSync(hookPath)) {
     const existing = fs.readFileSync(hookPath, 'utf-8');
     if (existing.includes(marker)) {
+      if (force) {
+        // Force overwrite — replace the entire hook with the new content
+        fs.writeFileSync(hookPath, hookContent);
+        try {
+          fs.chmodSync(hookPath, 0o755);
+        } catch {
+          // chmod may fail on Windows — hooks still work via git bash
+        }
+        return 'overwritten';
+      }
       return 'exists';
     }
 
@@ -346,8 +357,8 @@ export function installGitHook(
 }
 
 export interface EnforcementHookResult {
-  preCommit: 'installed' | 'exists' | 'appended' | 'skipped' | 'skipped-non-shell';
-  prePush: 'installed' | 'exists' | 'appended' | 'skipped' | 'skipped-non-shell';
+  preCommit: 'installed' | 'exists' | 'appended' | 'skipped' | 'skipped-non-shell' | 'overwritten';
+  prePush: 'installed' | 'exists' | 'appended' | 'skipped' | 'skipped-non-shell' | 'overwritten';
 }
 
 /**
@@ -448,17 +459,20 @@ export async function installHooksCommand(): Promise<void> {
 // ─── Non-interactive hooks command ───────────────────
 
 export interface HooksCommandResult {
-  preCommit: 'installed' | 'exists' | 'appended' | 'skipped-non-shell';
-  prePush: 'installed' | 'exists' | 'appended' | 'skipped-non-shell';
-  postMerge: 'installed' | 'exists' | 'appended' | 'skipped-non-shell';
-  postCheckout: 'installed' | 'exists' | 'appended' | 'skipped-non-shell';
+  preCommit: 'installed' | 'exists' | 'appended' | 'skipped-non-shell' | 'overwritten';
+  prePush: 'installed' | 'exists' | 'appended' | 'skipped-non-shell' | 'overwritten';
+  postMerge: 'installed' | 'exists' | 'appended' | 'skipped-non-shell' | 'overwritten';
+  postCheckout: 'installed' | 'exists' | 'appended' | 'skipped-non-shell' | 'overwritten';
 }
 
 /**
  * Non-interactive hook installer for `totem hooks` and `prepare` scripts.
  * Installs pre-commit, pre-push, and post-merge hooks without prompting.
  */
-export function installHooksNonInteractive(cwd: string): HooksCommandResult | null {
+export function installHooksNonInteractive(
+  cwd: string,
+  force?: boolean,
+): HooksCommandResult | null {
   // Guard: must be a git repo — resolve root from any subdirectory
   const gitRoot = resolveGitRoot(cwd);
   if (!gitRoot) {
@@ -482,6 +496,7 @@ export function installHooksNonInteractive(cwd: string): HooksCommandResult | nu
     'pre-commit',
     buildPreCommitHook(),
     TOTEM_PRECOMMIT_MARKER,
+    force,
   );
 
   const prePush = installGitHook(
@@ -489,10 +504,17 @@ export function installHooksNonInteractive(cwd: string): HooksCommandResult | nu
     'pre-push',
     buildPrePushHook(fallbackCmd),
     TOTEM_PREPUSH_MARKER,
+    force,
   );
 
   const postMergeContent = buildHookContent(fallbackCmd);
-  const postMerge = installGitHook(hooksDir, 'post-merge', postMergeContent, TOTEM_HOOK_MARKER);
+  const postMerge = installGitHook(
+    hooksDir,
+    'post-merge',
+    postMergeContent,
+    TOTEM_HOOK_MARKER,
+    force,
+  );
 
   const postCheckoutContent = buildPostCheckoutHookContent(fallbackCmd);
   const postCheckout = installGitHook(
@@ -500,6 +522,7 @@ export function installHooksNonInteractive(cwd: string): HooksCommandResult | nu
     'post-checkout',
     postCheckoutContent,
     TOTEM_CHECKOUT_MARKER,
+    force,
   );
 
   return { preCommit, prePush, postMerge, postCheckout };
@@ -543,7 +566,7 @@ export function checkHooksInstalled(cwd: string): boolean {
 /**
  * CLI entrypoint for `totem hooks [--check]`.
  */
-export function hooksCommand(opts: { check?: boolean }): void {
+export function hooksCommand(opts: { check?: boolean; force?: boolean }): void {
   const cwd = process.cwd();
 
   // Resolve git root once — guards both --check and install paths
@@ -564,7 +587,7 @@ export function hooksCommand(opts: { check?: boolean }): void {
     return;
   }
 
-  const result = installHooksNonInteractive(cwd);
+  const result = installHooksNonInteractive(cwd, opts.force);
 
   if (!result) {
     // Hook manager detected — guidance already printed by installHooksNonInteractive
@@ -588,6 +611,9 @@ export function hooksCommand(opts: { check?: boolean }): void {
         break;
       case 'exists':
         console.error(`[Totem] ${name} hook already installed.`);
+        break;
+      case 'overwritten':
+        console.error(`[Totem] Force-overwritten ${name} hook.`);
         break;
       case 'skipped-non-shell':
         console.error(

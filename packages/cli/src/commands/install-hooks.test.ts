@@ -461,6 +461,41 @@ describe('installGitHook', () => {
     expect(prePush).toContain(TOTEM_PREPUSH_MARKER);
     expect(prePush).not.toContain(TOTEM_PRECOMMIT_MARKER);
   });
+
+  it('overwrites existing hook when force is true', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-push');
+    // Write an old-format hook with the marker
+    fs.writeFileSync(hookPath, `#!/bin/sh\n# ${TOTEM_PREPUSH_MARKER}\n$TOTEM_CMD lint\n`);
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-push',
+      buildPrePushHook('pnpm dlx @mmnto/cli'),
+      TOTEM_PREPUSH_MARKER,
+      true, // force
+    );
+
+    expect(result).toBe('overwritten');
+    const content = fs.readFileSync(hookPath, 'utf-8');
+    expect(content).toContain('verify-manifest'); // new format
+    expect(content).not.toContain('$TOTEM_CMD lint\n'); // old format gone (trailing newline distinguishes bare line)
+  });
+
+  it('returns exists when marker found and force is false', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-push');
+    fs.writeFileSync(hookPath, `#!/bin/sh\n# ${TOTEM_PREPUSH_MARKER}\nold content\n`);
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-push',
+      buildPrePushHook('pnpm dlx @mmnto/cli'),
+      TOTEM_PREPUSH_MARKER,
+    );
+
+    expect(result).toBe('exists');
+  });
 });
 
 // ─── generateHookHelpers ────────────────────────────
@@ -617,6 +652,23 @@ describe('installHooksNonInteractive', () => {
     const content = fs.readFileSync(path.join(tmpDir, '.git', 'hooks', 'pre-push'), 'utf-8');
     expect(content).toContain('run_my_tests');
     expect(content).toContain(TOTEM_PREPUSH_MARKER);
+  });
+
+  it('force-overwrites all hooks when force is true', () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+
+    // First install — creates hooks
+    installHooksNonInteractive(tmpDir);
+
+    // Second install with force — overwrites all hooks
+    const result = installHooksNonInteractive(tmpDir, true);
+
+    expect(result).not.toBeNull();
+    expect(result!.preCommit).toBe('overwritten');
+    expect(result!.prePush).toBe('overwritten');
+    expect(result!.postMerge).toBe('overwritten');
+    expect(result!.postCheckout).toBe('overwritten');
   });
 });
 
