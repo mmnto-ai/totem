@@ -638,9 +638,6 @@ export function upgradePrePushHookIfNeeded(cwd: string): boolean {
     // Only upgrade hooks that Totem owns (have our marker)
     if (!content.includes(TOTEM_PREPUSH_MARKER)) return false;
 
-    // Upgrade if: hook uses old format (missing .lint-passed flag check)
-    if (content.includes('.lint-passed')) return false;
-
     // Splice only the totem-managed block, preserving any user-appended content.
     const markerIdx = content.indexOf(`# ${TOTEM_PREPUSH_MARKER}`);
     if (markerIdx === -1) return false;
@@ -669,6 +666,11 @@ export function upgradePrePushHookIfNeeded(cwd: string): boolean {
     }
 
     if (endOffset === -1) return false;
+
+    // Upgrade if: totem-managed block already uses new format (check block only, not user content)
+    const existingTotemBlock = afterMarker.slice(0, endOffset);
+    if (existingTotemBlock.includes('.lint-passed')) return false;
+
     const blockEnd = markerIdx + endOffset;
 
     // Build the replacement block (strip shebang — we're splicing into existing file)
