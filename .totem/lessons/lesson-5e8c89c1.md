@@ -1,4 +1,4 @@
-## Lesson — Decoupling mandatory product checks from workflow-specific
+## Lesson — Decouple product gates from workflow
 
 **Tags:** architecture, workflow
 

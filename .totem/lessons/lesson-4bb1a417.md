@@ -1,4 +1,4 @@
-## Lesson — Stateful flag files tied to Git SHAs frequently invalidate
+## Lesson — SHA-based flag files break on commit
 
 **Tags:** git, dx, architecture
 

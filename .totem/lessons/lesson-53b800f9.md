@@ -1,4 +1,4 @@
-## Lesson — Use native regex matching like [[ $var =~ pattern ]]
+## Lesson — Use bash [[ =~ ]] not echo | grep
 
 **Tags:** bash, performance
 

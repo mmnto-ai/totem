@@ -1,4 +1,4 @@
-## Lesson — Always append || exit 1 to cd commands within shell scripts.
+## Lesson — Always use 'cd ... || exit 1' in shell scripts
 
 **Tags:** bash, devops
 

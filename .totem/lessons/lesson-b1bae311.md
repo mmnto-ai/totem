@@ -1,4 +1,4 @@
-## Lesson — Follow the 'Sensors, Not Actuators' pattern by using
+## Lesson — Sensors, not actuators for hooks
 
 **Tags:** architecture, llm-context
 
