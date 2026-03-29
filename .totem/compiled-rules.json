@@ -5726,14 +5726,127 @@
     {
       "lessonHash": "ca8af19955c5722b",
       "lessonHeading": "HTML comment totem-context directives are not parsed by lint",
+      "pattern": "(<!--|//)\\s*totem-(context|ignore)",
       "message": "totem-context and totem-ignore directives are not supported in Markdown files. Use ignorePatterns in the config instead.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(<!--|//)\\s*totem-(context|ignore)",
       "compiledAt": "2026-03-27T20:45:47.092Z",
       "createdAt": "2026-03-27T20:45:47.092Z",
       "fileGlobs": [
         "**/*.md"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "2d364f952af19014",
+      "lessonHeading": "2026-03-07T06:05:56.069Z",
+      "message": "Always combine 'typeof val === \"object\"' with a truthiness check (e.g., 'val && ...') because 'typeof null' is 'object'.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "^[^&\\n]*\\btypeof\\s+[\\w$]+\\s*===\\s*['\"]object['\"]",
+      "compiledAt": "2026-03-29T04:11:54.018Z",
+      "createdAt": "2026-03-29T04:11:54.018Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ]
+    },
+    {
+      "lessonHash": "36651aa381e0beee",
+      "lessonHeading": "When parsing shell scripts to replace code blocks,",
+      "message": "Naive 'fi' keyword matching in shell parsing logic can be broken by nested conditionals. Use depth-aware parsing, specific end-of-block markers, or global matching to ensure the entire outer conditional is captured.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\.(match|test|includes|indexOf|search|startsWith|endsWith)\\(\\s*(['\"]fi['\"]|/\\bfi\\b/)\\s*\\)|={2,3}\\s*['\"]fi['\"]",
+      "compiledAt": "2026-03-29T04:11:32.881Z",
+      "createdAt": "2026-03-29T04:11:32.881Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.cjs",
+        "**/*.mjs"
+      ]
+    },
+    {
+      "lessonHash": "b4f1c47f1fc0eff6",
+      "lessonHeading": "When synthesizing rules from diff hunks, ensure",
+      "message": "Rule pattern starts with a unified-diff prefix (+, -, or space). Ensure prefixes are stripped during synthesis to prevent 'dead' patterns that only match patch files instead of source code.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bpattern\\b\\s*[:=]\\s*[\"'][\\+\\-\\ ]",
+      "compiledAt": "2026-03-29T04:11:45.370Z",
+      "createdAt": "2026-03-29T04:11:45.370Z",
+      "fileGlobs": [
+        "**/compiled-rules.json",
+        "**/totem.config.ts"
+      ]
+    },
+    {
+      "lessonHash": "78950a5239894249",
+      "lessonHeading": "Shared documentation and lessons should use portable",
+      "message": "Use portable commands like 'git rev-parse --show-toplevel' instead of hardcoded local file paths (e.g., /Users/... or C:\\Users\\...) to ensure instructions work for all contributors.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "([a-zA-Z]:[\\\\\\\\/]+Users|\\/(Users|home))\\/",
+      "compiledAt": "2026-03-29T04:12:37.513Z",
+      "createdAt": "2026-03-29T04:12:37.513Z",
+      "fileGlobs": [
+        "**/*.md",
+        "**/*.sh",
+        "**/*.yml",
+        "**/*.yaml",
+        "**/*.ts",
+        "**/*.js",
+        "!**/*.test.ts",
+        "!**/*.test.js"
+      ]
+    },
+    {
+      "lessonHash": "a6aea3c165ceffde",
+      "lessonHeading": "Even when data is missing, wrap the fallback instructions",
+      "message": "Wrap fallback instructions and 'no context' notes in XML tags (e.g., <context_note>) to maintain consistent schema for the LLM and reduce parsing ambiguity.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "['\\\"\\`](?![\\\\s]*<)(No\\\\s+context|No\\\\s+data|Missing\\\\s+context|None\\\\s+found|Not\\\\s+available)[^'\\\"\\`]*['\\\"\\`]",
+      "compiledAt": "2026-03-29T04:12:50.449Z",
+      "createdAt": "2026-03-29T04:12:50.449Z",
+      "fileGlobs": [
+        "packages/mcp/**/*.ts",
+        "packages/core/**/*.ts",
+        "!**/*.test.ts"
+      ]
+    },
+    {
+      "lessonHash": "b586d48a5b8eeabc",
+      "lessonHeading": "Naive substring matching on paths, such as using",
+      "message": "Avoid naive substring matching on paths (e.g., .includes('adapters/')). Use regex boundaries or path-splitting to prevent incorrect matches (e.g., matching 'src/notadapters/').",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "$OBJ.includes($STR)",
+      "compiledAt": "2026-03-29T04:14:51.955Z",
+      "createdAt": "2026-03-29T04:14:51.955Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ]
+    },
+    {
+      "lessonHash": "289b4c2a73ab0110",
+      "lessonHeading": "Simple quote-tracking logic for string literals fails",
+      "message": "Simple quote-tracking logic (e.g., [^\"]*) fails on escaped backslashes. Use a pattern that handles escapes, such as (?:[^\"\\\\]|\\\\.)*",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "(\"\\\\\\[\\\\^\\\\\\\"\\\\\\][\\\\*\\\\+]\\\\\\\"|'\\\\\\[\\\\^'\\\\\\][\\\\*\\\\+]')",
+      "compiledAt": "2026-03-29T04:16:04.681Z",
+      "createdAt": "2026-03-29T04:16:04.681Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "!**/*.test.ts"
       ]
     }
   ],
@@ -6322,6 +6435,13 @@
     "5c1a32a9957d5470",
     "57e17f41422fa06c",
     "4c4bbb2c2adff887",
-    "486a977cffc2714a"
+    "486a977cffc2714a",
+    "693e374aec00446e",
+    "a1765b40647a004b",
+    "820cd0fea3e2ddd0",
+    "1fe928eb7ce40ea9",
+    "b19e9c722141fa3a",
+    "6fb5a5b660f4652d",
+    "18fc834ab4100934"
   ]
 }
