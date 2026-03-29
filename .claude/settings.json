@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/pre-push-check.sh"
+            "command": "bash .claude/hooks/review-gate.sh"
           }
         ]
       }

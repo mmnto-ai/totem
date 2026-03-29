@@ -18,7 +18,7 @@ import {
   parseVerdict,
   SHIELD_LEARN_SYSTEM_PROMPT,
   STRUCTURAL_SYSTEM_PROMPT,
-  writeShieldPassedFlag,
+  writeReviewedContentHash,
 } from './shield.js';
 
 describe('parseVerdict', () => {
@@ -350,13 +350,13 @@ describe('shield learn system prompt', () => {
   });
 });
 
-// ─── writeShieldPassedFlag ───────────────────────────
+// ─── writeReviewedContentHash ───────────────────────────
 
-describe('writeShieldPassedFlag', () => {
+describe('writeReviewedContentHash', () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-shield-flag-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-content-hash-'));
   });
 
   afterEach(() => {
@@ -364,27 +364,31 @@ describe('writeShieldPassedFlag', () => {
   });
 
   it('does not throw on success or failure', async () => {
-    // writeShieldPassedFlag catches all errors internally — should never throw
-    await expect(writeShieldPassedFlag(tmpDir, '.totem')).resolves.toBeUndefined();
+    await expect(writeReviewedContentHash(tmpDir, '.totem')).resolves.toBeUndefined();
   });
 
   it('silently handles non-git directories', async () => {
-    await writeShieldPassedFlag(tmpDir, '.totem');
-    expect(fs.existsSync(path.join(tmpDir, '.totem', 'cache', '.shield-passed'))).toBe(false);
+    await writeReviewedContentHash(tmpDir, '.totem');
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'cache', '.reviewed-content-hash'))).toBe(
+      false,
+    );
   });
 
-  it('writes HEAD hash in a git repository', async () => {
+  it('writes content hash (not Git SHA) in a git repository with source files', async () => {
     const { execSync } = await import('node:child_process');
     execSync('git init', { cwd: tmpDir, stdio: 'pipe' });
-    execSync('git -c user.name="test" -c user.email="test@test" commit --allow-empty -m "init"', {
+    fs.writeFileSync(path.join(tmpDir, 'index.ts'), 'export const x = 1;');
+    execSync('git add .', { cwd: tmpDir, stdio: 'pipe' });
+    execSync('git -c user.name="test" -c user.email="test@test" commit -m "init"', {
       cwd: tmpDir,
       stdio: 'pipe',
     });
-    await writeShieldPassedFlag(tmpDir, '.totem');
-    const flagPath = path.join(tmpDir, '.totem', 'cache', '.shield-passed');
+    await writeReviewedContentHash(tmpDir, '.totem');
+    const flagPath = path.join(tmpDir, '.totem', 'cache', '.reviewed-content-hash');
     expect(fs.existsSync(flagPath)).toBe(true);
     const content = fs.readFileSync(flagPath, 'utf-8');
-    expect(content).toMatch(/^[a-f0-9]{40}$/);
+    // SHA-256 hex = 64 chars (not 40 like Git SHA)
+    expect(content).toMatch(/^[a-f0-9]{64}$/);
   });
 });
 

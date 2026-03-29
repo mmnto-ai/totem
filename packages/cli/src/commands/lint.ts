@@ -76,53 +76,6 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     configRoot,
   });
 
-  // Write target-globs cache for ancestry-aware pre-push hook
-  try {
-    const fs = await import('node:fs');
-    const allGlobs = new Set<string>();
-    for (const rule of rules) {
-      if (rule.fileGlobs) {
-        for (const g of rule.fileGlobs) {
-          if (typeof g === 'string' && !g.startsWith('!')) {
-            allGlobs.add(g);
-          }
-        }
-      }
-    }
-    const cacheDir = path.join(configRoot, config.totemDir, 'cache');
-    const globsPath = path.join(cacheDir, '.target-globs');
-    if (allGlobs.size > 0) {
-      if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
-      fs.writeFileSync(globsPath, [...allGlobs].sort().join('\n') + '\n');
-    } else if (fs.existsSync(globsPath)) {
-      fs.unlinkSync(globsPath);
-    }
-  } catch {
-    // Non-fatal — cache is a convenience for pre-push hooks
-  }
-
-  // Write or clear lint-passed flag for pre-push hook checkpoint
-  try {
-    const fs = await import('node:fs');
-    const cacheDir = path.join(configRoot, config.totemDir, 'cache');
-    const flagPath = path.join(cacheDir, '.lint-passed');
-    const hasErrors = violations.some((v) => (v.rule.severity ?? 'error') === 'error');
-    if (!hasErrors) {
-      const { getHeadSha } = await import('@mmnto/totem');
-      if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
-      const head = getHeadSha(cwd);
-      if (head) {
-        fs.writeFileSync(flagPath, head);
-      } else if (fs.existsSync(flagPath)) {
-        fs.unlinkSync(flagPath);
-      }
-    } else if (fs.existsSync(flagPath)) {
-      fs.unlinkSync(flagPath);
-    }
-  } catch {
-    // Non-fatal — flag is a convenience for pre-push hooks
-  }
-
   // Post PR comment if requested (zero-API-keys invariant: only behind --pr-comment flag)
   if (options.prComment == null) return;
 

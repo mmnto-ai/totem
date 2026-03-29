@@ -7,18 +7,20 @@
 - `kebab-case.ts` files, `err` (never `error`) in catch blocks.
 - Run `pnpm run format` before committing.
 
-## Totem Workflow (BLOCKING)
+## Totem Workflow
 
-- Before starting issue work: run `totem spec <issue>`
-- Before writing code: call `mcp__totem-dev__search_knowledge` with what you're changing
-- After extracting lessons: run `totem compile` before pushing — the CMA CI gate rejects stale manifests.
-- Before pushing: run `totem shield`. Fix violations — never bypass.
+Not mechanically enforced. Follow these because they reduce PR bot noise.
+
+- **Before coding:** Run `/preflight <issue>`. Create a feature branch.
+- **Before pushing:** `pnpm run format` → `totem lint` → `totem review` → verify compile manifest is current.
+- **After merging:** `totem lesson extract <prs>` → `totem lesson compile --cloud <url>` (6+ lessons).
 - **NEVER** use `git push --no-verify`, `totem-ignore`, or `eslint-disable` without a ticket.
+- Git pre-push hook runs `totem lint` + `totem verify-manifest` (stateless, no LLM).
 
 ## Skills
 
 - `/preflight <issue>` — spec + search before coding
-- `/prepush` — lint + shield before push
+- `/prepush` — format + lint + review before push
 - `/postmerge <prs>` — extract lessons after merge
 - `/signoff` — end-of-session memory + journal
 
