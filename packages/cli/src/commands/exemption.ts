@@ -150,6 +150,13 @@ export async function exemptionAddCommand(options: {
   const before = readSharedExemptions(totemDir, (msg) => log.dim(TAG, msg));
   const safeRule = sanitizeInput(options.rule.trim());
   const safeReason = sanitizeInput(options.reason.trim());
+
+  if (!safeRule || !safeReason) {
+    log.error('Totem Error', 'Rule label and reason must contain printable characters.');
+    process.exitCode = 1;
+    return;
+  }
+
   const after = addManualSuppression(before, safeRule, safeReason);
 
   if (after.exemptions.length === before.exemptions.length) {
