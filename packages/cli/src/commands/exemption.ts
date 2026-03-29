@@ -147,11 +147,17 @@ export async function exemptionAddCommand(options: {
 
   const { totemDir } = await resolveTotemPaths();
 
-  let shared = readSharedExemptions(totemDir, (msg) => log.dim(TAG, msg));
+  const before = readSharedExemptions(totemDir, (msg) => log.dim(TAG, msg));
   const safeRule = sanitizeInput(options.rule.trim());
   const safeReason = sanitizeInput(options.reason.trim());
-  shared = addManualSuppression(shared, safeRule, safeReason);
-  writeSharedExemptions(totemDir, shared, (msg) => log.dim(TAG, msg));
+  const after = addManualSuppression(before, safeRule, safeReason);
+
+  if (after.exemptions.length === before.exemptions.length) {
+    log.dim(TAG, `Exemption for '${safeRule}' already exists — skipping.`);
+    return;
+  }
+
+  writeSharedExemptions(totemDir, after, (msg) => log.dim(TAG, msg));
 
   appendLedgerEvent(
     totemDir,
@@ -166,7 +172,7 @@ export async function exemptionAddCommand(options: {
     (msg) => log.dim(TAG, msg),
   );
 
-  log.success(TAG, `Exemption added for '${options.rule}'`);
+  log.success(TAG, `Exemption added for '${safeRule}'`);
 }
 
 export async function exemptionAuditCommand(): Promise<void> {
