@@ -52,7 +52,7 @@ if [[ "$COMMAND" == *"gh pr create"* ]]; then
     if git merge-base --is-ancestor "$FLAG_CONTENT" "$CURRENT_HEAD" 2>/dev/null; then
       TARGET_GLOBS_FILE="$GIT_ROOT/.totem/cache/.target-globs"
       if [ -f "$TARGET_GLOBS_FILE" ]; then
-        TARGET_GLOBS=$(cat "$TARGET_GLOBS_FILE" 2>/dev/null | tr '\n' ' ')
+        TARGET_GLOBS=$(cat "$TARGET_GLOBS_FILE" 2>/dev/null | xargs)
       fi
       if [ -z "$TARGET_GLOBS" ]; then
         TARGET_GLOBS="*.ts *.tsx *.js *.jsx"

@@ -291,7 +291,7 @@ if [ -f ".totem/compiled-rules.json" ]; then
     if git merge-base --is-ancestor "$LINT_SHA" "$HEAD_SHA" 2>/dev/null; then
       # Read target globs from cache, fall back to common source extensions
       if [ -f ".totem/cache/.target-globs" ]; then
-        TARGET_GLOBS=$(cat .totem/cache/.target-globs 2>/dev/null | tr '\\n' ' ')
+        TARGET_GLOBS=$(cat .totem/cache/.target-globs 2>/dev/null | xargs)
       fi
       if [ -z "$TARGET_GLOBS" ]; then
         TARGET_GLOBS="*.ts *.tsx *.js *.jsx"
