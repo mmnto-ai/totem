@@ -59,6 +59,8 @@ export class TotemHelp extends Help {
     let output = `Totem — governance engine for AI-assisted codebases\n\n`;
     output += `Usage: totem [command]\n\n`;
 
+    const COLUMN_PADDING = 2;
+
     // Render each group
     for (const group of COMMAND_GROUPS) {
       const groupCmds = group.commands
@@ -73,7 +75,7 @@ export class TotemHelp extends Help {
       if (groupCmds.length === 0) continue;
 
       output += `${group.name}:\n`;
-      const pad = Math.max(...groupCmds.map((c) => c.displayName.length)) + 2;
+      const pad = Math.max(...groupCmds.map((c) => c.displayName.length)) + COLUMN_PADDING;
       for (const c of groupCmds) {
         output += `  ${c.displayName.padEnd(pad)}${c.description}\n`;
       }
@@ -88,7 +90,7 @@ export class TotemHelp extends Help {
         const badge = LLM_COMMANDS.has(c.name) ? ' [LLM]' : '';
         return c.name + badge;
       });
-      const pad = Math.max(...allNames.map((n) => n.length)) + 2;
+      const pad = Math.max(...allNames.map((n) => n.length)) + COLUMN_PADDING;
       for (let i = 0; i < ungrouped.length; i++) {
         const c = ungrouped[i]!;
         const displayName = allNames[i]!;
