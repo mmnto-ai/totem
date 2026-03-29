@@ -6062,6 +6062,88 @@
         "!**/*.spec.ts"
       ],
       "severity": "warning"
+    },
+    {
+      "lessonHash": "b586d48a5b8eeabc",
+      "lessonHeading": "Naive substring matching on paths, such as using",
+      "pattern": "\\.(includes|indexOf)\\(['\"][^'\"]*\\/[^'\"]*['\"]\\)",
+      "message": "Avoid naive substring matching on paths with .includes() or .indexOf(). Use regex boundaries or path-splitting to prevent false positives (e.g., 'notadapters/' matching 'adapters/').",
+      "engine": "regex",
+      "compiledAt": "2026-03-29T00:41:52.112Z",
+      "createdAt": "2026-03-29T00:41:52.112Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "83ded24440b108d3",
+      "lessonHeading": "Testing hook upgrades by checking only for a marker",
+      "pattern": "expect\\(.*(content|file|output).*\\)\\.(toContain|toMatch)\\(",
+      "message": "Assert the full normalized file content instead of just checking for a marker to ensure no stale shell fragments remain.",
+      "engine": "regex",
+      "compiledAt": "2026-03-29T00:42:33.409Z",
+      "createdAt": "2026-03-29T00:42:33.409Z",
+      "fileGlobs": [
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "f341848d23d8ed4b",
+      "lessonHeading": "Always verify that glob entries are strings before calling",
+      "pattern": "\\.(?:map|filter|find|some|every)\\(\\s*\\(?(\\w+)\\)?\\s*=>\\s*(?!.*typeof\\s+\\1)\\1\\.(?:startsWith|includes)\\(",
+      "message": "Always verify that glob entries are strings (e.g., typeof entry === 'string') before calling .startsWith() or .includes() to prevent runtime failures with heterogeneous arrays.",
+      "engine": "regex",
+      "compiledAt": "2026-03-29T00:43:04.185Z",
+      "createdAt": "2026-03-29T00:43:04.185Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "09e5e0cd5f6570a9",
+      "lessonHeading": "Naive substring matching like includes('dir/') can trigger",
+      "message": "Avoid naive substring matching for paths (e.g., .includes('dir/')). Use regex boundaries or path normalization to ensure logic only applies to intended directories.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\.includes\\(['\"][^'\"]*\\/[^'\"]*['\"]\\)",
+      "compiledAt": "2026-03-29T00:46:41.280Z",
+      "createdAt": "2026-03-29T00:46:41.280Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
+        "**/*.mjs",
+        "**/*.cjs"
+      ]
+    },
+    {
+      "lessonHash": "cccd9363ba696d53",
+      "lessonHeading": "Explicitly verify that glob entries are strings",
+      "message": "Explicitly verify that glob entries are strings (typeof === 'string') before calling .startsWith() or .endsWith() to prevent runtime crashes when processing arrays that might contain non-string types.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\b(glob|pattern|entry|item)s?\\.(startsWith|endsWith)\\(",
+      "compiledAt": "2026-03-29T00:47:56.145Z",
+      "createdAt": "2026-03-29T00:47:56.145Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.tsx",
+        "**/*.jsx",
+        "!**/*.test.ts",
+        "!**/*.test.js"
+      ]
     }
   ],
   "nonCompilable": [
@@ -6692,6 +6774,26 @@
     "7b8203b63ce7fd54",
     "a065e1af3dd2e7dc",
     "ee1d6e47929fa6a2",
-    "041a730c51b27a42"
+    "041a730c51b27a42",
+    "36651aa381e0beee",
+    "b4f1c47f1fc0eff6",
+    "b19e9c722141fa3a",
+    "18201ef95110c27e",
+    "9f9c425645c7fb91",
+    "f59d4be431477d55",
+    "e196023c74162777",
+    "681935b154aac0ed",
+    "9ee382736f5d5302",
+    "393bd80749271b9f",
+    "1fe928eb7ce40ea9",
+    "fd5af9eb0de34a38",
+    "289b4c2a73ab0110",
+    "0d0fe73f415a6863",
+    "bce3dfa69a3bc51d",
+    "56777b8e3f265da9",
+    "af8d47810783c8c8",
+    "17ac3bedccb5324d",
+    "06282905d061ca34",
+    "f99064d88d8c9b55"
   ]
 }
