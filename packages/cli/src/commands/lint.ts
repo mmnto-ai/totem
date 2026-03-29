@@ -106,7 +106,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     const fs = await import('node:fs');
     const cacheDir = path.join(configRoot, config.totemDir, 'cache');
     const flagPath = path.join(cacheDir, '.lint-passed');
-    if (violations === 0) {
+    if (violations.length === 0) {
       const { getHeadSha } = await import('@mmnto/totem');
       if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
       const head = getHeadSha(cwd);
