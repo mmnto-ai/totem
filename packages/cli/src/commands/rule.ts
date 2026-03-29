@@ -71,19 +71,28 @@ export async function ruleListCommand(): Promise<void> {
   // JSON mode — output structured data and return
   const { isJsonMode, printJson } = await import('../json-output.js');
   if (isJsonMode()) {
-    printJson({
-      status: 'success',
-      command: 'rule list',
-      data: {
-        rules: rules.map((r) => ({
-          hash: r.lessonHash,
-          heading: r.lessonHeading,
-          engine: r.engine,
-          severity: r.severity,
-          fileGlobs: r.fileGlobs,
-        })),
-      },
-    });
+    if (rules.length === 0) {
+      printJson({
+        status: 'error',
+        command: 'rule list',
+        // eslint-disable-next-line id-match -- JSON API field name
+        error: { message: 'No compiled rules found', fix: 'Run totem compile', code: 'NO_RULES' },
+      });
+    } else {
+      printJson({
+        status: 'success',
+        command: 'rule list',
+        data: {
+          rules: rules.map((r) => ({
+            hash: r.lessonHash,
+            heading: r.lessonHeading,
+            engine: r.engine,
+            severity: r.severity,
+            fileGlobs: r.fileGlobs,
+          })),
+        },
+      });
+    }
     return;
   }
 

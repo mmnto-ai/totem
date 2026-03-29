@@ -935,18 +935,19 @@ try {
 } catch (err) {
   if (process.env['TOTEM_JSON_OUTPUT'] === '1') {
     const { printJson } = await import('./json-output.js');
+    const message = err instanceof Error ? err.message : String(err);
+    const fix =
+      err instanceof Error && 'recoveryHint' in err && typeof err.recoveryHint === 'string'
+        ? err.recoveryHint
+        : undefined;
+    const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : undefined;
     printJson({
       status: 'error',
       command: process.argv.slice(2).join(' '),
-      error: {
-        message: err instanceof Error ? err.message : String(err),
-        code:
-          err && typeof err === 'object' && 'code' in err
-            ? String((err as { code: string }).code)
-            : undefined,
-      },
+      // eslint-disable-next-line id-match -- JSON API field name
+      error: { message, fix, code },
     });
     process.exit(1);
   }
-  throw err;
+  handleError(err);
 }
