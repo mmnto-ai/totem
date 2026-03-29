@@ -20,6 +20,7 @@ export interface CompileOptions {
   fromCursor?: boolean;
   concurrency?: string;
   cloud?: string;
+  verbose?: boolean;
 }
 
 // ─── Logging helpers ────────────────────────────────
@@ -195,6 +196,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
       let failed = 0;
       let processed = 0;
       const total = toCompile.length;
+      const skippedLessons: { heading: string; reason?: string }[] = [];
       const newRules: CompiledRule[] = [...existingRules];
 
       const currentHashes = new Set(lessons.map((l) => hashLesson(l.heading, l.body)));
@@ -329,6 +331,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
             }
             if (!parsed.compilable) {
               nonCompilableSet.add(lesson.hash);
+              skippedLessons.push({ heading: lesson.heading, reason: parsed.reason });
               skipped++;
               continue;
             }
@@ -404,6 +407,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
                 break;
               case 'skipped':
                 nonCompilableSet.add(result.hash);
+                skippedLessons.push({ heading: lesson.heading, reason: result.reason });
                 skipped++;
                 break;
               case 'failed':
@@ -444,6 +448,19 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
         spinner.succeed(
           `${newRules.length} rules — ${compiled} compiled, ${skipped} skipped, ${failed} failed`,
         );
+
+        // ─── Skipped lesson transparency (#1060) ───
+        if (skippedLessons.length > 0) {
+          log.warn(TAG, `${skippedLessons.length} lesson(s) could not be compiled into rules.`);
+          if (options.verbose) {
+            for (const sl of skippedLessons) {
+              const detail = sl.reason ?? 'no reason provided';
+              log.dim(TAG, `  ↳ ${sl.heading}: ${detail}`);
+            }
+          } else {
+            log.dim(TAG, 'Run totem compile --verbose to see why.');
+          }
+        }
       }
     }
   } else if (!options.export) {

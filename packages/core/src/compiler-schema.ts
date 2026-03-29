@@ -52,6 +52,8 @@ export const CompilerOutputSchema = z.object({
   astQuery: z.string().optional(),
   astGrepPattern: z.union([z.string(), z.record(z.unknown())]).optional(),
   severity: z.enum(['error', 'warning']).optional(),
+  /** LLM explanation for why a lesson was marked non-compilable */
+  reason: z.string().optional(),
 });
 
 export type CompilerOutput = z.infer<typeof CompilerOutputSchema>;
