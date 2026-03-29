@@ -285,6 +285,10 @@ if [ -f ".totem/compiled-rules.json" ]; then
     exit 1
   fi
   LINT_SHA=$(cat .totem/cache/.lint-passed 2>/dev/null | tr -d '[:space:]')
+  if [ -z "$LINT_SHA" ]; then
+    echo "[totem] Push blocked: lint flag is empty or unreadable. Run 'totem lint' or /prepush." >&2
+    exit 1
+  fi
   HEAD_SHA=$(git rev-parse HEAD 2>/dev/null)
   if [ "$LINT_SHA" != "$HEAD_SHA" ]; then
     # Ancestry check: lint may still be valid if only non-target files changed
