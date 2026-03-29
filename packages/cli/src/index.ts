@@ -804,6 +804,33 @@ ruleCmd
     }
   });
 
+// ─── Config noun-verb subcommands ───────────────────────
+const configCmd = program.command('config').description('Read and manage project configuration');
+
+configCmd
+  .command('get <key>')
+  .description('Read a configuration value by dot-notation key')
+  .action(async (key: string) => {
+    try {
+      const { configGetCommand } = await import('./commands/config.js');
+      await configGetCommand(key);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+configCmd
+  .command('set <key> <value>')
+  .description('Set a configuration value (not yet implemented)')
+  .action(async (key: string, value: string) => {
+    try {
+      const { configSetCommand } = await import('./commands/config.js');
+      await configSetCommand(key, value);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
 program
   .command('check')
   .description('Run lint + review sequentially')
@@ -855,7 +882,7 @@ program.addHelpText(
   'after',
   `
 Commands by tier:
-  Core (no API keys):    init, sync, lint, test, verify-manifest, hooks, link, stats, drift, doctor, status, lesson, rule
+  Core (no API keys):    init, sync, lint, test, verify-manifest, hooks, link, stats, drift, doctor, status, lesson, rule, config
   AI-Powered (needs LLM): review, spec, handoff, docs, lesson compile (with LLM), check
   GitHub Workflows:      lesson extract, review-learn, triage, triage-pr, wrap
   Utilities:             lesson add, add-secret, list-secrets, remove-secret, explain, eject
