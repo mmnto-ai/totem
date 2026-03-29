@@ -8,7 +8,7 @@
 # from bash — the agent calls it via MCP tools.
 
 GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
-cd "$GIT_ROOT"
+cd "$GIT_ROOT" || exit 1
 
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
 
