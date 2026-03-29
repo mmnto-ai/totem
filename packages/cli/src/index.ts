@@ -785,7 +785,7 @@ exemptionCmd
   .description('Add a manual exemption for a pattern label')
   .requiredOption('--rule <label>', 'Pattern label to exempt')
   .requiredOption('--reason <text>', 'Justification for the exemption')
-  .action(async (opts: { rule?: string; reason?: string }) => {
+  .action(async (opts: { rule: string; reason: string }) => {
     try {
       const { exemptionAddCommand } = await import('./commands/exemption.js');
       await exemptionAddCommand(opts);

@@ -252,7 +252,7 @@ describe('exemption add', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const { exemptionAddCommand } = await import('./exemption.js');
-    await exemptionAddCommand({ reason: 'some reason' });
+    await exemptionAddCommand({ reason: 'some reason' } as { rule: string; reason: string });
 
     const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
     expect(output).toContain('Missing required flag: --rule');
@@ -267,7 +267,7 @@ describe('exemption add', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const { exemptionAddCommand } = await import('./exemption.js');
-    await exemptionAddCommand({ rule: 'test-pattern' });
+    await exemptionAddCommand({ rule: 'test-pattern' } as { rule: string; reason: string });
 
     const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
     expect(output).toContain('Missing required flag: --reason');

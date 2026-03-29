@@ -9,6 +9,12 @@ function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max - 1) + '\u2026' : text;
 }
 
+/** Strip control characters from user input before persistence/display. */
+function sanitizeInput(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/[\x00-\x1f\x7f]/g, '');
+}
+
 async function resolveTotemPaths(): Promise<{
   totemDir: string;
   cacheDir: string;
@@ -118,8 +124,8 @@ export async function exemptionListCommand(): Promise<void> {
 }
 
 export async function exemptionAddCommand(options: {
-  rule?: string;
-  reason?: string;
+  rule: string;
+  reason: string;
 }): Promise<void> {
   const { log } = await import('../ui.js');
   const { addManualSuppression } = await import('../exemptions/exemption-engine.js');
@@ -128,13 +134,13 @@ export async function exemptionAddCommand(options: {
   const { appendLedgerEvent } = await import('@mmnto/totem');
 
   if (!options.rule || !options.rule.trim()) {
-    log.error(TAG, 'Missing required flag: --rule <label>');
+    log.error('Totem Error', 'Missing required flag: --rule <label>');
     process.exitCode = 1;
     return;
   }
 
   if (!options.reason || !options.reason.trim()) {
-    log.error(TAG, 'Missing required flag: --reason <text>');
+    log.error('Totem Error', 'Missing required flag: --reason <text>');
     process.exitCode = 1;
     return;
   }
@@ -142,7 +148,9 @@ export async function exemptionAddCommand(options: {
   const { totemDir } = await resolveTotemPaths();
 
   let shared = readSharedExemptions(totemDir, (msg) => log.dim(TAG, msg));
-  shared = addManualSuppression(shared, options.rule, options.reason);
+  const safeRule = sanitizeInput(options.rule.trim());
+  const safeReason = sanitizeInput(options.reason.trim());
+  shared = addManualSuppression(shared, safeRule, safeReason);
   writeSharedExemptions(totemDir, shared, (msg) => log.dim(TAG, msg));
 
   appendLedgerEvent(
@@ -152,7 +160,7 @@ export async function exemptionAddCommand(options: {
       type: 'exemption',
       ruleId: 'exemption-manual',
       file: '(exemption add)',
-      justification: `--rule ${options.rule} --reason ${options.reason}`,
+      justification: `--rule ${safeRule} --reason ${safeReason}`,
       source: 'shield',
     },
     (msg) => log.dim(TAG, msg),
