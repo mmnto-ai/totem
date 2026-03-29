@@ -9,9 +9,7 @@
 
 ## Totem Workflow
 
-These steps are not mechanically enforced — there are no local gates or flag files.
-You follow them because they produce better code and reduce PR bot noise.
-If you skip a step, PR bots and CI will catch it. Fix it then, don't bypass.
+Not mechanically enforced — no local gates or flag files. Follow these because they reduce PR bot noise. If you skip a step, PR bots and CI catch it.
 
 ### Before coding
 1. Run `/preflight <issue>` (runs `totem spec` + `mcp__totem-dev__search_knowledge`)
