@@ -665,6 +665,45 @@ program
     }
   });
 
+// ─── Rule noun-verb subcommands ──────────────────────────
+const ruleCmd = program.command('rule').description('Manage compiled rules');
+
+ruleCmd
+  .command('list')
+  .description('List all compiled rules')
+  .action(async () => {
+    try {
+      const { ruleListCommand } = await import('./commands/rule.js');
+      await ruleListCommand();
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+ruleCmd
+  .command('inspect <id>')
+  .description('Show rule details by hash (supports prefix matching)')
+  .action(async (id: string) => {
+    try {
+      const { ruleInspectCommand } = await import('./commands/rule.js');
+      await ruleInspectCommand(id);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+ruleCmd
+  .command('test <id>')
+  .description('Test rule against inline Example Hit/Miss')
+  .action(async (id: string) => {
+    try {
+      const { ruleTestCommand } = await import('./commands/rule.js');
+      await ruleTestCommand(id);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
 program
   .command('check')
   .description('Run lint + review sequentially')
@@ -716,7 +755,7 @@ program.addHelpText(
   'after',
   `
 Commands by tier:
-  Core (no API keys):    init, sync, lint, compile, test, verify-manifest, hooks, link, stats, drift, doctor, status
+  Core (no API keys):    init, sync, lint, compile, test, verify-manifest, hooks, link, stats, drift, doctor, status, rule
   AI-Powered (needs LLM): review, spec, handoff, docs, compile (with LLM), check
   GitHub Workflows:      extract, review-learn, triage, triage-pr, wrap
   Utilities:             add-lesson, add-secret, list-secrets, remove-secret, explain, eject
