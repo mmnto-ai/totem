@@ -210,9 +210,9 @@ describe('buildPrePushHook', () => {
     expect(hook).toMatch(/^#!\/bin\/sh\n/);
   });
 
-  it('mentions --no-verify override', () => {
+  it('does not advertise --no-verify escape hatch', () => {
     const hook = buildPrePushHook(FALLBACK);
-    expect(hook).toContain('git push --no-verify');
+    expect(hook).not.toContain('--no-verify');
   });
 
   it('contains verify-manifest check', () => {

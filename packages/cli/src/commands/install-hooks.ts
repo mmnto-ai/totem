@@ -274,7 +274,6 @@ fi
 export function buildPrePushHook(fallbackCmd: string): string {
   return `#!/bin/sh
 # ${TOTEM_PREPUSH_MARKER} — stateless enforcement.
-# Override with: git push --no-verify
 
 ${buildResolveBlock(fallbackCmd)}
 
