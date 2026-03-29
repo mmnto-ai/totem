@@ -1,8 +1,8 @@
 import { Command, Help } from 'commander';
 
 export interface CommandGroup {
-  name: string;
-  commands: string[];
+  readonly name: string;
+  readonly commands: readonly string[];
 }
 
 /** Commands that require an LLM orchestrator */
@@ -19,7 +19,7 @@ export const LLM_COMMANDS = new Set([
 ]);
 
 /** Command grouping for root help */
-export const COMMAND_GROUPS: CommandGroup[] = [
+export const COMMAND_GROUPS: readonly CommandGroup[] = [
   {
     name: 'Core',
     commands: ['lint', 'review', 'check', 'spec'],
@@ -53,7 +53,7 @@ export class TotemHelp extends Help {
         description: helper.subcommandDescription(c),
       }));
 
-    const visibleNames = new Set(visible.map((c) => c.name));
+    const visibleByName = new Map(visible.map((c) => [c.name, c] as const));
     const usedNames = new Set<string>();
 
     const cliName = cmd.name();
@@ -66,10 +66,10 @@ export class TotemHelp extends Help {
     // Render each group
     for (const group of COMMAND_GROUPS) {
       const groupCmds = group.commands
-        .filter((name) => visibleNames.has(name))
+        .filter((name) => visibleByName.has(name))
         .map((name) => {
           usedNames.add(name);
-          const entry = visible.find((c) => c.name === name)!;
+          const entry = visibleByName.get(name)!;
           const badge = LLM_COMMANDS.has(name) ? ' [LLM]' : '';
           return { displayName: name + badge, description: entry.description };
         });
