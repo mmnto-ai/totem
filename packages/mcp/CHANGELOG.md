@@ -1,5 +1,22 @@
 # @mmnto/mcp
 
+## 1.6.1
+
+### Patch Changes
+
+- fix: pipeline fixes, compiler DX improvements, and shield auto-refresh
+  - Shield flag auto-refresh on pre-push — no more stale flag after every commit (#1045)
+  - Bot source enum in LedgerEvent for accurate exemption tracking (#1048)
+  - Thread context propagation for reliable PR comment replies (#1051)
+  - Shield false positive fix on synchronous adapter methods (#1058)
+  - Compiler transparency — `totem compile --verbose` shows why lessons are skipped (#1060)
+  - Zero-match rule detection in lint output (#1061)
+  - Compile-time validation for ast-grep patterns (#1062)
+  - Hardened hook upgrade tests (#1068)
+
+- Updated dependencies
+  - @mmnto/totem@1.6.1
+
 ## 1.6.0
 
 ### Minor Changes
