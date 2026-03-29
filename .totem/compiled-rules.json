@@ -5737,412 +5737,116 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "14f6c93e4d15e802",
-      "lessonHeading": "README and curated wiki pages must never be LLM-generated",
-      "pattern": "['\"`](README\\.md|COVENANT\\.md|CHANGELOG\\.md)['\"`]",
-      "message": "README.md, COVENANT.md, and CHANGELOG.md are protected documents and must be handcrafted. Exclude them from LLM generation in totem.config.ts.",
+      "lessonHash": "2d364f952af19014",
+      "lessonHeading": "2026-03-07T06:05:56.069Z",
+      "message": "Always combine 'typeof val === \"object\"' with a truthiness check (e.g., 'val && ...') because 'typeof null' is 'object'.",
       "engine": "regex",
-      "compiledAt": "2026-03-27T22:45:00.054Z",
-      "createdAt": "2026-03-27T22:45:00.054Z",
+      "severity": "warning",
+      "pattern": "^[^&\\n]*\\btypeof\\s+[\\w$]+\\s*===\\s*['\"]object['\"]",
+      "compiledAt": "2026-03-29T04:11:54.018Z",
+      "createdAt": "2026-03-29T04:11:54.018Z",
       "fileGlobs": [
-        "**/totem.config.ts"
-      ],
-      "severity": "warning"
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ]
     },
     {
-      "lessonHash": "1988dee6bee35a4c",
-      "lessonHeading": "Totem is Agent Governance, not an AI documentation writer",
-      "pattern": "\\btotem docs\\b",
-      "message": "Do not pitch 'totem docs' as a core feature in user-facing copy. It is a Tier 4 power-user feature; focus on the Enforce tier (lint, shield, extract).",
+      "lessonHash": "36651aa381e0beee",
+      "lessonHeading": "When parsing shell scripts to replace code blocks,",
+      "message": "Naive 'fi' keyword matching in shell parsing logic can be broken by nested conditionals. Use depth-aware parsing, specific end-of-block markers, or global matching to ensure the entire outer conditional is captured.",
       "engine": "regex",
-      "compiledAt": "2026-03-27T22:44:50.456Z",
-      "createdAt": "2026-03-27T22:44:50.456Z",
+      "severity": "warning",
+      "pattern": "\\.(match|test|includes|indexOf|search|startsWith|endsWith)\\(\\s*(['\"]fi['\"]|/\\bfi\\b/)\\s*\\)|={2,3}\\s*['\"]fi['\"]",
+      "compiledAt": "2026-03-29T04:11:32.881Z",
+      "createdAt": "2026-03-29T04:11:32.881Z",
       "fileGlobs": [
-        "**/README.md",
-        "**/docs/**/*.md",
-        "packages/website/**/*.tsx",
-        "packages/website/**/*.html"
-      ],
-      "severity": "warning"
+        "**/*.ts",
+        "**/*.js",
+        "**/*.cjs",
+        "**/*.mjs"
+      ]
+    },
+    {
+      "lessonHash": "b4f1c47f1fc0eff6",
+      "lessonHeading": "When synthesizing rules from diff hunks, ensure",
+      "message": "Rule pattern starts with a unified-diff prefix (+, -, or space). Ensure prefixes are stripped during synthesis to prevent 'dead' patterns that only match patch files instead of source code.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bpattern\\b\\s*[:=]\\s*[\"'][\\+\\-\\ ]",
+      "compiledAt": "2026-03-29T04:11:45.370Z",
+      "createdAt": "2026-03-29T04:11:45.370Z",
+      "fileGlobs": [
+        "**/compiled-rules.json",
+        "**/totem.config.ts"
+      ]
     },
     {
       "lessonHash": "78950a5239894249",
       "lessonHeading": "Shared documentation and lessons should use portable",
-      "pattern": "(/Users/|/home/|[a-zA-Z]:\\\\Users\\\\)",
-      "message": "Use portable commands like 'git rev-parse --show-toplevel' instead of hardcoded local file paths (e.g., /Users/..., /home/..., C:\\Users\\...).",
+      "message": "Use portable commands like 'git rev-parse --show-toplevel' instead of hardcoded local file paths (e.g., /Users/... or C:\\Users\\...) to ensure instructions work for all contributors.",
       "engine": "regex",
-      "compiledAt": "2026-03-28T00:21:11.118Z",
-      "createdAt": "2026-03-28T00:21:11.118Z",
+      "severity": "warning",
+      "pattern": "([a-zA-Z]:[\\\\\\\\/]+Users|\\/(Users|home))\\/",
+      "compiledAt": "2026-03-29T04:12:37.513Z",
+      "createdAt": "2026-03-29T04:12:37.513Z",
       "fileGlobs": [
         "**/*.md",
-        "**/*.txt",
-        "**/*.markdown",
-        "**/*.lesson"
-      ],
-      "severity": "warning"
+        "**/*.sh",
+        "**/*.yml",
+        "**/*.yaml",
+        "**/*.ts",
+        "**/*.js",
+        "!**/*.test.ts",
+        "!**/*.test.js"
+      ]
     },
     {
       "lessonHash": "a6aea3c165ceffde",
       "lessonHeading": "Even when data is missing, wrap the fallback instructions",
-      "pattern": "['\"](?!\\s*<)(?:No context|No data|No results|Information not found)",
-      "message": "Wrap fallback instructions or 'no context' notes in XML tags (e.g., <context_note>) to maintain a consistent schema for the LLM and reduce parsing ambiguity.",
+      "message": "Wrap fallback instructions and 'no context' notes in XML tags (e.g., <context_note>) to maintain consistent schema for the LLM and reduce parsing ambiguity.",
       "engine": "regex",
-      "compiledAt": "2026-03-28T00:21:02.960Z",
-      "createdAt": "2026-03-28T00:21:02.960Z",
+      "severity": "warning",
+      "pattern": "['\\\"\\`](?![\\\\s]*<)(No\\\\s+context|No\\\\s+data|Missing\\\\s+context|None\\\\s+found|Not\\\\s+available)[^'\\\"\\`]*['\\\"\\`]",
+      "compiledAt": "2026-03-29T04:12:50.449Z",
+      "createdAt": "2026-03-29T04:12:50.449Z",
       "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.py",
-        "**/*.js",
-        "**/*.jsx",
-        "!**/*.test.ts",
-        "!**/*.test.js"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "09ee37252a814a09",
-      "lessonHeading": "Git commands used for programmatic parsing should be",
-      "pattern": "^(?!.*\\bLC_ALL=C.*\\bgit).*\\bgit\\s+(status|branch|log|diff|show|rev-parse|rev-list|ls-files|tag|describe|remote|config)\\b",
-      "message": "Git commands used for programmatic parsing should be prefixed with LC_ALL=C to ensure consistent, locale-independent output.",
-      "engine": "regex",
-      "compiledAt": "2026-03-28T00:22:51.687Z",
-      "createdAt": "2026-03-28T00:22:51.687Z",
-      "fileGlobs": [
-        "**/*.sh",
-        "**/*.bash",
-        "**/*.zsh",
-        "**/*.js",
-        "**/*.ts",
-        "**/*.py",
-        "**/*.yml",
-        "**/*.yaml"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "00c562ec01f93496",
-      "lessonHeading": "Wrap fallback instructions or meta-context in XML tags",
-      "pattern": "\\b(fallback|instructions?|meta[Cc]ontext|meta_context|meta-context)\\b\\s*[:=]\\s*['\"\\x60](?!\\s*<)",
-      "message": "Wrap fallback instructions or meta-context in XML tags (e.g., <context_note>) to maintain structural consistency and reduce LLM ambiguity.",
-      "engine": "regex",
-      "compiledAt": "2026-03-28T00:24:27.776Z",
-      "createdAt": "2026-03-28T00:24:27.776Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx",
-        "**/*.py",
-        "**/*.yaml",
-        "**/*.yml",
-        "!**/*.test.ts",
-        "!**/*.test.js",
-        "!**/*.spec.ts",
-        "!**/*.spec.js"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "b3e3e2b380a0b1be",
-      "lessonHeading": "Git output can vary by system locale, causing parsing logic",
-      "pattern": "^(?!.*LC_ALL=C).*\\bgit\\s+(status|log|branch|diff|show|rev-parse|describe|tag|ls-files|remote)\\b",
-      "message": "Git output can vary by system locale; use 'LC_ALL=C git ...' to ensure consistent output format for parsing.",
-      "engine": "regex",
-      "compiledAt": "2026-03-28T00:24:23.439Z",
-      "createdAt": "2026-03-28T00:24:23.439Z",
-      "fileGlobs": [
-        "**/*.sh",
-        "**/*.bash",
-        "**/*.yml",
-        "**/*.yaml",
-        "**/*.ts",
-        "**/*.js"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "22286088db9261b7",
-      "lessonHeading": "Hardcoding specific filenames like active_work.md",
-      "pattern": "active_work\\.md",
-      "message": "Hardcoding 'active_work.md' limits flexibility; use configuration flags to define document targets.",
-      "engine": "regex",
-      "compiledAt": "2026-03-28T00:24:47.706Z",
-      "createdAt": "2026-03-28T00:24:47.706Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.py",
-        "**/*.go",
-        "!**/*.md"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "46da33204d5c663b",
-      "lessonHeading": "Git output parsing should account for localized strings",
-      "pattern": "\\bgit\\s+(status|branch|log|ls-files)\\b(?![^\"']*(--porcelain|--format|-z))",
-      "message": "Git output parsing should account for localized strings and special characters. Use --porcelain, --format, or -z for stable, machine-readable output.",
-      "engine": "regex",
-      "compiledAt": "2026-03-28T00:25:41.505Z",
-      "createdAt": "2026-03-28T00:25:41.505Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.py",
-        "**/*.sh",
-        "**/*.bash",
-        "**/*.go"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "55797450514d4c3b",
-      "lessonHeading": "Never use git add -A or git add .",
-      "pattern": "\\bgit\\s+add\\s+(-A|--all|\\.)(?!\\S)",
-      "message": "Never use 'git add -A' or 'git add .'. Stage specific files by name (e.g., 'git add packages/*/package.json') to avoid committing artifacts or worktree copies.",
-      "engine": "regex",
-      "compiledAt": "2026-03-28T05:44:50.207Z",
-      "createdAt": "2026-03-28T05:44:50.207Z",
-      "fileGlobs": [
-        "**/*.sh",
-        "**/*.yml",
-        "**/*.yaml",
-        "**/package.json",
-        "**/Makefile"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "1a6b43d44d2c9c77",
-      "lessonHeading": "The GitHub API endpoint for replying to pull request",
-      "pattern": "pulls\\/[^\\/\\s]+\\/comments\\/[^\\/\\s]+\\/replies",
-      "message": "The GitHub API endpoint for replying to pull request comments does not require the PR number in the path. Use /repos/{owner}/{repo}/pulls/comments/{comment_id}/replies instead.",
-      "engine": "regex",
-      "compiledAt": "2026-03-28T18:35:57.992Z",
-      "createdAt": "2026-03-28T18:35:57.992Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "**/*.py",
-        "**/*.go",
-        "**/*.sh",
-        "**/*.rb"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "271765fe97bafafb",
-      "lessonHeading": "Always stage specific files instead of using 'git add -A'",
-      "pattern": "\\bgit\\s+add\\s+(-A|--all|\\.)(\\s|$)",
-      "message": "Always stage specific files instead of using 'git add -A', 'git add .', or 'git add --all' to prevent accidental inclusion of unrelated changes in automated workflows.",
-      "engine": "regex",
-      "compiledAt": "2026-03-28T18:36:22.534Z",
-      "createdAt": "2026-03-28T18:36:22.534Z",
-      "fileGlobs": [
-        "**/*.sh",
-        "**/*.bash",
-        "**/*.yml",
-        "**/*.yaml",
-        "**/Makefile",
-        "**/package.json"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "c0719f100c53d52f",
-      "lessonHeading": "Try local branch references before remote-tracking ones",
-      "pattern": "\\borigin\\/[a-zA-Z0-9._\\-\\/]+",
-      "message": "Prefer local branch references over remote-tracking ones (e.g., use 'main' instead of 'origin/main') when calculating diffs to maintain consistency.",
-      "engine": "regex",
-      "compiledAt": "2026-03-28T18:36:46.301Z",
-      "createdAt": "2026-03-28T18:36:46.301Z",
-      "fileGlobs": [
-        "**/*.sh",
-        "**/*.bash",
-        "**/*.yml",
-        "**/*.yaml",
-        "**/*.ts",
-        "**/*.js",
-        "**/*.py",
-        "**/*.json"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "b5cb138c293c69e4",
-      "lessonHeading": "Stripping non-ASCII characters during keyword extraction",
-      "pattern": "\\/\\[\\^a-zA-Z0-9\\][^\\/]*\\/",
-      "message": "Stripping non-ASCII characters causes pattern ID collisions for non-English messages. Use Unicode property escapes (e.g., \\p{L}) and the 'u' flag instead of ASCII-only ranges.",
-      "engine": "regex",
-      "compiledAt": "2026-03-28T18:38:13.946Z",
-      "createdAt": "2026-03-28T18:38:13.946Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "82dcda4cbce649bd",
-      "lessonHeading": "Ensure issue numbers are non-empty digit strings",
-      "pattern": "Deferred to #(?!\\d+\\b)",
-      "message": "Issue numbers in 'Deferred to #' markers must be non-empty digit strings (e.g., 'Deferred to #123') to ensure idempotency checks function correctly.",
-      "engine": "regex",
-      "compiledAt": "2026-03-28T18:38:16.555Z",
-      "createdAt": "2026-03-28T18:38:16.555Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "**/*.md",
-        "**/*.py",
-        "**/*.sh"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "981ab9170acc2719",
-      "lessonHeading": "When shield finds false positives on synchronous adapter",
-      "pattern": "\\bawait\\s+.*\\breplyToComment\\(",
-      "message": "Method 'replyToComment' is synchronous; do not use 'await'. Check return types in pr-adapter.ts before adding await to adapter methods.",
-      "engine": "regex",
-      "compiledAt": "2026-03-28T18:54:27.060Z",
-      "createdAt": "2026-03-28T18:54:27.060Z",
-      "fileGlobs": [
-        "**/packages/cli/src/commands/triage-pr.ts",
-        "**/packages/cli/src/services/deferred-issuer.ts"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "e4101b489e88ece9",
-      "lessonHeading": "GitHub's automatic issue closing requires the 'Closes'",
-      "pattern": "\\bCloses\\s+#\\d+[\\s,]+#\\d+",
-      "message": "GitHub's automatic issue closing requires the 'Closes' keyword to be repeated for every issue number; listing multiple numbers after a single keyword fails to close subsequent issues.",
-      "engine": "regex",
-      "compiledAt": "2026-03-28T23:53:48.517Z",
-      "createdAt": "2026-03-28T23:53:48.517Z",
-      "fileGlobs": [
-        "**/*.md"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "2266fc0dfe824f24",
-      "lessonHeading": "Static top-level imports from heavy internal packages delay",
-      "pattern": "^\\+import\\s+.*from\\s+['\"](@totem/|\\.\\./\\.\\./|@/packages/).*['\"]",
-      "message": "Static top-level imports from heavy internal packages delay CLI startup. Use dynamic 'await import()' inside the command function instead.",
-      "engine": "regex",
-      "compiledAt": "2026-03-28T23:54:12.828Z",
-      "createdAt": "2026-03-28T23:54:12.828Z",
-      "fileGlobs": [
-        "packages/cli/src/commands/**/*.ts",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "4bd978540dcd9fb6",
-      "lessonHeading": "Static top-level imports from heavy core packages",
-      "pattern": "^import\\s+(?!type\\b).+\\bfrom\\s+['\"]@totem/(core|mcp)['\"]",
-      "message": "Static top-level imports from heavy packages (@totem/core, @totem/mcp) slow down CLI startup. Use dynamic 'await import()' inside the command's run() function instead.",
-      "engine": "regex",
-      "compiledAt": "2026-03-28T23:54:30.834Z",
-      "createdAt": "2026-03-28T23:54:30.834Z",
-      "fileGlobs": [
-        "packages/cli/src/commands/**/*.ts",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ],
-      "severity": "warning"
+        "packages/mcp/**/*.ts",
+        "packages/core/**/*.ts",
+        "!**/*.test.ts"
+      ]
     },
     {
       "lessonHash": "b586d48a5b8eeabc",
       "lessonHeading": "Naive substring matching on paths, such as using",
-      "pattern": "\\.(includes|indexOf)\\(['\"][^'\"]*\\/[^'\"]*['\"]\\)",
-      "message": "Avoid naive substring matching on paths with .includes() or .indexOf(). Use regex boundaries or path-splitting to prevent false positives (e.g., 'notadapters/' matching 'adapters/').",
-      "engine": "regex",
-      "compiledAt": "2026-03-29T00:41:52.112Z",
-      "createdAt": "2026-03-29T00:41:52.112Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "83ded24440b108d3",
-      "lessonHeading": "Testing hook upgrades by checking only for a marker",
-      "pattern": "expect\\(.*(content|file|output).*\\)\\.(toContain|toMatch)\\(",
-      "message": "Assert the full normalized file content instead of just checking for a marker to ensure no stale shell fragments remain.",
-      "engine": "regex",
-      "compiledAt": "2026-03-29T00:42:33.409Z",
-      "createdAt": "2026-03-29T00:42:33.409Z",
-      "fileGlobs": [
-        "**/*.test.ts",
-        "**/*.spec.ts"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "f341848d23d8ed4b",
-      "lessonHeading": "Always verify that glob entries are strings before calling",
-      "pattern": "\\.(?:map|filter|find|some|every)\\(\\s*\\(?(\\w+)\\)?\\s*=>\\s*(?!.*typeof\\s+\\1)\\1\\.(?:startsWith|includes)\\(",
-      "message": "Always verify that glob entries are strings (e.g., typeof entry === 'string') before calling .startsWith() or .includes() to prevent runtime failures with heterogeneous arrays.",
-      "engine": "regex",
-      "compiledAt": "2026-03-29T00:43:04.185Z",
-      "createdAt": "2026-03-29T00:43:04.185Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "09e5e0cd5f6570a9",
-      "lessonHeading": "Naive substring matching like includes('dir/') can trigger",
-      "message": "Avoid naive substring matching for paths (e.g., .includes('dir/')). Use regex boundaries or path normalization to ensure logic only applies to intended directories.",
-      "engine": "regex",
+      "message": "Avoid naive substring matching on paths (e.g., .includes('adapters/')). Use regex boundaries or path-splitting to prevent incorrect matches (e.g., matching 'src/notadapters/').",
+      "engine": "ast-grep",
       "severity": "warning",
-      "pattern": "\\.includes\\(['\"][^'\"]*\\/[^'\"]*['\"]\\)",
-      "compiledAt": "2026-03-29T00:46:41.280Z",
-      "createdAt": "2026-03-29T00:46:41.280Z",
+      "pattern": "",
+      "astGrepPattern": "$OBJ.includes($STR)",
+      "compiledAt": "2026-03-29T04:14:51.955Z",
+      "createdAt": "2026-03-29T04:14:51.955Z",
       "fileGlobs": [
         "**/*.ts",
-        "**/*.tsx",
         "**/*.js",
-        "**/*.jsx",
-        "**/*.mjs",
-        "**/*.cjs"
+        "**/*.tsx",
+        "**/*.jsx"
       ]
     },
     {
-      "lessonHash": "cccd9363ba696d53",
-      "lessonHeading": "Explicitly verify that glob entries are strings",
-      "message": "Explicitly verify that glob entries are strings (typeof === 'string') before calling .startsWith() or .endsWith() to prevent runtime crashes when processing arrays that might contain non-string types.",
+      "lessonHash": "289b4c2a73ab0110",
+      "lessonHeading": "Simple quote-tracking logic for string literals fails",
+      "message": "Simple quote-tracking logic (e.g., [^\"]*) fails on escaped backslashes. Use a pattern that handles escapes, such as (?:[^\"\\\\]|\\\\.)*",
       "engine": "regex",
       "severity": "warning",
-      "pattern": "\\b(glob|pattern|entry|item)s?\\.(startsWith|endsWith)\\(",
-      "compiledAt": "2026-03-29T00:47:56.145Z",
-      "createdAt": "2026-03-29T00:47:56.145Z",
+      "pattern": "(\"\\\\\\[\\\\^\\\\\\\"\\\\\\][\\\\*\\\\+]\\\\\\\"|'\\\\\\[\\\\^'\\\\\\][\\\\*\\\\+]')",
+      "compiledAt": "2026-03-29T04:16:04.681Z",
+      "createdAt": "2026-03-29T04:16:04.681Z",
       "fileGlobs": [
         "**/*.ts",
         "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx",
-        "!**/*.test.ts",
-        "!**/*.test.js"
+        "!**/*.test.ts"
       ]
     }
   ],
@@ -6732,68 +6436,12 @@
     "57e17f41422fa06c",
     "4c4bbb2c2adff887",
     "486a977cffc2714a",
-    "bc9d15fcc81e4641",
+    "693e374aec00446e",
     "a1765b40647a004b",
     "820cd0fea3e2ddd0",
-    "18fc834ab4100934",
-    "b7ce61eade36b111",
-    "9ba2353289ac32c2",
-    "de82a755b405ec23",
-    "bb8adbb0227798ca",
-    "daa7bc396597da5b",
-    "f4ad1455da1c2926",
-    "0d8a21dfb3096079",
-    "47c298e42782da0c",
-    "20f8d3f8f990b70f",
-    "2b93c12f23f38863",
-    "d9100b79110ace93",
-    "1558cf7daff10c10",
-    "c19ec3301c41979a",
-    "2e33398cc490aff2",
-    "cc4dbe96eb163590",
-    "1fabf989332b2192",
-    "6fb5a5b660f4652d",
-    "8b741fcb32c84916",
-    "a4d09302639513a1",
-    "1c519a6ed4caf687",
-    "75d8c9683cbf6a53",
-    "02b318bdb73dbba6",
-    "d6a8bd74a74916d7",
-    "29879c4a6b6d4159",
-    "04d150a25d2163e4",
-    "a24909f57a3d1861",
-    "2b4ba67cb4ad52e2",
-    "847174f98eb86e3f",
-    "9a07a44b866ae7fd",
-    "8812e9aa8f2849ca",
-    "ce661aef564a39c5",
-    "f2a8a5c1534072f2",
-    "977ae6a13859e055",
-    "6289dc3fdda1c391",
-    "693e374aec00446e",
-    "7b8203b63ce7fd54",
-    "a065e1af3dd2e7dc",
-    "ee1d6e47929fa6a2",
-    "041a730c51b27a42",
-    "36651aa381e0beee",
-    "b4f1c47f1fc0eff6",
-    "b19e9c722141fa3a",
-    "18201ef95110c27e",
-    "9f9c425645c7fb91",
-    "f59d4be431477d55",
-    "e196023c74162777",
-    "681935b154aac0ed",
-    "9ee382736f5d5302",
-    "393bd80749271b9f",
     "1fe928eb7ce40ea9",
-    "fd5af9eb0de34a38",
-    "289b4c2a73ab0110",
-    "0d0fe73f415a6863",
-    "bce3dfa69a3bc51d",
-    "56777b8e3f265da9",
-    "af8d47810783c8c8",
-    "17ac3bedccb5324d",
-    "06282905d061ca34",
-    "f99064d88d8c9b55"
+    "b19e9c722141fa3a",
+    "6fb5a5b660f4652d",
+    "18fc834ab4100934"
   ]
 }
