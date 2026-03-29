@@ -69,7 +69,7 @@ describe('getNestedValue', () => {
 });
 
 describe('configGetCommand', () => {
-  let savedExitCode: number | undefined;
+  let savedExitCode: typeof process.exitCode;
 
   beforeEach(() => {
     savedExitCode = process.exitCode;
@@ -152,7 +152,7 @@ describe('configGetCommand', () => {
 });
 
 describe('configSetCommand', () => {
-  let savedExitCode: number | undefined;
+  let savedExitCode: typeof process.exitCode;
 
   beforeEach(() => {
     savedExitCode = process.exitCode;
