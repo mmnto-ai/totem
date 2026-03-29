@@ -46,7 +46,7 @@ When deciding where to store information or rules, use this decision tree:
 Totem provides CLI commands that map to your development lifecycle. Use them at these moments:
 1. **Start of Session:** Run \`totem briefing\` to get oriented with current branch state, open PRs, and recent context. Run \`totem triage\` if you need to pick a new task.
 2. **Before Implementation:** Run \`totem spec <issue-url-or-topic>\` to generate an architectural plan and review related context before writing code.
-3. **Before Push:** Run \`totem lint\` for a fast compiled-rules check (zero LLM, ~2s). **Before PR:** Run \`totem shield\` for a full AI-powered code review against project knowledge (~18s).
+3. **Before Push:** Run \`totem lint\` for a fast compiled-rules check (zero LLM, ~2s). **Before PR:** Run \`totem review\` for a full AI-powered code review against project knowledge (~18s).
 4. **End of Session:** Run \`totem handoff\` to generate a snapshot for the next agent session with current progress and open threads.
 
 ### Cloud / PR Review Bots
@@ -82,7 +82,7 @@ try {
 `;
 
 export const GEMINI_BEFORE_TOOL = `// [totem] auto-generated — Gemini CLI BeforeTool hook
-// Intercepts git push/commit to run \`totem shield\` before proceeding.
+// Intercepts git push/commit to run \`totem review\` before proceeding.
 const { execSync } = require('child_process');
 
 module.exports = function beforeTool(toolName, toolInput) {
@@ -112,8 +112,8 @@ This ensures you build on existing knowledge rather than repeating past mistakes
 
 // --- Claude Code hook templates ---
 
-export const CLAUDE_SHIELD_GATE = `// [totem] auto-generated — Claude Code shield gate hook
-// Intercepts git push/commit to run \`totem shield\` before proceeding.
+export const CLAUDE_SHIELD_GATE = `// [totem] auto-generated — Claude Code review gate hook
+// Intercepts git push/commit to run \`totem review\` before proceeding.
 const { execSync } = require('child_process');
 
 const input = process.env.TOOL_INPUT || '';

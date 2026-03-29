@@ -175,7 +175,9 @@ function scrubClaudeSettings(cwd: string, summary: EjectSummary): void {
           : h && typeof h === 'object'
             ? ((h as { command?: string }).command ?? '')
             : '';
-      return cmd.includes('shield-gate') || cmd.includes('totem shield');
+      return (
+        cmd.includes('shield-gate') || cmd.includes('totem shield') || cmd.includes('totem review')
+      );
     });
   });
 

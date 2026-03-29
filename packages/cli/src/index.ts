@@ -193,77 +193,96 @@ program
     },
   );
 
-program
-  .command('shield')
-  .description('AI-powered code review: analyze your diff against Totem knowledge')
-  .option('--raw', 'Output retrieved context without LLM synthesis')
-  .option('--out <path>', 'Write output to a file instead of stdout')
-  .option('--model <name>', 'Override the default model for the orchestrator')
-  .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
-  .option('--staged', 'Review only staged changes (default: all uncommitted)')
-  .option('--deterministic', 'REMOVED — use `totem lint` instead', false)
-  .option('--format <format>', 'REMOVED — use `totem lint --format` instead')
-  .option(
-    '--mode <mode>',
-    'Review mode: standard (default, with Totem knowledge) or structural (context-blind paranoia)',
-  )
-  .option('--learn', 'Extract lessons from failed verdicts into .totem/lessons/')
-  .option('--yes', 'Auto-accept extracted lessons (for CI; suspicious lessons are dropped)')
-  .option(
-    '--override <reason>',
-    'Override shield FAIL with a reason (min 10 chars, logged to trap ledger)',
-  )
-  .option(
-    '--suppress <label>',
-    'Suppress a pattern class by label (repeatable)',
-    (val: string, prev: string[]) => [...prev, val],
-    [] as string[], // totem-context: Commander accumulator default — not untrusted input
-  )
-  .action(
-    async (opts: {
-      raw?: boolean;
-      out?: string;
-      model?: string;
-      fresh?: boolean;
-      staged?: boolean;
-      deterministic?: boolean;
-      format?: string;
-      mode?: string;
-      learn?: boolean;
-      yes?: boolean;
-      override?: string;
-      suppress?: string[];
-    }) => {
-      try {
-        // Redirect removed --deterministic flag to totem lint
-        if (opts.deterministic) {
-          console.error('[Shield] --deterministic has been removed. Redirecting to `totem lint`.');
-          const { lintCommand } = await import('./commands/lint.js');
-          await lintCommand({
-            format: (opts.format as 'text' | 'sarif' | 'json') ?? 'text',
-            staged: opts.staged,
-          });
-          return;
-        }
-        // --format is only valid with totem lint, not shield
-        if (opts.format) {
-          const { TotemConfigError } = await import('@mmnto/totem');
-          throw new TotemConfigError(
-            '--format is not supported by totem shield. Use `totem lint --format sarif` instead.',
-            'Shield outputs human-readable text. Use `totem lint` for SARIF/JSON output.',
-            'CONFIG_INVALID',
-          );
-        }
-        const { shieldCommand } = await import('./commands/shield.js');
-        await shieldCommand({
-          ...opts,
-          mode: opts.mode as 'standard' | 'structural' | undefined,
-        });
-      } catch (err) {
-        handleError(err);
-      }
-    },
-  );
+// ─── Review options shared between `review` (primary) and `shield` (deprecated alias) ───
+const reviewOptions = (cmd: Command) =>
+  cmd
+    .option('--raw', 'Output retrieved context without LLM synthesis')
+    .option('--out <path>', 'Write output to a file instead of stdout')
+    .option('--model <name>', 'Override the default model for the orchestrator')
+    .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
+    .option('--staged', 'Review only staged changes (default: all uncommitted)')
+    .option('--deterministic', 'REMOVED — use `totem lint` instead', false)
+    .option('--format <format>', 'REMOVED — use `totem lint --format` instead')
+    .option(
+      '--mode <mode>',
+      'Review mode: standard (default, with Totem knowledge) or structural (context-blind paranoia)',
+    )
+    .option('--learn', 'Extract lessons from failed verdicts into .totem/lessons/')
+    .option('--yes', 'Auto-accept extracted lessons (for CI; suspicious lessons are dropped)')
+    .option(
+      '--override <reason>',
+      'Override review FAIL with a reason (min 10 chars, logged to trap ledger)',
+    )
+    .option(
+      '--suppress <label>',
+      'Suppress a pattern class by label (repeatable)',
+      (val: string, prev: string[]) => [...prev, val],
+      [] as string[], // totem-context: Commander accumulator default — not untrusted input
+    );
+
+async function runReview(opts: {
+  raw?: boolean;
+  out?: string;
+  model?: string;
+  fresh?: boolean;
+  staged?: boolean;
+  deterministic?: boolean;
+  format?: string;
+  mode?: string;
+  learn?: boolean;
+  yes?: boolean;
+  override?: string;
+  suppress?: string[];
+}): Promise<void> {
+  // Redirect removed --deterministic flag to totem lint
+  if (opts.deterministic) {
+    console.error('[Review] --deterministic has been removed. Redirecting to `totem lint`.');
+    const { lintCommand } = await import('./commands/lint.js');
+    await lintCommand({
+      format: (opts.format as 'text' | 'sarif' | 'json') ?? 'text',
+      staged: opts.staged,
+    });
+    return;
+  }
+  // --format is only valid with totem lint, not review
+  if (opts.format) {
+    const { TotemConfigError } = await import('@mmnto/totem');
+    throw new TotemConfigError(
+      '--format is not supported by totem review. Use `totem lint --format sarif` instead.',
+      'Review outputs human-readable text. Use `totem lint` for SARIF/JSON output.',
+      'CONFIG_INVALID',
+    );
+  }
+  const { shieldCommand } = await import('./commands/shield.js');
+  await shieldCommand({
+    ...opts,
+    mode: opts.mode as 'standard' | 'structural' | undefined,
+  });
+}
+
+reviewOptions(
+  program
+    .command('review')
+    .description('AI-powered code review: analyze your diff against Totem knowledge'),
+).action(async (opts) => {
+  try {
+    await runReview(opts);
+  } catch (err) {
+    handleError(err);
+  }
+});
+
+// Deprecated alias — hidden from --help
+reviewOptions(
+  program.command('shield', { hidden: true }).description('Deprecated alias for `totem review`'),
+).action(async (opts) => {
+  try {
+    console.error("\u26a0 'totem shield' is deprecated. Use 'totem review' instead.");
+    await runReview(opts);
+  } catch (err) {
+    handleError(err);
+  }
+});
 
 program
   .command('triage-pr <pr-number>')
@@ -372,7 +391,7 @@ program
 
 program
   .command('compile')
-  .description('Compile lessons into deterministic regex rules for zero-LLM shield checks')
+  .description('Compile lessons into deterministic regex rules for zero-LLM review checks')
   .option('--raw', 'Output compiler prompts without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
@@ -647,7 +666,7 @@ program
 
 program
   .command('check')
-  .description('Run lint + shield sequentially')
+  .description('Run lint + review sequentially')
   .option('--staged', 'Only check staged changes')
   .option('-m, --model <model>', 'Override orchestrator model')
   .option('--fresh', 'Skip cache')
@@ -697,7 +716,7 @@ program.addHelpText(
   `
 Commands by tier:
   Core (no API keys):    init, sync, lint, compile, test, verify-manifest, hooks, link, stats, drift, doctor, status
-  AI-Powered (needs LLM): shield, spec, handoff, docs, compile (with LLM), check
+  AI-Powered (needs LLM): review, spec, handoff, docs, compile (with LLM), check
   GitHub Workflows:      extract, review-learn, triage, triage-pr, wrap
   Utilities:             add-lesson, add-secret, list-secrets, remove-secret, explain, eject
 `,

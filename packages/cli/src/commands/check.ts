@@ -16,7 +16,7 @@ export async function checkCommand(options: {
     lintFailed = err instanceof Error ? err : new Error(String(err));
   }
 
-  log.info(TAG, 'Running shield...');
+  log.info(TAG, 'Running review...');
   let shieldFailed: Error | null = null;
   try {
     const { shieldCommand } = await import('./shield.js');
@@ -29,7 +29,7 @@ export async function checkCommand(options: {
     const { TotemError } = await import('@mmnto/totem');
     const parts: string[] = [];
     if (lintFailed) parts.push('lint');
-    if (shieldFailed) parts.push('shield');
+    if (shieldFailed) parts.push('review');
     const cause = lintFailed ?? shieldFailed;
     throw new TotemError(
       'CHECK_FAILED',

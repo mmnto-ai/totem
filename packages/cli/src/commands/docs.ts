@@ -58,8 +58,8 @@ Updated content here...
 
 ## Command Glossary (DO NOT confuse these)
 - **\`totem lint\`**: Runs compiled AST/regex rules against a diff. Zero LLM. Fast (~2s). No API keys needed. Used in pre-push hooks and CI. Lives in the Lite configuration tier.
-- **\`totem shield\`**: AI-powered code review. Queries LanceDB for context, sends diff + knowledge to an LLM. Slow (~18s). Requires API keys. Used before opening PRs. Lives in the Full configuration tier.
-- These are DIFFERENT commands with DIFFERENT purposes. Never describe \`shield\` as "deterministic" or \`lint\` as "AI-powered."
+- **\`totem review\`**: AI-powered code review. Queries LanceDB for context, sends diff + knowledge to an LLM. Slow (~18s). Requires API keys. Used before opening PRs. Lives in the Full configuration tier.
+- These are DIFFERENT commands with DIFFERENT purposes. Never describe \`review\` as "deterministic" or \`lint\` as "AI-powered."
 
 ## Writing Style (MANDATORY)
 - **No Marketing Language:** NEVER use marketing-centric terms: "comprehensive", "robust", "seamless", "cutting-edge", "state-of-the-art", "revolutionary", "guarantee", "guarantees". Use objective, factual descriptions instead. Say what the feature does, not how impressive it is.

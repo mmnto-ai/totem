@@ -23,12 +23,12 @@ describe('checkCommand', () => {
       callOrder.push('lint');
     });
     vi.mocked(shieldCommand).mockImplementation(async () => {
-      callOrder.push('shield');
+      callOrder.push('review');
     });
 
     await checkCommand({});
 
-    expect(callOrder).toEqual(['lint', 'shield']);
+    expect(callOrder).toEqual(['lint', 'review']);
   });
 
   it('reports failure when lint fails', async () => {
@@ -37,13 +37,13 @@ describe('checkCommand', () => {
     await expect(checkCommand({})).rejects.toThrow(/Check failed.*lint/);
   });
 
-  it('reports failure when shield fails', async () => {
-    vi.mocked(shieldCommand).mockRejectedValueOnce(new Error('shield error'));
+  it('reports failure when review fails', async () => {
+    vi.mocked(shieldCommand).mockRejectedValueOnce(new Error('review error'));
 
-    await expect(checkCommand({})).rejects.toThrow(/Check failed.*shield/);
+    await expect(checkCommand({})).rejects.toThrow(/Check failed.*review/);
   });
 
-  it('continues shield even when lint fails', async () => {
+  it('continues review even when lint fails', async () => {
     vi.mocked(lintCommand).mockRejectedValueOnce(new Error('lint error'));
 
     try {
@@ -57,9 +57,10 @@ describe('checkCommand', () => {
 
   it('reports both failures', async () => {
     vi.mocked(lintCommand).mockRejectedValueOnce(new Error('lint error'));
-    vi.mocked(shieldCommand).mockRejectedValueOnce(new Error('shield error'));
+    // totem-context: test mock — Error is intentional for failure simulation
+    vi.mocked(shieldCommand).mockRejectedValueOnce(new Error('review error'));
 
-    await expect(checkCommand({})).rejects.toThrow(/lint \+ shield/);
+    await expect(checkCommand({})).rejects.toThrow(/lint \+ review/);
   });
 
   it('passes options through to subcommands', async () => {

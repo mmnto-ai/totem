@@ -124,10 +124,15 @@ const ClaudeSettingsSchema = z
   })
   .passthrough();
 
-/** Check whether a hook entry already contains a totem shield reference. */
+/** Check whether a hook entry already contains a totem review/shield reference. */
 function hasTotemShield(entry: z.infer<typeof HookCommandSchema>): boolean {
-  if (typeof entry === 'string') return entry.includes('totem shield');
-  return entry.command.includes('totem shield') || entry.command.includes('shield-gate');
+  if (typeof entry === 'string')
+    return entry.includes('totem review') || entry.includes('totem shield');
+  return (
+    entry.command.includes('totem review') ||
+    entry.command.includes('totem shield') ||
+    entry.command.includes('shield-gate')
+  );
 }
 
 /**
