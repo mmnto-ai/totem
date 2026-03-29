@@ -1,4 +1,4 @@
-## Lesson — Hashing all lesson files to find a rule's source during CLI
+## Lesson — Hashing all lesson files to find a rule's source
 
 **Tags:** performance, cli, architecture
 
