@@ -694,7 +694,7 @@ async function handleVerdictResult(
       throw new TotemError(
         'SHIELD_FAILED',
         `Shield ${modeLabel} review failed: ${verdict.reason}`,
-        'Fix the issues identified in the review above, then re-run `totem shield`.',
+        'Fix the issues identified in the review above, then re-run `totem review`.',
       );
     }
     return;
@@ -734,7 +734,7 @@ async function handleVerdictResult(
       throw new TotemError(
         'SHIELD_FAILED',
         `Shield ${modeLabel} review failed: ${verdict.reason || 'no reason given'}`,
-        'Fix the issues identified in the review above, then re-run `totem shield`.',
+        'Fix the issues identified in the review above, then re-run `totem review`.',
       );
     }
   } else {
@@ -840,7 +840,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   if (options.mode && options.mode !== 'standard' && options.mode !== 'structural') {
     throw new TotemConfigError(
       `Invalid --mode "${options.mode}". Use "standard" or "structural".`,
-      'Check `totem shield --help` for valid options.',
+      'Check `totem review --help` for valid options.',
       'CONFIG_INVALID',
     );
   }
@@ -853,10 +853,10 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   }
   const cwd = process.cwd();
 
-  // Silently upgrade the pre-push hook if it lacks shield auto-refresh (#1045)
+  // Silently upgrade the pre-push hook if it lacks review auto-refresh (#1045)
   const { upgradePrePushHookIfNeeded } = await import('./install-hooks.js');
   if (upgradePrePushHookIfNeeded(cwd)) {
-    log.dim(TAG, 'Upgraded pre-push hook with shield auto-refresh');
+    log.dim(TAG, 'Upgraded pre-push hook with review auto-refresh');
   }
 
   const configPath = resolveConfigPath(cwd);

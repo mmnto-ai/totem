@@ -196,7 +196,7 @@ describe('buildPrePushHook', () => {
     expect(hook).toContain(TOTEM_PREPUSH_MARKER);
   });
 
-  it('only runs shield when compiled-rules.json exists (if/fi, safe for appending)', () => {
+  it('only runs review when compiled-rules.json exists (if/fi, safe for appending)', () => {
     const hook = buildPrePushHook(fallbackCmd);
     expect(hook).toContain('if [ -f ".totem/compiled-rules.json" ]; then');
     expect(hook).toContain('fi');
@@ -256,16 +256,16 @@ describe('buildPrePushHook', () => {
     expect(hook).toContain("Push aborted: auto-compile failed. Run 'totem compile' manually.");
   });
 
-  it('generates script with shield auto-refresh logic', () => {
+  it('generates script with review auto-refresh logic', () => {
     const hook = buildPrePushHook(fallbackCmd);
     expect(hook).toContain('Shield flag stale');
     expect(hook).toContain('.totem/cache/.shield-passed');
     expect(hook).toContain('git rev-parse HEAD');
-    expect(hook).toContain('$TOTEM_CMD shield');
-    expect(hook).toContain('Shield auto-refresh failed');
+    expect(hook).toContain('$TOTEM_CMD review');
+    expect(hook).toContain('Review auto-refresh failed');
   });
 
-  it('places shield auto-refresh after lint block', () => {
+  it('places review auto-refresh after lint block', () => {
     const hook = buildPrePushHook(fallbackCmd);
     const lintIdx = hook.indexOf('$TOTEM_CMD lint');
     const shieldIdx = hook.indexOf('Shield flag stale');
@@ -841,7 +841,7 @@ describe('upgradePrePushHookIfNeeded', () => {
   }
 
   it('upgrades old hook with marker but no auto-refresh', () => {
-    // Install an old-style hook that has the marker but lacks shield auto-refresh
+    // Install an old-style hook that has the marker but lacks review auto-refresh
     const hooksDir = path.join(tmpDir, '.git', 'hooks');
     fs.mkdirSync(hooksDir, { recursive: true });
     const oldHook = `#!/bin/sh
@@ -1028,6 +1028,49 @@ fi
     expect(markerHits.length).toBe(1);
 
     // Full block comparison as final sanity check
+    const actual = extractTotemBlock(content);
+    expect(actual).toBe(expectedTotemBlock());
+  });
+
+  it('upgrades hook that has auto-refresh but uses deprecated $TOTEM_CMD shield', () => {
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    // Simulate a hook with the auto-refresh marker but still using old `shield` command
+    const oldHook = `#!/bin/sh
+# ${TOTEM_PREPUSH_MARKER} — run compiled rules before push.
+# Override with: git push --no-verify
+
+if [ -f ".totem/compiled-rules.json" ]; then
+  TOTEM_CMD="totem"
+  if [ -n "$TOTEM_CMD" ]; then
+    if ! $TOTEM_CMD lint; then
+      exit 1
+    fi
+  fi
+
+  if [ -f ".totem/cache/.shield-passed" ] && [ -n "$TOTEM_CMD" ]; then
+    SHIELD_SHA=$(cat .totem/cache/.shield-passed | tr -d '[:space:]')
+    HEAD_SHA=$(git rev-parse HEAD)
+    if [ "$SHIELD_SHA" != "$HEAD_SHA" ]; then
+      echo "[totem] Shield flag stale. Auto-refreshing..."
+      if ! $TOTEM_CMD shield; then
+        echo "[totem] Shield auto-refresh failed. Fix issues and retry."
+        exit 1
+      fi
+    fi
+  fi
+fi
+`;
+    fs.writeFileSync(path.join(hooksDir, 'pre-push'), oldHook);
+
+    const upgraded = upgradePrePushHookIfNeeded(tmpDir);
+
+    expect(upgraded).toBe(true);
+    const content = fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8');
+    // Must use `review` instead of `shield`
+    expect(content).toContain('$TOTEM_CMD review');
+    expect(content).not.toContain('$TOTEM_CMD shield');
+    // Full block comparison
     const actual = extractTotemBlock(content);
     expect(actual).toBe(expectedTotemBlock());
   });
