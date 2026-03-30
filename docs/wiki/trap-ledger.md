@@ -16,7 +16,7 @@ The Ledger actively monitors your usage of Totem override directives:
 - `// totem-context:` (Semantic suppression)
 - `// shield-context:` (Deprecated alias — emits warning as of 1.6.0)
 
-Whenever `totem lint` or `totem shield` encounters one of these directives, it logs an `exception` event to the ledger.
+Whenever `totem lint` or `totem review` encounters one of these directives, it logs an `exception` event to the ledger.
 
 ### Event Schema
 

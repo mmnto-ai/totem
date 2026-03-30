@@ -6,7 +6,18 @@ Totem is evolving from a deterministic lint engine into a full **governance laye
 
 ---
 
-## 1.6.0 — Pipeline Maturity
+## 1.7.0 — Platform of Primitives (Shipped)
+
+**Theme:** Evolving the CLI into a standard library for codebase governance, eliminating opinionated agent friction, and standardizing the UX.
+
+- [x] **CLI Taxonomy Redesign:** Complete noun-verb hierarchical restructuring (`totem rule list`, `totem config get`). Help menus logically grouped by Core, Entities, and Workflow.
+- [x] **Actor-Aware Enforcement:** Nixed stateful flag files. Redesigned Git hooks to be purely deterministic (`lint`, `verify-manifest`). LLM push-gates are now optional Reference Implementations driven by Content Hashes at the MCP boundary.
+- [x] **Global Output:** Every command now supports `--json` for pipeline integration.
+- [x] **Developer Experience:** Added `hooks --force` for easy upgrades. `triage-pr` correctly parses multiple CodeRabbit nits.
+
+---
+
+## 1.6.0 — Pipeline Maturity (Shipped)
 
 **Theme:** Close the self-healing loop — the engine learns from developer overrides to reduce false positives over time.
 

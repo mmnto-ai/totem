@@ -15,7 +15,7 @@ Gemini CLI reads `GEMINI.md` on startup. Like Claude Code, keep this file under 
 
 ## 3. Totem Integration
 
-The `AI_PROMPT_BLOCK` provided by `totem init` is injected into `GEMINI.md`. This ensures Gemini CLI runs the `search_knowledge` MCP tool before making edits. The CLI can also execute `totem shield` and hooks to re-index the memory db.
+The `AI_PROMPT_BLOCK` provided by `totem init` is injected into `GEMINI.md`. This ensures Gemini CLI runs the `search_knowledge` MCP tool before making edits. The CLI can also execute `totem review` and hooks to re-index the memory db.
 
 ## 4. Common Pitfalls
 

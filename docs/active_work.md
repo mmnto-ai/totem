@@ -1,9 +1,17 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.6.0` with 1,032 lessons, 379 compiled rules, and 2,084 tests. The active milestone themes focus on pipeline maturity, compiler developer experience, and shield reliability.
+The project is at release `@mmnto/cli@1.7.0` with 1,032 lessons, 379 compiled rules, and 2,090 tests. The active milestone themes focus on pipeline integrity, auto-context injection, and rule fitness.
 
-Recent completed work (1.5.6–1.5.8):
+Recent completed work (1.6.0–1.7.0):
 
+- **CLI Redesign & Standard Library (1.7.0):**
+  - Completed noun-verb hierarchical restructuring for commands (e.g., `totem rule list`).
+  - Added global `--json` output support to all commands for easier scriptability.
+  - Help text redesigned with logical capability groupings and LLM badges.
+- **Actor-Aware Enforcement (1.7.0):**
+  - Ripped out all stateful flag files (`.lint-passed`, `.shield-passed`).
+  - Git `pre-push` hook is now strictly deterministic (`lint` + `verify-manifest`).
+  - `totem review` (formerly shield) is officially positioned as an optional "Reference Implementation" driven by a Content Hash lock at the MCP boundary.
 - **Agent Governance:**
   - Rule unit testing enables inline hit and miss verification at compile time.
   - Forbidden native module rules enforce secure module usage.

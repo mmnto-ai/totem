@@ -15,7 +15,7 @@ This command configures cross-repo queries in your `totem.config.ts`:
 linkedIndexes: ['../api-server', '../shared-design-system'],
 ```
 
-Now, `totem spec` and `totem shield` in your frontend repo can query lessons from your API repo. An architectural mistake in one codebase becomes a rule protecting all others. Strategy docs can inform code decisions, and shared design systems can inform component repositories.
+Now, `totem spec` and `totem review` in your frontend repo can query lessons from your API repo. An architectural mistake in one codebase becomes a rule protecting all others. Strategy docs can inform code decisions, and shared design systems can inform component repositories.
 
 ## Context Isolation (Partitions)
 

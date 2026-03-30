@@ -15,7 +15,7 @@ GCA's `.gemini/config.yaml` can be as large as necessary since it acts as a conf
 
 ## 3. Totem Integration
 
-Totem influences GCA primarily through compiled architectural rules exported during `totem wrap` or `totem shield`, which can inform the `.gemini/styleguide.md`. GCA does not use the `search_knowledge` MCP tool, as it cannot run local MCP servers.
+Totem influences GCA primarily through compiled architectural rules exported during `totem wrap` or `totem review`, which can inform the `.gemini/styleguide.md`. GCA does not use the `search_knowledge` MCP tool, as it cannot run local MCP servers.
 
 ## 4. Common Pitfalls
 

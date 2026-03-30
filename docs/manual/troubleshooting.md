@@ -34,7 +34,7 @@ pnpm exec totem lint
 
 ### Model not found errors
 
-If `totem sync` or `totem shield` fails with "model not installed" when using Ollama, the required model hasn't been pulled yet.
+If `totem sync` or `totem review` fails with "model not installed" when using Ollama, the required model hasn't been pulled yet.
 
 **Fix:**
 

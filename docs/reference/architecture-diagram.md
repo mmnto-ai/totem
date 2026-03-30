@@ -20,13 +20,13 @@ graph TD
 
     %% The Flywheel
     subgraph "1. The Eye (Observe)"
-        Shield[totem shield<br/>LLM PR Review]:::observe
+        Shield[totem review<br/>LLM PR Review]:::observe
         Triage[Bot Triage<br/>CodeRabbit / GCA]:::observe
     end
 
     subgraph "2. The Brain (Learn)"
         Extract[totem extract<br/>Capture Markdown Lesson]:::learn
-        Compile[totem compile<br/>Generate Regex/AST]:::learn
+        Compile[totem lesson compile<br/>Generate Regex/AST]:::learn
     end
 
     subgraph "3. The Hand (Enforce)"
@@ -61,7 +61,7 @@ sequenceDiagram
 
     Note over Strategy: The "Kernel" of Governance
     Dev->>Strategy: Merges ADR / Proposal
-    Strategy->>Strategy: totem compile (Self-Governance)
+    Strategy->>Strategy: totem lesson compile (Self-Governance)
     Strategy-->>Product: Exports Approved Architectural Rules
 
     Note over Agent, Product: The Agent Workflow
@@ -94,7 +94,7 @@ graph LR
     classDef action fill:#4b3a75,stroke:#9b72cf,color:#fff
 
     Developer((Developer)):::dev
-    Lint[totem lint / shield]:::system
+    Lint[totem lint / review]:::system
     Override["totem-context directive<br/>or --override flag"]:::action
     Ledger[(Trap Ledger<br/>events.ndjson)]:::data
     Doctor[totem doctor --pr]:::system
@@ -125,7 +125,7 @@ graph TD
 
     %% ─── THE SEMANTIC OVERLAY (Fuzzy, Contextual, LLM-Driven) ───
     subgraph "Layer 1: Semantic Overlay"
-        Shield[totem shield<br/>LLM PR Review]
+        Shield[totem review<br/>LLM PR Review]
         Triage[/review-reply<br/>Multi-Bot Triage/]
         Hints[Smart Hints<br/>// totem-context:]
         Extract[Pipeline 6<br/>Bot → Lesson Extraction]

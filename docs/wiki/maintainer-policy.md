@@ -20,7 +20,7 @@
 
 ## Pull Request Process
 
-- All PRs must pass CI: unit tests, `totem lint`, `totem shield`, format check.
+- All PRs must pass CI: unit tests, `totem lint`, `totem review`, format check.
 - Core package changes require Lead Maintainer review.
 - Merge policy: squash merge after approval and green CI.
 - `Closes #NNN` keyword required in PR body for auto-close.
@@ -42,7 +42,7 @@
 
 - Fork, branch, PR with template, link to issue.
 - Run `pnpm run format` before committing. Run `/prepush` before pushing.
-- New lessons are welcome. Run `totem compile` after adding lessons.
+- New lessons are welcome. Run `totem lesson compile` after adding lessons.
 
 ## _[Future]_ Scaling the Contributor Base
 

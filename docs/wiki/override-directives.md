@@ -12,7 +12,7 @@ When you use `totem-context:`, you are telling the system: _"I know this breaks 
 
 - **Rule Engine:** It strictly suppresses the deterministic `totem lint` error for the following block of code.
 - **Telemetry:** It writes an `exception` event into the **Trap Ledger**, capturing your reason. If a rule accumulates too many of these contexts, Totem will automatically downgrade the rule via `totem doctor --pr`.
-- **Review Layer:** During an AI-powered `totem shield` review, the LLM reads your context as a semantic hint and incorporates your logic into its evaluation, rather than blindly flagging the violation.
+- **Review Layer:** During an AI-powered `totem review`, the LLM reads your context as a semantic hint and incorporates your logic into its evaluation, rather than blindly flagging the violation.
 
 **Example:**
 

@@ -4,7 +4,7 @@
 
 AI agents (including Claude Code) drift from documented workflow rules during long sessions.
 CLAUDE.md is read once at session start but gets compressed out of context over time.
-The agent optimizes for speed over process, skipping steps like `totem spec` and `totem shield`.
+The agent optimizes for speed over process, skipping steps like `totem spec` and `totem review`.
 
 ## The Solution: 3 Layers (Same Architecture as Totem)
 
@@ -41,10 +41,10 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 
 ### Phase 5: Before Push
 
-**What should happen:** Run shield, verify no violations, format check.
-**Commands:** `totem shield`, `totem lint`, `pnpm run format:check`
+**What should happen:** Format, lint, review — cheapest checks first.
+**Commands:** `pnpm run format:check`, `totem lint`, `totem review`
 **Skill:** `/prepush`
-**Hook:** `PreToolUse` blocks `git push` if `/prepush` hasn't been run (checks `.totem/cache/.shield-passed` timestamp, expires after 30 min).
+**Hook:** `PreToolUse` blocks agent `git push` if review hasn't passed (checks `.totem/cache/.reviewed-content-hash` against current source files). Human pushes are unaffected.
 
 ### Phase 6: After PR Merge
 
@@ -80,7 +80,7 @@ Exempt branches (commit gate only): `main`, `master`, `hotfix/*`, `docs/*`, deta
 | Skill                | Usage                    | Steps                                                           |
 | -------------------- | ------------------------ | --------------------------------------------------------------- |
 | `/preflight <issue>` | Before starting a ticket | `totem spec` → `search_knowledge`                               |
-| `/prepush`           | Before pushing code      | `totem lint` → `totem shield`                                   |
+| `/prepush`           | Before pushing code      | `format` → `totem lint` → `totem review`                        |
 | `/postmerge <prs>`   | After merging PRs        | `totem wrap`                                                    |
 | `/triage`            | Pick next work           | `totem triage --fresh`                                          |
 | `/release-prep`      | Before cutting a release | `totem extract` → changeset → `pnpm run version` → `totem docs` |
@@ -92,7 +92,7 @@ Claude Code can spawn background agents for mechanical tasks, preserving the mai
 
 ### What agents CAN do (local operations)
 
-- `totem shield` — run and report verdict
+- `totem review` — run and report verdict
 - `totem lint` / `totem lint-lessons` — validate rules
 - `pnpm run test` / `pnpm run lint` — test suites
 - File reads, searches, code generation
@@ -110,7 +110,7 @@ Claude Code can spawn background agents for mechanical tasks, preserving the mai
 3. Continue working on strategy or next task while agent runs
 4. When agent reports back, main agent does the push + PR
 
-This saves context from 30-40KB of test output per push cycle while keeping the mandatory gates (spec before, shield after) running.
+This saves context from 30-40KB of test output per push cycle while keeping the mandatory gates (spec before, review after) running.
 
 ## What This Does NOT Solve
 
@@ -118,4 +118,4 @@ This saves context from 30-40KB of test output per push cycle while keeping the 
 - Skills are user-invoked, not automatic — you have to remember to type `/preflight`
 - Hooks can block actions but can't force the agent to do something proactively
 
-The realistic expectation: hooks catch the hard gates (push without shield), skills make the rituals easy to invoke, and CLAUDE.md provides the advisory layer. The user remains the router.
+The realistic expectation: hooks catch the hard gates (push without review), skills make the rituals easy to invoke, and CLAUDE.md provides the advisory layer. The user remains the router.
