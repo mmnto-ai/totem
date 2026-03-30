@@ -2,13 +2,8 @@
 
 The project is at release `@mmnto/cli@1.7.0` with 1,032 lessons, 379 compiled rules, and 2,090 tests. The active milestone themes focus on pipeline integrity, auto-context injection, and rule fitness.
 
-Recent completed work:
+Recent completed work (1.6.0–1.7.0):
 
-- **Auto-Context & Agent Discovery:**
-  - Implemented `SessionStart` auto-context V2 using Node-based vector search.
-  - Added the `totem describe` command to provide project discovery capabilities for agents.
-  - Created structured session checkpoints to support agent handoff workflows.
-  - Added path validation requiring `totemDir` and `lanceDir` to be strictly relative.
 - **CLI Redesign & Standard Library (1.7.0):**
   - Completed noun-verb hierarchical restructuring for commands (e.g., `totem rule list`).
   - Added global `--json` output support to all commands for easier scriptability.
