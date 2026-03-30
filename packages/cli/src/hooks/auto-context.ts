@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import type { SearchResult, TotemConfig } from '@mmnto/totem';
+import type { Embedder, SearchResult, TotemConfig } from '@mmnto/totem';
 import { createEmbedder, LanceStore, requireEmbedding, TotemConfigSchema } from '@mmnto/totem';
 
 // ─── Types ────────────────────────────────────────────────
@@ -178,17 +178,17 @@ export async function getAutoContext(options?: AutoContextOptions): Promise<Auto
 
     try {
       if (!store) {
-        // Need a store without a real embedder — create with a dummy
-        // LanceStore only needs the embedder for search(), not searchFts()
-        const dummyEmbedder = {
-          dimensions: 768,
-          embed: () =>
+        // Create store with a stub embedder — only FTS will be used (no embed calls).
+        // connectFtsOnly() skips dimension validation so it won't nuke the index.
+        const stubEmbedder: Embedder = {
+          dimensions: 0,
+          embed: (_texts: string[]) =>
             Promise.reject(new Error('[Totem Error] No embedder available for FTS fallback')),
         };
-        store = new LanceStore(storePath, dummyEmbedder as never, (msg) => {
+        store = new LanceStore(storePath, stubEmbedder, (msg) => {
           process.stderr.write(`[auto-context] ${msg}\n`);
         });
-        await store.connect();
+        await store.connectFtsOnly();
       }
 
       if (await store.isEmpty()) return { ...empty, durationMs: Date.now() - start };

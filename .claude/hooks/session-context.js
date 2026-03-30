@@ -12,6 +12,7 @@
 import { execSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -103,10 +104,10 @@ function buildStaticContext(gitRoot, branch, ticket) {
 
 async function buildVectorContext(gitRoot, branch) {
   try {
-    // Dynamic import — the CLI must be built for this to resolve
-    const { getAutoContext } = await import(
-      join(gitRoot, 'packages', 'cli', 'dist', 'hooks', 'auto-context.js')
-    );
+    // Dynamic import — the CLI must be built for this to resolve.
+    // Use pathToFileURL for Windows ESM compatibility (ERR_UNSUPPORTED_ESM_URL_SCHEME).
+    const modulePath = join(gitRoot, 'packages', 'cli', 'dist', 'hooks', 'auto-context.js');
+    const { getAutoContext } = await import(pathToFileURL(modulePath).href);
 
     const result = await getAutoContext({
       branchRef: branch,
@@ -137,7 +138,13 @@ async function main() {
   const staticContext = buildStaticContext(gitRoot, branch, ticket);
   const vectorContext = await buildVectorContext(gitRoot, branch);
 
-  const fullContext = staticContext + vectorContext + '\n\n── End Session Context ──';
+  // Hard cap: ~10k chars total (~2.5k tokens) per ADR-013
+  const MAX_TOTAL_CHARS = 10_000;
+  const combined = staticContext + vectorContext + '\n\n── End Session Context ──';
+  const fullContext =
+    combined.length > MAX_TOTAL_CHARS
+      ? combined.slice(0, MAX_TOTAL_CHARS) + '\n...(truncated)'
+      : combined;
 
   // Claude Code hook protocol: JSON with additionalContext field
   const output = JSON.stringify({ additionalContext: fullContext });

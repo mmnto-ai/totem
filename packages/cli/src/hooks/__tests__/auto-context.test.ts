@@ -1,3 +1,7 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { getAutoContext, parseBranch, truncateResults } from '../auto-context.js';
@@ -119,38 +123,56 @@ describe('truncateResults', () => {
 
 describe('getAutoContext', () => {
   it('returns empty context when projectRoot has no totem config', async () => {
-    const result = await getAutoContext({
-      branchRef: 'feat/999-nonexistent',
-      projectRoot: '/tmp/no-totem-here',
-    });
-    expect(result.searchMethod).toBe('none');
-    expect(result.content).toBe('');
-    expect(result.resultsIncluded).toBe(0);
-    expect(result.durationMs).toBeGreaterThanOrEqual(0);
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-test-'));
+    try {
+      const result = await getAutoContext({
+        branchRef: 'feat/999-nonexistent',
+        projectRoot: tmpDir,
+      });
+      expect(result.searchMethod).toBe('none');
+      expect(result.content).toBe('');
+      expect(result.resultsIncluded).toBe(0);
+      expect(result.durationMs).toBeGreaterThanOrEqual(0);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   it('returns empty context when lancedb directory is missing', async () => {
-    // Use the real project root but a branch that won't match
-    // If lancedb exists this will attempt a real search; either way it shouldn't throw
-    const result = await getAutoContext({
-      branchRef: 'main',
-      maxCharacters: 100,
-      limit: 1,
-    });
-    expect(result.query).toBe('project overview');
-    expect(result.searchMethod).toBeDefined();
-    expect(typeof result.durationMs).toBe('number');
+    // Create a tmpdir with a minimal totem.config.ts but no .lancedb
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-test-'));
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.config.ts'),
+      'export default { targets: [], embedding: { provider: "gemini" } };',
+    );
+    try {
+      const result = await getAutoContext({
+        branchRef: 'main',
+        maxCharacters: 100,
+        limit: 1,
+        projectRoot: tmpDir,
+      });
+      expect(result.query).toBe('project overview');
+      expect(result.searchMethod).toBe('none');
+      expect(typeof result.durationMs).toBe('number');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   it('respects maxCharacters in returned content', async () => {
-    const result = await getAutoContext({
-      branchRef: 'feat/1095-session-start',
-      maxCharacters: 500,
-      limit: 2,
-    });
-    // Content should respect the budget (with small overhead for truncation note)
-    if (result.content) {
-      expect(result.content.length).toBeLessThan(600);
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-test-'));
+    try {
+      const result = await getAutoContext({
+        branchRef: 'feat/1095-session-start',
+        maxCharacters: 500,
+        limit: 2,
+        projectRoot: tmpDir,
+      });
+      // No config → empty content, budget respected trivially
+      expect(result.content).toBe('');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 });

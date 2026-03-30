@@ -77,6 +77,29 @@ export class LanceStore {
     }
   }
 
+  /**
+   * Connect for FTS-only use — skips embedder dimension validation.
+   * Use when the embedder is unavailable (offline, no API key) and
+   * only FTS search will be performed.
+   */
+  async connectFtsOnly(): Promise<void> {
+    try {
+      this.db = await lancedb.connect(this.dbPath);
+
+      const tableNames = await this.db.tableNames();
+      if (tableNames.includes(TOTEM_TABLE_NAME)) {
+        this.table = await this.db.openTable(TOTEM_TABLE_NAME);
+        await this.detectFtsIndex();
+      }
+    } catch (err) {
+      // Read-only fallback — never nuke the index. Just warn and leave store empty.
+      const msg = err instanceof Error ? err.message : String(err);
+      this.onWarn(`[Totem] FTS-only connect failed: ${msg}`);
+      this.db = null;
+      this.table = null;
+    }
+  }
+
   /** Check if the stored vector dimensions differ from the current embedder. */
   private async hasDimensionMismatch(): Promise<boolean> {
     if (!this.table) return false;

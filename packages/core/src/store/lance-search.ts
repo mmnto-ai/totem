@@ -100,7 +100,7 @@ export async function runFtsSearch(
   return rows.map(({ row, rank }) => {
     const result = rowToSearchResult(row);
     // If FTS didn't provide _score, use rank-based scoring (1.0 → 0.0)
-    if (result.score === 0) {
+    if (row['_score'] == null) {
       result.score = 1 / rank;
     }
     return result;
