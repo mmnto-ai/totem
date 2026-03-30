@@ -142,10 +142,12 @@ function parseStatusFiles(statusOutput: string): string[] {
   const files: string[] = [];
   for (const line of statusOutput.split(/\r?\n/)) {
     if (!line.trim()) continue;
-    // Porcelain format: XY <path> or XY <old> -> <new> for renames
+    // Porcelain format: XY <path> or XY <old> -> <new> for renames (R/C status)
+    const statusCode = line.slice(0, 2);
     let filePart = line.slice(3); // skip 2-char status + space
-    const arrowIdx = filePart.indexOf(' -> ');
-    if (arrowIdx >= 0) filePart = filePart.slice(arrowIdx + 4);
+    if ((statusCode.startsWith('R') || statusCode.startsWith('C')) && filePart.includes(' -> ')) {
+      filePart = filePart.slice(filePart.indexOf(' -> ') + 4);
+    }
     // Strip C-style quotes that git adds for paths with spaces/special chars
     if (filePart.startsWith('"') && filePart.endsWith('"')) {
       filePart = filePart.slice(1, -1);
@@ -160,7 +162,7 @@ function parseStatusFiles(statusOutput: string): string[] {
  * ADR-039: Git Metadata Primacy — these fields come from git, never the LLM.
  */
 export async function gatherDeterministicState(cwd: string): Promise<DeterministicCheckpoint> {
-  const { getGitBranch, getGitStatus } = await import('@mmnto/totem');
+  const { getGitBranch, getGitStatus } = await import('../git.js');
 
   // 1. Get branch — handle detached HEAD gracefully
   let branch: string;

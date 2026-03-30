@@ -134,7 +134,7 @@ describe('buildLiteHandoff', () => {
 
 // ─── gatherDeterministicState ───────────────────────
 
-vi.mock('@mmnto/totem', async (importOriginal) => {
+vi.mock('../git.js', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
@@ -148,9 +148,9 @@ describe('gatherDeterministicState', () => {
   let mockGetGitStatus: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
-    const totem = await import('@mmnto/totem');
-    mockGetGitBranch = totem.getGitBranch as unknown as ReturnType<typeof vi.fn>;
-    mockGetGitStatus = totem.getGitStatus as unknown as ReturnType<typeof vi.fn>;
+    const git = await import('../git.js');
+    mockGetGitBranch = git.getGitBranch as unknown as ReturnType<typeof vi.fn>;
+    mockGetGitStatus = git.getGitStatus as unknown as ReturnType<typeof vi.fn>;
   });
 
   afterEach(() => {
@@ -314,9 +314,9 @@ describe('parseSemanticFields', () => {
 
 describe('lite mode checkpoint', () => {
   it('bypasses LLM execution when lite flag is provided and returns empty semantic arrays', async () => {
-    const totem = await import('@mmnto/totem');
-    const mockBranch = totem.getGitBranch as unknown as ReturnType<typeof vi.fn>;
-    const mockStatus = totem.getGitStatus as unknown as ReturnType<typeof vi.fn>;
+    const git = await import('../git.js');
+    const mockBranch = git.getGitBranch as unknown as ReturnType<typeof vi.fn>;
+    const mockStatus = git.getGitStatus as unknown as ReturnType<typeof vi.fn>;
 
     mockBranch.mockReturnValue('feat/lite-test');
     mockStatus.mockReturnValue(' M src/foo.ts');
