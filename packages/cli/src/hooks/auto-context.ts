@@ -170,9 +170,7 @@ export async function getAutoContext(options?: AutoContextOptions): Promise<Auto
     if (await store.isEmpty()) return { ...empty, durationMs: Date.now() - start };
 
     results = await store.search({ query, maxResults: limit });
-    searchMethod = store.ftsIndexReady ? 'hybrid' : 'hybrid';
-    // Hybrid uses both vector + FTS when available; vector-only when not.
-    // Either way, the embedder was used — label it 'hybrid'.
+    searchMethod = 'hybrid';
   } catch (err) {
     // Embedder failed (no API key, network error, etc.) — try FTS fallback
     const msg = err instanceof Error ? err.message : String(err);

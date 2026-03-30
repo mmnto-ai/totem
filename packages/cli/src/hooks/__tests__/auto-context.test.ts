@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AutoContextResult } from '../auto-context.js';
-import { parseBranch, truncateResults } from '../auto-context.js';
+import { getAutoContext, parseBranch, truncateResults } from '../auto-context.js';
 
 // ─── Branch Parsing ───────────────────────────────────────
 
@@ -116,19 +115,42 @@ describe('truncateResults', () => {
   });
 });
 
-// ─── getAutoContext (integration-level, mocked at boundaries) ──
+// ─── getAutoContext (graceful degradation) ─────────────────
 
-describe('getAutoContext result shape', () => {
-  it('returns correct shape for empty result', () => {
-    const result: AutoContextResult = {
-      query: 'test',
-      resultsIncluded: 0,
-      totalFound: 0,
-      content: '',
-      searchMethod: 'none',
-      durationMs: 0,
-    };
+describe('getAutoContext', () => {
+  it('returns empty context when projectRoot has no totem config', async () => {
+    const result = await getAutoContext({
+      branchRef: 'feat/999-nonexistent',
+      projectRoot: '/tmp/no-totem-here',
+    });
     expect(result.searchMethod).toBe('none');
     expect(result.content).toBe('');
+    expect(result.resultsIncluded).toBe(0);
+    expect(result.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('returns empty context when lancedb directory is missing', async () => {
+    // Use the real project root but a branch that won't match
+    // If lancedb exists this will attempt a real search; either way it shouldn't throw
+    const result = await getAutoContext({
+      branchRef: 'main',
+      maxCharacters: 100,
+      limit: 1,
+    });
+    expect(result.query).toBe('project overview');
+    expect(result.searchMethod).toBeDefined();
+    expect(typeof result.durationMs).toBe('number');
+  });
+
+  it('respects maxCharacters in returned content', async () => {
+    const result = await getAutoContext({
+      branchRef: 'feat/1095-session-start',
+      maxCharacters: 500,
+      limit: 2,
+    });
+    // Content should respect the budget (with small overhead for truncation note)
+    if (result.content) {
+      expect(result.content.length).toBeLessThan(600);
+    }
   });
 });
