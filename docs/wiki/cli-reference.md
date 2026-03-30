@@ -133,6 +133,7 @@ Assesses your current mid-task state and creates a lightweight breadcrumb file. 
 
 Captures uncommitted changes and lessons learned today for your next session.
 
+- **Output:** Emits both a human-readable markdown summary and a structured JSON checkpoint (useful for programmatic context loading by AI agents in subsequent sessions).
 - **Flags:**
   - `--lite`: An ANSI-sanitized, zero-LLM snapshot (fast).
 
