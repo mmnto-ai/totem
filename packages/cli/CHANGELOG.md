@@ -1,5 +1,15 @@
 # @mmnto/cli
 
+## 1.7.0
+
+### Minor Changes
+
+- c236cac: Developer Experience milestone: redesigned help output with command grouping and [LLM] badges, --json global flag for structured CLI output, totem hooks --force for hook regeneration, triage-pr multi-nit parsing fix, Sensors vs Actuators documentation.
+
+### Patch Changes
+
+- @mmnto/totem@1.7.0
+
 ## 1.6.3
 
 ### Patch Changes
