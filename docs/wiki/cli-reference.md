@@ -3,6 +3,8 @@
 This document provides a detailed breakdown of the `totem` command-line interface.
 
 > **Note:** All orchestrator commands (like `spec`, `triage`, and `extract`) currently require the [GitHub CLI (`gh`)](https://cli.github.com/) to be installed on your system.
+>
+> **Global Flags:** Every Totem command supports the `--json` flag to output structured JSON instead of human-readable text, making it trivial to pipe Totem into your own automation scripts or UI dashboards (e.g., `totem status --json`).
 
 ---
 
@@ -22,6 +24,8 @@ If existing AI agent instructions (e.g., `.cursor/rules/*.mdc`) are detected dur
 Installs or updates background git hooks (<!-- docs HOOK_LIST -->`pre-commit`, `pre-push`, `post-merge`, `post-checkout`<!-- /docs -->). Automatically resolves the git root in monorepo sub-packages.
 
 - **Usage:** Typically run automatically during `pnpm prepare`.
+- **Flags:**
+  - `--force`: Overwrites existing Totem hooks. Use this after a major version upgrade to ensure you have the latest stateless, fast-executing hook templates.
 - **Troubleshooting (Mac/Linux):** If you clone a repository initialized on Windows and the hooks fail to fire, Git may not recognize them as executable. Fix this by running: `chmod +x .git/hooks/pre-commit .git/hooks/pre-push .git/hooks/post-merge .git/hooks/post-checkout`
 
 ### `totem doctor`
@@ -55,7 +59,7 @@ Fetches merged PRs, reads comments, and extracts systemic architectural traps.
 
 - **Security:** Hardened against prompt injection via XML boundaries. Actively blocks suspicious lessons in all bypass modes.
 
-### `totem compile`
+### `totem lesson compile`
 
 Compiles `.totem/lessons.md` into deterministic regex/AST rules for zero-LLM checks. Outputs to `compiled-rules.json`.
 
@@ -71,7 +75,7 @@ Interactively documents a context, symptom, and fix. Saves to `.totem/lessons.md
 
 Looks up the original markdown lesson behind a deterministic rule violation. Supports partial hash prefixes. This runs locally in milliseconds with zero LLM overhead, acting as an asynchronous mentor when a junior developer encounters an architectural block.
 
-### `totem shield`
+### `totem review`
 
 The core of the Codebase Immune System. Reads your uncommitted diff and checks it against compiled rules and vector DB traps.
 

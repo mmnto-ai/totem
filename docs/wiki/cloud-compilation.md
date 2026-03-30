@@ -5,7 +5,7 @@ Totem supports offloading rule compilation to a self-hosted Cloud Run worker for
 ## Local Compilation (Default)
 
 ```bash
-totem compile
+totem lesson compile
 ```
 
 All users get local compilation by default. It uses the configured LLM orchestrator (Gemini, Anthropic, etc.) to compile lessons one at a time. Fast for small batches (1-5 lessons).
@@ -15,7 +15,7 @@ All users get local compilation by default. It uses the configured LLM orchestra
 For teams compiling large lesson sets (10+), you can deploy the `totem-compile-worker` to your own Cloud Run instance for parallel fan-out:
 
 ```bash
-totem compile --cloud <your-cloud-run-url>
+totem lesson compile --cloud <your-cloud-run-url>
 ```
 
 The `--cloud` flag sends lessons to your endpoint in parallel, reducing compilation time by up to 25x for bulk operations.

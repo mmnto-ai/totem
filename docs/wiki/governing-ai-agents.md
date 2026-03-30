@@ -22,7 +22,7 @@ By wiring the `totem briefing` command into your agent's startup hooks (e.g., `.
 [Reflex] Hook regex was too broad — tightened in #1021, watch for regressions
 ```
 
-**The Impact:** The agent immediately knows it needs to run `totem compile` before pushing, and it has the "Tactical Reflexes" (recent lessons learned) fresh in its context window.
+**The Impact:** The agent immediately knows it needs to run `totem lesson compile` before pushing, and it has the "Tactical Reflexes" (recent lessons learned) fresh in its context window.
 
 ## 2. Deterministic Guardrails (The Exoskeleton)
 

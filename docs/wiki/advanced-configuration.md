@@ -28,7 +28,7 @@ export default {
     overrides: {
       // Use Anthropic specifically for deep architectural specs
       spec: 'anthropic:claude-3-7-sonnet-latest',
-      shield: 'gemini-3.1-pro-preview',
+      review: 'gemini-3.1-pro-preview',
     },
   },
 };
@@ -128,7 +128,7 @@ targets: [
 
 ## Custom Prompt Overrides
 
-If you want to fundamentally change how a Totem command behaves (e.g., changing the persona or output format of `totem shield`), you do not need to modify the source code.
+If you want to fundamentally change how a Totem command behaves (e.g., changing the persona or output format of `totem review`), you do not need to modify the source code.
 
 You can override any command's system prompt by creating a markdown file in `.totem/prompts/`.
 

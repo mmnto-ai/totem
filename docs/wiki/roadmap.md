@@ -23,7 +23,7 @@ _We established the core primitives required for a local-first memory engine._
 _Current Focus: Stop the friction. Make writing and enforcing rules safe, fast, and foolproof._
 
 - **The Rule Simulator (`totem test`) & Compilation Guard:** Gamifying rule creation. Developers test their governance rules against local `pass.ts`/`fail.ts` fixtures. Totem refuses to deploy unproven rules, preventing regex from breaking CI.
-- **Hard Real-Time Load Shedding:** Enforcing the 3-second budget. If `totem shield` takes longer than 2.5s locally, it immediately aborts and fails open, guaranteeing the developer's terminal never hangs.
+- **Hard Real-Time Load Shedding:** Enforcing the 3-second budget. If `totem review` takes longer than 2.5s locally, it immediately aborts and fails open, guaranteeing the developer's terminal never hangs.
 - **Local Diagnostics (`totem doctor`):** Automated health checks that scan for config bloat, missing git hooks, and leaked secrets.
 - **Consumer Init Rewrite:** Dynamic agent detection to seamlessly auto-configure the exploding ecosystem of agents (Claude, Cursor, Copilot, Junie, Cline) without interactive friction.
 

@@ -26,7 +26,7 @@ flowchart TD
     %% The Workflow & Core Rules Layer
     subgraph CoreMemory [Core Operational Memory]
         M1(<b>MEMORY.md</b><br/><br/><i>Type: Global Safety</i><br/>- "Never amend commits"<br/>- "Only use pnpm"):::memory
-        M2(<b>CLAUDE.md</b><br/><br/><i>Type: Workflow Defaults</i><br/>- "Run totem shield before pushing"<br/>- List of MCP servers):::memory
+        M2(<b>CLAUDE.md</b><br/><br/><i>Type: Workflow Defaults</i><br/>- "Run totem review before pushing"<br/>- List of MCP servers):::memory
         M3(<b>.gemini/styleguide.md</b><br/><br/><i>Type: Syntax & Style</i><br/>- "Always use Drizzle eq()"<br/>- "Zod for boundaries"):::memory
     end
 
@@ -34,7 +34,7 @@ flowchart TD
     subgraph TotemPlane [Totem: The Codebase Immune System]
         direction TB
         T1((<b>.totem/lessons/</b><br/><i>Domain Knowledge & Traps</i><br/>- "DraftKings prop IDs changed"<br/>- "RSC Context caching bugs")):::totem
-        T2[<b>totem compile</b><br/><i>Natural Language to Regex/AST</i>]:::core
+        T2[<b>totem lesson compile</b><br/><i>Natural Language to Regex/AST</i>]:::core
         T3((<b>compiled-rules.json</b><br/><i>Deterministic Hard Gates</i>)):::totem
         T4((<b>.lancedb/</b><br/><i>Semantic Vector Index</i>)):::totem
 
@@ -100,7 +100,7 @@ All commands feature proper `--help` output documentation.
     - _Hooks:_ Enforces lifecycle events via `PreToolUse` hooks. Phase-gate enforcement actively blocks commits lacking proper preflight. Hooks resolve paths from the git root and use `jq` for JSON parsing with fallbacks.
   - **Review & Quality:**
     - **`totem lint`**: Runs compiled rules against diffs. Zero LLM, fast, and recommended for pre-push hooks and CI. It natively supports SARIF/JSON outputs.
-    - **`totem shield`**: Conducts AI-powered code review using LanceDB context before PRs. It enriches context with full file contents for small changed files. Supports an audited `--override` flag to bypass LLM false positives, logging the event to the trap ledger.
+    - **`totem review`**: Conducts AI-powered code review using LanceDB context before PRs. It enriches context with full file contents for small changed files. Supports an audited `--override` flag to bypass LLM false positives, logging the event to the trap ledger.
     - **`totem explain`**: Looks up the specific lesson behind a rule violation to provide immediate developer context.
   - **Documentation:** Automates transactional document syncs using a Saga validator to prevent partial updates. It strips known-not-shipped references and marketing terminology from generated content.
   - **Telemetry & Triage:** The Trap Ledger maintains append-only telemetry locally via `.totem/ledger/events.ndjson`. The `totem doctor` command autonomously downgrades noisy rules based on this data. A categorized triage inbox maps finding severities (Phase 1), with planned support for agent dispatch integration (Phase 2), interactive prompts (Phase 3), and lesson extraction (Phase 4). Planned roadmap additions include a unified exemption engine and consolidated check commands.
@@ -111,13 +111,13 @@ All commands feature proper `--help` output documentation.
 
 ### 3. Deterministic Compiler & Zero-LLM Lint
 
-`totem compile` reads architectural constraints and translates each lesson into a rule. It incorporates a strict lesson file linter acting as a pre-compilation gate to ensure structural integrity. Planned updates include semantic validation for scope, severity, and exclusions. The compilation process integrates manifest signing to establish a secure provenance chain and supports parallel execution via a `--concurrency` flag. It utilizes a facade pattern in `compiler.ts` to orchestrate rule translation.
+`totem lesson compile` reads architectural constraints and translates each lesson into a rule. It incorporates a strict lesson file linter acting as a pre-compilation gate to ensure structural integrity. Planned updates include semantic validation for scope, severity, and exclusions. The compilation process integrates manifest signing to establish a secure provenance chain and supports parallel execution via a `--concurrency` flag. It utilizes a facade pattern in `compiler.ts` to orchestrate rule translation.
 
 The compiler supports manual pattern definitions in lessons and reverse-compiles curated rules. The system incorporates a backfill of body text for 938 core architectural lessons to enrich rule context. It integrates a Tier 2 AST engine alongside its regex capabilities for advanced structural pattern matching. These AST query engines implement graceful degradation and strictly manage process exits. Rules are stored in `.totem/compiled-rules.json`, extended with advanced telemetry fields.
 
 The compilation process is context-aware, reading files directly from disk instead of parsing staged diffs. This prevents AST gating false positives. Developers can bypass false positives using audited inline suppression directives. Rules are scoped using anchored glob matching, preventing `fileGlobs` from leaking outside specified directories. Duplicate or overly broad match patterns are actively consolidated and rejected. The system relies on a curated 379-rule set for baseline enforcement.
 
-`totem lint` applies these compiled rules against `git diff` additions with zero LLM calls. It shares a core `runCompiledRules` engine with `totem shield` for execution consistency. This blocks main branch commits and pre-push violations locally.
+`totem lint` applies these compiled rules against `git diff` additions with zero LLM calls. It shares a core `runCompiledRules` engine with `totem review` for execution consistency. This blocks main branch commits and pre-push violations locally.
 
 **Unified Findings Model:** All violations are normalized into a canonical `TotemFinding` interface. This ensures consistent severity mapping across engines and supports finding deduplication:
 
@@ -163,7 +163,7 @@ Totem supports three explicit capability tiers, auto-detected from the environme
 | ------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
 | **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `link`, `bridge`, `eject`, `lint`, `compile`, `test`, `explain`, `handoff --lite` |
 | **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`, `doctor`                                                                       |
-| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `shield`, `triage`, `audit`, `briefing`, `handoff`, `extract`, `wrap`, `docs`)             |
+| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `review`, `triage`, `audit`, `briefing`, `handoff`, `extract`, `wrap`, `docs`)             |
 
 The `embedding` field in `totem.config.ts` is optional; when omitted, Totem operates in the Lite tier. The `getConfigTier()` helper and `requireEmbedding()` guard enforce these boundaries at runtime.
 

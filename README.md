@@ -8,7 +8,13 @@ Every PR becomes a back-and-forth with review bots about the same architectural 
 
 Write what you learned in plain English. Totem compiles it into a rule. That mistake physically cannot happen again.
 
-## The Invisible Exoskeleton
+## A Platform of Primitives, Not Opinionated Workflows
+
+Totem is a **standard library for codebase governance**. It provides fast, deterministic building blocks (`totem lint`, `totem compile`, `totem extract`) that you wire into your own CI/CD reality.
+
+We do not force you into a rigid, 7-step AI methodology. We provide the **Sensors** (the knowledge index, the deterministic compiler). You are the Flight Controller. You decide where to put the **Actuators** (Git hooks, IDE plugins).
+
+## The Codebase Immune System
 
 Totem operates as a continuous, self-healing loop that converts institutional knowledge into physical constraints.
 
@@ -33,9 +39,11 @@ graph LR
     Ledger -.->|Self-Healing Loop| Learn
 ```
 
-1. **The Eye (Observe):** `totem shield` and your review bots (CodeRabbit, GCA) watch the code. What went wrong?
+1. **The Eye (Observe):** `totem review` (our optional reference implementation) and your CI bots watch the code. What went wrong?
 2. **The Brain (Learn):** `totem extract` captures the markdown lesson from the PR. `totem compile` automatically writes the AST/Regex plugin for you. What did we learn?
-3. **The Hand (Enforce):** `totem lint` and Git Hooks physically block the push. Make it impossible to repeat.
+3. **The Hand (Enforce):** `totem lint` (the fast, deterministic core) physically blocks the push. Make it impossible to repeat.
+
+**Note on Tooling:** Every CLI command in Totem supports the `--json` global flag, allowing you to easily pipe Totem's output into your own custom UI or automation scripts.
 
 ## How a Mistake Becomes Impossible
 

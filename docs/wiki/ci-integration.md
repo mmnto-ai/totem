@@ -59,7 +59,7 @@ A standard Vitest test can assert the line count and presence of required string
 
 ## Handling False Positives in CI
 
-If the CI pipeline fails due to a `totem shield` rule that is technically correct but contextually wrong (a false positive), developers do not need to modify the ruleset.
+If the CI pipeline fails due to a `totem review` rule that is technically correct but contextually wrong (a false positive), developers do not need to modify the ruleset.
 
 They can bypass the rule using an inline suppression directive directly in the code:
 

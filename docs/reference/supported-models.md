@@ -10,14 +10,14 @@ config paths, and strategies for keeping everything current.
 
 ## Orchestrator Models (LLM Calls)
 
-Used by `totem shield`, `totem spec`, `totem triage`, `totem extract`, etc.
+Used by `totem review`, `totem spec`, `totem triage`, `totem extract`, etc.
 
 ### Google Gemini
 
 | Role                | Model ID                 | Notes                                            |
 | ------------------- | ------------------------ | ------------------------------------------------ |
 | Default (fast)      | `gemini-3-flash-preview` | Preview — current Totem default                  |
-| Pro (complex tasks) | `gemini-3.1-pro-preview` | Preview — used for spec/shield/triage overrides  |
+| Pro (complex tasks) | `gemini-3.1-pro-preview` | Preview — used for spec/review/triage overrides  |
 | Stable fast         | `gemini-2.5-flash`       | GA release, used in smoke/eval tests             |
 | Stable pro          | `gemini-2.5-pro`         | GA release                                       |
 | Fast-lite (newest)  | `gemini-3.1-flash-lite`  | Released 2026-03-03, 2.5x faster TTFT than Flash |
@@ -103,7 +103,7 @@ Current defaults configured in `totem.config.ts` and `packages/cli/src/commands/
 
 ```
 Embedding:    Gemini gemini-embedding-2-preview  (or OpenAI text-embedding-3-small, Ollama nomic-embed-text)
-Orchestrator: Gemini gemini-3-flash-preview  (overrides: gemini-3.1-pro-preview for spec/shield/triage)
+Orchestrator: Gemini gemini-3-flash-preview  (overrides: gemini-3.1-pro-preview for spec/review/triage)
 ```
 
 ### Updating Defaults
