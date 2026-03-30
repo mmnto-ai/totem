@@ -70,8 +70,8 @@ function buildStaticContext(gitRoot, branch, ticket) {
         lines.push('...');
         lines.push('');
       }
-    } catch {
-      // Skip journal if unreadable
+    } catch (err) {
+      process.stderr.write(`[session-context] Could not read journal: ${err.message}\n`);
     }
   }
 
@@ -92,8 +92,8 @@ function buildStaticContext(gitRoot, branch, ticket) {
           break;
         }
       }
-    } catch {
-      // Skip proposals if unreadable
+    } catch (err) {
+      process.stderr.write(`[session-context] Could not read proposals: ${err.message}\n`);
     }
   }
 
@@ -152,7 +152,8 @@ async function main() {
 }
 
 main().catch((err) => {
-  process.stderr.write(`[session-context] Fatal: ${err.message}\n`);
+  const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+  process.stderr.write(`[session-context] Fatal: ${detail}\n`);
   // Exit 0 — never crash the agent's session boot
   process.exit(0);
 });
