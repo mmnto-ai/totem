@@ -42,7 +42,7 @@ Most governance tools are per-repo. Totem lets you connect repos into a shared k
 totem link ../api-server
 ```
 
-Now `totem spec` and `totem shield` in your frontend repo can query lessons from your API repo. An architectural mistake in one codebase becomes a rule protecting all others.
+Now `totem spec` and `totem review` in your frontend repo can query lessons from your API repo. An architectural mistake in one codebase becomes a rule protecting all others.
 
 Configure cross-repo queries in `totem.config.ts`:
 
