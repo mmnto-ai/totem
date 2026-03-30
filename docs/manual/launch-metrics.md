@@ -27,8 +27,8 @@ Totem's enforcement layer is **100% deterministic** — no LLM, no API keys, no 
 | Pre-push git hook                |       No       |
 | AST classification (Tree-sitter) |       No       |
 | `totem sync` (vector index)      | Yes (embedder) |
-| `totem compile` (rule authoring) |   Yes (LLM)    |
-| `totem shield` (AI review)       |   Yes (LLM)    |
+| `totem lesson compile` (rule authoring) |   Yes (LLM)    |
+| `totem review` (AI review)              |   Yes (LLM)    |
 | `totem spec` (planning)          |   Yes (LLM)    |
 
 The AI helps you **write** rules. The rules enforce themselves.
