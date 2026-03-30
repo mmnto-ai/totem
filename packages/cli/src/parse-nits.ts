@@ -73,7 +73,17 @@ export function parseCodeRabbitNits(body: string): string[] {
     if (innerContent) {
       const cleaned = stripWrapperTags(innerContent);
       if (cleaned) {
-        nits.push(cleaned);
+        // CodeRabbit separates multiple nits with `---` dividers.
+        // Split on them to extract each nit individually.
+        const parts = cleaned
+          .split(/\r?\n---\r?\n/)
+          .map((p) => p.trim())
+          .filter(Boolean);
+        if (parts.length > 1) {
+          nits.push(...parts);
+        } else {
+          nits.push(cleaned);
+        }
       }
     }
   }
@@ -102,7 +112,15 @@ export function parseCodeRabbitOutsideDiff(body: string): string[] {
     if (innerContent) {
       const cleaned = stripWrapperTags(innerContent);
       if (cleaned) {
-        results.push(cleaned);
+        const parts = cleaned
+          .split(/\r?\n---\r?\n/)
+          .map((p) => p.trim())
+          .filter(Boolean);
+        if (parts.length > 1) {
+          results.push(...parts);
+        } else {
+          results.push(cleaned);
+        }
       }
     }
   }

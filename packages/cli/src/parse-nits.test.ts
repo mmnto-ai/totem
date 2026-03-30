@@ -76,6 +76,32 @@ Second batch of nits.
     expect(nits[1]).toContain('Second batch of nits');
   });
 
+  it('splits multiple nits separated by --- within a single file block (PR #1100 format)', () => {
+    const body = `<details>
+<summary>🧹 Nitpick comments (2)</summary><blockquote>
+
+<details>
+<summary>packages/cli/src/help.ts (2)</summary><blockquote>
+
+\`76-91\`: **Replace repeated padding literals with a named constant.**
+
+The \`+ 2\` padding appears twice.
+
+---
+
+\`59-61\`: **Avoid hardcoded CLI metadata in help output.**
+
+Line 59/60 hardcode product text and command name.
+
+</blockquote></details>
+
+</blockquote></details>`;
+    const nits = parseCodeRabbitNits(body);
+    expect(nits.length).toBeGreaterThanOrEqual(2);
+    expect(nits.some((n) => n.includes('padding literals'))).toBe(true);
+    expect(nits.some((n) => n.includes('hardcoded CLI metadata'))).toBe(true);
+  });
+
   it('strips HTML wrapper tags but preserves content', () => {
     const nits = parseCodeRabbitNits(SAMPLE_NIT_BLOCK);
     expect(nits).toHaveLength(1);
