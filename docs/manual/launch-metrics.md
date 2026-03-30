@@ -14,7 +14,7 @@ Totem provides the **sensors** — your codebase's immune system. You wire the *
 | `search_knowledge` — vector index | SessionStart hook, MCP tools |
 | `totem review` — LLM analysis     | PreToolUse hook (optional)   |
 
-Totem doesn't try to control the agent in real-time. It enforces a strict final output state — like a compiler, not a linter. The git hook runs `totem lint` and `totem verify-manifest` — stateless, deterministic, no LLM.
+Totem doesn't try to control the agent in real-time. It enforces a strict final output state — like a compiler, not a linter. The git hook runs `totem verify-manifest` and `totem lint` — stateless, deterministic, no LLM.
 
 ## Works Without AI
 
