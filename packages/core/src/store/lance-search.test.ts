@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Embedder } from '../embedders/embedder.js';
-import { runHybridSearch, runVectorSearch } from './lance-search.js';
+import { runFtsSearch, runHybridSearch, runVectorSearch } from './lance-search.js';
 
 // ─── Mock helpers ───────────────────────────────────────
 
@@ -368,5 +368,82 @@ describe('runHybridSearch', () => {
     expect(table._ftsBuilder.where).toHaveBeenCalled();
     const ftsClause = table._ftsBuilder.where.mock.calls[0]![0] as string;
     expect(ftsClause).toContain("`type` = 'spec'");
+  });
+});
+
+// ─── runFtsSearch (FTS-only, no embedder) ─────────────────
+
+describe('runFtsSearch', () => {
+  it('returns results from FTS without requiring an embedder', async () => {
+    const ftsRows = [
+      fakeRow('a', { _distance: undefined }),
+      fakeRow('b', { _distance: undefined }),
+    ];
+    const table = mockTable({ ftsRows });
+    const onWarn = vi.fn();
+
+    const results = await runFtsSearch(table as never, onWarn, 'test query', undefined, 10);
+
+    expect(results).toHaveLength(2);
+    expect(results[0]!.content).toBe('content-a');
+    expect(results[1]!.content).toBe('content-b');
+  });
+
+  it('assigns rank-based scores when no _score or _distance is present', async () => {
+    const ftsRows = [
+      fakeRow('a', { _distance: undefined, _score: undefined }),
+      fakeRow('b', { _distance: undefined, _score: undefined }),
+    ];
+    const table = mockTable({ ftsRows });
+    const onWarn = vi.fn();
+
+    const results = await runFtsSearch(table as never, onWarn, 'query', undefined, 10);
+
+    // Rank 1 → score 1/1 = 1.0, Rank 2 → score 1/2 = 0.5
+    expect(results[0]!.score).toBeCloseTo(1.0);
+    expect(results[1]!.score).toBeCloseTo(0.5);
+  });
+
+  it('uses _score from BM25 when available', async () => {
+    const ftsRows = [fakeRow('a', { _distance: undefined, _score: 2.5 })];
+    const table = mockTable({ ftsRows });
+    const onWarn = vi.fn();
+
+    const results = await runFtsSearch(table as never, onWarn, 'query', undefined, 10);
+
+    expect(results[0]!.score).toBeCloseTo(2.5);
+  });
+
+  it('returns empty on FTS failure and warns', async () => {
+    const table = mockTable({ ftsError: new Error('no FTS index') });
+    const onWarn = vi.fn();
+
+    const results = await runFtsSearch(table as never, onWarn, 'query', undefined, 10);
+
+    expect(results).toHaveLength(0);
+    expect(onWarn).toHaveBeenCalledOnce();
+    expect(onWarn.mock.calls[0]![0]).toContain('FTS search failed');
+  });
+
+  it('passes type filter as WHERE clause', async () => {
+    const table = mockTable({ ftsRows: [] });
+    const onWarn = vi.fn();
+
+    await runFtsSearch(table as never, onWarn, 'query', 'lesson', 5);
+
+    expect(table._ftsBuilder.where).toHaveBeenCalled();
+    const clause = table._ftsBuilder.where.mock.calls[0]![0] as string;
+    expect(clause).toContain("`type` = 'lesson'");
+  });
+
+  it('passes boundary filter as WHERE LIKE clause', async () => {
+    const table = mockTable({ ftsRows: [] });
+    const onWarn = vi.fn();
+
+    await runFtsSearch(table as never, onWarn, 'query', undefined, 5, 'packages/core');
+
+    expect(table._ftsBuilder.where).toHaveBeenCalled();
+    const clause = table._ftsBuilder.where.mock.calls[0]![0] as string;
+    expect(clause).toContain("`filePath` LIKE 'packages/core%'");
   });
 });
