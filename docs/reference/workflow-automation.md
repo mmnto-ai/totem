@@ -80,7 +80,7 @@ Exempt branches (commit gate only): `main`, `master`, `hotfix/*`, `docs/*`, deta
 | Skill                | Usage                    | Steps                                                           |
 | -------------------- | ------------------------ | --------------------------------------------------------------- |
 | `/preflight <issue>` | Before starting a ticket | `totem spec` → `search_knowledge`                               |
-| `/prepush`           | Before pushing code      | `totem lint` → `totem review`                                   |
+| `/prepush`           | Before pushing code      | `format` → `totem lint` → `totem review`                        |
 | `/postmerge <prs>`   | After merging PRs        | `totem wrap`                                                    |
 | `/triage`            | Pick next work           | `totem triage --fresh`                                          |
 | `/release-prep`      | Before cutting a release | `totem extract` → changeset → `pnpm run version` → `totem docs` |
