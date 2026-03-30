@@ -59,6 +59,31 @@ describe('TotemConfigSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects absolute lanceDir (Unix)', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS, lanceDir: '/tmp/lancedb' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects absolute lanceDir (Windows drive)', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS, lanceDir: 'C:\\lancedb' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects absolute lanceDir (Windows backslash)', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS, lanceDir: '\\lancedb' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects absolute totemDir', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS, totemDir: '/tmp/totem' });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts relative lanceDir', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS, lanceDir: '.lancedb' });
+    expect(result.success).toBe(true);
+  });
+
   it('accepts config with docs array', () => {
     const result = TotemConfigSchema.safeParse({
       targets: BASE_TARGETS,

@@ -156,10 +156,16 @@ export const TotemConfigSchema = z.object({
   orchestrator: z.preprocess(autoMigrateOrchestrator, OrchestratorSchema).optional(),
 
   /** Optional: override the .totem/ directory path */
-  totemDir: z.string().default('.totem'),
+  totemDir: z
+    .string()
+    .default('.totem')
+    .refine((p) => !/^(\/|\\|[A-Za-z]:)/.test(p), 'totemDir must be a relative path'),
 
   /** Optional: override the .lancedb/ directory path */
-  lanceDir: z.string().default('.lancedb'),
+  lanceDir: z
+    .string()
+    .default('.lancedb')
+    .refine((p) => !/^(\/|\\|[A-Za-z]:)/.test(p), 'lanceDir must be a relative path'),
 
   /** Optional: glob patterns to exclude from indexing */
   ignorePatterns: z.array(z.string()).default(DEFAULT_IGNORE_PATTERNS),
