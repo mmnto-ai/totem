@@ -30,6 +30,7 @@ export type {
 export {
   AnthropicOrchestratorSchema,
   ChunkStrategySchema,
+  CONFIG_FILES,
   ConfigTierSchema,
   ContentTypeSchema,
   DEFAULT_IGNORE_PATTERNS,

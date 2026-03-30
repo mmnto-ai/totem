@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-import { describeProject, TotemConfigSchema } from '@mmnto/totem';
+import { CONFIG_FILES, describeProject, TotemConfigSchema, TotemError } from '@mmnto/totem';
 
 import { getContext } from '../context.js';
 
@@ -13,18 +13,19 @@ async function getDescriptionFromContext() {
   const fs = await import('node:fs');
   const projectRoot = process.cwd();
 
-  // Try cached context first (avoids re-loading config)
+  // Try cached context first (avoids re-loading config).
+  // getContext() requires an embedder, so it will throw on Lite tier —
+  // we intentionally swallow the error and fall back to direct config load.
   try {
     const ctx = await getContext();
     return describeProject(ctx.config, ctx.projectRoot);
   } catch {
-    // getContext() requires embedder — fall back to direct config load
+    // Expected on Lite tier — fall through to direct config load
   }
 
   // Direct config load for Lite tier (no embedder)
-  const configFiles = ['totem.config.ts', 'totem.yaml', 'totem.yml', 'totem.toml'];
   let configPath: string | null = null;
-  for (const file of configFiles) {
+  for (const file of CONFIG_FILES) {
     const candidate = path.join(projectRoot, file);
     if (fs.existsSync(candidate)) {
       configPath = candidate;
@@ -64,8 +65,10 @@ export function registerDescribeProject(server: McpServer): void {
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        const hint = err instanceof TotemError ? err.recoveryHint : undefined;
+        const text = hint ? `${msg}\n\nRecovery hint: ${hint}` : msg;
         return {
-          content: [{ type: 'text' as const, text: msg }],
+          content: [{ type: 'text' as const, text }],
           isError: true,
         };
       }
