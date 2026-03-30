@@ -75,15 +75,13 @@ export function parseCodeRabbitNits(body: string): string[] {
       if (cleaned) {
         // CodeRabbit separates multiple nits with `---` dividers.
         // Split on them to extract each nit individually.
+        // CodeRabbit separates multiple nits with `---` dividers.
+        // Always split — works for 1 or N nits.
         const parts = cleaned
           .split(/\r?\n---\r?\n/)
           .map((p) => p.trim())
           .filter(Boolean);
-        if (parts.length > 1) {
-          nits.push(...parts);
-        } else {
-          nits.push(cleaned);
-        }
+        nits.push(...parts);
       }
     }
   }
