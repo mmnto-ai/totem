@@ -89,7 +89,7 @@ describe('describe_project MCP tool', () => {
     expect(parsed.lessons).toBe(5);
   });
 
-  it('calls describeProject with context config and projectRoot', async () => {
+  it('delegates to describeProject on each call', async () => {
     const server = fakeServer();
     registerDescribeProject(server as never);
 
@@ -99,17 +99,20 @@ describe('describe_project MCP tool', () => {
 
   it('returns isError when both context and fallback fail', async () => {
     contextError = new Error('[Totem Error] No config');
-    // cwd() won't have a totem config, so fallback also fails
 
     const originalCwd = process.cwd;
     process.cwd = () => '/nonexistent/path/no-totem-here';
+    try {
+      const server = fakeServer();
+      registerDescribeProject(server as never);
 
-    const server = fakeServer();
-    registerDescribeProject(server as never);
-
-    const result = (await capturedHandler({})) as { content: { text: string }[]; isError: boolean };
-    expect(result.isError).toBe(true);
-
-    process.cwd = originalCwd;
+      const result = (await capturedHandler({})) as {
+        content: { text: string }[];
+        isError: boolean;
+      };
+      expect(result.isError).toBe(true);
+    } finally {
+      process.cwd = originalCwd;
+    }
   });
 });
