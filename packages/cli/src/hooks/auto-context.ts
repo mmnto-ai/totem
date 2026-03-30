@@ -173,8 +173,8 @@ export async function getAutoContext(options?: AutoContextOptions): Promise<Auto
     searchMethod = 'hybrid';
   } catch (err) {
     // Embedder failed (no API key, network error, etc.) — try FTS fallback
-    const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`[auto-context] Vector search failed, trying FTS fallback: ${msg}\n`);
+    const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+    process.stderr.write(`[auto-context] Vector search failed, trying FTS fallback: ${detail}\n`);
 
     try {
       if (!store) {

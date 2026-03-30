@@ -93,8 +93,8 @@ export class LanceStore {
       }
     } catch (err) {
       // Read-only fallback — never nuke the index. Just warn and leave store empty.
-      const msg = err instanceof Error ? err.message : String(err);
-      this.onWarn(`[Totem] FTS-only connect failed: ${msg}`);
+      const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+      this.onWarn(`[Totem] FTS-only connect failed: ${detail}`);
       this.db = null;
       this.table = null;
     }
