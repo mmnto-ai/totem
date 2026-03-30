@@ -114,11 +114,7 @@ export function parseCodeRabbitOutsideDiff(body: string): string[] {
           .split(/\r?\n---\r?\n/)
           .map((p) => p.trim())
           .filter(Boolean);
-        if (parts.length > 1) {
-          results.push(...parts);
-        } else {
-          results.push(cleaned);
-        }
+        results.push(...parts);
       }
     }
   }
