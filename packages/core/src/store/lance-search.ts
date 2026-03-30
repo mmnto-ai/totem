@@ -86,6 +86,27 @@ async function runVectorLeg(
   }));
 }
 
+/** FTS-only search — no embedder required. For use when embedding is unavailable (offline, no API key). */
+export async function runFtsSearch(
+  table: lancedb.Table,
+  onWarn: (msg: string) => void,
+  query: string,
+  typeFilter: ContentType | undefined,
+  maxResults: number,
+  boundary?: string | string[],
+): Promise<SearchResult[]> {
+  const whereClause = buildWhereClause(typeFilter, boundary);
+  const rows = await runFtsLeg(table, onWarn, query, whereClause, maxResults);
+  return rows.map(({ row, rank }) => {
+    const result = rowToSearchResult(row);
+    // If FTS didn't provide _score, use rank-based scoring (1.0 → 0.0)
+    if (row['_score'] == null) {
+      result.score = 1 / rank;
+    }
+    return result;
+  });
+}
+
 async function runFtsLeg(
   table: lancedb.Table,
   onWarn: (msg: string) => void,
@@ -108,7 +129,7 @@ async function runFtsLeg(
   } catch (err) {
     // FTS leg failed — degrade gracefully
     const msg = err instanceof Error ? err.message : String(err);
-    onWarn(`FTS search failed, falling back to vector-only: ${msg}`);
+    onWarn(`FTS search failed: ${msg}`);
     return [];
   }
 }
@@ -152,13 +173,21 @@ function buildWhereClause(
 
 /** Convert a raw LanceDB row to a SearchResult. */
 function rowToSearchResult(row: Record<string, unknown>): SearchResult {
+  // Vector search returns _distance (lower = better); FTS returns _score (higher = better)
+  let score = 0;
+  if (row['_distance'] != null) {
+    score = 1 / (1 + (row['_distance'] as number));
+  } else if (row['_score'] != null) {
+    score = row['_score'] as number;
+  }
+
   return {
     content: row['content'] as string,
     contextPrefix: row['contextPrefix'] as string,
     filePath: row['filePath'] as string,
     type: row['type'] as ContentType,
     label: row['label'] as string,
-    score: row['_distance'] != null ? 1 / (1 + (row['_distance'] as number)) : 0,
+    score,
     metadata: JSON.parse((row['metadata'] as string) || '{}') as Record<string, string>,
   };
 }

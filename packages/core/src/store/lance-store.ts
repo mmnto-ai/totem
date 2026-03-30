@@ -14,7 +14,7 @@ import type {
 } from '../types.js';
 import { runHealthCheck } from './lance-health.js';
 import { TOTEM_TABLE_NAME } from './lance-schema.js';
-import { runHybridSearch, runVectorSearch } from './lance-search.js';
+import { runFtsSearch, runHybridSearch, runVectorSearch } from './lance-search.js';
 
 /**
  * Escape a string for use in a LanceDB SQL WHERE clause (single-quoted literal).
@@ -74,6 +74,29 @@ export class LanceStore {
         return;
       }
       throw err;
+    }
+  }
+
+  /**
+   * Connect for FTS-only use — skips embedder dimension validation.
+   * Use when the embedder is unavailable (offline, no API key) and
+   * only FTS search will be performed.
+   */
+  async connectFtsOnly(): Promise<void> {
+    try {
+      this.db = await lancedb.connect(this.dbPath);
+
+      const tableNames = await this.db.tableNames();
+      if (tableNames.includes(TOTEM_TABLE_NAME)) {
+        this.table = await this.db.openTable(TOTEM_TABLE_NAME);
+        await this.detectFtsIndex();
+      }
+    } catch (err) {
+      // Read-only fallback — never nuke the index. Just warn and leave store empty.
+      const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+      this.onWarn(`[Totem] FTS-only connect failed: ${detail}`);
+      this.db = null;
+      this.table = null;
     }
   }
 
@@ -232,6 +255,24 @@ export class LanceStore {
       options.typeFilter as ContentType | undefined,
       maxResults,
       boundary,
+    );
+  }
+
+  /**
+   * FTS-only search — no embedder required.
+   * Use when embedding is unavailable (offline, no API key, cold-start fallback).
+   * Requires an FTS index to exist; returns empty if none available.
+   */
+  async searchFts(options: SearchOptions): Promise<SearchResult[]> {
+    if (!this.table || !this.hasFtsIndex) return [];
+
+    return runFtsSearch(
+      this.table,
+      this.onWarn,
+      options.query,
+      options.typeFilter as ContentType | undefined,
+      options.maxResults ?? 5,
+      options.boundary,
     );
   }
 
