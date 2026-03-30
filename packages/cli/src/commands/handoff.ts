@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { getGitBranch, getGitStatus, readAllLessons } from '@mmnto/totem'; // totem-ignore
+import { readAllLessons } from '@mmnto/totem'; // totem-ignore
 
 import type { HandoffCheckpoint } from '../schemas/handoff-checkpoint.js';
 import { HandoffCheckpointSchema } from '../schemas/handoff-checkpoint.js';
@@ -160,6 +160,8 @@ function parseStatusFiles(statusOutput: string): string[] {
  * ADR-039: Git Metadata Primacy — these fields come from git, never the LLM.
  */
 export async function gatherDeterministicState(cwd: string): Promise<DeterministicCheckpoint> {
+  const { getGitBranch, getGitStatus } = await import('@mmnto/totem');
+
   // 1. Get branch — handle detached HEAD gracefully
   let branch: string;
   try {
@@ -268,9 +270,9 @@ export function writeCheckpoint(jsonPath: string, checkpoint: HandoffCheckpoint)
 /**
  * Determine the JSON checkpoint path given the --out option.
  * - If --out is specified: companion file with .json extension
- * - If --out is not specified: .totem/handoff.json (only if .totem/ exists)
+ * - If --out is not specified: <cwd>/<totemDir>/handoff.json
  */
-export function resolveCheckpointPath(cwd: string, outPath?: string): string | null {
+export function resolveCheckpointPath(cwd: string, totemDir: string, outPath?: string): string {
   if (outPath) {
     const ext = path.extname(outPath);
     if (ext) {
@@ -279,12 +281,7 @@ export function resolveCheckpointPath(cwd: string, outPath?: string): string | n
     return outPath + '.json';
   }
 
-  const totemDir = path.join(cwd, '.totem');
-  if (fs.existsSync(totemDir)) {
-    return path.join(totemDir, 'handoff.json');
-  }
-
-  return null;
+  return path.join(cwd, totemDir, 'handoff.json');
 }
 
 // ─── Lite handoff (zero LLM) ────────────────────────────
@@ -391,12 +388,15 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
     if (options.out) log.success(TAG, `Written to ${options.out}`);
 
     // Write checkpoint JSON with empty semantic fields (lite = no LLM)
-    const deterministicState = await gatherDeterministicState(cwd);
-    const checkpoint = HandoffCheckpointSchema.parse(deterministicState);
-    const jsonPath = resolveCheckpointPath(cwd, options.out);
-    if (jsonPath) {
+    try {
+      const deterministicState = await gatherDeterministicState(cwd);
+      const checkpoint = HandoffCheckpointSchema.parse(deterministicState);
+      const jsonPath = resolveCheckpointPath(cwd, config.totemDir, options.out);
       writeCheckpoint(jsonPath, checkpoint);
       log.dim(TAG, `Checkpoint: ${jsonPath}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn(TAG, `Checkpoint write failed (skipped): ${msg}`);
     }
 
     log.dim(TAG, 'Lite handoff complete (zero LLM).');
@@ -422,11 +422,9 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
 
     try {
       const checkpoint = HandoffCheckpointSchema.parse(merged);
-      const jsonPath = resolveCheckpointPath(cwd, options.out);
-      if (jsonPath) {
-        writeCheckpoint(jsonPath, checkpoint);
-        log.dim(TAG, `Checkpoint: ${jsonPath}`);
-      }
+      const jsonPath = resolveCheckpointPath(cwd, config.totemDir, options.out);
+      writeCheckpoint(jsonPath, checkpoint);
+      log.dim(TAG, `Checkpoint: ${jsonPath}`);
     } catch (err) {
       // Checkpoint is best-effort — never block the handoff on validation failure
       const msg = err instanceof Error ? err.message : String(err);

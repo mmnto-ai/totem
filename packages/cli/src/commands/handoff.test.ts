@@ -395,8 +395,8 @@ describe('writeCheckpoint', () => {
     const totemDir = path.join(tmpDir, '.totem');
     fs.mkdirSync(totemDir, { recursive: true });
 
-    const jsonPath = resolveCheckpointPath(tmpDir);
-    expect(jsonPath).toBe(path.join(totemDir, 'handoff.json'));
+    const jsonPath = resolveCheckpointPath(tmpDir, '.totem');
+    expect(jsonPath).toBe(path.join(tmpDir, '.totem', 'handoff.json'));
 
     const checkpoint = HandoffCheckpointSchema.parse({
       checkpoint_version: 1,
@@ -405,10 +405,10 @@ describe('writeCheckpoint', () => {
       active_files: ['src/index.ts'],
       completed: ['Setup project'],
     });
-    writeCheckpoint(jsonPath!, checkpoint);
+    writeCheckpoint(jsonPath, checkpoint);
 
-    expect(fs.existsSync(jsonPath!)).toBe(true);
-    const raw = JSON.parse(fs.readFileSync(jsonPath!, 'utf-8'));
+    expect(fs.existsSync(jsonPath)).toBe(true);
+    const raw = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
     const parsed = HandoffCheckpointSchema.parse(raw);
     expect(parsed.branch).toBe('feat/no-out');
     expect(parsed.active_files).toEqual(['src/index.ts']);
@@ -429,28 +429,27 @@ describe('resolveCheckpointPath', () => {
   });
 
   it('returns .json companion when --out has .md extension', () => {
-    const result = resolveCheckpointPath(tmpDir, '/some/path/handoff.md');
+    const result = resolveCheckpointPath(tmpDir, '.totem', '/some/path/handoff.md');
     expect(result).toBe('/some/path/handoff.json');
   });
 
   it('returns .json companion when --out has no extension', () => {
-    const result = resolveCheckpointPath(tmpDir, '/some/path/handoff');
+    const result = resolveCheckpointPath(tmpDir, '.totem', '/some/path/handoff');
     expect(result).toBe('/some/path/handoff.json');
   });
 
-  it('returns .totem/handoff.json when .totem exists and no --out', () => {
-    fs.mkdirSync(path.join(tmpDir, '.totem'), { recursive: true });
-    const result = resolveCheckpointPath(tmpDir);
+  it('returns totemDir/handoff.json when no --out', () => {
+    const result = resolveCheckpointPath(tmpDir, '.totem');
     expect(result).toBe(path.join(tmpDir, '.totem', 'handoff.json'));
   });
 
-  it('returns null when no --out and no .totem directory', () => {
-    const result = resolveCheckpointPath(tmpDir);
-    expect(result).toBeNull();
+  it('uses custom totemDir when configured', () => {
+    const result = resolveCheckpointPath(tmpDir, '.governance');
+    expect(result).toBe(path.join(tmpDir, '.governance', 'handoff.json'));
   });
 
   it('replaces .txt extension with .json', () => {
-    const result = resolveCheckpointPath(tmpDir, '/output/report.txt');
+    const result = resolveCheckpointPath(tmpDir, '.totem', '/output/report.txt');
     expect(result).toBe('/output/report.json');
   });
 });
