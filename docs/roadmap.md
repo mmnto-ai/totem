@@ -2,34 +2,37 @@
 
 This document outlines the strategic milestones for the Totem project.
 
-Totem is evolving from a deterministic lint engine into a full **governance layer** for AI-assisted development. The roadmap below tracks the progression from enforcement primitives to multi-repo federation.
+Totem is evolving from a deterministic lint engine into a governance layer for AI-assisted development. The roadmap below tracks the progression of enforcement primitives and pipeline integrity.
 
 ---
 
 ## 1.7.0 — Platform of Primitives (Shipped)
 
-**Theme:** Evolving the CLI into a standard library for codebase governance, eliminating opinionated agent friction, and standardizing the UX.
+**Theme:** Evolving the CLI into a standard library for codebase governance and standardizing the user experience.
 
-- [x] **CLI Taxonomy Redesign:** Complete noun-verb hierarchical restructuring (`totem rule list`, `totem config get`). Help menus logically grouped by Core, Entities, and Workflow.
-- [x] **Actor-Aware Enforcement:** Nixed stateful flag files. Redesigned Git hooks to be purely deterministic (`lint`, `verify-manifest`). LLM push-gates are now optional Reference Implementations driven by Content Hashes at the MCP boundary.
-- [x] **Global Output:** Every command now supports `--json` for pipeline integration.
-- [x] **Developer Experience:** Added `hooks --force` for easy upgrades. `triage-pr` correctly parses multiple CodeRabbit nits.
+This phase established deterministic enforcement and core primitives for agent governance.
+
+- **CLI Taxonomy:** Restructured commands into a noun-verb hierarchy and added global JSON output support.
+- **Deterministic Enforcement:** Replaced stateful flag files with deterministic Git pre-push hooks utilizing `totem lint`.
+- **Agent Governance:** Added inline rule unit testing, enforced secure module usage, and expanded the standard library.
 
 ---
 
 ## 1.6.0 — Pipeline Maturity (Shipped)
 
-**Theme:** Close the self-healing loop — the engine learns from developer overrides to reduce false positives over time.
+**Theme:** Closing the self-healing loop to track developer overrides and reduce false positives.
 
-- [x] **Self-Healing Loop:** Integrated the Trap Ledger and exemption engine to track dual-storage false positives and capture bot review signals.
-- [x] **Core Enforcement:** Added inline rule unit testing at compile time and enforced core design tenets via the standard library.
-- [x] **Developer Experience:** Improved compiler workflows, added shield flag auto-refresh on pre-push, and introduced stress testing for rules.
+This phase introduced system telemetry, rule downgrading, and improved compiler workflows.
+
+- **Self-Healing Loop:** Implemented telemetry tracking, autonomous rule downgrading for noisy rules, and lesson extraction from resolved findings.
+- **Shield Hardening:** Improved prompt context for small file changes and enforced execution constraints.
+- **Developer Experience:** Enhanced compiler commands and added stress testing for rules and strategy updates.
 
 ---
 
 ## Prioritized Roadmap
 
-**Theme:** Enhance pipeline integrity, streamline triage workflows, and consolidate developer tooling.
+**Theme:** Enhance pipeline integrity, streamline triage workflows, and inject context for AI agents.
 
 - [ ] **Pipeline Integrity:**
   - Implement a lesson logic linter to semantically validate rule scope, severity, and exclusions.
@@ -40,17 +43,10 @@ Totem is evolving from a deterministic lint engine into a full **governance laye
   - **Phase 3:** Build interactive CLI prompts to guide pull request triage.
   - **Phase 4:** Build a lesson extraction pipeline to automate the bot-to-lesson feedback loop.
 - [ ] **Enforcement & DX:**
+  - Integrate the exemption engine to unify false positive tracking.
   - Unify enforcement into explicit `totem check` and `totem status` commands.
   - Automate ticket creation for deferred review items.
-
----
-
-## 2.0.0 — Federation (The Enterprise Tier)
-
-**Theme:** The COSS Covenant tier — multi-repo coordination for teams running autonomous agents at scale.
-
-- [ ] **Multi-Repo Federation:** Central strategy repo pushes compiled rules to downstream repositories via RBAC.
-- [ ] **Signed Trap Ledger:** Cryptographically signed, immutable cloud endpoint for ingestion.
-- [ ] **Compliance Dashboard:** Track override rates by agent source, rule health trends, and bypass audit trails.
-- [ ] **Mesh Export:** Portable bundle format for lessons and rules.
-- [ ] **`totem ui`:** Local web dashboard for rule decay, hit/miss rates, and ledger history.
+- [x] **Auto-Context Injection:**
+  - Implemented `totem describe` for agent project discovery.
+  - Added SessionStart auto-context V2 utilizing local vector search.
+  - Created structured session checkpoints for agent handoffs.
