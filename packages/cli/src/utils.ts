@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import type { CustomSecret, SearchResult, TotemConfig } from '@mmnto/totem';
 import {
+  CONFIG_FILES,
   maskSecrets,
   TotemConfigError,
   TotemConfigSchema,
@@ -46,11 +47,8 @@ export function loadEnv(cwd: string): void {
   }
 }
 
-/**
- * Supported config file names in resolution priority order.
- * .ts is preferred (full TypeScript support), static formats are fallbacks.
- */
-export const CONFIG_FILES = ['totem.config.ts', 'totem.yaml', 'totem.yml', 'totem.toml'] as const;
+// Re-export from core — canonical list of config file names
+export { CONFIG_FILES };
 
 export type ConfigFormat = 'ts' | 'yaml' | 'toml';
 

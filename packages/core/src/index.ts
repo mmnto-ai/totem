@@ -30,6 +30,7 @@ export type {
 export {
   AnthropicOrchestratorSchema,
   ChunkStrategySchema,
+  CONFIG_FILES,
   ConfigTierSchema,
   ContentTypeSchema,
   DEFAULT_IGNORE_PATTERNS,
@@ -182,6 +183,10 @@ export { buildSarifLog, DEFAULT_RULE_CATEGORY, ruleId } from './sarif.js';
 // Saga validator
 export type { SagaViolation, ViolationType } from './saga-validator.js';
 export { validateDocUpdate } from './saga-validator.js';
+
+// Project discovery
+export type { ProjectDescription } from './describe.js';
+export { describeProject } from './describe.js';
 
 // Utilities
 export {

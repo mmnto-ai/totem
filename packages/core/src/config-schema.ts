@@ -207,6 +207,12 @@ export type DocTarget = z.infer<typeof DocTargetSchema>;
 export type TotemConfig = z.infer<typeof TotemConfigSchema>;
 
 /**
+ * Supported config file names in resolution priority order.
+ * .ts is preferred (full TypeScript support), static formats are fallbacks.
+ */
+export const CONFIG_FILES = ['totem.config.ts', 'totem.yaml', 'totem.yml', 'totem.toml'] as const;
+
+/**
  * Determine the configuration tier based on what's configured.
  * - lite: no embedding, no orchestrator (memory-only features)
  * - standard: embedding configured (sync, search, stats)
