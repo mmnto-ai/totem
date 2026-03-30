@@ -65,9 +65,15 @@ program
   .name('totem')
   .description('Totem — persistent memory and context layer for AI agents')
   .version(version)
+  .option('--json', 'Output structured JSON to stdout')
   .configureHelp({
     formatHelp: (cmd, helper) => new TotemHelp().formatHelp(cmd, helper),
   });
+
+// Set JSON mode early — preAction may not fire on parse errors
+if (process.argv.includes('--json')) {
+  process.env['TOTEM_JSON_OUTPUT'] = '1';
+}
 
 program
   .command('init')
@@ -924,4 +930,24 @@ program
 // Fire-and-forget: reap orphaned temp files from previous crashed runs
 reapOrphanedTempFiles(process.cwd(), '.totem').catch(() => {});
 
-program.parse();
+try {
+  await program.parseAsync();
+} catch (err) {
+  if (process.env['TOTEM_JSON_OUTPUT'] === '1') {
+    const { printJson } = await import('./json-output.js');
+    const message = err instanceof Error ? err.message : String(err);
+    const fix =
+      err instanceof Error && 'recoveryHint' in err && typeof err.recoveryHint === 'string'
+        ? err.recoveryHint
+        : undefined;
+    const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : undefined;
+    printJson({
+      status: 'error',
+      command: process.argv.slice(2).join(' '),
+      // eslint-disable-next-line id-match -- JSON API field name
+      error: { message, fix, code },
+    });
+    process.exit(1);
+  }
+  handleError(err);
+}

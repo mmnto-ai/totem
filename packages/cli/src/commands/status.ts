@@ -65,6 +65,24 @@ export async function statusCommand(): Promise<void> {
     shieldStatus = 'error';
   }
 
+  // JSON mode — output structured data and return
+  const { isJsonMode, printJson } = await import('../json-output.js');
+  if (isJsonMode()) {
+    printJson({
+      status: 'success',
+      command: 'status',
+      data: {
+        branch,
+        dirty,
+        rules: ruleCount,
+        lessons: lessonCount,
+        manifest: manifestStatus,
+        shield: shieldStatus,
+      },
+    });
+    return;
+  }
+
   // Print summary
   log.info(TAG, `Branch: ${branch}${dirty ? ' (dirty)' : ''}`);
   log.info(TAG, `Rules: ${ruleCount} compiled`);
