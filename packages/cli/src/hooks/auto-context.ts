@@ -182,7 +182,8 @@ export async function getAutoContext(options?: AutoContextOptions): Promise<Auto
         // LanceStore only needs the embedder for search(), not searchFts()
         const dummyEmbedder = {
           dimensions: 768,
-          embed: () => Promise.reject(new Error('no embedder')),
+          embed: () =>
+            Promise.reject(new Error('[Totem Error] No embedder available for FTS fallback')),
         };
         store = new LanceStore(storePath, dummyEmbedder as never, (msg) => {
           process.stderr.write(`[auto-context] ${msg}\n`);
