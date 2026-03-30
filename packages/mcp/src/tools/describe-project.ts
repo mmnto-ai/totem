@@ -23,7 +23,10 @@ async function getDescriptionFromContext() {
     // Expected on Lite tier — fall through to direct config load
   }
 
-  // Direct config load for Lite tier (no embedder)
+  // Direct config load for Lite tier (no embedder).
+  // Only .ts configs are supported here — jiti cannot parse YAML/TOML.
+  // YAML/TOML users will have getContext() succeed since those configs
+  // still define an embedding provider (Standard/Full tier).
   let configPath: string | null = null;
   for (const file of CONFIG_FILES) {
     const candidate = path.join(projectRoot, file);
@@ -35,6 +38,13 @@ async function getDescriptionFromContext() {
 
   if (!configPath) {
     throw new Error('[Totem Error] No totem config found. Run totem init first.');
+  }
+
+  if (!configPath.endsWith('.ts')) {
+    throw new Error(
+      '[Totem Error] MCP describe_project fallback only supports .ts configs. ' +
+        'YAML/TOML configs require an embedding provider (Standard+ tier).',
+    );
   }
 
   const { createJiti } = await import('jiti');
