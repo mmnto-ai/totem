@@ -145,7 +145,7 @@ function parseStatusFiles(statusOutput: string): string[] {
     // Porcelain format: XY <path> or XY <old> -> <new> for renames (R/C status)
     const statusCode = line.slice(0, 2);
     let filePart = line.slice(3); // skip 2-char status + space
-    if ((statusCode.startsWith('R') || statusCode.startsWith('C')) && filePart.includes(' -> ')) {
+    if ((statusCode.includes('R') || statusCode.includes('C')) && filePart.includes(' -> ')) {
       filePart = filePart.slice(filePart.indexOf(' -> ') + 4);
     }
     // Strip C-style quotes that git adds for paths with spaces/special chars
@@ -226,8 +226,18 @@ export function parseSemanticFields(markdown: string): SemanticFields {
 
   const lines = markdown.split(/\r?\n/);
   let currentField: keyof SemanticFields | null = null;
+  let inCodeBlock = false;
 
   for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Track fenced code blocks (``` or ~~~)
+    if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+    if (inCodeBlock) continue;
+
     // Detect heading (### or ##)
     const headingMatch = line.match(/^#{2,3}\s+(.+)$/);
     if (headingMatch) {
@@ -238,8 +248,7 @@ export function parseSemanticFields(markdown: string): SemanticFields {
 
     // Collect content lines under recognized sections
     if (currentField) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed === '```' || trimmed.startsWith('```')) continue;
+      if (!trimmed) continue;
       const bulletMatch = trimmed.match(/^[-*]\s+(.+)$/) ?? trimmed.match(/^\d+\.\s+(.+)$/);
       if (bulletMatch) {
         result[currentField].push(bulletMatch[1]!.trim());
@@ -384,6 +393,9 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
 
   // Lite mode — deterministic, zero LLM
   if (options.lite) {
+    // Snapshot git state BEFORE writing any files to avoid self-contamination
+    const deterministicState = await gatherDeterministicState(cwd);
+
     const recentCommits = getGitLogSince(cwd, undefined, RECENT_COMMITS_COUNT);
     const output = buildLiteHandoff(branch, status, diffStat, recentCommits, lessons);
     writeOutput(output, options.out);
@@ -391,7 +403,6 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
 
     // Write checkpoint JSON with empty semantic fields (lite = no LLM)
     try {
-      const deterministicState = await gatherDeterministicState(cwd);
       const checkpoint = HandoffCheckpointSchema.parse(deterministicState);
       const jsonPath = resolveCheckpointPath(cwd, config.totemDir, options.out);
       writeCheckpoint(jsonPath, checkpoint);
@@ -412,13 +423,15 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
   const prompt = assemblePrompt(branch, status, diff, diffStat, lessons, systemPrompt);
   log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
+  // Snapshot git state BEFORE writing any files to avoid self-contamination
+  const deterministicState = await gatherDeterministicState(cwd);
+
   const content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd });
   if (content != null) {
     writeOutput(content, options.out);
     if (options.out) log.success(TAG, `Written to ${options.out}`);
 
     // Build structured checkpoint: deterministic state + semantic fields from LLM output
-    const deterministicState = await gatherDeterministicState(cwd);
     const semanticFields = parseSemanticFields(content);
     const merged = { ...deterministicState, ...semanticFields };
 
