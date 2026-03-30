@@ -44,7 +44,7 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 **What should happen:** Run review, verify no violations, format check.
 **Commands:** `totem review`, `totem lint`, `pnpm run format:check`
 **Skill:** `/prepush`
-**Hook:** `PreToolUse` blocks `git push` if `/prepush` hasn't been run (checks `.totem/cache/.review-passed` timestamp, expires after 30 min).
+**Hook:** `PreToolUse` blocks agent `git push` if review hasn't passed (checks `.totem/cache/.reviewed-content-hash` against current source files). Human pushes are unaffected.
 
 ### Phase 6: After PR Merge
 

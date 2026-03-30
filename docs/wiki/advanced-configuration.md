@@ -132,7 +132,7 @@ If you want to fundamentally change how a Totem command behaves (e.g., changing 
 
 You can override any command's system prompt by creating a markdown file in `.totem/prompts/`.
 
-- Example: Creating `.totem/prompts/shield.md` will completely override the default instruction set for the `shield` command.
+- Example: Creating `.totem/prompts/review.md` will completely override the default instruction set for the `review` command.
 
 ## Export Targets (JetBrains Junie / Cursor)
 
