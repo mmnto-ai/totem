@@ -4,32 +4,32 @@
 - **Shared memory across repos.** `totem link` connects repos to a shared knowledge index. A lesson learned in your API repo automatically protects your frontend repo. One memory across your whole stack.
 - **Works with any AI agent.** Claude, Gemini, Cursor, Copilot, Codex — Totem doesn't care who writes the code. It just gates the push.
 
-## How It Works — The 3-Layer Gate
+## How It Works — Sensors, Not Actuators
 
-Your AI doesn't have to be obedient. It just has to push code.
+Totem provides the **sensors** — your codebase's immune system. You wire the **actuators**.
 
-| Layer          | Mechanism                               | Purpose                                                                                                                              |
-| -------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| **Suggestion** | `.cursorrules`, `CLAUDE.md`, `.gemini/` | Ask the AI to follow the rules so it works faster                                                                                    |
-| **Fast Path**  | `verify_execution` MCP tool             | Let the AI grade its own homework before pushing                                                                                     |
-| **Guarantee**  | `pre-push` git hook → `totem lint`      | Deterministic gate. If the AI ignored Layer 1 and skipped Layer 2, it hits the wall of Layer 3 and cannot proceed until it complies. |
+| What Totem Provides (Sensor)      | What You Wire (Actuator)     |
+| --------------------------------- | ---------------------------- |
+| `totem lint` — compiled rules     | Git pre-push hook            |
+| `search_knowledge` — vector index | SessionStart hook, MCP tools |
+| `totem review` — LLM analysis     | PreToolUse hook (optional)   |
 
-Totem doesn't try to control the agent in real-time. It enforces a strict final output state — like a compiler, not a linter.
+Totem doesn't try to control the agent in real-time. It enforces a strict final output state — like a compiler, not a linter. The git hook runs `totem verify-manifest` and `totem lint` — stateless, deterministic, no LLM.
 
 ## Works Without AI
 
 Totem's enforcement layer is **100% deterministic** — no LLM, no API keys, no network required.
 
-| Feature                          |  Requires AI?  |
-| -------------------------------- | :------------: |
-| `totem lint` (compiled rules)    |       No       |
-| `totem init` (baseline rules)    |       No       |
-| Pre-push git hook                |       No       |
-| AST classification (Tree-sitter) |       No       |
-| `totem sync` (vector index)      | Yes (embedder) |
-| `totem compile` (rule authoring) |   Yes (LLM)    |
-| `totem shield` (AI review)       |   Yes (LLM)    |
-| `totem spec` (planning)          |   Yes (LLM)    |
+| Feature                                 |  Requires AI?  |
+| --------------------------------------- | :------------: |
+| `totem lint` (compiled rules)           |       No       |
+| `totem init` (baseline rules)           |       No       |
+| Pre-push git hook                       |       No       |
+| AST classification (Tree-sitter)        |       No       |
+| `totem sync` (vector index)             | Yes (embedder) |
+| `totem lesson compile` (rule authoring) |   Yes (LLM)    |
+| `totem review` (AI review)              |   Yes (LLM)    |
+| `totem spec` (planning)                 |   Yes (LLM)    |
 
 The AI helps you **write** rules. The rules enforce themselves.
 
@@ -42,7 +42,7 @@ Most governance tools are per-repo. Totem lets you connect repos into a shared k
 totem link ../api-server
 ```
 
-Now `totem spec` and `totem shield` in your frontend repo can query lessons from your API repo. An architectural mistake in one codebase becomes a rule protecting all others.
+Now `totem spec` and `totem review` in your frontend repo can query lessons from your API repo. An architectural mistake in one codebase becomes a rule protecting all others.
 
 Configure cross-repo queries in `totem.config.ts`:
 
