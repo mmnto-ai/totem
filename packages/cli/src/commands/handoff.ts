@@ -1,7 +1,10 @@
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { readAllLessons } from '@mmnto/totem'; // totem-ignore
+import { getGitBranch, getGitStatus, readAllLessons } from '@mmnto/totem'; // totem-ignore
 
+import type { HandoffCheckpoint } from '../schemas/handoff-checkpoint.js';
+import { HandoffCheckpointSchema } from '../schemas/handoff-checkpoint.js';
 import { sanitize, wrapXml } from '../utils.js';
 
 // ─── Constants ──────────────────────────────────────────
@@ -118,6 +121,172 @@ export interface HandoffOptions {
   lite?: boolean;
 }
 
+// ─── Deterministic checkpoint (ADR-039) ────────────────
+
+export interface DeterministicCheckpoint {
+  checkpoint_version: 1;
+  timestamp: string;
+  branch: string;
+  active_files: string[];
+  open_prs: number[];
+}
+
+/**
+ * Parse file paths from `git status --porcelain` output.
+ * Handles standard two-char status codes: " M", "M ", "MM", "A ", "??", "D ", etc.
+ * Also handles renames ("R  old -> new") by extracting the new path.
+ */
+function parseStatusFiles(statusOutput: string): string[] {
+  if (!statusOutput.trim()) return [];
+
+  const files: string[] = [];
+  for (const line of statusOutput.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    // Porcelain format: XY <path> or XY <old> -> <new> for renames
+    let filePart = line.slice(3); // skip 2-char status + space
+    const arrowIdx = filePart.indexOf(' -> ');
+    if (arrowIdx >= 0) filePart = filePart.slice(arrowIdx + 4);
+    // Strip C-style quotes that git adds for paths with spaces/special chars
+    if (filePart.startsWith('"') && filePart.endsWith('"')) {
+      filePart = filePart.slice(1, -1);
+    }
+    files.push(filePart);
+  }
+  return files;
+}
+
+/**
+ * Gathers deterministic (zero-LLM) state for the handoff checkpoint.
+ * ADR-039: Git Metadata Primacy — these fields come from git, never the LLM.
+ */
+export async function gatherDeterministicState(cwd: string): Promise<DeterministicCheckpoint> {
+  // 1. Get branch — handle detached HEAD gracefully
+  let branch: string;
+  try {
+    const raw = getGitBranch(cwd);
+    branch = raw && raw !== '(unknown)' ? raw : 'HEAD';
+  } catch {
+    branch = 'HEAD';
+  }
+
+  // 2. Get active files from git status --porcelain (covers staged, unstaged, and untracked)
+  const statusOutput = getGitStatus(cwd);
+  const active_files = parseStatusFiles(statusOutput).sort();
+
+  // 3. Return checkpoint with timestamp and empty open_prs (PR detection is future work)
+  return {
+    checkpoint_version: 1,
+    timestamp: new Date().toISOString(),
+    branch,
+    active_files,
+    open_prs: [],
+  };
+}
+
+// ─── Semantic field extraction (Task 3) ─────────────────
+
+/**
+ * Known Markdown section headings and the semantic field they map to.
+ * Headings are matched case-insensitively.
+ */
+const SECTION_MAP: Record<string, keyof SemanticFields> = {
+  'what was done': 'completed',
+  'next steps': 'remaining',
+  'lessons & traps': 'context_hints',
+  lessons: 'context_hints',
+  'uncommitted changes': 'pending_decisions',
+};
+
+export interface SemanticFields {
+  completed: string[];
+  remaining: string[];
+  pending_decisions: string[];
+  context_hints: string[];
+}
+
+/**
+ * Extract semantic fields from Markdown output by parsing section headings
+ * and collecting bullet points / non-empty lines under each.
+ *
+ * Returns empty arrays for any sections not found or when input is malformed.
+ */
+export function parseSemanticFields(markdown: string): SemanticFields {
+  const result: SemanticFields = {
+    completed: [],
+    remaining: [],
+    pending_decisions: [],
+    context_hints: [],
+  };
+
+  if (!markdown || !markdown.trim()) return result;
+
+  const lines = markdown.split(/\r?\n/);
+  let currentField: keyof SemanticFields | null = null;
+
+  for (const line of lines) {
+    // Detect heading (### or ##)
+    const headingMatch = line.match(/^#{2,3}\s+(.+)$/);
+    if (headingMatch) {
+      const heading = headingMatch[1]!.trim().toLowerCase();
+      currentField = SECTION_MAP[heading] ?? null;
+      continue;
+    }
+
+    // Collect content lines under recognized sections
+    if (currentField) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed === '```' || trimmed.startsWith('```')) continue;
+      const bulletMatch = trimmed.match(/^[-*]\s+(.+)$/) ?? trimmed.match(/^\d+\.\s+(.+)$/);
+      if (bulletMatch) {
+        result[currentField].push(bulletMatch[1]!.trim());
+      } else if (!trimmed.startsWith('#')) {
+        result[currentField].push(trimmed);
+      }
+    }
+  }
+
+  return result;
+}
+
+// ─── Atomic checkpoint writer (Task 4) ──────────────────
+
+/**
+ * Write a JSON checkpoint file atomically: write to a .tmp file then rename.
+ * Creates parent directories if needed.
+ */
+export function writeCheckpoint(jsonPath: string, checkpoint: HandoffCheckpoint): void {
+  const dir = path.dirname(jsonPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  const tmpPath = jsonPath + '.tmp';
+  fs.writeFileSync(tmpPath, JSON.stringify(checkpoint, null, 2) + '\n', 'utf-8');
+  fs.renameSync(tmpPath, jsonPath);
+}
+
+/**
+ * Determine the JSON checkpoint path given the --out option.
+ * - If --out is specified: companion file with .json extension
+ * - If --out is not specified: .totem/handoff.json (only if .totem/ exists)
+ */
+export function resolveCheckpointPath(cwd: string, outPath?: string): string | null {
+  if (outPath) {
+    const ext = path.extname(outPath);
+    if (ext) {
+      return outPath.slice(0, -ext.length) + '.json';
+    }
+    return outPath + '.json';
+  }
+
+  const totemDir = path.join(cwd, '.totem');
+  if (fs.existsSync(totemDir)) {
+    return path.join(totemDir, 'handoff.json');
+  }
+
+  return null;
+}
+
 // ─── Lite handoff (zero LLM) ────────────────────────────
 
 const RECENT_COMMITS_COUNT = 10;
@@ -220,6 +389,16 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
     const output = buildLiteHandoff(branch, status, diffStat, recentCommits, lessons);
     writeOutput(output, options.out);
     if (options.out) log.success(TAG, `Written to ${options.out}`);
+
+    // Write checkpoint JSON with empty semantic fields (lite = no LLM)
+    const deterministicState = await gatherDeterministicState(cwd);
+    const checkpoint = HandoffCheckpointSchema.parse(deterministicState);
+    const jsonPath = resolveCheckpointPath(cwd, options.out);
+    if (jsonPath) {
+      writeCheckpoint(jsonPath, checkpoint);
+      log.dim(TAG, `Checkpoint: ${jsonPath}`);
+    }
+
     log.dim(TAG, 'Lite handoff complete (zero LLM).');
     return;
   }
@@ -235,5 +414,23 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
   if (content != null) {
     writeOutput(content, options.out);
     if (options.out) log.success(TAG, `Written to ${options.out}`);
+
+    // Build structured checkpoint: deterministic state + semantic fields from LLM output
+    const deterministicState = await gatherDeterministicState(cwd);
+    const semanticFields = parseSemanticFields(content);
+    const merged = { ...deterministicState, ...semanticFields };
+
+    try {
+      const checkpoint = HandoffCheckpointSchema.parse(merged);
+      const jsonPath = resolveCheckpointPath(cwd, options.out);
+      if (jsonPath) {
+        writeCheckpoint(jsonPath, checkpoint);
+        log.dim(TAG, `Checkpoint: ${jsonPath}`);
+      }
+    } catch (err) {
+      // Checkpoint is best-effort — never block the handoff on validation failure
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn(TAG, `Checkpoint validation failed (skipped): ${msg}`);
+    }
   }
 }
