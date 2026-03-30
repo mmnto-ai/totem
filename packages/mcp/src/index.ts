@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { TotemConfigError, TotemError } from '@mmnto/totem';
 
 import { registerAddLesson } from './tools/add-lesson.js';
+import { registerDescribeProject } from './tools/describe-project.js';
 import { registerSearchKnowledge } from './tools/search-knowledge.js';
 import { registerVerifyExecution } from './tools/verify-execution.js';
 
@@ -47,6 +48,7 @@ const server = new McpServer({
 registerSearchKnowledge(server);
 registerAddLesson(server);
 registerVerifyExecution(server);
+registerDescribeProject(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

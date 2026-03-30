@@ -183,6 +183,10 @@ export { buildSarifLog, DEFAULT_RULE_CATEGORY, ruleId } from './sarif.js';
 export type { SagaViolation, ViolationType } from './saga-validator.js';
 export { validateDocUpdate } from './saga-validator.js';
 
+// Project discovery
+export type { ProjectDescription } from './describe.js';
+export { describeProject } from './describe.js';
+
 // Utilities
 export {
   generateLessonHeading,

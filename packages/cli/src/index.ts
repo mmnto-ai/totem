@@ -679,6 +679,18 @@ program
     }
   });
 
+program
+  .command('describe')
+  .description('Show project governance scope (rules, lessons, tier, partitions)')
+  .action(async () => {
+    try {
+      const { describeCommand } = await import('./commands/describe.js');
+      await describeCommand();
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
 // ─── Lesson noun-verb subcommands ────────────────────────
 
 const lessonCmd = program.command('lesson').description('Manage project lessons');
