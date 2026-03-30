@@ -452,4 +452,9 @@ describe('resolveCheckpointPath', () => {
     const result = resolveCheckpointPath(tmpDir, '.totem', '/output/report.txt');
     expect(result).toBe('/output/report.json');
   });
+
+  it('avoids collision when --out already ends in .json', () => {
+    const result = resolveCheckpointPath(tmpDir, '.totem', '/output/handoff.json');
+    expect(result).toBe('/output/handoff.checkpoint.json');
+  });
 });

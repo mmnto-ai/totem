@@ -252,7 +252,7 @@ export function parseSemanticFields(markdown: string): SemanticFields {
       const bulletMatch = trimmed.match(/^[-*]\s+(.+)$/) ?? trimmed.match(/^\d+\.\s+(.+)$/);
       if (bulletMatch) {
         result[currentField].push(bulletMatch[1]!.trim());
-      } else if (!trimmed.startsWith('#')) {
+      } else if (!/^#{1,6}\s/.test(trimmed)) {
         result[currentField].push(trimmed);
       }
     }
@@ -286,6 +286,9 @@ export function writeCheckpoint(jsonPath: string, checkpoint: HandoffCheckpoint)
 export function resolveCheckpointPath(cwd: string, totemDir: string, outPath?: string): string {
   if (outPath) {
     const ext = path.extname(outPath);
+    if (ext === '.json') {
+      return outPath.slice(0, -ext.length) + '.checkpoint.json';
+    }
     if (ext) {
       return outPath.slice(0, -ext.length) + '.json';
     }
