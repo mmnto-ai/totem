@@ -23,7 +23,7 @@ const mockDescribeProject = vi.fn(() => ({
 
 vi.mock('@mmnto/totem', () => ({
   CONFIG_FILES: ['totem.config.ts', 'totem.yaml', 'totem.yml', 'totem.toml'],
-  describeProject: (...args: unknown[]) => mockDescribeProject(...args),
+  describeProject: () => mockDescribeProject(),
   TotemConfigSchema: { parse: (v: unknown) => v },
   TotemError: class extends Error {
     recoveryHint?: string;
