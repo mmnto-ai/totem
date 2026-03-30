@@ -179,7 +179,6 @@ export async function getAutoContext(options?: AutoContextOptions): Promise<Auto
     try {
       if (!store) {
         // Create store with a stub embedder — only FTS will be used (no embed calls).
-        // connectFtsOnly() skips dimension validation so it won't nuke the index.
         const stubEmbedder: Embedder = {
           dimensions: 0,
           embed: (_texts: string[]) =>
@@ -188,8 +187,10 @@ export async function getAutoContext(options?: AutoContextOptions): Promise<Auto
         store = new LanceStore(storePath, stubEmbedder, (msg) => {
           process.stderr.write(`[auto-context] ${msg}\n`);
         });
-        await store.connectFtsOnly();
       }
+      // (Re-)connect with connectFtsOnly — skips dimension validation and
+      // never nukes the index. Recovers from failed connect() state too.
+      await store.connectFtsOnly();
 
       if (await store.isEmpty()) return { ...empty, durationMs: Date.now() - start };
 
