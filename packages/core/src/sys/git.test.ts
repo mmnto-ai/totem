@@ -241,4 +241,11 @@ describe('inferScopeFromFiles', () => {
     const files = ['README.md', 'package.json', '.eslintrc.yaml'];
     expect(inferScopeFromFiles(files)).toEqual([]);
   });
+
+  it('does not confuse sibling directories with shared string prefix', () => {
+    const files = ['packages/core/src/index.ts', 'packages/core-utils/src/index.ts'];
+    // Common prefix should be "packages", not "packages/core"
+    const result = inferScopeFromFiles(files);
+    expect(result[0]).toBe('packages/**/*.ts');
+  });
 });

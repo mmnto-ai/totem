@@ -686,6 +686,36 @@ describe('assemblePrompt', () => {
   });
 });
 
+describe('assemblePrompt — scope context', () => {
+  const minimalPr = {
+    number: 1,
+    title: 'Test PR',
+    state: 'closed',
+    body: 'PR body',
+    reviews: [] as { author: string; state: string; body: string }[],
+    comments: [] as { author: string; body: string }[],
+  };
+
+  it('injects scope context when scopeGlobs are provided', () => {
+    const prompt = assemblePrompt(minimalPr, [], [], SYSTEM_PROMPT, undefined, undefined, [
+      'packages/cli/**/*.ts',
+      '!**/*.test.*',
+    ]);
+    expect(prompt).toContain('=== SCOPE CONTEXT (from PR diff analysis) ===');
+    expect(prompt).toContain('packages/cli/**/*.ts');
+  });
+
+  it('omits scope section when scopeGlobs is empty', () => {
+    const prompt = assemblePrompt(minimalPr, [], [], SYSTEM_PROMPT, undefined, undefined, []);
+    expect(prompt).not.toContain('=== SCOPE CONTEXT (from PR diff analysis) ===');
+  });
+
+  it('omits scope section when scopeGlobs is undefined', () => {
+    const prompt = assemblePrompt(minimalPr, [], [], SYSTEM_PROMPT);
+    expect(prompt).not.toContain('=== SCOPE CONTEXT (from PR diff analysis) ===');
+  });
+});
+
 // ─── SYSTEM_PROMPT structural assertions ────────────────
 
 describe('SYSTEM_PROMPT', () => {

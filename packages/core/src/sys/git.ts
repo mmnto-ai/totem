@@ -283,7 +283,7 @@ export function inferScopeFromFiles(files: string[]): string[] {
 
   let prefix = dirs[0]!;
   for (let i = 1; i < dirs.length; i++) {
-    while (prefix && !dirs[i]!.startsWith(prefix)) {
+    while (prefix && dirs[i] !== prefix && !dirs[i]!.startsWith(prefix + '/')) {
       const slash = prefix.lastIndexOf('/');
       prefix = slash === -1 ? '' : prefix.slice(0, slash);
     }
