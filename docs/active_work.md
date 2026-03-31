@@ -1,9 +1,13 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.7.0` with 1,032 lessons, 379 compiled rules, and 2,090 tests. The active milestone themes focus on pipeline integrity, auto-context injection, and rule fitness.
+The project is at release `@mmnto/cli@1.7.1` with 1,032 lessons, 379 compiled rules, and 2,090 tests. The active milestone themes focus on pipeline integrity, auto-context injection, and rule fitness.
 
-Recent completed work (1.6.0–1.7.0):
+Recent completed work (1.7.0–1.7.1):
 
+- **Agent Context Engineering (1.7.1):**
+  - Added structured JSON checkpoints to `totem handoff` for programmatic agent context loading.
+  - Implemented `SessionStart` Auto-Context V2 with vector/FTS search fallback.
+  - Created `totem project describe` CLI command and MCP tool for agent repo discovery.
 - **CLI Redesign & Standard Library (1.7.0):**
   - Completed noun-verb hierarchical restructuring for commands (e.g., `totem rule list`).
   - Added global `--json` output support to all commands for easier scriptability.
