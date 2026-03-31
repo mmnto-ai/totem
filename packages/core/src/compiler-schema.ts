@@ -27,6 +27,10 @@ export const CompiledRuleSchema = z.object({
   category: z.enum(['security', 'architecture', 'style', 'performance']).optional(),
   /** Severity level — error blocks CI, warning reports but doesn't fail */
   severity: z.enum(['error', 'warning']).optional(),
+  /** Lifecycle status — active rules are enforced, archived rules are skipped */
+  status: z.enum(['active', 'archived']).optional(),
+  /** Reason for archiving (when status is 'archived') */
+  archivedReason: z.string().optional(),
 });
 
 export type CompiledRule = z.infer<typeof CompiledRuleSchema>;

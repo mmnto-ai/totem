@@ -131,6 +131,17 @@ function autoMigrateOrchestrator(val: unknown): unknown {
   return val;
 }
 
+export const GarbageCollectionSchema = z.object({
+  /** Whether GC runs during `totem doctor` */
+  enabled: z.boolean().default(true),
+  /** Minimum age (days since compiledAt) before a rule is GC-eligible */
+  minAgeDays: z.number().int().min(1).default(90),
+  /** Rule categories exempt from GC (matches `category` field on compiled rules) */
+  exemptCategories: z
+    .array(z.enum(['security', 'architecture', 'style', 'performance']))
+    .default(['security']),
+});
+
 export const DocTargetSchema = z.object({
   /** Relative path to the document */
   path: z.string(),
@@ -196,6 +207,9 @@ export const TotemConfigSchema = z.object({
 
   /** Optional: custom secret patterns for DLP redaction (shared, version-controlled) */
   secrets: z.array(CustomSecretSchema).optional(),
+
+  /** Optional: garbage collection settings for stale compiled rules */
+  garbageCollection: GarbageCollectionSchema.optional(),
 });
 
 export type ChunkStrategy = z.infer<typeof ChunkStrategySchema>;
@@ -203,6 +217,7 @@ export type ContentType = z.infer<typeof ContentTypeSchema>;
 export type IngestTarget = z.infer<typeof IngestTargetSchema>;
 export type EmbeddingProvider = z.infer<typeof EmbeddingProviderSchema>;
 export type Orchestrator = z.infer<typeof OrchestratorSchema>;
+export type GarbageCollectionConfig = z.infer<typeof GarbageCollectionSchema>;
 export type DocTarget = z.infer<typeof DocTargetSchema>;
 export type TotemConfig = z.infer<typeof TotemConfigSchema>;
 

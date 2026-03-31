@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { TotemConfig } from './config-schema.js';
 import {
   DocTargetSchema,
+  GarbageCollectionSchema,
   getConfigTier,
   OrchestratorSchema,
   requireEmbedding,
@@ -393,5 +394,54 @@ describe('requireEmbedding', () => {
       return;
     }
     throw new Error('Expected requireEmbedding to throw');
+  });
+});
+
+// ─── Garbage collection config ──────────────────────
+
+describe('GarbageCollectionSchema', () => {
+  it('rejects garbage collection config with negative minAgeDays', () => {
+    const result = GarbageCollectionSchema.safeParse({ minAgeDays: -1 });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts garbage collection with defaults', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      garbageCollection: {},
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const gc = result.data.garbageCollection!;
+      expect(gc.enabled).toBe(true);
+      expect(gc.minAgeDays).toBe(90);
+      expect(gc.exemptCategories).toEqual(['security']);
+    }
+  });
+
+  it('accepts custom garbage collection config', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      garbageCollection: {
+        enabled: false,
+        minAgeDays: 30,
+        exemptCategories: ['security', 'architecture'],
+      },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const gc = result.data.garbageCollection!;
+      expect(gc.enabled).toBe(false);
+      expect(gc.minAgeDays).toBe(30);
+      expect(gc.exemptCategories).toEqual(['security', 'architecture']);
+    }
+  });
+
+  it('config without garbageCollection is valid', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.garbageCollection).toBeUndefined();
+    }
   });
 });

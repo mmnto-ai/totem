@@ -16,6 +16,7 @@ import {
   saveCompiledRules,
   validateRegex,
 } from './compiler.js';
+import { CompiledRuleSchema } from './compiler-schema.js';
 import { cleanTmpDir } from './test-utils.js';
 
 // ─── hashLesson ──────────────────────────────────────
@@ -621,6 +622,44 @@ describe('compiled rules file I/O', () => {
     const rulesPath = path.join(tmpDir, 'wrong.json');
     fs.writeFileSync(rulesPath, JSON.stringify({ version: 99, rules: [] }));
     expect(() => loadCompiledRules(rulesPath)).toThrow('Invalid compiled-rules.json');
+  });
+});
+
+// ─── CompiledRuleSchema: status / archivedReason ────
+
+describe('CompiledRuleSchema status field', () => {
+  const baseRule = {
+    lessonHash: 'abc123def456',
+    lessonHeading: 'Test rule',
+    pattern: '\\berror\\b',
+    message: 'Use err instead of error',
+    engine: 'regex' as const,
+    compiledAt: '2026-03-08T12:00:00Z',
+  };
+
+  it('compiled rule without status is valid (undefined = active)', () => {
+    const parsed = CompiledRuleSchema.parse(baseRule);
+    expect(parsed.status).toBeUndefined();
+  });
+
+  it('accepts archived status with reason', () => {
+    const parsed = CompiledRuleSchema.parse({
+      ...baseRule,
+      status: 'archived',
+      archivedReason: 'Zero triggers after 90 days',
+    });
+    expect(parsed.status).toBe('archived');
+    expect(parsed.archivedReason).toBe('Zero triggers after 90 days');
+  });
+
+  it('rejects invalid status value', () => {
+    expect(() => CompiledRuleSchema.parse({ ...baseRule, status: 'deleted' })).toThrow();
+  });
+
+  it('existing rules without status field remain valid', () => {
+    const parsed = CompiledRuleSchema.parse(baseRule);
+    expect(parsed.status).toBeUndefined();
+    expect(parsed.archivedReason).toBeUndefined();
   });
 });
 
