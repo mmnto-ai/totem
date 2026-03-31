@@ -33,5 +33,5 @@ export async function withRetry<T>(
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
-  throw new Error('[Totem Error] unreachable'); // totem-ignore #894 — dead code guard
+  throw new Error('[Totem Error] Retry loop failed to complete unexpectedly.'); // totem-ignore #894 — dead code guard
 }

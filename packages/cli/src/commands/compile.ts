@@ -189,7 +189,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
       ); // totem-ignore
     } else {
       const { createSpinner } = await import('../ui.js');
-      const spinner = await createSpinner(TAG);
+      const spinner = await createSpinner(TAG, 'Compiling...');
 
       let compiled = 0;
       let skipped = 0;
