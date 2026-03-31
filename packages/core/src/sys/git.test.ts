@@ -197,13 +197,12 @@ describe('inferScopeFromFiles', () => {
     expect(result).toContain('!**/*.spec.*');
   });
 
-  it('returns empty array for scattered files (no common prefix)', () => {
+  it('uses broad common prefix when files span multiple subdirectories', () => {
     const files = [
       'packages/cli/src/commands/extract.ts',
       'packages/core/src/sys/git.ts',
       'packages/mcp/src/server.ts',
     ];
-    // Common prefix is only "packages" — still a valid common prefix
     const result = inferScopeFromFiles(files);
     expect(result[0]).toBe('packages/**/*.ts');
   });
