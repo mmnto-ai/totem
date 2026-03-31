@@ -3,13 +3,9 @@
  * Checks error message for common rate-limit indicators across LLM providers.
  */
 export function isRateLimitError(err: unknown): boolean {
-  // totem-ignore — centralized detector per rule requirement
-  return (
-    err instanceof Error &&
-    (err.message.includes('429') ||
-      err.message.includes('Too Many Requests') ||
-      err.message.includes('rate limit'))
-  );
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase(); // totem-ignore #894 — centralized detector
+  return msg.includes('429') || msg.includes('too many requests') || msg.includes('rate limit');
 }
 
 /**
@@ -37,5 +33,5 @@ export async function withRetry<T>(
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
-  throw new Error('unreachable'); // totem-ignore — dead code guard
+  throw new Error('[Totem Error] unreachable'); // totem-ignore #894 — dead code guard
 }

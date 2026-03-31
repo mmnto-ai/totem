@@ -24,7 +24,7 @@ export class ProgressTracker {
 
   /** Get formatted progress string: "45/91 (49%) | 1m 12s elapsed | ~2m 5s remaining" */
   format(): string {
-    const pct = Math.round((this.completed / this.total) * 100);
+    const pct = this.total > 0 ? Math.round((this.completed / this.total) * 100) : 0;
     const elapsed = Date.now() - this.startTime;
     const elapsedStr = formatDuration(elapsed);
 
