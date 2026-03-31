@@ -1,5 +1,21 @@
 # @mmnto/cli
 
+## 1.8.1
+
+### Patch Changes
+
+- f088d68: feat: prior art concierge for `totem spec` (#1015)
+
+  Injects shared helper signatures into the spec prompt so agents discover existing utilities (safeExec, readJsonSafe, git helpers, maskSecrets) instead of reimplementing them.
+
+- f088d68: feat: intelligent scope inference for `totem extract` (#1014)
+
+  Analyzes PR changed files and pre-injects a scope suggestion into the extraction prompt so the LLM produces better file glob scopes on extracted lessons.
+
+- Updated dependencies [f088d68]
+- Updated dependencies [f088d68]
+  - @mmnto/totem@1.8.1
+
 ## 1.8.0
 
 ### Minor Changes
