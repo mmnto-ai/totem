@@ -28,7 +28,8 @@ export async function withRetry<T>(
     } catch (err) {
       if (!isRateLimitError(err) || attempt === maxRetries) throw err;
 
-      const delay = baseDelay * Math.pow(2, attempt);
+      const jitter = Math.random() * 0.5 + 0.75; // 0.75x–1.25x randomization
+      const delay = Math.round(baseDelay * Math.pow(2, attempt) * jitter);
       opts?.onRetry?.(attempt + 1, delay);
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
