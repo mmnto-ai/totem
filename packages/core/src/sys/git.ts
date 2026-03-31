@@ -255,3 +255,60 @@ export function extractChangedFiles(diff: string): string[] {
   }
   return files;
 }
+
+// ─── Scope inference ───────────────────────────────────
+
+const CODE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.py', '.rs', '.go']);
+
+/**
+ * Infer a scope glob suggestion from a list of changed file paths.
+ * Returns glob patterns based on the common directory prefix,
+ * with default test file exclusions.
+ */
+export function inferScopeFromFiles(files: string[]): string[] {
+  // Filter to source code files only (ignore configs, docs, data files)
+  const codeFiles = files.filter((f) => {
+    const dot = f.lastIndexOf('.');
+    if (dot === -1) return false;
+    return CODE_EXTENSIONS.has(f.slice(dot).toLowerCase());
+  });
+
+  if (codeFiles.length === 0) return [];
+
+  // Compute common directory prefix
+  const dirs = codeFiles.map((f) => {
+    const slash = f.lastIndexOf('/');
+    return slash === -1 ? '' : f.slice(0, slash);
+  });
+
+  let prefix = dirs[0]!;
+  for (let i = 1; i < dirs.length; i++) {
+    while (prefix && dirs[i] !== prefix && !dirs[i]!.startsWith(prefix + '/')) {
+      const slash = prefix.lastIndexOf('/');
+      prefix = slash === -1 ? '' : prefix.slice(0, slash);
+    }
+    if (!prefix) break;
+  }
+
+  // No useful common prefix — files are scattered across the repo.
+  // Root-level files (prefix === '') also return empty — too broad to be useful.
+  if (!prefix) return [];
+
+  // Determine dominant extension
+  const extCounts = new Map<string, number>();
+  for (const f of codeFiles) {
+    const dot = f.lastIndexOf('.');
+    const ext = f.slice(dot).toLowerCase();
+    extCounts.set(ext, (extCounts.get(ext) ?? 0) + 1);
+  }
+  let dominantExt = '';
+  let maxCount = 0;
+  for (const [ext, count] of extCounts) {
+    if (count > maxCount) {
+      maxCount = count;
+      dominantExt = ext;
+    }
+  }
+
+  return [`${prefix}/**/*${dominantExt}`, '!**/*.test.*', '!**/*.spec.*'];
+}

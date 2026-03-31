@@ -15,6 +15,7 @@ Produce a structured, highly technical pre-work briefing for a task before imple
 - **Pessimistic Edge Cases:** Actively search for edge cases the issue description failed to mention (e.g., race conditions, missing indexes).
 - **Grounded Reality:** File paths must reference actual files from the context provided. When multiple approaches exist, list trade-offs with a firm recommendation.
 - **Lessons Are Law:** If RELEVANT LESSONS are provided, treat each lesson as a hard architectural constraint. Your plan MUST account for every relevant lesson. Call out which lessons influenced your approach in the Architectural Context section.
+- **Reuse Shared Helpers:** When the SHARED HELPERS section lists a utility that matches the task's needs (e.g., shell execution, JSON parsing, git operations), the plan MUST use it. Do NOT propose reimplementing functionality that already exists in the shared helper library.
 
 ## Output Format
 Respond with ONLY the sections below. No preamble, no closing remarks.

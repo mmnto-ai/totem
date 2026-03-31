@@ -14,6 +14,7 @@ import {
   getGitLogSince,
   getLatestTag,
   getTagDate,
+  inferScopeFromFiles,
   isFileDirty,
 } from './git.js';
 
@@ -171,5 +172,79 @@ describe('extractChangedFiles', () => {
 
   it('returns empty array for empty diff', () => {
     expect(extractChangedFiles('')).toEqual([]);
+  });
+});
+
+describe('inferScopeFromFiles', () => {
+  it('returns common prefix glob for files in same directory', () => {
+    const files = ['packages/cli/src/commands/foo.ts', 'packages/cli/src/commands/bar.ts'];
+    expect(inferScopeFromFiles(files)).toEqual([
+      'packages/cli/src/commands/**/*.ts',
+      '!**/*.test.*',
+      '!**/*.spec.*',
+    ]);
+  });
+
+  it('uses dominant extension when files have mixed extensions', () => {
+    const files = [
+      'packages/core/src/util.ts',
+      'packages/core/src/helper.ts',
+      'packages/core/src/index.js',
+    ];
+    const result = inferScopeFromFiles(files);
+    expect(result[0]).toBe('packages/core/src/**/*.ts');
+    expect(result).toContain('!**/*.test.*');
+    expect(result).toContain('!**/*.spec.*');
+  });
+
+  it('uses broad common prefix when files span multiple subdirectories', () => {
+    const files = [
+      'packages/cli/src/commands/extract.ts',
+      'packages/core/src/sys/git.ts',
+      'packages/mcp/src/server.ts',
+    ];
+    const result = inferScopeFromFiles(files);
+    expect(result[0]).toBe('packages/**/*.ts');
+  });
+
+  it('returns empty array when files span root directories', () => {
+    const files = ['src/foo.ts', 'lib/bar.ts'];
+    expect(inferScopeFromFiles(files)).toEqual([]);
+  });
+
+  it('filters out non-code files (.md, .json, .yaml)', () => {
+    const files = [
+      'packages/core/src/index.ts',
+      'packages/core/README.md',
+      'packages/core/package.json',
+      'packages/core/tsconfig.json',
+      'packages/core/src/util.ts',
+    ];
+    const result = inferScopeFromFiles(files);
+    expect(result[0]).toBe('packages/core/src/**/*.ts');
+  });
+
+  it('always includes test exclusions when returning a suggestion', () => {
+    const files = ['src/commands/lint.ts'];
+    const result = inferScopeFromFiles(files);
+    expect(result).toHaveLength(3);
+    expect(result[1]).toBe('!**/*.test.*');
+    expect(result[2]).toBe('!**/*.spec.*');
+  });
+
+  it('returns empty array for empty input', () => {
+    expect(inferScopeFromFiles([])).toEqual([]);
+  });
+
+  it('returns empty array when all files are non-code', () => {
+    const files = ['README.md', 'package.json', '.eslintrc.yaml'];
+    expect(inferScopeFromFiles(files)).toEqual([]);
+  });
+
+  it('does not confuse sibling directories with shared string prefix', () => {
+    const files = ['packages/core/src/index.ts', 'packages/core-utils/src/index.ts'];
+    // Common prefix should be "packages", not "packages/core"
+    const result = inferScopeFromFiles(files);
+    expect(result[0]).toBe('packages/**/*.ts');
   });
 });

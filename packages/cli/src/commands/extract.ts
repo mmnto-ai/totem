@@ -17,6 +17,7 @@ import { log } from '../ui.js';
 import {
   formatResults,
   getSystemPrompt,
+  GH_TIMEOUT_MS,
   loadConfig,
   loadEnv,
   requireEmbedding,
@@ -118,8 +119,19 @@ export function assemblePrompt(
   systemPrompt: string,
   nits?: string[],
   botMarkers: readonly string[] = DEFAULT_BOT_MARKERS,
+  scopeGlobs?: string[],
 ): string {
   const sections: string[] = [systemPrompt];
+
+  // Scope context from PR diff analysis (#1014) — globs derived from PR filenames (untrusted)
+  if (scopeGlobs && scopeGlobs.length > 0) {
+    sections.push('\n=== SCOPE CONTEXT (from PR diff analysis) ===');
+    sections.push(
+      wrapUntrustedXml('scope_context', `Suggested file scope: ${scopeGlobs.join(', ')}`),
+    );
+    sections.push('Use this scope as the default unless a lesson truly applies globally.');
+    sections.push('Include a "scope" field in each lesson JSON with the appropriate glob pattern.');
+  }
 
   // PR metadata — sanitize untrusted fields (title, state come from PR author)
   sections.push('=== PR METADATA ===');
@@ -272,7 +284,11 @@ function validateLesson(obj: unknown): ExtractedLesson | null {
   // Validate optional heading
   const heading = typeof rec.heading === 'string' ? sanitizeHeading(rec.heading) : undefined;
 
-  return { ...(heading && { heading }), tags, text };
+  // Validate optional scope (#1014) — reject newlines to prevent body injection
+  const rawScope = typeof rec.scope === 'string' ? rec.scope.trim() : undefined;
+  const scope = rawScope && !/[\n\r]/.test(rawScope) ? rawScope : undefined;
+
+  return { ...(heading && { heading }), tags, text, ...(scope && { scope }) };
 }
 
 /** Try to parse JSON lessons with manual validation. Returns null on failure. */
@@ -342,7 +358,8 @@ export function appendLessons(lessons: ExtractedLesson[], lessonsDir: string): v
   for (const l of lessons) {
     const heading = l.heading || generateLessonHeading(l.text);
     const tags = l.tags.join(', ');
-    const entry = `## Lesson — ${heading}\n\n**Tags:** ${tags}\n\n${l.text}\n`;
+    const scopeLine = l.scope ? `\n**Scope:** ${l.scope}` : '';
+    const entry = `## Lesson — ${heading}\n\n**Tags:** ${tags}${scopeLine}\n\n${l.text}\n`;
     writeLessonFile(lessonsDir, entry);
   }
 }
@@ -520,8 +537,35 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
       }
     }
 
+    // Scope inference (#1014): analyze PR changed files for scope suggestion
+    let scopeGlobs: string[] = [];
+    try {
+      const { safeExec: exec, inferScopeFromFiles } = await import('@mmnto/totem');
+      const diff = exec('gh', ['pr', 'diff', String(num), '--name-only'], {
+        cwd,
+        timeout: GH_TIMEOUT_MS,
+        maxBuffer: 10 * 1024 * 1024, // 10MB for large PRs
+        env: { ...process.env, GH_PROMPT_DISABLED: '1' },
+      });
+      const files = diff.trim().split(/\r?\n/).filter(Boolean);
+      scopeGlobs = inferScopeFromFiles(files);
+      if (scopeGlobs.length > 0) {
+        log.dim(TAG, `Inferred scope: ${scopeGlobs.join(', ')}`);
+      }
+    } catch (err) {
+      log.dim(TAG, `Skipping scope inference: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
     // Assemble prompt
-    const prompt = assemblePrompt(pr, threads, existingLessons, systemPrompt, prNits, botMarkers);
+    const prompt = assemblePrompt(
+      pr,
+      threads,
+      existingLessons,
+      systemPrompt,
+      prNits,
+      botMarkers,
+      scopeGlobs,
+    );
     log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
     // Run orchestrator (handles --raw mode, validation, invocation, telemetry)
@@ -586,6 +630,7 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
     for (const lesson of flaggedLessons) {
       const prefix = lesson.suspiciousFlags?.length ? '[!] ' : '';
       console.log(`\n  ${prefix}Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`); // totem-ignore — stdout for piping
+      if (lesson.scope) console.log(`  Scope: ${sanitize(lesson.scope)}`); // totem-ignore — stdout for piping
       console.log(`  ${sanitize(lesson.text).replace(/\n/g, '\n  ')}`); // totem-ignore — stdout for piping
       if (lesson.suspiciousFlags?.length) {
         for (const flag of lesson.suspiciousFlags) {
@@ -615,6 +660,7 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
       console.error(
         `  [${i + 1}] ${prefix}Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`,
       );
+      if (lesson.scope) console.error(`      Scope: ${sanitize(lesson.scope)}`);
       console.error(`      ${sanitize(lesson.text).replace(/\n/g, '\n      ')}`);
       if (lesson.suspiciousFlags?.length) {
         for (const flag of lesson.suspiciousFlags) {
@@ -640,6 +686,7 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
   const sanitizedLessons = selected.map((l) => ({
     tags: l.tags.map((t) => sanitize(t)),
     text: sanitize(l.text),
+    ...(l.scope && { scope: sanitize(l.scope) }),
   }));
 
   // Append lessons to .totem/lessons/
