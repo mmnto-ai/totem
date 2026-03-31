@@ -93,23 +93,28 @@ export function autoScaffoldFixture(
   rule: CompiledRule,
   deps: AutoScaffoldDeps,
 ): void {
-  const examples = deps.extractRuleExamples(lesson.body);
-  const virtualPath = deps.deriveVirtualFilePath(rule);
-  const content = deps.scaffoldFixture({
-    ruleHash: lesson.hash,
-    filePath: virtualPath,
-    failLines: examples?.hits,
-    passLines: examples?.misses,
-    heading: lesson.heading,
-  });
-  const fixturePath = deps.scaffoldFixturePath(deps.testsDir, lesson.hash);
-  deps.fs.mkdirSync(deps.path.dirname(fixturePath), { recursive: true });
-  deps.fs.writeFileSync(fixturePath, content, 'utf8');
-  deps.testedHashes.add(lesson.hash);
-  deps.log.info(
-    TAG,
-    `[${lesson.heading}] Auto-scaffolded test fixture → ${deps.path.relative(deps.cwd, fixturePath)}`,
-  );
+  try {
+    const examples = deps.extractRuleExamples(lesson.body);
+    const virtualPath = deps.deriveVirtualFilePath(rule);
+    const content = deps.scaffoldFixture({
+      ruleHash: lesson.hash,
+      filePath: virtualPath,
+      failLines: examples?.hits,
+      passLines: examples?.misses,
+      heading: lesson.heading,
+    });
+    const fixturePath = deps.scaffoldFixturePath(deps.testsDir, lesson.hash);
+    deps.fs.mkdirSync(deps.path.dirname(fixturePath), { recursive: true });
+    deps.fs.writeFileSync(fixturePath, content, 'utf8');
+    deps.testedHashes.add(lesson.hash);
+    deps.log.info(
+      TAG,
+      `[${lesson.heading}] Auto-scaffolded test fixture → ${deps.path.relative(deps.cwd, fixturePath)}`,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    deps.log.info(TAG, `[${lesson.heading}] Failed to scaffold fixture (non-fatal): ${msg}`);
+  }
 }
 
 // ─── Main command ───────────────────────────────────

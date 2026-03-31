@@ -72,6 +72,7 @@ export function parseFixture(content: string, fixturePath: string): RuleTestFixt
 
 // ─── Fixture scaffolding ────────────────────────────
 
+/** Generate a markdown test fixture skeleton compatible with {@link parseFixture}. */
 export function scaffoldFixture(opts: {
   ruleHash: string;
   filePath?: string;
@@ -113,6 +114,7 @@ export function scaffoldFixture(opts: {
   ].join('\n');
 }
 
+/** Return the canonical fixture path for a given rule hash: `<testsDir>/test-<hash>.md`. */
 export function scaffoldFixturePath(testsDir: string, ruleHash: string): string {
   return path.join(testsDir, `test-${ruleHash}.md`);
 }
