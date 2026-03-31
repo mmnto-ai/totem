@@ -27,7 +27,7 @@ export function shouldArchiveRule(
   if (rule.status === 'archived') return null;
 
   // Exempt categories (e.g., security) are never GC'd
-  if (rule.category && gcConfig.exemptCategories.includes(rule.category)) return null;
+  if (rule.category && (gcConfig.exemptCategories as string[]).includes(rule.category)) return null;
 
   // Rule must be old enough — prefer createdAt (survives recompilation) over compiledAt
   const compiledAt = new Date(rule.createdAt ?? rule.compiledAt);
