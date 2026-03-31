@@ -474,6 +474,10 @@ program
   .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
   .option('--dry-run', 'Show extracted lessons without writing to disk')
   .option('--yes', 'Skip confirmation prompt (use in scripts/CI)')
+  .option(
+    '--from-scan',
+    'Extract lessons from fixed code scanning alerts instead of review comments',
+  )
   .action(
     async (
       prNumbers: string[],
@@ -484,6 +488,7 @@ program
         fresh?: boolean;
         dryRun?: boolean;
         yes?: boolean;
+        fromScan?: boolean;
       },
     ) => {
       requireGhCli();
@@ -766,6 +771,10 @@ lessonCmd
   .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
   .option('--dry-run', 'Show extracted lessons without writing to disk')
   .option('--yes', 'Skip confirmation prompt (use in scripts/CI)')
+  .option(
+    '--from-scan',
+    'Extract lessons from fixed code scanning alerts instead of review comments',
+  )
   .action(
     async (
       prNumbers: string[],
@@ -776,6 +785,7 @@ lessonCmd
         fresh?: boolean;
         dryRun?: boolean;
         yes?: boolean;
+        fromScan?: boolean;
       },
     ) => {
       requireGhCli();
