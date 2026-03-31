@@ -1,4 +1,18 @@
 /**
+ * Centralized 429/rate-limit error detection.
+ * Checks error message for common rate-limit indicators across LLM providers.
+ */
+export function isRateLimitError(err: unknown): boolean {
+  // totem-ignore — centralized detector per rule requirement
+  return (
+    err instanceof Error &&
+    (err.message.includes('429') ||
+      err.message.includes('Too Many Requests') ||
+      err.message.includes('rate limit'))
+  );
+}
+
+/**
  * Wraps an async function with exponential backoff retry on 429 errors.
  */
 export async function withRetry<T>(
@@ -16,17 +30,12 @@ export async function withRetry<T>(
     try {
       return await fn();
     } catch (err) {
-      const is429 = // totem-context: this IS the centralized 429 detection utility
-        err instanceof Error &&
-        (err.message.includes('429') ||
-          err.message.includes('Too Many Requests') ||
-          err.message.includes('rate limit'));
-      if (!is429 || attempt === maxRetries) throw err;
+      if (!isRateLimitError(err) || attempt === maxRetries) throw err;
 
       const delay = baseDelay * Math.pow(2, attempt);
       opts?.onRetry?.(attempt + 1, delay);
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
-  throw new Error('unreachable');
+  throw new Error('unreachable'); // totem-ignore — dead code guard
 }
