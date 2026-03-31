@@ -123,10 +123,12 @@ export function assemblePrompt(
 ): string {
   const sections: string[] = [systemPrompt];
 
-  // Scope context from PR diff analysis (#1014)
+  // Scope context from PR diff analysis (#1014) — globs derived from PR filenames (untrusted)
   if (scopeGlobs && scopeGlobs.length > 0) {
     sections.push('\n=== SCOPE CONTEXT (from PR diff analysis) ===');
-    sections.push(`Suggested file scope for extracted lessons: ${scopeGlobs.join(', ')}`);
+    sections.push(
+      wrapUntrustedXml('scope_context', `Suggested file scope: ${scopeGlobs.join(', ')}`),
+    );
     sections.push('Use this scope as the default unless a lesson truly applies globally.');
     sections.push('Include a "scope" field in each lesson JSON with the appropriate glob pattern.');
   }
@@ -282,8 +284,9 @@ function validateLesson(obj: unknown): ExtractedLesson | null {
   // Validate optional heading
   const heading = typeof rec.heading === 'string' ? sanitizeHeading(rec.heading) : undefined;
 
-  // Validate optional scope (#1014)
-  const scope = typeof rec.scope === 'string' ? rec.scope.trim() : undefined;
+  // Validate optional scope (#1014) — reject newlines to prevent body injection
+  const rawScope = typeof rec.scope === 'string' ? rec.scope.trim() : undefined;
+  const scope = rawScope && !/[\n\r]/.test(rawScope) ? rawScope : undefined;
 
   return { ...(heading && { heading }), tags, text, ...(scope && { scope }) };
 }
@@ -541,6 +544,7 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
       const diff = exec('gh', ['pr', 'diff', String(num), '--name-only'], {
         cwd,
         timeout: GH_TIMEOUT_MS,
+        maxBuffer: 10 * 1024 * 1024, // 10MB for large PRs
         env: { ...process.env, GH_PROMPT_DISABLED: '1' },
       });
       const files = diff.trim().split('\n').filter(Boolean);
@@ -548,8 +552,8 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
       if (scopeGlobs.length > 0) {
         log.dim(TAG, `Inferred scope: ${scopeGlobs.join(', ')}`);
       }
-    } catch {
-      // Non-fatal: scope inference is best-effort
+    } catch (err) {
+      log.dim(TAG, `Skipping scope inference: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     // Assemble prompt

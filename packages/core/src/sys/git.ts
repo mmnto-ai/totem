@@ -290,7 +290,8 @@ export function inferScopeFromFiles(files: string[]): string[] {
     if (!prefix) break;
   }
 
-  // No useful common prefix — files are scattered across the repo
+  // No useful common prefix — files are scattered across the repo.
+  // Root-level files (prefix === '') also return empty — too broad to be useful.
   if (!prefix) return [];
 
   // Determine dominant extension

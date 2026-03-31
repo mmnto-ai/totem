@@ -10,6 +10,7 @@ export interface SharedHelper {
   useInstead: string; // what NOT to do, e.g., 'child_process.execSync'
 }
 
+/** Return the static registry of shared helper functions for prompt injection. */
 export function getSharedHelpers(): SharedHelper[] {
   return [
     {
