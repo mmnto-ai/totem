@@ -173,4 +173,32 @@ describe('autoScaffoldFixture', () => {
       expect.stringContaining('Auto-scaffolded test fixture'),
     );
   });
+
+  it('returns true on success', () => {
+    const lesson = makeLesson();
+    const rule = makeRule();
+    const deps = makeDeps(tmpDir);
+
+    expect(autoScaffoldFixture(lesson, rule, deps)).toBe(true);
+  });
+
+  it('returns false and logs on fs failure', () => {
+    const lesson = makeLesson();
+    const rule = makeRule();
+    const deps = makeDeps(tmpDir);
+
+    // Force mkdirSync to throw
+    deps.fs = {
+      ...fs,
+      mkdirSync: () => {
+        throw new Error('disk full');
+      },
+    } as typeof fs;
+
+    expect(autoScaffoldFixture(lesson, rule, deps)).toBe(false);
+    expect(deps.log.info).toHaveBeenCalledWith(
+      'Compile',
+      expect.stringContaining('Failed to scaffold fixture'),
+    );
+  });
 });

@@ -88,11 +88,12 @@ export interface AutoScaffoldDeps {
   scaffoldFixturePath: typeof import('@mmnto/totem').scaffoldFixturePath;
 }
 
+/** Returns true if the fixture was written, false on failure. */
 export function autoScaffoldFixture(
   lesson: LessonInput,
   rule: CompiledRule,
   deps: AutoScaffoldDeps,
-): void {
+): boolean {
   try {
     const examples = deps.extractRuleExamples(lesson.body);
     const virtualPath = deps.deriveVirtualFilePath(rule);
@@ -111,9 +112,11 @@ export function autoScaffoldFixture(
       TAG,
       `[${lesson.heading}] Auto-scaffolded test fixture → ${deps.path.relative(deps.cwd, fixturePath)}`,
     );
+    return true;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     deps.log.info(TAG, `[${lesson.heading}] Failed to scaffold fixture (non-fatal): ${msg}`);
+    return false;
   }
 }
 
@@ -296,7 +299,13 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
             }
             // ADR-065: Pipeline 1 error rules require a test fixture
             if (manualResult.rule.severity === 'error' && !testedHashes.has(lesson.hash)) {
-              autoScaffoldFixture(lesson, manualResult.rule, scaffoldDeps);
+              if (!autoScaffoldFixture(lesson, manualResult.rule, scaffoldDeps)) {
+                manualResult.rule.severity = 'warning';
+                log.warn(
+                  TAG,
+                  `[${lesson.heading}] Downgraded to warning — fixture scaffold failed (ADR-065)`,
+                );
+              }
             }
             newRules.push(manualResult.rule);
             compiled++;
@@ -463,7 +472,13 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
                   result.rule.severity === 'error' &&
                   !testedHashes.has(lesson.hash)
                 ) {
-                  autoScaffoldFixture(lesson, result.rule, scaffoldDeps);
+                  if (!autoScaffoldFixture(lesson, result.rule, scaffoldDeps)) {
+                    result.rule.severity = 'warning';
+                    log.warn(
+                      TAG,
+                      `[${lesson.heading}] Downgraded to warning — fixture scaffold failed (ADR-065)`,
+                    );
+                  }
                 }
                 newRules.push(result.rule);
                 compiled++;
