@@ -383,3 +383,131 @@ describe('rule test', () => {
     expect(output).toContain('No compiled rules found');
   });
 });
+
+describe('rule scaffold', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+    vi.restoreAllMocks();
+  });
+
+  it('generates fixture for a valid rule', async () => {
+    scaffold(tmpDir, SAMPLE_RULES);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { ruleScaffoldCommand } = await import('./rule.js');
+    await ruleScaffoldCommand('efgh', {});
+
+    const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
+    expect(output).toContain('Scaffolded fixture');
+
+    const fixturePath = path.join(tmpDir, '.totem', 'tests', 'test-efgh5678efgh5678.md');
+    expect(fs.existsSync(fixturePath)).toBe(true);
+
+    const content = fs.readFileSync(fixturePath, 'utf-8');
+    expect(content).toContain('rule: efgh5678efgh5678');
+    expect(content).toContain('## Should fail');
+    expect(content).toContain('## Should pass');
+  });
+
+  it('warns and skips when fixture already exists', async () => {
+    const { totemDir } = scaffold(tmpDir, SAMPLE_RULES);
+    const testsDir = path.join(totemDir, 'tests');
+    fs.mkdirSync(testsDir, { recursive: true });
+    fs.writeFileSync(path.join(testsDir, 'test-efgh5678efgh5678.md'), 'existing', 'utf-8');
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { ruleScaffoldCommand } = await import('./rule.js');
+    await ruleScaffoldCommand('efgh', {});
+
+    const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
+    expect(output).toContain('already exists');
+
+    // File should NOT be overwritten
+    expect(fs.readFileSync(path.join(testsDir, 'test-efgh5678efgh5678.md'), 'utf-8')).toBe(
+      'existing',
+    );
+  });
+
+  it('errors on unknown hash prefix', async () => {
+    scaffold(tmpDir, SAMPLE_RULES);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { ruleScaffoldCommand } = await import('./rule.js');
+    await ruleScaffoldCommand('zzzz', {});
+
+    const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
+    expect(output).toContain("No rule found matching 'zzzz'");
+  });
+
+  it('seeds fixture with Example Hit/Miss from lesson', async () => {
+    const heading = 'Catch console log usage';
+    const bodyAfterTags = [
+      'Do not use console.log in production.',
+      '',
+      '**Pattern:** `console\\.log`',
+      '**Example Hit:** `console.log("debug")`',
+      '**Example Miss:** `logger.info("debug")`',
+    ].join('\n');
+
+    const realHash = await computeLessonHash(heading, bodyAfterTags);
+
+    const rule = {
+      lessonHash: realHash,
+      lessonHeading: heading,
+      pattern: 'console\\.log',
+      message: 'Remove console.log statements',
+      engine: 'regex',
+      severity: 'error',
+      compiledAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    const { lessonsDir } = scaffold(tmpDir, [rule]);
+
+    const lessonContent = [
+      `## Lesson \u2014 ${heading}`,
+      '',
+      '**Tags:** best-practice',
+      '',
+      bodyAfterTags,
+      '',
+    ].join('\n');
+    fs.writeFileSync(path.join(lessonsDir, 'lesson-test.md'), lessonContent, 'utf-8');
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { ruleScaffoldCommand } = await import('./rule.js');
+    await ruleScaffoldCommand(realHash, {});
+
+    const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
+    expect(output).toContain('Scaffolded fixture');
+
+    const fixturePath = path.join(tmpDir, '.totem', 'tests', `test-${realHash}.md`);
+    const content = fs.readFileSync(fixturePath, 'utf-8');
+    expect(content).toContain('console.log("debug")');
+    expect(content).toContain('logger.info("debug")');
+  });
+
+  it('writes to custom path with --out', async () => {
+    scaffold(tmpDir, SAMPLE_RULES);
+    const customPath = path.join(tmpDir, 'custom-fixture.md');
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { ruleScaffoldCommand } = await import('./rule.js');
+    await ruleScaffoldCommand('efgh', { out: customPath });
+
+    const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
+    expect(output).toContain('Scaffolded fixture');
+    expect(fs.existsSync(customPath)).toBe(true);
+  });
+});

@@ -173,6 +173,56 @@ export async function ruleInspectCommand(id: string): Promise<void> {
   console.error('');
 }
 
+export async function ruleScaffoldCommand(id: string, opts: { out?: string }): Promise<void> {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { log, bold } = await import('../ui.js');
+  const {
+    deriveVirtualFilePath,
+    extractRuleExamples,
+    hashLesson,
+    readAllLessons,
+    scaffoldFixture,
+    scaffoldFixturePath,
+  } = await import('@mmnto/totem');
+
+  const { rules, totemDir } = await loadRulesOrExit();
+
+  if (rules.length === 0) {
+    log.error('Totem Error', 'No compiled rules found. Run `totem compile` first.');
+    return;
+  }
+
+  const rule = resolveRuleByPrefix(rules, id, log, bold);
+  if (!rule) return;
+
+  // Determine output path
+  const testsDir = path.join(totemDir, 'tests');
+  const outPath = opts.out ?? scaffoldFixturePath(testsDir, rule.lessonHash);
+
+  if (fs.existsSync(outPath)) {
+    log.warn(TAG, `Fixture already exists: ${path.relative(process.cwd(), outPath)}`);
+    return;
+  }
+
+  // Find source lesson for Example Hit/Miss seed content
+  const lessons = readAllLessons(totemDir);
+  const lesson = lessons.find((l) => hashLesson(l.heading, l.body) === rule.lessonHash);
+  const examples = lesson ? extractRuleExamples(lesson.body) : null;
+
+  const content = scaffoldFixture({
+    ruleHash: rule.lessonHash,
+    filePath: deriveVirtualFilePath(rule),
+    failLines: examples?.hits,
+    passLines: examples?.misses,
+    heading: rule.lessonHeading,
+  });
+
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, content, 'utf8');
+  log.success(TAG, `Scaffolded fixture → ${bold(path.relative(process.cwd(), outPath))}`);
+}
+
 export async function ruleTestCommand(id: string): Promise<void> {
   const { log, bold, errorColor, success: successColor } = await import('../ui.js');
   const {

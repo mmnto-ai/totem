@@ -70,6 +70,50 @@ export function parseFixture(content: string, fixturePath: string): RuleTestFixt
   return { ruleHash, filePath, failLines, passLines, fixturePath };
 }
 
+// ─── Fixture scaffolding ────────────────────────────
+
+export function scaffoldFixture(opts: {
+  ruleHash: string;
+  filePath?: string;
+  failLines?: string[];
+  passLines?: string[];
+  heading?: string;
+}): string {
+  const filePath = opts.filePath ?? 'src/example.ts';
+  const failContent =
+    opts.failLines && opts.failLines.length > 0
+      ? opts.failLines.join('\n')
+      : '// TODO: add code that should trigger this rule';
+  const passContent =
+    opts.passLines && opts.passLines.length > 0
+      ? opts.passLines.join('\n')
+      : '// TODO: add code that should NOT trigger this rule';
+
+  return [
+    '---',
+    `rule: ${opts.ruleHash}`,
+    `file: ${filePath}`,
+    '---',
+    '',
+    '## Should fail',
+    '',
+    '```ts',
+    failContent,
+    '```',
+    '',
+    '## Should pass',
+    '',
+    '```ts',
+    passContent,
+    '```',
+    '',
+  ].join('\n');
+}
+
+export function scaffoldFixturePath(testsDir: string, ruleHash: string): string {
+  return path.join(testsDir, `test-${ruleHash}.md`);
+}
+
 // ─── Test execution ──────────────────────────────────
 
 function linesToAdditions(lines: string[], filePath: string): DiffAddition[] {

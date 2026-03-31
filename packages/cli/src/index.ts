@@ -868,6 +868,19 @@ ruleCmd
     }
   });
 
+ruleCmd
+  .command('scaffold <id>')
+  .description('Generate a test fixture skeleton for a compiled rule')
+  .option('--out <path>', 'Write fixture to a custom path')
+  .action(async (id: string, opts: { out?: string }) => {
+    try {
+      const { ruleScaffoldCommand } = await import('./commands/rule.js');
+      await ruleScaffoldCommand(id, opts);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
 // ─── Config noun-verb subcommands ───────────────────────
 const configCmd = program.command('config').description('Read and manage project configuration');
 

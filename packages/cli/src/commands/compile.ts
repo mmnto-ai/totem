@@ -86,14 +86,18 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
     buildCompiledRule,
     buildManualRule,
     compileLesson: compileLessonCore,
+    deriveVirtualFilePath,
     exportLessons,
     extractManualPattern,
+    extractRuleExamples,
     formatExampleFailure,
     hashLesson,
     loadCompiledRulesFile,
     parseCompilerResponse,
     readAllLessons,
     saveCompiledRulesFile,
+    scaffoldFixture,
+    scaffoldFixturePath,
     verifyRuleExamples,
   } = await import('@mmnto/totem');
 
@@ -235,10 +239,23 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
             }
             // ADR-065: Pipeline 1 error rules require a test fixture
             if (manualResult.rule.severity === 'error' && !testedHashes.has(lesson.hash)) {
-              manualResult.rule.severity = 'warning';
-              log.warn(
+              // Auto-scaffold fixture (ADR-065 / #854)
+              const examples = extractRuleExamples(lesson.body);
+              const virtualPath = deriveVirtualFilePath(manualResult.rule);
+              const content = scaffoldFixture({
+                ruleHash: lesson.hash,
+                filePath: virtualPath,
+                failLines: examples?.hits,
+                passLines: examples?.misses,
+                heading: lesson.heading,
+              });
+              const fixturePath = scaffoldFixturePath(testsDir, lesson.hash);
+              fs.mkdirSync(path.dirname(fixturePath), { recursive: true });
+              fs.writeFileSync(fixturePath, content, 'utf8');
+              testedHashes.add(lesson.hash);
+              log.info(
                 TAG,
-                `[${lesson.heading}] Downgraded to warning — no test fixture in .totem/tests/ (ADR-065)`,
+                `[${lesson.heading}] Auto-scaffolded test fixture → ${path.relative(cwd, fixturePath)}`,
               );
             }
             newRules.push(manualResult.rule);
@@ -406,10 +423,23 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
                   result.rule.severity === 'error' &&
                   !testedHashes.has(lesson.hash)
                 ) {
-                  result.rule.severity = 'warning';
-                  log.warn(
+                  // Auto-scaffold fixture (ADR-065 / #854)
+                  const examples = extractRuleExamples(lesson.body);
+                  const virtualPath = deriveVirtualFilePath(result.rule);
+                  const content = scaffoldFixture({
+                    ruleHash: lesson.hash,
+                    filePath: virtualPath,
+                    failLines: examples?.hits,
+                    passLines: examples?.misses,
+                    heading: lesson.heading,
+                  });
+                  const fixturePath = scaffoldFixturePath(testsDir, lesson.hash);
+                  fs.mkdirSync(path.dirname(fixturePath), { recursive: true });
+                  fs.writeFileSync(fixturePath, content, 'utf8');
+                  testedHashes.add(lesson.hash);
+                  log.info(
                     TAG,
-                    `[${lesson.heading}] Downgraded to warning — no test fixture in .totem/tests/ (ADR-065)`,
+                    `[${lesson.heading}] Auto-scaffolded test fixture → ${path.relative(cwd, fixturePath)}`,
                   );
                 }
                 newRules.push(result.rule);

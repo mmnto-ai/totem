@@ -81,6 +81,7 @@ function mockConfig(docs?: DocTarget[]): void {
     lanceDir: '.lancedb',
     ignorePatterns: [],
     shieldIgnorePatterns: [],
+    shieldAutoLearn: false,
     contextWarningThreshold: 40_000,
   });
 }
