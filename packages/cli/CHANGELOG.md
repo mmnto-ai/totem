@@ -1,5 +1,16 @@
 # @mmnto/cli
 
+## 1.7.2
+
+### Patch Changes
+
+- 8fe2329: feat: rule garbage collection and compile progress indicator (#1040, #894)
+  - `totem doctor --pr` now archives stale compiled rules (zero triggers after configurable minAgeDays). Opt-in via `garbageCollection` config block. Security-category rules are exempt.
+  - `totem compile` now shows elapsed time and ETA with throughput-based estimation. Rate-limited LLM calls (429) are automatically retried with jittered exponential backoff.
+
+- Updated dependencies [8fe2329]
+  - @mmnto/totem@1.7.2
+
 ## 1.7.1
 
 ### Patch Changes
