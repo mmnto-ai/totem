@@ -125,4 +125,79 @@ describe('GitHubCliPrAdapter', () => {
       ]);
     });
   });
+
+  describe('fetchCodeScanningAlerts', () => {
+    it('maps gh API output to StandardCodeScanAlert format', () => {
+      // First call: getRepoNwo
+      mockedExec.mockReturnValueOnce('mmnto-ai/totem\n');
+      // Second call: code scanning alerts
+      mockedExec.mockReturnValueOnce(
+        JSON.stringify([
+          {
+            number: 10,
+            rule: { id: 'js/unused-variable', severity: 'warning', description: 'Unused var' },
+            state: 'fixed',
+            dismissed_reason: null,
+            html_url: 'https://github.com/mmnto-ai/totem/security/code-scanning/10',
+            most_recent_instance: {
+              ref: 'refs/heads/feat/fix-stuff',
+              location: { path: 'src/utils.ts', start_line: 42, end_line: 42 },
+              message: { text: 'Unused variable tmp' },
+              classifications: [],
+            },
+            created_at: '2026-03-01T00:00:00Z',
+            tool: { name: 'CodeQL' },
+          },
+        ]),
+      );
+
+      const result = adapter.fetchCodeScanningAlerts('refs/heads/feat/fix-stuff');
+      expect(result).toEqual([
+        {
+          number: 10,
+          rule_id: 'js/unused-variable',
+          state: 'fixed',
+          dismissed_reason: undefined,
+          html_url: 'https://github.com/mmnto-ai/totem/security/code-scanning/10',
+          most_recent_instance: {
+            location: { path: 'src/utils.ts', start_line: 42 },
+            message: { text: 'Unused variable tmp' },
+          },
+        },
+      ]);
+    });
+
+    it('handles extra fields via passthrough (lenient schema)', () => {
+      mockedExec.mockReturnValueOnce('mmnto-ai/totem\n');
+      mockedExec.mockReturnValueOnce(
+        JSON.stringify([
+          {
+            number: 20,
+            rule: { id: 'sql/injection', severity: 'error', tags: ['security'] },
+            state: 'open',
+            html_url: 'https://github.com/mmnto-ai/totem/security/code-scanning/20',
+            most_recent_instance: {
+              location: { path: 'src/db.ts', start_line: 5, end_column: 30 },
+              message: { text: 'SQL injection risk' },
+              extra_field: 'should be ignored',
+            },
+            unknown_top_level: true,
+          },
+        ]),
+      );
+
+      const result = adapter.fetchCodeScanningAlerts('refs/heads/main');
+      expect(result).toHaveLength(1);
+      expect(result[0]!.rule_id).toBe('sql/injection');
+      expect(result[0]!.state).toBe('open');
+    });
+
+    it('returns empty array when no alerts', () => {
+      mockedExec.mockReturnValueOnce('mmnto-ai/totem\n');
+      mockedExec.mockReturnValueOnce('[]');
+
+      const result = adapter.fetchCodeScanningAlerts('refs/heads/main');
+      expect(result).toEqual([]);
+    });
+  });
 });

@@ -39,10 +39,26 @@ export interface StandardReviewComment {
   createdAt?: string;
 }
 
+export interface StandardCodeScanAlert {
+  number: number;
+  rule_id: string;
+  state: 'open' | 'dismissed' | 'fixed';
+  dismissed_reason?: string;
+  html_url: string;
+  most_recent_instance: {
+    location: {
+      path: string;
+      start_line: number;
+    };
+    message: { text: string };
+  };
+}
+
 export interface PrAdapter {
   fetchOpenPRs(): StandardPrListItem[];
   fetchPr(prNumber: number): StandardPr;
   fetchReviewComments(prNumber: number): StandardReviewComment[];
+  fetchCodeScanningAlerts?(ref: string): StandardCodeScanAlert[];
   createIssue(params: {
     title: string;
     body: string;

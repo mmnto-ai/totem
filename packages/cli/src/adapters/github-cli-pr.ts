@@ -8,6 +8,7 @@ import { GH_TIMEOUT_MS } from '../utils.js';
 import { ghExec, ghFetchAndParse, handleGhError } from './gh-utils.js';
 import type {
   PrAdapter,
+  StandardCodeScanAlert,
   StandardPr,
   StandardPrListItem,
   StandardReviewComment,
@@ -50,6 +51,27 @@ const GhReviewCommentSchema = z.object({
   in_reply_to_id: z.number().optional(),
   created_at: z.string().optional(),
 });
+
+const GhCodeScanAlertSchema = z
+  .object({
+    number: z.number(),
+    rule: z.object({ id: z.string() }).passthrough(),
+    state: z.enum(['open', 'dismissed', 'fixed']),
+    dismissed_reason: z.string().nullable().optional(),
+    html_url: z.string(),
+    most_recent_instance: z
+      .object({
+        location: z
+          .object({
+            path: z.string(),
+            start_line: z.number(),
+          })
+          .passthrough(),
+        message: z.object({ text: z.string() }).passthrough(),
+      })
+      .passthrough(),
+  })
+  .passthrough();
 
 // ─── Adapter implementation ─────────────────────────────
 
@@ -103,6 +125,30 @@ export class GitHubCliPrAdapter implements PrAdapter {
       diffHunk: c.diff_hunk,
       inReplyToId: c.in_reply_to_id,
       createdAt: c.created_at,
+    }));
+  }
+
+  fetchCodeScanningAlerts(ref: string): StandardCodeScanAlert[] {
+    const nwo = this.getRepoNwo();
+    const alerts = ghFetchAndParse(
+      ['api', `repos/${nwo}/code-scanning/alerts?ref=${ref}&per_page=100`, '--paginate'],
+      z.array(GhCodeScanAlertSchema),
+      `code scanning alerts for ${ref}`,
+      this.cwd,
+    );
+    return alerts.map((a) => ({
+      number: a.number,
+      rule_id: a.rule.id,
+      state: a.state,
+      dismissed_reason: a.dismissed_reason ?? undefined,
+      html_url: a.html_url,
+      most_recent_instance: {
+        location: {
+          path: a.most_recent_instance.location.path,
+          start_line: a.most_recent_instance.location.start_line,
+        },
+        message: { text: a.most_recent_instance.message.text },
+      },
     }));
   }
 
