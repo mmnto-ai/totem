@@ -189,13 +189,11 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
       ); // totem-ignore
     } else {
       const { createSpinner } = await import('../ui.js');
-      const spinner = await createSpinner(TAG);
+      const spinner = await createSpinner(TAG, 'Compiling...');
 
       let compiled = 0;
       let skipped = 0;
       let failed = 0;
-      let processed = 0;
-      const total = toCompile.length;
       const skippedLessons: { heading: string; reason?: string }[] = [];
       const newRules: CompiledRule[] = [...existingRules];
 
@@ -362,6 +360,11 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
         } // end cloudLessons.length > 0
       } else {
         // Compile lessons in parallel batches (Proposal 188 Phase 1)
+        const { ProgressTracker } = await import('../progress.js');
+        const { withRetry } = await import('../retry.js');
+        const tracker = new ProgressTracker(toCompile.length);
+        spinner.update(tracker.format());
+
         const parsed = Number(options.concurrency ?? DEFAULT_CONCURRENCY);
         const CONCURRENCY = Math.min(
           MAX_CONCURRENCY,
@@ -370,20 +373,28 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
         for (let i = 0; i < toCompile.length; i += CONCURRENCY) {
           const batch = toCompile.slice(i, i + CONCURRENCY);
           const results = await Promise.all(
-            batch.map((lesson) =>
-              compileLessonCore(lesson, COMPILER_SYSTEM_PROMPT, coreDeps)
-                .then((result) => ({ lesson, result }))
+            batch.map((lesson) => {
+              return withRetry(() => compileLessonCore(lesson, COMPILER_SYSTEM_PROMPT, coreDeps), {
+                onRetry: (attempt, delayMs) => {
+                  log.warn(
+                    TAG,
+                    `[${lesson.heading}] Rate limited — retry ${attempt} in ${delayMs}ms`,
+                  );
+                },
+              })
+                .then((result) => {
+                  tracker.tick();
+                  spinner.update(tracker.format());
+                  return { lesson, result };
+                })
                 .catch((err) => {
+                  tracker.tick();
+                  spinner.update(tracker.format());
                   const message = err instanceof Error ? err.message : String(err);
                   log.warn(TAG, `[${lesson.heading}] ${message} — skipping`);
                   return { lesson, result: { status: 'failed' as const } };
-                }),
-            ),
-          );
-
-          processed += batch.length;
-          spinner.update(
-            `${processed}/${total} lessons (${Math.round((processed / total) * 100)}%)`,
+                });
+            }),
           );
 
           for (const { lesson, result } of results) {
