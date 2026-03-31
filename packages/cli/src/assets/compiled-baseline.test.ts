@@ -1,4 +1,10 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
+
+import type { CompiledRule } from '@mmnto/totem';
+import { parseFixture, testRule } from '@mmnto/totem';
 
 import {
   COMPILED_BASELINE_RULES,
@@ -65,4 +71,36 @@ describe('compiled-baseline ecosystem arrays', () => {
       expect(positive.some((g) => g.includes('.go'))).toBe(true);
     }
   });
+});
+
+describe('baseline fixture validation', () => {
+  const fixturesDir = path.resolve(__dirname, 'baseline-fixtures');
+  const allEcosystemRules: CompiledRule[] = [
+    ...COMPILED_PYTHON_BASELINE,
+    ...COMPILED_RUST_BASELINE,
+    ...COMPILED_GO_BASELINE,
+  ];
+  const ruleMap = new Map(allEcosystemRules.map((r) => [r.lessonHash, r]));
+
+  const fixtureFiles = fs.existsSync(fixturesDir)
+    ? fs.readdirSync(fixturesDir).filter((f) => f.endsWith('.md'))
+    : [];
+
+  it('has fixture files for ecosystem rules', () => {
+    expect(fixtureFiles.length).toBe(allEcosystemRules.length);
+  });
+
+  for (const file of fixtureFiles) {
+    it(`fixture ${file} passes against its rule`, () => {
+      const content = fs.readFileSync(path.join(fixturesDir, file), 'utf-8');
+      const fixture = parseFixture(content, file);
+      expect(fixture).not.toBeNull();
+
+      const rule = ruleMap.get(fixture!.ruleHash);
+      expect(rule).toBeDefined();
+
+      const result = testRule(rule!, fixture!);
+      expect(result.passed).toBe(true);
+    });
+  }
 });
