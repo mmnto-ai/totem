@@ -547,7 +547,7 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
         maxBuffer: 10 * 1024 * 1024, // 10MB for large PRs
         env: { ...process.env, GH_PROMPT_DISABLED: '1' },
       });
-      const files = diff.trim().split('\n').filter(Boolean);
+      const files = diff.trim().split(/\r?\n/).filter(Boolean);
       scopeGlobs = inferScopeFromFiles(files);
       if (scopeGlobs.length > 0) {
         log.dim(TAG, `Inferred scope: ${scopeGlobs.join(', ')}`);
@@ -630,6 +630,7 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
     for (const lesson of flaggedLessons) {
       const prefix = lesson.suspiciousFlags?.length ? '[!] ' : '';
       console.log(`\n  ${prefix}Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`); // totem-ignore — stdout for piping
+      if (lesson.scope) console.log(`  Scope: ${sanitize(lesson.scope)}`); // totem-ignore — stdout for piping
       console.log(`  ${sanitize(lesson.text).replace(/\n/g, '\n  ')}`); // totem-ignore — stdout for piping
       if (lesson.suspiciousFlags?.length) {
         for (const flag of lesson.suspiciousFlags) {
@@ -659,6 +660,7 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
       console.error(
         `  [${i + 1}] ${prefix}Tags: ${sanitize(lesson.tags.join(', ')).replace(/\n/g, ' ')}`,
       );
+      if (lesson.scope) console.error(`      Scope: ${sanitize(lesson.scope)}`);
       console.error(`      ${sanitize(lesson.text).replace(/\n/g, '\n      ')}`);
       if (lesson.suspiciousFlags?.length) {
         for (const flag of lesson.suspiciousFlags) {
