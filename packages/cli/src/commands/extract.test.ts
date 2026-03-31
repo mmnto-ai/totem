@@ -1070,8 +1070,9 @@ describe('assembleFromScanPrompt', () => {
   it('generates valid prompt with alerts and diff', () => {
     const prompt = assembleFromScanPrompt(sampleAlerts, sampleDiff, [], SCAN_EXTRACT_SYSTEM_PROMPT);
     expect(prompt).toContain('=== FIXED CODE SCANNING ALERTS ===');
-    expect(prompt).toContain('Alert #1 (js/unused-local-variable)');
-    expect(prompt).toContain('Alert #2 (js/sql-injection)');
+    expect(prompt).toContain('Alert #1');
+    expect(prompt).toContain('Alert #2');
+    expect(prompt).toContain('<alert_rule>');
     expect(prompt).toContain('=== FIX DIFF ===');
     expect(prompt).toContain('src/utils.ts');
   });

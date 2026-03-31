@@ -219,7 +219,8 @@ export function assembleFromScanPrompt(
 
   sections.push('\n=== FIXED CODE SCANNING ALERTS ===');
   for (const alert of alerts) {
-    sections.push(`\n--- Alert #${alert.number} (${alert.rule_id}) ---`);
+    sections.push(`\n--- Alert #${alert.number} ---`);
+    sections.push(wrapUntrustedXml('alert_rule', sanitize(alert.rule_id)));
     sections.push(wrapUntrustedXml('alert_message', alert.most_recent_instance.message.text));
     sections.push(
       wrapUntrustedXml(
@@ -568,9 +569,13 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
         continue;
       }
 
-      // Fetch the PR diff
-      log.info(TAG, 'Fetching PR diff...');
-      const diff = exec('gh', ['pr', 'diff', String(num)], {
+      // Fetch the PR diff filtered to affected files only (avoids truncation in large PRs)
+      const affectedFiles = [
+        ...new Set(fixedAlerts.map((a) => a.most_recent_instance.location.path)),
+      ];
+      log.info(TAG, `Fetching PR diff for ${affectedFiles.length} affected file(s)...`);
+      const diffArgs = ['pr', 'diff', String(num), '--', ...affectedFiles];
+      const diff = exec('gh', diffArgs, {
         cwd,
         timeout: GH_TIMEOUT_MS,
         maxBuffer: 10 * 1024 * 1024,
