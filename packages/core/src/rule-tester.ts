@@ -89,12 +89,15 @@ export function scaffoldFixture(opts: {
       ? opts.passLines.join('\n')
       : '// TODO: add code that should NOT trigger this rule';
 
+  const heading = opts.heading ? [`<!-- ${opts.heading} -->`, ''] : [];
+
   return [
     '---',
     `rule: ${opts.ruleHash}`,
     `file: ${filePath}`,
     '---',
     '',
+    ...heading,
     '## Should fail',
     '',
     '```ts',
