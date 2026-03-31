@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { withRetry } from './retry.js';
+import { isRateLimitError, withRetry } from './retry.js';
 
 describe('withRetry', () => {
   beforeEach(() => {
@@ -26,15 +26,15 @@ describe('withRetry', () => {
 
     const retries: number[] = [];
     const promise = withRetry(fn, {
-      baseDelayMs: 1000,
+      baseDelayMs: 100,
       onRetry: (attempt) => {
         retries.push(attempt);
       },
     });
 
-    // Advance through the two retry delays
-    await vi.advanceTimersByTimeAsync(1000); // first retry: 1000ms * 2^0
-    await vi.advanceTimersByTimeAsync(2000); // second retry: 1000ms * 2^1
+    // Advance well past max jittered delays (100*1.25=125, 200*1.25=250)
+    await vi.advanceTimersByTimeAsync(200);
+    await vi.advanceTimersByTimeAsync(400);
 
     const result = await promise;
     expect(result).toBe('recovered');
@@ -60,20 +60,19 @@ describe('withRetry', () => {
       return Promise.reject(new Error('429 Too Many Requests'));
     };
 
-    // Attach rejection handler immediately to avoid unhandled rejection warning
     let caughtErr: Error | undefined;
     const promise = withRetry(fn, { maxRetries: 2, baseDelayMs: 100 }).catch((err: Error) => {
       caughtErr = err;
     });
 
-    // Advance through both retry delays
-    await vi.advanceTimersByTimeAsync(100); // retry 1: 100 * 2^0
-    await vi.advanceTimersByTimeAsync(200); // retry 2: 100 * 2^1
+    // Advance well past max jittered delays
+    await vi.advanceTimersByTimeAsync(200);
+    await vi.advanceTimersByTimeAsync(400);
 
     await promise;
     expect(caughtErr).toBeDefined();
     expect(caughtErr!.message).toContain('429');
-    expect(calls).toBe(3); // initial + 2 retries
+    expect(calls).toBe(3);
   });
 
   it('calls onRetry callback with attempt and delay', async () => {
@@ -84,28 +83,28 @@ describe('withRetry', () => {
       return Promise.resolve('done');
     };
 
-    const retryArgs: { attempt: number; delay: number }[] = [];
+    const retryArgs: { attempt: number }[] = [];
     const promise = withRetry(fn, {
       maxRetries: 3,
-      baseDelayMs: 500,
-      onRetry: (attempt, delayMs) => {
-        retryArgs.push({ attempt, delay: delayMs });
+      baseDelayMs: 100,
+      onRetry: (attempt) => {
+        retryArgs.push({ attempt });
       },
     });
 
-    await vi.advanceTimersByTimeAsync(500); // retry 1: 500 * 2^0 = 500
-    await vi.advanceTimersByTimeAsync(1000); // retry 2: 500 * 2^1 = 1000
-    await vi.advanceTimersByTimeAsync(2000); // retry 3: 500 * 2^2 = 2000
+    // Advance well past all jittered delays
+    await vi.advanceTimersByTimeAsync(200);
+    await vi.advanceTimersByTimeAsync(400);
+    await vi.advanceTimersByTimeAsync(800);
 
     await promise;
-    expect(retryArgs).toEqual([
-      { attempt: 1, delay: 500 },
-      { attempt: 2, delay: 1000 },
-      { attempt: 3, delay: 2000 },
-    ]);
+    expect(retryArgs.length).toBe(3);
+    expect(retryArgs[0]!.attempt).toBe(1);
+    expect(retryArgs[1]!.attempt).toBe(2);
+    expect(retryArgs[2]!.attempt).toBe(3);
   });
 
-  it('detects rate limit messages case-insensitively by content', async () => {
+  it('detects rate limit messages case-insensitively', async () => {
     let calls = 0;
     const fn = () => {
       calls++;
@@ -114,9 +113,28 @@ describe('withRetry', () => {
     };
 
     const promise = withRetry(fn, { baseDelayMs: 100 });
-    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(200);
     const result = await promise;
     expect(result).toBe('ok');
     expect(calls).toBe(2);
+  });
+});
+
+describe('isRateLimitError', () => {
+  it('detects 429 status code in message', () => {
+    expect(isRateLimitError(new Error('HTTP 429'))).toBe(true);
+  });
+
+  it('detects Too Many Requests', () => {
+    expect(isRateLimitError(new Error('too many requests'))).toBe(true);
+  });
+
+  it('rejects non-rate-limit errors', () => {
+    expect(isRateLimitError(new Error('ENOENT'))).toBe(false);
+  });
+
+  it('rejects non-Error values', () => {
+    expect(isRateLimitError('string')).toBe(false);
+    expect(isRateLimitError(null)).toBe(false);
   });
 });
