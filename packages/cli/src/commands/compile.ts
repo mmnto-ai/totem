@@ -299,11 +299,11 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
             }
             // ADR-065: Pipeline 1 error rules require a test fixture
             if (manualResult.rule.severity === 'error' && !testedHashes.has(lesson.hash)) {
-              if (!autoScaffoldFixture(lesson, manualResult.rule, scaffoldDeps)) {
+              if (options.raw || !autoScaffoldFixture(lesson, manualResult.rule, scaffoldDeps)) {
                 manualResult.rule.severity = 'warning';
                 log.warn(
                   TAG,
-                  `[${lesson.heading}] Downgraded to warning — fixture scaffold failed (ADR-065)`,
+                  `[${lesson.heading}] Downgraded to warning — no test fixture (ADR-065)`,
                 );
               }
             }
@@ -472,11 +472,11 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
                   result.rule.severity === 'error' &&
                   !testedHashes.has(lesson.hash)
                 ) {
-                  if (!autoScaffoldFixture(lesson, result.rule, scaffoldDeps)) {
+                  if (options.raw || !autoScaffoldFixture(lesson, result.rule, scaffoldDeps)) {
                     result.rule.severity = 'warning';
                     log.warn(
                       TAG,
-                      `[${lesson.heading}] Downgraded to warning — fixture scaffold failed (ADR-065)`,
+                      `[${lesson.heading}] Downgraded to warning — no test fixture (ADR-065)`,
                     );
                   }
                 }
