@@ -16,7 +16,7 @@ export async function withRetry<T>(
     try {
       return await fn();
     } catch (err) {
-      const is429 =
+      const is429 = // totem-context: this IS the centralized 429 detection utility
         err instanceof Error &&
         (err.message.includes('429') ||
           err.message.includes('Too Many Requests') ||
