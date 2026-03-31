@@ -137,7 +137,9 @@ export const GarbageCollectionSchema = z.object({
   /** Minimum age (days since compiledAt) before a rule is GC-eligible */
   minAgeDays: z.number().int().min(1).default(90),
   /** Rule categories exempt from GC (matches `category` field on compiled rules) */
-  exemptCategories: z.array(z.string()).default(['security']),
+  exemptCategories: z
+    .array(z.enum(['security', 'architecture', 'style', 'performance']))
+    .default(['security']),
 });
 
 export const DocTargetSchema = z.object({

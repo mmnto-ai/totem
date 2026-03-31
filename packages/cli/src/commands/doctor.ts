@@ -594,6 +594,7 @@ export async function runSelfHealing(cwd: string): Promise<void> {
         const reason = shouldArchiveRule(
           {
             lessonHash: rule.lessonHash,
+            createdAt: rule.createdAt,
             compiledAt: rule.compiledAt,
             category: rule.category,
             status: rule.status ?? 'active',

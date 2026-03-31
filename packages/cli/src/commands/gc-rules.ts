@@ -2,7 +2,8 @@ import type { GarbageCollectionConfig } from '@mmnto/totem';
 
 export interface RuleGcInput {
   lessonHash: string;
-  compiledAt: string; // ISO timestamp
+  createdAt?: string; // ISO timestamp — survives recompilation
+  compiledAt: string; // ISO timestamp — reset on each compile
   category?: string;
   status?: string;
 }
@@ -28,8 +29,8 @@ export function shouldArchiveRule(
   // Exempt categories (e.g., security) are never GC'd
   if (rule.category && gcConfig.exemptCategories.includes(rule.category)) return null;
 
-  // Rule must be old enough (minAgeDays since compiledAt)
-  const compiledAt = new Date(rule.compiledAt);
+  // Rule must be old enough — prefer createdAt (survives recompilation) over compiledAt
+  const compiledAt = new Date(rule.createdAt ?? rule.compiledAt);
   const currentDate = now ?? new Date();
   const ageDays = (currentDate.getTime() - compiledAt.getTime()) / (1000 * 60 * 60 * 24);
   if (ageDays < gcConfig.minAgeDays) return null;

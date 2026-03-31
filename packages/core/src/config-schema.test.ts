@@ -425,7 +425,7 @@ describe('GarbageCollectionSchema', () => {
       garbageCollection: {
         enabled: false,
         minAgeDays: 30,
-        exemptCategories: ['security', 'compliance'],
+        exemptCategories: ['security', 'architecture'],
       },
     });
     expect(result.success).toBe(true);
@@ -433,7 +433,7 @@ describe('GarbageCollectionSchema', () => {
       const gc = result.data.garbageCollection!;
       expect(gc.enabled).toBe(false);
       expect(gc.minAgeDays).toBe(30);
-      expect(gc.exemptCategories).toEqual(['security', 'compliance']);
+      expect(gc.exemptCategories).toEqual(['security', 'architecture']);
     }
   });
 
