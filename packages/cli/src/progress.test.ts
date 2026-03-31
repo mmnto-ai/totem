@@ -19,65 +19,46 @@ describe('ProgressTracker', () => {
     expect(output).toContain('calculating ETA');
   });
 
-  it('calculates accurate ETA from active item durations', () => {
+  it('calculates ETA using throughput', () => {
     const tracker = new ProgressTracker(10);
-    // Tick 5 items with 2000ms each
+    // Complete 5 items over 10 seconds = 0.5 items/sec
     for (let i = 0; i < 5; i++) {
       vi.advanceTimersByTime(2000);
-      tracker.tick(2000);
+      tracker.tick();
     }
     const output = tracker.format();
     expect(output).toContain('5/10');
     expect(output).toContain('50%');
-    expect(output).toContain('remaining');
-    // 5 remaining * 2000ms avg = 10s remaining
+    // 5 remaining at 0.5 items/sec = 10s
     expect(output).toContain('~10s remaining');
-  });
-
-  it('excludes instant items from ETA calculation', () => {
-    const tracker = new ProgressTracker(10);
-    // Tick 3 cached items (< 500ms, excluded from average)
-    vi.advanceTimersByTime(100);
-    tracker.tick(100);
-    tracker.tick(200);
-    tracker.tick(50);
-    // No active times recorded, should still say "calculating"
-    const outputNoActive = tracker.format();
-    expect(outputNoActive).toContain('3/10');
-    expect(outputNoActive).toContain('calculating ETA');
-
-    // Now tick one real item
-    vi.advanceTimersByTime(3000);
-    tracker.tick(3000);
-    const output = tracker.format();
-    expect(output).toContain('4/10');
-    expect(output).toContain('remaining');
-    // 6 remaining * 3000ms avg = 18s
-    expect(output).toContain('~18s remaining');
   });
 
   it('shows no remaining when all complete', () => {
     const tracker = new ProgressTracker(3);
-    vi.advanceTimersByTime(1000);
-    tracker.tick(1000);
-    vi.advanceTimersByTime(1000);
-    tracker.tick(1000);
-    vi.advanceTimersByTime(1000);
-    tracker.tick(1000);
+    for (let i = 0; i < 3; i++) {
+      vi.advanceTimersByTime(1000);
+      tracker.tick();
+    }
     const output = tracker.format();
     expect(output).toContain('3/3');
     expect(output).toContain('100%');
     expect(output).toContain('elapsed');
     expect(output).not.toContain('remaining');
-    expect(output).not.toContain('calculating');
   });
 
   it('tracks completedCount correctly', () => {
     const tracker = new ProgressTracker(5);
     expect(tracker.completedCount).toBe(0);
-    tracker.tick(1000);
+    tracker.tick();
     tracker.tick();
     expect(tracker.completedCount).toBe(2);
+  });
+
+  it('handles total of zero without division error', () => {
+    const tracker = new ProgressTracker(0);
+    const output = tracker.format();
+    expect(output).toContain('0/0');
+    expect(output).toContain('0%');
   });
 });
 

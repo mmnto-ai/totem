@@ -373,7 +373,6 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
           const batch = toCompile.slice(i, i + CONCURRENCY);
           const results = await Promise.all(
             batch.map((lesson) => {
-              const start = Date.now();
               return withRetry(() => compileLessonCore(lesson, COMPILER_SYSTEM_PROMPT, coreDeps), {
                 onRetry: (attempt, delayMs) => {
                   log.warn(
@@ -383,7 +382,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
                 },
               })
                 .then((result) => {
-                  tracker.tick(Date.now() - start);
+                  tracker.tick();
                   spinner.update(tracker.format());
                   return { lesson, result };
                 })
