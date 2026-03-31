@@ -210,7 +210,7 @@ export interface BuildRuleResult {
  * Derive a virtual file path that satisfies a rule's fileGlobs.
  * Used to construct test fixtures where glob matching is active.
  */
-function deriveVirtualFilePath(rule: CompiledRule): string {
+export function deriveVirtualFilePath(rule: CompiledRule): string {
   if (!rule.fileGlobs || rule.fileGlobs.length === 0) return 'src/example.ts';
   const positiveGlob = rule.fileGlobs.find((g) => !g.startsWith('!'));
   if (!positiveGlob) return 'src/example.ts';

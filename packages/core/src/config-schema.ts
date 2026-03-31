@@ -208,6 +208,9 @@ export const TotemConfigSchema = z.object({
   /** Optional: custom secret patterns for DLP redaction (shared, version-controlled) */
   secrets: z.array(CustomSecretSchema).optional(),
 
+  /** Optional: automatically extract lessons when shield returns a FAIL verdict (#779) */
+  shieldAutoLearn: z.boolean().default(false),
+
   /** Optional: garbage collection settings for stale compiled rules */
   garbageCollection: GarbageCollectionSchema.optional(),
 });

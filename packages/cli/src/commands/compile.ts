@@ -73,6 +73,53 @@ function getTestedHashes(
   return hashes;
 }
 
+// ─── Auto-scaffold (ADR-065 / #854) ─────────────────
+
+export interface AutoScaffoldDeps {
+  fs: typeof import('node:fs');
+  path: typeof import('node:path');
+  testsDir: string;
+  cwd: string;
+  testedHashes: Set<string>;
+  log: { info: (tag: string, msg: string) => void };
+  extractRuleExamples: typeof import('@mmnto/totem').extractRuleExamples;
+  deriveVirtualFilePath: typeof import('@mmnto/totem').deriveVirtualFilePath;
+  scaffoldFixture: typeof import('@mmnto/totem').scaffoldFixture;
+  scaffoldFixturePath: typeof import('@mmnto/totem').scaffoldFixturePath;
+}
+
+/** Returns true if the fixture was written, false on failure. */
+export function autoScaffoldFixture(
+  lesson: LessonInput,
+  rule: CompiledRule,
+  deps: AutoScaffoldDeps,
+): boolean {
+  try {
+    const examples = deps.extractRuleExamples(lesson.body);
+    const virtualPath = deps.deriveVirtualFilePath(rule);
+    const content = deps.scaffoldFixture({
+      ruleHash: lesson.hash,
+      filePath: virtualPath,
+      failLines: examples?.hits,
+      passLines: examples?.misses,
+      heading: lesson.heading,
+    });
+    const fixturePath = deps.scaffoldFixturePath(deps.testsDir, lesson.hash);
+    deps.fs.mkdirSync(deps.path.dirname(fixturePath), { recursive: true });
+    deps.fs.writeFileSync(fixturePath, content, { encoding: 'utf8', flag: 'wx' });
+    deps.testedHashes.add(lesson.hash);
+    deps.log.info(
+      TAG,
+      `[${lesson.heading}] Auto-scaffolded test fixture → ${deps.path.relative(deps.cwd, fixturePath)}`,
+    );
+    return true;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    deps.log.info(TAG, `[${lesson.heading}] Failed to scaffold fixture (non-fatal): ${msg}`);
+    return false;
+  }
+}
+
 // ─── Main command ───────────────────────────────────
 
 export async function compileCommand(options: CompileOptions): Promise<void> {
@@ -86,14 +133,18 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
     buildCompiledRule,
     buildManualRule,
     compileLesson: compileLessonCore,
+    deriveVirtualFilePath,
     exportLessons,
     extractManualPattern,
+    extractRuleExamples,
     formatExampleFailure,
     hashLesson,
     loadCompiledRulesFile,
     parseCompilerResponse,
     readAllLessons,
     saveCompiledRulesFile,
+    scaffoldFixture,
+    scaffoldFixturePath,
     verifyRuleExamples,
   } = await import('@mmnto/totem');
 
@@ -163,6 +214,19 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
   // ─── Test fixture lookup (ADR-065) ──
   const testsDir = path.join(totemDir, 'tests');
   const testedHashes = getTestedHashes(testsDir, fs, path);
+
+  const scaffoldDeps: AutoScaffoldDeps = {
+    fs,
+    path,
+    testsDir,
+    cwd,
+    testedHashes,
+    log,
+    extractRuleExamples,
+    deriveVirtualFilePath,
+    scaffoldFixture,
+    scaffoldFixturePath,
+  };
 
   // ─── Phase 1: Regex compilation (requires orchestrator) ──
   if (config.orchestrator) {
@@ -235,11 +299,13 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
             }
             // ADR-065: Pipeline 1 error rules require a test fixture
             if (manualResult.rule.severity === 'error' && !testedHashes.has(lesson.hash)) {
-              manualResult.rule.severity = 'warning';
-              log.warn(
-                TAG,
-                `[${lesson.heading}] Downgraded to warning — no test fixture in .totem/tests/ (ADR-065)`,
-              );
+              if (options.raw || !autoScaffoldFixture(lesson, manualResult.rule, scaffoldDeps)) {
+                manualResult.rule.severity = 'warning';
+                log.warn(
+                  TAG,
+                  `[${lesson.heading}] Downgraded to warning — no test fixture (ADR-065)`,
+                );
+              }
             }
             newRules.push(manualResult.rule);
             compiled++;
@@ -406,11 +472,13 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
                   result.rule.severity === 'error' &&
                   !testedHashes.has(lesson.hash)
                 ) {
-                  result.rule.severity = 'warning';
-                  log.warn(
-                    TAG,
-                    `[${lesson.heading}] Downgraded to warning — no test fixture in .totem/tests/ (ADR-065)`,
-                  );
+                  if (options.raw || !autoScaffoldFixture(lesson, result.rule, scaffoldDeps)) {
+                    result.rule.severity = 'warning';
+                    log.warn(
+                      TAG,
+                      `[${lesson.heading}] Downgraded to warning — no test fixture (ADR-065)`,
+                    );
+                  }
                 }
                 newRules.push(result.rule);
                 compiled++;

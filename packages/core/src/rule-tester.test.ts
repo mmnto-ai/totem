@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CompiledRule } from './compiler.js';
-import { parseFixture, testRule } from './rule-tester.js';
+import { parseFixture, scaffoldFixture, scaffoldFixturePath, testRule } from './rule-tester.js';
 
 const MOCK_RULE: CompiledRule = {
   lessonHash: 'abc123',
@@ -68,6 +68,71 @@ file: src/app.ts
 `;
     const fixture = parseFixture(content, 'test.md');
     expect(fixture).toBeNull();
+  });
+});
+
+describe('scaffoldFixture', () => {
+  it('generates valid fixture with all fields provided', () => {
+    const content = scaffoldFixture({
+      ruleHash: 'abcd1234abcd1234',
+      filePath: 'src/utils.ts',
+      failLines: ['eval("code")'],
+      passLines: ['safeEval("code")'],
+      heading: 'Never use eval()',
+    });
+
+    expect(content).toContain('rule: abcd1234abcd1234');
+    expect(content).toContain('file: src/utils.ts');
+    expect(content).toContain('eval("code")');
+    expect(content).toContain('safeEval("code")');
+  });
+
+  it('defaults filePath to src/example.ts when omitted', () => {
+    const content = scaffoldFixture({ ruleHash: 'abcd1234abcd1234' });
+    expect(content).toContain('file: src/example.ts');
+  });
+
+  it('uses TODO placeholders when lines are omitted', () => {
+    const content = scaffoldFixture({ ruleHash: 'abcd1234abcd1234' });
+    expect(content).toContain('// TODO: add code that should trigger this rule');
+    expect(content).toContain('// TODO: add code that should NOT trigger this rule');
+  });
+
+  it('round-trips through parseFixture', () => {
+    const opts = {
+      ruleHash: 'abcd1234abcd1234',
+      filePath: 'src/app.ts',
+      failLines: ['eval("bad")'],
+      passLines: ['safe("good")'],
+    };
+    const content = scaffoldFixture(opts);
+    const fixture = parseFixture(content, 'test.md');
+
+    expect(fixture).not.toBeNull();
+    expect(fixture!.ruleHash).toBe(opts.ruleHash);
+    expect(fixture!.filePath).toBe(opts.filePath);
+    expect(fixture!.failLines).toEqual(opts.failLines);
+    expect(fixture!.passLines).toEqual(opts.passLines);
+  });
+
+  it('round-trips with multiple lines', () => {
+    const opts = {
+      ruleHash: 'abcd1234abcd1234',
+      failLines: ['eval("a")', 'eval("b")'],
+      passLines: ['safe("a")', 'safe("b")'],
+    };
+    const content = scaffoldFixture(opts);
+    const fixture = parseFixture(content, 'test.md');
+
+    expect(fixture!.failLines).toEqual(opts.failLines);
+    expect(fixture!.passLines).toEqual(opts.passLines);
+  });
+});
+
+describe('scaffoldFixturePath', () => {
+  it('returns expected path', () => {
+    const result = scaffoldFixturePath('/project/.totem/tests', 'abcd1234abcd1234');
+    expect(result).toMatch(/test-abcd1234abcd1234\.md$/);
   });
 });
 

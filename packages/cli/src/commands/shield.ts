@@ -708,7 +708,7 @@ async function handleVerdictResult(
         );
       }
     } else {
-      if (options.learn) {
+      if (options.learn || config.shieldAutoLearn) {
         await learnFromVerdict(
           JSON.stringify(structured, null, 2),
           diff,
@@ -755,7 +755,8 @@ async function handleVerdictResult(
         (msg) => log.dim(TAG, msg),
       );
     } else {
-      if (options.learn) await learnFromVerdict(content, diff, options, config, cwd, configRoot);
+      if (options.learn || config.shieldAutoLearn)
+        await learnFromVerdict(content, diff, options, config, cwd, configRoot);
       throw new TotemError(
         'SHIELD_FAILED',
         `Shield ${modeLabel} review failed: ${verdict.reason || 'no reason given'}`,

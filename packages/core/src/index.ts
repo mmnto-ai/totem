@@ -152,6 +152,8 @@ export {
   type RuleTestResult,
   type RuleTestSummary,
   runRuleTests,
+  scaffoldFixture,
+  scaffoldFixturePath,
   testRule,
 } from './rule-tester.js';
 
@@ -260,6 +262,7 @@ export {
   buildCompiledRule,
   buildManualRule,
   compileLesson,
+  deriveVirtualFilePath,
   formatExampleFailure,
   validateAstGrepPattern,
   verifyRuleExamples,
