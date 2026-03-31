@@ -363,6 +363,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
         const { ProgressTracker } = await import('../progress.js');
         const { withRetry } = await import('../retry.js');
         const tracker = new ProgressTracker(toCompile.length);
+        spinner.update(tracker.format());
 
         const parsed = Number(options.concurrency ?? DEFAULT_CONCURRENCY);
         const CONCURRENCY = Math.min(

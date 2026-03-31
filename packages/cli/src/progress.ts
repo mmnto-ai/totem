@@ -28,7 +28,7 @@ export class ProgressTracker {
       return `${this.completed}/${this.total} (${pct}%) | ${elapsedStr} elapsed`;
     }
 
-    if (this.completed === 0) {
+    if (this.completed === 0 || elapsed === 0) {
       return `${this.completed}/${this.total} (${pct}%) | ${elapsedStr} elapsed | calculating ETA...`;
     }
 
