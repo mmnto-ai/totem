@@ -106,7 +106,7 @@ export function autoScaffoldFixture(
     });
     const fixturePath = deps.scaffoldFixturePath(deps.testsDir, lesson.hash);
     deps.fs.mkdirSync(deps.path.dirname(fixturePath), { recursive: true });
-    deps.fs.writeFileSync(fixturePath, content, 'utf8');
+    deps.fs.writeFileSync(fixturePath, content, { encoding: 'utf8', flag: 'wx' });
     deps.testedHashes.add(lesson.hash);
     deps.log.info(
       TAG,
