@@ -607,8 +607,9 @@ export async function initCommand(options?: { bare?: boolean }): Promise<void> {
         file: '.totem/lessons/baseline.md',
         action: `Installed baseline lessons (core${packLabel})`,
       });
-      // Non-JS packs don't have pre-compiled rules yet — tell the user
-      const uncompiledPacks = detectedEcosystems.filter((e) => e !== 'javascript');
+      // Ecosystems with pre-compiled rules — no need to prompt for compile
+      const compiledEcosystems = new Set(['javascript', 'python', 'rust', 'go']);
+      const uncompiledPacks = detectedEcosystems.filter((e) => !compiledEcosystems.has(e));
       if (uncompiledPacks.length > 0) {
         log.dim(
           'Totem',
@@ -622,9 +623,18 @@ export async function initCommand(options?: { bare?: boolean }): Promise<void> {
     const compiledRulesPath = path.join(totemDir, 'compiled-rules.json');
     if (!fs.existsSync(compiledRulesPath)) {
       try {
-        const { COMPILED_BASELINE_RULES } = await import('../assets/compiled-baseline.js');
-        baselineRuleCount = COMPILED_BASELINE_RULES.length;
-        const payload = { version: 1, rules: COMPILED_BASELINE_RULES };
+        const {
+          COMPILED_BASELINE_RULES,
+          COMPILED_PYTHON_BASELINE,
+          COMPILED_RUST_BASELINE,
+          COMPILED_GO_BASELINE,
+        } = await import('../assets/compiled-baseline.js');
+        const allRules = [...COMPILED_BASELINE_RULES];
+        if (detectedEcosystems.includes('python')) allRules.push(...COMPILED_PYTHON_BASELINE);
+        if (detectedEcosystems.includes('rust')) allRules.push(...COMPILED_RUST_BASELINE);
+        if (detectedEcosystems.includes('go')) allRules.push(...COMPILED_GO_BASELINE);
+        baselineRuleCount = allRules.length;
+        const payload = { version: 1, rules: allRules };
         fs.writeFileSync(compiledRulesPath, JSON.stringify(payload, null, 2) + '\n');
         summary.push({
           file: '.totem/compiled-rules.json',

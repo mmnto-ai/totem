@@ -364,3 +364,95 @@ export const COMPILED_BASELINE_RULES: CompiledRule[] = [
     category: 'style',
   },
 ];
+
+// ─── Python Baseline ────────────────────────────────
+
+export const COMPILED_PYTHON_BASELINE: CompiledRule[] = [
+  {
+    lessonHash: 'a1b2c3d4e5f60001',
+    lessonHeading: 'Bare except clauses hide real errors',
+    pattern: '\\bexcept\\s*:',
+    message:
+      'Bare `except:` catches all exceptions including KeyboardInterrupt and SystemExit. Use `except Exception:` or catch specific exception types.',
+    engine: 'regex',
+    compiledAt: '2026-03-31T00:00:00.000Z',
+    createdAt: '2026-03-31T00:00:00.000Z',
+    fileGlobs: ['**/*.py', '!**/*test*.py', '!**/test_*.py'],
+    severity: 'warning',
+    category: 'style',
+  },
+  {
+    lessonHash: 'a1b2c3d4e5f60002',
+    lessonHeading: 'Mutable default arguments persist across function calls',
+    pattern: 'def\\s+\\w+\\s*\\([^)]*=\\s*(\\[\\]|\\{\\})',
+    message:
+      'Mutable default arguments ([] or {}) are created once and shared across all calls. Use None as default and create the mutable object inside the function body.',
+    engine: 'regex',
+    compiledAt: '2026-03-31T00:00:00.000Z',
+    createdAt: '2026-03-31T00:00:00.000Z',
+    fileGlobs: ['**/*.py'],
+    severity: 'warning',
+    category: 'style',
+  },
+];
+
+// ─── Rust Baseline ──────────────────────────────────
+
+export const COMPILED_RUST_BASELINE: CompiledRule[] = [
+  {
+    lessonHash: 'b2c3d4e5f6a70001',
+    lessonHeading: 'Unwrap in production code causes unrecoverable panics',
+    pattern: '\\.unwrap\\(\\)',
+    message:
+      'Using .unwrap() in production code causes an unrecoverable panic on None/Err. Use .expect() with context, or handle the error with ? or match.',
+    engine: 'regex',
+    compiledAt: '2026-03-31T00:00:00.000Z',
+    createdAt: '2026-03-31T00:00:00.000Z',
+    fileGlobs: ['**/*.rs', '!**/tests/**', '!**/*test*.rs'],
+    severity: 'warning',
+    category: 'style',
+  },
+  {
+    lessonHash: 'b2c3d4e5f6a70002',
+    lessonHeading: 'Unsafe blocks require safety invariant documentation',
+    pattern: '\\bunsafe\\b',
+    message:
+      'Every unsafe block must have a preceding `// SAFETY:` comment documenting why the invariants are upheld.',
+    engine: 'regex',
+    compiledAt: '2026-03-31T00:00:00.000Z',
+    createdAt: '2026-03-31T00:00:00.000Z',
+    fileGlobs: ['**/*.rs'],
+    severity: 'warning',
+    category: 'style',
+  },
+];
+
+// ─── Go Baseline ────────────────────────────────────
+
+export const COMPILED_GO_BASELINE: CompiledRule[] = [
+  {
+    lessonHash: 'c3d4e5f6a7b80001',
+    lessonHeading: 'Error strings should not be capitalized',
+    pattern: 'errors\\.New\\(\\s*"[A-Z]',
+    message:
+      'Go convention: error strings should not be capitalized. Use lowercase: errors.New("something failed").',
+    engine: 'regex',
+    compiledAt: '2026-03-31T00:00:00.000Z',
+    createdAt: '2026-03-31T00:00:00.000Z',
+    fileGlobs: ['**/*.go', '!**/*_test.go'],
+    severity: 'warning',
+    category: 'style',
+  },
+  {
+    lessonHash: 'c3d4e5f6a7b80002',
+    lessonHeading: 'Error strings should not end with punctuation',
+    pattern: 'errors\\.New\\([^)]*[.!]\\s*"\\s*\\)',
+    message: 'Go convention: error strings should not end with punctuation.',
+    engine: 'regex',
+    compiledAt: '2026-03-31T00:00:00.000Z',
+    createdAt: '2026-03-31T00:00:00.000Z',
+    fileGlobs: ['**/*.go', '!**/*_test.go'],
+    severity: 'warning',
+    category: 'style',
+  },
+];
