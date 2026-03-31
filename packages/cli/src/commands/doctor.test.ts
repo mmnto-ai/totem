@@ -680,13 +680,13 @@ describe('runSelfHealing', () => {
 
     // Find the auto-downgrade branch and verify the committed file
     const branches = execSync('git branch', { cwd: tmpDir, encoding: 'utf-8' });
-    expect(branches).toContain('totem/auto-downgrade-');
+    expect(branches).toContain('totem/auto-healing-');
 
     // Check the committed file on the branch
     const branchName = branches
       .split('\n')
       .map((b: string) => b.trim())
-      .find((b: string) => b.startsWith('totem/auto-downgrade-'));
+      .find((b: string) => b.startsWith('totem/auto-healing-'));
     expect(branchName).toBeDefined();
 
     const showResult = spawnSync('git', ['show', `${branchName}:.totem/compiled-rules.json`], {
@@ -770,11 +770,93 @@ describe('runSelfHealing', () => {
 
     const output = stderrSpy.mock.calls.map((args: unknown[]) => String(args[0])).join('\n');
     expect(output).toContain('already at warning');
-    expect(output).toContain('All struggling rules already downgraded');
   });
 
   it('exports constants for testing', () => {
     expect(BYPASS_THRESHOLD).toBe(0.3);
     expect(MIN_EVENTS).toBe(5);
+  });
+
+  it('archives stale rules with zero triggers during self-healing', async () => {
+    // Set up workspace with GC enabled
+    const totemDir = path.join(tmpDir, '.totem');
+    fs.mkdirSync(totemDir, { recursive: true });
+
+    // Config with garbageCollection enabled
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.yaml'),
+      [
+        'targets:',
+        '  - glob: "**/*.ts"',
+        '    type: code',
+        '    strategy: typescript-ast',
+        'totemDir: .totem',
+        'garbageCollection:',
+        '  enabled: true',
+        '  minAgeDays: 90',
+        '  exemptCategories:',
+        '    - security',
+      ].join('\n') + '\n',
+      'utf-8',
+    );
+
+    // Create an old rule (compiledAt 120 days ago)
+    const oldDate = new Date('2026-03-30T00:00:00.000Z');
+    oldDate.setDate(oldDate.getDate() - 120);
+    const rulesPath = path.join(totemDir, 'compiled-rules.json');
+    fs.writeFileSync(
+      rulesPath,
+      JSON.stringify(
+        {
+          version: 1,
+          rules: [
+            {
+              lessonHash: 'stale-rule',
+              lessonHeading: 'Stale Rule',
+              pattern: '\\bconsole\\.log\\b',
+              message: 'Violation: Stale Rule',
+              engine: 'regex',
+              compiledAt: oldDate.toISOString(),
+              status: 'active',
+            },
+          ],
+        },
+        null,
+        2,
+      ) + '\n',
+      'utf-8',
+    );
+
+    // Write metrics with zero activity for the rule
+    writeMetrics(totemDir, {
+      'stale-rule': { triggerCount: 0, suppressCount: 0 },
+    });
+
+    // Commit so git status is clean
+    execSync('git add .', { cwd: tmpDir, stdio: 'ignore' });
+    execSync('git commit -m "init"', { cwd: tmpDir, stdio: 'ignore' });
+
+    await runSelfHealing(tmpDir);
+
+    const output = stderrSpy.mock.calls.map((args: unknown[]) => String(args[0])).join('\n');
+    expect(output).toContain('Archived 1 stale rule(s)');
+
+    // Verify the rule was archived — the function switches back to original branch,
+    // but the GC changes are committed on a healing branch.
+    const branches = execSync('git branch', { cwd: tmpDir, encoding: 'utf-8' });
+    const healingBranch = branches
+      .split('\n')
+      .map((b: string) => b.trim())
+      .find((b: string) => b.startsWith('totem/auto-healing-'));
+    expect(healingBranch).toBeDefined();
+
+    // Verify committed file on the branch
+    const showResult = spawnSync('git', ['show', `${healingBranch}:.totem/compiled-rules.json`], {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    });
+    const committedRules = JSON.parse(showResult.stdout ?? '');
+    expect(committedRules.rules[0].status).toBe('archived');
+    expect(committedRules.rules[0].archivedReason).toMatch(/after \d+ days/);
   });
 });

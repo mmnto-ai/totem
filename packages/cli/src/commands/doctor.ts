@@ -497,28 +497,8 @@ export async function runSelfHealing(cwd: string): Promise<void> {
   const { analyzeLedger } = await import('./ledger-analyzer.js');
   const stats = await analyzeLedger(totemDir, (msg) => console.error(pc.dim(`  ${msg}`)));
 
-  if (stats.size === 0) {
-    console.error(
-      pc.dim('  No ledger data. Run totem lint with some // totem-context: overrides first.'),
-    );
-    return;
-  }
-
-  // Find struggling rules
-  const struggling = [...stats.entries()]
-    .filter(([, s]) => s.bypassRate > BYPASS_THRESHOLD && s.totalEvents >= MIN_EVENTS)
-    .sort((a, b) => b[1].bypassRate - a[1].bypassRate);
-
-  if (struggling.length === 0) {
-    console.error(pc.green('  No rules exceed the 30% bypass threshold. All healthy.'));
-    return;
-  }
-
-  console.error(
-    `  Found ${struggling.length} rule(s) exceeding ${BYPASS_THRESHOLD * 100}% bypass rate:\n`,
-  );
-
-  // Check git status before modifying files
+  // ─── Guard: abort if compiled-rules.json has uncommitted changes ──
+  let gitDirty = false;
   try {
     const gitResult = spawnSync('git', ['status', '--porcelain', rulesPath], {
       cwd,
@@ -529,42 +509,124 @@ export async function runSelfHealing(cwd: string): Promise<void> {
       console.error(
         pc.red('  ERROR: compiled-rules.json has uncommitted changes. Commit or stash first.'),
       );
-      return;
+      gitDirty = true;
     }
   } catch {
     // Not a git repo or git not available — proceed anyway
   }
 
-  // Downgrade each struggling rule
-  const { downgradeRuleToWarning } = await import('./rule-mutator.js');
+  // ─── Downgrade phase: demote noisy rules ─────────────
   const downgraded: Array<{ ruleId: string; heading: string; rate: number }> = [];
 
-  for (const [ruleId, ruleStats] of struggling) {
-    const result = downgradeRuleToWarning(rulesPath, ruleId);
-    if (result.downgraded) {
-      const pct = (ruleStats.bypassRate * 100).toFixed(0);
-      console.error(
-        `  ${pc.yellow('↓')} ${result.ruleHeading ?? ruleId} — ${pct}% bypass rate (${ruleStats.bypassCount}/${ruleStats.totalEvents} events)`,
-      );
-      downgraded.push({
-        ruleId,
-        heading: result.ruleHeading ?? ruleId,
-        rate: ruleStats.bypassRate,
-      });
+  if (stats.size === 0) {
+    console.error(
+      pc.dim('  No ledger data. Run totem lint with some // totem-context: overrides first.'),
+    );
+  } else {
+    // Find struggling rules
+    const struggling = [...stats.entries()]
+      .filter(([, s]) => s.bypassRate > BYPASS_THRESHOLD && s.totalEvents >= MIN_EVENTS)
+      .sort((a, b) => b[1].bypassRate - a[1].bypassRate);
+
+    if (struggling.length === 0) {
+      console.error(pc.green('  No rules exceed the 30% bypass threshold. All healthy.'));
     } else {
-      console.error(pc.dim(`  - ${result.ruleHeading ?? ruleId} — already at warning, skipping`));
+      console.error(
+        `  Found ${struggling.length} rule(s) exceeding ${BYPASS_THRESHOLD * 100}% bypass rate:\n`,
+      );
+
+      if (!gitDirty) {
+        // Downgrade each struggling rule
+        const { downgradeRuleToWarning } = await import('./rule-mutator.js');
+
+        for (const [ruleId, ruleStats] of struggling) {
+          const result = downgradeRuleToWarning(rulesPath, ruleId);
+          if (result.downgraded) {
+            const pct = (ruleStats.bypassRate * 100).toFixed(0);
+            console.error(
+              `  ${pc.yellow('↓')} ${result.ruleHeading ?? ruleId} — ${pct}% bypass rate (${ruleStats.bypassCount}/${ruleStats.totalEvents} events)`,
+            );
+            downgraded.push({
+              ruleId,
+              heading: result.ruleHeading ?? ruleId,
+              rate: ruleStats.bypassRate,
+            });
+          } else {
+            console.error(
+              pc.dim(`  - ${result.ruleHeading ?? ruleId} — already at warning, skipping`),
+            );
+          }
+        }
+
+        if (downgraded.length > 0) {
+          console.error(
+            `\n  ${pc.green(`Downgraded ${downgraded.length} rule(s) from error → warning.`)}`,
+          );
+        }
+      }
     }
   }
 
-  if (downgraded.length === 0) {
-    console.error(pc.green('\n  All struggling rules already downgraded. Nothing to do.'));
+  // ─── GC phase: archive stale rules ───────────────────
+  const { shouldArchiveRule } = await import('./gc-rules.js');
+  let archivedCount = 0;
+
+  // GC is opt-in: only runs when garbageCollection is explicitly configured
+  const gcConfig = config.garbageCollection;
+  if (gcConfig && gcConfig.enabled !== false && !gitDirty) {
+    console.error(`\n${pc.cyan('[Auto-Healing]')} Checking for stale rules to archive...`);
+
+    const fs = await import('node:fs');
+    if (!fs.existsSync(rulesPath)) {
+      console.error(pc.dim('  No compiled-rules.json found. Skipping GC.'));
+    } else {
+      const {
+        loadCompiledRulesFile,
+        saveCompiledRulesFile,
+        loadRuleMetrics,
+      } = // totem-context: verified — both functions exist in core/compiler.ts and core/index.ts
+        await import('@mmnto/totem');
+      const rulesFile = loadCompiledRulesFile(rulesPath);
+      const metricsFile = loadRuleMetrics(totemDir); // returns { version, rules: Record<hash, RuleMetric> }
+
+      for (const rule of rulesFile.rules) {
+        const ruleMetrics = metricsFile.rules[rule.lessonHash];
+        const reason = shouldArchiveRule(
+          {
+            lessonHash: rule.lessonHash,
+            compiledAt: rule.compiledAt,
+            category: rule.category,
+            status: rule.status ?? 'active',
+          },
+          ruleMetrics
+            ? { triggerCount: ruleMetrics.triggerCount, suppressCount: ruleMetrics.suppressCount }
+            : undefined,
+          gcConfig,
+        );
+
+        if (reason) {
+          rule.status = 'archived';
+          rule.archivedReason = reason;
+          archivedCount++;
+          console.error(`  ${pc.dim('🗃')} ${rule.lessonHeading ?? rule.lessonHash} — ${reason}`);
+        }
+      }
+
+      if (archivedCount > 0) {
+        saveCompiledRulesFile(rulesPath, rulesFile);
+        console.error(`\n  ${pc.green(`Archived ${archivedCount} stale rule(s).`)}`);
+      } else {
+        console.error(pc.green('  No stale rules found. All active rules have recent activity.'));
+      }
+    } // end fs.existsSync guard
+  }
+
+  if (downgraded.length === 0 && archivedCount === 0) {
     return;
   }
 
-  console.error(`\n  ${pc.green(`Downgraded ${downgraded.length} rule(s) from error → warning.`)}`);
-
   // Create branch and PR
-  const branchName = `totem/auto-downgrade-${Date.now()}`;
+  const branchName = `totem/auto-healing-${Date.now()}`;
 
   // Capture current branch so we can restore on failure
   const currentBranchRes = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
@@ -593,33 +655,54 @@ export async function runSelfHealing(cwd: string): Promise<void> {
     run('git', ['add', rulesPath]);
 
     // Build commit message
-    const ruleList = downgraded
-      .map((d) => `- ${d.heading} (${(d.rate * 100).toFixed(0)}% bypass)`)
-      .join('\n');
-    const commitMsg = `fix: auto-downgrade ${downgraded.length} noisy rule(s)\n\n${ruleList}\n\nGenerated by totem doctor --pr`;
+    const parts: string[] = [];
+    if (downgraded.length > 0) {
+      const ruleList = downgraded
+        .map((d) => `- ${d.heading} (${(d.rate * 100).toFixed(0)}% bypass)`)
+        .join('\n');
+      parts.push(`Downgraded ${downgraded.length} rule(s):\n${ruleList}`);
+    }
+    if (archivedCount > 0) {
+      parts.push(`Archived ${archivedCount} stale rule(s)`);
+    }
+    const commitMsg = `fix: auto-heal ${downgraded.length + archivedCount} rule(s)\n\n${parts.join('\n\n')}\n\nGenerated by totem doctor --pr`;
 
     run('git', ['commit', '-m', commitMsg]);
     run('git', ['push', '-u', 'origin', branchName]);
 
     // Build PR body
-    const prBody = [
-      '## Auto-Healing: Rule Downgrade',
-      '',
-      `${downgraded.length} compiled rule(s) exceeded the 30% bypass rate threshold and have been downgraded from \`error\` to \`warning\`.`,
-      '',
-      '| Rule | Bypass Rate | Events |',
-      '|---|---|---|',
-      ...downgraded.map((d) => {
-        const ruleStats = struggling.find(([id]) => id === d.ruleId)?.[1];
-        return `| ${d.heading} | ${(d.rate * 100).toFixed(0)}% | ${ruleStats?.totalEvents ?? '?'} |`;
-      }),
-      '',
-      'These rules are not deleted (ADR-027). They continue to fire as warnings, feeding into local telemetry. If the underlying issue is fixed, the rule can be re-promoted to error.',
+    const prBodyParts = ['## Auto-Healing: Rule Maintenance', ''];
+
+    if (downgraded.length > 0) {
+      prBodyParts.push(
+        `### Downgrades`,
+        '',
+        `${downgraded.length} compiled rule(s) exceeded the 30% bypass rate threshold and have been downgraded from \`error\` to \`warning\`.`,
+        '',
+        '| Rule | Bypass Rate |',
+        '|---|---|',
+        ...downgraded.map((d) => `| ${d.heading} | ${(d.rate * 100).toFixed(0)}% |`),
+        '',
+      );
+    }
+
+    if (archivedCount > 0) {
+      prBodyParts.push(
+        `### Archives`,
+        '',
+        `${archivedCount} stale rule(s) with zero activity past their minimum age have been archived.`,
+        '',
+      );
+    }
+
+    prBodyParts.push(
+      'These rules are not deleted (ADR-027). Downgraded rules continue to fire as warnings. Archived rules are skipped during lint but preserved for audit.',
       '',
       'Generated by `totem doctor --pr`',
-    ].join('\n');
+    );
 
-    const prTitle = `fix: auto-downgrade ${downgraded.length} noisy rule(s)`;
+    const prBody = prBodyParts.join('\n');
+    const prTitle = `fix: auto-heal ${downgraded.length + archivedCount} rule(s)`;
     run('gh', ['pr', 'create', '--title', prTitle, '--body', prBody]);
 
     console.error(pc.green(`\n  PR created on branch ${branchName}`));
