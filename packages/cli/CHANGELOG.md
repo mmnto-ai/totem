@@ -1,5 +1,13 @@
 # @mmnto/cli
 
+## 1.8.2
+
+### Patch Changes
+
+- 11f4512: Add pre-compiled baseline rules for Python (4), Rust (3), and Go (2) ecosystems
+- Updated dependencies [11f4512]
+  - @mmnto/totem@1.8.2
+
 ## 1.8.1
 
 ### Patch Changes
