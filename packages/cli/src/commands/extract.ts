@@ -556,23 +556,10 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
         );
       }
 
-      // Fetch PR to get head ref/branch name
-      log.info(TAG, `Fetching PR #${num} for head ref...`);
+      // Fetch code scanning alerts for this PR
       const { safeExec: exec } = await import('@mmnto/totem');
-      const headRef = exec(
-        'gh',
-        ['pr', 'view', String(num), '--json', 'headRefName', '-q', '.headRefName'],
-        {
-          cwd,
-          timeout: GH_TIMEOUT_MS,
-          env: { ...process.env, GH_PROMPT_DISABLED: '1' },
-        },
-      ).trim();
-      log.info(TAG, `Head ref: ${headRef}`);
-
-      // Fetch code scanning alerts for this ref
-      log.info(TAG, `Fetching code scanning alerts for ref ${headRef}...`);
-      const allAlerts = adapter.fetchCodeScanningAlerts(headRef);
+      log.info(TAG, `Fetching code scanning alerts for PR #${num}...`);
+      const allAlerts = adapter.fetchCodeScanningAlerts(num);
       const fixedAlerts = allAlerts.filter((a) => a.state === 'fixed');
       log.info(TAG, `Found ${allAlerts.length} alert(s), ${fixedAlerts.length} fixed`);
 

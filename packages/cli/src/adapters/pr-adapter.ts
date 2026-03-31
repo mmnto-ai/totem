@@ -58,7 +58,7 @@ export interface PrAdapter {
   fetchOpenPRs(): StandardPrListItem[];
   fetchPr(prNumber: number): StandardPr;
   fetchReviewComments(prNumber: number): StandardReviewComment[];
-  fetchCodeScanningAlerts?(ref: string): StandardCodeScanAlert[];
+  fetchCodeScanningAlerts?(prNumber: number): StandardCodeScanAlert[];
   createIssue(params: {
     title: string;
     body: string;

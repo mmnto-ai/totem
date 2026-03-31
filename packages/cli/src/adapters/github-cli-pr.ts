@@ -128,12 +128,12 @@ export class GitHubCliPrAdapter implements PrAdapter {
     }));
   }
 
-  fetchCodeScanningAlerts(ref: string): StandardCodeScanAlert[] {
+  fetchCodeScanningAlerts(prNumber: number): StandardCodeScanAlert[] {
     const nwo = this.getRepoNwo();
     const alerts = ghFetchAndParse(
-      ['api', `repos/${nwo}/code-scanning/alerts?ref=${ref}&per_page=100`, '--paginate'],
+      ['api', `repos/${nwo}/code-scanning/alerts?pr=${prNumber}&per_page=100`, '--paginate'],
       z.array(GhCodeScanAlertSchema),
-      `code scanning alerts for ${ref}`,
+      `code scanning alerts for PR #${prNumber}`,
       this.cwd,
     );
     return alerts.map((a) => ({

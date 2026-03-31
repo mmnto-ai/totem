@@ -151,7 +151,7 @@ describe('GitHubCliPrAdapter', () => {
         ]),
       );
 
-      const result = adapter.fetchCodeScanningAlerts('refs/heads/feat/fix-stuff');
+      const result = adapter.fetchCodeScanningAlerts(42);
       expect(result).toEqual([
         {
           number: 10,
@@ -186,7 +186,7 @@ describe('GitHubCliPrAdapter', () => {
         ]),
       );
 
-      const result = adapter.fetchCodeScanningAlerts('refs/heads/main');
+      const result = adapter.fetchCodeScanningAlerts(99);
       expect(result).toHaveLength(1);
       expect(result[0]!.rule_id).toBe('sql/injection');
       expect(result[0]!.state).toBe('open');
@@ -196,7 +196,7 @@ describe('GitHubCliPrAdapter', () => {
       mockedExec.mockReturnValueOnce('mmnto-ai/totem\n');
       mockedExec.mockReturnValueOnce('[]');
 
-      const result = adapter.fetchCodeScanningAlerts('refs/heads/main');
+      const result = adapter.fetchCodeScanningAlerts(99);
       expect(result).toEqual([]);
     });
   });
