@@ -307,9 +307,14 @@ export {
   getGitStatus,
   getLatestTag,
   getTagDate,
+  inferScopeFromFiles,
   isFileDirty,
   resolveGitRoot,
 } from './sys/git.js';
 
 // Filesystem helpers
 export { readJsonSafe } from './sys/fs.js';
+
+// Shared helper registry (prior art concierge for spec prompts)
+export type { SharedHelper } from './sys/helpers.js';
+export { formatSharedHelpers, getSharedHelpers } from './sys/helpers.js';

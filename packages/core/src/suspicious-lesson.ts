@@ -11,6 +11,7 @@ export interface ExtractedLesson {
   heading?: string;
   tags: string[];
   text: string;
+  scope?: string;
   suspiciousFlags?: string[];
 }
 

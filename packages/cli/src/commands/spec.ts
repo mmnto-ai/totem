@@ -134,6 +134,13 @@ export async function assemblePrompt(
   const lessonSection = formatLessonSection(context.lessons, MAX_LESSON_CHARS);
   if (lessonSection) sections.push(lessonSection);
 
+  // Prior art concierge (#1015): inject shared helper signatures
+  const { formatSharedHelpers, getSharedHelpers } = await import('@mmnto/totem');
+  const helperSection = formatSharedHelpers(getSharedHelpers());
+  if (helperSection) {
+    sections.push('\n' + helperSection);
+  }
+
   return sections.join('\n');
 }
 

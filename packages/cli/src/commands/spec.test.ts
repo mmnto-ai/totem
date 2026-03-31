@@ -66,6 +66,11 @@ describe('SPEC_SYSTEM_PROMPT', () => {
     expect(SPEC_SYSTEM_PROMPT).toContain('Never skip the test step');
   });
 
+  it('contains Reuse Shared Helpers rule (#1015)', () => {
+    expect(SPEC_SYSTEM_PROMPT).toContain('Reuse Shared Helpers');
+    expect(SPEC_SYSTEM_PROMPT).toContain('SHARED HELPERS section');
+  });
+
   it('contains Graphviz execution flow diagram', () => {
     expect(SPEC_SYSTEM_PROMPT).toContain('digraph workflow');
     expect(SPEC_SYSTEM_PROMPT).toContain('verify_fails -> implement');
@@ -126,8 +131,9 @@ describe('assemblePrompt', () => {
 
     const result = await assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
 
-    // Extract just the lessons section
-    const lessonSection = result.split('RELEVANT LESSONS (HARD CONSTRAINTS)')[1] ?? '';
+    // Extract just the lessons section (stop at the next === section)
+    const afterLessons = result.split('RELEVANT LESSONS (HARD CONSTRAINTS)')[1] ?? '';
+    const lessonSection = afterLessons.split(/\n===\s/)[0] ?? '';
     expect(lessonSection.length).toBeLessThan(MAX_LESSON_CHARS + 200); // small margin for headers
   });
 
@@ -142,6 +148,17 @@ describe('assemblePrompt', () => {
     expect(result).toContain('RELEVANT LESSONS');
     expect(result).toContain('Small lesson body');
     expect(result).not.toContain('H'.repeat(100));
+  });
+
+  it('includes shared helpers section (#1015)', async () => {
+    const result = await assemblePrompt(
+      [{ issue: null, freeText: 'test topic' }],
+      emptyContext(),
+      'system prompt',
+    );
+    expect(result).toContain('SHARED HELPERS');
+    expect(result).toContain('safeExec');
+    expect(result).toContain('Instead of:');
   });
 
   it('includes both specs and lessons as separate sections', async () => {

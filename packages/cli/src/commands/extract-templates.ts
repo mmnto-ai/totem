@@ -40,9 +40,14 @@ Respond with a JSON array of lesson objects. Each object must have:
 - "heading": string (3-7 word COMPLETE phrase, max 60 chars, must NOT end with a preposition, article, or conjunction. Good: "Always sanitize Git outputs", "Guard reversed marker ordering". Bad: "Custom glob matching functions must be tested against the".)
 - "tags": string[] (lowercase, reflecting technical domain)
 - "text": string (1-2 sentences capturing the trap/pattern and WHY it matters)
+- "scope": string (optional — file glob pattern like "packages/cli/**/*.ts, !**/*.test.*". Include when the lesson applies to specific files, omit for global lessons)
+
+## Scope Rules
+- When SCOPE CONTEXT is provided from diff analysis, use it as the default scope for extracted lessons unless the lesson clearly applies globally (e.g., security rules, naming conventions)
+- Prefer specific scopes over broad ones — a lesson about CLI commands should scope to the CLI package, not the whole repo
 
 Example:
-[{"heading": "Always sanitize Git outputs", "tags": ["git", "security"], "text": "Raw Git output may contain ANSI escape codes that corrupt downstream parsing."}]
+[{"heading": "Always sanitize Git outputs", "tags": ["git", "security"], "text": "Raw Git output may contain ANSI escape codes that corrupt downstream parsing.", "scope": "packages/core/src/sys/**/*.ts, !**/*.test.*"}]
 
 If no lessons found, respond with exactly: NONE
 `;

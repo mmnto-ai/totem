@@ -17,6 +17,7 @@ import { log } from '../ui.js';
 import {
   formatResults,
   getSystemPrompt,
+  GH_TIMEOUT_MS,
   loadConfig,
   loadEnv,
   requireEmbedding,
@@ -118,8 +119,17 @@ export function assemblePrompt(
   systemPrompt: string,
   nits?: string[],
   botMarkers: readonly string[] = DEFAULT_BOT_MARKERS,
+  scopeGlobs?: string[],
 ): string {
   const sections: string[] = [systemPrompt];
+
+  // Scope context from PR diff analysis (#1014)
+  if (scopeGlobs && scopeGlobs.length > 0) {
+    sections.push('\n=== SCOPE CONTEXT (from PR diff analysis) ===');
+    sections.push(`Suggested file scope for extracted lessons: ${scopeGlobs.join(', ')}`);
+    sections.push('Use this scope as the default unless a lesson truly applies globally.');
+    sections.push('Include a "scope" field in each lesson JSON with the appropriate glob pattern.');
+  }
 
   // PR metadata — sanitize untrusted fields (title, state come from PR author)
   sections.push('=== PR METADATA ===');
@@ -272,7 +282,10 @@ function validateLesson(obj: unknown): ExtractedLesson | null {
   // Validate optional heading
   const heading = typeof rec.heading === 'string' ? sanitizeHeading(rec.heading) : undefined;
 
-  return { ...(heading && { heading }), tags, text };
+  // Validate optional scope (#1014)
+  const scope = typeof rec.scope === 'string' ? rec.scope.trim() : undefined;
+
+  return { ...(heading && { heading }), tags, text, ...(scope && { scope }) };
 }
 
 /** Try to parse JSON lessons with manual validation. Returns null on failure. */
@@ -342,7 +355,8 @@ export function appendLessons(lessons: ExtractedLesson[], lessonsDir: string): v
   for (const l of lessons) {
     const heading = l.heading || generateLessonHeading(l.text);
     const tags = l.tags.join(', ');
-    const entry = `## Lesson — ${heading}\n\n**Tags:** ${tags}\n\n${l.text}\n`;
+    const scopeLine = l.scope ? `\n**Scope:** ${l.scope}` : '';
+    const entry = `## Lesson — ${heading}\n\n**Tags:** ${tags}${scopeLine}\n\n${l.text}\n`;
     writeLessonFile(lessonsDir, entry);
   }
 }
@@ -520,8 +534,34 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
       }
     }
 
+    // Scope inference (#1014): analyze PR changed files for scope suggestion
+    let scopeGlobs: string[] = [];
+    try {
+      const { safeExec: exec, inferScopeFromFiles } = await import('@mmnto/totem');
+      const diff = exec('gh', ['pr', 'diff', String(num), '--name-only'], {
+        cwd,
+        timeout: GH_TIMEOUT_MS,
+        env: { ...process.env, GH_PROMPT_DISABLED: '1' },
+      });
+      const files = diff.trim().split('\n').filter(Boolean);
+      scopeGlobs = inferScopeFromFiles(files);
+      if (scopeGlobs.length > 0) {
+        log.dim(TAG, `Inferred scope: ${scopeGlobs.join(', ')}`);
+      }
+    } catch {
+      // Non-fatal: scope inference is best-effort
+    }
+
     // Assemble prompt
-    const prompt = assemblePrompt(pr, threads, existingLessons, systemPrompt, prNits, botMarkers);
+    const prompt = assemblePrompt(
+      pr,
+      threads,
+      existingLessons,
+      systemPrompt,
+      prNits,
+      botMarkers,
+      scopeGlobs,
+    );
     log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
     // Run orchestrator (handles --raw mode, validation, invocation, telemetry)
@@ -640,6 +680,7 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
   const sanitizedLessons = selected.map((l) => ({
     tags: l.tags.map((t) => sanitize(t)),
     text: sanitize(l.text),
+    ...(l.scope && { scope: sanitize(l.scope) }),
   }));
 
   // Append lessons to .totem/lessons/
