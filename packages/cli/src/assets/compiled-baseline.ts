@@ -394,32 +394,6 @@ export const COMPILED_PYTHON_BASELINE: CompiledRule[] = [
     severity: 'warning',
     category: 'style',
   },
-  {
-    lessonHash: 'a1b2c3d4e5f60003',
-    lessonHeading: 'str.format with untrusted templates leaks attributes',
-    pattern: '\\.format\\s*\\(',
-    message:
-      'str.format() with user-controlled format strings can leak object attributes via {0.__class__}. Use f-strings or sanitize format templates.',
-    engine: 'regex',
-    compiledAt: '2026-03-31T00:00:00.000Z',
-    createdAt: '2026-03-31T00:00:00.000Z',
-    fileGlobs: ['**/*.py', '!**/*test*.py', '!**/test_*.py'],
-    severity: 'warning',
-    category: 'style',
-  },
-  {
-    lessonHash: 'a1b2c3d4e5f60004',
-    lessonHeading: 'Import side effects in __init__.py cause circular imports',
-    pattern: '^(?:from\\s+\\S+\\s+)?import\\s+\\S+',
-    message:
-      'Imports in __init__.py execute on package load and can cause circular import errors. Keep __init__.py minimal.',
-    engine: 'regex',
-    compiledAt: '2026-03-31T00:00:00.000Z',
-    createdAt: '2026-03-31T00:00:00.000Z',
-    fileGlobs: ['**/__init__.py'],
-    severity: 'warning',
-    category: 'style',
-  },
 ];
 
 // ─── Rust Baseline ──────────────────────────────────
@@ -448,19 +422,6 @@ export const COMPILED_RUST_BASELINE: CompiledRule[] = [
     compiledAt: '2026-03-31T00:00:00.000Z',
     createdAt: '2026-03-31T00:00:00.000Z',
     fileGlobs: ['**/*.rs'],
-    severity: 'warning',
-    category: 'style',
-  },
-  {
-    lessonHash: 'b2c3d4e5f6a70003',
-    lessonHeading: 'Clone to satisfy the borrow checker is a code smell',
-    pattern: '\\.clone\\(\\)',
-    message:
-      'Cloning to satisfy the borrow checker often indicates a design issue. Consider restructuring ownership or using references.',
-    engine: 'regex',
-    compiledAt: '2026-03-31T00:00:00.000Z',
-    createdAt: '2026-03-31T00:00:00.000Z',
-    fileGlobs: ['**/*.rs', '!**/tests/**', '!**/*test*.rs'],
     severity: 'warning',
     category: 'style',
   },
