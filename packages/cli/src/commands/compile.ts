@@ -73,6 +73,45 @@ function getTestedHashes(
   return hashes;
 }
 
+// ─── Auto-scaffold (ADR-065 / #854) ─────────────────
+
+export interface AutoScaffoldDeps {
+  fs: typeof import('node:fs');
+  path: typeof import('node:path');
+  testsDir: string;
+  cwd: string;
+  testedHashes: Set<string>;
+  log: { info: (tag: string, msg: string) => void };
+  extractRuleExamples: typeof import('@mmnto/totem').extractRuleExamples;
+  deriveVirtualFilePath: typeof import('@mmnto/totem').deriveVirtualFilePath;
+  scaffoldFixture: typeof import('@mmnto/totem').scaffoldFixture;
+  scaffoldFixturePath: typeof import('@mmnto/totem').scaffoldFixturePath;
+}
+
+export function autoScaffoldFixture(
+  lesson: LessonInput,
+  rule: CompiledRule,
+  deps: AutoScaffoldDeps,
+): void {
+  const examples = deps.extractRuleExamples(lesson.body);
+  const virtualPath = deps.deriveVirtualFilePath(rule);
+  const content = deps.scaffoldFixture({
+    ruleHash: lesson.hash,
+    filePath: virtualPath,
+    failLines: examples?.hits,
+    passLines: examples?.misses,
+    heading: lesson.heading,
+  });
+  const fixturePath = deps.scaffoldFixturePath(deps.testsDir, lesson.hash);
+  deps.fs.mkdirSync(deps.path.dirname(fixturePath), { recursive: true });
+  deps.fs.writeFileSync(fixturePath, content, 'utf8');
+  deps.testedHashes.add(lesson.hash);
+  deps.log.info(
+    TAG,
+    `[${lesson.heading}] Auto-scaffolded test fixture → ${deps.path.relative(deps.cwd, fixturePath)}`,
+  );
+}
+
 // ─── Main command ───────────────────────────────────
 
 export async function compileCommand(options: CompileOptions): Promise<void> {
@@ -168,6 +207,19 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
   const testsDir = path.join(totemDir, 'tests');
   const testedHashes = getTestedHashes(testsDir, fs, path);
 
+  const scaffoldDeps: AutoScaffoldDeps = {
+    fs,
+    path,
+    testsDir,
+    cwd,
+    testedHashes,
+    log,
+    extractRuleExamples,
+    deriveVirtualFilePath,
+    scaffoldFixture,
+    scaffoldFixturePath,
+  };
+
   // ─── Phase 1: Regex compilation (requires orchestrator) ──
   if (config.orchestrator) {
     const existingFile: CompiledRulesFile = options.force
@@ -239,24 +291,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
             }
             // ADR-065: Pipeline 1 error rules require a test fixture
             if (manualResult.rule.severity === 'error' && !testedHashes.has(lesson.hash)) {
-              // Auto-scaffold fixture (ADR-065 / #854)
-              const examples = extractRuleExamples(lesson.body);
-              const virtualPath = deriveVirtualFilePath(manualResult.rule);
-              const content = scaffoldFixture({
-                ruleHash: lesson.hash,
-                filePath: virtualPath,
-                failLines: examples?.hits,
-                passLines: examples?.misses,
-                heading: lesson.heading,
-              });
-              const fixturePath = scaffoldFixturePath(testsDir, lesson.hash);
-              fs.mkdirSync(path.dirname(fixturePath), { recursive: true });
-              fs.writeFileSync(fixturePath, content, 'utf8');
-              testedHashes.add(lesson.hash);
-              log.info(
-                TAG,
-                `[${lesson.heading}] Auto-scaffolded test fixture → ${path.relative(cwd, fixturePath)}`,
-              );
+              autoScaffoldFixture(lesson, manualResult.rule, scaffoldDeps);
             }
             newRules.push(manualResult.rule);
             compiled++;
@@ -423,24 +458,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
                   result.rule.severity === 'error' &&
                   !testedHashes.has(lesson.hash)
                 ) {
-                  // Auto-scaffold fixture (ADR-065 / #854)
-                  const examples = extractRuleExamples(lesson.body);
-                  const virtualPath = deriveVirtualFilePath(result.rule);
-                  const content = scaffoldFixture({
-                    ruleHash: lesson.hash,
-                    filePath: virtualPath,
-                    failLines: examples?.hits,
-                    passLines: examples?.misses,
-                    heading: lesson.heading,
-                  });
-                  const fixturePath = scaffoldFixturePath(testsDir, lesson.hash);
-                  fs.mkdirSync(path.dirname(fixturePath), { recursive: true });
-                  fs.writeFileSync(fixturePath, content, 'utf8');
-                  testedHashes.add(lesson.hash);
-                  log.info(
-                    TAG,
-                    `[${lesson.heading}] Auto-scaffolded test fixture → ${path.relative(cwd, fixturePath)}`,
-                  );
+                  autoScaffoldFixture(lesson, result.rule, scaffoldDeps);
                 }
                 newRules.push(result.rule);
                 compiled++;
