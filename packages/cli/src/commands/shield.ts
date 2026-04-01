@@ -25,6 +25,7 @@ import {
   MAX_SPEC_RESULTS,
   QUERY_DIFF_TRUNCATE,
   SHIELD_LEARN_SYSTEM_PROMPT,
+  type ShieldFinding,
   type ShieldStructuredVerdict,
   ShieldStructuredVerdictSchema,
   SPEC_SEARCH_POOL,
@@ -436,6 +437,7 @@ export interface ShieldOptions {
   yes?: boolean;
   override?: string;
   suppress?: string[];
+  autoCapture?: boolean;
 }
 
 // ─── Deterministic mode (delegates to shared engine) ─
@@ -583,6 +585,66 @@ export async function learnFromVerdict(
   }
 }
 
+// ─── Pipeline 5: observation auto-capture ──────────
+
+/** @internal — exported for testing */
+export async function captureObservationRules(
+  findings: ShieldFinding[],
+  cwd: string,
+  config: TotemConfig,
+  configRoot: string | undefined,
+): Promise<void> {
+  // Only process findings with file + line (others can't be captured)
+  const locatable = findings.filter(
+    (f): f is ShieldFinding & { file: string; line: number } => !!f.file && !!f.line,
+  );
+  if (locatable.length === 0) return;
+
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const {
+    deduplicateObservations,
+    generateObservationRule,
+    loadCompiledRulesFile,
+    saveCompiledRulesFile,
+  } = await import('@mmnto/totem');
+
+  const candidates: import('@mmnto/totem').CompiledRule[] = [];
+  for (const finding of locatable) {
+    const fullPath = path.join(cwd, finding.file);
+    let content: string;
+    try {
+      content = fs.readFileSync(fullPath, 'utf-8');
+    } catch {
+      continue; // Deleted or inaccessible file — skip
+    }
+
+    const rule = generateObservationRule({
+      file: finding.file,
+      line: finding.line,
+      message: finding.message,
+      fileContent: content,
+    });
+    if (rule) candidates.push(rule);
+  }
+
+  if (candidates.length === 0) return;
+
+  const deduped = deduplicateObservations(candidates);
+
+  // Merge into existing compiled rules, skipping duplicates by lessonHash
+  const rulesPath = path.join(configRoot ?? cwd, config.totemDir, 'compiled-rules.json');
+  const existing = loadCompiledRulesFile(rulesPath, (msg) => log.dim(TAG, msg));
+  const existingHashes = new Set(existing.rules.map((r) => r.lessonHash));
+
+  const newRules = deduped.filter((r) => !existingHashes.has(r.lessonHash));
+  if (newRules.length === 0) return;
+
+  existing.rules.push(...newRules);
+  saveCompiledRulesFile(rulesPath, existing);
+  log.info(TAG, `Pipeline 5: captured ${newRules.length} observation rule(s)`);
+}
+
 // ─── Shared verdict handler ─────────────────────────
 
 async function handleVerdictResult(
@@ -651,6 +713,11 @@ async function handleVerdictResult(
     const verdict = computeVerdict({ ...structured, findings: filtered });
     const display = formatVerdictForDisplay(filteredVerdict, verdict.pass);
     console.error(display);
+
+    // ─── Pipeline 5: auto-capture observation rules ──
+    if (options.autoCapture !== false) {
+      await captureObservationRules(filtered, cwd, config, configRoot);
+    }
 
     if (verdict.pass) {
       await writeReviewedContentHash(cwd, config.totemDir, configRoot);

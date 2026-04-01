@@ -228,6 +228,10 @@ const reviewOptions = (cmd: Command) =>
       'Suppress a pattern class by label (repeatable)',
       (val: string, prev: string[]) => [...prev, val],
       [] as string[], // totem-context: Commander accumulator default — not untrusted input
+    )
+    .option(
+      '--no-auto-capture',
+      'Disable Pipeline 5 auto-capture of observation rules from findings',
     );
 
 async function runReview(opts: {
@@ -243,6 +247,7 @@ async function runReview(opts: {
   yes?: boolean;
   override?: string;
   suppress?: string[];
+  autoCapture?: boolean;
 }): Promise<void> {
   // Redirect removed --deterministic flag to totem lint
   if (opts.deterministic) {
