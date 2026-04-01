@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 1.8.5
+
+### Patch Changes
+
+- 9a6a1a0: Add Pipeline 5 observation-based auto-capture from shield findings
+
 ## 1.8.4
 
 ### Patch Changes
