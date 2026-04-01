@@ -37,10 +37,10 @@ Totem is evolving from a deterministic lint engine into a full **governance laye
   - Update triage and review-learn workflows to skip findings that fall outside the current diff range.
 - [ ] **Triage Workflow:**
   - **Phase 2:** Integrate agent dispatch capabilities to perform atomic triage fixes.
-  - **Phase 3:** Build interactive CLI prompts to guide pull request triage.
-  - **Phase 4:** Build a lesson extraction pipeline to automate the bot-to-lesson feedback loop.
+  - **Phase 3:** Build interactive CLI prompts to guide pull request triage (Shipped).
+  - **Phase 4:** Build a lesson extraction pipeline to automate the bot-to-lesson feedback loop (Partially shipped: SARIF support and severity levels added).
 - [ ] **Enforcement & DX:**
-  - Unify enforcement into explicit `totem check` and `totem status` commands.
+  - Unify enforcement into explicit `totem check` and `totem status` commands (Shipped).
   - Automate ticket creation for deferred review items.
 
 ---
@@ -50,7 +50,7 @@ Totem is evolving from a deterministic lint engine into a full **governance laye
 **Theme:** The COSS Covenant tier — multi-repo coordination for teams running autonomous agents at scale.
 
 - [ ] **Multi-Repo Federation:** Central strategy repo pushes compiled rules to downstream repositories via RBAC.
-- [ ] **Signed Trap Ledger:** Cryptographically signed, immutable cloud endpoint for ingestion.
+- [ ] **Signed Trap Ledger:** Cryptographically signed, immutable cloud endpoint for ingestion.      
 - [ ] **Compliance Dashboard:** Track override rates by agent source, rule health trends, and bypass audit trails.
 - [ ] **Mesh Export:** Portable bundle format for lessons and rules.
 - [ ] **`totem ui`:** Local web dashboard for rule decay, hit/miss rates, and ledger history.

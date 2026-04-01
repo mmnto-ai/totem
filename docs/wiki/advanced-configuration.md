@@ -141,8 +141,8 @@ Totem can automatically export its compiled architectural rules as localized fil
 ```typescript
 // totem.config.ts
 exports: {
-  // Junie loads this as an on-demand skill rather than injecting it into every prompt
-  junie: '.junie/skills/totem-rules/rules.md',
+  // Junie loads this as guidelines rather than injecting it into every prompt
+  junie: '.junie/guidelines.md',
   copilot: '.github/copilot-instructions.md'
 }
 ```
@@ -154,3 +154,23 @@ By default, the MCP integration runs via `npx -y @mmnto/mcp`, which always fetch
 1. Install it locally: `pnpm add -D @mmnto/mcp`
 2. Remove the `-y` flag from your MCP config (e.g., `.mcp.json` or `.claude/settings.local.json`).
 3. `npx` will now execute the exact version locked in your `package.json`.
+
+## Auto-Learning (shieldAutoLearn)
+
+You can configure Totem to automatically prompt for lesson extraction whenever a `totem review` (shield) fails. This accelerates the Self-Healing Loop by ensuring that every violation provides an immediate opportunity to improve the ruleset.
+
+```typescript
+// totem.config.ts
+export default {
+  // ...
+  shieldAutoLearn: true,
+};
+```
+
+## Scope Inference in Extract
+
+When running `totem extract` against a pull request, Totem will automatically analyze the changed files to infer the architectural scope of the PR. This suggested scope is pre-injected into the lesson extraction process, saving time and ensuring lessons are correctly categorized.
+
+## Prior Art Concierge (Spec)
+
+The `totem spec` command acts as a prior art concierge. Before generating a specification for a new feature or issue, it automatically searches your local knowledge index for existing shared helpers, internal libraries, and relevant structural lessons. This injected context prevents the AI from reinventing the wheel and forces alignment with your established architectural patterns.
