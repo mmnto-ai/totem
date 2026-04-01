@@ -85,5 +85,9 @@ Merge-Label "priority: P3" "tier-3"
 # Status merges
 Merge-Label "blocked" "status: blocked"
 Merge-Label "research" "status: investigation"
+Merge-Label "investigation" "status: investigation"
+
+# Domain merges
+Merge-Label "strategy" "domain: strategy"
 
 Write-Host "Label taxonomy sync complete for $Repo!" -ForegroundColor Green
