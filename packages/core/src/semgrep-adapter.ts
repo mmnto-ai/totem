@@ -82,9 +82,15 @@ export function parseSemgrepRules(yamlContent: string): SemgrepImportResult {
       pattern = rule['pattern-regex'];
     } else if (typeof rule.pattern === 'string' && !rule.patterns && !rule['pattern-either']) {
       // Simple string patterns like "eval(...)" — convert to regex
-      // Strip Semgrep metavariables ($X, $...) before escaping, replace `...` with `.*`
-      const cleaned = rule.pattern.replace(/\$\w+/g, '\\w+');
-      pattern = cleaned.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\.\\\.\\\./g, '.*');
+      // 1. Replace metavariables with placeholder before escaping
+      // 2. Escape regex special chars
+      // 3. Restore metavariable placeholders and `...` wildcards
+      const METAVAR_PLACEHOLDER = '\x00METAVAR\x00';
+      const withPlaceholders = rule.pattern.replace(/\$\w+/g, METAVAR_PLACEHOLDER);
+      const escaped = withPlaceholders.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      pattern = escaped
+        .replace(/\\\.\\\.\\\./g, '.*')
+        .replace(new RegExp(METAVAR_PLACEHOLDER.replace(/\x00/g, '\\x00'), 'g'), '\\w+');
     }
 
     if (!pattern) {

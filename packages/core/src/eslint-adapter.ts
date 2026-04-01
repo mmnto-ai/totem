@@ -53,7 +53,7 @@ function handleRestrictedImports(
       rules.push({
         lessonHash: hashLesson(heading, `Import of '${name}' is restricted`),
         lessonHeading: heading,
-        pattern: `from\\s+['"]${escapedName}`,
+        pattern: `from\\s+['"]${escapedName}['"/]`,
         message: `Import of '${name}' is restricted by ESLint config.`,
         engine: 'regex',
         severity,
@@ -79,7 +79,7 @@ function handleRestrictedImports(
       rules.push({
         lessonHash: hashLesson(heading, `Import matching '${pat}' is restricted`),
         lessonHeading: heading,
-        pattern: `from\\s+['"]${regexPat}`,
+        pattern: `from\\s+['"]${regexPat}['"/]`,
         message: `Import matching '${pat}' is restricted by ESLint config.`,
         engine: 'regex',
         severity,
