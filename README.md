@@ -16,7 +16,7 @@ We do not force you into a rigid, 7-step AI methodology. We provide the **Sensor
 
 ## The Codebase Immune System (The Pipeline Engine)
 
-Totem operates as a continuous, self-healing loop that converts institutional knowledge into physical constraints through **The Pipeline Engine** (Pipelines 1–5). You can author rules manually (zero-LLM), import from ESLint, compile from Markdown examples, or let Totem auto-capture warnings from PR bots.
+Totem operates as a continuous, self-healing loop that converts institutional knowledge into physical constraints through **The Pipeline Engine**. You can author rules manually (zero-LLM), import from ESLint, compile from Markdown examples, or let Totem auto-capture warnings from PR bots.
 
 ```mermaid
 graph LR

@@ -140,10 +140,10 @@ Lists all locally documented lessons from `.totem/lessons.md` and the lessons di
 Compiles `.totem/lessons.md` into deterministic regex/AST rules for zero-LLM checks. Outputs to `compiled-rules.json`. Supports Pipeline 2 (LLM-generated) and Pipeline 3 (Example-based compilation).
 
 - **Flags:**
-  - `--cloud`: Offloads the compilation process to Totem cloud workers.
-  - `--concurrency <n>`: Sets parallel compilation limit.
+  - `--cloud <url>`: Offloads the compilation process to a cloud endpoint for parallel fan-out.
+  - `--concurrency <n>`: Sets parallel compilation limit (default: 5).
   - `--force`: Bypasses the compilation cache.
-  - `--from-cursor`: Imports Cursor `.mdc` rules.
+  - `--from-cursor`: Ingests `.cursorrules`, `.windsurfrules`, and `.cursor/rules/*.mdc` files as lessons.
 
 ### `totem extract <pr-ids...>`
 

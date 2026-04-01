@@ -10,9 +10,9 @@ Totem supports five distinct pipelines for rule creation, ranging from zero-LLM 
 
 | Pipeline | Name | LLM Required? | Entry Point |
 |----------|------|---------------|-------------|
-| **P1** | Manual Rules | No | `totem rule scaffold`, hand-edit `compiled-rules.json` |
+| **P1** | Manual Rules | No | `totem rule scaffold` → author lesson → `totem lesson compile` |
 | **P2** | LLM-Generated | Yes | `totem lesson compile` (from extracted lessons) |
-| **P3** | Example-Based | Yes | `totem lesson compile` (from Bad/Good code snippets) |
+| **P3** | Example-Based | Yes | `totem lesson compile` (from Bad/Good code snippets in `.totem/lessons/*.md`) |
 | **P4** | Import | No | `totem import --from-eslint`, `totem import --from-semgrep` |
 | **P5** | Observation Auto-Capture | No (at capture time) | Automatic during `totem review` (opt out with `--no-auto-capture`) |
 
@@ -36,7 +36,7 @@ Create the structure and write the AST selector yourself:
 ```bash
 totem rule scaffold --id no-console --severity error
 ```
-Then, edit the resulting entry in `compiled-rules.json`.
+Then, author the lesson markdown and run `totem lesson compile` to generate the deterministic rule.
 
 ### Pipeline 3: Example-Based Compilation
 Given a lesson (`.totem/lessons/db-access.md`) with explicit blocks:
