@@ -17,7 +17,7 @@ function Merge-Label {
     param($OldName, $NewName)
     Write-Host "Merging '$OldName' into '$NewName'..." -ForegroundColor Cyan
     # Get issues with the old label
-    $issues = gh issue list --label $OldName --repo $Repo --state all --json number --jq '.[].number' | Out-String
+    $issues = gh issue list --label $OldName --repo $Repo --state all --limit 1000 --json number --jq '.[].number' | Out-String
     $issueNumbers = $issues -split '\s+' | Where-Object { $_ -ne '' }
     
     foreach ($num in $issueNumbers) {
@@ -51,6 +51,7 @@ gh label edit "scope: mcp" --color "de89ff" --description "Issues related to the
 gh label edit "scope: ci" --color "32c597" --description "GitHub Actions, Turbo, or build pipelines" --repo $Repo 2>$null
 gh label edit "domain: architecture" --color "1edb45" --description "System design and structural decisions" --repo $Repo 2>$null
 gh label edit "domain: ux" --color "1edb45" --description "Terminal UI, CLI output, and user experience" --repo $Repo 2>$null
+gh label edit "domain: strategy" --color "1edb45" --description "Product and execution strategy decisions" --repo $Repo 2>$null
 
 # Status / Meta
 gh label edit "status: blocked" --color "dda26d" --description "Blocked by external dependency" --repo $Repo 2>$null
@@ -85,5 +86,9 @@ Merge-Label "priority: P3" "tier-3"
 # Status merges
 Merge-Label "blocked" "status: blocked"
 Merge-Label "research" "status: investigation"
+Merge-Label "investigation" "status: investigation"
+
+# Domain merges
+Merge-Label "strategy" "domain: strategy"
 
 Write-Host "Label taxonomy sync complete for $Repo!" -ForegroundColor Green
