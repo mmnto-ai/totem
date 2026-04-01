@@ -1,5 +1,5 @@
-import { serve } from '@hono/node-server';
 import { GoogleGenAI } from '@google/genai';
+import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 
 // ─── Types ──────────────────────────────────────────
@@ -103,8 +103,8 @@ app.post('/compile', async (c) => {
 
         const text = response.text ?? null;
         return { hash: lesson.hash, response: text };
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
         return { hash: lesson.hash, response: null, err: message };
       }
     },

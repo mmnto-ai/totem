@@ -60,3 +60,4 @@ design/
 skills-lock.json
 .claude/skills/autofix/
 .claude/skills/code-review/
+repomix-output.xml
