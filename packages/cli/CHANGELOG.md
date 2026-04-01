@@ -1,5 +1,12 @@
 # @mmnto/cli
 
+## 1.8.3
+
+### Patch Changes
+
+- ea9e7f2: Add `--from-scan` flag to `totem lesson extract` for extracting lessons from fixed code scanning alerts
+  - @mmnto/totem@1.8.3
+
 ## 1.8.2
 
 ### Patch Changes
