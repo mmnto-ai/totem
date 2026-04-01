@@ -15,7 +15,7 @@ This document provides a detailed breakdown of the `totem` command-line interfac
 Auto-detects your project structure, package manager, and installed AI agents. It scaffolds `totem.config.ts`, injects the Proactive Memory Reflexes into your agent's instruction files (e.g., `CLAUDE.md`, `GEMINI.md`), and automatically seeds the project with the **Universal Baseline**.
 
 - **Flags:**
-  - `--bare`: Initializes Totem in a zero-config mode optimized for non-code repositories.
+  - `--bare`: Initializes Totem in a zero-config mode optimized for non-code repositories (e.g., Markdown notes, Obsidian vaults, documentation sites). Skips Git hooks, orchestrator detection, and API key prompts, forcing the Lite tier so you can use Totem as a local MCP RAG server without developer tooling overhead.
 
 ### `totem hooks`
 
@@ -23,6 +23,7 @@ Installs or updates background git hooks (`pre-commit`, `pre-push`, `post-merge`
 
 - **Flags:**
   - `--force`: Overwrites existing Totem hooks. Use this after a major version upgrade.
+- **Troubleshooting (Mac/Linux):** If you clone a repository initialized on Windows and the hooks fail to fire, Git may not recognize them as executable. Fix this by running: `chmod +x .git/hooks/pre-commit .git/hooks/pre-push .git/hooks/post-merge .git/hooks/post-checkout`
 
 ### `totem config`
 
@@ -93,7 +94,7 @@ The core of the Codebase Immune System. Reads your uncommitted diff and checks i
 - **Flags:**
   - `--deterministic`: Runs lightning-fast zero-LLM checks using `compiled-rules.json` (sub-3 seconds).
   - `--format sarif`: Exports violations in SARIF 2.1.0 format.
-  - `--format json`: Exports structured JSON including a unified `findings[]` array.
+  - `--format json`: Exports structured JSON including a unified `findings[]` array (ADR-071 Unified Findings Model) alongside raw `violations[]`.
   - `--learn`: Prompts you to extract a new lesson if a violation is found.
   - `--no-auto-capture`: Disables Pipeline 5 observation auto-capture during the review.
 
@@ -147,6 +148,8 @@ Compiles `.totem/lessons.md` into deterministic regex/AST rules for zero-LLM che
 ### `totem extract <pr-ids...>`
 
 Fetches merged PRs, reads comments, and extracts systemic architectural traps. Automatically infers scope from PR changed files.
+
+- **Security:** Hardened against prompt injection via XML boundaries. Actively blocks suspicious lessons in all bypass modes.
 
 ---
 
