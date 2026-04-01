@@ -95,9 +95,9 @@ export interface BadGoodSnippets {
  */
 function extractCodeBlock(body: string, field: string): string[] | null {
   const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // Try fenced code block after **Field:** (with optional language tag)
+  // Try fenced code block after **Field:** or **Field**: (colon required, inside or outside bold)
   const fencedRe = new RegExp(
-    `(?:^|\\n)\\*{0,2}${safeField}:?\\*{0,2}[^\\n]*\\n(?:\\s*\\n)*\`\`\`[^\\n]*\\n([\\s\\S]*?)\`\`\``,
+    `(?:^|\\n)\\*{0,2}${safeField}\\*{0,2}\\s*:[^\\n]*\\n(?:\\s*\\n)*\`\`\`[^\\n]*\\n([\\s\\S]*?)\`\`\``,
     'i',
   );
   const fencedMatch = body.match(fencedRe);
