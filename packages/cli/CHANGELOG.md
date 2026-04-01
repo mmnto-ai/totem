@@ -1,5 +1,13 @@
 # @mmnto/cli
 
+## 1.8.4
+
+### Patch Changes
+
+- 1bb150d: Add Pipeline 3 example-based compilation prompt for Bad/Good code snippet lessons
+- Updated dependencies [1bb150d]
+  - @mmnto/totem@1.8.4
+
 ## 1.8.3
 
 ### Patch Changes
