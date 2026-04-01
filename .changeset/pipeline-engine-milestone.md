@@ -1,7 +1,7 @@
 ---
-"@mmnto/totem": minor
-"@mmnto/cli": minor
-"@mmnto/mcp": minor
+'@mmnto/totem': minor
+'@mmnto/cli': minor
+'@mmnto/mcp': minor
 ---
 
 1.9.0 — Pipeline Engine milestone release
