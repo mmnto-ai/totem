@@ -1,8 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { z } from 'zod';
-
 import type { IngestTarget } from '@mmnto/totem';
 
 import {
@@ -96,41 +94,24 @@ async function installGeminiHooks(cwd: string): Promise<HookInstallerResult[]> {
 
 // --- Claude Code hook installer ---
 
-// Zod schema for the subset of settings.local.json that we need to validate.
-// Uses .passthrough() to preserve unknown keys during round-trip read/write.
-const HookCommandSchema = z.union([
-  z.string(),
-  z.object({ type: z.string(), command: z.string() }).passthrough(),
-]);
-
-const ClaudeSettingsSchema = z
-  .object({
-    hooks: z
-      .object({
-        PreToolUse: z
-          .array(
-            z
-              .object({
-                matcher: z.string().optional(),
-                hooks: z.array(HookCommandSchema).optional(),
-              })
-              .passthrough(),
-          )
-          .optional(),
-      })
-      .passthrough()
-      .optional(),
-  })
-  .passthrough();
-
 /** Check whether a hook entry already contains a totem review/shield reference. */
-function hasTotemShield(entry: z.infer<typeof HookCommandSchema>): boolean {
-  if (typeof entry === 'string')
-    return entry.includes('totem review') || entry.includes('totem shield');
+async function hasTotemShield(entry: unknown): Promise<boolean> {
+  const { z } = await import('zod');
+  const HookCommandSchema = z.union([
+    z.string(),
+    z.object({ type: z.string(), command: z.string() }).passthrough(),
+  ]);
+
+  const parsed = HookCommandSchema.safeParse(entry);
+  if (!parsed.success) return false;
+  const data = parsed.data;
+
+  if (typeof data === 'string')
+    return data.includes('totem review') || data.includes('totem shield');
   return (
-    entry.command.includes('totem review') ||
-    entry.command.includes('totem shield') ||
-    entry.command.includes('shield-gate')
+    data.command.includes('totem review') ||
+    data.command.includes('totem shield') ||
+    data.command.includes('shield-gate')
   );
 }
 
@@ -138,10 +119,31 @@ function hasTotemShield(entry: z.infer<typeof HookCommandSchema>): boolean {
  * Merge Totem hooks into .claude/settings.local.json without overwriting
  * existing user-defined hooks.
  */
-export function scaffoldClaudeHooks(filePath: string): {
+export async function scaffoldClaudeHooks(filePath: string): Promise<{
   action: 'created' | 'merged' | 'skipped';
   err?: string;
-} {
+}> {
+  const { z } = await import('zod');
+  const ClaudeSettingsSchema = z
+    .object({
+      hooks: z
+        .object({
+          PreToolUse: z
+            .array(
+              z
+                .object({
+                  matcher: z.string().optional(),
+                  hooks: z.array(z.any()).optional(),
+                })
+                .passthrough(),
+            )
+            .optional(),
+        })
+        .passthrough()
+        .optional(),
+    })
+    .passthrough();
+
   try {
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) {
@@ -179,11 +181,20 @@ export function scaffoldClaudeHooks(filePath: string): {
     const parsed = result.data;
     const preToolUse = parsed.hooks?.PreToolUse ?? [];
 
-    if (
-      preToolUse.some(
-        (h) => h.matcher === 'Bash' && Array.isArray(h.hooks) && h.hooks.some(hasTotemShield),
-      )
-    ) {
+    let alreadyHasShield = false;
+    for (const h of preToolUse) {
+      if (h.matcher === 'Bash' && Array.isArray(h.hooks)) {
+        for (const entry of h.hooks) {
+          if (await hasTotemShield(entry)) {
+            alreadyHasShield = true;
+            break;
+          }
+        }
+      }
+      if (alreadyHasShield) break;
+    }
+
+    if (alreadyHasShield) {
       return { action: 'skipped' };
     }
 
