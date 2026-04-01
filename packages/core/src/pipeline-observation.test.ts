@@ -182,4 +182,27 @@ describe('deduplicateObservations', () => {
 
     expect(result).toHaveLength(2);
   });
+
+  it('merges fileGlobs from different extensions', () => {
+    const ruleTs = generateObservationRule({
+      file: 'src/a.ts',
+      line: 1,
+      message: 'Finding in TS',
+      fileContent: 'const x = 1;',
+    })!;
+
+    const ruleJs = generateObservationRule({
+      file: 'src/b.js',
+      line: 1,
+      message: 'Finding in JS',
+      fileContent: 'const x = 1;',
+    })!;
+
+    const result = deduplicateObservations([ruleTs, ruleJs]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.fileGlobs).toEqual(['**/*.js', '**/*.ts']);
+    expect(result[0]!.message).toContain('Finding in TS');
+    expect(result[0]!.message).toContain('Finding in JS');
+  });
 });

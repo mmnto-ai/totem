@@ -82,21 +82,33 @@ export function generateObservationRule(input: ObservationInput): CompiledRule |
 /**
  * Merge rules that share the same `lessonHash` (i.e., identical pattern).
  *
- * For duplicates the unique messages are joined with ` | `.
+ * For duplicates the unique messages are joined with ` | ` and
+ * fileGlobs are merged so the rule covers all observed file types.
  */
 export function deduplicateObservations(rules: CompiledRule[]): CompiledRule[] {
   const map = new Map<string, CompiledRule>();
   const messageMap = new Map<string, string[]>();
+  const globMap = new Map<string, Set<string> | undefined>();
 
   for (const rule of rules) {
-    const existing = map.get(rule.lessonHash);
+    const hash = rule.lessonHash;
+    const existing = map.get(hash);
     if (!existing) {
-      map.set(rule.lessonHash, { ...rule });
-      messageMap.set(rule.lessonHash, [rule.message]);
+      map.set(hash, { ...rule });
+      messageMap.set(hash, [rule.message]);
+      globMap.set(hash, rule.fileGlobs ? new Set(rule.fileGlobs) : undefined);
     } else {
-      const messages = messageMap.get(rule.lessonHash)!;
+      const messages = messageMap.get(hash)!;
       if (!messages.includes(rule.message)) {
         messages.push(rule.message);
+      }
+      const currentGlobs = globMap.get(hash);
+      if (currentGlobs !== undefined) {
+        if (rule.fileGlobs === undefined) {
+          globMap.set(hash, undefined); // No globs = match everything
+        } else {
+          for (const g of rule.fileGlobs) currentGlobs.add(g);
+        }
       }
     }
   }
@@ -104,7 +116,12 @@ export function deduplicateObservations(rules: CompiledRule[]): CompiledRule[] {
   const result: CompiledRule[] = [];
   for (const [hash, rule] of map) {
     const messages = messageMap.get(hash)!;
-    result.push({ ...rule, message: messages.join(' | ') });
+    const globs = globMap.get(hash);
+    result.push({
+      ...rule,
+      message: messages.join(' | '),
+      fileGlobs: globs ? [...globs].sort() : undefined,
+    });
   }
 
   return result;

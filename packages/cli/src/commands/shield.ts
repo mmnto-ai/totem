@@ -615,7 +615,13 @@ export async function captureObservationRules(
     let content: string;
     try {
       content = fs.readFileSync(fullPath, 'utf-8');
-    } catch {
+    } catch (err) {
+      if (process.env['TOTEM_DEBUG'] === '1') {
+        log.dim(
+          TAG,
+          `Skipped ${finding.file}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
       continue; // Deleted or inaccessible file — skip
     }
 
