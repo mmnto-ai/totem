@@ -230,9 +230,9 @@ describe('scaffoldClaudeHooks', () => {
     cleanTmpDir(tmpDir);
   });
 
-  it('creates settings.local.json when none exists', async () => {
+  it('creates settings.local.json when none exists', () => {
     const filePath = path.join(tmpDir, '.claude', 'settings.local.json');
-    const result = await scaffoldClaudeHooks(filePath);
+    const result = scaffoldClaudeHooks(filePath);
 
     expect(result).toEqual({ action: 'created' });
     const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
@@ -246,19 +246,19 @@ describe('scaffoldClaudeHooks', () => {
     });
   });
 
-  it('creates parent directories as needed', async () => {
+  it('creates parent directories as needed', () => {
     const filePath = path.join(tmpDir, '.claude', 'settings.local.json');
-    await scaffoldClaudeHooks(filePath);
+    scaffoldClaudeHooks(filePath);
     expect(fs.existsSync(filePath)).toBe(true);
   });
 
-  it('merges into existing config without hooks', async () => {
+  it('merges into existing config without hooks', () => {
     const dir = path.join(tmpDir, '.claude');
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, 'settings.local.json');
     fs.writeFileSync(filePath, JSON.stringify({ theme: 'dark' }, null, 2) + '\n', 'utf-8');
 
-    const result = await scaffoldClaudeHooks(filePath);
+    const result = scaffoldClaudeHooks(filePath);
 
     expect(result).toEqual({ action: 'merged' });
     const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
@@ -266,14 +266,14 @@ describe('scaffoldClaudeHooks', () => {
     expect(content.hooks.PreToolUse).toBeDefined();
   });
 
-  it('deep merges when hooks exist but no totem entry', async () => {
+  it('deep merges when hooks exist but no totem entry', () => {
     const dir = path.join(tmpDir, '.claude');
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, 'settings.local.json');
     const existing = { hooks: { PreToolUse: [{ matcher: 'custom', hooks: ['echo hi'] }] } };
     fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
 
-    const result = await scaffoldClaudeHooks(filePath);
+    const result = scaffoldClaudeHooks(filePath);
 
     expect(result).toEqual({ action: 'merged' });
     const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
@@ -284,7 +284,7 @@ describe('scaffoldClaudeHooks', () => {
     expect(JSON.stringify(content.hooks.PreToolUse[1])).toContain('shield-gate');
   });
 
-  it('skips when totem shield hook exists (bare string format — legacy)', async () => {
+  it('skips when totem shield hook exists (bare string format — legacy)', () => {
     const dir = path.join(tmpDir, '.claude');
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, 'settings.local.json');
@@ -293,12 +293,12 @@ describe('scaffoldClaudeHooks', () => {
     };
     fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
 
-    const result = await scaffoldClaudeHooks(filePath);
+    const result = scaffoldClaudeHooks(filePath);
 
     expect(result).toEqual({ action: 'skipped' });
   });
 
-  it('skips when totem shield hook exists (object format)', async () => {
+  it('skips when totem shield hook exists (object format)', () => {
     const dir = path.join(tmpDir, '.claude');
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, 'settings.local.json');
@@ -314,42 +314,42 @@ describe('scaffoldClaudeHooks', () => {
     };
     fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
 
-    const result = await scaffoldClaudeHooks(filePath);
+    const result = scaffoldClaudeHooks(filePath);
 
     expect(result).toEqual({ action: 'skipped' });
   });
 
-  it('returns error on malformed JSON', async () => {
+  it('returns error on malformed JSON', () => {
     const dir = path.join(tmpDir, '.claude');
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, 'settings.local.json');
     fs.writeFileSync(filePath, '{ broken!!!', 'utf-8');
 
-    const result = await scaffoldClaudeHooks(filePath);
+    const result = scaffoldClaudeHooks(filePath);
 
     expect(result.action).toBe('skipped');
     expect(result.err).toContain('invalid JSON');
   });
 
-  it('returns error when hooks has unexpected shape', async () => {
+  it('returns error when hooks has unexpected shape', () => {
     const dir = path.join(tmpDir, '.claude');
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, 'settings.local.json');
     fs.writeFileSync(filePath, JSON.stringify({ hooks: 'not-an-object' }, null, 2) + '\n', 'utf-8');
 
-    const result = await scaffoldClaudeHooks(filePath);
+    const result = scaffoldClaudeHooks(filePath);
 
     expect(result.action).toBe('skipped');
     expect(result.err).toContain('unexpected shape');
   });
 
-  it('is idempotent — double invoke does not duplicate', async () => {
+  it('is idempotent — double invoke does not duplicate', () => {
     const filePath = path.join(tmpDir, '.claude', 'settings.local.json');
 
-    const first = await scaffoldClaudeHooks(filePath);
+    const first = scaffoldClaudeHooks(filePath);
     expect(first).toEqual({ action: 'created' });
 
-    const second = await scaffoldClaudeHooks(filePath);
+    const second = scaffoldClaudeHooks(filePath);
     expect(second).toEqual({ action: 'skipped' });
   });
 });
