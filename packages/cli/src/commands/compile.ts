@@ -124,7 +124,8 @@ export function autoScaffoldFixture(
 
 export async function compileCommand(options: CompileOptions): Promise<void> {
   const { TotemConfigError, TotemError } = await import('@mmnto/totem');
-  const { COMPILER_SYSTEM_PROMPT } = await import('./compile-templates.js');
+  const { COMPILER_SYSTEM_PROMPT, PIPELINE3_COMPILER_PROMPT } =
+    await import('./compile-templates.js');
   const fs = await import('node:fs');
   const path = await import('node:path');
   const { log } = await import('../ui.js');
@@ -275,6 +276,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
         runOrchestrator: (prompt: string) =>
           runOrchestrator({ prompt, tag: TAG, options, config, cwd, temperature: 0 }),
         existingByHash,
+        pipeline3Prompt: PIPELINE3_COMPILER_PROMPT,
         callbacks: {
           onWarn: (heading: string, msg: string) => log.warn(TAG, `[${heading}] ${msg}`),
           onDim: (heading: string, msg: string) => log.dim(TAG, `[${heading}] ${msg}`),

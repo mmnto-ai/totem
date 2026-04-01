@@ -33,6 +33,8 @@ export interface CompileLessonDeps {
   runOrchestrator: (prompt: string) => Promise<string | undefined>;
   existingByHash: Map<string, CompiledRule>;
   callbacks?: CompileLessonCallbacks;
+  /** Optional: specialized system prompt for Pipeline 3 (Bad/Good example-based compilation). */
+  pipeline3Prompt?: string;
 }
 
 // ─── ast-grep pattern validation ───────────────────
@@ -344,8 +346,9 @@ export async function compileLesson(
   const snippets = extractBadGoodSnippets(lesson.body);
   if (snippets) {
     // Build a constrained prompt with the bad/good examples
+    const basePrompt = deps.pipeline3Prompt ?? compilerPrompt;
     const examplePrompt = [
-      compilerPrompt,
+      basePrompt,
       '',
       '## Lesson to Compile (Example-Based — Pipeline 3)',
       '',

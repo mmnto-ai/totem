@@ -41,11 +41,12 @@ function isPipeline3(body: string): boolean {
 
 /** Check whether a single Bad/Good field marker is present (even without its pair). */
 function hasBadField(body: string): boolean {
-  return /(?:^|\n)\*{0,2}Bad:\*{0,2}/im.test(body);
+  // Matches **Bad:**, **Bad**:, Bad: — requires colon somewhere around the word
+  return /(?:^|\n)\*{0,2}Bad\*{0,2}\s*:/im.test(body);
 }
 
 function hasGoodField(body: string): boolean {
-  return /(?:^|\n)\*{0,2}Good:\*{0,2}/im.test(body);
+  return /(?:^|\n)\*{0,2}Good\*{0,2}\s*:/im.test(body);
 }
 
 function lintLesson(lesson: ParsedLesson): LessonLintDiagnostic[] {
