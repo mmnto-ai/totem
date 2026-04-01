@@ -50,7 +50,7 @@ Totem is evolving from a deterministic lint engine into a full **governance laye
 **Theme:** The COSS Covenant tier — multi-repo coordination for teams running autonomous agents at scale.
 
 - [ ] **Multi-Repo Federation:** Central strategy repo pushes compiled rules to downstream repositories via RBAC.
-- [ ] **Signed Trap Ledger:** Cryptographically signed, immutable cloud endpoint for ingestion.      
+- [ ] **Signed Trap Ledger:** Cryptographically signed, immutable cloud endpoint for ingestion.
 - [ ] **Compliance Dashboard:** Track override rates by agent source, rule health trends, and bypass audit trails.
 - [ ] **Mesh Export:** Portable bundle format for lessons and rules.
 - [ ] **`totem ui`:** Local web dashboard for rule decay, hit/miss rates, and ledger history.

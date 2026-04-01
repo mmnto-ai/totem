@@ -7,6 +7,7 @@ Baseline rules provide immediate value by catching common structural traps befor
 ## Language-Specific Rules
 
 Totem includes language-specific baselines for:
+
 - **Python** (e.g., FastAPI, Django conventions)
 - **Rust** (e.g., Tokio, Serde patterns)
 - **Go** (e.g., Goroutine leaks, context propagation)
