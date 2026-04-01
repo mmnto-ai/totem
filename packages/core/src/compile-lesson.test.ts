@@ -706,3 +706,164 @@ describe('compileLesson with inline examples', () => {
     expect(result.status).toBe('compiled');
   });
 });
+
+// ─── compileLesson Pipeline 3 ─────────────────────────
+
+describe('compileLesson Pipeline 3 (Bad/Good snippets)', () => {
+  const pipeline3Lesson: LessonInput = {
+    index: 0,
+    heading: 'Use logger not console.log',
+    body: [
+      '**Bad:**',
+      '```ts',
+      'console.log("debug");',
+      '```',
+      '',
+      '**Good:**',
+      '```ts',
+      'logger.info("debug");',
+      '```',
+    ].join('\n'),
+    hash: 'p3hash1',
+  };
+
+  it('compiles when Bad/Good snippets present and LLM returns valid pattern', async () => {
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: true,
+        pattern: 'console\\.log',
+        message: 'Use logger instead of console.log',
+        engine: 'regex' as const,
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('{"compilable": true}'),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(pipeline3Lesson, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    expect(deps.runOrchestrator).toHaveBeenCalled();
+    // Verify prompt contains Pipeline 3 markers
+    const prompt = (deps.runOrchestrator as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(prompt).toContain('Pipeline 3');
+    expect(prompt).toContain('Bad Code');
+    expect(prompt).toContain('Good Code');
+  });
+
+  it('returns skipped when LLM says not compilable', async () => {
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: false,
+        reason: 'Not a code pattern',
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('response'),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(pipeline3Lesson, 'system prompt', deps);
+    expect(result.status).toBe('skipped');
+    expect(deps.callbacks!.onDim).toHaveBeenCalledWith(
+      pipeline3Lesson.heading,
+      expect.stringContaining('Pipeline 3'),
+    );
+  });
+
+  it('fails self-verification when pattern does not match Bad snippet', async () => {
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: true,
+        // Pattern matches neither Bad nor Good — will fail self-test
+        pattern: 'this_matches_nothing_at_all',
+        message: 'Wrong pattern',
+        engine: 'regex' as const,
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('response'),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(pipeline3Lesson, 'system prompt', deps);
+    expect(result.status).toBe('failed');
+    expect(deps.callbacks!.onWarn).toHaveBeenCalledWith(
+      pipeline3Lesson.heading,
+      expect.stringContaining('self-verification'),
+    );
+  });
+
+  it('passes self-verification when pattern matches Bad but not Good', async () => {
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: true,
+        pattern: 'console\\.log',
+        message: 'Use logger instead of console.log',
+        engine: 'regex' as const,
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('response'),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(pipeline3Lesson, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.pattern).toBe('console\\.log');
+    }
+  });
+
+  it('Pipeline 1 takes priority over Pipeline 3', async () => {
+    const bothLesson: LessonInput = {
+      index: 0,
+      heading: 'Lesson with both Pattern and Bad/Good',
+      body: [
+        '**Pattern:** console\\.log',
+        '**Engine:** regex',
+        '**Severity:** warning',
+        '**Scope:** **/*.ts',
+        '',
+        '**Bad:**',
+        '```ts',
+        'console.log("bad");',
+        '```',
+        '',
+        '**Good:**',
+        '```ts',
+        'logger.info("good");',
+        '```',
+      ].join('\n'),
+      hash: 'bothHash',
+    };
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn(),
+      runOrchestrator: vi.fn(),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(bothLesson, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    // Pipeline 1 should handle it — no LLM call
+    expect(deps.runOrchestrator).not.toHaveBeenCalled();
+  });
+
+  it('returns noop when orchestrator returns null', async () => {
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn(),
+      runOrchestrator: vi.fn().mockResolvedValue(undefined),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(pipeline3Lesson, 'system prompt', deps);
+    expect(result.status).toBe('noop');
+  });
+
+  it('returns failed when LLM response cannot be parsed', async () => {
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue(null),
+      runOrchestrator: vi.fn().mockResolvedValue('bad response'),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(pipeline3Lesson, 'system prompt', deps);
+    expect(result.status).toBe('failed');
+    expect(deps.callbacks!.onWarn).toHaveBeenCalledWith(
+      pipeline3Lesson.heading,
+      expect.stringContaining('Pipeline 3'),
+    );
+  });
+});

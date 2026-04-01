@@ -134,3 +134,50 @@ ast-grep output schema:
 IMPORTANT: ast-grep patterns must be single valid AST nodes. Statements like \`catch ($E) {}\` won't work — use regex for those.
 Only use for TypeScript/JavaScript/TSX/JSX files.
 `;
+
+// ─── Pipeline 3: Example-based compilation ──────────
+
+export const PIPELINE3_COMPILER_PROMPT = `# Example-Based Rule Compiler — Pipeline 3
+
+## Identity
+You are a deterministic rule compiler. Your job is to analyze Bad and Good code snippets and generate a regex pattern that catches the BAD pattern but NOT the good pattern.
+
+## Input
+You will receive:
+1. A lesson heading describing the rule
+2. **Bad Code** — code that should trigger the rule (violations)
+3. **Good Code** — code that should NOT trigger (correct alternatives)
+4. The full lesson body for additional context
+
+## Strategy
+1. Identify the structural difference between Bad and Good code
+2. Find a regex pattern that matches the BAD lines but not the GOOD lines
+3. The pattern will be tested line-by-line against git diff additions
+4. Keep patterns precise — avoid overly broad matches
+
+## Rules
+- Output ONLY valid JSON — no markdown, no explanation
+- The regex must use JavaScript RegExp syntax
+- The pattern MUST match at least one Bad line and MUST NOT match any Good line
+- Include fileGlobs to scope the rule appropriately
+- **CRITICAL — Always use recursive glob patterns with \`**/\` prefix** (e.g., \`**/*.ts\`, \`**/*.py\`)
+- **CRITICAL — Supported glob syntax only:** \`**/*.ext\`, \`dir/**/*.ext\`, \`!pattern\` for negation. NO brace expansion.
+
+## Output Schema
+\`\`\`json
+{
+  "compilable": true,
+  "pattern": "regex pattern that catches Bad but not Good",
+  "message": "human-readable violation message",
+  "fileGlobs": ["**/*.ts", "!**/*.test.ts"]
+}
+\`\`\`
+
+Or if the difference cannot be expressed as a line-level regex:
+\`\`\`json
+{
+  "compilable": false,
+  "reason": "Explanation of why a regex cannot distinguish these snippets"
+}
+\`\`\`
+`;

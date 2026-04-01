@@ -427,4 +427,86 @@ describe('lesson-linter', () => {
       expect(result.diagnostics[0].lessonHeading).toBe('Bad lesson');
     });
   });
+
+  describe('Pipeline 3 (Bad/Good snippet) validation', () => {
+    it('passes for valid Bad/Good snippets', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Bad:** `console.log("bad")`\n**Good:** `logger.info("good")`',
+        }),
+      ]);
+      expect(result.valid).toBe(true);
+      expect(
+        result.diagnostics.filter((d) => d.field === 'Bad' || d.field === 'Good'),
+      ).toHaveLength(0);
+    });
+
+    it('errors for empty Bad snippet', () => {
+      const body = [
+        '## Lesson — Test',
+        '',
+        '**Bad:**',
+        '```ts',
+        '```',
+        '',
+        '**Good:**',
+        '```ts',
+        'logger.info("good");',
+        '```',
+      ].join('\n');
+      const result = validateLessons([makeParsedLesson({ raw: body })]);
+      expect(result.valid).toBe(false);
+      expect(result.diagnostics.some((d) => d.field === 'Bad' && d.message.includes('empty'))).toBe(
+        true,
+      );
+    });
+
+    it('errors for empty Good snippet', () => {
+      const body = [
+        '## Lesson — Test',
+        '',
+        '**Bad:**',
+        '```ts',
+        'console.log("bad");',
+        '```',
+        '',
+        '**Good:**',
+        '```ts',
+        '```',
+      ].join('\n');
+      const result = validateLessons([makeParsedLesson({ raw: body })]);
+      expect(result.valid).toBe(false);
+      expect(
+        result.diagnostics.some((d) => d.field === 'Good' && d.message.includes('empty')),
+      ).toBe(true);
+    });
+
+    it('errors when Bad is present without Good', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Bad:** `console.log("bad")`',
+        }),
+      ]);
+      expect(result.valid).toBe(false);
+      expect(
+        result.diagnostics.some(
+          (d) => d.field === 'Good' && d.message.includes('without matching Good'),
+        ),
+      ).toBe(true);
+    });
+
+    it('errors when Good is present without Bad', () => {
+      const result = validateLessons([
+        makeParsedLesson({
+          raw: '## Lesson — Test\n\n**Good:** `logger.info("good")`',
+        }),
+      ]);
+      expect(result.valid).toBe(false);
+      expect(
+        result.diagnostics.some(
+          (d) => d.field === 'Bad' && d.message.includes('without matching Bad'),
+        ),
+      ).toBe(true);
+    });
+  });
 });
