@@ -201,9 +201,10 @@ export {
 } from './lesson-format.js';
 export type { LessonLintDiagnostic, LessonLintResult } from './lesson-linter.js';
 export { validateLessons } from './lesson-linter.js';
-export type { ManualPattern, RuleExamples } from './lesson-pattern.js';
+export type { BadGoodSnippets, ManualPattern, RuleExamples } from './lesson-pattern.js';
 export {
   extractAllFields,
+  extractBadGoodSnippets,
   extractField,
   extractManualPattern,
   extractRuleExamples,

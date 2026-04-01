@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   extractAllFields,
+  extractBadGoodSnippets,
   extractManualPattern,
   extractRuleExamples,
   stripInlineCode,
@@ -126,5 +127,103 @@ describe('extractRuleExamples', () => {
     const result = extractRuleExamples(body);
     expect(result!.hits).toEqual(['a', 'b']);
     expect(result!.misses).toEqual([]);
+  });
+});
+
+describe('extractBadGoodSnippets', () => {
+  it('extracts fenced code blocks', () => {
+    const body = [
+      '**Bad:**',
+      '```ts',
+      'console.log("bad");',
+      '```',
+      '',
+      '**Good:**',
+      '```ts',
+      'logger.info("good");',
+      '```',
+    ].join('\n');
+    const result = extractBadGoodSnippets(body);
+    expect(result).not.toBeNull();
+    expect(result!.bad).toEqual(['console.log("bad");']);
+    expect(result!.good).toEqual(['logger.info("good");']);
+  });
+
+  it('extracts inline single-line snippets', () => {
+    const body = '**Bad:** `console.log("bad")`\n**Good:** `logger.info("good")`';
+    const result = extractBadGoodSnippets(body);
+    expect(result).not.toBeNull();
+    expect(result!.bad).toEqual(['console.log("bad")']);
+    expect(result!.good).toEqual(['logger.info("good")']);
+  });
+
+  it('returns null when no Bad/Good fields', () => {
+    const body = 'Just a normal lesson body without pattern fields.';
+    expect(extractBadGoodSnippets(body)).toBeNull();
+  });
+
+  it('returns null when only Bad (no Good)', () => {
+    const body = '**Bad:** `console.log("bad")`';
+    expect(extractBadGoodSnippets(body)).toBeNull();
+  });
+
+  it('returns null when only Good (no Bad)', () => {
+    const body = '**Good:** `logger.info("good")`';
+    expect(extractBadGoodSnippets(body)).toBeNull();
+  });
+
+  it('handles mixed formats (fenced Bad, inline Good)', () => {
+    const body = [
+      '**Bad:**',
+      '```ts',
+      'console.log("bad");',
+      '```',
+      '**Good:** `logger.info("good")`',
+    ].join('\n');
+    const result = extractBadGoodSnippets(body);
+    expect(result).not.toBeNull();
+    expect(result!.bad).toEqual(['console.log("bad");']);
+    expect(result!.good).toEqual(['logger.info("good")']);
+  });
+
+  it('filters empty lines from fenced snippets', () => {
+    const body = [
+      '**Bad:**',
+      '```ts',
+      '',
+      'console.log("bad");',
+      '',
+      '```',
+      '**Good:**',
+      '```ts',
+      '',
+      'logger.info("good");',
+      '',
+      '```',
+    ].join('\n');
+    const result = extractBadGoodSnippets(body);
+    expect(result).not.toBeNull();
+    expect(result!.bad).toEqual(['console.log("bad");']);
+    expect(result!.good).toEqual(['logger.info("good");']);
+  });
+
+  it('extracts multi-line fenced code blocks', () => {
+    const body = [
+      '**Bad:**',
+      '```ts',
+      'const x = 1;',
+      'console.log(x);',
+      '```',
+      '',
+      '**Good:**',
+      '```ts',
+      'const x = 1;',
+      'logger.info(x);',
+      '```',
+    ].join('\n');
+    const result = extractBadGoodSnippets(body);
+    expect(result).not.toBeNull();
+    expect(result!.bad).toEqual(['const x = 1;', 'console.log(x);']);
+    expect(result!.good).toEqual(['const x = 1;', 'logger.info(x);']);
   });
 });

@@ -7,7 +7,12 @@
 import { validateRegex } from './compiler.js';
 import type { ParsedLesson } from './drift-detector.js';
 import { HEADING_MAX_CHARS } from './lesson-format.js';
-import { extractAllFields, extractField, stripInlineCode } from './lesson-pattern.js';
+import {
+  extractAllFields,
+  extractBadGoodSnippets,
+  extractField,
+  stripInlineCode,
+} from './lesson-pattern.js';
 
 export interface LessonLintDiagnostic {
   lessonHeading: string;
@@ -28,6 +33,20 @@ const ESCAPED_GLOB_RE = /\\_\.|(?<!\*)\\\*/;
 
 function isPipeline1(body: string): boolean {
   return extractField(body, 'Pattern') != null;
+}
+
+function isPipeline3(body: string): boolean {
+  return extractBadGoodSnippets(body) != null;
+}
+
+/** Check whether a single Bad/Good field marker is present (even without its pair). */
+function hasBadField(body: string): boolean {
+  // Matches **Bad:**, **Bad**:, Bad: — requires colon somewhere around the word
+  return /(?:^|\n)\*{0,2}Bad\*{0,2}\s*:/im.test(body);
+}
+
+function hasGoodField(body: string): boolean {
+  return /(?:^|\n)\*{0,2}Good\*{0,2}\s*:/im.test(body);
 }
 
 function lintLesson(lesson: ParsedLesson): LessonLintDiagnostic[] {
@@ -66,6 +85,44 @@ function lintLesson(lesson: ParsedLesson): LessonLintDiagnostic[] {
         severity: 'error',
         field: 'Example Miss',
         message: 'Example Miss value is empty',
+      });
+    }
+  }
+
+  // ── Pipeline 3: Bad/Good snippet validation ──
+  if (isPipeline3(body)) {
+    const snippets = extractBadGoodSnippets(body)!;
+    if (snippets.bad.length === 0) {
+      diags.push({ ...base, severity: 'error', field: 'Bad', message: 'Bad snippet is empty' });
+    }
+    if (snippets.good.length === 0) {
+      diags.push({ ...base, severity: 'error', field: 'Good', message: 'Good snippet is empty' });
+    }
+  } else if (hasBadField(body) && hasGoodField(body)) {
+    // Both markers present but code blocks couldn't be parsed
+    diags.push({
+      ...base,
+      severity: 'error',
+      field: 'Bad/Good',
+      message:
+        'Bad and Good markers found but code blocks could not be parsed. Use fenced code blocks (```lang ... ```) or inline backticks.',
+    });
+  } else {
+    // If only one of Bad/Good is present (without the other), that's an error
+    if (hasBadField(body) && !hasGoodField(body)) {
+      diags.push({
+        ...base,
+        severity: 'error',
+        field: 'Good',
+        message: 'Bad snippet found without matching Good snippet',
+      });
+    }
+    if (hasGoodField(body) && !hasBadField(body)) {
+      diags.push({
+        ...base,
+        severity: 'error',
+        field: 'Bad',
+        message: 'Good snippet found without matching Bad snippet',
       });
     }
   }

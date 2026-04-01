@@ -81,3 +81,44 @@ export function extractRuleExamples(body: string): RuleExamples | null {
   if (hits.length === 0 && misses.length === 0) return null;
   return { hits, misses };
 }
+
+// ─── Pipeline 3: Bad/Good snippet extraction ─────────
+
+export interface BadGoodSnippets {
+  bad: string[]; // lines from the Bad snippet
+  good: string[]; // lines from the Good snippet
+}
+
+/**
+ * Extract a code block (fenced or inline) following a **Field:** marker.
+ * Used internally by extractBadGoodSnippets.
+ */
+function extractCodeBlock(body: string, field: string): string[] | null {
+  const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Try fenced code block after **Field:** or **Field**: (colon required, inside or outside bold)
+  const fencedRe = new RegExp(
+    `(?:^|\\n)\\*{0,2}${safeField}\\*{0,2}\\s*:[^\\n]*\\n(?:\\s*\\n)*\`\`\`[^\\n]*\\n([\\s\\S]*?)\`\`\``,
+    'i',
+  );
+  const fencedMatch = body.match(fencedRe);
+  if (fencedMatch) {
+    return fencedMatch[1]!.split('\n').filter((l) => l.trim().length > 0);
+  }
+  // Fallback: inline value after **Field:**
+  const inline = extractField(body, field);
+  if (inline) {
+    return [stripInlineCode(inline)];
+  }
+  return null;
+}
+
+/**
+ * Extract Bad/Good code snippets from a lesson body (Pipeline 3).
+ * Supports both fenced code blocks and inline text after the field.
+ */
+export function extractBadGoodSnippets(body: string): BadGoodSnippets | null {
+  const bad = extractCodeBlock(body, 'Bad');
+  const good = extractCodeBlock(body, 'Good');
+  if (!bad || !good) return null;
+  return { bad, good };
+}

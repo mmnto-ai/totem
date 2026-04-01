@@ -1,6 +1,10 @@
 import { engineFields, sanitizeFileGlobs, validateRegex } from './compiler.js';
 import type { CompiledRule, CompilerOutput, RegexValidation } from './compiler-schema.js';
-import { extractManualPattern, extractRuleExamples } from './lesson-pattern.js';
+import {
+  extractBadGoodSnippets,
+  extractManualPattern,
+  extractRuleExamples,
+} from './lesson-pattern.js';
 import type { RuleTestResult } from './rule-tester.js';
 import { testRule } from './rule-tester.js';
 
@@ -29,6 +33,8 @@ export interface CompileLessonDeps {
   runOrchestrator: (prompt: string) => Promise<string | undefined>;
   existingByHash: Map<string, CompiledRule>;
   callbacks?: CompileLessonCallbacks;
+  /** Optional: specialized system prompt for Pipeline 3 (Bad/Good example-based compilation). */
+  pipeline3Prompt?: string;
 }
 
 // ─── ast-grep pattern validation ───────────────────
@@ -334,7 +340,75 @@ export async function compileLesson(
     callbacks?.onWarn?.(lesson.heading, manualResult.rejectReason);
     return { status: 'failed' };
   }
-  // manualResult.rule === null && no rejectReason → no manual pattern, proceed to LLM
+  // manualResult.rule === null && no rejectReason → no manual pattern, proceed to Pipeline 3 or 2
+
+  // ── Pipeline 3: Example-based compilation (Bad/Good snippets) ──
+  const snippets = extractBadGoodSnippets(lesson.body);
+  if (snippets) {
+    // Build a constrained prompt with the bad/good examples
+    const basePrompt = deps.pipeline3Prompt ?? compilerPrompt;
+    const examplePrompt = [
+      basePrompt,
+      '',
+      '## Lesson to Compile (Example-Based — Pipeline 3)',
+      '',
+      `Heading: ${lesson.heading}`,
+      '',
+      '### Bad Code (should trigger the rule):',
+      ...snippets.bad,
+      '',
+      '### Good Code (should NOT trigger the rule):',
+      ...snippets.good,
+      '',
+      lesson.body,
+    ].join('\n');
+
+    const response = await runOrchestrator(examplePrompt);
+    if (response == null) return { status: 'noop' };
+
+    const parsed = parseCompilerResponse(response);
+    if (!parsed) {
+      callbacks?.onWarn?.(lesson.heading, 'Pipeline 3: failed to parse LLM response — skipping');
+      return { status: 'failed' };
+    }
+
+    if (!parsed.compilable) {
+      callbacks?.onDim?.(lesson.heading, 'Pipeline 3: not compilable — skipping');
+      return { status: 'skipped', hash: lesson.hash, reason: parsed.reason };
+    }
+
+    const ruleResult = buildCompiledRule(parsed, lesson, existingByHash);
+    if (!ruleResult.rule) {
+      callbacks?.onWarn?.(
+        lesson.heading,
+        `Pipeline 3: ${ruleResult.rejectReason ?? 'Unknown error'} — skipping`,
+      );
+      return { status: 'failed' };
+    }
+
+    // Self-verify: at least one Bad line should trigger, no Good line should trigger
+    const virtualPath = deriveVirtualFilePath(ruleResult.rule);
+    const testFixture = {
+      ruleHash: lesson.hash,
+      filePath: virtualPath,
+      failLines: snippets.bad,
+      passLines: snippets.good,
+      fixturePath: '(pipeline-3-self-test)',
+    };
+    const testResult = testRule(ruleResult.rule, testFixture);
+    // For Pipeline 3, we only require at least one Bad line triggers (not all).
+    // Context lines in multi-line Bad snippets (e.g., `{`, `}`) won't match.
+    const badCaught = snippets.bad.length - testResult.missedFails.length;
+    if (badCaught === 0 || testResult.falsePositives.length > 0) {
+      callbacks?.onWarn?.(
+        lesson.heading,
+        'Pipeline 3: generated rule failed self-verification against Bad/Good snippets — skipping',
+      );
+      return { status: 'failed' };
+    }
+
+    return { status: 'compiled', rule: ruleResult.rule };
+  }
 
   // ── Pipeline 2: LLM compilation ──────────────────
   const prompt = `${compilerPrompt}\n\n## Lesson to Compile\n\nHeading: ${lesson.heading}\n\n${lesson.body}`;
