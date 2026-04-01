@@ -4,11 +4,9 @@
  * Only imports rules with string/regex patterns in config:
  * - no-restricted-imports (paths/patterns)
  * - no-restricted-globals (string array)
- * - no-restricted-syntax (selector strings)
- * - no-restricted-properties (object/property pairs)
  */
 
-import { hashLesson } from './compiler.js';
+import { hashLesson, validateRegex } from './compiler.js';
 import type { CompiledRule } from './compiler-schema.js';
 
 // ─── Types ──────────────────────────────────────────
@@ -190,10 +188,22 @@ export function parseEslintConfig(jsonContent: string): EslintImportResult {
     }
 
     const imported = handler(ruleName, options, severity, now);
-    if (imported.length === 0) {
+    // Validate each imported rule's regex for syntax and ReDoS safety
+    const valid = imported.filter((r) => {
+      const v = validateRegex(r.pattern);
+      if (!v.valid) {
+        skipped.push({
+          rule: `${ruleName}: ${r.lessonHeading}`,
+          reason: `Invalid regex: ${v.reason}`,
+        });
+        return false;
+      }
+      return true;
+    });
+    if (valid.length === 0 && imported.length === 0) {
       skipped.push({ rule: ruleName, reason: 'No importable patterns found in rule config' });
     } else {
-      rules.push(...imported);
+      rules.push(...valid);
     }
   }
 

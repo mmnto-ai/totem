@@ -5,7 +5,7 @@
 
 import { parse as parseYaml } from 'yaml';
 
-import { hashLesson } from './compiler.js';
+import { hashLesson, validateRegex } from './compiler.js';
 import type { CompiledRule } from './compiler-schema.js';
 
 // ─── Language-to-glob mapping ───────────────────────
@@ -82,8 +82,9 @@ export function parseSemgrepRules(yamlContent: string): SemgrepImportResult {
       pattern = rule['pattern-regex'];
     } else if (typeof rule.pattern === 'string' && !rule.patterns && !rule['pattern-either']) {
       // Simple string patterns like "eval(...)" — convert to regex
-      // Escape regex special chars, replace Semgrep's `...` with `.*`
-      pattern = rule.pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\.\\\.\\\./g, '.*');
+      // Strip Semgrep metavariables ($X, $...) before escaping, replace `...` with `.*`
+      const cleaned = rule.pattern.replace(/\$\w+/g, '\\w+');
+      pattern = cleaned.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\.\\\.\\\./g, '.*');
     }
 
     if (!pattern) {
@@ -91,6 +92,13 @@ export function parseSemgrepRules(yamlContent: string): SemgrepImportResult {
         ? 'Compound pattern (patterns/pattern-either)'
         : 'No pattern or pattern-regex field';
       skipped.push({ id, reason });
+      continue;
+    }
+
+    // Validate regex for syntax and ReDoS safety
+    const validation = validateRegex(pattern);
+    if (!validation.valid) {
+      skipped.push({ id, reason: `Invalid regex: ${validation.reason}` });
       continue;
     }
 
@@ -121,11 +129,14 @@ export function parseSemgrepRules(yamlContent: string): SemgrepImportResult {
       ...excludeGlobs,
     ];
 
-    // Category from metadata
+    // Category from metadata (validate against allowed values)
+    const VALID_CATEGORIES = new Set(['security', 'architecture', 'style', 'performance']);
     const metadata = rule.metadata as Record<string, unknown> | undefined;
+    const rawCategory =
+      metadata && typeof metadata.category === 'string' ? metadata.category : undefined;
     const category =
-      metadata && typeof metadata.category === 'string'
-        ? (metadata.category as CompiledRule['category'])
+      rawCategory && VALID_CATEGORIES.has(rawCategory)
+        ? (rawCategory as CompiledRule['category'])
         : undefined;
 
     const heading = `[semgrep] ${id}`;
