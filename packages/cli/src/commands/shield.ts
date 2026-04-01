@@ -640,15 +640,22 @@ export async function captureObservationRules(
 
   // Merge into existing compiled rules, skipping duplicates by lessonHash
   const rulesPath = path.join(configRoot ?? cwd, config.totemDir, 'compiled-rules.json');
-  const existing = loadCompiledRulesFile(rulesPath, (msg) => log.dim(TAG, msg));
-  const existingHashes = new Set(existing.rules.map((r) => r.lessonHash));
+  try {
+    const existing = loadCompiledRulesFile(rulesPath, (msg) => log.dim(TAG, msg));
+    const existingHashes = new Set(existing.rules.map((r) => r.lessonHash));
 
-  const newRules = deduped.filter((r) => !existingHashes.has(r.lessonHash));
-  if (newRules.length === 0) return;
+    const newRules = deduped.filter((r) => !existingHashes.has(r.lessonHash));
+    if (newRules.length === 0) return;
 
-  existing.rules.push(...newRules);
-  saveCompiledRulesFile(rulesPath, existing);
-  log.info(TAG, `Pipeline 5: captured ${newRules.length} observation rule(s)`);
+    existing.rules.push(...newRules);
+    saveCompiledRulesFile(rulesPath, existing);
+    log.info(TAG, `Pipeline 5: captured ${newRules.length} observation rule(s)`);
+  } catch (err) {
+    // Non-fatal — auto-capture should never crash the shield command
+    if (process.env['TOTEM_DEBUG'] === '1') {
+      log.dim(TAG, `Pipeline 5 save failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 }
 
 // ─── Shared verdict handler ─────────────────────────
