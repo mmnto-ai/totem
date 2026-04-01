@@ -97,6 +97,15 @@ function lintLesson(lesson: ParsedLesson): LessonLintDiagnostic[] {
     if (snippets.good.length === 0) {
       diags.push({ ...base, severity: 'error', field: 'Good', message: 'Good snippet is empty' });
     }
+  } else if (hasBadField(body) && hasGoodField(body)) {
+    // Both markers present but code blocks couldn't be parsed
+    diags.push({
+      ...base,
+      severity: 'error',
+      field: 'Bad/Good',
+      message:
+        'Bad and Good markers found but code blocks could not be parsed. Use fenced code blocks (```lang ... ```) or inline backticks.',
+    });
   } else {
     // If only one of Bad/Good is present (without the other), that's an error
     if (hasBadField(body) && !hasGoodField(body)) {

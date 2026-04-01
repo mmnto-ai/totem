@@ -97,7 +97,7 @@ function extractCodeBlock(body: string, field: string): string[] | null {
   const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Try fenced code block after **Field:** (with optional language tag)
   const fencedRe = new RegExp(
-    `(?:^|\\n)\\*{0,2}${safeField}:?\\*{0,2}[^\\n]*\\n\`\`\`[^\\n]*\\n([\\s\\S]*?)\`\`\``,
+    `(?:^|\\n)\\*{0,2}${safeField}:?\\*{0,2}[^\\n]*\\n(?:\\s*\\n)*\`\`\`[^\\n]*\\n([\\s\\S]*?)\`\`\``,
     'i',
   );
   const fencedMatch = body.match(fencedRe);

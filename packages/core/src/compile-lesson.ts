@@ -383,16 +383,20 @@ export async function compileLesson(
       return { status: 'failed' };
     }
 
-    // Self-verify: Bad lines should trigger, Good lines should not
+    // Self-verify: at least one Bad line should trigger, no Good line should trigger
+    const virtualPath = deriveVirtualFilePath(ruleResult.rule);
     const testFixture = {
       ruleHash: lesson.hash,
-      filePath: deriveVirtualFilePath(ruleResult.rule),
+      filePath: virtualPath,
       failLines: snippets.bad,
       passLines: snippets.good,
       fixturePath: '(pipeline-3-self-test)',
     };
     const testResult = testRule(ruleResult.rule, testFixture);
-    if (!testResult.passed) {
+    // For Pipeline 3, we only require at least one Bad line triggers (not all).
+    // Context lines in multi-line Bad snippets (e.g., `{`, `}`) won't match.
+    const badCaught = snippets.bad.length - testResult.missedFails.length;
+    if (badCaught === 0 || testResult.falsePositives.length > 0) {
       callbacks?.onWarn?.(
         lesson.heading,
         'Pipeline 3: generated rule failed self-verification against Bad/Good snippets — skipping',
