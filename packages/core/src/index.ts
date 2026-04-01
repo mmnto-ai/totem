@@ -327,3 +327,10 @@ export { parseEslintConfig } from './eslint-adapter.js';
 // Shared helper registry (prior art concierge for spec prompts)
 export type { SharedHelper } from './sys/helpers.js';
 export { formatSharedHelpers, getSharedHelpers } from './sys/helpers.js';
+
+// Regex utilities (centralized escape + Pipeline 5 pattern builder)
+export { codeToPattern, escapeRegex } from './regex-utils.js';
+
+// Pipeline 5 — observation-based auto-capture from shield findings
+export type { ObservationInput } from './pipeline-observation.js';
+export { deduplicateObservations, generateObservationRule } from './pipeline-observation.js';

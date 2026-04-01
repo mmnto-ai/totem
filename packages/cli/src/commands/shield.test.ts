@@ -771,6 +771,151 @@ describe('shield override validation', () => {
   });
 });
 
+// ─── captureObservationRules (Pipeline 5) ──────────
+
+describe('captureObservationRules', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-p5-'));
+    fs.mkdirSync(path.join(tmpDir, '.totem'), { recursive: true });
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('captures observation rules from findings with file + line', async () => {
+    const { captureObservationRules } = await import('./shield.js');
+
+    // Create a source file
+    const srcDir = path.join(tmpDir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(srcDir, 'routes.ts'),
+      'import express from "express";\napp.get("/admin", handler);\napp.listen(3000);\n',
+    );
+
+    const findings = [
+      {
+        severity: 'CRITICAL' as const,
+        confidence: 0.9,
+        message: 'Missing auth middleware on admin route',
+        file: 'src/routes.ts',
+        line: 2,
+      },
+    ];
+
+    const config = { totemDir: '.totem' } as import('@mmnto/totem').TotemConfig;
+    await captureObservationRules(findings, tmpDir, config, undefined);
+
+    // Verify a rule was written to compiled-rules.json
+    const rulesPath = path.join(tmpDir, '.totem', 'compiled-rules.json');
+    expect(fs.existsSync(rulesPath)).toBe(true);
+
+    const rules = loadCompiledRules(rulesPath);
+    expect(rules.length).toBe(1);
+    expect(rules[0]!.severity).toBe('warning');
+    expect(rules[0]!.engine).toBe('regex');
+    expect(rules[0]!.message).toBe('Missing auth middleware on admin route');
+    // Pattern should match the original line
+    expect(new RegExp(rules[0]!.pattern).test('app.get("/admin", handler);')).toBe(true);
+  });
+
+  it('skips findings without file or line', async () => {
+    const { captureObservationRules } = await import('./shield.js');
+
+    const findings = [
+      {
+        severity: 'WARN' as const,
+        confidence: 0.6,
+        message: 'Consider adding rate limiting',
+        // No file or line
+      },
+    ];
+
+    const config = { totemDir: '.totem' } as import('@mmnto/totem').TotemConfig;
+    await captureObservationRules(findings, tmpDir, config, undefined);
+
+    // No rules file should be created
+    const rulesPath = path.join(tmpDir, '.totem', 'compiled-rules.json');
+    expect(fs.existsSync(rulesPath)).toBe(false);
+  });
+
+  it('deduplicates identical patterns across findings', async () => {
+    const { captureObservationRules } = await import('./shield.js');
+
+    // Two files with the same violating line
+    const srcDir = path.join(tmpDir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(path.join(srcDir, 'a.ts'), 'eval(userInput);\n');
+    fs.writeFileSync(path.join(srcDir, 'b.ts'), 'eval(userInput);\n');
+
+    const findings = [
+      {
+        severity: 'CRITICAL' as const,
+        confidence: 0.95,
+        message: 'Unsafe eval in a.ts',
+        file: 'src/a.ts',
+        line: 1,
+      },
+      {
+        severity: 'CRITICAL' as const,
+        confidence: 0.95,
+        message: 'Unsafe eval in b.ts',
+        file: 'src/b.ts',
+        line: 1,
+      },
+    ];
+
+    const config = { totemDir: '.totem' } as import('@mmnto/totem').TotemConfig;
+    await captureObservationRules(findings, tmpDir, config, undefined);
+
+    const rules = loadCompiledRules(path.join(tmpDir, '.totem', 'compiled-rules.json'));
+    // Same pattern → deduplicated to 1 rule with merged messages
+    expect(rules.length).toBe(1);
+    expect(rules[0]!.message).toContain('Unsafe eval in a.ts');
+    expect(rules[0]!.message).toContain('Unsafe eval in b.ts');
+  });
+
+  it('does not duplicate rules already in compiled-rules.json', async () => {
+    const { captureObservationRules } = await import('./shield.js');
+    const { generateObservationRule } = await import('@mmnto/totem');
+
+    const srcDir = path.join(tmpDir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    const fileContent = 'eval(userInput);\n';
+    fs.writeFileSync(path.join(srcDir, 'a.ts'), fileContent);
+
+    // Pre-populate with the same rule
+    const existing = generateObservationRule({
+      file: 'src/a.ts',
+      line: 1,
+      message: 'Already captured',
+      fileContent,
+    });
+    saveCompiledRules(path.join(tmpDir, '.totem', 'compiled-rules.json'), [existing!]);
+
+    const findings = [
+      {
+        severity: 'CRITICAL' as const,
+        confidence: 0.95,
+        message: 'Unsafe eval',
+        file: 'src/a.ts',
+        line: 1,
+      },
+    ];
+
+    const config = { totemDir: '.totem' } as import('@mmnto/totem').TotemConfig;
+    await captureObservationRules(findings, tmpDir, config, undefined);
+
+    // Should still have just 1 rule (no duplicate)
+    const rules = loadCompiledRules(path.join(tmpDir, '.totem', 'compiled-rules.json'));
+    expect(rules.length).toBe(1);
+    expect(rules[0]!.message).toBe('Already captured');
+  });
+});
+
 // ─── learnFromVerdict ────────────────────────────────
 
 // These tests go in a separate file to avoid mock contamination with the pure tests above.
