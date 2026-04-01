@@ -316,6 +316,14 @@ export {
 // Filesystem helpers
 export { readJsonSafe } from './sys/fs.js';
 
+// Semgrep adapter (Pipeline 4 — import rules from Semgrep YAML)
+export type { SemgrepImportResult } from './semgrep-adapter.js';
+export { parseSemgrepRules } from './semgrep-adapter.js';
+
+// ESLint adapter (Pipeline 4 — import rules from ESLint JSON config)
+export type { EslintImportResult } from './eslint-adapter.js';
+export { parseEslintConfig } from './eslint-adapter.js';
+
 // Shared helper registry (prior art concierge for spec prompts)
 export type { SharedHelper } from './sys/helpers.js';
 export { formatSharedHelpers, getSharedHelpers } from './sys/helpers.js';

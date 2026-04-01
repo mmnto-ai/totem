@@ -453,6 +453,22 @@ program
   });
 
 program
+  .command('import')
+  .description('Import rules from external linter configs (ESLint, Semgrep)')
+  .option('--from-semgrep <path>', 'Import rules from a Semgrep YAML rules file')
+  .option('--from-eslint <path>', 'Import rules from an ESLint JSON config file')
+  .option('--out <path>', 'Custom output path for compiled-rules.json')
+  .option('--dry-run', 'Preview imported rules without writing')
+  .action(async (opts) => {
+    try {
+      const { importCommand } = await import('./commands/import.js');
+      await importCommand(opts);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('test')
   .description('Run test fixtures against compiled rules (TDD for governance rules)')
   .option('--filter <term>', 'Filter by rule hash or heading substring')
