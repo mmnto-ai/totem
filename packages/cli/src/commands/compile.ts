@@ -129,7 +129,8 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
   const fs = await import('node:fs');
   const path = await import('node:path');
   const { log } = await import('../ui.js');
-  const { loadConfig, loadEnv, resolveConfigPath, runOrchestrator } = await import('../utils.js');
+  const { isGlobalConfigPath, loadConfig, loadEnv, resolveConfigPath, runOrchestrator } =
+    await import('../utils.js');
   const {
     buildCompiledRule,
     buildManualRule,
@@ -151,6 +152,13 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
 
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
+  if (isGlobalConfigPath(configPath)) {
+    throw new TotemConfigError(
+      'Cannot compile rules without a local project.',
+      "Run 'totem init' to create a local .totem/ directory first.",
+      'CONFIG_MISSING',
+    );
+  }
   loadEnv(cwd);
   const config = await loadConfig(configPath);
 

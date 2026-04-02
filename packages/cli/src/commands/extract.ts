@@ -22,6 +22,7 @@ import {
   formatResults,
   getSystemPrompt,
   GH_TIMEOUT_MS,
+  isGlobalConfigPath,
   loadConfig,
   loadEnv,
   requireEmbedding,
@@ -613,6 +614,13 @@ async function localExtractCommand(options: ExtractOptions): Promise<void> {
 
   // 5. Load config, env, embedding, connect to LanceDB
   const configPath = resolveConfigPath(cwd);
+  if (isGlobalConfigPath(configPath)) {
+    throw new TotemConfigError(
+      'Cannot extract lessons without a local project.',
+      "Run 'totem init' to create a local .totem/ directory first.",
+      'CONFIG_MISSING',
+    );
+  }
   loadEnv(cwd);
   const config = await loadConfig(configPath);
   const customSecrets = loadSecrets(cwd, config.totemDir, (msg) => log.warn(TAG, msg));
@@ -809,6 +817,13 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
 
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
+  if (isGlobalConfigPath(configPath)) {
+    throw new TotemConfigError(
+      'Cannot extract lessons without a local project.',
+      "Run 'totem init' to create a local .totem/ directory first.",
+      'CONFIG_MISSING',
+    );
+  }
   loadEnv(cwd);
   const config = await loadConfig(configPath);
 

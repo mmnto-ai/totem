@@ -446,7 +446,64 @@ export async function initCommand(options?: {
   bare?: boolean;
   pilot?: boolean;
   strict?: boolean;
+  global?: boolean;
+  /** Override home directory for testing. */
+  _homeDir?: string;
 }): Promise<void> {
+  // ─── Global profile shortcut ───────────────────────
+  if (options?.global) {
+    const os = await import('node:os');
+    const { log } = await import('../ui.js');
+    const { CONFIG_FILES } = await import('../utils.js');
+
+    const globalDir = path.join(options._homeDir ?? os.homedir(), '.totem');
+
+    // Create ~/.totem/ if it doesn't exist
+    if (!fs.existsSync(globalDir)) {
+      fs.mkdirSync(globalDir, { recursive: true });
+    }
+
+    // Check if global config already exists
+    const existingGlobalConfig = CONFIG_FILES.map((f: string) => path.join(globalDir, f)).find(
+      (p: string) => fs.existsSync(p),
+    );
+
+    if (existingGlobalConfig) {
+      log.warn('Totem', `Global profile already exists at ${globalDir}`);
+      log.dim('Totem', `Config: ${existingGlobalConfig}`);
+      return;
+    }
+
+    // Write minimal global config
+    const configPath = path.join(globalDir, 'totem.config.ts');
+    const configContent = `import type { TotemConfig } from '@mmnto/totem';
+
+export default {
+  totemDir: '.',
+  embedding: { tier: 'none' },
+  targets: [],
+} satisfies TotemConfig;
+`;
+    fs.writeFileSync(configPath, configContent, 'utf-8');
+
+    // Install universal baseline compiled rules
+    const compiledRulesPath = path.join(globalDir, 'compiled-rules.json');
+    try {
+      const { COMPILED_BASELINE_RULES } = await import('../assets/compiled-baseline.js');
+      const payload = { version: 1, rules: [...COMPILED_BASELINE_RULES] };
+      fs.writeFileSync(compiledRulesPath, JSON.stringify(payload, null, 2) + '\n');
+      log.success('Totem', `Global profile created at ${globalDir}`);
+      log.success('Totem', `${COMPILED_BASELINE_RULES.length} universal baseline rules installed.`);
+      log.info('Totem', 'Run `totem lint` in any directory to apply your personal rules.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn('Totem', `Could not install baseline rules: ${msg}`);
+    }
+
+    return; // Skip the rest of interactive init
+  }
+
+  // ─── Standard project init ─────────────────────────
   const { stdin: input, stdout: output } = await import('node:process');
   const readline = await import('node:readline/promises');
   const { bold, brand, dim, log, printBanner, success } = await import('../ui.js');

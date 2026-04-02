@@ -84,13 +84,21 @@ program
   )
   .option('--pilot', 'Enable pilot mode — hooks warn instead of block during initial adoption')
   .option('--strict', 'Use strict enforcement tier (spec-required + shield gate for agents)')
-  .action(async (options: { bare?: boolean; pilot?: boolean; strict?: boolean }) => {
-    try {
-      await initCommand({ bare: options.bare, pilot: options.pilot, strict: options.strict });
-    } catch (err) {
-      handleError(err);
-    }
-  });
+  .option('--global', 'Create a personal profile in ~/.totem/ for use across all projects')
+  .action(
+    async (options: { bare?: boolean; pilot?: boolean; strict?: boolean; global?: boolean }) => {
+      try {
+        await initCommand({
+          bare: options.bare,
+          pilot: options.pilot,
+          strict: options.strict,
+          global: options.global,
+        });
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
 
 program
   .command('sync')
