@@ -1,56 +1,81 @@
 # Totem Strategic Roadmap
 
-Totem is evolving from a local memory database into the **Air-Gapped Codebase Immune System**—a zero-telemetry infrastructure layer that prevents AI coding agents from violating architectural boundaries.
-
-This roadmap outlines the path to `v1.0` and beyond, broken down into sequential phases that prioritize Developer Experience (DX), enterprise sandboxing, and continuous governance.
+Totem is a **standard library for codebase governance** — zero-telemetry infrastructure that prevents AI coding agents from violating architectural boundaries. It provides sensors (lint rules, vector search, compiled patterns); users wire the actuators (Git hooks, CI, MCP boundaries).
 
 ---
 
-## 🟢 Phase 1 & 2: The Foundation (Completed)
+## Active: 1.10.0 — The Invisible Exoskeleton
 
-_We established the core primitives required for a local-first memory engine._
+_Reduce adoption friction so totem disappears into the developer's workflow._
 
-- [x] **Local Vector Engine:** Embedded LanceDB chunking and retrieval.
-- [x] **MCP Interface:** Standardized `search_knowledge` for Claude, Gemini, and Junie.
-- [x] **MVC Tiers:** "Minimum Viable Configuration" scaling from Lite to Full.
-- [x] **Adversarial Hardening:** ANSI terminal injection defense and XML delimiting.
-- [x] **Universal Lessons Baseline:** Curated set of architectural traps shipping automatically with `totem init`.
-
----
-
-## 🟡 Phase 3: The DX & Reliability Engine (Active)
-
-_Current Focus: Stop the friction. Make writing and enforcing rules safe, fast, and foolproof._
-
-- **The Rule Simulator (`totem test`) & Compilation Guard:** Gamifying rule creation. Developers test their governance rules against local `pass.ts`/`fail.ts` fixtures. Totem refuses to deploy unproven rules, preventing regex from breaking CI.
-- **Hard Real-Time Load Shedding:** Enforcing the 3-second budget. If `totem review` takes longer than 2.5s locally, it immediately aborts and fails open, guaranteeing the developer's terminal never hangs.
-- **Local Diagnostics (`totem doctor`):** Automated health checks that scan for config bloat, missing git hooks, and leaked secrets.
-- **Consumer Init Rewrite:** Dynamic agent detection to seamlessly auto-configure the exploding ecosystem of agents (Claude, Cursor, Copilot, Junie, Cline) without interactive friction.
+- **Pilot Mode (#949):** Observe-only onboarding — run enforcement in advisory mode before blocking.
+- **Enforcement Tiers (#987):** Configurable strictness levels (permissive → strict) for gradual ramp-up.
+- **Concurrent Dispatch (#1053):** Parallel agent task execution for faster review cycles.
+- **Solo Dev Audit (#1039):** End-to-end experience review for single-developer repos.
+- **Docs Scope (#1033):** Fix `totem wrap` doc sync reliability.
+- **.env Parser (#1114):** Correct environment variable parsing edge cases.
+- **Spec Infrastructure (#1016):** Spec command misses infrastructure context.
+- **Model-Specific Adapters (Strategy #62):** Prompt tuning per LLM provider.
 
 ---
 
-## 🔵 Phase 4: Enterprise Sandboxing & Boundaries (Upcoming)
+## Next: 1.11.0 — The Import Engine
 
-_Proving Totem is the only viable solution for complex, high-compliance environments._
+_Rule portability — bring governance from external tools and other totem instances._
 
-- **Multi-Totem Domains:** Running parallel, isolated MCP servers (e.g., separating public monorepo code from private strategy submodules) to prevent context pollution.
-- **Hierarchical Exclusions (`.totemignore`):** Providing granular, git-style control over what gets indexed and shielded, replacing flat config arrays for massive monorepos.
-- **Severity Levels & SARIF:** Introducing `error` (blocking) and `warning` (advisory) levels to shield rules, preventing bot-generated PRs from failing CI over minor formatting issues. Native SARIF 2.1.0 output integration.
-
----
-
-## 🟣 Phase 5: Continuous Governance (Post-v1.0)
-
-_Moving from static rules to a measurable, self-cleaning immune system._
-
-- **Rule Lifecycle Management:** Tracking local telemetry (`fire_count`, `suppression_count`) to automatically flag rotting, high-noise rules before they annoy developers.
-- **Continuous Compliance Signal:** Passively tracking agent behavior logs to warn teams when an agent's instruction adherence drops below an 80% threshold (e.g., failing to call `search_knowledge` before coding).
+- **ESLint Flat Config (#1138):** Import from modern ESLint flat config format.
+- **Totem-to-Totem Import (#1139):** Cross-repo rule sharing between totem instances.
+- **ESLint Syntax/Properties (#1140):** Handle `no-restricted-syntax` and `no-restricted-properties`.
+- **Rule Refinement (#1131):** Refine rules from false-positive scan alerts.
+- **AST Upgrade Detection (#1132):** Auto-detect string-content matches for AST patterns.
+- **Pack Distribution (#1059):** Shareable rule bundles.
+- **GHAS/SARIF Extraction (Strategy #50):** Import from GitHub Advanced Security alerts.
+- **Lint Warning Extraction (Strategy #51):** Convert lint warnings into totem lessons.
 
 ---
 
-## 🛸 The "Dream Within the Dream" (Future)
+## Shipped
 
-_Federated organizational memory and swarm intelligence._
+### 1.9.0 — Pipeline Engine (2026-04-01)
 
-- **Federated Memory (The Mother Brain Pattern):** Allowing local Totem instances to securely `pull` cryptographically signed, enterprise-wide architectural lessons into new projects instantly.
-- **Auto-Discovery Mesh Networking:** Totems automatically discovering and wiring themselves to other upstream Totems across enterprise networks.
+_Five pipelines for rule creation, from zero-LLM to fully autonomous._
+
+- **P1 — Manual Scaffolding:** `totem rule scaffold` with auto-generated test fixtures.
+- **P2 — LLM-Generated:** `totem compile` converts prose lessons to regex patterns.
+- **P3 — Example-Based:** Bad/Good code snippets compiled with self-verification via `testRule`.
+- **P4 — Import:** `totem import` translates ESLint/Semgrep configs. Zero LLM cost.
+- **P5 — Observation Auto-Capture:** Shield findings automatically staged as warning-severity rules.
+- Pre-compiled baseline rules for Python, Rust, and Go. Scan feedback loop from GHAS alerts. Shield auto-learn on FAIL verdicts.
+
+See [Pipeline Engine](pipeline-engine.md) for full details.
+
+### 1.7.0 — Platform of Primitives (2026-03-29)
+
+- **CLI Redesign:** Noun-verb taxonomy, global `--json` output, redesigned help.
+- **Actor-Aware Enforcement (ADR-083):** Stateless Git hooks. Content Hash Lock at the MCP boundary.
+- **Agent Context Engineering:** SessionStart Auto-Context V2 (vector/FTS), `totem describe`, structured handoff checkpoints.
+- **Rule Lifecycle:** Garbage collection with adaptive decay, compile progress with 429 retry.
+
+### 1.6.0 — Pipeline Maturity (2026-03-22)
+
+- Self-healing loop: Trap Ledger, exemption engine, bot review signal capture.
+- Inline rule unit testing, standard library, forbidden native module rules.
+- Compiler DX, shield flag auto-refresh, stress testing.
+
+### Earlier (1.0–1.5)
+
+- Local vector engine (LanceDB), MCP interface, adversarial hardening.
+- Severity levels and SARIF output, multi-domain MCP isolation.
+- Rule lifecycle telemetry, autonomous downgrading, triage inbox.
+- `totem doctor`, consumer init with agent auto-detection.
+
+---
+
+## Future: 2.0 — Federation
+
+_Multi-repo coordination for teams running autonomous agents at scale._
+
+- **Federated Rules:** Central strategy repo pushes compiled rules to downstream repos via RBAC.
+- **Signed Trap Ledger:** Cryptographically signed, immutable cloud endpoint.
+- **Compliance Dashboard:** Override rates, rule health trends, bypass audit trails.
+- **Mesh Export:** Portable bundle format for lessons and rules.

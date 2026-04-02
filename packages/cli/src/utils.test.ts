@@ -370,6 +370,34 @@ describe('loadEnv', () => {
     loadEnv(tmpDir);
     expect(process.env[TEST_KEY]).toBe('quoted-crlf');
   });
+
+  it('strips inline comments from unquoted values', () => {
+    fs.writeFileSync(path.join(tmpDir, '.env'), `${TEST_KEY}=secret # expires tomorrow`, 'utf-8');
+    loadEnv(tmpDir);
+    expect(process.env[TEST_KEY]).toBe('secret');
+  });
+
+  it('strips inline comments with trailing whitespace', () => {
+    fs.writeFileSync(path.join(tmpDir, '.env'), `${TEST_KEY}=secret    # comment`, 'utf-8');
+    loadEnv(tmpDir);
+    expect(process.env[TEST_KEY]).toBe('secret');
+  });
+
+  it('preserves hash inside double-quoted values', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.env'),
+      `${TEST_KEY}="my#secret" # actual comment`,
+      'utf-8',
+    );
+    loadEnv(tmpDir);
+    expect(process.env[TEST_KEY]).toBe('my#secret');
+  });
+
+  it('handles empty values', () => {
+    fs.writeFileSync(path.join(tmpDir, '.env'), `${TEST_KEY}=`, 'utf-8');
+    loadEnv(tmpDir);
+    expect(process.env[TEST_KEY]).toBe('');
+  });
 });
 
 // ─── getSystemPrompt ──────────────────────────────────

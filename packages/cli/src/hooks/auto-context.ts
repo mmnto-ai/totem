@@ -4,6 +4,8 @@ import * as path from 'node:path';
 import type { Embedder, SearchResult, TotemConfig } from '@mmnto/totem';
 import { createEmbedder, LanceStore, requireEmbedding, TotemConfigSchema } from '@mmnto/totem';
 
+import { loadEnv } from '../utils.js';
+
 // ─── Types ────────────────────────────────────────────────
 
 export interface AutoContextOptions {
@@ -93,25 +95,6 @@ export function truncateResults(
 
 // ─── Config Loading (lightweight) ─────────────────────────
 
-function loadEnvFile(cwd: string): void {
-  const envPath = path.join(cwd, '.env');
-  if (!fs.existsSync(envPath)) return;
-
-  const content = fs.readFileSync(envPath, 'utf-8');
-  for (const rawLine of content.split('\n')) {
-    const line = rawLine.replace(/\r$/, '');
-    const match = line.match(/^([^#=]+)=(.*)$/);
-    if (match) {
-      const key = match[1]!.trim();
-      const raw = match[2]!.trim();
-      const value = raw.replace(/^(['"])(.*)(\1)$/, '$2');
-      if (!process.env[key]) {
-        process.env[key] = value;
-      }
-    }
-  }
-}
-
 async function loadConfig(configPath: string): Promise<TotemConfig> {
   const { createJiti } = await import('jiti');
   const jiti = createJiti(import.meta.url);
@@ -145,7 +128,7 @@ export async function getAutoContext(options?: AutoContextOptions): Promise<Auto
 
   let config: TotemConfig;
   try {
-    loadEnvFile(projectRoot);
+    loadEnv(projectRoot);
     config = await loadConfig(configPath);
   } catch {
     return { ...empty, durationMs: Date.now() - start };

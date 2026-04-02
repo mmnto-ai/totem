@@ -2,46 +2,65 @@
 
 This document outlines the strategic milestones for the Totem project.
 
-Totem is evolving from a deterministic lint engine into a full **governance layer** for AI-assisted development. The roadmap below tracks the progression from enforcement primitives to multi-repo federation.
+Totem is a **standard library for codebase governance** — deterministic primitives that let teams enforce architectural boundaries on AI agents without opinionated workflows. The roadmap below tracks the progression from enforcement primitives to multi-repo federation.
 
 ---
 
-## 1.7.0 — Platform of Primitives (Shipped)
+## 1.10.0 — The Invisible Exoskeleton (Active)
 
-**Theme:** Evolving the CLI into a standard library for codebase governance, eliminating opinionated agent friction, and standardizing the UX.
+**Theme:** Reduce adoption friction for new users and solo developers.
 
-- [x] **CLI Taxonomy Redesign:** Complete noun-verb hierarchical restructuring (`totem rule list`, `totem config get`). Help menus logically grouped by Core, Entities, and Workflow.
-- [x] **Actor-Aware Enforcement:** Nixed stateful flag files. Redesigned Git hooks to be purely deterministic (`lint`, `verify-manifest`). LLM push-gates are now optional Reference Implementations driven by Content Hashes at the MCP boundary.
-- [x] **Global Output:** Every command now supports `--json` for pipeline integration.
-- [x] **Developer Experience:** Added `hooks --force` for easy upgrades. `triage-pr` correctly parses multiple CodeRabbit nits.
-
----
-
-## 1.6.0 — Pipeline Maturity (Shipped)
-
-**Theme:** Close the self-healing loop — the engine learns from developer overrides to reduce false positives over time.
-
-- [x] **Self-Healing Loop:** Integrated the Trap Ledger and exemption engine to track dual-storage false positives and capture bot review signals.
-- [x] **Core Enforcement:** Added inline rule unit testing at compile time and enforced core design tenets via the standard library.
-- [x] **Developer Experience:** Improved compiler workflows, added shield flag auto-refresh on pre-push, and introduced stress testing for rules.
+- [ ] **Pilot Mode (#949):** Gradual onboarding without full enforcement — observe before enforce.
+- [ ] **Enforcement Tiers (#987):** Configurable strictness levels so teams can ramp up incrementally.
+- [ ] **Docs Scope (#1033):** Fix `totem wrap` doc sync reliability.
+- [ ] **Concurrent Dispatch (#1053):** Parallel agent task execution.
+- [ ] **Solo Dev Audit (#1039):** End-to-end experience review for single-developer repos.
+- [ ] **.env Parser Fix (#1114):** Correct environment variable parsing edge cases.
+- [ ] **Spec Infrastructure (#1016):** Spec command misses infrastructure context.
+- [ ] **Model-Specific Adapters (Strategy #62):** Prompt tuning per LLM provider.
 
 ---
 
-## Prioritized Roadmap
+## 1.11.0 — The Import Engine (Next)
 
-**Theme:** Enhance pipeline integrity, streamline triage workflows, and consolidate developer tooling.
+**Theme:** Rule portability — bring governance from external tools and other totem instances.
 
-- [ ] **Pipeline Integrity:**
-  - Implement a lesson logic linter to semantically validate rule scope, severity, and exclusions.
-  - Add incremental shield validation to re-check only the active diff after minor fixes.
-  - Update triage and review-learn workflows to skip findings that fall outside the current diff range.
-- [ ] **Triage Workflow:**
-  - **Phase 2:** Integrate agent dispatch capabilities to perform atomic triage fixes.
-  - **Phase 3:** Build interactive CLI prompts to guide pull request triage (Shipped).
-  - **Phase 4:** Build a lesson extraction pipeline to automate the bot-to-lesson feedback loop (Partially shipped: SARIF support and severity levels added).
-- [ ] **Enforcement & DX:**
-  - Unify enforcement into explicit `totem check` and `totem status` commands (Shipped).
-  - Automate ticket creation for deferred review items.
+- [ ] **ESLint Flat Config (#1138):** Import from modern ESLint flat config format.
+- [ ] **Totem-to-Totem Import (#1139):** Cross-repo rule sharing between totem instances.
+- [ ] **ESLint Syntax/Properties (#1140):** Handle `no-restricted-syntax` and `no-restricted-properties`.
+- [ ] **Rule Refinement (#1131):** Refine rules from false-positive scan alerts.
+- [ ] **AST Upgrade Detection (#1132):** Auto-detect string-content matches eligible for AST patterns.
+- [ ] **Pack Distribution (#1059):** Shareable rule bundles.
+- [ ] **GHAS/SARIF Extraction (Strategy #50):** Import rules from GitHub Advanced Security alerts.
+- [ ] **Lint Warning Extraction (Strategy #51):** Convert lint warnings into totem lessons.
+
+---
+
+## Shipped Milestones
+
+### 1.9.0 — Pipeline Engine (2026-04-01)
+
+**Theme:** Five pipelines for rule creation, from zero-LLM to fully autonomous.
+
+- [x] **P1 — Manual Scaffolding (#854):** `totem rule scaffold` with auto-generated test fixtures.
+- [x] **P2 — LLM-Generated:** `totem compile` converts prose lessons to regex patterns.
+- [x] **P3 — Example-Based (#749):** Bad/Good code snippets compiled with self-verification.
+- [x] **P4 — Import (#750):** `totem import` translates ESLint/Semgrep configs. Zero LLM.
+- [x] **P5 — Observation Auto-Capture (#751):** Shield findings staged as warning-severity rules.
+- [x] **Ecosystem:** Docs/wiki refresh, playground overhaul, pre-compiled baseline rules for Python/Rust/Go.
+
+### 1.7.0 — Platform of Primitives (2026-03-29)
+
+- [x] **CLI Taxonomy Redesign:** Noun-verb hierarchical restructuring. Global `--json` output.
+- [x] **Actor-Aware Enforcement:** Stateless Git hooks. Content Hash Lock at MCP boundary (ADR-083).
+- [x] **Agent Context Engineering:** SessionStart Auto-Context V2, `totem describe`, structured handoff checkpoints.
+- [x] **Rule Lifecycle:** Garbage collection with adaptive decay, compile progress with 429 retry.
+
+### 1.6.0 — Pipeline Maturity (2026-03-22)
+
+- [x] **Self-Healing Loop:** Trap Ledger, exemption engine, bot review signal capture.
+- [x] **Core Enforcement:** Inline rule unit testing, standard library, forbidden native module rules.
+- [x] **Developer Experience:** Compiler workflows, shield flag auto-refresh, stress testing.
 
 ---
 
