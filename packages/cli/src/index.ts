@@ -82,9 +82,11 @@ program
     '--bare',
     'Initialize without package manager checks or Git hooks (ideal for notes/docs repos)',
   )
-  .action(async (options: { bare?: boolean }) => {
+  .option('--pilot', 'Enable pilot mode — hooks warn instead of block during initial adoption')
+  .option('--strict', 'Use strict enforcement tier (spec-required + shield gate for agents)')
+  .action(async (options: { bare?: boolean; pilot?: boolean; strict?: boolean }) => {
     try {
-      await initCommand({ bare: options.bare });
+      await initCommand({ bare: options.bare, pilot: options.pilot, strict: options.strict });
     } catch (err) {
       handleError(err);
     }
@@ -671,14 +673,18 @@ program
   .description('Install git hooks (pre-commit, pre-push, post-merge) non-interactively')
   .option('--check', 'Verify hooks are installed (exit 1 if missing)')
   .option('-f, --force', 'Force overwrite existing hooks')
-  .action(async (opts: { check?: boolean; force?: boolean }) => {
-    try {
-      const { hooksCommand } = await import('./commands/install-hooks.js');
-      hooksCommand(opts);
-    } catch (err) {
-      handleError(err);
-    }
-  });
+  .option('--strict', 'Use strict enforcement tier (spec-required + shield gate)')
+  .option('--standard', 'Use standard enforcement tier (default)')
+  .action(
+    async (opts: { check?: boolean; force?: boolean; strict?: boolean; standard?: boolean }) => {
+      try {
+        const { hooksCommand } = await import('./commands/install-hooks.js');
+        await hooksCommand(opts);
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
 
 program
   .command('doctor')
