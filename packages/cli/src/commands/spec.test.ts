@@ -318,4 +318,11 @@ describe('expandSpecQuery', () => {
     expect(result).toContain('rule-tester');
     expect(result).toContain('fixture');
   });
+
+  it('matches plural and inflected forms', () => {
+    expect(expandSpecQuery('update tests for coverage')).toContain('rule-tester');
+    expect(expandSpecQuery('add verification step')).toContain('rule-tester');
+    expect(expandSpecQuery('load fixtures from disk')).toContain('rule-tester');
+    expect(expandSpecQuery('provide examples for docs')).toContain('rule-tester');
+  });
 });

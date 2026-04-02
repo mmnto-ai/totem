@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.9.0` with ~2,389 tests across core, CLI, and MCP packages. The 1.9.0 "Pipeline Engine" milestone is complete — all five rule-creation pipelines shipped. The next milestone focuses on adoption friction.
+The project is at release `@mmnto/cli@1.9.0` with ~2,446 tests across core, CLI, and MCP packages. The 1.9.0 "Pipeline Engine" milestone is complete — all five rule-creation pipelines shipped. The next milestone focuses on adoption friction.
 
 ### Current: 1.10.0 — The Invisible Exoskeleton
 

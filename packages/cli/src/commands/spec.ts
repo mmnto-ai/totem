@@ -84,7 +84,8 @@ function buildSearchQuery(issue: StandardIssue): string {
   return `${issue.title} ${labels} ${bodySnippet}`.trim();
 }
 
-const TEST_KEYWORD_RE = /\b(test|verify|example|fixture|hits|misses|rule-tester)\b/i;
+const TEST_KEYWORD_RE =
+  /\b(test(?:s|ing)?|verif(?:y|ies|ication)|example(?:s)?|fixture(?:s)?|hits|misses|rule-?tester)\b/i;
 const TEST_EXPANSION = ' test testing infrastructure fixture verification testRule rule-tester';
 
 /**
