@@ -84,13 +84,21 @@ program
   )
   .option('--pilot', 'Enable pilot mode — hooks warn instead of block during initial adoption')
   .option('--strict', 'Use strict enforcement tier (spec-required + shield gate for agents)')
-  .action(async (options: { bare?: boolean; pilot?: boolean; strict?: boolean }) => {
-    try {
-      await initCommand({ bare: options.bare, pilot: options.pilot, strict: options.strict });
-    } catch (err) {
-      handleError(err);
-    }
-  });
+  .option('--global', 'Create a personal profile in ~/.totem/ for use across all projects')
+  .action(
+    async (options: { bare?: boolean; pilot?: boolean; strict?: boolean; global?: boolean }) => {
+      try {
+        await initCommand({
+          bare: options.bare,
+          pilot: options.pilot,
+          strict: options.strict,
+          global: options.global,
+        });
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
 
 program
   .command('sync')
@@ -489,7 +497,7 @@ program
   });
 
 program
-  .command('extract <pr-numbers...>', { hidden: true })
+  .command('extract [pr-numbers...]', { hidden: true })
   .description('Deprecated alias for `totem lesson extract`')
   .option('--raw', 'Output assembled prompt without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
@@ -501,6 +509,7 @@ program
     '--from-scan',
     'Extract lessons from fixed code scanning alerts instead of review comments',
   )
+  .option('--local', 'Extract lessons from local git diff instead of PR reviews')
   .action(
     async (
       prNumbers: string[],
@@ -512,13 +521,24 @@ program
         dryRun?: boolean;
         yes?: boolean;
         fromScan?: boolean;
+        local?: boolean;
       },
     ) => {
-      requireGhCli();
       try {
+        if (!opts.local && (!prNumbers || prNumbers.length === 0)) {
+          const { TotemConfigError } = await import('@mmnto/totem');
+          throw new TotemConfigError(
+            'No PR numbers provided.',
+            "Pass PR numbers (e.g. 'totem lesson extract 123') or use --local for local diffs.",
+            'CONFIG_INVALID',
+          );
+        }
+        if (!opts.local) {
+          requireGhCli();
+        }
         console.error("\u26a0 'totem extract' is deprecated. Use 'totem lesson extract' instead.");
         const { extractCommand } = await import('./commands/extract.js');
-        await extractCommand(prNumbers, opts);
+        await extractCommand(prNumbers ?? [], opts);
       } catch (err) {
         handleError(err);
       }
@@ -790,8 +810,8 @@ lessonCmd
   );
 
 lessonCmd
-  .command('extract <pr-numbers...>')
-  .description('Extract lessons from PR review(s) into .totem/lessons/')
+  .command('extract [pr-numbers...]')
+  .description('Extract lessons from PR review(s) or local git diff into .totem/lessons/')
   .option('--raw', 'Output assembled prompt without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
@@ -802,6 +822,7 @@ lessonCmd
     '--from-scan',
     'Extract lessons from fixed code scanning alerts instead of review comments',
   )
+  .option('--local', 'Extract lessons from local git diff instead of PR reviews')
   .action(
     async (
       prNumbers: string[],
@@ -813,12 +834,23 @@ lessonCmd
         dryRun?: boolean;
         yes?: boolean;
         fromScan?: boolean;
+        local?: boolean;
       },
     ) => {
-      requireGhCli();
       try {
+        if (!opts.local && (!prNumbers || prNumbers.length === 0)) {
+          const { TotemConfigError } = await import('@mmnto/totem');
+          throw new TotemConfigError(
+            'No PR numbers provided.',
+            "Pass PR numbers (e.g. 'totem lesson extract 123') or use --local for local diffs.",
+            'CONFIG_INVALID',
+          );
+        }
+        if (!opts.local) {
+          requireGhCli();
+        }
         const { extractCommand } = await import('./commands/extract.js');
-        await extractCommand(prNumbers, opts);
+        await extractCommand(prNumbers ?? [], opts);
       } catch (err) {
         handleError(err);
       }

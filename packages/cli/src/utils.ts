@@ -1,5 +1,6 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 import dotenv from 'dotenv';
@@ -44,19 +45,42 @@ export { CONFIG_FILES };
 
 export type ConfigFormat = 'ts' | 'yaml' | 'toml';
 
+/** Return the global totem directory path (~/.totem/). Accepts override for testing. */
+export function getGlobalTotemDir(homeDir?: string): string {
+  return path.join(homeDir ?? os.homedir(), '.totem');
+}
+
 /**
  * Resolve config path by checking the fallback chain: .ts → .yaml → .yml → .toml
+ * Falls back to the global ~/.totem/ profile when no local config exists.
  */
-export function resolveConfigPath(cwd: string): string {
+export function resolveConfigPath(cwd: string, homeDir?: string): string {
+  // 1. Check CWD for local config
   for (const file of CONFIG_FILES) {
     const candidate = path.join(cwd, file);
     if (fs.existsSync(candidate)) return candidate;
   }
+
+  // 2. Check global ~/.totem/ profile
+  const globalTotemDir = getGlobalTotemDir(homeDir);
+  for (const file of CONFIG_FILES) {
+    const candidate = path.join(globalTotemDir, file);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  // 3. Neither found — error with updated hint
   throw new TotemConfigError(
     'No Totem configuration found.',
-    "Run 'totem init' to create one. Supported: totem.config.ts, totem.yaml, totem.yml, totem.toml",
+    "Run 'totem init' to create a project config, or 'totem init --global' for a personal profile.",
     'CONFIG_MISSING',
   );
+}
+
+/** Check whether a resolved config path comes from the global ~/.totem/ profile. */
+export function isGlobalConfigPath(configPath: string, homeDir?: string): boolean {
+  const globalTotemDir = getGlobalTotemDir(homeDir);
+  const normalizedGlobal = path.normalize(globalTotemDir) + path.sep;
+  return path.normalize(configPath).startsWith(normalizedGlobal);
 }
 
 /**

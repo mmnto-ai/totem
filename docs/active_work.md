@@ -1,18 +1,30 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.9.0` with ~2,446 tests across core, CLI, and MCP packages. The 1.9.0 "Pipeline Engine" milestone is complete — all five rule-creation pipelines shipped. The next milestone focuses on adoption friction.
+The project is at release `@mmnto/cli@1.9.0` with ~2,502 tests across core, CLI, and MCP packages. Pilot mode (#949), enforcement tiers (#987), .env parser (#1114), and spec query expansion (#1016) have merged to main. Next patch release pending changeset.
 
 ### Current: 1.10.0 — The Invisible Exoskeleton
 
-Theme: reduce friction for new adopters and solo developers.
+Theme: reduce adoption friction for new adopters and solo developers.
 
-- **#949** — Pilot mode (gradual onboarding without full enforcement)
-- **#987** — Enforcement tiers (configurable strictness levels)
+**Shipped (merged to main, pending release):**
+
+- ~~**#949**~~ — Pilot mode (warn-only hooks, 14 days / 50 pushes)
+- ~~**#987**~~ — Enforcement tiers (strict + agent auto-detection)
+- ~~**#1114**~~ — .env parser hardened with dotenv
+- ~~**#1016**~~ — Spec query expansion for test infrastructure
+- ~~**#1039**~~ — Solo dev experience audit (local extract, global init)
+
+**In Progress:**
+
+- **#1152** — Proactive language packs (thick TypeScript/Shell/Node.js baseline rules)
+  - **#1153** — "Missed Caught" audit (Phase 0 — categorize historical bot findings)
+  - Deep research: DR-57 (TypeScript/ESLint), DR-58 (ShellCheck/POSIX), DR-59 (Node.js Security)
+  - Proposals: 210 (Language Packs), 211 (Review Gate Graduation)
+
+**Remaining:**
+
 - **#1033** — Docs scope (fix `totem wrap` doc sync reliability)
 - **#1053** — Concurrent dispatch (parallel agent task execution)
-- **#1039** — Solo dev experience audit
-- **#1114** — .env parser fix
-- **#1016** — Spec misses infrastructure context
 - Strategy **#62** — Model-specific prompt adapters
 
 ### Next: 1.11.0 — The Import Engine
