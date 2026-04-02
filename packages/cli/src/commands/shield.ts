@@ -605,8 +605,11 @@ export async function captureObservationRules(
   const {
     deduplicateObservations,
     generateObservationRule,
+    generateOutputHash,
     loadCompiledRulesFile,
+    readCompileManifest,
     saveCompiledRulesFile,
+    writeCompileManifest,
   } = await import('@mmnto/totem');
 
   const candidates: import('@mmnto/totem').CompiledRule[] = [];
@@ -655,8 +658,6 @@ export async function captureObservationRules(
     const resolvedTotemDir = path.join(configRoot ?? cwd, config.totemDir);
     const manifestPath = path.join(resolvedTotemDir, 'compile-manifest.json');
     try {
-      const { generateOutputHash, readCompileManifest, writeCompileManifest } =
-        await import('@mmnto/totem');
       const manifest = readCompileManifest(manifestPath);
       manifest.output_hash = generateOutputHash(rulesPath);
       writeCompileManifest(manifestPath, manifest);
