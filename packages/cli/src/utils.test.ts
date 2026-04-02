@@ -319,6 +319,11 @@ describe('isGlobalConfigPath', () => {
     expect(isGlobalConfigPath('/my/project/totem.config.ts', fakeHome)).toBe(false);
     expect(isGlobalConfigPath('/other/dir/totem.yaml', fakeHome)).toBe(false);
   });
+
+  it('returns false for directories sharing the prefix (e.g. ~/.totem-foo/)', () => {
+    const fakeHome = '/fake/home';
+    expect(isGlobalConfigPath('/fake/home/.totem-foo/totem.config.ts', fakeHome)).toBe(false);
+  });
 });
 
 // ─── loadConfig (YAML/TOML) ─────────────────────────

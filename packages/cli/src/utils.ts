@@ -79,7 +79,8 @@ export function resolveConfigPath(cwd: string, homeDir?: string): string {
 /** Check whether a resolved config path comes from the global ~/.totem/ profile. */
 export function isGlobalConfigPath(configPath: string, homeDir?: string): boolean {
   const globalTotemDir = getGlobalTotemDir(homeDir);
-  return path.normalize(configPath).startsWith(path.normalize(globalTotemDir));
+  const normalizedGlobal = path.normalize(globalTotemDir) + path.sep;
+  return path.normalize(configPath).startsWith(normalizedGlobal);
 }
 
 /**
