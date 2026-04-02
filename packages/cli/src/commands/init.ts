@@ -442,7 +442,11 @@ interface InitSummaryEntry {
   action: string;
 }
 
-export async function initCommand(options?: { bare?: boolean }): Promise<void> {
+export async function initCommand(options?: {
+  bare?: boolean;
+  pilot?: boolean;
+  strict?: boolean;
+}): Promise<void> {
   const { stdin: input, stdout: output } = await import('node:process');
   const readline = await import('node:readline/promises');
   const { bold, brand, dim, log, printBanner, success } = await import('../ui.js');
@@ -564,7 +568,35 @@ export async function initCommand(options?: { bare?: boolean }): Promise<void> {
         cwd,
       );
       const configPath = path.join(cwd, configFilename);
-      fs.writeFileSync(configPath, configContent, 'utf-8');
+
+      // Inject pilot: true into the generated config when --pilot is set
+      let finalConfigContent = configContent;
+      if (options?.pilot) {
+        if (configFilename.endsWith('.ts')) {
+          // Insert `pilot: true,` before the closing `};`
+          finalConfigContent = finalConfigContent.replace(/\n};\s*$/, '\n\n  pilot: true,\n};\n');
+        } else if (configFilename.endsWith('.yaml') || configFilename.endsWith('.yml')) {
+          finalConfigContent = finalConfigContent.trimEnd() + '\npilot: true\n';
+        } else if (configFilename.endsWith('.toml')) {
+          finalConfigContent = finalConfigContent.trimEnd() + '\npilot = true\n';
+        }
+      }
+
+      // Inject hooks.tier into the generated config when --strict is set
+      if (options?.strict) {
+        if (configFilename.endsWith('.ts')) {
+          finalConfigContent = finalConfigContent.replace(
+            /\n};\s*$/,
+            "\n\n  hooks: { tier: 'strict' },\n};\n",
+          );
+        } else if (configFilename.endsWith('.yaml') || configFilename.endsWith('.yml')) {
+          finalConfigContent = finalConfigContent.trimEnd() + '\nhooks:\n  tier: strict\n';
+        } else if (configFilename.endsWith('.toml')) {
+          finalConfigContent = finalConfigContent.trimEnd() + '\n\n[hooks]\ntier = "strict"\n';
+        }
+      }
+
+      fs.writeFileSync(configPath, finalConfigContent, 'utf-8');
       const tierLabel =
         embeddingTier === 'none'
           ? 'Lite'
@@ -583,6 +615,17 @@ export async function initCommand(options?: { bare?: boolean }): Promise<void> {
     // --- Always run: .totem/ directory ---
     if (!fs.existsSync(totemDir)) {
       fs.mkdirSync(totemDir, { recursive: true });
+    }
+
+    // --- Pilot mode initialization ---
+    if (options?.pilot) {
+      const { readPilotState } = await import('../utils/pilot.js');
+      readPilotState(totemDir); // initializes pilot-state.json if missing
+      log.info(
+        'Totem',
+        'Pilot mode enabled (14 days / 50 pushes). Hooks will warn instead of block.',
+      );
+      summary.push({ file: '.totem/pilot-state.json', action: 'Initialized pilot state' });
     }
 
     const lessonsDir = path.join(totemDir, 'lessons');
@@ -801,7 +844,11 @@ export async function initCommand(options?: { bare?: boolean }): Promise<void> {
       }
 
       // --- Always run: enforcement hooks (pre-commit + pre-push) ---
-      const enforcement = await installEnforcementHooks(cwd, rl);
+      const hookTier = options?.strict ? 'strict' : undefined;
+      const enforcement = await installEnforcementHooks(cwd, rl, {
+        tier: hookTier,
+        pilot: options?.pilot,
+      });
       if (enforcement.preCommit === 'installed' || enforcement.preCommit === 'appended') {
         summary.push({
           file: '.git/hooks/pre-commit',
