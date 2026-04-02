@@ -335,6 +335,19 @@ if [ -n "$TOTEM_CMD" ]; then
   fi
 ${shieldBlock}
 fi
+
+# Format check — catch unformatted files before CI does
+# Only runs if the project defines a format:check script (no workflow opinions)
+if [ -f "package.json" ] && command -v pnpm >/dev/null 2>&1; then
+  if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['format:check'] ? 0 : 1)" 2>/dev/null; then
+    if pnpm run format:check > /dev/null 2>&1; then
+      : # pass
+    else
+      echo "[totem] ❌ Formatting check failed. Run 'pnpm run format' to fix." >&2
+      exit 1
+    fi
+  fi
+fi
 `;
 }
 
