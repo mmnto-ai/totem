@@ -63,7 +63,7 @@ export async function extractFromScans(
   options: ExtractOptions,
   config: TotemConfig,
   cwd: string,
-  configRoot: string,
+  _configRoot: string,
 ): Promise<ExtractedLesson[]> {
   const path = await import('node:path');
   const { GitHubCliPrAdapter } = await import('../adapters/github-cli-pr.js');
