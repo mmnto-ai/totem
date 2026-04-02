@@ -469,7 +469,8 @@ export async function initCommand(options?: {
       (p: string) => fs.existsSync(p),
     );
 
-    if (existingGlobalConfig) {
+    const compiledRulesPath = path.join(globalDir, 'compiled-rules.json');
+    if (existingGlobalConfig && fs.existsSync(compiledRulesPath)) {
       log.warn('Totem', `Global profile already exists at ${globalDir}`);
       log.dim('Totem', `Config: ${existingGlobalConfig}`);
       return;
@@ -481,14 +482,14 @@ export async function initCommand(options?: {
 
 export default {
   totemDir: '.',
-  embedding: { tier: 'none' },
-  targets: [],
+  targets: [
+    { glob: '.totem/lessons/*.md', type: 'lesson', strategy: 'markdown-heading' },
+  ],
 } satisfies TotemConfig;
 `;
     fs.writeFileSync(configPath, configContent, 'utf-8');
 
     // Install universal baseline compiled rules
-    const compiledRulesPath = path.join(globalDir, 'compiled-rules.json');
     try {
       const { COMPILED_BASELINE_RULES } = await import('../assets/compiled-baseline.js');
       const payload = { version: 1, rules: [...COMPILED_BASELINE_RULES] };

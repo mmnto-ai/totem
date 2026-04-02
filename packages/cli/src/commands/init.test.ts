@@ -1033,6 +1033,11 @@ describe('initCommand --global', () => {
     const globalDir = path.join(fakeHome, '.totem');
     fs.mkdirSync(globalDir, { recursive: true });
     fs.writeFileSync(path.join(globalDir, 'totem.config.ts'), 'export default {}', 'utf-8');
+    fs.writeFileSync(
+      path.join(globalDir, 'compiled-rules.json'),
+      '{"version":1,"rules":[]}',
+      'utf-8',
+    );
 
     // Should not throw, just warn
     await initCommand({ global: true, _homeDir: fakeHome });
@@ -1042,7 +1047,19 @@ describe('initCommand --global', () => {
     expect(content).toBe('export default {}');
   });
 
-  it('config sets totemDir to "."', async () => {
+  it('recovers from half-initialized profile (config exists but no rules)', async () => {
+    const globalDir = path.join(fakeHome, '.totem');
+    fs.mkdirSync(globalDir, { recursive: true });
+    fs.writeFileSync(path.join(globalDir, 'totem.config.ts'), 'export default {}', 'utf-8');
+    // No compiled-rules.json — simulate partial init failure
+
+    await initCommand({ global: true, _homeDir: fakeHome });
+
+    // compiled-rules.json should now exist
+    expect(fs.existsSync(path.join(globalDir, 'compiled-rules.json'))).toBe(true);
+  });
+
+  it('config sets totemDir to "." with valid schema', async () => {
     await initCommand({ global: true, _homeDir: fakeHome });
 
     const configContent = fs.readFileSync(
@@ -1050,5 +1067,8 @@ describe('initCommand --global', () => {
       'utf-8',
     );
     expect(configContent).toContain("totemDir: '.'");
+    expect(configContent).not.toContain('embedding');
+    expect(configContent).toContain('targets:');
+    expect(configContent).toContain("glob: '.totem/lessons/*.md'");
   });
 });

@@ -561,27 +561,26 @@ async function localExtractCommand(options: ExtractOptions): Promise<void> {
   let diff = '';
   let diffSource = '';
 
-  const staged = getGitDiff('staged', cwd);
-  if (staged) {
-    diff = staged;
-    diffSource = 'staged changes';
+  const all = getGitDiff('all', cwd);
+  if (all) {
+    diff = all;
+    diffSource = 'local changes';
   } else {
-    const all = getGitDiff('all', cwd);
-    if (all) {
-      diff = all;
-      diffSource = 'working tree changes';
-    } else {
-      // Try unpushed commits
-      try {
-        const defaultBranch = getDefaultBranch(cwd);
-        const unpushed = exec('git', ['log', '-p', `origin/${defaultBranch}..HEAD`], { cwd });
-        if (unpushed) {
-          diff = unpushed;
-          diffSource = 'unpushed commits';
-        }
-      } catch {
-        // No remote or no commits — fall through to error
+    // Try unpushed commits
+    try {
+      const defaultBranch = getDefaultBranch(cwd);
+      const currentBranch = exec('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd });
+      const remoteRef =
+        currentBranch && currentBranch !== 'HEAD'
+          ? `origin/${currentBranch}`
+          : `origin/${defaultBranch}`;
+      const unpushed = exec('git', ['log', '-p', `${remoteRef}..HEAD`], { cwd });
+      if (unpushed) {
+        diff = unpushed;
+        diffSource = 'unpushed commits';
       }
+    } catch {
+      // No remote or no commits — fall through to error
     }
   }
 
@@ -743,6 +742,7 @@ async function localExtractCommand(options: ExtractOptions): Promise<void> {
   }
 
   const sanitizedLessons = selected.map((l) => ({
+    ...(l.heading && { heading: sanitize(l.heading) }),
     tags: l.tags.map((t) => sanitize(t)),
     text: sanitize(l.text),
     ...(l.scope && { scope: sanitize(l.scope) }),
@@ -1108,6 +1108,7 @@ export async function extractCommand(prNumbers: string[], options: ExtractOption
 
   // Sanitize before persisting — strip any terminal injection from stored lessons
   const sanitizedLessons = selected.map((l) => ({
+    ...(l.heading && { heading: sanitize(l.heading) }),
     tags: l.tags.map((t) => sanitize(t)),
     text: sanitize(l.text),
     ...(l.scope && { scope: sanitize(l.scope) }),

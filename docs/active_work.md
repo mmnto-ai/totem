@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.9.0` with ~2,477 tests across core, CLI, and MCP packages. Pilot mode (#949), enforcement tiers (#987), .env parser (#1114), and spec query expansion (#1016) have merged to main. Next patch release pending changeset.
+The project is at release `@mmnto/cli@1.9.0` with ~2,502 tests across core, CLI, and MCP packages. Pilot mode (#949), enforcement tiers (#987), .env parser (#1114), and spec query expansion (#1016) have merged to main. Next patch release pending changeset.
 
 ### Current: 1.10.0 — The Invisible Exoskeleton
 
@@ -12,6 +12,7 @@ Theme: reduce adoption friction for new adopters and solo developers.
 - ~~**#987**~~ — Enforcement tiers (strict + agent auto-detection)
 - ~~**#1114**~~ — .env parser hardened with dotenv
 - ~~**#1016**~~ — Spec query expansion for test infrastructure
+- ~~**#1039**~~ — Solo dev experience audit (local extract, global init)
 
 **In Progress:**
 
@@ -24,7 +25,6 @@ Theme: reduce adoption friction for new adopters and solo developers.
 
 - **#1033** — Docs scope (fix `totem wrap` doc sync reliability)
 - **#1053** — Concurrent dispatch (parallel agent task execution)
-- **#1039** — Solo dev experience audit
 - Strategy **#62** — Model-specific prompt adapters
 
 ### Next: 1.11.0 — The Import Engine
