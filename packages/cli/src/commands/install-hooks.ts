@@ -198,7 +198,11 @@ function printHookManagerGuidance(manager: HookManager): void {
   }
 }
 
-export async function installPostMergeHook(cwd: string, rl: readline.Interface): Promise<void> {
+export async function installPostMergeHook(
+  cwd: string,
+  rl: readline.Interface,
+  options?: { tier?: 'strict' | 'standard' },
+): Promise<void> {
   // Guard: must be a git repo — resolve root from any subdirectory
   const gitRoot = resolveGitRoot(cwd);
   if (!gitRoot) {
@@ -210,7 +214,7 @@ export async function installPostMergeHook(cwd: string, rl: readline.Interface):
   const manager = detectHookManager(gitRoot);
 
   if (manager) {
-    generateHookHelpers(gitRoot, fallbackCmd);
+    generateHookHelpers(gitRoot, fallbackCmd, options);
     printHookManagerGuidance(manager);
     return;
   }
