@@ -914,6 +914,49 @@ describe('captureObservationRules', () => {
     expect(rules.length).toBe(1);
     expect(rules[0]!.message).toBe('Already captured');
   });
+
+  it('updates compile manifest hash after capturing rules (#1155)', async () => {
+    const { captureObservationRules } = await import('./shield.js');
+    const { generateOutputHash, writeCompileManifest } = await import('@mmnto/totem');
+
+    // Create source file
+    const srcDir = path.join(tmpDir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(path.join(srcDir, 'app.ts'), 'eval(userInput);\n');
+
+    // Seed compiled-rules.json and a manifest with matching hash
+    const rulesPath = path.join(tmpDir, '.totem', 'compiled-rules.json');
+    fs.writeFileSync(rulesPath, JSON.stringify({ version: 1, rules: [] }, null, 2) + '\n');
+    const manifestPath = path.join(tmpDir, '.totem', 'compile-manifest.json');
+    const originalHash = generateOutputHash(rulesPath);
+    writeCompileManifest(manifestPath, {
+      compiled_at: new Date().toISOString(),
+      model: 'test',
+      input_hash: 'abc',
+      output_hash: originalHash,
+      rule_count: 0,
+    });
+
+    const findings = [
+      {
+        severity: 'WARN' as const,
+        confidence: 0.8,
+        message: 'Unsafe eval',
+        file: 'src/app.ts',
+        line: 1,
+      },
+    ];
+
+    const config = { totemDir: '.totem' } as import('@mmnto/totem').TotemConfig;
+    await captureObservationRules(findings, tmpDir, config, undefined);
+
+    // Manifest should have been updated with the new hash
+    const { readCompileManifest } = await import('@mmnto/totem');
+    const manifest = readCompileManifest(manifestPath);
+    const newHash = generateOutputHash(rulesPath);
+    expect(manifest.output_hash).toBe(newHash);
+    expect(manifest.output_hash).not.toBe(originalHash);
+  });
 });
 
 // ─── learnFromVerdict ────────────────────────────────

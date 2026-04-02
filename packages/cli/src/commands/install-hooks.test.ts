@@ -255,6 +255,12 @@ describe('buildPrePushHook', () => {
     const hook = buildPrePushHook('yarn dlx @mmnto/cli');
     expect(hook).toContain('yarn dlx @mmnto/cli');
   });
+
+  it('includes format:check before push', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    expect(hook).toContain('format:check');
+    expect(hook).toContain('Formatting check failed');
+  });
 });
 
 describe('installGitHook', () => {
@@ -840,9 +846,9 @@ describe('upgradePrePushHookIfNeeded', () => {
    * the canonical output of buildPrePushHook('pnpm dlx @mmnto/cli') (shebang stripped, trimmed).
    * Catches stale shell fragments or splice boundary bugs that toContain would miss.
    *
-   * The new stateless format has TWO top-level if/fi blocks (resolve block +
-   * guard block). We track to the second balanced fi at depth 0 to capture both.
-   * Old single-block hooks are captured at the first balanced fi.
+   * The new stateless format has THREE top-level if/fi blocks (resolve block +
+   * guard block + format:check block). We track to the third balanced fi at
+   * depth 0 to capture all. Old single-block hooks are captured at the first.
    */
   function extractTotemBlock(hookContent: string): string {
     const markerIdx = hookContent.indexOf(`# ${TOTEM_PREPUSH_MARKER}`);
@@ -874,9 +880,9 @@ describe('upgradePrePushHookIfNeeded', () => {
       if (firstIfFound && depth === 0 && /^fi\s*$/.test(trimmed)) {
         balancedCount++;
         endOffset = charOffset + line.length;
-        // New format has 2 top-level blocks; old format has 1.
+        // New format has 3 top-level blocks; old format has 1.
         // Stop after finding the block count that matches the canonical hook.
-        if (balancedCount >= 2) break;
+        if (balancedCount >= 3) break;
       }
       charOffset += line.length + 1; // +1 for the newline
     }
