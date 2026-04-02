@@ -489,7 +489,7 @@ program
   });
 
 program
-  .command('extract <pr-numbers...>', { hidden: true })
+  .command('extract [pr-numbers...]', { hidden: true })
   .description('Deprecated alias for `totem lesson extract`')
   .option('--raw', 'Output assembled prompt without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
@@ -501,6 +501,7 @@ program
     '--from-scan',
     'Extract lessons from fixed code scanning alerts instead of review comments',
   )
+  .option('--local', 'Extract lessons from local git diff instead of PR reviews')
   .action(
     async (
       prNumbers: string[],
@@ -512,13 +513,22 @@ program
         dryRun?: boolean;
         yes?: boolean;
         fromScan?: boolean;
+        local?: boolean;
       },
     ) => {
-      requireGhCli();
+      if (!opts.local) {
+        if (!prNumbers || prNumbers.length === 0) {
+          console.error(
+            '[Totem Error] Provide PR numbers or use --local for local diff extraction.',
+          );
+          process.exit(1);
+        }
+        requireGhCli();
+      }
       try {
         console.error("\u26a0 'totem extract' is deprecated. Use 'totem lesson extract' instead.");
         const { extractCommand } = await import('./commands/extract.js');
-        await extractCommand(prNumbers, opts);
+        await extractCommand(prNumbers ?? [], opts);
       } catch (err) {
         handleError(err);
       }
@@ -790,8 +800,8 @@ lessonCmd
   );
 
 lessonCmd
-  .command('extract <pr-numbers...>')
-  .description('Extract lessons from PR review(s) into .totem/lessons/')
+  .command('extract [pr-numbers...]')
+  .description('Extract lessons from PR review(s) or local git diff into .totem/lessons/')
   .option('--raw', 'Output assembled prompt without LLM synthesis')
   .option('--out <path>', 'Write output to a file instead of stdout')
   .option('--model <name>', 'Override the default model for the orchestrator')
@@ -802,6 +812,7 @@ lessonCmd
     '--from-scan',
     'Extract lessons from fixed code scanning alerts instead of review comments',
   )
+  .option('--local', 'Extract lessons from local git diff instead of PR reviews')
   .action(
     async (
       prNumbers: string[],
@@ -813,12 +824,21 @@ lessonCmd
         dryRun?: boolean;
         yes?: boolean;
         fromScan?: boolean;
+        local?: boolean;
       },
     ) => {
-      requireGhCli();
+      if (!opts.local) {
+        if (!prNumbers || prNumbers.length === 0) {
+          console.error(
+            '[Totem Error] Provide PR numbers or use --local for local diff extraction.',
+          );
+          process.exit(1);
+        }
+        requireGhCli();
+      }
       try {
         const { extractCommand } = await import('./commands/extract.js');
-        await extractCommand(prNumbers, opts);
+        await extractCommand(prNumbers ?? [], opts);
       } catch (err) {
         handleError(err);
       }
