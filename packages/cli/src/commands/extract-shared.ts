@@ -407,6 +407,9 @@ export async function sharedPipeline(
 
   if (selected.length === 0) {
     log.dim(TAG, 'No lessons selected — nothing written.');
+    if (options.yes && suspiciousCount > 0) {
+      process.exitCode = 1;
+    }
     return;
   }
 
