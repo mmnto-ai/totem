@@ -532,6 +532,7 @@ export function assembleLocalPrompt(
 
 const LOCKFILE_PATTERNS = ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock'];
 
+// totem-context: localExtractCommand uses TotemConfigError and log from static imports at top of file (lines 10, 20)
 async function localExtractCommand(options: ExtractOptions): Promise<void> {
   const path = await import('node:path');
   const {

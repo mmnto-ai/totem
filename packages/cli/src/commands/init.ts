@@ -451,6 +451,7 @@ export async function initCommand(options?: {
   _homeDir?: string;
 }): Promise<void> {
   // ─── Global profile shortcut ───────────────────────
+  // totem-context: fs and path are static imports at top of file (lines 1-2)
   if (options?.global) {
     const os = await import('node:os');
     const { log } = await import('../ui.js');
