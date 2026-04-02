@@ -213,6 +213,27 @@ export const TotemConfigSchema = z.object({
 
   /** Optional: garbage collection settings for stale compiled rules */
   garbageCollection: GarbageCollectionSchema.optional(),
+
+  /** Optional: pilot mode — warn-only hooks during initial adoption.
+   *  `true` uses defaults (14 days / 50 pushes). Object form overrides thresholds. */
+  pilot: z
+    .union([
+      z.boolean(),
+      z.object({
+        maxDays: z.number().int().positive().default(14),
+        maxPushes: z.number().int().positive().default(50),
+      }),
+    ])
+    .optional(),
+
+  /** Optional: enforcement hook tier configuration */
+  hooks: z
+    .object({
+      /** Enforcement tier: 'strict' adds spec-completed checks and shield gates.
+       *  Agents are auto-detected and enforced at strict level regardless of this setting. */
+      tier: z.enum(['strict', 'standard']).default('standard'),
+    })
+    .optional(),
 });
 
 export type ChunkStrategy = z.infer<typeof ChunkStrategySchema>;

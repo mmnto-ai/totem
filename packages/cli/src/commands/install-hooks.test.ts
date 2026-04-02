@@ -849,27 +849,36 @@ describe('upgradePrePushHookIfNeeded', () => {
     if (markerIdx === -1) return '';
 
     const afterMarker = hookContent.slice(markerIdx);
-    const ifFiPattern = /^\s*(if\s|fi\s*$)/gm;
+    // Match lines that start with `if ` or are standalone `fi`.
+    // Skip inline `if ... fi` (both on same line) — they don't change depth.
+    const lines = afterMarker.split('\n');
     let depth = 0;
     let endOffset = -1;
     let firstIfFound = false;
     let balancedCount = 0;
-    let match;
-    while ((match = ifFiPattern.exec(afterMarker)) !== null) {
-      const keyword = match[1]!.trim();
-      if (keyword.startsWith('if')) {
-        if (!firstIfFound) firstIfFound = true;
-        depth++;
-      } else if (keyword === 'fi' && firstIfFound) {
-        depth--;
+    let charOffset = 0;
+
+    for (const line of lines) {
+      const trimmed = line.trimStart();
+      const isInlineIfFi = /^if\s.*;\s*fi\s*$/.test(trimmed);
+
+      if (!isInlineIfFi) {
+        if (/^if\s/.test(trimmed)) {
+          if (!firstIfFound) firstIfFound = true;
+          depth++;
+        } else if (/^fi\s*$/.test(trimmed) && firstIfFound) {
+          depth--;
+        }
       }
-      if (firstIfFound && depth === 0) {
+
+      if (firstIfFound && depth === 0 && /^fi\s*$/.test(trimmed)) {
         balancedCount++;
-        endOffset = match.index + match[0].length;
+        endOffset = charOffset + line.length;
         // New format has 2 top-level blocks; old format has 1.
         // Stop after finding the block count that matches the canonical hook.
         if (balancedCount >= 2) break;
       }
+      charOffset += line.length + 1; // +1 for the newline
     }
     if (endOffset === -1) return '';
     return hookContent.slice(markerIdx, markerIdx + endOffset).trim();
@@ -1064,10 +1073,12 @@ fi
     upgradePrePushHookIfNeeded(tmpDir);
     const content = fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8');
 
-    // Count if/fi balance: every `if` must have a matching `fi`
-    const ifMatches = content.match(/^\s*if\s/gm) ?? [];
-    const fiMatches = content.match(/^\s*fi\s*$/gm) ?? [];
-    expect(ifMatches.length).toBe(fiMatches.length);
+    // Count if/fi balance: every `if` must have a matching `fi`.
+    // Inline `if ... fi` on a single line are self-balanced and excluded from both counts.
+    const contentLines = content.split('\n');
+    const multiLineIfs = contentLines.filter((l) => /^\s*if\s/.test(l) && !/;\s*fi\s*$/.test(l));
+    const standaloneFis = contentLines.filter((l) => /^\s*fi\s*$/.test(l));
+    expect(multiLineIfs.length).toBe(standaloneFis.length);
 
     // No duplicate markers — upgrade must not leave the old marker behind
     const markerPattern = new RegExp(TOTEM_PREPUSH_MARKER.replace(/[[\]]/g, '\\$&'), 'g');
@@ -1155,5 +1166,125 @@ fi
     // Full block comparison
     const actual = extractTotemBlock(content);
     expect(actual).toBe(expectedTotemBlock());
+  });
+});
+
+// ─── Enforcement tier: agent detection & strict mode ──
+
+describe('buildPreCommitHook agent detection', () => {
+  it('includes agent detection snippet', () => {
+    const hook = buildPreCommitHook();
+    expect(hook).toContain('is_agent=0');
+    expect(hook).toContain('is_agent=1');
+    expect(hook).toContain('CLAUDE_CODE_AGENT');
+    expect(hook).toContain('CLAUDE_VERSION');
+    expect(hook).toContain('CURSOR_TRACE_ID');
+    // GEMINI_API_KEY intentionally excluded — human devs export it for Totem's embedding provider
+  });
+
+  it('includes TOTEM_HOOK_TIER variable', () => {
+    const hook = buildPreCommitHook();
+    expect(hook).toContain('TOTEM_HOOK_TIER="standard"');
+  });
+
+  it('sets TOTEM_HOOK_TIER to strict when tier is strict', () => {
+    const hook = buildPreCommitHook('strict');
+    expect(hook).toContain('TOTEM_HOOK_TIER="strict"');
+  });
+});
+
+describe('buildPreCommitHook with strict tier', () => {
+  it('includes spec-completed check', () => {
+    const hook = buildPreCommitHook('strict');
+    expect(hook).toContain('.spec-completed');
+    expect(hook).toContain("Run 'totem spec <issue>' before committing (strict mode)");
+  });
+
+  it('gates spec check on agent detection or strict tier', () => {
+    const hook = buildPreCommitHook('strict');
+    expect(hook).toContain('$is_agent');
+    expect(hook).toContain('$TOTEM_HOOK_TIER');
+  });
+});
+
+describe('buildPreCommitHook with standard tier', () => {
+  it('includes spec-completed check guarded by agent/tier condition', () => {
+    const hook = buildPreCommitHook('standard');
+    expect(hook).toContain('.spec-completed');
+    expect(hook).toContain('is_agent');
+    expect(hook).toContain('TOTEM_HOOK_TIER="standard"');
+  });
+
+  it('defaults to standard tier when no tier specified', () => {
+    const hook = buildPreCommitHook();
+    expect(hook).toContain('TOTEM_HOOK_TIER="standard"');
+    expect(hook).toContain('.spec-completed');
+  });
+});
+
+describe('buildPrePushHook with strict tier', () => {
+  const FALLBACK = 'pnpm dlx @mmnto/cli';
+
+  it('includes shield gate', () => {
+    const hook = buildPrePushHook(FALLBACK, 'strict');
+    expect(hook).toContain('review');
+    expect(hook).toContain('shield gate (strict mode)');
+  });
+
+  it('includes TOTEM_HOOK_TIER set to strict', () => {
+    const hook = buildPrePushHook(FALLBACK, 'strict');
+    expect(hook).toContain('TOTEM_HOOK_TIER="strict"');
+  });
+
+  it('includes agent detection snippet', () => {
+    const hook = buildPrePushHook(FALLBACK, 'strict');
+    expect(hook).toContain('is_agent=0');
+    expect(hook).toContain('CLAUDE_CODE_AGENT');
+  });
+});
+
+describe('buildPrePushHook with standard tier', () => {
+  const FALLBACK = 'pnpm dlx @mmnto/cli';
+
+  it('includes shield gate guarded by agent/tier condition', () => {
+    const hook = buildPrePushHook(FALLBACK, 'standard');
+    expect(hook).toContain('shield gate');
+    expect(hook).toContain('is_agent');
+    expect(hook).toContain('TOTEM_HOOK_TIER="standard"');
+  });
+
+  it('defaults to standard tier when no tier specified', () => {
+    const hook = buildPrePushHook(FALLBACK);
+    expect(hook).toContain('TOTEM_HOOK_TIER="standard"');
+    expect(hook).toContain('shield gate');
+  });
+
+  it('still includes agent detection', () => {
+    const hook = buildPrePushHook(FALLBACK, 'standard');
+    expect(hook).toContain('is_agent=0');
+  });
+});
+
+describe('agent detection uses POSIX syntax', () => {
+  it('pre-commit hook has no bashisms', () => {
+    const hook = buildPreCommitHook('strict');
+    // Must use [ ] not [[ ]]
+    expect(hook).not.toContain('[[');
+    expect(hook).not.toContain(']]');
+    // Must use = not ==
+    expect(hook).not.toMatch(/[^!]==/);
+    // Must use test or [ ], not bash-only constructs
+    expect(hook).toMatch(/^#!\/bin\/sh\n/);
+  });
+
+  it('pre-push hook has no bashisms', () => {
+    const hook = buildPrePushHook('pnpm dlx @mmnto/cli', 'strict');
+    // Must use [ ] not [[ ]]
+    expect(hook).not.toContain('[[');
+    expect(hook).not.toContain(']]');
+    // Must use = not ==
+    expect(hook).not.toMatch(/[^!]==/);
+    // Must use #!/bin/sh
+    expect(hook).toMatch(/^#!\/bin\/sh\n/);
   });
 });
