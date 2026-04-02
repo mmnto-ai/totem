@@ -524,16 +524,18 @@ program
         local?: boolean;
       },
     ) => {
-      if (!opts.local) {
-        if (!prNumbers || prNumbers.length === 0) {
-          console.error(
-            '[Totem Error] Provide PR numbers or use --local for local diff extraction.',
-          );
-          process.exit(1);
-        }
-        requireGhCli();
-      }
       try {
+        if (!opts.local && (!prNumbers || prNumbers.length === 0)) {
+          const { TotemConfigError } = await import('@mmnto/totem');
+          throw new TotemConfigError(
+            'No PR numbers provided.',
+            "Pass PR numbers (e.g. 'totem lesson extract 123') or use --local for local diffs.",
+            'CONFIG_INVALID',
+          );
+        }
+        if (!opts.local) {
+          requireGhCli();
+        }
         console.error("\u26a0 'totem extract' is deprecated. Use 'totem lesson extract' instead.");
         const { extractCommand } = await import('./commands/extract.js');
         await extractCommand(prNumbers ?? [], opts);
@@ -835,16 +837,18 @@ lessonCmd
         local?: boolean;
       },
     ) => {
-      if (!opts.local) {
-        if (!prNumbers || prNumbers.length === 0) {
-          console.error(
-            '[Totem Error] Provide PR numbers or use --local for local diff extraction.',
-          );
-          process.exit(1);
-        }
-        requireGhCli();
-      }
       try {
+        if (!opts.local && (!prNumbers || prNumbers.length === 0)) {
+          const { TotemConfigError } = await import('@mmnto/totem');
+          throw new TotemConfigError(
+            'No PR numbers provided.',
+            "Pass PR numbers (e.g. 'totem lesson extract 123') or use --local for local diffs.",
+            'CONFIG_INVALID',
+          );
+        }
+        if (!opts.local) {
+          requireGhCli();
+        }
         const { extractCommand } = await import('./commands/extract.js');
         await extractCommand(prNumbers ?? [], opts);
       } catch (err) {

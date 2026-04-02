@@ -530,7 +530,13 @@ export function assembleLocalPrompt(
 
 // ─── Local extraction command ──────────────────────────
 
-const LOCKFILE_PATTERNS = ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock'];
+const LOCKFILE_PATTERNS = [
+  'package-lock.json',
+  'pnpm-lock.yaml',
+  'yarn.lock',
+  'bun.lockb',
+  'bun.lock',
+];
 
 // totem-context: localExtractCommand uses TotemConfigError and log from static imports at top of file (lines 10, 20)
 async function localExtractCommand(options: ExtractOptions): Promise<void> {
@@ -570,11 +576,17 @@ async function localExtractCommand(options: ExtractOptions): Promise<void> {
     try {
       const defaultBranch = getDefaultBranch(cwd);
       const currentBranch = exec('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd });
-      const remoteRef =
-        currentBranch && currentBranch !== 'HEAD'
-          ? `origin/${currentBranch}`
-          : `origin/${defaultBranch}`;
-      const unpushed = exec('git', ['log', '-p', `${remoteRef}..HEAD`], { cwd });
+      let unpushed = '';
+      if (currentBranch && currentBranch !== 'HEAD') {
+        try {
+          unpushed = exec('git', ['log', '-p', `origin/${currentBranch}..HEAD`], { cwd });
+        } catch {
+          // Remote tracking branch may not exist — fall back to default branch
+        }
+      }
+      if (!unpushed) {
+        unpushed = exec('git', ['log', '-p', `origin/${defaultBranch}..HEAD`], { cwd });
+      }
       if (unpushed) {
         diff = unpushed;
         diffSource = 'unpushed commits';
@@ -779,6 +791,13 @@ async function localExtractCommand(options: ExtractOptions): Promise<void> {
 export async function extractCommand(prNumbers: string[], options: ExtractOptions): Promise<void> {
   // ─── Local extraction mode (--local) ─────────────────
   if (options.local) {
+    if (options.fromScan) {
+      throw new TotemConfigError(
+        'Cannot combine --local with --from-scan.',
+        'Use --local for local diffs or --from-scan with PR numbers for code scanning alerts.',
+        'CONFIG_INVALID',
+      );
+    }
     if (prNumbers.length > 0) {
       throw new TotemConfigError(
         'Cannot combine --local with PR numbers.',

@@ -476,9 +476,10 @@ export async function initCommand(options?: {
       return;
     }
 
-    // Write minimal global config
-    const configPath = path.join(globalDir, 'totem.config.ts');
-    const configContent = `import type { TotemConfig } from '@mmnto/totem';
+    // Write minimal global config (only if no config exists yet — don't clobber during repair)
+    if (!existingGlobalConfig) {
+      const configPath = path.join(globalDir, 'totem.config.ts');
+      const configContent = `import type { TotemConfig } from '@mmnto/totem';
 
 export default {
   totemDir: '.',
@@ -487,7 +488,8 @@ export default {
   ],
 } satisfies TotemConfig;
 `;
-    fs.writeFileSync(configPath, configContent, 'utf-8');
+      fs.writeFileSync(configPath, configContent, 'utf-8');
+    }
 
     // Install universal baseline compiled rules
     try {
