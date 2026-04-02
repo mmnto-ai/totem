@@ -108,15 +108,15 @@ fi
 export function generateHookHelpers(
   gitRoot: string,
   fallbackCmd: string,
-  options?: { tier?: 'strict' | 'standard'; pilot?: boolean },
+  options?: { tier?: 'strict' | 'standard' },
 ): void {
   const hooksDir = path.join(gitRoot, '.totem', 'hooks');
   fs.mkdirSync(hooksDir, { recursive: true });
 
   const postMerge = buildHookContent(fallbackCmd);
   const postCheckout = buildPostCheckoutHookContent(fallbackCmd);
-  const preCommit = buildPreCommitHook(options?.tier, options?.pilot);
-  const prePush = buildPrePushHook(fallbackCmd, options?.tier, options?.pilot);
+  const preCommit = buildPreCommitHook(options?.tier);
+  const prePush = buildPrePushHook(fallbackCmd, options?.tier);
 
   fs.writeFileSync(path.join(hooksDir, 'post-merge.sh'), postMerge, { mode: 0o755 });
   fs.writeFileSync(path.join(hooksDir, 'post-checkout.sh'), postCheckout, { mode: 0o755 });
@@ -260,27 +260,22 @@ export async function installPostMergeHook(cwd: string, rl: readline.Interface):
 
 // ─── Agent detection snippet (POSIX-compliant) ─────────
 
-function buildAgentDetectionBlock(pilot?: boolean): string {
+function buildAgentDetectionBlock(): string {
   return `# Agent detection — strict enforcement for AI agents
 is_agent=0
-if [ -n "$CLAUDE_CODE_AGENT" ] || [ -n "$CLAUDE_VERSION" ] || [ -n "$CURSOR_TRACE_ID" ]; then is_agent=1; fi
-is_pilot=${pilot ? '1' : '0'}`;
+if [ -n "$CLAUDE_CODE_AGENT" ] || [ -n "$CLAUDE_VERSION" ] || [ -n "$CURSOR_TRACE_ID" ]; then is_agent=1; fi`;
 }
 
 // ─── Enforcement hooks (pre-commit + pre-push) ──────────
 
-export function buildPreCommitHook(tier?: 'strict' | 'standard', pilot?: boolean): string {
+export function buildPreCommitHook(tier?: 'strict' | 'standard'): string {
   const effectiveTier = tier ?? 'standard';
   const strictBlock = `
 # Strict mode: require spec before commit
 if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
   if [ ! -f ".totem/cache/.spec-completed" ]; then
-    if [ "$is_pilot" = "1" ]; then
-      echo "[Totem Pilot] Would have blocked: spec not completed (strict mode)"
-    else
-      echo "[Totem] BLOCKED: Run 'totem spec <issue>' before committing (strict mode)"
-      exit 1
-    fi
+    echo "[Totem] BLOCKED: Run 'totem spec <issue>' before committing (strict mode)"
+    exit 1
   fi
 fi`;
 
@@ -289,7 +284,7 @@ fi`;
 # Override with: git commit --no-verify
 TOTEM_HOOK_TIER="${effectiveTier}"
 
-${buildAgentDetectionBlock(pilot)}
+${buildAgentDetectionBlock()}
 
 branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
@@ -302,29 +297,20 @@ ${strictBlock}
 `;
 }
 
-export function buildPrePushHook(
-  fallbackCmd: string,
-  tier?: 'strict' | 'standard',
-  pilot?: boolean,
-): string {
+export function buildPrePushHook(fallbackCmd: string, tier?: 'strict' | 'standard'): string {
   const effectiveTier = tier ?? 'standard';
   const shieldBlock = `
   # Strict mode: require shield pass before push
   if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
-    if [ "$is_pilot" = "1" ]; then
-      echo "[Totem Pilot] Running shield gate (advisory)..."
-      $TOTEM_CMD review || echo "[Totem Pilot] Would have blocked: shield review failed"
-    else
-      echo "[Totem] Running shield gate (strict mode)..."
-      $TOTEM_CMD review || exit 1
-    fi
+    echo "[Totem] Running shield gate (strict mode)..."
+    $TOTEM_CMD review || exit 1
   fi`;
 
   return `#!/bin/sh
 # ${TOTEM_PREPUSH_MARKER} — stateless enforcement.
 TOTEM_HOOK_TIER="${effectiveTier}"
 
-${buildAgentDetectionBlock(pilot)}
+${buildAgentDetectionBlock()}
 
 ${buildResolveBlock(fallbackCmd)}
 
@@ -421,7 +407,7 @@ export interface EnforcementHookResult {
 export async function installEnforcementHooks(
   cwd: string,
   rl: readline.Interface,
-  options?: { tier?: 'strict' | 'standard'; pilot?: boolean },
+  options?: { tier?: 'strict' | 'standard' },
 ): Promise<EnforcementHookResult> {
   const skip: EnforcementHookResult = { preCommit: 'skipped', prePush: 'skipped' };
 
@@ -453,14 +439,14 @@ export async function installEnforcementHooks(
   const preCommit = installGitHook(
     hooksDir,
     'pre-commit',
-    buildPreCommitHook(options?.tier, options?.pilot),
+    buildPreCommitHook(options?.tier),
     TOTEM_PRECOMMIT_MARKER,
   );
 
   const prePush = installGitHook(
     hooksDir,
     'pre-push',
-    buildPrePushHook(fallbackCmd, options?.tier, options?.pilot),
+    buildPrePushHook(fallbackCmd, options?.tier),
     TOTEM_PREPUSH_MARKER,
   );
 
@@ -525,7 +511,7 @@ export interface HooksCommandResult {
 export function installHooksNonInteractive(
   cwd: string,
   force?: boolean,
-  options?: { tier?: 'strict' | 'standard'; pilot?: boolean },
+  options?: { tier?: 'strict' | 'standard' },
 ): HooksCommandResult | null {
   // Guard: must be a git repo — resolve root from any subdirectory
   const gitRoot = resolveGitRoot(cwd);
@@ -548,7 +534,7 @@ export function installHooksNonInteractive(
   const preCommit = installGitHook(
     hooksDir,
     'pre-commit',
-    buildPreCommitHook(options?.tier, options?.pilot),
+    buildPreCommitHook(options?.tier),
     TOTEM_PRECOMMIT_MARKER,
     force,
   );
@@ -556,7 +542,7 @@ export function installHooksNonInteractive(
   const prePush = installGitHook(
     hooksDir,
     'pre-push',
-    buildPrePushHook(fallbackCmd, options?.tier, options?.pilot),
+    buildPrePushHook(fallbackCmd, options?.tier),
     TOTEM_PREPUSH_MARKER,
     force,
   );
@@ -648,9 +634,7 @@ export async function hooksCommand(opts: {
 
   // Resolve tier + pilot: CLI flag > config file > default ('standard')
   let tier: 'strict' | 'standard' | undefined;
-  let pilot = false;
-
-  // Always load config for pilot; use CLI flags for tier override
+  // Resolve tier: CLI flag > config file > default ('standard')
   try {
     const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
     loadEnv(cwd);
@@ -660,7 +644,6 @@ export async function hooksCommand(opts: {
       if (!opts.strict && !opts.standard) {
         tier = config.hooks?.tier;
       }
-      pilot = !!config.pilot;
     }
   } catch (err) {
     if (process.env.TOTEM_DEBUG) {
@@ -674,7 +657,7 @@ export async function hooksCommand(opts: {
     tier = 'standard';
   }
 
-  const result = installHooksNonInteractive(cwd, opts.force, { tier, pilot });
+  const result = installHooksNonInteractive(cwd, opts.force, { tier });
 
   if (!result) {
     // Hook manager detected — guidance already printed by installHooksNonInteractive

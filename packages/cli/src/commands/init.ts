@@ -845,10 +845,7 @@ export async function initCommand(options?: {
 
       // --- Always run: enforcement hooks (pre-commit + pre-push) ---
       const hookTier = options?.strict ? 'strict' : undefined;
-      const enforcement = await installEnforcementHooks(cwd, rl, {
-        tier: hookTier,
-        pilot: options?.pilot,
-      });
+      const enforcement = await installEnforcementHooks(cwd, rl, { tier: hookTier });
       if (enforcement.preCommit === 'installed' || enforcement.preCommit === 'appended') {
         summary.push({
           file: '.git/hooks/pre-commit',
