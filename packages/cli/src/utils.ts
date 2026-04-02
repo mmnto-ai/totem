@@ -2,6 +2,8 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import dotenv from 'dotenv';
+
 import type { CustomSecret, SearchResult, TotemConfig } from '@mmnto/totem';
 import {
   CONFIG_FILES,
@@ -27,24 +29,14 @@ export const GH_TIMEOUT_MS = 15_000;
 
 /**
  * Load environment variables from .env file (does not override existing).
+ * Uses the `dotenv` library for robust parsing of inline comments, quoted
+ * values containing `#`, and other edge cases.
  */
 export function loadEnv(cwd: string): void {
   const envPath = path.join(cwd, '.env');
   if (!fs.existsSync(envPath)) return;
 
-  const content = fs.readFileSync(envPath, 'utf-8');
-  for (const rawLine of content.split('\n')) {
-    const line = rawLine.replace(/\r$/, '');
-    const match = line.match(/^([^#=]+)=(.*)$/);
-    if (match) {
-      const key = match[1]!.trim();
-      const raw = match[2]!.trim();
-      const value = raw.replace(/^(['"])(.*)(\1)$/, '$2');
-      if (!process.env[key]) {
-        process.env[key] = value;
-      }
-    }
-  }
+  dotenv.config({ path: envPath });
 }
 
 // Re-export from core — canonical list of config file names

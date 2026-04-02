@@ -6528,6 +6528,19 @@
       "compiledAt": "2026-03-30T22:42:31.004Z",
       "createdAt": "2026-03-30T22:42:31.004Z",
       "severity": "warning"
+    },
+    {
+      "lessonHash": "c797720e7d2a03e3",
+      "lessonHeading": "Pipeline 5: observation from shield",
+      "pattern": "export\\s+function\\s+loadEnv\\(cwd:\\s+string\\):\\s+void\\s+\\{",
+      "message": "DRY violation: The `loadEnv` function is duplicated exactly in `packages/cli/src/utils.ts` and `packages/mcp/src/context.ts`. Consider extracting this to a shared core utility (e.g., `@mmnto/totem`).",
+      "engine": "regex",
+      "severity": "warning",
+      "fileGlobs": [
+        "**/*.ts"
+      ],
+      "compiledAt": "2026-04-02T00:31:34.407Z",
+      "createdAt": "2026-04-02T00:31:34.407Z"
     }
   ],
   "nonCompilable": [

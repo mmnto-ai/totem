@@ -6,6 +6,7 @@ import { log } from '../ui.js';
 import type { RetrievedContext } from './spec.js';
 import {
   assemblePrompt,
+  expandSpecQuery,
   MAX_LESSON_CHARS,
   MAX_LESSONS,
   retrieveContext,
@@ -294,5 +295,27 @@ describe('retrieveContext partitioning', () => {
     // Lessons appear in their own section, not mixed with specs
     const specSection = result.split('RELATED SPECS & ADRs')[1]?.split('===')[0] ?? '';
     expect(specSection).not.toContain('lessons.md');
+  });
+});
+
+// ─── expandSpecQuery (#1016) ────────────────────────────
+
+describe('expandSpecQuery', () => {
+  it('appends test keywords when issue mentions testing', () => {
+    const result = expandSpecQuery('verify rule examples');
+    expect(result).toContain('rule-tester');
+    expect(result).toContain('testRule');
+    expect(result).toContain('infrastructure');
+  });
+
+  it('does not modify unrelated queries', () => {
+    const query = 'add new CLI command for status';
+    expect(expandSpecQuery(query)).toBe(query);
+  });
+
+  it('is case-insensitive', () => {
+    const result = expandSpecQuery('Fix TEST infrastructure');
+    expect(result).toContain('rule-tester');
+    expect(result).toContain('fixture');
   });
 });
