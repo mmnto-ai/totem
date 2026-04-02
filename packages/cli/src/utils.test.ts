@@ -11,6 +11,7 @@ import {
   formatLessonSection,
   formatResults,
   getSystemPrompt,
+  isGlobalConfigPath,
   loadConfig,
   loadEnv,
   partitionLessons,
@@ -257,6 +258,71 @@ describe('resolveConfigPath', () => {
     fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), 'export default {}');
     fs.writeFileSync(path.join(tmpDir, 'totem.yaml'), 'targets: []\n');
     expect(resolveConfigPath(tmpDir)).toBe(path.join(tmpDir, 'totem.config.ts'));
+  });
+
+  it('falls back to ~/.totem/ when no local config exists', () => {
+    const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-home-'));
+    const globalDir = path.join(fakeHome, '.totem');
+    fs.mkdirSync(globalDir, { recursive: true });
+    fs.writeFileSync(path.join(globalDir, 'totem.config.ts'), 'export default {}', 'utf-8');
+
+    try {
+      const result = resolveConfigPath(tmpDir, fakeHome);
+      expect(result).toBe(path.join(globalDir, 'totem.config.ts'));
+    } finally {
+      cleanTmpDir(fakeHome);
+    }
+  });
+
+  it('prefers local config over global', () => {
+    const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-home-'));
+    const globalDir = path.join(fakeHome, '.totem');
+    fs.mkdirSync(globalDir, { recursive: true });
+    fs.writeFileSync(path.join(globalDir, 'totem.config.ts'), 'export default {}', 'utf-8');
+
+    // Also create local config
+    fs.writeFileSync(path.join(tmpDir, 'totem.yaml'), 'targets: []\n', 'utf-8');
+
+    try {
+      const result = resolveConfigPath(tmpDir, fakeHome);
+      expect(result).toBe(path.join(tmpDir, 'totem.yaml'));
+    } finally {
+      cleanTmpDir(fakeHome);
+    }
+  });
+
+  it('throws when neither local nor global config exists with updated hint', () => {
+    const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-home-'));
+    try {
+      expect(() => resolveConfigPath(tmpDir, fakeHome)).toThrow('No Totem configuration found');
+      try {
+        resolveConfigPath(tmpDir, fakeHome);
+      } catch (err) {
+        expect(err).toHaveProperty('recoveryHint');
+        expect((err as { recoveryHint: string }).recoveryHint).toContain('--global');
+      }
+    } finally {
+      cleanTmpDir(fakeHome);
+    }
+  });
+});
+
+describe('isGlobalConfigPath', () => {
+  it('returns true for paths under ~/.totem/', () => {
+    const fakeHome = '/fake/home';
+    expect(isGlobalConfigPath('/fake/home/.totem/totem.config.ts', fakeHome)).toBe(true);
+    expect(isGlobalConfigPath('/fake/home/.totem/totem.yaml', fakeHome)).toBe(true);
+  });
+
+  it('returns false for local project paths', () => {
+    const fakeHome = '/fake/home';
+    expect(isGlobalConfigPath('/my/project/totem.config.ts', fakeHome)).toBe(false);
+    expect(isGlobalConfigPath('/other/dir/totem.yaml', fakeHome)).toBe(false);
+  });
+
+  it('returns false for directories sharing the prefix (e.g. ~/.totem-foo/)', () => {
+    const fakeHome = '/fake/home';
+    expect(isGlobalConfigPath('/fake/home/.totem-foo/totem.config.ts', fakeHome)).toBe(false);
   });
 });
 

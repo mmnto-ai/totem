@@ -8,13 +8,15 @@ Totem is a **standard library for codebase governance** — zero-telemetry infra
 
 _Reduce adoption friction so totem disappears into the developer's workflow._
 
-- **Pilot Mode (#949):** Observe-only onboarding — run enforcement in advisory mode before blocking.
-- **Enforcement Tiers (#987):** Configurable strictness levels (permissive → strict) for gradual ramp-up.
+- ~~**Pilot Mode (#949):**~~ Time-bounded warn-only hooks (14 days / 50 pushes). Shipped.
+- ~~**Enforcement Tiers (#987):**~~ Strict tier + agent auto-detection. Shipped.
+- ~~**.env Parser (#1114):**~~ Hardened with dotenv. Shipped.
+- ~~**Spec Infrastructure (#1016):**~~ Query expansion for test keywords. Shipped.
+- **Proactive Language Packs (#1152):** Ship thick TypeScript/Shell/Node.js baseline rules sourced from `@typescript-eslint`, ShellCheck, and OWASP. Goal: `totem lint` catches 90% of what `totem review` catches.
+- **"Missed Caught" Audit (#1153):** Empirical validation — categorize 90 days of bot findings by detection tier.
 - **Concurrent Dispatch (#1053):** Parallel agent task execution for faster review cycles.
 - **Solo Dev Audit (#1039):** End-to-end experience review for single-developer repos.
 - **Docs Scope (#1033):** Fix `totem wrap` doc sync reliability.
-- **.env Parser (#1114):** Correct environment variable parsing edge cases.
-- **Spec Infrastructure (#1016):** Spec command misses infrastructure context.
 - **Model-Specific Adapters (Strategy #62):** Prompt tuning per LLM provider.
 
 ---

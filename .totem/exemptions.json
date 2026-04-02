@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "exemptions": [
+    {
+      "patternId": "shield:38ee749c3f840c1c755e6423fed0448ead8683b58b2debbf303cf598ebe991f1",
+      "label": "array captureobservationrules defined filtered filteredverdict",
+      "reason": "Auto-promoted after 3 false positives",
+      "promotedAt": "2026-04-01T05:30:54.255Z",
+      "promotedBy": "auto",
+      "sampleMessages": [
+        "Potential ReferenceError: `filtered` is passed to `captureObservationRules`, but it may not be defined in this scope. If the intended variable is the findings array from `filteredVerdict`, it should be `filteredVerdict.findings`.",
+        "Potential ReferenceError: `filtered` is passed to `captureObservationRules`, but it may not be defined in this scope. If the intended variable is the findings array from `filteredVerdict`, it should be `filteredVerdict.findings`.",
+        "Potential ReferenceError: `filtered` is passed to `captureObservationRules`, but it may not be defined in this scope. If the intended variable is the findings array from `filteredVerdict`, it should be `filteredVerdict.findings`."
+      ]
+    }
+  ]
+}

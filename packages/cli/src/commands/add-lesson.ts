@@ -8,7 +8,8 @@ export async function addLessonCommand(lessonArg?: string): Promise<void> {
   const readline = await import('node:readline/promises');
   const { generateLessonHeading, writeLessonFile } = await import('@mmnto/totem'); // totem-ignore
   const { log } = await import('../ui.js');
-  const { IS_WIN, loadConfig, loadEnv, resolveConfigPath, sanitize } = await import('../utils.js');
+  const { IS_WIN, isGlobalConfigPath, loadConfig, loadEnv, resolveConfigPath, sanitize } =
+    await import('../utils.js');
 
   function detectSyncCommand(cwd: string): { cmd: string; args: string[] } {
     if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) {
@@ -27,6 +28,14 @@ export async function addLessonCommand(lessonArg?: string): Promise<void> {
 
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
+  if (isGlobalConfigPath(configPath)) {
+    const { TotemConfigError } = await import('@mmnto/totem');
+    throw new TotemConfigError(
+      'Cannot add lessons without a local project.',
+      "Run 'totem init' to create a local .totem/ directory first.",
+      'CONFIG_MISSING',
+    );
+  }
   loadEnv(cwd);
   const config = await loadConfig(configPath);
 

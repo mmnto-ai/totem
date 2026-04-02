@@ -17,6 +17,7 @@ import {
   detectEmbeddingTier,
   detectReflexStatus,
   generateConfig,
+  initCommand,
   installBaselineLessons,
   REFLEX_VERSION,
   scaffoldClaudeHooks,
@@ -992,5 +993,82 @@ describe('generateConfigForFormat', () => {
     const { content, filename } = await generateConfigForFormat('ts', targets, 'none', tmpDir);
     expect(filename).toBe('totem.config.ts');
     expect(content).toContain('import type');
+  });
+});
+
+// ─── init --global ──────────────────────────────────
+
+describe('initCommand --global', () => {
+  let fakeHome: string;
+
+  beforeEach(() => {
+    fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-global-init-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(fakeHome);
+  });
+
+  it('creates ~/.totem/ directory and config', async () => {
+    await initCommand({ global: true, _homeDir: fakeHome });
+
+    const globalDir = path.join(fakeHome, '.totem');
+    expect(fs.existsSync(globalDir)).toBe(true);
+    expect(fs.existsSync(path.join(globalDir, 'totem.config.ts'))).toBe(true);
+  });
+
+  it('installs universal baseline rules', async () => {
+    await initCommand({ global: true, _homeDir: fakeHome });
+
+    const rulesPath = path.join(fakeHome, '.totem', 'compiled-rules.json');
+    expect(fs.existsSync(rulesPath)).toBe(true);
+
+    const content = JSON.parse(fs.readFileSync(rulesPath, 'utf-8'));
+    expect(content.version).toBe(1);
+    expect(Array.isArray(content.rules)).toBe(true);
+    expect(content.rules.length).toBeGreaterThan(0);
+  });
+
+  it('warns if profile already exists', async () => {
+    const globalDir = path.join(fakeHome, '.totem');
+    fs.mkdirSync(globalDir, { recursive: true });
+    fs.writeFileSync(path.join(globalDir, 'totem.config.ts'), 'export default {}', 'utf-8');
+    fs.writeFileSync(
+      path.join(globalDir, 'compiled-rules.json'),
+      '{"version":1,"rules":[]}',
+      'utf-8',
+    );
+
+    // Should not throw, just warn
+    await initCommand({ global: true, _homeDir: fakeHome });
+
+    // Config should not be overwritten
+    const content = fs.readFileSync(path.join(globalDir, 'totem.config.ts'), 'utf-8');
+    expect(content).toBe('export default {}');
+  });
+
+  it('recovers from half-initialized profile (config exists but no rules)', async () => {
+    const globalDir = path.join(fakeHome, '.totem');
+    fs.mkdirSync(globalDir, { recursive: true });
+    fs.writeFileSync(path.join(globalDir, 'totem.config.ts'), 'export default {}', 'utf-8');
+    // No compiled-rules.json — simulate partial init failure
+
+    await initCommand({ global: true, _homeDir: fakeHome });
+
+    // compiled-rules.json should now exist
+    expect(fs.existsSync(path.join(globalDir, 'compiled-rules.json'))).toBe(true);
+  });
+
+  it('config sets totemDir to "." with valid schema', async () => {
+    await initCommand({ global: true, _homeDir: fakeHome });
+
+    const configContent = fs.readFileSync(
+      path.join(fakeHome, '.totem', 'totem.config.ts'),
+      'utf-8',
+    );
+    expect(configContent).toContain("totemDir: '.'");
+    expect(configContent).not.toContain('embedding');
+    expect(configContent).toContain('targets:');
+    expect(configContent).toContain("glob: '.totem/lessons/*.md'");
   });
 });
