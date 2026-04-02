@@ -170,7 +170,8 @@ export async function withPilotMode(
     return 0;
   }
 
-  // Non-zero: log violation, warn instead of block
+  // Non-zero: log violation, warn instead of block — but still consume budget
+  state.pushCount += 1;
   state.violations.push({
     timestamp: new Date().toISOString(),
     hook: hookName,

@@ -649,26 +649,29 @@ export async function hooksCommand(opts: {
   // Resolve tier + pilot: CLI flag > config file > default ('standard')
   let tier: 'strict' | 'standard' | undefined;
   let pilot = false;
+
+  // Always load config for pilot; use CLI flags for tier override
+  try {
+    const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
+    loadEnv(cwd);
+    const configPath = resolveConfigPath(cwd);
+    if (configPath) {
+      const config = await loadConfig(configPath);
+      if (!opts.strict && !opts.standard) {
+        tier = config.hooks?.tier;
+      }
+      pilot = !!config.pilot;
+    }
+  } catch (err) {
+    if (process.env.TOTEM_DEBUG) {
+      console.error('[Totem] Could not load config for tier resolution:', err);
+    }
+  }
+
   if (opts.strict) {
     tier = 'strict';
   } else if (opts.standard) {
     tier = 'standard';
-  } else {
-    // Fall back to config file
-    try {
-      const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
-      loadEnv(cwd);
-      const configPath = resolveConfigPath(cwd);
-      if (configPath) {
-        const config = await loadConfig(configPath);
-        tier = config.hooks?.tier;
-        pilot = !!config.pilot;
-      }
-    } catch (err) {
-      if (process.env.TOTEM_DEBUG) {
-        console.error('[Totem] Could not load config for tier resolution:', err);
-      }
-    }
   }
 
   const result = installHooksNonInteractive(cwd, opts.force, { tier, pilot });
