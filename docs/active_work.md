@@ -1,87 +1,64 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.7.1` with 1,032 lessons, 379 compiled rules, and 2,090 tests. The active milestone themes focus on pipeline integrity, auto-context injection, and rule fitness.
+The project is at release `@mmnto/cli@1.9.0` with ~2,389 tests across core, CLI, and MCP packages. The 1.9.0 "Pipeline Engine" milestone is complete — all five rule-creation pipelines shipped. The next milestone focuses on adoption friction.
 
-Recent completed work (1.7.0–1.7.1):
+### Current: 1.10.0 — The Invisible Exoskeleton
 
-- **Agent Context Engineering (1.7.1):**
-  - Added structured JSON checkpoints to `totem handoff` for programmatic agent context loading.
-  - Implemented `SessionStart` Auto-Context V2 with vector/FTS search fallback.
-  - Created `totem project describe` CLI command and MCP tool for agent repo discovery.
-- **CLI Redesign & Standard Library (1.7.0):**
-  - Completed noun-verb hierarchical restructuring for commands (e.g., `totem rule list`).
-  - Added global `--json` output support to all commands for easier scriptability.
-  - Help text redesigned with logical capability groupings and LLM badges.
-- **Actor-Aware Enforcement (1.7.0):**
-  - Ripped out all stateful flag files (`.lint-passed`, `.shield-passed`).
-  - Git `pre-push` hook is now strictly deterministic (`lint` + `verify-manifest`).
-  - `totem review` (formerly shield) is officially positioned as an optional "Reference Implementation" driven by a Content Hash lock at the MCP boundary.
-- **Agent Governance:**
-  - Rule unit testing enables inline hit and miss verification at compile time.
-  - Forbidden native module rules enforce secure module usage.
-  - A new standard library includes safe execution and git adapter functions.
-- **Codebase Audit Remediation:**
-  - Error cause chains span the error hierarchy.
-  - Injectable loggers replace console warnings in core.
-  - Phase-gate hooks now block operations instead of warning.
-  - Line endings are normalized via git attributes and formatting rules.
-- **Self-Healing Loop:**
-  - Append-only telemetry captures system events.
-  - Autonomous rule downgrading mitigates noisy rules.
-  - Triage inbox is categorized with severity mapping.
-  - Review-learn extracts lessons from resolved bot findings.
-- **Shield Hardening:**
-  - **Context & Resiliency:** Prompts include full file content for small changed files. Hook paths resolve from the git root.
-  - **Execution Constraints:** Commands use forced pipe mode with type-safe return guards. Hook regex strictly matches git subcommands.
-  - **Parsing & Overrides:** Audited bypass flags handle false positives. Parsing uses reliable tools with graceful fallbacks.
-  - **Environment Isolation:** Disabled AI prompts on direct invocations. Excluded worktrees from formatting rules.
-- **Ecosystem:**
-  - Findings model unifies rule violations and deduplicates results.
-  - User-defined secrets implement data loss prevention at AI boundaries.
-  - Baseline lessons establish language packs for Python, Rust, and Go.
-  - Strategy submodules run isolated operational instances.
+Theme: reduce friction for new adopters and solo developers.
 
-### Prioritized Roadmap
+- **#949** — Pilot mode (gradual onboarding without full enforcement)
+- **#987** — Enforcement tiers (configurable strictness levels)
+- **#1033** — Docs scope (fix `totem wrap` doc sync reliability)
+- **#1053** — Concurrent dispatch (parallel agent task execution)
+- **#1039** — Solo dev experience audit
+- **#1114** — .env parser fix
+- **#1016** — Spec misses infrastructure context
+- Strategy **#62** — Model-specific prompt adapters
 
-**Pipeline Integrity**
+### Next: 1.11.0 — The Import Engine
 
-- Lesson logic linter enables semantic validation for scope, severity, and exclusions.
-- Incremental shield validation performs diff-only re-checks after minor fixes.
-- Triage and review-learn commands skip findings outside the diff range.
+Theme: rule portability across tools and teams.
 
-**Triage Phases 2–4**
+- **#1138** — ESLint flat config import support
+- **#1139** — Totem-to-totem import (cross-repo rule sharing)
+- **#1140** — ESLint `no-restricted-syntax`/`properties` handlers
+- **#1131** — Rule refinement from false-positive scan alerts
+- **#1132** — Auto-detect string-content matches for AST upgrade
+- **#1059** — Pack distribution
+- Strategy **#50** — GHAS/SARIF extraction
+- Strategy **#51** — Lint warning extraction
 
-- Phase 2: Agent dispatch integration for atomic triage fixes.
-- Phase 3: Interactive command-line interface prompts for pull request triage.
-- Phase 4: Lesson extraction pipeline from bot to lesson loop (blocked).
+### Strategy Research (not release-gated)
 
-**Enforcement & DX**
+- **#6** — Trap corpus (adversarial test fixtures)
+- **#17** — Eval harness
+- **#63** — Spec efficacy measurement
 
-- Exemption engine unifies false positive tracking.
-- Unified enforcement commands support check and status workflows.
-- System auto-tickets deferred bot review items.
+### Recently Completed
 
-### Completed (1.6.0–1.6.2 milestones)
+**1.9.0 — Pipeline Engine (2026-04-01)**
 
-- **Compiler & DX (1.6.2):**
-  - Shipped compiler developer experience improvements.
-  - Stress-tested lessons, compiled rules, wiki content, and strategy updates.
-- **Pipeline Stability (1.6.1):**
-  - Deployed pipeline fixes.
-  - Corrected shield flag auto-refresh behavior on pre-push hooks.
-- **Agent Governance (1.6.0):**
-  - Integrated rule unit testing.
-  - Shipped forbidden native module lessons.
-  - Implemented test audit global state.
-- **Core Enhancements (1.6.0):**
-  - Added error cause chains and migrated standard library functions to core.
-  - Introduced dependency-injected loggers and test coverage.
-- **Self-Healing & Quality (1.6.0):**
-  - Finalized phase-gate hardening and telemetry logs.
-  - Completed the first triage phase and safe-regex validation.
-- **Refactoring & Clean-up (1.6.0):**
-  - Deprecated obsolete shield contexts.
-  - Stripped citation references during ingest.
-  - Addressed dynamic import scoping.
+Five pipelines for rule creation, from zero-LLM to fully autonomous:
 
-<!-- No blocked items except Phase 4, which depends on Phases 2-3. -->
+- **P1 — Manual scaffolding (#854):** `totem rule scaffold <id>` with auto-generated test fixtures.
+- **P2 — LLM-generated:** Existing `totem compile` pipeline for prose-to-pattern conversion.
+- **P3 — Example-based compilation (#749):** Bad/Good code snippets compiled to rules with self-verification.
+- **P4 — ESLint/Semgrep import (#750):** `totem import` translates external tool configs to totem rules. Zero LLM.
+- **P5 — Observation auto-capture (#751):** Shield findings automatically staged as warning-severity rules.
+
+Also shipped: docs/wiki refresh (#1145), playground overhaul (totem-playground#14), compile-worker cleanup (#1146).
+
+**1.7.x — Agent Context Engineering (2026-03-29–30)**
+
+- **SessionStart Auto-Context V2 (#1110):** Vector/FTS search fallback injects strategy into agent context on boot.
+- **Project Discovery (#1116):** `totem describe` CLI command and MCP tool for agent repo understanding.
+- **Structured Checkpoints (#914):** `totem handoff` emits Zod-validated JSON alongside Markdown.
+- **Rule Garbage Collection (#1040):** `totem doctor --pr` archives stale compiled rules with adaptive decay.
+- **Compile Progress (#894):** Throughput-based ETA with jittered exponential backoff on rate limits.
+
+**1.7.0 — Developer Experience (2026-03-29)**
+
+- Noun-verb CLI restructuring, global `--json` output, redesigned help taxonomy.
+- Stateless gate architecture: ripped out flag files, Git hooks are purely deterministic.
+- Actor-aware enforcement: Content Hash Lock at the MCP boundary (ADR-083).
+- Sensors vs. Actuators product positioning (ADR-081).
