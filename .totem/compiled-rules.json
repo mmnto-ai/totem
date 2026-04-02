@@ -6563,6 +6563,22 @@
         "!**/*.spec.js"
       ],
       "severity": "warning"
+    },
+    {
+      "lessonHash": "64f919558d8ad756",
+      "lessonHeading": "Ensure all thrown errors, including those for missing",
+      "message": "All thrown errors must include the '[Totem Error]' prefix for consistent reporting.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "throw\\s+new\\s+\\w*Error\\(\\s*['\"\\`](?!\\s*\\[Totem Error\\])",
+      "compiledAt": "2026-04-02T21:26:40.866Z",
+      "createdAt": "2026-04-02T21:26:40.866Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ]
     }
   ],
   "nonCompilable": [
