@@ -335,6 +335,31 @@ if [ -n "$TOTEM_CMD" ]; then
   fi
 ${shieldBlock}
 fi
+
+# Format check — catch unformatted files before CI does
+# Only runs if the project defines a format:check script (no workflow opinions)
+# Detects package manager from lockfile presence
+if [ -f "package.json" ]; then
+  FORMAT_CMD=""
+  if [ -f "pnpm-lock.yaml" ] && command -v pnpm >/dev/null 2>&1; then
+    FORMAT_CMD="pnpm run"
+  elif [ -f "yarn.lock" ] && command -v yarn >/dev/null 2>&1; then
+    FORMAT_CMD="yarn run"
+  elif [ -f "bun.lockb" ] || [ -f "bun.lock" ]; then
+    command -v bun >/dev/null 2>&1 && FORMAT_CMD="bun run"
+  elif command -v npm >/dev/null 2>&1; then
+    FORMAT_CMD="npm run"
+  fi
+
+  if [ -n "$FORMAT_CMD" ] && node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['format:check'] ? 0 : 1)" 2>/dev/null; then
+    if $FORMAT_CMD format:check > /dev/null 2>&1; then
+      : # pass
+    else
+      echo "[totem] ❌ Formatting check failed. Run '$FORMAT_CMD format' to fix." >&2
+      exit 1
+    fi
+  fi
+fi
 `;
 }
 

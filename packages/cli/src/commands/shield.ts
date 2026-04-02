@@ -605,8 +605,11 @@ export async function captureObservationRules(
   const {
     deduplicateObservations,
     generateObservationRule,
+    generateOutputHash,
     loadCompiledRulesFile,
+    readCompileManifest,
     saveCompiledRulesFile,
+    writeCompileManifest,
   } = await import('@mmnto/totem');
 
   const candidates: import('@mmnto/totem').CompiledRule[] = [];
@@ -650,6 +653,17 @@ export async function captureObservationRules(
     existing.rules.push(...newRules);
     saveCompiledRulesFile(rulesPath, existing);
     log.info(TAG, `Pipeline 5: captured ${newRules.length} observation rule(s)`);
+
+    // Re-hash the manifest so verify-manifest stays in sync (#1155)
+    const resolvedTotemDir = path.join(configRoot ?? cwd, config.totemDir);
+    const manifestPath = path.join(resolvedTotemDir, 'compile-manifest.json');
+    try {
+      const manifest = readCompileManifest(manifestPath);
+      manifest.output_hash = generateOutputHash(rulesPath);
+      writeCompileManifest(manifestPath, manifest);
+    } catch {
+      // Non-fatal — manifest may not exist yet (e.g. first run before compile)
+    }
   } catch (err) {
     // Non-fatal — auto-capture should never crash the shield command
     if (process.env['TOTEM_DEBUG'] === '1') {
