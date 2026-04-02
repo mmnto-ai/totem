@@ -144,7 +144,7 @@ function tryParseJson(llmOutput: string): ExtractedLesson[] | null {
     // Returning [] (not null) prevents regex fallback from accepting
     // injected ---LESSON--- content after JSON was already found.
     return lessons;
-  } catch {
+  } catch (_err) {
     return null;
   }
 }
