@@ -7,18 +7,21 @@ The project is at release `@mmnto/cli@1.9.0` with ~2,477 tests across core, CLI,
 Theme: reduce adoption friction for new adopters and solo developers.
 
 **Shipped (merged to main, pending release):**
+
 - ~~**#949**~~ — Pilot mode (warn-only hooks, 14 days / 50 pushes)
 - ~~**#987**~~ — Enforcement tiers (strict + agent auto-detection)
 - ~~**#1114**~~ — .env parser hardened with dotenv
 - ~~**#1016**~~ — Spec query expansion for test infrastructure
 
 **In Progress:**
+
 - **#1152** — Proactive language packs (thick TypeScript/Shell/Node.js baseline rules)
   - **#1153** — "Missed Caught" audit (Phase 0 — categorize historical bot findings)
   - Deep research: DR-57 (TypeScript/ESLint), DR-58 (ShellCheck/POSIX), DR-59 (Node.js Security)
   - Proposals: 210 (Language Packs), 211 (Review Gate Graduation)
 
 **Remaining:**
+
 - **#1033** — Docs scope (fix `totem wrap` doc sync reliability)
 - **#1053** — Concurrent dispatch (parallel agent task execution)
 - **#1039** — Solo dev experience audit
