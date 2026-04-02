@@ -6532,25 +6532,24 @@
     {
       "lessonHash": "2266fc0dfe824f24",
       "lessonHeading": "Static top-level imports from heavy internal packages delay",
+      "pattern": "import\\s+(?!type\\s+).*from\\s+['\"](@|(\\.\\./){3,})",
       "message": "Static top-level imports of internal packages delay CLI startup. Use dynamic await imports inside the command function instead to ensure dependencies are only loaded when needed.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "import\\s+(?!type\\s+).*from\\s+['\"](@|(\\.\\./){3,})",
       "compiledAt": "2026-04-02T00:34:00.806Z",
       "createdAt": "2026-04-02T00:34:00.806Z",
       "fileGlobs": [
         "**/packages/cli/src/commands/**/*.ts",
         "!**/*.test.ts",
         "!**/*.spec.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "3be97bd9147e7562",
       "lessonHeading": "GitHub API responses often contain \\r\\n line endings, so",
+      "pattern": "\\.split\\(\\s*(['\"]\\\\n['\"]|/\\\\n/[gimuy]*)\\s*\\)",
       "message": "GitHub API responses often contain \\r\\n line endings; use /\\r?\\n/ in dividers to prevent parsing failures on Windows-style or mixed line endings.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.split\\(\\s*(['\"]\\\\n['\"]|/\\\\n/[gimuy]*)\\s*\\)",
       "compiledAt": "2026-04-02T00:35:19.363Z",
       "createdAt": "2026-04-02T00:35:19.363Z",
       "fileGlobs": [
@@ -6562,7 +6561,8 @@
         "!**/*.test.js",
         "!**/*.spec.ts",
         "!**/*.spec.js"
-      ]
+      ],
+      "severity": "warning"
     }
   ],
   "nonCompilable": [
