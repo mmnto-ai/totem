@@ -9,6 +9,11 @@ import { getErrorMessage } from './errors.js';
 
 // ─── Types ───────────────────────────────────────────
 
+/**
+ * Fixture for verifying compiled rule patterns against examples.
+ * Used by the rule testing infrastructure to validate hits (fail lines)
+ * and misses (pass lines) for regex and AST-grep rules.
+ */
 export interface RuleTestFixture {
   /** lessonHash of the rule to test */
   ruleHash: string;
@@ -130,6 +135,11 @@ function linesToAdditions(lines: string[], filePath: string): DiffAddition[] {
   }));
 }
 
+/**
+ * Existing test infrastructure for compiled rule verification.
+ * Validates regex patterns against hit/miss examples from fixture files.
+ * Use this instead of building new verification functions.
+ */
 export function testRule(rule: CompiledRule, fixture: RuleTestFixture): RuleTestResult {
   const result: RuleTestResult = {
     ruleHash: rule.lessonHash,

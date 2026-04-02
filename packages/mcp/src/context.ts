@@ -1,6 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import dotenv from 'dotenv';
+
 import type { Embedder, TotemConfig } from '@mmnto/totem';
 import {
   createEmbedder,
@@ -33,22 +35,11 @@ export async function reconnectStore(): Promise<void> {
 /**
  * Load environment variables from .env file (does not override existing).
  */
-function loadEnv(cwd: string): void {
+export function loadEnv(cwd: string): void {
   const envPath = path.join(cwd, '.env');
   if (!fs.existsSync(envPath)) return;
 
-  const content = fs.readFileSync(envPath, 'utf-8');
-  for (const line of content.split('\n')) {
-    const match = line.match(/^([^#=]+)=(.*)$/);
-    if (match) {
-      const key = match[1]!.trim();
-      const raw = match[2]!.trim();
-      const value = raw.replace(/^(['"])(.*)(\1)$/, '$2');
-      if (!process.env[key]) {
-        process.env[key] = value;
-      }
-    }
-  }
+  dotenv.config({ path: envPath });
 }
 
 /**

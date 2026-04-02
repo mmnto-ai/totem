@@ -84,6 +84,19 @@ function buildSearchQuery(issue: StandardIssue): string {
   return `${issue.title} ${labels} ${bodySnippet}`.trim();
 }
 
+const TEST_KEYWORD_RE =
+  /\b(test(?:s|ing)?|verif(?:y|ies|ication)|example(?:s)?|fixture(?:s)?|hits|misses|rule-?tester)\b/i;
+const TEST_EXPANSION = ' test testing infrastructure fixture verification testRule rule-tester';
+
+/**
+ * Expand a spec search query with test-infrastructure keywords when the
+ * original query mentions testing concepts.  This helps the vector search
+ * surface existing helpers like `rule-tester.ts`.
+ */
+export function expandSpecQuery(query: string): string {
+  return TEST_KEYWORD_RE.test(query) ? query + TEST_EXPANSION : query;
+}
+
 // ─── Input types ────────────────────────────────────────
 
 interface ParsedInput {
@@ -260,7 +273,7 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   }
 
   // Retrieve context from LanceDB
-  const query = queryParts.join(' ');
+  const query = expandSpecQuery(queryParts.join(' '));
   log.info(TAG, 'Querying Totem index...');
   const context = await retrieveContext(
     query,
