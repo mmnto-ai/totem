@@ -1,33 +1,8 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.9.0` with ~2,502 tests across core, CLI, and MCP packages. Pilot mode (#949), enforcement tiers (#987), .env parser (#1114), and spec query expansion (#1016) have merged to main. Next patch release pending changeset.
+The project is at release `@mmnto/cli@1.10.0` (pending changeset/publish) with ~2,502 tests across core, CLI, and MCP packages and 407 compiled rules. The Invisible Exoskeleton milestone shipped in full. The Import Engine is now current work.
 
-### Current: 1.10.0 — The Invisible Exoskeleton
-
-Theme: reduce adoption friction for new adopters and solo developers.
-
-**Shipped (merged to main, pending release):**
-
-- ~~**#949**~~ — Pilot mode (warn-only hooks, 14 days / 50 pushes)
-- ~~**#987**~~ — Enforcement tiers (strict + agent auto-detection)
-- ~~**#1114**~~ — .env parser hardened with dotenv
-- ~~**#1016**~~ — Spec query expansion for test infrastructure
-- ~~**#1039**~~ — Solo dev experience audit (local extract, global init)
-
-**In Progress:**
-
-- **#1152** — Proactive language packs (thick TypeScript/Shell/Node.js baseline rules)
-  - **#1153** — "Missed Caught" audit (Phase 0 — categorize historical bot findings)
-  - Deep research: DR-57 (TypeScript/ESLint), DR-58 (ShellCheck/POSIX), DR-59 (Node.js Security)
-  - Proposals: 210 (Language Packs), 211 (Review Gate Graduation)
-
-**Remaining:**
-
-- **#1033** — Docs scope (fix `totem wrap` doc sync reliability)
-- **#1053** — Concurrent dispatch (parallel agent task execution)
-- Strategy **#62** — Model-specific prompt adapters
-
-### Next: 1.11.0 — The Import Engine
+### Current: 1.11.0 — The Import Engine
 
 Theme: rule portability across tools and teams.
 
@@ -37,16 +12,43 @@ Theme: rule portability across tools and teams.
 - **#1131** — Rule refinement from false-positive scan alerts
 - **#1132** — Auto-detect string-content matches for AST upgrade
 - **#1059** — Pack distribution
+- **#1152** — Proactive language packs (moved from 1.10.0)
+- **#1158** — Exemption dedup bug fix
 - Strategy **#50** — GHAS/SARIF extraction
 - Strategy **#51** — Lint warning extraction
 
-### Strategy Research (not release-gated)
+### Next: 1.12.0 — Foundation & Validation
 
-- **#6** — Trap corpus (adversarial test fixtures)
-- **#17** — Eval harness
-- **#63** — Spec efficacy measurement
+Theme: internal quality, test infrastructure, and deferred refactors.
+
+- **#999** — Orchestrator refactor (middleware pipeline)
+- **#997** — Centralize path resolution (WorkspaceContext)
+- **#1000** — Non-null assertion sweep
+- **#1008** — git.ts re-export compat review
+- **#1020** — Shield override validation tests
+- **#1053** — Concurrent agent dispatch (moved from 1.10.0)
+- **#1033** — Docs scope / `totem wrap` reliability (moved from 1.10.0)
+- Strategy **#6** — Adversarial trap corpus
+- Strategy **#17** — Governance eval harness
+- Strategy **#62** — Model-specific prompt adapters (moved from 1.10.0)
+- Strategy **#63** — Spec efficacy validation
 
 ### Recently Completed
+
+**1.10.0 — The Invisible Exoskeleton (2026-04-02)**
+
+Reduce adoption friction for new users and solo developers.
+
+- ~~**#949**~~ — Pilot mode (warn-only hooks, 14 days / 50 pushes)
+- ~~**#987**~~ — Enforcement tiers (strict + agent auto-detection)
+- ~~**#1114**~~ — .env parser hardened with dotenv
+- ~~**#1016**~~ — Spec query expansion for test infrastructure
+- ~~**#1039**~~ — Solo dev experience audit (local extract, global init)
+- ~~**#1153**~~ — "Missed Caught" audit (44% deterministic)
+- ~~**#1155**~~ — Manifest rehash after observation capture
+- ~~**#1156**~~ — Format check in pre-push hook
+- ~~**#1159**~~ — Extract refactor (split into per-mode modules)
+- ~~**#1161**~~ — `--yes` exit code fix
 
 **1.9.0 — Pipeline Engine (2026-04-01)**
 

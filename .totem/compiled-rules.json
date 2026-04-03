@@ -6567,10 +6567,9 @@
     {
       "lessonHash": "64f919558d8ad756",
       "lessonHeading": "Ensure all thrown errors, including those for missing",
+      "pattern": "throw\\s+new\\s+\\w*Error\\(\\s*['\"\\`](?!\\s*\\[Totem Error\\])",
       "message": "All thrown errors must include the '[Totem Error]' prefix for consistent reporting.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "throw\\s+new\\s+\\w*Error\\(\\s*['\"\\`](?!\\s*\\[Totem Error\\])",
       "compiledAt": "2026-04-02T21:26:40.866Z",
       "createdAt": "2026-04-02T21:26:40.866Z",
       "fileGlobs": [
@@ -6578,6 +6577,22 @@
         "**/*.tsx",
         "**/*.js",
         "**/*.jsx"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "29db0aebc515741d",
+      "lessonHeading": "Use process.exitCode for CLI exits",
+      "message": "Prefer setting process.exitCode over calling process.exit() to allow for graceful termination and cleanup.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "process.exit($CODE)",
+      "compiledAt": "2026-04-02T23:28:03.392Z",
+      "createdAt": "2026-04-02T23:28:03.392Z",
+      "fileGlobs": [
+        "packages/cli/src/**/*.ts",
+        "!**/*.test.ts"
       ]
     }
   ],
@@ -7259,6 +7274,7 @@
     "f99064d88d8c9b55",
     "08af488e5e38cf84",
     "977ae6a13859e055",
-    "4d8ec6f39597e2bf"
+    "4d8ec6f39597e2bf",
+    "5f50bd1627f666cc"
   ]
 }
