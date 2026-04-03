@@ -267,7 +267,9 @@ export async function installPostMergeHook(
 function buildAgentDetectionBlock(): string {
   return `# Agent detection — strict enforcement for AI agents
 is_agent=0
-if [ -n "$CLAUDE_CODE_AGENT" ] || [ -n "$CLAUDE_VERSION" ] || [ -n "$CURSOR_TRACE_ID" ]; then is_agent=1; fi`;
+if [ -n "$CLAUDE_CODE_AGENT" ] || [ -n "$CLAUDE_VERSION" ] || [ -n "$CURSOR_TRACE_ID" ]; then
+  is_agent=1
+fi`;
 }
 
 // ─── Enforcement hooks (pre-commit + pre-push) ──────────

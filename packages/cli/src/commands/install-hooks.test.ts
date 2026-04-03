@@ -880,9 +880,9 @@ describe('upgradePrePushHookIfNeeded', () => {
       if (firstIfFound && depth === 0 && /^fi\s*$/.test(trimmed)) {
         balancedCount++;
         endOffset = charOffset + line.length;
-        // New format has 3 top-level blocks; old format has 1.
-        // Stop after finding the block count that matches the canonical hook.
-        if (balancedCount >= 3) break;
+        // New format has 4 top-level blocks (agent detection, resolve, main, format check);
+        // old format has 1. Stop after finding the block count that matches the canonical hook.
+        if (balancedCount >= 4) break;
       }
       charOffset += line.length + 1; // +1 for the newline
     }
