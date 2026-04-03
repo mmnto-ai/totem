@@ -1,2 +1,8 @@
 # Force LF line endings for all text files (cross-platform consistency)
 * text=auto eol=lf
+
+# Shell scripts must stay LF — dash/sh on Linux chokes on CRLF
+*.sh text eol=lf
+tools/pre-push text eol=lf
+tools/pre-commit text eol=lf
+tools/post-merge text eol=lf
