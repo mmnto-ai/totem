@@ -1,6 +1,11 @@
 #!/bin/sh
 # [totem] pre-push hook — runs format check, lint, tests, and totem lint.
 
+# Skip in CI — release workflows handle their own quality gates
+if [ "${CI:-}" = "true" ]; then
+  exit 0
+fi
+
 echo "[totem] Running pre-push checks..."
 
 # Ensure temp files are cleaned up on any exit (success, failure, or interrupt)
