@@ -4,24 +4,7 @@ Totem is a **standard library for codebase governance** — zero-telemetry infra
 
 ---
 
-## Active: 1.10.0 — The Invisible Exoskeleton
-
-_Reduce adoption friction so totem disappears into the developer's workflow._
-
-- ~~**Pilot Mode (#949):**~~ Time-bounded warn-only hooks (14 days / 50 pushes). Shipped.
-- ~~**Enforcement Tiers (#987):**~~ Strict tier + agent auto-detection. Shipped.
-- ~~**.env Parser (#1114):**~~ Hardened with dotenv. Shipped.
-- ~~**Spec Infrastructure (#1016):**~~ Query expansion for test keywords. Shipped.
-- **Proactive Language Packs (#1152):** Ship thick TypeScript/Shell/Node.js baseline rules sourced from `@typescript-eslint`, ShellCheck, and OWASP. Goal: `totem lint` catches 90% of what `totem review` catches.
-- **"Missed Caught" Audit (#1153):** Empirical validation — categorize 90 days of bot findings by detection tier.
-- **Concurrent Dispatch (#1053):** Parallel agent task execution for faster review cycles.
-- **Solo Dev Audit (#1039):** End-to-end experience review for single-developer repos.
-- **Docs Scope (#1033):** Fix `totem wrap` doc sync reliability.
-- **Model-Specific Adapters (Strategy #62):** Prompt tuning per LLM provider.
-
----
-
-## Next: 1.11.0 — The Import Engine
+## Active: 1.11.0 — The Import Engine
 
 _Rule portability — bring governance from external tools and other totem instances._
 
@@ -31,12 +14,47 @@ _Rule portability — bring governance from external tools and other totem insta
 - **Rule Refinement (#1131):** Refine rules from false-positive scan alerts.
 - **AST Upgrade Detection (#1132):** Auto-detect string-content matches for AST patterns.
 - **Pack Distribution (#1059):** Shareable rule bundles.
+- **Proactive Language Packs (#1152):** Thick TypeScript/Shell/Node.js baseline rules from established best practices.
+- **Exemption Dedup Fix (#1158):** Fix duplicate sampleMessages in auto-promotion.
 - **GHAS/SARIF Extraction (Strategy #50):** Import from GitHub Advanced Security alerts.
 - **Lint Warning Extraction (Strategy #51):** Convert lint warnings into totem lessons.
 
 ---
 
+## Next: 1.12.0 — Foundation & Validation
+
+_Internal quality, research validation, and platform hardening._
+
+- **Orchestrator Refactor (#999):** Decompose runOrchestrator into middleware pipeline.
+- **Path Registry (#997):** Centralize path resolution via WorkspaceContext.
+- **Non-Null Sweep (#1000):** Replace `!` assertions with proper type narrowing.
+- **git.ts Compat Review (#1008):** Re-export backward compat on error paths.
+- **Shield Tests (#1020):** Exercise shieldCommand directly in validation tests.
+- **Concurrent Dispatch (#1053):** Parallel agent task execution.
+- **Docs Scope (#1033):** Fix `totem wrap` doc sync reliability.
+- **Trap Corpus (Strategy #6):** Adversarial eval suite for deterministic engine.
+- **Eval Harness (Strategy #17):** Governance eval tooling.
+- **Model Adapters (Strategy #62):** Model-specific prompt tuning.
+- **Spec Efficacy (Strategy #63):** Proving agent followed the spec.
+
+---
+
 ## Shipped
+
+### 1.10.0 — The Invisible Exoskeleton (2026-04-02)
+
+_Reduce adoption friction so totem disappears into the developer's workflow._
+
+- **Pilot Mode (#949):** Time-bounded warn-only hooks (14 days / 50 pushes).
+- **Enforcement Tiers (#987):** Strict tier + agent auto-detection via environment variables.
+- **.env Parser (#1114):** Hardened with dotenv.
+- **Spec Infrastructure (#1016):** Query expansion for test keywords + docstring enrichment.
+- **Solo Dev Experience (#1039):** `extract --local` for local git diffs. Global profile (`~/.totem/`) with `totem init --global`.
+- **"Missed Caught" Audit (#1153):** Historical bot findings categorized by detection tier (44% deterministic).
+- **Manifest Rehash (#1155):** Observation capture re-hashes compile manifest after mutation.
+- **Pre-Push Format Check (#1156):** Package-manager-agnostic `format:check` in hook template.
+- **Extract Refactor (#1159):** Split extract.ts into per-mode modules with unified assembler.
+- **Exit Code Fix (#1161):** `--yes` mode sets exitCode 1 when all lessons suspicious.
 
 ### 1.9.0 — Pipeline Engine (2026-04-01)
 

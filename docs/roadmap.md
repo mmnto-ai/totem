@@ -6,24 +6,7 @@ Totem is a **standard library for codebase governance** — deterministic primit
 
 ---
 
-## 1.10.0 — The Invisible Exoskeleton (Active)
-
-**Theme:** Reduce adoption friction for new users and solo developers.
-
-- [x] **Pilot Mode (#949):** Time-bounded warn-only hooks (14 days / 50 pushes). State tracked in `.totem/pilot-state.json`.
-- [x] **Enforcement Tiers (#987):** Strict tier with spec-completed check + shield gate. Agent auto-detection via environment variables.
-- [x] **.env Parser Fix (#1114):** Replaced custom regex with `dotenv` in CLI and MCP packages.
-- [x] **Spec Infrastructure (#1016):** Query expansion for test-related keywords + docstring enrichment.
-- [ ] **Proactive Language Packs (#1152):** Ship thick TypeScript/Shell/Node.js baseline rules from established best practices (DR-57/58/59). Goal: deterministic lint catches 90% of what LLM review catches.
-- [ ] **"Missed Caught" Audit (#1153):** Categorize 90 days of bot review findings by detection tier to validate language pack ROI.
-- [ ] **Docs Scope (#1033):** Fix `totem wrap` doc sync reliability.
-- [ ] **Concurrent Dispatch (#1053):** Parallel agent task execution.
-- [ ] **Solo Dev Audit (#1039):** End-to-end experience review for single-developer repos.
-- [ ] **Model-Specific Adapters (Strategy #62):** Prompt tuning per LLM provider.
-
----
-
-## 1.11.0 — The Import Engine (Next)
+## 1.11.0 — The Import Engine (Active)
 
 **Theme:** Rule portability — bring governance from external tools and other totem instances.
 
@@ -33,12 +16,47 @@ Totem is a **standard library for codebase governance** — deterministic primit
 - [ ] **Rule Refinement (#1131):** Refine rules from false-positive scan alerts.
 - [ ] **AST Upgrade Detection (#1132):** Auto-detect string-content matches eligible for AST patterns.
 - [ ] **Pack Distribution (#1059):** Shareable rule bundles.
+- [ ] **Proactive Language Packs (#1152):** Thick TypeScript/Shell/Node.js baseline rules from established best practices (moved from 1.10.0).
+- [ ] **Exemption Dedup Fix (#1158):** Fix duplicate sampleMessages in auto-promotion.
 - [ ] **GHAS/SARIF Extraction (Strategy #50):** Import rules from GitHub Advanced Security alerts.
 - [ ] **Lint Warning Extraction (Strategy #51):** Convert lint warnings into totem lessons.
 
 ---
 
+## 1.12.0 — Foundation & Validation (Next)
+
+**Theme:** Internal quality, research validation, and platform hardening.
+
+- [ ] **Orchestrator Refactor (#999):** Decompose runOrchestrator into middleware pipeline.
+- [ ] **Path Registry (#997):** Centralize path resolution via WorkspaceContext.
+- [ ] **Non-Null Sweep (#1000):** Replace `!` assertions with proper type narrowing.
+- [ ] **git.ts Compat Review (#1008):** Re-export backward compat on error paths.
+- [ ] **Shield Tests (#1020):** Exercise shieldCommand directly in validation tests.
+- [ ] **Concurrent Dispatch (#1053):** Parallel agent task execution (moved from 1.10.0).
+- [ ] **Docs Scope (#1033):** Fix `totem wrap` doc sync reliability (moved from 1.10.0).
+- [ ] **Trap Corpus (Strategy #6):** Adversarial eval suite for deterministic engine.
+- [ ] **Eval Harness (Strategy #17):** Governance eval tooling.
+- [ ] **Model Adapters (Strategy #62):** Model-specific prompt tuning (moved from 1.10.0).
+- [ ] **Spec Efficacy (Strategy #63):** Proving agent followed the spec.
+
+---
+
 ## Shipped Milestones
+
+### 1.10.0 — The Invisible Exoskeleton (2026-04-02)
+
+**Theme:** Reduce adoption friction for new users and solo developers.
+
+- [x] **Pilot Mode (#949):** Time-bounded warn-only hooks (14 days / 50 pushes). State tracked in `.totem/pilot-state.json`.
+- [x] **Enforcement Tiers (#987):** Strict tier with spec-completed check + shield gate. Agent auto-detection via environment variables.
+- [x] **.env Parser Fix (#1114):** Replaced custom regex with `dotenv` in CLI and MCP packages.
+- [x] **Spec Infrastructure (#1016):** Query expansion for test-related keywords + docstring enrichment.
+- [x] **Solo Dev Experience (#1039):** `extract --local` + global profile (`~/.totem/`).
+- [x] **"Missed Caught" Audit (#1153):** Historical bot findings categorized by detection tier.
+- [x] **Manifest Rehash (#1155):** Observation capture re-hashes compile manifest.
+- [x] **Pre-Push Format Check (#1156):** Package-manager-agnostic `format:check` in hook template.
+- [x] **Extract Refactor (#1159):** Split extract.ts into per-mode modules with unified assembler.
+- [x] **Exit Code Fix (#1161):** `--yes` mode sets exitCode 1 when all lessons suspicious.
 
 ### 1.9.0 — Pipeline Engine (2026-04-01)
 
