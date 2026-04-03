@@ -241,7 +241,12 @@ describe('resolveConfigPath', () => {
   });
 
   it('throws when no config file exists', () => {
-    expect(() => resolveConfigPath(tmpDir)).toThrow('No Totem configuration found');
+    const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-home-'));
+    try {
+      expect(() => resolveConfigPath(tmpDir, fakeHome)).toThrow('No Totem configuration found');
+    } finally {
+      cleanTmpDir(fakeHome);
+    }
   });
 
   it('resolves totem.yaml when totem.config.ts is missing', () => {

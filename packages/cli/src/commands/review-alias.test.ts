@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import * as path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -11,19 +11,14 @@ describe('review command alias', () => {
   const distEntry = path.resolve(process.cwd(), 'dist/index.js');
 
   const cli = (args: string): { stdout: string; stderr: string } => {
-    try {
-      // totem-context: test helper — args are hardcoded test strings, not user input
-      const stdout = execSync(`node "${distEntry}" ${args}`, {
-        cwd: process.cwd(),
-        encoding: 'utf-8',
-        timeout: 10_000,
-        env: { ...process.env, NODE_NO_WARNINGS: '1' },
-      });
-      return { stdout, stderr: '' };
-    } catch (err: unknown) {
-      const e = err as { stdout?: string; stderr?: string };
-      return { stdout: e.stdout ?? '', stderr: e.stderr ?? '' };
-    }
+    // totem-context: test helper — args are hardcoded test strings, not user input
+    const result = spawnSync('node', [distEntry, ...args.split(' ')], {
+      cwd: process.cwd(),
+      encoding: 'utf-8',
+      timeout: 10_000,
+      env: { ...process.env, NODE_NO_WARNINGS: '1' },
+    });
+    return { stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
   };
 
   it('registers review as a visible command in --help', () => {
