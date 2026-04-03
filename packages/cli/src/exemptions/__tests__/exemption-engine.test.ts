@@ -128,6 +128,16 @@ describe('recordFalsePositive', () => {
     expect(local.patterns[pid]?.sampleMessages).toHaveLength(3);
     expect(local.patterns[pid]?.sampleMessages).toEqual(['msg-0', 'msg-1', 'msg-2']);
   });
+
+  it('deduplicates identical sampleMessages', () => {
+    let local: ExemptionLocal = { ...EMPTY_LOCAL };
+    const msg = 'identical error message';
+    for (let i = 0; i < 5; i++) {
+      ({ updatedLocal: local } = recordFalsePositive(local, pid, 'shield', msg));
+    }
+    expect(local.patterns[pid]?.sampleMessages).toHaveLength(1);
+    expect(local.patterns[pid]?.sampleMessages).toEqual([msg]);
+  });
 });
 
 // ─── promoteToShared ───────────────────────────────────

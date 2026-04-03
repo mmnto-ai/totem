@@ -97,7 +97,7 @@ export function recordFalsePositive(
     ? existing.sources
     : [...existing.sources, source];
   const sampleMessages =
-    existing.sampleMessages.length < 3
+    existing.sampleMessages.length < 3 && !existing.sampleMessages.includes(message)
       ? [...existing.sampleMessages, message]
       : existing.sampleMessages;
 
