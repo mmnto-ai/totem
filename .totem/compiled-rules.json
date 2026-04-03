@@ -6583,13 +6583,162 @@
     {
       "lessonHash": "29db0aebc515741d",
       "lessonHeading": "Use process.exitCode for CLI exits",
+      "pattern": "",
       "message": "Prefer setting process.exitCode over calling process.exit() to allow for graceful termination and cleanup.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "process.exit($CODE)",
       "compiledAt": "2026-04-02T23:28:03.392Z",
       "createdAt": "2026-04-02T23:28:03.392Z",
+      "fileGlobs": [
+        "packages/cli/src/**/*.ts",
+        "!**/*.test.ts"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "d58c2dd2c7f123ac",
+      "lessonHeading": "Use totem-context for inline justifications",
+      "message": "Use 'totem-context:' for inline justifications instead of 'totem-ignore' to maintain auditability.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\btotem-ignore\\b",
+      "compiledAt": "2026-04-03T13:22:37.881Z",
+      "createdAt": "2026-04-03T13:22:37.881Z"
+    },
+    {
+      "lessonHash": "0bfbee24513eb73f",
+      "lessonHeading": "Use pre-push hooks for project-wide formatting",
+      "message": "Use pre-push hooks for project-wide formatting instead of pre-commit to ensure non-code files (docs, JSON) are checked before CI.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "['\"]pre-commit['\"]",
+      "compiledAt": "2026-04-03T13:22:51.421Z",
+      "createdAt": "2026-04-03T13:22:51.421Z",
+      "fileGlobs": [
+        "**/packages/cli/src/commands/install-hooks.ts"
+      ]
+    },
+    {
+      "lessonHash": "4cd80a665e3600e3",
+      "lessonHeading": "Escape Windows paths in generated configs",
+      "message": "Windows paths in strings must use escaped backslashes (e.g., 'C:\\\\path') to prevent corruption in generated configs.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "[a-zA-Z]:\\\\(?![\\\\/])",
+      "compiledAt": "2026-04-03T13:24:31.954Z",
+      "createdAt": "2026-04-03T13:24:31.954Z",
+      "fileGlobs": [
+        "**/packages/cli/src/commands/init.ts"
+      ]
+    },
+    {
+      "lessonHash": "4ca75ee08dddccd6",
+      "lessonHeading": "Global config paths must be absolute",
+      "message": "totemDir must be an absolute path. Relative paths in global profiles resolve relative to the execution context and cause lookup failures.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "totemDir\\s*[:=]\\s*['\"](?!\\/|[a-zA-Z]:\\\\)[^'\"]+['\"]",
+      "compiledAt": "2026-04-03T13:23:27.623Z",
+      "createdAt": "2026-04-03T13:23:27.623Z",
+      "fileGlobs": [
+        "packages/cli/src/**/*.ts",
+        "!**/*.test.ts"
+      ]
+    },
+    {
+      "lessonHash": "6f833b47dc45f955",
+      "lessonHeading": "Detect package managers in generated hooks",
+      "message": "Avoid hardcoding package managers in git hook templates; detect the project's active manager (pnpm, npm, yarn, or bun) instead to ensure environment compatibility.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\b(npm|pnpm|yarn|bun)\\s+(install|i|run|exec|test|dlx|x|add)\\b",
+      "compiledAt": "2026-04-03T13:23:28.019Z",
+      "createdAt": "2026-04-03T13:23:28.019Z",
+      "fileGlobs": [
+        "**/packages/cli/src/commands/install-hooks.ts"
+      ]
+    },
+    {
+      "lessonHash": "c9700d28abb6e96c",
+      "lessonHeading": "Surface specific git fallback errors",
+      "message": "Avoid empty catch blocks when probing for git refs; surface specific errors like 'missing upstream' to help diagnose configuration issues.",
+      "engine": "ast",
+      "severity": "warning",
+      "pattern": "",
+      "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
+      "compiledAt": "2026-04-03T13:23:27.701Z",
+      "createdAt": "2026-04-03T13:23:27.701Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/extract.ts"
+      ]
+    },
+    {
+      "lessonHash": "ea7ed761aaa15c82",
+      "lessonHeading": "Avoid empty catch blocks using discards",
+      "message": "Avoid empty catch blocks. Use a discard variable (e.g., catch (_err)) to indicate intentional silent failure.",
+      "engine": "ast",
+      "severity": "warning",
+      "pattern": "",
+      "astQuery": "[(catch_clause parameter: (catch_parameter (identifier) @id (#not-match? @id \"^_\")) body: (statement_block) @body (#eq? @body \"{}\")) (catch_clause !parameter body: (statement_block) @body (#eq? @body \"{}\"))] @violation",
+      "compiledAt": "2026-04-03T13:24:37.408Z",
+      "createdAt": "2026-04-03T13:24:37.408Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "6e68239337fb47b5",
+      "lessonHeading": "Hoist immutable adapter capability checks",
+      "message": "Move adapter capability checks outside of loops when the adapter is instantiated once, as repeated checks inside the loop are redundant and slightly impact performance.",
+      "engine": "ast",
+      "severity": "warning",
+      "pattern": "",
+      "astQuery": "([ (for_statement) (for_in_statement) (for_of_statement) (while_statement) (call_expression function: (member_expression property: (property_identifier) @method (#match? @method \"^(map|forEach|filter|reduce)$\"))) ] @violation (#match? @violation \"capabilities|hasCapability|can\"))",
+      "compiledAt": "2026-04-03T13:25:20.709Z",
+      "createdAt": "2026-04-03T13:25:20.709Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "5f1bed43a025ecec",
+      "lessonHeading": "Sanitize untrusted diffs in prompts",
+      "message": "Untrusted diffs must be sanitized before being included in prompts to prevent injection. Wrap the diff variable in a sanitization function.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\$\\{(?!\\s*\\w+\\()[^}]*\\b\\w*(?:diff|patch)\\w*\\b[^}]*\\}",
+      "compiledAt": "2026-04-03T13:25:50.236Z",
+      "createdAt": "2026-04-03T13:25:50.236Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/extract-templates.ts"
+      ]
+    },
+    {
+      "lessonHash": "f5a69d33c7cf9092",
+      "lessonHeading": "Guard parsers against hook format changes",
+      "message": "Use named constants for expected block counts instead of hardcoded numbers to make termination logic explicit and prevent brittle failures.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "expect\\(.*?(\\.length\\)\\s*\\.(toBe|toEqual)|\\)\\.toHaveLength)\\s*\\(\\s*[0-9]+\\s*\\)",
+      "compiledAt": "2026-04-03T13:25:38.012Z",
+      "createdAt": "2026-04-03T13:25:38.012Z",
+      "fileGlobs": [
+        "**/packages/cli/src/commands/install-hooks.test.ts"
+      ]
+    },
+    {
+      "lessonHash": "9b1fe3a7ce4880e5",
+      "lessonHeading": "Always trim git output whitespace",
+      "message": "Always trim git output whitespace (e.g., .toString().trim()) to prevent path resolution errors",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\bgit\\b.*?\\.toString\\(\\)(?!\\.trim)",
+      "compiledAt": "2026-04-03T13:26:12.696Z",
+      "createdAt": "2026-04-03T13:26:12.696Z",
       "fileGlobs": [
         "packages/cli/src/**/*.ts",
         "!**/*.test.ts"
@@ -7275,6 +7424,11 @@
     "08af488e5e38cf84",
     "977ae6a13859e055",
     "4d8ec6f39597e2bf",
-    "5f50bd1627f666cc"
+    "5f50bd1627f666cc",
+    "1cc409999f982f96",
+    "748044a1e6332c9c",
+    "50796eaaa05ef819",
+    "455b0e13ede04e72",
+    "b9b43f2d3645036a"
   ]
 }
