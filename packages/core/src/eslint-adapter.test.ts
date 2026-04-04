@@ -263,4 +263,38 @@ describe('parseEslintConfig', () => {
       expect(re.test('const x = 1;')).toBe(false);
     });
   });
+
+  describe('no-restricted-properties bracket notation', () => {
+    it('matches bracket notation for object+property', () => {
+      const result = parseEslintConfig(
+        JSON.stringify({
+          rules: {
+            'no-restricted-properties': ['error', { object: 'Math', property: 'pow' }],
+          },
+        }),
+      );
+      const re = new RegExp(result.rules[0]!.pattern);
+      expect(re.test(' Math.pow(2, 3)')).toBe(true);
+      expect(re.test(' Math?.pow(2, 3)')).toBe(true);
+      expect(re.test(' Math["pow"]')).toBe(true);
+      expect(re.test(" Math['pow']")).toBe(true);
+      expect(re.test('const x = 1;')).toBe(false);
+    });
+
+    it('matches bracket notation for property-only', () => {
+      const result = parseEslintConfig(
+        JSON.stringify({
+          rules: {
+            'no-restricted-properties': ['error', { property: '__proto__' }],
+          },
+        }),
+      );
+      const re = new RegExp(result.rules[0]!.pattern);
+      expect(re.test('obj.__proto__')).toBe(true);
+      expect(re.test('obj?.__proto__')).toBe(true);
+      expect(re.test('obj["__proto__"]')).toBe(true);
+      expect(re.test("obj['__proto__']")).toBe(true);
+      expect(re.test('const __proto__ = 1;')).toBe(false);
+    });
+  });
 });

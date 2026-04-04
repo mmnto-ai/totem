@@ -159,13 +159,15 @@ function handleRestrictedProperties(
     if (obj && prop) {
       const eo = escapeRegex(obj);
       const ep = escapeRegex(prop);
-      pattern = `(?:^|[^\\w$])${eo}\\s*(?:\\.|\\?\\.)\\s*${ep}\\b`;
+      // Dot/optional-chaining access OR bracket notation
+      pattern = `(?:^|[^\\w$])${eo}\\s*(?:(?:\\.|\\?\\.)\\s*${ep}\\b|\\[\\s*['"]${ep}['"]\\s*\\])`;
     } else if (obj) {
       const eo = escapeRegex(obj);
       pattern = `(?:^|[^\\w$])${eo}\\s*(?:\\.|\\?\\.|\\[)`;
     } else {
       const ep = escapeRegex(prop!);
-      pattern = `(?:\\.|\\?\\.)\\s*${ep}\\b`;
+      // Dot/optional-chaining access OR bracket notation
+      pattern = `(?:(?:\\.|\\?\\.)\\s*${ep}\\b|\\[\\s*['"]${ep}['"]\\s*\\])`;
     }
 
     rules.push({
