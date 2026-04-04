@@ -267,7 +267,9 @@ export async function installPostMergeHook(
 function buildAgentDetectionBlock(): string {
   return `# Agent detection — strict enforcement for AI agents
 is_agent=0
-if [ -n "$CLAUDE_CODE_AGENT" ] || [ -n "$CLAUDE_VERSION" ] || [ -n "$CURSOR_TRACE_ID" ]; then is_agent=1; fi`;
+if [ -n "$CLAUDE_CODE_AGENT" ] || [ -n "$CLAUDE_VERSION" ] || [ -n "$CURSOR_TRACE_ID" ]; then
+  is_agent=1
+fi`;
 }
 
 // ─── Enforcement hooks (pre-commit + pre-push) ──────────
@@ -745,36 +747,45 @@ export function upgradePrePushHookIfNeeded(cwd: string): boolean {
     // Only upgrade hooks that Totem owns (have our marker)
     if (!content.includes(TOTEM_PREPUSH_MARKER)) return false;
 
-    // Already on the new stateless format — no upgrade needed
+    // Already on the new stateless format — no upgrade needed.
+    // SAFETY INVARIANT: old hooks (pre-verify-manifest) have a single top-level
+    // if/fi block and no agent detection. The parser below relies on this — it
+    // stops at the first balanced fi. If this guard is ever removed, the parser
+    // must be updated to handle multi-block hooks (see extractTotemBlock in tests).
     if (content.includes('verify-manifest')) return false;
 
     // Splice only the totem-managed block, preserving any user-appended content.
     const markerIdx = content.indexOf(`# ${TOTEM_PREPUSH_MARKER}`);
     if (markerIdx === -1) return false;
 
-    // Find the end of the totem block by balancing if/fi depth.
-    // Track the LAST balanced fi at depth 0 to handle multi-block hooks
-    // (e.g. resolve block + guard block).
+    // Find the end of the old totem block by balancing if/fi depth.
+    // Old hooks have one top-level if/fi block; we stop at its closing fi.
+    // Skip inline `if ... fi` on a single line — they don't change depth.
     const afterMarker = content.slice(markerIdx);
-    const ifFiPattern = /^\s*(if\s|fi\s*$)/gm;
+    const lines = afterMarker.split('\n');
     let depth = 0;
     let endOffset = -1;
     let firstIfFound = false;
-    let match;
+    let charOffset = 0;
 
-    // totem-context: RegExp.exec, not child_process
-    while ((match = ifFiPattern.exec(afterMarker)) !== null) {
-      const keyword = match[1]!.trim();
-      if (keyword.startsWith('if')) {
-        if (!firstIfFound) firstIfFound = true;
-        depth++;
-      } else if (keyword === 'fi' && firstIfFound) {
-        depth--;
+    for (const line of lines) {
+      const trimmed = line.trimStart();
+      const isInlineIfFi = /^if\s.*;\s*fi\s*$/.test(trimmed);
+
+      if (!isInlineIfFi) {
+        if (/^if\s/.test(trimmed)) {
+          if (!firstIfFound) firstIfFound = true;
+          depth++;
+        } else if (/^fi\s*$/.test(trimmed) && firstIfFound) {
+          depth--;
+        }
       }
-      if (firstIfFound && depth === 0) {
-        endOffset = match.index + match[0].length;
+
+      if (firstIfFound && depth === 0 && /^fi\s*$/.test(trimmed)) {
+        endOffset = charOffset + line.length;
         break;
       }
+      charOffset += line.length + 1;
     }
 
     if (endOffset === -1) return false;
