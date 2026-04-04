@@ -67,15 +67,17 @@ Used by `totem review`, `totem spec`, `totem triage`, `totem extract`, etc.
 ### Ollama (Local)
 
 Ollama runs models locally. Any model from the [Ollama library](https://ollama.com/search)
-can be used as an orchestrator. Popular choices:
+can be used as an orchestrator.
 
-| Model           | Parameters      | Notes                            |
-| --------------- | --------------- | -------------------------------- |
-| `gemma4`        | e2b/e4b/26b/31b | Google, multimodal, 128-256K ctx |
-| `qwen3`         | 0.6B–235B (MoE) | Alibaba, strong reasoning        |
-| `llama3.2`      | 1B/3B/11B/90B   | Meta, vision variants available  |
-| `qwen2.5-coder` | 7B/32B          | Code-specialized                 |
-| `phi3`          | 3.8B/14B        | Microsoft, lightweight           |
+**Recommended: `gemma4`** — `totem init` auto-detects Ollama and defaults to gemma4. In benchmarks against Gemini API, gemma4:e4b completed triage in 16s (vs 27s API) with equal formatting adherence, at zero cost. Best for low-creativity tasks (lint, triage, classify). Use cloud models for high-creativity tasks (spec, review).
+
+| Model           | Parameters      | Notes                                             |
+| --------------- | --------------- | ------------------------------------------------- |
+| **`gemma4`**    | e2b/e4b/26b/31b | **Recommended.** Google, multimodal, 128-256K ctx |
+| `qwen3`         | 0.6B–235B (MoE) | Alibaba, strong reasoning                         |
+| `llama3.2`      | 1B/3B/11B/90B   | Meta, vision variants available                   |
+| `qwen2.5-coder` | 7B/32B          | Code-specialized                                  |
+| `phi3`          | 3.8B/14B        | Microsoft, lightweight                            |
 
 **Listing API (local):** `GET http://localhost:11434/api/tags`
 
