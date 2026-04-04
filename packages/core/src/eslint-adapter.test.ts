@@ -120,7 +120,7 @@ describe('parseEslintConfig', () => {
   });
 
   describe('no-restricted-properties', () => {
-    it('imports object.property pair', () => {
+    it('imports object.property pair as ast-grep rule', () => {
       const result = parseEslintConfig(
         JSON.stringify({
           rules: {
@@ -134,11 +134,12 @@ describe('parseEslintConfig', () => {
       expect(result.rules).toHaveLength(1);
       expect(result.rules[0]!.lessonHeading).toContain('Math.pow');
       expect(result.rules[0]!.message).toBe('Use ** operator');
-      expect(result.rules[0]!.pattern).toContain('Math');
-      expect(result.rules[0]!.pattern).toContain('pow');
+      expect(result.rules[0]!.engine).toBe('ast-grep');
+      expect(result.rules[0]!.astGrepPattern).toBe('Math.pow');
+      expect(result.rules[0]!.pattern).toBe('');
     });
 
-    it('imports property-only restriction', () => {
+    it('imports property-only restriction as regex rule', () => {
       const result = parseEslintConfig(
         JSON.stringify({
           rules: {
@@ -148,10 +149,11 @@ describe('parseEslintConfig', () => {
       );
       expect(result.rules).toHaveLength(1);
       expect(result.rules[0]!.severity).toBe('warning');
+      expect(result.rules[0]!.engine).toBe('regex');
       expect(result.rules[0]!.pattern).toContain('__defineGetter__');
     });
 
-    it('imports object-only restriction', () => {
+    it('imports object-only restriction as ast-grep rule', () => {
       const result = parseEslintConfig(
         JSON.stringify({
           rules: {
@@ -160,7 +162,9 @@ describe('parseEslintConfig', () => {
         }),
       );
       expect(result.rules).toHaveLength(1);
-      expect(result.rules[0]!.pattern).toContain('arguments');
+      expect(result.rules[0]!.engine).toBe('ast-grep');
+      expect(result.rules[0]!.astGrepPattern).toBe('arguments.$PROP');
+      expect(result.rules[0]!.pattern).toBe('');
     });
 
     it('generates fallback message when none provided', () => {
@@ -265,7 +269,7 @@ describe('parseEslintConfig', () => {
   });
 
   describe('no-restricted-properties bracket notation', () => {
-    it('matches bracket notation for object+property', () => {
+    it('uses ast-grep for object+property (handles bracket notation natively)', () => {
       const result = parseEslintConfig(
         JSON.stringify({
           rules: {
@@ -273,15 +277,12 @@ describe('parseEslintConfig', () => {
           },
         }),
       );
-      const re = new RegExp(result.rules[0]!.pattern);
-      expect(re.test(' Math.pow(2, 3)')).toBe(true);
-      expect(re.test(' Math?.pow(2, 3)')).toBe(true);
-      expect(re.test(' Math["pow"]')).toBe(true);
-      expect(re.test(" Math['pow']")).toBe(true);
-      expect(re.test('const x = 1;')).toBe(false);
+      expect(result.rules[0]!.engine).toBe('ast-grep');
+      expect(result.rules[0]!.astGrepPattern).toBe('Math.pow');
+      // ast-grep natively matches dot, optional chaining, and bracket notation
     });
 
-    it('matches bracket notation for property-only', () => {
+    it('matches bracket notation for property-only via regex', () => {
       const result = parseEslintConfig(
         JSON.stringify({
           rules: {
@@ -289,6 +290,7 @@ describe('parseEslintConfig', () => {
           },
         }),
       );
+      expect(result.rules[0]!.engine).toBe('regex');
       const re = new RegExp(result.rules[0]!.pattern);
       expect(re.test('obj.__proto__')).toBe(true);
       expect(re.test('obj?.__proto__')).toBe(true);
