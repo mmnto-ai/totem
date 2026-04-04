@@ -1,0 +1,12 @@
+[
+  {
+    "heading": "Use totem-context for inline justifications",
+    "reason": "Self-suppressing: pattern /\\btotem-ignore\\b/ matches suppression directive, consumed by engine before rule evaluation (#1177)",
+    "retiredAt": "2026-04-04"
+  },
+  {
+    "heading": "Using bare suppression directives like 'totem-ignore'",
+    "reason": "Self-suppressing: pattern /\\btotem-ignore\\b\\s*/ matches suppression directive, consumed by engine before rule evaluation (#1177)",
+    "retiredAt": "2026-04-04"
+  }
+]

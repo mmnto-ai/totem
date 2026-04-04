@@ -5867,16 +5867,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "63e7fcb6f282ada0",
-      "lessonHeading": "Using bare suppression directives like 'totem-ignore'",
-      "pattern": "\\btotem-ignore\\b\\s*[:\\-]?\\s*(\\*\\/)?\\s*$",
-      "message": "Always provide a rationale or ticket reference when using 'totem-ignore' to maintain auditability.",
-      "engine": "regex",
-      "compiledAt": "2026-03-30T22:27:57.334Z",
-      "createdAt": "2026-03-30T22:27:57.334Z",
-      "severity": "warning"
-    },
-    {
       "lessonHash": "7a4037dd8ffc4c37",
       "lessonHeading": "Use xargs instead of 'tr' for joining multi-line outputs",
       "pattern": "\\btr\\b.*\\\\n",
@@ -6665,19 +6655,30 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "1c1bdad026583463",
-      "lessonHeading": "Use totem-context for inline justifications",
-      "message": "Use 'totem-context:' for inline justifications instead of 'totem-ignore' to maintain auditability.",
+      "lessonHash": "63bcf79cab67e1fb",
+      "lessonHeading": "Pipeline 5: observation from shield",
+      "pattern": "if\\s+\\(!tarball\\s+\\|\\|\\s+!fs\\.existsSync\\(path\\.join\\(dir,\\s+tarball\\)\\)\\)\\s+\\{",
+      "message": "`pnpm pack` outputs the absolute path to the generated tarball. Using `path.join(dir, tarball)` with an absolute path will result in an invalid concatenated path (e.g., `packages/core/Users/...`), causing `fs.existsSync` to fail and aborting the publish process. Use `path.resolve(dir, tarball)` instead.",
+      "engine": "regex",
+      "compiledAt": "2026-04-04T03:29:58.166Z",
+      "createdAt": "2026-04-04T03:29:58.166Z",
+      "fileGlobs": [
+        "**/*.js"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "2791e8b3422059f5",
+      "lessonHeading": "Pipeline 5: observation from shield",
+      "pattern": "if\\s+\\(retiredLessons\\.length\\s+>\\s+0\\)\\s+\\{",
+      "message": "Verify that `ExtractedLesson` has a `text` property. Other lesson types in the codebase (like `LessonInput`) use `body`. If `l.text` is undefined, `l.text.slice(0, 80)` will throw a runtime error.",
       "engine": "regex",
       "severity": "warning",
-      "pattern": "\\btotem-ignore\\b",
-      "compiledAt": "2026-04-04T01:04:19.700Z",
-      "createdAt": "2026-04-04T01:04:19.700Z",
       "fileGlobs": [
-        "**/*.ts",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ]
+        "**/*.ts"
+      ],
+      "compiledAt": "2026-04-04T16:20:10.875Z",
+      "createdAt": "2026-04-04T16:20:10.875Z"
     }
   ],
   "nonCompilable": [
