@@ -9,14 +9,20 @@ import { parseFixture, testRule } from '@mmnto/totem';
 import {
   COMPILED_BASELINE_RULES,
   COMPILED_GO_BASELINE,
+  COMPILED_NODEJS_BASELINE,
   COMPILED_PYTHON_BASELINE,
   COMPILED_RUST_BASELINE,
+  COMPILED_SHELL_BASELINE,
+  NEW_TYPESCRIPT_RULES,
 } from './compiled-baseline.js';
 
 // ─── Helpers ────────────────────────────────────────
 
 const ALL_ARRAYS = [
   { name: 'COMPILED_BASELINE_RULES', rules: COMPILED_BASELINE_RULES },
+  { name: 'NEW_TYPESCRIPT_RULES', rules: NEW_TYPESCRIPT_RULES },
+  { name: 'COMPILED_NODEJS_BASELINE', rules: COMPILED_NODEJS_BASELINE },
+  { name: 'COMPILED_SHELL_BASELINE', rules: COMPILED_SHELL_BASELINE },
   { name: 'COMPILED_PYTHON_BASELINE', rules: COMPILED_PYTHON_BASELINE },
   { name: 'COMPILED_RUST_BASELINE', rules: COMPILED_RUST_BASELINE },
   { name: 'COMPILED_GO_BASELINE', rules: COMPILED_GO_BASELINE },
@@ -71,10 +77,34 @@ describe('compiled-baseline ecosystem arrays', () => {
       expect(positive.some((g) => g.includes('.go'))).toBe(true);
     }
   });
+
+  it('Shell rules use .sh or .husky file globs', () => {
+    for (const rule of COMPILED_SHELL_BASELINE) {
+      const globs = rule.fileGlobs ?? [];
+      const positive = globs.filter((g) => !g.startsWith('!'));
+      expect(positive.some((g) => g.includes('.sh') || g.includes('.husky'))).toBe(true);
+    }
+  });
+
+  it('Node.js security rules have security category', () => {
+    for (const rule of COMPILED_NODEJS_BASELINE) {
+      expect(rule.category).toBe('security');
+    }
+  });
+
+  it('all regex patterns are valid', () => {
+    for (const rule of ALL_RULES) {
+      if (rule.engine === 'regex' && rule.pattern) {
+        expect(() => new RegExp(rule.pattern)).not.toThrow();
+      }
+    }
+  });
 });
 
 describe('baseline fixture validation', () => {
   const fixturesDir = path.resolve(__dirname, 'baseline-fixtures');
+  // Only ecosystem rules with matching fixture files are validated here.
+  // TS/Node.js/Shell rules are validated by the field + regex tests above.
   const allEcosystemRules: CompiledRule[] = [
     ...COMPILED_PYTHON_BASELINE,
     ...COMPILED_RUST_BASELINE,

@@ -491,13 +491,31 @@ export default {
       fs.writeFileSync(configPath, configContent, 'utf-8');
     }
 
-    // Install universal baseline compiled rules
+    // Install universal baseline compiled rules (global profile gets all packs —
+    // project-specific init gates on detected ecosystems)
     try {
-      const { COMPILED_BASELINE_RULES } = await import('../assets/compiled-baseline.js');
-      const payload = { version: 1, rules: [...COMPILED_BASELINE_RULES] };
+      const {
+        COMPILED_BASELINE_RULES,
+        NEW_TYPESCRIPT_RULES,
+        COMPILED_NODEJS_BASELINE,
+        COMPILED_SHELL_BASELINE,
+        COMPILED_PYTHON_BASELINE,
+        COMPILED_RUST_BASELINE,
+        COMPILED_GO_BASELINE,
+      } = await import('../assets/compiled-baseline.js');
+      const allRules = [
+        ...COMPILED_BASELINE_RULES,
+        ...NEW_TYPESCRIPT_RULES,
+        ...COMPILED_NODEJS_BASELINE,
+        ...COMPILED_SHELL_BASELINE,
+        ...COMPILED_PYTHON_BASELINE,
+        ...COMPILED_RUST_BASELINE,
+        ...COMPILED_GO_BASELINE,
+      ];
+      const payload = { version: 1, rules: allRules };
       fs.writeFileSync(compiledRulesPath, JSON.stringify(payload, null, 2) + '\n');
       log.success('Totem', `Global profile created at ${globalDir}`);
-      log.success('Totem', `${COMPILED_BASELINE_RULES.length} universal baseline rules installed.`);
+      log.success('Totem', `${allRules.length} baseline rules installed.`);
       log.info('Totem', 'Run `totem lint` in any directory to apply your personal rules.');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -729,11 +747,20 @@ export default {
       try {
         const {
           COMPILED_BASELINE_RULES,
+          NEW_TYPESCRIPT_RULES,
+          COMPILED_NODEJS_BASELINE,
+          COMPILED_SHELL_BASELINE,
           COMPILED_PYTHON_BASELINE,
           COMPILED_RUST_BASELINE,
           COMPILED_GO_BASELINE,
         } = await import('../assets/compiled-baseline.js');
-        const allRules = [...COMPILED_BASELINE_RULES];
+        const allRules = [
+          ...COMPILED_BASELINE_RULES,
+          ...COMPILED_SHELL_BASELINE, // Always included — totem hooks are shell scripts
+        ];
+        if (detectedEcosystems.includes('javascript')) {
+          allRules.push(...NEW_TYPESCRIPT_RULES, ...COMPILED_NODEJS_BASELINE);
+        }
         if (detectedEcosystems.includes('python')) allRules.push(...COMPILED_PYTHON_BASELINE);
         if (detectedEcosystems.includes('rust')) allRules.push(...COMPILED_RUST_BASELINE);
         if (detectedEcosystems.includes('go')) allRules.push(...COMPILED_GO_BASELINE);
