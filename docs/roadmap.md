@@ -12,12 +12,10 @@ Totem is a **standard library for codebase governance** — deterministic primit
 
 - [ ] **ESLint Flat Config (#1138):** Import from modern ESLint flat config format.
 - [ ] **Totem-to-Totem Import (#1139):** Cross-repo rule sharing between totem instances.
-- [ ] **ESLint Syntax/Properties (#1140):** Handle `no-restricted-syntax` and `no-restricted-properties`.
 - [ ] **Rule Refinement (#1131):** Refine rules from false-positive scan alerts.
 - [ ] **AST Upgrade Detection (#1132):** Auto-detect string-content matches eligible for AST patterns.
 - [ ] **Pack Distribution (#1059):** Shareable rule bundles.
 - [ ] **Proactive Language Packs (#1152):** Thick TypeScript/Shell/Node.js baseline rules from established best practices (moved from 1.10.0).
-- [ ] **Lesson Retirement Ledger (#1165):** Prevent re-extraction of intentionally removed rules.
 - [ ] **GHAS/SARIF Extraction (Strategy #50):** Import rules from GitHub Advanced Security alerts.
 - [ ] **Lint Warning Extraction (Strategy #51):** Convert lint warnings into totem lessons.
 
@@ -42,6 +40,15 @@ Totem is a **standard library for codebase governance** — deterministic primit
 ---
 
 ## Shipped Milestones
+
+### 1.10.2 — Phase 2: Import Engine Foundations (2026-04-04)
+
+**Theme:** Retirement ledger, compiler safety, and expanded ESLint import coverage.
+
+- [x] **Lesson Retirement Ledger (#1165):** `.totem/retired-lessons.json` tracks removed rules, preventing re-extraction.
+- [x] **Compiler Guard (#1177):** Rejects self-suppressing patterns (totem-ignore, totem-context, shield-context).
+- [x] **ESLint Syntax/Properties (#1140):** `no-restricted-properties` and `no-restricted-syntax` handlers.
+- [x] **Model Defaults (#1185):** `totem init` updated to `claude-sonnet-4-6` and `gpt-5.4-mini`.
 
 ### 1.10.1 — Phase 1 Bug Fixes (2026-04-04)
 

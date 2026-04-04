@@ -66,7 +66,11 @@ Manage your deterministic rules (Pipeline 1). `rule list` outputs active rules, 
 Imports rules from existing tools into the Totem engine (Pipeline 4).
 
 - **Flags:**
-  - `--from-eslint <path>`: Import rules from ESLint configuration.
+  - `--from-eslint <path>`: Import rules from ESLint configuration. Supported rules:
+    - `no-restricted-imports` (paths and patterns)
+    - `no-restricted-globals` (string array)
+    - `no-restricted-properties` (object.property pairs, including bracket notation)
+    - `no-restricted-syntax` (ForInStatement, WithStatement, DebuggerStatement)
   - `--from-semgrep <path>`: Import rules from Semgrep YAML files.
   - `--out <path>`: Specify an output path.
   - `--dry-run`: Preview the import without saving.

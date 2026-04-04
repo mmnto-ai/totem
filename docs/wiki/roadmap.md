@@ -10,12 +10,10 @@ _Rule portability — bring governance from external tools and other totem insta
 
 - **ESLint Flat Config (#1138):** Import from modern ESLint flat config format.
 - **Totem-to-Totem Import (#1139):** Cross-repo rule sharing between totem instances.
-- **ESLint Syntax/Properties (#1140):** Handle `no-restricted-syntax` and `no-restricted-properties`.
 - **Rule Refinement (#1131):** Refine rules from false-positive scan alerts.
 - **AST Upgrade Detection (#1132):** Auto-detect string-content matches for AST patterns.
 - **Pack Distribution (#1059):** Shareable rule bundles.
 - **Proactive Language Packs (#1152):** Thick TypeScript/Shell/Node.js baseline rules from established best practices.
-- **Lesson Retirement Ledger (#1165):** Prevent re-extraction of intentionally removed rules.
 - **GHAS/SARIF Extraction (Strategy #50):** Import from GitHub Advanced Security alerts.
 - **Lint Warning Extraction (Strategy #51):** Convert lint warnings into totem lessons.
 
@@ -40,6 +38,15 @@ _Internal quality, research validation, and platform hardening._
 ---
 
 ## Shipped
+
+### 1.10.2 — Phase 2: Import Engine Foundations (2026-04-04)
+
+_Retirement ledger, compiler safety, and expanded ESLint import coverage._
+
+- **Lesson Retirement Ledger (#1165):** `.totem/retired-lessons.json` tracks intentionally removed rules, preventing re-extraction. Integrated into the extraction pipeline.
+- **Compiler Guard (#1177):** Rejects rules whose patterns match suppression directives (totem-ignore, totem-context, shield-context) — they self-suppress at runtime.
+- **ESLint Syntax/Properties (#1140):** `totem import --from-eslint` now handles `no-restricted-properties` (dot, optional chaining, bracket notation) and `no-restricted-syntax` (ForInStatement, WithStatement, DebuggerStatement).
+- **Model Defaults (#1185):** `totem init` defaults updated to `claude-sonnet-4-6` (Anthropic) and `gpt-5.4-mini` (OpenAI).
 
 ### 1.10.1 — Phase 1 Bug Fixes (2026-04-04)
 
