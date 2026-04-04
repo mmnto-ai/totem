@@ -6655,30 +6655,95 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "63bcf79cab67e1fb",
-      "lessonHeading": "Pipeline 5: observation from shield",
-      "pattern": "if\\s+\\(!tarball\\s+\\|\\|\\s+!fs\\.existsSync\\(path\\.join\\(dir,\\s+tarball\\)\\)\\)\\s+\\{",
-      "message": "`pnpm pack` outputs the absolute path to the generated tarball. Using `path.join(dir, tarball)` with an absolute path will result in an invalid concatenated path (e.g., `packages/core/Users/...`), causing `fs.existsSync` to fail and aborting the publish process. Use `path.resolve(dir, tarball)` instead.",
-      "engine": "regex",
-      "compiledAt": "2026-04-04T03:29:58.166Z",
-      "createdAt": "2026-04-04T03:29:58.166Z",
-      "fileGlobs": [
-        "**/*.js"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "2791e8b3422059f5",
-      "lessonHeading": "Pipeline 5: observation from shield",
-      "pattern": "if\\s+\\(retiredLessons\\.length\\s+>\\s+0\\)\\s+\\{",
-      "message": "Verify that `ExtractedLesson` has a `text` property. Other lesson types in the codebase (like `LessonInput`) use `body`. If `l.text` is undefined, `l.text.slice(0, 80)` will throw a runtime error.",
+      "lessonHash": "b237bcf3b52381b1",
+      "lessonHeading": "Exclude 'pwd' from credential regexes",
+      "message": "Exclude 'pwd' from credential regexes to avoid false positives with 'present working directory'",
       "engine": "regex",
       "severity": "warning",
+      "pattern": "(\\/[^/]*pwd[^/]*\\/|new\\s+RegExp\\s*\\(\\s*['\"][^'\"]*pwd[^'\"]*['\"])",
+      "compiledAt": "2026-04-04T21:48:14.333Z",
+      "createdAt": "2026-04-04T21:48:14.333Z",
       "fileGlobs": [
-        "**/*.ts"
-      ],
-      "compiledAt": "2026-04-04T16:20:10.875Z",
-      "createdAt": "2026-04-04T16:20:10.875Z"
+        "packages/cli/src/assets/**/*.ts"
+      ]
+    },
+    {
+      "lessonHash": "6f362fa28abcf94a",
+      "lessonHeading": "Validate JSON at system boundaries",
+      "message": "Avoid using type assertions when parsing JSON. Perform element-level validation instead to prevent crashes from corrupted or manually edited files.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "JSON.parse($JSON) as $TYPE",
+      "compiledAt": "2026-04-04T21:49:04.385Z",
+      "createdAt": "2026-04-04T21:49:04.385Z",
+      "fileGlobs": [
+        "packages/core/**/*.ts",
+        "!**/*.test.ts"
+      ]
+    },
+    {
+      "lessonHash": "2fb6d33741343797",
+      "lessonHeading": "Centralize model IDs in CLI initialization",
+      "message": "Avoid hardcoding model ID literals; use centralized constants to prevent version drift in CLI initialization.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "['\"](gpt|claude|gemini|llama|o1|mistral|deepseek)-[a-zA-Z0-9.-]+['\"]",
+      "compiledAt": "2026-04-04T21:49:01.018Z",
+      "createdAt": "2026-04-04T21:49:01.018Z",
+      "fileGlobs": [
+        "**/packages/cli/src/commands/init-detect.ts"
+      ]
+    },
+    {
+      "lessonHash": "bca57e1cdeb45f90",
+      "lessonHeading": "Use centralized utilities for regex escaping",
+      "message": "Use the centralized 'escapeRegex' utility when building RegExp from dynamic configuration to prevent injection vulnerabilities.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "new\\s+RegExp\\s*\\(\\s*(?!escapeRegex\\b)(?![\\\"'\\x60/])",
+      "compiledAt": "2026-04-04T21:49:14.301Z",
+      "createdAt": "2026-04-04T21:49:14.301Z",
+      "fileGlobs": [
+        "**/packages/core/src/eslint-adapter.ts"
+      ]
+    },
+    {
+      "lessonHash": "00dfbf2221b68df2",
+      "lessonHeading": "Exclude test files from XSS rules",
+      "message": "Avoid innerHTML to prevent XSS vulnerabilities. Use textContent or a safe sanitization library instead. Test files are excluded from this rule to allow for testing of sanitization logic.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\.innerHTML\\s*=",
+      "compiledAt": "2026-04-04T21:49:26.878Z",
+      "createdAt": "2026-04-04T21:49:26.878Z",
+      "fileGlobs": [
+        "packages/cli/**/*.ts",
+        "packages/cli/**/*.tsx",
+        "packages/cli/**/*.js",
+        "packages/cli/**/*.jsx",
+        "!**/*.test.ts",
+        "!**/*.test.tsx",
+        "!**/*.test.js",
+        "!**/*.test.jsx",
+        "!**/*.spec.ts",
+        "!**/*.spec.tsx",
+        "!**/*.spec.js",
+        "!**/*.spec.jsx"
+      ]
+    },
+    {
+      "lessonHash": "76762d7d0ad98113",
+      "lessonHeading": "Handle dollar signs in identifier boundaries",
+      "message": "Avoid using standard word boundaries (\\b) for JavaScript identifiers as they fail when identifiers contain '$'. Use '(?:^|[^\\w$])' instead.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\\\b",
+      "compiledAt": "2026-04-04T21:49:55.498Z",
+      "createdAt": "2026-04-04T21:49:55.498Z",
+      "fileGlobs": [
+        "**/packages/core/src/eslint-adapter.ts"
+      ]
     }
   ],
   "nonCompilable": [
@@ -7365,6 +7430,13 @@
     "748044a1e6332c9c",
     "50796eaaa05ef819",
     "455b0e13ede04e72",
-    "b9b43f2d3645036a"
+    "b9b43f2d3645036a",
+    "93cd2400a4e98520",
+    "7ad85aedb7fd6320",
+    "aa2a97ca80567494",
+    "f62f065249bd1910",
+    "af09a65c91788e75",
+    "f74744bd47cdbe69",
+    "3fa3b223cac2495f"
   ]
 }

@@ -1,45 +1,41 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.10.2` (published 2026-04-04) with 2,525 tests across core, CLI, and MCP packages and 411 compiled rules. The Import Engine is the current milestone.
+The project is at release `@mmnto/cli@1.11.0` (published 2026-04-04) with 2,553 tests across core, CLI, and MCP packages and 439 compiled rules.
 
-### Current: 1.11.0 — The Import Engine
+### Current: 1.12.0 — The Umpire & The Router
 
-Theme: rule portability across tools and teams.
+Theme: internal quality, research validation, and platform hardening.
 
-**Phase 3 (next):**
+- **#1184** — Evaluate gemma4 variants for the classify task
+- **#1189** — Flaky Windows CI timeout
+- **#1190** — Use ast-grep engine for no-restricted-properties
+- **#916** — Lite-tier standalone binary (subset CLI, no native deps)
+- Strategy **#64** — Epic: Model Routing Matrix
+- Strategy **#17** — Governance eval harness
+- Strategy **#6** — Adversarial trap corpus
+- Strategy **#62** — Model-specific prompt adapters
 
-- **#1152** — Proactive language packs (tier-1 headline feature)
+### Next: 1.13.0 — The Refinement Engine
+
+Theme: Rule refinement and pack distribution.
+
 - **#1131** — Rule refinement from false-positive scan alerts
 - **#1132** — Auto-detect string-content matches for AST upgrade
-
-**Phase 4 (1.11.0 minor):**
-
-- **#1138** — ESLint flat config import support
+- **#664** — AST-based empty catch detection
 - **#1059** — Pack distribution
-- **#1139** — Totem-to-totem import (cross-repo rule sharing)
-
-**Strategy:**
-
 - Strategy **#50** — GHAS/SARIF extraction
 - Strategy **#51** — Lint warning extraction
-
-### Next: 1.12.0 — Foundation & Validation
-
-Theme: internal quality, test infrastructure, and deferred refactors.
-
-- **#999** — Orchestrator refactor (middleware pipeline)
-- **#997** — Centralize path resolution (WorkspaceContext)
-- **#1000** — Non-null assertion sweep
-- **#1008** — git.ts re-export compat review
-- **#1020** — Shield override validation tests
-- **#1053** — Concurrent agent dispatch (moved from 1.10.0)
-- **#1033** — Docs scope / `totem wrap` reliability (moved from 1.10.0)
-- Strategy **#6** — Adversarial trap corpus
-- Strategy **#17** — Governance eval harness
-- Strategy **#62** — Model-specific prompt adapters (moved from 1.10.0)
-- Strategy **#63** — Spec efficacy validation
+- Strategy **#35** — Distributing Totem rules
 
 ### Recently Completed
+
+**1.11.0 — The Import Engine (2026-04-04)**
+
+Theme: Rule portability across tools and teams.
+
+- ~~**#1152**~~ — Proactive language packs (tier-1 headline feature, 50 rules)
+- ~~**#1138**~~ — ESLint flat config import support
+- ~~**#1139**~~ — Totem-to-totem import (cross-repo rule sharing)
 
 **1.10.2 — Phase 2: Import Engine Foundations (2026-04-04)**
 
