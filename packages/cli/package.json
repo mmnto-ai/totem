@@ -72,6 +72,7 @@
     "url": "https://github.com/mmnto-ai/totem/issues"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   }
 }
