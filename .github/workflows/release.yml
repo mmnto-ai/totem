@@ -41,8 +41,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
       - name: Push release tags
-        if: steps.changesets.outputs.published == 'true'
+        if: steps.changesets.outputs.hasChangesets == 'false'
         run: |
+          # Tag each package version if not already tagged
+          for pkg in packages/*/package.json; do
+            name=$(node -p "require('./$pkg').name")
+            version=$(node -p "require('./$pkg').version")
+            tag="${name}@${version}"
+            if ! LC_ALL=C git rev-parse "${tag}" >/dev/null 2>&1; then
+              LC_ALL=C git tag "${tag}"
+              echo "Tagged ${tag}"
+            fi
+          done
           git push origin --tags --force
           git tag -f v0
           git push origin refs/tags/v0 --force
