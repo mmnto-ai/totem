@@ -159,13 +159,13 @@ function handleRestrictedProperties(
     if (obj && prop) {
       const eo = escapeRegex(obj);
       const ep = escapeRegex(prop);
-      pattern = `(?:^|[^\\w$])${eo}\\s*\\.\\s*${ep}\\b`;
+      pattern = `(?:^|[^\\w$])${eo}\\s*(?:\\.|\\?\\.)\\s*${ep}\\b`;
     } else if (obj) {
       const eo = escapeRegex(obj);
-      pattern = `(?:^|[^\\w$])${eo}\\b`;
+      pattern = `(?:^|[^\\w$])${eo}\\s*(?:\\.|\\?\\.|\\[)`;
     } else {
       const ep = escapeRegex(prop!);
-      pattern = `\\.\\s*${ep}\\b`;
+      pattern = `(?:\\.|\\?\\.)\\s*${ep}\\b`;
     }
 
     rules.push({
@@ -190,7 +190,7 @@ function handleRestrictedProperties(
  * Complex or ambiguous selectors are skipped during import.
  */
 const SYNTAX_REGEX_MAP: Record<string, string> = {
-  ForInStatement: '\\bfor\\s*\\([^)]*\\bin\\b',
+  ForInStatement: '\\bfor\\s*\\([^;]+?\\bin\\b',
   WithStatement: '\\bwith\\s*\\(',
   DebuggerStatement: '\\bdebugger\\b',
 };
