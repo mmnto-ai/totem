@@ -253,10 +253,10 @@ describe('resolveOrchestrator', () => {
   });
 
   it('creates new invoker for cross-provider resolution', () => {
-    const result = resolveOrchestrator('anthropic:claude-sonnet-4-20250514', 'gemini', mockInvoke);
+    const result = resolveOrchestrator('anthropic:claude-sonnet-4-6', 'gemini', mockInvoke);
     expect(result.invoke).not.toBe(mockInvoke);
-    expect(result.parsed).toEqual({ provider: 'anthropic', model: 'claude-sonnet-4-20250514' });
-    expect(result.qualifiedModel).toBe('anthropic:claude-sonnet-4-20250514');
+    expect(result.parsed).toEqual({ provider: 'anthropic', model: 'claude-sonnet-4-6' });
+    expect(result.qualifiedModel).toBe('anthropic:claude-sonnet-4-6');
   });
 
   it('throws on empty model string (provider:)', () => {
@@ -302,9 +302,9 @@ describe('resolveOrchestrator', () => {
 
 describe('parseModelString', () => {
   it('parses anthropic:model into provider and model', () => {
-    expect(parseModelString('anthropic:claude-sonnet-4-20250514', 'gemini')).toEqual({
+    expect(parseModelString('anthropic:claude-sonnet-4-6', 'gemini')).toEqual({
       provider: 'anthropic',
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
     });
   });
 

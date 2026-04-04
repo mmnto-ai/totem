@@ -294,23 +294,23 @@ export function detectOrchestrator(cwd: string): DetectedOrchestrator | null {
   }
 
   if (hasKey(envContent, 'ANTHROPIC_API_KEY')) {
-    const config = { provider: 'anthropic', defaultModel: 'claude-sonnet-4-20250514' };
+    const config = { provider: 'anthropic', defaultModel: 'claude-sonnet-4-6' };
     return {
       config,
       block: `  orchestrator: {
     provider: 'anthropic',
-    defaultModel: 'claude-sonnet-4-20250514',
+    defaultModel: 'claude-sonnet-4-6',
   },`,
     };
   }
 
   if (hasKey(envContent, 'OPENAI_API_KEY')) {
-    const config = { provider: 'openai', defaultModel: 'gpt-4.1-mini' };
+    const config = { provider: 'openai', defaultModel: 'gpt-5.4-mini' };
     return {
       config,
       block: `  orchestrator: {
     provider: 'openai',
-    defaultModel: 'gpt-4.1-mini',
+    defaultModel: 'gpt-5.4-mini',
   },`,
     };
   }

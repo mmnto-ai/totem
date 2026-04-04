@@ -17,7 +17,7 @@ Totem is a **standard library for codebase governance** — deterministic primit
 - [ ] **AST Upgrade Detection (#1132):** Auto-detect string-content matches eligible for AST patterns.
 - [ ] **Pack Distribution (#1059):** Shareable rule bundles.
 - [ ] **Proactive Language Packs (#1152):** Thick TypeScript/Shell/Node.js baseline rules from established best practices (moved from 1.10.0).
-- [ ] **Exemption Dedup Fix (#1158):** Fix duplicate sampleMessages in auto-promotion.
+- [ ] **Lesson Retirement Ledger (#1165):** Prevent re-extraction of intentionally removed rules.
 - [ ] **GHAS/SARIF Extraction (Strategy #50):** Import rules from GitHub Advanced Security alerts.
 - [ ] **Lint Warning Extraction (Strategy #51):** Convert lint warnings into totem lessons.
 
@@ -42,6 +42,15 @@ Totem is a **standard library for codebase governance** — deterministic primit
 ---
 
 ## Shipped Milestones
+
+### 1.10.1 — Phase 1 Bug Fixes (2026-04-04)
+
+**Theme:** Rule hygiene and release pipeline hardening before the Import Engine.
+
+- [x] **Exemption Dedup (#1158):** Added `!includes(message)` check in `recordFalsePositive()`.
+- [x] **Exit Scope (#1164):** Narrowed process.exit() rule to exclude CLI entry points and command files.
+- [x] **Rule Conflict Audit (#1166):** Deleted 5 lessons, scoped 1 (418 → 413 compiled rules).
+- [x] **POSIX Compliance (#1168):** Multi-line if/then/fi in agent detection, hardened hook parser.
 
 ### 1.10.0 — The Invisible Exoskeleton (2026-04-02)
 

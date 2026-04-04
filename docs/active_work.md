@@ -1,19 +1,30 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.10.0` (pending changeset/publish) with ~2,502 tests across core, CLI, and MCP packages and 407 compiled rules. The Invisible Exoskeleton milestone shipped in full. The Import Engine is now current work.
+The project is at release `@mmnto/cli@1.10.1` (published 2026-04-04) with 2,506 tests across core, CLI, and MCP packages and 413 compiled rules. The Import Engine is the current milestone.
 
 ### Current: 1.11.0 — The Import Engine
 
 Theme: rule portability across tools and teams.
 
-- **#1138** — ESLint flat config import support
-- **#1139** — Totem-to-totem import (cross-repo rule sharing)
+**Phase 2 (next):**
+
+- **#1165** — Lesson retirement ledger (prevent re-extraction of removed rules)
 - **#1140** — ESLint `no-restricted-syntax`/`properties` handlers
+
+**Phase 3:**
+
+- **#1152** — Proactive language packs (tier-1 headline feature)
 - **#1131** — Rule refinement from false-positive scan alerts
 - **#1132** — Auto-detect string-content matches for AST upgrade
+
+**Phase 4 (1.11.0 minor):**
+
+- **#1138** — ESLint flat config import support
 - **#1059** — Pack distribution
-- **#1152** — Proactive language packs (moved from 1.10.0)
-- **#1158** — Exemption dedup bug fix
+- **#1139** — Totem-to-totem import (cross-repo rule sharing)
+
+**Strategy:**
+
 - Strategy **#50** — GHAS/SARIF extraction
 - Strategy **#51** — Lint warning extraction
 
@@ -34,6 +45,16 @@ Theme: internal quality, test infrastructure, and deferred refactors.
 - Strategy **#63** — Spec efficacy validation
 
 ### Recently Completed
+
+**1.10.1 — Phase 1 Bug Fixes (2026-04-04)**
+
+Bug fixes and rule hygiene shipped as a patch before the main Import Engine work.
+
+- ~~**#1158**~~ — Exemption dedup: added `!includes(message)` check in `recordFalsePositive()`
+- ~~**#1164**~~ — Narrowed process.exit() rule to exclude CLI entry points and command files
+- ~~**#1166**~~ — Rule conflict audit: deleted 5 lessons, scoped 1 (418 → 413 compiled rules)
+- ~~**#1168**~~ — POSIX compliance for monorepo shell hooks
+- Issues filed from GCA reviews: **#1175** (agent detection in TS), **#1177** (self-suppressing rule bug)
 
 **1.10.0 — The Invisible Exoskeleton (2026-04-02)**
 
