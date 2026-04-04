@@ -1,5 +1,14 @@
 # @mmnto/cli
 
+## 1.10.1
+
+### Patch Changes
+
+- 8e5ede0: fix: deduplicate exemption sampleMessages and narrow process.exit() rule scope
+- 1f01269: fix: refactor monorepo hook templates for strict POSIX sh compliance
+- bf80dc1: chore: audit and refine 5 conflicting compiled rules from 1.10.0 batch
+  - @mmnto/totem@1.10.1
+
 ## 1.10.0
 
 ### Minor Changes
