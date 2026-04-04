@@ -137,8 +137,13 @@ describe('isRetiredHeading', () => {
     expect(isRetiredHeading('Always Avoid eval() in production code', retired)).toBe(true);
   });
 
-  it('matches when candidate is a substring of retired heading', () => {
-    expect(isRetiredHeading('strict mode', retired)).toBe(true);
+  it('does not match when candidate is only a substring of retired heading', () => {
+    expect(isRetiredHeading('strict mode', retired)).toBe(false);
+  });
+
+  it('returns false for empty or whitespace-only headings', () => {
+    expect(isRetiredHeading('', retired)).toBe(false);
+    expect(isRetiredHeading('   ', retired)).toBe(false);
   });
 
   it('returns false for unrelated headings', () => {

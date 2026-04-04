@@ -67,13 +67,14 @@ export function retireLesson(totemDir: string, heading: string, reason: string):
 /**
  * Check whether a heading matches any retired entry.
  *
- * Uses case-insensitive substring matching: normalise both sides to lowercase
- * and check if either contains the other. This handles minor rewording by the LLM.
+ * Uses case-insensitive substring matching: checks if the candidate heading
+ * contains a retired heading. Guards against empty/whitespace-only strings.
  */
 export function isRetiredHeading(heading: string, retired: RetiredLesson[]): boolean {
-  const h = heading.toLowerCase();
+  const h = heading.toLowerCase().trim();
+  if (!h) return false;
   return retired.some((entry) => {
-    const r = entry.heading.toLowerCase();
-    return h.includes(r) || r.includes(h);
+    const r = entry.heading.toLowerCase().trim();
+    return r && h.includes(r);
   });
 }
