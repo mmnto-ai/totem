@@ -1,13 +1,16 @@
 /**
  * ESLint config rule importer (Pipeline 4).
  * Parses ESLint JSON config files and extracts importable rules.
- * Only imports rules with string/regex patterns in config:
+ * Imports rules with string/regex patterns in config:
  * - no-restricted-imports (paths/patterns)
  * - no-restricted-globals (string array)
+ * - no-restricted-properties (object.property pairs)
+ * - no-restricted-syntax (AST node type selectors → regex approximations)
  */
 
 import { hashLesson, validateRegex } from './compiler.js';
 import type { CompiledRule } from './compiler-schema.js';
+import { escapeRegex } from './regex-utils.js';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -49,7 +52,7 @@ function handleRestrictedImports(
             : null;
       if (!name) continue;
       const heading = `[eslint] ${ruleName}: ${name}`;
-      const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const escapedName = escapeRegex(name);
       rules.push({
         lessonHash: hashLesson(heading, `Import of '${name}' is restricted`),
         lessonHeading: heading,
@@ -75,7 +78,7 @@ function handleRestrictedImports(
       if (!pat) continue;
       const heading = `[eslint] ${ruleName}: ${pat}`;
       // Convert glob-like pattern to regex
-      const regexPat = pat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*');
+      const regexPat = escapeRegex(pat).replace(/\\\*/g, '.*');
       rules.push({
         lessonHash: hashLesson(heading, `Import matching '${pat}' is restricted`),
         lessonHeading: heading,
@@ -111,7 +114,7 @@ function handleRestrictedGlobals(
             : null;
       if (!name) continue;
       const heading = `[eslint] no-restricted-globals: ${name}`;
-      const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const escapedName = escapeRegex(name);
       rules.push({
         lessonHash: hashLesson(heading, `Use of global '${name}' is restricted`),
         lessonHeading: heading,
@@ -129,10 +132,126 @@ function handleRestrictedGlobals(
   return rules;
 }
 
+function handleRestrictedProperties(
+  _ruleName: string,
+  config: unknown,
+  severity: 'error' | 'warning',
+  now: string,
+): CompiledRule[] {
+  const rules: CompiledRule[] = [];
+  if (!Array.isArray(config)) return rules;
+
+  for (const item of config) {
+    if (typeof item !== 'object' || item === null) continue;
+    const rec = item as Record<string, unknown>;
+    const obj = typeof rec.object === 'string' ? rec.object : null;
+    const prop = typeof rec.property === 'string' ? rec.property : null;
+    if (!obj && !prop) continue;
+
+    const label = obj && prop ? `${obj}.${prop}` : (obj ?? `.${prop}`);
+    const heading = `[eslint] no-restricted-properties: ${label}`;
+    const msg =
+      typeof rec.message === 'string'
+        ? rec.message
+        : `Use of ${label} is restricted by ESLint config.`;
+
+    let pattern: string;
+    if (obj && prop) {
+      const eo = escapeRegex(obj);
+      const ep = escapeRegex(prop);
+      // Dot/optional-chaining access OR bracket notation
+      pattern = `(?:^|[^\\w$])${eo}\\s*(?:(?:\\.|\\?\\.)\\s*${ep}\\b|\\[\\s*['"]${ep}['"]\\s*\\])`;
+    } else if (obj) {
+      const eo = escapeRegex(obj);
+      pattern = `(?:^|[^\\w$])${eo}\\s*(?:\\.|\\?\\.|\\[)`;
+    } else {
+      const ep = escapeRegex(prop!);
+      // Dot/optional-chaining access OR bracket notation
+      pattern = `(?:(?:\\.|\\?\\.)\\s*${ep}\\b|\\[\\s*['"]${ep}['"]\\s*\\])`;
+    }
+
+    rules.push({
+      lessonHash: hashLesson(heading, msg),
+      lessonHeading: heading,
+      pattern,
+      message: msg,
+      engine: 'regex',
+      severity,
+      compiledAt: now,
+      createdAt: now,
+      fileGlobs: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
+    });
+  }
+
+  return rules;
+}
+
+/**
+ * Map common ESTree node type selectors to regex approximations.
+ * Only includes selectors with high-confidence regex mappings.
+ * Complex or ambiguous selectors are skipped during import.
+ */
+const SYNTAX_REGEX_MAP: Record<string, string> = {
+  ForInStatement: '\\bfor\\s*\\([^;]+?\\bin\\b',
+  WithStatement: '\\bwith\\s*\\(',
+  DebuggerStatement: '\\bdebugger\\b',
+};
+
+function handleRestrictedSyntax(
+  _ruleName: string,
+  config: unknown,
+  severity: 'error' | 'warning',
+  now: string,
+): CompiledRule[] {
+  const rules: CompiledRule[] = [];
+  if (!Array.isArray(config)) return rules;
+
+  for (const item of config) {
+    const selector =
+      typeof item === 'string'
+        ? item
+        : typeof item === 'object' &&
+            item !== null &&
+            typeof (item as Record<string, unknown>).selector === 'string'
+          ? ((item as Record<string, unknown>).selector as string)
+          : null;
+    if (!selector) continue;
+
+    const pattern = SYNTAX_REGEX_MAP[selector];
+    if (!pattern) continue; // Skip complex/unknown selectors silently
+
+    const customMsg =
+      typeof item === 'object' && item !== null
+        ? (item as Record<string, unknown>).message
+        : undefined;
+    const heading = `[eslint] no-restricted-syntax: ${selector}`;
+    const message =
+      typeof customMsg === 'string'
+        ? customMsg
+        : `Use of '${selector}' is restricted by ESLint config.`;
+
+    rules.push({
+      lessonHash: hashLesson(heading, message),
+      lessonHeading: heading,
+      pattern,
+      message,
+      engine: 'regex',
+      severity,
+      compiledAt: now,
+      createdAt: now,
+      fileGlobs: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
+    });
+  }
+
+  return rules;
+}
+
 const IMPORTABLE_HANDLERS: Record<string, RuleHandler> = {
   'no-restricted-imports': handleRestrictedImports,
   '@typescript-eslint/no-restricted-imports': handleRestrictedImports,
   'no-restricted-globals': handleRestrictedGlobals,
+  'no-restricted-properties': handleRestrictedProperties,
+  'no-restricted-syntax': handleRestrictedSyntax,
 };
 
 // ─── Parser ─────────────────────────────────────────
