@@ -69,7 +69,10 @@ Used by `totem review`, `totem spec`, `totem triage`, `totem extract`, etc.
 Ollama runs models locally. Any model from the [Ollama library](https://ollama.com/search)
 can be used as an orchestrator.
 
-**Recommended: `gemma4`** — `totem init` auto-detects Ollama and defaults to gemma4. In benchmarks against Gemini API, gemma4:e4b completed triage in 16s (vs 27s API) with equal formatting adherence, at zero cost. Best for low-creativity tasks (lint, triage, classify). Use cloud models for high-creativity tasks (spec, review).
+**Recommended: `gemma4`** — `totem init` auto-detects Ollama and defaults to gemma4. Choose the variant by task:
+
+- **`gemma4:e4b`** (9.6GB) — Fast triage and classification. 16s triage vs 27s cloud API, equal formatting. Best cost/speed ratio.
+- **`gemma4:26b`** (17GB) — Local rule compilation and spec generation. Produces correct regex with proper escaping. Unlocks the 100% offline governance loop (extract → compile → lint).
 
 | Model           | Parameters      | Notes                                             |
 | --------------- | --------------- | ------------------------------------------------- |
