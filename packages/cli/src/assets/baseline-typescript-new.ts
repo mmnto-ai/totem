@@ -82,22 +82,9 @@ export const NEW_TYPESCRIPT_RULES: CompiledRule[] = [
     category: 'style',
   },
 
-  // ─── 6. Empty catch blocks ───────────────────────────
-  {
-    lessonHash: 'dbc338da4d100342',
-    lessonHeading: 'Empty catch blocks',
-    pattern: 'catch\\s*\\([^)]*\\)\\s*\\{\\s*\\}',
-    message:
-      'Empty catch blocks silently swallow errors. At minimum, log the error or add a comment explaining why it is intentionally ignored.',
-    engine: 'regex',
-    compiledAt: '2026-04-04T00:00:00.000Z',
-    createdAt: '2026-04-04T00:00:00.000Z',
-    fileGlobs: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
-    severity: 'warning',
-    category: 'style',
-  },
+  // Empty catch blocks: covered by existing COMPILED_BASELINE_RULES (guardrail-empty-catch)
 
-  // ─── 7. `eval()` usage ──────────────────────────────
+  // ─── 6. `eval()` usage ──────────────────────────────
   {
     lessonHash: '103db6b09cdbd21a',
     lessonHeading: 'eval() usage',
