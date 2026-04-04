@@ -54,7 +54,7 @@ export const COMPILED_SHELL_BASELINE: CompiledRule[] = [
   {
     lessonHash: '85527afcf2757832',
     lessonHeading: 'echo -n / echo -e non-POSIX flags',
-    pattern: '\\becho\\s+-[ne]\\b',
+    pattern: '\\becho\\s+-[ne]+\\b',
     message:
       'echo -n and echo -e are not portable across shells. Use printf instead for POSIX compliance.',
     engine: 'regex',

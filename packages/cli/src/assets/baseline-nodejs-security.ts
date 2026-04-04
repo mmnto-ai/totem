@@ -20,7 +20,7 @@ export const COMPILED_NODEJS_BASELINE: CompiledRule[] = [
     message:
       'Avoid child_process.exec() — it spawns a shell and is vulnerable to command injection. Use execFile() or spawn() without shell:true instead.',
     engine: 'regex',
-    severity: 'error',
+    severity: 'warning',
     category: 'security',
     fileGlobs: ['**/*.ts', '**/*.js', '!**/*.test.*', '!**/*.spec.*', '!**/scripts/**'],
     compiledAt: '2026-04-04T00:00:00.000Z',
@@ -61,7 +61,7 @@ export const COMPILED_NODEJS_BASELINE: CompiledRule[] = [
   {
     lessonHash: '78dc2e118185134f',
     lessonHeading: 'MD5 and SHA1 are cryptographically broken',
-    pattern: String.raw`createHash\s*\(\s*['"](?:md5|sha1)['"]\s*\)`,
+    pattern: String.raw`\bcreateHash\s*\(\s*['"](?:md5|sha1)['"]\s*\)`,
     message:
       'MD5 and SHA1 are cryptographically broken. Use SHA-256 or SHA-384 for integrity checks, and bcrypt/scrypt/argon2 for passwords.',
     engine: 'regex',

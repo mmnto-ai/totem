@@ -133,7 +133,8 @@ export const NEW_TYPESCRIPT_RULES: CompiledRule[] = [
   {
     lessonHash: '052527fee28122db',
     lessonHeading: 'Hardcoded API key patterns',
-    pattern: '(?:api[_-]?key|secret|token|password)\\s*[:=]\\s*[\'"][A-Za-z0-9+/=_-]{16,}[\'"]',
+    pattern:
+      '(?:api[_-]?key|apiKey|secret|token|password|passwd)\\s*[:=]\\s*[\'"][A-Za-z0-9+/=_-]{16,}[\'"]',
     message:
       'Possible hardcoded credential detected. Use environment variables or a secrets manager instead.',
     engine: 'regex',
