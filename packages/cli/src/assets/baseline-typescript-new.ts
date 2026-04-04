@@ -112,10 +112,10 @@ export const NEW_TYPESCRIPT_RULES: CompiledRule[] = [
     category: 'security',
   },
 
-  // ─── 8. `JSON.parse` without try-catch ──────────────
+  // ─── 8. `JSON.parse` error handling ─────────────────
   {
-    lessonHash: '27b9e7c87997271c',
-    lessonHeading: 'JSON.parse without try-catch',
+    lessonHash: '93f0fb40147c3307',
+    lessonHeading: 'Ensure JSON.parse is wrapped in error handling',
     pattern: '\\bJSON\\.parse\\s*\\(',
     message:
       'Wrap JSON.parse() in try-catch at system boundaries. Unhandled parse errors crash the process.',

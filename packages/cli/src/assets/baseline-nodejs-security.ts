@@ -82,7 +82,7 @@ export const COMPILED_NODEJS_BASELINE: CompiledRule[] = [
     engine: 'regex',
     severity: 'error',
     category: 'security',
-    fileGlobs: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
+    fileGlobs: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '!**/*.test.*', '!**/*.spec.*'],
     compiledAt: '2026-04-04T00:00:00.000Z',
     createdAt: '2026-04-04T00:00:00.000Z',
   },
@@ -91,7 +91,7 @@ export const COMPILED_NODEJS_BASELINE: CompiledRule[] = [
   {
     lessonHash: '4a64a564963ff978',
     lessonHeading: 'Hardcoded credentials in source code',
-    pattern: String.raw`(?:password|passwd|pwd)\s*[:=]\s*['"][^'"]{4,}['"]`,
+    pattern: String.raw`(?:password|passwd)\s*[:=]\s*['"][^'"]{4,}['"]`,
     message:
       'Possible hardcoded password detected. Use environment variables, a secrets manager, or a .env file (gitignored) instead.',
     engine: 'regex',
