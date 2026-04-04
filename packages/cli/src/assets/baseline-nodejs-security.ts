@@ -108,7 +108,7 @@ export const COMPILED_NODEJS_BASELINE: CompiledRule[] = [
     lessonHeading: 'path.join() with user input enables directory traversal',
     pattern: String.raw`path\.join\s*\([^)]*(?:req\.|params\.|query\.|body\.)`,
     message:
-      'Validate and sanitize user input before passing to path.join(). Unvalidated paths enable directory traversal attacks. Use path.resolve() and verify the result stays within the expected directory.',
+      'Validate and sanitize user input before passing to path.join(). Unvalidated paths enable directory traversal attacks. Normalize the result and verify it stays within the expected base directory.',
     engine: 'regex',
     severity: 'warning',
     category: 'security',
