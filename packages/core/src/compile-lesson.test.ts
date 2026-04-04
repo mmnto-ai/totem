@@ -177,6 +177,98 @@ describe('buildCompiledRule', () => {
   });
 });
 
+// ─── self-suppression guard (#1177) ────────────────
+
+describe('self-suppression guard (#1177)', () => {
+  it('rejects regex pattern containing totem-ignore', () => {
+    const result = buildCompiledRule(
+      {
+        compilable: true,
+        pattern: '\\btotem-ignore\\b',
+        message: 'test',
+        engine: 'regex',
+      } as CompilerOutput,
+      { hash: 'abc123', heading: 'Test' },
+      new Map(),
+    );
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('self-suppress');
+  });
+
+  it('rejects regex pattern containing totem-context', () => {
+    const result = buildCompiledRule(
+      {
+        compilable: true,
+        pattern: 'totem-context:',
+        message: 'test',
+        engine: 'regex',
+      } as CompilerOutput,
+      { hash: 'def456', heading: 'Test' },
+      new Map(),
+    );
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('self-suppress');
+  });
+
+  it('allows normal regex patterns', () => {
+    const result = buildCompiledRule(
+      {
+        compilable: true,
+        pattern: '\\bconsole\\.log\\b',
+        message: 'no console',
+        engine: 'regex',
+      } as CompilerOutput,
+      { hash: 'ghi789', heading: 'Test' },
+      new Map(),
+    );
+    expect(result.rule).not.toBeNull();
+  });
+
+  it('rejects ast-grep string pattern containing totem-ignore', () => {
+    const result = buildCompiledRule(
+      {
+        compilable: true,
+        astGrepPattern: '// totem-ignore',
+        message: 'test',
+        engine: 'ast-grep',
+      } as CompilerOutput,
+      { hash: 'ast123', heading: 'Test' },
+      new Map(),
+    );
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('self-suppress');
+  });
+
+  it('rejects ast-grep object pattern containing totem-context', () => {
+    const result = buildCompiledRule(
+      {
+        compilable: true,
+        astGrepPattern: { rule: { pattern: 'totem-context: something' } },
+        message: 'test',
+        engine: 'ast-grep',
+      } as CompilerOutput,
+      { hash: 'ast456', heading: 'Test' },
+      new Map(),
+    );
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('self-suppress');
+  });
+
+  it('allows normal ast-grep patterns', () => {
+    const result = buildCompiledRule(
+      {
+        compilable: true,
+        astGrepPattern: 'catch($ERR) { $$$ }',
+        message: 'test',
+        engine: 'ast-grep',
+      } as CompilerOutput,
+      { hash: 'ast789', heading: 'Test' },
+      new Map(),
+    );
+    expect(result.rule).not.toBeNull();
+  });
+});
+
 // ─── validateAstGrepPattern ────────────────────────
 
 describe('validateAstGrepPattern', () => {

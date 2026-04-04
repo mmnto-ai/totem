@@ -109,6 +109,16 @@ export {
   writeLessonFileAsync,
 } from './lesson-io.js';
 
+// Retirement Ledger (#1165)
+export type { RetiredLesson } from './retired-lessons.js';
+export {
+  isRetiredHeading,
+  readRetiredLessons,
+  RETIRED_LESSONS_FILE,
+  retireLesson,
+  writeRetiredLessons,
+} from './retired-lessons.js';
+
 // Compiler
 export type {
   AstContext,

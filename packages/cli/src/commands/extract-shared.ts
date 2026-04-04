@@ -325,10 +325,31 @@ export async function sharedPipeline(
   const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
   await store.connect();
 
+  // Filter out lessons matching the retirement ledger (#1165)
+  const { readRetiredLessons, isRetiredHeading } = await import('@mmnto/totem');
+  const totemDir = path.resolve(cwd, config.totemDir);
+  const retiredLessons = readRetiredLessons(totemDir);
+  let lessonsToProcess = allLessons;
+  if (retiredLessons.length > 0) {
+    const beforeCount = lessonsToProcess.length;
+    lessonsToProcess = lessonsToProcess.filter(
+      (l) => !isRetiredHeading(l.heading ?? generateLessonHeading(l.text), retiredLessons),
+    );
+    const retiredCount = beforeCount - lessonsToProcess.length;
+    if (retiredCount > 0) {
+      log.dim(TAG, `Filtered ${retiredCount} lesson(s) matching retirement ledger`);
+    }
+  }
+
+  if (lessonsToProcess.length === 0) {
+    log.dim(TAG, 'All extracted lessons match the retirement ledger.');
+    return;
+  }
+
   // Semantic dedup against existing lessons and intra-batch (#347)
   log.info(TAG, 'Deduplicating against existing lessons...'); // totem-ignore — static string
   const { kept: novelLessons, dropped: dupLessons } = await deduplicateLessons(
-    allLessons,
+    lessonsToProcess,
     store,
     embedder,
   );

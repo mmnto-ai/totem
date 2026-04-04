@@ -116,6 +116,19 @@ export function validateAstGrepPattern(pattern: string | Record<string, unknown>
   return { valid: true };
 }
 
+// ─── Self-suppression guard (#1177) ─────────────────
+
+/** Patterns containing suppression markers can never fire — the engine suppresses those lines first. */
+function isSelfSuppressing(pattern: string): boolean {
+  // Unescape the regex string to check for literal directive substrings
+  const unescaped = pattern.replace(/\\\\/g, '\\').replace(/\\b/g, '').toLowerCase();
+  return (
+    unescaped.includes('totem-ignore') ||
+    unescaped.includes('totem-context') ||
+    unescaped.includes('shield-context')
+  );
+}
+
 // ─── Rule builder (pure, no I/O) ────────────────────
 
 /**
@@ -145,6 +158,20 @@ export function buildCompiledRule(
     const astValidation = validateAstGrepPattern(parsed.astGrepPattern);
     if (!astValidation.valid) {
       return { rule: null, rejectReason: `Invalid ast-grep pattern: ${astValidation.reason}` };
+    }
+
+    // Guard: reject patterns that match suppression directives (#1177)
+    // These rules can never fire — the engine suppresses matching lines before rule evaluation.
+    const astPatternStr =
+      typeof parsed.astGrepPattern === 'string'
+        ? parsed.astGrepPattern
+        : JSON.stringify(parsed.astGrepPattern);
+    if (isSelfSuppressing(astPatternStr)) {
+      return {
+        rule: null,
+        rejectReason:
+          'Pattern matches a suppression directive (totem-ignore/totem-context) and will self-suppress at runtime',
+      };
     }
 
     return {
@@ -188,6 +215,16 @@ export function buildCompiledRule(
   const validation = validateRegex(parsed.pattern);
   if (!validation.valid) {
     return { rule: null, rejectReason: `Rejected regex: ${validation.reason}` };
+  }
+
+  // Guard: reject patterns that match suppression directives (#1177)
+  // These rules can never fire — the engine suppresses matching lines before rule evaluation.
+  if (isSelfSuppressing(parsed.pattern)) {
+    return {
+      rule: null,
+      rejectReason:
+        'Pattern matches a suppression directive (totem-ignore/totem-context) and will self-suppress at runtime',
+    };
   }
 
   return {
