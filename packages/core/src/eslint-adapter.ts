@@ -155,32 +155,63 @@ function handleRestrictedProperties(
         ? rec.message
         : `Use of ${label} is restricted by ESLint config.`;
 
-    let pattern: string;
-    if (obj && prop) {
-      const eo = escapeRegex(obj);
-      const ep = escapeRegex(prop);
-      // Dot/optional-chaining access OR bracket notation
-      pattern = `(?:^|[^\\w$])${eo}\\s*(?:(?:\\.|\\?\\.)\\s*${ep}\\b|\\[\\s*['"]${ep}['"]\\s*\\])`;
-    } else if (obj) {
-      const eo = escapeRegex(obj);
-      pattern = `(?:^|[^\\w$])${eo}\\s*(?:\\.|\\?\\.|\\[)`;
-    } else {
-      const ep = escapeRegex(prop!);
-      // Dot/optional-chaining access OR bracket notation
-      pattern = `(?:(?:\\.|\\?\\.)\\s*${ep}\\b|\\[\\s*['"]${ep}['"]\\s*\\])`;
-    }
+    // Only use ast-grep for valid JS identifier properties (non-identifiers need regex)
+    const isIdentifier = (s: string) => /^[a-zA-Z_$][\w$]*$/.test(s);
 
-    rules.push({
-      lessonHash: hashLesson(heading, msg),
-      lessonHeading: heading,
-      pattern,
-      message: msg,
-      engine: 'regex',
-      severity,
-      compiledAt: now,
-      createdAt: now,
-      fileGlobs: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
-    });
+    if (obj && prop && isIdentifier(obj) && isIdentifier(prop)) {
+      // ast-grep natively matches dot, optional chaining, and bracket notation
+      rules.push({
+        lessonHash: hashLesson(heading, msg),
+        lessonHeading: heading,
+        pattern: '',
+        astGrepPattern: `${obj}.${prop}`,
+        message: msg,
+        engine: 'ast-grep',
+        severity,
+        compiledAt: now,
+        createdAt: now,
+        fileGlobs: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '!**/*.test.*', '!**/*.spec.*'],
+      });
+    } else if (obj && !prop && isIdentifier(obj)) {
+      // ast-grep wildcard matches any property access on the object
+      rules.push({
+        lessonHash: hashLesson(heading, msg),
+        lessonHeading: heading,
+        pattern: '',
+        astGrepPattern: `${obj}.$PROP`,
+        message: msg,
+        engine: 'ast-grep',
+        severity,
+        compiledAt: now,
+        createdAt: now,
+        fileGlobs: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '!**/*.test.*', '!**/*.spec.*'],
+      });
+    } else {
+      // Regex fallback: prop-only, or obj/prop with non-identifier names
+      let pattern: string;
+      if (obj && prop) {
+        const eo = escapeRegex(obj);
+        const ep = escapeRegex(prop);
+        pattern = `(?:^|[^\\w$])${eo}\\s*(?:(?:\\.|\\?\\.)\\s*${ep}\\b|\\[\\s*['"]${ep}['"]\\s*\\])`;
+      } else if (obj) {
+        const eo = escapeRegex(obj);
+        pattern = `(?:^|[^\\w$])${eo}\\s*(?:\\.|\\?\\.|\\[)`;
+      } else {
+        const ep = escapeRegex(prop!);
+        pattern = `(?:(?:\\.|\\?\\.)\\s*${ep}\\b|\\[\\s*['"]${ep}['"]\\s*\\])`;
+      }
+      rules.push({
+        lessonHash: hashLesson(heading, msg),
+        lessonHeading: heading,
+        pattern,
+        message: msg,
+        engine: 'regex',
+        severity,
+        compiledAt: now,
+        createdAt: now,
+        fileGlobs: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '!**/*.test.*', '!**/*.spec.*'],
+      });
+    }
   }
 
   return rules;
@@ -309,6 +340,7 @@ export function parseEslintConfig(jsonContent: string): EslintImportResult {
     const imported = handler(ruleName, options, severity, now);
     // Validate each imported rule's regex for syntax and ReDoS safety
     const valid = imported.filter((r) => {
+      if (r.engine === 'ast-grep') return true; // ast-grep patterns validated separately
       const v = validateRegex(r.pattern);
       if (!v.valid) {
         skipped.push({
