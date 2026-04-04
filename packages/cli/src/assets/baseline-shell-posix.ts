@@ -119,7 +119,7 @@ export const COMPILED_SHELL_BASELINE: CompiledRule[] = [
   {
     lessonHash: '2370e5e71fb895d2',
     lessonHeading: 'Unquoted variable expansion in conditions',
-    pattern: '\\[\\s+\\$\\{?\\w+\\}?\\s+',
+    pattern: '\\[[^\\]]*\\s+\\$\\{?\\w+\\}?\\s+',
     message:
       'Always quote variable expansions in test expressions: ["$var" = value]. Unquoted variables cause word splitting and glob expansion bugs.',
     engine: 'regex',
