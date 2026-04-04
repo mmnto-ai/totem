@@ -333,7 +333,7 @@ export async function sharedPipeline(
   if (retiredLessons.length > 0) {
     const beforeCount = lessonsToProcess.length;
     lessonsToProcess = lessonsToProcess.filter(
-      (l) => !isRetiredHeading(l.heading ?? l.text.slice(0, 80), retiredLessons),
+      (l) => !isRetiredHeading(l.heading ?? generateLessonHeading(l.text), retiredLessons),
     );
     const retiredCount = beforeCount - lessonsToProcess.length;
     if (retiredCount > 0) {

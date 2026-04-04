@@ -133,11 +133,8 @@ describe('isRetiredHeading', () => {
     expect(isRetiredHeading('use STRICT mode', retired)).toBe(true);
   });
 
-  it('matches when retired heading is a substring of candidate', () => {
-    expect(isRetiredHeading('Always Avoid eval() in production code', retired)).toBe(true);
-  });
-
-  it('does not match when candidate is only a substring of retired heading', () => {
+  it('does not match when headings only partially overlap', () => {
+    expect(isRetiredHeading('Always Avoid eval() in production code', retired)).toBe(false);
     expect(isRetiredHeading('strict mode', retired)).toBe(false);
   });
 
