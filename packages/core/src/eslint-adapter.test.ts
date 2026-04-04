@@ -118,4 +118,149 @@ describe('parseEslintConfig', () => {
     expect(globs).toContain('**/*.ts');
     expect(globs).toContain('**/*.js');
   });
+
+  describe('no-restricted-properties', () => {
+    it('imports object.property pair', () => {
+      const result = parseEslintConfig(
+        JSON.stringify({
+          rules: {
+            'no-restricted-properties': [
+              'error',
+              { object: 'Math', property: 'pow', message: 'Use ** operator' },
+            ],
+          },
+        }),
+      );
+      expect(result.rules).toHaveLength(1);
+      expect(result.rules[0]!.lessonHeading).toContain('Math.pow');
+      expect(result.rules[0]!.message).toBe('Use ** operator');
+      expect(result.rules[0]!.pattern).toContain('Math');
+      expect(result.rules[0]!.pattern).toContain('pow');
+    });
+
+    it('imports property-only restriction', () => {
+      const result = parseEslintConfig(
+        JSON.stringify({
+          rules: {
+            'no-restricted-properties': ['warn', { property: '__defineGetter__' }],
+          },
+        }),
+      );
+      expect(result.rules).toHaveLength(1);
+      expect(result.rules[0]!.severity).toBe('warning');
+      expect(result.rules[0]!.pattern).toContain('__defineGetter__');
+    });
+
+    it('imports object-only restriction', () => {
+      const result = parseEslintConfig(
+        JSON.stringify({
+          rules: {
+            'no-restricted-properties': ['error', { object: 'arguments' }],
+          },
+        }),
+      );
+      expect(result.rules).toHaveLength(1);
+      expect(result.rules[0]!.pattern).toContain('arguments');
+    });
+
+    it('generates fallback message when none provided', () => {
+      const result = parseEslintConfig(
+        JSON.stringify({
+          rules: {
+            'no-restricted-properties': ['error', { object: 'Math', property: 'pow' }],
+          },
+        }),
+      );
+      expect(result.rules[0]!.message).toContain('restricted');
+    });
+
+    it('skips entries with neither object nor property', () => {
+      const result = parseEslintConfig(
+        JSON.stringify({
+          rules: {
+            'no-restricted-properties': ['error', { message: 'orphan' }],
+          },
+        }),
+      );
+      expect(result.rules).toHaveLength(0);
+    });
+
+    it('handles empty config', () => {
+      const result = parseEslintConfig(
+        JSON.stringify({
+          rules: { 'no-restricted-properties': 'error' },
+        }),
+      );
+      expect(result.rules).toHaveLength(0);
+    });
+  });
+
+  describe('no-restricted-syntax', () => {
+    it('imports known node types', () => {
+      const result = parseEslintConfig(
+        JSON.stringify({
+          rules: {
+            'no-restricted-syntax': ['error', 'ForInStatement', 'WithStatement'],
+          },
+        }),
+      );
+      expect(result.rules).toHaveLength(2);
+      expect(result.rules[0]!.lessonHeading).toContain('ForInStatement');
+      expect(result.rules[1]!.lessonHeading).toContain('WithStatement');
+    });
+
+    it('handles mixed string and object selectors', () => {
+      const result = parseEslintConfig(
+        JSON.stringify({
+          rules: {
+            'no-restricted-syntax': [
+              'error',
+              'DebuggerStatement',
+              { selector: 'WithStatement', message: 'with is deprecated' },
+            ],
+          },
+        }),
+      );
+      expect(result.rules).toHaveLength(2);
+      expect(result.rules[0]!.message).toContain('DebuggerStatement');
+      expect(result.rules[1]!.message).toBe('with is deprecated');
+    });
+
+    it('skips unknown/complex selectors', () => {
+      const result = parseEslintConfig(
+        JSON.stringify({
+          rules: {
+            'no-restricted-syntax': [
+              'error',
+              'CallExpression[callee.name="eval"]',
+              'ForInStatement',
+            ],
+          },
+        }),
+      );
+      // Only ForInStatement maps, the complex selector is skipped
+      expect(result.rules).toHaveLength(1);
+      expect(result.rules[0]!.lessonHeading).toContain('ForInStatement');
+    });
+
+    it('handles empty config', () => {
+      const result = parseEslintConfig(
+        JSON.stringify({
+          rules: { 'no-restricted-syntax': 'error' },
+        }),
+      );
+      expect(result.rules).toHaveLength(0);
+    });
+
+    it('generates regex that matches expected code', () => {
+      const result = parseEslintConfig(
+        JSON.stringify({
+          rules: { 'no-restricted-syntax': ['error', 'DebuggerStatement'] },
+        }),
+      );
+      const re = new RegExp(result.rules[0]!.pattern);
+      expect(re.test('  debugger;')).toBe(true);
+      expect(re.test('const x = 1;')).toBe(false);
+    });
+  });
 });
