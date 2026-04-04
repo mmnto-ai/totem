@@ -78,6 +78,15 @@ totem import --from-eslint ./eslint.config.mjs
 totem rule list
 ```
 
+The ESLint adapter imports these rule types:
+
+- `no-restricted-imports` — import paths and patterns
+- `no-restricted-globals` — global variable usage
+- `no-restricted-properties` — object.property pairs (dot, optional chaining, and bracket notation)
+- `no-restricted-syntax` — these three AST node types: ForInStatement, WithStatement, DebuggerStatement (other selectors are silently skipped)
+
+The Semgrep adapter (`--from-semgrep`) imports pattern-based YAML rules.
+
 ### Pipeline 5: Auto-Capture
 
 Run your standard review. If the PR contains violations, P5 will automatically stage the offending lines as warnings in your rule list.

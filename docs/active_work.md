@@ -1,17 +1,12 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.10.1` (published 2026-04-04) with 2,506 tests across core, CLI, and MCP packages and 413 compiled rules. The Import Engine is the current milestone.
+The project is at release `@mmnto/cli@1.10.2` (published 2026-04-04) with 2,525 tests across core, CLI, and MCP packages and 411 compiled rules. The Import Engine is the current milestone.
 
 ### Current: 1.11.0 — The Import Engine
 
 Theme: rule portability across tools and teams.
 
-**Phase 2 (next):**
-
-- **#1165** — Lesson retirement ledger (prevent re-extraction of removed rules)
-- **#1140** — ESLint `no-restricted-syntax`/`properties` handlers
-
-**Phase 3:**
+**Phase 3 (next):**
 
 - **#1152** — Proactive language packs (tier-1 headline feature)
 - **#1131** — Rule refinement from false-positive scan alerts
@@ -45,6 +40,16 @@ Theme: internal quality, test infrastructure, and deferred refactors.
 - Strategy **#63** — Spec efficacy validation
 
 ### Recently Completed
+
+**1.10.2 — Phase 2: Import Engine Foundations (2026-04-04)**
+
+Retirement ledger, compiler safety, and expanded ESLint import coverage.
+
+- ~~**#1165**~~ — Lesson retirement ledger: `.totem/retired-lessons.json` prevents re-extraction of removed rules
+- ~~**#1177**~~ — Compiler guard: rejects self-suppressing patterns (totem-ignore/totem-context/shield-context)
+- ~~**#1140**~~ — ESLint `no-restricted-properties` and `no-restricted-syntax` handlers
+- ~~**#1185**~~ — Model defaults updated (`claude-sonnet-4-6`, `gpt-5.4-mini`)
+- Issues filed: **#1184** (gemma4 eval), **#1189** (flaky Windows CI), **#1190** (ast-grep for properties)
 
 **1.10.1 — Phase 1 Bug Fixes (2026-04-04)**
 
