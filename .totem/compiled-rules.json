@@ -4695,22 +4695,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "a3935d585c6e2ca3",
-      "lessonHeading": "Adhering to project-specific error formatting, such",
-      "pattern": "\\bnew\\s+Error\\(\\s*['\"`](?!\\[Totem Error\\])",
-      "message": "Error messages must be prefixed with '[Totem Error]' to ensure consistent diagnostic parsing and prevent errors from being swallowed.",
-      "engine": "regex",
-      "compiledAt": "2026-03-26T04:22:13.798Z",
-      "createdAt": "2026-03-26T04:22:13.798Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "5888612c86a4cd02",
       "lessonHeading": "Concatenating severity strings with comment bodies",
       "pattern": "(\\b(severity|level)\\b.*\\+.*\\b(body|comment|text|msg)\\b)|(\\$\\{\\s*(severity|level)\\s*\\}.*\\$\\{\\s*(body|comment|text|msg)\\s*\\})",
@@ -6581,29 +6565,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "d58c2dd2c7f123ac",
-      "lessonHeading": "Use totem-context for inline justifications",
-      "pattern": "\\btotem-ignore\\b",
-      "message": "Use 'totem-context:' for inline justifications instead of 'totem-ignore' to maintain auditability.",
-      "engine": "regex",
-      "compiledAt": "2026-04-03T13:22:37.881Z",
-      "createdAt": "2026-04-03T13:22:37.881Z",
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "0bfbee24513eb73f",
-      "lessonHeading": "Use pre-push hooks for project-wide formatting",
-      "pattern": "['\"]pre-commit['\"]",
-      "message": "Use pre-push hooks for project-wide formatting instead of pre-commit to ensure non-code files (docs, JSON) are checked before CI.",
-      "engine": "regex",
-      "compiledAt": "2026-04-03T13:22:51.421Z",
-      "createdAt": "2026-04-03T13:22:51.421Z",
-      "fileGlobs": [
-        "**/packages/cli/src/commands/install-hooks.ts"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "4cd80a665e3600e3",
       "lessonHeading": "Escape Windows paths in generated configs",
       "pattern": "[a-zA-Z]:\\\\(?![\\\\/])",
@@ -6631,19 +6592,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "6f833b47dc45f955",
-      "lessonHeading": "Detect package managers in generated hooks",
-      "pattern": "\\b(npm|pnpm|yarn|bun)\\s+(install|i|run|exec|test|dlx|x|add)\\b",
-      "message": "Avoid hardcoding package managers in git hook templates; detect the project's active manager (pnpm, npm, yarn, or bun) instead to ensure environment compatibility.",
-      "engine": "regex",
-      "compiledAt": "2026-04-03T13:23:28.019Z",
-      "createdAt": "2026-04-03T13:23:28.019Z",
-      "fileGlobs": [
-        "**/packages/cli/src/commands/install-hooks.ts"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "c9700d28abb6e96c",
       "lessonHeading": "Surface specific git fallback errors",
       "pattern": "",
@@ -6654,22 +6602,6 @@
       "createdAt": "2026-04-03T13:23:27.701Z",
       "fileGlobs": [
         "packages/cli/src/commands/extract.ts"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "ea7ed761aaa15c82",
-      "lessonHeading": "Avoid empty catch blocks using discards",
-      "pattern": "",
-      "message": "Avoid empty catch blocks. Use a discard variable (e.g., catch (_err)) to indicate intentional silent failure.",
-      "engine": "ast",
-      "astQuery": "[(catch_clause parameter: (catch_parameter (identifier) @id (#not-match? @id \"^_\")) body: (statement_block) @body (#eq? @body \"{}\")) (catch_clause !parameter body: (statement_block) @body (#eq? @body \"{}\"))] @violation",
-      "compiledAt": "2026-04-03T13:24:37.408Z",
-      "createdAt": "2026-04-03T13:24:37.408Z",
-      "fileGlobs": [
-        "packages/cli/src/commands/**/*.ts",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
       ],
       "severity": "warning"
     },
@@ -6716,26 +6648,11 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "9b1fe3a7ce4880e5",
-      "lessonHeading": "Always trim git output whitespace",
-      "pattern": "\\bgit\\b.*?\\.toString\\(\\)(?!\\.trim)",
-      "message": "Always trim git output whitespace (e.g., .toString().trim()) to prevent path resolution errors",
-      "engine": "regex",
-      "compiledAt": "2026-04-03T13:26:12.696Z",
-      "createdAt": "2026-04-03T13:26:12.696Z",
-      "fileGlobs": [
-        "packages/cli/src/**/*.ts",
-        "!**/*.test.ts"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "63680bf329d59167",
       "lessonHeading": "Use process.exitCode for CLI exits",
+      "pattern": "",
       "message": "Use process.exitCode instead of process.exit() to allow the process to terminate gracefully and ensure cleanup logic can complete.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "process.exit($$$ARGS)",
       "compiledAt": "2026-04-03T22:48:57.295Z",
       "createdAt": "2026-04-03T22:48:57.295Z",
@@ -6744,6 +6661,22 @@
         "!**/index.ts",
         "!**/commands/*.ts",
         "!**/*.test.ts"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "1c1bdad026583463",
+      "lessonHeading": "Use totem-context for inline justifications",
+      "message": "Use 'totem-context:' for inline justifications instead of 'totem-ignore' to maintain auditability.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\btotem-ignore\\b",
+      "compiledAt": "2026-04-04T01:04:19.700Z",
+      "createdAt": "2026-04-04T01:04:19.700Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
       ]
     }
   ],
