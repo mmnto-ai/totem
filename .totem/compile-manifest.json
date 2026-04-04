@@ -1,7 +1,7 @@
 {
-  "compiled_at": "2026-04-04T16:47:06.528Z",
-  "model": "manual-retirement",
-  "input_hash": "b2245f7bfc177457f0bdc39466ef188e3179401585fe53d7322298e0fd84db23",
-  "output_hash": "dc9457a26228569482e18907553206788ab031f559e6182943f45e6eacc9aa28",
-  "rule_count": 413
+  "compiled_at": "2026-04-04T21:50:44.245Z",
+  "model": "gemini-3-flash-preview",
+  "input_hash": "8f677f9381f03788b745cc15c09dbe46a9e9c4e40cc3e1957598a82784d3348d",
+  "output_hash": "291f076365ff60323ad8bb2d0b1dacfad8ad56f40da79dfc35e2637897dfea13",
+  "rule_count": 417
 }
