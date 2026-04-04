@@ -13,7 +13,7 @@
     "prepare": "node tools/install-hooks.js",
     "changeset": "changeset",
     "version": "changeset version",
-    "release": "pnpm build && node tools/publish-oidc.js",
+    "release": "pnpm build && changeset publish",
     "docs:inject": "node tools/docs-inject.cjs",
     "test:docs": "node tools/docs-transforms.test.cjs"
   },
