@@ -6565,21 +6565,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "29db0aebc515741d",
-      "lessonHeading": "Use process.exitCode for CLI exits",
-      "pattern": "",
-      "message": "Prefer setting process.exitCode over calling process.exit() to allow for graceful termination and cleanup.",
-      "engine": "ast-grep",
-      "astGrepPattern": "process.exit($CODE)",
-      "compiledAt": "2026-04-02T23:28:03.392Z",
-      "createdAt": "2026-04-02T23:28:03.392Z",
-      "fileGlobs": [
-        "packages/cli/src/**/*.ts",
-        "!**/*.test.ts"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "4cd80a665e3600e3",
       "lessonHeading": "Escape Windows paths in generated configs",
       "pattern": "[a-zA-Z]:\\\\(?![\\\\/])",
@@ -6663,14 +6648,31 @@
       "severity": "warning"
     },
     {
+      "lessonHash": "63680bf329d59167",
+      "lessonHeading": "Use process.exitCode for CLI exits",
+      "pattern": "",
+      "message": "Use process.exitCode instead of process.exit() to allow the process to terminate gracefully and ensure cleanup logic can complete.",
+      "engine": "ast-grep",
+      "astGrepPattern": "process.exit($$$ARGS)",
+      "compiledAt": "2026-04-03T22:48:57.295Z",
+      "createdAt": "2026-04-03T22:48:57.295Z",
+      "fileGlobs": [
+        "packages/cli/src/**/*.ts",
+        "!**/index.ts",
+        "!**/commands/*.ts",
+        "!**/*.test.ts"
+      ],
+      "severity": "warning"
+    },
+    {
       "lessonHash": "1c1bdad026583463",
       "lessonHeading": "Use totem-context for inline justifications",
       "message": "Use 'totem-context:' for inline justifications instead of 'totem-ignore' to maintain auditability.",
       "engine": "regex",
       "severity": "warning",
       "pattern": "\\btotem-ignore\\b",
-      "compiledAt": "2026-04-04T00:43:10.262Z",
-      "createdAt": "2026-04-04T00:43:10.262Z",
+      "compiledAt": "2026-04-04T01:04:19.700Z",
+      "createdAt": "2026-04-04T01:04:19.700Z",
       "fileGlobs": [
         "**/*.ts",
         "!**/*.test.ts",
