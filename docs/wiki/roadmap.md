@@ -39,6 +39,14 @@ _Internal quality, research validation, and platform hardening._
 
 ## Shipped
 
+### 1.11.0 — The Import Engine (2026-04-04)
+
+_Rule portability — bring governance from external tools and other totem instances._
+
+- **Proactive Language Packs (#1152):** Thick TypeScript/Shell/Node.js baseline rules (50 total) from established best practices like @typescript-eslint/strict, OWASP Node.js, and ShellCheck/POSIX.
+- **ESLint Flat Config (#1138):** Import from modern ESLint flat config format.
+- **Totem-to-Totem Import (#1139):** Cross-repo rule sharing between totem instances.
+
 ### 1.10.2 — Phase 2: Import Engine Foundations (2026-04-04)
 
 _Retirement ledger, compiler safety, and expanded ESLint import coverage._
