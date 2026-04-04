@@ -10,6 +10,7 @@
 
 import { hashLesson, validateRegex } from './compiler.js';
 import type { CompiledRule } from './compiler-schema.js';
+import { escapeRegex } from './regex-utils.js';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -51,7 +52,7 @@ function handleRestrictedImports(
             : null;
       if (!name) continue;
       const heading = `[eslint] ${ruleName}: ${name}`;
-      const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const escapedName = escapeRegex(name);
       rules.push({
         lessonHash: hashLesson(heading, `Import of '${name}' is restricted`),
         lessonHeading: heading,
@@ -77,7 +78,7 @@ function handleRestrictedImports(
       if (!pat) continue;
       const heading = `[eslint] ${ruleName}: ${pat}`;
       // Convert glob-like pattern to regex
-      const regexPat = pat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*');
+      const regexPat = escapeRegex(pat).replace(/\\\*/g, '.*');
       rules.push({
         lessonHash: hashLesson(heading, `Import matching '${pat}' is restricted`),
         lessonHeading: heading,
@@ -113,7 +114,7 @@ function handleRestrictedGlobals(
             : null;
       if (!name) continue;
       const heading = `[eslint] no-restricted-globals: ${name}`;
-      const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const escapedName = escapeRegex(name);
       rules.push({
         lessonHash: hashLesson(heading, `Use of global '${name}' is restricted`),
         lessonHeading: heading,
@@ -156,15 +157,15 @@ function handleRestrictedProperties(
 
     let pattern: string;
     if (obj && prop) {
-      const eo = obj.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const ep = prop.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      pattern = `\\b${eo}\\.${ep}\\b`;
+      const eo = escapeRegex(obj);
+      const ep = escapeRegex(prop);
+      pattern = `(?:^|[^\\w$])${eo}\\s*\\.\\s*${ep}\\b`;
     } else if (obj) {
-      const eo = obj.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      pattern = `\\b${eo}\\b`;
+      const eo = escapeRegex(obj);
+      pattern = `(?:^|[^\\w$])${eo}\\b`;
     } else {
-      const ep = prop!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      pattern = `\\.${ep}\\b`;
+      const ep = escapeRegex(prop!);
+      pattern = `\\.\\s*${ep}\\b`;
     }
 
     rules.push({
@@ -215,7 +216,7 @@ function handleRestrictedSyntax(
     if (!selector) continue;
 
     const pattern = SYNTAX_REGEX_MAP[selector];
-    if (!pattern) continue; // Skip complex/unknown selectors — handled in parseEslintConfig as "skipped"
+    if (!pattern) continue; // Skip complex/unknown selectors silently
 
     const customMsg =
       typeof item === 'object' && item !== null
