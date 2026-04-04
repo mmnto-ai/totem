@@ -327,7 +327,7 @@ export async function sharedPipeline(
 
   // Filter out lessons matching the retirement ledger (#1165)
   const { readRetiredLessons, isRetiredHeading } = await import('@mmnto/totem');
-  const totemDir = path.join(cwd, '.totem');
+  const totemDir = path.resolve(cwd, config.totemDir);
   const retiredLessons = readRetiredLessons(totemDir);
   let lessonsToProcess = allLessons;
   if (retiredLessons.length > 0) {

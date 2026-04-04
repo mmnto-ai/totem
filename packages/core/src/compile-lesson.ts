@@ -121,8 +121,12 @@ export function validateAstGrepPattern(pattern: string | Record<string, unknown>
 /** Patterns containing suppression markers can never fire — the engine suppresses those lines first. */
 function isSelfSuppressing(pattern: string): boolean {
   // Unescape the regex string to check for literal directive substrings
-  const unescaped = pattern.replace(/\\\\/g, '\\').replace(/\\b/g, '');
-  return unescaped.includes('totem-ignore') || unescaped.includes('totem-context');
+  const unescaped = pattern.replace(/\\\\/g, '\\').replace(/\\b/g, '').toLowerCase();
+  return (
+    unescaped.includes('totem-ignore') ||
+    unescaped.includes('totem-context') ||
+    unescaped.includes('shield-context')
+  );
 }
 
 // ─── Rule builder (pure, no I/O) ────────────────────

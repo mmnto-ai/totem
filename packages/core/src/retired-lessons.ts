@@ -27,7 +27,13 @@ export function readRetiredLessons(totemDir: string): RetiredLesson[] {
     const content = fs.readFileSync(filePath, 'utf-8');
     const parsed: unknown = JSON.parse(content);
     if (!Array.isArray(parsed)) return [];
-    return parsed as RetiredLesson[];
+    return parsed.filter(
+      (item): item is RetiredLesson =>
+        item !== null &&
+        typeof item === 'object' &&
+        typeof (item as Record<string, unknown>).heading === 'string' &&
+        typeof (item as Record<string, unknown>).reason === 'string',
+    );
   } catch {
     return [];
   }
@@ -50,8 +56,8 @@ export function writeRetiredLessons(totemDir: string, entries: RetiredLesson[]):
  */
 export function retireLesson(totemDir: string, heading: string, reason: string): void {
   const existing = readRetiredLessons(totemDir);
-  const normalised = heading.toLowerCase();
-  const alreadyExists = existing.some((e) => e.heading.toLowerCase() === normalised);
+  const normalised = heading.toLowerCase().trim();
+  const alreadyExists = existing.some((e) => e.heading.toLowerCase().trim() === normalised);
   if (alreadyExists) return;
 
   existing.push({
