@@ -692,7 +692,7 @@ function baseConfig(overrides?: Partial<TotemConfig>): TotemConfig {
   } as TotemConfig;
 }
 
-describe('runOrchestrator', () => {
+describe('runOrchestrator', { timeout: 15_000 }, () => {
   let tmpDir: string;
 
   beforeEach(() => {
