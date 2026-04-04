@@ -6663,17 +6663,16 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "8475519baae876d6",
+      "lessonHash": "1c1bdad026583463",
       "lessonHeading": "Use totem-context for inline justifications",
       "message": "Use 'totem-context:' for inline justifications instead of 'totem-ignore' to maintain auditability.",
       "engine": "regex",
       "severity": "warning",
       "pattern": "\\btotem-ignore\\b",
-      "compiledAt": "2026-04-04T00:34:48.159Z",
-      "createdAt": "2026-04-04T00:34:48.159Z",
+      "compiledAt": "2026-04-04T00:43:10.262Z",
+      "createdAt": "2026-04-04T00:43:10.262Z",
       "fileGlobs": [
         "**/*.ts",
-        "!**/*.md",
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ]
