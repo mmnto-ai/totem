@@ -1,6 +1,6 @@
 # Supported Models & AI Tools Reference
 
-> **Last validated:** 2026-03-12
+> **Last validated:** 2026-04-04
 
 Totem supports four LLM provider families for orchestration, and exports project
 knowledge to all major AI coding tools. This document tracks model IDs, tool
@@ -14,27 +14,29 @@ Used by `totem review`, `totem spec`, `totem triage`, `totem extract`, etc.
 
 ### Google Gemini
 
-| Role                | Model ID                 | Notes                                            |
-| ------------------- | ------------------------ | ------------------------------------------------ |
-| Default (fast)      | `gemini-3-flash-preview` | Preview — current Totem default                  |
-| Pro (complex tasks) | `gemini-3.1-pro-preview` | Preview — used for spec/review/triage overrides  |
-| Stable fast         | `gemini-2.5-flash`       | GA release, used in smoke/eval tests             |
-| Stable pro          | `gemini-2.5-pro`         | GA release                                       |
-| Fast-lite (newest)  | `gemini-3.1-flash-lite`  | Released 2026-03-03, 2.5x faster TTFT than Flash |
-| Ultra-cheap         | `gemini-2.5-flash-lite`  | Minimal cost                                     |
+| Role                | Model ID                         | Notes                                        |
+| ------------------- | -------------------------------- | -------------------------------------------- |
+| Default (fast)      | `gemini-3-flash-preview`         | Preview — current Totem default              |
+| Pro (complex tasks) | `gemini-3.1-pro-preview`         | Replaced `gemini-3-pro-preview` (March 2026) |
+| Image generation    | `gemini-3.1-flash-image-preview` | Flash variant optimized for image tasks      |
+| Fast-lite (newest)  | `gemini-3.1-flash-lite`          | 2.5x faster TTFT than Flash, lowest cost     |
+| Stable fast         | `gemini-2.5-flash`               | GA — **deprecating June 17, 2026**           |
+| Stable pro          | `gemini-2.5-pro`                 | GA — **deprecating June 17, 2026**           |
 
 **Listing API:** `GET https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY`
 
 - Auth: API key as query parameter
 - Docs: https://ai.google.dev/api/models
+- Note: `gemini-3-pro-preview` was discontinued March 26, 2026. Use `gemini-3.1-pro-preview`.
 
 ### Anthropic (Claude)
 
 | Role              | Model ID            | Dated Snapshot               |
 | ----------------- | ------------------- | ---------------------------- |
-| Flagship          | `claude-opus-4-6`   | Latest Opus                  |
+| Flagship          | `claude-opus-4-6`   | Latest Opus (1M context)     |
 | Fast/balanced     | `claude-sonnet-4-6` | Latest Sonnet                |
 | Cheapest          | `claude-haiku-4-5`  | `claude-haiku-4-5-20251001`  |
+| Previous Opus     | `claude-opus-4-5`   | Still available              |
 | Legacy Sonnet 4.5 | `claude-sonnet-4-5` | `claude-sonnet-4-5-20250929` |
 | Legacy Sonnet 4   | `claude-sonnet-4-0` | `claude-sonnet-4-20250514`   |
 
@@ -46,32 +48,34 @@ Used by `totem review`, `totem spec`, `totem triage`, `totem extract`, etc.
 
 ### OpenAI
 
-| Role                 | Model ID                  | Notes                    |
-| -------------------- | ------------------------- | ------------------------ |
-| Flagship             | `gpt-5.4`                 | Latest                   |
-| Pro (higher compute) | `gpt-5.4-pro`             | Higher token limits      |
-| Fast/cheap           | `gpt-5-mini`              | Cost-optimized           |
-| Ultra-cheap          | `gpt-5-nano`              | Smallest                 |
-| Reasoning (best)     | `o3-pro`                  | Slow but powerful        |
-| Reasoning (fast)     | `o4-mini`                 | Cost-efficient reasoning |
-| Previous gen         | `gpt-4o`, `gpt-4o-mini`   | Legacy, still available  |
-| Previous gen         | `gpt-4.1`, `gpt-4.1-mini` | Still available          |
+| Role                 | Model ID                  | Notes                                 |
+| -------------------- | ------------------------- | ------------------------------------- |
+| Flagship             | `gpt-5.4`                 | Latest                                |
+| Pro (higher compute) | `gpt-5.4-pro`             | Higher token limits                   |
+| Fast/cheap           | `gpt-5.4-mini`            | Cost-optimized (succeeded gpt-5-mini) |
+| Ultra-cheap          | `gpt-5.4-nano`            | Smallest (succeeded gpt-5-nano)       |
+| Reasoning (best)     | `o3-pro`                  | API only — retired from ChatGPT       |
+| Reasoning (fast)     | `o4-mini`                 | API only — retired from ChatGPT       |
+| Previous gen         | `gpt-4.1`, `gpt-4.1-mini` | Legacy, still available in API        |
 
 **Listing API:** `GET https://api.openai.com/v1/models`
 
 - Auth: `Authorization: Bearer $OPENAI_API_KEY`
 - Docs: https://platform.openai.com/docs/models
+- Note: `gpt-4o`, `gpt-4o-mini`, `o4-mini` retired from ChatGPT (Feb 2026) but still in API.
 
 ### Ollama (Local)
 
 Ollama runs models locally. Any model from the [Ollama library](https://ollama.com/search)
 can be used as an orchestrator. Popular choices:
 
-| Model           | Parameters  | Notes                  |
-| --------------- | ----------- | ---------------------- |
-| `llama3.1`      | 8B/70B/405B | Meta's flagship        |
-| `qwen2.5-coder` | 7B/32B      | Code-specialized       |
-| `phi3`          | 3.8B/14B    | Microsoft, lightweight |
+| Model           | Parameters      | Notes                            |
+| --------------- | --------------- | -------------------------------- |
+| `gemma4`        | e2b/e4b/26b/31b | Google, multimodal, 128-256K ctx |
+| `qwen3`         | 0.6B–235B (MoE) | Alibaba, strong reasoning        |
+| `llama3.2`      | 1B/3B/11B/90B   | Meta, vision variants available  |
+| `qwen2.5-coder` | 7B/32B          | Code-specialized                 |
+| `phi3`          | 3.8B/14B        | Microsoft, lightweight           |
 
 **Listing API (local):** `GET http://localhost:11434/api/tags`
 
@@ -91,9 +95,11 @@ Used by `totem sync` for indexing chunks into LanceDB.
 | Gemini               | `gemini-embedding-001`       | 768        | Stable, text-only                     |
 | OpenAI               | `text-embedding-3-small`     | 1536       | Lowest onboarding friction            |
 | OpenAI (large)       | `text-embedding-3-large`     | 3072       | Higher quality, higher cost           |
-| **Ollama** (offline) | `nomic-embed-text`           | 768        | 56M+ pulls, most popular local        |
+| **Ollama** (offline) | `nomic-embed-text`           | 768        | Most popular local embed model        |
+| Ollama               | `nomic-embed-text-v2-moe`    | 768        | Multilingual MoE variant              |
 | Ollama               | `mxbai-embed-large`          | 1024       | BERT-large class SOTA                 |
-| Ollama               | `qwen3-embedding`            | varies     | Newest, fast-growing                  |
+| Ollama               | `embeddinggemma`             | 768        | 300M params, from Gemma 3, 100+ langs |
+| Ollama               | `qwen3-embedding`            | varies     | 0.6B–8B, 100+ languages               |
 
 ---
 

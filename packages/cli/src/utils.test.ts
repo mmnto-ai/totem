@@ -779,7 +779,7 @@ describe('runOrchestrator', () => {
       orchestrator: {
         provider: 'gemini',
         defaultModel: 'gemini-3-flash-preview',
-        overrides: { shield: 'anthropic:claude-sonnet-4-20250514' },
+        overrides: { shield: 'anthropic:claude-sonnet-4-6' },
       },
     });
 
