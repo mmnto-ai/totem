@@ -155,10 +155,12 @@ function handleRestrictedProperties(
         ? rec.message
         : `Use of ${label} is restricted by ESLint config.`;
 
-    // Only use ast-grep for valid JS identifier properties (non-identifiers need regex)
-    const isIdentifier = (s: string) => /^[a-zA-Z_$][\w$]*$/.test(s);
+    // Only use ast-grep for identifiers safe from meta-variable collision
+    // ($-prefixed names are ast-grep meta-variables, _ is a wildcard)
+    const isAstGrepSafe = (s: string) =>
+      /^[a-zA-Z_$][\w$]*$/.test(s) && !s.startsWith('$') && s !== '_';
 
-    if (obj && prop && isIdentifier(obj) && isIdentifier(prop)) {
+    if (obj && prop && isAstGrepSafe(obj) && isAstGrepSafe(prop)) {
       // ast-grep natively matches dot, optional chaining, and bracket notation
       rules.push({
         lessonHash: hashLesson(heading, msg),
@@ -172,7 +174,7 @@ function handleRestrictedProperties(
         createdAt: now,
         fileGlobs: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '!**/*.test.*', '!**/*.spec.*'],
       });
-    } else if (obj && !prop && isIdentifier(obj)) {
+    } else if (obj && !prop && isAstGrepSafe(obj)) {
       // ast-grep wildcard matches any property access on the object
       rules.push({
         lessonHash: hashLesson(heading, msg),
