@@ -841,14 +841,14 @@ describe('upgradePrePushHookIfNeeded', () => {
     cleanTmpDir(tmpDir);
   });
 
+  // Top-level if/fi blocks in the canonical pre-push hook:
+  // 1. agent detection, 2. resolve, 3. main guard, 4. format:check
+  const PRE_PUSH_TOP_LEVEL_BLOCKS = 4;
+
   /**
    * Helper: extract the totem block from a hook file and compare it against
    * the canonical output of buildPrePushHook('pnpm dlx @mmnto/cli') (shebang stripped, trimmed).
    * Catches stale shell fragments or splice boundary bugs that toContain would miss.
-   *
-   * The new stateless format has THREE top-level if/fi blocks (resolve block +
-   * guard block + format:check block). We track to the third balanced fi at
-   * depth 0 to capture all. Old single-block hooks are captured at the first.
    */
   function extractTotemBlock(hookContent: string): string {
     const markerIdx = hookContent.indexOf(`# ${TOTEM_PREPUSH_MARKER}`);
@@ -880,9 +880,7 @@ describe('upgradePrePushHookIfNeeded', () => {
       if (firstIfFound && depth === 0 && /^fi\s*$/.test(trimmed)) {
         balancedCount++;
         endOffset = charOffset + line.length;
-        // New format has 4 top-level blocks (agent detection, resolve, main, format check);
-        // old format has 1. Stop after finding the block count that matches the canonical hook.
-        if (balancedCount >= 4) break;
+        if (balancedCount >= PRE_PUSH_TOP_LEVEL_BLOCKS) break;
       }
       charOffset += line.length + 1; // +1 for the newline
     }
