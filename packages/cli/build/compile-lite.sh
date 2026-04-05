@@ -33,6 +33,8 @@ compile_target() {
     --outfile "$outfile"
 
   if [ -f "$outfile" ] || [ -f "$outfile.exe" ]; then
+    local warn_limit=$((35 * 1024 * 1024))
+    local hard_limit=$((50 * 1024 * 1024))
     local size
     if [ -f "$outfile.exe" ]; then
       size=$(stat -c%s "$outfile.exe" 2>/dev/null || stat -f%z "$outfile.exe" 2>/dev/null)
@@ -42,10 +44,10 @@ compile_target() {
     local mb=$((size / 1024 / 1024))
     echo "[Lite Compile] $target: ${mb}MB"
 
-    if [ "$mb" -gt 50 ]; then
+    if [ "$size" -gt "$hard_limit" ]; then
       echo "[Lite Compile] WARNING: Binary exceeds 50MB hard limit!"
       exit 1
-    elif [ "$mb" -gt 35 ]; then
+    elif [ "$size" -gt "$warn_limit" ]; then
       echo "[Lite Compile] WARNING: Binary exceeds 35MB target (but under 50MB cap)"
     fi
   fi

@@ -21,7 +21,12 @@ describe('ast-grep-wasm-shim (non-WASM parts)', () => {
     try {
       const mod = await import(shimPath);
       Lang = mod.Lang;
-    } catch {
+    } catch (err) {
+      // Only swallow the known WASM loader limitation — re-throw real errors
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!/\.wasm|ERR_UNKNOWN_FILE_EXTENSION|Unknown file extension/i.test(msg)) {
+        throw err;
+      }
       // WASM import fails in Node — that's expected
       // Verify the source directly instead
       const { readFileSync } = await import('node:fs');

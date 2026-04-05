@@ -522,8 +522,12 @@ try {
   if ('ensureInit' in mod && typeof mod.ensureInit === 'function') {
     await (mod as { ensureInit: () => Promise<void> }).ensureInit();
   }
-} catch {
-  // Non-fatal: AST rules will fail gracefully
+} catch (err) {
+  // Non-fatal: AST rules will degrade gracefully. Surface under --debug.
+  if (process.env['TOTEM_DEBUG'] === '1' || process.argv.includes('--debug')) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[Totem Debug] AST WASM init failed: ${msg}`);
+  }
 }
 
 // ─── Parse and run ──────────────────────────────────────────

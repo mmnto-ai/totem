@@ -42,7 +42,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.2.x
 
       - run: pnpm install --frozen-lockfile
 
@@ -104,8 +104,8 @@ jobs:
         id: tag
         env:
           EVENT_NAME: ${{ github.event_name }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }} # totem-ignore: env context, not shell — safe from injection
-          INPUT_TAG: ${{ inputs.tag }} # totem-ignore: env context, not shell — safe from injection
+          RELEASE_TAG: ${{ github.event.release.tag_name }} # totem-ignore(#1201): env context, not shell — safe from injection
+          INPUT_TAG: ${{ inputs.tag }} # totem-ignore(#1201): env context, not shell — safe from injection
         run: |
           if [ "$EVENT_NAME" = "release" ]; then
             echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"

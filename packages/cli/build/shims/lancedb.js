@@ -11,6 +11,12 @@ export function connect() {
   throw new Error(LITE_ERROR);
 }
 
+export const Index = {
+  fts() {
+    throw new Error(LITE_ERROR);
+  },
+};
+
 export class Table {
   constructor() {
     throw new Error(LITE_ERROR);

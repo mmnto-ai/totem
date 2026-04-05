@@ -102,14 +102,18 @@ async function doInit(): Promise<void> {
   initialized = true;
 }
 
+// ─── Re-export types for downstream consumers ──────
+
+export type { SgNode, SgRoot } from '@ast-grep/wasm';
+
 // ─── Public API (matching @ast-grep/napi) ───────────
 
 /**
  * Parse source code into an AST.
  * Matches the @ast-grep/napi signature: parse(lang: Lang, src: string) => SgRoot
  *
- * The lang parameter accepts either a Lang enum value (string) or the
- * numeric napi Lang values — we normalize to strings internally.
+ * The lang parameter accepts a Lang enum value (string).
+ * Unlike @ast-grep/napi which uses numeric enums, the WASM API uses strings.
  */
 export function parse(lang: Lang | string, src: string): import('@ast-grep/wasm').SgRoot {
   if (!initialized || !wasmModule) {
