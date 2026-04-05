@@ -26,13 +26,46 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   return denom === 0 ? 0 : dot / denom;
 }
 
+// ─── Heading-level deduplication ────────────────────────
+
+/** Normalize a heading for exact-match dedup: lowercase, collapse whitespace. */
+export function normalizeHeading(heading: string): string {
+  return heading.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Drop candidates whose normalized heading has already been seen.
+ * Cheap O(n) first pass before the expensive embedding comparison.
+ */
+export function deduplicateByHeading(candidates: ExtractedLesson[]): {
+  unique: ExtractedLesson[];
+  headingDupes: ExtractedLesson[];
+} {
+  const seen = new Set<string>();
+  const unique: ExtractedLesson[] = [];
+  const headingDupes: ExtractedLesson[] = [];
+
+  for (const c of candidates) {
+    const key = normalizeHeading(c.heading ?? '');
+    if (key && seen.has(key)) {
+      headingDupes.push(c);
+    } else {
+      if (key) seen.add(key);
+      unique.push(c);
+    }
+  }
+
+  return { unique, headingDupes };
+}
+
 // ─── Semantic deduplication ─────────────────────────────
 
 /**
  * Remove semantically duplicate lessons by checking against both the LanceDB
  * index and already-accepted candidates in the current batch.
  *
- * Uses embedding cosine similarity with a configurable threshold (default 0.92).
+ * First pass: exact heading dedup (cheap, deterministic).
+ * Second pass: embedding cosine similarity with a configurable threshold (default 0.92).
  * Returns only the lessons that are sufficiently novel.
  */
 export async function deduplicateLessons(
@@ -43,11 +76,14 @@ export async function deduplicateLessons(
 ): Promise<{ kept: ExtractedLesson[]; dropped: ExtractedLesson[] }> {
   if (candidates.length === 0) return { kept: [], dropped: [] };
 
+  // First pass: exact heading dedup
+  const { unique: headingUnique, headingDupes } = deduplicateByHeading(candidates);
+
   const kept: ExtractedLesson[] = [];
-  const dropped: ExtractedLesson[] = [];
+  const dropped: ExtractedLesson[] = [...headingDupes];
   const batchVectors: number[][] = [];
 
-  for (const candidate of candidates) {
+  for (const candidate of headingUnique) {
     // Check against existing LanceDB lessons
     let isDbDuplicate = false;
     try {
