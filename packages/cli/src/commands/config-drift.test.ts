@@ -101,8 +101,9 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
 
 // ─── Instruction file length limits (FR-C01) ─────────
 
-describe('agent instruction files stay under 50 lines (FMEA-001 / FR-C01)', () => {
-  const MAX_LINES = 50;
+describe('agent instruction files stay concise (FMEA-001 / FR-C01)', () => {
+  const MAX_CHARS = 3000;
+  const MAX_DIRECTIVES = 25;
 
   const files = [
     { name: 'CLAUDE.md', content: readRoot('CLAUDE.md') },
@@ -111,9 +112,14 @@ describe('agent instruction files stay under 50 lines (FMEA-001 / FR-C01)', () =
   ];
 
   for (const { name, content } of files) {
-    it(`${name} is under ${MAX_LINES} lines`, () => {
-      const lineCount = content.split('\n').length;
-      expect(lineCount).toBeLessThanOrEqual(MAX_LINES);
+    it(`${name} is under ${MAX_CHARS} characters`, () => {
+      expect(content.length).toBeLessThanOrEqual(MAX_CHARS);
+    });
+
+    it(`${name} has fewer than ${MAX_DIRECTIVES} directives`, () => {
+      // Count bullet points and numbered items as distinct directives
+      const directives = content.split('\n').filter((l) => /^\s*[-*]\s|^\s*\d+\.\s/.test(l)).length;
+      expect(directives).toBeLessThanOrEqual(MAX_DIRECTIVES);
     });
   }
 });
