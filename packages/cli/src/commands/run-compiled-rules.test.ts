@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CompiledRule } from '@mmnto/totem';
 import * as totem from '@mmnto/totem';
-import { readLedgerEvents, saveCompiledRules } from '@mmnto/totem';
+import { readLedgerEvents, saveCompiledRules, TotemError } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import { runCompiledRules } from './run-compiled-rules.js';
@@ -605,5 +605,88 @@ describe('runCompiledRules', () => {
     expect(events[0]!.file).toBe('src/app.ts');
     expect(events[0]!.justification).toBe('needed for monitoring');
     expect(events[0]!.source).toBe('lint');
+  });
+});
+
+describe('TOTEM_LITE graceful AST degradation', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-lite-test-'));
+    fs.mkdirSync(path.join(tmpDir, TOTEM_DIR), { recursive: true });
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+    delete process.env['TOTEM_LITE'];
+  });
+
+  it('skips AST rules with warning when TOTEM_LITE=1 and AST engine fails', async () => {
+    process.env['TOTEM_LITE'] = '1';
+
+    const astRule = makeRule('console.log($$$)', 'no console', 'No console', {
+      engine: 'ast-grep',
+      fileGlobs: ['**/*.ts'],
+    });
+    saveCompiledRules(path.join(tmpDir, TOTEM_DIR, 'compiled-rules.json'), [astRule]);
+
+    const diff = `diff --git a/src/app.ts b/src/app.ts
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -1 +1,2 @@
++console.log("hello");
+`;
+
+    // Mock applyAstRulesToAdditions to throw (simulating WASM failure)
+    const spy = vi
+      .spyOn(totem, 'applyAstRulesToAdditions')
+      .mockRejectedValueOnce(
+        new TotemError('LINT_LESSONS_FAILED', 'AST engine not initialized — WASM unavailable', ''),
+      );
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'text',
+      tag: 'Test',
+    });
+
+    // Should pass despite AST failure — regex rules still run, AST skipped
+    expect(result.violations).toHaveLength(0);
+    spy.mockRestore();
+  });
+
+  it('re-throws AST errors when NOT in lite mode', async () => {
+    delete process.env['TOTEM_LITE'];
+
+    const astRule = makeRule('console.log($$$)', 'no console', 'No console', {
+      engine: 'ast-grep',
+      fileGlobs: ['**/*.ts'],
+    });
+    saveCompiledRules(path.join(tmpDir, TOTEM_DIR, 'compiled-rules.json'), [astRule]);
+
+    const diff = `diff --git a/src/app.ts b/src/app.ts
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -1 +1,2 @@
++console.log("hello");
+`;
+
+    const spy = vi
+      .spyOn(totem, 'applyAstRulesToAdditions')
+      .mockRejectedValueOnce(new TotemError('LINT_LESSONS_FAILED', 'AST engine crashed', ''));
+
+    await expect(
+      runCompiledRules({
+        diff,
+        cwd: tmpDir,
+        totemDir: TOTEM_DIR,
+        format: 'text',
+        tag: 'Test',
+      }),
+    ).rejects.toThrow('[Totem Error] AST engine crashed');
+
+    spy.mockRestore();
   });
 });

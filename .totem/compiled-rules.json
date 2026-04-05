@@ -2012,20 +2012,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "771fb0e59ec42095",
-      "lessonHeading": "GitHub Actions shell injection via template expressions",
-      "pattern": "\\$\\{\\{\\s*(github\\.event|inputs)\\..*\\}\\}",
-      "message": "GitHub Actions shell injection via template expressions",
-      "engine": "regex",
-      "compiledAt": "2026-03-21T07:45:50.468Z",
-      "createdAt": "2026-03-21T07:45:50.468Z",
-      "fileGlobs": [
-        ".github/workflows/*.yml",
-        ".github/workflows/*.yaml"
-      ],
-      "severity": "error"
-    },
-    {
       "lessonHash": "5b961a2a63d69d96",
       "lessonHeading": "Setting open-pull-requests-limit to 0 in dependabot.yml",
       "pattern": "open-pull-requests-limit\\s*:\\s*['\"]?[1-9]\\d*['\"]?",
@@ -6657,64 +6643,63 @@
     {
       "lessonHash": "b237bcf3b52381b1",
       "lessonHeading": "Exclude 'pwd' from credential regexes",
+      "pattern": "(\\/[^/]*pwd[^/]*\\/|new\\s+RegExp\\s*\\(\\s*['\"][^'\"]*pwd[^'\"]*['\"])",
       "message": "Exclude 'pwd' from credential regexes to avoid false positives with 'present working directory'",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(\\/[^/]*pwd[^/]*\\/|new\\s+RegExp\\s*\\(\\s*['\"][^'\"]*pwd[^'\"]*['\"])",
       "compiledAt": "2026-04-04T21:48:14.333Z",
       "createdAt": "2026-04-04T21:48:14.333Z",
       "fileGlobs": [
         "packages/cli/src/assets/**/*.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "6f362fa28abcf94a",
       "lessonHeading": "Validate JSON at system boundaries",
+      "pattern": "",
       "message": "Avoid using type assertions when parsing JSON. Perform element-level validation instead to prevent crashes from corrupted or manually edited files.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "JSON.parse($JSON) as $TYPE",
       "compiledAt": "2026-04-04T21:49:04.385Z",
       "createdAt": "2026-04-04T21:49:04.385Z",
       "fileGlobs": [
         "packages/core/**/*.ts",
         "!**/*.test.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "2fb6d33741343797",
       "lessonHeading": "Centralize model IDs in CLI initialization",
+      "pattern": "['\"](gpt|claude|gemini|llama|o1|mistral|deepseek)-[a-zA-Z0-9.-]+['\"]",
       "message": "Avoid hardcoding model ID literals; use centralized constants to prevent version drift in CLI initialization.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "['\"](gpt|claude|gemini|llama|o1|mistral|deepseek)-[a-zA-Z0-9.-]+['\"]",
       "compiledAt": "2026-04-04T21:49:01.018Z",
       "createdAt": "2026-04-04T21:49:01.018Z",
       "fileGlobs": [
         "**/packages/cli/src/commands/init-detect.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "bca57e1cdeb45f90",
       "lessonHeading": "Use centralized utilities for regex escaping",
+      "pattern": "new\\s+RegExp\\s*\\(\\s*(?!escapeRegex\\b)(?![\\\"'\\x60/])",
       "message": "Use the centralized 'escapeRegex' utility when building RegExp from dynamic configuration to prevent injection vulnerabilities.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "new\\s+RegExp\\s*\\(\\s*(?!escapeRegex\\b)(?![\\\"'\\x60/])",
       "compiledAt": "2026-04-04T21:49:14.301Z",
       "createdAt": "2026-04-04T21:49:14.301Z",
       "fileGlobs": [
         "**/packages/core/src/eslint-adapter.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "00dfbf2221b68df2",
       "lessonHeading": "Exclude test files from XSS rules",
+      "pattern": "\\.innerHTML\\s*=",
       "message": "Avoid innerHTML to prevent XSS vulnerabilities. Use textContent or a safe sanitization library instead. Test files are excluded from this rule to allow for testing of sanitization logic.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\.innerHTML\\s*=",
       "compiledAt": "2026-04-04T21:49:26.878Z",
       "createdAt": "2026-04-04T21:49:26.878Z",
       "fileGlobs": [
@@ -6730,19 +6715,34 @@
         "!**/*.spec.tsx",
         "!**/*.spec.js",
         "!**/*.spec.jsx"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "76762d7d0ad98113",
       "lessonHeading": "Handle dollar signs in identifier boundaries",
+      "pattern": "\\\\b",
       "message": "Avoid using standard word boundaries (\\b) for JavaScript identifiers as they fail when identifiers contain '$'. Use '(?:^|[^\\w$])' instead.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\\\b",
       "compiledAt": "2026-04-04T21:49:55.498Z",
       "createdAt": "2026-04-04T21:49:55.498Z",
       "fileGlobs": [
         "**/packages/core/src/eslint-adapter.ts"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "9f266a455f97fe37",
+      "lessonHeading": "GitHub Actions shell injection via template expressions",
+      "message": "GitHub Actions shell injection via template expressions",
+      "engine": "regex",
+      "severity": "error",
+      "pattern": "(?:^\\s*-?\\s*run\\b|^(?!\\s*[\\w-]+:\\s)\\s+).*\\$\\{\\{\\s*(github\\.event|inputs)\\..*\\}\\}",
+      "compiledAt": "2026-04-05T03:16:31.102Z",
+      "createdAt": "2026-04-05T03:16:31.102Z",
+      "fileGlobs": [
+        ".github/workflows/*.yml",
+        ".github/workflows/*.yaml"
       ]
     }
   ],
