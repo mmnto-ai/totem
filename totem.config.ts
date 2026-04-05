@@ -20,6 +20,7 @@ const config: TotemConfig = {
     provider: 'gemini',
     defaultModel: 'gemini-3-flash-preview',
     overrides: {
+      compile: 'anthropic:claude-sonnet-4-6', // Strategy #73: 90% correctness, 2.4s avg, 100% ast-grep on structural rules
       docs: 'gemini-3.1-pro-preview',
       spec: 'gemini-3.1-pro-preview',
       shield: 'gemini-3.1-pro-preview',
