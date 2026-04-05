@@ -148,10 +148,11 @@ export async function runCompiledRules(
           (msg) => log.warn(tag, msg),
         );
       } catch (err) {
-        // In the lite binary, WASM init may fail under Node.js (works in Bun).
-        // Degrade gracefully: skip AST rules, warn, continue with regex results.
-        if (process.env['TOTEM_LITE'] === '1') {
-          const msg = err instanceof Error ? err.message : String(err);
+        const msg = err instanceof Error ? err.message : String(err);
+        const isWasmFailure = /not initialized|wasm|web-tree-sitter/i.test(msg);
+        if (process.env['TOTEM_LITE'] === '1' && isWasmFailure) {
+          // In the lite binary, WASM init may fail under Node.js (works in Bun).
+          // Degrade gracefully: skip AST rules, warn, continue with regex results.
           log.warn(tag, `AST rules skipped (WASM engine unavailable): ${msg}`);
         } else {
           throw err;

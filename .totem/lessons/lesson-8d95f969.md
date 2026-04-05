@@ -1,7 +1,7 @@
 ## Lesson — GitHub Actions shell injection via template expressions
 
 **Tags:** security, curated
-**Pattern:** ^(?!\s*[-\w]+:\s*\$\{\{).*\$\{\{\s*(github\.event|inputs)\..*\}\}
+**Pattern:** (?:^\s*-?\s*run\b|^\s+(?![\w-]+:\s)).*\$\{\{\s*(github\.event|inputs)\..*\}\}
 **Engine:** regex
 **Scope:** .github/workflows/*.yml, .github/workflows/*.yaml
 **Severity:** error

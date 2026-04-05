@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CompiledRule } from '@mmnto/totem';
 import * as totem from '@mmnto/totem';
-import { readLedgerEvents, saveCompiledRules } from '@mmnto/totem';
+import { readLedgerEvents, saveCompiledRules, TotemError } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import { runCompiledRules } from './run-compiled-rules.js';
@@ -640,7 +640,9 @@ describe('TOTEM_LITE graceful AST degradation', () => {
     // Mock applyAstRulesToAdditions to throw (simulating WASM failure)
     const spy = vi
       .spyOn(totem, 'applyAstRulesToAdditions')
-      .mockRejectedValueOnce(new Error('[Totem Error] AST engine not initialized'));
+      .mockRejectedValueOnce(
+        new TotemError('LINT_LESSONS_FAILED', 'AST engine not initialized — WASM unavailable', ''),
+      );
 
     const result = await runCompiledRules({
       diff,
@@ -673,7 +675,7 @@ describe('TOTEM_LITE graceful AST degradation', () => {
 
     const spy = vi
       .spyOn(totem, 'applyAstRulesToAdditions')
-      .mockRejectedValueOnce(new Error('AST engine crashed'));
+      .mockRejectedValueOnce(new TotemError('LINT_LESSONS_FAILED', 'AST engine crashed', ''));
 
     await expect(
       runCompiledRules({
@@ -683,7 +685,7 @@ describe('TOTEM_LITE graceful AST degradation', () => {
         format: 'text',
         tag: 'Test',
       }),
-    ).rejects.toThrow('AST engine crashed');
+    ).rejects.toThrow('[Totem Error] AST engine crashed');
 
     spy.mockRestore();
   });
