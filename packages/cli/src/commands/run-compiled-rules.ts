@@ -139,13 +139,24 @@ export async function runCompiledRules(
     let astViolations: Violation[] = [];
     if (astRules.length > 0) {
       log.dim(tag, `Running ${astRules.length} AST rule(s)...`);
-      astViolations = await applyAstRulesToAdditions(
-        rules,
-        additions,
-        cwd,
-        ruleEventCallback,
-        (msg) => log.warn(tag, msg),
-      );
+      try {
+        astViolations = await applyAstRulesToAdditions(
+          rules,
+          additions,
+          cwd,
+          ruleEventCallback,
+          (msg) => log.warn(tag, msg),
+        );
+      } catch (err) {
+        // In the lite binary, WASM init may fail under Node.js (works in Bun).
+        // Degrade gracefully: skip AST rules, warn, continue with regex results.
+        if (process.env['TOTEM_LITE'] === '1') {
+          const msg = err instanceof Error ? err.message : String(err);
+          log.warn(tag, `AST rules skipped (WASM engine unavailable): ${msg}`);
+        } else {
+          throw err;
+        }
+      }
     }
 
     const violations = [...regexViolations, ...astViolations];

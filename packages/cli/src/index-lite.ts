@@ -43,6 +43,21 @@ function handleError(err: unknown): never {
   process.exit(1);
 }
 
+// ─── WASM ast-grep lazy init (only when AST rules are needed) ──
+async function initAstGrepWasm(): Promise<void> {
+  try {
+    const mod = await import('@ast-grep/napi');
+    if ('ensureInit' in mod && typeof mod.ensureInit === 'function') {
+      await (mod as { ensureInit: () => Promise<void> }).ensureInit();
+    }
+  } catch (err) {
+    if (process.env['TOTEM_DEBUG'] === '1' || process.argv.includes('--debug')) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[Totem Debug] AST WASM init failed: ${msg}`);
+    }
+  }
+}
+
 // ─── Excluded command stub ──────────────────────────────────
 function registerExcluded(name: string, description: string): void {
   program
@@ -123,6 +138,7 @@ program
       prComment?: string | true;
     }) => {
       try {
+        await initAstGrepWasm();
         const { lintCommand } = await import('./commands/lint.js');
         const prComment =
           opts.prComment === true
@@ -242,6 +258,7 @@ program
   .option('--filter <term>', 'Filter by rule hash or heading substring')
   .action(async (opts: { filter?: string }) => {
     try {
+      await initAstGrepWasm();
       const { testRulesCommand } = await import('./commands/test-rules.js');
       await testRulesCommand(opts);
     } catch (err) {
@@ -424,6 +441,7 @@ ruleCmd
   .description('Test rule against inline Example Hit/Miss')
   .action(async (id: string) => {
     try {
+      await initAstGrepWasm();
       const { ruleTestCommand } = await import('./commands/rule.js');
       await ruleTestCommand(id);
     } catch (err) {
@@ -515,20 +533,6 @@ lessonCmd
     console.error('Install the full version: npm install -g @mmnto/cli');
     process.exitCode = 78;
   });
-
-// ─── Initialize WASM ast-grep engine before parsing ─────
-try {
-  const mod = await import('@ast-grep/napi');
-  if ('ensureInit' in mod && typeof mod.ensureInit === 'function') {
-    await (mod as { ensureInit: () => Promise<void> }).ensureInit();
-  }
-} catch (err) {
-  // Non-fatal: AST rules will degrade gracefully. Surface under --debug.
-  if (process.env['TOTEM_DEBUG'] === '1' || process.argv.includes('--debug')) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[Totem Debug] AST WASM init failed: ${msg}`);
-  }
-}
 
 // ─── Parse and run ──────────────────────────────────────────
 try {
