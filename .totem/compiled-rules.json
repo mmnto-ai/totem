@@ -6924,15 +6924,15 @@
     {
       "lessonHash": "3706efb77448d53d",
       "lessonHeading": "Pin Bun versions in CI",
+      "pattern": "bun-version:\\s*latest",
       "message": "Pin Bun versions in CI to ensure reproducible builds; avoid using 'latest'.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "bun-version:\\s*latest",
       "compiledAt": "2026-04-05T22:31:50.072Z",
       "createdAt": "2026-04-05T22:31:50.072Z",
       "fileGlobs": [
         "**/.github/workflows/release-binary.yml"
-      ]
+      ],
+      "severity": "warning"
     }
   ],
   "nonCompilable": [
