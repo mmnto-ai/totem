@@ -2,6 +2,17 @@
 
 This document defines the architectural patterns, styling, and coding conventions for the `totem` repository. The Gemini Code Assist bot will use this to enforce rules during PR reviews.
 
+## 0. Product Philosophy (Review with this headspace)
+
+Totem is a **deterministic governance platform** — a standard library for codebase governance, not an opinionated workflow tool. Every review must be evaluated against these tenets:
+
+- **Sensors, Not Actuators (Tenet 13):** Totem provides sensors (lint, rules, knowledge). Users wire their own actuators (hooks, CI). Do not suggest opinionated workflow changes or prescribe how users should integrate Totem into their CI.
+- **Math for Mechanics:** The deterministic engine (regex + AST) is the core product. Do not suggest replacing deterministic checks with statistical/LLM approaches. `totem lint` must remain zero-LLM.
+- **Platform of Primitives (Tenet 12):** Totem is building blocks, not a framework. Do not suggest abstractions that couple independent primitives together.
+- **Local-First:** The standalone binary and Ollama integration prove governance works 100% offline. Do not suggest cloud dependencies for core enforcement paths.
+
+When a review finding conflicts with these tenets, the tenet wins.
+
 ## 1. Architectural Boundaries
 
 - **Vector DB Abstraction:** All LanceDB interactions must remain strictly within the `@mmnto/totem` (core) package. The CLI and MCP packages must never import LanceDB directly.
