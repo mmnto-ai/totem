@@ -156,6 +156,7 @@ export {
 
 // Rule testing
 export {
+  isTodoFixture,
   loadFixtures,
   parseFixture,
   type RuleTestFixture,

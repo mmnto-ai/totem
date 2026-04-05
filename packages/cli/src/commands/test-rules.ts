@@ -19,7 +19,7 @@ export async function testRulesCommand(opts: { filter?: string }): Promise<void>
 
   const summary = runRuleTests(rulesPath, testsDir);
 
-  if (summary.total === 0) {
+  if (summary.total === 0 && summary.skipped === 0) {
     log.dim(TAG, `No test fixtures found in ${config.totemDir}/tests/`); // totem-ignore — config.totemDir is our own config, not untrusted
     log.dim(TAG, 'Create a fixture with:');
     log.dim(TAG, '');
@@ -40,14 +40,24 @@ export async function testRulesCommand(opts: { filter?: string }): Promise<void>
     return;
   }
 
-  // Filter results if --filter is provided
+  // Filter results and skipped fixtures if --filter is provided
   let results = summary.results;
+  let skipped = summary.skippedFixtures;
   if (opts.filter) {
     const filter = opts.filter.toLowerCase();
     results = results.filter(
       (r) =>
         r.ruleHash.toLowerCase().includes(filter) || r.ruleHeading.toLowerCase().includes(filter),
     );
+    skipped = skipped.filter(
+      (s) =>
+        s.ruleHash.toLowerCase().includes(filter) || s.ruleHeading.toLowerCase().includes(filter),
+    );
+  }
+
+  // Warn about skipped TODO fixtures
+  for (const s of skipped) {
+    log.warn(TAG, `Skipping scaffolded fixture ${path.basename(s.path)} — contains TODOs`);
   }
 
   // Display results
@@ -81,7 +91,8 @@ export async function testRulesCommand(opts: { filter?: string }): Promise<void>
   console.error('');
   if (failedCount === 0) {
     const label = successColor(bold('PASS'));
-    log.info(TAG, `${label} — ${passedCount} rule test(s) passed`);
+    const skippedSuffix = skipped.length > 0 ? `, ${skipped.length} skipped` : '';
+    log.info(TAG, `${label} — ${passedCount} rule test(s) passed${skippedSuffix}`);
   } else {
     const label = errorColor(bold('FAIL'));
     log.info(TAG, `${label} — ${failedCount} failed, ${passedCount} passed`);

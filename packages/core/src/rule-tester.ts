@@ -43,6 +43,8 @@ export interface RuleTestSummary {
   total: number;
   passed: number;
   failed: number;
+  skipped: number;
+  skippedFixtures: { path: string; ruleHash: string; ruleHeading: string }[];
   results: RuleTestResult[];
 }
 
@@ -51,6 +53,14 @@ export interface RuleTestSummary {
 const FRONTMATTER_RE = /^---\s*\n([\s\S]*?)\n---/;
 const FAIL_SECTION_RE = /##\s*[Ss]hould\s+fail\s*\n+```[^\n]*\n([\s\S]*?)```/;
 const PASS_SECTION_RE = /##\s*[Ss]hould\s+pass\s*\n+```[^\n]*\n([\s\S]*?)```/;
+
+const TODO_MARKER = '// TODO: add code that should';
+
+/** Return true when every line in the fixture is a scaffolding placeholder. */
+export function isTodoFixture(fixture: RuleTestFixture): boolean {
+  const allLines = [...fixture.failLines, ...fixture.passLines];
+  return allLines.length === 0 || allLines.every((l) => l.includes(TODO_MARKER));
+}
 
 // totem-ignore-next-line — .exec() calls below are for trusted local fixture parsing, not security-sensitive
 export function parseFixture(content: string, fixturePath: string): RuleTestFixture | null {
@@ -229,13 +239,24 @@ export function runRuleTests(rulesPath: string, testsDir: string): RuleTestSumma
   const fixtures = loadFixtures(testsDir);
 
   if (fixtures.length === 0) {
-    return { total: 0, passed: 0, failed: 0, results: [] };
+    return { total: 0, passed: 0, failed: 0, skipped: 0, skippedFixtures: [], results: [] };
   }
 
   const ruleMap = new Map(rules.map((r) => [r.lessonHash, r]));
   const results: RuleTestResult[] = [];
+  const skippedFixtures: { path: string; ruleHash: string; ruleHeading: string }[] = [];
 
   for (const fixture of fixtures) {
+    if (isTodoFixture(fixture)) {
+      const heading = ruleMap.get(fixture.ruleHash)?.lessonHeading ?? '';
+      skippedFixtures.push({
+        path: fixture.fixturePath,
+        ruleHash: fixture.ruleHash,
+        ruleHeading: heading,
+      });
+      continue;
+    }
+
     const rule = ruleMap.get(fixture.ruleHash);
     if (!rule) {
       results.push({
@@ -257,6 +278,8 @@ export function runRuleTests(rulesPath: string, testsDir: string): RuleTestSumma
     total: results.length,
     passed,
     failed: results.length - passed,
+    skipped: skippedFixtures.length,
+    skippedFixtures,
     results,
   };
 }
