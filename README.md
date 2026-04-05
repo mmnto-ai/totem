@@ -2,20 +2,45 @@
 
 _AI coding agents are brilliant goldfish. Totem gives them a memory._
 
-**Your AI agents keep making the same mistakes.** They're brilliant at the 100 lines in front of them, but terrible at asking: _"Does a shared helper already exist for this?"_
+**Your AI agents keep making the same mistakes.** They nail the 100 lines in front of them, but they'll never ask: _"doesn't a shared helper already exist for this?"_
 
 Every PR becomes a back-and-forth with review bots about the same architectural nits — missing lazy imports, improper error tagging, reinventing the wheel. That's the **"Bot-Tax."**
 
-Totem fixes this. You write down the architectural rule once in plain English, Totem compiles it into a blazing-fast, deterministic linter rule (`ast-grep` or `regex`), and it physically blocks the AI (or you) from making that exact mistake again.
+Totem fixes this. Write the rule in plain English, Totem compiles it into a lint rule, and that mistake can't happen again. No LLM in the loop — just ast-grep and regex, sub-second, offline.
 
-## How It Works
+## A Platform of Primitives, Not Opinionated Workflows
 
-Totem is a **standard library for codebase governance**. It doesn't force you into an opinionated AI workflow. It just provides fast, deterministic building blocks (`totem lint`, `totem compile`, `totem extract`) that you wire into your own CI/CD reality.
+Totem doesn't force a workflow on you. It's building blocks — `totem lint`, `totem compile`, `totem extract` — that you wire into whatever CI you already have.
 
-1. **Observe (`totem review`):** Use our optional AI reviewer, or your existing PR bots, to catch a mistake.
-2. **Extract (`totem extract`):** Totem reads the PR comments and drafts a markdown lesson explaining what went wrong.
-3. **Compile (`totem compile`):** Totem translates that markdown lesson into a highly-optimized, deterministic `ast-grep` or regex rule.
-4. **Enforce (`totem lint`):** A sub-second, zero-LLM check that runs in your Git `pre-push` hook or CI pipeline. If the AI breaks the rule, the push fails.
+We do not force you into a rigid, 7-step AI methodology. We provide the **Sensors** (the knowledge index, the deterministic compiler). You are the Flight Controller. You decide where to put the **Actuators** (Git hooks, IDE plugins).
+
+## The Codebase Immune System (The Pipeline Engine)
+
+Totem operates as a continuous, self-healing loop that converts institutional knowledge into physical constraints through **The Pipeline Engine**. You can author rules manually (zero-LLM), import from ESLint, compile from Markdown examples, or let Totem auto-capture warnings from PR bots.
+
+```mermaid
+graph LR
+    classDef observe fill:#4b3a75,stroke:#9b72cf,stroke-width:2px,color:#fff
+    classDef learn fill:#5e3a24,stroke:#e67c3b,stroke-width:2px,color:#fff
+    classDef enforce fill:#1a4d2e,stroke:#34a853,stroke-width:2px,color:#fff
+    classDef core fill:#2d2d2d,stroke:#888,stroke-width:1px,color:#fff
+
+    Observe["1. The Eye — Observe"]:::observe
+    Learn["2. The Brain — Learn"]:::learn
+    Enforce["3. The Hand — Enforce"]:::enforce
+    Ledger[("Trap Ledger")]:::core
+
+    Observe -->|"PR Reviews / Bot Nits"| Learn
+    Learn -->|"totem compile"| Enforce
+    Enforce -->|"totem lint / pre-push"| Observe
+
+    Enforce -.->|"Developer Bypass"| Ledger
+    Ledger -.->|"Self-Healing Loop"| Learn
+```
+
+1. **The Eye (Observe):** `totem review` (our optional reference implementation) and your CI bots watch the code. What went wrong?
+2. **The Brain (Learn):** `totem extract` captures the markdown lesson from the PR. `totem compile` automatically writes the AST/Regex plugin for you. What did we learn?
+3. **The Hand (Enforce):** `totem lint` (the fast, deterministic core) physically blocks the push. Make it impossible to repeat.
 
 **Note on Tooling:** Every CLI command in Totem supports the `--json` global flag, allowing you to easily pipe Totem's output into your own custom UI or automation scripts.
 
@@ -58,7 +83,7 @@ pnpm dlx @mmnto/cli init
 
 This scaffolds `totem.config.ts`, installs foundational baseline rules, and configures the `pre-push` git hook.
 
-Run the enforcement engine (Zero-LLM, offline, fast):
+Run the linter (no AI, no network, no config):
 
 ```bash
 pnpm dlx @mmnto/cli lint
@@ -88,7 +113,7 @@ The [Totem Playground](https://github.com/mmnto-ai/totem-playground) is a pre-br
 
 ## Documentation & Workflows
 
-Stop reading manuals and start solving friction. See the Wiki for how to use Totem to govern your workflows:
+See the Wiki for how to use Totem to govern your workflows:
 
 - [**It Never Happens Again:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/it-never-happens-again.md) How to turn a PR mistake into a permanent project law in 60 seconds.
 - [**Governing AI Agents:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/governing-ai-agents.md) How to use hooks and MCP tools to enforce project rules on Claude and Gemini from Turn 1.
