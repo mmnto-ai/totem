@@ -40,19 +40,24 @@ export async function testRulesCommand(opts: { filter?: string }): Promise<void>
     return;
   }
 
-  // Warn about skipped TODO fixtures
-  for (const fp of summary.skippedFixtures) {
-    log.warn(TAG, `Skipping scaffolded fixture ${path.basename(fp)} — contains TODOs`);
-  }
-
-  // Filter results if --filter is provided
+  // Filter results and skipped fixtures if --filter is provided
   let results = summary.results;
+  let skipped = summary.skippedFixtures;
   if (opts.filter) {
     const filter = opts.filter.toLowerCase();
     results = results.filter(
       (r) =>
         r.ruleHash.toLowerCase().includes(filter) || r.ruleHeading.toLowerCase().includes(filter),
     );
+    skipped = skipped.filter(
+      (s) =>
+        s.ruleHash.toLowerCase().includes(filter) || s.ruleHeading.toLowerCase().includes(filter),
+    );
+  }
+
+  // Warn about skipped TODO fixtures
+  for (const s of skipped) {
+    log.warn(TAG, `Skipping scaffolded fixture ${path.basename(s.path)} — contains TODOs`);
   }
 
   // Display results
@@ -86,7 +91,7 @@ export async function testRulesCommand(opts: { filter?: string }): Promise<void>
   console.error('');
   if (failedCount === 0) {
     const label = successColor(bold('PASS'));
-    const skippedSuffix = summary.skipped > 0 ? `, ${summary.skipped} skipped` : '';
+    const skippedSuffix = skipped.length > 0 ? `, ${skipped.length} skipped` : '';
     log.info(TAG, `${label} — ${passedCount} rule test(s) passed${skippedSuffix}`);
   } else {
     const label = errorColor(bold('FAIL'));

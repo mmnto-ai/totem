@@ -44,7 +44,7 @@ export interface RuleTestSummary {
   passed: number;
   failed: number;
   skipped: number;
-  skippedFixtures: string[];
+  skippedFixtures: { path: string; ruleHash: string; ruleHeading: string }[];
   results: RuleTestResult[];
 }
 
@@ -244,11 +244,16 @@ export function runRuleTests(rulesPath: string, testsDir: string): RuleTestSumma
 
   const ruleMap = new Map(rules.map((r) => [r.lessonHash, r]));
   const results: RuleTestResult[] = [];
-  const skippedFixtures: string[] = [];
+  const skippedFixtures: { path: string; ruleHash: string; ruleHeading: string }[] = [];
 
   for (const fixture of fixtures) {
     if (isTodoFixture(fixture)) {
-      skippedFixtures.push(fixture.fixturePath);
+      const heading = ruleMap.get(fixture.ruleHash)?.lessonHeading ?? '';
+      skippedFixtures.push({
+        path: fixture.fixturePath,
+        ruleHash: fixture.ruleHash,
+        ruleHeading: heading,
+      });
       continue;
     }
 
