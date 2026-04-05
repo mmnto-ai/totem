@@ -1,6 +1,7 @@
 language: en-US
 early_access: true
-tone_instructions: 'Be direct and technical. No praise, no filler. Flag real issues, skip cosmetic nits unless they affect correctness.'
+tone_instructions: >-
+  Direct, technical. Flag real issues only. Totem is deterministic governance — Sensors not Actuators. Core engine (totem lint) is zero-LLM and offline. No statistical replacements, no coupling primitives, no cloud deps in enforcement. Tenets win.
 
 reviews:
   profile: chill
