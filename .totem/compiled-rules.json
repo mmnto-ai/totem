@@ -6734,15 +6734,41 @@
     {
       "lessonHash": "9f266a455f97fe37",
       "lessonHeading": "GitHub Actions shell injection via template expressions",
+      "pattern": "(?:^\\s*-?\\s*run\\b|^(?!\\s*[\\w-]+:\\s)\\s+).*\\$\\{\\{\\s*(github\\.event|inputs)\\..*\\}\\}",
       "message": "GitHub Actions shell injection via template expressions",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "(?:^\\s*-?\\s*run\\b|^(?!\\s*[\\w-]+:\\s)\\s+).*\\$\\{\\{\\s*(github\\.event|inputs)\\..*\\}\\}",
       "compiledAt": "2026-04-05T03:16:31.102Z",
       "createdAt": "2026-04-05T03:16:31.102Z",
       "fileGlobs": [
         ".github/workflows/*.yml",
         ".github/workflows/*.yaml"
+      ],
+      "severity": "error"
+    },
+    {
+      "lessonHash": "ece07b64a3df6e2a",
+      "lessonHeading": "Pin Bun versions in CI",
+      "message": "Pin Bun versions in CI instead of using 'latest' to prevent build drift.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "bun-version:\\s*['\"]?latest['\"]?",
+      "compiledAt": "2026-04-05T04:12:30.929Z",
+      "createdAt": "2026-04-05T04:12:30.929Z",
+      "fileGlobs": [
+        "**/.github/workflows/release-binary.yml"
+      ]
+    },
+    {
+      "lessonHash": "3706efb77448d53d",
+      "lessonHeading": "Pin Bun versions in CI",
+      "message": "Pin Bun versions in CI instead of using 'latest' to ensure reproducible builds.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "bun-version:\\s*['\"]?latest['\"]?",
+      "compiledAt": "2026-04-05T04:12:30.930Z",
+      "createdAt": "2026-04-05T04:12:30.930Z",
+      "fileGlobs": [
+        "**/.github/workflows/release-binary.yml"
       ]
     }
   ],
@@ -7437,6 +7463,9 @@
     "f62f065249bd1910",
     "af09a65c91788e75",
     "f74744bd47cdbe69",
-    "3fa3b223cac2495f"
+    "3fa3b223cac2495f",
+    "708854b2009b3475",
+    "f65b28512f819a72",
+    "64c381f0f3f47893"
   ]
 }
