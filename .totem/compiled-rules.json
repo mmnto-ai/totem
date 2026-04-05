@@ -6732,14 +6732,14 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "c52b4312d560c882",
+      "lessonHash": "9f266a455f97fe37",
       "lessonHeading": "GitHub Actions shell injection via template expressions",
       "message": "GitHub Actions shell injection via template expressions",
       "engine": "regex",
       "severity": "error",
-      "pattern": "(?:^\\s*-?\\s*run\\b|^\\s+(?![\\w-]+:\\s)).*\\$\\{\\{\\s*(github\\.event|inputs)\\..*\\}\\}",
-      "compiledAt": "2026-04-05T03:05:00.070Z",
-      "createdAt": "2026-04-05T03:05:00.070Z",
+      "pattern": "(?:^\\s*-?\\s*run\\b|^(?!\\s*[\\w-]+:\\s)\\s+).*\\$\\{\\{\\s*(github\\.event|inputs)\\..*\\}\\}",
+      "compiledAt": "2026-04-05T03:16:31.102Z",
+      "createdAt": "2026-04-05T03:16:31.102Z",
       "fileGlobs": [
         ".github/workflows/*.yml",
         ".github/workflows/*.yaml"
