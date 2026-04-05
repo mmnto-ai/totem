@@ -247,7 +247,12 @@ export {
 } from './suspicious-lesson.js';
 
 // Semantic deduplication
-export { cosineSimilarity, deduplicateLessons } from './semantic-dedup.js';
+export {
+  cosineSimilarity,
+  deduplicateByHeading,
+  deduplicateLessons,
+  normalizeHeading,
+} from './semantic-dedup.js';
 
 // Cursor adapter (.mdc / .cursorrules ingestion)
 export type { CursorInstruction } from './cursor-adapter.js';
