@@ -94,13 +94,16 @@ pnpm dlx @mmnto/cli lint
 If you are working in a non-JavaScript ecosystem (Rust, Go, Python) and don't want to install Node.js, you can download the **Totem Lite** standalone binary from the [GitHub Releases](https://github.com/mmnto-ai/totem/releases) page.
 
 ```bash
-# Linux / macOS (example)
+# Linux (x64)
 curl -L https://github.com/mmnto-ai/totem/releases/latest/download/totem-linux-x64 -o totem
-chmod +x totem
-sudo mv totem /usr/local/bin/
+chmod +x totem && sudo mv totem /usr/local/bin/
+
+# macOS (Apple Silicon)
+curl -L https://github.com/mmnto-ai/totem/releases/latest/download/totem-darwin-arm64 -o totem
+chmod +x totem && sudo mv totem /usr/local/bin/
 ```
 
-The Lite binary includes the full AST engine and can run `totem init`, `totem lint`, and `totem hooks` completely offline. See the [Installation Guide](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/installation.md) for details.
+The Lite binary includes the full AST engine and can run `totem init`, `totem lint`, and `totem hooks` completely offline. For Windows and other platforms, see the [Installation Guide](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/installation.md).
 
 ## Try It Live
 
