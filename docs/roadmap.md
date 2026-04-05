@@ -2,40 +2,43 @@
 
 This document outlines the strategic milestones for the Totem project.
 
-Totem is a **standard library for codebase governance** — deterministic primitives that let teams enforce architectural boundaries on AI agents without opinionated workflows. The roadmap below tracks the progression from enforcement primitives to multi-repo federation.
+Totem is a standard library for codebase governance — deterministic primitives that let teams enforce architectural boundaries on AI agents without opinionated workflows. The roadmap below tracks the active progression of enforcement primitives, platform validation, and rule distribution.
 
 ---
 
-## 1.11.0 — The Import Engine (Active)
-
-**Theme:** Rule portability — bring governance from external tools and other totem instances.
-
-- [ ] **ESLint Flat Config (#1138):** Import from modern ESLint flat config format.
-- [ ] **Totem-to-Totem Import (#1139):** Cross-repo rule sharing between totem instances.
-- [ ] **Rule Refinement (#1131):** Refine rules from false-positive scan alerts.
-- [ ] **AST Upgrade Detection (#1132):** Auto-detect string-content matches eligible for AST patterns.
-- [ ] **Pack Distribution (#1059):** Shareable rule bundles.
-- [ ] **Proactive Language Packs (#1152):** Thick TypeScript/Shell/Node.js baseline rules from established best practices (moved from 1.10.0).
-- [ ] **GHAS/SARIF Extraction (Strategy #50):** Import rules from GitHub Advanced Security alerts.
-- [ ] **Lint Warning Extraction (Strategy #51):** Convert lint warnings into totem lessons.
-
----
-
-## 1.12.0 — Foundation & Validation (Next)
+## 1.12.0 — The Umpire & The Router (Active)
 
 **Theme:** Internal quality, research validation, and platform hardening.
 
-- [ ] **Orchestrator Refactor (#999):** Decompose runOrchestrator into middleware pipeline.
-- [ ] **Path Registry (#997):** Centralize path resolution via WorkspaceContext.
-- [ ] **Non-Null Sweep (#1000):** Replace `!` assertions with proper type narrowing.
-- [ ] **git.ts Compat Review (#1008):** Re-export backward compat on error paths.
-- [ ] **Shield Tests (#1020):** Exercise shieldCommand directly in validation tests.
-- [ ] **Concurrent Dispatch (#1053):** Parallel agent task execution (moved from 1.10.0).
-- [ ] **Docs Scope (#1033):** Fix `totem wrap` doc sync reliability (moved from 1.10.0).
-- [ ] **Trap Corpus (Strategy #6):** Adversarial eval suite for deterministic engine.
-- [ ] **Eval Harness (Strategy #17):** Governance eval tooling.
-- [ ] **Model Adapters (Strategy #62):** Model-specific prompt tuning (moved from 1.10.0).
-- [ ] **Spec Efficacy (Strategy #63):** Proving agent followed the spec.
+- **Engine & Stability:**
+  - [x] **Lite-Tier Binary:** Standalone binary with WASM AST-grep engine requiring no native dependencies.
+  - [x] **AST-Grep Integration:** Applied AST-grep engine to restricted property rules.
+  - [x] **Windows CI Fix:** Resolved timeout constraints for orchestrator execution on Windows environments.
+  - [ ] **Adversarial Trap Corpus:** Evaluation suite to test the deterministic engine against evasion techniques.
+- **Models & Routing:**
+  - [x] **Local Model Support:** Auto-detect Ollama environments with default routing to Gemma 4 models.
+  - [ ] **Classification Evaluation:** Evaluate Gemma 4 variants for the internal classification task.
+  - [ ] **Model Routing Matrix:** Matrix for delegating tasks to appropriate models based on capability.
+  - [ ] **Prompt Adapters:** Model-specific prompt tuning to improve rule extraction across different LLM backends.
+- **Validation:**
+  - [ ] **Governance Evaluation Harness:** Tooling to evaluate rule enforcement and agent compliance.
+
+---
+
+## 1.13.0 — The Refinement Engine (Next)
+
+**Theme:** Rule refinement and pack distribution.
+
+- **Refinement:**
+  - [ ] **False-Positive Tuning:** Refine active rules based on false-positive scan alerts.
+  - [ ] **AST Upgrades:** Auto-detect string-content matches eligible for AST patterns.
+  - [ ] **Empty Catch Tracking:** Identify and flag empty catch blocks using AST patterns.
+- **Distribution:**
+  - [ ] **Pack System:** Standardized bundles for reusable rule distribution.
+  - [ ] **Rule Sharing:** Broaden the mechanisms for distributing compiled rules across teams.
+- **Extraction:**
+  - [ ] **Security Alerts:** Extract rules directly from GitHub Advanced Security alerts.
+  - [ ] **Lint Warnings:** Convert standard repository lint warnings into actionable lessons.
 
 ---
 
@@ -43,77 +46,52 @@ Totem is a **standard library for codebase governance** — deterministic primit
 
 ### 1.11.0 — The Import Engine (2026-04-04)
 
-**Theme:** Rule portability — bring governance from external tools and other totem instances.
+Brought governance rules from external tools and other instances into the platform.
 
-- [x] **Proactive Language Packs (#1152):** Thick TypeScript/Shell/Node.js baseline rules (50 total) from established best practices like @typescript-eslint/strict, OWASP Node.js, and ShellCheck/POSIX.
-- [x] **ESLint Flat Config (#1138):** Import from modern ESLint flat config format.
-- [x] **Totem-to-Totem Import (#1139):** Cross-repo rule sharing between totem instances.
+- **Portability:** Enabled cross-repository rule sharing between instances and imported rules from modern ESLint flat config formats.
+- **Language Support:** Added baseline proactive rule packs for TypeScript, Shell, and Node.js built on established best practices.
 
 ### 1.10.2 — Phase 2: Import Engine Foundations (2026-04-04)
 
-**Theme:** Retirement ledger, compiler safety, and expanded ESLint import coverage.
+Hardened compiler safety and expanded ESLint import coverage.
 
-- [x] **Lesson Retirement Ledger (#1165):** `.totem/retired-lessons.json` tracks removed rules, preventing re-extraction.
-- [x] **Compiler Guard (#1177):** Rejects self-suppressing patterns (totem-ignore, totem-context, shield-context).
-- [x] **ESLint Syntax/Properties (#1140):** `no-restricted-properties` and `no-restricted-syntax` handlers.
-- [x] **Model Defaults (#1185):** `totem init` updated to `claude-sonnet-4-6` and `gpt-5.4-mini`.
+- **Safety:** Rejected self-suppressing patterns and tracked removed rules via a retirement ledger to prevent re-extraction.
+- **Enforcement:** Updated default model selections and expanded extraction handlers for restricted properties and syntax rules.
 
 ### 1.10.1 — Phase 1 Bug Fixes (2026-04-04)
 
-**Theme:** Rule hygiene and release pipeline hardening before the Import Engine.
+Hardened the release pipeline and improved rule hygiene prior to major feature additions.
 
-- [x] **Exemption Dedup (#1158):** Added `!includes(message)` check in `recordFalsePositive()`.
-- [x] **Exit Scope (#1164):** Narrowed process.exit() rule to exclude CLI entry points and command files.
-- [x] **Rule Conflict Audit (#1166):** Deleted 5 lessons, scoped 1 (418 → 413 compiled rules).
-- [x] **POSIX Compliance (#1168):** Multi-line if/then/fi in agent detection, hardened hook parser.
+- **Hygiene:** Deduplicated false-positive exemptions and audited rule conflicts to reduce overall rule overlaps.
+- **Compliance:** Narrowed exit scope rules to exclude CLI entries and improved POSIX compliance for multi-line shell hooks.
 
 ### 1.10.0 — The Invisible Exoskeleton (2026-04-02)
 
-**Theme:** Reduce adoption friction for new users and solo developers.
+Reduced adoption friction for solo developers and new repository environments.
 
-- [x] **Pilot Mode (#949):** Time-bounded warn-only hooks (14 days / 50 pushes). State tracked in `.totem/pilot-state.json`.
-- [x] **Enforcement Tiers (#987):** Strict tier with spec-completed check + shield gate. Agent auto-detection via environment variables.
-- [x] **.env Parser Fix (#1114):** Replaced custom regex with `dotenv` in CLI and MCP packages.
-- [x] **Spec Infrastructure (#1016):** Query expansion for test-related keywords + docstring enrichment.
-- [x] **Solo Dev Experience (#1039):** `extract --local` + global profile (`~/.totem/`).
-- [x] **"Missed Caught" Audit (#1153):** Historical bot findings categorized by detection tier.
-- [x] **Manifest Rehash (#1155):** Observation capture re-hashes compile manifest.
-- [x] **Pre-Push Format Check (#1156):** Package-manager-agnostic `format:check` in hook template.
-- [x] **Extract Refactor (#1159):** Split extract.ts into per-mode modules with unified assembler.
-- [x] **Exit Code Fix (#1161):** `--yes` mode sets exitCode 1 when all lessons suspicious.
+- **Developer Experience:** Added time-bounded pilot modes, local extraction options, and global profile support.
+- **Enforcement Validation:** Introduced strict tiers with agent auto-detection and formalized format checks in pre-push hooks.
+- **Pipeline Refactoring:** Hardened environment variable parsing and refactored the extraction pipeline into distinct per-mode modules.
 
 ### 1.9.0 — Pipeline Engine (2026-04-01)
 
-**Theme:** Five pipelines for rule creation, from zero-LLM to fully autonomous.
+Established multiple pipelines for rule creation ranging from manual scaffolding to fully autonomous extraction.
 
-- [x] **P1 — Manual Scaffolding (#854):** `totem rule scaffold` with auto-generated test fixtures.
-- [x] **P2 — LLM-Generated:** `totem compile` converts prose lessons to regex patterns.
-- [x] **P3 — Example-Based (#749):** Bad/Good code snippets compiled with self-verification.
-- [x] **P4 — Import (#750):** `totem import` translates ESLint/Semgrep configs. Zero LLM.
-- [x] **P5 — Observation Auto-Capture (#751):** Shield findings staged as warning-severity rules.
-- [x] **Ecosystem:** Docs/wiki refresh, playground overhaul, pre-compiled baseline rules for Python/Rust/Go.
+- **Rule Scaffolding:** Supported manual generation with test fixtures, example-based compilation, and prose-to-pattern translation.
+- **Automation:** Staged observation findings automatically and translated external tool configurations without relying on language models.
+- **Ecosystem:** Refreshed documentation, overhauled the playground, and published pre-compiled baseline rules for additional languages.
 
 ### 1.7.0 — Platform of Primitives (2026-03-29)
 
-- [x] **CLI Taxonomy Redesign:** Noun-verb hierarchical restructuring. Global `--json` output.
-- [x] **Actor-Aware Enforcement:** Stateless Git hooks. Content Hash Lock at MCP boundary (ADR-083).
-- [x] **Agent Context Engineering:** SessionStart Auto-Context V2, `totem describe`, structured handoff checkpoints.
-- [x] **Rule Lifecycle:** Garbage collection with adaptive decay, compile progress with 429 retry.
+Redesigned the command structure and stabilized context engineering.
+
+- **Architecture:** Transitioned to stateless hooks, hierarchical command structures, and hash-locked execution boundaries.
+- **Context Management:** Deployed fallback search for agent context injection, repository discovery commands, and structured handoff validations.
+- **Lifecycle:** Added garbage collection with adaptive decay and throughput-based ETA for compilation progress.
 
 ### 1.6.0 — Pipeline Maturity (2026-03-22)
 
-- [x] **Self-Healing Loop:** Trap Ledger, exemption engine, bot review signal capture.
-- [x] **Core Enforcement:** Inline rule unit testing, standard library, forbidden native module rules.
-- [x] **Developer Experience:** Compiler workflows, shield flag auto-refresh, stress testing.
+Finalized the core self-healing loop and core enforcement testing structures.
 
----
-
-## 2.0.0 — Federation (The Enterprise Tier)
-
-**Theme:** The COSS Covenant tier — multi-repo coordination for teams running autonomous agents at scale.
-
-- [ ] **Multi-Repo Federation:** Central strategy repo pushes compiled rules to downstream repositories via RBAC.
-- [ ] **Signed Trap Ledger:** Cryptographically signed, immutable cloud endpoint for ingestion.
-- [ ] **Compliance Dashboard:** Track override rates by agent source, rule health trends, and bypass audit trails.
-- [ ] **Mesh Export:** Portable bundle format for lessons and rules.
-- [ ] **`totem ui`:** Local web dashboard for rule decay, hit/miss rates, and ledger history.
+- **Enforcement Core:** Delivered inline rule unit testing, standard libraries, and tracking ledgers for evasion traps.
+- **Developer Experience:** Improved compiler workflows, implemented auto-refreshing flag mechanisms, and integrated stress testing.

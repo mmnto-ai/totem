@@ -20,23 +20,22 @@ Totem operates as a continuous, self-healing loop that converts institutional kn
 
 ```mermaid
 graph LR
-    %% Styles
     classDef observe fill:#4b3a75,stroke:#9b72cf,stroke-width:2px,color:#fff
     classDef learn fill:#5e3a24,stroke:#e67c3b,stroke-width:2px,color:#fff
     classDef enforce fill:#1a4d2e,stroke:#34a853,stroke-width:2px,color:#fff
     classDef core fill:#2d2d2d,stroke:#888,stroke-width:1px,color:#fff
 
-    Observe[1. The Eye <br> Observe]:::observe
-    Learn[2. The Brain <br> Learn]:::learn
-    Enforce[3. The Hand <br> Enforce]:::enforce
-    Ledger[(Trap Ledger)]:::core
+    Observe["1. The Eye — Observe"]:::observe
+    Learn["2. The Brain — Learn"]:::learn
+    Enforce["3. The Hand — Enforce"]:::enforce
+    Ledger[("Trap Ledger")]:::core
 
-    Observe -->|PR Reviews<br/>Bot Nits| Learn
-    Learn -->|totem compile<br/>Generate Rule| Enforce
-    Enforce -->|totem lint<br/>pre-push hook| Observe
+    Observe -->|"PR Reviews / Bot Nits"| Learn
+    Learn -->|"totem compile"| Enforce
+    Enforce -->|"totem lint / pre-push"| Observe
 
-    Enforce -.->|Developer Bypass| Ledger
-    Ledger -.->|Self-Healing Loop| Learn
+    Enforce -.->|"Developer Bypass"| Ledger
+    Ledger -.->|"Self-Healing Loop"| Learn
 ```
 
 1. **The Eye (Observe):** `totem review` (our optional reference implementation) and your CI bots watch the code. What went wrong?
@@ -89,6 +88,22 @@ Run the enforcement engine (Zero-LLM, offline, fast):
 ```bash
 pnpm dlx @mmnto/cli lint
 ```
+
+### Standalone Binary (No Node.js Required)
+
+If you are working in a non-JavaScript ecosystem (Rust, Go, Python) and don't want to install Node.js, you can download the **Totem Lite** standalone binary from the [GitHub Releases](https://github.com/mmnto-ai/totem/releases) page.
+
+```bash
+# Linux (x64)
+curl -L https://github.com/mmnto-ai/totem/releases/latest/download/totem-linux-x64 -o totem
+chmod +x totem && sudo mv totem /usr/local/bin/
+
+# macOS (Apple Silicon)
+curl -L https://github.com/mmnto-ai/totem/releases/latest/download/totem-darwin-arm64 -o totem
+chmod +x totem && sudo mv totem /usr/local/bin/
+```
+
+The Lite binary includes the full AST engine and can run `totem init`, `totem lint`, and `totem hooks` completely offline. For Windows and other platforms, see the [Installation Guide](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/installation.md).
 
 ## Try It Live
 
