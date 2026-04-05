@@ -315,7 +315,19 @@ export function detectOrchestrator(cwd: string): DetectedOrchestrator | null {
     };
   }
 
-  // 4. Nothing found → omit orchestrator (Lite/Standard tier)
+  // 4. Ollama running locally → use gemma4 (free, fast, air-gappable)
+  if (cliExists('ollama')) {
+    const config = { provider: 'ollama', defaultModel: 'gemma4' };
+    return {
+      config,
+      block: `  orchestrator: {
+    provider: 'ollama',
+    defaultModel: 'gemma4',
+  },`,
+    };
+  }
+
+  // 5. Nothing found → omit orchestrator (Lite/Standard tier)
   return null;
 }
 
