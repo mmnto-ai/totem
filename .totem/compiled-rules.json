@@ -6748,27 +6748,177 @@
     {
       "lessonHash": "ece07b64a3df6e2a",
       "lessonHeading": "Pin Bun versions in CI",
+      "pattern": "bun-version:\\s*['\"]?latest['\"]?",
       "message": "Pin Bun versions in CI instead of using 'latest' to prevent build drift.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "bun-version:\\s*['\"]?latest['\"]?",
       "compiledAt": "2026-04-05T04:12:30.929Z",
       "createdAt": "2026-04-05T04:12:30.929Z",
       "fileGlobs": [
         "**/.github/workflows/release-binary.yml"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "727172a086abfaa2",
+      "lessonHeading": "Narrow GHA injection rules to execution contexts",
+      "message": "GitHub Actions 'env' and 'with' blocks are safe from injection. Only target execution contexts like 'run' or 'shell' to avoid false positives.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "(['\"](env|with)['\"].*(injection|shell|unsafe))|((injection|shell|unsafe).*['\"](env|with)['\"])",
+      "compiledAt": "2026-04-05T16:40:23.658Z",
+      "createdAt": "2026-04-05T16:40:23.658Z",
+      "fileGlobs": [
+        "packages/cli/src/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
       ]
     },
     {
-      "lessonHash": "3706efb77448d53d",
-      "lessonHeading": "Pin Bun versions in CI",
-      "message": "Pin Bun versions in CI instead of using 'latest' to ensure reproducible builds.",
+      "lessonHash": "ed3e9f9cd92cc200",
+      "lessonHeading": "Ensure resilient feature detection",
+      "message": "Feature detection must handle errors silently and avoid crashing. Use fallbacks instead of throwing, exiting, or logging errors in init-detect.ts.",
       "engine": "regex",
       "severity": "warning",
-      "pattern": "bun-version:\\s*['\"]?latest['\"]?",
-      "compiledAt": "2026-04-05T04:12:30.930Z",
-      "createdAt": "2026-04-05T04:12:30.930Z",
+      "pattern": "\\b(throw\\b|process\\.exit\\s*\\(|console\\.error\\s*\\()",
+      "compiledAt": "2026-04-05T16:41:04.556Z",
+      "createdAt": "2026-04-05T16:41:04.556Z",
       "fileGlobs": [
-        "**/.github/workflows/release-binary.yml"
+        "**/packages/cli/src/commands/init-detect.ts"
+      ]
+    },
+    {
+      "lessonHash": "b317f8a415016bf1",
+      "lessonHeading": "Bypass id-match lint via bracket notation",
+      "message": "Use bracket notation for object keys to satisfy id-match rules instead of using eslint-disable comments",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "eslint-disable(?:-next-line)?\\s+.*\\bid-match\\b",
+      "compiledAt": "2026-04-05T16:41:00.758Z",
+      "createdAt": "2026-04-05T16:41:00.758Z",
+      "fileGlobs": [
+        "**/packages/cli/src/index-lite.ts"
+      ]
+    },
+    {
+      "lessonHash": "95e66fb1e817ad3d",
+      "lessonHeading": "Prefer exit codes over re-throwing CLI errors",
+      "message": "Prefer setting process.exitCode and using log.error over throwing exceptions in CLI handlers to ensure clean output and proper exit status management.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "throw $ERR",
+      "compiledAt": "2026-04-05T16:41:12.380Z",
+      "createdAt": "2026-04-05T16:41:12.380Z",
+      "fileGlobs": [
+        "packages/cli/src/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
+    },
+    {
+      "lessonHash": "105b1207017096ff",
+      "lessonHeading": "Use regex for non-identifier properties",
+      "message": "Property names with hyphens (non-identifiers) must use regex fallbacks to avoid ast-grep parsing errors (e.g., interpreted as subtraction).",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "['\"][a-zA-Z0-9_$]*-[a-zA-Z0-9_$-]*['\"]",
+      "compiledAt": "2026-04-05T16:42:11.322Z",
+      "createdAt": "2026-04-05T16:42:11.322Z",
+      "fileGlobs": [
+        "**/packages/core/src/eslint-adapter.ts"
+      ]
+    },
+    {
+      "lessonHash": "bc372189f80425a7",
+      "lessonHeading": "Guard against broad error swallowing",
+      "message": "Guard against broad error swallowing in async import tests. Inspect caught errors to only swallow expected environment-specific failures while re-throwing actual regressions.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "try { $$$ } catch ($E) {}",
+      "compiledAt": "2026-04-05T16:43:16.193Z",
+      "createdAt": "2026-04-05T16:43:16.193Z",
+      "fileGlobs": [
+        "**/packages/core/src/ast-grep-wasm-shim.test.ts"
+      ]
+    },
+    {
+      "lessonHash": "ba2c95d0e14b2026",
+      "lessonHeading": "Avoid premature task-specific model overrides",
+      "message": "Avoid hardcoding specialized model variants (e.g., '26b') in init-detect.ts. Defer complex routing to an orchestrator to prevent friction with missing local dependencies.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "['\"][^'\"]*\\d+b[^'\"]*['\"]",
+      "compiledAt": "2026-04-05T16:42:23.997Z",
+      "createdAt": "2026-04-05T16:42:23.997Z",
+      "fileGlobs": [
+        "**/packages/cli/src/commands/init-detect.ts"
+      ]
+    },
+    {
+      "lessonHash": "a643f38dc131960c",
+      "lessonHeading": "Distinguish CLI existence from service availability",
+      "message": "Distinguish CLI existence from service availability. Use an API ping (e.g., a HEAD request) to verify the service is reachable instead of checking for binary existence on the PATH.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "['\"\\`](which|command\\s+-v)\\s+",
+      "compiledAt": "2026-04-05T16:43:28.428Z",
+      "createdAt": "2026-04-05T16:43:28.428Z",
+      "fileGlobs": [
+        "**/packages/cli/src/commands/init-detect.ts"
+      ]
+    },
+    {
+      "lessonHash": "e702914c97bb6ecc",
+      "lessonHeading": "Allow inline literals for test timeouts",
+      "message": "Use inline literals for test timeouts instead of variables or constants; the 'timeout' key is self-documenting",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\btimeout\\s*[:\\(]\\s*(?![0-9]|\\x27|\\x22|\\x60)[a-zA-Z_]",
+      "compiledAt": "2026-04-05T16:44:11.384Z",
+      "createdAt": "2026-04-05T16:44:11.384Z",
+      "fileGlobs": [
+        "packages/cli/src/**/*.test.ts"
+      ]
+    },
+    {
+      "lessonHash": "b51b2f87ca829d6e",
+      "lessonHeading": "Use byte-level binary size checks",
+      "message": "Use byte-level binary size checks instead of integer division to megabytes to ensure accurate enforcement.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\/\\s*(1024|1048576)",
+      "compiledAt": "2026-04-05T16:43:35.661Z",
+      "createdAt": "2026-04-05T16:43:35.661Z",
+      "fileGlobs": [
+        "**/packages/cli/build/compile-lite.sh"
+      ]
+    },
+    {
+      "lessonHash": "017989d7c0b42d44",
+      "lessonHeading": "Avoid hardcoding unpulled model variants",
+      "message": "Avoid hardcoding specialized or high-parameter model variants (e.g., :70b, :large) as defaults to ensure a zero-config experience.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "['\"][\\w\\d\\.-]+[:\\-](70b|405b|large|pro|ultra|175b|32k|128k)['\"]",
+      "compiledAt": "2026-04-05T16:44:27.790Z",
+      "createdAt": "2026-04-05T16:44:27.790Z",
+      "fileGlobs": [
+        "**/packages/cli/src/commands/init-detect.ts"
+      ]
+    },
+    {
+      "lessonHash": "dbf8353010d2db7e",
+      "lessonHeading": "Narrow catch blocks in test imports",
+      "message": "Narrow catch blocks in test imports. Only swallow expected error signatures (e.g., by checking e.message or e.code) to avoid masking real regressions.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "try { $$$ } catch ($$$) { }",
+      "compiledAt": "2026-04-05T16:46:10.899Z",
+      "createdAt": "2026-04-05T16:46:10.899Z",
+      "fileGlobs": [
+        "**/packages/core/src/ast-grep-wasm-shim.test.ts"
       ]
     }
   ],
@@ -7465,7 +7615,19 @@
     "f74744bd47cdbe69",
     "3fa3b223cac2495f",
     "708854b2009b3475",
-    "f65b28512f819a72",
-    "64c381f0f3f47893"
+    "e2da140470037392",
+    "715c5b6ca2bc73f8",
+    "64c9ca76055e668b",
+    "86959743c56d3fd2",
+    "9534dd9bf791494b",
+    "fe120b1b1aa75b0d",
+    "d096a221d5402f24",
+    "b5f2bb0233687cc4",
+    "0b697710fb53aeb2",
+    "47a5fb2e3a08b3e7",
+    "8bd077e61709d6b3",
+    "7de0a7f0b294485d",
+    "b4f045fe9e8ff4d4",
+    "937e64d7c79a8595"
   ]
 }
