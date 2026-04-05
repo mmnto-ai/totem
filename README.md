@@ -6,7 +6,7 @@ _AI coding agents are brilliant goldfish. Totem gives them a memory._
 
 Every PR becomes a back-and-forth with review bots about the same architectural nits — missing lazy imports, improper error tagging, reinventing the wheel. That's the **"Bot-Tax."**
 
-Totem fixes this. You write down the architectural rule once in plain English, Totem compiles it into a blazing-fast, deterministic linter rule (`AST` or `Regex`), and it physically blocks the AI (or you) from making that exact mistake again.
+Totem fixes this. You write down the architectural rule once in plain English, Totem compiles it into a blazing-fast, deterministic linter rule (`ast-grep` or `regex`), and it physically blocks the AI (or you) from making that exact mistake again.
 
 ## How It Works
 
