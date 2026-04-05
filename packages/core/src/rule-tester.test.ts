@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CompiledRule } from './compiler.js';
-import { parseFixture, scaffoldFixture, scaffoldFixturePath, testRule } from './rule-tester.js';
+import {
+  isTodoFixture,
+  parseFixture,
+  scaffoldFixture,
+  scaffoldFixturePath,
+  testRule,
+} from './rule-tester.js';
 
 const MOCK_RULE: CompiledRule = {
   lessonHash: 'abc123',
@@ -133,6 +139,47 @@ describe('scaffoldFixturePath', () => {
   it('returns expected path', () => {
     const result = scaffoldFixturePath('/project/.totem/tests', 'abcd1234abcd1234');
     expect(result).toMatch(/test-abcd1234abcd1234\.md$/);
+  });
+});
+
+describe('isTodoFixture', () => {
+  it('detects a scaffolded TODO fixture', () => {
+    const content = scaffoldFixture({ ruleHash: 'abc123' });
+    const fixture = parseFixture(content, 'test.md')!;
+    expect(isTodoFixture(fixture)).toBe(true);
+  });
+
+  it('returns false for a fixture with real examples', () => {
+    const content = scaffoldFixture({
+      ruleHash: 'abc123',
+      failLines: ['eval("code")'],
+      passLines: ['safeEval("code")'],
+    });
+    const fixture = parseFixture(content, 'test.md')!;
+    expect(isTodoFixture(fixture)).toBe(false);
+  });
+
+  it('returns true when both sections are empty', () => {
+    expect(
+      isTodoFixture({
+        ruleHash: 'x',
+        filePath: 'f',
+        failLines: [],
+        passLines: [],
+        fixturePath: 'p',
+      }),
+    ).toBe(true);
+  });
+
+  it('detects mixed TODO and real lines as non-TODO', () => {
+    const fixture = {
+      ruleHash: 'x',
+      filePath: 'f',
+      failLines: ['// TODO: add code that should trigger this rule'],
+      passLines: ['const x = 1;'],
+      fixturePath: 'p',
+    };
+    expect(isTodoFixture(fixture)).toBe(false);
   });
 });
 
