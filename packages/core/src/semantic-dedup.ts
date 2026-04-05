@@ -96,8 +96,9 @@ export async function deduplicateLessons(
       if (results.length > 0 && results[0]!.score >= threshold) {
         isDbDuplicate = true;
       }
-    } catch {
+    } catch (err) {
       // Empty DB or no table — no existing lessons to dedup against
+      void err;
     }
 
     if (isDbDuplicate) {

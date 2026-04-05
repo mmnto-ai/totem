@@ -79,6 +79,17 @@ describe('deduplicateByHeading', () => {
     expect(headingDupes).toHaveLength(2);
   });
 
+  it('treats whitespace-only headings as headingless (not deduplicated)', () => {
+    const candidates = [
+      { tags: ['a'], text: 'First lesson.', heading: '   ' },
+      { tags: ['b'], text: 'Second lesson.', heading: '\t\n' },
+    ];
+
+    const { unique, headingDupes } = deduplicateByHeading(candidates);
+    expect(unique).toHaveLength(2);
+    expect(headingDupes).toHaveLength(0);
+  });
+
   it('returns empty arrays for empty input', () => {
     const { unique, headingDupes } = deduplicateByHeading([]);
     expect(unique).toHaveLength(0);
