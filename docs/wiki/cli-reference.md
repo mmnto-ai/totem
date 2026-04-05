@@ -7,6 +7,7 @@ This document provides a detailed breakdown of the `totem` command-line interfac
 > **Global Flags:** Every Totem command supports the `--json` flag to output structured JSON instead of human-readable text, making it trivial to pipe Totem into your own automation scripts or UI dashboards (e.g., `totem status --json`).
 
 > **Standalone Binary (Totem Lite):** If you are using the compiled standalone binary (no Node.js required), certain commands that require the LLM orchestrator or local Vector database are excluded to keep the binary small (~35MB).
+>
 > - **Available in Lite:** `init`, `lint`, `hooks`, `compile` (AST/Regex), `doctor`, `status`, `rule list`
 > - **Excluded in Lite:** `review`, `sync`, `extract`, `spec`, `triage`
 >
