@@ -6,7 +6,6 @@ declare const __TOTEM_VERSION__: string;
 
 import { Command } from 'commander';
 
-import { initCommand } from './commands/init.js';
 import { TotemHelp } from './help.js';
 
 function handleError(err: unknown): never {
@@ -93,6 +92,7 @@ program
   .action(
     async (options: { bare?: boolean; pilot?: boolean; strict?: boolean; global?: boolean }) => {
       try {
+        const { initCommand } = await import('./commands/init.js');
         await initCommand({
           bare: options.bare,
           pilot: options.pilot,
