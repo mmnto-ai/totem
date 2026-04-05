@@ -18,6 +18,7 @@
     "test:docs": "node tools/docs-transforms.test.cjs"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@changesets/cli": "^2.29.8",
     "@google/genai": "^1.44.0",
     "eslint": "^10.0.2",

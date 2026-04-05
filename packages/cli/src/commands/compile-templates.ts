@@ -142,7 +142,7 @@ Tree-sitter S-expression syntax:
 {
   "compilable": true,
   "engine": "ast",
-  "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\"))) @violation",
+  "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
   "pattern": "",
   "message": "human-readable violation message",
   "fileGlobs": ["**/*.ts", "**/*.tsx"]
