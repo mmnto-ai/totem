@@ -44,6 +44,7 @@
     }
   },
   "devDependencies": {
+    "@ast-grep/wasm": "^0.42.1",
     "@types/mdast": "^4.0.0",
     "vitest": "^3.0.0"
   },
