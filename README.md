@@ -2,15 +2,15 @@
 
 _AI coding agents are brilliant goldfish. Totem gives them a memory._
 
-**Your AI agents keep making the same mistakes.** They're brilliant at the 100 lines in front of them, but terrible at asking: _"Does a shared helper already exist for this?"_
+**Your AI agents keep making the same mistakes.** They nail the 100 lines in front of them, but they'll never ask: _"doesn't a shared helper already exist for this?"_
 
 Every PR becomes a back-and-forth with review bots about the same architectural nits — missing lazy imports, improper error tagging, reinventing the wheel. That's the **"Bot-Tax."**
 
-Write what you learned in plain English. Totem compiles it into a rule. That mistake physically cannot happen again.
+Totem fixes this. Write the rule in plain English, Totem compiles it into a lint rule, and that mistake can't happen again. No LLM in the loop — just ast-grep and regex, sub-second, offline.
 
 ## A Platform of Primitives, Not Opinionated Workflows
 
-Totem is a **standard library for codebase governance**. It provides fast, deterministic building blocks (`totem lint`, `totem compile`, `totem extract`) that you wire into your own CI/CD reality.
+Totem doesn't force a workflow on you. It's building blocks — `totem lint`, `totem compile`, `totem extract` — that you wire into whatever CI you already have.
 
 We do not force you into a rigid, 7-step AI methodology. We provide the **Sensors** (the knowledge index, the deterministic compiler). You are the Flight Controller. You decide where to put the **Actuators** (Git hooks, IDE plugins).
 
@@ -83,7 +83,7 @@ pnpm dlx @mmnto/cli init
 
 This scaffolds `totem.config.ts`, installs foundational baseline rules, and configures the `pre-push` git hook.
 
-Run the enforcement engine (Zero-LLM, offline, fast):
+Run the linter (no AI, no network, no config):
 
 ```bash
 pnpm dlx @mmnto/cli lint
@@ -113,7 +113,7 @@ The [Totem Playground](https://github.com/mmnto-ai/totem-playground) is a pre-br
 
 ## Documentation & Workflows
 
-Stop reading manuals and start solving friction. See the Wiki for how to use Totem to govern your workflows:
+See the Wiki for how to use Totem to govern your workflows:
 
 - [**It Never Happens Again:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/it-never-happens-again.md) How to turn a PR mistake into a permanent project law in 60 seconds.
 - [**Governing AI Agents:**](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/governing-ai-agents.md) How to use hooks and MCP tools to enforce project rules on Claude and Gemini from Turn 1.
