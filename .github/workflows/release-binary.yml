@@ -102,11 +102,15 @@ jobs:
 
       - name: Determine release tag
         id: tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = "release" ]; then
+            echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Attach binaries to release

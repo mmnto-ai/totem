@@ -113,7 +113,7 @@ async function doInit(): Promise<void> {
  */
 export function parse(lang: Lang | string, src: string): import('@ast-grep/wasm').SgRoot {
   if (!initialized || !wasmModule) {
-    throw new Error('[Totem Lite] AST engine not initialized. Call ensureInit() before parse().');
+    throw new Error('[Totem Error] AST engine not initialized. Call ensureInit() before parse().');
   }
 
   // Normalize lang — in case someone passes the string directly
