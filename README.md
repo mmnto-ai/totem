@@ -90,6 +90,19 @@ Run the enforcement engine (Zero-LLM, offline, fast):
 pnpm dlx @mmnto/cli lint
 ```
 
+### Standalone Binary (No Node.js Required)
+
+If you are working in a non-JavaScript ecosystem (Rust, Go, Python) and don't want to install Node.js, you can download the **Totem Lite** standalone binary from the [GitHub Releases](https://github.com/mmnto-ai/totem/releases) page.
+
+```bash
+# Linux / macOS (example)
+curl -L https://github.com/mmnto-ai/totem/releases/latest/download/totem-linux-x64 -o totem
+chmod +x totem
+sudo mv totem /usr/local/bin/
+```
+
+The Lite binary includes the full AST engine and can run `totem init`, `totem lint`, and `totem hooks` completely offline. See the [Installation Guide](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/installation.md) for details.
+
 ## Try It Live
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/mmnto-ai/totem-playground)

@@ -10,6 +10,7 @@ Welcome to the Totem documentation.
 
 ## Reference
 
+- [Installation Guide](installation.md)
 - [CLI Reference](cli-reference.md)
 - [Configuration Reference](config-reference.md)
 - [Compile Options](compile-options.md)
