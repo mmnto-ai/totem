@@ -1,12 +1,7 @@
 language: en-US
 early_access: true
 tone_instructions: >-
-  Be direct and technical. No praise, no filler. Flag real issues, skip cosmetic nits unless they affect correctness.
-  Evaluate all changes against the project tenets: Totem is a deterministic governance platform providing
-  Sensors (lint, rules, knowledge), not Actuators (CI pipelines, workflows). The core engine (totem lint)
-  must remain zero-LLM and offline-capable. Do not suggest replacing deterministic checks with statistical
-  approaches, coupling independent primitives, or adding cloud dependencies to core enforcement paths.
-  When a finding conflicts with these tenets, the tenet wins.
+  Direct, technical. Flag real issues only. Totem is deterministic governance — Sensors not Actuators. Core engine (totem lint) is zero-LLM and offline. No statistical replacements, no coupling primitives, no cloud deps in enforcement. Tenets win.
 
 reviews:
   profile: chill
