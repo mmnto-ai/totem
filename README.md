@@ -6,41 +6,16 @@ _AI coding agents are brilliant goldfish. Totem gives them a memory._
 
 Every PR becomes a back-and-forth with review bots about the same architectural nits — missing lazy imports, improper error tagging, reinventing the wheel. That's the **"Bot-Tax."**
 
-Write what you learned in plain English. Totem compiles it into a rule. That mistake physically cannot happen again.
+Totem fixes this. You write down the architectural rule once in plain English, Totem compiles it into a blazing-fast, deterministic linter rule (`AST` or `Regex`), and it physically blocks the AI (or you) from making that exact mistake again.
 
-## A Platform of Primitives, Not Opinionated Workflows
+## How It Works
 
-Totem is a **standard library for codebase governance**. It provides fast, deterministic building blocks (`totem lint`, `totem compile`, `totem extract`) that you wire into your own CI/CD reality.
+Totem is a **standard library for codebase governance**. It doesn't force you into an opinionated AI workflow. It just provides fast, deterministic building blocks (`totem lint`, `totem compile`, `totem extract`) that you wire into your own CI/CD reality.
 
-We do not force you into a rigid, 7-step AI methodology. We provide the **Sensors** (the knowledge index, the deterministic compiler). You are the Flight Controller. You decide where to put the **Actuators** (Git hooks, IDE plugins).
-
-## The Codebase Immune System (The Pipeline Engine)
-
-Totem operates as a continuous, self-healing loop that converts institutional knowledge into physical constraints through **The Pipeline Engine**. You can author rules manually (zero-LLM), import from ESLint, compile from Markdown examples, or let Totem auto-capture warnings from PR bots.
-
-```mermaid
-graph LR
-    classDef observe fill:#4b3a75,stroke:#9b72cf,stroke-width:2px,color:#fff
-    classDef learn fill:#5e3a24,stroke:#e67c3b,stroke-width:2px,color:#fff
-    classDef enforce fill:#1a4d2e,stroke:#34a853,stroke-width:2px,color:#fff
-    classDef core fill:#2d2d2d,stroke:#888,stroke-width:1px,color:#fff
-
-    Observe["1. The Eye — Observe"]:::observe
-    Learn["2. The Brain — Learn"]:::learn
-    Enforce["3. The Hand — Enforce"]:::enforce
-    Ledger[("Trap Ledger")]:::core
-
-    Observe -->|"PR Reviews / Bot Nits"| Learn
-    Learn -->|"totem compile"| Enforce
-    Enforce -->|"totem lint / pre-push"| Observe
-
-    Enforce -.->|"Developer Bypass"| Ledger
-    Ledger -.->|"Self-Healing Loop"| Learn
-```
-
-1. **The Eye (Observe):** `totem review` (our optional reference implementation) and your CI bots watch the code. What went wrong?
-2. **The Brain (Learn):** `totem extract` captures the markdown lesson from the PR. `totem compile` automatically writes the AST/Regex plugin for you. What did we learn?
-3. **The Hand (Enforce):** `totem lint` (the fast, deterministic core) physically blocks the push. Make it impossible to repeat.
+1. **Observe (`totem review`):** Use our optional AI reviewer, or your existing PR bots, to catch a mistake.
+2. **Extract (`totem extract`):** Totem reads the PR comments and drafts a markdown lesson explaining what went wrong.
+3. **Compile (`totem compile`):** Totem translates that markdown lesson into a highly-optimized, deterministic `ast-grep` or regex rule.
+4. **Enforce (`totem lint`):** A sub-second, zero-LLM check that runs in your Git `pre-push` hook or CI pipeline. If the AI breaks the rule, the push fails.
 
 **Note on Tooling:** Every CLI command in Totem supports the `--json` global flag, allowing you to easily pipe Totem's output into your own custom UI or automation scripts.
 
