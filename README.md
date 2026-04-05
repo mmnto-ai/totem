@@ -2,7 +2,7 @@
 
 _AI coding agents are brilliant goldfish. Totem gives them a memory._
 
-**Your AI agents keep making the same mistakes.** They can write 100 lines of code, but they'll never ask: _"doesn't a shared helper already exist for this?"_
+**Your AI agents keep making the same mistakes.** They can make the wrong way look brilliant — until you realize what happened. They'll never ask: _"doesn't a shared helper already exist for this?"_
 
 Every PR becomes a back-and-forth with review bots about the same architectural nits — missing lazy imports, improper error tagging, reinventing the wheel. That's the **"Bot-Tax."**
 
