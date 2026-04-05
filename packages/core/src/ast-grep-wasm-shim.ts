@@ -29,6 +29,10 @@ export type NapiConfig = {
  * Mimics the @ast-grep/napi Lang enum.
  * The WASM API uses plain strings; the napi API uses a numeric enum.
  * This object provides the same property names with string values.
+ *
+ * Note: In the lite build, only TypeScript, Tsx, and JavaScript are
+ * registered. Html and Css are included for type compatibility but
+ * will throw at runtime (no parsers registered).
  */
 export const Lang = {
   TypeScript: 'typescript',
@@ -82,9 +86,10 @@ async function doInit(): Promise<void> {
     tsWasm = req.resolve('tree-sitter-typescript/tree-sitter-typescript.wasm');
     tsxWasm = req.resolve('tree-sitter-typescript/tree-sitter-tsx.wasm');
     jsWasm = req.resolve('tree-sitter-javascript/tree-sitter-javascript.wasm');
-  } catch {
+  } catch (err) {
     // In the compiled Bun binary, require.resolve may not work.
     // Fall back to looking relative to the binary location.
+    void err;
     const { join, dirname } = await import('node:path');
     const wasmDir = join(dirname(process.execPath), 'wasm');
     tsWasm = join(wasmDir, 'tree-sitter-typescript.wasm');
