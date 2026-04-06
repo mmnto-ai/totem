@@ -1,4 +1,4 @@
-import type { CompiledRule, TotemFinding, Violation } from '@mmnto/totem';
+import type { CompiledRule, RuleEventContext, TotemFinding, Violation } from '@mmnto/totem';
 
 import type { ShieldFormat } from './shield.js';
 
@@ -109,15 +109,14 @@ export async function runCompiledRules(
     const ruleEventCallback = (
       event: 'trigger' | 'suppress',
       hash: string,
-      context?: { file: string; line: number; justification?: string; astContext?: string },
+      context?: RuleEventContext,
     ) => {
       if (event === 'trigger') {
         recordTrigger(metrics, hash);
-        recordContextHit(
-          metrics,
-          hash,
-          context?.astContext as 'code' | 'string' | 'comment' | 'regex' | undefined,
-        );
+        // Only record context for regex rules (AST rules inherently fire in code context)
+        if (context?.astContext !== undefined) {
+          recordContextHit(metrics, hash, context.astContext);
+        }
       } else {
         recordSuppression(metrics, hash);
         // Append to Trap Ledger (fire-and-forget)

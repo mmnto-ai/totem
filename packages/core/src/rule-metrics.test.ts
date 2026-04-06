@@ -260,8 +260,26 @@ describe('recordSuppression', () => {
 // ─── recordContextHit ──────────────────────────────────
 
 describe('recordContextHit', () => {
-  it('initializes contextCounts on first hit', () => {
+  it('initializes contextCounts on first hit (seeds unknown from triggerCount)', () => {
     const metrics = emptyMetrics();
+    recordContextHit(metrics, 'hash1', 'code');
+
+    // New rule: triggerCount is 0, so unknown seeds at 0
+    expect(metrics.rules['hash1']!.contextCounts).toEqual({
+      code: 1,
+      string: 0,
+      comment: 0,
+      regex: 0,
+      unknown: 0,
+    });
+  });
+
+  it('seeds unknown with existing triggerCount on first context hit', () => {
+    const metrics = emptyMetrics();
+    recordTrigger(metrics, 'hash1');
+    recordTrigger(metrics, 'hash1');
+    recordTrigger(metrics, 'hash1');
+    // Now add context tracking — unknown should start at 3
     recordContextHit(metrics, 'hash1', 'code');
 
     expect(metrics.rules['hash1']!.contextCounts).toEqual({
@@ -269,7 +287,7 @@ describe('recordContextHit', () => {
       string: 0,
       comment: 0,
       regex: 0,
-      unknown: 0,
+      unknown: 3,
     });
   });
 

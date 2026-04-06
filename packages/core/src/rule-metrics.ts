@@ -95,7 +95,8 @@ export function recordContextHit(
 ): void {
   const entry = getOrCreate(metrics, lessonHash);
   if (!entry.contextCounts) {
-    entry.contextCounts = { code: 0, string: 0, comment: 0, regex: 0, unknown: 0 };
+    // Seed unknown with existing triggerCount so historical totals stay consistent
+    entry.contextCounts = { code: 0, string: 0, comment: 0, regex: 0, unknown: entry.triggerCount };
   }
   entry.contextCounts[context ?? 'unknown']++;
 }
