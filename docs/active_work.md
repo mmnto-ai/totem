@@ -1,47 +1,71 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.12.0` (published 2026-04-05) with ~2,580 tests across core, CLI, and MCP packages and 390 compiled rules (208 ast-grep, 182 regex). Release 1.13.0 is in progress — #1131 is the last ticket.
+The project is at release `@mmnto/cli@1.12.0` (published 2026-04-05) with ~2,580 tests across core, CLI, and MCP packages and **397 compiled rules (207 ast-grep, 190 regex)**. **1.13.0 is feature-complete and in release prep.**
 
-### Current: 1.13.0 — The Refinement Engine
+### Current: 1.13.0 — The Refinement Engine (release prep)
 
-Theme: Rule refinement, AST upgrades, and compilation routing.
+Theme: Telemetry-driven rule refinement, compilation routing, and AST upgrades.
 
-- **Compilation Routing (shipped):**
+- **Compilation routing (shipped):**
   - ~~Strategy **#73**~~ — Compilation quality benchmark (Gemini Pro vs gemma4:26b vs Claude Sonnet)
   - ~~**#1220**~~ — Route compile to `anthropic:claude-sonnet-4-6` (90% correctness, 2.4s avg)
-  - ~~**#1224**~~ — Bulk Sonnet recompile (438 → 390 rules, 208 ast-grep)
+  - ~~**#1224**~~ — Bulk Sonnet recompile (438 → 397 rules, 207 ast-grep)
   - ~~**#1225**~~ — Backtick parser hardening (both pipelines)
   - ~~**#1210**~~ — Skip TODO scaffold fixtures in wind tunnel
   - ~~**#1211**~~ — Heading-level dedup in extract pipeline
   - ~~**#1212**~~ — Closed: local gemma4 compilation not viable (benchmark evidence)
 
-- **Auto-Upgrade Pipeline:**
+- **Telemetry-driven refinement (shipped):**
   - ~~**#664**~~ — AST-based empty catch detection (8 rules upgraded regex→ast-grep)
   - ~~**#1132**~~ — Context telemetry wired into rule metrics (code/string/comment/regex tracking)
-  - **#1131** — Rule refinement diagnostic (`totem doctor` upgrade recommendations + `compile --upgrade <hash>`) — **LAST 1.13.0 TICKET**
+  - ~~**#1131**~~ — Rule refinement diagnostic + `compile --upgrade <hash>` flow (PR #1234)
 
-- **Pre-release checklist (before 1.13.0 publish):**
-  - Update `docs/` (active_work, roadmap)
-  - Update wiki
-  - Update playground
-  - Rebuild standalone binary for all 3 platforms
+- **Governance + cleanup (shipped this branch):**
+  - ~~**chore**~~ — Extract 31 lessons from the 1.13.0 PR arc (#1214–#1234)
+  - ~~**chore**~~ — Compile 6 new rules from those lessons (Sonnet)
+  - ~~**chore**~~ — Salvage `Closes`-keyword Pipeline 1 rule from a failed inline-example
+  - ~~**chore**~~ — Silence 9 non-compilable lessons (3 advisory + 6 deferred to #1236)
+  - ~~**feat(governance)**~~ — Pipeline 1 lint rule (severity: error) physically blocks `git rm .totem/lessons.md` after a 41-rule near-miss
 
-- **Deferred to 1.14.0:**
+- **Pre-release checklist:**
+  - [x] Update `docs/active_work.md`
+  - [x] Update `docs/roadmap.md`
+  - [ ] Update README + wiki (handed off to Gemini, see notes below)
+  - [ ] Add changeset (minor for the milestone)
+  - [ ] File totem-playground tickets for playground refresh
+  - [ ] Rebuild standalone binary for linux-x64, darwin-arm64, win32-x64
+  - [ ] Push branch + open release prep PR
+  - [ ] Merge release PR + Version Packages PR to publish 1.13.0
+
+- **Routed to 1.14.0 — The Distribution Pipeline:**
+  - **#1059** — Rule pack distribution (headline)
+  - Strategy **#35** — Distributing compiled rules (headline)
+  - **#1221** — Update cloud compile worker to route through Claude Sonnet (critical for cloud distribution)
+  - **#1232** — Thread explicit `cwd` through `compileCommand` (#1234 follow-up)
+  - **#1233** — Stray `packages/core/{}` file created during `pnpm build`
+  - **#1235** — Batch `--upgrade` hashes in `runSelfHealing`
   - **#1218** — Broad `throw $ERR` ast-grep pattern needs refinement
   - **#1219** — Lazy-load compiler prompt templates
-  - **#1221** — Update cloud compile worker to route through Claude Sonnet
-  - **#1226** — SARIF upload fails on invalid hex escape (workaround: `continue-on-error`)
-  - **#1059** — Rule pack distribution
 
-- **Deferred strategy research:**
-  - Strategy **#64** — Model Routing Matrix (partially addressed by #73 benchmark)
-  - Strategy **#17** — Governance eval harness
+- **Routed to 1.15.0 — The Ingestion Pipeline:**
+  - Strategy **#50** — GHAS / SARIF alert extraction (headline; the original #1131 scope before the refinement pivot)
+  - Strategy **#51** — Lint warning extraction (headline)
+  - **#1226** — SARIF upload hex escape fix (load-bearing for SARIF ingestion)
+  - Strategy **#17** — Governance eval harness (validate ingested inputs)
+
+- **Backlog (Horizon 3+):**
   - Strategy **#6** — Adversarial trap corpus
-  - Strategy **#62** — Model-specific prompt adapters (partially addressed by prompt rewrite)
+  - Strategy **#62** — Model-specific prompt adapters (partially addressed by #1220 rewrite)
+  - Strategy **#64** — Model Routing Matrix (partially addressed by #73 benchmark)
+  - **#1236** — Revisit 6 silenced upgrade-target lessons (1.13.0 cleanup)
 
-### Next: 1.14.0
+### Next: 1.14.0 — The Distribution Pipeline
 
-Theme: TBD — candidates include pack distribution (#1059), code scanning alert extraction (Strategy #50/#51), and distributing compiled rules (Strategy #35).
+Theme: The Totem Pack Ecosystem. 1.13.0 proved the engine generates high-fidelity rules; 1.14.0 lets teams bundle and share them across repositories via the npm registry. Headline work: #1059 + Strategy #35. Cleanup tickets bundled as operational chores along the way (see "Routed to 1.14.0" above).
+
+### After Next: 1.15.0 — The Ingestion Pipeline
+
+Theme: Source Diversity and the Self-Healing Loop. Convert external signals (GHAS alerts, lint warnings) into Totem lessons. Headline work: Strategy #50 + #51.
 
 ### Recently Completed
 
