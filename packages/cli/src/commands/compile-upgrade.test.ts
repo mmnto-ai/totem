@@ -81,6 +81,35 @@ describe('buildTelemetryPrefix', () => {
     });
     expect(prefix).toContain('0%');
   });
+
+  it('excludes the unknown bucket from both numerator and denominator', () => {
+    // 100 unclassified historical hits + 5 recent classified (all code).
+    // Old math would report (100 + 0) / 105 = 95% "non-code" — a false positive.
+    // New math: 0 / 5 = 0% non-code. Unknown is surfaced as a side note.
+    const prefix = buildTelemetryPrefix({
+      code: 5,
+      string: 0,
+      comment: 0,
+      regex: 0,
+      unknown: 100,
+    });
+    expect(prefix).toContain('0%');
+    expect(prefix).toContain('Unclassified (historical) matches: 100');
+  });
+
+  it('computes the ratio from classified buckets only when unknown is large', () => {
+    // 500 historical + 5 classified (2 code, 3 string). Classified total = 5,
+    // non-code = 3, pct = 60%. Unknown is reported but does not move the ratio.
+    const prefix = buildTelemetryPrefix({
+      code: 2,
+      string: 3,
+      comment: 0,
+      regex: 0,
+      unknown: 500,
+    });
+    expect(prefix).toContain('60%');
+    expect(prefix).toContain('Unclassified (historical) matches: 500');
+  });
 });
 
 // ─── compileCommand --upgrade error paths ──────────
@@ -117,6 +146,17 @@ describe('compileCommand --upgrade', () => {
       compileCommand({ upgrade: 'deadbeef', cloud: 'https://example.invalid' }),
     ).rejects.toMatchObject({
       code: 'UPGRADE_CLOUD_UNSUPPORTED',
+    });
+  });
+
+  it('rejects --upgrade combined with --force', async () => {
+    setupWorkspace(tmpDir, {
+      'rule-a.md': lessonMarkdown('Use err in catch', 'Do not use error in catch blocks.'),
+    });
+    // --force would empty the cache before scoped eviction runs, silently
+    // turning --upgrade into a full recompile. Must be rejected.
+    await expect(compileCommand({ upgrade: 'deadbeef', force: true })).rejects.toMatchObject({
+      code: 'CONFIG_INVALID',
     });
   });
 

@@ -455,23 +455,29 @@ export async function findUpgradeCandidates(
 
     const candidates: UpgradeCandidate[] = [];
     for (const rule of rulesFile.rules) {
-      // Skip already-structural ast-grep rules
-      if (rule.engine !== 'regex' && rule.engine !== 'ast') continue;
+      // Only regex rules carry trustworthy non-code telemetry. `ast-grep` rules
+      // are already structural; the legacy `ast` (Tree-sitter) engine does not
+      // populate `astContext`, so its hits land in the `unknown` bucket and
+      // cannot be reasoned about here.
+      if (rule.engine !== 'regex') continue;
 
       const metric = metricsFile.rules[rule.lessonHash];
       if (!metric || !metric.contextCounts) continue;
 
+      // Exclude `unknown` from both numerator and denominator — it represents
+      // historical / unclassified telemetry (pre-context-aware hits, or seeding
+      // via `triggerCount - 1`) and is not evidence of non-code leakage.
       const cc = metric.contextCounts;
-      const total = cc.code + cc.string + cc.comment + cc.regex + cc.unknown;
-      if (total < MIN_CONTEXT_EVENTS) continue;
+      const classifiedTotal = cc.code + cc.string + cc.comment + cc.regex;
+      if (classifiedTotal < MIN_CONTEXT_EVENTS) continue;
 
-      const nonCodeRatio = (total - cc.code) / total;
+      const nonCodeRatio = (cc.string + cc.comment + cc.regex) / classifiedTotal;
       if (nonCodeRatio > NON_CODE_THRESHOLD) {
         candidates.push({
           lessonHash: rule.lessonHash,
           heading: rule.lessonHeading ?? rule.lessonHash,
           engine: rule.engine,
-          total,
+          total: classifiedTotal,
           codeCount: cc.code,
           nonCodeRatio,
         });
@@ -515,7 +521,7 @@ export async function checkUpgradeCandidates(
     return {
       name: 'Upgrade Candidates',
       status: 'pass',
-      message: 'No regex/ast rules exceed non-code threshold',
+      message: 'No regex rules exceed non-code threshold',
     };
   }
 
@@ -610,6 +616,20 @@ export interface DoctorOptions {
 // ─── Self-healing flow ──────────────────────────────────
 
 export async function runSelfHealing(cwd: string): Promise<void> {
+  // Self-healing creates a branch, commits, and opens a PR via the GitHub CLI.
+  // Verify gh is installed up front — otherwise we would fail deep inside the
+  // flow with an opaque ENOENT after already doing diagnostic work.
+  const ghCheck = spawnSync('gh', ['--version'], { stdio: 'ignore', timeout: 3000 });
+  if (ghCheck.status !== 0 || ghCheck.error) {
+    console.error(
+      pc.red(
+        '\n[Auto-Healing] The --pr flow requires the GitHub CLI (gh). Install: https://cli.github.com',
+      ),
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   // Load config to get totemDir
   const { loadConfig, resolveConfigPath } = await import('../utils.js');
   const configPath = resolveConfigPath(cwd);

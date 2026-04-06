@@ -31,7 +31,14 @@ export interface CompileOptions {
 
 // ─── Telemetry directive (mmnto/totem#1131) ────────────────────
 
-/** Build the directive injected into the Sonnet system prompt for `--upgrade`. */
+/**
+ * Build the directive injected into the Sonnet system prompt for `--upgrade`.
+ *
+ * `unknown` is excluded from both the numerator and the denominator because it
+ * holds historical / unclassified telemetry (pre-context-aware hits, or events
+ * where the rule runner did not provide an `astContext`). Including it would
+ * dilute the classified signal and produce misleading ratios.
+ */
 export function buildTelemetryPrefix(contextCounts: {
   code: number;
   string: number;
@@ -39,18 +46,18 @@ export function buildTelemetryPrefix(contextCounts: {
   regex: number;
   unknown: number;
 }): string {
-  const total =
-    contextCounts.code +
-    contextCounts.string +
-    contextCounts.comment +
-    contextCounts.regex +
-    contextCounts.unknown;
-  const nonCode = total - contextCounts.code;
-  const pct = total > 0 ? Math.round((nonCode / total) * 100) : 0;
+  const classifiedTotal =
+    contextCounts.code + contextCounts.string + contextCounts.comment + contextCounts.regex;
+  const nonCode = contextCounts.string + contextCounts.comment + contextCounts.regex;
+  const pct = classifiedTotal > 0 ? Math.round((nonCode / classifiedTotal) * 100) : 0;
+  const unknownNote =
+    contextCounts.unknown > 0
+      ? ` Unclassified (historical) matches: ${contextCounts.unknown}.`
+      : '';
   return [
-    `This rule was flagged because ${pct}% of its matches occur in non-code contexts`,
+    `This rule was flagged because ${pct}% of its classified matches occur in non-code contexts`,
     `(strings: ${contextCounts.string}, comments: ${contextCounts.comment}, regex literals: ${contextCounts.regex}). Please prefer an ast-grep`,
-    `structural pattern that only matches executable code, not string or comment content.`,
+    `structural pattern that only matches executable code, not string or comment content.${unknownNote}`,
   ].join(' ');
 }
 
@@ -244,6 +251,15 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
         'Run `totem compile --upgrade <hash>` without --cloud. The cloud worker cannot thread a per-lesson telemetry directive yet (mmnto/totem#1221).',
       );
     }
+    if (options.force) {
+      // --force empties the cache before scoped eviction runs, silently turning
+      // --upgrade into a full recompile. Reject the combo so intent is explicit.
+      throw new TotemConfigError(
+        '--upgrade cannot be combined with --force.',
+        'Run `totem compile --upgrade <hash>` without --force. The upgrade path already bypasses the cache for the target rule only, preserving every other compiled rule.',
+        'CONFIG_INVALID',
+      );
+    }
 
     const target = options.upgrade.toLowerCase();
     const matches = lessons.filter((l) => {
@@ -380,13 +396,11 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
       newRules.length = 0;
       newRules.push(...freshRules);
 
-      // --upgrade: drop the stale version of the target rule so the fresh compile
-      // replaces it instead of duplicating under the same lessonHash.
-      if (upgradeTargetHash) {
-        const filteredRules = newRules.filter((r) => r.lessonHash !== upgradeTargetHash);
-        newRules.length = 0;
-        newRules.push(...filteredRules);
-      }
+      // --upgrade: the stale copy is NOT pre-filtered here. If we removed it now
+      // and compilation failed (network error, LLM refusal, parser failure), the
+      // rule would be silently deleted from compiled-rules.json. Instead, we
+      // splice the stale copy inside the `case 'compiled':` handler below, so
+      // the fresh rule only replaces the old one on a successful re-compile.
 
       const coreDeps = {
         parseCompilerResponse,
@@ -604,6 +618,13 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
                       `[${lesson.heading}] Downgraded to warning — no test fixture (ADR-065)`,
                     );
                   }
+                }
+                // --upgrade: now that the fresh rule is ready, drop the stale copy
+                // (if any) so the save path doesn't end up with two rules sharing
+                // the same lessonHash. Only happens for the upgrade target.
+                if (lesson.hash === upgradeTargetHash) {
+                  const staleIdx = newRules.findIndex((r) => r.lessonHash === upgradeTargetHash);
+                  if (staleIdx >= 0) newRules.splice(staleIdx, 1);
                 }
                 newRules.push(result.rule);
                 compiled++;

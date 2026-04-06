@@ -695,7 +695,7 @@ describe('checkUpgradeCandidates', () => {
     expect(result.status).toBe('pass');
   });
 
-  it('flags ast-engine rules (not just regex) when non-code ratio is high', async () => {
+  it('skips legacy ast-engine rules because their telemetry lands in unknown', async () => {
     const totemDir = path.join(tmpDir, '.totem');
     writeUpgradeRules(totemDir, [
       { lessonHash: 'ast-noisy', lessonHeading: 'Noisy AST', engine: 'ast' },
@@ -707,9 +707,30 @@ describe('checkUpgradeCandidates', () => {
       },
     });
 
+    // Legacy `ast` (Tree-sitter) rules do not populate `astContext`, so their
+    // context distribution is not trustworthy. checkUpgradeCandidates scopes to
+    // `engine === 'regex'` only.
     const result = await checkUpgradeCandidates(tmpDir);
-    expect(result.status).toBe('warn');
-    expect(result.message).toContain('ast-noisy');
+    expect(result.status).toBe('pass');
+  });
+
+  it('skips the unknown bucket when computing non-code ratio', async () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    writeUpgradeRules(totemDir, [
+      { lessonHash: 'mostly-historical', lessonHeading: 'Historical', engine: 'regex' },
+    ]);
+    writeUpgradeMetrics(totemDir, {
+      'mostly-historical': {
+        triggerCount: 100,
+        // 100 historical hits + 5 recent classified: 5 code, 0 non-code.
+        // Old math: (0 + 100) / 105 = 95% "non-code" → false positive.
+        // New math: 0 / 5 = 0% → pass.
+        contextCounts: { code: 5, string: 0, comment: 0, regex: 0, unknown: 100 },
+      },
+    });
+
+    const result = await checkUpgradeCandidates(tmpDir);
+    expect(result.status).toBe('pass');
   });
 });
 
