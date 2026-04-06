@@ -274,20 +274,21 @@ describe('recordContextHit', () => {
     });
   });
 
-  it('seeds unknown with existing triggerCount on first context hit', () => {
+  it('seeds unknown with historical triggerCount minus current hit', () => {
     const metrics = emptyMetrics();
     recordTrigger(metrics, 'hash1');
     recordTrigger(metrics, 'hash1');
     recordTrigger(metrics, 'hash1');
-    // Now add context tracking — unknown should start at 3
+    // triggerCount is now 3. Current hit makes it 3 historical minus 1 = 2 seeded.
     recordContextHit(metrics, 'hash1', 'code');
 
+    // sum(contextCounts) should equal triggerCount: 2 unknown + 1 code = 3
     expect(metrics.rules['hash1']!.contextCounts).toEqual({
       code: 1,
       string: 0,
       comment: 0,
       regex: 0,
-      unknown: 3,
+      unknown: 2,
     });
   });
 

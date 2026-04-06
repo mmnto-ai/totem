@@ -113,10 +113,7 @@ export async function runCompiledRules(
     ) => {
       if (event === 'trigger') {
         recordTrigger(metrics, hash);
-        // Only record context for regex rules (AST rules inherently fire in code context)
-        if (context?.astContext !== undefined) {
-          recordContextHit(metrics, hash, context.astContext);
-        }
+        recordContextHit(metrics, hash, context?.astContext);
       } else {
         recordSuppression(metrics, hash);
         // Append to Trap Ledger (fire-and-forget)
