@@ -19,5 +19,5 @@ updates:
       day: monday
     open-pull-requests-limit: 5
     labels:
-      - dependencies
-      - ci
+      - 'type: chore'
+      - 'scope: ci'
