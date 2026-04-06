@@ -6347,16 +6347,42 @@
     {
       "lessonHash": "8213cd4e21b375ba",
       "lessonHeading": "GitHub Closes keyword only applies to the first issue",
+      "pattern": "\\b(?:[Cc]loses?|[Cc]losed|[Ff]ix(?:es|ed)?|[Rr]esolves?|[Rr]esolved)\\s+#\\d+\\s*,\\s*#\\d+",
       "message": "GitHub Closes keyword only applies to the first issue",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(?:[Cc]loses?|[Cc]losed|[Ff]ix(?:es|ed)?|[Rr]esolves?|[Rr]esolved)\\s+#\\d+\\s*,\\s*#\\d+",
       "compiledAt": "2026-04-06T18:30:29.901Z",
       "createdAt": "2026-04-06T18:30:29.901Z",
       "fileGlobs": [
         "**/CHANGELOG.md",
         ".github/**/*.md",
         ".changeset/*.md"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "61dcb058bd1df15d",
+      "lessonHeading": "Do not delete .totem/lessons.md (load-bearing for 41+ rules)",
+      "message": "Do not delete .totem/lessons.md (load-bearing for 41+ rules)",
+      "engine": "regex",
+      "severity": "error",
+      "pattern": "\\b(?:git\\s+rm|rm)\\s+[^\\n]{0,40}\\.totem/lessons\\.md\\b",
+      "compiledAt": "2026-04-06T18:40:01.768Z",
+      "createdAt": "2026-04-06T18:40:01.768Z",
+      "fileGlobs": [
+        "**/*.sh",
+        "**/*.bash",
+        "**/*.zsh",
+        "**/*.md",
+        "**/*.ts",
+        "**/*.js",
+        "**/*.cjs",
+        "**/*.mjs",
+        ".claude/**/*",
+        "!**/*.test.*",
+        "!**/*.spec.*",
+        "!.totem/lessons/**",
+        "!.totem/lessons.md",
+        "!.totem/tests/**"
       ]
     }
   ],
