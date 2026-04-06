@@ -475,18 +475,26 @@ export async function findUpgradeCandidates(
       // Exclude `unknown` from both numerator and denominator — it represents
       // historical / unclassified telemetry (pre-context-aware hits, or seeding
       // via `triggerCount - 1`) and is not evidence of non-code leakage.
+      // The `?? 0` defaults are defensive: the Zod schema at
+      // packages/core/src/rule-metrics.ts declares every contextCounts field
+      // as a non-negative integer, but a hand-edited rule-metrics.json could
+      // bypass that and produce NaN in the arithmetic below.
       const cc = metric.contextCounts;
-      const classifiedTotal = cc.code + cc.string + cc.comment + cc.regex;
+      const code = cc.code ?? 0;
+      const strings = cc.string ?? 0;
+      const comments = cc.comment ?? 0;
+      const regexes = cc.regex ?? 0;
+      const classifiedTotal = code + strings + comments + regexes;
       if (classifiedTotal < MIN_CONTEXT_EVENTS) continue;
 
-      const nonCodeRatio = (cc.string + cc.comment + cc.regex) / classifiedTotal;
+      const nonCodeRatio = (strings + comments + regexes) / classifiedTotal;
       if (nonCodeRatio > NON_CODE_THRESHOLD) {
         candidates.push({
           lessonHash: rule.lessonHash,
           heading: rule.lessonHeading ?? rule.lessonHash,
-          engine: rule.engine,
+          engine: 'regex',
           total: classifiedTotal,
-          codeCount: cc.code,
+          codeCount: code,
           nonCodeRatio,
         });
       }
@@ -609,7 +617,12 @@ export const MIN_CONTEXT_EVENTS = 5;
 export interface UpgradeCandidate {
   lessonHash: string;
   heading: string;
-  engine: 'regex' | 'ast';
+  /**
+   * Always `'regex'` — `findUpgradeCandidates` filters to regex rules only
+   * because only they carry trustworthy non-code telemetry. Narrowed from
+   * the broader engine union so the type matches the implementation.
+   */
+  engine: 'regex';
   total: number;
   codeCount: number;
   nonCodeRatio: number;
@@ -729,7 +742,8 @@ export async function runSelfHealing(cwd: string): Promise<void> {
   if (gcConfig && gcConfig.enabled !== false && !gitDirty) {
     console.error(`\n${pc.cyan('[Auto-Healing]')} Checking for stale rules to archive...`);
 
-    const fs = await import('node:fs');
+    // fs is statically imported at the top of this file (line 2); no need to
+    // re-import dynamically here (mmnto/totem#1234 CR cleanup).
     if (!fs.existsSync(rulesPath)) {
       console.error(pc.dim('  No compiled-rules.json found. Skipping GC.'));
     } else {
