@@ -19,23 +19,17 @@ We do not force you into a rigid, 7-step AI methodology. We provide the **Sensor
 Totem is a self-healing loop. Mistakes get observed, compiled into rules, and enforced — automatically. You can author rules manually (zero-LLM), import from ESLint, compile from Markdown examples, or let Totem auto-capture warnings from PR bots.
 
 ```mermaid
-graph LR
-    classDef observe fill:#4b3a75,stroke:#9b72cf,stroke-width:2px,color:#fff
-    classDef learn fill:#5e3a24,stroke:#e67c3b,stroke-width:2px,color:#fff
-    classDef enforce fill:#1a4d2e,stroke:#34a853,stroke-width:2px,color:#fff
-    classDef core fill:#2d2d2d,stroke:#888,stroke-width:1px,color:#fff
+graph TD
+    Observe["Observe"] -->|"PR reviews, bot nits"| Learn["Learn"]
+    Learn -->|"totem compile"| Enforce["Enforce"]
+    Enforce -->|"totem lint"| Observe
+    Enforce -.->|"bypass"| Ledger[("Trap Ledger")]
+    Ledger -.->|"self-heal"| Learn
 
-    Observe["Observe"]:::observe
-    Learn["Learn"]:::learn
-    Enforce["Enforce"]:::enforce
-    Ledger[("Trap Ledger")]:::core
-
-    Observe -->|"PR Reviews / Bot Nits"| Learn
-    Learn -->|"totem compile"| Enforce
-    Enforce -->|"totem lint / pre-push"| Observe
-
-    Enforce -.->|"Developer Bypass"| Ledger
-    Ledger -.->|"Self-Healing Loop"| Learn
+    style Observe fill:#4b3a75,stroke:#9b72cf,color:#fff
+    style Learn fill:#5e3a24,stroke:#e67c3b,color:#fff
+    style Enforce fill:#1a4d2e,stroke:#34a853,color:#fff
+    style Ledger fill:#2d2d2d,stroke:#888,color:#fff
 ```
 
 1. **Observe:** `totem review` or your existing CI bots catch a mistake.
