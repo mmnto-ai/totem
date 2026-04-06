@@ -745,6 +745,40 @@ describe('parseCompilerResponse', () => {
       fileGlobs: ['*.sh', '*.bash', '*.yml'],
     });
   });
+
+  it('strips single backtick wrappers from pattern fields', () => {
+    const response = JSON.stringify({
+      compilable: true,
+      engine: 'ast-grep',
+      astGrepPattern: '`spawn($CMD, [$$$ARGS], { shell: true })`',
+      pattern: '',
+      message: 'Do not use shell:true with array args',
+    });
+    const result = parseCompilerResponse(response);
+    expect(result!.astGrepPattern).toBe('spawn($CMD, [$$$ARGS], { shell: true })');
+  });
+
+  it('strips single backtick wrappers from regex pattern', () => {
+    const response = JSON.stringify({
+      compilable: true,
+      pattern: '`\\bconsole\\.log\\b`',
+      message: 'No console.log',
+    });
+    const result = parseCompilerResponse(response);
+    expect(result!.pattern).toBe('\\bconsole\\.log\\b');
+  });
+
+  it('leaves patterns without backtick wrappers unchanged', () => {
+    const response = JSON.stringify({
+      compilable: true,
+      engine: 'ast-grep',
+      astGrepPattern: '$OBJ.replace(process.cwd(), $R)',
+      pattern: '',
+      message: 'Use path.relative',
+    });
+    const result = parseCompilerResponse(response);
+    expect(result!.astGrepPattern).toBe('$OBJ.replace(process.cwd(), $R)');
+  });
 });
 
 // ─── sanitizeFileGlobs ─────────────────────────────

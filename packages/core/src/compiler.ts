@@ -225,10 +225,20 @@ export function engineFields(
 
 // ─── LLM response parsing ──────────────────────────
 
-/**
- * Parse the LLM's compilation response. Extracts JSON from the response text,
- * validates it, and returns the structured output or null if unparseable.
- */
+/** Strip leading/trailing backtick wrappers (e.g., `` `pattern` ``, `` ```regex\npattern\n``` ``). */
+function stripBacktickWrap(value: string): string {
+  const s = value.trim();
+  // Multi-line code fence: ```lang\n...\n```
+  const fenceMatch = s.match(/^```[^\n]*\n([\s\S]*?)\n?```$/);
+  if (fenceMatch) return fenceMatch[1]!.trim();
+  // Single backtick wrap: `pattern` — only strip if content doesn't contain backticks
+  if (s.startsWith('`') && s.endsWith('`') && s.length > 2) {
+    const inner = s.slice(1, -1);
+    if (!inner.includes('`')) return inner.trim();
+  }
+  return s;
+}
+
 export function parseCompilerResponse(response: string): CompilerOutput | null {
   // Try to extract JSON from the response (LLMs often wrap in ```json blocks)
   const jsonMatch = response.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
@@ -238,7 +248,22 @@ export function parseCompilerResponse(response: string): CompilerOutput | null {
     const parsed = JSON.parse(jsonStr);
     const result = CompilerOutputSchema.safeParse(parsed);
     if (!result.success) return null;
-    return result.data;
+
+    const data = result.data;
+    // Strip backtick formatting hallucinations from pattern fields
+    if (typeof data.pattern === 'string' && data.pattern) {
+      data.pattern = stripBacktickWrap(data.pattern);
+    }
+    if (typeof data.astGrepPattern === 'string' && data.astGrepPattern) {
+      data.astGrepPattern = stripBacktickWrap(data.astGrepPattern);
+    }
+    if (typeof data.astQuery === 'string' && data.astQuery) {
+      data.astQuery = stripBacktickWrap(data.astQuery);
+    }
+    if (data.fileGlobs) {
+      data.fileGlobs = data.fileGlobs.map(stripBacktickWrap);
+    }
+    return data;
   } catch {
     return null;
   }
