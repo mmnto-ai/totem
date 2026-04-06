@@ -71,6 +71,12 @@ describe('extractManualPattern', () => {
     const result = extractManualPattern(body);
     expect(result?.fileGlobs).toBeUndefined();
   });
+
+  it('strips backtick wrappers from Pattern field', () => {
+    const body = '**Pattern:** `process.kill($PID, 0)`\n**Engine:** ast-grep';
+    const result = extractManualPattern(body);
+    expect(result?.pattern).toBe('process.kill($PID, 0)');
+  });
 });
 
 describe('extractAllFields', () => {

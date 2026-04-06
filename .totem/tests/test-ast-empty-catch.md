@@ -1,13 +1,13 @@
 ---
 rule: 2d962603591aa928
-file: src/example.ts
+file: scripts/audit.ts
 ---
 
 ## Should fail
 
 ```ts
 try {
-  doSomething();
+  new RegExp(pattern);
 } catch (err) {}
 ```
 
@@ -15,7 +15,7 @@ try {
 
 ```ts
 try {
-  doSomething();
+  new RegExp(pattern);
 } catch (err) {
   console.error(err);
 }
