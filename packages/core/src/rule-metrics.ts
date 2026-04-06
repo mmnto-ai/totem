@@ -16,7 +16,11 @@ const ContextCountsSchema = z.object({
 export type ContextCounts = z.infer<typeof ContextCountsSchema>;
 
 const RuleMetricSchema = z.object({
-  /** Number of times this rule triggered a violation */
+  /**
+   * Number of times this rule's pattern matched an added line. Includes matches
+   * in non-code contexts (strings, comments) that are recorded as telemetry but
+   * do NOT produce violations. Use `contextCounts.code` for violation count.
+   */
   triggerCount: z.number().int().nonnegative(),
   /** Number of times this rule was suppressed via totem-ignore */
   suppressCount: z.number().int().nonnegative(),
