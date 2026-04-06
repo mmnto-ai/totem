@@ -11,7 +11,7 @@ When configuring the Totem repository, it is critical to understand that **Gemin
 
 ## 2. The Danger of Overlap
 
-A common mistake is assuming that instructions placed in `GEMINI.md` will be read by GCA, or that rules in `.gemini/styleguide.md` apply to the local CLI _[needs verification - research left this ambiguous]_.
+A common mistake is assuming that instructions placed in `GEMINI.md` will be read by GCA, or that rules in `.gemini/styleguide.md` apply to the local CLI (they do not; the CLI relies on its own memory and `compiled-rules.json` for structural enforcement).
 
 - **Command Hallucination:** If CLI instructions (like "Run `totem sync` after editing") leak into GCA's context, the headless GCA bot may hallucinate capabilities and attempt to run shell commands it does not possess.
 - **Dead Files:** Developers sometimes create a lowercase `.gemini/gemini.md` file hoping to share context. This file is **dead**. It is unrecognized by both GCA and the Gemini CLI. The correct local instruction file is `GEMINI.md` (uppercase) at the root of the project.

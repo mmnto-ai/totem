@@ -1,125 +1,141 @@
-# Totem Strategic Roadmap
+# Totem Roadmap
 
-Totem is a **standard library for codebase governance** — zero-telemetry infrastructure that prevents AI coding agents from violating architectural boundaries. It provides sensors (lint rules, vector search, compiled patterns); users wire the actuators (Git hooks, CI, MCP boundaries).
+This document outlines the strategic milestones for the Totem project.
 
----
-
-## Active: 1.11.0 — The Import Engine
-
-_Rule portability — bring governance from external tools and other totem instances._
-
-- **ESLint Flat Config (#1138):** Import from modern ESLint flat config format.
-- **Totem-to-Totem Import (#1139):** Cross-repo rule sharing between totem instances.
-- **Rule Refinement (#1131):** Refine rules from false-positive scan alerts.
-- **AST Upgrade Detection (#1132):** Auto-detect string-content matches for AST patterns.
-- **Pack Distribution (#1059):** Shareable rule bundles.
-- **Proactive Language Packs (#1152):** Thick TypeScript/Shell/Node.js baseline rules from established best practices.
-- **GHAS/SARIF Extraction (Strategy #50):** Import from GitHub Advanced Security alerts.
-- **Lint Warning Extraction (Strategy #51):** Convert lint warnings into totem lessons.
+Totem is a standard library for codebase governance — deterministic primitives that let teams enforce architectural boundaries on AI agents without opinionated workflows. The roadmap below tracks the active progression of enforcement primitives, platform validation, and rule distribution.
 
 ---
 
-## Next: 1.12.0 — Foundation & Validation
+## 1.13.0 — The Refinement Engine (Active — release prep)
 
-_Internal quality, research validation, and platform hardening._
+**Theme:** Telemetry-driven rule refinement, compilation routing, and structural pattern upgrades.
 
-- **Orchestrator Refactor (#999):** Decompose runOrchestrator into middleware pipeline.
-- **Path Registry (#997):** Centralize path resolution via WorkspaceContext.
-- **Non-Null Sweep (#1000):** Replace `!` assertions with proper type narrowing.
-- **git.ts Compat Review (#1008):** Re-export backward compat on error paths.
-- **Shield Tests (#1020):** Exercise shieldCommand directly in validation tests.
-- **Concurrent Dispatch (#1053):** Parallel agent task execution.
-- **Docs Scope (#1033):** Fix `totem wrap` doc sync reliability.
-- **Trap Corpus (Strategy #6):** Adversarial eval suite for deterministic engine.
-- **Eval Harness (Strategy #17):** Governance eval tooling.
-- **Model Adapters (Strategy #62):** Model-specific prompt tuning.
-- **Spec Efficacy (Strategy #63):** Proving agent followed the spec.
+- **Compilation Routing:**
+  - [x] **Sonnet Routing:** Compile pipeline routes through Claude Sonnet 4.6 (90% correctness vs Gemini Pro's 73%, 2.4s vs 19.6s avg). Validated by Strategy #73 benchmark across 30 lessons in 4 difficulty tiers.
+  - [x] **Bulk Recompile:** All 1156 lessons recompiled through Sonnet — 438 → 397 rules, 102 regex→ast-grep upgrades, 143 noisy Gemini-hallucinated rules purged. Quality > quantity.
+  - [x] **Prompt Rewrite:** Compiler system prompt rewritten with explicit ast-grep preference, syntax cheat sheet, and 6 compound pattern examples mined from benchmark failures.
+  - [x] **Parser Hardening:** Backtick wrapper stripping in both Pipeline 1 (manual `**Pattern:**` extraction) and Pipeline 2 (LLM JSON output) so generated patterns can never ship with code-fence artifacts.
+
+- **Telemetry-Driven Refinement:**
+  - [x] **Context Telemetry:** `RuleMetric` now tracks the per-context match distribution (code, string, comment, regex, unknown). Match-context comes from the rule runner's `astContext` field; historical hits are seeded into the `unknown` bucket so older metrics remain interpretable.
+  - [x] **`totem doctor` Diagnostic:** New `checkUpgradeCandidates` flags regex rules whose telemetry shows >20% of matches landing in non-code contexts (excluding `unknown` from the ratio, with a 5-event minimum-confidence floor).
+  - [x] **`totem compile --upgrade <hash>`:** Re-compile a single targeted rule through Claude Sonnet with a telemetry-driven directive prompt. Scoped cache eviction preserves the rule's original `createdAt` metadata; failure paths leave the old rule intact (fail-safe) while replacement paths handle both `compiled` and `skipped` outcomes consistently.
+  - [x] **Self-Healing Integration:** `totem doctor --pr` upgrade phase calls `compileCommand` in-process, bundles results into the existing branch + commit + PR flow, reports only actual replacements (not noop/skipped/failed) in the auto-heal PR body, and stages `compile-manifest.json` alongside the rules file.
+  - [x] **AST Empty Catch:** 8 empty-catch rules upgraded from the legacy `ast` (Tree-sitter `#eq?`) engine to `ast-grep` structural matching, correctly handling parameterless catch blocks and multi-line empty bodies.
+
+- **Pipeline Hygiene:**
+  - [x] **Wind Tunnel:** Skip auto-scaffolded TODO fixtures so empty placeholder fixtures don't dilute the gate signal.
+  - [x] **Extract Dedup:** Heading-level exact-match deduplication runs before embedding similarity to short-circuit duplicate ingestion at zero cost.
+  - [x] **Config Drift Test:** Replaced the line-count limit on instructional files with a token-aware character + directive count limit.
+
+- **Governance (eat your own dogfood):**
+  - [x] **Lesson Protection Rule:** A near-miss almost deleted `.totem/lessons.md` (which sources 41+ functional ast-grep rules) under the mistaken assumption it was legacy cruft. Encoded the constraint as a Pipeline 1 lint rule with severity `error` that flags the destructive `git rm .totem/lessons.md` shell command at the point of intent across all script and documentation files. Demonstrates the totem thesis: when an agent makes a mistake, write a deterministic constraint, not a sticky note.
 
 ---
 
-## Shipped
+## 1.14.0 — The Distribution Pipeline (Next)
+
+**Theme:** The Totem Pack Ecosystem. We spent 1.13.0 proving the engine can generate high-fidelity ast-grep rules — the bulk Sonnet recompile produced 397 precise rules and the refinement diagnostic closes the loop on noisy ones. 1.14.0 is about letting teams **bundle and share** those proven rules across repositories via the npm registry.
+
+- **Headline Work:**
+  - [ ] **Rule Pack Distribution:** Standardized bundles for reusable rule distribution (#1059). Teams should be able to publish a versioned pack of compiled rules to npm and consume them in other projects with the same governance guarantees as locally-compiled rules.
+  - [ ] **Distributing Compiled Rules:** Strategy #35 research — mechanisms, versioning model, trust anchors, and integrity verification for cross-team rule sharing.
+
+- **Bundled Cleanup (operational chores on the way):**
+  - [ ] **Cloud Compile → Sonnet:** Update the cloud compile worker to route through Claude Sonnet (#1221) — critical prerequisite for cloud distribution, since packs compiled through the cloud need the same quality guarantees as local Sonnet compile.
+  - [ ] **`cwd` Threading:** Thread explicit `cwd` through `compileCommand` so packs can be compiled from arbitrary working directories (#1232, #1234 follow-up).
+  - [ ] **Build Artifact:** Investigate and fix the stray `packages/core/{}` file produced by `pnpm build` (#1233).
+  - [ ] **Batch `--upgrade`:** Refactor `compileCommand` to accept an array of hashes so `runSelfHealing` doesn't reload config + lessons + rules + manifest per candidate (#1235).
+  - [ ] **Broad `throw $ERR` Pattern:** Refine the overly-broad ast-grep pattern (#1218).
+  - [ ] **Lazy Compile Templates:** Lazy-load compiler prompt templates to reduce CLI startup cost (#1219).
+
+---
+
+## 1.15.0 — The Ingestion Pipeline
+
+**Theme:** Source Diversity and the Self-Healing Loop. Expand the extraction pipeline to automatically convert external signals — GitHub Advanced Security (GHAS) alerts and standard repository lint warnings — into deterministic Totem lessons. Where 1.13.0 refined rules from internal telemetry and 1.14.0 distributes them across teams, 1.15.0 is about where the _inputs_ come from.
+
+- **Headline Work:**
+  - [ ] **GHAS / SARIF Extraction:** Convert GitHub Advanced Security alerts into Totem lessons (Strategy #50). This is the original #1131 scope we pivoted away from when telemetry-driven refinement won — now the right time, because 1.14.0 distribution gives us a way to ship the resulting rules back out.
+  - [ ] **Lint Warning Extraction:** Convert repository lint warnings (ESLint, Semgrep, Sonar) into actionable lessons (Strategy #51).
+
+- **Bundled Cleanup / Validation:**
+  - [ ] **SARIF Hex Escape Fix:** Fix SARIF upload failing on invalid hex escape sequences (#1226) — load-bearing for the new SARIF ingestion path.
+  - [ ] **Governance Eval Harness:** Tooling to evaluate rule enforcement against the new ingested inputs (Strategy #17) — the ingestion pipeline needs validation to prove the extracted rules actually catch what GHAS/lint flagged.
+
+---
+
+## Backlog — Horizon 3+
+
+Strategic research not currently scoped to 1.14.0 or 1.15.0:
+
+- **Strategy #6** — Adversarial trap corpus: evaluation suite to test the deterministic engine against evasion techniques
+- **Strategy #62** — Model-specific prompt adapters (partially addressed by #1220 rewrite)
+- **Strategy #64** — Formal model routing matrix (partially addressed by #73 benchmark)
+- **#1236** — Revisit 6 upgrade-target lessons silenced during 1.13.0 cleanup
+
+---
+
+## Shipped Milestones
+
+### 1.12.0 — The Umpire & The Router (2026-04-05)
+
+Standalone binary, research validation, and platform hardening.
+
+- **Lite-Tier Binary:** Standalone executable with WASM ast-grep engine — no native dependencies, three platforms (linux-x64, darwin-arm64, win32-x64).
+- **gemma4 Evaluation:** Auto-detect Ollama environments and validate local model viability. gemma4:26b benchmarked at 80% parse / 93% safe / 90s avg — kept for triage but ruled out for compile.
+- **AST-Grep Coverage:** Extended ast-grep coverage to ESLint restricted-properties rules.
+- **Windows CI:** Resolved orchestrator timeout constraints on Windows runners.
+- **Context Tuning:** Proposal 213 Phases 2+3 — CLAUDE.md pulse check, GCA/CR tenets injected into bot configs.
 
 ### 1.11.0 — The Import Engine (2026-04-04)
 
-_Rule portability — bring governance from external tools and other totem instances._
+Brought governance rules from external tools and other instances into the platform.
 
-- **Proactive Language Packs (#1152):** Thick TypeScript/Shell/Node.js baseline rules (50 total) from established best practices like @typescript-eslint/strict, OWASP Node.js, and ShellCheck/POSIX.
-- **ESLint Flat Config (#1138):** Import from modern ESLint flat config format.
-- **Totem-to-Totem Import (#1139):** Cross-repo rule sharing between totem instances.
+- **Portability:** Enabled cross-repository rule sharing between instances and imported rules from modern ESLint flat config formats.
+- **Language Support:** Added baseline proactive rule packs for TypeScript, Shell, and Node.js built on established best practices.
 
 ### 1.10.2 — Phase 2: Import Engine Foundations (2026-04-04)
 
-_Retirement ledger, compiler safety, and expanded ESLint import coverage._
+Hardened compiler safety and expanded ESLint import coverage.
 
-- **Lesson Retirement Ledger (#1165):** `.totem/retired-lessons.json` tracks intentionally removed rules, preventing re-extraction. Integrated into the extraction pipeline.
-- **Compiler Guard (#1177):** Rejects rules whose patterns match suppression directives (totem-ignore, totem-context, shield-context) — they self-suppress at runtime.
-- **ESLint Syntax/Properties (#1140):** `totem import --from-eslint` now handles `no-restricted-properties` (dot, optional chaining, bracket notation) and `no-restricted-syntax` (ForInStatement, WithStatement, DebuggerStatement).
-- **Model Defaults (#1185):** `totem init` defaults updated to `claude-sonnet-4-6` (Anthropic) and `gpt-5.4-mini` (OpenAI).
+- **Safety:** Rejected self-suppressing patterns and tracked removed rules via a retirement ledger to prevent re-extraction.
+- **Enforcement:** Updated default model selections and expanded extraction handlers for restricted properties and syntax rules.
 
 ### 1.10.1 — Phase 1 Bug Fixes (2026-04-04)
 
-_Rule hygiene and release pipeline hardening before the Import Engine._
+Hardened the release pipeline and improved rule hygiene prior to major feature additions.
 
-- **Exemption Dedup (#1158):** Added `!includes(message)` check in `recordFalsePositive()`.
-- **Exit Scope (#1164):** Narrowed process.exit() rule to exclude CLI entry points and command files.
-- **Rule Conflict Audit (#1166):** Deleted 5 lessons, scoped 1 (418 → 413 compiled rules).
-- **POSIX Compliance (#1168):** Multi-line if/then/fi in agent detection, hardened hook parser.
+- **Hygiene:** Deduplicated false-positive exemptions and audited rule conflicts to reduce overall rule overlaps.
+- **Compliance:** Narrowed exit scope rules to exclude CLI entries and improved POSIX compliance for multi-line shell hooks.
 
 ### 1.10.0 — The Invisible Exoskeleton (2026-04-02)
 
-_Reduce adoption friction so totem disappears into the developer's workflow._
+Reduced adoption friction for solo developers and new repository environments.
 
-- **Pilot Mode (#949):** Time-bounded warn-only hooks (14 days / 50 pushes).
-- **Enforcement Tiers (#987):** Strict tier + agent auto-detection via environment variables.
-- **.env Parser (#1114):** Hardened with dotenv.
-- **Spec Infrastructure (#1016):** Query expansion for test keywords + docstring enrichment.
-- **Solo Dev Experience (#1039):** `extract --local` for local git diffs. Global profile (`~/.totem/`) with `totem init --global`.
-- **"Missed Caught" Audit (#1153):** Historical bot findings categorized by detection tier (44% deterministic).
-- **Manifest Rehash (#1155):** Observation capture re-hashes compile manifest after mutation.
-- **Pre-Push Format Check (#1156):** Package-manager-agnostic `format:check` in hook template.
-- **Extract Refactor (#1159):** Split extract.ts into per-mode modules with unified assembler.
-- **Exit Code Fix (#1161):** `--yes` mode sets exitCode 1 when all lessons suspicious.
+- **Developer Experience:** Added time-bounded pilot modes, local extraction options, and global profile support.
+- **Enforcement Validation:** Introduced strict tiers with agent auto-detection and formalized format checks in pre-push hooks.
+- **Pipeline Refactoring:** Hardened environment variable parsing and refactored the extraction pipeline into distinct per-mode modules.
 
 ### 1.9.0 — Pipeline Engine (2026-04-01)
 
-_Five pipelines for rule creation, from zero-LLM to fully autonomous._
+Established multiple pipelines for rule creation ranging from manual scaffolding to fully autonomous extraction.
 
-- **P1 — Manual Scaffolding:** `totem rule scaffold` with auto-generated test fixtures.
-- **P2 — LLM-Generated:** `totem compile` converts prose lessons to regex patterns.
-- **P3 — Example-Based:** Bad/Good code snippets compiled with self-verification via `testRule`.
-- **P4 — Import:** `totem import` translates ESLint/Semgrep configs. Zero LLM cost.
-- **P5 — Observation Auto-Capture:** Shield findings automatically staged as warning-severity rules.
-- Pre-compiled baseline rules for Python, Rust, and Go. Scan feedback loop from GHAS alerts. Shield auto-learn on FAIL verdicts.
-
-See [Pipeline Engine](pipeline-engine.md) for full details.
+- **Rule Scaffolding:** Supported manual generation with test fixtures, example-based compilation, and prose-to-pattern translation.
+- **Automation:** Staged observation findings automatically and translated external tool configurations without relying on language models.
+- **Ecosystem:** Refreshed documentation, overhauled the playground, and published pre-compiled baseline rules for additional languages.
 
 ### 1.7.0 — Platform of Primitives (2026-03-29)
 
-- **CLI Redesign:** Noun-verb taxonomy, global `--json` output, redesigned help.
-- **Actor-Aware Enforcement (ADR-083):** Stateless Git hooks. Content Hash Lock at the MCP boundary.
-- **Agent Context Engineering:** SessionStart Auto-Context V2 (vector/FTS), `totem describe`, structured handoff checkpoints.
-- **Rule Lifecycle:** Garbage collection with adaptive decay, compile progress with 429 retry.
+Redesigned the command structure and stabilized context engineering.
+
+- **Architecture:** Transitioned to stateless hooks, hierarchical command structures, and hash-locked execution boundaries.
+- **Context Management:** Deployed fallback search for agent context injection, repository discovery commands, and structured handoff validations.
+- **Lifecycle:** Added garbage collection with adaptive decay and throughput-based ETA for compilation progress.
 
 ### 1.6.0 — Pipeline Maturity (2026-03-22)
 
-- Self-healing loop: Trap Ledger, exemption engine, bot review signal capture.
-- Inline rule unit testing, standard library, forbidden native module rules.
-- Compiler DX, shield flag auto-refresh, stress testing.
+Finalized the core self-healing loop and core enforcement testing structures.
 
-### Earlier (1.0–1.5)
-
-- Local vector engine (LanceDB), MCP interface, adversarial hardening.
-- Severity levels and SARIF output, multi-domain MCP isolation.
-- Rule lifecycle telemetry, autonomous downgrading, triage inbox.
-- `totem doctor`, consumer init with agent auto-detection.
-
----
-
-## Future: 2.0 — Federation
-
-_Multi-repo coordination for teams running autonomous agents at scale._
-
-- **Federated Rules:** Central strategy repo pushes compiled rules to downstream repos via RBAC.
-- **Signed Trap Ledger:** Cryptographically signed, immutable cloud endpoint.
-- **Compliance Dashboard:** Override rates, rule health trends, bypass audit trails.
-- **Mesh Export:** Portable bundle format for lessons and rules.
+- **Enforcement Core:** Delivered inline rule unit testing, standard libraries, and tracking ledgers for evasion traps.
+- **Developer Experience:** Improved compiler workflows, implemented auto-refreshing flag mechanisms, and integrated stress testing.
