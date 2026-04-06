@@ -49,6 +49,7 @@ export async function runCompiledRules(
     loadCompiledRules,
     loadRuleMetrics,
     matchesGlob,
+    recordContextHit,
     recordSuppression,
     recordTrigger,
     saveRuleMetrics,
@@ -108,10 +109,15 @@ export async function runCompiledRules(
     const ruleEventCallback = (
       event: 'trigger' | 'suppress',
       hash: string,
-      context?: { file: string; line: number; justification?: string },
+      context?: { file: string; line: number; justification?: string; astContext?: string },
     ) => {
       if (event === 'trigger') {
         recordTrigger(metrics, hash);
+        recordContextHit(
+          metrics,
+          hash,
+          context?.astContext as 'code' | 'string' | 'comment' | 'regex' | undefined,
+        );
       } else {
         recordSuppression(metrics, hash);
         // Append to Trap Ledger (fire-and-forget)

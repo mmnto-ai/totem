@@ -5,6 +5,16 @@ import { z } from 'zod';
 
 // ─── Schema ─────────────────────────────────────────
 
+const ContextCountsSchema = z.object({
+  code: z.number().int().nonnegative(),
+  string: z.number().int().nonnegative(),
+  comment: z.number().int().nonnegative(),
+  regex: z.number().int().nonnegative(),
+  unknown: z.number().int().nonnegative(),
+});
+
+export type ContextCounts = z.infer<typeof ContextCountsSchema>;
+
 const RuleMetricSchema = z.object({
   /** Number of times this rule triggered a violation */
   triggerCount: z.number().int().nonnegative(),
@@ -14,6 +24,8 @@ const RuleMetricSchema = z.object({
   lastTriggeredAt: z.string().nullable(),
   /** ISO timestamp of last suppression */
   lastSuppressedAt: z.string().nullable(),
+  /** Tracks where regex rules fire: code, string, comment, regex, or unknown context */
+  contextCounts: ContextCountsSchema.optional(),
 });
 
 export type RuleMetric = z.infer<typeof RuleMetricSchema>;
@@ -73,6 +85,19 @@ export function recordSuppression(metrics: RuleMetricsFile, lessonHash: string):
   const entry = getOrCreate(metrics, lessonHash);
   entry.suppressCount++;
   entry.lastSuppressedAt = new Date().toISOString();
+}
+
+/** Record the AST context where a rule fired. */
+export function recordContextHit(
+  metrics: RuleMetricsFile,
+  lessonHash: string,
+  context: 'code' | 'string' | 'comment' | 'regex' | undefined,
+): void {
+  const entry = getOrCreate(metrics, lessonHash);
+  if (!entry.contextCounts) {
+    entry.contextCounts = { code: 0, string: 0, comment: 0, regex: 0, unknown: 0 };
+  }
+  entry.contextCounts[context ?? 'unknown']++;
 }
 
 function getOrCreate(metrics: RuleMetricsFile, lessonHash: string): RuleMetric {

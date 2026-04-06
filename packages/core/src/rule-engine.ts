@@ -243,6 +243,7 @@ export function applyRulesToAdditions(
         onRuleEvent?.('trigger', rule.lessonHash, {
           file: addition.file,
           line: addition.lineNumber,
+          astContext: addition.astContext,
         });
         violations.push({
           rule,
