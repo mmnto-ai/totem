@@ -17,8 +17,8 @@ export default {
 
   // AI Orchestrator Settings
   orchestrator: {
-    provider: 'gemini', // 'shell', 'openai', 'ollama', 'gemini', 'anthropic'
-    defaultModel: 'gemini-3.1-pro-preview',
+    provider: 'anthropic', // 'shell', 'openai', 'ollama', 'gemini', 'anthropic'
+    defaultModel: 'claude-sonnet-4-6',
     options: {
       temperature: 0.1,
       // Provider-specific options like maxTokens or num_ctx

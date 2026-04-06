@@ -53,7 +53,7 @@ Totem is a standard library for codebase governance — deterministic primitives
 
 ## 1.15.0 — The Ingestion Pipeline
 
-**Theme:** Source Diversity and the Self-Healing Loop. Expand the extraction pipeline to automatically convert external signals — GitHub Advanced Security (GHAS) alerts and standard repository lint warnings — into deterministic Totem lessons. Where 1.13.0 refined rules from internal telemetry and 1.14.0 distributes them across teams, 1.15.0 is about where the *inputs* come from.
+**Theme:** Source Diversity and the Self-Healing Loop. Expand the extraction pipeline to automatically convert external signals — GitHub Advanced Security (GHAS) alerts and standard repository lint warnings — into deterministic Totem lessons. Where 1.13.0 refined rules from internal telemetry and 1.14.0 distributes them across teams, 1.15.0 is about where the _inputs_ come from.
 
 - **Headline Work:**
   - [ ] **GHAS / SARIF Extraction:** Convert GitHub Advanced Security alerts into Totem lessons (Strategy #50). This is the original #1131 scope we pivoted away from when telemetry-driven refinement won — now the right time, because 1.14.0 distribution gives us a way to ship the resulting rules back out.

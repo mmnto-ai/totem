@@ -57,7 +57,7 @@ Direct use of `node:child_process` is forbidden outside `core/src/sys/`. Use the
 
 ```bash
 $ git push
-[Lint] Running 365 rules (zero LLM)...
+[Lint] Running 397 rules (zero LLM)...
 ### Warnings
 - **packages/cli/src/git.ts:22** — Never use native child_process
   Pattern: `import { execSync } from 'node:child_process'`
@@ -66,6 +66,14 @@ $ git push
 ```
 
 The "wrong" way becomes the "loud" way.
+
+## Quality > Quantity
+
+In 1.13.0 we recompiled all 1156 lessons through Claude Sonnet 4.6 (`anthropic:claude-sonnet-4-6`), shipping 397 precise rules (207 ast-grep, 190 regex) and purging 143 noisy hallucinated rules. Quality > quantity is enforced by the compile gate, not by manual curation. Strategy #73 benchmark proved Sonnet wins on every metric (90% correctness vs 73%, 2.4s vs 19.6s).
+
+The `totem doctor` command now flags regex rules whose telemetry shows >20% of matches landing in non-code contexts (strings, comments, regex literals) and recommends ast-grep upgrades.
+
+You can run `totem compile --upgrade <hash>` to target one rule by hash, evict only that rule from the cache, recompile through Sonnet with a telemetry-driven directive, and replace the rule. This command rejects `--cloud` (cloud worker still on Gemini, tracked as #1221) and `--force` (the scoped eviction makes `--force` redundant and dangerous).
 
 ## Quickstart
 
