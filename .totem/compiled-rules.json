@@ -1960,9 +1960,9 @@
       "lessonHeading": "Swallowing errors within internal validation checks (like",
       "pattern": "",
       "message": "Do not swallow errors in internal validation checks. Propagate them to allow top-level handlers to identify database corruption or 'healable' states and trigger appropriate resets.",
-      "engine": "ast",
-      "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
-      "compiledAt": "2026-03-21T07:43:17.117Z",
+      "engine": "ast-grep",
+      "astGrepPattern": "try { $$$BODY } catch ($ERR) { }",
+      "compiledAt": "2026-04-06T00:23:24.846Z",
       "createdAt": "2026-03-21T07:43:17.117Z",
       "fileGlobs": [
         "**/*.ts",
@@ -3225,9 +3225,9 @@
       "lessonHeading": "Using empty catch blocks during regex compilation in audit",
       "pattern": "",
       "message": "Empty catch blocks in audit scripts hide regex compilation failures. Ensure errors are surfaced to prevent silent coverage gaps and maintain rule-set integrity.",
-      "engine": "ast",
-      "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
-      "compiledAt": "2026-03-21T22:22:34.588Z",
+      "engine": "ast-grep",
+      "astGrepPattern": "try { $$$BODY } catch ($ERR) { }",
+      "compiledAt": "2026-04-06T00:23:24.846Z",
       "createdAt": "2026-03-21T22:22:34.588Z",
       "fileGlobs": [
         "audit/**/*.ts",
@@ -3421,9 +3421,9 @@
       "lessonHeading": "Empty catch blocks during file discovery can lead",
       "pattern": "",
       "message": "Empty catch blocks can lead to incomplete data sets and incorrect logic. Use explicit error handling to distinguish between missing directories and file read failures.",
-      "engine": "ast",
-      "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
-      "compiledAt": "2026-03-22T17:39:21.564Z",
+      "engine": "ast-grep",
+      "astGrepPattern": "try { $$$BODY } catch ($ERR) { }",
+      "compiledAt": "2026-04-06T00:23:24.846Z",
       "createdAt": "2026-03-22T17:39:21.564Z",
       "fileGlobs": [
         "**/*.ts",
@@ -3486,9 +3486,9 @@
       "lessonHeading": "When scanning directories for feature detection",
       "pattern": "",
       "message": "Do not swallow all errors in an empty catch block. When scanning directories for feature detection, explicitly handle known errors (like ENOENT) and log or rethrow others (like EACCES) to avoid masking structural or permission issues.",
-      "engine": "ast",
-      "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
-      "compiledAt": "2026-03-22T17:42:09.151Z",
+      "engine": "ast-grep",
+      "astGrepPattern": "try { $$$BODY } catch ($ERR) { }",
+      "compiledAt": "2026-04-06T00:23:24.846Z",
       "createdAt": "2026-03-22T17:42:09.151Z",
       "fileGlobs": [
         "**/*.ts",
@@ -3767,9 +3767,9 @@
       "lessonHeading": "Preserve error context when re-throwing",
       "pattern": "",
       "message": "Preserve the original error context when re-throwing (e.g., use 'throw new Error(`...: ${err.message}`)' or 'throw new Error(message, { cause: err })') to avoid swallowing debug details.",
-      "engine": "ast",
-      "astQuery": "(catch_clause body: (statement_block (throw_statement (new_expression constructor: (identifier) @ctor (#eq? @ctor \"Error\") arguments: (arguments (string)))))) @violation",
-      "compiledAt": "2026-03-23T04:33:41.616Z",
+      "engine": "ast-grep",
+      "astGrepPattern": "try { $$$BODY } catch ($ERR) { }",
+      "compiledAt": "2026-04-06T00:23:24.846Z",
       "createdAt": "2026-03-23T04:33:41.616Z",
       "fileGlobs": [
         "**/*.ts",
@@ -4524,9 +4524,9 @@
       "lessonHeading": "Silent failures in 'best-effort' operations like staleness",
       "pattern": "",
       "message": "Use non-blocking logging instead of empty catch blocks to ensure IO failures are traceable without crashing the primary command execution.",
-      "engine": "ast",
-      "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
-      "compiledAt": "2026-03-25T16:02:57.312Z",
+      "engine": "ast-grep",
+      "astGrepPattern": "try { $$$BODY } catch ($ERR) { }",
+      "compiledAt": "2026-04-06T00:23:24.846Z",
       "createdAt": "2026-03-25T16:02:57.312Z",
       "fileGlobs": [
         "**/*.ts",
@@ -4630,9 +4630,9 @@
       "lessonHeading": "Reporting malformed records via an onWarn callback instead",
       "pattern": "",
       "message": "Avoid silent catch blocks. Use an onWarn callback to report malformed records or corrupted NDJSON streams.",
-      "engine": "ast",
-      "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
-      "compiledAt": "2026-03-26T02:02:35.823Z",
+      "engine": "ast-grep",
+      "astGrepPattern": "try { $$$BODY } catch ($ERR) { }",
+      "compiledAt": "2026-04-06T00:23:24.846Z",
       "createdAt": "2026-03-26T02:02:35.823Z",
       "fileGlobs": [
         "**/*.ts",
@@ -6572,9 +6572,9 @@
       "lessonHeading": "Surface specific git fallback errors",
       "pattern": "",
       "message": "Avoid empty catch blocks when probing for git refs; surface specific errors like 'missing upstream' to help diagnose configuration issues.",
-      "engine": "ast",
-      "astQuery": "(catch_clause body: (statement_block) @body (#eq? @body \"{}\")) @violation",
-      "compiledAt": "2026-04-03T13:23:27.701Z",
+      "engine": "ast-grep",
+      "astGrepPattern": "try { $$$BODY } catch ($ERR) { }",
+      "compiledAt": "2026-04-06T00:23:24.846Z",
       "createdAt": "2026-04-03T13:23:27.701Z",
       "fileGlobs": [
         "packages/cli/src/commands/extract.ts"
@@ -6933,6 +6933,106 @@
         "**/.github/workflows/release-binary.yml"
       ],
       "severity": "warning"
+    },
+    {
+      "lessonHash": "1f59d48fd2413abf",
+      "lessonHeading": "Persist dynamic import initialization errors",
+      "message": "Catching dynamic import failures without recording the error prevents downstream commands from reporting the root cause. Persist the error for later reporting.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "catch ($ERR) { $$$BODY }",
+      "compiledAt": "2026-04-06T00:24:57.458Z",
+      "createdAt": "2026-04-06T00:24:57.458Z",
+      "fileGlobs": [
+        "packages/cli/src/index-lite.ts"
+      ]
+    },
+    {
+      "lessonHash": "25d23ec6f87ec844",
+      "lessonHeading": "Use bracket notation for reserved keys",
+      "message": "Use bracket notation for reserved keys (e.g., payload['error'] = ...) to avoid lint rule violations instead of dot notation with inline suppressions.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "$OBJ.error = $VAL",
+      "compiledAt": "2026-04-06T00:24:57.510Z",
+      "createdAt": "2026-04-06T00:24:57.510Z",
+      "fileGlobs": [
+        "packages/cli/src/index-lite.ts"
+      ]
+    },
+    {
+      "lessonHash": "a13f7e907b043266",
+      "lessonHeading": "Increase timeouts for Windows CI I/O",
+      "message": "Consider increasing test timeout to 15s for file-heavy tests on Windows CI (slow temp dir I/O can cause flaky failures with default 5s limits)",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "setTimeout($MS)",
+      "compiledAt": "2026-04-06T00:25:03.531Z",
+      "createdAt": "2026-04-06T00:25:03.531Z",
+      "fileGlobs": [
+        "packages/cli/src/**/*.test.ts"
+      ]
+    },
+    {
+      "lessonHash": "0fb278f47705b4f1",
+      "lessonHeading": "Initialize WASM engines lazily",
+      "message": "Do not initialize WASM engines at the top level — move initialization into specific command handlers to avoid overhead on every CLI command (including 'help').",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "await $WASM.default()",
+      "compiledAt": "2026-04-06T00:25:00.503Z",
+      "createdAt": "2026-04-06T00:25:00.503Z",
+      "fileGlobs": [
+        "packages/cli/src/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ]
+    },
+    {
+      "lessonHash": "35bc466e8ea46001",
+      "lessonHeading": "Use byte-level binary size checks",
+      "message": "Use byte-level binary size checks (e.g., `wc -c` compared to byte counts) instead of megabyte-level checks to avoid truncation errors letting oversized binaries slip through.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "-gt\\s+\\d+\\s*#?.*[Mm][Bb]|\\$\\(\\s*du\\s+-[smSM]",
+      "compiledAt": "2026-04-06T00:25:06.546Z",
+      "createdAt": "2026-04-06T00:25:06.546Z",
+      "fileGlobs": [
+        "packages/cli/build/compile-lite.sh"
+      ]
+    },
+    {
+      "lessonHash": "791b9a6cfb2f38af",
+      "lessonHeading": "Use exit codes for CLI errors",
+      "message": "Prefer setting process.exitCode and logging via log.error over re-throwing exceptions in CLI command handlers.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "throw $ERR",
+      "compiledAt": "2026-04-06T00:25:05.399Z",
+      "createdAt": "2026-04-06T00:25:05.399Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.*"
+      ]
+    },
+    {
+      "lessonHash": "b973609688ec2888",
+      "lessonHeading": "Set higher timeouts for orchestrator tests",
+      "message": "Orchestrator test suites should set an explicit 15s timeout (e.g., { timeout: 15000 }) to prevent flaky CI failures during heavy workloads",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "describe($TITLE, $FN)",
+      "compiledAt": "2026-04-06T00:25:13.844Z",
+      "createdAt": "2026-04-06T00:25:13.844Z",
+      "fileGlobs": [
+        "packages/cli/**/*.test.ts"
+      ]
     }
   ],
   "nonCompilable": [
@@ -7643,6 +7743,13 @@
     "b4f045fe9e8ff4d4",
     "937e64d7c79a8595",
     "f65b28512f819a72",
-    "64c381f0f3f47893"
+    "64c381f0f3f47893",
+    "98339b41140e5c8a",
+    "6dc3531c0f4f5f2c",
+    "67b567de22f7fc9d",
+    "f2e537ad06fa5787",
+    "0f1720d4824f2eea",
+    "f08f8870409dcaed",
+    "21f56cfc54e844c1"
   ]
 }
