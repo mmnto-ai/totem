@@ -616,19 +616,14 @@ export interface DoctorOptions {
 // ─── Self-healing flow ──────────────────────────────────
 
 export async function runSelfHealing(cwd: string): Promise<void> {
-  // Self-healing creates a branch, commits, and opens a PR via the GitHub CLI.
-  // Verify gh is installed up front — otherwise we would fail deep inside the
-  // flow with an opaque ENOENT after already doing diagnostic work.
-  const ghCheck = spawnSync('gh', ['--version'], { stdio: 'ignore', timeout: 3000 });
-  if (ghCheck.status !== 0 || ghCheck.error) {
-    console.error(
-      pc.red(
-        '\n[Auto-Healing] The --pr flow requires the GitHub CLI (gh). Install: https://cli.github.com',
-      ),
-    );
-    process.exitCode = 1;
-    return;
-  }
+  // Note: we do NOT pre-flight `gh` here. The diagnostic + downgrade + upgrade
+  // work is still valuable on a machine without gh installed — the user just
+  // can't auto-open a PR. The try/catch around `gh pr create` below catches the
+  // missing-dependency case and tells the user how to push + open the PR
+  // manually, which is better UX than aborting all the work up front. (The
+  // original GCA suggestion to add requireGhCli() matches commands like
+  // `triage-pr` whose sole purpose is PR interaction; doctor's purpose is
+  // diagnosis, so gh is a nice-to-have, not a hard requirement.)
 
   // Load config to get totemDir
   const { loadConfig, resolveConfigPath } = await import('../utils.js');

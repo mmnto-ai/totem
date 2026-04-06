@@ -241,8 +241,18 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
   // --upgrade <hash> targets ONE rule by hash (full or short prefix match), evicts
   // it from the cache so it alone gets recompiled, and threads a telemetry directive
   // into its Pipeline 2 prompt. All other rules pass through unchanged.
+  //
+  // `lessonsInScope` is what we validate and iterate for compilation. It starts
+  // as the full lesson set (default behavior) and is narrowed to just the
+  // target lesson for --upgrade so that:
+  //   1. An unrelated invalid lesson can't abort the upgrade (validateLessons)
+  //   2. An unrelated cache-miss lesson doesn't leak into the compile batch
+  //   3. `totem doctor --pr` branches stay scoped to the flagged rule only
+  // The full `lessons` array is still used for `currentHashes` pruning so the
+  // other 389 compiled rules remain in newRules.
   let telemetryPrefix: string | undefined;
   let upgradeTargetHash: string | undefined;
+  let lessonsInScope: typeof lessons = lessons;
   if (options.upgrade) {
     if (options.cloud) {
       throw new TotemError(
@@ -286,6 +296,7 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
     }
 
     upgradeTargetHash = hashLesson(matches[0]!.heading, matches[0]!.body);
+    lessonsInScope = [matches[0]!];
     log.info(TAG, `--upgrade: targeting ${upgradeTargetHash} (${matches[0]!.heading})`);
 
     // Load existing telemetry to build the directive
@@ -309,9 +320,11 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
   }
 
   // ─── Pre-compilation gate: validate Pipeline 1 metadata ──
+  // For --upgrade, scope validation to the target so unrelated invalid lessons
+  // cannot block the upgrade (mmnto/totem#1234 CR finding).
   {
     const { validateLessons } = await import('@mmnto/totem');
-    const lintResult = validateLessons(lessons);
+    const lintResult = validateLessons(lessonsInScope);
     const errors = lintResult.diagnostics.filter((d) => d.severity === 'error');
     const warnings = lintResult.diagnostics.filter((d) => d.severity === 'warning');
     for (const d of warnings) {
@@ -355,27 +368,32 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
     const existingByHash = new Map(existingRules.map((r) => [r.lessonHash, r]));
     const nonCompilableSet = new Set(existingFile.nonCompilable ?? []);
 
-    // --upgrade: evict the target so it falls through to re-compile, leaving
-    // every other cached rule intact. Without this, --upgrade would either
-    // short-circuit (cache hit) or wipe the whole workspace (global force).
-    if (upgradeTargetHash) {
-      existingByHash.delete(upgradeTargetHash);
-      nonCompilableSet.delete(upgradeTargetHash);
-    }
+    // Note: we do NOT delete the --upgrade target from existingByHash here.
+    // buildCompiledRule in @mmnto/totem looks up the old entry to preserve
+    // metadata (createdAt, audit lineage). Deleting would make the upgraded
+    // rule look brand-new and break garbage-collection heuristics. Instead,
+    // we bypass the cache check for the target inside the loop below.
 
     const toCompile: LessonInput[] = [];
 
-    for (const lesson of lessons) {
+    // For --upgrade, iterate only the target lesson so unrelated cache-miss
+    // lessons don't leak into the compile batch (mmnto/totem#1234 CR finding).
+    for (const lesson of lessonsInScope) {
       const hash = hashLesson(lesson.heading, lesson.body);
-      if (existingByHash.has(hash)) continue; // already compiled
-      if (nonCompilableSet.has(hash)) continue; // cached as non-compilable
+      // --upgrade: always recompile the target, even if it's in the cache or
+      // was previously marked non-compilable. The telemetry directive may
+      // unlock a pattern the compiler couldn't produce on the first pass.
+      if (hash !== upgradeTargetHash) {
+        if (existingByHash.has(hash)) continue; // already compiled
+        if (nonCompilableSet.has(hash)) continue; // cached as non-compilable
+      }
       toCompile.push({ index: lesson.index, heading: lesson.heading, body: lesson.body, hash });
     }
 
     if (toCompile.length === 0) {
       log.success(
         TAG,
-        `All ${lessons.length} lessons already processed (${existingRules.length} compiled, ${nonCompilableSet.size} non-compilable). Use --force to recompile.`,
+        `All ${lessonsInScope.length} lesson(s) in scope already processed (${existingRules.length} compiled, ${nonCompilableSet.size} non-compilable). Use --force to recompile.`,
       ); // totem-ignore
     } else {
       const { createSpinner } = await import('../ui.js');
@@ -603,6 +621,21 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
           );
 
           for (const { lesson, result } of results) {
+            // --upgrade: remove the stale copy from newRules up front for any
+            // terminal outcome where the rule's state CHANGES (compiled → new
+            // pattern replaces old; skipped → rule moves to nonCompilable and
+            // must no longer appear as an active rule). For `failed`
+            // (transient error) and `noop` (no change), leave the old rule
+            // intact so a flaky network / rate-limit doesn't silently delete
+            // work (mmnto/totem#1234 GCA finding).
+            if (
+              lesson.hash === upgradeTargetHash &&
+              (result.status === 'compiled' || result.status === 'skipped')
+            ) {
+              const staleIdx = newRules.findIndex((r) => r.lessonHash === upgradeTargetHash);
+              if (staleIdx >= 0) newRules.splice(staleIdx, 1);
+            }
+
             switch (result.status) {
               case 'compiled':
                 // ADR-065: Pipeline 1 error rules require a test fixture
@@ -619,12 +652,11 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
                     );
                   }
                 }
-                // --upgrade: now that the fresh rule is ready, drop the stale copy
-                // (if any) so the save path doesn't end up with two rules sharing
-                // the same lessonHash. Only happens for the upgrade target.
+                // --upgrade: also clear any stale nonCompilable entry so the
+                // successfully-compiled rule doesn't coexist with a
+                // non-compilable marker for the same hash.
                 if (lesson.hash === upgradeTargetHash) {
-                  const staleIdx = newRules.findIndex((r) => r.lessonHash === upgradeTargetHash);
-                  if (staleIdx >= 0) newRules.splice(staleIdx, 1);
+                  nonCompilableSet.delete(upgradeTargetHash);
                 }
                 newRules.push(result.rule);
                 compiled++;
