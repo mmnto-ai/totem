@@ -507,6 +507,46 @@ describe('compileLesson', () => {
     expect(deps.runOrchestrator).toHaveBeenCalled();
   });
 
+  it('threads telemetryPrefix into the Pipeline 2 system prompt (mmnto/totem#1131)', async () => {
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: true,
+        pattern: 'console\\.log',
+        message: 'No console.log',
+        engine: 'regex' as const,
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('{"compilable": true}'),
+      existingByHash: new Map(),
+      telemetryPrefix:
+        'This rule was flagged because 60% of its matches occur in non-code contexts (strings: 3, comments: 0, regex literals: 0). Please prefer an ast-grep structural pattern.',
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(lesson, 'BASE_SYSTEM_PROMPT', deps);
+    expect(result.status).toBe('compiled');
+    expect(deps.runOrchestrator).toHaveBeenCalledTimes(1);
+    const sentPrompt = (deps.runOrchestrator as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as string;
+    expect(sentPrompt).toContain('BASE_SYSTEM_PROMPT');
+    expect(sentPrompt).toContain('Telemetry-Driven Refinement Directive');
+    expect(sentPrompt).toContain('60% of its matches occur in non-code contexts');
+    // Directive must appear AFTER the base prompt and BEFORE the lesson body
+    const baseIdx = sentPrompt.indexOf('BASE_SYSTEM_PROMPT');
+    const directiveIdx = sentPrompt.indexOf('Telemetry-Driven Refinement Directive');
+    const lessonIdx = sentPrompt.indexOf('Lesson to Compile');
+    // Order check: base < directive < lesson
+    expect(baseIdx >= 0).toBe(true);
+    expect(directiveIdx > baseIdx).toBe(true);
+    expect(lessonIdx > directiveIdx).toBe(true);
+  });
+
+  it('omits the telemetry directive when telemetryPrefix is undefined', async () => {
+    const deps = makeDeps('{"compilable": true}');
+    await compileLesson(lesson, 'BASE_SYSTEM_PROMPT', deps);
+    const sentPrompt = (deps.runOrchestrator as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as string;
+    expect(sentPrompt).not.toContain('Telemetry-Driven Refinement Directive');
+  });
+
   it('uses manual pattern when available (skips LLM)', async () => {
     const deps = makeDeps('should not be called');
     const result = await compileLesson(manualLesson, 'system prompt', deps);

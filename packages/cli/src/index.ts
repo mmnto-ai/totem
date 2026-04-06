@@ -425,6 +425,10 @@ program
   .option('--fresh', 'Bypass cache and force a fresh LLM call')
   .option('--force', 'Recompile all lessons (ignore existing compiled rules)')
   .option(
+    '--upgrade <hash>',
+    'Re-compile a single rule with telemetry-driven ast-grep guidance (mmnto/totem#1131)',
+  )
+  .option(
     '--export',
     'Export lessons as rules to AI assistant config files (uses exports from config)',
   )
@@ -444,6 +448,7 @@ program
       concurrency?: string;
       cloud?: string;
       verbose?: boolean;
+      upgrade?: string;
     }) => {
       try {
         console.error("\u26a0 'totem compile' is deprecated. Use 'totem lesson compile' instead.");
@@ -787,6 +792,10 @@ lessonCmd
   .option('--concurrency <n>', 'Number of parallel LLM compilations (default: 5)', '5')
   .option('--cloud <url>', 'Use a cloud compilation endpoint for parallel fan-out')
   .option('--verbose', 'Show details for skipped (non-compilable) lessons')
+  .option(
+    '--upgrade <hash>',
+    'Re-compile a single rule with telemetry-driven ast-grep guidance (mmnto/totem#1131)',
+  )
   .action(
     async (opts: {
       raw?: boolean;
@@ -799,6 +808,7 @@ lessonCmd
       concurrency?: string;
       cloud?: string;
       verbose?: boolean;
+      upgrade?: string;
     }) => {
       try {
         const { compileCommand } = await import('./commands/compile.js');

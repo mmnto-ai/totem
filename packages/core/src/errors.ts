@@ -25,7 +25,10 @@ export type TotemErrorCode =
   | 'DRIFT_FAILED'
   | 'TEST_FAILED'
   | 'CHECK_FAILED'
-  | 'MCP_ERROR';
+  | 'MCP_ERROR'
+  | 'UPGRADE_HASH_NOT_FOUND'
+  | 'UPGRADE_HASH_AMBIGUOUS'
+  | 'UPGRADE_CLOUD_UNSUPPORTED';
 
 export class TotemError extends Error {
   readonly code: TotemErrorCode;

@@ -21,6 +21,37 @@ export interface CompileOptions {
   concurrency?: string;
   cloud?: string;
   verbose?: boolean;
+  /**
+   * Telemetry-driven re-compile (mmnto/totem#1131). Filters lessons to a single hash
+   * (full or short prefix), bypasses the cache, and threads a non-code-ratio
+   * directive into the Pipeline 2 system prompt.
+   */
+  upgrade?: string;
+}
+
+// ─── Telemetry directive (mmnto/totem#1131) ────────────────────
+
+/** Build the directive injected into the Sonnet system prompt for `--upgrade`. */
+export function buildTelemetryPrefix(contextCounts: {
+  code: number;
+  string: number;
+  comment: number;
+  regex: number;
+  unknown: number;
+}): string {
+  const total =
+    contextCounts.code +
+    contextCounts.string +
+    contextCounts.comment +
+    contextCounts.regex +
+    contextCounts.unknown;
+  const nonCode = total - contextCounts.code;
+  const pct = total > 0 ? Math.round((nonCode / total) * 100) : 0;
+  return [
+    `This rule was flagged because ${pct}% of its matches occur in non-code contexts`,
+    `(strings: ${contextCounts.string}, comments: ${contextCounts.comment}, regex literals: ${contextCounts.regex}). Please prefer an ast-grep`,
+    `structural pattern that only matches executable code, not string or comment content.`,
+  ].join(' ');
 }
 
 // ─── Logging helpers ────────────────────────────────
@@ -199,6 +230,68 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
 
   log.info(TAG, `Found ${lessons.length} lessons`); // totem-ignore
 
+  // ─── Telemetry-driven re-compile (mmnto/totem#1131) ──
+  // --upgrade <hash> targets ONE rule by hash (full or short prefix match), evicts
+  // it from the cache so it alone gets recompiled, and threads a telemetry directive
+  // into its Pipeline 2 prompt. All other rules pass through unchanged.
+  let telemetryPrefix: string | undefined;
+  let upgradeTargetHash: string | undefined;
+  if (options.upgrade) {
+    if (options.cloud) {
+      throw new TotemError(
+        'UPGRADE_CLOUD_UNSUPPORTED',
+        '--upgrade is not supported with --cloud.',
+        'Run `totem compile --upgrade <hash>` without --cloud. The cloud worker cannot thread a per-lesson telemetry directive yet (mmnto/totem#1221).',
+      );
+    }
+
+    const target = options.upgrade.toLowerCase();
+    const matches = lessons.filter((l) => {
+      const lessonHash = hashLesson(l.heading, l.body).toLowerCase();
+      return lessonHash === target || lessonHash.startsWith(target);
+    });
+
+    if (matches.length === 0) {
+      throw new TotemError(
+        'UPGRADE_HASH_NOT_FOUND',
+        `No lesson matches hash '${options.upgrade}'.`,
+        'Run `totem doctor` to see flagged upgrade candidates, then re-run with the printed hash.',
+      );
+    }
+    if (matches.length > 1) {
+      const found = matches
+        .map((m) => `${hashLesson(m.heading, m.body)} (${m.heading})`)
+        .join(', ');
+      throw new TotemError(
+        'UPGRADE_HASH_AMBIGUOUS',
+        `Hash prefix '${options.upgrade}' matches ${matches.length} lessons: ${found}`,
+        'Use the full hash to disambiguate.',
+      );
+    }
+
+    upgradeTargetHash = hashLesson(matches[0]!.heading, matches[0]!.body);
+    log.info(TAG, `--upgrade: targeting ${upgradeTargetHash} (${matches[0]!.heading})`);
+
+    // Load existing telemetry to build the directive
+    try {
+      const { loadRuleMetrics } = await import('@mmnto/totem');
+      const metricsFile = loadRuleMetrics(totemDir);
+      const metric = metricsFile.rules[upgradeTargetHash];
+      if (metric?.contextCounts) {
+        telemetryPrefix = buildTelemetryPrefix(metric.contextCounts);
+        log.dim(TAG, `--upgrade: telemetry directive prepared (${telemetryPrefix.length} chars)`);
+      } else {
+        log.warn(
+          TAG,
+          `--upgrade: no telemetry found for ${upgradeTargetHash}; recompiling without directive.`,
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn(TAG, `--upgrade: failed to load telemetry — ${msg}`);
+    }
+  }
+
   // ─── Pre-compilation gate: validate Pipeline 1 metadata ──
   {
     const { validateLessons } = await import('@mmnto/totem');
@@ -246,6 +339,14 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
     const existingByHash = new Map(existingRules.map((r) => [r.lessonHash, r]));
     const nonCompilableSet = new Set(existingFile.nonCompilable ?? []);
 
+    // --upgrade: evict the target so it falls through to re-compile, leaving
+    // every other cached rule intact. Without this, --upgrade would either
+    // short-circuit (cache hit) or wipe the whole workspace (global force).
+    if (upgradeTargetHash) {
+      existingByHash.delete(upgradeTargetHash);
+      nonCompilableSet.delete(upgradeTargetHash);
+    }
+
     const toCompile: LessonInput[] = [];
 
     for (const lesson of lessons) {
@@ -278,6 +379,14 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
       }
       newRules.length = 0;
       newRules.push(...freshRules);
+
+      // --upgrade: drop the stale version of the target rule so the fresh compile
+      // replaces it instead of duplicating under the same lessonHash.
+      if (upgradeTargetHash) {
+        const filteredRules = newRules.filter((r) => r.lessonHash !== upgradeTargetHash);
+        newRules.length = 0;
+        newRules.push(...filteredRules);
+      }
 
       const coreDeps = {
         parseCompilerResponse,
@@ -450,14 +559,20 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
           const batch = toCompile.slice(i, i + CONCURRENCY);
           const results = await Promise.all(
             batch.map((lesson) => {
-              return withRetry(() => compileLessonCore(lesson, COMPILER_SYSTEM_PROMPT, coreDeps), {
-                onRetry: (attempt, delayMs) => {
-                  log.warn(
-                    TAG,
-                    `[${lesson.heading}] Rate limited — retry ${attempt} in ${delayMs}ms`,
-                  );
+              // Per-lesson deps: telemetry prefix only applies to the --upgrade target.
+              const lessonDeps =
+                lesson.hash === upgradeTargetHash ? { ...coreDeps, telemetryPrefix } : coreDeps;
+              return withRetry(
+                () => compileLessonCore(lesson, COMPILER_SYSTEM_PROMPT, lessonDeps),
+                {
+                  onRetry: (attempt, delayMs) => {
+                    log.warn(
+                      TAG,
+                      `[${lesson.heading}] Rate limited — retry ${attempt} in ${delayMs}ms`,
+                    );
+                  },
                 },
-              })
+              )
                 .then((result) => {
                   tracker.tick();
                   spinner.update(tracker.format());
