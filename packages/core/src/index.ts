@@ -259,9 +259,10 @@ export type { CursorInstruction } from './cursor-adapter.js';
 export { scanCursorInstructions } from './cursor-adapter.js';
 
 // Rule metrics (observability)
-export type { RuleMetric, RuleMetricsFile } from './rule-metrics.js';
+export type { ContextCounts, RuleMetric, RuleMetricsFile } from './rule-metrics.js';
 export {
   loadRuleMetrics,
+  recordContextHit,
   recordSuppression,
   recordTrigger,
   saveRuleMetrics,

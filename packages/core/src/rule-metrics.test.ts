@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RuleMetricsFile } from './rule-metrics.js';
 import {
   loadRuleMetrics,
+  recordContextHit,
   recordSuppression,
   recordTrigger,
   saveRuleMetrics,
@@ -253,5 +254,75 @@ describe('recordSuppression', () => {
 
     expect(metrics.rules['hash1']!.triggerCount).toBe(2);
     expect(metrics.rules['hash1']!.suppressCount).toBe(1);
+  });
+});
+
+// ─── recordContextHit ──────────────────────────────────
+
+describe('recordContextHit', () => {
+  it('initializes contextCounts on first hit (seeds unknown from triggerCount)', () => {
+    const metrics = emptyMetrics();
+    recordContextHit(metrics, 'hash1', 'code');
+
+    // New rule: triggerCount is 0, so unknown seeds at 0
+    expect(metrics.rules['hash1']!.contextCounts).toEqual({
+      code: 1,
+      string: 0,
+      comment: 0,
+      regex: 0,
+      unknown: 0,
+    });
+  });
+
+  it('seeds unknown with historical triggerCount minus current hit', () => {
+    const metrics = emptyMetrics();
+    recordTrigger(metrics, 'hash1');
+    recordTrigger(metrics, 'hash1');
+    recordTrigger(metrics, 'hash1');
+    // triggerCount is now 3. Current hit makes it 3 historical minus 1 = 2 seeded.
+    recordContextHit(metrics, 'hash1', 'code');
+
+    // sum(contextCounts) should equal triggerCount: 2 unknown + 1 code = 3
+    expect(metrics.rules['hash1']!.contextCounts).toEqual({
+      code: 1,
+      string: 0,
+      comment: 0,
+      regex: 0,
+      unknown: 2,
+    });
+  });
+
+  it('increments the correct context bucket', () => {
+    const metrics = emptyMetrics();
+    recordContextHit(metrics, 'hash1', 'code');
+    recordContextHit(metrics, 'hash1', 'string');
+    recordContextHit(metrics, 'hash1', 'string');
+    recordContextHit(metrics, 'hash1', 'comment');
+
+    expect(metrics.rules['hash1']!.contextCounts).toEqual({
+      code: 1,
+      string: 2,
+      comment: 1,
+      regex: 0,
+      unknown: 0,
+    });
+  });
+
+  it('records undefined context as unknown', () => {
+    const metrics = emptyMetrics();
+    recordContextHit(metrics, 'hash1', undefined);
+
+    expect(metrics.rules['hash1']!.contextCounts!.unknown).toBe(1);
+  });
+
+  it('preserves existing triggerCount and suppressCount', () => {
+    const metrics = emptyMetrics();
+    recordTrigger(metrics, 'hash1');
+    recordSuppression(metrics, 'hash1');
+    recordContextHit(metrics, 'hash1', 'code');
+
+    expect(metrics.rules['hash1']!.triggerCount).toBe(1);
+    expect(metrics.rules['hash1']!.suppressCount).toBe(1);
+    expect(metrics.rules['hash1']!.contextCounts!.code).toBe(1);
   });
 });

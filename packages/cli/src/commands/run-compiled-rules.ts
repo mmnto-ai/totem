@@ -1,4 +1,4 @@
-import type { CompiledRule, TotemFinding, Violation } from '@mmnto/totem';
+import type { CompiledRule, RuleEventContext, TotemFinding, Violation } from '@mmnto/totem';
 
 import type { ShieldFormat } from './shield.js';
 
@@ -49,6 +49,7 @@ export async function runCompiledRules(
     loadCompiledRules,
     loadRuleMetrics,
     matchesGlob,
+    recordContextHit,
     recordSuppression,
     recordTrigger,
     saveRuleMetrics,
@@ -108,10 +109,11 @@ export async function runCompiledRules(
     const ruleEventCallback = (
       event: 'trigger' | 'suppress',
       hash: string,
-      context?: { file: string; line: number; justification?: string },
+      context?: RuleEventContext,
     ) => {
       if (event === 'trigger') {
         recordTrigger(metrics, hash);
+        recordContextHit(metrics, hash, context?.astContext);
       } else {
         recordSuppression(metrics, hash);
         // Append to Trap Ledger (fire-and-forget)

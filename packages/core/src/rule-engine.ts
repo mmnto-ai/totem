@@ -219,9 +219,6 @@ export function applyRulesToAdditions(
     }
 
     for (const addition of additions) {
-      // Skip non-code lines when AST context is available
-      if (addition.astContext && addition.astContext !== 'code') continue;
-
       // Skip if rule has fileGlobs and this file doesn't match
       if (rule.fileGlobs && rule.fileGlobs.length > 0) {
         if (!fileMatchesGlobs(addition.file, rule.fileGlobs)) continue;
@@ -240,16 +237,22 @@ export function applyRulesToAdditions(
       }
 
       if (re.test(addition.line)) {
+        // Record context telemetry for ALL matches (code, string, comment, regex)
         onRuleEvent?.('trigger', rule.lessonHash, {
           file: addition.file,
           line: addition.lineNumber,
+          astContext: addition.astContext,
         });
-        violations.push({
-          rule,
-          file: addition.file,
-          line: addition.line,
-          lineNumber: addition.lineNumber,
-        });
+
+        // Only emit violations for code context (non-code matches are telemetry-only)
+        if (!addition.astContext || addition.astContext === 'code') {
+          violations.push({
+            rule,
+            file: addition.file,
+            line: addition.line,
+            lineNumber: addition.lineNumber,
+          });
+        }
       }
     }
   }

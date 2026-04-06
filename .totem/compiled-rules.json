@@ -3422,22 +3422,6 @@
       "severity": "error"
     },
     {
-      "lessonHash": "a3d0d61011ee543d",
-      "lessonHeading": "CLI command actions must wrap asynchronous logic",
-      "pattern": "",
-      "message": "CLI command actions with async logic must wrap their body in a try/catch block that delegates to a centralized error handler.",
-      "engine": "ast-grep",
-      "astGrepPattern": ".action(async ($$$ARGS) => { $$$BODY })",
-      "compiledAt": "2026-04-06T03:25:18.011Z",
-      "createdAt": "2026-04-06T03:25:18.011Z",
-      "fileGlobs": [
-        "packages/cli/src/commands/**/*.ts",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "5f573f60651f3f1d",
       "lessonHeading": "Manually suppress \"unused export\" errors in styleguide",
       "pattern": "^\\+?\\s*export\\b(?!.*eslint-disable)",
@@ -7026,6 +7010,7 @@
     "e99b55cacdba1707",
     "3c975f752bc2d396",
     "fe120b1b1aa75b0d",
-    "1f59d48fd2413abf"
+    "1f59d48fd2413abf",
+    "a3d0d61011ee543d"
   ]
 }

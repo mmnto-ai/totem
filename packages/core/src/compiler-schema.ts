@@ -102,6 +102,8 @@ export interface RuleEventContext {
   file: string;
   line: number;
   justification?: string;
+  /** AST context where the rule fired (code, string, comment, regex). */
+  astContext?: AstContext;
 }
 
 /** Callback for observability — invoked when a rule is suppressed or triggered. */
