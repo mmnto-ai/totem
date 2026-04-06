@@ -16,8 +16,11 @@ import {
   checkIndex,
   checkSecretLeaks,
   checkSecretsFileTracked,
+  checkUpgradeCandidates,
   doctorCommand,
+  MIN_CONTEXT_EVENTS,
   MIN_EVENTS,
+  NON_CODE_THRESHOLD,
   runSelfHealing,
 } from './doctor.js';
 
@@ -297,7 +300,7 @@ describe('doctorCommand', () => {
   it('runs without throwing', async () => {
     const results = await doctorCommand();
     expect(results).toBeDefined();
-    expect(results.length).toBe(7);
+    expect(results.length).toBe(8);
   });
 
   it('returns correct check names', async () => {
@@ -310,6 +313,7 @@ describe('doctorCommand', () => {
     expect(names).toContain('Index');
     expect(names).toContain('Secret Scan');
     expect(names).toContain('Secrets File Security');
+    expect(names).toContain('Upgrade Candidates');
   });
 });
 
@@ -352,6 +356,7 @@ describe('doctorCommand output', () => {
     expect(output).toContain('Index');
     expect(output).toContain('Secret Scan');
     expect(output).toContain('Secrets File Security');
+    expect(output).toContain('Upgrade Candidates');
   });
 
   it('outputs summary line with pass/warn/fail counts', async () => {
@@ -481,6 +486,276 @@ describe('checkSecretLeaks with custom secrets', () => {
     fs.writeFileSync(path.join(lessonsDir, 'clean-lesson.md'), '# Lesson\nNothing sensitive here.');
 
     const result = await checkSecretLeaks(tmpDir);
+    expect(result.status).toBe('pass');
+  });
+});
+
+// ─── Upgrade-candidate helpers (#1131) ─────────────────
+
+interface UpgradeMetricInput {
+  triggerCount?: number;
+  suppressCount?: number;
+  contextCounts?: {
+    code?: number;
+    string?: number;
+    comment?: number;
+    regex?: number;
+    unknown?: number;
+  };
+}
+
+function writeUpgradeMetrics(totemDir: string, rules: Record<string, UpgradeMetricInput>): void {
+  const cacheDir = path.join(totemDir, 'cache');
+  fs.mkdirSync(cacheDir, { recursive: true });
+  const out: Record<string, unknown> = {};
+  for (const [hash, m] of Object.entries(rules)) {
+    const entry: Record<string, unknown> = {
+      triggerCount: m.triggerCount ?? 0,
+      suppressCount: m.suppressCount ?? 0,
+      lastTriggeredAt: '2026-04-06T12:00:00.000Z',
+      lastSuppressedAt: null,
+    };
+    if (m.contextCounts) {
+      entry.contextCounts = {
+        code: m.contextCounts.code ?? 0,
+        string: m.contextCounts.string ?? 0,
+        comment: m.contextCounts.comment ?? 0,
+        regex: m.contextCounts.regex ?? 0,
+        unknown: m.contextCounts.unknown ?? 0,
+      };
+    }
+    out[hash] = entry;
+  }
+  fs.writeFileSync(
+    path.join(cacheDir, 'rule-metrics.json'),
+    JSON.stringify({ version: 1, rules: out }, null, 2) + '\n',
+    'utf-8',
+  );
+}
+
+interface UpgradeRuleInput {
+  lessonHash: string;
+  lessonHeading?: string;
+  /** Override to produce a manual-rule shape (lessonHeading === message). */
+  message?: string;
+  engine?: 'regex' | 'ast' | 'ast-grep';
+  pattern?: string;
+  astQuery?: string;
+  astGrepPattern?: string;
+}
+
+function writeUpgradeRules(totemDir: string, rules: UpgradeRuleInput[]): void {
+  fs.mkdirSync(totemDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(totemDir, 'compiled-rules.json'),
+    JSON.stringify(
+      {
+        version: 1,
+        rules: rules.map((r) => {
+          const engine = r.engine ?? 'regex';
+          const base = {
+            lessonHash: r.lessonHash,
+            lessonHeading: r.lessonHeading ?? r.lessonHash,
+            message: r.message ?? `Violation: ${r.lessonHeading ?? r.lessonHash}`,
+            engine,
+            compiledAt: '2026-04-06T12:00:00.000Z',
+          };
+          if (engine === 'regex') {
+            return { ...base, pattern: r.pattern ?? '\\bconsole\\.log\\b' };
+          }
+          if (engine === 'ast') {
+            return {
+              ...base,
+              pattern: '',
+              astQuery: r.astQuery ?? '(call_expression) @violation',
+            };
+          }
+          // ast-grep
+          return {
+            ...base,
+            pattern: '',
+            astGrepPattern: r.astGrepPattern ?? 'console.log($ARG)',
+          };
+        }),
+      },
+      null,
+      2,
+    ) + '\n',
+    'utf-8',
+  );
+}
+
+// ─── checkUpgradeCandidates (#1131) ────────────────────
+
+describe('checkUpgradeCandidates', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('exposes the constants that govern flagging', () => {
+    expect(NON_CODE_THRESHOLD).toBe(0.2);
+    expect(MIN_CONTEXT_EVENTS).toBe(5);
+  });
+
+  it('skips when compiled-rules.json is missing', async () => {
+    const result = await checkUpgradeCandidates(tmpDir);
+    expect(result.status).toBe('skip');
+    expect(result.message).toContain('missing');
+  });
+
+  it('passes when no metrics exist', async () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    writeUpgradeRules(totemDir, [{ lessonHash: 'rule-empty', lessonHeading: 'Empty rule' }]);
+    const result = await checkUpgradeCandidates(tmpDir);
+    expect(result.status).toBe('pass');
+  });
+
+  it('flags a rule with 40% non-code matches (3 code + 2 string)', async () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    writeUpgradeRules(totemDir, [{ lessonHash: 'noisy-rule', lessonHeading: 'Noisy regex' }]);
+    writeUpgradeMetrics(totemDir, {
+      'noisy-rule': {
+        triggerCount: 5,
+        contextCounts: { code: 3, string: 2 },
+      },
+    });
+
+    const result = await checkUpgradeCandidates(tmpDir);
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('noisy-rule');
+    expect(result.message).toContain('40%');
+    expect(result.remediation).toContain('totem compile --upgrade noisy-rule');
+  });
+
+  it('does NOT flag a rule at exactly 20% non-code (strict greater-than)', async () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    writeUpgradeRules(totemDir, [{ lessonHash: 'boundary-rule', lessonHeading: 'Boundary' }]);
+    writeUpgradeMetrics(totemDir, {
+      'boundary-rule': {
+        triggerCount: 5,
+        // 4 code + 1 string = 5 total, 1/5 = 20% non-code (NOT > 20%)
+        contextCounts: { code: 4, string: 1 },
+      },
+    });
+
+    const result = await checkUpgradeCandidates(tmpDir);
+    expect(result.status).toBe('pass');
+  });
+
+  it('skips rules with fewer than MIN_CONTEXT_EVENTS total matches', async () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    writeUpgradeRules(totemDir, [{ lessonHash: 'low-volume', lessonHeading: 'Low volume rule' }]);
+    writeUpgradeMetrics(totemDir, {
+      'low-volume': {
+        triggerCount: 4,
+        // 100% non-code, but only 4 events → below MIN_CONTEXT_EVENTS
+        contextCounts: { code: 0, string: 4 },
+      },
+    });
+
+    const result = await checkUpgradeCandidates(tmpDir);
+    expect(result.status).toBe('pass');
+  });
+
+  it('skips ast-grep rules regardless of telemetry', async () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    writeUpgradeRules(totemDir, [
+      {
+        lessonHash: 'astgrep-rule',
+        lessonHeading: 'Already structural',
+        engine: 'ast-grep',
+      },
+    ]);
+    writeUpgradeMetrics(totemDir, {
+      'astgrep-rule': {
+        triggerCount: 10,
+        contextCounts: { code: 1, string: 9 },
+      },
+    });
+
+    const result = await checkUpgradeCandidates(tmpDir);
+    expect(result.status).toBe('pass');
+  });
+
+  it('skips rules without contextCounts telemetry silently', async () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    writeUpgradeRules(totemDir, [{ lessonHash: 'no-telemetry', lessonHeading: 'No telemetry' }]);
+    writeUpgradeMetrics(totemDir, {
+      'no-telemetry': {
+        triggerCount: 100,
+        // No contextCounts at all (legacy metric)
+      },
+    });
+
+    const result = await checkUpgradeCandidates(tmpDir);
+    expect(result.status).toBe('pass');
+  });
+
+  it('skips legacy ast-engine rules because their telemetry lands in unknown', async () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    writeUpgradeRules(totemDir, [
+      { lessonHash: 'ast-noisy', lessonHeading: 'Noisy AST', engine: 'ast' },
+    ]);
+    writeUpgradeMetrics(totemDir, {
+      'ast-noisy': {
+        triggerCount: 10,
+        contextCounts: { code: 2, comment: 8 },
+      },
+    });
+
+    // Legacy `ast` (Tree-sitter) rules do not populate `astContext`, so their
+    // context distribution is not trustworthy. checkUpgradeCandidates scopes to
+    // `engine === 'regex'` only.
+    const result = await checkUpgradeCandidates(tmpDir);
+    expect(result.status).toBe('pass');
+  });
+
+  it('skips manual regex rules (message === lessonHeading)', async () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    // Manual rule: message === lessonHeading. This is the shape compile.ts
+    // uses to recognize Pipeline 1 (manual pattern) rules, which never see
+    // the telemetryPrefix directive. Upgrading them would be a no-op forever.
+    writeUpgradeRules(totemDir, [
+      {
+        lessonHash: 'manual-rule',
+        lessonHeading: 'No console.log',
+        message: 'No console.log',
+        engine: 'regex',
+      },
+    ]);
+    writeUpgradeMetrics(totemDir, {
+      'manual-rule': {
+        triggerCount: 20,
+        contextCounts: { code: 2, string: 18, comment: 0, regex: 0, unknown: 0 },
+      },
+    });
+
+    const result = await checkUpgradeCandidates(tmpDir);
+    expect(result.status).toBe('pass');
+  });
+
+  it('skips the unknown bucket when computing non-code ratio', async () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    writeUpgradeRules(totemDir, [
+      { lessonHash: 'mostly-historical', lessonHeading: 'Historical', engine: 'regex' },
+    ]);
+    writeUpgradeMetrics(totemDir, {
+      'mostly-historical': {
+        triggerCount: 100,
+        // 100 historical hits + 5 recent classified: 5 code, 0 non-code.
+        // Old math: (0 + 100) / 105 = 95% "non-code" → false positive.
+        // New math: 0 / 5 = 0% → pass.
+        contextCounts: { code: 5, string: 0, comment: 0, regex: 0, unknown: 100 },
+      },
+    });
+
+    const result = await checkUpgradeCandidates(tmpDir);
     expect(result.status).toBe('pass');
   });
 });
@@ -775,6 +1050,86 @@ describe('runSelfHealing', () => {
   it('exports constants for testing', () => {
     expect(BYPASS_THRESHOLD).toBe(0.3);
     expect(MIN_EVENTS).toBe(5);
+  });
+
+  it('runs the upgrade phase without crashing when no candidates exist (mmnto/totem#1131)', async () => {
+    // No metrics → no candidates → upgrade phase should print "no rules flagged"
+    const totemDir = setupSelfHealingWorkspace(tmpDir);
+    fs.writeFileSync(
+      path.join(totemDir, 'compiled-rules.json'),
+      JSON.stringify(
+        makeCompiledRules([
+          { lessonHash: 'rule-clean', lessonHeading: 'Clean rule', severity: 'warning' },
+        ]),
+        null,
+        2,
+      ) + '\n',
+      'utf-8',
+    );
+
+    // Commit so the working tree is clean (upgrade phase is skipped via gitDirty guard)
+    execSync('git add .', { cwd: tmpDir, stdio: 'ignore' });
+    execSync('git commit -m "init"', { cwd: tmpDir, stdio: 'ignore' });
+
+    await runSelfHealing(tmpDir);
+
+    const output = stderrSpy.mock.calls.map((args: unknown[]) => String(args[0])).join('\n');
+    expect(output).toContain('Checking for ast-grep upgrade candidates');
+    expect(output).toContain('No rules flagged for upgrade');
+  });
+
+  it('detects upgrade candidates and reports them in the upgrade phase (mmnto/totem#1131)', async () => {
+    const totemDir = setupSelfHealingWorkspace(tmpDir);
+
+    // Write a regex rule with telemetry showing 60% non-code matches
+    fs.writeFileSync(
+      path.join(totemDir, 'compiled-rules.json'),
+      JSON.stringify(
+        makeCompiledRules([
+          { lessonHash: 'noisy-regex', lessonHeading: 'Noisy regex rule', severity: 'warning' },
+        ]),
+        null,
+        2,
+      ) + '\n',
+      'utf-8',
+    );
+
+    const cacheDir = path.join(totemDir, 'cache');
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(cacheDir, 'rule-metrics.json'),
+      JSON.stringify(
+        {
+          version: 1,
+          rules: {
+            'noisy-regex': {
+              triggerCount: 10,
+              suppressCount: 0,
+              lastTriggeredAt: '2026-04-06T12:00:00.000Z',
+              lastSuppressedAt: null,
+              contextCounts: { code: 4, string: 6, comment: 0, regex: 0, unknown: 0 },
+            },
+          },
+        },
+        null,
+        2,
+      ) + '\n',
+      'utf-8',
+    );
+
+    // Commit so the working tree is clean
+    execSync('git add .', { cwd: tmpDir, stdio: 'ignore' });
+    execSync('git commit -m "init"', { cwd: tmpDir, stdio: 'ignore' });
+
+    await runSelfHealing(tmpDir);
+
+    const output = stderrSpy.mock.calls.map((args: unknown[]) => String(args[0])).join('\n');
+    // The phase should detect the candidate and attempt to upgrade it.
+    // The actual `pnpm exec totem compile --upgrade` call will likely fail in the test
+    // sandbox (no orchestrator config / no LLM) — that's expected. We're just verifying
+    // the candidate was detected and the phase ran end-to-end.
+    expect(output).toContain('Checking for ast-grep upgrade candidates');
+    expect(output).toContain('Found 1 upgrade candidate');
   });
 
   it('archives stale rules with zero triggers during self-healing', async () => {

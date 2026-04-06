@@ -429,6 +429,134 @@ export function checkSecretsFileTracked(cwd: string, totemDir = '.totem'): Diagn
   };
 }
 
+// ─── Upgrade candidate check (mmnto/totem#1131) ────────────────────
+
+/**
+ * Pure helper: scan compiled rules + metrics and return structured upgrade candidates.
+ * Used by both `checkUpgradeCandidates` (read-only diagnostic) and `runSelfHealing`
+ * (auto-recompile phase). Returns null if rules/metrics cannot be loaded.
+ *
+ * IMPORTANT: Uses `contextCounts` (per-context match buckets), NOT `triggerCount`
+ * (the rolled-up total). `triggerCount` includes ALL matches, not just code matches.
+ */
+export async function findUpgradeCandidates(
+  cwd: string,
+  totemDir = '.totem',
+): Promise<UpgradeCandidate[] | null> {
+  const totemDirAbs = path.join(cwd, totemDir);
+  const rulesPath = path.join(totemDirAbs, 'compiled-rules.json');
+  if (!fs.existsSync(rulesPath)) return null;
+
+  try {
+    // Dynamic import to avoid top-level @mmnto/totem dep (mirrors GC phase)
+    const { loadCompiledRulesFile, loadRuleMetrics } = await import('@mmnto/totem');
+    const rulesFile = loadCompiledRulesFile(rulesPath);
+    const metricsFile = loadRuleMetrics(totemDirAbs);
+
+    const candidates: UpgradeCandidate[] = [];
+    for (const rule of rulesFile.rules) {
+      // Only regex rules carry trustworthy non-code telemetry. `ast-grep` rules
+      // are already structural; the legacy `ast` (Tree-sitter) engine does not
+      // populate `astContext`, so its hits land in the `unknown` bucket and
+      // cannot be reasoned about here.
+      if (rule.engine !== 'regex') continue;
+
+      // Skip manual regex rules. Manual rules take the Pipeline 1 path in
+      // `compileLesson`, which never receives `telemetryPrefix` — so a
+      // `--upgrade` run on a manual rule would just recompile the same
+      // hand-written pattern and produce a permanent false positive. Manual
+      // rules are recognizable by `lessonHeading === message` (see the same
+      // shape check in compile.ts `logCompiledRule`).
+      if (rule.lessonHeading === rule.message) continue;
+
+      const metric = metricsFile.rules[rule.lessonHash];
+      if (!metric || !metric.contextCounts) continue;
+
+      // Exclude `unknown` from both numerator and denominator — it represents
+      // historical / unclassified telemetry (pre-context-aware hits, or seeding
+      // via `triggerCount - 1`) and is not evidence of non-code leakage.
+      // The `?? 0` defaults are defensive: the Zod schema at
+      // packages/core/src/rule-metrics.ts declares every contextCounts field
+      // as a non-negative integer, but a hand-edited rule-metrics.json could
+      // bypass that and produce NaN in the arithmetic below.
+      const cc = metric.contextCounts;
+      const code = cc.code ?? 0;
+      const strings = cc.string ?? 0;
+      const comments = cc.comment ?? 0;
+      const regexes = cc.regex ?? 0;
+      const classifiedTotal = code + strings + comments + regexes;
+      if (classifiedTotal < MIN_CONTEXT_EVENTS) continue;
+
+      const nonCodeRatio = (strings + comments + regexes) / classifiedTotal;
+      if (nonCodeRatio > NON_CODE_THRESHOLD) {
+        candidates.push({
+          lessonHash: rule.lessonHash,
+          heading: rule.lessonHeading ?? rule.lessonHash,
+          engine: 'regex',
+          total: classifiedTotal,
+          codeCount: code,
+          nonCodeRatio,
+        });
+      }
+    }
+    // Highest non-code ratio first for human readability
+    return candidates.sort((a, b) => b.nonCodeRatio - a.nonCodeRatio);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Find regex/ast rules whose telemetry shows >NON_CODE_THRESHOLD of matches landing
+ * in non-code contexts (strings, comments, regex literals). These are good candidates
+ * for being upgraded to structural ast-grep patterns via `totem compile --upgrade`.
+ */
+export async function checkUpgradeCandidates(
+  cwd: string,
+  totemDir = '.totem',
+): Promise<DiagnosticResult> {
+  const rulesPath = path.join(cwd, totemDir, 'compiled-rules.json');
+  if (!fs.existsSync(rulesPath)) {
+    return {
+      name: 'Upgrade Candidates',
+      status: 'skip',
+      message: 'compiled-rules.json missing',
+    };
+  }
+
+  const candidates = await findUpgradeCandidates(cwd, totemDir);
+  if (candidates === null) {
+    return {
+      name: 'Upgrade Candidates',
+      status: 'skip',
+      message: 'Could not analyze rules',
+    };
+  }
+
+  if (candidates.length === 0) {
+    return {
+      name: 'Upgrade Candidates',
+      status: 'pass',
+      message: 'No regex rules exceed non-code threshold',
+    };
+  }
+
+  const summary = candidates
+    .map(
+      (c) =>
+        `${c.lessonHash} (${c.engine}, ${(c.nonCodeRatio * 100).toFixed(0)}% non-code, ${c.total} matches)`,
+    )
+    .join(', ');
+
+  const firstHash = candidates[0]!.lessonHash;
+  return {
+    name: 'Upgrade Candidates',
+    status: 'warn',
+    message: `${candidates.length} rule(s) firing in non-code contexts: ${summary}`,
+    remediation: `Run \`totem compile --upgrade ${firstHash}\` to re-compile through Claude Sonnet with telemetry guidance.`,
+  };
+}
+
 // ─── Output formatting ──────────────────────────────────
 
 function statusIcon(status: CheckStatus): string {
@@ -476,6 +604,30 @@ export const BYPASS_THRESHOLD = 0.3;
 /** Minimum total events (triggers + bypasses) required before acting on a rule. */
 export const MIN_EVENTS = 5;
 
+// ─── Upgrade-candidate constants (mmnto/totem#1131) ────────────────
+
+/** Non-code match ratio above which a regex/ast rule is flagged for ast-grep upgrade. */
+export const NON_CODE_THRESHOLD = 0.2; // 20%+ non-code matches → upgrade candidate
+
+/** Minimum total context events required before flagging a rule as an upgrade candidate. */
+export const MIN_CONTEXT_EVENTS = 5;
+
+// ─── Upgrade-candidate types ────────────────────────────
+
+export interface UpgradeCandidate {
+  lessonHash: string;
+  heading: string;
+  /**
+   * Always `'regex'` — `findUpgradeCandidates` filters to regex rules only
+   * because only they carry trustworthy non-code telemetry. Narrowed from
+   * the broader engine union so the type matches the implementation.
+   */
+  engine: 'regex';
+  total: number;
+  codeCount: number;
+  nonCodeRatio: number;
+}
+
 // ─── Types ──────────────────────────────────────────────
 
 export interface DoctorOptions {
@@ -484,13 +636,27 @@ export interface DoctorOptions {
 
 // ─── Self-healing flow ──────────────────────────────────
 
+// totem-context: spawnSync, fs, path, and pc are static imports at lines 1-5 of this file. The review pipeline only sees diff hunks, so new references to these symbols far from the import block should not be flagged as undefined.
 export async function runSelfHealing(cwd: string): Promise<void> {
+  // Note: we do NOT pre-flight `gh` here. The diagnostic + downgrade + upgrade
+  // work is still valuable on a machine without gh installed — the user just
+  // can't auto-open a PR. The try/catch around `gh pr create` below catches the
+  // missing-dependency case and tells the user how to push + open the PR
+  // manually, which is better UX than aborting all the work up front. (The
+  // original GCA suggestion to add requireGhCli() matches commands like
+  // `triage-pr` whose sole purpose is PR interaction; doctor's purpose is
+  // diagnosis, so gh is a nice-to-have, not a hard requirement.)
+
   // Load config to get totemDir
   const { loadConfig, resolveConfigPath } = await import('../utils.js');
   const configPath = resolveConfigPath(cwd);
   const config = await loadConfig(configPath);
   const totemDir = path.join(cwd, config.totemDir);
   const rulesPath = path.join(totemDir, 'compiled-rules.json');
+  // compileCommand rewrites this file on every --upgrade call, so the
+  // upgrade phase needs to stage it alongside compiled-rules.json (or revert
+  // it if no actual changes land) to keep the working tree clean.
+  const manifestPath = path.join(totemDir, 'compile-manifest.json');
 
   console.error(`\n${pc.cyan('[Auto-Healing]')} Analyzing Trap Ledger...`);
 
@@ -576,7 +742,8 @@ export async function runSelfHealing(cwd: string): Promise<void> {
   if (gcConfig && gcConfig.enabled !== false && !gitDirty) {
     console.error(`\n${pc.cyan('[Auto-Healing]')} Checking for stale rules to archive...`);
 
-    const fs = await import('node:fs');
+    // fs is statically imported at the top of this file (line 2); no need to
+    // re-import dynamically here (mmnto/totem#1234 CR cleanup).
     if (!fs.existsSync(rulesPath)) {
       console.error(pc.dim('  No compiled-rules.json found. Skipping GC.'));
     } else {
@@ -622,7 +789,70 @@ export async function runSelfHealing(cwd: string): Promise<void> {
     } // end fs.existsSync guard
   }
 
-  if (downgraded.length === 0 && archivedCount === 0) {
+  // ─── Upgrade phase: re-compile flagged rules through Sonnet (mmnto/totem#1131) ─
+  const upgraded: UpgradeCandidate[] = [];
+  // Set to true whenever we invoke compileCommand({ upgrade }) — even for a
+  // noop outcome — because each call rewrites compile-manifest.json. Drives
+  // the manifest-revert / manifest-stage decision below.
+  let upgradePhaseTouchedManifest = false;
+
+  if (!gitDirty) {
+    console.error(`\n${pc.cyan('[Auto-Healing]')} Checking for ast-grep upgrade candidates...`);
+    const candidates = await findUpgradeCandidates(cwd, config.totemDir);
+
+    if (candidates === null || candidates.length === 0) {
+      console.error(pc.dim('  No rules flagged for upgrade.'));
+    } else {
+      console.error(`  Found ${candidates.length} upgrade candidate(s). Re-compiling...`);
+
+      // Call compileCommand directly (avoids shelling out — works regardless of pnpm/npm/global install).
+      // Each call mutates compiled-rules.json and compile-manifest.json in-place.
+      const { compileCommand } = await import('./compile.js');
+      for (const cand of candidates) {
+        try {
+          const outcome = await compileCommand({ upgrade: cand.lessonHash });
+          upgradePhaseTouchedManifest = true;
+          // Only count actual replacements. `skipped` / `noop` / `failed` all
+          // return normally but leave no real upgrade to report (mmnto/totem#1234
+          // CR finding — avoids lying in the auto-heal PR body).
+          if (outcome?.status === 'replaced') {
+            upgraded.push(cand);
+            console.error(
+              `  ${pc.green('↑')} ${cand.heading} (${(cand.nonCodeRatio * 100).toFixed(0)}% non-code)`,
+            );
+          } else if (outcome?.status === 'skipped') {
+            console.error(
+              pc.dim(`  - ${cand.heading} — compiler marked non-compilable; no upgrade`),
+            );
+          } else {
+            console.error(pc.dim(`  - ${cand.heading} — no change`));
+          }
+        } catch (err) {
+          // compileCommand can throw on config errors, network hard failures,
+          // etc. Even a thrown error means the manifest may have been touched
+          // before the throw, so keep the flag set above.
+          upgradePhaseTouchedManifest = true;
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(pc.yellow(`  - ${cand.heading} — upgrade failed: ${msg}`));
+        }
+      }
+
+      if (upgraded.length > 0) {
+        console.error(`\n  ${pc.green(`Upgraded ${upgraded.length} rule(s) via telemetry.`)}`);
+      }
+    }
+  }
+
+  if (downgraded.length === 0 && archivedCount === 0 && upgraded.length === 0) {
+    // If the upgrade phase called compileCommand at all (even for candidates
+    // that ended in noop/skipped/failed), compile-manifest.json was rewritten.
+    // Revert it so the working tree on the original branch stays clean
+    // (mmnto/totem#1234 CR finding). spawnSync is imported at the top of this
+    // file; stdio: 'ignore' + no status check makes the call a silent no-op
+    // if the file is already clean or the checkout fails for any reason.
+    if (upgradePhaseTouchedManifest) {
+      spawnSync('git', ['checkout', '--', manifestPath], { cwd, stdio: 'ignore' });
+    }
     return;
   }
 
@@ -653,7 +883,15 @@ export async function runSelfHealing(cwd: string): Promise<void> {
   try {
     run('git', ['checkout', '-b', branchName]);
     branchCreated = true;
-    run('git', ['add', rulesPath]);
+    // Stage compile-manifest.json alongside compiled-rules.json when the
+    // upgrade phase ran — otherwise the temp branch will diverge from the
+    // working tree and the checkout back to originalBranch can fail
+    // (mmnto/totem#1234 CR finding).
+    if (upgradePhaseTouchedManifest && fs.existsSync(manifestPath)) {
+      run('git', ['add', rulesPath, manifestPath]);
+    } else {
+      run('git', ['add', rulesPath]);
+    }
 
     // Build commit message
     const parts: string[] = [];
@@ -666,7 +904,14 @@ export async function runSelfHealing(cwd: string): Promise<void> {
     if (archivedCount > 0) {
       parts.push(`Archived ${archivedCount} stale rule(s)`);
     }
-    const commitMsg = `fix: auto-heal ${downgraded.length + archivedCount} rule(s)\n\n${parts.join('\n\n')}\n\nGenerated by totem doctor --pr`;
+    if (upgraded.length > 0) {
+      const ruleList = upgraded
+        .map((u) => `- ${u.heading} (${(u.nonCodeRatio * 100).toFixed(0)}% non-code)`)
+        .join('\n');
+      parts.push(`Upgraded ${upgraded.length} rule(s) via telemetry diagnostic:\n${ruleList}`);
+    }
+    const totalChanges = downgraded.length + archivedCount + upgraded.length;
+    const commitMsg = `fix: auto-heal ${totalChanges} rule(s)\n\n${parts.join('\n\n')}\n\nGenerated by totem doctor --pr`;
 
     run('git', ['commit', '-m', commitMsg]);
     run('git', ['push', '-u', 'origin', branchName]);
@@ -696,14 +941,32 @@ export async function runSelfHealing(cwd: string): Promise<void> {
       );
     }
 
+    if (upgraded.length > 0) {
+      prBodyParts.push(
+        `### Upgrades (mmnto/totem#1131)`,
+        '',
+        `${upgraded.length} rule(s) were re-compiled through Claude Sonnet because telemetry showed >${NON_CODE_THRESHOLD * 100}% of matches landing in non-code contexts.`,
+        '',
+        '| Rule | Hash | Non-Code Ratio |',
+        '|---|---|---|',
+        ...upgraded.map(
+          (u) => `| ${u.heading} | \`${u.lessonHash}\` | ${(u.nonCodeRatio * 100).toFixed(0)}% |`,
+        ),
+        '',
+      );
+    }
+
     prBodyParts.push(
-      'These rules are not deleted (ADR-027). Downgraded rules continue to fire as warnings. Archived rules are skipped during lint but preserved for audit.',
+      'These rules are not deleted (ADR-027). Downgraded rules continue to fire as warnings. Archived rules are skipped during lint but preserved for audit. Upgraded rules retain the same lessonHash but ship with a structural ast-grep pattern.',
       '',
       'Generated by `totem doctor --pr`',
     );
 
     const prBody = prBodyParts.join('\n');
-    const prTitle = `fix: auto-heal ${downgraded.length + archivedCount} rule(s)`;
+    const prTitle =
+      upgraded.length > 0 && downgraded.length === 0 && archivedCount === 0
+        ? `chore(doctor): upgrade ${upgraded.length} rule(s) to ast-grep via telemetry diagnostic`
+        : `fix: auto-heal ${totalChanges} rule(s)`;
     run('gh', ['pr', 'create', '--title', prTitle, '--body', prBody]);
 
     console.error(pc.green(`\n  PR created on branch ${branchName}`));
@@ -744,6 +1007,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     checkIndex(cwd),
     await checkSecretLeaks(cwd),
     checkSecretsFileTracked(cwd),
+    await checkUpgradeCandidates(cwd),
   ];
 
   for (const result of results) {

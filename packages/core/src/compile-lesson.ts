@@ -35,6 +35,13 @@ export interface CompileLessonDeps {
   callbacks?: CompileLessonCallbacks;
   /** Optional: specialized system prompt for Pipeline 3 (Bad/Good example-based compilation). */
   pipeline3Prompt?: string;
+  /**
+   * Optional telemetry-driven directive appended to the Pipeline 2 system prompt.
+   * Used by `totem compile --upgrade <hash>` (mmnto/totem#1131) to nudge Sonnet toward an
+   * ast-grep structural pattern when the existing rule is firing in non-code contexts.
+   * Has no effect on Pipeline 1 (manual) or Pipeline 3 (example-based) compilation.
+   */
+  telemetryPrefix?: string;
 }
 
 // ─── ast-grep pattern validation ───────────────────
@@ -448,7 +455,14 @@ export async function compileLesson(
   }
 
   // ── Pipeline 2: LLM compilation ──────────────────
-  const prompt = `${compilerPrompt}\n\n## Lesson to Compile\n\nHeading: ${lesson.heading}\n\n${lesson.body}`;
+  // Optional telemetry directive (mmnto/totem#1131) — nudges Sonnet toward ast-grep
+  // when the existing rule is firing in strings/comments instead of code.
+  const promptParts: string[] = [compilerPrompt];
+  if (deps.telemetryPrefix) {
+    promptParts.push('## Telemetry-Driven Refinement Directive', deps.telemetryPrefix);
+  }
+  promptParts.push('## Lesson to Compile', `Heading: ${lesson.heading}`, lesson.body);
+  const prompt = promptParts.join('\n\n');
   const response = await runOrchestrator(prompt);
 
   if (response == null) return { status: 'noop' };

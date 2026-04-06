@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.12.0` (published 2026-04-05) with 2,571 tests across core, CLI, and MCP packages and 438 compiled rules. Release 1.13.0 is in progress.
+The project is at release `@mmnto/cli@1.12.0` (published 2026-04-05) with ~2,580 tests across core, CLI, and MCP packages and 390 compiled rules (208 ast-grep, 182 regex). Release 1.13.0 is in progress — #1131 is the last ticket.
 
 ### Current: 1.13.0 — The Refinement Engine
 
@@ -9,19 +9,28 @@ Theme: Rule refinement, AST upgrades, and compilation routing.
 - **Compilation Routing (shipped):**
   - ~~Strategy **#73**~~ — Compilation quality benchmark (Gemini Pro vs gemma4:26b vs Claude Sonnet)
   - ~~**#1220**~~ — Route compile to `anthropic:claude-sonnet-4-6` (90% correctness, 2.4s avg)
+  - ~~**#1224**~~ — Bulk Sonnet recompile (438 → 390 rules, 208 ast-grep)
+  - ~~**#1225**~~ — Backtick parser hardening (both pipelines)
   - ~~**#1210**~~ — Skip TODO scaffold fixtures in wind tunnel
   - ~~**#1211**~~ — Heading-level dedup in extract pipeline
   - ~~**#1212**~~ — Closed: local gemma4 compilation not viable (benchmark evidence)
 
-- **Auto-Upgrade Pipeline (in progress):**
-  - **#664** — AST-based empty catch detection (proof-of-concept for regex→ast-grep upgrade)
-  - **#1132** — Wire context telemetry into rule metrics (code vs string vs comment match tracking)
-  - **#1131** — Rule refinement suggestions from false-positive scan alerts
+- **Auto-Upgrade Pipeline:**
+  - ~~**#664**~~ — AST-based empty catch detection (8 rules upgraded regex→ast-grep)
+  - ~~**#1132**~~ — Context telemetry wired into rule metrics (code/string/comment/regex tracking)
+  - **#1131** — Rule refinement diagnostic (`totem doctor` upgrade recommendations + `compile --upgrade <hash>`) — **LAST 1.13.0 TICKET**
 
-- **Maintenance:**
+- **Pre-release checklist (before 1.13.0 publish):**
+  - Update `docs/` (active_work, roadmap)
+  - Update wiki
+  - Update playground
+  - Rebuild standalone binary for all 3 platforms
+
+- **Deferred to 1.14.0:**
   - **#1218** — Broad `throw $ERR` ast-grep pattern needs refinement
   - **#1219** — Lazy-load compiler prompt templates
   - **#1221** — Update cloud compile worker to route through Claude Sonnet
+  - **#1226** — SARIF upload fails on invalid hex escape (workaround: `continue-on-error`)
   - **#1059** — Rule pack distribution
 
 - **Deferred strategy research:**

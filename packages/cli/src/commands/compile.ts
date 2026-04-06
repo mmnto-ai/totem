@@ -10,6 +10,26 @@ const CLOUD_CONCURRENCY = 50;
 
 // ─── Types ──────────────────────────────────────────
 
+/**
+ * Terminal outcome of a `--upgrade <hash>` run, returned by `compileCommand`
+ * so callers (like `totem doctor --pr` self-healing) can distinguish an actual
+ * rule replacement from a noop / skipped / failed outcome and only report real
+ * upgrades in their summaries.
+ *
+ * - `replaced`: compilation produced a fresh rule that replaced the stale copy
+ * - `skipped`:  LLM decided the lesson is non-compilable; rule moved to
+ *               nonCompilable and removed from active rules
+ * - `noop`:     compile returned with no change (rare — cache hit path)
+ * - `failed`:   transient error (network, rate limit, parser failure); old
+ *               rule is preserved untouched
+ */
+export type UpgradeStatus = 'replaced' | 'skipped' | 'noop' | 'failed';
+
+export interface UpgradeOutcome {
+  hash: string;
+  status: UpgradeStatus;
+}
+
 export interface CompileOptions {
   raw?: boolean;
   out?: string;
@@ -21,6 +41,44 @@ export interface CompileOptions {
   concurrency?: string;
   cloud?: string;
   verbose?: boolean;
+  /**
+   * Telemetry-driven re-compile (mmnto/totem#1131). Filters lessons to a single hash
+   * (full or short prefix), bypasses the cache, and threads a non-code-ratio
+   * directive into the Pipeline 2 system prompt.
+   */
+  upgrade?: string;
+}
+
+// ─── Telemetry directive (mmnto/totem#1131) ────────────────────
+
+/**
+ * Build the directive injected into the Sonnet system prompt for `--upgrade`.
+ *
+ * `unknown` is excluded from both the numerator and the denominator because it
+ * holds historical / unclassified telemetry (pre-context-aware hits, or events
+ * where the rule runner did not provide an `astContext`). Including it would
+ * dilute the classified signal and produce misleading ratios.
+ */
+export function buildTelemetryPrefix(contextCounts: {
+  code: number;
+  string: number;
+  comment: number;
+  regex: number;
+  unknown: number;
+}): string {
+  const classifiedTotal =
+    contextCounts.code + contextCounts.string + contextCounts.comment + contextCounts.regex;
+  const nonCode = contextCounts.string + contextCounts.comment + contextCounts.regex;
+  const pct = classifiedTotal > 0 ? Math.round((nonCode / classifiedTotal) * 100) : 0;
+  const unknownNote =
+    contextCounts.unknown > 0
+      ? ` Unclassified (historical) matches: ${contextCounts.unknown}.`
+      : '';
+  return [
+    `This rule was flagged because ${pct}% of its classified matches occur in non-code contexts`,
+    `(strings: ${contextCounts.string}, comments: ${contextCounts.comment}, regex literals: ${contextCounts.regex}). Please prefer an ast-grep`,
+    `structural pattern that only matches executable code, not string or comment content.${unknownNote}`,
+  ].join(' ');
 }
 
 // ─── Logging helpers ────────────────────────────────
@@ -122,7 +180,7 @@ export function autoScaffoldFixture(
 
 // ─── Main command ───────────────────────────────────
 
-export async function compileCommand(options: CompileOptions): Promise<void> {
+export async function compileCommand(options: CompileOptions): Promise<UpgradeOutcome | void> {
   const { TotemConfigError, TotemError } = await import('@mmnto/totem');
   const { COMPILER_SYSTEM_PROMPT, PIPELINE3_COMPILER_PROMPT } =
     await import('./compile-templates.js');
@@ -199,10 +257,94 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
 
   log.info(TAG, `Found ${lessons.length} lessons`); // totem-ignore
 
+  // ─── Telemetry-driven re-compile (mmnto/totem#1131) ──
+  // --upgrade <hash> targets ONE rule by hash (full or short prefix match), evicts
+  // it from the cache so it alone gets recompiled, and threads a telemetry directive
+  // into its Pipeline 2 prompt. All other rules pass through unchanged.
+  //
+  // `lessonsInScope` is what we validate and iterate for compilation. It starts
+  // as the full lesson set (default behavior) and is narrowed to just the
+  // target lesson for --upgrade so that:
+  //   1. An unrelated invalid lesson can't abort the upgrade (validateLessons)
+  //   2. An unrelated cache-miss lesson doesn't leak into the compile batch
+  //   3. `totem doctor --pr` branches stay scoped to the flagged rule only
+  // The full `lessons` array is still used for `currentHashes` pruning so the
+  // other 389 compiled rules remain in newRules.
+  let telemetryPrefix: string | undefined;
+  let upgradeTargetHash: string | undefined;
+  let lessonsInScope: typeof lessons = lessons;
+  if (options.upgrade) {
+    if (options.cloud) {
+      throw new TotemError(
+        'UPGRADE_CLOUD_UNSUPPORTED',
+        '--upgrade is not supported with --cloud.',
+        'Run `totem compile --upgrade <hash>` without --cloud. The cloud worker cannot thread a per-lesson telemetry directive yet (mmnto/totem#1221).',
+      );
+    }
+    if (options.force) {
+      // --force empties the cache before scoped eviction runs, silently turning
+      // --upgrade into a full recompile. Reject the combo so intent is explicit.
+      throw new TotemConfigError(
+        '--upgrade cannot be combined with --force.',
+        'Run `totem compile --upgrade <hash>` without --force. The upgrade path already bypasses the cache for the target rule only, preserving every other compiled rule.',
+        'CONFIG_INVALID',
+      );
+    }
+
+    const target = options.upgrade.toLowerCase();
+    const matches = lessons.filter((l) => {
+      const lessonHash = hashLesson(l.heading, l.body).toLowerCase();
+      return lessonHash === target || lessonHash.startsWith(target);
+    });
+
+    if (matches.length === 0) {
+      throw new TotemError(
+        'UPGRADE_HASH_NOT_FOUND',
+        `No lesson matches hash '${options.upgrade}'.`,
+        'Run `totem doctor` to see flagged upgrade candidates, then re-run with the printed hash.',
+      );
+    }
+    if (matches.length > 1) {
+      const found = matches
+        .map((m) => `${hashLesson(m.heading, m.body)} (${m.heading})`)
+        .join(', ');
+      throw new TotemError(
+        'UPGRADE_HASH_AMBIGUOUS',
+        `Hash prefix '${options.upgrade}' matches ${matches.length} lessons: ${found}`,
+        'Use the full hash to disambiguate.',
+      );
+    }
+
+    upgradeTargetHash = hashLesson(matches[0]!.heading, matches[0]!.body);
+    lessonsInScope = [matches[0]!];
+    log.info(TAG, `--upgrade: targeting ${upgradeTargetHash} (${matches[0]!.heading})`);
+
+    // Load existing telemetry to build the directive
+    try {
+      const { loadRuleMetrics } = await import('@mmnto/totem');
+      const metricsFile = loadRuleMetrics(totemDir);
+      const metric = metricsFile.rules[upgradeTargetHash];
+      if (metric?.contextCounts) {
+        telemetryPrefix = buildTelemetryPrefix(metric.contextCounts);
+        log.dim(TAG, `--upgrade: telemetry directive prepared (${telemetryPrefix.length} chars)`);
+      } else {
+        log.warn(
+          TAG,
+          `--upgrade: no telemetry found for ${upgradeTargetHash}; recompiling without directive.`,
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn(TAG, `--upgrade: failed to load telemetry — ${msg}`);
+    }
+  }
+
   // ─── Pre-compilation gate: validate Pipeline 1 metadata ──
+  // For --upgrade, scope validation to the target so unrelated invalid lessons
+  // cannot block the upgrade (mmnto/totem#1234 CR finding).
   {
     const { validateLessons } = await import('@mmnto/totem');
-    const lintResult = validateLessons(lessons);
+    const lintResult = validateLessons(lessonsInScope);
     const errors = lintResult.diagnostics.filter((d) => d.severity === 'error');
     const warnings = lintResult.diagnostics.filter((d) => d.severity === 'warning');
     for (const d of warnings) {
@@ -237,6 +379,12 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
     scaffoldFixturePath,
   };
 
+  // Track the terminal outcome of the --upgrade target's compile attempt so
+  // we can return it to the caller. Default 'noop' covers the case where the
+  // target was never enqueued for some reason (shouldn't happen with the
+  // cache-bypass logic below, but safe default).
+  let upgradeOutcome: UpgradeStatus = 'noop';
+
   // ─── Phase 1: Regex compilation (requires orchestrator) ──
   if (config.orchestrator) {
     const existingFile: CompiledRulesFile = options.force
@@ -246,19 +394,32 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
     const existingByHash = new Map(existingRules.map((r) => [r.lessonHash, r]));
     const nonCompilableSet = new Set(existingFile.nonCompilable ?? []);
 
+    // Note: we do NOT delete the --upgrade target from existingByHash here.
+    // buildCompiledRule in @mmnto/totem looks up the old entry to preserve
+    // metadata (createdAt, audit lineage). Deleting would make the upgraded
+    // rule look brand-new and break garbage-collection heuristics. Instead,
+    // we bypass the cache check for the target inside the loop below.
+
     const toCompile: LessonInput[] = [];
 
-    for (const lesson of lessons) {
+    // For --upgrade, iterate only the target lesson so unrelated cache-miss
+    // lessons don't leak into the compile batch (mmnto/totem#1234 CR finding).
+    for (const lesson of lessonsInScope) {
       const hash = hashLesson(lesson.heading, lesson.body);
-      if (existingByHash.has(hash)) continue; // already compiled
-      if (nonCompilableSet.has(hash)) continue; // cached as non-compilable
+      // --upgrade: always recompile the target, even if it's in the cache or
+      // was previously marked non-compilable. The telemetry directive may
+      // unlock a pattern the compiler couldn't produce on the first pass.
+      if (hash !== upgradeTargetHash) {
+        if (existingByHash.has(hash)) continue; // already compiled
+        if (nonCompilableSet.has(hash)) continue; // cached as non-compilable
+      }
       toCompile.push({ index: lesson.index, heading: lesson.heading, body: lesson.body, hash });
     }
 
     if (toCompile.length === 0) {
       log.success(
         TAG,
-        `All ${lessons.length} lessons already processed (${existingRules.length} compiled, ${nonCompilableSet.size} non-compilable). Use --force to recompile.`,
+        `All ${lessonsInScope.length} lesson(s) in scope already processed (${existingRules.length} compiled, ${nonCompilableSet.size} non-compilable). Use --force to recompile.`,
       ); // totem-ignore
     } else {
       const { createSpinner } = await import('../ui.js');
@@ -278,6 +439,12 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
       }
       newRules.length = 0;
       newRules.push(...freshRules);
+
+      // --upgrade: the stale copy is NOT pre-filtered here. If we removed it now
+      // and compilation failed (network error, LLM refusal, parser failure), the
+      // rule would be silently deleted from compiled-rules.json. Instead, we
+      // splice the stale copy inside the `case 'compiled':` handler below, so
+      // the fresh rule only replaces the old one on a successful re-compile.
 
       const coreDeps = {
         parseCompilerResponse,
@@ -450,14 +617,20 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
           const batch = toCompile.slice(i, i + CONCURRENCY);
           const results = await Promise.all(
             batch.map((lesson) => {
-              return withRetry(() => compileLessonCore(lesson, COMPILER_SYSTEM_PROMPT, coreDeps), {
-                onRetry: (attempt, delayMs) => {
-                  log.warn(
-                    TAG,
-                    `[${lesson.heading}] Rate limited — retry ${attempt} in ${delayMs}ms`,
-                  );
+              // Per-lesson deps: telemetry prefix only applies to the --upgrade target.
+              const lessonDeps =
+                lesson.hash === upgradeTargetHash ? { ...coreDeps, telemetryPrefix } : coreDeps;
+              return withRetry(
+                () => compileLessonCore(lesson, COMPILER_SYSTEM_PROMPT, lessonDeps),
+                {
+                  onRetry: (attempt, delayMs) => {
+                    log.warn(
+                      TAG,
+                      `[${lesson.heading}] Rate limited — retry ${attempt} in ${delayMs}ms`,
+                    );
+                  },
                 },
-              })
+              )
                 .then((result) => {
                   tracker.tick();
                   spinner.update(tracker.format());
@@ -474,6 +647,42 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
           );
 
           for (const { lesson, result } of results) {
+            // --upgrade: remove the stale copy from newRules up front for any
+            // terminal outcome where the rule's state CHANGES (compiled → new
+            // pattern replaces old; skipped → rule moves to nonCompilable and
+            // must no longer appear as an active rule). For `failed`
+            // (transient error) and `noop` (no change), leave the old rule
+            // intact so a flaky network / rate-limit doesn't silently delete
+            // work (mmnto/totem#1234 GCA finding).
+            if (
+              lesson.hash === upgradeTargetHash &&
+              (result.status === 'compiled' || result.status === 'skipped')
+            ) {
+              const staleIdx = newRules.findIndex((r) => r.lessonHash === upgradeTargetHash);
+              if (staleIdx >= 0) newRules.splice(staleIdx, 1);
+            }
+
+            // --upgrade: record the terminal outcome for the target. Used by
+            // `totem doctor --pr` to distinguish real replacements from
+            // noop/skipped/failed so its PR body doesn't lie about work done
+            // (mmnto/totem#1234 CR finding).
+            if (lesson.hash === upgradeTargetHash) {
+              switch (result.status) {
+                case 'compiled':
+                  upgradeOutcome = 'replaced';
+                  break;
+                case 'skipped':
+                  upgradeOutcome = 'skipped';
+                  break;
+                case 'failed':
+                  upgradeOutcome = 'failed';
+                  break;
+                case 'noop':
+                  upgradeOutcome = 'noop';
+                  break;
+              }
+            }
+
             switch (result.status) {
               case 'compiled':
                 // ADR-065: Pipeline 1 error rules require a test fixture
@@ -489,6 +698,12 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
                       `[${lesson.heading}] Downgraded to warning — no test fixture (ADR-065)`,
                     );
                   }
+                }
+                // --upgrade: also clear any stale nonCompilable entry so the
+                // successfully-compiled rule doesn't coexist with a
+                // non-compilable marker for the same hash.
+                if (lesson.hash === upgradeTargetHash) {
+                  nonCompilableSet.delete(upgradeTargetHash);
                 }
                 newRules.push(result.rule);
                 compiled++;
@@ -572,5 +787,11 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
       exportLessons(lessons, absPath);
       log.success(TAG, `Exported ${lessons.length} rules to ${filePath} (${name})`); // totem-ignore
     }
+  }
+
+  // Return the upgrade outcome so callers can report it precisely. Only set
+  // when --upgrade was requested; default compile runs return void.
+  if (upgradeTargetHash) {
+    return { hash: upgradeTargetHash, status: upgradeOutcome };
   }
 }
