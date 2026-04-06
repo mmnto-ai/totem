@@ -461,6 +461,14 @@ export async function findUpgradeCandidates(
       // cannot be reasoned about here.
       if (rule.engine !== 'regex') continue;
 
+      // Skip manual regex rules. Manual rules take the Pipeline 1 path in
+      // `compileLesson`, which never receives `telemetryPrefix` — so a
+      // `--upgrade` run on a manual rule would just recompile the same
+      // hand-written pattern and produce a permanent false positive. Manual
+      // rules are recognizable by `lessonHeading === message` (see the same
+      // shape check in compile.ts `logCompiledRule`).
+      if (rule.lessonHeading === rule.message) continue;
+
       const metric = metricsFile.rules[rule.lessonHash];
       if (!metric || !metric.contextCounts) continue;
 
@@ -631,6 +639,10 @@ export async function runSelfHealing(cwd: string): Promise<void> {
   const config = await loadConfig(configPath);
   const totemDir = path.join(cwd, config.totemDir);
   const rulesPath = path.join(totemDir, 'compiled-rules.json');
+  // compileCommand rewrites this file on every --upgrade call, so the
+  // upgrade phase needs to stage it alongside compiled-rules.json (or revert
+  // it if no actual changes land) to keep the working tree clean.
+  const manifestPath = path.join(totemDir, 'compile-manifest.json');
 
   console.error(`\n${pc.cyan('[Auto-Healing]')} Analyzing Trap Ledger...`);
 
@@ -764,6 +776,10 @@ export async function runSelfHealing(cwd: string): Promise<void> {
 
   // ─── Upgrade phase: re-compile flagged rules through Sonnet (mmnto/totem#1131) ─
   const upgraded: UpgradeCandidate[] = [];
+  // Set to true whenever we invoke compileCommand({ upgrade }) — even for a
+  // noop outcome — because each call rewrites compile-manifest.json. Drives
+  // the manifest-revert / manifest-stage decision below.
+  let upgradePhaseTouchedManifest = false;
 
   if (!gitDirty) {
     console.error(`\n${pc.cyan('[Auto-Healing]')} Checking for ast-grep upgrade candidates...`);
@@ -775,16 +791,32 @@ export async function runSelfHealing(cwd: string): Promise<void> {
       console.error(`  Found ${candidates.length} upgrade candidate(s). Re-compiling...`);
 
       // Call compileCommand directly (avoids shelling out — works regardless of pnpm/npm/global install).
-      // Each call mutates compiled-rules.json in-place.
+      // Each call mutates compiled-rules.json and compile-manifest.json in-place.
       const { compileCommand } = await import('./compile.js');
       for (const cand of candidates) {
         try {
-          await compileCommand({ upgrade: cand.lessonHash });
-          upgraded.push(cand);
-          console.error(
-            `  ${pc.green('↑')} ${cand.heading} (${(cand.nonCodeRatio * 100).toFixed(0)}% non-code)`,
-          );
+          const outcome = await compileCommand({ upgrade: cand.lessonHash });
+          upgradePhaseTouchedManifest = true;
+          // Only count actual replacements. `skipped` / `noop` / `failed` all
+          // return normally but leave no real upgrade to report (mmnto/totem#1234
+          // CR finding — avoids lying in the auto-heal PR body).
+          if (outcome?.status === 'replaced') {
+            upgraded.push(cand);
+            console.error(
+              `  ${pc.green('↑')} ${cand.heading} (${(cand.nonCodeRatio * 100).toFixed(0)}% non-code)`,
+            );
+          } else if (outcome?.status === 'skipped') {
+            console.error(
+              pc.dim(`  - ${cand.heading} — compiler marked non-compilable; no upgrade`),
+            );
+          } else {
+            console.error(pc.dim(`  - ${cand.heading} — no change`));
+          }
         } catch (err) {
+          // compileCommand can throw on config errors, network hard failures,
+          // etc. Even a thrown error means the manifest may have been touched
+          // before the throw, so keep the flag set above.
+          upgradePhaseTouchedManifest = true;
           const msg = err instanceof Error ? err.message : String(err);
           console.error(pc.yellow(`  - ${cand.heading} — upgrade failed: ${msg}`));
         }
@@ -797,6 +829,15 @@ export async function runSelfHealing(cwd: string): Promise<void> {
   }
 
   if (downgraded.length === 0 && archivedCount === 0 && upgraded.length === 0) {
+    // If the upgrade phase called compileCommand at all (even for candidates
+    // that ended in noop/skipped/failed), compile-manifest.json was rewritten.
+    // Revert it so the working tree on the original branch stays clean
+    // (mmnto/totem#1234 CR finding). spawnSync is imported at the top of this
+    // file; stdio: 'ignore' + no status check makes the call a silent no-op
+    // if the file is already clean or the checkout fails for any reason.
+    if (upgradePhaseTouchedManifest) {
+      spawnSync('git', ['checkout', '--', manifestPath], { cwd, stdio: 'ignore' });
+    }
     return;
   }
 
@@ -827,7 +868,15 @@ export async function runSelfHealing(cwd: string): Promise<void> {
   try {
     run('git', ['checkout', '-b', branchName]);
     branchCreated = true;
-    run('git', ['add', rulesPath]);
+    // Stage compile-manifest.json alongside compiled-rules.json when the
+    // upgrade phase ran — otherwise the temp branch will diverge from the
+    // working tree and the checkout back to originalBranch can fail
+    // (mmnto/totem#1234 CR finding).
+    if (upgradePhaseTouchedManifest && fs.existsSync(manifestPath)) {
+      run('git', ['add', rulesPath, manifestPath]);
+    } else {
+      run('git', ['add', rulesPath]);
+    }
 
     // Build commit message
     const parts: string[] = [];

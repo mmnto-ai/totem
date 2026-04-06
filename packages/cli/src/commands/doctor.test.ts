@@ -536,6 +536,8 @@ function writeUpgradeMetrics(totemDir: string, rules: Record<string, UpgradeMetr
 interface UpgradeRuleInput {
   lessonHash: string;
   lessonHeading?: string;
+  /** Override to produce a manual-rule shape (lessonHeading === message). */
+  message?: string;
   engine?: 'regex' | 'ast' | 'ast-grep';
   pattern?: string;
   astQuery?: string;
@@ -554,7 +556,7 @@ function writeUpgradeRules(totemDir: string, rules: UpgradeRuleInput[]): void {
           const base = {
             lessonHash: r.lessonHash,
             lessonHeading: r.lessonHeading ?? r.lessonHash,
-            message: `Violation: ${r.lessonHeading ?? r.lessonHash}`,
+            message: r.message ?? `Violation: ${r.lessonHeading ?? r.lessonHash}`,
             engine,
             compiledAt: '2026-04-06T12:00:00.000Z',
           };
@@ -710,6 +712,30 @@ describe('checkUpgradeCandidates', () => {
     // Legacy `ast` (Tree-sitter) rules do not populate `astContext`, so their
     // context distribution is not trustworthy. checkUpgradeCandidates scopes to
     // `engine === 'regex'` only.
+    const result = await checkUpgradeCandidates(tmpDir);
+    expect(result.status).toBe('pass');
+  });
+
+  it('skips manual regex rules (message === lessonHeading)', async () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    // Manual rule: message === lessonHeading. This is the shape compile.ts
+    // uses to recognize Pipeline 1 (manual pattern) rules, which never see
+    // the telemetryPrefix directive. Upgrading them would be a no-op forever.
+    writeUpgradeRules(totemDir, [
+      {
+        lessonHash: 'manual-rule',
+        lessonHeading: 'No console.log',
+        message: 'No console.log',
+        engine: 'regex',
+      },
+    ]);
+    writeUpgradeMetrics(totemDir, {
+      'manual-rule': {
+        triggerCount: 20,
+        contextCounts: { code: 2, string: 18, comment: 0, regex: 0, unknown: 0 },
+      },
+    });
+
     const result = await checkUpgradeCandidates(tmpDir);
     expect(result.status).toBe('pass');
   });

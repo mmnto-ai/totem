@@ -10,6 +10,26 @@ const CLOUD_CONCURRENCY = 50;
 
 // ─── Types ──────────────────────────────────────────
 
+/**
+ * Terminal outcome of a `--upgrade <hash>` run, returned by `compileCommand`
+ * so callers (like `totem doctor --pr` self-healing) can distinguish an actual
+ * rule replacement from a noop / skipped / failed outcome and only report real
+ * upgrades in their summaries.
+ *
+ * - `replaced`: compilation produced a fresh rule that replaced the stale copy
+ * - `skipped`:  LLM decided the lesson is non-compilable; rule moved to
+ *               nonCompilable and removed from active rules
+ * - `noop`:     compile returned with no change (rare — cache hit path)
+ * - `failed`:   transient error (network, rate limit, parser failure); old
+ *               rule is preserved untouched
+ */
+export type UpgradeStatus = 'replaced' | 'skipped' | 'noop' | 'failed';
+
+export interface UpgradeOutcome {
+  hash: string;
+  status: UpgradeStatus;
+}
+
 export interface CompileOptions {
   raw?: boolean;
   out?: string;
@@ -160,7 +180,7 @@ export function autoScaffoldFixture(
 
 // ─── Main command ───────────────────────────────────
 
-export async function compileCommand(options: CompileOptions): Promise<void> {
+export async function compileCommand(options: CompileOptions): Promise<UpgradeOutcome | void> {
   const { TotemConfigError, TotemError } = await import('@mmnto/totem');
   const { COMPILER_SYSTEM_PROMPT, PIPELINE3_COMPILER_PROMPT } =
     await import('./compile-templates.js');
@@ -358,6 +378,12 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
     scaffoldFixture,
     scaffoldFixturePath,
   };
+
+  // Track the terminal outcome of the --upgrade target's compile attempt so
+  // we can return it to the caller. Default 'noop' covers the case where the
+  // target was never enqueued for some reason (shouldn't happen with the
+  // cache-bypass logic below, but safe default).
+  let upgradeOutcome: UpgradeStatus = 'noop';
 
   // ─── Phase 1: Regex compilation (requires orchestrator) ──
   if (config.orchestrator) {
@@ -636,6 +662,27 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
               if (staleIdx >= 0) newRules.splice(staleIdx, 1);
             }
 
+            // --upgrade: record the terminal outcome for the target. Used by
+            // `totem doctor --pr` to distinguish real replacements from
+            // noop/skipped/failed so its PR body doesn't lie about work done
+            // (mmnto/totem#1234 CR finding).
+            if (lesson.hash === upgradeTargetHash) {
+              switch (result.status) {
+                case 'compiled':
+                  upgradeOutcome = 'replaced';
+                  break;
+                case 'skipped':
+                  upgradeOutcome = 'skipped';
+                  break;
+                case 'failed':
+                  upgradeOutcome = 'failed';
+                  break;
+                case 'noop':
+                  upgradeOutcome = 'noop';
+                  break;
+              }
+            }
+
             switch (result.status) {
               case 'compiled':
                 // ADR-065: Pipeline 1 error rules require a test fixture
@@ -740,5 +787,11 @@ export async function compileCommand(options: CompileOptions): Promise<void> {
       exportLessons(lessons, absPath);
       log.success(TAG, `Exported ${lessons.length} rules to ${filePath} (${name})`); // totem-ignore
     }
+  }
+
+  // Return the upgrade outcome so callers can report it precisely. Only set
+  // when --upgrade was requested; default compile runs return void.
+  if (upgradeTargetHash) {
+    return { hash: upgradeTargetHash, status: upgradeOutcome };
   }
 }
