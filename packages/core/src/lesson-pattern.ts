@@ -30,8 +30,9 @@ export function extractField(body: string, field: string): string | undefined {
  * Returns null if the lesson doesn't contain a Pattern: field.
  */
 export function extractManualPattern(body: string): ManualPattern | null {
-  const pattern = extractField(body, 'Pattern');
-  if (!pattern) return null;
+  const rawPattern = extractField(body, 'Pattern');
+  if (!rawPattern) return null;
+  const pattern = stripInlineCode(rawPattern);
 
   const engineRaw = extractField(body, 'Engine')?.toLowerCase();
   const engine: ManualPattern['engine'] =

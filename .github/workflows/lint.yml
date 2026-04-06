@@ -42,6 +42,7 @@ jobs:
 
       - name: Upload SARIF to GitHub Security
         if: always() && hashFiles('totem-lint.sarif') != ''
+        continue-on-error: true # #1226: SARIF serialization bugs shouldn't block PRs
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: totem-lint.sarif
