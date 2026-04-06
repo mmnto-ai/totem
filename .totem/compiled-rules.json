@@ -3767,9 +3767,8 @@
       "lessonHeading": "Preserve error context when re-throwing",
       "pattern": "",
       "message": "Preserve the original error context when re-throwing (e.g., use 'throw new Error(`...: ${err.message}`)' or 'throw new Error(message, { cause: err })') to avoid swallowing debug details.",
-      "engine": "ast-grep",
-      "astGrepPattern": "try { $$$BODY } catch ($ERR) { }",
-      "compiledAt": "2026-04-06T00:23:24.846Z",
+      "engine": "ast",
+      "compiledAt": "2026-03-23T04:33:41.616Z",
       "createdAt": "2026-03-23T04:33:41.616Z",
       "fileGlobs": [
         "**/*.ts",
@@ -3777,7 +3776,8 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "astQuery": "(catch_clause body: (statement_block (throw_statement (new_expression constructor: (identifier) @ctor (#eq? @ctor \"Error\") arguments: (arguments (string)))))) @violation"
     },
     {
       "lessonHash": "18722912049af6f2",

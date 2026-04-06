@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.12.0` (published 2026-04-05) with 2,571 tests across core, CLI, and MCP packages and 431 compiled rules. Release 1.13.0 is in progress.
+The project is at release `@mmnto/cli@1.12.0` (published 2026-04-05) with 2,571 tests across core, CLI, and MCP packages and 438 compiled rules. Release 1.13.0 is in progress.
 
 ### Current: 1.13.0 — The Refinement Engine
 
