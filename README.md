@@ -14,9 +14,9 @@ Totem doesn't force a workflow on you. It's building blocks — `totem lint`, `t
 
 We do not force you into a rigid, 7-step AI methodology. We provide the **Sensors** (the knowledge index, the deterministic compiler). You are the Flight Controller. You decide where to put the **Actuators** (Git hooks, IDE plugins).
 
-## The Codebase Immune System (The Pipeline Engine)
+## The Loop
 
-Totem operates as a continuous, self-healing loop that converts institutional knowledge into physical constraints through **The Pipeline Engine**. You can author rules manually (zero-LLM), import from ESLint, compile from Markdown examples, or let Totem auto-capture warnings from PR bots.
+Totem is a self-healing loop. Mistakes get observed, compiled into rules, and enforced — automatically. You can author rules manually (zero-LLM), import from ESLint, compile from Markdown examples, or let Totem auto-capture warnings from PR bots.
 
 ```mermaid
 graph LR
@@ -25,9 +25,9 @@ graph LR
     classDef enforce fill:#1a4d2e,stroke:#34a853,stroke-width:2px,color:#fff
     classDef core fill:#2d2d2d,stroke:#888,stroke-width:1px,color:#fff
 
-    Observe["1. The Eye — Observe"]:::observe
-    Learn["2. The Brain — Learn"]:::learn
-    Enforce["3. The Hand — Enforce"]:::enforce
+    Observe["Observe"]:::observe
+    Learn["Learn"]:::learn
+    Enforce["Enforce"]:::enforce
     Ledger[("Trap Ledger")]:::core
 
     Observe -->|"PR Reviews / Bot Nits"| Learn
@@ -38,11 +38,11 @@ graph LR
     Ledger -.->|"Self-Healing Loop"| Learn
 ```
 
-1. **The Eye (Observe):** `totem review` (our optional reference implementation) and your CI bots watch the code. What went wrong?
-2. **The Brain (Learn):** `totem extract` captures the markdown lesson from the PR. `totem compile` automatically writes the AST/Regex plugin for you. What did we learn?
-3. **The Hand (Enforce):** `totem lint` (the fast, deterministic core) physically blocks the push. Make it impossible to repeat.
+1. **Observe:** `totem review` or your existing CI bots catch a mistake.
+2. **Learn:** `totem extract` captures the lesson. `totem compile` turns it into an ast-grep or regex rule.
+3. **Enforce:** `totem lint` blocks the push. Sub-second, zero-LLM, offline.
 
-**Note on Tooling:** Every CLI command in Totem supports the `--json` global flag, allowing you to easily pipe Totem's output into your own custom UI or automation scripts.
+Every CLI command supports `--json` for piping into your own automation.
 
 ## How a Mistake Becomes Impossible
 
