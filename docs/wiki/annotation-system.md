@@ -16,7 +16,7 @@ Totem relies on a semantic annotation system to guide the review pipeline and pr
    The extracted context is injected into the `=== SMART REVIEW HINTS ===` section of the LLM review prompt. This prevents the AI from blindly flagging acceptable deviations from the architecture.
 
 3. **Telemetry & Self-Healing:**
-   Every time a `totem-context` directive is encountered by `totem lint` or `totem review`, it is recorded as an `exception` event in `.totem/ledger/events.ndjson`. If a rule accumulates too many exceptions, the self-healing loop (`totem doctor --pr`) will propose downgrading the rule.
+   Every time a `totem-context` directive is encountered by `totem lint` or `totem review`, it is recorded as an `override` event in `.totem/ledger/events.ndjson`. If a rule accumulates too many exceptions, the self-healing loop (`totem doctor --pr`) will propose downgrading the rule.
 
 4. **Linting vs. Review:**
    `totem-context` suppresses the deterministic lint errors for the following block of code AND provides context to the review AI. It is different from `// totem-ignore`, which is a hard suppression without providing context to the reviewer.
