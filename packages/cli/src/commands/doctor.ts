@@ -623,6 +623,7 @@ export interface DoctorOptions {
 
 // ─── Self-healing flow ──────────────────────────────────
 
+// totem-context: spawnSync, fs, path, and pc are static imports at lines 1-5 of this file. The review pipeline only sees diff hunks, so new references to these symbols far from the import block should not be flagged as undefined.
 export async function runSelfHealing(cwd: string): Promise<void> {
   // Note: we do NOT pre-flight `gh` here. The diagnostic + downgrade + upgrade
   // work is still valuable on a machine without gh installed — the user just
