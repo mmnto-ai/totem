@@ -15,20 +15,34 @@ permissions:
 jobs:
   build-lite:
     strategy:
+      # fail-fast disabled so one platform's cap breach doesn't cancel the
+      # others — we want to learn the true cost on every target per run.
+      fail-fast: false
       matrix:
         include:
+          # Per-platform size caps calibrated to Bun 1.2.x standalone runtime cost
+          # per target. Linux x64 is ~40 MB heavier than darwin-arm64 due to
+          # statically-linked glibc + ICU data. Windows is provisional — tighten
+          # after the first successful run produces measured data. See strategy
+          # proposal 214 (Correction/Addendum).
           - os: ubuntu-latest
             target: linux-x64
             bun-target: bun-linux-x64
             artifact: totem-lite-linux-x64
+            warn_mb: 120
+            hard_mb: 140
           - os: macos-latest
             target: darwin-arm64
             bun-target: bun-darwin-arm64
             artifact: totem-lite-darwin-arm64
+            warn_mb: 75
+            hard_mb: 90
           - os: windows-latest
             target: win32-x64
             bun-target: bun-windows-x64
             artifact: totem-lite-win32-x64.exe
+            warn_mb: 120
+            hard_mb: 140
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -94,14 +108,19 @@ jobs:
 
       - name: Size gate (final binary)
         shell: bash
-        # Final-binary thresholds calibrated to Bun 1.2.x standalone runtime
-        # (~60 MB baseline). 75 MB warn / 90 MB hard gives a ~30% growth ceiling
-        # above the current measured cost. The granular bundle gate above is the
-        # real defense against bundle leaks; this cap is the end-to-end ceiling.
-        # See strategy proposal 214.
+        # Final-binary thresholds are per-platform matrix variables because
+        # Bun 1.2.x's standalone runtime cost varies materially by target
+        # (darwin-arm64: ~62 MB, linux-x64: ~104 MB, win32-x64: TBD). A blanket
+        # cap would leave a large blind spot on the smaller platforms. See
+        # strategy proposal 214 (Correction/Addendum). The granular bundle gate
+        # above is the real defense against bundle leaks; these final-binary
+        # caps are the end-to-end ceiling per platform.
         #
         # Comparisons are byte-precise, not megabyte-truncated — a 90.9 MB binary
         # would otherwise pass a `$MB -gt 90` check. See lesson-d1d43e9e.
+        env:
+          WARN_MB: ${{ matrix.warn_mb }}
+          HARD_MB: ${{ matrix.hard_mb }}
         run: |
           FILE="packages/cli/dist/lite/bin/${{ matrix.artifact }}"
           if [ ! -f "$FILE" ]; then
@@ -109,15 +128,15 @@ jobs:
             exit 1
           fi
           SIZE=$(stat -c%s "$FILE" 2>/dev/null || stat -f%z "$FILE" 2>/dev/null)
-          MB=$((SIZE / 1024 / 1024))
-          WARN_LIMIT=$((75 * 1024 * 1024))
-          HARD_LIMIT=$((90 * 1024 * 1024))
-          echo "Binary size: ${MB}MB (${SIZE} bytes)"
+          DISPLAY_MB=$((SIZE / 1024 / 1024))
+          WARN_LIMIT=$((WARN_MB * 1024 * 1024))
+          HARD_LIMIT=$((HARD_MB * 1024 * 1024))
+          echo "Binary size: ${DISPLAY_MB}MB (${SIZE} bytes) — platform ${{ matrix.target }} caps: warn=${WARN_MB}MB hard=${HARD_MB}MB"
           if [ "$SIZE" -gt "$HARD_LIMIT" ]; then
-            echo "::error::Binary exceeds 90MB hard limit (${MB}MB)"
+            echo "::error::Binary exceeds ${HARD_MB}MB hard limit (${DISPLAY_MB}MB)"
             exit 1
           elif [ "$SIZE" -gt "$WARN_LIMIT" ]; then
-            echo "::warning::Binary exceeds 75MB target (${MB}MB) but under 90MB cap"
+            echo "::warning::Binary exceeds ${WARN_MB}MB target (${DISPLAY_MB}MB) but under ${HARD_MB}MB cap"
           fi
 
       - name: Smoke test (non-cross-compiled only)
