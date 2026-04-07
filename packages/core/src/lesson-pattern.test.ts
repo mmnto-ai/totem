@@ -79,6 +79,27 @@ describe('extractManualPattern', () => {
     expect(result?.pattern).toBe('process.kill($PID, 0)');
   });
 
+  it('extracts all fields when the lesson uses the **Field**: form (#1282)', () => {
+    // Caught by Shield AI on PR #1282 as a partial-fix CRITICAL: extending
+    // extractMultilineField to support **Field**: without extending the shared
+    // extractField helper meant a lesson written entirely in alt-form would have
+    // extractManualPattern return null because Pattern wouldn't be found.
+    const body = [
+      '**Pattern**: console\\.log\\(',
+      '**Engine**: regex',
+      '**Scope**: src/**/*.ts',
+      '**Severity**: warning',
+      '**Message**: Use the structured logger instead of console output.',
+    ].join('\n');
+    const result = extractManualPattern(body);
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('console\\.log\\(');
+    expect(result?.engine).toBe('regex');
+    expect(result?.fileGlobs).toEqual(['src/**/*.ts']);
+    expect(result?.severity).toBe('warning');
+    expect(result?.message).toBe('Use the structured logger instead of console output.');
+  });
+
   it('extracts a single-line Message field (#1265)', () => {
     const body = [
       '**Pattern:** console\\.log\\(',
@@ -244,6 +265,38 @@ describe('extractMultilineField (#1265)', () => {
       'Leading spaces preserved on first line.\n\n   Trailing whitespace on the body.',
     );
   });
+
+  it('accepts the **Field**: form (asterisks before colon) for both start and terminator', () => {
+    // Caught by gemini-code-assist on PR #1282 as a high-priority finding. Both the
+    // start regex and the field-marker terminator must accept **Field**: in addition
+    // to **Field:** so authors can use either common markdown convention without
+    // having later fields incorrectly swallowed into the Message capture.
+    const body = [
+      '**Pattern**: foo',
+      '**Message**: This message uses the alt-form heading.',
+      'It spans multiple lines.',
+      '**Severity**: warning',
+      'This should NOT be captured.',
+    ].join('\n');
+    const result = extractMultilineField(body, 'Message');
+    expect(result).toContain('This message uses the alt-form heading.');
+    expect(result).toContain('It spans multiple lines.');
+    expect(result).not.toContain('warning');
+    expect(result).not.toContain('This should NOT be captured');
+  });
+
+  it('handles mixed **Field:** and **Field**: forms in the same body', () => {
+    const body = [
+      '**Pattern:** foo', // canonical
+      '**Message**: First line.', // alt form
+      'Second line.',
+      '**Severity:** warning', // canonical terminator
+    ].join('\n');
+    const result = extractMultilineField(body, 'Message');
+    expect(result).toContain('First line.');
+    expect(result).toContain('Second line.');
+    expect(result).not.toContain('warning');
+  });
 });
 
 describe('extractAllFields', () => {
@@ -264,6 +317,17 @@ describe('extractAllFields', () => {
   it('captures empty values for bare field declarations', () => {
     const body = '**Example Hit:**\n**Example Hit:** valid';
     expect(extractAllFields(body, 'Example Hit')).toEqual(['', 'valid']);
+  });
+
+  it('extracts the **Field**: form (asterisks before colon) (#1282)', () => {
+    // Mirrors the extractField + extractMultilineField fix for cross-helper consistency.
+    const body =
+      '**Example Hit**: hit-alt-1\n**Example Hit:** hit-canonical\n**Example Hit**: hit-alt-2';
+    expect(extractAllFields(body, 'Example Hit')).toEqual([
+      'hit-alt-1',
+      'hit-canonical',
+      'hit-alt-2',
+    ]);
   });
 });
 

@@ -20,10 +20,21 @@ export interface ManualPattern {
 }
 
 export function extractField(body: string, field: string): string | undefined {
-  // Match: **Field:** value, **Field**: value, Field: value
+  // Match all common bold/colon variants (#1282 — caught by Shield AI as a
+  // partial-fix consequence of extending extractMultilineField):
+  //   **Field:**  ← canonical totem (asterisks both sides of colon)
+  //   **Field**:  ← alternative markdown convention (asterisks before colon)
+  //   **Field:    ← bold-open only
+  //   Field:      ← plain
+  // Pre-fix, only the canonical form was supported despite the docstring
+  // claiming **Field**: was supported. extractMultilineField needed the alt
+  // form to terminate Message captures correctly, so we extend the shared
+  // helper to keep all field-extraction call sites consistent — otherwise
+  // a user writing **Pattern**: foo would have extractManualPattern fail
+  // entirely because Pattern wouldn't be found.
   // Colon is mandatory to avoid matching prose like "Pattern is important..."
   const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`^(?:\\*{2})?${safeField}:(?:\\*{2})?\\s+(.+)$`, 'im');
+  const re = new RegExp(`^(?:\\*{2})?${safeField}(?:\\*{2})?:(?:\\*{2})?\\s+(.+)$`, 'im');
   const match = body.match(re);
   return match?.[1]?.trim();
 }
@@ -45,11 +56,18 @@ export function extractField(body: string, field: string): string | undefined {
  */
 export function extractMultilineField(body: string, field: string): string | undefined {
   const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // Match the field's first line: **Field:** value OR Field: value
-  const startRe = new RegExp(`^(?:\\*{2})?${safeField}:(?:\\*{2})?\\s*(.*)$`, 'i');
-  // Field-marker terminator: only BOLD `**Word:**` lines stop the capture.
-  // Bare-colon prose (Note:, Fix:) stays as continuation.
-  const fieldMarkerRe = /^\*{2}[A-Za-z][\w\s]*:\*{2}/;
+  // Match the field's first line. Supports four common forms:
+  //   **Field:**  ← canonical totem (asterisks both sides of colon)
+  //   **Field**:  ← alternative markdown convention (asterisks before colon)
+  //   **Field:    ← bold-open only
+  //   Field:      ← plain
+  // Caught by gemini-code-assist on PR #1282: pre-fix, the regex only accepted
+  // the canonical form, so a user writing **Pattern**: would have it incorrectly
+  // swallowed into the Message capture instead of terminating it.
+  const startRe = new RegExp(`^(?:\\*{2})?${safeField}(?:\\*{2})?:(?:\\*{2})?\\s*(.*)$`, 'i');
+  // Field-marker terminator: BOLD `**Word:**` OR `**Word**:` lines stop the capture.
+  // Bare-colon prose (Note:, Fix:) still stays as continuation.
+  const fieldMarkerRe = /^\*{2}[A-Za-z][\w\s]*(?::\*{2}|\*{2}:)/;
 
   // Split on both LF and CRLF — Windows-authored lessons would otherwise leave a
   // trailing `\r` on each line, and the `(.*)$` capture (no /m flag) would fail
@@ -113,10 +131,13 @@ export function extractManualPattern(body: string): ManualPattern | null {
 /**
  * Extract ALL values for a repeated field from a lesson body.
  * Unlike extractField (first match only), this returns every match.
+ *
+ * Supports the same four forms as extractField (#1282): `**Field:**`,
+ * `**Field**:`, `**Field:`, and plain `Field:`.
  */
 export function extractAllFields(body: string, field: string): string[] {
   const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`^(?:\\*{2})?${safeField}:(?:\\*{2})?[ \\t]*(.*)$`, 'gim');
+  const re = new RegExp(`^(?:\\*{2})?${safeField}(?:\\*{2})?:(?:\\*{2})?[ \\t]*(.*)$`, 'gim');
   return Array.from(body.matchAll(re), (m) => m[1]!.trim());
 }
 
