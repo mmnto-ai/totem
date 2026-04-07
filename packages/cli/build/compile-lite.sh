@@ -33,13 +33,33 @@ compile_target() {
     --outfile "$outfile"
 
   if [ -f "$outfile" ] || [ -f "$outfile.exe" ]; then
-    # Size thresholds calibrated to Bun 1.2.x standalone runtime (~60 MB baseline).
-    # Our TS+WASM payload is ~7.7 MB; the rest is Bun's embedded runtime.
-    # A separate 15 MB granular gate in release-binary.yml catches bundle leaks
-    # directly (e.g. an LLM SDK accidentally un-externalized). These final-binary
-    # caps are the end-to-end ceiling. See strategy proposal 214.
-    local warn_limit=$((75 * 1024 * 1024))
-    local hard_limit=$((90 * 1024 * 1024))
+    # Per-platform thresholds: Bun 1.2.x standalone runtime varies materially
+    # by target (darwin-arm64 ~62 MB, linux-x64 ~104 MB due to statically-linked
+    # glibc + ICU). The granular 15 MB bundle gate in release-binary.yml catches
+    # our own bloat directly; these final-binary caps are the end-to-end
+    # ceiling per platform. Keep in sync with .github/workflows/release-binary.yml
+    # matrix.warn_mb / matrix.hard_mb. See strategy proposal 214 (Addendum).
+    local warn_mb
+    local hard_mb
+    case "$target" in
+      darwin-arm64)
+        warn_mb=75
+        hard_mb=90
+        ;;
+      linux-x64|windows-x64)
+        warn_mb=120
+        hard_mb=140
+        ;;
+      *)
+        # Fail closed — unknown targets must declare explicit caps before
+        # compiling. Silent fallback would hide miscalibrated new platforms.
+        echo "[Lite Compile] Unknown target for size caps: $target" >&2
+        echo "[Lite Compile] Add an explicit warn_mb/hard_mb branch before compiling this platform." >&2
+        exit 1
+        ;;
+    esac
+    local warn_limit=$((warn_mb * 1024 * 1024))
+    local hard_limit=$((hard_mb * 1024 * 1024))
     local size
     if [ -f "$outfile.exe" ]; then
       size=$(stat -c%s "$outfile.exe" 2>/dev/null || stat -f%z "$outfile.exe" 2>/dev/null)
@@ -47,13 +67,13 @@ compile_target() {
       size=$(stat -c%s "$outfile" 2>/dev/null || stat -f%z "$outfile" 2>/dev/null)
     fi
     local mb=$((size / 1024 / 1024))
-    echo "[Lite Compile] $target: ${mb}MB"
+    echo "[Lite Compile] $target: ${mb}MB (caps: warn=${warn_mb}MB hard=${hard_mb}MB)"
 
     if [ "$size" -gt "$hard_limit" ]; then
-      echo "[Lite Compile] WARNING: Binary exceeds 90MB hard limit!"
+      echo "[Lite Compile] WARNING: Binary exceeds ${hard_mb}MB hard limit for $target!"
       exit 1
     elif [ "$size" -gt "$warn_limit" ]; then
-      echo "[Lite Compile] WARNING: Binary exceeds 75MB target (but under 90MB cap)"
+      echo "[Lite Compile] WARNING: Binary exceeds ${warn_mb}MB target for $target (but under ${hard_mb}MB cap)"
     fi
   fi
 }
