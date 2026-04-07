@@ -51,8 +51,11 @@ compile_target() {
         hard_mb=140
         ;;
       *)
-        warn_mb=120
-        hard_mb=140
+        # Fail closed — unknown targets must declare explicit caps before
+        # compiling. Silent fallback would hide miscalibrated new platforms.
+        echo "[Lite Compile] Unknown target for size caps: $target" >&2
+        echo "[Lite Compile] Add an explicit warn_mb/hard_mb branch before compiling this platform." >&2
+        exit 1
         ;;
     esac
     local warn_limit=$((warn_mb * 1024 * 1024))
