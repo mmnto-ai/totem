@@ -1,5 +1,24 @@
 # @mmnto/totem
 
+## 1.13.0
+
+### Minor Changes
+
+- 0b08629: 1.13.0 — The Refinement Engine
+
+  Telemetry-driven rule refinement, compilation routing through Claude Sonnet 4.6, and structural pattern upgrades. The compile pipeline now generates high-fidelity rules at scale (393 precise rules, 203 ast-grep / 190 regex), and the doctor diagnostic closes the loop on noisy ones.
+  - **Sonnet routing (#1220):** Compile pipeline routes through `anthropic:claude-sonnet-4-6` instead of Gemini. Strategy #73 benchmark across 30 lessons in 4 difficulty tiers proved Sonnet wins on every metric — 90% correctness vs Gemini Pro's 73%, 2.4s vs 19.6s avg. The compiler system prompt was rewritten with explicit ast-grep preference, a syntax cheat sheet, and 6 compound pattern examples mined from benchmark failures.
+  - **Bulk Sonnet recompile (#1224):** All 1156 lessons recompiled through Claude Sonnet — 438 → 393 rules, 102 regex→ast-grep upgrades, 143 noisy hallucinated rules purged. Quality > quantity is now enforced by the compile gate, not by manual curation.
+  - **Backtick parser hardening (#1225):** Both Pipeline 1 (manual `**Pattern:**` extraction) and Pipeline 2 (LLM JSON output) strip code-fence wrappers from generated patterns so rules can never ship with backtick artifacts.
+  - **Context telemetry (#1132, #1227):** `RuleMetric` now tracks the per-context match distribution — `{ code, string, comment, regex, unknown }`. The match context comes from the rule runner's `astContext` field; historical hits are seeded into the `unknown` bucket so legacy metrics remain interpretable.
+  - **`totem doctor` upgrade diagnostic (#1131):** New `checkUpgradeCandidates` flags regex rules whose telemetry shows >20% of matches landing in non-code contexts (strings, comments, regex literals). Excludes the `unknown` bucket from the ratio math and requires a 5-event minimum-confidence floor. The legacy `ast` (Tree-sitter) engine is filtered out because its telemetry lands in `unknown` and can't be reasoned about.
+  - **`totem compile --upgrade <hash>`:** Re-compile a single targeted rule by hash (full or short prefix). Scoped cache eviction preserves the rule's original `createdAt` metadata; failure paths leave the old rule intact (fail-safe); the `compiled` and `skipped` outcomes are handled consistently. Returns an `UpgradeOutcome { hash, status }` discriminant so callers can distinguish actual replacements from noop / skipped / failed. Rejects `--cloud` (cloud worker still on Gemini, tracked as #1221) and `--force` (the scoped eviction makes both flags redundant and dangerous).
+  - **`totem doctor --pr` self-healing upgrade phase:** Slots after the existing downgrade and GC phases. Calls `compileCommand` in-process (no shelling out), only counts `'replaced'` outcomes as actual upgrades, stages `compile-manifest.json` alongside `compiled-rules.json`, and reverts the manifest when nothing changes so the working tree stays clean.
+  - **AST empty catch (#664):** 8 empty-catch rules upgraded from the legacy Tree-sitter `#eq?` engine to `ast-grep` structural matching. Correctly handles parameterless catch blocks (ES2019+) and multi-line empty bodies that the predicate-based approach missed.
+  - **Pipeline hygiene (#1210, #1211, #1214):** Wind tunnel skips auto-scaffolded TODO fixtures so empty placeholders don't dilute the gate signal. Extract pipeline runs heading-level exact-match deduplication before embedding similarity to short-circuit duplicate ingestion at zero cost. Config-drift test replaced its line-count limit on instructional files with a token-aware character + directive count limit.
+  - **Lesson protection rule (governance):** A near-miss almost deleted `.totem/lessons.md` (which sources 41+ functional ast-grep rules) under the assumption it was legacy cruft. Encoded as a Pipeline 1 lint rule with severity `error` that flags the destructive shell command at the point of intent across all script and documentation files. When an agent makes a mistake, the right answer is a deterministic constraint, not a sticky note.
+  - **Drift detector — shell prefix filter (core fix):** `extractFileReferences` in `@mmnto/totem` now skips backtick-wrapped strings starting with a recognizable shell command prefix (`rm`, `git rm`, `cp`, `mv`, `cat`, `less`, `head`, `tail`, `tee`, `chmod`, `chown`, `touch`). This is a pre-existing latent bug that surfaced when the lesson protection rule above put `git rm <path>` in its Example Hit / Miss lines — the detector was misparsing the shell command as a literal path and reporting it as orphaned. New unit test in `drift-detector.test.ts` locks in the behavior across all supported shell prefixes.
+
 ## 1.12.0
 
 ### Minor Changes
