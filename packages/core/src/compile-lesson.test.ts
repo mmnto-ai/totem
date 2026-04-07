@@ -476,6 +476,46 @@ describe('buildManualRule', () => {
     expect(result.rule).not.toBeNull();
     expect(result.rule!.engine).toBe('ast-grep');
   });
+
+  it('uses extracted **Message:** field over heading when present (#1265)', () => {
+    // Pre-#1265, buildManualRule hardcoded `message: lesson.heading`. Pipeline 1
+    // rules lost their rich body prose. Now the parser extracts the Message field
+    // and buildManualRule prefers it over the heading fallback.
+    const lessonWithMessage: LessonInput = {
+      index: 5,
+      heading: 'console-log',
+      body: [
+        '**Pattern:** console\\.log\\(',
+        '**Engine:** regex',
+        '**Severity:** warning',
+        '**Message:** Use the structured logger (logger.info) instead of console.log to keep production output filterable.',
+      ].join('\n'),
+      hash: 'msg-override-1',
+    };
+    const result = buildManualRule(lessonWithMessage, existingByHash);
+    expect(result.rule).not.toBeNull();
+    expect(result.rule!.message).toBe(
+      'Use the structured logger (logger.info) instead of console.log to keep production output filterable.',
+    );
+    expect(result.rule!.message).not.toBe('console-log');
+  });
+
+  it('falls back to heading when Message field is absent (backward compatible #1265)', () => {
+    // Existing Pipeline 1 lessons that pre-date #1265 don't have a Message field.
+    // buildManualRule must continue producing a rule with message === heading
+    // for those lessons so existing compiled-rules.json output is byte-stable.
+    const lessonWithoutMessage: LessonInput = {
+      index: 6,
+      heading: 'Direct env access',
+      body: ['**Pattern:** process\\.env\\[', '**Engine:** regex', '**Severity:** warning'].join(
+        '\n',
+      ),
+      hash: 'msg-fallback-1',
+    };
+    const result = buildManualRule(lessonWithoutMessage, existingByHash);
+    expect(result.rule).not.toBeNull();
+    expect(result.rule!.message).toBe('Direct env access');
+  });
 });
 
 // ─── compileLesson ──────────────────────────────────

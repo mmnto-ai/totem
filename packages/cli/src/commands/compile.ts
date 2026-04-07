@@ -97,8 +97,10 @@ function logCompiledRule(
     ); // totem-ignore
   } else if (engine === 'ast') {
     log.success(TAG, `[${lesson.heading}] Compiled (ast, ${severity}): ${rule.astQuery}`); // totem-ignore
-  } else if (rule.lessonHeading === rule.message) {
-    // Manual pattern — message equals heading
+  } else if (rule.manual === true || rule.lessonHeading === rule.message) {
+    // Manual pattern — `manual: true` flag (post-mmnto/totem#1265) or legacy heading=message heuristic.
+    // The legacy heuristic only worked when manual rules had no rich message; the explicit
+    // flag is the reliable post-mmnto/totem#1265 signal.
     const manualEngine = rule.engine;
     log.success(
       TAG,
@@ -392,7 +394,12 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
       : loadCompiledRulesFile(rulesPath);
     const existingRules = existingFile.rules;
     const existingByHash = new Map(existingRules.map((r) => [r.lessonHash, r]));
-    const nonCompilableSet = new Set(existingFile.nonCompilable ?? []);
+    // mmnto/totem#1280: nonCompilable is now Map<hash, title> internally for observability.
+    // The schema's transform normalizes legacy string entries to {hash, title} tuples
+    // on read, so existingFile.nonCompilable is always tuple-shaped here.
+    const nonCompilableMap = new Map<string, string>(
+      (existingFile.nonCompilable ?? []).map((entry) => [entry.hash, entry.title]),
+    );
 
     // Note: we do NOT delete the --upgrade target from existingByHash here.
     // buildCompiledRule in @mmnto/totem looks up the old entry to preserve
@@ -411,7 +418,7 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
       // unlock a pattern the compiler couldn't produce on the first pass.
       if (hash !== upgradeTargetHash) {
         if (existingByHash.has(hash)) continue; // already compiled
-        if (nonCompilableSet.has(hash)) continue; // cached as non-compilable
+        if (nonCompilableMap.has(hash)) continue; // cached as non-compilable
       }
       toCompile.push({ index: lesson.index, heading: lesson.heading, body: lesson.body, hash });
     }
@@ -419,7 +426,7 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
     if (toCompile.length === 0) {
       log.success(
         TAG,
-        `All ${lessonsInScope.length} lesson(s) in scope already processed (${existingRules.length} compiled, ${nonCompilableSet.size} non-compilable). Use --force to recompile.`,
+        `All ${lessonsInScope.length} lesson(s) in scope already processed (${existingRules.length} compiled, ${nonCompilableMap.size} non-compilable). Use --force to recompile.`,
       ); // totem-ignore
     } else {
       const { createSpinner } = await import('../ui.js');
@@ -571,7 +578,8 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
               continue;
             }
             if (!parsed.compilable) {
-              nonCompilableSet.add(lesson.hash);
+              // mmnto/totem#1280: capture title alongside hash for observability
+              nonCompilableMap.set(lesson.hash, lesson.heading);
               skippedLessons.push({ heading: lesson.heading, reason: parsed.reason });
               skipped++;
               continue;
@@ -703,14 +711,15 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
                 // successfully-compiled rule doesn't coexist with a
                 // non-compilable marker for the same hash.
                 if (lesson.hash === upgradeTargetHash) {
-                  nonCompilableSet.delete(upgradeTargetHash);
+                  nonCompilableMap.delete(upgradeTargetHash);
                 }
                 newRules.push(result.rule);
                 compiled++;
                 logCompiledRule(log, lesson, result.rule);
                 break;
               case 'skipped':
-                nonCompilableSet.add(result.hash);
+                // mmnto/totem#1280: capture title alongside hash for observability
+                nonCompilableMap.set(result.hash, lesson.heading);
                 skippedLessons.push({ heading: lesson.heading, reason: result.reason });
                 skipped++;
                 break;
@@ -725,8 +734,11 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
       } // end cloud/local else
 
       if (!options.raw) {
-        // Prune stale non-compilable hashes (lesson was edited or removed)
-        const freshNonCompilable = [...nonCompilableSet].filter((h) => currentHashes.has(h));
+        // mmnto/totem#1280: Prune stale non-compilable entries (lesson was edited or removed)
+        // and write the result as {hash, title} tuples for observability.
+        const freshNonCompilable = [...nonCompilableMap.entries()]
+          .filter(([h]) => currentHashes.has(h))
+          .map(([hash, title]) => ({ hash, title }));
         saveCompiledRulesFile(rulesPath, {
           version: 1,
           rules: newRules,

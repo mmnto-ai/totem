@@ -345,9 +345,17 @@ export function buildManualRule(
     rule: {
       lessonHash: lesson.hash,
       lessonHeading: lesson.heading,
-      message: lesson.heading,
+      // #1265: prefer the extracted **Message:** field over the heading fallback.
+      // The heading is the *what*; the message is the *why and how*.
+      message: manual.message ?? lesson.heading,
       engine: manual.engine,
       severity: manual.severity,
+      // #1265: explicit Pipeline 1 marker. Pre-#1265, downstream code (doctor,
+      // compile.ts:logCompiledRule) used `lessonHeading === message` to identify
+      // manual rules. That heuristic breaks when manual rules have rich messages,
+      // so we set this flag explicitly here. Old compiled-rules.json files don't
+      // have it; the legacy heuristic stays as a fallback for those.
+      manual: true,
       ...engineFields(manual.engine, manual.pattern),
       compiledAt: now,
       createdAt: existing?.createdAt ?? now,

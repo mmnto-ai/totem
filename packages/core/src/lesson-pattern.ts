@@ -7,6 +7,7 @@
  *   **Engine:** regex | ast | ast-grep
  *   **Scope:** glob, glob, !negated-glob
  *   **Severity:** error | warning
+ *   **Message:** <single-line OR multi-line remediation message>  (#1265)
  */
 
 export interface ManualPattern {
@@ -14,15 +15,98 @@ export interface ManualPattern {
   engine: 'regex' | 'ast' | 'ast-grep';
   fileGlobs?: string[];
   severity: 'error' | 'warning';
+  /** Optional rich message for the compiled rule. Falls back to lesson heading if absent. */
+  message?: string;
 }
 
 export function extractField(body: string, field: string): string | undefined {
-  // Match: **Field:** value, **Field**: value, Field: value
+  // Match all common bold/colon variants (#1282 — caught by Shield AI as a
+  // partial-fix consequence of extending extractMultilineField):
+  //   **Field:**  ← canonical totem (asterisks both sides of colon)
+  //   **Field**:  ← alternative markdown convention (asterisks before colon)
+  //   **Field:    ← bold-open only
+  //   Field:      ← plain
+  // Pre-fix, only the canonical form was supported despite the docstring
+  // claiming **Field**: was supported. extractMultilineField needed the alt
+  // form to terminate Message captures correctly, so we extend the shared
+  // helper to keep all field-extraction call sites consistent — otherwise
+  // a user writing **Pattern**: foo would have extractManualPattern fail
+  // entirely because Pattern wouldn't be found.
   // Colon is mandatory to avoid matching prose like "Pattern is important..."
+  // Whitespace after the closing bold is OPTIONAL ([ \t]*, not \s+) and the value
+  // capture is OPTIONAL ((.*), not (.+)) for sibling-helper consistency: pre-fix,
+  // extractField was stricter than extractAllFields and extractMultilineField,
+  // silently rejecting `**Pattern:**foo` (no space) and `**Pattern:**` (empty value).
+  // Caught by gemini-code-assist on PR #1282 as another instance of the
+  // cross-helper-consistency cascade pattern documented in lesson-400fed87.
   const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`^(?:\\*{2})?${safeField}:(?:\\*{2})?\\s+(.+)$`, 'im');
+  const re = new RegExp(`^(?:\\*{2})?${safeField}(?:\\*{2})?:(?:\\*{2})?[ \\t]*(.*)$`, 'im');
   const match = body.match(re);
-  return match?.[1]?.trim();
+  // Trim and treat empty as "no value" so callers' `if (!value)` checks fire correctly.
+  const value = match?.[1]?.trim();
+  return value || undefined;
+}
+
+/**
+ * Extract a multi-line field value from a lesson body (#1265).
+ *
+ * Unlike `extractField` which captures only the first line, this captures from
+ * the field marker line through subsequent continuation lines, stopping at
+ * either the next BOLD `**Field:**` marker or EOF. Used for the `**Message:**`
+ * field where remediation guidance often spans multiple paragraphs.
+ *
+ * Bare-colon prose (e.g. "Note: see above", "Fix: do X") is treated as
+ * continuation, NOT a new field. Only `**bold**:` markers terminate the capture
+ * — this matches markdown convention where structured fields are bolded and
+ * unstructured prose is not.
+ *
+ * Returns the trimmed value, or `undefined` if the field is absent.
+ */
+export function extractMultilineField(body: string, field: string): string | undefined {
+  const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Match the field's first line. Supports four common forms:
+  //   **Field:**  ← canonical totem (asterisks both sides of colon)
+  //   **Field**:  ← alternative markdown convention (asterisks before colon)
+  //   **Field:    ← bold-open only
+  //   Field:      ← plain
+  // Caught by gemini-code-assist on PR #1282: pre-fix, the regex only accepted
+  // the canonical form, so a user writing **Pattern**: would have it incorrectly
+  // swallowed into the Message capture instead of terminating it.
+  const startRe = new RegExp(`^(?:\\*{2})?${safeField}(?:\\*{2})?:(?:\\*{2})?\\s*(.*)$`, 'i');
+  // Field-marker terminator: any BOLD `**Word:**`, `**Word**:`, or bold-open `**Word:`
+  // line stops the capture. Bare-colon prose (`Note:`, `Fix:` without `**` prefix) still
+  // stays as continuation. Hyphens are allowed in field names (e.g. `**Compile-Time:**`).
+  // CR caught the missing `**Word:` form on PR #1282 — without it, a lesson written with
+  // bold-open-only fields could have Message capture run past the next intended field
+  // because the terminator wouldn't match.
+  const fieldMarkerRe = /^\*{2}[A-Za-z][\w\s-]*(?::\*{2}|\*{2}:|:)/;
+
+  // Split on both LF and CRLF — Windows-authored lessons would otherwise leave a
+  // trailing `\r` on each line, and the `(.*)$` capture (no /m flag) would fail
+  // because `$` requires end-of-string and `.` doesn't match `\r`. Caught by Shield AI.
+  const lines = body.split(/\r?\n/);
+  let startIdx = -1;
+  let firstLineValue = '';
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i]!.match(startRe);
+    if (m) {
+      startIdx = i;
+      firstLineValue = m[1] ?? '';
+      break;
+    }
+  }
+  if (startIdx === -1) return undefined;
+
+  const valueLines: string[] = [firstLineValue];
+  for (let j = startIdx + 1; j < lines.length; j++) {
+    if (fieldMarkerRe.test(lines[j]!)) break;
+    valueLines.push(lines[j]!);
+  }
+  // Treat an empty trimmed result as absent so the caller's `?? heading` fallback fires.
+  // Without this, `**Message:**` with no body would set `message: ""` on the compiled
+  // rule instead of falling back to lesson.heading.
+  const trimmed = valueLines.join('\n').trim();
+  return trimmed || undefined;
 }
 
 /**
@@ -49,16 +133,23 @@ export function extractManualPattern(body: string): ManualPattern | null {
   const severityRaw = extractField(body, 'Severity')?.toLowerCase();
   const severity: ManualPattern['severity'] = severityRaw === 'error' ? 'error' : 'warning';
 
-  return { pattern, engine, fileGlobs, severity };
+  // #1265: rich message field with multi-line support. Backward compatible — undefined
+  // when absent, and `buildManualRule` falls back to `lesson.heading` in that case.
+  const message = extractMultilineField(body, 'Message');
+
+  return { pattern, engine, fileGlobs, severity, message };
 }
 
 /**
  * Extract ALL values for a repeated field from a lesson body.
  * Unlike extractField (first match only), this returns every match.
+ *
+ * Supports the same four forms as extractField (#1282): `**Field:**`,
+ * `**Field**:`, `**Field:`, and plain `Field:`.
  */
 export function extractAllFields(body: string, field: string): string[] {
   const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`^(?:\\*{2})?${safeField}:(?:\\*{2})?[ \\t]*(.*)$`, 'gim');
+  const re = new RegExp(`^(?:\\*{2})?${safeField}(?:\\*{2})?:(?:\\*{2})?[ \\t]*(.*)$`, 'gim');
   return Array.from(body.matchAll(re), (m) => m[1]!.trim());
 }
 
