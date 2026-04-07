@@ -4957,19 +4957,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "35bc466e8ea46001",
-      "lessonHeading": "Use byte-level binary size checks",
-      "pattern": "-gt\\s+\\d+\\s*#?\\s*MB|\\$\\(\\s*du\\s+-[smSM]",
-      "message": "Use byte-level binary size checks (e.g., `du -b` or `wc -c`) rather than megabyte integers to avoid truncation errors near the size limit",
-      "engine": "regex",
-      "compiledAt": "2026-04-06T03:28:42.380Z",
-      "createdAt": "2026-04-06T03:28:42.380Z",
-      "fileGlobs": [
-        "packages/cli/build/compile-lite.sh"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "7d08707fe8607f79",
       "lessonHeading": "Node's spawn() emits resolution errors via the 'error'",
       "pattern": "",
@@ -6310,14 +6297,13 @@
       "severity": "error"
     },
     {
-      "lessonHash": "e68aaf7153bf650e",
+      "lessonHash": "9823710ec0b487d8",
       "lessonHeading": "Proactively remove references to planned features from user",
+      "pattern": "\\b(coming soon|planned (feature|for)|future release|roadmap|under development|slated for|later development phases)\\b",
       "message": "Proactively remove references to planned features from user",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\b(coming soon|planned (feature|for)|future release|roadmap|under development|slated for|later development phases)\\b",
-      "compiledAt": "2026-04-06T23:58:43.020Z",
-      "createdAt": "2026-04-06T23:58:43.020Z",
+      "compiledAt": "2026-04-07T03:48:16.284Z",
+      "createdAt": "2026-04-07T03:48:16.284Z",
       "fileGlobs": [
         "**/*.md",
         "**/*.mdx",
@@ -6326,6 +6312,22 @@
         "!docs/roadmap.md",
         "!docs/wiki/roadmap.md",
         "!docs/active_work.md"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "a6902a95ca7ee1d6",
+      "lessonHeading": "Use byte-level binary size checks",
+      "message": "Use byte-level binary size checks",
+      "engine": "regex",
+      "severity": "error",
+      "pattern": "\\[\\[?\\s*\"?\\$[A-Z_]*MB[A-Z_]*\"?\\s+-(?:gt|ge|lt|le|eq|ne)\\s+\\d+",
+      "compiledAt": "2026-04-07T03:50:41.126Z",
+      "createdAt": "2026-04-07T03:50:41.126Z",
+      "fileGlobs": [
+        "packages/cli/build/*.sh",
+        ".github/workflows/*.yml",
+        ".github/workflows/*.yaml"
       ]
     }
   ],

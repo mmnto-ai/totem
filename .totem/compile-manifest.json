@@ -1,7 +1,7 @@
 {
-  "compiled_at": "2026-04-07T00:20:09.547Z",
-  "model": "anthropic:claude-sonnet-4-6",
-  "input_hash": "7e3d483562b205717b78d3fde6a4e45331556af16ad8ed5bce8958caa535e728",
-  "output_hash": "cdafe1825a345205a3c2197f24d1ffa6d68a205cefcb43a7fe318e7bfa91e52d",
+  "compiled_at": "2026-04-07T03:50:41.157Z",
+  "model": "gemini-3-flash-preview",
+  "input_hash": "edf6015bca3221ebcb6c7ef09274241a9a79f469ccf4c117f8a85868681b5534",
+  "output_hash": "27d23d51cf5993fd5ba0bff5c54c1c357f7858edb2f8d15324734b65cf9fe30d",
   "rule_count": 393
 }
