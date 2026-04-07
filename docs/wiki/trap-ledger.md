@@ -16,7 +16,7 @@ The Ledger actively monitors your usage of Totem override directives:
 - `// totem-context:` (Semantic suppression)
 - `// shield-context:` (Deprecated alias — emits warning as of 1.6.0)
 
-Whenever `totem lint` or `totem review` encounters one of these directives, it logs an `exception` event to the ledger.
+Whenever `totem lint` or `totem review` encounters one of these directives, it logs an `override` event to the ledger.
 
 ### Event Schema
 
@@ -45,8 +45,9 @@ By running `totem doctor --pr`, you initiate the self-healing sequence. The comm
 ### The Algorithm
 
 1.  **Thresholds:** The Doctor looks for rules that have been evaluated a minimum number of times (e.g., 5 events) and have a **Bypass Rate > 30%**.
-2.  **Downgrade:** If a rule is bypassed that frequently, it is deemed mathematically noisy. The Doctor modifies `compiled-rules.json`, downgrading the rule's severity from `error` to `warning`.
-3.  **Human Review:** Crucially, following **ADR-027 (Rule Lifecycle)**, Totem never auto-deletes rules or forcefully alters the architecture without human review. The Doctor creates a new git branch, commits the downgrade, and opens a Pull Request detailing the exact numeric rationale (e.g., _"Rule X has a 42% bypass rate"_).
+2.  **Downgrade:** If a rule is bypassed that frequently, it is deemed mathematically noisy. The Doctor modifies `compiled-rules.json`, downgrading the rule's severity from `error` to `warning`, or archiving stale rules.
+3.  **Upgrade:** The Doctor upgrades regex rules to ast-grep when context telemetry shows >20% of matches landing in non-code contexts. The `compileCommand({ upgrade })` is invoked in-process from `runSelfHealing`.
+4.  **Human Review:** Crucially, following **ADR-027 (Rule Lifecycle)**, Totem won't auto-delete rules or forcefully alter the architecture without human review. The Doctor creates a new git branch, commits the downgrade/upgrade, and opens a Pull Request detailing the exact numeric rationale (e.g., _"Rule X has a 42% bypass rate"_).
 
 ### The Full Cycle
 

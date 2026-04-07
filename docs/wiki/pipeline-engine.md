@@ -24,12 +24,20 @@ When establishing rules, prefer pipelines in the following order: **P1 > P3 > P2
    - _Use when:_ You have a strict, highly specific pattern (e.g., `process.exit()`).
 2. **P3 (Example-Based):** The next best option. If you don't know how to write an AST selector but you have clear examples of the "Wrong Way" and the "Right Way," P3 uses an LLM once to generate the deterministic rule for you.
    - _Use when:_ You can easily provide `bad.ts` and `good.ts` snippets in your Markdown lesson.
-3. **P2 (LLM-Generated):** Fallback. Generates rules from prose explanations in extracted lessons. Highly capable but requires well-written lessons.
+3. **P2 (LLM/Sonnet):** Fallback. Generates rules from prose explanations in extracted lessons. Powered by Claude Sonnet 4.6. Highly capable but requires well-written lessons.
    - _Use when:_ Rules are derived from PR review feedback where strict examples weren't provided.
 4. **P4 (Import):** The bootstrapping pipeline. Use this on Day 1 to suck in your existing `eslint-plugin-no-restricted-syntax` configurations into the fast Totem engine.
 5. **P5 (Observation Capture):** The auto-pilot. P5 listens to `totem review` outputs. When a bot flags a specific line, P5 deterministically extracts that line into a `severity: warning` rule so the team is alerted next time it happens.
 
 ## Usage Examples
+
+### Pipeline 2: Telemetry-Driven Upgrades
+
+You can upgrade noisy regex rules using context telemetry. Run `totem compile --upgrade <hash>` to target a specific rule.
+
+- **Semantics:** Evicts only that rule from the cache (preserves `createdAt` metadata), recompiles through Sonnet with a telemetry-driven directive, and replaces the rule.
+- **Fail-safe:** Rejects `--cloud` (still routed to Gemini until #1221 ships) and `--force` (scoped eviction makes `--force` redundant and dangerous).
+- **Outcome:** Returns an `UpgradeOutcome { hash, status }` shape to callers (`runSelfHealing` only counts 'replaced' outcomes as actual upgrades).
 
 ### Pipeline 1: Manual Scaffolding
 

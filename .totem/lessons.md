@@ -1,5 +1,18 @@
 # Totem Lessons
 
+> **LOAD-BEARING — DO NOT DELETE THIS FILE.**
+>
+> This file is the source for 41+ compiled ast-grep rules. Each
+> `## Lesson — <timestamp>` section below is a separate lesson ingested
+> via the MCP `add_lesson` flow. The timestamp-shaped headings are a
+> cosmetic artifact from batch ingestion — the content is real and the
+> rules sourced from it are in production.
+>
+> Deleting this file prunes those rules from the compiled rule set on
+> the next compile. A Pipeline 1 manual lint rule (severity: error)
+> flags the destructive shell command at the point of intent — see the
+> lesson titled "Do not delete .totem/lessons.md".
+
 Lessons learned from PR reviews and Shield checks.
 This file is version-controlled and reviewed in PR diffs.
 
