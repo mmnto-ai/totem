@@ -2,7 +2,9 @@
 
 _AI coding agents are brilliant goldfish. Totem is their persistent, cross-repo memory._
 
-**Your AI agents keep making the same mistakes.** They can make the wrong way look brilliant—until you realize they just reinvented a wheel that already exists in your `core` module. Every PR becomes a back-and-forth with review bots about the same architectural nits. That's the **"Bot-Tax."**
+**Your AI agents keep making the same mistakes.** They can make the wrong way look brilliant — until you realize what happened. They'll never ask: _"doesn't a shared helper already exist for this?"_
+
+Every PR becomes a back-and-forth with review bots about the same architectural nits — missing lazy imports, improper error tagging, reinventing the wheel. Same nit, every PR.
 
 Totem is a zero-config CLI and native MCP server that gives your AI agents a persistent, vendor-agnostic semantic memory. It is not an orchestration framework like LangChain — it is a drop-in compiler that adds a deterministic validation layer to the tools you already use (Claude, Gemini, Cursor, Copilot).
 
@@ -35,7 +37,7 @@ The "wrong" way becomes the "loud" way. No LLM in the loop at runtime — just s
 
 ## A Platform of Primitives, Not Opinionated Workflows
 
-Totem doesn't force a rigid 7-step AI methodology on you. It's building blocks — `totem lint`, `totem compile`, `totem extract`, `totem doctor` — that you wire into whatever CI you already have.
+Totem doesn't force a workflow on you. It's building blocks — `totem lint`, `totem compile`, `totem extract`, `totem doctor` — that you wire into whatever CI you already have.
 
 We provide the **Sensors** (the knowledge index, the deterministic compiler shown above, the context telemetry that flags noisy rules over time). You are the **Flight Controller**. You decide where to put the **Actuators** (Git hooks, IDE plugins, PR bot triggers, CI gates). Totem doesn't assume your workflow; it integrates with it.
 
