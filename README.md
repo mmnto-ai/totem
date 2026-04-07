@@ -10,7 +10,7 @@ Totem is a zero-config CLI and native MCP server that gives your AI agents a per
 
 ## How a Mistake Becomes Impossible
 
-Documentation is a suggestion. Totem turns a plain-English markdown lesson into a physical constraint the compiler enforces on every push:
+Documentation is a suggestion. Totem turns a plain-English markdown lesson into a physical constraint the linter enforces on every push:
 
 **Input:** (`.totem/lessons/no-child-process.md`)
 
@@ -39,7 +39,7 @@ The "wrong" way becomes the "loud" way. No LLM in the loop at runtime — just s
 
 Totem doesn't force a workflow on you. It's building blocks — `totem lint`, `totem compile`, `totem extract`, `totem doctor` — that you wire into whatever CI you already have.
 
-We provide the **Sensors** (the knowledge index, the deterministic compiler shown above, the context telemetry that flags noisy rules over time). You are the **Flight Controller**. You decide where to put the **Actuators** (Git hooks, IDE plugins, PR bot triggers, CI gates). Totem doesn't assume your workflow; it integrates with it.
+We provide the **Sensors**: the knowledge index, the compiler that turns lessons into rules, the deterministic linter shown above, and the context telemetry that flags noisy rules over time. You are the **Flight Controller**. You decide where to put the **Actuators** (Git hooks, IDE plugins, PR bot triggers, CI gates). Totem doesn't assume your workflow; it integrates with it.
 
 The same Tree-sitter + LanceDB index that powers the compiler also powers the **Semantic Memory Layer (MCP)**: plug Totem into Claude Desktop, Windsurf, or your IDE via the built-in MCP server and your agents get read/write access to your project's architectural decisions (ADRs) and design tenets _before_ they write a single line of code.
 
