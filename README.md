@@ -69,11 +69,11 @@ Every CLI command supports `--json` for piping into your own automation.
 
 ## Quality > Quantity
 
-In 1.13.0 we recompiled all 1156 lessons through Claude Sonnet 4.6 (`anthropic:claude-sonnet-4-6`), shipping 393 precise rules (203 ast-grep, 190 regex) and purging 143 noisy hallucinated rules. Quality > quantity is enforced by the compile gate, not by manual curation. Strategy #73 benchmark proved Sonnet wins on every metric (90% correctness vs 73%, 2.4s vs 19.6s).
+More rules is not better. A linter with a thousand noisy rules is worse than one with three hundred precise ones — every false positive erodes trust, and once developers start ignoring the linter, it stops working.
 
-The `totem doctor` command now flags regex rules whose telemetry shows >20% of matches landing in non-code contexts (strings, comments, regex literals) and recommends ast-grep upgrades.
+Totem enforces quality at compile time. Every lesson is compiled through a benchmark-gated model and only lands as a rule if it passes structural validation. The `totem doctor` command continuously monitors rule precision via context telemetry — if a rule's matches start landing mostly in strings or comments, doctor flags it as an upgrade candidate, and `totem compile --upgrade <hash>` re-runs the compiler on just that one rule with a precision-targeted prompt.
 
-You can run `totem compile --upgrade <hash>` to target one rule by hash, evict only that rule from the cache, recompile through Sonnet with a telemetry-driven directive, and replace the rule. This command rejects `--cloud` (cloud worker still on Gemini, tracked as #1221) and `--force` (the scoped eviction makes `--force` redundant and dangerous).
+No manual curation. No rule-count arms race.
 
 ## Quickstart
 
