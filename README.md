@@ -97,11 +97,11 @@ If you are working in a non-JavaScript ecosystem (Rust, Go, Python) and don't wa
 
 ```bash
 # Linux (x64)
-curl -L https://github.com/mmnto-ai/totem/releases/latest/download/totem-linux-x64 -o totem
+curl -L https://github.com/mmnto-ai/totem/releases/latest/download/totem-lite-linux-x64 -o totem
 chmod +x totem && sudo mv totem /usr/local/bin/
 
 # macOS (Apple Silicon)
-curl -L https://github.com/mmnto-ai/totem/releases/latest/download/totem-darwin-arm64 -o totem
+curl -L https://github.com/mmnto-ai/totem/releases/latest/download/totem-lite-darwin-arm64 -o totem
 chmod +x totem && sudo mv totem /usr/local/bin/
 ```
 
