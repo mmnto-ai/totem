@@ -71,7 +71,7 @@ Every CLI command supports `--json` for piping into your own automation.
 
 More rules is not better. A linter with a thousand noisy rules is worse than one with three hundred precise ones — every false positive erodes trust, and once developers start ignoring the linter, it stops working.
 
-Totem enforces quality at compile time. Every lesson is compiled through a benchmark-gated model and only lands as a rule if it passes structural validation. The `totem doctor` command continuously monitors rule precision via context telemetry — if a rule's matches start landing mostly in strings or comments, doctor flags it as an upgrade candidate, and `totem compile --upgrade <hash>` re-runs the compiler on just that one rule with a precision-targeted prompt.
+Totem enforces quality at compile time. Every lesson is compiled through a benchmark-gated model and only lands as a rule if it passes structural validation. The `totem doctor` command evaluates rule precision via context telemetry — when too many of a rule's matches land in non-code contexts (strings, comments, regex literals), doctor flags it as an upgrade candidate, and `totem compile --upgrade <hash>` re-runs the compiler on just that one rule with a precision-targeted prompt.
 
 No manual curation. No rule-count arms race.
 
