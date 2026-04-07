@@ -4,45 +4,11 @@ _AI coding agents are brilliant goldfish. Totem is their persistent, cross-repo 
 
 **Your AI agents keep making the same mistakes.** They can make the wrong way look brilliant—until you realize they just reinvented a wheel that already exists in your `core` module. Every PR becomes a back-and-forth with review bots about the same architectural nits. That's the **"Bot-Tax."**
 
-Totem is a zero-config CLI and Native MCP Server that gives your AI agents a persistent, vendor-agnostic semantic memory. It is not an orchestration framework like LangChain. It is a drop-in compiler that adds a deterministic validation layer to the tools you already use (Claude, Gemini, Cursor, Copilot).
-
-## The Codebase Immune System & Context Mesh
-
-Totem operates on two fronts to eliminate the Bot-Tax:
-
-### 1. The Semantic Memory Layer (MCP)
-Built on the same architecture as elite AI assistants (Tree-sitter + LanceDB), Totem actively feeds context into your agents *before* they write a single line of code. Plug Totem directly into Claude Desktop, Windsurf, or your IDE via the Native MCP Server to give your agents read/write access to your project's architectural decisions (ADRs) and design tenets. It acts as the **Shared Memory Bus** for multi-agent workflows.
-
-### 2. The Deterministic Governance Compiler
-Documentation is a suggestion; agents need physical constraints. We don't compile your code. We compile your `.cursorrules` (Markdown lessons) into mathematical AST queries (`ast-grep`) that block bad code in CI. Write the rule in plain English, Totem compiles it, and that mistake can never happen again. No LLM in the loop at runtime—just sub-second, offline enforcement.
-
-## The Self-Healing Loop
-
-Totem doesn't force a rigid 7-step workflow on you. It's a platform of primitives—`totem lint`, `totem compile`, `totem extract`—that you wire into whatever CI you already have. Mistakes get observed, compiled into rules, and enforced automatically.
-
-```mermaid
-graph TD
-    Observe["Observe"] -->|"PR reviews, bot nits"| Learn["Learn"]
-    Learn -->|"totem compile"| Enforce["Enforce"]
-    Enforce -->|"totem lint"| Observe
-    Enforce -.->|"bypass"| Ledger[("Trap Ledger")]
-    Ledger -.->|"self-heal"| Learn
-
-    style Observe fill:#4b3a75,stroke:#9b72cf,color:#fff
-    style Learn fill:#5e3a24,stroke:#e67c3b,color:#fff
-    style Enforce fill:#1a4d2e,stroke:#34a853,color:#fff
-    style Ledger fill:#2d2d2d,stroke:#888,color:#fff
-```
-
-1. **Observe:** `totem review` or your existing CI bots catch a mistake.
-2. **Learn:** `totem extract` captures the lesson. `totem compile` turns it into an ast-grep or regex rule.
-3. **Enforce:** `totem lint` blocks the push. Sub-second, zero-LLM, offline.
-
-Every CLI command supports `--json` for piping into your own automation.
+Totem is a zero-config CLI and native MCP server that gives your AI agents a persistent, vendor-agnostic semantic memory. It is not an orchestration framework like LangChain — it is a drop-in compiler that adds a deterministic validation layer to the tools you already use (Claude, Gemini, Cursor, Copilot).
 
 ## How a Mistake Becomes Impossible
 
-Totem translates a plain-English markdown lesson into a deterministic physical constraint:
+Documentation is a suggestion. Totem turns a plain-English markdown lesson into a physical constraint the compiler enforces on every push:
 
 **Input:** (`.totem/lessons/no-child-process.md`)
 
@@ -65,7 +31,39 @@ $ git push
 [Lint] Verdict: FAIL — Fix violations before pushing.
 ```
 
-The "wrong" way becomes the "loud" way.
+The "wrong" way becomes the "loud" way. No LLM in the loop at runtime — just sub-second, offline enforcement.
+
+## A Platform of Primitives, Not Opinionated Workflows
+
+Totem doesn't force a rigid 7-step AI methodology on you. It's building blocks — `totem lint`, `totem compile`, `totem extract`, `totem doctor` — that you wire into whatever CI you already have.
+
+We provide the **Sensors** (the knowledge index, the deterministic compiler shown above, the context telemetry that flags noisy rules over time). You are the **Flight Controller**. You decide where to put the **Actuators** (Git hooks, IDE plugins, PR bot triggers, CI gates). Totem doesn't assume your workflow; it integrates with it.
+
+The same Tree-sitter + LanceDB index that powers the compiler also powers the **Semantic Memory Layer (MCP)**: plug Totem into Claude Desktop, Windsurf, or your IDE via the built-in MCP server and your agents get read/write access to your project's architectural decisions (ADRs) and design tenets _before_ they write a single line of code.
+
+## The Self-Healing Loop
+
+Mistakes get observed, compiled into rules, and enforced automatically.
+
+```mermaid
+graph TD
+    Observe["Observe"] -->|"PR reviews, bot nits"| Learn["Learn"]
+    Learn -->|"totem compile"| Enforce["Enforce"]
+    Enforce -->|"totem lint"| Observe
+    Enforce -.->|"bypass"| Ledger[("Trap Ledger")]
+    Ledger -.->|"self-heal"| Learn
+
+    style Observe fill:#4b3a75,stroke:#9b72cf,color:#fff
+    style Learn fill:#5e3a24,stroke:#e67c3b,color:#fff
+    style Enforce fill:#1a4d2e,stroke:#34a853,color:#fff
+    style Ledger fill:#2d2d2d,stroke:#888,color:#fff
+```
+
+1. **Observe:** `totem review` or your existing CI bots catch a mistake.
+2. **Learn:** `totem extract` captures the lesson. `totem compile` turns it into an ast-grep or regex rule.
+3. **Enforce:** `totem lint` blocks the push. Sub-second, zero-LLM, offline.
+
+Every CLI command supports `--json` for piping into your own automation.
 
 ## Quality > Quantity
 
