@@ -4818,22 +4818,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "116ab168dae04201",
-      "lessonHeading": "Proactively remove references to planned features from user",
-      "pattern": "\\b(coming soon|planned (feature|for)|future release|roadmap|under development|slated for|later development phases)\\b",
-      "message": "Proactively remove references to planned features from user",
-      "engine": "regex",
-      "compiledAt": "2026-04-06T03:28:20.096Z",
-      "createdAt": "2026-04-06T03:28:20.096Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.mdx",
-        "docs/**/*",
-        "guides/**/*"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "1d7dbe69b248fa50",
       "lessonHeading": "When manually parsing CLI arguments, verify that a flag's",
       "pattern": "",
@@ -6362,10 +6346,9 @@
     {
       "lessonHash": "61dcb058bd1df15d",
       "lessonHeading": "Do not delete .totem/lessons.md (load-bearing for 41+ rules)",
+      "pattern": "\\b(?:git\\s+rm|rm)\\s+[^\\n]{0,40}\\.totem/lessons\\.md\\b",
       "message": "Do not delete .totem/lessons.md (load-bearing for 41+ rules)",
       "engine": "regex",
-      "severity": "error",
-      "pattern": "\\b(?:git\\s+rm|rm)\\s+[^\\n]{0,40}\\.totem/lessons\\.md\\b",
       "compiledAt": "2026-04-06T18:40:01.768Z",
       "createdAt": "2026-04-06T18:40:01.768Z",
       "fileGlobs": [
@@ -6383,6 +6366,26 @@
         "!.totem/lessons/**",
         "!.totem/lessons.md",
         "!.totem/tests/**"
+      ],
+      "severity": "error"
+    },
+    {
+      "lessonHash": "e68aaf7153bf650e",
+      "lessonHeading": "Proactively remove references to planned features from user",
+      "message": "Proactively remove references to planned features from user",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\b(coming soon|planned (feature|for)|future release|roadmap|under development|slated for|later development phases)\\b",
+      "compiledAt": "2026-04-06T23:58:43.020Z",
+      "createdAt": "2026-04-06T23:58:43.020Z",
+      "fileGlobs": [
+        "**/*.md",
+        "**/*.mdx",
+        "docs/**/*",
+        "guides/**/*",
+        "!docs/roadmap.md",
+        "!docs/wiki/roadmap.md",
+        "!docs/active_work.md"
       ]
     }
   ],

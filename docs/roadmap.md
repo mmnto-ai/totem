@@ -14,7 +14,7 @@ Totem is a standard library for codebase governance — deterministic primitives
   - [x] **Sonnet Routing:** Compile pipeline routes through Claude Sonnet 4.6 (90% correctness vs Gemini Pro's 73%, 2.4s vs 19.6s avg). Validated by Strategy #73 benchmark across 30 lessons in 4 difficulty tiers.
   - [x] **Bulk Recompile:** All 1156 lessons recompiled through Sonnet — 438 → 397 rules, 102 regex→ast-grep upgrades, 143 noisy Gemini-hallucinated rules purged. Quality > quantity.
   - [x] **Prompt Rewrite:** Compiler system prompt rewritten with explicit ast-grep preference, syntax cheat sheet, and 6 compound pattern examples mined from benchmark failures.
-  - [x] **Parser Hardening:** Backtick wrapper stripping in both Pipeline 1 (manual `**Pattern:**` extraction) and Pipeline 2 (LLM JSON output) so generated patterns can never ship with code-fence artifacts.
+  - [x] **Parser Hardening:** Backtick wrapper stripping in both Pipeline 1 (manual `**Pattern:**` extraction) and Pipeline 2 (LLM JSON output) so generated patterns no longer ship with code-fence artifacts.
 
 - **Telemetry-Driven Refinement:**
   - [x] **Context Telemetry:** `RuleMetric` now tracks the per-context match distribution (code, string, comment, regex, unknown). Match-context comes from the rule runner's `astContext` field; historical hits are seeded into the `unknown` bucket so older metrics remain interpretable.
@@ -38,11 +38,11 @@ Totem is a standard library for codebase governance — deterministic primitives
 **Theme:** The Totem Pack Ecosystem. We spent 1.13.0 proving the engine can generate high-fidelity ast-grep rules — the bulk Sonnet recompile produced 397 precise rules and the refinement diagnostic closes the loop on noisy ones. 1.14.0 is about letting teams **bundle and share** those proven rules across repositories via the npm registry.
 
 - **Headline Work:**
-  - [ ] **Rule Pack Distribution:** Standardized bundles for reusable rule distribution (#1059). Teams should be able to publish a versioned pack of compiled rules to npm and consume them in other projects with the same governance guarantees as locally-compiled rules.
+  - [ ] **Rule Pack Distribution:** Standardized bundles for reusable rule distribution (#1059). Teams should be able to publish a versioned pack of compiled rules to npm and consume them in other projects under the same governance contract that locally-compiled rules satisfy.
   - [ ] **Distributing Compiled Rules:** Strategy #35 research — mechanisms, versioning model, trust anchors, and integrity verification for cross-team rule sharing.
 
 - **Bundled Cleanup (operational chores on the way):**
-  - [ ] **Cloud Compile → Sonnet:** Update the cloud compile worker to route through Claude Sonnet (#1221) — critical prerequisite for cloud distribution, since packs compiled through the cloud need the same quality guarantees as local Sonnet compile.
+  - [ ] **Cloud Compile → Sonnet:** Update the cloud compile worker to route through Claude Sonnet (#1221) — critical prerequisite for cloud distribution, since packs compiled through the cloud need to meet the same quality bar as local Sonnet compile.
   - [ ] **`cwd` Threading:** Thread explicit `cwd` through `compileCommand` so packs can be compiled from arbitrary working directories (#1232, #1234 follow-up).
   - [ ] **Build Artifact:** Investigate and fix the stray `packages/core/{}` file produced by `pnpm build` (#1233).
   - [ ] **Batch `--upgrade`:** Refactor `compileCommand` to accept an array of hashes so `runSelfHealing` doesn't reload config + lessons + rules + manifest per candidate (#1235).
