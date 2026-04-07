@@ -79,6 +79,29 @@ describe('extractManualPattern', () => {
     expect(result?.pattern).toBe('process.kill($PID, 0)');
   });
 
+  it('extracts fields with no whitespace after the closing bold marker (#1282 GCA)', () => {
+    // Pre-fix, extractField required \s+ which silently rejected **Pattern:**foo
+    // (no space). The lesson would fall through to Pipeline 2 instead of taking
+    // the manual path. Caught by gemini-code-assist as a cross-helper consistency
+    // cascade — the same pattern lesson-400fed87 describes.
+    const body = '**Pattern:**process\\.env\\[\n**Engine:**regex\n**Severity:**warning';
+    const result = extractManualPattern(body);
+    expect(result).not.toBeNull();
+    expect(result?.pattern).toBe('process\\.env\\[');
+    expect(result?.engine).toBe('regex');
+    expect(result?.severity).toBe('warning');
+  });
+
+  it('treats empty field values as absent (#1282 GCA)', () => {
+    // **Pattern:** with no value should return null (not a Pipeline 1 lesson)
+    // rather than producing a rule with an empty pattern. Same fix as the
+    // extractMultilineField empty-value handling — empty after trim → undefined
+    // → caller's `!value` fallback fires.
+    const body = '**Pattern:**\n**Engine:** regex';
+    const result = extractManualPattern(body);
+    expect(result).toBeNull();
+  });
+
   it('extracts all fields when the lesson uses the **Field**: form (#1282)', () => {
     // Caught by Shield AI on PR #1282 as a partial-fix CRITICAL: extending
     // extractMultilineField to support **Field**: without extending the shared

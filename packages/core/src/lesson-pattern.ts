@@ -33,10 +33,18 @@ export function extractField(body: string, field: string): string | undefined {
   // a user writing **Pattern**: foo would have extractManualPattern fail
   // entirely because Pattern wouldn't be found.
   // Colon is mandatory to avoid matching prose like "Pattern is important..."
+  // Whitespace after the closing bold is OPTIONAL ([ \t]*, not \s+) and the value
+  // capture is OPTIONAL ((.*), not (.+)) for sibling-helper consistency: pre-fix,
+  // extractField was stricter than extractAllFields and extractMultilineField,
+  // silently rejecting `**Pattern:**foo` (no space) and `**Pattern:**` (empty value).
+  // Caught by gemini-code-assist on PR #1282 as another instance of the
+  // cross-helper-consistency cascade pattern documented in lesson-400fed87.
   const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`^(?:\\*{2})?${safeField}(?:\\*{2})?:(?:\\*{2})?\\s+(.+)$`, 'im');
+  const re = new RegExp(`^(?:\\*{2})?${safeField}(?:\\*{2})?:(?:\\*{2})?[ \\t]*(.*)$`, 'im');
   const match = body.match(re);
-  return match?.[1]?.trim();
+  // Trim and treat empty as "no value" so callers' `if (!value)` checks fire correctly.
+  const value = match?.[1]?.trim();
+  return value || undefined;
 }
 
 /**
