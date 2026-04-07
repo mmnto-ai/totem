@@ -29,7 +29,7 @@ Totem is a standard library for codebase governance — deterministic primitives
   - [x] **Config Drift Test:** Replaced the line-count limit on instructional files with a token-aware character + directive count limit.
 
 - **Governance (eat your own dogfood):**
-  - [x] **Lesson Protection Rule:** A near-miss almost deleted `.totem/lessons.md` (which sources 41+ functional ast-grep rules) under the mistaken assumption it was legacy cruft. Encoded the constraint as a Pipeline 1 lint rule with severity `error` that flags the destructive `git rm .totem/lessons.md` shell command at the point of intent across all script and documentation files. Demonstrates the totem thesis: when an agent makes a mistake, write a deterministic constraint, not a sticky note.
+  - [x] **Lesson Protection Rule:** A near-miss almost deleted `.totem/lessons.md` (which sources 41+ functional ast-grep rules) under the mistaken assumption it was legacy cruft. Encoded the constraint as a Pipeline 1 lint rule with severity `error` that flags the destructive shell-removal command targeting the load-bearing lessons file, at the point of intent, across all script and documentation files. Demonstrates the totem thesis: when an agent makes a mistake, write a deterministic constraint, not a sticky note.
 
 ---
 

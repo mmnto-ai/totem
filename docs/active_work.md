@@ -25,7 +25,7 @@ Theme: Telemetry-driven rule refinement, compilation routing, and AST upgrades.
   - ~~**chore**~~ — Compile 6 new rules from those lessons (Sonnet)
   - ~~**chore**~~ — Salvage `Closes`-keyword Pipeline 1 rule from a failed inline-example
   - ~~**chore**~~ — Silence 9 non-compilable lessons (3 advisory + 6 deferred to #1236)
-  - ~~**feat(governance)**~~ — Pipeline 1 lint rule (severity: error) physically blocks `git rm .totem/lessons.md` after a 41-rule near-miss
+  - ~~**feat(governance)**~~ — Pipeline 1 lint rule (severity: error) physically blocks the destructive shell-removal command targeting the load-bearing lessons file, after a 41-rule near-miss
 
 - **Pre-release checklist:**
   - [x] Update `docs/active_work.md`
