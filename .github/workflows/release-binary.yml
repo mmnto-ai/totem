@@ -100,6 +100,12 @@ jobs:
           fi
 
       - name: Compile with Bun
+        # shell: bash is required — the multi-line command uses backslash line
+        # continuations, which PowerShell (the default on windows-latest) parses
+        # as a ParserError. This was a latent bug from PR #1200 masked by matrix
+        # fail-fast for 3 releases; exposed when fail-fast was disabled in #1266
+        # and windows finally reached this step. See strategy proposal 214.
+        shell: bash
         run: |
           bun build --compile \
             --target=${{ matrix.bun-target }} \
