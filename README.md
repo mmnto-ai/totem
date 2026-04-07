@@ -1,22 +1,24 @@
 # Totem
 
-_AI coding agents are brilliant goldfish. Totem gives them a memory._
+_The Memory and Nervous System for Autonomous Engineering._
 
-**Your AI agents keep making the same mistakes.** They can make the wrong way look brilliant — until you realize what happened. They'll never ask: _"doesn't a shared helper already exist for this?"_
+**Your AI agents keep making the same mistakes.** They are brilliant goldfish that make the wrong way look brilliant—until you realize they just reinvented a wheel that already exists in your `core` module. Every PR becomes a back-and-forth with review bots about the same architectural nits. That's the **"Bot-Tax."**
 
-Every PR becomes a back-and-forth with review bots about the same architectural nits — missing lazy imports, improper error tagging, reinventing the wheel. That's the **"Bot-Tax."**
+Totem is a zero-config CLI and Native MCP Server that gives your AI agents a persistent, vendor-agnostic semantic memory. It is not an orchestration framework like LangChain. It is a drop-in compiler that adds a deterministic validation layer to the tools you already use (Claude, Gemini, Cursor, Copilot).
 
-Totem fixes this. Write the rule in plain English, Totem compiles it into a lint rule, and that mistake can't happen again. No LLM in the loop — just ast-grep and regex, sub-second, offline.
+## The Codebase Immune System & Context Mesh
 
-## A Platform of Primitives, Not Opinionated Workflows
+Totem operates on two fronts to eliminate the Bot-Tax:
 
-Totem doesn't force a workflow on you. It's building blocks — `totem lint`, `totem compile`, `totem extract` — that you wire into whatever CI you already have.
+### 1. The Semantic Memory Layer (MCP)
+Built on the same architecture as elite AI assistants (Tree-sitter + LanceDB), Totem actively feeds context into your agents *before* they write a single line of code. Plug Totem directly into Claude Desktop, Windsurf, or your IDE via the Native MCP Server to give your agents read/write access to your project's architectural decisions (ADRs) and design tenets. It acts as the **Shared Memory Bus** for multi-agent workflows.
 
-We do not force you into a rigid, 7-step AI methodology. We provide the **Sensors** (the knowledge index, the deterministic compiler). You are the Flight Controller. You decide where to put the **Actuators** (Git hooks, IDE plugins).
+### 2. The Deterministic Governance Compiler
+Documentation is a suggestion; agents need physical constraints. We don't compile your code. We compile your `.cursorrules` (Markdown lessons) into mathematical AST queries (`ast-grep`) that block bad code in CI. Write the rule in plain English, Totem compiles it, and that mistake can never happen again. No LLM in the loop at runtime—just sub-second, offline enforcement.
 
-## The Loop
+## The Self-Healing Loop
 
-Totem is a self-healing loop. Mistakes get observed, compiled into rules, and enforced — automatically. You can author rules manually (zero-LLM), import from ESLint, compile from Markdown examples, or let Totem auto-capture warnings from PR bots.
+Totem doesn't force a rigid 7-step workflow on you. It's a platform of primitives—`totem lint`, `totem compile`, `totem extract`—that you wire into whatever CI you already have. Mistakes get observed, compiled into rules, and enforced automatically.
 
 ```mermaid
 graph TD
@@ -39,8 +41,6 @@ graph TD
 Every CLI command supports `--json` for piping into your own automation.
 
 ## How a Mistake Becomes Impossible
-
-Documentation is not enforcement. Telling an AI to "follow the style guide" in a README is a suggestion.
 
 Totem translates a plain-English markdown lesson into a deterministic physical constraint:
 
