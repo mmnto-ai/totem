@@ -1,8 +1,8 @@
 # Totem
 
-_The Memory and Nervous System for Autonomous Engineering._
+_AI coding agents are brilliant goldfish. Totem is their persistent, cross-repo memory._
 
-**Your AI agents keep making the same mistakes.** They are brilliant goldfish that make the wrong way look brilliant—until you realize they just reinvented a wheel that already exists in your `core` module. Every PR becomes a back-and-forth with review bots about the same architectural nits. That's the **"Bot-Tax."**
+**Your AI agents keep making the same mistakes.** They can make the wrong way look brilliant—until you realize they just reinvented a wheel that already exists in your `core` module. Every PR becomes a back-and-forth with review bots about the same architectural nits. That's the **"Bot-Tax."**
 
 Totem is a zero-config CLI and Native MCP Server that gives your AI agents a persistent, vendor-agnostic semantic memory. It is not an orchestration framework like LangChain. It is a drop-in compiler that adds a deterministic validation layer to the tools you already use (Claude, Gemini, Cursor, Copilot).
 
