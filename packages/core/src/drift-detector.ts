@@ -155,6 +155,14 @@ export function extractFileReferences(body: string): string[] {
       // Exclude shell commands with flags
       if (candidate.includes(' -') || candidate.includes(' --')) continue;
 
+      // Exclude shell command + path forms like `git rm <path>` or `rm <path>`.
+      // Without this, lessons that document destructive commands (e.g. the
+      // .totem/lessons.md protection rule) would have their Example Hit /
+      // Miss values misparsed as paths.
+      if (/^(?:git\s+rm|rm|cp|mv|cat|less|head|tail|tee|chmod|chown|touch)\s/.test(candidate)) {
+        continue;
+      }
+
       // Must have a recognized file extension
       const ext = path.extname(candidate).toLowerCase();
       if (!ext || !FILE_EXTENSIONS.has(ext)) continue;

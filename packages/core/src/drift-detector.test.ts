@@ -162,6 +162,18 @@ describe('extractFileReferences', () => {
     const refs = extractFileReferences(body);
     expect(refs).toEqual(['config/database.json']);
   });
+
+  it('skips shell command + path forms (rm, git rm, cp, mv, cat)', () => {
+    // Lessons that document destructive commands (e.g. the .totem/lessons.md
+    // protection rule) put `git rm <path>` and `rm <path>` in their Example
+    // Hit / Miss lines so the rule pattern can match. Without the shell-prefix
+    // filter, the drift detector parses these as "rm <path>" file references
+    // and reports them as orphaned. mmnto/totem#1237.
+    const body =
+      'Hit: `git rm .totem/lessons.md`\nMiss: `rm .totem/lessons/lesson-cd27a5b0.md`\nAlso `cp src/old.ts dest/new.ts` and `mv a/b.ts c/d.ts`.';
+    const refs = extractFileReferences(body);
+    expect(refs).toEqual([]);
+  });
 });
 
 // ─── detectDrift ──────────────────────────────────────
