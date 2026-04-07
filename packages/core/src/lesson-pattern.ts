@@ -7,6 +7,7 @@
  *   **Engine:** regex | ast | ast-grep
  *   **Scope:** glob, glob, !negated-glob
  *   **Severity:** error | warning
+ *   **Message:** <single-line OR multi-line remediation message>  (#1265)
  */
 
 export interface ManualPattern {
@@ -14,6 +15,8 @@ export interface ManualPattern {
   engine: 'regex' | 'ast' | 'ast-grep';
   fileGlobs?: string[];
   severity: 'error' | 'warning';
+  /** Optional rich message for the compiled rule. Falls back to lesson heading if absent. */
+  message?: string;
 }
 
 export function extractField(body: string, field: string): string | undefined {
@@ -23,6 +26,57 @@ export function extractField(body: string, field: string): string | undefined {
   const re = new RegExp(`^(?:\\*{2})?${safeField}:(?:\\*{2})?\\s+(.+)$`, 'im');
   const match = body.match(re);
   return match?.[1]?.trim();
+}
+
+/**
+ * Extract a multi-line field value from a lesson body (#1265).
+ *
+ * Unlike `extractField` which captures only the first line, this captures from
+ * the field marker line through subsequent continuation lines, stopping at
+ * either the next BOLD `**Field:**` marker or EOF. Used for the `**Message:**`
+ * field where remediation guidance often spans multiple paragraphs.
+ *
+ * Bare-colon prose (e.g. "Note: see above", "Fix: do X") is treated as
+ * continuation, NOT a new field. Only `**bold**:` markers terminate the capture
+ * — this matches markdown convention where structured fields are bolded and
+ * unstructured prose is not.
+ *
+ * Returns the trimmed value, or `undefined` if the field is absent.
+ */
+export function extractMultilineField(body: string, field: string): string | undefined {
+  const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Match the field's first line: **Field:** value OR Field: value
+  const startRe = new RegExp(`^(?:\\*{2})?${safeField}:(?:\\*{2})?\\s*(.*)$`, 'i');
+  // Field-marker terminator: only BOLD `**Word:**` lines stop the capture.
+  // Bare-colon prose (Note:, Fix:) stays as continuation.
+  const fieldMarkerRe = /^\*{2}[A-Za-z][\w\s]*:\*{2}/;
+
+  // Split on both LF and CRLF — Windows-authored lessons would otherwise leave a
+  // trailing `\r` on each line, and the `(.*)$` capture (no /m flag) would fail
+  // because `$` requires end-of-string and `.` doesn't match `\r`. Caught by Shield AI.
+  const lines = body.split(/\r?\n/);
+  let startIdx = -1;
+  let firstLineValue = '';
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i]!.match(startRe);
+    if (m) {
+      startIdx = i;
+      firstLineValue = m[1] ?? '';
+      break;
+    }
+  }
+  if (startIdx === -1) return undefined;
+
+  const valueLines: string[] = [firstLineValue];
+  for (let j = startIdx + 1; j < lines.length; j++) {
+    if (fieldMarkerRe.test(lines[j]!)) break;
+    valueLines.push(lines[j]!);
+  }
+  // Treat an empty trimmed result as absent so the caller's `?? heading` fallback fires.
+  // Without this, `**Message:**` with no body would set `message: ""` on the compiled
+  // rule instead of falling back to lesson.heading.
+  const trimmed = valueLines.join('\n').trim();
+  return trimmed || undefined;
 }
 
 /**
@@ -49,7 +103,11 @@ export function extractManualPattern(body: string): ManualPattern | null {
   const severityRaw = extractField(body, 'Severity')?.toLowerCase();
   const severity: ManualPattern['severity'] = severityRaw === 'error' ? 'error' : 'warning';
 
-  return { pattern, engine, fileGlobs, severity };
+  // #1265: rich message field with multi-line support. Backward compatible — undefined
+  // when absent, and `buildManualRule` falls back to `lesson.heading` in that case.
+  const message = extractMultilineField(body, 'Message');
+
+  return { pattern, engine, fileGlobs, severity, message };
 }
 
 /**

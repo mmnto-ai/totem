@@ -538,6 +538,8 @@ interface UpgradeRuleInput {
   lessonHeading?: string;
   /** Override to produce a manual-rule shape (lessonHeading === message). */
   message?: string;
+  /** Set true to mark rule as Pipeline 1 manual (#1265) — preferred over heading=message heuristic. */
+  manual?: boolean;
   engine?: 'regex' | 'ast' | 'ast-grep';
   pattern?: string;
   astQuery?: string;
@@ -559,6 +561,7 @@ function writeUpgradeRules(totemDir: string, rules: UpgradeRuleInput[]): void {
             message: r.message ?? `Violation: ${r.lessonHeading ?? r.lessonHash}`,
             engine,
             compiledAt: '2026-04-06T12:00:00.000Z',
+            ...(r.manual === true ? { manual: true } : {}),
           };
           if (engine === 'regex') {
             return { ...base, pattern: r.pattern ?? '\\bconsole\\.log\\b' };
@@ -716,11 +719,12 @@ describe('checkUpgradeCandidates', () => {
     expect(result.status).toBe('pass');
   });
 
-  it('skips manual regex rules (message === lessonHeading)', async () => {
+  it('skips manual regex rules (message === lessonHeading) — legacy heuristic', async () => {
     const totemDir = path.join(tmpDir, '.totem');
-    // Manual rule: message === lessonHeading. This is the shape compile.ts
-    // uses to recognize Pipeline 1 (manual pattern) rules, which never see
-    // the telemetryPrefix directive. Upgrading them would be a no-op forever.
+    // Pre-#1265 manual rule: message === lessonHeading. This was the only signal
+    // available for identifying Pipeline 1 rules before the explicit `manual: true`
+    // flag landed. Old compiled-rules.json files don't have the flag, so the doctor
+    // must continue to support this heuristic for backward compatibility.
     writeUpgradeRules(totemDir, [
       {
         lessonHash: 'manual-rule',
@@ -731,6 +735,35 @@ describe('checkUpgradeCandidates', () => {
     ]);
     writeUpgradeMetrics(totemDir, {
       'manual-rule': {
+        triggerCount: 20,
+        contextCounts: { code: 2, string: 18, comment: 0, regex: 0, unknown: 0 },
+      },
+    });
+
+    const result = await checkUpgradeCandidates(tmpDir);
+    expect(result.status).toBe('pass');
+  });
+
+  it('skips manual regex rules with rich messages via the manual flag (#1265)', async () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    // Post-#1265 manual rule: message DIFFERS from lessonHeading because Pipeline 1
+    // now supports a **Message:** field. The legacy heading=message heuristic would
+    // FAIL to skip this rule, but the explicit `manual: true` flag set by
+    // buildManualRule provides a reliable signal. Without this fix, doctor would
+    // try to upgrade the rule via Pipeline 2, burning LLM cycles to produce the
+    // same hand-written manual pattern that takes Pipeline 1 priority on next compile.
+    writeUpgradeRules(totemDir, [
+      {
+        lessonHash: 'manual-rule-with-message',
+        lessonHeading: 'No console.log',
+        message:
+          'Use the structured logger (logger.info) instead of console.log so production output stays filterable.',
+        engine: 'regex',
+        manual: true,
+      },
+    ]);
+    writeUpgradeMetrics(totemDir, {
+      'manual-rule-with-message': {
         triggerCount: 20,
         contextCounts: { code: 2, string: 18, comment: 0, regex: 0, unknown: 0 },
       },

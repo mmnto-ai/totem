@@ -464,10 +464,16 @@ export async function findUpgradeCandidates(
       // Skip manual regex rules. Manual rules take the Pipeline 1 path in
       // `compileLesson`, which never receives `telemetryPrefix` — so a
       // `--upgrade` run on a manual rule would just recompile the same
-      // hand-written pattern and produce a permanent false positive. Manual
-      // rules are recognizable by `lessonHeading === message` (see the same
-      // shape check in compile.ts `logCompiledRule`).
-      if (rule.lessonHeading === rule.message) continue;
+      // hand-written pattern and produce a permanent false positive.
+      //
+      // Post-mmnto/totem#1265: prefer the explicit `manual: true` flag set in
+      // `buildManualRule`. Pre-mmnto/totem#1265 rules don't have the flag, so fall back to
+      // the legacy `lessonHeading === message` heuristic — which only worked
+      // because pre-#1265 manual rules had no way to express a custom message
+      // and the compiler hardcoded `message: lesson.heading`. After mmnto/totem#1265 added
+      // Pipeline 1 Message field support, manual rules can have rich messages
+      // distinct from their headings, breaking the heuristic for new rules.
+      if (rule.manual === true || rule.lessonHeading === rule.message) continue;
 
       const metric = metricsFile.rules[rule.lessonHash];
       if (!metric || !metric.contextCounts) continue;

@@ -625,6 +625,125 @@ describe('compiled rules file I/O', () => {
   });
 });
 
+describe('nonCompilable tuple schema (#1280)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-noncompilable-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('loads legacy string-only nonCompilable arrays without errors', async () => {
+    // Pre-#1280: nonCompilable was Array<string>. Existing 1.13.0 compiled-rules.json
+    // files in the wild have this shape. The schema must keep accepting them.
+    const { loadCompiledRulesFile } = await import('./compiler.js');
+    const rulesPath = path.join(tmpDir, 'compiled-rules.json');
+    fs.writeFileSync(
+      rulesPath,
+      JSON.stringify({
+        version: 1,
+        rules: [],
+        nonCompilable: ['legacy-hash-aaa', 'legacy-hash-bbb'],
+      }),
+    );
+    const loaded = loadCompiledRulesFile(rulesPath);
+    // Loader normalizes legacy strings to {hash, title} tuples for downstream uniformity.
+    expect(loaded.nonCompilable).toEqual([
+      { hash: 'legacy-hash-aaa', title: '(legacy entry)' },
+      { hash: 'legacy-hash-bbb', title: '(legacy entry)' },
+    ]);
+  });
+
+  it('loads new tuple-form nonCompilable arrays', async () => {
+    const { loadCompiledRulesFile } = await import('./compiler.js');
+    const rulesPath = path.join(tmpDir, 'compiled-rules.json');
+    fs.writeFileSync(
+      rulesPath,
+      JSON.stringify({
+        version: 1,
+        rules: [],
+        nonCompilable: [
+          { hash: 'newer-hash-1', title: 'Async error handling without context' },
+          { hash: 'newer-hash-2', title: 'SSR hydration mismatch logging' },
+        ],
+      }),
+    );
+    const loaded = loadCompiledRulesFile(rulesPath);
+    expect(loaded.nonCompilable).toEqual([
+      { hash: 'newer-hash-1', title: 'Async error handling without context' },
+      { hash: 'newer-hash-2', title: 'SSR hydration mismatch logging' },
+    ]);
+  });
+
+  it('loads mixed legacy + tuple arrays', async () => {
+    // Migration scenario: a project with stale legacy entries plus new tuple entries
+    // (e.g., someone upgraded mid-cycle). Loader normalizes both to tuples.
+    const { loadCompiledRulesFile } = await import('./compiler.js');
+    const rulesPath = path.join(tmpDir, 'compiled-rules.json');
+    fs.writeFileSync(
+      rulesPath,
+      JSON.stringify({
+        version: 1,
+        rules: [],
+        nonCompilable: [
+          'legacy-hash',
+          { hash: 'tuple-hash', title: 'Has a real title' },
+          'another-legacy',
+        ],
+      }),
+    );
+    const loaded = loadCompiledRulesFile(rulesPath);
+    expect(loaded.nonCompilable).toEqual([
+      { hash: 'legacy-hash', title: '(legacy entry)' },
+      { hash: 'tuple-hash', title: 'Has a real title' },
+      { hash: 'another-legacy', title: '(legacy entry)' },
+    ]);
+  });
+
+  it('round-trips tuple entries through save and load', async () => {
+    const { loadCompiledRulesFile, saveCompiledRulesFile } = await import('./compiler.js');
+    const rulesPath = path.join(tmpDir, 'compiled-rules.json');
+    saveCompiledRulesFile(rulesPath, {
+      version: 1,
+      rules: [],
+      nonCompilable: [
+        { hash: 'roundtrip-1', title: 'First entry' },
+        { hash: 'roundtrip-2', title: 'Second entry' },
+      ],
+    });
+    const loaded = loadCompiledRulesFile(rulesPath);
+    expect(loaded.nonCompilable).toEqual([
+      { hash: 'roundtrip-1', title: 'First entry' },
+      { hash: 'roundtrip-2', title: 'Second entry' },
+    ]);
+  });
+
+  it('save normalizes legacy strings to tuples on the next round-trip', async () => {
+    // The loader normalizes on read, so when the same data flows back through save,
+    // the disk file gets the canonical tuple form. Legacy strings are a one-way
+    // migration: once loaded, they're tuples; once saved, they stay tuples.
+    const { loadCompiledRulesFile, saveCompiledRulesFile } = await import('./compiler.js');
+    const rulesPath = path.join(tmpDir, 'compiled-rules.json');
+    fs.writeFileSync(
+      rulesPath,
+      JSON.stringify({
+        version: 1,
+        rules: [],
+        nonCompilable: ['legacy-only'],
+      }),
+    );
+    const firstLoad = loadCompiledRulesFile(rulesPath);
+    saveCompiledRulesFile(rulesPath, firstLoad);
+    const onDisk = JSON.parse(fs.readFileSync(rulesPath, 'utf-8')) as {
+      nonCompilable: Array<{ hash: string; title: string } | string>;
+    };
+    expect(onDisk.nonCompilable).toEqual([{ hash: 'legacy-only', title: '(legacy entry)' }]);
+  });
+});
+
 // ─── CompiledRuleSchema: status / archivedReason ────
 
 describe('CompiledRuleSchema status field', () => {
