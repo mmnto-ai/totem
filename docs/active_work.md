@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.12.0` (published 2026-04-05) with ~2,580 tests across core, CLI, and MCP packages and **397 compiled rules (207 ast-grep, 190 regex)**. **1.13.0 is feature-complete and in release prep.**
+The project is at release `@mmnto/cli@1.12.0` (published 2026-04-05) with ~2,580 tests across core, CLI, and MCP packages and **393 compiled rules (203 ast-grep, 190 regex)**. **1.13.0 is feature-complete and in release prep.**
 
 ### Current: 1.13.0 — The Refinement Engine (release prep)
 
@@ -9,7 +9,7 @@ Theme: Telemetry-driven rule refinement, compilation routing, and AST upgrades.
 - **Compilation routing (shipped):**
   - ~~Strategy **#73**~~ — Compilation quality benchmark (Gemini Pro vs gemma4:26b vs Claude Sonnet)
   - ~~**#1220**~~ — Route compile to `anthropic:claude-sonnet-4-6` (90% correctness, 2.4s avg)
-  - ~~**#1224**~~ — Bulk Sonnet recompile (438 → 397 rules, 207 ast-grep)
+  - ~~**#1224**~~ — Bulk Sonnet recompile (438 → 393 rules, 203 ast-grep)
   - ~~**#1225**~~ — Backtick parser hardening (both pipelines)
   - ~~**#1210**~~ — Skip TODO scaffold fixtures in wind tunnel
   - ~~**#1211**~~ — Heading-level dedup in extract pipeline

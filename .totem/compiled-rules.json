@@ -6237,38 +6237,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "9e1c878139a7ccde",
-      "lessonHeading": "Standardize catch block error naming",
-      "pattern": "",
-      "message": "Use 'err' as the catch block variable name (project convention), not '$ERROR'",
-      "engine": "ast-grep",
-      "astGrepPattern": "try { $$$TRY } catch ($ERROR) { $$$CATCH }",
-      "compiledAt": "2026-04-06T18:02:37.925Z",
-      "createdAt": "2026-04-06T18:02:37.925Z",
-      "fileGlobs": [
-        "packages/core/src/**/*.ts",
-        "!**/*.test.*",
-        "!**/*.spec.*"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "e2200476ba24d64e",
-      "lessonHeading": "Strip LLM-generated markdown wrappers",
-      "pattern": "",
-      "message": "Strip LLM-generated markdown wrappers (backticks/code fences) before parsing LLM output — raw JSON.parse on LLM responses may silently fail if markdown is present",
-      "engine": "ast-grep",
-      "astGrepPattern": "JSON.parse($INPUT)",
-      "compiledAt": "2026-04-06T18:02:42.120Z",
-      "createdAt": "2026-04-06T18:02:42.120Z",
-      "fileGlobs": [
-        "packages/core/src/**/*.ts",
-        "!**/*.test.*",
-        "!**/*.spec.*"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "5a32d8b0577186c5",
       "lessonHeading": "Validate single-backtick wrappers before stripping",
       "pattern": "",
@@ -6297,34 +6265,6 @@
         "packages/cli/src/commands/**/*.ts",
         "!**/*.test.*",
         "!**/*.spec.*"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "9b6ee4c42954225c",
-      "lessonHeading": "Guard against conflicting upgrade and force flags",
-      "pattern": "",
-      "message": "Guard against conflicting --upgrade and --force flags: explicitly reject their combination to prevent cache corruption",
-      "engine": "ast-grep",
-      "astGrepPattern": "if ($$$COND) { $$$BODY }",
-      "compiledAt": "2026-04-06T18:03:04.269Z",
-      "createdAt": "2026-04-06T18:03:04.269Z",
-      "fileGlobs": [
-        "packages/cli/src/commands/compile.ts"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "02c5fed32072848f",
-      "lessonHeading": "Prefer in-process CLI command execution",
-      "pattern": "",
-      "message": "Prefer in-process CLI command execution over spawning a shell process. Call the command function directly instead of using spawn().",
-      "engine": "ast-grep",
-      "astGrepPattern": "spawn($CMD, $$$ARGS)",
-      "compiledAt": "2026-04-06T18:03:07.428Z",
-      "createdAt": "2026-04-06T18:03:07.428Z",
-      "fileGlobs": [
-        "packages/cli/src/commands/doctor.ts"
       ],
       "severity": "warning"
     },
@@ -6397,6 +6337,7 @@
     "01ad9fa44c7c5a3f",
     "01dcddb5454bb3ac",
     "02b318bdb73dbba6",
+    "02c5fed32072848f",
     "030158e91ed37273",
     "03c06e72f387ecbd",
     "03f572ffe933b21a",
@@ -6848,6 +6789,7 @@
     "9a0a69c8fb9fa797",
     "9a4e25d816770caf",
     "9b29e05c8c7f4001",
+    "9b6ee4c42954225c",
     "9b75e4500b8b8837",
     "9ba2353289ac32c2",
     "9ba3b23b3039906d",
@@ -6858,6 +6800,7 @@
     "9d11bb846da8a278",
     "9db404994f0574b8",
     "9dbc00ec4e637769",
+    "9e1c878139a7ccde",
     "9e4c9e474317c17b",
     "9eabec8fb748d2a5",
     "9ec0e320821292ea",
@@ -7086,6 +7029,7 @@
     "e18b9f81eef4cd6a",
     "e196023c74162777",
     "e21933d263748874",
+    "e2200476ba24d64e",
     "e2da140470037392",
     "e3d01ccfd990bfea",
     "e4101b489e88ece9",

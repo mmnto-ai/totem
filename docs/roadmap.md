@@ -12,7 +12,7 @@ Totem is a standard library for codebase governance — deterministic primitives
 
 - **Compilation Routing:**
   - [x] **Sonnet Routing:** Compile pipeline routes through Claude Sonnet 4.6 (90% correctness vs Gemini Pro's 73%, 2.4s vs 19.6s avg). Validated by Strategy #73 benchmark across 30 lessons in 4 difficulty tiers.
-  - [x] **Bulk Recompile:** All 1156 lessons recompiled through Sonnet — 438 → 397 rules, 102 regex→ast-grep upgrades, 143 noisy Gemini-hallucinated rules purged. Quality > quantity.
+  - [x] **Bulk Recompile:** All 1156 lessons recompiled through Sonnet — 438 → 393 rules, 102 regex→ast-grep upgrades, 143 noisy Gemini-hallucinated rules purged. Quality > quantity.
   - [x] **Prompt Rewrite:** Compiler system prompt rewritten with explicit ast-grep preference, syntax cheat sheet, and 6 compound pattern examples mined from benchmark failures.
   - [x] **Parser Hardening:** Backtick wrapper stripping in both Pipeline 1 (manual `**Pattern:**` extraction) and Pipeline 2 (LLM JSON output) so generated patterns no longer ship with code-fence artifacts.
 
@@ -35,7 +35,7 @@ Totem is a standard library for codebase governance — deterministic primitives
 
 ## 1.14.0 — The Distribution Pipeline (Next)
 
-**Theme:** The Totem Pack Ecosystem. We spent 1.13.0 proving the engine can generate high-fidelity ast-grep rules — the bulk Sonnet recompile produced 397 precise rules and the refinement diagnostic closes the loop on noisy ones. 1.14.0 is about letting teams **bundle and share** those proven rules across repositories via the npm registry.
+**Theme:** The Totem Pack Ecosystem. We spent 1.13.0 proving the engine can generate high-fidelity ast-grep rules — the bulk Sonnet recompile produced 393 precise rules and the refinement diagnostic closes the loop on noisy ones. 1.14.0 is about letting teams **bundle and share** those proven rules across repositories via the npm registry.
 
 - **Headline Work:**
   - [ ] **Rule Pack Distribution:** Standardized bundles for reusable rule distribution (#1059). Teams should be able to publish a versioned pack of compiled rules to npm and consume them in other projects under the same governance contract that locally-compiled rules satisfy.
