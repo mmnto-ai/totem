@@ -285,6 +285,25 @@ describe('extractMultilineField (#1265)', () => {
     expect(result).not.toContain('This should NOT be captured');
   });
 
+  it('terminates on the bold-open-only **Field: form (#1282 CR)', () => {
+    // CR caught the missing form during PR #1282. extractField already accepted
+    // **Pattern: foo (bold-open, plain colon) since the original code, but
+    // fieldMarkerRe didn't recognize it as a terminator. Result: a lesson written
+    // with bold-open-only fields would have Message capture run past the next
+    // intended field. Now all four forms terminate consistently.
+    const body = [
+      '**Message:** Use the structured logger.',
+      'It survives across log rotations.',
+      '**Severity: warning', // bold-open-only — should terminate
+      'This should NOT be captured.',
+    ].join('\n');
+    const result = extractMultilineField(body, 'Message');
+    expect(result).toContain('Use the structured logger.');
+    expect(result).toContain('It survives across log rotations.');
+    expect(result).not.toContain('warning');
+    expect(result).not.toContain('This should NOT be captured');
+  });
+
   it('handles mixed **Field:** and **Field**: forms in the same body', () => {
     const body = [
       '**Pattern:** foo', // canonical

@@ -65,9 +65,13 @@ export function extractMultilineField(body: string, field: string): string | und
   // the canonical form, so a user writing **Pattern**: would have it incorrectly
   // swallowed into the Message capture instead of terminating it.
   const startRe = new RegExp(`^(?:\\*{2})?${safeField}(?:\\*{2})?:(?:\\*{2})?\\s*(.*)$`, 'i');
-  // Field-marker terminator: BOLD `**Word:**` OR `**Word**:` lines stop the capture.
-  // Bare-colon prose (Note:, Fix:) still stays as continuation.
-  const fieldMarkerRe = /^\*{2}[A-Za-z][\w\s]*(?::\*{2}|\*{2}:)/;
+  // Field-marker terminator: any BOLD `**Word:**`, `**Word**:`, or bold-open `**Word:`
+  // line stops the capture. Bare-colon prose (`Note:`, `Fix:` without `**` prefix) still
+  // stays as continuation. Hyphens are allowed in field names (e.g. `**Compile-Time:**`).
+  // CR caught the missing `**Word:` form on PR #1282 — without it, a lesson written with
+  // bold-open-only fields could have Message capture run past the next intended field
+  // because the terminator wouldn't match.
+  const fieldMarkerRe = /^\*{2}[A-Za-z][\w\s-]*(?::\*{2}|\*{2}:|:)/;
 
   // Split on both LF and CRLF — Windows-authored lessons would otherwise leave a
   // trailing `\r` on each line, and the `(.*)$` capture (no /m flag) would fail
