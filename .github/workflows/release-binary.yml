@@ -51,6 +51,40 @@ jobs:
       - name: Bundle with esbuild
         run: node packages/cli/build/esbuild-lite.mjs
 
+      - name: Bundle size gate (granular — user-controlled payload only)
+        shell: bash
+        # Asserts the esbuild output directory (our TS + WASM surface) stays under
+        # 15 MB. Current baseline is ~6 MB, so this gives ~2.5x headroom. This gate
+        # cleanly separates "our bloat" (e.g. an LLM SDK accidentally un-externalized
+        # would leak several MB here) from "Bun's bloat" (the ~60 MB runtime embedded
+        # by bun build --compile). See strategy proposal 214 for context.
+        run: |
+          BUNDLE_DIR="packages/cli/dist/lite"
+          if [ ! -d "$BUNDLE_DIR" ]; then
+            echo "::error::Bundle directory not found: $BUNDLE_DIR"
+            exit 1
+          fi
+          # Use node for a cross-platform recursive size measurement. `du -sb` is GNU-only
+          # and `stat` has different flags across Linux/macOS — node is already on the
+          # runner and gives us a single correct answer everywhere.
+          BYTES=$(node -e '
+            const fs = require("fs");
+            const path = require("path");
+            const walk = (dir) =>
+              fs.readdirSync(dir, { withFileTypes: true }).reduce((sum, entry) => {
+                const p = path.join(dir, entry.name);
+                return sum + (entry.isDirectory() ? walk(p) : fs.statSync(p).size);
+              }, 0);
+            console.log(walk(process.argv[1]));
+          ' "$BUNDLE_DIR")
+          MB=$((BYTES / 1024 / 1024))
+          echo "Bundle directory size (pre-Bun compile): ${MB}MB (${BYTES} bytes)"
+          LIMIT=$((15 * 1024 * 1024))
+          if [ "$BYTES" -gt "$LIMIT" ]; then
+            echo "::error::Bundle directory exceeds 15MB granular cap (${MB}MB). This suggests a leak in the esbuild config — check the externals list in packages/cli/build/esbuild-lite.mjs and ensure LLM SDKs (openai, @anthropic-ai/sdk, @google/genai) and heavy deps (vectordb, apache-arrow) are still excluded."
+            exit 1
+          fi
+
       - name: Compile with Bun
         run: |
           bun build --compile \
@@ -58,8 +92,16 @@ jobs:
             packages/cli/dist/lite/totem-lite.mjs \
             --outfile packages/cli/dist/lite/bin/${{ matrix.artifact }}
 
-      - name: Size gate
+      - name: Size gate (final binary)
         shell: bash
+        # Final-binary thresholds calibrated to Bun 1.2.x standalone runtime
+        # (~60 MB baseline). 75 MB warn / 90 MB hard gives a ~30% growth ceiling
+        # above the current measured cost. The granular bundle gate above is the
+        # real defense against bundle leaks; this cap is the end-to-end ceiling.
+        # See strategy proposal 214.
+        #
+        # Comparisons are byte-precise, not megabyte-truncated — a 90.9 MB binary
+        # would otherwise pass a `$MB -gt 90` check. See lesson-d1d43e9e.
         run: |
           FILE="packages/cli/dist/lite/bin/${{ matrix.artifact }}"
           if [ ! -f "$FILE" ]; then
@@ -68,12 +110,14 @@ jobs:
           fi
           SIZE=$(stat -c%s "$FILE" 2>/dev/null || stat -f%z "$FILE" 2>/dev/null)
           MB=$((SIZE / 1024 / 1024))
-          echo "Binary size: ${MB}MB"
-          if [ "$MB" -gt 50 ]; then
-            echo "::error::Binary exceeds 50MB hard limit (${MB}MB)"
+          WARN_LIMIT=$((75 * 1024 * 1024))
+          HARD_LIMIT=$((90 * 1024 * 1024))
+          echo "Binary size: ${MB}MB (${SIZE} bytes)"
+          if [ "$SIZE" -gt "$HARD_LIMIT" ]; then
+            echo "::error::Binary exceeds 90MB hard limit (${MB}MB)"
             exit 1
-          elif [ "$MB" -gt 35 ]; then
-            echo "::warning::Binary exceeds 35MB target (${MB}MB) but under 50MB cap"
+          elif [ "$SIZE" -gt "$WARN_LIMIT" ]; then
+            echo "::warning::Binary exceeds 75MB target (${MB}MB) but under 90MB cap"
           fi
 
       - name: Smoke test (non-cross-compiled only)

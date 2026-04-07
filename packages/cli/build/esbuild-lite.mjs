@@ -127,13 +127,17 @@ await build({
   },
 });
 
-// Copy WASM assets to output directory so the binary can embed them
+// Copy tree-sitter WASM assets to output directory so the binary can embed them.
+// Note: @ast-grep/wasm's own wasm_bg.wasm is emitted by esbuild's file loader as a
+// hash-named file (e.g. wasm_bg-<hash>.wasm) and referenced by the bundle directly —
+// we do NOT copy astGrepWasm manually, as that would create an orphaned duplicate
+// (~1.8 MB) that nothing in the fallback path at ast-grep-wasm-shim.ts references.
+// See strategy proposal 214 for the investigation.
 mkdirSync(resolve(outdir, 'wasm'), { recursive: true });
 cpSync(webTreeSitterWasm, resolve(outdir, 'wasm/web-tree-sitter.wasm'));
 cpSync(tsWasm, resolve(outdir, 'wasm/tree-sitter-typescript.wasm'));
 cpSync(tsxWasm, resolve(outdir, 'wasm/tree-sitter-tsx.wasm'));
 cpSync(jsWasm, resolve(outdir, 'wasm/tree-sitter-javascript.wasm'));
-cpSync(astGrepWasm, resolve(outdir, 'wasm/ast-grep.wasm'));
 
 console.log(`[Lite Build] Bundled to ${resolve(outdir, 'totem-lite.mjs')}`);
 console.log(`[Lite Build] Version: ${version}`);

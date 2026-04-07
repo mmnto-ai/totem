@@ -33,8 +33,13 @@ compile_target() {
     --outfile "$outfile"
 
   if [ -f "$outfile" ] || [ -f "$outfile.exe" ]; then
-    local warn_limit=$((35 * 1024 * 1024))
-    local hard_limit=$((50 * 1024 * 1024))
+    # Size thresholds calibrated to Bun 1.2.x standalone runtime (~60 MB baseline).
+    # Our TS+WASM payload is ~7.7 MB; the rest is Bun's embedded runtime.
+    # A separate 15 MB granular gate in release-binary.yml catches bundle leaks
+    # directly (e.g. an LLM SDK accidentally un-externalized). These final-binary
+    # caps are the end-to-end ceiling. See strategy proposal 214.
+    local warn_limit=$((75 * 1024 * 1024))
+    local hard_limit=$((90 * 1024 * 1024))
     local size
     if [ -f "$outfile.exe" ]; then
       size=$(stat -c%s "$outfile.exe" 2>/dev/null || stat -f%z "$outfile.exe" 2>/dev/null)
@@ -45,10 +50,10 @@ compile_target() {
     echo "[Lite Compile] $target: ${mb}MB"
 
     if [ "$size" -gt "$hard_limit" ]; then
-      echo "[Lite Compile] WARNING: Binary exceeds 50MB hard limit!"
+      echo "[Lite Compile] WARNING: Binary exceeds 90MB hard limit!"
       exit 1
     elif [ "$size" -gt "$warn_limit" ]; then
-      echo "[Lite Compile] WARNING: Binary exceeds 35MB target (but under 50MB cap)"
+      echo "[Lite Compile] WARNING: Binary exceeds 75MB target (but under 90MB cap)"
     fi
   fi
 }
