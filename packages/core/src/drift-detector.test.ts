@@ -96,6 +96,77 @@ Body text.
     expect(lessons[0]!.raw).toContain('## Lesson — Test');
     expect(lessons[0]!.raw).toContain('Body text.');
   });
+
+  it('accepts em-dash, en-dash, and hyphen separators (#1263)', () => {
+    // Users sometimes type a regular hyphen, or macOS auto-formats `--` to en-dash.
+    // The parser must accept all three so lessons aren't silently dropped.
+    // Regression test for the em-dash silent skip bug discovered on totem-playground.
+    const content = `# Header
+
+---
+
+## Lesson — Em-dash one
+
+**Tags:** a
+
+Body one.
+
+## Lesson - Hyphen two
+
+**Tags:** b
+
+Body two.
+
+## Lesson – En-dash three
+
+**Tags:** c
+
+Body three.
+`;
+
+    const lessons = parseLessonsFile(content);
+    expect(lessons).toHaveLength(3);
+    expect(lessons[0]!.heading).toBe('Em-dash one');
+    expect(lessons[1]!.heading).toBe('Hyphen two');
+    expect(lessons[2]!.heading).toBe('En-dash three');
+  });
+
+  it('preserves the actual separator byte-for-byte in lesson.raw (#1263)', () => {
+    // The raw field is used for content-hash drift detection. If the parser
+    // normalizes the separator to em-dash here, hash comparisons will think
+    // the file has been mutated when it hasn't. The write-side `rewriteLessonsFile`
+    // is allowed to normalize to canonical em-dash on rewrite — but the read-side
+    // `lesson.raw` MUST reflect the exact bytes on disk.
+    const content = `# Header
+
+---
+
+## Lesson — Canonical
+
+**Tags:** a
+
+Body one.
+
+## Lesson - Hyphen
+
+**Tags:** b
+
+Body two.
+
+## Lesson – En-dash
+
+**Tags:** c
+
+Body three.
+`;
+
+    const lessons = parseLessonsFile(content);
+    expect(lessons[0]!.raw).toContain('## Lesson — Canonical');
+    expect(lessons[1]!.raw).toContain('## Lesson - Hyphen');
+    expect(lessons[1]!.raw).not.toContain('## Lesson — Hyphen');
+    expect(lessons[2]!.raw).toContain('## Lesson – En-dash');
+    expect(lessons[2]!.raw).not.toContain('## Lesson — En-dash');
+  });
 });
 
 // ─── extractFileReferences ────────────────────────────

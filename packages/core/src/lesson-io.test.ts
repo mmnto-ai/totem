@@ -85,6 +85,37 @@ describe('writeLessonFile', () => {
     const content = fs.readFileSync(filePath, 'utf-8');
     expect(content).toContain(`## Lesson — ${shortHeading}`);
   });
+
+  it('truncates and canonicalizes hyphen/en-dash heading separators on write (#1263)', () => {
+    // After #1263 widened the parser to accept hyphen and en-dash, the heading
+    // limit on write must also recognize all three separators AND normalize to
+    // canonical em-dash on output. Otherwise, hyphen-formatted entries silently
+    // bypass the 60-character limit, and the file persists a non-canonical
+    // separator on disk. Mirrors the write-side normalization in rewriteLessonsFile.
+    const lessonsDir = path.join(tmpDir, 'lessons');
+    const longHeading =
+      'This is a very long lesson heading that definitely exceeds the sixty character limit we enforce';
+
+    // Hyphen input → canonical em-dash output, heading truncated
+    const hyphenEntry = `## Lesson - ${longHeading}\n\n**Tags:** t\n\nBody.\n`;
+    const hyphenPath = writeLessonFile(lessonsDir, hyphenEntry);
+    const hyphenContent = fs.readFileSync(hyphenPath, 'utf-8');
+    expect(hyphenContent).toMatch(/^## Lesson — /m);
+    expect(hyphenContent).not.toMatch(/^## Lesson - /m);
+    const hyphenHeadingMatch = hyphenContent.match(/^## Lesson — (.+)$/m);
+    expect(hyphenHeadingMatch).toBeTruthy();
+    expect(hyphenHeadingMatch![1]!.length).toBeLessThanOrEqual(60);
+
+    // En-dash input → canonical em-dash output, heading truncated
+    const enDashEntry = `## Lesson – ${longHeading}\n\n**Tags:** t\n\nBody.\n`;
+    const enDashPath = writeLessonFile(lessonsDir, enDashEntry);
+    const enDashContent = fs.readFileSync(enDashPath, 'utf-8');
+    expect(enDashContent).toMatch(/^## Lesson — /m);
+    expect(enDashContent).not.toMatch(/^## Lesson – /m);
+    const enDashHeadingMatch = enDashContent.match(/^## Lesson — (.+)$/m);
+    expect(enDashHeadingMatch).toBeTruthy();
+    expect(enDashHeadingMatch![1]!.length).toBeLessThanOrEqual(60);
+  });
 });
 
 describe('writeLessonFileAsync', () => {
@@ -208,6 +239,37 @@ describe('readAllLessons', () => {
     const lessons = readAllLessons(tmpDir);
     expect(lessons[0]!.heading).toBe('A');
     expect(lessons[1]!.heading).toBe('Z');
+  });
+
+  it('emits a warning when a lesson file in the directory parses to zero lessons (#1263)', () => {
+    // A .md file with no `## Lesson` heading (e.g., a draft, a misnamed file,
+    // or a file using an unsupported separator) should warn the author instead
+    // of being silently dropped. Pre-#1263, this was the silent failure mode
+    // that ate hyphen-formatted lessons on totem-playground for weeks.
+    const lessonsDir = path.join(tmpDir, 'lessons');
+    fs.mkdirSync(lessonsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(lessonsDir, 'lesson-empty.md'),
+      '# Just a header, no lesson heading\n\nThis file has no `## Lesson` markers.\n',
+      'utf-8',
+    );
+    const warnings: string[] = [];
+    const lessons = readAllLessons(tmpDir, (msg) => warnings.push(msg));
+    expect(lessons).toHaveLength(0);
+    expect(warnings.some((w) => w.includes('lesson-empty.md'))).toBe(true);
+    expect(warnings.some((w) => w.includes('## Lesson'))).toBe(true);
+  });
+
+  it('emits a warning when legacy lessons.md parses to zero lessons (#1263)', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'lessons.md'),
+      '# Totem Lessons\n\nNo lesson entries yet.\n',
+      'utf-8',
+    );
+    const warnings: string[] = [];
+    const lessons = readAllLessons(tmpDir, (msg) => warnings.push(msg));
+    expect(lessons).toHaveLength(0);
+    expect(warnings.some((w) => w.includes('lessons.md'))).toBe(true);
   });
 });
 

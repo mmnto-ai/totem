@@ -18,11 +18,16 @@ export function lessonFileName(content: string): string {
 
 /**
  * Enforce heading length limit on a lesson entry string.
- * Applies truncateHeading() to any `## Lesson — ...` heading that exceeds the limit.
+ * Applies truncateHeading() to any `## Lesson [—|–|-] ...` heading that exceeds the limit.
+ *
+ * Accepts em-dash, en-dash, and hyphen separators (matching the parser as of #1263)
+ * AND normalizes the output to canonical em-dash on write — entries written through
+ * this function persist to disk in canonical form regardless of the input separator.
+ * This mirrors the write-side normalization in `rewriteLessonsFile`.
  */
 function enforceHeadingLimit(entry: string): string {
-  return entry.replace(/^(## Lesson — )(.+)$/m, (_match, prefix: string, heading: string) => {
-    return `${prefix}${truncateHeading(heading) || 'Lesson'}`; // totem-ignore — prefix ends with "— " delimiter
+  return entry.replace(/^## Lesson [—–-] (.+)$/m, (_match, heading: string) => {
+    return `## Lesson — ${truncateHeading(heading) || 'Lesson'}`; // canonical em-dash on write
   });
 }
 
@@ -77,6 +82,12 @@ export function readAllLessons(totemDir: string, onWarn?: (msg: string) => void)
       lesson.sourcePath = legacyPath;
     }
     allLessons.push(...lessons);
+
+    // #1263: warn if a non-empty file produced zero parsed lessons (e.g. unsupported
+    // separator, malformed heading, missing `## Lesson` markers entirely).
+    if (onWarn && lessons.length === 0 && content.trim().length > 0) {
+      onWarn(`${legacyPath}: no '## Lesson [—|–|-] ' headings found — file was skipped`);
+    }
   }
 
   // 2. Read .totem/lessons/*.md (sorted, skip non-.md)
@@ -89,6 +100,7 @@ export function readAllLessons(totemDir: string, onWarn?: (msg: string) => void)
     for (const file of files) {
       const filePath = path.join(lessonsDir, file);
       const content = fs.readFileSync(filePath, 'utf-8');
+      const lessonsBefore = allLessons.length;
 
       // ADR-070: detect YAML frontmatter for individual lesson files
       const warn = onWarn ? (msg: string) => onWarn(`${filePath}: ${msg}`) : undefined;
@@ -112,6 +124,14 @@ export function readAllLessons(totemDir: string, onWarn?: (msg: string) => void)
           lesson.sourcePath = filePath;
         }
         allLessons.push(...lessons);
+      }
+
+      // #1263: warn if a non-empty file produced zero parsed lessons (e.g. unsupported
+      // separator, malformed heading, missing `## Lesson` markers entirely). Pre-#1263
+      // these files were silently dropped — totem-playground discovered hyphen-formatted
+      // lessons had been ignored for weeks before the bug was caught.
+      if (onWarn && allLessons.length === lessonsBefore && content.trim().length > 0) {
+        onWarn(`${filePath}: no '## Lesson [—|–|-] ' headings found — file was skipped`);
       }
     }
   }
