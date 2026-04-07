@@ -27,7 +27,7 @@ Download the binary for your architecture from the [GitHub Releases](https://git
 **Linux (x64):**
 
 ```bash
-curl -L https://github.com/mmnto-ai/totem/releases/latest/download/totem-linux-x64 -o totem
+curl -L https://github.com/mmnto-ai/totem/releases/latest/download/totem-lite-linux-x64 -o totem
 chmod +x totem
 sudo mv totem /usr/local/bin/
 ```
@@ -35,13 +35,13 @@ sudo mv totem /usr/local/bin/
 **macOS (ARM64 / Apple Silicon):**
 
 ```bash
-curl -L https://github.com/mmnto-ai/totem/releases/latest/download/totem-darwin-arm64 -o totem
+curl -L https://github.com/mmnto-ai/totem/releases/latest/download/totem-lite-darwin-arm64 -o totem
 chmod +x totem
 sudo mv totem /usr/local/bin/
 ```
 
 **Windows (x64):**
-Download `totem-win32-x64.exe` from the Releases page and add the containing folder to your System `PATH` environment variable.
+Download `totem-lite-win32-x64.exe` from the Releases page and add the containing folder to your System `PATH` environment variable.
 
 ### Command Availability in Totem Lite
 
