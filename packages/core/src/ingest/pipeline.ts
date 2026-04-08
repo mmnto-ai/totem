@@ -151,7 +151,7 @@ async function runSyncInner(
 
   // 2. Connect to store
   const storePath = path.join(projectRoot, config.lanceDir);
-  const store = new LanceStore(storePath, embedder);
+  const store = new LanceStore(storePath, embedder, { absolutePathRoot: projectRoot });
   await store.connect();
 
   // 2b. Auto-heal: force full sync when incremental is requested but DB is empty

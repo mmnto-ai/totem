@@ -72,7 +72,7 @@ describe('LanceStore', () => {
   beforeEach(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lance-test-'));
     embedder = new FakeEmbedder();
-    store = new LanceStore(tmpDir, embedder);
+    store = new LanceStore(tmpDir, embedder, { absolutePathRoot: tmpDir });
     await store.connect();
   });
 

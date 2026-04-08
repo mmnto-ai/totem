@@ -597,7 +597,12 @@ describe('search_knowledge', () => {
       expect(linkedStore.search).not.toHaveBeenCalled();
     });
 
-    it('linked store search failure degrades to primary-only result', async () => {
+    it('linked store runtime failure surfaces per-query warning (non-blocking)', async () => {
+      // mmnto/totem#1295 GCA/CR fix: previously this path silently dropped
+      // linked failures with no user-visible signal (Tenet 4 violation).
+      // The new per-query runtime-warning architecture surfaces the failure
+      // inline on every query it occurred on, without mutating global state
+      // (so transient issues don't cause permanent session drift).
       mockSearchResults = [
         {
           label: 'Primary hit',
@@ -622,11 +627,66 @@ describe('search_knowledge', () => {
         isError?: boolean;
       };
 
-      // Primary still returns despite linked failure — federation is
-      // non-blocking per Tenet 4 (but surfaced via logSearch for telemetry)
+      // Federation is non-blocking — primary results still land
       expect(result.isError).toBeUndefined();
-      expect(result.content[0]!.text).toContain('Primary hit');
       expect(brokenLink.search).toHaveBeenCalled();
+      expect(result.content[0]!.text).toContain('Primary hit');
+
+      // Runtime failure is surfaced as a per-query system warning so the
+      // agent sees the drift in-context (Tenet 4: Fail Loud)
+      expect(result.content[0]!.text).toContain('[SYSTEM WARNING]');
+      expect(result.content[0]!.text).toContain('Federated search');
+      expect(result.content[0]!.text).toContain('broken');
+      expect(result.content[0]!.text).toContain('Connection refused');
+    });
+
+    it('per-query runtime warnings do not mutate global init errors (transient failures stay transient)', async () => {
+      // mmnto/totem#1295 CR/GCA architectural fix: the original Phase 2
+      // implementation mutated linkedStoreInitErrors on runtime failure,
+      // which permanently degraded the session for transient issues like
+      // a file lock during a parallel `totem sync`. The fix: runtime
+      // failures populate a per-query Map that is discarded after the
+      // response is built. A subsequent successful query sees zero warning.
+      const flaky: MockLinkedStore = {
+        search: vi
+          .fn()
+          .mockRejectedValueOnce(new Error('Transient lock'))
+          .mockResolvedValueOnce([
+            {
+              label: 'Recovered',
+              type: 'spec',
+              filePath: 'adr/adr-001.md',
+              absoluteFilePath: '/abs/flaky/adr/adr-001.md',
+              sourceRepo: 'flaky',
+              score: 0.8,
+              content: 'recovered content',
+            },
+          ]),
+      };
+      mockLinkedStores.set('flaky', flaky);
+      mockSearchResults = [
+        {
+          label: 'Primary',
+          type: 'code',
+          filePath: 'src/foo.ts',
+          score: 0.7,
+          content: 'primary',
+        },
+      ];
+
+      // First query: runtime failure → warning present
+      const first = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+      };
+      expect(first.content[0]!.text).toContain('[SYSTEM WARNING]');
+      expect(first.content[0]!.text).toContain('flaky');
+
+      // Second query: linked store recovers → NO warning carried over
+      const second = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+      };
+      expect(second.content[0]!.text).not.toContain('[SYSTEM WARNING]');
+      expect(second.content[0]!.text).toContain('Recovered');
     });
 
     it('boundary matching a failed-init linked store returns explicit error (no silent primary fallback)', async () => {

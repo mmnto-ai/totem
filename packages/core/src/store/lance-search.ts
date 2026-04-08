@@ -29,8 +29,8 @@ export async function runVectorSearch(
   query: string,
   typeFilter: ContentType | undefined,
   maxResults: number,
+  sourceContext: SourceContext,
   boundary?: string | string[],
-  sourceContext?: SourceContext,
 ): Promise<SearchResult[]> {
   const [queryVector] = await embedder.embed([query]);
 
@@ -55,8 +55,8 @@ export async function runHybridSearch(
   query: string,
   typeFilter: ContentType | undefined,
   maxResults: number,
+  sourceContext: SourceContext,
   boundary?: string | string[],
-  sourceContext?: SourceContext,
 ): Promise<SearchResult[]> {
   const fetchCount = maxResults * HYBRID_OVERFETCH_FACTOR;
   const whereClause = buildWhereClause(typeFilter, boundary);
@@ -97,8 +97,8 @@ export async function runFtsSearch(
   query: string,
   typeFilter: ContentType | undefined,
   maxResults: number,
+  sourceContext: SourceContext,
   boundary?: string | string[],
-  sourceContext?: SourceContext,
 ): Promise<SearchResult[]> {
   const whereClause = buildWhereClause(typeFilter, boundary);
   const rows = await runFtsLeg(table, onWarn, query, whereClause, maxResults);
@@ -179,16 +179,14 @@ function buildWhereClause(
 /**
  * Convert a raw LanceDB row to a SearchResult.
  *
- * When `sourceContext` is provided (mmnto/totem#1294), stamps the result with
- * `absoluteFilePath` (joined against the context's `absolutePathRoot`) and
- * `sourceRepo` (the context's tag, if set). When not provided, falls back to
- * using `filePath` as-is for `absoluteFilePath` — test fixtures and legacy
- * call sites that construct SearchResult via mocks don't need to supply a
- * context as long as they provide an absolute path in `filePath`.
+ * `sourceContext` is **required** (mmnto/totem#1295 — CR outside-diff catch).
+ * An optional context with a silent `filePath` fallback for `absoluteFilePath`
+ * sent legacy callers down the wrong repo root instead of failing fast.
+ * Making the parameter required is the type-level fix for that drift.
  */
 function rowToSearchResult(
   row: Record<string, unknown>,
-  sourceContext?: SourceContext,
+  sourceContext: SourceContext,
 ): SearchResult {
   // Vector search returns _distance (lower = better); FTS returns _score (higher = better)
   let score = 0;
@@ -199,9 +197,7 @@ function rowToSearchResult(
   }
 
   const filePath = row['filePath'] as string;
-  const absoluteFilePath = sourceContext
-    ? path.join(sourceContext.absolutePathRoot, filePath)
-    : filePath;
+  const absoluteFilePath = path.join(sourceContext.absolutePathRoot, filePath);
 
   const result: SearchResult = {
     content: row['content'] as string,
@@ -214,7 +210,7 @@ function rowToSearchResult(
     metadata: JSON.parse((row['metadata'] as string) || '{}') as Record<string, string>,
   };
 
-  if (sourceContext?.sourceRepo) {
+  if (sourceContext.sourceRepo) {
     result.sourceRepo = sourceContext.sourceRepo;
   }
 
@@ -229,7 +225,7 @@ function rrfMerge(
   listA: RankedRow[],
   listB: RankedRow[],
   limit: number,
-  sourceContext?: SourceContext,
+  sourceContext: SourceContext,
 ): SearchResult[] {
   const scores = new Map<string, { score: number; row: Record<string, unknown> }>();
 

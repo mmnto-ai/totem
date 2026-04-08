@@ -75,7 +75,9 @@ export async function extractFromScans(
   // Connect to LanceDB for dedup context
   const embedding = requireEmbedding(config);
   const embedder = createEmbedder(embedding);
-  const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
+  const store = new LanceStore(path.join(cwd, config.lanceDir), embedder, {
+    absolutePathRoot: cwd,
+  });
   await store.connect();
 
   log.info(TAG, 'Querying existing lessons for dedup...');

@@ -156,22 +156,31 @@ function formatResult(r: SearchResult, index: number): string {
  *
  * Mirrors the semantic-merge pattern established in
  * `packages/cli/src/commands/spec.ts:retrieveContext` — fetch per-store
- * budgets, concat, re-rank by score, truncate. A single failing linked
- * store is eviction-on-failure: we attempt a targeted reconnect first,
- * and if that fails, we delete the store from the active map + record
- * the error so future federated queries skip it instead of repeatedly
- * attempting the same failing reconnect (which would add latency and
- * log spam on every call).
+ * budgets, concat, re-rank by score, truncate.
  *
- * mmnto/totem#1294 Phase 2.
+ * **Runtime failure handling (mmnto/totem#1295 rewrite):** On a linked-
+ * store search error, attempt a targeted `reconnect()` + retry. If the
+ * retry succeeds, return the fresh results. If it fails, record the
+ * failure into the caller-provided `runtimeFailures` map and return
+ * empty for that store on THIS query only. This function DOES NOT
+ * mutate the global `linkedStores` or `linkedStoreInitErrors` maps —
+ * an earlier revision evicted failing stores to avoid log spam, but
+ * GCA + CR both flagged that as a Tenet 4 violation: transient errors
+ * (file locks during parallel sync, network blips) caused permanent
+ * context loss until server restart. The correct tradeoff is to accept
+ * some log spam for resilience, and surface runtime failures via the
+ * per-request warning path (see `performSearch`).
+ *
+ * mmnto/totem#1294 Phase 2 + mmnto/totem#1295 fix.
  */
 async function federatedSearch(
   query: string,
   typeFilter: ContentType | undefined,
   perStoreLimit: number,
   finalLimit: number,
+  runtimeFailures: Map<string, string>,
 ): Promise<SearchResult[]> {
-  const { store: primaryStore, linkedStores, linkedStoreInitErrors } = await getContext();
+  const { store: primaryStore, linkedStores } = await getContext();
 
   // Primary failures propagate — they're handled by the outer retry /
   // reconnect logic in registerSearchKnowledge. No local catch needed;
@@ -183,42 +192,29 @@ async function federatedSearch(
   });
 
   // Linked stores: catch per-store failures so one broken linked index
-  // doesn't break the overall query. On failure:
-  //   1. Attempt a targeted `reconnect()` and retry the search
-  //   2. If that succeeds, return the fresh results
-  //   3. If that fails, EVICT the store from the active map and record
-  //      the error so future federated queries don't re-hit the same
-  //      broken handle on every call (Shield WARN fix — latency + log
-  //      spam on every repeat call if the store wasn't evicted).
-  //
-  // Shield AI catch on PR mmnto/totem#1294 Phase 2 review: "catch-and-
-  // swallow prevents the outer retry/reconnect logic from ever firing
-  // on linked stores." Fixed via targeted reconnect + eviction.
+  // doesn't break the overall query. On failure, attempt targeted
+  // reconnect + retry, then return empty for this query (populating
+  // `runtimeFailures` for the caller to surface). Global state is
+  // NEVER mutated here — the store stays in `linkedStores` so the next
+  // query can try again (the transient issue may have cleared).
   const linkedPromises = Array.from(linkedStores.entries()).map(([name, ls]) =>
     ls.search({ query, typeFilter, maxResults: perStoreLimit }).catch(async (err) => {
       const firstMsg = err instanceof Error ? err.message : String(err);
-      // Targeted reconnect + retry: if the handle was stale, this brings
-      // it back. If the linked repo is actually offline, this fails too
-      // and we evict the store to avoid repeating the same failure.
       try {
         await ls.reconnect();
         return await ls.search({ query, typeFilter, maxResults: perStoreLimit });
       } catch (retryErr) {
         const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
-        const combinedMsg = `Linked store "${name}" search failed (initial: ${firstMsg}; reconnect+retry: ${retryMsg})`;
+        const combinedMsg = `search failed (initial: ${firstMsg}; reconnect+retry: ${retryMsg})`;
         logSearch({
           timestamp: new Date().toISOString(),
           query: `internal:linked-store-search:${name}`,
           resultCount: 0,
           durationMs: 0,
           topScore: null,
-          error: combinedMsg,
+          error: `Linked store "${name}" ${combinedMsg}`,
         });
-        // Evict: remove from active map + record error so the next
-        // query through this path skips the store entirely. A server
-        // restart is required to rehydrate the link.
-        linkedStores.delete(name);
-        linkedStoreInitErrors.set(name, combinedMsg);
+        runtimeFailures.set(name, combinedMsg);
         return [] as SearchResult[];
       }
     }),
@@ -239,6 +235,15 @@ async function performSearch(
 ): Promise<ToolResult> {
   const { config, linkedStores, linkedStoreInitErrors } = await getContext();
   const finalLimit = maxResults ?? 5;
+
+  // Per-query runtime failure tracking (mmnto/totem#1295 CR MAJOR fix).
+  // Populated by `federatedSearch` when a linked store errors during
+  // this specific query. Surfaced as a compact system warning on the
+  // response so the agent sees the failure in-context — NOT gated by
+  // any session-level "already warned" flag. Every query where a
+  // linked store fails produces its own warning; this is the correct
+  // Tenet 4 tradeoff versus the earlier one-shot snapshot approach.
+  const runtimeFailures = new Map<string, string>();
 
   // ─── Boundary resolution (mmnto/totem#1294 Phase 2) ──
   //
@@ -271,13 +276,27 @@ async function performSearch(
       boundary: config.partitions[boundary],
     });
   } else if (boundary !== undefined && linkedStores.has(boundary)) {
-    // Case 2: linked store name — route ONLY to that linked store
+    // Case 2: linked store name — route ONLY to that linked store.
+    // Runtime failures on the explicit-boundary path are captured into
+    // `runtimeFailures` the same way federatedSearch does, so the agent
+    // sees a warning if this specific linked store fails mid-query.
     const linked = linkedStores.get(boundary)!;
-    results = await linked.search({
-      query,
-      typeFilter,
-      maxResults: finalLimit,
-    });
+    try {
+      results = await linked.search({ query, typeFilter, maxResults: finalLimit });
+    } catch (err) {
+      const firstMsg = err instanceof Error ? err.message : String(err);
+      try {
+        await linked.reconnect();
+        results = await linked.search({ query, typeFilter, maxResults: finalLimit });
+      } catch (retryErr) {
+        const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        runtimeFailures.set(
+          boundary,
+          `search failed (initial: ${firstMsg}; reconnect+retry: ${retryMsg})`,
+        );
+        results = [];
+      }
+    }
   } else if (boundary !== undefined && linkedStoreInitErrors.has(boundary)) {
     // Case 3: explicitly-named linked store is in the failure map. Surface
     // the specific error rather than silently degrading to raw-prefix
@@ -305,23 +324,41 @@ async function performSearch(
       boundary,
     });
   } else {
-    // Case 5: no boundary → federated search across primary + all linked
-    // Use the same per-store limit as the final limit so each store gets a
-    // fair budget; the merge below re-ranks and truncates by score.
-    results = await federatedSearch(query, typeFilter, finalLimit, finalLimit);
+    // Case 5: no boundary → federated search across primary + all linked.
+    // Pass the runtimeFailures map so the federation path can populate
+    // it on linked-store errors without mutating global state.
+    results = await federatedSearch(query, typeFilter, finalLimit, finalLimit, runtimeFailures);
   }
 
+  // Build the runtime-failures warning (if any) once so we can decide
+  // whether to skip the "no results" early return for warn-only cases.
+  const runtimeWarning =
+    runtimeFailures.size > 0
+      ? formatSystemWarning(
+          [
+            `Federated search: ${runtimeFailures.size} linked index(es) failed on this query.`,
+            '',
+            ...Array.from(runtimeFailures.entries()).map(([name, err]) => `  - ${name}: ${err}`),
+            '',
+            'Other stores returned their results normally. The linked store(s) above may recover on a subsequent call if the failure was transient (stale handle, file lock). mmnto/totem#1294.',
+          ].join('\n'),
+        )
+      : null;
+
   if (results.length === 0) {
-    return {
-      content: [
-        { type: 'text' as const, text: formatXmlResponse('knowledge', 'No results found.') },
-      ],
-    };
+    const body = formatXmlResponse('knowledge', 'No results found.');
+    const text = runtimeWarning ? runtimeWarning + '\n\n' + body : body; // totem-ignore — system-generated + XML-wrapped
+    return { content: [{ type: 'text' as const, text }] };
   }
 
   const formatted = results.map((r, i) => formatResult(r, i)).join('\n\n---\n\n');
 
   let text = formatXmlResponse('knowledge', formatted);
+
+  // Prepend the per-query runtime warning if federatedSearch populated it
+  if (runtimeWarning) {
+    text = runtimeWarning + '\n\n' + text; // totem-ignore — system-generated + XML-wrapped
+  }
 
   // Append a system warning when the payload is large enough to risk context pressure
   if (text.length > config.contextWarningThreshold) {

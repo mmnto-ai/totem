@@ -44,22 +44,24 @@ export class LanceStore {
    * Passed down to every `search` / `searchFts` call so every SearchResult
    * gets stamped with the owning store's identity via `rowToSearchResult`.
    *
-   * Optional for backward compat: tests and legacy callers that construct
-   * a LanceStore without a source context still work — results fall back
-   * to using `filePath` as `absoluteFilePath`.
+   * **Required** since mmnto/totem#1295 — CR flagged that an optional
+   * context with a silent `filePath` fallback for `absoluteFilePath` sent
+   * legacy callers down the wrong repo root instead of failing fast.
+   * Making the parameter required closes that class of bug at the type
+   * level and forces every call site to state its source explicitly.
    */
-  private sourceContext: SourceContext | undefined;
+  private sourceContext: SourceContext;
 
   constructor(
     dbPath: string,
     embedder: Embedder,
+    sourceContext: SourceContext,
     onWarn?: (msg: string) => void,
-    sourceContext?: SourceContext,
   ) {
     this.dbPath = dbPath;
     this.embedder = embedder;
-    this.onWarn = onWarn ?? (() => {});
     this.sourceContext = sourceContext;
+    this.onWarn = onWarn ?? (() => {});
   }
 
   /**
@@ -264,8 +266,8 @@ export class LanceStore {
         options.query,
         options.typeFilter as ContentType | undefined,
         maxResults,
-        boundary,
         this.sourceContext,
+        boundary,
       );
     }
 
@@ -275,8 +277,8 @@ export class LanceStore {
       options.query,
       options.typeFilter as ContentType | undefined,
       maxResults,
-      boundary,
       this.sourceContext,
+      boundary,
     );
   }
 
@@ -294,8 +296,8 @@ export class LanceStore {
       options.query,
       options.typeFilter as ContentType | undefined,
       options.maxResults ?? 5,
-      options.boundary,
       this.sourceContext,
+      options.boundary,
     );
   }
 

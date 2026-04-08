@@ -484,7 +484,9 @@ export async function learnFromVerdict(
     try {
       const { createEmbedder, LanceStore: Store } = await import('@mmnto/totem');
       const embedder = createEmbedder(config.embedding);
-      const store = new Store(path.join(cwd, config.lanceDir), embedder);
+      const store = new Store(path.join(cwd, config.lanceDir), embedder, {
+        absolutePathRoot: cwd,
+      });
       await store.connect();
       const existing = await store.search({
         query: 'lesson trap pattern decision',
@@ -1123,7 +1125,9 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const embedding = requireEmbedding(config);
   const { createEmbedder, LanceStore: Store } = await import('@mmnto/totem');
   const embedder = createEmbedder(embedding);
-  const store = new Store(path.join(cwd, config.lanceDir), embedder);
+  const store = new Store(path.join(cwd, config.lanceDir), embedder, {
+    absolutePathRoot: cwd,
+  });
   await store.connect();
 
   // Retrieve context from LanceDB — use original changedFiles for better search relevance

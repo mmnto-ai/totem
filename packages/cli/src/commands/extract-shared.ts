@@ -322,7 +322,9 @@ export async function sharedPipeline(
   // Connect to LanceDB for dedup
   const embedding = requireEmbedding(config);
   const embedder = createEmbedder(embedding);
-  const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
+  const store = new LanceStore(path.join(cwd, config.lanceDir), embedder, {
+    absolutePathRoot: cwd,
+  });
   await store.connect();
 
   // Filter out lessons matching the retirement ledger (#1165)

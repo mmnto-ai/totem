@@ -57,10 +57,19 @@ let initPromise: Promise<ServerContext> | undefined;
  * this, a `totem sync` in a linked repo would invalidate that repo's
  * LanceDB table handle, and subsequent federated queries would silently
  * drop that repo's results (or fail explicit-boundary queries) until the
- * MCP server was restarted. Linked-store reconnects are best-effort —
- * individual failures are captured into `linkedStoreInitErrors` so the
- * first-query-warn-block can surface them, matching the init-failure
- * pattern for consistency.
+ * MCP server was restarted.
+ *
+ * mmnto/totem#1295 GCA HIGH: per-link reconnect failures are best-effort
+ * and DO NOT mutate `linkedStores`. Earlier revisions evicted broken
+ * stores from the active map on reconnect failure, but that caused two
+ * problems: (1) transient issues (temporary file lock during a parallel
+ * sync) would cause permanent context loss until server restart, and
+ * (2) a subsequent fix in the linked repo couldn't be picked up without
+ * restart. The current behavior: record the error for the first-query
+ * warning path, leave the store in `linkedStores`, and let the next
+ * `search_knowledge` call attempt a targeted reconnect again via
+ * `federatedSearch`. Trades some log spam for resilience — the correct
+ * Tenet 4 tradeoff per the bot review on PR mmnto/totem#1295.
  */
 export async function reconnectStore(): Promise<void> {
   if (!cached) return;
@@ -70,25 +79,19 @@ export async function reconnectStore(): Promise<void> {
   for (const [name, linkedStore] of cached.linkedStores.entries()) {
     try {
       await linkedStore.reconnect();
-      // No-op on the error map: stores in `linkedStores` never have an
-      // entry in `linkedStoreInitErrors` (init-success and init-failure
-      // are mutually exclusive by construction). Kept intentionally as
-      // a soft invariant — if the invariant ever breaks, clearing the
-      // stale error here is the safe recovery.
-      cached.linkedStoreInitErrors.delete(name);
+      // Successful reconnect clears any previous runtime error for this
+      // link. Init errors persist until server restart — they represent
+      // static config issues (empty store, broken path) that a runtime
+      // reconnect can't fix.
+      if (cached.linkedStoreInitErrors.has(name)) {
+        cached.linkedStoreInitErrors.delete(name);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       cached.linkedStoreInitErrors.set(name, `Reconnect after primary retry failed: ${msg}`);
-      // Remove the stale handle from the active map — federated queries
-      // will skip it until the next server restart. No retry loop here:
-      // the delete is load-bearing (the next reconnectStore call won't
-      // find this entry to retry), but that's intentional. A persistent
-      // linked-store failure that isn't fixed by the initial reconnect
-      // is unlikely to resolve on a subsequent retry in the same session,
-      // and a server restart is the clean recovery path. Captured as
-      // mmnto/totem#1294 follow-up: eager retry + exponential backoff
-      // across search_knowledge calls is a P1 enhancement.
-      cached.linkedStores.delete(name);
+      // DO NOT evict from `linkedStores` — keep the store reference so
+      // future `federatedSearch` calls can attempt a targeted reconnect
+      // when the transient issue clears.
     }
   }
 }
@@ -163,25 +166,29 @@ async function initContext(): Promise<ServerContext> {
   // Primary store gets its own SourceContext so `absoluteFilePath` is
   // populated on every local result. `sourceRepo` stays undefined —
   // primary hits don't carry a source tag.
-  const store = new LanceStore(storePath, embedder, undefined, {
-    absolutePathRoot: projectRoot,
-  });
+  const store = new LanceStore(storePath, embedder, { absolutePathRoot: projectRoot });
   await store.connect();
 
-  // ─── Linked index initialization (mmnto/totem#1294 Phase 2) ──
+  // ─── Linked index initialization (mmnto/totem#1294 Phase 2 + #1295 fixes) ──
   //
   // For every path in `config.linkedIndexes`, attempt to:
   //   1. Derive a stable link name via basename + leading-dot strip
   //   2. Detect and reject name collisions (2+ links resolving to the same name)
-  //   3. Resolve the linked directory, load its config, validate its embedder
-  //   4. Construct a LanceStore with sourceContext tagged for federation
-  //   5. Connect it
+  //   3. Load the linked repo's .env (may contain provider API keys)
+  //   4. Resolve the linked directory, load its config
+  //   5. Validate embedder provider/model AND dimensions match primary
+  //   6. Construct a LanceStore with sourceContext tagged for federation
+  //   7. Connect it
+  //   8. Empty stores: add to linkedStores AND record warning (NOT fatal —
+  //      a subsequent `totem sync` in the linked repo can populate it
+  //      without requiring an MCP server restart)
   //
-  // Any failure at any step is captured into `linkedStoreInitErrors` keyed
-  // by the link name and surfaced on the first `search_knowledge` call via
-  // the first-query-warn-block pattern. The server itself does NOT crash
-  // on any linked-store failure — that would tear down local tools too
-  // and produce a worse user experience than missing context.
+  // Any initialization failure is captured into `linkedStoreInitErrors`
+  // keyed by the link name and surfaced on the first `search_knowledge`
+  // call. The server itself does NOT crash on any linked-store failure —
+  // that would tear down local tools too and produce a worse user
+  // experience than missing context. Runtime search failures use a
+  // separate per-query warning path (see `search-knowledge.ts`).
   const linkedStores = new Map<string, LanceStore>();
   const linkedStoreInitErrors = new Map<string, string>();
 
@@ -216,6 +223,12 @@ async function initContext(): Promise<ServerContext> {
         );
       }
 
+      // mmnto/totem#1295 GCA HIGH: linked repos may have their own `.env`
+      // files containing embedder API keys. Load them BEFORE evaluating
+      // the linked config — `loadEnv` uses `dotenv` without override, so
+      // primary env vars stay authoritative when they overlap.
+      loadEnv(resolvedPath);
+
       const linkedConfig = await loadConfig(linkedConfigPath);
       if (!linkedConfig.embedding) {
         throw new TotemConfigError(
@@ -225,11 +238,9 @@ async function initContext(): Promise<ServerContext> {
         );
       }
 
-      // Validate the linked embedder matches the primary embedder provider
-      // and model. Different providers produce incompatible vector spaces
-      // (see Tenet 7 / ADR-068 — version-pin, don't hand-wave). This catch
-      // is a structural guarantee that mesh queries never cross-compare
-      // mismatched dimensions.
+      // Validate the linked embedder matches the primary embedder
+      // provider and model. Different providers produce incompatible
+      // vector spaces (Tenet 7 / ADR-068 — version-pin, don't hand-wave).
       if (
         linkedConfig.embedding.provider !== embedding.provider ||
         linkedConfig.embedding.model !== embedding.model
@@ -242,26 +253,43 @@ async function initContext(): Promise<ServerContext> {
       }
 
       const linkedEmbedder = createEmbedder(linkedConfig.embedding);
+
+      // mmnto/totem#1295 CR MAJOR: provider + model match is not
+      // sufficient. The same embedder can be instantiated with different
+      // output dimensions (config `dimensions` override). Cross-repo
+      // federation across mismatched dimensions would merge scores from
+      // incompatible vector spaces as if they were comparable. Validate
+      // the resolved dimensions after construction.
+      if (linkedEmbedder.dimensions !== embedder.dimensions) {
+        throw new TotemConfigError(
+          `Linked index embedder dimension mismatch: primary produces ${embedder.dimensions}-dim vectors, linked at ${resolvedPath} produces ${linkedEmbedder.dimensions}-dim. Federation would merge scores from incompatible vector spaces.`,
+          "Align the linked repo embedder dimensions with the primary by updating the linked repo's totem.config.ts embedding.dimensions field, then rebuild the linked index via `totem sync --full` in that repo.",
+          'CONFIG_INVALID',
+        );
+      }
+
       const linkedLanceDir = path.join(resolvedPath, linkedConfig.lanceDir);
-      const linkedStore = new LanceStore(linkedLanceDir, linkedEmbedder, undefined, {
+      const linkedStore = new LanceStore(linkedLanceDir, linkedEmbedder, {
         sourceRepo: name,
         absolutePathRoot: resolvedPath,
       });
       await linkedStore.connect();
 
-      // Post-connect sanity check: the linked store must have data.
-      // Empty linked stores silently contribute nothing to federated
-      // search, which is confusing. Warn on the first query if so.
+      // mmnto/totem#1295 GCA HIGH: empty linked stores are NOT fatal.
+      // A subsequent `totem sync` in the linked repo can populate it
+      // without requiring an MCP server restart. Add the store to the
+      // active map but also record a warning so the first query surfaces
+      // the "run totem sync" hint. (Maps are not mutually exclusive — a
+      // store can be in BOTH linkedStores AND linkedStoreInitErrors if
+      // it's queryable but has a non-fatal issue like being empty.)
+      linkedStores.set(name, linkedStore);
       const rowCount = await linkedStore.count();
       if (rowCount === 0) {
         linkedStoreInitErrors.set(
           name,
-          `Linked index at ${resolvedPath} is empty (0 rows). Run 'totem sync' in that repository to populate its index.`,
+          `Linked index at ${resolvedPath} is empty (0 rows). Federated queries will return no hits from this repo until you run 'totem sync' in that directory.`,
         );
-        continue;
       }
-
-      linkedStores.set(name, linkedStore);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       linkedStoreInitErrors.set(name, msg);
