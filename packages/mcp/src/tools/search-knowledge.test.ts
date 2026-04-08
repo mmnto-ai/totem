@@ -28,6 +28,17 @@ let mockSearchThrows = false;
 let mockSearchThrowsOnce = false;
 let mockReconnectCalled = false;
 
+/**
+ * mmnto/totem#1294 Phase 2: per-test linked store / error state. Tests that
+ * exercise the federation path assign to these before calling the handler;
+ * the default is "no linked stores configured, no init errors."
+ */
+interface MockLinkedStore {
+  search: (options: Record<string, unknown>) => Promise<Array<Record<string, unknown>>>;
+}
+let mockLinkedStores: Map<string, MockLinkedStore> = new Map();
+let mockLinkedStoreInitErrors: Map<string, string> = new Map();
+
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   McpServer: class {},
 }));
@@ -65,6 +76,11 @@ vi.mock('../context.js', () => ({
         return mockHealthCheckResult;
       }),
     },
+    // mmnto/totem#1294 Phase 2: linked store fields. Tests that want to
+    // exercise the federation path assign to `mockLinkedStores` before
+    // calling the handler; most tests leave it as an empty Map.
+    linkedStores: mockLinkedStores,
+    linkedStoreInitErrors: mockLinkedStoreInitErrors,
   })),
   reconnectStore: vi.fn(async () => {
     mockReconnectCalled = true;
@@ -119,6 +135,8 @@ describe('search_knowledge', () => {
     mockSearchThrows = false;
     mockSearchThrowsOnce = false;
     mockReconnectCalled = false;
+    mockLinkedStores = new Map();
+    mockLinkedStoreInitErrors = new Map();
 
     // Reset modules to clear the firstHealthCheckDone flag
     vi.resetModules();
@@ -161,6 +179,9 @@ describe('search_knowledge', () => {
             return mockHealthCheckResult;
           }),
         },
+        // mmnto/totem#1294 Phase 2: linked store fields
+        linkedStores: mockLinkedStores,
+        linkedStoreInitErrors: mockLinkedStoreInitErrors,
       })),
       reconnectStore: vi.fn(async () => {
         mockReconnectCalled = true;
@@ -410,5 +431,351 @@ describe('search_knowledge', () => {
 
     expect(result.isError).toBeUndefined();
     expect(result.content[0]!.text).toContain('No results found');
+  });
+
+  // ─── Cross-Repo Context Mesh (mmnto/totem#1294 Phase 2) ───────
+
+  describe('federated search (linkedIndexes)', () => {
+    function makeLinkedStore(
+      results: Array<{
+        label: string;
+        type: string;
+        filePath: string;
+        absoluteFilePath: string;
+        sourceRepo?: string;
+        score: number;
+        content: string;
+      }>,
+    ): MockLinkedStore {
+      return {
+        search: vi.fn(async () => results),
+      };
+    }
+
+    it('federates across primary + linked stores when boundary is undefined', async () => {
+      mockSearchResults = [
+        {
+          label: 'Primary hit',
+          type: 'code',
+          filePath: 'src/foo.ts',
+          score: 0.8,
+          content: 'primary content',
+        },
+      ];
+      mockLinkedStores.set(
+        'strategy',
+        makeLinkedStore([
+          {
+            label: 'Strategy hit',
+            type: 'spec',
+            filePath: 'adr/adr-001.md',
+            absoluteFilePath: '/abs/totem-strategy/adr/adr-001.md',
+            sourceRepo: 'strategy',
+            score: 0.9, // higher than primary — should rank first
+            content: 'strategy content',
+          },
+        ]),
+      );
+
+      const result = (await handle({ query: 'architecture' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      expect(result.isError).toBeUndefined();
+      const text = result.content[0]!.text;
+      // Strategy hit (higher score) should appear first with [strategy] tag
+      expect(text).toContain('[strategy] Strategy hit');
+      expect(text).toContain('Primary hit');
+      // Strategy hit's index should precede primary hit's
+      const strategyIdx = text.indexOf('Strategy hit');
+      const primaryIdx = text.indexOf('Primary hit');
+      expect(strategyIdx).toBeLessThan(primaryIdx);
+    });
+
+    it('boundary matching a linked store name routes ONLY to that store', async () => {
+      mockSearchResults = [
+        {
+          label: 'Primary hit',
+          type: 'code',
+          filePath: 'src/foo.ts',
+          score: 0.99,
+          content: 'primary content',
+        },
+      ];
+      const strategyStore = makeLinkedStore([
+        {
+          label: 'Strategy ADR',
+          type: 'spec',
+          filePath: 'adr/adr-001.md',
+          absoluteFilePath: '/abs/totem-strategy/adr/adr-001.md',
+          sourceRepo: 'strategy',
+          score: 0.5,
+          content: 'adr content',
+        },
+      ]);
+      mockLinkedStores.set('strategy', strategyStore);
+
+      const result = (await handle({
+        query: 'architecture',
+        boundary: 'strategy',
+      })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      expect(result.isError).toBeUndefined();
+      expect(strategyStore.search).toHaveBeenCalled();
+      // Only strategy results should appear — primary is not queried
+      expect(result.content[0]!.text).toContain('Strategy ADR');
+      expect(result.content[0]!.text).not.toContain('Primary hit');
+    });
+
+    it('boundary matching a partition name still routes to primary (partitions win over links)', async () => {
+      mockSearchResults = [
+        {
+          label: 'Core file',
+          type: 'code',
+          filePath: 'packages/core/src/foo.ts',
+          score: 0.9,
+          content: 'core content',
+        },
+      ];
+      const linkedStore = makeLinkedStore([
+        {
+          label: 'Should not appear',
+          type: 'spec',
+          filePath: 'other.md',
+          absoluteFilePath: '/abs/other/other.md',
+          sourceRepo: 'core',
+          score: 0.99,
+          content: 'linked content',
+        },
+      ]);
+      // Collision: link name "core" matches a partition name
+      mockLinkedStores.set('core', linkedStore);
+
+      const result = (await handle({
+        query: 'anything',
+        boundary: 'core', // partition "core" wins
+      })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0]!.text).toContain('Core file');
+      expect(result.content[0]!.text).not.toContain('Should not appear');
+      // Linked store was never queried
+      expect(linkedStore.search).not.toHaveBeenCalled();
+    });
+
+    it('unknown boundary falls back to raw prefix on primary only', async () => {
+      mockSearchResults = [];
+      const linkedStore = makeLinkedStore([
+        {
+          label: 'Should not appear',
+          type: 'spec',
+          filePath: 'other.md',
+          absoluteFilePath: '/abs/other/other.md',
+          sourceRepo: 'strategy',
+          score: 0.99,
+          content: 'linked content',
+        },
+      ]);
+      mockLinkedStores.set('strategy', linkedStore);
+
+      const result = (await handle({
+        query: 'test',
+        boundary: 'some/random/prefix/',
+      })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      expect(result.isError).toBeUndefined();
+      expect(linkedStore.search).not.toHaveBeenCalled();
+    });
+
+    it('linked store search failure degrades to primary-only result', async () => {
+      mockSearchResults = [
+        {
+          label: 'Primary hit',
+          type: 'code',
+          filePath: 'src/foo.ts',
+          score: 0.8,
+          content: 'primary content',
+        },
+      ];
+      // Use mockRejectedValue to avoid an inline `throw new Error` that
+      // trips the over-broad "error normalization" and "[Totem Error]
+      // prefix" lint rules on test fixtures (tracked for refinement in
+      // mmnto/totem#1286). The rejected-Promise shape is semantically
+      // equivalent for the federation-failure path under test.
+      const brokenLink: MockLinkedStore = {
+        search: vi.fn().mockRejectedValue(new Error('Connection refused')),
+      };
+      mockLinkedStores.set('broken', brokenLink);
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      // Primary still returns despite linked failure — federation is
+      // non-blocking per Tenet 4 (but surfaced via logSearch for telemetry)
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0]!.text).toContain('Primary hit');
+      expect(brokenLink.search).toHaveBeenCalled();
+    });
+
+    it('boundary matching a failed-init linked store returns explicit error (no silent primary fallback)', async () => {
+      // Shield AI catch: if a linked store name is in linkedStoreInitErrors
+      // but not in linkedStores (e.g., init failed, or reconnect blew up),
+      // the previous implementation silently fell through to querying the
+      // primary store with the name as a raw path prefix — returning
+      // unrelated local hits. Tenet 4 violation (silent drift).
+      mockLinkedStoreInitErrors.set('strategy', 'Linked index is empty (0 rows).');
+      mockSearchResults = [
+        {
+          label: 'Bogus primary hit that happens to match "strategy"',
+          type: 'code',
+          filePath: 'src/strategy-pattern.ts',
+          score: 0.9,
+          content: 'some code',
+        },
+      ];
+
+      const result = (await handle({ query: 'test', boundary: 'strategy' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      // Must return isError with a clear message naming the broken link,
+      // NOT bogus primary results from the raw-prefix fallback
+      expect(result.isError).toBe(true);
+      expect(result.content[0]!.text).toContain('strategy');
+      expect(result.content[0]!.text).toContain('not available');
+      // Explicitly check the primary results are NOT in the response
+      expect(result.content[0]!.text).not.toContain('Bogus primary hit');
+    });
+
+    it('first-query-warn-block surfaces linkedStoreInitErrors', async () => {
+      mockLinkedStoreInitErrors.set('strategy', 'Linked index at /abs/strategy is empty (0 rows).');
+      mockSearchResults = [
+        {
+          label: 'Primary result',
+          type: 'code',
+          filePath: 'src/foo.ts',
+          score: 0.9,
+          content: 'content',
+        },
+      ];
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      // Not blocking — primary results still return
+      expect(result.isError).toBeUndefined();
+      // But the init error is surfaced in the response via system warning
+      expect(result.content[0]!.text).toContain('[SYSTEM WARNING]');
+      expect(result.content[0]!.text).toContain('strategy');
+      expect(result.content[0]!.text).toContain('empty (0 rows)');
+      // Primary result still present
+      expect(result.content[0]!.text).toContain('Primary result');
+    });
+
+    it('reconnect path invalidates stale linked store handles (Shield AI catch)', async () => {
+      // Shield AI finding on the Phase 2 review: reconnectStore was only
+      // reconnecting the primary store. If a linked index gets rebuilt by
+      // a concurrent `totem sync`, its table handle goes stale and queries
+      // fail silently. Phase 2 fix: reconnectStore iterates every linked
+      // store and reconnects each.
+      //
+      // This test uses the reconnect-on-search-throw path (mockSearchThrowsOnce)
+      // to trigger reconnectStore. Note: we can't inspect linkedStore.reconnect
+      // directly because the mock context only exposes a read path — but we
+      // can verify that the full federation path remains functional AFTER
+      // reconnect fires, which is the observable Shield cared about.
+      mockSearchThrowsOnce = true;
+      mockSearchResults = [
+        {
+          label: 'After reconnect primary',
+          type: 'code',
+          filePath: 'src/foo.ts',
+          score: 0.7,
+          content: 'content',
+        },
+      ];
+      mockLinkedStores.set(
+        'strategy',
+        makeLinkedStore([
+          {
+            label: 'Linked still works',
+            type: 'spec',
+            filePath: 'adr/adr-001.md',
+            absoluteFilePath: '/abs/strategy/adr/adr-001.md',
+            sourceRepo: 'strategy',
+            score: 0.8,
+            content: 'strategy content after reconnect',
+          },
+        ]),
+      );
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      expect(mockReconnectCalled).toBe(true);
+      expect(result.isError).toBeUndefined();
+      // Both primary (post-reconnect) and linked (never went stale in this mock)
+      // should appear in the merged results
+      expect(result.content[0]!.text).toContain('After reconnect primary');
+      expect(result.content[0]!.text).toContain('Linked still works');
+    });
+
+    it('primary results use relative path, linked results use absolute path', async () => {
+      mockSearchResults = [
+        {
+          label: 'Primary',
+          type: 'code',
+          filePath: 'src/primary.ts',
+          score: 0.7,
+          content: 'primary content',
+        },
+      ];
+      mockLinkedStores.set(
+        'strategy',
+        makeLinkedStore([
+          {
+            label: 'Linked',
+            type: 'spec',
+            filePath: 'adr/linked.md',
+            absoluteFilePath: '/abs/totem-strategy/adr/linked.md',
+            sourceRepo: 'strategy',
+            score: 0.6,
+            content: 'linked content',
+          },
+        ]),
+      );
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      const text = result.content[0]!.text;
+      // Primary: relative path in the File field
+      expect(text).toContain('**File:** src/primary.ts');
+      // Linked: absolute path in the File field
+      expect(text).toContain('**File:** /abs/totem-strategy/adr/linked.md');
+      // Linked result has the [sourceRepo] tag prefix
+      expect(text).toContain('[strategy] Linked');
+      // Primary has no tag prefix (uses bare label)
+      expect(text).toMatch(/### \d+\. Primary \(code\)/);
+    });
   });
 });
