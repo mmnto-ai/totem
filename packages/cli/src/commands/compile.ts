@@ -455,8 +455,20 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
 
       const coreDeps = {
         parseCompilerResponse,
-        runOrchestrator: (prompt: string) =>
-          runOrchestrator({ prompt, tag: TAG, options, config, cwd, temperature: 0 }),
+        // mmnto/totem#1291 Phase 3: thread the optional systemPrompt from
+        // compileLesson through to runOrchestrator so the static compiler
+        // template gets cached server-side by Anthropic instead of being
+        // re-billed at full input-token cost on every lesson.
+        runOrchestrator: (prompt: string, systemPrompt?: string) =>
+          runOrchestrator({
+            prompt,
+            systemPrompt,
+            tag: TAG,
+            options,
+            config,
+            cwd,
+            temperature: 0,
+          }),
         existingByHash,
         pipeline3Prompt: PIPELINE3_COMPILER_PROMPT,
         callbacks: {

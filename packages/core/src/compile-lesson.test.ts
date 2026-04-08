@@ -547,6 +547,59 @@ describe('compileLesson', () => {
     expect(deps.runOrchestrator).toHaveBeenCalled();
   });
 
+  // ─── Phase 3 systemPrompt threading (mmnto/totem#1291) ─────
+
+  it('passes compilerPrompt as the systemPrompt argument (Phase 3 cache target)', async () => {
+    const deps = makeDeps('{"compilable": true}');
+    await compileLesson(lesson, 'COMPILER_PROMPT_50KB', deps);
+
+    const callArgs = (deps.runOrchestrator as ReturnType<typeof vi.fn>).mock.calls[0];
+    const userPrompt = callArgs[0] as string;
+    const systemPrompt = callArgs[1] as string | undefined;
+
+    // The compiler template MUST land on the second arg so the orchestrator
+    // can mark it as a cache target. If it leaks into the user prompt, the
+    // cache directive lands on per-lesson content and never hits.
+    expect(systemPrompt).toBe('COMPILER_PROMPT_50KB');
+    expect(userPrompt).not.toContain('COMPILER_PROMPT_50KB');
+    // The user prompt still carries the lesson markers
+    expect(userPrompt).toContain('Lesson to Compile');
+    expect(userPrompt).toContain(lesson.heading);
+  });
+
+  it('keeps systemPrompt stable across calls so the cache key is identical', async () => {
+    // The whole point of Phase 3: bulk-compile sends the same systemPrompt
+    // bytes for every lesson, so the second + Nth call hit the cache. Verify
+    // that two compileLesson calls with the same compilerPrompt result in two
+    // identical systemPrompt arguments to runOrchestrator.
+    const deps = makeDeps('{"compilable": true}');
+
+    const lessonA: LessonInput = {
+      index: 0,
+      heading: 'Lesson A',
+      body: 'body of lesson A',
+      hash: 'hashA',
+    };
+    const lessonB: LessonInput = {
+      index: 1,
+      heading: 'Lesson B',
+      body: 'body of lesson B',
+      hash: 'hashB',
+    };
+
+    await compileLesson(lessonA, 'STABLE_COMPILER_PROMPT', deps);
+    await compileLesson(lessonB, 'STABLE_COMPILER_PROMPT', deps);
+
+    const callA = (deps.runOrchestrator as ReturnType<typeof vi.fn>).mock.calls[0];
+    const callB = (deps.runOrchestrator as ReturnType<typeof vi.fn>).mock.calls[1];
+
+    // System prompts must be byte-identical. The user prompts differ.
+    expect(callA[1]).toBe('STABLE_COMPILER_PROMPT');
+    expect(callB[1]).toBe('STABLE_COMPILER_PROMPT');
+    expect(callA[1]).toBe(callB[1]);
+    expect(callA[0]).not.toBe(callB[0]);
+  });
+
   it('threads telemetryPrefix into the Pipeline 2 system prompt (mmnto/totem#1131)', async () => {
     const deps: CompileLessonDeps = {
       parseCompilerResponse: vi.fn().mockReturnValue({
@@ -564,27 +617,38 @@ describe('compileLesson', () => {
     const result = await compileLesson(lesson, 'BASE_SYSTEM_PROMPT', deps);
     expect(result.status).toBe('compiled');
     expect(deps.runOrchestrator).toHaveBeenCalledTimes(1);
-    const sentPrompt = (deps.runOrchestrator as ReturnType<typeof vi.fn>).mock
-      .calls[0][0] as string;
-    expect(sentPrompt).toContain('BASE_SYSTEM_PROMPT');
-    expect(sentPrompt).toContain('Telemetry-Driven Refinement Directive');
-    expect(sentPrompt).toContain('60% of its matches occur in non-code contexts');
-    // Directive must appear AFTER the base prompt and BEFORE the lesson body
-    const baseIdx = sentPrompt.indexOf('BASE_SYSTEM_PROMPT');
-    const directiveIdx = sentPrompt.indexOf('Telemetry-Driven Refinement Directive');
-    const lessonIdx = sentPrompt.indexOf('Lesson to Compile');
-    // Order check: base < directive < lesson
-    expect(baseIdx >= 0).toBe(true);
-    expect(directiveIdx > baseIdx).toBe(true);
+
+    // mmnto/totem#1291 Phase 3: compilerPrompt is now passed as the SECOND
+    // argument (systemPrompt) so the orchestrator can mark it as a cache
+    // target. The first argument is the per-lesson user prompt, which carries
+    // the telemetry directive (per-rule, not cacheable) and the lesson body.
+    const callArgs = (deps.runOrchestrator as ReturnType<typeof vi.fn>).mock.calls[0];
+    const sentUserPrompt = callArgs[0] as string;
+    const sentSystemPrompt = callArgs[1] as string | undefined;
+
+    expect(sentSystemPrompt).toBe('BASE_SYSTEM_PROMPT');
+    expect(sentUserPrompt).not.toContain('BASE_SYSTEM_PROMPT');
+    expect(sentUserPrompt).toContain('Telemetry-Driven Refinement Directive');
+    expect(sentUserPrompt).toContain('60% of its matches occur in non-code contexts');
+
+    // Order check inside the user prompt: directive < lesson
+    const directiveIdx = sentUserPrompt.indexOf('Telemetry-Driven Refinement Directive');
+    const lessonIdx = sentUserPrompt.indexOf('Lesson to Compile');
+    expect(directiveIdx >= 0).toBe(true);
     expect(lessonIdx > directiveIdx).toBe(true);
   });
 
   it('omits the telemetry directive when telemetryPrefix is undefined', async () => {
     const deps = makeDeps('{"compilable": true}');
     await compileLesson(lesson, 'BASE_SYSTEM_PROMPT', deps);
-    const sentPrompt = (deps.runOrchestrator as ReturnType<typeof vi.fn>).mock
-      .calls[0][0] as string;
-    expect(sentPrompt).not.toContain('Telemetry-Driven Refinement Directive');
+    const callArgs = (deps.runOrchestrator as ReturnType<typeof vi.fn>).mock.calls[0];
+    const sentUserPrompt = callArgs[0] as string;
+    const sentSystemPrompt = callArgs[1] as string | undefined;
+    expect(sentUserPrompt).not.toContain('Telemetry-Driven Refinement Directive');
+    // Pipeline 2 still threads the compilerPrompt as systemPrompt even when
+    // telemetry is absent — this is the cache-eligible bulk-compile path.
+    expect(sentSystemPrompt).toBe('BASE_SYSTEM_PROMPT');
+    expect(sentUserPrompt).not.toContain('BASE_SYSTEM_PROMPT');
   });
 
   it('uses manual pattern when available (skips LLM)', async () => {
@@ -914,11 +978,18 @@ describe('compileLesson Pipeline 3 (Bad/Good snippets)', () => {
     const result = await compileLesson(pipeline3Lesson, 'system prompt', deps);
     expect(result.status).toBe('compiled');
     expect(deps.runOrchestrator).toHaveBeenCalled();
-    // Verify prompt contains Pipeline 3 markers
-    const prompt = (deps.runOrchestrator as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
-    expect(prompt).toContain('Pipeline 3');
-    expect(prompt).toContain('Bad Code');
-    expect(prompt).toContain('Good Code');
+    // mmnto/totem#1291 Phase 3: Pipeline 3 markers (Bad/Good code, lesson body)
+    // live in the user prompt; the base prompt (Pipeline 3 template OR
+    // compilerPrompt fallback) is passed as the second-arg systemPrompt so the
+    // orchestrator can mark it as a cache target.
+    const callArgs = (deps.runOrchestrator as ReturnType<typeof vi.fn>).mock.calls[0];
+    const userPrompt = callArgs[0] as string;
+    const systemPrompt = callArgs[1] as string | undefined;
+    expect(userPrompt).toContain('Pipeline 3');
+    expect(userPrompt).toContain('Bad Code');
+    expect(userPrompt).toContain('Good Code');
+    // Falls back to compilerPrompt when no pipeline3Prompt was provided
+    expect(systemPrompt).toBe('system prompt');
   });
 
   it('returns skipped when LLM says not compilable', async () => {

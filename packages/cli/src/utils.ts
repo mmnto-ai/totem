@@ -382,6 +382,14 @@ const DEFAULT_TTLS: Record<string, number> = {
  */
 export async function runOrchestrator(opts: {
   prompt: string;
+  /**
+   * Optional persistent system context that providers MAY cache server-side
+   * (mmnto/totem#1291 Phase 3). When set AND the orchestrator config has
+   * `enableContextCaching: true`, providers like Anthropic mark this segment
+   * with `cache_control: { type: 'ephemeral' }` so subsequent calls within
+   * the TTL window read from prompt cache at ~10% the input-token cost.
+   */
+  systemPrompt?: string;
   tag: string;
   options: OrchestratorRunOptions;
   config: TotemConfig;
@@ -393,7 +401,7 @@ export async function runOrchestrator(opts: {
   /** User-defined custom secrets to redact via DLP before outbound LLM calls (#921). */
   customSecrets?: CustomSecret[];
 }): Promise<string | undefined> {
-  const { prompt, tag, options, config, cwd } = opts;
+  const { prompt, systemPrompt, tag, options, config, cwd } = opts;
   const configRoot = opts.configRoot ?? cwd;
 
   // --raw mode: output context only
@@ -439,9 +447,13 @@ export async function runOrchestrator(opts: {
   let cachePath = '';
 
   if (useCache) {
+    // mmnto/totem#1291 Phase 3: hash the systemPrompt too so callers that vary
+    // it (e.g., compile-lesson Pipeline 2 vs Pipeline 3) don't collide on the
+    // same response cache key.
     const hash = crypto
       .createHash('sha256')
       .update(prompt)
+      .update(systemPrompt ?? '')
       .update(qualifiedModel)
       .digest('hex')
       .slice(0, 16);
@@ -473,11 +485,22 @@ export async function runOrchestrator(opts: {
       (baseUrl == null || LOCAL_HOST_RE.test(baseUrl))) ||
     (baseUrl != null && LOCAL_HOST_RE.test(baseUrl));
   let safePrompt = prompt;
+  // mmnto/totem#1291 Phase 3: scrub the systemPrompt too. Today's only
+  // caller (compile.ts) passes a static developer-authored template with no
+  // user data, but future call sites might inject runtime context, so we
+  // mask it on the same path as the user prompt.
+  let safeSystemPrompt = systemPrompt;
   if (!isLocalProvider) {
     try {
       safePrompt = maskSecrets(prompt, opts.customSecrets);
       if (safePrompt !== prompt) {
         log.warn(tag, 'DLP: secrets detected and redacted before LLM call');
+      }
+      if (systemPrompt !== undefined) {
+        safeSystemPrompt = maskSecrets(systemPrompt, opts.customSecrets);
+        if (safeSystemPrompt !== systemPrompt) {
+          log.warn(tag, 'DLP: secrets detected in systemPrompt and redacted before LLM call');
+        }
       }
     } catch (err) {
       throw new TotemOrchestratorError(
@@ -488,15 +511,25 @@ export async function runOrchestrator(opts: {
     }
   }
 
+  // mmnto/totem#1291 Phase 3: read prompt-cache opts from orchestrator config
+  // so they can flow through to provider implementations that support caching
+  // (Anthropic in 1.15.0; Gemini deferred to 1.16.0). Both fields are optional
+  // and undefined-safe — providers fall back to today's behavior when unset.
+  const enableContextCaching = config.orchestrator.enableContextCaching;
+  const cacheTTL = config.orchestrator.cacheTTL;
+
   let result: OrchestratorResult;
   try {
     result = await invoke({
       prompt: safePrompt,
+      ...(safeSystemPrompt !== undefined ? { systemPrompt: safeSystemPrompt } : {}),
       model,
       cwd,
       tag,
       totemDir: config.totemDir,
       temperature: opts.temperature,
+      ...(enableContextCaching !== undefined ? { enableContextCaching } : {}),
+      ...(cacheTTL !== undefined ? { cacheTTL } : {}),
     });
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'QuotaError') {
@@ -510,11 +543,14 @@ export async function runOrchestrator(opts: {
         try {
           result = await fallbackResolved.invoke({
             prompt: safePrompt,
+            ...(safeSystemPrompt !== undefined ? { systemPrompt: safeSystemPrompt } : {}),
             model: fallbackResolved.parsed.model,
             cwd,
             tag,
             totemDir: config.totemDir,
             temperature: opts.temperature,
+            ...(enableContextCaching !== undefined ? { enableContextCaching } : {}),
+            ...(cacheTTL !== undefined ? { cacheTTL } : {}),
           });
           // Update model/invoke so telemetry and cache log the correct values
           model = fallbackResolved.parsed.model;
@@ -594,6 +630,25 @@ export async function runOrchestrator(opts: {
     log.success(tag, `Done: ${secs}s | ${inTok} in | ${outTok} out`);
   } else {
     log.success(tag, `Done: ${secs}s | ${(prompt.length / 1024).toFixed(0)}KB prompt`);
+  }
+
+  // mmnto/totem#1291 Phase 3: surface prompt-cache observability inline so a
+  // bulk recompile shows real-world cache savings on every call. The
+  // distinction matters: cache_read = served from cache (cheap, fast),
+  // cache_creation = wrote a new cache entry (first call in a TTL window,
+  // standard input cost). Both are reported separately so the savings ratio
+  // is unambiguous.
+  if (result.cacheReadInputTokens != null && result.cacheReadInputTokens > 0) {
+    log.dim(
+      tag,
+      `cache hit: ${result.cacheReadInputTokens.toLocaleString()} tokens read from prompt cache`,
+    );
+  }
+  if (result.cacheCreationInputTokens != null && result.cacheCreationInputTokens > 0) {
+    log.dim(
+      tag,
+      `cache write: ${result.cacheCreationInputTokens.toLocaleString()} tokens (first call in TTL window)`,
+    );
   }
 
   return result.content;
