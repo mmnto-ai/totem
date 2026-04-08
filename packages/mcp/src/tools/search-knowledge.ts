@@ -311,7 +311,7 @@ async function performSearch(
       ].join('\n'),
     );
     return {
-      content: [{ type: 'text' as const, text: warning }], // totem-ignore — system-generated + XML-wrapped
+      content: [{ type: 'text' as const, text: warning }], // totem-ignore #1294 — system-generated + XML-wrapped
       isError: true,
     };
   } else if (boundary !== undefined) {
@@ -332,22 +332,37 @@ async function performSearch(
 
   // Build the runtime-failures warning (if any) once so we can decide
   // whether to skip the "no results" early return for warn-only cases.
+  // Copy branches on `boundary` because the targeted (Case 2) path only
+  // queries one linked store — the federated copy ("Other stores returned
+  // their results normally") would be a lie there. mmnto/totem#1295 CR fix.
   const runtimeWarning =
     runtimeFailures.size > 0
       ? formatSystemWarning(
-          [
-            `Federated search: ${runtimeFailures.size} linked index(es) failed on this query.`,
-            '',
-            ...Array.from(runtimeFailures.entries()).map(([name, err]) => `  - ${name}: ${err}`),
-            '',
-            'Other stores returned their results normally. The linked store(s) above may recover on a subsequent call if the failure was transient (stale handle, file lock). mmnto/totem#1294.',
-          ].join('\n'),
+          boundary === undefined
+            ? [
+                `Federated search: ${runtimeFailures.size} linked index(es) failed on this query.`,
+                '',
+                ...Array.from(runtimeFailures.entries()).map(
+                  ([name, err]) => `  - ${name}: ${err}`,
+                ),
+                '',
+                'Other stores returned their results normally. The linked store(s) above may recover on a subsequent call if the failure was transient (stale handle, file lock). mmnto/totem#1294.',
+              ].join('\n')
+            : [
+                `Linked-store search: targeted index "${boundary}" failed on this query.`,
+                '',
+                ...Array.from(runtimeFailures.entries()).map(
+                  ([name, err]) => `  - ${name}: ${err}`,
+                ),
+                '',
+                'No other stores were queried for this request. The linked store may recover on a subsequent call if the failure was transient (stale handle, file lock). mmnto/totem#1294.',
+              ].join('\n'),
         )
       : null;
 
   if (results.length === 0) {
     const body = formatXmlResponse('knowledge', 'No results found.');
-    const text = runtimeWarning ? runtimeWarning + '\n\n' + body : body; // totem-ignore — system-generated + XML-wrapped
+    const text = runtimeWarning ? runtimeWarning + '\n\n' + body : body; // totem-ignore #1294 — system-generated + XML-wrapped
     return { content: [{ type: 'text' as const, text }] };
   }
 
@@ -357,7 +372,7 @@ async function performSearch(
 
   // Prepend the per-query runtime warning if federatedSearch populated it
   if (runtimeWarning) {
-    text = runtimeWarning + '\n\n' + text; // totem-ignore — system-generated + XML-wrapped
+    text = runtimeWarning + '\n\n' + text; // totem-ignore #1294 — system-generated + XML-wrapped
   }
 
   // Append a system warning when the payload is large enough to risk context pressure
@@ -391,11 +406,18 @@ export function registerSearchKnowledge(server: McpServer): void {
           .max(MAX_SEARCH_RESULTS)
           .optional()
           .describe(`Maximum number of results to return (default: 5, max: ${MAX_SEARCH_RESULTS})`),
+        // Normalize blank/whitespace boundaries to undefined so they take
+        // the federated default path. Without this, "" and "   " fall into
+        // the raw-prefix branch and silently drop linked-repo federation.
+        // mmnto/totem#1295 CR fix — input sanitization at the MCP boundary.
         boundary: z
-          .string()
-          .optional()
+          .preprocess((value) => {
+            if (typeof value !== 'string') return value;
+            const trimmed = value.trim();
+            return trimmed === '' ? undefined : trimmed;
+          }, z.string().optional())
           .describe(
-            'Partition name, linked-index name, or file path prefix to scope results. Resolution order: (1) configured partition names (e.g., "core", "cli", "mcp") → primary index, prefix-filtered; (2) linked-index names from linkedIndexes config (e.g., "strategy") → routes only to that cross-repo index; (3) raw path prefixes (e.g., "src/components/") → primary, prefix-filtered. When omitted, search federates across primary + all linked indexes, merging by semantic score.',
+            'Partition name, linked-index name, or file path prefix to scope results. Resolution order: (1) configured partition names (e.g., "core", "cli", "mcp") → primary index, prefix-filtered; (2) linked-index names from linkedIndexes config (e.g., "strategy") → routes only to that cross-repo index; (3) raw path prefixes (e.g., "src/components/") → primary, prefix-filtered. When omitted, search federates across primary + all linked indexes, merging by semantic score. Blank or whitespace-only values are normalized to "omitted" (federated default).',
           ),
       },
       annotations: {
@@ -427,7 +449,7 @@ export function registerSearchKnowledge(server: McpServer): void {
         // Dimension mismatch is fatal — search will crash with a cryptic LanceDB error
         if (healthWarning && healthWarning.includes('DIMENSION MISMATCH')) {
           return {
-            content: [{ type: 'text' as const, text: healthWarning }], // totem-ignore — healthWarning is from formatSystemWarning (already XML-wrapped)
+            content: [{ type: 'text' as const, text: healthWarning }], // totem-ignore #1294 — healthWarning is from formatSystemWarning (already XML-wrapped)
             isError: true,
           };
         }
@@ -481,26 +503,44 @@ export function registerSearchKnowledge(server: McpServer): void {
         const scoreMatches = [...resultText.matchAll(/\*\*Score:\*\* ([\d.]+)/g)];
         const topScore = scoreMatches.length > 0 ? parseFloat(scoreMatches[0]![1]!) : null;
 
-        logSearch({
-          timestamp: new Date().toISOString(),
-          query,
-          typeFilter: type_filter,
-          boundary,
-          resultCount: scoreMatches.length,
-          durationMs: Date.now() - start,
-          topScore,
-        });
+        // Log error responses (e.g., the broken-linked-boundary path at
+        // performSearch Case 3) as errors instead of zero-result successes,
+        // so routing failures are visible in search-log.jsonl. Without this
+        // branch, isError responses would be indistinguishable from "no
+        // matches found." mmnto/totem#1295 CR fix.
+        if (result.isError) {
+          logSearch({
+            timestamp: new Date().toISOString(),
+            query,
+            typeFilter: type_filter,
+            boundary,
+            resultCount: 0,
+            durationMs: Date.now() - start,
+            topScore: null,
+            error: resultText,
+          });
+        } else {
+          logSearch({
+            timestamp: new Date().toISOString(),
+            query,
+            typeFilter: type_filter,
+            boundary,
+            resultCount: scoreMatches.length,
+            durationMs: Date.now() - start,
+            topScore,
+          });
+        }
 
         // Prepend health warning and linked-stores warning to the first search
         // result if issues were found. Order is deliberate: health first
         // (local index issues are higher priority), then linked-stores second.
         const warnings: string[] = [];
         if (healthWarning) warnings.push(healthWarning);
-        if (linkedStoresWarning) warnings.push(linkedStoresWarning); // totem-ignore — system-generated
+        if (linkedStoresWarning) warnings.push(linkedStoresWarning); // totem-ignore #1294 — system-generated
         if (warnings.length > 0 && result.content.length > 0) {
           result.content[0] = {
             type: 'text' as const,
-            text: warnings.join('\n\n') + '\n\n' + result.content[0]!.text, // totem-ignore — all system-generated + XML-wrapped
+            text: warnings.join('\n\n') + '\n\n' + result.content[0]!.text, // totem-ignore #1294 — all system-generated + XML-wrapped
           };
         }
 

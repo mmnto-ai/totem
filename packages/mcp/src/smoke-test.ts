@@ -40,6 +40,8 @@
 import { getContext } from './context.js';
 
 const QUERY = 'cross-repo context mesh federation linked totems';
+const CONSOLE_DIVIDER_WIDTH = 78;
+const CONTENT_PREVIEW_MAX_CHARS = 120;
 
 interface FormattedResult {
   rank: number;
@@ -66,14 +68,15 @@ function formatResults(
     label: r.label,
     score: r.score.toFixed(3),
     path: r.sourceRepo ? r.absoluteFilePath : r.filePath,
-    contentPreview: r.content.slice(0, 120).replace(/\s+/g, ' ').trim() + '...',
+    contentPreview:
+      r.content.slice(0, CONTENT_PREVIEW_MAX_CHARS).replace(/\s+/g, ' ').trim() + '...',
   }));
 }
 
 async function main(): Promise<void> {
-  console.log('='.repeat(78));
+  console.log('='.repeat(CONSOLE_DIVIDER_WIDTH));
   console.log('Cross-Repo Context Mesh — smoke test (mmnto/totem#1294 Phase 3)');
-  console.log('='.repeat(78));
+  console.log('='.repeat(CONSOLE_DIVIDER_WIDTH));
   console.log();
 
   // Capture init timing — helps prove the eager-init path doesn't block
@@ -129,9 +132,9 @@ async function main(): Promise<void> {
   // an equal per-store fetch budget.
 
   console.log();
-  console.log('='.repeat(78));
+  console.log('='.repeat(CONSOLE_DIVIDER_WIDTH));
   console.log(`Query: "${QUERY}"`);
-  console.log('='.repeat(78));
+  console.log('='.repeat(CONSOLE_DIVIDER_WIDTH));
   console.log();
 
   const queryStart = Date.now();
@@ -172,9 +175,7 @@ async function main(): Promise<void> {
   // Per-store breakdown for the PR body
   const primaryHits = primaryResults.length;
   const linkedHitsByName = new Map<string, number>();
-  for (const [name, linkedRes] of ctx.linkedStores.entries()) {
-    // Re-run to get count; the parallel results above lost the per-store mapping
-    void linkedRes; // avoid unused variable
+  for (const name of ctx.linkedStores.keys()) {
     linkedHitsByName.set(name, 0);
   }
   for (const r of merged) {
@@ -220,16 +221,22 @@ async function main(): Promise<void> {
   //   1. Init had zero errors (all linked stores loaded cleanly)
   //   2. At least one linked store returned hits
   //   3. Merge produced an interleaved result set (not just primary or just linked)
+  //
+  // Note: `linkedStoreInitErrors` (populated by `initContext()` in context.ts)
+  // includes empty linked stores as non-fatal warnings — they'd be served as
+  // an empty federation in production but here they fail the smoke test,
+  // because an empty store can't prove cross-repo federation actually works.
+  // (mmnto/totem#1295 CR clarification)
   const hasLinkedHits = Array.from(linkedHitsByName.values()).some((n) => n > 0);
   const hasPrimaryHits = primaryHits > 0;
   const zeroInitErrors = ctx.linkedStoreInitErrors.size === 0;
 
-  console.log('='.repeat(78));
+  console.log('='.repeat(CONSOLE_DIVIDER_WIDTH));
   console.log('Smoke test verdict:');
   console.log(`  Zero init errors:       ${zeroInitErrors ? 'PASS' : 'FAIL'}`);
   console.log(`  Primary returned hits:  ${hasPrimaryHits ? 'PASS' : 'FAIL'}`);
   console.log(`  Linked returned hits:   ${hasLinkedHits ? 'PASS' : 'FAIL'}`);
-  console.log('='.repeat(78));
+  console.log('='.repeat(CONSOLE_DIVIDER_WIDTH));
 
   const verdict = zeroInitErrors && hasPrimaryHits && hasLinkedHits;
   console.log();
