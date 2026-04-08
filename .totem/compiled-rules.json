@@ -5598,22 +5598,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "7d299a9fd0e81e3b",
-      "lessonHeading": "Use anchored regex for shell command matching",
-      "pattern": "/[^/^\\\\][a-zA-Z]+[^/^\\\\$]/",
-      "message": "Use anchored regex (e.g., /^\\s*git\\s+/) for shell command matching to avoid false positives on paths or comments",
-      "engine": "regex",
-      "compiledAt": "2026-04-06T03:30:07.981Z",
-      "createdAt": "2026-04-06T03:30:07.981Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.js",
-        "**/*.tsx",
-        "**/*.jsx"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "18722912049af6f2",
       "lessonHeading": "Prefer shell redirection over cat pipe",
       "pattern": "\\bcat\\s+\\S+\\s*\\|",
@@ -6329,6 +6313,23 @@
         ".github/workflows/*.yaml"
       ],
       "severity": "error"
+    },
+    {
+      "lessonHash": "7d299a9fd0e81e3b",
+      "lessonHeading": "Use anchored regex for shell command matching",
+      "message": "Use anchored regex (e.g., /^\\s*git\\s+/) for shell command matching to avoid false positives on paths like .git/hooks",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "$VAR.test($STR)",
+      "compiledAt": "2026-04-08T03:27:30.964Z",
+      "createdAt": "2026-04-06T03:30:07.981Z",
+      "fileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ]
     }
   ],
   "nonCompilable": [
