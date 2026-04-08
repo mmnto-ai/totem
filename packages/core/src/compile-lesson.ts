@@ -30,16 +30,33 @@ export interface CompileLessonCallbacks {
 
 export interface CompileLessonDeps {
   parseCompilerResponse: (response: string) => CompilerOutput | null;
-  runOrchestrator: (prompt: string) => Promise<string | undefined>;
+  /**
+   * Invoke the LLM. The optional second parameter `systemPrompt` carries the
+   * persistent compiler template separately from the per-lesson user prompt
+   * so the orchestrator can mark it as a cache target (mmnto/totem#1291
+   * Phase 3). When the wrapper threads systemPrompt through to a caching-
+   * capable provider (Anthropic), repeat calls within the TTL window read
+   * from prompt cache instead of paying full input-token cost.
+   *
+   * Backward compatible: callers that ignore the second parameter and
+   * receive a wrapper-prepended single string still work — just without
+   * the cache benefit.
+   */
+  runOrchestrator: (prompt: string, systemPrompt?: string) => Promise<string | undefined>;
   existingByHash: Map<string, CompiledRule>;
   callbacks?: CompileLessonCallbacks;
   /** Optional: specialized system prompt for Pipeline 3 (Bad/Good example-based compilation). */
   pipeline3Prompt?: string;
   /**
-   * Optional telemetry-driven directive appended to the Pipeline 2 system prompt.
-   * Used by `totem compile --upgrade <hash>` (mmnto/totem#1131) to nudge Sonnet toward an
-   * ast-grep structural pattern when the existing rule is firing in non-code contexts.
-   * Has no effect on Pipeline 1 (manual) or Pipeline 3 (example-based) compilation.
+   * Optional telemetry-driven directive prepended to the Pipeline 2 USER prompt
+   * (not the system prompt). Used by `totem compile --upgrade <hash>`
+   * (mmnto/totem#1131) to nudge Sonnet toward an ast-grep structural pattern
+   * when the existing rule is firing in non-code contexts. Has no effect on
+   * Pipeline 1 (manual) or Pipeline 3 (example-based) compilation.
+   *
+   * Note: this lives in the user prompt rather than the system prompt because
+   * it's per-lesson (specific to one rule's telemetry). Putting it in the
+   * system prompt would invalidate the cache on every --upgrade call.
    */
   telemetryPrefix?: string;
 }
@@ -397,11 +414,13 @@ export async function compileLesson(
   // ── Pipeline 3: Example-based compilation (Bad/Good snippets) ──
   const snippets = extractBadGoodSnippets(lesson.body);
   if (snippets) {
-    // Build a constrained prompt with the bad/good examples
-    const basePrompt = deps.pipeline3Prompt ?? compilerPrompt;
-    const examplePrompt = [
-      basePrompt,
-      '',
+    // The base prompt (Pipeline 3 specialized template, or compilerPrompt fallback)
+    // is the persistent system context — same bytes across every Pipeline 3 call
+    // within a session. Pass it as systemPrompt so the orchestrator can cache it
+    // (mmnto/totem#1291 Phase 3). The user prompt carries only the per-lesson
+    // bad/good snippets and lesson body.
+    const systemPrompt = deps.pipeline3Prompt ?? compilerPrompt;
+    const userPrompt = [
       '## Lesson to Compile (Example-Based — Pipeline 3)',
       '',
       `Heading: ${lesson.heading}`,
@@ -415,7 +434,7 @@ export async function compileLesson(
       lesson.body,
     ].join('\n');
 
-    const response = await runOrchestrator(examplePrompt);
+    const response = await runOrchestrator(userPrompt, systemPrompt);
     if (response == null) return { status: 'noop' };
 
     const parsed = parseCompilerResponse(response);
@@ -463,15 +482,22 @@ export async function compileLesson(
   }
 
   // ── Pipeline 2: LLM compilation ──────────────────
+  // The compilerPrompt (ast-grep manual + few-shot examples, ~50KB) is the
+  // persistent system context — same bytes across every Pipeline 2 call within
+  // a session. Pass it as systemPrompt so the orchestrator can cache it
+  // (mmnto/totem#1291 Phase 3). The user prompt carries only the per-lesson
+  // body and the optional telemetry directive (which is per-rule, not cacheable).
+  //
   // Optional telemetry directive (mmnto/totem#1131) — nudges Sonnet toward ast-grep
-  // when the existing rule is firing in strings/comments instead of code.
-  const promptParts: string[] = [compilerPrompt];
+  // when the existing rule is firing in strings/comments instead of code. Lives
+  // in the user prompt because it varies per --upgrade target.
+  const userPromptParts: string[] = [];
   if (deps.telemetryPrefix) {
-    promptParts.push('## Telemetry-Driven Refinement Directive', deps.telemetryPrefix);
+    userPromptParts.push('## Telemetry-Driven Refinement Directive', deps.telemetryPrefix);
   }
-  promptParts.push('## Lesson to Compile', `Heading: ${lesson.heading}`, lesson.body);
-  const prompt = promptParts.join('\n\n');
-  const response = await runOrchestrator(prompt);
+  userPromptParts.push('## Lesson to Compile', `Heading: ${lesson.heading}`, lesson.body);
+  const userPrompt = userPromptParts.join('\n\n');
+  const response = await runOrchestrator(userPrompt, compilerPrompt);
 
   if (response == null) return { status: 'noop' };
 

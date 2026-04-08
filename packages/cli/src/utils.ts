@@ -373,6 +373,36 @@ const DEFAULT_TTLS: Record<string, number> = {
 };
 
 /**
+ * Build the response-cache key for the orthogonal command-level cache (#52).
+ *
+ * Hashes prompt, systemPrompt, and the qualifiedModel string with `\0` byte
+ * delimiters between every field so boundary-case inputs (e.g. `prompt="AB",
+ * systemPrompt=""` vs `prompt="A", systemPrompt="B"`) produce distinct keys.
+ *
+ * Used by both the read path (lookup) and write path (store) inside
+ * `runOrchestrator` to guarantee the keys are identical — extracted as a
+ * pure helper after the mmnto/totem#1292 review (mmnto/totem#1291) caught a
+ * regression where my Phase 3 cascade fix updated only the read path,
+ * leaving the write path on the legacy `prompt + model` shape and making
+ * fresh cache entries unreachable on subsequent runs.
+ */
+function buildResponseCacheHash(
+  prompt: string,
+  systemPrompt: string | undefined,
+  qualifiedModel: string,
+): string {
+  return crypto
+    .createHash('sha256')
+    .update(prompt)
+    .update('\0')
+    .update(systemPrompt ?? '')
+    .update('\0')
+    .update(qualifiedModel)
+    .digest('hex')
+    .slice(0, 16);
+}
+
+/**
  * Validate orchestrator config, then either output raw context (--raw) or
  * invoke the configured orchestrator provider and return the LLM content.
  *
@@ -382,6 +412,14 @@ const DEFAULT_TTLS: Record<string, number> = {
  */
 export async function runOrchestrator(opts: {
   prompt: string;
+  /**
+   * Optional persistent system context that providers MAY cache server-side
+   * (mmnto/totem#1291 Phase 3). When set AND the orchestrator config has
+   * `enableContextCaching: true`, providers like Anthropic mark this segment
+   * with `cache_control: { type: 'ephemeral' }` so subsequent calls within
+   * the TTL window read from prompt cache at ~10% the input-token cost.
+   */
+  systemPrompt?: string;
   tag: string;
   options: OrchestratorRunOptions;
   config: TotemConfig;
@@ -393,12 +431,29 @@ export async function runOrchestrator(opts: {
   /** User-defined custom secrets to redact via DLP before outbound LLM calls (#921). */
   customSecrets?: CustomSecret[];
 }): Promise<string | undefined> {
-  const { prompt, tag, options, config, cwd } = opts;
+  const { prompt, systemPrompt, tag, options, config, cwd } = opts;
   const configRoot = opts.configRoot ?? cwd;
 
-  // --raw mode: output context only
+  // --raw mode: output context only.
+  // mmnto/totem#1291 Phase 3: when systemPrompt is set (post-split callers like
+  // compile-lesson), concatenate both segments in the raw artifact so the
+  // file accurately reflects what the model would receive. Pre-split callers
+  // that pass only `prompt` get today's behavior unchanged.
+  //
+  // Plain `${systemPrompt}\n\n${prompt}` concatenation matches the established
+  // pattern in shell-orchestrator.ts (CLI binaries have no structured message
+  // API and the orchestrator concatenates before piping), and avoids any
+  // markdown-marker text that downstream consumers might misinterpret as
+  // content when piping the raw output to other tools or LLMs. CodeRabbit
+  // initially asked for the markers in mmnto/totem#1292 round 1; GCA pushed back
+  // in round 2 for the pipe-safety reason. The shell precedent + pipe-safety
+  // wins.
   if (options.raw) {
-    writeOutput(prompt, options.out);
+    const rawOutput =
+      systemPrompt !== undefined && systemPrompt.length > 0
+        ? `${systemPrompt}\n\n${prompt}`
+        : prompt;
+    writeOutput(rawOutput, options.out);
     const suffix = opts.totalResults != null ? ` (${opts.totalResults} chunks)` : '';
     log.dim(tag, `Raw context output complete${suffix}.`);
     return undefined;
@@ -439,12 +494,7 @@ export async function runOrchestrator(opts: {
   let cachePath = '';
 
   if (useCache) {
-    const hash = crypto
-      .createHash('sha256')
-      .update(prompt)
-      .update(qualifiedModel)
-      .digest('hex')
-      .slice(0, 16);
+    const hash = buildResponseCacheHash(prompt, systemPrompt, qualifiedModel);
     const cacheDir = path.join(configRoot, config.totemDir, 'cache');
     cachePath = path.join(cacheDir, `${tagKey}-${hash}.json`);
 
@@ -473,11 +523,22 @@ export async function runOrchestrator(opts: {
       (baseUrl == null || LOCAL_HOST_RE.test(baseUrl))) ||
     (baseUrl != null && LOCAL_HOST_RE.test(baseUrl));
   let safePrompt = prompt;
+  // mmnto/totem#1291 Phase 3: scrub the systemPrompt too. Today's only
+  // caller (compile.ts) passes a static developer-authored template with no
+  // user data, but future call sites might inject runtime context, so we
+  // mask it on the same path as the user prompt.
+  let safeSystemPrompt = systemPrompt;
   if (!isLocalProvider) {
     try {
       safePrompt = maskSecrets(prompt, opts.customSecrets);
       if (safePrompt !== prompt) {
         log.warn(tag, 'DLP: secrets detected and redacted before LLM call');
+      }
+      if (systemPrompt !== undefined) {
+        safeSystemPrompt = maskSecrets(systemPrompt, opts.customSecrets);
+        if (safeSystemPrompt !== systemPrompt) {
+          log.warn(tag, 'DLP: secrets detected in systemPrompt and redacted before LLM call');
+        }
       }
     } catch (err) {
       throw new TotemOrchestratorError(
@@ -488,15 +549,25 @@ export async function runOrchestrator(opts: {
     }
   }
 
+  // mmnto/totem#1291 Phase 3: read prompt-cache opts from orchestrator config
+  // so they can flow through to provider implementations that support caching
+  // (Anthropic in 1.15.0; Gemini deferred to 1.16.0). Both fields are optional
+  // and undefined-safe — providers fall back to today's behavior when unset.
+  const enableContextCaching = config.orchestrator.enableContextCaching;
+  const cacheTTL = config.orchestrator.cacheTTL;
+
   let result: OrchestratorResult;
   try {
     result = await invoke({
       prompt: safePrompt,
+      ...(safeSystemPrompt !== undefined ? { systemPrompt: safeSystemPrompt } : {}),
       model,
       cwd,
       tag,
       totemDir: config.totemDir,
       temperature: opts.temperature,
+      ...(enableContextCaching !== undefined ? { enableContextCaching } : {}),
+      ...(cacheTTL !== undefined ? { cacheTTL } : {}),
     });
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'QuotaError') {
@@ -510,11 +581,14 @@ export async function runOrchestrator(opts: {
         try {
           result = await fallbackResolved.invoke({
             prompt: safePrompt,
+            ...(safeSystemPrompt !== undefined ? { systemPrompt: safeSystemPrompt } : {}),
             model: fallbackResolved.parsed.model,
             cwd,
             tag,
             totemDir: config.totemDir,
             temperature: opts.temperature,
+            ...(enableContextCaching !== undefined ? { enableContextCaching } : {}),
+            ...(cacheTTL !== undefined ? { cacheTTL } : {}),
           });
           // Update model/invoke so telemetry and cache log the correct values
           model = fallbackResolved.parsed.model;
@@ -548,13 +622,11 @@ export async function runOrchestrator(opts: {
 
   if (useCache && result.content && result.durationMs > 0) {
     try {
-      // Recalculate cache path — `model` may have changed to fallbackModel
-      const cacheHash = crypto
-        .createHash('sha256')
-        .update(prompt)
-        .update(model)
-        .digest('hex')
-        .slice(0, 16);
+      // Recalculate cache path — `qualifiedModel` reflects any quota fallback
+      // resolution that may have happened above. Uses the same helper as the
+      // read path so the keys are guaranteed identical (mmnto/totem#1291
+      // mmnto/totem#1292 review fix from GCA + CodeRabbit).
+      const cacheHash = buildResponseCacheHash(prompt, systemPrompt, qualifiedModel);
       const cacheDir = path.join(configRoot, config.totemDir, 'cache');
       const finalCachePath = path.join(cacheDir, `${tagKey}-${cacheHash}.json`);
       fs.mkdirSync(cacheDir, { recursive: true });
@@ -594,6 +666,25 @@ export async function runOrchestrator(opts: {
     log.success(tag, `Done: ${secs}s | ${inTok} in | ${outTok} out`);
   } else {
     log.success(tag, `Done: ${secs}s | ${(prompt.length / 1024).toFixed(0)}KB prompt`);
+  }
+
+  // mmnto/totem#1291 Phase 3: surface prompt-cache observability inline so a
+  // bulk recompile shows real-world cache savings on every call. The
+  // distinction matters: cache_read = served from cache (cheap, fast),
+  // cache_creation = wrote a new cache entry (first call in a TTL window,
+  // standard input cost). Both are reported separately so the savings ratio
+  // is unambiguous.
+  if (result.cacheReadInputTokens != null && result.cacheReadInputTokens > 0) {
+    log.dim(
+      tag,
+      `cache hit: ${result.cacheReadInputTokens.toLocaleString()} tokens read from prompt cache`,
+    );
+  }
+  if (result.cacheCreationInputTokens != null && result.cacheCreationInputTokens > 0) {
+    log.dim(
+      tag,
+      `cache write: ${result.cacheCreationInputTokens.toLocaleString()} tokens (first call in TTL window)`,
+    );
   }
 
   return result.content;

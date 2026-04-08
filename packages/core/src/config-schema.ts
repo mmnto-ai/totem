@@ -71,6 +71,30 @@ const BaseOrchestratorFields = {
   overrides: z.record(z.string()).optional(),
   /** Per-command cache TTLs in seconds (e.g., { 'triage': 3600, 'shield': 0 }) */
   cacheTtls: z.record(z.number()).optional(),
+  /**
+   * Enable provider-native prompt caching (mmnto/totem#1291 Proposal 217). When true and
+   * the provider supports it (Anthropic in 1.15.0, Gemini in 1.16.0+), persistent
+   * `systemPrompt` segments will be marked with cache_control directives to
+   * reduce input-token cost on repeat invocations within the TTL window.
+   * Defaults to undefined (off) — opt-in for 1.15.0 to avoid surprising existing
+   * users mid-cycle. Distinct from `cacheTtls` above, which controls the
+   * orthogonal response-level cache (mmnto/totem#52, closed) at
+   * `.totem/cache/<command>-<hash>.json`.
+   */
+  enableContextCaching: z.boolean().optional(),
+  /**
+   * Prompt cache TTL in seconds (mmnto/totem#1291). Anthropic supports exactly
+   * two values today: 300 (5m, default ephemeral) and 3600 (1h, extended cache
+   * — 2x write cost, ~10% read cost). Only consulted when
+   * `enableContextCaching` is true. Defaults to 300 when omitted.
+   *
+   * Constrained to literals at parse time so invalid TTLs (e.g. 600, 1800)
+   * fail fast at config load instead of silently falling through to 5m at
+   * provider-invocation time. Caught by CodeRabbit on PR #1292 review.
+   * Anthropic docs verified for both values:
+   * https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
+   */
+  cacheTTL: z.union([z.literal(300), z.literal(3600)]).optional(),
 };
 
 export const ShellOrchestratorSchema = z.object({

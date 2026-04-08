@@ -148,4 +148,51 @@ describe('invokeGeminiOrchestrator', () => {
     expect(result.content).toBe('');
     expect(result.finishReason).toBe('SAFETY');
   });
+
+  // ─── systemPrompt threading (mmnto/totem#1291 Phase 3 cascade fix) ──
+
+  describe('systemPrompt threading', { timeout: 15000 }, () => {
+    const happyResponse = () => ({
+      text: 'ok',
+      usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
+      candidates: [{ finishReason: 'STOP' }],
+    });
+
+    it('passes systemPrompt as config.systemInstruction when provided', async () => {
+      mockGenerateContent.mockResolvedValueOnce(happyResponse());
+
+      await invokeGeminiOrchestrator({
+        ...baseOpts,
+        systemPrompt: 'COMPILER_SYSTEM_PROMPT',
+      });
+
+      const call = mockGenerateContent.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(call).toBeDefined();
+      const config = call['config'] as Record<string, unknown>;
+      expect(config['systemInstruction']).toBe('COMPILER_SYSTEM_PROMPT');
+      // contents (the user prompt) is unchanged
+      expect(call['contents']).toBe('test prompt');
+    });
+
+    it('omits systemInstruction from config when systemPrompt is undefined (backward compat)', async () => {
+      mockGenerateContent.mockResolvedValueOnce(happyResponse());
+
+      await invokeGeminiOrchestrator(baseOpts);
+
+      const call = mockGenerateContent.mock.calls[0]?.[0] as Record<string, unknown>;
+      const config = call['config'] as Record<string, unknown>;
+      expect(config['systemInstruction']).toBeUndefined();
+    });
+
+    it('treats an empty systemPrompt the same as undefined (omits systemInstruction)', async () => {
+      // GCA round 2 SAFETY INVARIANT: Gemini may reject empty
+      // systemInstruction. Match the parallel checks in
+      // anthropic/openai/ollama by treating empty/undefined the same.
+      mockGenerateContent.mockResolvedValueOnce(happyResponse());
+      await invokeGeminiOrchestrator({ ...baseOpts, systemPrompt: '' });
+      const call = mockGenerateContent.mock.calls[0]?.[0] as Record<string, unknown>;
+      const config = call['config'] as Record<string, unknown>;
+      expect(config['systemInstruction']).toBeUndefined();
+    });
+  });
 });

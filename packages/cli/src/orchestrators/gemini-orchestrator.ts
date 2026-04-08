@@ -33,7 +33,25 @@ async function importGeminiSdk() {
 export async function invokeGeminiOrchestrator(
   opts: OrchestratorInvokeOptions,
 ): Promise<OrchestratorResult> {
-  const { prompt, model, tag } = opts;
+  // mmnto/totem#1291 Phase 3: opts.systemPrompt is consumed via Gemini's
+  // native `config.systemInstruction` field so the LLM receives the
+  // compiler instructions correctly. Without this, Phase 3's prompt split
+  // (compilerPrompt → systemPrompt) would silently strip the instructions
+  // when compile is routed to Gemini, leaving the model with only the
+  // lesson body. Caught by Shield AI on the first push attempt — see
+  // .totem/lessons/lesson-400fed87.md (read-path schema changes break
+  // write-path invariants).
+  //
+  // TODO(mmnto/totem#1291 Phase 4 — deferred to 1.16.0): When
+  // opts.enableContextCaching is true, use the `ai.caches.create({ model,
+  // contents, ttl })` lifecycle to upload the persistent context, hash-key
+  // it on `compile-manifest.json`, and reference it via
+  // `config: { cachedContent }` on subsequent calls. Surface the cached-
+  // token count from `usageMetadata.cachedContentTokenCount` (Gemini's
+  // field, not Anthropic's `cache_read_input_tokens`) into
+  // OrchestratorResult.cacheReadInputTokens. The systemInstruction wiring
+  // in Phase 3 is the foundation Phase 4 will build on.
+  const { prompt, systemPrompt, model, tag } = opts;
 
   const apiKey = process.env['GEMINI_API_KEY'] ?? process.env['GOOGLE_API_KEY'];
   if (!apiKey) {
@@ -50,6 +68,11 @@ export async function invokeGeminiOrchestrator(
   log.info(tag, 'Invoking Gemini API (this may take 15-60 seconds)...');
   const startMs = Date.now();
 
+  // SAFETY INVARIANT: Gemini may reject empty `systemInstruction`. Skip the
+  // field when systemPrompt is undefined or empty so the request shape stays
+  // identical to today's pre-Phase-3 calls. Matches the parallel checks in
+  // anthropic/openai/ollama after the GCA round 2 review on PR mmnto/totem#1292.
+  const hasSystemPrompt = systemPrompt !== undefined && systemPrompt.length > 0;
   try {
     const response = await ai.models.generateContent({
       model,
@@ -57,6 +80,7 @@ export async function invokeGeminiOrchestrator(
       config: {
         maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
         ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+        ...(hasSystemPrompt ? { systemInstruction: systemPrompt } : {}),
       },
     });
 

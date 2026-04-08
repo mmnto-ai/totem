@@ -26,6 +26,12 @@ const config: TotemConfig = {
       shield: 'gemini-3.1-pro-preview',
       triage: 'gemini-3.1-pro-preview',
     },
+    // mmnto/totem#1291 Phase 3: dogfood prompt caching against our own
+    // compile path. Sonnet 4.6 caches the static compiler template (~50KB
+    // ast-grep manual + few-shot) on the first call of a session and reads
+    // from cache on every subsequent lesson within the 5-minute TTL window.
+    // Default 5m ephemeral covers bulk recompile + multi-lesson CI runs.
+    enableContextCaching: true,
   },
 
   exports: {

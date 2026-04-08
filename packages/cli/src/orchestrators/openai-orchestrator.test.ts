@@ -146,4 +146,57 @@ describe('invokeOpenAIOrchestrator', () => {
     const result = await invokeOpenAIOrchestrator(baseOpts);
     expect(result.content).toBe('');
   });
+
+  // ─── systemPrompt threading (mmnto/totem#1291 Phase 3 cascade fix) ──
+
+  describe('systemPrompt threading', { timeout: 15000 }, () => {
+    const happyResponse = () => ({
+      choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 10, completion_tokens: 5 },
+    });
+
+    it('prepends a system role message when systemPrompt is provided', async () => {
+      mockCreate.mockResolvedValueOnce(happyResponse());
+
+      await invokeOpenAIOrchestrator({
+        ...baseOpts,
+        systemPrompt: 'COMPILER_SYSTEM_PROMPT',
+      });
+
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messages: [
+            { role: 'system', content: 'COMPILER_SYSTEM_PROMPT' },
+            { role: 'user', content: 'test prompt' },
+          ],
+        }),
+      );
+    });
+
+    it('omits the system role message when systemPrompt is undefined (backward compat)', async () => {
+      mockCreate.mockResolvedValueOnce(happyResponse());
+
+      await invokeOpenAIOrchestrator(baseOpts);
+
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messages: [{ role: 'user', content: 'test prompt' }],
+        }),
+      );
+    });
+
+    it('treats an empty systemPrompt the same as undefined (no system role message)', async () => {
+      // GCA round 2 SAFETY INVARIANT: OpenAI Chat Completions API
+      // explicitly rejects messages with empty content (400). Match the
+      // parallel checks in anthropic/gemini/ollama by treating
+      // empty/undefined the same — no system role message in the array.
+      mockCreate.mockResolvedValueOnce(happyResponse());
+      await invokeOpenAIOrchestrator({ ...baseOpts, systemPrompt: '' });
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messages: [{ role: 'user', content: 'test prompt' }],
+        }),
+      );
+    });
+  });
 });
