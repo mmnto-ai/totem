@@ -350,10 +350,12 @@ describe('OrchestratorInvokeOptions caching foundation', { timeout: 15000 }, () 
     expect(opts.cacheTTL).toBe(3600);
   });
 
-  it('Phase 1 providers ignore systemPrompt — existing mock dispatch still works', async () => {
-    // Sanity check: passing the new fields through createOrchestrator's
-    // resulting invoker must not break the call. The mocks at the top of
-    // this file resolve the same OrchestratorResult shape regardless.
+  it('caching options flow through createOrchestrator dispatch without breaking the call', async () => {
+    // Sanity check: passing the new caching fields through createOrchestrator's
+    // resulting invoker must not break the call shape. The mocks at the top of
+    // this file resolve the same OrchestratorResult shape regardless of whether
+    // caching is opted into — the actual SDK-level cache wiring lives in the
+    // anthropic-orchestrator.test.ts behavior tests.
     const config: OrchestratorConfig = { provider: 'anthropic' };
     const invoke = createOrchestrator(config);
     const result = await invoke({
