@@ -206,4 +206,34 @@ describe('invokeOllamaOrchestrator', () => {
       'Unexpected response from Ollama API',
     );
   });
+
+  // ─── systemPrompt threading (mmnto/totem#1291 Phase 3 cascade fix) ──
+
+  describe('systemPrompt threading', { timeout: 15000 }, () => {
+    it('prepends a system role message when systemPrompt is provided', async () => {
+      mockFetch.mockResolvedValueOnce(okResponse({ message: { content: 'ok' }, done: true }));
+
+      await invokeOllamaOrchestrator({
+        ...baseOpts,
+        systemPrompt: 'COMPILER_SYSTEM_PROMPT',
+      });
+
+      const [, fetchOpts] = mockFetch.mock.calls[0]!;
+      const body = JSON.parse(fetchOpts.body);
+      expect(body.messages).toEqual([
+        { role: 'system', content: 'COMPILER_SYSTEM_PROMPT' },
+        { role: 'user', content: 'test prompt' },
+      ]);
+    });
+
+    it('omits the system role message when systemPrompt is undefined (backward compat)', async () => {
+      mockFetch.mockResolvedValueOnce(okResponse({ message: { content: 'ok' }, done: true }));
+
+      await invokeOllamaOrchestrator(baseOpts);
+
+      const [, fetchOpts] = mockFetch.mock.calls[0]!;
+      const body = JSON.parse(fetchOpts.body);
+      expect(body.messages).toEqual([{ role: 'user', content: 'test prompt' }]);
+    });
+  });
 });

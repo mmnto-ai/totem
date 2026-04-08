@@ -449,11 +449,16 @@ export async function runOrchestrator(opts: {
   if (useCache) {
     // mmnto/totem#1291 Phase 3: hash the systemPrompt too so callers that vary
     // it (e.g., compile-lesson Pipeline 2 vs Pipeline 3) don't collide on the
-    // same response cache key.
+    // same response cache key. Null-byte delimiters between fields prevent
+    // boundary-collision attacks where `prompt="AB", systemPrompt=""` would
+    // otherwise hash identically to `prompt="A", systemPrompt="B"`. Caught
+    // by Shield AI on the first push attempt.
     const hash = crypto
       .createHash('sha256')
       .update(prompt)
+      .update('\0')
       .update(systemPrompt ?? '')
+      .update('\0')
       .update(qualifiedModel)
       .digest('hex')
       .slice(0, 16);

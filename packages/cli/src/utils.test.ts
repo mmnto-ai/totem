@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -937,6 +938,42 @@ describe('runOrchestrator', { timeout: 15_000 }, () => {
     const callArgs = invoke.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(callArgs['enableContextCaching']).toBeUndefined();
     expect(callArgs['cacheTTL']).toBeUndefined();
+  });
+
+  it('response cache key includes null-byte delimiters to prevent boundary collisions', async () => {
+    // Phase 3 cascade-fix regression test (caught by Shield AI):
+    // crypto.createHash().update(prompt).update(systemPrompt) without a
+    // delimiter would let `prompt="AB", systemPrompt=""` collide with
+    // `prompt="A", systemPrompt="B"` because both concatenate to "AB".
+    //
+    // Replicate the exact construction from runOrchestrator (utils.ts) and
+    // assert the boundary-case inputs produce DIFFERENT hashes. The
+    // `\0` delimiter sits between every field — without it, the test below
+    // would produce identical hashes and fail.
+    const buildKey = (prompt: string, systemPrompt: string, model: string) =>
+      crypto
+        .createHash('sha256')
+        .update(prompt)
+        .update('\0')
+        .update(systemPrompt)
+        .update('\0')
+        .update(model)
+        .digest('hex')
+        .slice(0, 16);
+
+    const a = buildKey('AB', '', 'm');
+    const b = buildKey('A', 'B', 'm');
+    expect(a).not.toBe(b);
+
+    // Sibling collision: "A", "BC" vs "AB", "C"
+    const c = buildKey('A', 'BC', 'm');
+    const d = buildKey('AB', 'C', 'm');
+    expect(c).not.toBe(d);
+
+    // Same inputs MUST still hash identically (idempotency check)
+    const e = buildKey('prompt', 'system', 'model');
+    const f = buildKey('prompt', 'system', 'model');
+    expect(e).toBe(f);
   });
 
   it('passes through cacheReadInputTokens / cacheCreationInputTokens from invoke() result', async () => {

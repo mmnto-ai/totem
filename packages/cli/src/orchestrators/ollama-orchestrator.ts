@@ -32,7 +32,14 @@ const OllamaChatResponseSchema = z.object({
 export async function invokeOllamaOrchestrator(
   opts: OrchestratorInvokeOptions & { baseUrl?: string; numCtx?: number },
 ): Promise<OrchestratorResult> {
-  const { prompt, model, tag, baseUrl, numCtx } = opts;
+  // mmnto/totem#1291 Phase 3: opts.systemPrompt is consumed via the Ollama
+  // chat API's standard `system` role message so the LLM receives the
+  // compiler instructions correctly. Without this, Phase 3's prompt split
+  // would silently strip the instructions when compile is routed to a local
+  // Ollama model, leaving the model with only the lesson body. Caught by
+  // Shield AI on the first push attempt — same cascade pattern as the
+  // Gemini and OpenAI fixes.
+  const { prompt, systemPrompt, model, tag, baseUrl, numCtx } = opts;
 
   // Normalize base URL (strip trailing slash)
   const base = (baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
@@ -42,10 +49,16 @@ export async function invokeOllamaOrchestrator(
   log.info(tag, `Invoking Ollama at ${base}${ctxLabel} (this may take 15-60 seconds)...`);
   const startMs = Date.now();
 
+  const messages: { role: 'system' | 'user'; content: string }[] = [];
+  if (systemPrompt !== undefined) {
+    messages.push({ role: 'system', content: systemPrompt });
+  }
+  messages.push({ role: 'user', content: prompt });
+
   const body: Record<string, unknown> = {
     model,
     stream: false,
-    messages: [{ role: 'user', content: prompt }],
+    messages,
   };
 
   // Only inject options when explicitly configured

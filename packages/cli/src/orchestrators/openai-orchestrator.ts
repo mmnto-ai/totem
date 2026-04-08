@@ -40,7 +40,14 @@ async function importOpenAISdk() {
 export async function invokeOpenAIOrchestrator(
   opts: OrchestratorInvokeOptions & { baseUrl?: string },
 ): Promise<OrchestratorResult> {
-  const { prompt, model, tag, baseUrl } = opts;
+  // mmnto/totem#1291 Phase 3: opts.systemPrompt is consumed via the
+  // standard OpenAI `system` role message so the LLM receives the compiler
+  // instructions correctly. Without this, Phase 3's prompt split would
+  // silently strip the instructions when compile is routed to OpenAI-
+  // compatible servers (LM Studio, Groq, OpenRouter, etc.), leaving the
+  // model with only the lesson body. Caught by Shield AI on the first
+  // push attempt — same cascade pattern as the Gemini fix.
+  const { prompt, systemPrompt, model, tag, baseUrl } = opts;
 
   // For local servers, use a dummy key if none is set
   const apiKey = process.env['OPENAI_API_KEY'] ?? (baseUrl ? LOCAL_DUMMY_KEY : undefined);
@@ -63,10 +70,16 @@ export async function invokeOpenAIOrchestrator(
   const startMs = Date.now();
 
   try {
+    const messages: { role: 'system' | 'user'; content: string }[] = [];
+    if (systemPrompt !== undefined) {
+      messages.push({ role: 'system', content: systemPrompt });
+    }
+    messages.push({ role: 'user', content: prompt });
+
     const response = await client.chat.completions.create({
       model,
       max_tokens: DEFAULT_MAX_TOKENS,
-      messages: [{ role: 'user' as const, content: prompt }],
+      messages,
       ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
     });
 

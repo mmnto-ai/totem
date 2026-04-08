@@ -71,13 +71,23 @@ export interface ShellOrchestratorOptions extends OrchestratorInvokeOptions {
 export async function invokeShellOrchestrator(
   opts: ShellOrchestratorOptions,
 ): Promise<OrchestratorResult> {
-  const { prompt, command, model, cwd, tag, totemDir } = opts;
+  // mmnto/totem#1291 Phase 3: opts.systemPrompt is concatenated with prompt
+  // before being written to the tempfile because shell orchestrators talk to
+  // CLI binaries (`gemini`, `claude`) that consume one piped prompt and have
+  // no structured system/user message API. Concatenation matches the legacy
+  // single-string behavior — without this, Phase 3's prompt split would
+  // silently strip compiler instructions when compile is routed through a
+  // shell CLI fallback. Caught by Shield AI on the first push attempt as
+  // part of the same cascade as the Gemini/OpenAI/Ollama fixes.
+  const { prompt, systemPrompt, command, model, cwd, tag, totemDir } = opts;
+  const fullPrompt =
+    systemPrompt !== undefined && systemPrompt.length > 0 ? `${systemPrompt}\n\n${prompt}` : prompt;
   const tmpName = `totem-${tag.toLowerCase()}-${crypto.randomBytes(TEMP_ID_BYTES).toString('hex')}.md`;
   const tempDir = path.join(cwd, totemDir, 'temp');
   fs.mkdirSync(tempDir, { recursive: true });
   const tempPath = path.join(tempDir, tmpName);
 
-  fs.writeFileSync(tempPath, prompt, { encoding: 'utf-8', mode: 0o600 });
+  fs.writeFileSync(tempPath, fullPrompt, { encoding: 'utf-8', mode: 0o600 });
 
   const quotedPath = IS_WIN
     ? `"${tempPath.replace(/"/g, '""')}"`

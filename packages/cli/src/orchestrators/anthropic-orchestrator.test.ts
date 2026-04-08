@@ -174,6 +174,25 @@ describe('invokeAnthropicOrchestrator', () => {
       );
     });
 
+    // Cascade-fix coverage: Phase 3 made systemPrompt always set on the
+    // compile path, so non-Anthropic providers needed parallel updates to
+    // consume it for correctness (not just for caching). The corresponding
+    // tests for Gemini / OpenAI / Ollama / Shell live in their respective
+    // *.test.ts files. This Anthropic test asserts that the SDK call shape
+    // is unchanged when systemPrompt comes through with caching off — which
+    // is the parity contract those other tests must mirror.
+    it('threads systemPrompt to the SDK even when caching is implicitly off', async () => {
+      mockCreate.mockResolvedValueOnce(happyResponse());
+      await invokeAnthropicOrchestrator({
+        ...baseOpts,
+        systemPrompt: 'COMPILER_SYSTEM_PROMPT_BYTES',
+        // enableContextCaching not set → defaults to off → system is plain string
+      });
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ system: 'COMPILER_SYSTEM_PROMPT_BYTES' }),
+      );
+    });
+
     it('emits cache_control: ephemeral when caching is enabled (5-minute default)', async () => {
       mockCreate.mockResolvedValueOnce(happyResponse());
 

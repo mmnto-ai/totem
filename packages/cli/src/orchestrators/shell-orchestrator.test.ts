@@ -241,6 +241,79 @@ describe('invokeShellOrchestrator', () => {
     process.kill = originalKill;
     vi.useRealTimers();
   });
+
+  // ─── systemPrompt threading (mmnto/totem#1291 Phase 3 cascade fix) ──
+
+  describe('systemPrompt threading', { timeout: 15000 }, () => {
+    /**
+     * Read the orchestrator's tempfile during the nextTick callback that
+     * emits the close event. The shell orchestrator deletes the tempfile in
+     * its `finally` block, which runs only after the awaited promise
+     * resolves — so reading during nextTick (before close emission) catches
+     * the bytes the orchestrator wrote.
+     *
+     * vi.spyOn(fs, 'writeFileSync') doesn't work here because fs is a star
+     * import (non-configurable property), so we go to disk instead.
+     */
+    function emitSuccessAndCapture(): { promise: Promise<string> } {
+      let resolveCaptured: (s: string) => void;
+      const promise = new Promise<string>((resolve) => {
+        resolveCaptured = resolve;
+      });
+      process.nextTick(() => {
+        const tempDir = path.join(tmpDir, totemDir, 'temp');
+        try {
+          const files = fs.readdirSync(tempDir).filter((f) => f.startsWith('totem-test-'));
+          if (files.length > 0) {
+            const content = fs.readFileSync(path.join(tempDir, files[0]!), 'utf-8');
+            resolveCaptured(content);
+          } else {
+            resolveCaptured('<no tempfile found>');
+          }
+        } catch (err) {
+          resolveCaptured(`<read error: ${(err as Error).message}>`);
+        }
+        mockChild.stdout.emit('data', Buffer.from('ok'));
+        mockChild.emit('close', 0);
+      });
+      return { promise };
+    }
+
+    it('concatenates systemPrompt and prompt into the tempfile when systemPrompt is provided', async () => {
+      const { promise: capturedPromise } = emitSuccessAndCapture();
+      await invokeShellOrchestrator({
+        prompt: 'lesson body',
+        systemPrompt: 'COMPILER_SYSTEM_PROMPT',
+        command: 'echo {file}',
+        model: 'test-model',
+        cwd: tmpDir,
+        tag: 'Test',
+        totemDir,
+      });
+
+      const captured = await capturedPromise;
+      // Shell orchestrators talk to CLI binaries with no system/user message
+      // API. Concatenation is the only correct fallback. Order is system
+      // first (the persistent context the LLM should follow), blank line,
+      // then user prompt.
+      expect(captured).toBe('COMPILER_SYSTEM_PROMPT\n\nlesson body');
+    });
+
+    it('writes only the user prompt when systemPrompt is undefined (backward compat)', async () => {
+      const { promise: capturedPromise } = emitSuccessAndCapture();
+      await invokeShellOrchestrator({
+        prompt: 'just the prompt',
+        command: 'echo {file}',
+        model: 'test-model',
+        cwd: tmpDir,
+        tag: 'Test',
+        totemDir,
+      });
+
+      const captured = await capturedPromise;
+      expect(captured).toBe('just the prompt');
+    });
+  });
 });
 
 // ─── tryParseGeminiJson ──────────────────────────────
