@@ -1,8 +1,10 @@
+import * as path from 'node:path';
+
 import type * as lancedb from '@lancedb/lancedb';
 
 import type { ContentType } from '../config-schema.js';
 import type { Embedder } from '../embedders/embedder.js';
-import type { SearchResult } from '../types.js';
+import type { SearchResult, SourceContext } from '../types.js';
 
 /** RRF constant — standard value from the original RRF paper. */
 const RRF_K = 60;
@@ -28,6 +30,7 @@ export async function runVectorSearch(
   typeFilter: ContentType | undefined,
   maxResults: number,
   boundary?: string | string[],
+  sourceContext?: SourceContext,
 ): Promise<SearchResult[]> {
   const [queryVector] = await embedder.embed([query]);
 
@@ -37,7 +40,7 @@ export async function runVectorSearch(
   if (whereClause) q = q.where(whereClause);
 
   const results = await q.toArray();
-  return results.map(rowToSearchResult);
+  return results.map((row) => rowToSearchResult(row, sourceContext));
 }
 
 /**
@@ -53,6 +56,7 @@ export async function runHybridSearch(
   typeFilter: ContentType | undefined,
   maxResults: number,
   boundary?: string | string[],
+  sourceContext?: SourceContext,
 ): Promise<SearchResult[]> {
   const fetchCount = maxResults * HYBRID_OVERFETCH_FACTOR;
   const whereClause = buildWhereClause(typeFilter, boundary);
@@ -66,7 +70,7 @@ export async function runHybridSearch(
   ]);
 
   // Merge with RRF
-  return rrfMerge(vectorResults, ftsResults, maxResults);
+  return rrfMerge(vectorResults, ftsResults, maxResults, sourceContext);
 }
 
 async function runVectorLeg(
@@ -94,11 +98,12 @@ export async function runFtsSearch(
   typeFilter: ContentType | undefined,
   maxResults: number,
   boundary?: string | string[],
+  sourceContext?: SourceContext,
 ): Promise<SearchResult[]> {
   const whereClause = buildWhereClause(typeFilter, boundary);
   const rows = await runFtsLeg(table, onWarn, query, whereClause, maxResults);
   return rows.map(({ row, rank }) => {
-    const result = rowToSearchResult(row);
+    const result = rowToSearchResult(row, sourceContext);
     // If FTS didn't provide _score, use rank-based scoring (1.0 → 0.0)
     if (row['_score'] == null) {
       result.score = 1 / rank;
@@ -171,8 +176,20 @@ function buildWhereClause(
   return conditions.length > 0 ? conditions.join(' AND ') : undefined;
 }
 
-/** Convert a raw LanceDB row to a SearchResult. */
-function rowToSearchResult(row: Record<string, unknown>): SearchResult {
+/**
+ * Convert a raw LanceDB row to a SearchResult.
+ *
+ * When `sourceContext` is provided (mmnto/totem#1294), stamps the result with
+ * `absoluteFilePath` (joined against the context's `absolutePathRoot`) and
+ * `sourceRepo` (the context's tag, if set). When not provided, falls back to
+ * using `filePath` as-is for `absoluteFilePath` — test fixtures and legacy
+ * call sites that construct SearchResult via mocks don't need to supply a
+ * context as long as they provide an absolute path in `filePath`.
+ */
+function rowToSearchResult(
+  row: Record<string, unknown>,
+  sourceContext?: SourceContext,
+): SearchResult {
   // Vector search returns _distance (lower = better); FTS returns _score (higher = better)
   let score = 0;
   if (row['_distance'] != null) {
@@ -181,22 +198,39 @@ function rowToSearchResult(row: Record<string, unknown>): SearchResult {
     score = row['_score'] as number;
   }
 
-  return {
+  const filePath = row['filePath'] as string;
+  const absoluteFilePath = sourceContext
+    ? path.join(sourceContext.absolutePathRoot, filePath)
+    : filePath;
+
+  const result: SearchResult = {
     content: row['content'] as string,
     contextPrefix: row['contextPrefix'] as string,
-    filePath: row['filePath'] as string,
+    filePath,
+    absoluteFilePath,
     type: row['type'] as ContentType,
     label: row['label'] as string,
     score,
     metadata: JSON.parse((row['metadata'] as string) || '{}') as Record<string, string>,
   };
+
+  if (sourceContext?.sourceRepo) {
+    result.sourceRepo = sourceContext.sourceRepo;
+  }
+
+  return result;
 }
 
 /**
  * Reciprocal Rank Fusion — merges two ranked result lists.
  * score(d) = Σ 1 / (k + rank_in_list) for each list containing d.
  */
-function rrfMerge(listA: RankedRow[], listB: RankedRow[], limit: number): SearchResult[] {
+function rrfMerge(
+  listA: RankedRow[],
+  listB: RankedRow[],
+  limit: number,
+  sourceContext?: SourceContext,
+): SearchResult[] {
   const scores = new Map<string, { score: number; row: Record<string, unknown> }>();
 
   for (const list of [listA, listB]) {
@@ -210,5 +244,5 @@ function rrfMerge(listA: RankedRow[], listB: RankedRow[], limit: number): Search
   return [...scores.values()]
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
-    .map(({ score, row }) => ({ ...rowToSearchResult(row), score }));
+    .map(({ score, row }) => ({ ...rowToSearchResult(row, sourceContext), score }));
 }

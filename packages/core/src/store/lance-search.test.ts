@@ -447,3 +447,141 @@ describe('runFtsSearch', () => {
     expect(clause).toContain("`filePath` LIKE 'packages/core%'");
   });
 });
+
+// ─── Source context tagging (mmnto/totem#1294 Phase 1) ─────────
+
+describe('source context tagging', () => {
+  it('runVectorSearch: no sourceContext → absoluteFilePath falls back to filePath, no sourceRepo', async () => {
+    const table = mockTable({
+      vectorRows: [fakeRow('a', { _distance: 0.5, filePath: 'src/foo.ts' })],
+    });
+
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      'query',
+      undefined,
+      5,
+      undefined,
+      // sourceContext omitted — legacy / test path
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0]!.filePath).toBe('src/foo.ts');
+    expect(results[0]!.absoluteFilePath).toBe('src/foo.ts');
+    expect(results[0]!.sourceRepo).toBeUndefined();
+  });
+
+  it('runVectorSearch: primary sourceContext (no sourceRepo) → absoluteFilePath joined, sourceRepo absent', async () => {
+    const table = mockTable({
+      vectorRows: [fakeRow('a', { _distance: 0.5, filePath: 'src/foo.ts' })],
+    });
+
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      'query',
+      undefined,
+      5,
+      undefined,
+      { absolutePathRoot: '/d/Dev/totem' }, // primary — no sourceRepo tag
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0]!.filePath).toBe('src/foo.ts');
+    // path.join normalizes to the platform separator; check with posix + win32 forms
+    expect(results[0]!.absoluteFilePath).toMatch(/^[/\\]d[/\\]Dev[/\\]totem[/\\]src[/\\]foo\.ts$/);
+    expect(results[0]!.sourceRepo).toBeUndefined();
+  });
+
+  it('runVectorSearch: linked sourceContext → absoluteFilePath joined AND sourceRepo set', async () => {
+    const table = mockTable({
+      vectorRows: [fakeRow('a', { _distance: 0.5, filePath: 'adr/adr-001.md' })],
+    });
+
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      'query',
+      undefined,
+      5,
+      undefined,
+      { sourceRepo: 'strategy', absolutePathRoot: '/d/Dev/totem-strategy' },
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0]!.filePath).toBe('adr/adr-001.md');
+    expect(results[0]!.absoluteFilePath).toMatch(
+      /^[/\\]d[/\\]Dev[/\\]totem-strategy[/\\]adr[/\\]adr-001\.md$/,
+    );
+    expect(results[0]!.sourceRepo).toBe('strategy');
+  });
+
+  it('runHybridSearch: sourceContext flows through RRF merge to final results', async () => {
+    const table = mockTable({
+      vectorRows: [fakeRow('a', { _distance: 0.5, filePath: 'src/foo.ts' })],
+      ftsRows: [fakeRow('a', { _score: 10, filePath: 'src/foo.ts' })],
+    });
+
+    const results = await runHybridSearch(
+      table as never,
+      mockEmbedder(),
+      () => {},
+      'query',
+      undefined,
+      5,
+      undefined,
+      { sourceRepo: 'playground', absolutePathRoot: '/d/Dev/totem-playground' },
+    );
+
+    // RRF merges the same row from both legs — should produce one result
+    expect(results).toHaveLength(1);
+    expect(results[0]!.sourceRepo).toBe('playground');
+    expect(results[0]!.absoluteFilePath).toMatch(
+      /^[/\\]d[/\\]Dev[/\\]totem-playground[/\\]src[/\\]foo\.ts$/,
+    );
+  });
+
+  it('runFtsSearch: sourceContext threads through FTS-only path', async () => {
+    const table = mockTable({
+      ftsRows: [fakeRow('a', { _score: 10, filePath: 'proposals/active/215-mesh.md' })],
+    });
+
+    const results = await runFtsSearch(
+      table as never,
+      () => {},
+      'mesh query',
+      undefined,
+      5,
+      undefined,
+      { sourceRepo: 'strategy', absolutePathRoot: '/d/Dev/totem-strategy' },
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0]!.sourceRepo).toBe('strategy');
+    expect(results[0]!.filePath).toBe('proposals/active/215-mesh.md');
+    expect(results[0]!.absoluteFilePath).toMatch(
+      /^[/\\]d[/\\]Dev[/\\]totem-strategy[/\\]proposals[/\\]active[/\\]215-mesh\.md$/,
+    );
+  });
+
+  it('runVectorSearch: sourceRepo of empty string is treated as absent', async () => {
+    // Edge case: someone passes sourceRepo: '' — should NOT set the tag
+    // (mirrors the truthy check in rowToSearchResult)
+    const table = mockTable({
+      vectorRows: [fakeRow('a', { _distance: 0.5, filePath: 'src/foo.ts' })],
+    });
+
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      'query',
+      undefined,
+      5,
+      undefined,
+      { sourceRepo: '', absolutePathRoot: '/d/Dev/totem' },
+    );
+
+    expect(results[0]!.sourceRepo).toBeUndefined();
+  });
+});

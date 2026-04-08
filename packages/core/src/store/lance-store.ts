@@ -10,6 +10,7 @@ import type {
   HealthCheckResult,
   SearchOptions,
   SearchResult,
+  SourceContext,
   StoredChunk,
 } from '../types.js';
 import { runHealthCheck } from './lance-health.js';
@@ -35,11 +36,30 @@ export class LanceStore {
   private embedder: Embedder;
   private hasFtsIndex = false;
   private onWarn: (msg: string) => void;
+  /**
+   * Source repo context injected at construction time. Primary stores use
+   * `{ absolutePathRoot: projectRoot }` with no `sourceRepo`; linked stores
+   * (mmnto/totem#1294 Cross-Repo Context Mesh) use
+   * `{ sourceRepo: '<link name>', absolutePathRoot: '<linked repo root>' }`.
+   * Passed down to every `search` / `searchFts` call so every SearchResult
+   * gets stamped with the owning store's identity via `rowToSearchResult`.
+   *
+   * Optional for backward compat: tests and legacy callers that construct
+   * a LanceStore without a source context still work — results fall back
+   * to using `filePath` as `absoluteFilePath`.
+   */
+  private sourceContext: SourceContext | undefined;
 
-  constructor(dbPath: string, embedder: Embedder, onWarn?: (msg: string) => void) {
+  constructor(
+    dbPath: string,
+    embedder: Embedder,
+    onWarn?: (msg: string) => void,
+    sourceContext?: SourceContext,
+  ) {
     this.dbPath = dbPath;
     this.embedder = embedder;
     this.onWarn = onWarn ?? (() => {});
+    this.sourceContext = sourceContext;
   }
 
   /**
@@ -245,6 +265,7 @@ export class LanceStore {
         options.typeFilter as ContentType | undefined,
         maxResults,
         boundary,
+        this.sourceContext,
       );
     }
 
@@ -255,6 +276,7 @@ export class LanceStore {
       options.typeFilter as ContentType | undefined,
       maxResults,
       boundary,
+      this.sourceContext,
     );
   }
 
@@ -273,6 +295,7 @@ export class LanceStore {
       options.typeFilter as ContentType | undefined,
       options.maxResults ?? 5,
       options.boundary,
+      this.sourceContext,
     );
   }
 

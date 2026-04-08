@@ -49,6 +49,7 @@ describe('assemblePrompt', () => {
     content: 'Lesson content here',
     contextPrefix: '',
     filePath: '.totem/lessons.md',
+    absoluteFilePath: '.totem/lessons.md',
     type: 'spec',
     label,
     score: 0.9,
