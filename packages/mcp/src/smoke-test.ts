@@ -114,7 +114,12 @@ async function main(): Promise<void> {
     console.log('WARNING: No linked stores initialized. This smoke test cannot');
     console.log('demonstrate cross-repo federation without at least one linked');
     console.log('store. Check totem.config.ts for linkedIndexes entries.');
-    process.exit(1);
+    // Use exitCode + early return instead of process.exit() so buffered
+    // stdout (the tail logs above) flushes before the process terminates.
+    // This matters because the smoke test is piped into the PR body.
+    // (mmnto/totem#1295 CR minor)
+    process.exitCode = 1;
+    return;
   }
 
   // ─── Run the federated query ──────────────────────────────
@@ -192,7 +197,8 @@ async function main(): Promise<void> {
   if (topResults.length === 0) {
     console.log('NO RESULTS. The query returned zero matches from primary or linked.');
     console.log('This likely means the indexes are not synced or the query is too narrow.');
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   const formatted = formatResults(topResults);
@@ -229,7 +235,7 @@ async function main(): Promise<void> {
   console.log();
   console.log(verdict ? 'SMOKE TEST: PASS' : 'SMOKE TEST: FAIL');
 
-  process.exit(verdict ? 0 : 1);
+  if (!verdict) process.exitCode = 1;
 }
 
 main().catch((err: unknown) => {
@@ -237,5 +243,5 @@ main().catch((err: unknown) => {
   const stack = err instanceof Error ? err.stack : undefined;
   console.error('Smoke test threw:', msg);
   if (stack) console.error(stack);
-  process.exit(1);
+  process.exitCode = 1;
 });
