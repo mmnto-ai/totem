@@ -1,3 +1,11 @@
+/* eslint-disable no-console -- standalone CLI utility, not an MCP stdio file.
+ * The no-console rule exists to prevent breaking the MCP stdio protocol
+ * where stdout writes corrupt the wire format. This file is invoked
+ * directly via `node packages/mcp/dist/smoke-test.js` and console output
+ * is the entire point — it IS the result capture mechanism for the
+ * Phase 3 empirical proof. Scoped file-level exception.
+ */
+
 /**
  * Cross-Repo Context Mesh smoke test (mmnto/totem#1294 Phase 3).
  *
