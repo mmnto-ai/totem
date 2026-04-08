@@ -33,6 +33,15 @@ async function importGeminiSdk() {
 export async function invokeGeminiOrchestrator(
   opts: OrchestratorInvokeOptions,
 ): Promise<OrchestratorResult> {
+  // TODO(mmnto/totem#1291 Phase 4 — deferred to 1.16.0): When opts.systemPrompt is
+  // provided AND opts.enableContextCaching is true, use the
+  // `ai.caches.create({ model, contents, ttl })` lifecycle to upload the
+  // persistent context, hash-key it on `compile-manifest.json`, and
+  // reference it via `config: { cachedContent }` on subsequent calls.
+  // Surface the cached-token count from `usageMetadata.cachedContentTokenCount`
+  // (Gemini's field, not Anthropic's `cache_read_input_tokens`) into
+  // OrchestratorResult.cacheReadInputTokens. Currently ignored — backward-
+  // compatible no-op so the Phase 1 interface extension ships safely.
   const { prompt, model, tag } = opts;
 
   const apiKey = process.env['GEMINI_API_KEY'] ?? process.env['GOOGLE_API_KEY'];

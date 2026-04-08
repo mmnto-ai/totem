@@ -41,6 +41,12 @@ async function importAnthropicSdk() {
 export async function invokeAnthropicOrchestrator(
   opts: OrchestratorInvokeOptions,
 ): Promise<OrchestratorResult> {
+  // TODO(mmnto/totem#1291 Phase 2): When opts.systemPrompt is provided AND
+  // opts.enableContextCaching is true, restructure the request to use a
+  // system message with `cache_control: { type: 'ephemeral' }` and surface
+  // response.usage.cache_read_input_tokens / cache_creation_input_tokens
+  // in the returned OrchestratorResult. Currently ignored — backward-
+  // compatible no-op so the Phase 1 interface extension ships safely.
   const { prompt, model, tag } = opts;
 
   if (!process.env['ANTHROPIC_API_KEY']) {

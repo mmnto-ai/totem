@@ -11,16 +11,54 @@ export interface OrchestratorResult {
   outputTokens: number | null;
   durationMs: number;
   finishReason?: string;
+  /**
+   * Tokens read from prompt cache on this call (mmnto/totem#1291 Phase 2). Populated by
+   * providers that support prompt caching when `enableContextCaching` is true
+   * and a cache hit occurred. Null when caching wasn't requested or the
+   * provider doesn't support it. Distinct from `inputTokens`, which counts
+   * cached + uncached + ephemeral combined for the request as a whole.
+   */
+  cacheReadInputTokens?: number | null;
+  /**
+   * Tokens written to prompt cache on this call (mmnto/totem#1291 Phase 2). Populated
+   * only when a cache miss occurred and the provider wrote a new cache entry.
+   * Null otherwise.
+   */
+  cacheCreationInputTokens?: number | null;
 }
 
 export interface OrchestratorInvokeOptions {
   prompt: string;
+  /**
+   * Optional persistent system context that providers may cache (mmnto/totem#1291
+   * Proposal 217). When provided AND `enableContextCaching` is true,
+   * Anthropic providers (Phase 2) will mark this with a `cache_control:
+   * ephemeral` directive so subsequent calls within the TTL window read
+   * from prompt cache instead of paying full input-token cost. Backward
+   * compatible: when omitted, the call shape is identical to today
+   * (single user message, no caching).
+   */
+  systemPrompt?: string;
   model: string;
   cwd: string;
   tag: string;
   totemDir: string;
   /** LLM temperature: 0 = deterministic, 0.7 = creative. Caller sets per use case. */
   temperature?: number;
+  /**
+   * Whether to request provider-native prompt caching (mmnto/totem#1291 Phase 2).
+   * Threaded through from `orchestrator.enableContextCaching` config. When
+   * true AND `systemPrompt` is provided, the provider implementation MAY
+   * emit a cache directive. When false (default), providers behave exactly
+   * as today.
+   */
+  enableContextCaching?: boolean;
+  /**
+   * Cache TTL in seconds (mmnto/totem#1291 Phase 2). 300 = 5min (Anthropic default
+   * ephemeral), 3600 = 1h (Anthropic extended cache). Only consulted by
+   * providers that support caching when `enableContextCaching` is true.
+   */
+  cacheTTL?: number;
 }
 
 /** A provider-bound function that invokes an LLM and returns the result. */

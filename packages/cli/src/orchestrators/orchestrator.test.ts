@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Orchestrator as OrchestratorConfig } from '@mmnto/totem';
 
+import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
 import {
   createOrchestrator,
   detectPackageManager,
@@ -295,6 +296,128 @@ describe('resolveOrchestrator', () => {
     expect(() => resolveOrchestrator('model;rm -rf /', 'shell', mockInvoke)).toThrow(
       'Invalid model name',
     );
+  });
+});
+
+// ─── Caching foundation (mmnto/totem#1291 Phase 1) ─────────────
+//
+// Pure type/shape assertions: prove that the new optional fields on
+// OrchestratorInvokeOptions and OrchestratorResult are backward-compatible.
+// Phase 2 will add behavior tests against the actual Anthropic provider.
+
+describe('OrchestratorInvokeOptions caching foundation', { timeout: 15000 }, () => {
+  it('accepts the legacy minimal shape (no systemPrompt, no caching fields)', () => {
+    const opts: OrchestratorInvokeOptions = {
+      prompt: 'legacy call',
+      model: 'claude-sonnet-4-6',
+      cwd: '.',
+      tag: 'Test',
+      totemDir: '.totem',
+    };
+    expect(opts.prompt).toBe('legacy call');
+    expect(opts.systemPrompt).toBeUndefined();
+    expect(opts.enableContextCaching).toBeUndefined();
+    expect(opts.cacheTTL).toBeUndefined();
+  });
+
+  it('accepts the full caching-enabled shape', () => {
+    const opts: OrchestratorInvokeOptions = {
+      prompt: 'ephemeral user query',
+      systemPrompt: 'persistent ast-grep manual + few-shot',
+      model: 'claude-sonnet-4-6',
+      cwd: '.',
+      tag: 'Compile',
+      totemDir: '.totem',
+      enableContextCaching: true,
+      cacheTTL: 300,
+    };
+    expect(opts.systemPrompt).toBe('persistent ast-grep manual + few-shot');
+    expect(opts.enableContextCaching).toBe(true);
+    expect(opts.cacheTTL).toBe(300);
+  });
+
+  it('accepts a 1-hour extended cacheTTL', () => {
+    const opts: OrchestratorInvokeOptions = {
+      prompt: 'q',
+      systemPrompt: 's',
+      model: 'claude-sonnet-4-6',
+      cwd: '.',
+      tag: 'T',
+      totemDir: '.totem',
+      enableContextCaching: true,
+      cacheTTL: 3600,
+    };
+    expect(opts.cacheTTL).toBe(3600);
+  });
+
+  it('Phase 1 providers ignore systemPrompt — existing mock dispatch still works', async () => {
+    // Sanity check: passing the new fields through createOrchestrator's
+    // resulting invoker must not break the call. The mocks at the top of
+    // this file resolve the same OrchestratorResult shape regardless.
+    const config: OrchestratorConfig = { provider: 'anthropic' };
+    const invoke = createOrchestrator(config);
+    const result = await invoke({
+      prompt: 'ephemeral',
+      systemPrompt: 'persistent',
+      model: 'claude-sonnet-4-6',
+      cwd: '.',
+      tag: 'Test',
+      totemDir: '.totem',
+      enableContextCaching: true,
+      cacheTTL: 300,
+    });
+    expect(result.content).toBe('anthropic result');
+  });
+});
+
+describe('OrchestratorResult caching foundation', { timeout: 15000 }, () => {
+  it('accepts the legacy shape with no cache fields', () => {
+    const result: OrchestratorResult = {
+      content: 'ok',
+      inputTokens: 100,
+      outputTokens: 50,
+      durationMs: 1000,
+    };
+    expect(result.cacheReadInputTokens).toBeUndefined();
+    expect(result.cacheCreationInputTokens).toBeUndefined();
+  });
+
+  it('accepts a result with cache hit metrics', () => {
+    const result: OrchestratorResult = {
+      content: 'ok',
+      inputTokens: 50_000,
+      outputTokens: 200,
+      durationMs: 800,
+      cacheReadInputTokens: 47_231,
+      cacheCreationInputTokens: 0,
+    };
+    expect(result.cacheReadInputTokens).toBe(47_231);
+    expect(result.cacheCreationInputTokens).toBe(0);
+  });
+
+  it('accepts a result with cache write metrics (first call)', () => {
+    const result: OrchestratorResult = {
+      content: 'ok',
+      inputTokens: 50_000,
+      outputTokens: 200,
+      durationMs: 2_400,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 47_231,
+    };
+    expect(result.cacheCreationInputTokens).toBe(47_231);
+  });
+
+  it('accepts null cache metrics (provider does not support caching)', () => {
+    const result: OrchestratorResult = {
+      content: 'ok',
+      inputTokens: 100,
+      outputTokens: 50,
+      durationMs: 500,
+      cacheReadInputTokens: null,
+      cacheCreationInputTokens: null,
+    };
+    expect(result.cacheReadInputTokens).toBeNull();
+    expect(result.cacheCreationInputTokens).toBeNull();
   });
 });
 

@@ -175,6 +175,116 @@ describe('OrchestratorSchema', () => {
     const result = OrchestratorSchema.safeParse({ provider: 'shell', defaultModel: 'test' });
     expect(result.success).toBe(false);
   });
+
+  // ─── Caching foundation (mmnto/totem#1291 Phase 1) ─────────────
+
+  it('accepts orchestrator config without enableContextCaching (defaults to undefined)', () => {
+    const result = OrchestratorSchema.safeParse(ANTHROPIC_ORCHESTRATOR);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.enableContextCaching).toBeUndefined();
+      expect(result.data.cacheTTL).toBeUndefined();
+    }
+  });
+
+  it('accepts enableContextCaching: true with default cacheTTL', () => {
+    const result = OrchestratorSchema.safeParse({
+      provider: 'anthropic',
+      defaultModel: 'claude-sonnet-4-6',
+      enableContextCaching: true,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.enableContextCaching).toBe(true);
+      expect(result.data.cacheTTL).toBeUndefined();
+    }
+  });
+
+  it('accepts enableContextCaching with explicit 5-minute cacheTTL', () => {
+    const result = OrchestratorSchema.safeParse({
+      provider: 'anthropic',
+      defaultModel: 'claude-sonnet-4-6',
+      enableContextCaching: true,
+      cacheTTL: 300,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cacheTTL).toBe(300);
+    }
+  });
+
+  it('accepts enableContextCaching with extended 1-hour cacheTTL', () => {
+    const result = OrchestratorSchema.safeParse({
+      provider: 'anthropic',
+      defaultModel: 'claude-sonnet-4-6',
+      enableContextCaching: true,
+      cacheTTL: 3600,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cacheTTL).toBe(3600);
+    }
+  });
+
+  it('rejects negative cacheTTL', () => {
+    const result = OrchestratorSchema.safeParse({
+      provider: 'anthropic',
+      enableContextCaching: true,
+      cacheTTL: -1,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects zero cacheTTL', () => {
+    const result = OrchestratorSchema.safeParse({
+      provider: 'anthropic',
+      enableContextCaching: true,
+      cacheTTL: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects fractional cacheTTL (must be integer seconds)', () => {
+    const result = OrchestratorSchema.safeParse({
+      provider: 'anthropic',
+      enableContextCaching: true,
+      cacheTTL: 300.5,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('coexists with the orthogonal cacheTtls (#52) field', () => {
+    // enableContextCaching (prompt cache, mmnto/totem#1291) and cacheTtls (response
+    // cache, #52) live at the same level but control different layers.
+    // A config setting both should parse cleanly with no interaction.
+    const result = OrchestratorSchema.safeParse({
+      provider: 'anthropic',
+      defaultModel: 'claude-sonnet-4-6',
+      cacheTtls: { triage: 3600, shield: 0 },
+      enableContextCaching: true,
+      cacheTTL: 300,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cacheTtls).toEqual({ triage: 3600, shield: 0 });
+      expect(result.data.enableContextCaching).toBe(true);
+      expect(result.data.cacheTTL).toBe(300);
+    }
+  });
+
+  it('accepts enableContextCaching on every provider variant', () => {
+    const variants = [
+      { provider: 'shell' as const, command: 'echo {file}', enableContextCaching: true },
+      { provider: 'anthropic' as const, enableContextCaching: true },
+      { provider: 'gemini' as const, enableContextCaching: true },
+      { provider: 'openai' as const, enableContextCaching: true },
+      { provider: 'ollama' as const, enableContextCaching: true },
+    ];
+    for (const variant of variants) {
+      const result = OrchestratorSchema.safeParse(variant);
+      expect(result.success).toBe(true);
+    }
+  });
 });
 
 // ─── Backwards compatibility ─────────────────────────
