@@ -436,14 +436,22 @@ export async function runOrchestrator(opts: {
 
   // --raw mode: output context only.
   // mmnto/totem#1291 Phase 3: when systemPrompt is set (post-split callers like
-  // compile-lesson), include both segments in the raw artifact so the file
-  // accurately reflects what the model would receive. Pre-split callers that
-  // pass only `prompt` get today's behavior unchanged. Caught by CodeRabbit
-  // on mmnto/totem#1292 review.
+  // compile-lesson), concatenate both segments in the raw artifact so the
+  // file accurately reflects what the model would receive. Pre-split callers
+  // that pass only `prompt` get today's behavior unchanged.
+  //
+  // Plain `${systemPrompt}\n\n${prompt}` concatenation matches the established
+  // pattern in shell-orchestrator.ts (CLI binaries have no structured message
+  // API and the orchestrator concatenates before piping), and avoids any
+  // markdown-marker text that downstream consumers might misinterpret as
+  // content when piping the raw output to other tools or LLMs. CodeRabbit
+  // initially asked for the markers in mmnto/totem#1292 round 1; GCA pushed back
+  // in round 2 for the pipe-safety reason. The shell precedent + pipe-safety
+  // wins.
   if (options.raw) {
     const rawOutput =
       systemPrompt !== undefined && systemPrompt.length > 0
-        ? `## System Prompt\n\n${systemPrompt}\n\n## User Prompt\n\n${prompt}`
+        ? `${systemPrompt}\n\n${prompt}`
         : prompt;
     writeOutput(rawOutput, options.out);
     const suffix = opts.totalResults != null ? ` (${opts.totalResults} chunks)` : '';

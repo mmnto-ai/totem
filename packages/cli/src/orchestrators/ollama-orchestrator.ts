@@ -50,7 +50,11 @@ export async function invokeOllamaOrchestrator(
   const startMs = Date.now();
 
   const messages: { role: 'system' | 'user'; content: string }[] = [];
-  if (systemPrompt !== undefined) {
+  // SAFETY INVARIANT: Some local model implementations behave unexpectedly
+  // when receiving empty role messages. Skip the system role entirely when
+  // systemPrompt is undefined or empty. Matches the parallel checks in
+  // anthropic/gemini/openai after the GCA round 2 review on PR mmnto/totem#1292.
+  if (systemPrompt !== undefined && systemPrompt.length > 0) {
     messages.push({ role: 'system', content: systemPrompt });
   }
   messages.push({ role: 'user', content: prompt });

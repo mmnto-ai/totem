@@ -71,7 +71,12 @@ export async function invokeOpenAIOrchestrator(
 
   try {
     const messages: { role: 'system' | 'user'; content: string }[] = [];
-    if (systemPrompt !== undefined) {
+    // SAFETY INVARIANT: The OpenAI Chat Completions API explicitly rejects
+    // messages with empty `content` (400). Skip the system role message
+    // entirely when systemPrompt is undefined or empty. Matches the parallel
+    // checks in anthropic/gemini/ollama after the GCA round 2 review on
+    // PR mmnto/totem#1292.
+    if (systemPrompt !== undefined && systemPrompt.length > 0) {
       messages.push({ role: 'system', content: systemPrompt });
     }
     messages.push({ role: 'user', content: prompt });

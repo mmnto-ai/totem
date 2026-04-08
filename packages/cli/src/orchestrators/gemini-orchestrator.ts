@@ -68,6 +68,11 @@ export async function invokeGeminiOrchestrator(
   log.info(tag, 'Invoking Gemini API (this may take 15-60 seconds)...');
   const startMs = Date.now();
 
+  // SAFETY INVARIANT: Gemini may reject empty `systemInstruction`. Skip the
+  // field when systemPrompt is undefined or empty so the request shape stays
+  // identical to today's pre-Phase-3 calls. Matches the parallel checks in
+  // anthropic/openai/ollama after the GCA round 2 review on PR mmnto/totem#1292.
+  const hasSystemPrompt = systemPrompt !== undefined && systemPrompt.length > 0;
   try {
     const response = await ai.models.generateContent({
       model,
@@ -75,7 +80,7 @@ export async function invokeGeminiOrchestrator(
       config: {
         maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
         ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
-        ...(systemPrompt !== undefined ? { systemInstruction: systemPrompt } : {}),
+        ...(hasSystemPrompt ? { systemInstruction: systemPrompt } : {}),
       },
     });
 

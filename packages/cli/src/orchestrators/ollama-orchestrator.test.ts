@@ -235,5 +235,17 @@ describe('invokeOllamaOrchestrator', () => {
       const body = JSON.parse(fetchOpts.body);
       expect(body.messages).toEqual([{ role: 'user', content: 'test prompt' }]);
     });
+
+    it('treats an empty systemPrompt the same as undefined (no system role message)', async () => {
+      // GCA round 2 SAFETY INVARIANT: some local model implementations
+      // behave unexpectedly when receiving empty role messages. Match the
+      // parallel checks in anthropic/gemini/openai by treating
+      // empty/undefined the same.
+      mockFetch.mockResolvedValueOnce(okResponse({ message: { content: 'ok' }, done: true }));
+      await invokeOllamaOrchestrator({ ...baseOpts, systemPrompt: '' });
+      const [, fetchOpts] = mockFetch.mock.calls[0]!;
+      const body = JSON.parse(fetchOpts.body);
+      expect(body.messages).toEqual([{ role: 'user', content: 'test prompt' }]);
+    });
   });
 });

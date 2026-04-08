@@ -184,5 +184,19 @@ describe('invokeOpenAIOrchestrator', () => {
         }),
       );
     });
+
+    it('treats an empty systemPrompt the same as undefined (no system role message)', async () => {
+      // GCA round 2 SAFETY INVARIANT: OpenAI Chat Completions API
+      // explicitly rejects messages with empty content (400). Match the
+      // parallel checks in anthropic/gemini/ollama by treating
+      // empty/undefined the same — no system role message in the array.
+      mockCreate.mockResolvedValueOnce(happyResponse());
+      await invokeOpenAIOrchestrator({ ...baseOpts, systemPrompt: '' });
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messages: [{ role: 'user', content: 'test prompt' }],
+        }),
+      );
+    });
   });
 });

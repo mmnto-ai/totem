@@ -999,10 +999,10 @@ describe('runOrchestrator', { timeout: 15_000 }, () => {
       cwd: tmpDir,
     });
     captured = fs.readFileSync(tmpOut, 'utf-8');
-    expect(captured).toContain('## System Prompt');
-    expect(captured).toContain('COMPILER_SYSTEM_PROMPT');
-    expect(captured).toContain('## User Prompt');
-    expect(captured).toContain('lesson body');
+    // GCA round 2: dropped the markdown markers in favor of plain
+    // concatenation matching shell-orchestrator.ts and pipe-safety for
+    // downstream consumers. Exact byte equality.
+    expect(captured).toBe('COMPILER_SYSTEM_PROMPT\n\nlesson body');
   });
 
   it('--raw mode falls back to user-prompt-only when systemPrompt is undefined (backward compat)', async () => {
@@ -1016,9 +1016,23 @@ describe('runOrchestrator', { timeout: 15_000 }, () => {
     });
     const captured = fs.readFileSync(tmpOut, 'utf-8');
     expect(captured).toBe('just the prompt');
-    // No system markers when systemPrompt absent — preserves today's shape
-    expect(captured).not.toContain('## System Prompt');
-    expect(captured).not.toContain('## User Prompt');
+  });
+
+  it('--raw mode treats empty systemPrompt the same as undefined', async () => {
+    // GCA round 2 SAFETY INVARIANT: empty systemPrompt is treated as
+    // absent throughout the system to avoid 4xx from providers that
+    // reject empty system messages. --raw mode honors the same contract.
+    const tmpOut = path.join(tmpDir, 'raw-out-empty-sys.md');
+    await runOrchestrator({
+      prompt: 'user only',
+      systemPrompt: '',
+      tag: 'Spec',
+      options: { raw: true, out: tmpOut },
+      config: baseConfig(),
+      cwd: tmpDir,
+    });
+    const captured = fs.readFileSync(tmpOut, 'utf-8');
+    expect(captured).toBe('user only');
   });
 
   it('passes through cacheReadInputTokens / cacheCreationInputTokens from invoke() result', async () => {

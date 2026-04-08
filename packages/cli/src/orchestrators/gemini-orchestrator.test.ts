@@ -183,5 +183,16 @@ describe('invokeGeminiOrchestrator', () => {
       const config = call['config'] as Record<string, unknown>;
       expect(config['systemInstruction']).toBeUndefined();
     });
+
+    it('treats an empty systemPrompt the same as undefined (omits systemInstruction)', async () => {
+      // GCA round 2 SAFETY INVARIANT: Gemini may reject empty
+      // systemInstruction. Match the parallel checks in
+      // anthropic/openai/ollama by treating empty/undefined the same.
+      mockGenerateContent.mockResolvedValueOnce(happyResponse());
+      await invokeGeminiOrchestrator({ ...baseOpts, systemPrompt: '' });
+      const call = mockGenerateContent.mock.calls[0]?.[0] as Record<string, unknown>;
+      const config = call['config'] as Record<string, unknown>;
+      expect(config['systemInstruction']).toBeUndefined();
+    });
   });
 });

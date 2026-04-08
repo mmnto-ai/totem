@@ -193,6 +193,20 @@ describe('invokeAnthropicOrchestrator', () => {
       );
     });
 
+    it('treats an empty systemPrompt the same as undefined (omits system field)', async () => {
+      // GCA round 2 SAFETY INVARIANT: Anthropic rejects empty `system`
+      // strings with a 400 error. Match the existing shell-orchestrator
+      // pattern by treating empty/undefined the same.
+      mockCreate.mockResolvedValueOnce(happyResponse());
+      await invokeAnthropicOrchestrator({
+        ...baseOpts,
+        systemPrompt: '',
+        enableContextCaching: true,
+      });
+      const call = mockCreate.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(call['system']).toBeUndefined();
+    });
+
     it('emits cache_control: ephemeral when caching is enabled (5-minute default)', async () => {
       mockCreate.mockResolvedValueOnce(happyResponse());
 

@@ -73,7 +73,12 @@ function buildSystemField(
       text: string;
       cache_control: { type: 'ephemeral'; ttl?: '1h' };
     }> {
-  if (systemPrompt === undefined) return undefined;
+  // SAFETY INVARIANT: Anthropic rejects empty `system` strings with a 400
+  // error. Treat empty/whitespace-only systemPrompt the same as undefined
+  // — return early so the request omits the field entirely. Matches the
+  // existing pattern in shell-orchestrator.ts and the parallel checks in
+  // gemini/openai/ollama after the GCA round 2 review on PR mmnto/totem#1292.
+  if (systemPrompt === undefined || systemPrompt.length === 0) return undefined;
   if (!enableContextCaching) return systemPrompt;
 
   const cacheControl: { type: 'ephemeral'; ttl?: '1h' } = { type: 'ephemeral' };
