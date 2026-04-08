@@ -373,6 +373,36 @@ const DEFAULT_TTLS: Record<string, number> = {
 };
 
 /**
+ * Build the response-cache key for the orthogonal command-level cache (#52).
+ *
+ * Hashes prompt, systemPrompt, and the qualifiedModel string with `\0` byte
+ * delimiters between every field so boundary-case inputs (e.g. `prompt="AB",
+ * systemPrompt=""` vs `prompt="A", systemPrompt="B"`) produce distinct keys.
+ *
+ * Used by both the read path (lookup) and write path (store) inside
+ * `runOrchestrator` to guarantee the keys are identical — extracted as a
+ * pure helper after the mmnto/totem#1292 review (mmnto/totem#1291) caught a
+ * regression where my Phase 3 cascade fix updated only the read path,
+ * leaving the write path on the legacy `prompt + model` shape and making
+ * fresh cache entries unreachable on subsequent runs.
+ */
+function buildResponseCacheHash(
+  prompt: string,
+  systemPrompt: string | undefined,
+  qualifiedModel: string,
+): string {
+  return crypto
+    .createHash('sha256')
+    .update(prompt)
+    .update('\0')
+    .update(systemPrompt ?? '')
+    .update('\0')
+    .update(qualifiedModel)
+    .digest('hex')
+    .slice(0, 16);
+}
+
+/**
  * Validate orchestrator config, then either output raw context (--raw) or
  * invoke the configured orchestrator provider and return the LLM content.
  *
@@ -404,9 +434,18 @@ export async function runOrchestrator(opts: {
   const { prompt, systemPrompt, tag, options, config, cwd } = opts;
   const configRoot = opts.configRoot ?? cwd;
 
-  // --raw mode: output context only
+  // --raw mode: output context only.
+  // mmnto/totem#1291 Phase 3: when systemPrompt is set (post-split callers like
+  // compile-lesson), include both segments in the raw artifact so the file
+  // accurately reflects what the model would receive. Pre-split callers that
+  // pass only `prompt` get today's behavior unchanged. Caught by CodeRabbit
+  // on mmnto/totem#1292 review.
   if (options.raw) {
-    writeOutput(prompt, options.out);
+    const rawOutput =
+      systemPrompt !== undefined && systemPrompt.length > 0
+        ? `## System Prompt\n\n${systemPrompt}\n\n## User Prompt\n\n${prompt}`
+        : prompt;
+    writeOutput(rawOutput, options.out);
     const suffix = opts.totalResults != null ? ` (${opts.totalResults} chunks)` : '';
     log.dim(tag, `Raw context output complete${suffix}.`);
     return undefined;
@@ -447,21 +486,7 @@ export async function runOrchestrator(opts: {
   let cachePath = '';
 
   if (useCache) {
-    // mmnto/totem#1291 Phase 3: hash the systemPrompt too so callers that vary
-    // it (e.g., compile-lesson Pipeline 2 vs Pipeline 3) don't collide on the
-    // same response cache key. Null-byte delimiters between fields prevent
-    // boundary-collision attacks where `prompt="AB", systemPrompt=""` would
-    // otherwise hash identically to `prompt="A", systemPrompt="B"`. Caught
-    // by Shield AI on the first push attempt.
-    const hash = crypto
-      .createHash('sha256')
-      .update(prompt)
-      .update('\0')
-      .update(systemPrompt ?? '')
-      .update('\0')
-      .update(qualifiedModel)
-      .digest('hex')
-      .slice(0, 16);
+    const hash = buildResponseCacheHash(prompt, systemPrompt, qualifiedModel);
     const cacheDir = path.join(configRoot, config.totemDir, 'cache');
     cachePath = path.join(cacheDir, `${tagKey}-${hash}.json`);
 
@@ -589,13 +614,11 @@ export async function runOrchestrator(opts: {
 
   if (useCache && result.content && result.durationMs > 0) {
     try {
-      // Recalculate cache path — `model` may have changed to fallbackModel
-      const cacheHash = crypto
-        .createHash('sha256')
-        .update(prompt)
-        .update(model)
-        .digest('hex')
-        .slice(0, 16);
+      // Recalculate cache path — `qualifiedModel` reflects any quota fallback
+      // resolution that may have happened above. Uses the same helper as the
+      // read path so the keys are guaranteed identical (mmnto/totem#1291
+      // mmnto/totem#1292 review fix from GCA + CodeRabbit).
+      const cacheHash = buildResponseCacheHash(prompt, systemPrompt, qualifiedModel);
       const cacheDir = path.join(configRoot, config.totemDir, 'cache');
       const finalCachePath = path.join(cacheDir, `${tagKey}-${cacheHash}.json`);
       fs.mkdirSync(cacheDir, { recursive: true });

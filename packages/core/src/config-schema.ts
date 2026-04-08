@@ -83,11 +83,18 @@ const BaseOrchestratorFields = {
    */
   enableContextCaching: z.boolean().optional(),
   /**
-   * Prompt cache TTL in seconds (mmnto/totem#1291). Anthropic supports 300 (5min, default
-   * ephemeral) and 3600 (1h, extended cache — 2x write cost, cheaper read).
-   * Only consulted when `enableContextCaching` is true. Default: 300.
+   * Prompt cache TTL in seconds (mmnto/totem#1291). Anthropic supports exactly
+   * two values today: 300 (5m, default ephemeral) and 3600 (1h, extended cache
+   * — 2x write cost, ~10% read cost). Only consulted when
+   * `enableContextCaching` is true. Defaults to 300 when omitted.
+   *
+   * Constrained to literals at parse time so invalid TTLs (e.g. 600, 1800)
+   * fail fast at config load instead of silently falling through to 5m at
+   * provider-invocation time. Caught by CodeRabbit on PR #1292 review.
+   * Anthropic docs verified for both values:
+   * https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
    */
-  cacheTTL: z.number().int().positive().optional(),
+  cacheTTL: z.union([z.literal(300), z.literal(3600)]).optional(),
 };
 
 export const ShellOrchestratorSchema = z.object({

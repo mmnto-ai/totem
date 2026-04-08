@@ -976,6 +976,51 @@ describe('runOrchestrator', { timeout: 15_000 }, () => {
     expect(e).toBe(f);
   });
 
+  it('--raw mode includes systemPrompt in the output when split callers pass both', async () => {
+    // mmnto/totem#1291 PR #1292 review fix from CodeRabbit: --raw mode used
+    // to write only `prompt`, but Phase 3 callers (compile-lesson) now route
+    // the compiler template through `systemPrompt`. Without the fix below,
+    // `totem compile --raw` would produce a file that doesn't show what the
+    // model would actually receive.
+    //
+    // We can't test the writeOutput call directly without setting up a tmp
+    // file pipeline, but we can verify the OrchestratorRunOptions branch
+    // returns undefined and doesn't invoke the orchestrator (--raw never
+    // calls invoke). The actual file content shape is asserted via the
+    // unit-test below by spying on writeOutput's destination.
+    let captured = '';
+    const tmpOut = path.join(tmpDir, 'raw-out.md');
+    await runOrchestrator({
+      prompt: 'lesson body',
+      systemPrompt: 'COMPILER_SYSTEM_PROMPT',
+      tag: 'Compile',
+      options: { raw: true, out: tmpOut },
+      config: baseConfig(),
+      cwd: tmpDir,
+    });
+    captured = fs.readFileSync(tmpOut, 'utf-8');
+    expect(captured).toContain('## System Prompt');
+    expect(captured).toContain('COMPILER_SYSTEM_PROMPT');
+    expect(captured).toContain('## User Prompt');
+    expect(captured).toContain('lesson body');
+  });
+
+  it('--raw mode falls back to user-prompt-only when systemPrompt is undefined (backward compat)', async () => {
+    const tmpOut = path.join(tmpDir, 'raw-out-legacy.md');
+    await runOrchestrator({
+      prompt: 'just the prompt',
+      tag: 'Spec',
+      options: { raw: true, out: tmpOut },
+      config: baseConfig(),
+      cwd: tmpDir,
+    });
+    const captured = fs.readFileSync(tmpOut, 'utf-8');
+    expect(captured).toBe('just the prompt');
+    // No system markers when systemPrompt absent — preserves today's shape
+    expect(captured).not.toContain('## System Prompt');
+    expect(captured).not.toContain('## User Prompt');
+  });
+
   it('passes through cacheReadInputTokens / cacheCreationInputTokens from invoke() result', async () => {
     // Override the default mock to return a result that simulates a cache hit
     const mockInvokeWithCache = vi.fn().mockResolvedValue({

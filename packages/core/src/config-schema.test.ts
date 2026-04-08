@@ -253,6 +253,37 @@ describe('OrchestratorSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects unsupported cacheTTL values like 600 (only 300 and 3600 are valid)', () => {
+    // mmnto/totem#1291 PR mmnto/totem#1292 review fix from CodeRabbit: cacheTTL
+    // must be constrained to the literal values Anthropic supports (300 = 5m
+    // default ephemeral, 3600 = 1h extended cache). Any other positive integer
+    // would silently fall through to 5m at provider-invocation time, which is
+    // confusing and untestable. Better to fail at config-parse time.
+    //
+    // Asserts the failure is specifically on the `cacheTTL` field path
+    // rather than relying on the overall safeParse failing — addresses
+    // a Shield AI WARN that the loose form might be a false positive if
+    // some other required field were missing. Every other field in this
+    // payload is valid (provider literal, enableContextCaching boolean),
+    // so the error path MUST land on cacheTTL.
+    const unsupported = [60, 600, 1200, 1800, 7200, 86_400];
+    for (const ttl of unsupported) {
+      const result = OrchestratorSchema.safeParse({
+        provider: 'anthropic',
+        enableContextCaching: true,
+        cacheTTL: ttl,
+      });
+      expect(result.success, `cacheTTL: ${ttl} should be rejected`).toBe(false);
+      if (!result.success) {
+        const cacheTTLIssues = result.error.issues.filter((i) => i.path[0] === 'cacheTTL');
+        expect(
+          cacheTTLIssues.length,
+          `cacheTTL: ${ttl} should produce a cacheTTL-specific error`,
+        ).toBeGreaterThan(0);
+      }
+    }
+  });
+
   it('coexists with the orthogonal cacheTtls (#52) field', () => {
     // enableContextCaching (prompt cache, mmnto/totem#1291) and cacheTtls (response
     // cache, #52) live at the same level but control different layers.
