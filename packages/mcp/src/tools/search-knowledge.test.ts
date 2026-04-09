@@ -803,6 +803,60 @@ describe('search_knowledge', () => {
       expect(result.content[0]!.text).toContain('Connection refused');
     });
 
+    it('linked store literally named "primary" does not collide with actual primary failure slot (CR MAJOR)', async () => {
+      // mmnto/totem#1295 CR MAJOR: `deriveLinkName` strips leading dots
+      // from the basename, so a linked repo at `.primary/` would derive
+      // to the link name `'primary'`. The earlier implementation stored
+      // primary store failures under `runtimeFailures.set('primary', ...)`,
+      // which would have either overwritten or been overwritten by the
+      // legitimate linked store named 'primary'.
+      //
+      // The fix splits primary into a dedicated `failures.primary` slot
+      // (string | null), keeping the linked-store map free of reserved
+      // keys. This test exercises the collision scenario:
+      //
+      //   1. The actual primary store throws (so failures.primary is set).
+      //   2. A linked store literally named 'primary' returns results
+      //      successfully — its results must NOT be misreported as the
+      //      primary store, AND the warning copy must distinguish them.
+      mockSearchThrows = true;
+      const linkedNamedPrimary = makeLinkedStore([
+        {
+          label: 'Linked-primary hit',
+          type: 'spec',
+          filePath: 'adr/adr-001.md',
+          absoluteFilePath: '/abs/.primary/adr/adr-001.md',
+          sourceRepo: 'primary',
+          score: 0.8,
+          content: 'linked content from a repo named primary',
+        },
+      ]);
+      mockLinkedStores.set('primary', linkedNamedPrimary);
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      // Federation succeeds with the linked-named-primary results
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0]!.text).toContain('Linked-primary hit');
+
+      // The warning surfaces the actual primary store failure WITHOUT
+      // collision. With the bug, the linked store's success would have
+      // either overwritten the primary failure (no warning) or the
+      // primary failure would have overwritten the linked store's entry.
+      const text = result.content[0]!.text;
+      expect(text).toContain('[SYSTEM WARNING]');
+      // The warning must reference primary store failure
+      expect(text).toContain('primary store');
+      // The warning must NOT reference any linked store failure (the
+      // 'primary' linked store succeeded)
+      expect(text).not.toContain('1 linked index(es) failed');
+      // Linked store named 'primary' got its tag prefix
+      expect(text).toContain('[primary] Linked-primary hit');
+    });
+
     it('primary store failure does not block linked-store results (GCA HIGH)', async () => {
       // mmnto/totem#1295 GCA HIGH catch: previously the primary store
       // search bubbled out of `Promise.all` and killed the entire

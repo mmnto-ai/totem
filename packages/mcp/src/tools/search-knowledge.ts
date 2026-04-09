@@ -12,6 +12,27 @@ import { formatSystemWarning, formatXmlResponse } from '../xml-format.js';
 
 type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
 
+/**
+ * Per-query runtime failure log (mmnto/totem#1295). Primary failures are
+ * tracked in a dedicated slot, NOT in the linked-store map, because
+ * `'primary'` is a legal link name — `deriveLinkName` strips leading dots,
+ * so a linked repo at `.primary/` would derive to `'primary'` and collide
+ * with the reserved key. Keeping primary in its own field eliminates the
+ * collision class entirely. (CR MAJOR catch on round 7.)
+ */
+interface FailureLog {
+  primary: string | null;
+  linked: Map<string, string>;
+}
+
+function makeFailureLog(): FailureLog {
+  return { primary: null, linked: new Map() };
+}
+
+function failureLogIsEmpty(log: FailureLog): boolean {
+  return log.primary === null && log.linked.size === 0;
+}
+
 const MAX_SEARCH_RESULTS = 100;
 
 /** Session-level flag — healthCheck runs only on the first search call. */
@@ -91,12 +112,15 @@ async function runFirstQueryHealthCheck(): Promise<string | null> {
 
   try {
     const { store } = await getContext();
-    // mmnto/totem#1295 CR minor: same one-shot flag fix as
-    // `runFirstLinkedStoresCheck` — only consume after getContext resolves
-    // successfully so a transient init failure doesn't permanently
-    // suppress the dimension-mismatch / index-health warning.
-    firstHealthCheckDone = true;
     const result: HealthCheckResult = await store.healthCheck();
+    // mmnto/totem#1295 CR MAJOR: only consume the one-shot flag after
+    // BOTH getContext AND healthCheck succeed. Setting it earlier meant
+    // a transient healthCheck failure would permanently suppress the
+    // dimension-mismatch / index-health diagnostic for the rest of the
+    // session — dropping us back to the cryptic LanceDB search failure
+    // this gate exists to prevent. The previous round-6 fix moved it
+    // out of pre-getContext but still left it pre-healthCheck.
+    firstHealthCheckDone = true;
 
     if (result.healthy) return null;
 
@@ -174,15 +198,18 @@ function formatResult(r: SearchResult, index: number): string {
  * **Runtime failure handling (mmnto/totem#1295 rewrite):** On a linked-
  * store search error, attempt a targeted `reconnect()` + retry. If the
  * retry succeeds, return the fresh results. If it fails, record the
- * failure into the caller-provided `runtimeFailures` map and return
- * empty for that store on THIS query only. This function DOES NOT
- * mutate the global `linkedStores` or `linkedStoreInitErrors` maps —
- * an earlier revision evicted failing stores to avoid log spam, but
- * GCA + CR both flagged that as a Tenet 4 violation: transient errors
- * (file locks during parallel sync, network blips) caused permanent
- * context loss until server restart. The correct tradeoff is to accept
- * some log spam for resilience, and surface runtime failures via the
- * per-request warning path (see `performSearch`).
+ * failure into the caller-provided `failures` log and return empty for
+ * that store on THIS query only. Primary failures go in `failures.primary`
+ * (a dedicated slot — `'primary'` would collide with a legal link name);
+ * linked failures go in `failures.linked` keyed by link name.
+ *
+ * This function DOES NOT mutate the global `linkedStores` or
+ * `linkedStoreInitErrors` maps — an earlier revision evicted failing
+ * stores to avoid log spam, but GCA + CR both flagged that as a Tenet 4
+ * violation: transient errors (file locks during parallel sync, network
+ * blips) caused permanent context loss until server restart. The correct
+ * tradeoff is to accept some log spam for resilience, and surface
+ * runtime failures via the per-request warning path (see `performSearch`).
  *
  * mmnto/totem#1294 Phase 2 + mmnto/totem#1295 fix.
  */
@@ -191,7 +218,7 @@ async function federatedSearch(
   typeFilter: ContentType | undefined,
   perStoreLimit: number,
   finalLimit: number,
-  runtimeFailures: Map<string, string>,
+  failures: FailureLog,
 ): Promise<SearchResult[]> {
   const { store: primaryStore, linkedStores } = await getContext();
 
@@ -206,8 +233,8 @@ async function federatedSearch(
   //
   // When the inner catch fires, primary uses the SAME targeted reconnect+
   // retry pattern as linked stores below: catch → reconnect → retry → on
-  // second failure, log and record into `runtimeFailures` under the
-  // reserved 'primary' key. Promise.all never rejects from the primary slot.
+  // second failure, log and record into `failures.primary`. Promise.all
+  // never rejects from the primary slot.
   const hasLinkedStores = linkedStores.size > 0;
   const primaryPromise = hasLinkedStores
     ? primaryStore
@@ -228,7 +255,7 @@ async function federatedSearch(
               topScore: null,
               error: `Primary store ${combinedMsg}`,
             });
-            runtimeFailures.set('primary', combinedMsg);
+            failures.primary = combinedMsg;
             return [] as SearchResult[];
           }
         })
@@ -237,9 +264,9 @@ async function federatedSearch(
   // Linked stores: catch per-store failures so one broken linked index
   // doesn't break the overall query. On failure, attempt targeted
   // reconnect + retry, then return empty for this query (populating
-  // `runtimeFailures` for the caller to surface). Global state is
-  // NEVER mutated here — the store stays in `linkedStores` so the next
-  // query can try again (the transient issue may have cleared).
+  // `failures.linked` for the caller to surface). Global state is NEVER
+  // mutated here — the store stays in `linkedStores` so the next query
+  // can try again (the transient issue may have cleared).
   const linkedPromises = Array.from(linkedStores.entries()).map(([name, ls]) =>
     ls.search({ query, typeFilter, maxResults: perStoreLimit }).catch(async (err) => {
       const firstMsg = err instanceof Error ? err.message : String(err);
@@ -257,7 +284,7 @@ async function federatedSearch(
           topScore: null,
           error: `Linked store "${name}" ${combinedMsg}`,
         });
-        runtimeFailures.set(name, combinedMsg);
+        failures.linked.set(name, combinedMsg);
         return [] as SearchResult[];
       }
     }),
@@ -311,14 +338,19 @@ async function performSearch(
   const { config, linkedStores, linkedStoreInitErrors } = await getContext();
   const finalLimit = maxResults ?? 5;
 
-  // Per-query runtime failure tracking (mmnto/totem#1295 CR MAJOR fix).
-  // Populated by `federatedSearch` when a linked store errors during
-  // this specific query. Surfaced as a compact system warning on the
-  // response so the agent sees the failure in-context — NOT gated by
-  // any session-level "already warned" flag. Every query where a
-  // linked store fails produces its own warning; this is the correct
-  // Tenet 4 tradeoff versus the earlier one-shot snapshot approach.
-  const runtimeFailures = new Map<string, string>();
+  // Per-query runtime failure log (mmnto/totem#1295). Populated by
+  // `federatedSearch` when primary or any linked store errors during this
+  // specific query. Surfaced as a compact system warning on the response
+  // so the agent sees the failure in-context — NOT gated by any session-
+  // level "already warned" flag. Every query where a store fails produces
+  // its own warning; this is the correct Tenet 4 tradeoff versus the
+  // earlier one-shot snapshot approach.
+  //
+  // Primary lives in `failures.primary` (a dedicated slot, NOT keyed under
+  // `'primary'` in a map) because `'primary'` is a legal link name —
+  // `deriveLinkName` strips leading dots so a `.primary/` linked repo would
+  // collide with a reserved key. CR MAJOR catch on round 7.
+  const failures: FailureLog = makeFailureLog();
 
   // ─── Boundary resolution (mmnto/totem#1294 Phase 2) ──
   //
@@ -414,34 +446,37 @@ async function performSearch(
     });
   } else {
     // Case 5: no boundary → federated search across primary + all linked.
-    // Pass the runtimeFailures map so the federation path can populate
-    // it on linked-store errors without mutating global state.
-    results = await federatedSearch(query, typeFilter, finalLimit, finalLimit, runtimeFailures);
+    // Pass the `failures` log so the federation path can populate it on
+    // store errors without mutating global state. Primary lives in a
+    // dedicated slot to avoid colliding with linked-store names.
+    results = await federatedSearch(query, typeFilter, finalLimit, finalLimit, failures);
   }
 
   // Build the runtime-failures warning (if any) once so we can decide
   // whether to skip the "no results" early return for warn-only cases.
   //
-  // Only Case 5 (federated) reaches this with runtimeFailures populated:
+  // Only Case 5 (federated) reaches this with `failures` populated:
   // Cases 1/4 bubble primary failures up, Case 2 returns isError early
   // on full linked failure (mmnto/totem#1295 GCA HIGH), Case 3 returns
-  // isError immediately. So we don't need a `boundary !== undefined`
-  // branch — the IIFE only ever runs in the federated case.
+  // isError immediately. So the IIFE only ever runs in the federated case.
   //
-  // Within the federated case, copy branches on `runtimeFailures.has('primary')`
-  // so primary-only and mixed primary+linked failures are reported
-  // accurately (mmnto/totem#1295 CR minor — don't label primary as linked).
+  // Copy branches three ways based on which store(s) failed (mmnto/totem
+  // #1295 CR fixes — accurate reporting + no `'primary'` map-key collision).
   const runtimeWarning = (() => {
-    if (runtimeFailures.size === 0) return null;
+    if (failureLogIsEmpty(failures)) return null;
 
-    const detailLines = Array.from(runtimeFailures.entries()).map(
-      ([name, err]) => `  - ${name}: ${err}`,
-    );
+    const detailLines: string[] = [];
+    if (failures.primary !== null) {
+      detailLines.push(`  - primary: ${failures.primary}`);
+    }
+    for (const [name, err] of failures.linked.entries()) {
+      detailLines.push(`  - ${name}: ${err}`);
+    }
     const recoveryNote =
       'The store(s) above may recover on a subsequent call if the failure was transient (stale handle, file lock). mmnto/totem#1294.';
 
-    const primaryFailed = runtimeFailures.has('primary');
-    const linkedFailureCount = runtimeFailures.size - (primaryFailed ? 1 : 0);
+    const primaryFailed = failures.primary !== null;
+    const linkedFailureCount = failures.linked.size;
 
     let summary: string;
     if (primaryFailed && linkedFailureCount > 0) {
