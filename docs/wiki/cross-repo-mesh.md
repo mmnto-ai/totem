@@ -21,7 +21,7 @@ Because federated results are merged into a single vector space for semantic ran
 
 If your primary repo uses a 768-dimension embedder and a linked repo uses a 1536-dimension embedder, cross-repo semantic search will fail.
 
-If you see a `Linked index embedder dimension mismatch` warning during startup, the linked repository is producing vectors of a different size than the primary:
+If you see a `Linked index embedder dimension mismatch` warning on your first `search_knowledge` call (init failures are caught and surfaced as warnings on the first query, not at server startup), the linked repository is producing vectors of a different size than the primary:
 
 1. Align the `totem.config.ts` embedding settings in the linked repository to match the primary.
 2. Run `rm -rf .lancedb && totem sync --full` in the linked repository to rebuild its index with the correct dimensions.
@@ -88,7 +88,7 @@ _(Note: Federated queries incur a slight performance overhead, roughly ~50-100ms
 
 ## Context Isolation (Partitions)
 
-_Partitions work orthogonally to the mesh — they scope results within a single store (local or linked), whereas the mesh federates across multiple stores._
+_Partitions work orthogonally to the mesh — they scope results within the primary store, whereas the mesh federates across multiple stores. (Linked stores are currently searched in their entirety; partition filters are not propagated to linked-store queries.)_
 
 When multiple AI agents (or one agent across packages) share a knowledge index, you can restrict search results to specific boundaries. This prevents a frontend agent from hallucinating based on backend database schemas.
 
