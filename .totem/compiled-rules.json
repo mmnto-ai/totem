@@ -6317,10 +6317,9 @@
     {
       "lessonHash": "7d299a9fd0e81e3b",
       "lessonHeading": "Use anchored regex for shell command matching",
+      "pattern": "",
       "message": "Use anchored regex (e.g., /^\\s*git\\s+/) for shell command matching to avoid false positives on paths like .git/hooks",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "$VAR.test($STR)",
       "compiledAt": "2026-04-08T03:27:30.964Z",
       "createdAt": "2026-04-06T03:30:07.981Z",
@@ -6329,6 +6328,35 @@
         "**/*.tsx",
         "**/*.js",
         "**/*.jsx"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "4196eff35629aea4",
+      "lessonHeading": "Use delimiters in multi-field cache keys",
+      "message": "Multi-field cache keys must use delimiters (e.g., null bytes '\\0') between fields to prevent boundary collisions. Use `${a}\\0${b}` instead of `${a}${b}`.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "${$A}${$B}",
+      "compiledAt": "2026-04-09T03:54:53.350Z",
+      "createdAt": "2026-04-09T03:54:53.350Z",
+      "fileGlobs": [
+        "packages/cli/src/utils.ts"
+      ]
+    },
+    {
+      "lessonHash": "5c78f52c51152810",
+      "lessonHeading": "Set exit codes instead of exiting",
+      "message": "Avoid process.exit() in smoke tests — set process.exitCode instead and return from the function to ensure stdout/stderr buffers are flushed.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "process.exit($CODE)",
+      "compiledAt": "2026-04-09T03:55:04.739Z",
+      "createdAt": "2026-04-09T03:55:04.739Z",
+      "fileGlobs": [
+        "packages/mcp/src/smoke-test.ts"
       ]
     }
   ],
@@ -9516,6 +9544,74 @@
     {
       "hash": "96b7ee1282d35ccd",
       "title": "Read-path schema changes break write-path invariants"
+    },
+    {
+      "hash": "8ecc14a3df2f4d63",
+      "title": "Eliminate silent degradation in failure modes"
+    },
+    {
+      "hash": "fdb59232e0f8a671",
+      "title": "Isolate static templates for prompt caching"
+    },
+    {
+      "hash": "67d373c5a5dbb190",
+      "title": "Define state machine for lifecycle flags"
+    },
+    {
+      "hash": "fccb3459e6a2f7ab",
+      "title": "Thread system prompts through all orchestrators"
+    },
+    {
+      "hash": "9bc88226fb024671",
+      "title": "Enforce provider-specific cache TTL constraints"
+    },
+    {
+      "hash": "513b6feb60d5423d",
+      "title": "Triage changes to skip design ceremony"
+    },
+    {
+      "hash": "0dcbcf4dda1d0bac",
+      "title": "Prioritize human design review over bot cycles"
+    },
+    {
+      "hash": "1f190125944b0966",
+      "title": "Avoid fake absolute paths in results"
+    },
+    {
+      "hash": "32ca9960d4f54725",
+      "title": "Align read and write cache hashing"
+    },
+    {
+      "hash": "82b523e96d2b9857",
+      "title": "Evict permanently failing federated links"
+    },
+    {
+      "hash": "0e7ab7acf91aa7f6",
+      "title": "Prevent boundary routing fallbacks on error"
+    },
+    {
+      "hash": "d882161badba5714",
+      "title": "Validate embedding dimensions across federated stores"
+    },
+    {
+      "hash": "511c5f82e445bc73",
+      "title": "Reference correct phases in workflow documentation"
+    },
+    {
+      "hash": "11ee20bc837042c4",
+      "title": "Verify caching via full round-trip tests"
+    },
+    {
+      "hash": "80a0df2ceb123c9a",
+      "title": "Gate architectural work with design docs"
+    },
+    {
+      "hash": "3d7f4d17ed97c690",
+      "title": "Reconnect all handles after sync operations"
+    },
+    {
+      "hash": "abfee44f26c513f0",
+      "title": "Prefer non-blocking warnings over startup crashes"
     }
   ]
 }
