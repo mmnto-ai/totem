@@ -195,11 +195,28 @@ async function initContext(): Promise<ServerContext> {
   for (const linkedPath of config.linkedIndexes ?? []) {
     const name = deriveLinkName(linkedPath, projectRoot);
 
-    // Collision detection — the first-wins so downstream lookups are stable
+    // Collision detection — the first-wins so downstream lookups are stable.
+    //
+    // Key the error under the BARE `name`, not a descriptive composite, so
+    // `performSearch` Case 3 (`linkedStoreInitErrors.has(boundary)`) can
+    // resolve a user-supplied boundary to the collision message instead of
+    // silently falling through to raw-prefix search on the primary.
+    // mmnto/totem#1295 GCA HIGH — maintain the original identifier
+    // throughout the pipeline.
+    //
+    // If the bare name is already in errors (because the first iteration
+    // failed for an unrelated reason), append the collision note rather
+    // than overwrite — both pieces of information matter to the operator.
     if (linkedStores.has(name) || linkedStoreInitErrors.has(name)) {
+      const collisionNote =
+        `Path "${linkedPath}" also derives the link name "${name}". ` +
+        `Rename one of the linked directories or remove the duplicate from config.linkedIndexes.`;
+      const existing = linkedStoreInitErrors.get(name);
       linkedStoreInitErrors.set(
-        `${name} (collision at ${linkedPath})`,
-        `Another linked index already claims the name "${name}". Rename one of the linked directories or remove the duplicate from config.linkedIndexes.`,
+        name,
+        existing
+          ? `${existing}\n  COLLISION: ${collisionNote}`
+          : `Another linked index already claims the name "${name}". ${collisionNote}`,
       );
       continue;
     }

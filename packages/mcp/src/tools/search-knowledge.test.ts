@@ -689,6 +689,51 @@ describe('search_knowledge', () => {
       expect(second.content[0]!.text).toContain('Recovered');
     });
 
+    it('boundary matching a name-collision error keyed under the bare derived name routes via Case 3', async () => {
+      // mmnto/totem#1295 GCA HIGH catch: the collision detection in
+      // initContext used to key the error under a descriptive composite
+      // (e.g., `strategy (collision at .strategy2)`), so a user typing
+      // `boundary: 'strategy'` could not find the entry via
+      // `linkedStoreInitErrors.has('strategy')` and would fall through to
+      // raw-prefix search on the primary — exactly the silent drift this
+      // PR is supposed to prevent.
+      //
+      // The fix in context.ts now keys collisions under the BARE derived
+      // name. This test asserts the contract from the consumer side:
+      // a collision-style error message keyed under the bare name MUST
+      // route via Case 3 (explicit isError) rather than Case 4 (raw
+      // prefix). This is the integration guarantee the bare-name keying
+      // change unlocks.
+      mockLinkedStoreInitErrors.set(
+        'strategy',
+        'Another linked index already claims the name "strategy". ' +
+          'Path "./strategy2" also derives the link name "strategy". ' +
+          'Rename one of the linked directories or remove the duplicate from config.linkedIndexes.',
+      );
+      mockSearchResults = [
+        {
+          label: 'Bogus primary hit that happens to match "strategy"',
+          type: 'code',
+          filePath: 'src/strategy-pattern.ts',
+          score: 0.9,
+          content: 'some code',
+        },
+      ];
+
+      const result = (await handle({ query: 'test', boundary: 'strategy' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      expect(result.isError).toBe(true);
+      // The collision-style message should be surfaced via Case 3 wrapping
+      expect(result.content[0]!.text).toContain('strategy');
+      expect(result.content[0]!.text).toContain('not available');
+      expect(result.content[0]!.text).toContain('already claims');
+      // Bogus primary hit MUST NOT appear (no raw-prefix fallback)
+      expect(result.content[0]!.text).not.toContain('Bogus primary hit');
+    });
+
     it('boundary matching a failed-init linked store returns explicit error (no silent primary fallback)', async () => {
       // Shield AI catch: if a linked store name is in linkedStoreInitErrors
       // but not in linkedStores (e.g., init failed, or reconnect blew up),
