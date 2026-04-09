@@ -48,10 +48,14 @@ async function runFirstLinkedStoresCheck(): Promise<string | null> {
     const { linkedStoreInitErrors } = await getContext();
     if (linkedStoreInitErrors.size === 0) return null;
 
+    // mmnto/totem#1295 CR minor: `linkedStoreInitErrors` now holds BOTH
+    // fatal init failures AND non-fatal startup warnings (e.g., empty
+    // linked stores, name collisions where the first link still loaded).
+    // Use neutral wording so the summary line accurately covers both.
     const lines: string[] = [
-      `Cross-Repo Context Mesh: ${linkedStoreInitErrors.size} linked index(es) failed to initialize.`,
+      `Cross-Repo Context Mesh: ${linkedStoreInitErrors.size} linked index startup issue(s).`,
       '',
-      'Federated search will proceed using only the stores that initialized successfully. Fix the issues below so cross-repo queries return complete context. (mmnto/totem#1294)',
+      'Federated search will proceed using only the stores that initialized successfully. Review the issues below so cross-repo queries return complete context. (mmnto/totem#1294)',
       '',
     ];
     for (const [name, err] of linkedStoreInitErrors.entries()) {
@@ -251,10 +255,42 @@ async function federatedSearch(
   );
 
   const [primaryResults, ...linkedResults] = await Promise.all([primaryPromise, ...linkedPromises]);
+  const buckets: SearchResult[][] = [primaryResults, ...linkedResults];
 
-  const merged: SearchResult[] = [...primaryResults, ...linkedResults.flat()];
-  merged.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-  return merged.slice(0, finalLimit);
+  // Single-bucket fast path (no linked stores configured): scores are
+  // already comparable since they all come from one store. Skip RRF
+  // normalization to keep the original scores visible to the agent.
+  if (buckets.length === 1) {
+    return primaryResults.slice(0, finalLimit);
+  }
+
+  // mmnto/totem#1295 GCA CRITICAL: re-rank via Reciprocal Rank Fusion
+  // across stores. `LanceStore.search` returns scores in incompatible
+  // scales depending on the search method:
+  //
+  //   - Hybrid (default): RRF scores ~0.01–0.04
+  //   - Vector-only (no FTS): 1/(1+distance) ~0.5–0.95
+  //   - FTS-only: raw _score, often > 1
+  //
+  // Sorting by raw scores would bias the merge toward whichever store
+  // happens to use the larger-scale scoring method. RRF fixes this: each
+  // store's results are treated as a ranked list and a new score is
+  // assigned based on rank-within-store. The visible `score` field is
+  // OVERWRITTEN with the RRF score so the displayed order matches the
+  // displayed score (avoids the "ranked first but lower number" UX
+  // confusion). Within-store relative ordering is preserved.
+  //
+  // RRF k=60 matches the constant used inside `LanceStore.rrfMerge` for
+  // intra-store hybrid fusion, for consistency.
+  const RRF_K_FEDERATION = 60;
+  const reranked: SearchResult[] = [];
+  for (const bucket of buckets) {
+    bucket.forEach((r, rank) => {
+      reranked.push({ ...r, score: 1 / (RRF_K_FEDERATION + rank + 1) });
+    });
+  }
+  reranked.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  return reranked.slice(0, finalLimit);
 }
 
 async function performSearch(
@@ -307,9 +343,14 @@ async function performSearch(
     });
   } else if (boundary !== undefined && linkedStores.has(boundary)) {
     // Case 2: linked store name — route ONLY to that linked store.
-    // Runtime failures on the explicit-boundary path are captured into
-    // `runtimeFailures` the same way federatedSearch does, so the agent
-    // sees a warning if this specific linked store fails mid-query.
+    //
+    // Complete failure of an explicitly-targeted linked store (initial
+    // search throws AND reconnect+retry also throws) returns isError: true
+    // for symmetry with Case 3 (mmnto/totem#1295 GCA HIGH). When the
+    // user explicitly names a boundary, "no results" and "the boundary
+    // is broken" are very different signals — falling through to a
+    // generic "no results" response would let the agent misinterpret a
+    // real outage as an absence of relevant knowledge.
     const linked = linkedStores.get(boundary)!;
     try {
       results = await linked.search({ query, typeFilter, maxResults: finalLimit });
@@ -320,11 +361,20 @@ async function performSearch(
         results = await linked.search({ query, typeFilter, maxResults: finalLimit });
       } catch (retryErr) {
         const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
-        runtimeFailures.set(
-          boundary,
-          `search failed (initial: ${firstMsg}; reconnect+retry: ${retryMsg})`,
+        const errorText = formatSystemWarning(
+          [
+            `Linked-store search: targeted index "${boundary}" failed.`,
+            '',
+            `  Initial error:        ${firstMsg}`,
+            `  Reconnect+retry error: ${retryMsg}`,
+            '',
+            `Cross-repo search for this boundary cannot proceed on this query. The store may recover on a subsequent call if the failure was transient (stale handle, file lock). mmnto/totem#1294.`,
+          ].join('\n'),
         );
-        results = [];
+        return {
+          content: [{ type: 'text' as const, text: errorText }], // totem-ignore #1294 — system-generated + XML-wrapped
+          isError: true,
+        };
       }
     }
   } else if (boundary !== undefined && linkedStoreInitErrors.has(boundary)) {
@@ -362,33 +412,39 @@ async function performSearch(
 
   // Build the runtime-failures warning (if any) once so we can decide
   // whether to skip the "no results" early return for warn-only cases.
-  // Copy branches on `boundary` because the targeted (Case 2) path only
-  // queries one linked store — the federated copy ("Other stores returned
-  // their results normally") would be a lie there. mmnto/totem#1295 CR fix.
-  const runtimeWarning =
-    runtimeFailures.size > 0
-      ? formatSystemWarning(
-          boundary === undefined
-            ? [
-                `Federated search: ${runtimeFailures.size} linked index(es) failed on this query.`,
-                '',
-                ...Array.from(runtimeFailures.entries()).map(
-                  ([name, err]) => `  - ${name}: ${err}`,
-                ),
-                '',
-                'Other stores returned their results normally. The linked store(s) above may recover on a subsequent call if the failure was transient (stale handle, file lock). mmnto/totem#1294.',
-              ].join('\n')
-            : [
-                `Linked-store search: targeted index "${boundary}" failed on this query.`,
-                '',
-                ...Array.from(runtimeFailures.entries()).map(
-                  ([name, err]) => `  - ${name}: ${err}`,
-                ),
-                '',
-                'No other stores were queried for this request. The linked store may recover on a subsequent call if the failure was transient (stale handle, file lock). mmnto/totem#1294.',
-              ].join('\n'),
-        )
-      : null;
+  //
+  // Only Case 5 (federated) reaches this with runtimeFailures populated:
+  // Cases 1/4 bubble primary failures up, Case 2 returns isError early
+  // on full linked failure (mmnto/totem#1295 GCA HIGH), Case 3 returns
+  // isError immediately. So we don't need a `boundary !== undefined`
+  // branch — the IIFE only ever runs in the federated case.
+  //
+  // Within the federated case, copy branches on `runtimeFailures.has('primary')`
+  // so primary-only and mixed primary+linked failures are reported
+  // accurately (mmnto/totem#1295 CR minor — don't label primary as linked).
+  const runtimeWarning = (() => {
+    if (runtimeFailures.size === 0) return null;
+
+    const detailLines = Array.from(runtimeFailures.entries()).map(
+      ([name, err]) => `  - ${name}: ${err}`,
+    );
+    const recoveryNote =
+      'The store(s) above may recover on a subsequent call if the failure was transient (stale handle, file lock). mmnto/totem#1294.';
+
+    const primaryFailed = runtimeFailures.has('primary');
+    const linkedFailureCount = runtimeFailures.size - (primaryFailed ? 1 : 0);
+
+    let summary: string;
+    if (primaryFailed && linkedFailureCount > 0) {
+      summary = `Federated search: primary store and ${linkedFailureCount} linked index(es) failed on this query.`;
+    } else if (primaryFailed) {
+      summary = `Federated search: primary store failed on this query. Linked stores returned their results normally.`;
+    } else {
+      summary = `Federated search: ${linkedFailureCount} linked index(es) failed on this query. Other stores returned their results normally.`;
+    }
+
+    return formatSystemWarning([summary, '', ...detailLines, '', recoveryNote].join('\n'));
+  })();
 
   if (results.length === 0) {
     const body = formatXmlResponse('knowledge', 'No results found.');

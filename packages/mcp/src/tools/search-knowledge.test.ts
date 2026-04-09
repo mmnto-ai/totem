@@ -483,45 +483,131 @@ describe('search_knowledge', () => {
       };
     }
 
-    it('federates across primary + linked stores when boundary is undefined', async () => {
+    it('federates across primary + linked stores via fair RRF rank merge', async () => {
+      // mmnto/totem#1295 GCA CRITICAL: federation must merge by
+      // rank-within-store (RRF), not raw score, because LanceStore returns
+      // scores in incompatible scales (hybrid RRF ~0.03 vs vector-only
+      // ~0.85). This test sets up scores where the OLD raw-score sort
+      // would give the wrong answer:
+      //
+      //   Primary: P1 (0.95), P2 (0.94)         — both very high (vector scale)
+      //   Linked:  S1 (0.04), S2 (0.03)         — both very low  (RRF scale)
+      //
+      //   Old raw-score sort: P1, P2, S1, S2     ← linked store starved
+      //   New RRF sort:       P1, S1, P2, S2     ← rank 0s interleave fairly
+      //
+      // The "rank 0 from each store should beat rank 1 from any store"
+      // property is the architectural guarantee RRF provides.
       mockSearchResults = [
         {
-          label: 'Primary hit',
+          label: 'P1 primary top',
           type: 'code',
           filePath: 'src/foo.ts',
-          score: 0.8,
-          content: 'primary content',
+          score: 0.95,
+          content: 'primary top content',
+        },
+        {
+          label: 'P2 primary second',
+          type: 'code',
+          filePath: 'src/bar.ts',
+          score: 0.94,
+          content: 'primary second content',
         },
       ];
       mockLinkedStores.set(
         'strategy',
         makeLinkedStore([
           {
-            label: 'Strategy hit',
+            label: 'S1 strategy top',
             type: 'spec',
             filePath: 'adr/adr-001.md',
             absoluteFilePath: '/abs/totem-strategy/adr/adr-001.md',
             sourceRepo: 'strategy',
-            score: 0.9, // higher than primary — should rank first
-            content: 'strategy content',
+            score: 0.04, // raw-score sort would put this BEHIND both P1 and P2
+            content: 'strategy top content',
+          },
+          {
+            label: 'S2 strategy second',
+            type: 'spec',
+            filePath: 'adr/adr-002.md',
+            absoluteFilePath: '/abs/totem-strategy/adr/adr-002.md',
+            sourceRepo: 'strategy',
+            score: 0.03,
+            content: 'strategy second content',
           },
         ]),
       );
 
-      const result = (await handle({ query: 'architecture' })) as {
+      const result = (await handle({ query: 'architecture', max_results: 10 })) as {
         content: Array<{ type: string; text: string }>;
         isError?: boolean;
       };
 
       expect(result.isError).toBeUndefined();
       const text = result.content[0]!.text;
-      // Strategy hit (higher score) should appear first with [strategy] tag
-      expect(text).toContain('[strategy] Strategy hit');
-      expect(text).toContain('Primary hit');
-      // Strategy hit's index should precede primary hit's
-      const strategyIdx = text.indexOf('Strategy hit');
-      const primaryIdx = text.indexOf('Primary hit');
-      expect(strategyIdx).toBeLessThan(primaryIdx);
+
+      // All four results present
+      expect(text).toContain('P1 primary top');
+      expect(text).toContain('S1 strategy top');
+      expect(text).toContain('P2 primary second');
+      expect(text).toContain('S2 strategy second');
+
+      // RRF interleaving: S1 (rank 0 in its store) must appear BEFORE
+      // P2 (rank 1 in primary), even though P2 has 23x the raw score.
+      // This is the architectural fix — without RRF, S1 would be last.
+      const p1Idx = text.indexOf('P1 primary top');
+      const s1Idx = text.indexOf('S1 strategy top');
+      const p2Idx = text.indexOf('P2 primary second');
+      const s2Idx = text.indexOf('S2 strategy second');
+
+      // Stable sort within ties: bucket order is primary-first then linked,
+      // so among rank-0 results P1 comes before S1; among rank-1 results
+      // P2 comes before S2.
+      expect(p1Idx).toBeLessThan(s1Idx);
+      expect(s1Idx).toBeLessThan(p2Idx); // ← THE KEY ASSERTION
+      expect(p2Idx).toBeLessThan(s2Idx);
+    });
+
+    it('federation displays normalized RRF scores, not raw store scores', async () => {
+      // mmnto/totem#1295 GCA CRITICAL: the visible `score` field is
+      // overwritten with the RRF score during federation so the displayed
+      // order matches the displayed numbers. Otherwise users would see
+      // results sorted by an invisible secondary key, which is confusing.
+      mockSearchResults = [
+        {
+          label: 'P1',
+          type: 'code',
+          filePath: 'src/foo.ts',
+          score: 0.99, // raw vector-distance scale
+          content: 'primary',
+        },
+      ];
+      mockLinkedStores.set(
+        'strategy',
+        makeLinkedStore([
+          {
+            label: 'S1',
+            type: 'spec',
+            filePath: 'adr/adr-001.md',
+            absoluteFilePath: '/abs/strategy/adr/adr-001.md',
+            sourceRepo: 'strategy',
+            score: 0.04, // raw RRF scale
+            content: 'strategy',
+          },
+        ]),
+      );
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+      };
+      const text = result.content[0]!.text;
+
+      // The original raw scores (0.990 / 0.040) must NOT appear — they
+      // would mislead the user about cross-store comparability.
+      expect(text).not.toContain('0.990');
+      expect(text).not.toContain('0.040');
+      // The RRF score for rank 0 with k=60 is 1/61 ≈ 0.016
+      expect(text).toContain('0.016');
     });
 
     it('boundary matching a linked store name routes ONLY to that store', async () => {
@@ -760,6 +846,51 @@ describe('search_knowledge', () => {
       };
       expect(second.content[0]!.text).not.toContain('[SYSTEM WARNING]');
       expect(second.content[0]!.text).toContain('Recovered');
+    });
+
+    it('targeted Case 2 returns isError when the linked store fails completely (GCA HIGH)', async () => {
+      // mmnto/totem#1295 GCA HIGH: when the user explicitly names a
+      // boundary and the targeted linked store fails (initial AND
+      // reconnect+retry), the response must signal isError: true rather
+      // than falling through to a "no results found" body. The agent
+      // should not misinterpret a real outage as an absence of relevant
+      // knowledge. This is symmetric with Case 3 (boundary matches a
+      // failed-init linked store).
+      // The search throws on EVERY call (initial + post-reconnect retry).
+      // Reconnect succeeds so the retry actually fires — proves we go all
+      // the way through the retry path before returning isError.
+      const targeted: MockLinkedStore = {
+        search: vi.fn().mockRejectedValue(new Error('Connection refused')),
+        reconnect: vi.fn(async () => {}),
+      };
+      mockLinkedStores.set('strategy', targeted);
+      // Primary results are deliberately set so we can prove they are
+      // NOT leaked into the response (a regression would show them).
+      mockSearchResults = [
+        {
+          label: 'Bogus primary hit',
+          type: 'code',
+          filePath: 'src/strategy.ts',
+          score: 0.9,
+          content: 'unrelated local',
+        },
+      ];
+
+      const result = (await handle({ query: 'test', boundary: 'strategy' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      expect(result.isError).toBe(true);
+      // Both reconnect and the second search were attempted
+      expect(targeted.reconnect).toHaveBeenCalledOnce();
+      expect(targeted.search).toHaveBeenCalledTimes(2);
+      // Error message names the targeted boundary and includes both errors
+      const text = result.content[0]!.text;
+      expect(text).toContain('strategy');
+      expect(text).toContain('Connection refused');
+      // Critically: NO bogus primary results leaked into the response
+      expect(text).not.toContain('Bogus primary hit');
     });
 
     it('boundary matching a name-collision error keyed under the bare derived name routes via Case 3', async () => {
