@@ -34,10 +34,14 @@ When Totem communicates with the LLM, it splits the prompt into static and dynam
 - The specific lesson content currently being compiled or reviewed
 - Telemetry IDs and dynamic directives
 
-Anthropic's caching operates on a **sliding 5-minute TTL (Time To Live)**.
-When you run a command like `totem compile`, the first lesson compiled will incur the full input token cost to write the static context into the cache. Every subsequent lesson compiled within 5 minutes will read that static context from the cache at a fraction of the price.
+Anthropic's caching operates on a **sliding TTL (Time To Live)** that resets on every cache hit. The TTL is configurable via the `cacheTTL` option in `totem.config.ts` and is constrained to two values that Anthropic supports natively:
 
-Because the TTL resets on every cache hit, a bulk recompile of 50+ rules (which might take 15 minutes) will stay "warm" end-to-end, caching the system prompt for the entire duration of the run.
+- **`cacheTTL: 300`** (5 minutes) — the default. Ephemeral cache, ~10% of normal input token cost on read.
+- **`cacheTTL: 3600`** (1 hour) — extended cache. ~2x write cost on the first call, but lets the cache survive longer gaps between operations.
+
+When you run a command like `totem compile`, the first lesson compiled will incur the full input token cost (plus any extended-cache premium) to write the static context into the cache. Every subsequent lesson compiled within the active TTL window will read that static context from the cache at a fraction of the price.
+
+Because the TTL resets on every cache hit, a bulk recompile of 50+ rules (which might take 15+ minutes on the default 5-minute TTL) will stay "warm" end-to-end as long as compile operations land inside the sliding window. For workflows where you make a request, walk away, and come back later (e.g. automated reviews triggered hours apart), set `cacheTTL: 3600` to keep the cache warm across the gap.
 
 _(Note: Placing dynamic content inside the cached section of a prompt is an anti-pattern that invalidates the cache on every call. Totem's prompts are explicitly architected to isolate dynamic user data at the end of the payload.)_
 
@@ -60,9 +64,9 @@ You can verify that context caching is working by observing the CLI output durin
 When a cache hit occurs, Totem will log a dimmed message to `stderr`:
 `[Compile] cache hit: 14,205 tokens read from prompt cache`
 
-On the first compile call in a 5-minute TTL window, you'll see the companion message instead:
+On the first compile call in a TTL window, you'll see the companion message instead:
 `[Compile] cache write: 14,205 tokens (first call in TTL window)`
 
-The first call pays full input token cost to write the static context into the cache; every subsequent call within 5 minutes reads from it.
+The first call pays full input token cost to write the static context into the cache; every subsequent call within the configured `cacheTTL` window reads from it.
 
-When the provider returns cache usage metrics, cache hit/write messages appear in normal compile output (dimmed). If you make several compile calls in rapid succession within a 5-minute window and you see `cache write: N tokens` on every call instead of `cache hit: N tokens`, the cache is being invalidated on each call — most likely because dynamic content has been placed inside the cached section of the prompt. If you see no cache messages at all, verify that `enableContextCaching: true` is set in your `totem.config.ts` and that you're using an `anthropic:` provider.
+When the provider returns cache usage metrics, cache hit/write messages appear in normal compile output (dimmed). If you make several compile calls in rapid succession within the active TTL window and you see `cache write: N tokens` on every call instead of `cache hit: N tokens`, the cache is being invalidated on each call — most likely because dynamic content has been placed inside the cached section of the prompt. If you see no cache messages at all, verify that `enableContextCaching: true` is set in your `totem.config.ts` and that you're using an `anthropic:` provider.

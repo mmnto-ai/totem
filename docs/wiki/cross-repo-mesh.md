@@ -30,7 +30,7 @@ If you see a `Linked index embedder dimension mismatch` warning on your first `s
 
 When an agent calls the `search_knowledge` tool without specifying a boundary, the query automatically fans out to the primary index and all configured linked indexes in parallel.
 
-The results from all stores are merged using **Reciprocal Rank Fusion (RRF)** with a constant of `k=60`. Each store is treated as an independently ranked list, and each result is assigned a normalized score based on its position: `1 / (60 + rank_within_store + 1)`.
+The results from all stores are merged using **Reciprocal Rank Fusion (RRF)** with a constant of `k=60`. Each store is treated as an independently ranked list, and each result is assigned a normalized score based on its 1-indexed position within its store: `1 / (60 + rank_within_store)`. So the top result of any store gets `1/61 ≈ 0.0164`, the second gets `1/62`, and so on. This produces correctly interleaved ranks regardless of how the underlying store scored its own results.
 
 This mathematical normalization eliminates score-scale bias. It ensures that a highly relevant hit from a purely vector-based linked store isn't outranked by a mediocre hit from a hybrid-search primary store just because their absolute scoring scales differ. The visible `Score:` field in the agent's results displays this normalized RRF value.
 
