@@ -44,10 +44,19 @@ When in doubt, draft the doc. The cost of 10 minutes of design writing
 is always lower than the cost of a multi-round bot review cycle.
 
 State your triage decision explicitly: "Tactical — skipping Phase 3"
-or "Architectural — drafting design doc." If tactical, you may proceed
-directly to implementation after Phase 1 completes.
+or "Architectural — drafting design doc."
 
-## Phase 3 — Implementation design doc (REQUIRED before code)
+**Tactical path — no approval gate.** If tactical, proceed directly to
+implementation after Phase 1 completes. The Phase 4 approval gate below
+only applies when Phase 3 was drafted, because the gate exists to catch
+architectural mistakes before code is written — there's nothing
+architectural to review for a tactical change. The user's normal
+PR-approval and merge-approval rules still apply to the finished code.
+
+**Architectural path — continue to Phase 3.** Draft the design doc, then
+stop at the Phase 4 approval gate before writing any code.
+
+## Phase 3 — Implementation design doc (REQUIRED for architectural changes before code; skipped for tactical)
 
 Append a new `## Implementation Design` section to the spec file at
 `.totem/specs/<issue>.md`. The section MUST cover all six subsections
@@ -117,7 +126,10 @@ Anything that needs user judgment before coding starts. Format:
 - **Options:** <bulleted list of viable answers with tradeoffs>
 - **Recommendation:** <your best guess>
 
-## Phase 4 — Approval gate
+## Phase 4 — Approval gate (architectural path only)
+
+This phase applies ONLY when Phase 3 was drafted. For tactical changes
+that skipped Phase 3, there is no gate — see Phase 2.
 
 After drafting Phase 3, STOP and output:
 
