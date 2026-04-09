@@ -490,7 +490,47 @@ async function performSearch(
     return formatSystemWarning([summary, '', ...detailLines, '', recoveryNote].join('\n'));
   })();
 
+  // mmnto/totem#1295 CR MAJOR: detect the "entire federation is down" case
+  // and return isError instead of a success-shaped "No results found" body.
+  //
+  // When `boundary === undefined` (federated Case 5), every store we TRIED
+  // to query failed, and results came back empty, the agent must see this
+  // as an outage — not as "no relevant knowledge found." Otherwise it
+  // concludes there's nothing in the index when the entire search plane
+  // is actually broken.
+  //
+  // The condition is narrow on purpose:
+  //   - `boundary === undefined`: only the federated case (targeted Cases
+  //     2 & 3 have their own isError paths; Cases 1 & 4 bubble primary
+  //     failures to the outer reconnect+retry)
+  //   - `failures.primary !== null`: primary actually failed (if primary
+  //     succeeded with 0 rows, that's a legitimate "no results")
+  //   - `failures.linked.size === linkedStores.size`: every linked store
+  //     also failed (if ANY linked store succeeded with 0 rows, that
+  //     answer is authoritative)
+  //
+  // Primary failures with at least one healthy linked store still return
+  // a success-shaped response with the runtime warning prepended — the
+  // linked stores' zero-results answer is authoritative for the query.
+  const allFederatedStoresFailed =
+    boundary === undefined &&
+    failures.primary !== null &&
+    failures.linked.size === linkedStores.size;
+
   if (results.length === 0) {
+    if (allFederatedStoresFailed) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              runtimeWarning ??
+              '[Totem Error] Federated search failed: every queried store errored.', // totem-ignore #1294 — system-generated + XML-wrapped
+          },
+        ],
+        isError: true,
+      };
+    }
     const body = formatXmlResponse('knowledge', 'No results found.');
     const text = runtimeWarning ? runtimeWarning + '\n\n' + body : body; // totem-ignore #1294 — system-generated + XML-wrapped
     return { content: [{ type: 'text' as const, text }] };

@@ -857,6 +857,81 @@ describe('search_knowledge', () => {
       expect(text).toContain('[primary] Linked-primary hit');
     });
 
+    it('entire federation down returns isError (CR MAJOR — do not mask outage as "no results")', async () => {
+      // mmnto/totem#1295 CR MAJOR catch: when primary AND every linked
+      // store fail, results.length === 0 but the previous code fell
+      // through to a success-shaped "No results found" body with the
+      // warning prepended. The agent reads that as "no relevant knowledge
+      // in the index" when actually the entire search plane is broken.
+      // Tenet 4 violation (silent degradation).
+      //
+      // The fix: detect the federated case where `failures.primary !== null`
+      // AND `failures.linked.size === linkedStores.size` AND results are
+      // empty, and return isError: true with the runtime warning as the
+      // error text so the agent sees the breakdown of what's down.
+      mockSearchThrows = true;
+      const brokenLinkA: MockLinkedStore = {
+        search: vi.fn().mockRejectedValue(new Error('Linked A down')),
+        reconnect: vi.fn().mockRejectedValue(new Error('A reconnect failed')),
+      };
+      const brokenLinkB: MockLinkedStore = {
+        search: vi.fn().mockRejectedValue(new Error('Linked B down')),
+        reconnect: vi.fn().mockRejectedValue(new Error('B reconnect failed')),
+      };
+      mockLinkedStores.set('strategy', brokenLinkA);
+      mockLinkedStores.set('playground', brokenLinkB);
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      // Must be isError — not a silent "no results found" body
+      expect(result.isError).toBe(true);
+      const text = result.content[0]!.text;
+      // The runtime warning (breakdown of what failed) is the error text
+      expect(text).toContain('[SYSTEM WARNING]');
+      expect(text).toContain('primary store');
+      expect(text).toContain('2 linked index(es) failed');
+      // Each broken store is named in the detail lines
+      expect(text).toContain('strategy');
+      expect(text).toContain('playground');
+      // Critically: the "No results found." body must NOT appear
+      expect(text).not.toContain('No results found');
+    });
+
+    it('partial-failure federation (some linked OK, some broken) still returns success-shape "no results"', async () => {
+      // mmnto/totem#1295 CR MAJOR follow-up: verify the all-failed check
+      // is narrow enough. When at least ONE store successfully returned
+      // zero results, the zero-ness is authoritative and the response
+      // should be a normal "No results found" body with the warning
+      // prepended — NOT isError. The agent can see the warning and
+      // decide whether to retry or accept the zero-result answer.
+      const brokenLink: MockLinkedStore = {
+        search: vi.fn().mockRejectedValue(new Error('Linked down')),
+        reconnect: vi.fn().mockRejectedValue(new Error('Reconnect failed')),
+      };
+      const healthyLink = makeLinkedStore([]); // healthy, empty results
+      mockLinkedStores.set('strategy', brokenLink);
+      mockLinkedStores.set('playground', healthyLink);
+      mockSearchResults = []; // primary also empty but healthy
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      // Not isError — at least one store answered authoritatively
+      expect(result.isError).toBeUndefined();
+      const text = result.content[0]!.text;
+      // Runtime warning surfaces the partial failure
+      expect(text).toContain('[SYSTEM WARNING]');
+      expect(text).toContain('strategy');
+      // "No results found" body IS present because primary + healthy linked
+      // both returned zero
+      expect(text).toContain('No results found');
+    });
+
     it('primary store failure does not block linked-store results (GCA HIGH)', async () => {
       // mmnto/totem#1295 GCA HIGH catch: previously the primary store
       // search bubbled out of `Promise.all` and killed the entire
