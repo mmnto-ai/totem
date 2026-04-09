@@ -1,5 +1,7 @@
 # Cloud Compilation
 
+> **1.14.0 note:** Cloud compilation is **currently Gemini-only** and does NOT benefit from the new context caching layer. For best compile quality and lowest cost, use **local compilation** (the default, which routes to Claude Sonnet 4.6 per Strategy #73). Migration of the cloud worker to Claude Sonnet is tracked as [mmnto/totem#1221](https://github.com/mmnto-ai/totem/issues/1221).
+
 Totem supports offloading rule compilation to a self-hosted Cloud Run worker for parallel fan-out. This is optional — local compilation works out of the box with no additional infrastructure.
 
 ## Local Compilation (Default)

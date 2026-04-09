@@ -75,6 +75,12 @@ Totem enforces quality at compile time. Every lesson is compiled through a bench
 
 No manual curation. No rule-count arms race.
 
+## What's New in 1.14.0 — The Nervous System Foundation
+
+- **Cross-Repo Context Mesh:** New `linkedIndexes: []` option in `totem.config.ts` lets your agents federate semantic search across sibling repos. One repo's lessons become rules protecting all linked ones. Results merge via Reciprocal Rank Fusion for fair cross-store ranking regardless of score scale. See the [Cross-Repo Mesh wiki page](docs/wiki/cross-repo-mesh.md).
+- **Context Caching (Anthropic):** Compile and review operations now benefit from Anthropic prompt caching automatically — no config changes required. Bulk recompile runs stay warm end-to-end thanks to the sliding 5-minute TTL.
+- **Preflight Design Gate:** The `/preflight` skill now requires a 1-page design doc for architectural changes before any code is written. Tactical bug fixes skip the gate via explicit triage.
+
 ## Quickstart
 
 Initialize Totem in any project (Node, Python, Go, Rust):

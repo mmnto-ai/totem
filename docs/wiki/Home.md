@@ -7,6 +7,8 @@ Welcome to the Totem documentation.
 - [The Pipeline Engine](pipeline-engine.md) (P1-P5)
 - [Enforcement Model](enforcement-model.md)
 - [Trap Ledger](trap-ledger.md)
+- [Cross-Repo Mesh](cross-repo-mesh.md)
+- [Context Caching](context-caching.md)
 
 ## Reference
 
