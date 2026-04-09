@@ -53,12 +53,62 @@ export interface StoredChunk {
 }
 
 /**
+ * Source context for a LanceStore — identifies which repository the store's
+ * results originate from and where on disk that repository lives. Injected
+ * at LanceStore construction time and stamped onto every SearchResult via
+ * `rowToSearchResult` in the search hot path.
+ *
+ * Used by mmnto/totem#1294 (Cross-Repo Context Mesh) so agents receiving
+ * federated results can distinguish between primary-repo and linked-repo
+ * hits, and so they have an absolute path for `Read` tool calls without
+ * having to reason about which repo root to resolve `filePath` against.
+ */
+export interface SourceContext {
+  /**
+   * Semantic identifier for the source repo. `undefined` for the primary
+   * store (local repo); set to the linked-index name for cross-repo hits
+   * (e.g., `'strategy'`). Safe to display in agent-facing formatters.
+   */
+  sourceRepo?: string;
+  /**
+   * Absolute filesystem path to the root of the repository that owns this
+   * store. Used to resolve `filePath` (which is stored relative to this
+   * root) into `absoluteFilePath` on every SearchResult.
+   */
+  absolutePathRoot: string;
+}
+
+/**
  * Result returned from a search query.
  */
 export interface SearchResult {
   content: string;
   contextPrefix: string;
+  /**
+   * File path relative to the source repository root. Unchanged from the
+   * pre-mmnto/totem#1294 shape — kept for display, lesson-linking, and
+   * incremental-sync purposes.
+   */
   filePath: string;
+  /**
+   * Absolute on-disk path to the source file, computed by joining
+   * `filePath` with the owning LanceStore's `absolutePathRoot`. Always
+   * populated, even for primary-store results. Agents should prefer this
+   * for `Read` / `Edit` tool calls; `filePath` is for display.
+   *
+   * mmnto/totem#1294 rationale: the context window is hostile to agents.
+   * Relative paths invite hallucinated tool calls that resolve against the
+   * wrong repo root. An explicit absolute path eliminates that class of
+   * error at the cost of a few extra bytes per result.
+   */
+  absoluteFilePath: string;
+  /**
+   * Semantic tag identifying the source repo. `undefined` for primary-store
+   * hits; set to the linked-index name (e.g., `'strategy'`) for federated
+   * cross-repo hits. Safe to display in agent-facing formatters to
+   * disambiguate local from cross-repo results.
+   */
+  sourceRepo?: string;
   type: ContentType;
   label: string;
   score: number;

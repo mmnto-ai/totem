@@ -164,7 +164,9 @@ export async function triageCommand(options: TriageOptions): Promise<void> {
   // Connect to LanceDB
   const embedding = requireEmbedding(config);
   const embedder = createEmbedder(embedding);
-  const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
+  const store = new LanceStore(path.join(cwd, config.lanceDir), embedder, {
+    absolutePathRoot: cwd,
+  });
   await store.connect();
 
   // Retrieve context from LanceDB

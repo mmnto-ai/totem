@@ -71,6 +71,7 @@ function fakeResult(label: string, contentLength: number) {
     content: 'x'.repeat(contentLength),
     contextPrefix: '',
     filePath: 'test.ts',
+    absoluteFilePath: 'test.ts',
     type: 'code' as const,
     label,
     score: 0.95,

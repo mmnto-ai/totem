@@ -145,7 +145,7 @@ export async function getAutoContext(options?: AutoContextOptions): Promise<Auto
   try {
     const embedding = requireEmbedding(config);
     const embedder = createEmbedder(embedding);
-    store = new LanceStore(storePath, embedder, (msg) => {
+    store = new LanceStore(storePath, embedder, { absolutePathRoot: projectRoot }, (msg) => {
       process.stderr.write(`[auto-context] ${msg}\n`);
     });
     await store.connect();
@@ -167,9 +167,14 @@ export async function getAutoContext(options?: AutoContextOptions): Promise<Auto
           embed: (_texts: string[]) =>
             Promise.reject(new Error('[Totem Error] No embedder available for FTS fallback')),
         };
-        store = new LanceStore(storePath, stubEmbedder, (msg) => {
-          process.stderr.write(`[auto-context] ${msg}\n`);
-        });
+        store = new LanceStore(
+          storePath,
+          stubEmbedder,
+          { absolutePathRoot: projectRoot },
+          (msg) => {
+            process.stderr.write(`[auto-context] ${msg}\n`);
+          },
+        );
       }
       // (Re-)connect with connectFtsOnly — skips dimension validation and
       // never nukes the index. Recovers from failed connect() state too.

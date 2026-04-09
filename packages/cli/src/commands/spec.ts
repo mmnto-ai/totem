@@ -201,7 +201,9 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   // Connect to LanceDB
   const embedding = requireEmbedding(config);
   const embedder = createEmbedder(embedding);
-  const store = new LanceStoreImpl(path.join(cwd, config.lanceDir), embedder);
+  const store = new LanceStoreImpl(path.join(cwd, config.lanceDir), embedder, {
+    absolutePathRoot: cwd,
+  });
   await store.connect();
 
   // Connect to linked indexes (cross-totem knowledge)
@@ -215,9 +217,14 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
         const linkedEmbedding = linkedConfig.embedding;
         if (!linkedEmbedding) continue; // Linked totem has no embedder — skip
         const linkedEmbedder = createEmbedder(linkedEmbedding);
+        // Derive a link name for sourceContext — basename of the resolved
+        // path with leading dot stripped, matching the MCP server's
+        // `deriveLinkName` convention (mmnto/totem#1295).
+        const linkName = path.basename(resolvedPath).replace(/^\./, '');
         const linkedStore = new LanceStoreImpl(
           path.join(resolvedPath, linkedConfig.lanceDir),
           linkedEmbedder,
+          { sourceRepo: linkName, absolutePathRoot: resolvedPath },
         );
         await linkedStore.connect();
         linkedStores.push(linkedStore);

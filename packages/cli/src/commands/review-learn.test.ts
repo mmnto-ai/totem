@@ -60,6 +60,7 @@ describe('assembleReviewLearnPrompt', () => {
       {
         content: 'Always use parameterized queries.',
         filePath: '.totem/lessons/lesson-abc.md',
+        absoluteFilePath: '.totem/lessons/lesson-abc.md',
         score: 0.95,
         type: 'spec' as const,
         label: 'SQL injection prevention',

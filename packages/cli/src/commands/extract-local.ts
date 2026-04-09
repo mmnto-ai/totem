@@ -163,7 +163,9 @@ export async function extractFromLocal(
   const customSecrets = loadSecrets(cwd, config.totemDir, (msg) => log.warn(TAG, msg));
   const embedding = requireEmbedding(config);
   const embedder = createEmbedder(embedding);
-  const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
+  const store = new LanceStore(path.join(cwd, config.lanceDir), embedder, {
+    absolutePathRoot: cwd,
+  });
   await store.connect();
 
   // 6. Query existing lessons for dedup

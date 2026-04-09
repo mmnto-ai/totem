@@ -11,7 +11,9 @@ export async function statsCommand(): Promise<void> {
   const config = await loadConfig(configPath);
   const embedding = requireEmbedding(config);
   const embedder = createEmbedder(embedding);
-  const store = new LanceStore(path.join(cwd, config.lanceDir), embedder);
+  const store = new LanceStore(path.join(cwd, config.lanceDir), embedder, {
+    absolutePathRoot: cwd,
+  });
   await store.connect();
 
   const { totalChunks, byType } = await store.stats();

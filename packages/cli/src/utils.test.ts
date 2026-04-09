@@ -29,7 +29,16 @@ import {
 function makeResult(
   overrides: Partial<SearchResult> & Pick<SearchResult, 'label' | 'filePath' | 'score' | 'content'>,
 ): SearchResult {
-  return { contextPrefix: '', type: 'code', metadata: {}, ...overrides };
+  // Default absoluteFilePath to the provided filePath — mirrors
+  // rowToSearchResult's fallback when no sourceContext is injected
+  // (mmnto/totem#1294 Phase 1).
+  return {
+    contextPrefix: '',
+    type: 'code',
+    metadata: {},
+    absoluteFilePath: overrides.filePath,
+    ...overrides,
+  };
 }
 
 // ─── sanitize ───────────────────────────────────────────
@@ -1078,6 +1087,7 @@ describe('partitionLessons', () => {
     content: `content for ${label}`,
     contextPrefix: '',
     filePath,
+    absoluteFilePath: filePath,
     type: 'spec',
     label,
     score: 0.9,
@@ -1132,6 +1142,7 @@ describe('formatLessonSection', () => {
     content,
     contextPrefix: '',
     filePath: '.totem/lessons.md',
+    absoluteFilePath: '.totem/lessons.md',
     type: 'spec',
     label,
     score: 0.9,
