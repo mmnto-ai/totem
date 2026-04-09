@@ -2,9 +2,35 @@
 
 Most governance tools operate in isolation per repository. Totem lets you connect multiple repositories into a shared semantic knowledge mesh, allowing your agents to federate context across repository boundaries.
 
-## Configuration
+## Two ways to share lessons across repositories
 
-To link repositories, hand-edit your `totem.config.ts` and add the paths to the sibling repositories:
+Totem ships **two distinct mechanisms** for cross-repository knowledge sharing. They sound similar but have very different tradeoffs — pick the one that matches your use case.
+
+### Option 1: `linkedIndexes` config (federation mode)
+
+Each repository keeps its own `.lancedb` index. Queries fan out across multiple stores in parallel and merge results by rank. The lessons in linked repositories stay in their home repos; you query them remotely.
+
+**Best for:** distinct repositories with their own lesson corpora, where you want each repo to maintain its own governance authority but cross-pollinate semantic context.
+
+### Option 2: `totem link <path>` CLI — pull mode
+
+Adds the neighboring repo's `.totem/lessons/*.md` files to your local `targets: []` array in `totem.config.ts`. After running `totem sync`, those lessons get **embedded into your local LanceDB index** alongside your own. The neighboring repo's index is not queried at all — its lessons become part of yours.
+
+**Best for:** tightly coupled repositories that share a single lesson corpus (e.g., a monorepo with multiple packages, or a parent project with first-party plugins). Your local index becomes the single source of truth.
+
+```bash
+# Pull neighboring repo's lessons into your local index
+totem link ../api-server
+
+# Remove the link
+totem link --unlink ../api-server
+```
+
+Note: `totem link` modifies the `targets: []` array, NOT `linkedIndexes`. The two mechanisms are independent — you can use both at the same time on different neighboring repos if your needs vary.
+
+### Configuring `linkedIndexes` (federation mode)
+
+To set up federation, hand-edit your `totem.config.ts` and add the paths to the sibling repositories:
 
 ```typescript
 export default {
@@ -30,7 +56,9 @@ If you see a `Linked index embedder dimension mismatch` warning on your first `s
 
 When an agent calls the `search_knowledge` tool without specifying a boundary, the query automatically fans out to the primary index and all configured linked indexes in parallel.
 
-The results from all stores are merged using **Reciprocal Rank Fusion (RRF)** with a constant of `k=60`. Each store is treated as an independently ranked list, and each result is assigned a normalized score based on its 1-indexed position within its store: `1 / (60 + rank_within_store)`. So the top result of any store gets `1/61 ≈ 0.0164`, the second gets `1/62`, and so on. This produces correctly interleaved ranks regardless of how the underlying store scored its own results.
+The results from all stores are merged using **rank-based RRF scoring** with a constant of `k=60`. Each store is treated as an independently ranked list, and each result is assigned a normalized score based on its 1-indexed position within its store: `1 / (60 + rank_within_store)`. So the top result of any store gets `1/61 ≈ 0.0164`, the second gets `1/62`, and so on. This produces correctly interleaved ranks regardless of how the underlying store scored its own results.
+
+This is a simplified form of Reciprocal Rank Fusion. The textbook RRF formula sums reciprocal ranks across multiple lists when the same document appears in more than one. Federation across linked Totem repositories assumes **disjoint corpora** — each document lives in exactly one store, distinguished by its `sourceRepo` tag — so the cross-list summation degenerates to a single per-list rank score. If you ever link two repositories that share content (e.g., a vendored submodule indexed in both), each copy would be treated as a separate document at its own rank within its source store, not deduplicated.
 
 This mathematical normalization eliminates score-scale bias. It ensures that a highly relevant hit from a purely vector-based linked store isn't outranked by a mediocre hit from a hybrid-search primary store just because their absolute scoring scales differ. The visible `Score:` field in the agent's results displays this normalized RRF value.
 
@@ -82,7 +110,7 @@ If the primary store AND every single linked store fail, the response is an expl
 - **Shared Design Systems:** Link a centralized UI component repository so downstream applications automatically receive structural rules about component usage.
 - **Monorepo vs. Mesh:** If your code lives in a single monorepo, use **Partitions** to isolate context. If your code is spread across physically distinct repositories that cannot be merged, use the **Context Mesh**.
 
-_(Note: Federated queries incur a slight performance overhead, roughly ~50-100ms per linked store. The mesh is designed to link 2-5 tightly coupled repositories, not 20 independent ones.)_
+_(Note: Federated queries incur a slight performance overhead, roughly ~50–100 ms per linked store. The mesh is designed to link 2-5 tightly coupled repositories, not 20 independent ones.)_
 
 ---
 
