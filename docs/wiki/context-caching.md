@@ -17,7 +17,7 @@ export default {
 };
 ```
 
-That's the only change required. The next `totem compile` or `totem review` invocation against an Anthropic provider will start writing to and reading from the prompt cache.
+That's the only change required. The next `totem lesson compile` or `totem review` invocation against an Anthropic provider will start writing to and reading from the prompt cache.
 
 ## How it Works
 
@@ -39,7 +39,7 @@ Anthropic's caching operates on a **sliding TTL (Time To Live)** that resets on 
 - **`cacheTTL: 300`** (5 minutes) — the default. Ephemeral cache, ~10% of normal input token cost on read.
 - **`cacheTTL: 3600`** (1 hour) — extended cache. ~2x write cost on the first call, but lets the cache survive longer gaps between operations.
 
-When you run a command like `totem compile`, the first lesson compiled will incur the full input token cost (plus any extended-cache premium) to write the static context into the cache. Every subsequent lesson compiled within the active TTL window will read that static context from the cache at a fraction of the price.
+When you run a command like `totem lesson compile`, the first lesson compiled will incur the full input token cost (plus any extended-cache premium) to write the static context into the cache. Every subsequent lesson compiled within the active TTL window will read that static context from the cache at a fraction of the price.
 
 Because the TTL resets on every cache hit, a bulk recompile of 50+ rules (which might take 15+ minutes on the default 5-minute TTL) will stay "warm" end-to-end as long as compile operations land inside the sliding window. For workflows where you make a request, walk away, and come back later (e.g. automated reviews triggered hours apart), set `cacheTTL: 3600` to keep the cache warm across the gap.
 
@@ -47,7 +47,7 @@ _(Note: Placing dynamic content inside the cached section of a prompt is an anti
 
 ## Provider Coverage
 
-- **Anthropic:** Supported for `totem compile` and `totem review` on any `anthropic:` model that returns prompt-cache usage metrics on the response. Caching activates when `enableContextCaching: true` is set in your config and the provider returns the cache metrics — there's no specific model-name gate.
+- **Anthropic:** Supported for `totem lesson compile` and `totem review` on any `anthropic:` model that returns prompt-cache usage metrics on the response. Caching activates when `enableContextCaching: true` is set in your config and the provider returns the cache metrics — there's no specific model-name gate.
 - **Google Gemini:** Deferred pending integration with the Gemini `CachedContent` API. Tracked for 1.16.0+.
 - **Other Providers:** No caching layer is currently wired into the orchestrator middleware.
 

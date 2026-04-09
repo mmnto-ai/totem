@@ -17,7 +17,7 @@ export default {
 
 ### Embedding Dimension Requirement
 
-Because federated results are merged into a single vector space for semantic ranking, **every linked repository must use the exact same embedding provider, model, and dimensions as the primary repository.**
+Because each linked store is queried with the same embedding pipeline and results are then merged by rank (RRF), **every linked repository must use the same embedding provider, model, and dimensions as the primary repository.** The query embedding (a single vector) must be compatible with each store's index shape for the per-store search to even run; results are then merged by rank position rather than by raw cosine similarity in a shared space.
 
 If your primary repo uses a 768-dimension embedder and a linked repo uses a 1536-dimension embedder, cross-repo semantic search will fail.
 
