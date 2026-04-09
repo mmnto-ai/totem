@@ -6,11 +6,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 let capturedHandler: (args: Record<string, unknown>) => Promise<unknown>;
 
-/** Tracks the mock store behaviour for each test. */
+/**
+ * Tracks the mock store behaviour for each test. `absoluteFilePath` is
+ * optional — when omitted the mock store fills it in from the fake
+ * `projectRoot` (mirroring real `LanceStore` which constructs it via
+ * `path.join(sourceContext.absolutePathRoot, filePath)`).
+ */
 let mockSearchResults: Array<{
   label: string;
   type: string;
   filePath: string;
+  absoluteFilePath?: string;
   score: number;
   content: string;
 }> = [];
@@ -86,7 +92,12 @@ vi.mock('../context.js', () => ({
             mockSearchThrowsOnce = false;
             throw new Error('Stale handle error');
           }
-          return mockSearchResults;
+          // Fill in absoluteFilePath from the fake projectRoot when the
+          // test didn't set one explicitly — mirrors real LanceStore.
+          return mockSearchResults.map((r) => ({
+            ...r,
+            absoluteFilePath: r.absoluteFilePath ?? `/fake/project/${r.filePath}`,
+          }));
         }),
         reconnect: vi.fn(async () => {}),
         healthCheck: vi.fn(async () => {
@@ -111,8 +122,12 @@ vi.mock('../context.js', () => ({
     for (const linkedStore of mockLinkedStores.values()) {
       try {
         await linkedStore.reconnect();
-      } catch {
-        // Best-effort, mirror the real reconnectStore behavior
+      } catch (err) {
+        // Best-effort, mirror the real reconnectStore behavior.
+        // Suppression is intentional — discard the error explicitly so
+        // the bare-catch lint rule doesn't fire and unexpected mock
+        // breakage stays grep-able.
+        void err;
       }
     }
   }),
@@ -207,7 +222,12 @@ describe('search_knowledge', () => {
                 mockSearchThrowsOnce = false;
                 throw new Error('Stale handle error');
               }
-              return mockSearchResults;
+              // Fill in absoluteFilePath from the fake projectRoot when
+              // the test didn't set one explicitly — mirrors LanceStore.
+              return mockSearchResults.map((r) => ({
+                ...r,
+                absoluteFilePath: r.absoluteFilePath ?? `/fake/project/${r.filePath}`,
+              }));
             }),
             reconnect: vi.fn(async () => {}),
             healthCheck: vi.fn(async () => {
@@ -229,8 +249,10 @@ describe('search_knowledge', () => {
         for (const linkedStore of mockLinkedStores.values()) {
           try {
             await linkedStore.reconnect();
-          } catch {
-            // Best-effort, mirror real reconnectStore
+          } catch (err) {
+            // Best-effort, mirror the real reconnectStore behavior.
+            // Suppression is intentional — discard the error explicitly.
+            void err;
           }
         }
       }),
@@ -438,7 +460,9 @@ describe('search_knowledge', () => {
     expect(text).toContain('### 1. First result (lesson)');
     expect(text).toContain('### 2. Second result (spec)');
     expect(text).toContain('### 3. Third result (code)');
-    expect(text).toContain('**File:** lessons/first.md | **Score:** 0.990');
+    // mmnto/totem#1295 CR MAJOR: File line uses absolute path (mock fills
+    // absoluteFilePath from /fake/project + filePath when not set explicitly)
+    expect(text).toContain('**File:** /fake/project/lessons/first.md | **Score:** 0.990');
     expect(text).toContain('---');
   });
 
@@ -1133,7 +1157,12 @@ describe('search_knowledge', () => {
       expect(result.content[0]!.text).not.toContain('[SYSTEM WARNING]');
     });
 
-    it('primary results use relative path, linked results use absolute path', async () => {
+    it('all results display absolute paths so the agent can Read/Edit unambiguously', async () => {
+      // mmnto/totem#1295 CR MAJOR: `formatResult` previously fell back to
+      // relative `filePath` for primary hits, reintroducing repo-root
+      // ambiguity in the common case — exactly the bug `absoluteFilePath`
+      // was added to fix. Both primary and linked hits must now display
+      // absolute paths in the File line.
       mockSearchResults = [
         {
           label: 'Primary',
@@ -1164,9 +1193,14 @@ describe('search_knowledge', () => {
       };
 
       const text = result.content[0]!.text;
-      // Primary: relative path in the File field
-      expect(text).toContain('**File:** src/primary.ts');
-      // Linked: absolute path in the File field
+      // Primary: absolute path (constructed by the mock from projectRoot
+      // + filePath, mirroring real LanceStore behavior)
+      expect(text).toContain('**File:** /fake/project/src/primary.ts');
+      // Primary's relative path must NOT appear in the File line — the
+      // regression would be the bare `src/primary.ts` (without the
+      // `/fake/project/` prefix) appearing where the absolute path goes
+      expect(text).not.toContain('**File:** src/primary.ts ');
+      // Linked: absolute path in the File field (unchanged)
       expect(text).toContain('**File:** /abs/totem-strategy/adr/linked.md');
       // Linked result has the [sourceRepo] tag prefix
       expect(text).toContain('[strategy] Linked');

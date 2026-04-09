@@ -150,13 +150,14 @@ function formatResult(r: SearchResult, index: number): string {
   // joined with explicit `+` rather than two adjacent template placeholders
   // (which the concat-without-delimiter lint rule flags).
   const labelWithTag = r.sourceRepo ? `[${r.sourceRepo}] ` + r.label : r.label;
-  // Use absolute path for linked results so agents can Read() them directly.
-  // Primary results keep the relative path for display compactness — they
-  // resolve against cwd naturally.
-  const fileDisplay = r.sourceRepo ? r.absoluteFilePath : r.filePath;
+  // mmnto/totem#1295 CR MAJOR: ALWAYS display the absolute path. The whole
+  // point of `absoluteFilePath` on `SearchResult` is to give agents an
+  // unambiguous Read/Edit target. Falling back to the relative `filePath`
+  // for primary hits reintroduced repo-root ambiguity in the common case —
+  // exactly the bug that field was added to fix.
   return (
     `### ${index + 1}. ${labelWithTag} (${r.type})\n` +
-    `**File:** ${fileDisplay} | **Score:** ${r.score.toFixed(3)}\n\n` +
+    `**File:** ${r.absoluteFilePath} | **Score:** ${r.score.toFixed(3)}\n\n` +
     r.content
   );
 }
