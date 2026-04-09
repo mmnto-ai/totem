@@ -52,4 +52,4 @@ On the first compile call in a 5-minute TTL window, you'll see the companion mes
 
 The first call pays full input token cost to write the static context into the cache; every subsequent call within 5 minutes reads from it.
 
-Cache hit and cache write messages are always shown in normal compile output (they're dimmed but present). If you make several compile calls in rapid succession within a 5-minute window and you see `cache write: N tokens` on every call instead of `cache hit: N tokens`, the cache is being invalidated on each call — most likely because dynamic content has been placed inside the cached section of the prompt.
+Cache hit and cache write messages are emitted by default in normal compile output (they're dimmed but present) — no flag required. If you make several compile calls in rapid succession within a 5-minute window and you see `cache write: N tokens` on every call instead of `cache hit: N tokens`, the cache is being invalidated on each call — most likely because dynamic content has been placed inside the cached section of the prompt.

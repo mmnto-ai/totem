@@ -8,9 +8,9 @@ Every PR becomes a back-and-forth with review bots about the same architectural 
 
 Totem is a zero-config CLI and native MCP server that gives your AI agents a persistent, vendor-agnostic semantic memory. It is not an orchestration framework like LangChain — it is a drop-in compiler that adds a deterministic validation layer to the tools you already use (Claude, Gemini, Cursor, Copilot).
 
-## How a Mistake Becomes Impossible
+## Documentation is a suggestion
 
-Documentation is a suggestion. Totem turns a plain-English markdown lesson into a physical constraint the linter enforces on every push:
+Totem turns a plain-English markdown lesson into a physical constraint the linter enforces on every push:
 
 **Input:** (`.totem/lessons/no-child-process.md`)
 
