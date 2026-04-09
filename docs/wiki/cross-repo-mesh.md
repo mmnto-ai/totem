@@ -68,13 +68,13 @@ If the primary store AND every single linked store fail, the response is an expl
 
 ## Troubleshooting
 
-| Error / Warning                                      | Meaning                                                            | Resolution                                                                  |
-| :--------------------------------------------------- | :----------------------------------------------------------------- | :-------------------------------------------------------------------------- |
-| **"Linked index has no totem.config.ts"**            | The linked directory is not Totem-managed.                         | Run `totem init` in the target repository.                                  |
-| **"Linked index is empty (0 rows)"**                 | The link is valid, but the database has no data.                   | Run `totem sync` in the linked repository.                                  |
-| **"Linked index embedder dimension mismatch"**       | The linked repo uses a different embedding model than the primary. | Align the `totem.config.ts` embedder settings and rebuild the linked index. |
-| **"DIMENSION MISMATCH: Index has N-dim vectors"**    | The _primary_ repository's index is stale relative to its config.  | Run `rm -rf .lancedb && totem sync --full` in the primary repo.             |
-| **"Another linked index already claims the name X"** | Two paths in `linkedIndexes` resolve to the same basename.         | Rename one of the linked directories on disk.                               |
+| Error / Warning                                                                                      | Meaning                                                                    | Resolution                                                                              |
+| :--------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------- |
+| **"Linked index has no totem.config.ts"**                                                            | The linked directory is not Totem-managed.                                 | Run `totem init` in the target repository.                                              |
+| **"Linked index is empty (0 rows)"**                                                                 | The link is valid, but the database has no data.                           | Run `totem sync` in the linked repository.                                              |
+| **"Linked index embedder dimension mismatch"**                                                       | The linked repo produces a different embedding dimension than the primary. | Align the `totem.config.ts` embedding dimensions/settings and rebuild the linked index. |
+| **"DIMENSION MISMATCH: Index has X-dim vectors but the configured embedder produces Y-dim vectors"** | The _primary_ repository's index is stale relative to its config.          | Run `rm -rf .lancedb && totem sync --full` in the primary repo.                         |
+| **"Another linked index already claims the name X"**                                                 | Two paths in `linkedIndexes` resolve to the same basename.                 | Rename one of the linked directories on disk.                                           |
 
 ## When to use the Context Mesh
 
