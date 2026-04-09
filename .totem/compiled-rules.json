@@ -9568,10 +9568,6 @@
       "title": "Align read and write cache hashing"
     },
     {
-      "hash": "82b523e96d2b9857",
-      "title": "Evict permanently failing federated links"
-    },
-    {
       "hash": "0e7ab7acf91aa7f6",
       "title": "Prevent boundary routing fallbacks on error"
     },
@@ -9602,6 +9598,10 @@
     {
       "hash": "40059dd558302e47",
       "title": "Use delimiters in multi-field cache keys"
+    },
+    {
+      "hash": "16d717f95e8cc66f",
+      "title": "Resilient continuation for transient federated link failures"
     }
   ]
 }
