@@ -35,6 +35,12 @@ let mockReconnectCalled = false;
  */
 interface MockLinkedStore {
   search: (options: Record<string, unknown>) => Promise<Array<Record<string, unknown>>>;
+  // mmnto/totem#1295 CR minor: tests that exercise the reconnect path
+  // need to actually verify per-store reconnect calls fired. The mock now
+  // exposes a `reconnect` spy and the mocked `reconnectStore` (below)
+  // iterates `mockLinkedStores` and calls `.reconnect()` on each — same
+  // pattern as the real `reconnectStore` in context.ts.
+  reconnect: () => Promise<void>;
 }
 let mockLinkedStores: Map<string, MockLinkedStore> = new Map();
 let mockLinkedStoreInitErrors: Map<string, string> = new Map();
@@ -69,6 +75,7 @@ vi.mock('../context.js', () => ({
         }
         return mockSearchResults;
       }),
+      reconnect: vi.fn(async () => {}),
       healthCheck: vi.fn(async () => {
         if (mockHealthCheckThrows) {
           throw new Error('Health check exploded');
@@ -84,6 +91,16 @@ vi.mock('../context.js', () => ({
   })),
   reconnectStore: vi.fn(async () => {
     mockReconnectCalled = true;
+    // mmnto/totem#1295 CR minor: mirror the real reconnectStore — iterate
+    // linked stores and call each one's reconnect spy so tests can assert
+    // per-store reconnect actually fired.
+    for (const linkedStore of mockLinkedStores.values()) {
+      try {
+        await linkedStore.reconnect();
+      } catch {
+        // Best-effort, mirror the real reconnectStore behavior
+      }
+    }
   }),
 }));
 
@@ -172,6 +189,7 @@ describe('search_knowledge', () => {
             }
             return mockSearchResults;
           }),
+          reconnect: vi.fn(async () => {}),
           healthCheck: vi.fn(async () => {
             if (mockHealthCheckThrows) {
               throw new Error('Health check exploded');
@@ -185,6 +203,15 @@ describe('search_knowledge', () => {
       })),
       reconnectStore: vi.fn(async () => {
         mockReconnectCalled = true;
+        // mmnto/totem#1295 CR minor: mirror reconnectStore — iterate
+        // linked stores so tests can assert per-store reconnect fired.
+        for (const linkedStore of mockLinkedStores.values()) {
+          try {
+            await linkedStore.reconnect();
+          } catch {
+            // Best-effort, mirror real reconnectStore
+          }
+        }
       }),
     }));
 
@@ -449,6 +476,10 @@ describe('search_knowledge', () => {
     ): MockLinkedStore {
       return {
         search: vi.fn(async () => results),
+        // mmnto/totem#1295 CR minor: every linked-store mock now exposes
+        // a reconnect spy so tests can assert per-store reconnect actually
+        // fired during the reconnect path.
+        reconnect: vi.fn(async () => {}),
       };
     }
 
@@ -619,6 +650,7 @@ describe('search_knowledge', () => {
       // equivalent for the federation-failure path under test.
       const brokenLink: MockLinkedStore = {
         search: vi.fn().mockRejectedValue(new Error('Connection refused')),
+        reconnect: vi.fn().mockRejectedValue(new Error('Reconnect also broken')),
       };
       mockLinkedStores.set('broken', brokenLink);
 
@@ -638,6 +670,44 @@ describe('search_knowledge', () => {
       expect(result.content[0]!.text).toContain('Federated search');
       expect(result.content[0]!.text).toContain('broken');
       expect(result.content[0]!.text).toContain('Connection refused');
+    });
+
+    it('primary store failure does not block linked-store results (GCA HIGH)', async () => {
+      // mmnto/totem#1295 GCA HIGH catch: previously the primary store
+      // search bubbled out of `Promise.all` and killed the entire
+      // federation, even when linked stores were healthy. Now primary
+      // failures are caught inside `federatedSearch` and routed through
+      // the same per-query runtime-warning path as linked failures —
+      // populated under the reserved `'primary'` key.
+      mockSearchThrows = true;
+      mockLinkedStores.set(
+        'strategy',
+        makeLinkedStore([
+          {
+            label: 'Linked still works',
+            type: 'spec',
+            filePath: 'adr/adr-001.md',
+            absoluteFilePath: '/abs/strategy/adr/adr-001.md',
+            sourceRepo: 'strategy',
+            score: 0.8,
+            content: 'strategy content',
+          },
+        ]),
+      );
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      // Federation is non-blocking — linked results still land
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0]!.text).toContain('Linked still works');
+
+      // Primary failure is surfaced as a per-query runtime warning under
+      // the reserved 'primary' key
+      expect(result.content[0]!.text).toContain('[SYSTEM WARNING]');
+      expect(result.content[0]!.text).toContain('primary');
     });
 
     it('per-query runtime warnings do not mutate global init errors (transient failures stay transient)', async () => {
@@ -662,6 +732,9 @@ describe('search_knowledge', () => {
               content: 'recovered content',
             },
           ]),
+        // First-query reconnect attempt fails (so the runtime warning fires);
+        // second query bypasses the catch path entirely.
+        reconnect: vi.fn().mockRejectedValue(new Error('Reconnect lock')),
       };
       mockLinkedStores.set('flaky', flaky);
       mockSearchResults = [
@@ -792,54 +865,64 @@ describe('search_knowledge', () => {
       expect(result.content[0]!.text).toContain('Primary result');
     });
 
-    it('reconnect path invalidates stale linked store handles (Shield AI catch)', async () => {
-      // Shield AI finding on the Phase 2 review: reconnectStore was only
-      // reconnecting the primary store. If a linked index gets rebuilt by
-      // a concurrent `totem sync`, its table handle goes stale and queries
-      // fail silently. Phase 2 fix: reconnectStore iterates every linked
-      // store and reconnects each.
+    it('linked store stale-handle recovers via per-store reconnect+retry (Shield AI catch)', async () => {
+      // Shield AI finding on the Phase 2 review: if a linked index gets
+      // rebuilt by a concurrent `totem sync`, its table handle goes stale
+      // and queries fail. The fix is the per-linked-store catch+reconnect+
+      // retry inside `federatedSearch`: when a linked store's search
+      // throws, federatedSearch calls its `.reconnect()` and retries the
+      // search before recording a runtime failure.
       //
-      // This test uses the reconnect-on-search-throw path (mockSearchThrowsOnce)
-      // to trigger reconnectStore. Note: we can't inspect linkedStore.reconnect
-      // directly because the mock context only exposes a read path — but we
-      // can verify that the full federation path remains functional AFTER
-      // reconnect fires, which is the observable Shield cared about.
-      mockSearchThrowsOnce = true;
+      // mmnto/totem#1295 CR minor: this test asserts the linked-store
+      // reconnect spy was actually invoked AND that the retry produces
+      // recovered results. Without the spy assertion, the test would still
+      // pass if federatedSearch stopped reconnecting linked stores entirely
+      // — the exact regression Shield AI was guarding against.
       mockSearchResults = [
         {
-          label: 'After reconnect primary',
+          label: 'Primary',
           type: 'code',
           filePath: 'src/foo.ts',
           score: 0.7,
           content: 'content',
         },
       ];
-      mockLinkedStores.set(
-        'strategy',
-        makeLinkedStore([
-          {
-            label: 'Linked still works',
-            type: 'spec',
-            filePath: 'adr/adr-001.md',
-            absoluteFilePath: '/abs/strategy/adr/adr-001.md',
-            sourceRepo: 'strategy',
-            score: 0.8,
-            content: 'strategy content after reconnect',
-          },
-        ]),
-      );
+      const strategyStore: MockLinkedStore = {
+        // First search call throws (stale handle), second call (after
+        // reconnect) returns the recovered result.
+        search: vi
+          .fn()
+          .mockRejectedValueOnce(new Error('Stale handle'))
+          .mockResolvedValueOnce([
+            {
+              label: 'Linked recovered',
+              type: 'spec',
+              filePath: 'adr/adr-001.md',
+              absoluteFilePath: '/abs/strategy/adr/adr-001.md',
+              sourceRepo: 'strategy',
+              score: 0.8,
+              content: 'strategy content after reconnect',
+            },
+          ]),
+        reconnect: vi.fn(async () => {}),
+      };
+      mockLinkedStores.set('strategy', strategyStore);
 
       const result = (await handle({ query: 'test' })) as {
         content: Array<{ type: string; text: string }>;
         isError?: boolean;
       };
 
-      expect(mockReconnectCalled).toBe(true);
+      // The linked store's reconnect spy was actually invoked
+      expect(strategyStore.reconnect).toHaveBeenCalledOnce();
+      // The search spy was called twice: once that threw, once after reconnect
+      expect(strategyStore.search).toHaveBeenCalledTimes(2);
       expect(result.isError).toBeUndefined();
-      // Both primary (post-reconnect) and linked (never went stale in this mock)
-      // should appear in the merged results
-      expect(result.content[0]!.text).toContain('After reconnect primary');
-      expect(result.content[0]!.text).toContain('Linked still works');
+      // Both primary and the recovered linked result are in the merged response
+      expect(result.content[0]!.text).toContain('Primary');
+      expect(result.content[0]!.text).toContain('Linked recovered');
+      // No runtime warning because the recovery succeeded
+      expect(result.content[0]!.text).not.toContain('[SYSTEM WARNING]');
     });
 
     it('primary results use relative path, linked results use absolute path', async () => {

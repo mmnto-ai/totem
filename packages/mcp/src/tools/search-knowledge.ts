@@ -182,14 +182,44 @@ async function federatedSearch(
 ): Promise<SearchResult[]> {
   const { store: primaryStore, linkedStores } = await getContext();
 
-  // Primary failures propagate — they're handled by the outer retry /
-  // reconnect logic in registerSearchKnowledge. No local catch needed;
-  // the rejection bubbles through Promise.all to the outer handler.
-  const primaryPromise = primaryStore.search({
-    query,
-    typeFilter,
-    maxResults: perStoreLimit,
-  });
+  // mmnto/totem#1295 GCA HIGH: catch primary failures inside federatedSearch
+  // ONLY when linked stores exist, so a transient primary failure doesn't
+  // kill linked-store results. For non-mesh users (no linked stores), let
+  // primary failures bubble to the outer reconnect+retry in
+  // `registerSearchKnowledge` — that path produces a hard error which is
+  // strictly more useful than "empty results + warning" when primary is
+  // the only target. The outer path also still handles raw-prefix cases
+  // (Cases 1, 4) where primary is the only target regardless of mesh state.
+  //
+  // When the inner catch fires, primary uses the SAME targeted reconnect+
+  // retry pattern as linked stores below: catch → reconnect → retry → on
+  // second failure, log and record into `runtimeFailures` under the
+  // reserved 'primary' key. Promise.all never rejects from the primary slot.
+  const hasLinkedStores = linkedStores.size > 0;
+  const primaryPromise = hasLinkedStores
+    ? primaryStore
+        .search({ query, typeFilter, maxResults: perStoreLimit })
+        .catch(async (err: unknown) => {
+          const firstMsg = err instanceof Error ? err.message : String(err);
+          try {
+            await primaryStore.reconnect();
+            return await primaryStore.search({ query, typeFilter, maxResults: perStoreLimit });
+          } catch (retryErr) {
+            const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+            const combinedMsg = `search failed (initial: ${firstMsg}; reconnect+retry: ${retryMsg})`;
+            logSearch({
+              timestamp: new Date().toISOString(),
+              query: 'internal:primary-store-search',
+              resultCount: 0,
+              durationMs: 0,
+              topScore: null,
+              error: `Primary store ${combinedMsg}`,
+            });
+            runtimeFailures.set('primary', combinedMsg);
+            return [] as SearchResult[];
+          }
+        })
+    : primaryStore.search({ query, typeFilter, maxResults: perStoreLimit });
 
   // Linked stores: catch per-store failures so one broken linked index
   // doesn't break the overall query. On failure, attempt targeted

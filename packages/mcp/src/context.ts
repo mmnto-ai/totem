@@ -71,29 +71,50 @@ let initPromise: Promise<ServerContext> | undefined;
  * `federatedSearch`. Trades some log spam for resilience — the correct
  * Tenet 4 tradeoff per the bot review on PR mmnto/totem#1295.
  */
-export async function reconnectStore(): Promise<void> {
-  if (!cached) return;
+/**
+ * Pure reconnect logic — takes a `ServerContext` explicitly so it can be
+ * unit-tested without standing up the full `initContext` pipeline.
+ *
+ * Reconnects the primary store first, then iterates every linked store
+ * and reconnects each. Linked-store reconnect failures are intentionally
+ * silent here — see the comment in `reconnectStore` below for the full
+ * Tenet 4 reasoning.
+ *
+ * Exported with an underscore prefix to mark it as a test seam, not a
+ * public API. Production code should always use `reconnectStore()`.
+ */
+export async function _reconnectOnContext(ctx: ServerContext): Promise<void> {
+  await ctx.store.reconnect();
 
-  await cached.store.reconnect();
-
-  for (const [name, linkedStore] of cached.linkedStores.entries()) {
+  // mmnto/totem#1295 CR MAJOR: do NOT mutate `linkedStoreInitErrors` from
+  // here. That map holds INIT-time warnings (empty store, broken path,
+  // collision) which are static config issues that a runtime reconnect
+  // can't fix. Earlier revisions deleted entries on successful reconnect
+  // (suppressing the static warning) and OVERWROTE entries on failed
+  // reconnect (replacing the original diagnostic with a generic reconnect
+  // message). Both broke the `performSearch` Case 3 routing — a user
+  // querying `boundary: 'strategy'` after a reconnect cycle would either
+  // miss the empty-store warning entirely or see a misleading reconnect
+  // error instead of the original cause.
+  //
+  // Runtime failures on a per-query basis are surfaced via the per-query
+  // `runtimeFailures` map populated by `federatedSearch`. That path is
+  // the correct place for transient runtime state.
+  for (const [, linkedStore] of ctx.linkedStores.entries()) {
     try {
       await linkedStore.reconnect();
-      // Successful reconnect clears any previous runtime error for this
-      // link. Init errors persist until server restart — they represent
-      // static config issues (empty store, broken path) that a runtime
-      // reconnect can't fix.
-      if (cached.linkedStoreInitErrors.has(name)) {
-        cached.linkedStoreInitErrors.delete(name);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      cached.linkedStoreInitErrors.set(name, `Reconnect after primary retry failed: ${msg}`);
-      // DO NOT evict from `linkedStores` — keep the store reference so
-      // future `federatedSearch` calls can attempt a targeted reconnect
-      // when the transient issue clears.
+    } catch {
+      // Best-effort: a failed reconnect here is not actionable. The next
+      // query will hit the broken store via `federatedSearch`, fail, and
+      // surface a per-query runtime warning to the agent. We intentionally
+      // do NOT mutate global state — see the comment block above.
     }
   }
+}
+
+export async function reconnectStore(): Promise<void> {
+  if (!cached) return;
+  await _reconnectOnContext(cached);
 }
 
 /**
@@ -244,6 +265,25 @@ async function initContext(): Promise<ServerContext> {
       // files containing embedder API keys. Load them BEFORE evaluating
       // the linked config — `loadEnv` uses `dotenv` without override, so
       // primary env vars stay authoritative when they overlap.
+      //
+      // SAFETY INVARIANT (mmnto/totem#1295 GCA HIGH #2): `loadEnv` mutates
+      // the GLOBAL `process.env`, not a per-repo scope. Node.js does not
+      // provide isolated env per module. Consequences:
+      //
+      //   1. Primary `.env` keys remain authoritative (dotenv `override:
+      //      false`), so primary always wins on key collision.
+      //   2. If two LINKED repos define the same key (and primary doesn't),
+      //      the FIRST linked repo in `config.linkedIndexes` order wins.
+      //      Subsequent linked repos' values are silently dropped.
+      //   3. The merged env is visible to ALL subsequent code in this
+      //      process — including primary code that runs after init.
+      //
+      // For now this is acceptable because (a) the typical mesh has 1
+      // linked repo, (b) embedder API keys are usually identical across
+      // sibling repos in a workspace, and (c) the deterministic ordering
+      // (config order) is documented behavior. If this becomes a footgun,
+      // file a follow-up to scope env loading per linked-config evaluation
+      // (e.g., snapshot/restore process.env around `loadConfig`).
       loadEnv(resolvedPath);
 
       const linkedConfig = await loadConfig(linkedConfigPath);
