@@ -8,9 +8,9 @@ Every PR becomes a back-and-forth with review bots about the same architectural 
 
 Totem is a zero-config CLI and native MCP server that gives your AI agents a persistent, vendor-agnostic semantic memory. It is not an orchestration framework like LangChain — it is a drop-in compiler that adds a deterministic validation layer to the tools you already use (Claude, Gemini, Cursor, Copilot).
 
-## How a Mistake Becomes Impossible
+## Documentation is a suggestion
 
-Documentation is a suggestion. Totem turns a plain-English markdown lesson into a physical constraint the linter enforces on every push:
+Totem turns a plain-English markdown lesson into a physical constraint the linter enforces on every push:
 
 **Input:** (`.totem/lessons/no-child-process.md`)
 
@@ -74,6 +74,12 @@ More rules is not better. A linter with a thousand noisy rules is worse than one
 Totem enforces quality at compile time. Every lesson is compiled through a benchmark-gated model and only lands as a rule if it passes structural validation. The `totem doctor` command evaluates rule precision via context telemetry — when too many of a rule's matches land in non-code contexts (strings, comments, regex literals), doctor flags it as an upgrade candidate, and `totem compile --upgrade <hash>` re-runs the compiler on just that one rule with a precision-targeted prompt.
 
 No manual curation. No rule-count arms race.
+
+## What's New in 1.14.0 — The Nervous System Foundation
+
+- **Cross-Repo Context Mesh:** New `linkedIndexes: []` option in `totem.config.ts` lets your agents federate semantic search across sibling repos. One repo's lessons become rules protecting all linked ones. Results merge via Reciprocal Rank Fusion for fair cross-store ranking regardless of score scale. See the [Cross-Repo Mesh wiki page](docs/wiki/cross-repo-mesh.md).
+- **Context Caching (Opt-In Preview):** Compile and review operations can now leverage Anthropic prompt caching to drastically reduce token costs on bulk runs. Enable it via `enableContextCaching: true` in your `totem.config.ts`. Default activation is tracked for 1.15.0 in [mmnto/totem#1291](https://github.com/mmnto-ai/totem/issues/1291).
+- **Preflight Design Gate:** The `/preflight` skill now requires a 1-page design doc for architectural changes before any code is written. Tactical bug fixes skip the gate via explicit triage.
 
 ## Quickstart
 
