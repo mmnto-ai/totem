@@ -6332,32 +6332,18 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "4196eff35629aea4",
-      "lessonHeading": "Use delimiters in multi-field cache keys",
-      "message": "Multi-field cache keys must use delimiters (e.g., null bytes '\\0') between fields to prevent boundary collisions. Use `${a}\\0${b}` instead of `${a}${b}`.",
-      "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
-      "astGrepPattern": "${$A}${$B}",
-      "compiledAt": "2026-04-09T03:54:53.350Z",
-      "createdAt": "2026-04-09T03:54:53.350Z",
-      "fileGlobs": [
-        "packages/cli/src/utils.ts"
-      ]
-    },
-    {
       "lessonHash": "5c78f52c51152810",
       "lessonHeading": "Set exit codes instead of exiting",
+      "pattern": "",
       "message": "Avoid process.exit() in smoke tests — set process.exitCode instead and return from the function to ensure stdout/stderr buffers are flushed.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "process.exit($CODE)",
       "compiledAt": "2026-04-09T03:55:04.739Z",
       "createdAt": "2026-04-09T03:55:04.739Z",
       "fileGlobs": [
         "packages/mcp/src/smoke-test.ts"
-      ]
+      ],
+      "severity": "warning"
     }
   ],
   "nonCompilable": [
@@ -9612,6 +9598,10 @@
     {
       "hash": "abfee44f26c513f0",
       "title": "Prefer non-blocking warnings over startup crashes"
+    },
+    {
+      "hash": "40059dd558302e47",
+      "title": "Use delimiters in multi-field cache keys"
     }
   ]
 }

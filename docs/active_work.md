@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.13.0` (published 2026-04-07, "The Refinement Engine") with **2,722 tests** across core, CLI, and MCP packages and **395 compiled rules** (up from 393 after the 1.14.0 lesson extraction + Sonnet compile). **1.14.0 is scope-locked and in release prep** — Cross-Repo Context Mesh as the headline feature plus LLM Context Caching machinery shipping as opt-in preview. Theme renamed to "The Nervous System Foundation" to reflect what actually landed (previously locked as "The Distribution Pipeline," which now slides to 1.15.0).
+The project is at release `@mmnto/cli@1.13.0` (published 2026-04-07, "The Refinement Engine") with **2,722 tests** across core, CLI, and MCP packages and **394 compiled rules** (up from 393 after the 1.14.0 lesson extraction + Sonnet compile). **1.14.0 is scope-locked and in release prep** — Cross-Repo Context Mesh as the headline feature plus LLM Context Caching machinery shipping as opt-in preview. Theme renamed to "The Nervous System Foundation" to reflect what actually landed (previously locked as "The Distribution Pipeline," which now slides to 1.15.0).
 
 ### Current: 1.14.0 — The Nervous System Foundation (release prep)
 
@@ -18,7 +18,7 @@ Theme: Cross-repo federated context (active default) plus opt-in preview of pers
 
 - **Governance + cleanup (shipped this branch):**
   - ~~**chore**~~ — Extract 19 lessons from the 1.14.0 PR arc (#1292, #1295, #1296)
-  - ~~**chore**~~ — Compile 2 new rules from those lessons via local Sonnet (395 total, up from 393). 17 lessons skipped as architectural/conceptual — they become `nonCompilable` tuples for doctor triage.
+  - ~~**chore**~~ — Compile 1 new rule from those lessons via local Sonnet (394 total, up from 393). 18 lessons skipped as architectural/conceptual — they become `nonCompilable` tuples for doctor triage. (Initial pass produced a `process.exit($CODE)` ast-grep rule + a malformed delimiter pattern; the delimiter lesson was reframed as architectural after both bots flagged the broken pattern, so it now ships as documentation only.)
 
 - **Pre-release checklist:**
   - [x] Update `docs/active_work.md`
@@ -27,7 +27,7 @@ Theme: Cross-repo federated context (active default) plus opt-in preview of pers
   - [x] Add changeset (minor for `@mmnto/cli` + `@mmnto/totem` + `@mmnto/mcp`)
   - [ ] File totem-playground tickets for playground refresh (validate mesh federation from playground)
   - [ ] Rebuild standalone binary for linux-x64, darwin-arm64, win32-x64
-  - [x] Push branch + open release prep PR (mmnto/totem#<release-pr>)
+  - [x] Push branch + open release prep PR (mmnto/totem#1300)
   - [ ] Merge release PR + Version Packages PR to publish 1.14.0
 
 - **Deferred to 1.15.0 — The Distribution Pipeline** (slid from 1.14.0 when the mesh + caching arc shipped first):
