@@ -42,10 +42,14 @@ export function _resetSessionFlags(): void {
  */
 async function runFirstLinkedStoresCheck(): Promise<string | null> {
   if (firstLinkedStoresCheckDone) return null;
-  firstLinkedStoresCheckDone = true;
 
   try {
     const { linkedStoreInitErrors } = await getContext();
+    // mmnto/totem#1295 CR minor: only consume the one-shot flag AFTER
+    // getContext resolves successfully. Setting it before the await meant
+    // a transient init failure on the first call would permanently
+    // suppress the startup warning for the rest of the session.
+    firstLinkedStoresCheckDone = true;
     if (linkedStoreInitErrors.size === 0) return null;
 
     // mmnto/totem#1295 CR minor: `linkedStoreInitErrors` now holds BOTH
@@ -84,10 +88,14 @@ async function runFirstLinkedStoresCheck(): Promise<string | null> {
  */
 async function runFirstQueryHealthCheck(): Promise<string | null> {
   if (firstHealthCheckDone) return null;
-  firstHealthCheckDone = true;
 
   try {
     const { store } = await getContext();
+    // mmnto/totem#1295 CR minor: same one-shot flag fix as
+    // `runFirstLinkedStoresCheck` — only consume after getContext resolves
+    // successfully so a transient init failure doesn't permanently
+    // suppress the dimension-mismatch / index-health warning.
+    firstHealthCheckDone = true;
     const result: HealthCheckResult = await store.healthCheck();
 
     if (result.healthy) return null;

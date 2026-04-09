@@ -27,6 +27,14 @@ let mockHealthCheckThrows = false;
 let mockSearchThrows = false;
 let mockSearchThrowsOnce = false;
 let mockReconnectCalled = false;
+/**
+ * mmnto/totem#1295 CR minor: number of upcoming `getContext()` calls
+ * that should throw before getContext starts returning normally.
+ * Decremented on each throw. The test for the one-shot flag fix sets
+ * this to a high enough number to cover every getContext call within
+ * a single handle() invocation, then expects subsequent calls to work.
+ */
+let mockGetContextFailuresRemaining = 0;
 
 /**
  * mmnto/totem#1294 Phase 2: per-test linked store / error state. Tests that
@@ -56,39 +64,45 @@ vi.mock('@mmnto/totem', () => ({
 }));
 
 vi.mock('../context.js', () => ({
-  getContext: vi.fn(async () => ({
-    projectRoot: '/fake/project',
-    config: {
-      totemDir: '.totem',
-      lanceDir: '.totem/.lance',
-      contextWarningThreshold: 50_000,
-      partitions: { core: ['packages/core/'] },
-    },
-    store: {
-      search: vi.fn(async () => {
-        if (mockSearchThrows) {
-          throw new Error('LanceDB search failed');
-        }
-        if (mockSearchThrowsOnce) {
-          mockSearchThrowsOnce = false;
-          throw new Error('Stale handle error');
-        }
-        return mockSearchResults;
-      }),
-      reconnect: vi.fn(async () => {}),
-      healthCheck: vi.fn(async () => {
-        if (mockHealthCheckThrows) {
-          throw new Error('Health check exploded');
-        }
-        return mockHealthCheckResult;
-      }),
-    },
-    // mmnto/totem#1294 Phase 2: linked store fields. Tests that want to
-    // exercise the federation path assign to `mockLinkedStores` before
-    // calling the handler; most tests leave it as an empty Map.
-    linkedStores: mockLinkedStores,
-    linkedStoreInitErrors: mockLinkedStoreInitErrors,
-  })),
+  getContext: vi.fn(async () => {
+    if (mockGetContextFailuresRemaining > 0) {
+      mockGetContextFailuresRemaining -= 1;
+      throw new Error('Transient init failure');
+    }
+    return {
+      projectRoot: '/fake/project',
+      config: {
+        totemDir: '.totem',
+        lanceDir: '.totem/.lance',
+        contextWarningThreshold: 50_000,
+        partitions: { core: ['packages/core/'] },
+      },
+      store: {
+        search: vi.fn(async () => {
+          if (mockSearchThrows) {
+            throw new Error('LanceDB search failed');
+          }
+          if (mockSearchThrowsOnce) {
+            mockSearchThrowsOnce = false;
+            throw new Error('Stale handle error');
+          }
+          return mockSearchResults;
+        }),
+        reconnect: vi.fn(async () => {}),
+        healthCheck: vi.fn(async () => {
+          if (mockHealthCheckThrows) {
+            throw new Error('Health check exploded');
+          }
+          return mockHealthCheckResult;
+        }),
+      },
+      // mmnto/totem#1294 Phase 2: linked store fields. Tests that want
+      // to exercise the federation path assign to `mockLinkedStores`
+      // before calling the handler; most tests leave it as an empty Map.
+      linkedStores: mockLinkedStores,
+      linkedStoreInitErrors: mockLinkedStoreInitErrors,
+    };
+  }),
   reconnectStore: vi.fn(async () => {
     mockReconnectCalled = true;
     // mmnto/totem#1295 CR minor: mirror the real reconnectStore — iterate
@@ -152,6 +166,7 @@ describe('search_knowledge', () => {
     mockSearchThrows = false;
     mockSearchThrowsOnce = false;
     mockReconnectCalled = false;
+    mockGetContextFailuresRemaining = 0;
     mockLinkedStores = new Map();
     mockLinkedStoreInitErrors = new Map();
 
@@ -170,37 +185,43 @@ describe('search_knowledge', () => {
     }));
 
     vi.doMock('../context.js', () => ({
-      getContext: vi.fn(async () => ({
-        projectRoot: '/fake/project',
-        config: {
-          totemDir: '.totem',
-          lanceDir: '.totem/.lance',
-          contextWarningThreshold: 50_000,
-          partitions: { core: ['packages/core/'] },
-        },
-        store: {
-          search: vi.fn(async () => {
-            if (mockSearchThrows) {
-              throw new Error('LanceDB search failed');
-            }
-            if (mockSearchThrowsOnce) {
-              mockSearchThrowsOnce = false;
-              throw new Error('Stale handle error');
-            }
-            return mockSearchResults;
-          }),
-          reconnect: vi.fn(async () => {}),
-          healthCheck: vi.fn(async () => {
-            if (mockHealthCheckThrows) {
-              throw new Error('Health check exploded');
-            }
-            return mockHealthCheckResult;
-          }),
-        },
-        // mmnto/totem#1294 Phase 2: linked store fields
-        linkedStores: mockLinkedStores,
-        linkedStoreInitErrors: mockLinkedStoreInitErrors,
-      })),
+      getContext: vi.fn(async () => {
+        if (mockGetContextFailuresRemaining > 0) {
+          mockGetContextFailuresRemaining -= 1;
+          throw new Error('Transient init failure');
+        }
+        return {
+          projectRoot: '/fake/project',
+          config: {
+            totemDir: '.totem',
+            lanceDir: '.totem/.lance',
+            contextWarningThreshold: 50_000,
+            partitions: { core: ['packages/core/'] },
+          },
+          store: {
+            search: vi.fn(async () => {
+              if (mockSearchThrows) {
+                throw new Error('LanceDB search failed');
+              }
+              if (mockSearchThrowsOnce) {
+                mockSearchThrowsOnce = false;
+                throw new Error('Stale handle error');
+              }
+              return mockSearchResults;
+            }),
+            reconnect: vi.fn(async () => {}),
+            healthCheck: vi.fn(async () => {
+              if (mockHealthCheckThrows) {
+                throw new Error('Health check exploded');
+              }
+              return mockHealthCheckResult;
+            }),
+          },
+          // mmnto/totem#1294 Phase 2: linked store fields
+          linkedStores: mockLinkedStores,
+          linkedStoreInitErrors: mockLinkedStoreInitErrors,
+        };
+      }),
       reconnectStore: vi.fn(async () => {
         mockReconnectCalled = true;
         // mmnto/totem#1295 CR minor: mirror reconnectStore — iterate
@@ -967,6 +988,62 @@ describe('search_knowledge', () => {
       expect(result.content[0]!.text).toContain('not available');
       // Explicitly check the primary results are NOT in the response
       expect(result.content[0]!.text).not.toContain('Bogus primary hit');
+    });
+
+    it('one-shot linked-stores warning is NOT consumed by a transient getContext failure (CR minor)', async () => {
+      // mmnto/totem#1295 CR minor: previously `firstLinkedStoresCheckDone`
+      // was set BEFORE awaiting `getContext()`, so a transient init error
+      // on the very first call permanently suppressed the startup warning
+      // for the rest of the session. The fix moves the flag write to
+      // AFTER getContext resolves successfully.
+      //
+      // This test exercises the bug-fixed contract end-to-end:
+      //   1. First handle() call: getContext throws on every call (4+ times
+      //      to cover setLogDir, runFirstQueryHealthCheck, runFirstLinkedStoresCheck,
+      //      and performSearch). The handler returns isError but neither
+      //      first-query flag is consumed.
+      //   2. Second handle() call: getContext succeeds. The first-query gates
+      //      run for real, the linkedStoreInitErrors warning is surfaced,
+      //      and the search returns normally.
+      mockLinkedStoreInitErrors.set('strategy', 'Linked index is empty (0 rows).');
+      mockSearchResults = [
+        {
+          label: 'Primary result',
+          type: 'code',
+          filePath: 'src/foo.ts',
+          score: 0.9,
+          content: 'content',
+        },
+      ];
+
+      // First call: 8 failures is enough to cover every getContext
+      // invocation in a single handle() call (setLogDir, healthCheck,
+      // linkedStores, performSearch, plus the outer-retry path).
+      mockGetContextFailuresRemaining = 8;
+      const first = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+      // The first call hard-fails (no context, no results)
+      expect(first.isError).toBe(true);
+      // Critically: the warning is NOT surfaced in the failure response
+      // (linkedStoresWarning was null because getContext threw)
+      expect(first.content[0]!.text).not.toContain('Linked index is empty');
+
+      // Second call: getContext now succeeds. With the fix, the first-query
+      // flag was NOT consumed on the first attempt, so the warning surfaces.
+      mockGetContextFailuresRemaining = 0;
+      const second = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+      expect(second.isError).toBeUndefined();
+      // The startup warning is now surfaced — the bug fix is observable
+      expect(second.content[0]!.text).toContain('[SYSTEM WARNING]');
+      expect(second.content[0]!.text).toContain('strategy');
+      expect(second.content[0]!.text).toContain('empty (0 rows)');
+      // And the actual search result is also present
+      expect(second.content[0]!.text).toContain('Primary result');
     });
 
     it('first-query-warn-block surfaces linkedStoreInitErrors', async () => {
