@@ -47,7 +47,7 @@ State your triage decision explicitly: "Tactical — skipping Phase 3"
 or "Architectural — drafting design doc."
 
 **Tactical path — no approval gate.** If tactical, proceed directly to
-implementation after Phase 1 completes. The Phase 4 approval gate below
+implementation after Phase 2 (triage) completes. The Phase 4 approval gate below
 only applies when Phase 3 was drafted, because the gate exists to catch
 architectural mistakes before code is written — there's nothing
 architectural to review for a tactical change. The user's normal
