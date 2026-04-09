@@ -113,18 +113,23 @@ async function runFirstQueryHealthCheck(): Promise<string | null> {
   try {
     const { store } = await getContext();
     const result: HealthCheckResult = await store.healthCheck();
-    // mmnto/totem#1295 CR MAJOR: only consume the one-shot flag after
-    // BOTH getContext AND healthCheck succeed. Setting it earlier meant
-    // a transient healthCheck failure would permanently suppress the
-    // dimension-mismatch / index-health diagnostic for the rest of the
-    // session — dropping us back to the cryptic LanceDB search failure
-    // this gate exists to prevent. The previous round-6 fix moved it
-    // out of pre-getContext but still left it pre-healthCheck.
-    firstHealthCheckDone = true;
 
-    if (result.healthy) return null;
+    // Healthy — consume the one-shot flag and skip the warning for this
+    // session. This is the common case.
+    if (result.healthy) {
+      firstHealthCheckDone = true;
+      return null;
+    }
 
-    // Dimension mismatch is a blocking error — search will fail with a cryptic LanceDB error
+    // mmnto/totem#1295 CR MAJOR: dimension mismatch must KEEP firing on
+    // every query until the user actually fixes the index. Consuming the
+    // flag here would let query 2 onwards skip the gate and fall back to
+    // the cryptic LanceDB "vector dimension mismatch" error — exactly
+    // what the friendly diagnostic exists to prevent. The outer
+    // `registerSearchKnowledge` blocks the search with isError: true
+    // whenever this branch returns a warning, so a persistent mismatch
+    // produces a persistent actionable message rather than a one-shot
+    // reminder followed by silent cryptic failures.
     if (!result.dimensionMatch && result.storedDimensions !== null) {
       const lines = [
         `DIMENSION MISMATCH: Index has ${result.storedDimensions}-dim vectors but the configured embedder produces ${result.expectedDimensions}-dim vectors.`,
@@ -137,7 +142,10 @@ async function runFirstQueryHealthCheck(): Promise<string | null> {
       return formatSystemWarning(lines.join('\n'));
     }
 
-    // Build actionable warning lines for other issues
+    // Non-fatal health warnings (stale rows, missing partitions, etc.):
+    // search still returns results — the warning is informational, not
+    // blocking — so one-shot consumption is appropriate here.
+    firstHealthCheckDone = true;
     const lines: string[] = ['Index health issues detected:'];
     for (const issue of result.issues) {
       lines.push(`- ${issue}`);

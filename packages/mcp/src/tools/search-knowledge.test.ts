@@ -366,6 +366,105 @@ describe('search_knowledge', () => {
     expect(result.content[0]!.text).toContain('DIMENSION MISMATCH');
   });
 
+  it('dimension mismatch warning persists across queries until the index is fixed (CR MAJOR)', async () => {
+    // mmnto/totem#1295 CR MAJOR: the round-7 fix moved
+    // `firstHealthCheckDone = true` to after the healthCheck() await, but
+    // still consumed the flag on UNHEALTHY results. That meant a persistent
+    // dimension mismatch showed the actionable "rm -rf .lancedb &&
+    // totem sync --full" guidance ONCE, then the next query skipped the
+    // gate and fell back to the cryptic LanceDB "vector dimension mismatch"
+    // error — exactly what this gate exists to prevent.
+    //
+    // The fix: don't consume the flag on dimension mismatch. The friendly
+    // diagnostic fires on EVERY query until the state is actually fixed.
+    mockHealthCheckResult = {
+      healthy: false,
+      dimensionMatch: false,
+      storedDimensions: 768,
+      expectedDimensions: 1536,
+    };
+
+    const first = (await handle({ query: 'anything' })) as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+    expect(first.isError).toBe(true);
+    expect(first.content[0]!.text).toContain('DIMENSION MISMATCH');
+    expect(first.content[0]!.text).toContain('rm -rf .lancedb');
+
+    // Second query: WITHOUT the fix, this would return a regular search
+    // (the flag would have been consumed, runFirstQueryHealthCheck would
+    // return null, the outer catch would see a cryptic LanceDB error from
+    // performSearch OR worse, fall into the success path silently).
+    // WITH the fix, the dimension mismatch warning fires again and the
+    // search is blocked again.
+    const second = (await handle({ query: 'anything' })) as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+    expect(second.isError).toBe(true);
+    expect(second.content[0]!.text).toContain('DIMENSION MISMATCH');
+    expect(second.content[0]!.text).toContain('rm -rf .lancedb');
+
+    // Simulate the user fixing the index: healthCheck now returns healthy.
+    // After the fix-then-retry, the warning should stop firing (normal
+    // one-shot semantics resume).
+    mockHealthCheckResult = { healthy: true };
+    mockSearchResults = [
+      {
+        label: 'Post-fix hit',
+        type: 'code',
+        filePath: 'src/foo.ts',
+        score: 0.8,
+        content: 'recovered',
+      },
+    ];
+    const third = (await handle({ query: 'anything' })) as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+    expect(third.isError).toBeUndefined();
+    expect(third.content[0]!.text).not.toContain('DIMENSION MISMATCH');
+    expect(third.content[0]!.text).toContain('Post-fix hit');
+  });
+
+  it('non-fatal health warnings stay one-shot even after dimension-mismatch fix', async () => {
+    // Sanity check for the companion rule: non-fatal health issues (stale
+    // rows, missing partitions) still consume the flag after one warning.
+    // Only dimension mismatch is special-cased to persist.
+    mockHealthCheckResult = {
+      healthy: false,
+      dimensionMatch: true, // dim is fine — other issues
+      issues: ['Partition "core" has no rows'],
+    };
+    mockSearchResults = [
+      {
+        label: 'Hit',
+        type: 'code',
+        filePath: 'src/foo.ts',
+        score: 0.7,
+        content: 'content',
+      },
+    ];
+
+    const first = (await handle({ query: 'test' })) as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+    expect(first.isError).toBeUndefined();
+    expect(first.content[0]!.text).toContain('Index health issues detected');
+    expect(first.content[0]!.text).toContain('Hit');
+
+    // Second query: the non-fatal warning should NOT repeat (one-shot)
+    const second = (await handle({ query: 'test' })) as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+    expect(second.isError).toBeUndefined();
+    expect(second.content[0]!.text).not.toContain('Index health issues detected');
+    expect(second.content[0]!.text).toContain('Hit');
+  });
+
   it('does not block search when health check itself fails', async () => {
     mockHealthCheckThrows = true;
     mockSearchResults = [
