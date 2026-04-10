@@ -154,7 +154,10 @@ describe('generateObservationRule', () => {
       '/* eslint-disable */',
       '   // indented comment',
       '# Python comment',
+      '#TODO no space after hash',
       '   # indented hash comment',
+      ' * JSDoc continuation line',
+      '   * indented JSDoc line',
     ];
 
     for (const content of cases) {
