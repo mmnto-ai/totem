@@ -117,7 +117,7 @@ the project shipped, not drift.
 ### `lessonHash` (in `compiled-rules.json` and the compile manifest)
 
 - Defined in `packages/core/src/compiler.ts:60-66`
-- Formula: `sha256(`${heading}\n${body}`).slice(0, 16)`
+- Formula: `sha256(heading + '\n' + body).slice(0, 16)`
 - 16 characters
 - Hashes ONLY `heading + '\n' + body` — explicitly excludes frontmatter
 - Used as the canonical content hash for the compile manifest, rule loader,
@@ -126,7 +126,7 @@ the project shipped, not drift.
 ### Why they're independent
 
 1. The two hashes are computed over different input strings (full file vs
-   heading+body only). They cannot agree even by coincidence — one includes
+   heading+body only). They are not expected to match because one includes
    frontmatter content the other excludes.
 2. The slice lengths differ (8 vs 16 chars). Even if both were SHA-256 of
    identical inputs, the 8-char filename hash would only match the FIRST 8
