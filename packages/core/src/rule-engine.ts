@@ -319,6 +319,14 @@ export async function applyAstRulesToAdditions(
       });
 
       if (applicableTreeSitter.length > 0) {
+        // Path containment check — prevent traversal outside the project
+        const normalizedBase = path.resolve(workingDirectory);
+        const fullPath = path.join(normalizedBase, file);
+        if (!fullPath.startsWith(normalizedBase)) {
+          onWarn?.(`Skipped file outside project: ${file}`);
+          continue;
+        }
+
         // Batch: parse file once, run all queries against the cached tree
         const queries = applicableTreeSitter.map((rule) => ({
           astQuery: rule.astQuery!,

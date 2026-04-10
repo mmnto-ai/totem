@@ -189,11 +189,15 @@ export async function matchAstQueriesBatch(
   if (readStrategy) {
     content = await readStrategy(filePath);
   } else {
-    // Default disk read fallback
+    // Default disk read fallback with path containment check
     try {
-      const fullPath = path.resolve(workingDirectory, filePath);
-      const fs = await import('node:fs/promises');
-      content = await fs.readFile(fullPath, 'utf-8');
+      const normalizedBase = path.resolve(workingDirectory);
+      const fullPath = path.join(normalizedBase, filePath);
+      if (!fullPath.startsWith(normalizedBase)) {
+        content = null;
+      } else {
+        content = await fs.readFile(fullPath, 'utf-8');
+      }
     } catch {
       content = null;
     }
