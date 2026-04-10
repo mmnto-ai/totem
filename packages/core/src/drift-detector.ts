@@ -154,7 +154,7 @@ export function extractFileReferences(body: string): string[] {
   const refs = new Set<string>();
 
   // Split by code fences and only process content outside them (even-indexed parts)
-  const segments = body.split('```');
+  const segments = body.split(/```|~~~/);
 
   for (let i = 0; i < segments.length; i += 2) {
     const segment = segments[i]!;
