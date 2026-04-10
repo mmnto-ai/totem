@@ -15,6 +15,8 @@ export interface RunCompiledRulesOptions {
   tag: string;
   /** Absolute path to config root — used for cache paths instead of cwd */
   configRoot?: string;
+  /** True if we are linting staged changes only */
+  isStaged?: boolean;
 }
 
 export interface RunCompiledRulesResult {
@@ -52,12 +54,15 @@ export async function runCompiledRules(
     recordContextHit,
     recordSuppression,
     recordTrigger,
+    resolveGitRoot,
+    safeExec,
     saveRuleMetrics,
     setCoreLogger,
     TotemError,
   } = await import('@mmnto/totem');
 
-  const { diff, cwd, totemDir, format, outPath, exportPaths, ignorePatterns, tag } = options;
+  const { diff, cwd, totemDir, format, outPath, exportPaths, ignorePatterns, tag, isStaged } =
+    options;
 
   // Wire core logger to CLI UI (ADR-071: core must not use console.warn directly)
   setCoreLogger({ warn: (msg) => log.warn(tag, msg) });
@@ -78,7 +83,26 @@ export async function runCompiledRules(
 
     log.info(tag, `Running ${rules.length} rules (zero LLM)...`);
 
-    // Extract additions, exclude compiled rules file and export targets
+    // Extract additions, exclude compiled rules file, export targets, and binary files
+    const BINARY_EXTENSIONS = new Set([
+      '.png',
+      '.jpg',
+      '.jpeg',
+      '.gif',
+      '.mp4',
+      '.pdf',
+      '.zip',
+      '.tar',
+      '.gz',
+      '.woff',
+      '.woff2',
+      '.eot',
+      '.ttf',
+      '.mp3',
+      '.wav',
+      '.ico',
+      '.bin',
+    ]);
     const rulesRelPath = path.join(totemDir, COMPILED_RULES_FILE).replace(/\\/g, '/');
     const excluded = new Set([rulesRelPath]);
     if (exportPaths) {
@@ -88,6 +112,7 @@ export async function runCompiledRules(
     }
     const additions = extractAddedLines(diff)
       .filter((a) => !excluded.has(a.file))
+      .filter((a) => !BINARY_EXTENSIONS.has(path.extname(a.file).toLowerCase()))
       .filter(
         (a) => !ignorePatterns || !ignorePatterns.some((pattern) => matchesGlob(a.file, pattern)),
       );
@@ -142,14 +167,65 @@ export async function runCompiledRules(
     if (astRules.length > 0) {
       log.dim(tag, `Running ${astRules.length} AST rule(s)...`);
       try {
+        let workingDirectory = cwd;
+        let readStrategy: ((filePath: string) => Promise<string | null>) | undefined = undefined;
+
+        if (isStaged) {
+          const repoRoot = resolveGitRoot(cwd);
+          if (repoRoot) {
+            workingDirectory = repoRoot;
+
+            readStrategy = async (filePath: string) => {
+              try {
+                // 1. Detect symlinks explicitly (git ls-files -s returns mode 120000).
+                //    The `--` separator prevents filePath values starting with `-` from
+                //    being interpreted as git options.
+                const lsOutput = safeExec(
+                  'git',
+                  ['ls-files', '--recurse-submodules', '-s', '--', filePath],
+                  { cwd: repoRoot, env: { ...process.env, LC_ALL: 'C' } },
+                );
+                if (lsOutput.startsWith('120000 ')) {
+                  return null; // Explicitly exclude symlinks from AST checks
+                }
+
+                // 2. Read staged content
+                const content = safeExec('git', ['show', `:${filePath}`], {
+                  cwd: repoRoot,
+                  trim: false,
+                  env: { ...process.env, LC_ALL: 'C' },
+                });
+
+                // 3. Normalize CRLF to LF specifically for the staged callback
+                // Disk-read callback preserves existing behavior per Invariant #4.
+                return content.replace(/\r\n/g, '\n');
+              } catch (err) {
+                // Explicit throw per Failure Mode 1 decision
+                throw new TotemError(
+                  'STAGED_READ_FAILED',
+                  `Failed to read staged content for ${filePath}`,
+                  `git show :${filePath} failed. The file may not exist in the index or may be staged for deletion. Ensure --staged is used correctly.`,
+                  { cause: err },
+                );
+              }
+            };
+          }
+        }
+
         astViolations = await applyAstRulesToAdditions(
           rules,
           additions,
-          cwd,
+          workingDirectory,
           ruleEventCallback,
           (msg) => log.warn(tag, msg),
+          readStrategy,
         );
       } catch (err) {
+        // STAGED_READ_FAILED must propagate — the pre-commit guarantee depends
+        // on surfacing staged-read failures rather than silently falling back.
+        if (err instanceof TotemError && err.code === 'STAGED_READ_FAILED') {
+          throw err;
+        }
         const msg = err instanceof Error ? err.message : String(err);
         const isWasmFailure = /not initialized|wasm|web-tree-sitter/i.test(msg);
         if (process.env['TOTEM_LITE'] === '1' && isWasmFailure) {

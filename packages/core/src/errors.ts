@@ -28,6 +28,7 @@ export type TotemErrorCode =
   | 'MCP_ERROR'
   | 'UPGRADE_HASH_NOT_FOUND'
   | 'UPGRADE_HASH_AMBIGUOUS'
+  | 'STAGED_READ_FAILED'
   | 'UPGRADE_CLOUD_UNSUPPORTED';
 
 export class TotemError extends Error {
