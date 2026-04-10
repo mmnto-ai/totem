@@ -344,10 +344,10 @@ program
 program
   .command('handoff')
   .description('Scaffold a structured journal entry for end-of-session handoff')
-  .option('--no-edit', 'Print scaffold to stdout instead of opening in $EDITOR')
-  .option('--lite', 'Alias for --no-edit (backward compat)')
+  .option('--stdout', 'Print scaffold to stdout instead of opening in $EDITOR')
+  .option('--lite', 'Alias for --stdout')
   .option('--out <path>', 'Write journal entry to a specific path')
-  .action(async (opts: { noEdit?: boolean; lite?: boolean; out?: string }) => {
+  .action(async (opts: { stdout?: boolean; lite?: boolean; out?: string }) => {
     try {
       const { handoffCommand } = await import('./commands/handoff.js');
       await handoffCommand(opts);

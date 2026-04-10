@@ -183,7 +183,7 @@ export async function openInEditor(filePath: string): Promise<boolean> {
 // ─── Main command ───────────────────────────────────────
 
 export interface HandoffOptions {
-  noEdit?: boolean;
+  stdout?: boolean;
   lite?: boolean;
   out?: string;
 }
@@ -222,8 +222,8 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
     return;
   }
 
-  // --no-edit / --lite: print to stdout
-  if (options.noEdit || options.lite) {
+  // --stdout / --lite: print to stdout
+  if (options.stdout || options.lite) {
     process.stdout.write(scaffold);
     log.dim(TAG, 'Scaffold printed to stdout.');
     return;
