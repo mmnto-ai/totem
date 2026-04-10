@@ -212,26 +212,19 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
   // Build scaffold
   const scaffold = buildJournalScaffold(branch, status, diffStat, recentCommits, lessons);
 
-  // --no-edit / --lite: write to --out if specified, otherwise print to stdout
-  if (options.noEdit || options.lite) {
-    if (options.out) {
-      const outDir = path.dirname(options.out);
-      if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
-      fs.writeFileSync(options.out, scaffold, 'utf-8');
-      log.success(TAG, `Scaffold written to ${options.out}`);
-    } else {
-      process.stdout.write(scaffold);
-      log.dim(TAG, 'Scaffold printed to stdout (--no-edit mode).');
-    }
-    return;
-  }
-
-  // --out without --no-edit: write to the specified path and exit (no editor)
+  // --out: write to the specified path and exit (no editor)
   if (options.out) {
     const outDir = path.dirname(options.out);
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
     fs.writeFileSync(options.out, scaffold, 'utf-8');
     log.success(TAG, `Scaffold written to ${options.out}`);
+    return;
+  }
+
+  // --no-edit / --lite: print to stdout
+  if (options.noEdit || options.lite) {
+    process.stdout.write(scaffold);
+    log.dim(TAG, 'Scaffold printed to stdout (--no-edit mode).');
     return;
   }
 
