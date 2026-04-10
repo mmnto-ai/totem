@@ -17,6 +17,7 @@ Totem is the framework I extracted to solve that friction. It's a collection of 
 
 - [Documentation is merely a suggestion](#documentation-is-merely-a-suggestion)
 - [How Mistakes Become Rules](#how-mistakes-become-rules)
+- [The Memory Layer](#the-memory-layer)
 - [What's in the Box](#whats-in-the-box)
 - [What Works and What Doesn't](#what-works-and-what-doesnt)
 - [Quickstart](#quickstart)
@@ -73,22 +74,40 @@ graph LR
 
 When a rule starts getting noisy — matching comments or string literals instead of actual code — `totem doctor` flags it and `totem compile --upgrade` re-runs the compiler with a precision-targeted prompt. I'd rather have 300 precise rules than 1,000 noisy ones.
 
+## The Memory Layer
+
+AI agents are stateless by default. Every new session starts from zero — no memory of what broke last time, no awareness of your architectural decisions, no idea that a shared helper already exists. You end up re-explaining the same context over and over.
+
+Totem fixes this by indexing your lessons, ADRs, and architectural decisions into a local semantic knowledge base (Tree-sitter + LanceDB). That index stays in your repo — plain files, no cloud dependency, no vendor lock-in.
+
+Any MCP-compatible agent can query it: Claude, Gemini, Cursor, Windsurf, Copilot. Before your agent writes a line of code, it can ask "what patterns are banned in this codebase?" or "what's the architecture of the auth system?" and get a real answer grounded in your project's actual history — not a hallucinated guess.
+
+With [Cross-Repo Mesh](docs/wiki/cross-repo-mesh.md), you can federate search across sibling repos. One repo's lessons become queryable from all linked repos, so context doesn't stop at the repo boundary.
+
 ## What's in the Box
 
-Totem is a set of CLI tools, not a framework. `totem lint`, `totem compile`, `totem extract`, `totem doctor` — building blocks you wire into whatever CI and workflow you already have. Every command supports `--json` for scripting.
+Totem is a set of CLI tools, not a framework. Building blocks you wire into whatever CI and workflow you already have. Every command supports `--json` for scripting.
 
-The same Tree-sitter + LanceDB index that powers the compiler also powers a built-in MCP server. Plug it into Claude, Cursor, Windsurf, or any MCP-compatible agent and your AI gets read/write access to your project's lessons and architectural decisions before it writes a line of code. The agent can ask "what patterns are banned in this codebase?" and get a real answer instead of guessing.
+| Command | What it does |
+|---------|-------------|
+| `totem lint` | Run all compiled rules against your code. Zero LLM, offline, sub-second. |
+| `totem compile` | Turn plain-English lessons into AST or regex rules. |
+| `totem extract` | Pull lessons from PR reviews and bot comments. |
+| `totem doctor` | Flag noisy rules via context telemetry, suggest upgrades. |
+| `totem review` | LLM-powered architectural review (optional, requires API key). |
+| `totem sync` | Rebuild the semantic index from your lessons and docs. |
+| `totem hooks` | Install Git hooks (`pre-push` lint gate). |
+
+The built-in MCP server exposes the knowledge base to any compatible agent — same index, no extra setup.
 
 ## What Works and What Doesn't
 
-I've learned the hard way that an AI agent's memory is unreliable. You can load rules, lessons, and explicit instructions into the agent's context — and it will still ignore them when it gets deep into a task.
-
 Totem has two layers, and I want to be honest about where each one stands:
 
-1. **The deterministic layer** works. The compiled rules, the Git hooks, the pre-push lint gate — they catch violations mechanically, every time, offline, in under a second.
-2. **The probabilistic layer** is still earning its keep. The MCP server and semantic search help agents find the right context, but whether the agent reliably *acts* on that context is an open question I'm actively working through.
+1. **The enforcement layer** works. The compiled rules, the Git hooks, the pre-push lint gate — they catch violations mechanically, every time, offline, in under a second. This is proven.
+2. **The memory layer** is real infrastructure — the index exists, it's queryable, it's portable across agents and repos. But whether an agent *consistently acts* on the context it retrieves is an open question I'm actively working through. The availability is deterministic. The agent's discipline is not.
 
-The deterministic layer is the product. The probabilistic layer is the experiment.
+I built the enforcement layer because the memory layer alone wasn't enough. An agent can have perfect access to your architectural decisions and still ignore them when it gets deep into a task. The tripwires catch what the memory misses.
 
 ## Changelog
 
