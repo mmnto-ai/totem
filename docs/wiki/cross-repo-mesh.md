@@ -1,6 +1,6 @@
 # Cross-Repo Mesh (Federation)
 
-When working across multiple repositories, I found that AI agents kept hallucinating context because they couldn't see the architectural decisions made in sibling repos. The Cross-Repo Mesh fixes this by connecting multiple `.lancedb` indexes into a shared semantic knowledge base, allowing your agents to federate context across repository boundaries.
+When working across multiple repositories, AI agents often hallucinate context because they cannot see the architectural decisions made in sibling repos. The Cross-Repo Mesh fixes this by connecting multiple `.lancedb` indexes into a shared semantic knowledge base, allowing agents to federate context across repository boundaries.
 
 ## Two ways to share lessons across repositories
 
