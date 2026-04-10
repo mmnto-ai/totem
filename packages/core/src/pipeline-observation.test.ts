@@ -180,6 +180,7 @@ describe('generateObservationRule', () => {
       'console.log(result);',
       'if (x > 0) {',
       'return this.value;',
+      '*args, **kwargs',
     ];
 
     for (const content of cases) {

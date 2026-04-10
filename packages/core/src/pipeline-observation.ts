@@ -68,7 +68,13 @@ export function generateObservationRule(input: ObservationInput): CompiledRule |
 
   // Reject comment-only lines — patterns derived from comments match every
   // comment in the codebase and have no enforcement value. (#1279)
-  if (/^\s*\/\//.test(sourceLine) || /^\s*\/?\*/.test(sourceLine) || /^\s*#/.test(sourceLine)) {
+  if (
+    /^\s*\/\//.test(sourceLine) ||
+    /^\s*\/\*/.test(sourceLine) ||
+    /^\s*\*[\s/]/.test(sourceLine) ||
+    /^\s*\*$/.test(sourceLine) ||
+    /^\s*#/.test(sourceLine)
+  ) {
     return null;
   }
 
