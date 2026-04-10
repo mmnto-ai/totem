@@ -170,12 +170,13 @@ export function buildJournalScaffold(
 export async function openInEditor(filePath: string): Promise<boolean> {
   const { spawnSync } = await import('node:child_process');
   const editor = process.env['VISUAL'] || process.env['EDITOR'] || 'vi';
-  // Split editor command in case it contains args (e.g. "code --wait")
-  const parts = editor.split(/\s+/);
-  const cmd = parts[0]!;
-  const args = [...parts.slice(1), filePath];
-
-  const result = spawnSync(cmd, args, { stdio: 'inherit', shell: process.platform === 'win32' });
+  // Use shell: true so the system shell parses the editor command (handles
+  // quoted paths like "/Applications/Visual Studio Code.app/.../code" --wait
+  // and Windows .cmd/.bat resolution).
+  const result = spawnSync(`${editor} "${filePath}"`, {
+    stdio: 'inherit',
+    shell: true,
+  });
   return result.status === 0;
 }
 
