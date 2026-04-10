@@ -12,6 +12,11 @@ import { extname } from 'node:path';
 import type { CompiledRule } from './compiler-schema.js';
 import { codeToPattern } from './regex-utils.js';
 
+// ─── Constants ────────────────────────────────────
+
+/** Minimum alphanumeric characters a source line must contain to produce a rule. */
+const MIN_ALPHANUM_CHARS = 3;
+
 // ─── Input type ────────────────────────────────────
 
 /** Describes a single shield observation that should be turned into a rule. */
@@ -57,7 +62,7 @@ export function generateObservationRule(input: ObservationInput): CompiledRule |
   // that match thousands of lines across the codebase. (#1279)
   const trimmed = sourceLine.trim();
   const alphanumCount = (trimmed.match(/[a-zA-Z0-9]/g) ?? []).length;
-  if (alphanumCount < 3) {
+  if (alphanumCount < MIN_ALPHANUM_CHARS) {
     return null;
   }
 
