@@ -39,25 +39,42 @@ $ git push
 
 The "wrong" way becomes the "loud" way. No LLM in the loop at runtime — just sub-second, offline enforcement.
 
-## A Platform of Primitives
+## How Mistakes Become Rules
 
-Because this started as a personal tool to solve my own friction, I didn't want it to force a specific workflow. I just wanted building blocks—`totem lint`, `totem compile`, `totem extract`—that I could wire into whatever tools I was already using.
+The core loop is simple: a mistake gets caught (PR review, bot nit, production bug), I write a plain-English lesson describing what went wrong, `totem compile` turns it into an AST or regex rule, and `totem lint` enforces it on every push from that point forward. The same mistake can never happen again.
 
-I view Totem as providing the **Sensors** and the **Tripwires** (the knowledge index, the compiler, the deterministic linter). You decide where to put the actuators (Git hooks, IDE plugins, CI gates). 
+```mermaid
+graph LR
+    Catch["Catch a mistake"] -->|write a lesson| Compile["totem compile"]
+    Compile -->|generates rule| Enforce["totem lint"]
+    Enforce -->|catches next attempt| Catch
 
-The same Tree-sitter + LanceDB index that powers the compiler also powers a built-in MCP server. I plug this into my IDE or CLI agents so they can read my project's architectural decisions *before* they start writing code. 
+    style Catch fill:#4b3a75,stroke:#9b72cf,color:#fff
+    style Compile fill:#5e3a24,stroke:#e67c3b,color:#fff
+    style Enforce fill:#1a4d2e,stroke:#34a853,color:#fff
+```
 
-## An Honest Assessment: Where I Am vs. Where I'm Going
+When a rule starts getting noisy — matching comments or string literals instead of actual code — `totem doctor` flags it and `totem compile --upgrade` re-runs the compiler with a precision-targeted prompt. I'd rather have 300 precise rules than 1,000 noisy ones.
 
-I've learned the hard way that an AI agent's memory is fragile. If you write "Always do X" in a prompt or a memory file, the model will still forget it 20% of the time. 
+## What's in the Box
 
-Because of that, Totem is split into two layers:
-1. **The Deterministic Layer (The Tripwires):** This works. The AST rules, the Git hooks, the pre-push blocks—they catch the bad code mechanically, every single time.
-2. **The Probabilistic Layer (The Memory):** This is still earning its keep. The MCP server and the semantic vector search help the agent find the right context, but relying on the agent to consistently act on that context is a moving target. 
+Totem is a set of CLI tools, not a framework. `totem lint`, `totem compile`, `totem extract`, `totem doctor` — building blocks you wire into whatever CI and workflow you already have. Every command supports `--json` for scripting.
 
-I'm focused on quality over quantity. A linter with a thousand noisy rules is worse than one with three hundred precise ones. Totem tries to enforce this quality at compile time—rules only land if they pass structural validation. If a rule starts getting noisy (e.g., matching strings or comments instead of actual code), `totem doctor` flags it so the compiler can upgrade it into a more precise AST pattern.
+The same Tree-sitter + LanceDB index that powers the compiler also powers a built-in MCP server. Plug it into Claude, Cursor, Windsurf, or any MCP-compatible agent and your AI gets read/write access to your project's lessons and architectural decisions before it writes a line of code. The agent can ask "what patterns are banned in this codebase?" and get a real answer instead of guessing.
+
+## What Works and What Doesn't
+
+I've learned the hard way that an AI agent's memory is unreliable. You can load rules, lessons, and explicit instructions into the agent's context — and it will still ignore them when it gets deep into a task.
+
+Totem has two layers, and I want to be honest about where each one stands:
+
+1. **The deterministic layer** works. The compiled rules, the Git hooks, the pre-push lint gate — they catch violations mechanically, every time, offline, in under a second.
+2. **The probabilistic layer** is still earning its keep. The MCP server and semantic search help agents find the right context, but whether the agent reliably *acts* on that context is an open question I'm actively working through.
+
+The deterministic layer is the product. The probabilistic layer is the experiment.
 
 ## Changelog
+
 See [Releases](https://github.com/mmnto-ai/totem/releases) for recent updates.
 
 ## Quickstart
