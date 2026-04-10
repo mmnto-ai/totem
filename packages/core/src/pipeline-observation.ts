@@ -12,6 +12,11 @@ import { extname } from 'node:path';
 import type { CompiledRule } from './compiler-schema.js';
 import { codeToPattern } from './regex-utils.js';
 
+// ─── Constants ────────────────────────────────────
+
+/** Minimum alphanumeric characters a source line must contain to produce a rule. */
+const MIN_ALPHANUM_CHARS = 3;
+
 // ─── Input type ────────────────────────────────────
 
 /** Describes a single shield observation that should be turned into a rule. */
@@ -49,6 +54,27 @@ export function generateObservationRule(input: ObservationInput): CompiledRule |
 
   // Reject empty / whitespace-only lines
   if (!sourceLine || sourceLine.trim().length === 0) {
+    return null;
+  }
+
+  // Reject lines that are purely syntactic noise — closing braces, bracket/paren
+  // combos, block comment terminators. These produce patterns like `\}` or `\*/`
+  // that match thousands of lines across the codebase. (#1279)
+  const trimmed = sourceLine.trim();
+  const alphanumCount = (trimmed.match(/[a-zA-Z0-9]/g) ?? []).length;
+  if (alphanumCount < MIN_ALPHANUM_CHARS) {
+    return null;
+  }
+
+  // Reject comment-only lines — patterns derived from comments match every
+  // comment in the codebase and have no enforcement value. (#1279)
+  if (
+    /^\s*\/\//.test(sourceLine) ||
+    /^\s*\/\*/.test(sourceLine) ||
+    /^\s*\*[\s/]/.test(sourceLine) ||
+    /^\s*\*$/.test(sourceLine) ||
+    /^\s*#/.test(sourceLine)
+  ) {
     return null;
   }
 
