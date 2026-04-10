@@ -37,7 +37,7 @@ export function collectCodeRanges(text: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
 
   // Fenced blocks first (higher priority — consume triple backticks before singles)
-  for (const match of text.matchAll(/(?:```|~~~)[\s\S]*?(?:```|~~~)/g)) {
+  for (const match of text.matchAll(/(```|~~~)[\s\S]*?\1/g)) {
     ranges.push([match.index, match.index + match[0].length]);
   }
 

@@ -59,7 +59,7 @@ export function truncateHeading(heading: string): string {
 export function generateLessonHeading(body: string): string {
   // Strip markdown formatting: bold, italic, headings, blockquotes, code fences
   let text = body
-    .replace(/^(?:```|~~~)[\s\S]*?(?:```|~~~)/gm, '') // code blocks
+    .replace(/^(```|~~~)[\s\S]*?\1/gm, '') // code blocks
     .replace(/^#+\s*/gm, '') // headings
     .replace(/^>\s*/gm, '') // blockquotes
     .replace(/\*\*(.+?)\*\*/g, '$1') // bold
