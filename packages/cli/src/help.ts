@@ -9,7 +9,6 @@ export interface CommandGroup {
 export const LLM_COMMANDS = new Set([
   'review',
   'spec',
-  'handoff',
   'docs',
   'check',
   'wrap',

@@ -343,28 +343,18 @@ program
 
 program
   .command('handoff')
-  .description('Generate an end-of-session handoff snapshot for the next session')
-  .option('--lite', 'Zero-LLM deterministic snapshot (git state + lessons, no API key needed)')
-  .option('--raw', 'Output retrieved context without LLM synthesis')
-  .option('--out <path>', 'Write output to a file instead of stdout')
-  .option('--model <name>', 'Override the default model for the orchestrator')
-  .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
-  .action(
-    async (opts: {
-      lite?: boolean;
-      raw?: boolean;
-      out?: string;
-      model?: string;
-      fresh?: boolean;
-    }) => {
-      try {
-        const { handoffCommand } = await import('./commands/handoff.js');
-        await handoffCommand(opts);
-      } catch (err) {
-        handleError(err);
-      }
-    },
-  );
+  .description('Scaffold a structured journal entry for end-of-session handoff')
+  .option('--no-edit', 'Print scaffold to stdout instead of opening in $EDITOR')
+  .option('--lite', 'Alias for --no-edit (backward compat)')
+  .option('--out <path>', 'Write journal entry to a specific path')
+  .action(async (opts: { noEdit?: boolean; lite?: boolean; out?: string }) => {
+    try {
+      const { handoffCommand } = await import('./commands/handoff.js');
+      await handoffCommand(opts);
+    } catch (err) {
+      handleError(err);
+    }
+  });
 
 program
   .command('add-lesson [lesson]', { hidden: true })
