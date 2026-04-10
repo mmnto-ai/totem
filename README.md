@@ -7,7 +7,7 @@ _AI coding agents are brilliant goldfish. Totem is their persistent, cross-repo 
 
 > `totem lint` runs entirely offline, uses zero LLMs, and completes in under 2 seconds.
 
-When using LLMs on projects, I found that agents kept making the same architectural mistakes, forgetting context, and reinventing the wheel. The velocity was great, but the architectural integrity degraded quickly. Every PR became an exhausting back-and-forth with review bots over the exact same nits. 
+When using LLMs on projects, I found that agents kept making the same architectural mistakes, forgetting context, and reinventing the wheel. The velocity was great, but the architectural integrity degraded quickly. Every PR became an exhausting back-and-forth with review bots over the exact same nits.
 
 They can make the wrong way look brilliant — until you realize what happened. They'll rarely ask: _"doesn't a shared helper already exist for this?"_
 
@@ -30,7 +30,7 @@ Totem is the framework I extracted to solve that friction. It's a collection of 
 
 I tried the heavy orchestration approach—dictating every step of the agent's workflow—and found it rigid and disruptive to the human-in-the-loop dynamic. Totem is built on a different philosophy: **Tripwires, Not Tracks.**
 
-You provide an open field surrounded by electric fences. The LLM is free to code however it wants, but when it attempts to alter the permanent state of the world (e.g., `git push`), it hits a deterministic tripwire. 
+You provide an open field surrounded by electric fences. The LLM is free to code however it wants, but when it attempts to alter the permanent state of the world (e.g., `git push`), it hits a deterministic tripwire.
 
 Totem turns a plain-English markdown lesson into a physical constraint that a local, zero-LLM linter enforces:
 
@@ -88,15 +88,15 @@ With [Cross-Repo Mesh](docs/wiki/cross-repo-mesh.md), you can federate search ac
 
 Totem is a set of CLI tools, not a framework. Building blocks you wire into whatever CI and workflow you already have. Every command supports `--json` for scripting.
 
-| Command | What it does |
-|---------|-------------|
-| `totem lint` | Run all compiled rules against your code. Zero LLM, offline, sub-second. |
-| `totem compile` | Turn plain-English lessons into AST or regex rules. |
-| `totem extract` | Pull lessons from PR reviews and bot comments. |
-| `totem doctor` | Flag noisy rules via context telemetry, suggest upgrades. |
-| `totem review` | LLM-powered architectural review (optional, requires API key). |
-| `totem sync` | Rebuild the semantic index from your lessons and docs. |
-| `totem hooks` | Install Git hooks (`pre-push` lint gate). |
+| Command         | What it does                                                             |
+| --------------- | ------------------------------------------------------------------------ |
+| `totem lint`    | Run all compiled rules against your code. Zero LLM, offline, sub-second. |
+| `totem compile` | Turn plain-English lessons into AST or regex rules.                      |
+| `totem extract` | Pull lessons from PR reviews and bot comments.                           |
+| `totem doctor`  | Flag noisy rules via context telemetry, suggest upgrades.                |
+| `totem review`  | LLM-powered architectural review (optional, requires API key).           |
+| `totem sync`    | Rebuild the semantic index from your lessons and docs.                   |
+| `totem hooks`   | Install Git hooks (`pre-push` lint gate).                                |
 
 The built-in MCP server exposes the knowledge base to any compatible agent — same index, no extra setup.
 
@@ -105,7 +105,7 @@ The built-in MCP server exposes the knowledge base to any compatible agent — s
 Totem has two layers, and I want to be honest about where each one stands:
 
 1. **The enforcement layer** works. The compiled rules, the Git hooks, the pre-push lint gate — they catch violations mechanically, every time, offline, in under a second. This is proven.
-2. **The memory layer** is real infrastructure — the index exists, it's queryable, it's portable across agents and repos. But whether an agent *consistently acts* on the context it retrieves is an open question I'm actively working through. The availability is deterministic. The agent's discipline is not.
+2. **The memory layer** is real infrastructure — the index exists, it's queryable, it's portable across agents and repos. But whether an agent _consistently acts_ on the context it retrieves is an open question I'm actively working through. The availability is deterministic. The agent's discipline is not.
 
 I built the enforcement layer because the memory layer alone wasn't enough. An agent can have perfect access to your architectural decisions and still ignore them when it gets deep into a task. The tripwires catch what the memory misses.
 
