@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -157,19 +156,16 @@ export function buildJournalScaffold(
  * Open a file in the user's editor. Uses $VISUAL, then $EDITOR, then vi.
  * Returns true if the editor exited successfully.
  */
-export function openInEditor(filePath: string): boolean {
+export async function openInEditor(filePath: string): Promise<boolean> {
+  const { spawnSync } = await import('node:child_process');
   const editor = process.env['VISUAL'] || process.env['EDITOR'] || 'vi';
   // Split editor command in case it contains args (e.g. "code --wait")
   const parts = editor.split(/\s+/);
   const cmd = parts[0]!;
   const args = [...parts.slice(1), filePath];
 
-  try {
-    execFileSync(cmd, args, { stdio: 'inherit' });
-    return true;
-  } catch {
-    return false;
-  }
+  const result = spawnSync(cmd, args, { stdio: 'inherit' });
+  return result.status === 0;
 }
 
 // ─── Main command ───────────────────────────────────────
@@ -236,7 +232,7 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
 
   // Open in editor
   log.info(TAG, 'Opening in editor...');
-  const ok = openInEditor(journalPath);
+  const ok = await openInEditor(journalPath);
   if (ok) {
     log.success(TAG, 'Journal entry saved.');
   } else {
