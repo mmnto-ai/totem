@@ -2,15 +2,19 @@
 
 _AI coding agents are brilliant goldfish. Totem is their persistent, cross-repo memory._
 
-**Your AI agents keep making the same mistakes.** They can make the wrong way look brilliant — until you realize what happened. They'll never ask: _"doesn't a shared helper already exist for this?"_
+When using LLMs on projects, I found that agents kept making the same architectural mistakes, forgetting context, and reinventing the wheel. The velocity was great, but the architectural integrity degraded quickly. Every PR became an exhausting back-and-forth with review bots over the exact same nits. 
 
-Every PR becomes a back-and-forth with review bots about the same architectural nits — missing lazy imports, improper error tagging, reinventing the wheel. Same nit, every PR.
+They can make the wrong way look brilliant — until you realize what happened. They'll rarely ask: _"doesn't a shared helper already exist for this?"_
 
-Totem is a zero-config CLI and native MCP server that gives your AI agents a persistent, vendor-agnostic semantic memory. It is not an orchestration framework like LangChain — it is a drop-in compiler that adds a deterministic validation layer to the tools you already use (Claude, Gemini, Cursor, Copilot).
+Totem is the framework I extracted to solve that friction. It's a collection of tools that acts as a persistent memory and enforcement layer for AI agents. It uses deterministic hooks to remember the lessons the AI forgets.
 
-## Documentation is a suggestion
+## Documentation is merely a suggestion
 
-Totem turns a plain-English markdown lesson into a physical constraint the linter enforces on every push:
+I tried the heavy orchestration approach—dictating every step of the agent's workflow—and found it rigid and disruptive to the human-in-the-loop dynamic. Totem is built on a different philosophy: **Tripwires, Not Tracks.**
+
+You provide an open field surrounded by electric fences. The LLM is free to code however it wants, but when it attempts to alter the permanent state of the world (e.g., `git push`), it hits a deterministic tripwire. 
+
+Totem turns a plain-English markdown lesson into a physical constraint that a local, zero-LLM linter enforces:
 
 **Input:** (`.totem/lessons/no-child-process.md`)
 
@@ -35,51 +39,26 @@ $ git push
 
 The "wrong" way becomes the "loud" way. No LLM in the loop at runtime — just sub-second, offline enforcement.
 
-## A Platform of Primitives, Not Opinionated Workflows
+## A Platform of Primitives
 
-Totem doesn't force a workflow on you. It's building blocks — `totem lint`, `totem compile`, `totem extract`, `totem doctor` — that you wire into whatever CI you already have.
+Because this started as a personal tool to solve my own friction, I didn't want it to force a specific workflow. I just wanted building blocks—`totem lint`, `totem compile`, `totem extract`—that I could wire into whatever tools I was already using.
 
-We provide the **Sensors**: the knowledge index, the compiler that turns lessons into rules, the deterministic linter shown above, and the context telemetry that flags noisy rules over time. You are the **Flight Controller**. You decide where to put the **Actuators** (Git hooks, IDE plugins, PR bot triggers, CI gates). Totem doesn't assume your workflow; it integrates with it.
+I view Totem as providing the **Sensors** and the **Tripwires** (the knowledge index, the compiler, the deterministic linter). You decide where to put the actuators (Git hooks, IDE plugins, CI gates). 
 
-The same Tree-sitter + LanceDB index that powers the compiler also powers the **Semantic Memory Layer (MCP)**: plug Totem into Claude Desktop, Windsurf, or your IDE via the built-in MCP server and your agents get read/write access to your project's architectural decisions (ADRs) and design tenets _before_ they write a single line of code.
+The same Tree-sitter + LanceDB index that powers the compiler also powers a built-in MCP server. I plug this into my IDE or CLI agents so they can read my project's architectural decisions *before* they start writing code. 
 
-## The Self-Healing Loop
+## An Honest Assessment: Where I Am vs. Where I'm Going
 
-Mistakes get observed, compiled into rules, and enforced automatically.
+I've learned the hard way that an AI agent's memory is fragile. If you write "Always do X" in a prompt or a memory file, the model will still forget it 20% of the time. 
 
-```mermaid
-graph TD
-    Observe["Observe"] -->|"PR reviews, bot nits"| Learn["Learn"]
-    Learn -->|"totem compile"| Enforce["Enforce"]
-    Enforce -->|"totem lint"| Observe
-    Enforce -.->|"bypass"| Ledger[("Trap Ledger")]
-    Ledger -.->|"self-heal"| Learn
+Because of that, Totem is split into two layers:
+1. **The Deterministic Layer (The Tripwires):** This works. The AST rules, the Git hooks, the pre-push blocks—they catch the bad code mechanically, every single time.
+2. **The Probabilistic Layer (The Memory):** This is still earning its keep. The MCP server and the semantic vector search help the agent find the right context, but relying on the agent to consistently act on that context is a moving target. 
 
-    style Observe fill:#4b3a75,stroke:#9b72cf,color:#fff
-    style Learn fill:#5e3a24,stroke:#e67c3b,color:#fff
-    style Enforce fill:#1a4d2e,stroke:#34a853,color:#fff
-    style Ledger fill:#2d2d2d,stroke:#888,color:#fff
-```
+I'm focused on quality over quantity. A linter with a thousand noisy rules is worse than one with three hundred precise ones. Totem tries to enforce this quality at compile time—rules only land if they pass structural validation. If a rule starts getting noisy (e.g., matching strings or comments instead of actual code), `totem doctor` flags it so the compiler can upgrade it into a more precise AST pattern.
 
-1. **Observe:** `totem review` or your existing CI bots catch a mistake.
-2. **Learn:** `totem extract` captures the lesson. `totem compile` turns it into an ast-grep or regex rule.
-3. **Enforce:** `totem lint` blocks the push. Sub-second, zero-LLM, offline.
-
-Every CLI command supports `--json` for piping into your own automation.
-
-## Quality > Quantity
-
-More rules is not better. A linter with a thousand noisy rules is worse than one with three hundred precise ones — every false positive erodes trust, and once developers start ignoring the linter, it stops working.
-
-Totem enforces quality at compile time. Every lesson is compiled through a benchmark-gated model and only lands as a rule if it passes structural validation. The `totem doctor` command evaluates rule precision via context telemetry — when too many of a rule's matches land in non-code contexts (strings, comments, regex literals), doctor flags it as an upgrade candidate, and `totem compile --upgrade <hash>` re-runs the compiler on just that one rule with a precision-targeted prompt.
-
-No manual curation. No rule-count arms race.
-
-## What's New in 1.14.0 — The Nervous System Foundation
-
-- **Cross-Repo Context Mesh:** New `linkedIndexes: []` option in `totem.config.ts` lets your agents federate semantic search across sibling repos. One repo's lessons become rules protecting all linked ones. Results merge via Reciprocal Rank Fusion for fair cross-store ranking regardless of score scale. See the [Cross-Repo Mesh wiki page](docs/wiki/cross-repo-mesh.md).
-- **Context Caching (Opt-In Preview):** Compile and review operations can now leverage Anthropic prompt caching to drastically reduce token costs on bulk runs. Enable it via `enableContextCaching: true` in your `totem.config.ts`. Default activation is tracked for 1.15.0 in [mmnto/totem#1291](https://github.com/mmnto-ai/totem/issues/1291).
-- **Preflight Design Gate:** The `/preflight` skill now requires a 1-page design doc for architectural changes before any code is written. Tactical bug fixes skip the gate via explicit triage.
+## Changelog
+See [Releases](https://github.com/mmnto-ai/totem/releases) for recent updates.
 
 ## Quickstart
 
