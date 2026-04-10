@@ -10,6 +10,17 @@ import { sanitize } from '../utils.js';
 const TAG = 'Handoff';
 const LESSONS_TAIL_LINES = 100;
 const RECENT_COMMITS_COUNT = 10;
+const MAX_SLUG_LENGTH = 60;
+
+/** Local calendar date as YYYY-MM-DD (avoids UTC off-by-one for evening users). */
+function currentLocalDate(): string {
+  const now = new Date();
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-');
+}
 
 // ─── Lessons file reader ────────────────────────────────
 
@@ -45,7 +56,7 @@ export function slugFromBranch(branch: string): string {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
-      .slice(0, 60) || 'session'
+      .slice(0, MAX_SLUG_LENGTH) || 'session'
   );
 }
 
@@ -63,7 +74,7 @@ export function resolveJournalPath(
 ): string {
   if (outPath) return outPath;
 
-  const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const date = currentLocalDate(); // YYYY-MM-DD
   const slug = slugFromBranch(branch);
   return path.join(cwd, totemDir, 'journal', `${date}-${slug}.md`);
 }
@@ -87,7 +98,7 @@ export function buildJournalScaffold(
   const sDiffStat = sanitize(diffStat);
   const sCommits = sanitize(recentCommits);
 
-  const date = new Date().toISOString().slice(0, 10);
+  const date = currentLocalDate();
   const lines: string[] = [];
 
   // ── Human-editable section (top) ──
@@ -164,7 +175,7 @@ export async function openInEditor(filePath: string): Promise<boolean> {
   const cmd = parts[0]!;
   const args = [...parts.slice(1), filePath];
 
-  const result = spawnSync(cmd, args, { stdio: 'inherit' });
+  const result = spawnSync(cmd, args, { stdio: 'inherit', shell: process.platform === 'win32' });
   return result.status === 0;
 }
 
@@ -215,8 +226,17 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
     return;
   }
 
-  // Write scaffold to journal file
-  const journalPath = resolveJournalPath(cwd, config.totemDir, branch, options.out);
+  // --out without --no-edit: write to the specified path and exit (no editor)
+  if (options.out) {
+    const outDir = path.dirname(options.out);
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+    fs.writeFileSync(options.out, scaffold, 'utf-8');
+    log.success(TAG, `Scaffold written to ${options.out}`);
+    return;
+  }
+
+  // Default: write scaffold to journal file and open in editor
+  const journalPath = resolveJournalPath(cwd, config.totemDir, branch);
   const journalDir = path.dirname(journalPath);
   if (!fs.existsSync(journalDir)) {
     fs.mkdirSync(journalDir, { recursive: true });
