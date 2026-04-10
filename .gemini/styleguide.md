@@ -68,7 +68,7 @@ The following suggestions have been repeatedly declined during code review. Do n
 - **Lesson heading truncation.** Do not suggest expanding lesson headings beyond 60 characters. The `HEADING_MAX_CHARS` limit is enforced by `lesson-format.ts`. Headings serve as SARIF identifiers and vector search labels, not prose. Truncation is by design.
 - **Redundant "Lesson:" prefix in lesson headings.** Do not flag `## Lesson — Lesson: ...` as a style issue on auto-generated lesson files. This is a known `sanitizeHeading` improvement tracked separately.
 - **Timestamps appearing as "future dates."** The project is actively developed in 2026. Do not flag `compiledAt` or `createdAt` timestamps as errors or bugs.
-- **Confusing `totem lint` and `totem shield`.** `totem lint` = compiled rules, zero LLM, fast, Lite tier. `totem shield` = AI-powered code review, Full tier. Never describe shield as "deterministic" or lint as "AI-powered." Issue #515 (Claude Code hooks) was closed and NOT shipped — do not reference it as a live feature.
+- **Confusing `totem lint` and `totem review`.** `totem lint` = compiled rules, zero LLM, fast, Lite tier. `totem review` = AI-powered code review, Full tier. Never describe review as "deterministic" or lint as "AI-powered." The old `totem shield` command is a deprecated alias for `totem review` — do not use the old name in suggestions. Issue #515 (Claude Code hooks) was closed and NOT shipped — do not reference it as a live feature.
 - **Alphabetical sorting of command lists.** Do not suggest alphabetically sorting command lists in documentation tables. Commands are grouped by function (init → hooks → enforcement → workflow), which is more useful than alphabetical order.
 
 ## 7. Tone & Voice (The Solo Dev Litmus Test)
@@ -100,3 +100,47 @@ All overrides are recorded in the Trap Ledger (`.totem/ledger/events.ndjson`) fo
 - Defense-in-depth guards in batch processing loops should use `log.warn()` + counter increments, NOT `throw`. The design intent is resilient continuation, not fail-fast. Only suggest `throw` for guards that should halt the entire operation.
 - Library code (`@mmnto/totem` core) uses `onWarn` callbacks, never direct `console.warn`.
 - **Error cause chains (ES2022):** When re-throwing errors in `catch` blocks, always pass the original error as the `cause` property: `throw new TotemError('...', '...', err)`. NEVER concatenate `err.message` into a new error string — this destroys the original stack trace. The `handleError` debug logger traverses `.cause` chains automatically.
+
+## 10. Hash Conventions (Do Not Flag as Mismatches)
+
+Totem uses **two independent hash functions** for lessons, computed over different
+inputs. They are NOT supposed to match — this is the established convention since
+the project shipped, not drift.
+
+### Filename hash (`lesson-XXXXXXXX.md`)
+
+- Defined in `packages/core/src/lesson-io.ts:14-17`
+- Formula: `sha256(full_file_content).substring(0, 8)`
+- 8 characters
+- Hashes the **full file content** including frontmatter (`**Tags:**`, `**Scope:**`)
+
+### `lessonHash` (in `compiled-rules.json` and the compile manifest)
+
+- Defined in `packages/core/src/compiler.ts:60-66`
+- Formula: `sha256(heading + '\n' + body).slice(0, 16)`
+- 16 characters
+- Hashes ONLY `heading + '\n' + body` — explicitly excludes frontmatter
+- Used as the canonical content hash for the compile manifest, rule loader,
+  doctor diagnostic, and `totem compile --upgrade <hash>` CLI flag
+
+### Why they're independent
+
+1. The two hashes are computed over different input strings (full file vs
+   heading+body only). They are not expected to match because one includes
+   frontmatter content the other excludes.
+2. The slice lengths differ (8 vs 16 chars). Even if both were SHA-256 of
+   identical inputs, the 8-char filename hash would only match the FIRST 8
+   chars of the 16-char `lessonHash`, and the inputs are not identical.
+3. ALL existing 393+ compiled rules from 1.13.0 and earlier exhibit this
+   convention. Verifiable by sampling: pick any rule, look at its `lessonHash`,
+   then look at the corresponding `.totem/lessons/lesson-*.md` file's
+   filename — they will not match. They were never designed to match.
+
+### Do not flag
+
+When reviewing PRs that touch `.totem/compiled-rules.json` or
+`.totem/lessons/lesson-*.md`, do not flag mismatches between the 16-char
+`lessonHash` field and the 8-char filename hash. They are independent
+identifiers by design. If a future change unifies them under a single scheme,
+that will be discussed in a strategy proposal under `.strategy/proposals/`,
+not as a code review finding.

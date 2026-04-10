@@ -39,9 +39,25 @@ If `totem spec` fails, report the error and stop — do not proceed to Phase 2.
   (hard error → warning, sync → async, blocking → non-blocking)
 - Crosses architectural boundaries (core → cli, cli → mcp, etc.)
 - Touches >3 files OR introduces a new cross-cutting concern
+- Documents a new config field, new public API method, or new
+  agent-facing tool surface (regardless of whether the doc is in the
+  same PR as the implementation, and regardless of whether the
+  implementation is yours or someone else's)
 
 When in doubt, draft the doc. The cost of 10 minutes of design writing
 is always lower than the cost of a multi-round bot review cycle.
+
+**Why docs-that-describe-features count as architectural.** A wiki page
+that describes a new config field has the same data-model verification
+requirement as the code that implements it — you can write incorrect
+documentation about a real feature surface just as easily as you can
+write incorrect code. If you're authoring docs for a feature you didn't
+just build (or built more than a session ago), READ THE SCHEMA before
+the prose. The Phase 3 data-model section will force you to enumerate
+the config fields, which is exactly the work that catches "I remember
+this feature as automatic but the schema says opt-in" errors before
+they ship to users. The mmnto-ai/totem#1297 docs PR cycle is the
+load-bearing example.
 
 State your triage decision explicitly: "Tactical — skipping Phase 3"
 or "Architectural — drafting design doc."
