@@ -346,6 +346,29 @@ describe('runCompiledRules', () => {
     expect(result.violations).toHaveLength(0);
   });
 
+  it('excludes binary files from scanning', async () => {
+    const rules = [
+      makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+        engine: 'ast-grep',
+        astGrepPattern: 'console.log("foo")',
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    // Diff that changes a binary file (.png)
+    const diff = makeDiff('assets/logo.png', '  console.log("foo");');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'json',
+      tag: 'Test',
+    });
+
+    expect(result.violations).toHaveLength(0);
+  });
+
   // ─── Ignore patterns ────────────────────────────────
 
   // ─── SARIF output ──────────────────────────────────
@@ -605,6 +628,368 @@ describe('runCompiledRules', () => {
     expect(events[0]!.file).toBe('src/app.ts');
     expect(events[0]!.justification).toBe('needed for monitoring');
     expect(events[0]!.source).toBe('lint');
+  });
+
+  // ─── readStrategy / isStaged ────────────────────────
+
+  describe('readStrategy / isStaged', () => {
+    it('constructs readStrategy and reads staged content via the underlying staged read when isStaged is true', async () => {
+      const rules = [
+        makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+          engine: 'ast-grep',
+          astGrepPattern: 'console.log("foo")',
+        }),
+      ];
+      writeRules(tmpDir, rules);
+
+      const diff = makeDiff('src/app.ts', '  console.log("foo");');
+
+      const mockResolveGitRoot = vi.spyOn(totem, 'resolveGitRoot').mockReturnValue(tmpDir);
+
+      const mockExec = vi
+        .spyOn(totem, 'safeExec')
+        .mockImplementation((cmd: string, args?: string[]) => {
+          if (!args) return '';
+          if (args[0] === 'ls-files' && args[1] === '--recurse-submodules' && args[2] === '-s') {
+            return '100644 hash 0\tsrc/app.ts\n';
+          }
+          if (args[0] === 'show') {
+            return '// context\n  console.log("foo");\n// context\n';
+          }
+          return '';
+        });
+
+      let violations: unknown[] = [];
+      try {
+        const result = await runCompiledRules({
+          diff,
+          cwd: tmpDir,
+          totemDir: TOTEM_DIR,
+          format: 'json',
+          tag: 'Test',
+          isStaged: true,
+        });
+        violations = result.violations;
+      } catch (err: unknown) {
+        if (
+          err instanceof Error &&
+          err.name === 'TotemError' &&
+          err.message.includes('Violations detected')
+        ) {
+          violations = [1]; // We just need to know it matched
+        } else {
+          throw err;
+        }
+      }
+
+      expect(violations).toHaveLength(1);
+      mockResolveGitRoot.mockRestore();
+      mockExec.mockRestore();
+    });
+
+    it('filters symlinks via the underlying index check mode 120000', async () => {
+      const rules = [
+        makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+          engine: 'ast-grep',
+          astGrepPattern: 'console.log("foo")',
+        }),
+      ];
+      writeRules(tmpDir, rules);
+
+      const diff = makeDiff('src/app.ts', '  console.log("foo");');
+
+      const mockResolveGitRoot = vi.spyOn(totem, 'resolveGitRoot').mockReturnValue(tmpDir);
+
+      const mockExec = vi
+        .spyOn(totem, 'safeExec')
+        .mockImplementation((cmd: string, args?: string[]) => {
+          if (!args) return '';
+          if (args[0] === 'ls-files' && args[1] === '--recurse-submodules' && args[2] === '-s') {
+            return '120000 hash 0\tsrc/app.ts\n'; // Symlink
+          }
+          if (args[0] === 'show') {
+            return 'console.log("foo");\n'; // Should not be called
+          }
+          return '';
+        });
+
+      try {
+        const result = await runCompiledRules({
+          diff,
+          cwd: tmpDir,
+          totemDir: TOTEM_DIR,
+          format: 'json',
+          tag: 'Test',
+          isStaged: true,
+        });
+
+        expect(result.violations).toHaveLength(0);
+      } finally {
+        mockResolveGitRoot.mockRestore();
+        mockExec.mockRestore();
+      }
+    });
+
+    it('normalizes CRLF to LF in staged content', async () => {
+      const rules = [
+        makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+          engine: 'ast-grep',
+          astGrepPattern: 'console.log("foo")',
+        }),
+      ];
+      writeRules(tmpDir, rules);
+
+      const diff = makeDiff('src/app.ts', '  console.log("foo");');
+
+      const mockResolveGitRoot = vi.spyOn(totem, 'resolveGitRoot').mockReturnValue(tmpDir);
+
+      const mockExec = vi
+        .spyOn(totem, 'safeExec')
+        .mockImplementation((cmd: string, args?: string[]) => {
+          if (!args) return '';
+          if (args[0] === 'ls-files' && args[1] === '--recurse-submodules' && args[2] === '-s') {
+            return '100644 hash 0\tsrc/app.ts\n';
+          }
+          if (args[0] === 'show') {
+            return '// context\r\n  console.log("foo");\r\n// context\r\n';
+          }
+          return '';
+        });
+
+      let violations: unknown[] = [];
+      try {
+        const result = await runCompiledRules({
+          diff,
+          cwd: tmpDir,
+          totemDir: TOTEM_DIR,
+          format: 'json',
+          tag: 'Test',
+          isStaged: true,
+        });
+        violations = result.violations;
+      } catch (err: unknown) {
+        if (
+          err instanceof Error &&
+          err.name === 'TotemError' &&
+          err.message.includes('Violations detected')
+        ) {
+          violations = [1];
+        } else {
+          throw err;
+        }
+      }
+
+      expect(violations).toHaveLength(1);
+      mockResolveGitRoot.mockRestore();
+      mockExec.mockRestore();
+    });
+
+    it('throws STAGED_READ_FAILED when the underlying staged read fails', async () => {
+      const rules = [
+        makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+          engine: 'ast-grep',
+          astGrepPattern: 'console.log("foo")',
+        }),
+      ];
+      writeRules(tmpDir, rules);
+
+      const diff = makeDiff('src/app.ts', '  console.log("foo");');
+
+      const mockResolveGitRoot = vi.spyOn(totem, 'resolveGitRoot').mockReturnValue(tmpDir);
+
+      const mockExec = vi
+        .spyOn(totem, 'safeExec')
+        .mockImplementation((cmd: string, args?: string[]) => {
+          if (!args) return '';
+          if (args[0] === 'ls-files' && args[1] === '--recurse-submodules' && args[2] === '-s') {
+            return '100644 hash 0\tsrc/app.ts\n';
+          }
+          if (args[0] === 'show') {
+            throw new Error('[Totem Error] Command failed: show :src/app.ts');
+          }
+          return '';
+        });
+
+      try {
+        await expect(
+          runCompiledRules({
+            diff,
+            cwd: tmpDir,
+            totemDir: TOTEM_DIR,
+            format: 'json',
+            tag: 'Test',
+            isStaged: true,
+          }),
+        ).rejects.toThrow('Failed to read staged content');
+      } finally {
+        mockResolveGitRoot.mockRestore();
+        mockExec.mockRestore();
+      }
+    });
+
+    it('does not construct readStrategy when isStaged is false', async () => {
+      const rules = [
+        makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+          engine: 'ast-grep',
+          astGrepPattern: 'console.log("foo")',
+        }),
+      ];
+      writeRules(tmpDir, rules);
+
+      fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tmpDir, 'src', 'app.ts'),
+        '// context\n  console.log("foo");\n// context\n',
+      );
+
+      const diff = makeDiff('src/app.ts', '  console.log("foo");');
+
+      const mockExec = vi.spyOn(totem, 'safeExec').mockImplementation(() => {
+        throw new Error('[Totem Error] Should not be called');
+      });
+
+      let violations: unknown[] = [];
+      try {
+        const result = await runCompiledRules({
+          diff,
+          cwd: tmpDir,
+          totemDir: TOTEM_DIR,
+          format: 'json',
+          tag: 'Test',
+          isStaged: false,
+        });
+        violations = result.violations;
+      } catch (err: unknown) {
+        if (
+          err instanceof Error &&
+          err.name === 'TotemError' &&
+          err.message.includes('Violations detected')
+        ) {
+          violations = [1];
+        } else {
+          throw err;
+        }
+      }
+
+      // AST engine runs with disk-read fallback
+      expect(violations).toHaveLength(1);
+      mockExec.mockRestore();
+    });
+
+    it('uses repo root as workingDirectory when cwd is a subdirectory', async () => {
+      const rules = [
+        makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+          engine: 'ast-grep',
+          astGrepPattern: 'console.log("foo")',
+        }),
+      ];
+      writeRules(tmpDir, rules);
+
+      const diff = makeDiff('src/app.ts', '  console.log("foo");');
+
+      const subDir = path.join(tmpDir, 'sub', 'dir');
+      fs.mkdirSync(subDir, { recursive: true });
+
+      const mockResolveGitRoot = vi.spyOn(totem, 'resolveGitRoot').mockReturnValue(tmpDir);
+
+      const mockExec = vi
+        .spyOn(totem, 'safeExec')
+        .mockImplementation((cmd: string, args?: string[]) => {
+          if (!args) return '';
+          if (args[0] === 'ls-files' && args[1] === '--recurse-submodules' && args[2] === '-s') {
+            return '100644 hash 0\tsrc/app.ts\n';
+          }
+          if (args[0] === 'show') {
+            return '// context\n  console.log("foo");\n// context\n';
+          }
+          return '';
+        });
+
+      const spyAst = vi.spyOn(totem, 'applyAstRulesToAdditions');
+
+      let violations: unknown[] = [];
+      try {
+        const result = await runCompiledRules({
+          diff,
+          cwd: subDir,
+          totemDir: TOTEM_DIR,
+          format: 'json',
+          tag: 'Test',
+          isStaged: true,
+          configRoot: tmpDir,
+        });
+        violations = result.violations;
+      } catch (err: unknown) {
+        if (
+          err instanceof Error &&
+          err.name === 'TotemError' &&
+          err.message.includes('Violations detected')
+        ) {
+          violations = [1];
+        } else {
+          throw err;
+        }
+      }
+
+      expect(violations).toHaveLength(1);
+      expect(spyAst).toHaveBeenCalled();
+      // Check that workingDirectory passed to applyAstRulesToAdditions is tmpDir (repo root), not subDir
+      expect(spyAst.mock.calls[0]![2]).toBe(tmpDir);
+      mockResolveGitRoot.mockRestore();
+      mockExec.mockRestore();
+      spyAst.mockRestore();
+    });
+
+    it('falls back to original cwd when not in a git repo (resolveGitRoot returns null)', async () => {
+      const rules = [
+        makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+          engine: 'ast-grep',
+          astGrepPattern: 'console.log("foo")',
+        }),
+      ];
+      writeRules(tmpDir, rules);
+
+      fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tmpDir, 'src', 'app.ts'),
+        '// context\n  console.log("foo");\n// context\n',
+      );
+
+      const diff = makeDiff('src/app.ts', '  console.log("foo");');
+
+      const mockResolveGitRoot = vi.spyOn(totem, 'resolveGitRoot').mockReturnValue(null);
+      const mockExec = vi.spyOn(totem, 'safeExec').mockImplementation(() => {
+        throw new Error('[Totem Error] Should not be called');
+      });
+
+      let violations: unknown[] = [];
+      try {
+        const result = await runCompiledRules({
+          diff,
+          cwd: tmpDir,
+          totemDir: TOTEM_DIR,
+          format: 'json',
+          tag: 'Test',
+          isStaged: true,
+        });
+        violations = result.violations;
+      } catch (err: unknown) {
+        if (
+          err instanceof Error &&
+          err.name === 'TotemError' &&
+          err.message.includes('Violations detected')
+        ) {
+          violations = [1];
+        } else {
+          throw err;
+        }
+      }
+
+      // Should gracefully fallback to disk read and process rules
+      expect(violations).toHaveLength(1);
+      mockResolveGitRoot.mockRestore();
+      mockExec.mockRestore();
+    });
   });
 });
 

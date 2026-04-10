@@ -106,6 +106,94 @@ describe('applyAstRulesToAdditions', () => {
     expect(violations[0]!.lineNumber).toBe(1);
   });
 
+  it('supports injected readStrategy for staged content', async () => {
+    // The file doesn't exist on disk, or has different content on disk
+    fs.writeFileSync(path.join(tmpDir, 'src', 'app.ts'), 'console.log("disk content");\n');
+
+    const rule = makeRule({
+      engine: 'ast-grep',
+      astGrepPattern: 'console.log("staged content")',
+    });
+
+    const additions = [makeAddition('src/app.ts', 'console.log("staged content");', 1)];
+
+    // Inject a readStrategy that returns staged content
+    const mockReadStrategy = async (filePath: string) => {
+      if (filePath === 'src/app.ts') return 'console.log("staged content");\n';
+      return null;
+    };
+
+    const violations = await applyAstRulesToAdditions(
+      [rule],
+      additions,
+      tmpDir,
+      undefined,
+      undefined,
+      mockReadStrategy,
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0]!.line).toBe('console.log("staged content");');
+  });
+
+  it('skips file when readStrategy returns null', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'src', 'app.ts'), 'console.log("disk content");\n');
+
+    const rule = makeRule({
+      engine: 'ast-grep',
+      astGrepPattern: 'console.log("disk content")',
+    });
+
+    const additions = [makeAddition('src/app.ts', 'console.log("disk content");', 1)];
+
+    // readStrategy returns null (simulating a symlink or unreadable file)
+    const mockReadStrategyReturningNull = async () => null;
+
+    const violations = await applyAstRulesToAdditions(
+      [rule],
+      additions,
+      tmpDir,
+      undefined,
+      undefined,
+      mockReadStrategyReturningNull,
+    );
+    expect(violations).toHaveLength(0); // Violation from disk content is ignored because readStrategy returned null
+  });
+
+  it('uses disk read when no readStrategy provided (Invariant #4 backward compat)', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'src', 'app.ts'), 'console.log("disk content");\n');
+
+    const rule = makeRule({
+      engine: 'ast-grep',
+      astGrepPattern: 'console.log("disk content")',
+    });
+
+    const additions = [makeAddition('src/app.ts', 'console.log("disk content");', 1)];
+
+    // No readStrategy argument passed
+    const violations = await applyAstRulesToAdditions([rule], additions, tmpDir);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]!.line).toBe('console.log("disk content");');
+  });
+
+  it('respects workingDirectory explicitly rather than cwd', async () => {
+    // The bug (#1304) was that applyAstRulesToAdditions used process.cwd() instead of the repo root
+    // To simulate this, we pass a workingDirectory that is different from cwd
+    const repoRoot = path.join(tmpDir, 'repo-root');
+    fs.mkdirSync(path.join(repoRoot, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, 'src', 'app.ts'), 'console.log("hello");\n');
+
+    const rule = makeRule({
+      engine: 'ast-grep',
+      astGrepPattern: 'console.log($$$)',
+    });
+
+    const additions = [makeAddition('src/app.ts', 'console.log("hello");', 1)];
+
+    // We pass repoRoot as the workingDirectory. If it uses something else (like process.cwd()), it will fail to read the file.
+    const violations = await applyAstRulesToAdditions([rule], additions, repoRoot);
+    expect(violations).toHaveLength(1);
+  });
+
   it('emits suppress event for ast-grep rules on totem-ignore lines', async () => {
     fs.writeFileSync(
       path.join(tmpDir, 'src', 'app.ts'),

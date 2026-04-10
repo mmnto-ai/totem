@@ -49,7 +49,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
       if (currentInputHash !== manifest.input_hash) {
         uiLog.warn(
           TAG,
-          "Compile manifest is stale — lessons changed since last compile. Run 'totem compile' to update.",
+          "Compile manifest is stale — lessons changed since last compile. Run 'totem lesson compile' to update.",
         );
       }
     }
@@ -74,6 +74,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     ignorePatterns: allIgnore,
     tag: TAG,
     configRoot,
+    isStaged: !!options.staged,
   });
 
   // Post PR comment if requested (zero-API-keys invariant: only behind --pr-comment flag)

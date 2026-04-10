@@ -145,12 +145,8 @@ async function runFtsLeg(
 function escapeBoundaryPrefix(raw: string): string {
   // Normalize Windows backslashes to forward slashes
   const normalized = raw.replace(/\\/g, '/');
-  // Escape SQL LIKE wildcards (%, _), backticks, and single quotes
-  return normalized
-    .replace(/`/g, '\\`')
-    .replace(/%/g, '\\%')
-    .replace(/_/g, '\\_')
-    .replace(/'/g, "''");
+  // Escape SQL LIKE wildcards (%, _) and single quotes
+  return normalized.replace(/%/g, '\\%').replace(/_/g, '\\_').replace(/'/g, "''");
 }
 
 /** Build a SQL WHERE clause from optional type and boundary filters. */
@@ -160,7 +156,7 @@ function buildWhereClause(
 ): string | undefined {
   const conditions: string[] = [];
   if (typeFilter) {
-    const safeType = typeFilter.replace(/`/g, '\\`').replace(/'/g, "''");
+    const safeType = typeFilter.replace(/'/g, "''");
     conditions.push(`\`type\` = '${safeType}'`);
   }
   // Normalize boundary to array

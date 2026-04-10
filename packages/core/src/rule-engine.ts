@@ -271,9 +271,10 @@ export function applyRulesToAdditions(
 export async function applyAstRulesToAdditions(
   rules: CompiledRule[],
   additions: DiffAddition[],
-  cwd: string,
+  workingDirectory: string,
   onRuleEvent?: RuleEventCallback,
   onWarn?: (msg: string) => void,
+  readStrategy?: (filePath: string) => Promise<string | null>,
 ): Promise<Violation[]> {
   const treeSitterRules = rules.filter((r) => r.engine === 'ast' && r.astQuery);
   const astGrepRules = rules.filter((r) => r.engine === 'ast-grep' && r.astGrepPattern);
@@ -318,13 +319,30 @@ export async function applyAstRulesToAdditions(
       });
 
       if (applicableTreeSitter.length > 0) {
+        // Path containment check — prevent traversal outside the project.
+        // Uses path.relative() instead of startsWith() to avoid sibling-directory bypass
+        // (e.g., /app-secrets bypassing a /app base).
+        const normalizedBase = path.resolve(workingDirectory);
+        const fullPath = path.join(normalizedBase, file);
+        const relative = path.relative(normalizedBase, fullPath);
+        if (relative.startsWith('..') || path.isAbsolute(relative)) {
+          onWarn?.(`Skipped file outside project: ${file}`);
+          continue;
+        }
+
         // Batch: parse file once, run all queries against the cached tree
         const queries = applicableTreeSitter.map((rule) => ({
           astQuery: rule.astQuery!,
           addedLineNumbers,
         }));
 
-        const batchResults = await matchAstQueriesBatch(file, queries, cwd, onWarn);
+        const batchResults = await matchAstQueriesBatch(
+          file,
+          queries,
+          workingDirectory,
+          onWarn,
+          readStrategy,
+        );
 
         // Map results back to violations
         for (let i = 0; i < applicableTreeSitter.length; i++) {
@@ -370,18 +388,25 @@ export async function applyAstRulesToAdditions(
         // Read file content once for all ast-grep rules on this file
         let content: string | null = null;
         try {
-          const fullPath = path.resolve(cwd, file);
+          const fullPath = path.resolve(workingDirectory, file);
           // Path containment check — prevent traversal outside the project
-          const relative = path.relative(path.resolve(cwd), fullPath);
+          const relative = path.relative(path.resolve(workingDirectory), fullPath);
           if (relative.startsWith('..') || path.isAbsolute(relative)) {
             onWarn?.(`Skipped file outside project: ${file} (resolved to ${fullPath})`);
             continue;
           }
-          content = await fs.promises.readFile(fullPath, 'utf-8');
-        } catch {
-          // Fall through — content stays null
+          if (readStrategy) {
+            content = await readStrategy(file);
+          } else {
+            content = await fs.promises.readFile(fullPath, 'utf-8');
+          }
+        } catch (err: unknown) {
+          // Explicitly propagate readStrategy errors. Disk reads fall back to null, but staged reads shouldn't.
+          if (readStrategy) {
+            throw err;
+          }
+          // Fall through — content stays null for standard file read failures
         }
-
         if (content) {
           // Batch: parse file once, run all patterns
           const queries = applicableAstGrep

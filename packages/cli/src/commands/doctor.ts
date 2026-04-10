@@ -515,7 +515,7 @@ export async function findUpgradeCandidates(
 /**
  * Find regex/ast rules whose telemetry shows >NON_CODE_THRESHOLD of matches landing
  * in non-code contexts (strings, comments, regex literals). These are good candidates
- * for being upgraded to structural ast-grep patterns via `totem compile --upgrade`.
+ * for being upgraded to structural ast-grep patterns via `totem lesson compile --upgrade`.
  */
 export async function checkUpgradeCandidates(
   cwd: string,
@@ -559,7 +559,7 @@ export async function checkUpgradeCandidates(
     name: 'Upgrade Candidates',
     status: 'warn',
     message: `${candidates.length} rule(s) firing in non-code contexts: ${summary}`,
-    remediation: `Run \`totem compile --upgrade ${firstHash}\` to re-compile through Claude Sonnet with telemetry guidance.`,
+    remediation: `Run \`totem lesson compile --upgrade ${firstHash}\` to re-compile through Claude Sonnet with telemetry guidance.`,
   };
 }
 

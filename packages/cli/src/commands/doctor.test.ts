@@ -633,7 +633,7 @@ describe('checkUpgradeCandidates', () => {
     expect(result.status).toBe('warn');
     expect(result.message).toContain('noisy-rule');
     expect(result.message).toContain('40%');
-    expect(result.remediation).toContain('totem compile --upgrade noisy-rule');
+    expect(result.remediation).toContain('totem lesson compile --upgrade noisy-rule');
   });
 
   it('does NOT flag a rule at exactly 20% non-code (strict greater-than)', async () => {

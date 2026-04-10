@@ -173,8 +173,9 @@ export async function matchAstQuery(
 export async function matchAstQueriesBatch(
   filePath: string,
   queries: Array<{ astQuery: string; addedLineNumbers: number[] }>,
-  cwd: string,
+  workingDirectory: string,
   onWarn: (msg: string) => void = console.warn, // totem-context: fallback ensures query failures are never silently swallowed
+  readStrategy?: (filePath: string) => Promise<string | null>,
 ): Promise<AstMatch[][]> {
   if (queries.length === 0) return [];
 
@@ -184,7 +185,27 @@ export async function matchAstQueriesBatch(
     return queries.map(() => []);
   }
 
-  const content = await readFileContent(filePath, cwd);
+  let content: string | null = null;
+  if (readStrategy) {
+    content = await readStrategy(filePath);
+  } else {
+    // Default disk read fallback with path containment check.
+    // Uses path.relative() instead of startsWith() to avoid sibling-directory bypass
+    // (e.g., /app-secrets bypassing a /app base).
+    try {
+      const normalizedBase = path.resolve(workingDirectory);
+      const fullPath = path.join(normalizedBase, filePath);
+      const relative = path.relative(normalizedBase, fullPath);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) {
+        content = null;
+      } else {
+        content = await fs.readFile(fullPath, 'utf-8');
+      }
+    } catch {
+      content = null;
+    }
+  }
+
   if (!content) {
     return queries.map(() => []);
   }

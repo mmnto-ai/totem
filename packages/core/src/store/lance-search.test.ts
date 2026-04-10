@@ -203,6 +203,23 @@ describe('runVectorSearch', () => {
     expect(clause).not.toContain('\\\\');
   });
 
+  it('does not escape backticks in boundary prefixes (not required for single-quoted literals)', async () => {
+    const table = mockTable({ vectorRows: [] });
+    await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+      'src/my`path',
+    );
+
+    const clause = table._vectorBuilder.where.mock.calls[0]![0] as string;
+    expect(clause).toContain('src/my`path');
+    expect(clause).not.toContain('src/my\\`path');
+  });
+
   it('escapes single quotes in boundary prefixes', async () => {
     const table = mockTable({ vectorRows: [] });
     await runVectorSearch(
