@@ -65,6 +65,15 @@ describe('generateLessonHeading', () => {
     expect(generateLessonHeading('```\ncode\n```')).toBe('Lesson');
   });
 
+  it('strips tilde-fenced code blocks (#1319)', () => {
+    const body = '~~~typescript\nconst x = 1;\n~~~\nAlways initialize variables.';
+    expect(generateLessonHeading(body)).toBe('Always initialize variables.');
+  });
+
+  it('handles body that is only a tilde-fenced code block (#1319)', () => {
+    expect(generateLessonHeading('~~~\ncode\n~~~')).toBe('Lesson');
+  });
+
   it('strips list markers', () => {
     expect(generateLessonHeading('- Always validate input')).toBe('Always validate input');
   });

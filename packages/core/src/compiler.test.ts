@@ -818,6 +818,18 @@ describe('parseCompilerResponse', () => {
     expect(result!.pattern).toBe('console\\.log');
   });
 
+  it('extracts JSON from a tilde-fenced code block (#1319)', () => {
+    const response = `Here is the compiled rule:
+~~~json
+{"compilable": true, "pattern": "console\\\\.log", "message": "Remove debug logging"}
+~~~`;
+
+    const result = parseCompilerResponse(response);
+    expect(result).not.toBeNull();
+    expect(result!.compilable).toBe(true);
+    expect(result!.pattern).toBe('console\\.log');
+  });
+
   it('returns null for completely invalid output', () => {
     expect(parseCompilerResponse('I cannot compile this lesson.')).toBeNull();
   });
