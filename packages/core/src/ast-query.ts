@@ -189,11 +189,14 @@ export async function matchAstQueriesBatch(
   if (readStrategy) {
     content = await readStrategy(filePath);
   } else {
-    // Default disk read fallback with path containment check
+    // Default disk read fallback with path containment check.
+    // Uses path.relative() instead of startsWith() to avoid sibling-directory bypass
+    // (e.g., /app-secrets bypassing a /app base).
     try {
       const normalizedBase = path.resolve(workingDirectory);
       const fullPath = path.join(normalizedBase, filePath);
-      if (!fullPath.startsWith(normalizedBase)) {
+      const relative = path.relative(normalizedBase, fullPath);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) {
         content = null;
       } else {
         content = await fs.readFile(fullPath, 'utf-8');

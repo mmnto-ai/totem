@@ -319,10 +319,13 @@ export async function applyAstRulesToAdditions(
       });
 
       if (applicableTreeSitter.length > 0) {
-        // Path containment check — prevent traversal outside the project
+        // Path containment check — prevent traversal outside the project.
+        // Uses path.relative() instead of startsWith() to avoid sibling-directory bypass
+        // (e.g., /app-secrets bypassing a /app base).
         const normalizedBase = path.resolve(workingDirectory);
         const fullPath = path.join(normalizedBase, file);
-        if (!fullPath.startsWith(normalizedBase)) {
+        const relative = path.relative(normalizedBase, fullPath);
+        if (relative.startsWith('..') || path.isAbsolute(relative)) {
           onWarn?.(`Skipped file outside project: ${file}`);
           continue;
         }
