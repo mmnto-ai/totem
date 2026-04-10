@@ -1,12 +1,29 @@
 # Totem
 
+[![npm version](https://img.shields.io/npm/v/@mmnto/cli.svg)](https://www.npmjs.com/package/@mmnto/cli)
+[![CI](https://github.com/mmnto-ai/totem/actions/workflows/ci.yml/badge.svg)](https://github.com/mmnto-ai/totem/actions/workflows/ci.yml)
+
 _AI coding agents are brilliant goldfish. Totem is their persistent, cross-repo memory._
+
+> `totem lint` runs entirely offline, uses zero LLMs, and completes in under 2 seconds.
 
 When using LLMs on projects, I found that agents kept making the same architectural mistakes, forgetting context, and reinventing the wheel. The velocity was great, but the architectural integrity degraded quickly. Every PR became an exhausting back-and-forth with review bots over the exact same nits. 
 
 They can make the wrong way look brilliant — until you realize what happened. They'll rarely ask: _"doesn't a shared helper already exist for this?"_
 
 Totem is the framework I extracted to solve that friction. It's a collection of tools that acts as a persistent memory and enforcement layer for AI agents. It uses deterministic hooks to remember the lessons the AI forgets.
+
+---
+
+- [Documentation is merely a suggestion](#documentation-is-merely-a-suggestion)
+- [How Mistakes Become Rules](#how-mistakes-become-rules)
+- [What's in the Box](#whats-in-the-box)
+- [What Works and What Doesn't](#what-works-and-what-doesnt)
+- [Quickstart](#quickstart)
+- [Try It Live](#try-it-live)
+- [Documentation & Workflows](#documentation--workflows)
+
+---
 
 ## Documentation is merely a suggestion
 
