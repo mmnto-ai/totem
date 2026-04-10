@@ -11,7 +11,7 @@ When using LLMs on projects, I found that agents kept making the same architectu
 
 They can make the wrong way look brilliant — until you realize what happened. They'll rarely ask: _"doesn't a shared helper already exist for this?"_
 
-Totem is the framework I extracted to solve that friction. It's a collection of tools that acts as a persistent memory and enforcement layer for AI agents. It uses deterministic hooks to remember the lessons the AI forgets.
+Totem is what I extracted to solve that friction — a set of CLI tools that acts as a persistent memory and enforcement layer for AI agents. It uses deterministic hooks to remember the lessons the AI forgets.
 
 ---
 
