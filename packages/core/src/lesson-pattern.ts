@@ -189,12 +189,12 @@ function extractCodeBlock(body: string, field: string): string[] | null {
   const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Try fenced code block after **Field:** or **Field**: (colon required, inside or outside bold)
   const fencedRe = new RegExp(
-    `(?:^|\\n)\\*{0,2}${safeField}\\*{0,2}\\s*:[^\\n]*\\n(?:\\s*\\n)*(?:\`\`\`|~~~)[^\\n]*\\n([\\s\\S]*?)(?:\`\`\`|~~~)`,
+    `(?:^|\\n)\\*{0,2}${safeField}\\*{0,2}\\s*:[^\\n]*\\n(?:\\s*\\n)*(\`\`\`|~~~)[^\\n]*\\n([\\s\\S]*?)\\1`,
     'i',
   );
   const fencedMatch = body.match(fencedRe);
   if (fencedMatch) {
-    return fencedMatch[1]!.split('\n').filter((l) => l.trim().length > 0);
+    return fencedMatch[2]!.split('\n').filter((l) => l.trim().length > 0);
   }
   // Fallback: inline value after **Field:**
   const inline = extractField(body, field);
