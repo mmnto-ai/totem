@@ -27,4 +27,4 @@ Totem influences GCA primarily through compiled architectural rules exported dur
 When GCA repeatedly suggests an incorrect pattern during PR reviews (e.g., suggesting an async `execFile` when sequential execution is required), you must train it to decline that pattern.
 
 1. **Update the Styleguide:** Add the specific declined pattern to Section 6 of `.gemini/styleguide.md`.
-2. **Anchor the Lesson:** Use the Totem `add_lesson` tool with the `review-guidance` tag on the same PR to ensure the architectural reasoning is stored in memory.
+2. **Record the Lesson:** Use the Totem `add_lesson` tool with the `review-guidance` tag on the same PR to ensure the architectural reasoning is stored in the knowledge base.

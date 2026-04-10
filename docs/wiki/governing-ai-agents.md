@@ -25,7 +25,7 @@ const output = execSync('totem briefing', { encoding: 'utf-8' });
 console.log(output);
 ```
 
-The agent now knows it needs to run `totem compile` before pushing, and has recent lessons (tactical reflexes) fresh in its context window.
+The agent now knows it needs to run `totem compile` before pushing, and has recent lessons fresh in its context window.
 
 ## 2. Deterministic Enforcement (Pre-Push Hook)
 
@@ -45,7 +45,7 @@ The agent cannot bypass this. When the lint gate fails, the push is rejected, an
 
 For agents that support the Model Context Protocol (MCP), Totem exposes the project's knowledge base as queryable tools. The agent can search lessons, ADRs, and architectural decisions before writing code:
 
-```
+```text
 Agent: "What patterns are banned in the CLI package?"
 → search_knowledge("CLI banned patterns")
 → Results: "Direct child_process forbidden, use safeExec..."
