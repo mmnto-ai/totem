@@ -1,6 +1,6 @@
 # Cross-Repo Mesh (Federation)
 
-Most governance tools operate in isolation per repository. Totem lets you connect multiple repositories into a shared semantic knowledge mesh, allowing your agents to federate context across repository boundaries.
+When working across multiple repositories, AI agents often hallucinate context because they cannot see the architectural decisions made in sibling repos. The Cross-Repo Mesh fixes this by connecting multiple `.lancedb` indexes into a shared semantic knowledge base, allowing agents to federate context across repository boundaries.
 
 ## Two ways to share lessons across repositories
 
