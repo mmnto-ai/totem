@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { readAllLessons } from '@mmnto/totem'; // totem-ignore
+import { readAllLessons } from '@mmnto/totem'; // totem-context: static import required — readRecentLessons is a sync exported helper used in tests
 
 import { sanitize } from '../utils.js';
 
