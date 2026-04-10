@@ -368,7 +368,6 @@ const DEFAULT_TTLS: Record<string, number> = {
   spec: 3600, // 1 hour
   docs: 0, // No cache — each run should reflect latest state
   shield: 0,
-  handoff: 0,
   learn: 0,
 };
 
