@@ -940,6 +940,63 @@ describe('runCompiledRules', () => {
       spyAst.mockRestore();
     });
 
+    it('uses repo root as workingDirectory for non-staged path from a subdirectory (#1312)', async () => {
+      const rules = [
+        makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {
+          engine: 'ast-grep',
+          astGrepPattern: 'console.log("foo")',
+        }),
+      ];
+      writeRules(tmpDir, rules);
+
+      // Write the file at repo root so AST can read it
+      fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tmpDir, 'src', 'app.ts'),
+        '// context\n  console.log("foo");\n// context\n',
+      );
+
+      const diff = makeDiff('src/app.ts', '  console.log("foo");');
+
+      const subDir = path.join(tmpDir, 'sub', 'dir');
+      fs.mkdirSync(subDir, { recursive: true });
+
+      const mockResolveGitRoot = vi.spyOn(totem, 'resolveGitRoot').mockReturnValue(tmpDir);
+
+      const spyAst = vi.spyOn(totem, 'applyAstRulesToAdditions');
+
+      let violations: unknown[] = [];
+      try {
+        const result = await runCompiledRules({
+          diff,
+          cwd: subDir,
+          totemDir: TOTEM_DIR,
+          format: 'json',
+          tag: 'Test',
+          isStaged: false,
+          configRoot: tmpDir,
+        });
+        violations = result.violations;
+      } catch (err: unknown) {
+        if (
+          err instanceof Error &&
+          err.name === 'TotemError' &&
+          err.message.includes('Violations detected')
+        ) {
+          violations = [1];
+        } else {
+          throw err;
+        }
+      }
+
+      expect(violations).toHaveLength(1);
+      expect(spyAst).toHaveBeenCalled();
+      // Non-staged path must also resolve against repo root, not subDir
+      expect(spyAst.mock.calls[0]![2]).toBe(tmpDir);
+      mockResolveGitRoot.mockRestore();
+      spyAst.mockRestore();
+    });
+
     it('falls back to original cwd when not in a git repo (resolveGitRoot returns null)', async () => {
       const rules = [
         makeRule('console\\.log\\("foo"\\)', 'No foo log', 'No foo log', {

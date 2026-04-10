@@ -117,9 +117,13 @@ export async function runCompiledRules(
         (a) => !ignorePatterns || !ignorePatterns.some((pattern) => matchesGlob(a.file, pattern)),
       );
 
+    // Resolve repo root once — git diff paths are always repo-root-relative,
+    // so both staged and non-staged paths need the repo root for file resolution.
+    const repoRoot = resolveGitRoot(cwd);
+
     // Enrich with AST context
     try {
-      await enrichWithAstContext(additions, { cwd });
+      await enrichWithAstContext(additions, { cwd: repoRoot ?? cwd });
       const classified = additions.filter((a) => a.astContext !== undefined).length;
       if (classified > 0) {
         log.dim(tag, `AST classified ${classified}/${additions.length} additions`);
@@ -167,14 +171,11 @@ export async function runCompiledRules(
     if (astRules.length > 0) {
       log.dim(tag, `Running ${astRules.length} AST rule(s)...`);
       try {
-        let workingDirectory = cwd;
+        const workingDirectory = repoRoot ?? cwd;
         let readStrategy: ((filePath: string) => Promise<string | null>) | undefined = undefined;
 
         if (isStaged) {
-          const repoRoot = resolveGitRoot(cwd);
           if (repoRoot) {
-            workingDirectory = repoRoot;
-
             readStrategy = async (filePath: string) => {
               try {
                 // 1. Detect symlinks explicitly (git ls-files -s returns mode 120000).
