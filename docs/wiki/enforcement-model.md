@@ -8,11 +8,11 @@ Totem provides the **primitives** — the knowledge index, the compiler, the com
 
 Totem does **not** force a specific workflow — it doesn't dictate when to block, inject, or enforce. You decide how to wire these primitives into your own Git hooks, CI config, or IDE plugins. Totem ships reference wiring, not a mandatory policy.
 
-| Layer             | What Totem Provides                       | Where You Wire It            |
-| ----------------- | ----------------------------------------- | ---------------------------- |
-| **Deterministic** | `totem lint` (compiled rules, zero LLM)   | Git pre-push hook            |
-| **Knowledge**     | `search_knowledge` (vector index)         | SessionStart hook, MCP tools |
-| **Review**        | `totem review` (LLM-powered analysis)     | PreToolUse hook (optional)   |
+| Layer             | What Totem Provides                     | Where You Wire It            |
+| ----------------- | --------------------------------------- | ---------------------------- |
+| **Deterministic** | `totem lint` (compiled rules, zero LLM) | Git pre-push hook            |
+| **Knowledge**     | `search_knowledge` (vector index)       | SessionStart hook, MCP tools |
+| **Review**        | `totem review` (LLM-powered analysis)   | PreToolUse hook (optional)   |
 
 ### The Git Hook (Product — All Users)
 
