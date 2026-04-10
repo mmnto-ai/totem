@@ -1,36 +1,33 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.13.0` (published 2026-04-07, "The Refinement Engine") with **2,722 tests** across core, CLI, and MCP packages and **394 compiled rules** (up from 393 after the 1.14.0 lesson extraction + Sonnet compile). **1.14.0 is scope-locked and in release prep** — Cross-Repo Context Mesh as the headline feature plus LLM Context Caching machinery shipping as opt-in preview. Theme renamed to "The Nervous System Foundation" to reflect what actually landed (previously locked as "The Distribution Pipeline," which now slides to 1.15.0).
+The project is at release `@mmnto/cli@1.14.0` (published 2026-04-09, "The Nervous System Foundation") with **2,722 tests** across core, CLI, and MCP packages and **394 compiled rules**.
 
-### Current: 1.14.0 — The Nervous System Foundation (release prep)
+### Current: 1.14.1 — Hotfix Sweep & Queue Drain
 
-Theme: Cross-repo federated context (active default) plus opt-in preview of persistent LLM context caching — two halves of the same nervous system, shipping at different maturity levels in 1.14.0 (mesh active, caching opt-in preview pending default activation in 1.15.0 per mmnto/totem#1291).
+Theme: Draining the technical debt queue before opening new architectural surface.
 
-- **Cross-Repo Context Mesh (shipped, active default):**
-  - ~~**#1295**~~ — Phases 1-3 of Proposal 215. `linkedIndexes: []` config, required `SourceContext` on `SearchResult`, federated search with cross-store RRF merge, per-query runtime warnings (not session-persistent), collision-safe failure log, targeted boundary routing (Case 2 isError on full failure, Case 3 for broken-init links), dimension-mismatch diagnostic that persists until the index is fixed, one-shot flags consumed only after successful work, empirical smoke test
-  - 9 bot review rounds, ~27 findings resolved across 9 fix commits — see PR body for the full architectural journey
+- **#1304** — `applyAstRulesToAdditions` staged content + cwd resolution bug.
+- **#1305** — `lance-search` SQL backtick over-escape cleanup.
+- **#1306** — AST engine test coverage audit (locking in #1304 and #1305).
+- **#1309** — `totem doctor` upgrade-candidate hint + stale-manifest warning emit deprecated compile.
 
-- **LLM Context Caching — Opt-In Preview (shipped, default off):**
-  - ~~**#1292**~~ — Phases 1-3 of Proposal 217. Anthropic `cache_control` wired through orchestrator middleware for compile + review paths. Sliding TTL configurable via `cacheTTL` (constrained to Anthropic's two supported values: `300` default or `3600` extended); resets on every cache hit, so bulk recompile runs stay warm end-to-end **when enabled**. Defaults to off in 1.14.0 — opt-in via `enableContextCaching: true` in `totem.config.ts` to avoid surprising existing users mid-cycle with a token-usage profile shift. Default activation tracked for 1.15.0 in mmnto/totem#1291. Anthropic-only in 1.14.0; Gemini `CachedContent` tracked for 1.16.0+. The full machinery (orchestrator middleware, schema field, TTL-literal validation, per-call cache metric tracking) ships in 1.14.0 — only the default-on behavior is deferred.
+_Note: #1304 introduces a new callback injection for the read strategy and requires a `/preflight` v2 design-doc gate._
 
-- **Workflow governance (shipped):**
-  - ~~**#1296**~~ — `/preflight` skill v2. Adds triage-gated design-doc phase between `totem spec` and code for architectural changes. Six-subsection template (scope, data model, state lifecycle, failure modes table, invariants, open questions) + explicit approval gate. Direct response to the #1295 review cycle — ~70-80% of the ~27 findings would have been caught by a 1-page design doc before any code was written. Tactical changes skip Phase 3 via explicit triage checklist
+- **#1299** — Expand `/preflight` v2 to docs that document feature surfaces (single-file edit to SKILL.md).
+- **#1302** — Document dual-hash convention in `.gemini/styleguide.md`.
+- **#1298** — Shield branding cleanup.
+- **#1301** — Audit `nonCompilable` lesson bodies for implementation contradictions.
 
-- **Governance + cleanup (shipped this branch):**
-  - ~~**chore**~~ — Extract 19 lessons from the 1.14.0 PR arc (#1292, #1295, #1296)
-  - ~~**chore**~~ — Compile 1 new rule from those lessons via local Sonnet (394 total, up from 393). 18 lessons skipped as architectural/conceptual — they become `nonCompilable` tuples for doctor triage. (Initial pass produced a `process.exit($CODE)` ast-grep rule + a malformed delimiter pattern; the delimiter lesson was reframed as architectural after both bots flagged the broken pattern, so it now ships as documentation only.)
+### Next: 1.15.0 — The Distribution Pipeline
 
-- **Pre-release checklist:**
-  - [x] Update `docs/active_work.md`
-  - [ ] Update `docs/roadmap.md` (handled by `totem docs` generation; not hand-edited)
-  - [ ] Update README + wiki (hand off to Gemini)
-  - [x] Add changeset (minor for `@mmnto/cli` + `@mmnto/totem` + `@mmnto/mcp`)
-  - [ ] File totem-playground tickets for playground refresh (validate mesh federation from playground)
-  - [ ] Rebuild standalone binary for linux-x64, darwin-arm64, win32-x64
-  - [x] Push branch + open release prep PR (mmnto/totem#1300)
-  - [ ] Merge release PR + Version Packages PR to publish 1.14.0
+Theme: The Totem Pack Ecosystem. 1.14.0 proved the Nervous System (federated context + cached tokens); 1.15.0 lets teams bundle and share compiled rules across repositories via the npm registry. Headline work: #1059 + Strategy #35 + ADR-085 Totem Pack Ecosystem. Cleanup tickets bundled as operational chores along the way (see "Deferred to 1.15.0" below).
 
-- **Deferred to 1.15.0 — The Distribution Pipeline** (slid from 1.14.0 when the mesh + caching arc shipped first):
+_New queued features for 1.15.x:_
+
+- **#1307** — CLI `totem search` silently ignores `linkedIndexes`.
+- **#1308** — `totem doctor` has no Linked Indexes health check.
+
+- **Deferred to 1.15.0:**
   - **#1059** — Rule pack distribution (headline)
   - Strategy **#35** — Distributing compiled rules (headline)
   - **#1221** — Cloud compile worker Sonnet routing (critical for cloud distribution)
@@ -40,26 +37,23 @@ Theme: Cross-repo federated context (active default) plus opt-in preview of pers
   - **#1218** — Broad `throw $ERR` ast-grep pattern needs refinement
   - **#1219** — Lazy-load compiler prompt templates
 
-- **Deferred to 1.16.0 — The Ingestion Pipeline** (slid from 1.15.0):
+### After Next: 1.16.0 — The Ingestion Pipeline
+
+Theme: Source Diversity and the Self-Healing Loop. Convert external signals (GHAS alerts, lint warnings) into Totem lessons. Headline work: Strategy #50 + #51 + ADR-086 External Alert Ingestion.
+
+- **Deferred to 1.16.0:**
   - Strategy **#50** — GHAS / SARIF alert extraction (headline)
   - Strategy **#51** — Lint warning extraction (headline)
   - **#1226** — SARIF upload hex escape fix (load-bearing for SARIF ingestion)
   - **#1279** — Pipeline 5 hallucination bug (sand before ingestion ships; escalated from 1.14.0 post-evidence)
   - Strategy **#17** — Governance eval harness (validate ingested inputs)
 
-- **Backlog (Horizon 3+):**
-  - Strategy **#6** — Adversarial trap corpus
-  - Strategy **#62** — Model-specific prompt adapters (partially addressed by #1220 rewrite)
-  - Strategy **#64** — Model Routing Matrix (partially addressed by #73 benchmark)
-  - **#1236** — Revisit 6 silenced upgrade-target lessons (1.13.0 cleanup)
+### Backlog (Horizon 3+)
 
-### Next: 1.15.0 — The Distribution Pipeline
-
-Theme: The Totem Pack Ecosystem. 1.14.0 proved the Nervous System (federated context + cached tokens); 1.15.0 lets teams bundle and share compiled rules across repositories via the npm registry. Headline work: #1059 + Strategy #35 + ADR-085 Totem Pack Ecosystem. Cleanup tickets bundled as operational chores along the way (see "Deferred to 1.15.0" above).
-
-### After Next: 1.16.0 — The Ingestion Pipeline
-
-Theme: Source Diversity and the Self-Healing Loop. Convert external signals (GHAS alerts, lint warnings) into Totem lessons. Headline work: Strategy #50 + #51 + ADR-086 External Alert Ingestion.
+- Strategy **#6** — Adversarial trap corpus
+- Strategy **#62** — Model-specific prompt adapters (partially addressed by #1220 rewrite)
+- Strategy **#64** — Model Routing Matrix (partially addressed by #73 benchmark)
+- **#1236** — Revisit 6 silenced upgrade-target lessons (1.13.0 cleanup)
 
 ### Recently Completed
 
