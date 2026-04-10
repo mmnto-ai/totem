@@ -102,7 +102,7 @@ program
     'Initialize without package manager checks or Git hooks (ideal for notes/docs repos)',
   )
   .option('--pilot', 'Enable pilot mode — hooks warn instead of block during initial adoption')
-  .option('--strict', 'Use strict enforcement tier (spec-required + shield gate for agents)')
+  .option('--strict', 'Use strict enforcement tier (spec-required + review gate for agents)')
   .option('--global', 'Create a personal profile in ~/.totem/ for use across all projects')
   .action(
     async (options: { bare?: boolean; pilot?: boolean; strict?: boolean; global?: boolean }) => {
@@ -162,7 +162,7 @@ program
   .description('Install git hooks (pre-commit, pre-push, post-merge) non-interactively')
   .option('--check', 'Verify hooks are installed (exit 1 if missing)')
   .option('-f, --force', 'Force overwrite existing hooks')
-  .option('--strict', 'Use strict enforcement tier (spec-required + shield gate)')
+  .option('--strict', 'Use strict enforcement tier (spec-required + review gate)')
   .option('--standard', 'Use standard enforcement tier (default)')
   .action(
     async (opts: { check?: boolean; force?: boolean; strict?: boolean; standard?: boolean }) => {

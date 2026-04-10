@@ -595,7 +595,7 @@ describe('formatVerdictForDisplay', () => {
   it('formats empty findings as clean pass', () => {
     const verdict = { findings: [], summary: 'All good' };
     const output = formatVerdictForDisplay(verdict, true);
-    expect(output).toContain('Shield Review');
+    expect(output).toContain('Review');
     expect(output).toContain('PASS');
     expect(output).toContain('Summary: All good');
     expect(output).toContain('No issues found');

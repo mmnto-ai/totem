@@ -334,7 +334,7 @@ export function formatVerdictForDisplay(verdict: ShieldStructuredVerdict, pass: 
 
   // Header
   const verdictLabel = pass ? successColor(bold('PASS')) : errorColor(bold('FAIL'));
-  lines.push(`Shield Review — ${verdictLabel}`);
+  lines.push(`Review — ${verdictLabel}`);
   lines.push('');
 
   // Summary
@@ -415,7 +415,7 @@ export async function writeReviewedContentHash(
     // Non-fatal — flag is a convenience for PreToolUse hooks
     if (process.env['TOTEM_DEBUG'] === '1') {
       console.error(
-        '[Shield] Failed to write .reviewed-content-hash:',
+        '[Review] Failed to write .reviewed-content-hash:',
         err instanceof Error ? err.message : err,
       );
     }
