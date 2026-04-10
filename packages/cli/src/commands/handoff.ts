@@ -225,7 +225,7 @@ export async function handoffCommand(options: HandoffOptions): Promise<void> {
   // --no-edit / --lite: print to stdout
   if (options.noEdit || options.lite) {
     process.stdout.write(scaffold);
-    log.dim(TAG, 'Scaffold printed to stdout (--no-edit mode).');
+    log.dim(TAG, 'Scaffold printed to stdout.');
     return;
   }
 
