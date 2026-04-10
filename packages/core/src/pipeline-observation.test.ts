@@ -125,6 +125,72 @@ describe('generateObservationRule', () => {
     expect(re.test('console.log(result);')).toBe(true);
   });
 
+  it('rejects pure-punctuation lines like } or */ (#1279)', () => {
+    const cases = [
+      { content: '}', desc: 'closing brace' },
+      { content: '*/', desc: 'block comment close' },
+      { content: '});', desc: 'closing brace + paren + semi' },
+      { content: '],', desc: 'closing bracket + comma' },
+      { content: '};', desc: 'closing brace + semi' },
+      { content: '  }  ', desc: 'indented closing brace' },
+    ];
+
+    for (const { content, desc } of cases) {
+      const input: ObservationInput = {
+        file: 'src/example.ts',
+        line: 1,
+        message: `Finding on ${desc}`,
+        fileContent: content,
+      };
+
+      expect(generateObservationRule(input)).toBeNull();
+    }
+  });
+
+  it('rejects comment-only lines (#1279)', () => {
+    const cases = [
+      '// TODO: fix this',
+      '// same response cache key.',
+      '/* eslint-disable */',
+      '   // indented comment',
+      '# Python comment',
+      '   # indented hash comment',
+    ];
+
+    for (const content of cases) {
+      const input: ObservationInput = {
+        file: 'src/example.ts',
+        line: 1,
+        message: 'Finding on comment line',
+        fileContent: content,
+      };
+
+      expect(generateObservationRule(input)).toBeNull();
+    }
+  });
+
+  it('accepts valid code lines despite containing punctuation (#1279)', () => {
+    const cases = [
+      'const result = foo(42);',
+      'import { foo } from "bar";',
+      'export default result;',
+      'console.log(result);',
+      'if (x > 0) {',
+      'return this.value;',
+    ];
+
+    for (const content of cases) {
+      const input: ObservationInput = {
+        file: 'src/example.ts',
+        line: 1,
+        message: 'Valid finding',
+        fileContent: content,
+      };
+
+      expect(generateObservationRule(input)).not.toBeNull();
+    }
+  });
+
   it('severity is always warning, never error', () => {
     const input: ObservationInput = {
       file: 'src/example.ts',
