@@ -1,49 +1,58 @@
 # Governing AI Agents
 
-AI coding agents (Claude, Gemini, Cursor) are brilliant at solving the 100 lines of code directly in front of them. However, they suffer from **Systemic Amnesia**.
+AI coding agents (Claude, Gemini, Cursor) are effective at solving the code directly in front of them but suffer from a fundamental limitation: they are stateless. Every new session starts from zero — no memory of what broke last time, no awareness of architectural decisions, no knowledge that a shared helper already exists.
 
-When starting a new session, they forget the broader context of the project. They reinvent shared helpers, ignore recent architectural decisions, and bypass critical operational steps (like recompiling assets).
+Static documentation files (`CLAUDE.md`, `GEMINI.md`) help, but agents don't reliably act on instructions loaded into context. If governance depends on the agent reading and following a rule, it will eventually be ignored.
 
-If you want agents to write production-grade code, you cannot rely on static documentation (`CLAUDE.md` or `GEMINI.md`). **Documentation is a suggestion; agents need physical constraints.**
+Totem addresses this with two mechanisms: **context injection** (give the agent the right information at session start) and **deterministic enforcement** (block violations mechanically when the agent tries to push).
 
-Totem provides the **Governance Operating System** to lock down AI agents.
+## 1. Context Injection (Session Start Hooks)
 
-## 1. The Smart Briefing (Turn-1 Hydration)
-
-Instead of hoping an agent reads a static README, Totem _injects_ reality into the agent's brain the moment it wakes up.
-
-By wiring the `totem briefing` command into your agent's startup hooks (e.g., `.gemini/hooks/SessionStart.js`), the agent is forced to process the live state of the project before it takes any action:
+Wire `totem briefing` into your agent's startup hook so the agent receives the project's live state before it takes any action:
 
 ```text
-[Briefing] @mmnto/cli@1.5.7 | main | 2 uncommitted | lint: 0 errors | shield: PASS
+[Briefing] @mmnto/cli@1.14.0 | main | 2 uncommitted | lint: 0 errors
 [Briefing] Manifest: STALE (lessons changed since last compile)
 [Briefing] Status: compile required before push
 [Reflex] Compile after extract — CI gate rejects stale manifests
-[Reflex] Hook regex was too broad — tightened in #1021, watch for regressions
 ```
 
-**The Impact:** The agent immediately knows it needs to run `totem lesson compile` before pushing, and it has the "Tactical Reflexes" (recent lessons learned) fresh in its context window.
+Example hook for Gemini (`.gemini/hooks/SessionStart.js`):
 
-## 2. Deterministic Guardrails (The Exoskeleton)
+```javascript
+const { execSync } = require('child_process');
+const output = execSync('totem briefing', { encoding: 'utf-8' });
+console.log(output);
+```
 
-You cannot trust an AI agent to self-police its own code. You must build an environment where the "wrong" way physically fails.
+The agent now knows it needs to run `totem compile` before pushing, and has recent lessons fresh in its context window.
 
-Using Totem's Pipeline 1 rules, you can encode architectural mandates that act as invisible boundaries:
+## 2. Deterministic Enforcement (Pre-Push Hook)
 
-- _"Direct use of `child_process` is forbidden. Use `safeExec`."_
-- _"Never use empty catch blocks in the `core/` package."_
+Context injection helps agents make better decisions, but it cannot guarantee compliance. The pre-push Git hook provides the hard guarantee:
 
-When the agent attempts to commit code that violates these rules, the `totem lint` pre-push hook instantly fails, kicking the agent back into a refactor loop. The agent learns the architecture through failure, not reading.
+```bash
+$ git push
+[Lint] Running 394 rules (zero LLM)...
+### Errors
+- **packages/cli/src/git.ts:22** — Never use native child_process
+[Lint] Verdict: FAIL — Fix violations before pushing.
+```
 
-## 3. Protocol-in-Description (MCP Hardening)
+The agent cannot bypass this. When the lint gate fails, the push is rejected, and the agent is forced to fix the violation before trying again. The agent learns the architecture through mechanical failure, not by reading documentation.
 
-If you expose Model Context Protocol (MCP) tools to your agents, they will often call them out of order.
+## 3. MCP Knowledge Base
 
-Totem governs this by embedding the constraint directly into the tool's description string—the one place the LLM always looks.
+For agents that support the Model Context Protocol (MCP), Totem exposes the project's knowledge base as queryable tools. The agent can search lessons, ADRs, and architectural decisions before writing code:
 
-- Instead of: `"Adds a lesson to the index."`
-- Totem uses: `"CRITICAL: Call search_knowledge first to check for duplicates. Adds a lesson to the index."`
+```text
+Agent: "What patterns are banned in the CLI package?"
+→ search_knowledge("CLI banned patterns")
+→ Results: "Direct child_process forbidden, use safeExec..."
+```
 
-## The Result
+This works with any MCP-compatible agent — Claude, Gemini, Cursor, Windsurf. See [MCP Server Setup](mcp-setup.md) for configuration.
 
-By combining Smart Briefings with Deterministic Guardrails, your agents stop acting like "fast-but-messy juniors" and start acting like "fast-and-compliant seniors." You stop managing their output and start managing their environment.
+## The Tradeoff
+
+Context injection and the MCP knowledge base improve agent behavior but cannot guarantee it. The pre-push lint gate guarantees compliance but only catches violations at push time. Used together, the agent gets the context to write correct code and the tripwire to catch it when it doesn't.

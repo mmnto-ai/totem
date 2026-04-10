@@ -1,24 +1,20 @@
-# It Never Happens Again (The Learning Loop)
+# It Never Happens Again
 
-Every development team pays a hidden tax during code review: **The Bot-Tax** (and the Human-Tax).
+When a reviewer (human or AI) spots an architectural mistake — like using a static import instead of a lazy one, or failing to tag an error properly — they leave a comment. The developer fixes it. The PR merges.
 
-When a reviewer (human or AI) spots an architectural mistake—like using a static import instead of a lazy one, or failing to tag an error properly—they leave a comment. The developer fixes it. The PR merges.
+Two days later, an agent or a junior developer makes the exact same mistake in a different file. The cycle repeats. Knowledge is trapped in merged PRs.
 
-Two days later, an AI agent or a junior developer makes the exact same mistake in a different file. The cycle repeats. **Knowledge is trapped in merged PRs.**
-
-Totem solves this with the **Extract → Compile → Enforce** loop. You turn a PR mistake into a permanent project law in under 60 seconds.
+Totem breaks this cycle with a three-step loop: **Extract → Compile → Enforce.** You turn a PR mistake into a permanent, mechanically enforced rule in under 60 seconds.
 
 ## 1. Extract the Lesson
 
-When a PR review identifies a recurring issue, you don't just fix the code. You extract the principle.
-
-Run the extraction pipeline against the PR:
+When a PR review identifies a recurring issue, extract the principle — not just the fix.
 
 ```bash
 totem extract <PR_NUMBER>
 ```
 
-Totem reads the bot/human review comments, identifies the architectural fix, and writes a plain-English Markdown lesson to `.totem/lessons/`.
+Totem reads the review comments, identifies the architectural pattern, and writes a plain-English Markdown lesson to `.totem/lessons/`.
 
 _Example output:_
 
@@ -31,25 +27,23 @@ Never use static imports (e.g., `import fs from 'fs'`) at the top level of CLI c
 
 ## 2. Compile the Rule
 
-Markdown is great for humans, but computers can't enforce prose.
-
-Run the compiler:
+Markdown is readable by humans but not enforceable by machines.
 
 ```bash
 totem compile
 ```
 
-Totem's LLM engine reads the new lesson and synthesizes a deterministic **AST or Regex plugin** tailored specifically to your codebase. It saves this to `.totem/compiled-rules.json`.
+Totem's compiler reads the lesson and generates a deterministic AST or regex rule tailored to your codebase. The rule is saved to `.totem/compiled-rules.json`.
 
-_The AI is now out of the loop._
+From this point forward, no LLM is involved in enforcement.
 
-## 3. Enforce the Law
+## 3. Enforce the Rule
 
-The next time any developer or AI agent tries to write a static import in a CLI file, they don't get a review comment. **They get blocked locally.**
+The next time any developer or AI agent tries to write a static import in a CLI file, the pre-push hook blocks locally:
 
 ```bash
 $ git push
-[Lint] Running rules...
+[Lint] Running 394 rules (zero LLM)...
 ### Errors
 - **packages/cli/src/commands/init.ts:1** — Lazy load CLI commands
   Pattern: `import fs from 'fs'`
@@ -57,8 +51,8 @@ $ git push
 [Lint] Verdict: FAIL — Fix violations before pushing.
 ```
 
+No review comment. No back-and-forth. The violation is caught before the code leaves the developer's machine.
+
 ## The Result
 
-You never pay the "Bot-Tax" for that specific mistake again. You have effectively automated yourself out of the review loop for that class of error.
-
-The mistake happened once. **It never happens again.**
+The mistake happened once. It was extracted, compiled, and enforced. The same class of error is now mechanically impossible to merge — regardless of whether the author is a human, Claude, Gemini, or Cursor.

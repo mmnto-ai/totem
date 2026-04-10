@@ -21,3 +21,10 @@ Totem influences GCA primarily through compiled architectural rules exported dur
 
 - **File Confusion:** Developers mistakenly placing `gemini.md` (lowercase) inside `.gemini/` expecting GCA to read it.
 - **Command Hallucination:** If CLI commands (like `totem sync`) leak into GCA's context, the bot may hallucinate capabilities it doesn't have.
+
+## 5. How to Add GCA Decline Rules
+
+When GCA repeatedly suggests an incorrect pattern during PR reviews (e.g., suggesting an async `execFile` when sequential execution is required), you must train it to decline that pattern.
+
+1. **Update the Styleguide:** Add the specific declined pattern to Section 6 of `.gemini/styleguide.md`.
+2. **Record the Lesson:** Use the Totem `add_lesson` tool with the `review-guidance` tag on the same PR to ensure the architectural reasoning is stored in the knowledge base.
