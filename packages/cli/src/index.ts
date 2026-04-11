@@ -598,14 +598,18 @@ program
     }
   });
 
+// `totem wrap` is retired pending mmnto-ai/totem#1361. The command is
+// hidden from --help but still wired so invocation produces the
+// retirement error with the manual workaround sequence. Do NOT remove
+// the registration — deleting it would silently mask the error with
+// commander's "unknown command" path and lose the workaround hint.
 program
-  .command('wrap <pr-numbers...>')
-  .description('Post-merge workflow: learn from PR(s), sync index, then triage')
+  .command('wrap <pr-numbers...>', { hidden: true })
+  .description('RETIRED (mmnto-ai/totem#1361) — post-merge workflow')
   .option('--model <name>', 'Override the default model for the orchestrator')
   .option('--fresh', 'Bypass cache and force fresh LLM calls')
   .option('--yes', 'Skip confirmation prompt for lesson extraction')
   .action(async (prNumbers: string[], opts: { model?: string; fresh?: boolean; yes?: boolean }) => {
-    requireGhCli();
     try {
       const { wrapCommand } = await import('./commands/wrap.js');
       await wrapCommand(prNumbers, opts);

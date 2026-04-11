@@ -202,9 +202,21 @@ Captures uncommitted changes and lessons learned today for your next session.
 - **Flags:**
   - `--lite`: An ANSI-sanitized, zero-LLM snapshot (fast).
 
-### `totem wrap`
+### `totem wrap` (RETIRED)
 
-A post-merge workflow chain. Runs `extract`, syncs the database, generates a roadmap, and updates docs in one command.
+Previously a 6-step post-merge workflow chain. Retired pending [mmnto-ai/totem#1361](https://github.com/mmnto-ai/totem/issues/1361) because the `totem docs` step silently overwrote hand-crafted committed documentation. Running the command now prints a hard error with the manual workaround sequence. Use the individual commands directly:
+
+```bash
+pnpm exec totem extract <pr-numbers> --yes
+pnpm exec totem sync
+pnpm exec totem compile --export
+git checkout HEAD -- .totem/compiled-rules.json
+pnpm run format
+git add .totem/lessons/ .github/copilot-instructions.md .junie/skills/totem-rules/rules.md
+git commit -m "chore: totem postmerge lessons for <prs>"
+```
+
+Three return conditions must ship before `totem wrap` comes back: a `--skip-docs` flag on wrap, a 24-hour git-author-date freshness guard on `totem docs`, and an end-to-end regression test that seeds a hand-crafted `active_work.md` and asserts the file survives the pipeline unmodified.
 
 ### `totem add-secret <value>`
 

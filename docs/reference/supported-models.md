@@ -132,8 +132,7 @@ When a provider releases new stable models, update these locations:
 
 ## AI Coding Tools (Export Targets)
 
-Totem exports compiled lessons to AI coding tool config files via `totem compile --export`
-(also runs automatically as Step 5 of `totem wrap`). Each tool reads its own file on startup.
+Totem exports compiled lessons to AI coding tool config files via `totem compile --export`. Each tool reads its own file on startup.
 
 | Tool                   | Config File                       | Export Key | Totem Support           |
 | ---------------------- | --------------------------------- | ---------- | ----------------------- |

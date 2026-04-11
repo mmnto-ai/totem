@@ -48,9 +48,10 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 
 ### Phase 6: After PR Merge
 
-**What should happen:** Extract lessons from the PR, wrap.
-**Commands:** `totem wrap <pr-numbers> --yes`
+**What should happen:** Extract lessons from the merged PR(s), re-sync the index, compile new rules locally, review the resulting rules by hand.
+**Commands:** `totem extract <prs> --yes`, `totem sync`, `totem compile --export`, `git checkout HEAD -- .totem/compiled-rules.json`
 **Skill:** `/postmerge <pr-numbers>`
+**Note:** `totem wrap` is retired pending [mmnto-ai/totem#1361](https://github.com/mmnto-ai/totem/issues/1361) because its `totem docs` step silently overwrote hand-crafted committed documentation. Run the individual commands directly.
 
 ### Phase 7: Before Release
 
@@ -81,7 +82,7 @@ Exempt branches (commit gate only): `main`, `master`, `hotfix/*`, `docs/*`, deta
 | -------------------- | ------------------------ | --------------------------------------------------------------- |
 | `/preflight <issue>` | Before starting a ticket | `totem spec` → `search_knowledge`                               |
 | `/prepush`           | Before pushing code      | `format` → `totem lint` → `totem review`                        |
-| `/postmerge <prs>`   | After merging PRs        | `totem wrap`                                                    |
+| `/postmerge <prs>`   | After merging PRs        | `totem extract` → `totem sync` → `totem compile --export`       |
 | `/triage`            | Pick next work           | `totem triage --fresh`                                          |
 | `/release-prep`      | Before cutting a release | `totem extract` → changeset → `pnpm run version` → `totem docs` |
 | `/signoff`           | End of session           | update memory → journal                                         |

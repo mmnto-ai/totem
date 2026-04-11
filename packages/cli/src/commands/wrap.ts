@@ -1,8 +1,10 @@
+import { TotemError } from '@mmnto/totem';
+
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Wrap';
 
-// ─── Main command ───────────────────────────────────────
+// ─── Options ────────────────────────────────────────────
 
 export interface WrapOptions {
   model?: string;
@@ -10,91 +12,56 @@ export interface WrapOptions {
   yes?: boolean;
 }
 
-export async function wrapCommand(prNumbers: string[], options: WrapOptions): Promise<void> {
-  const { log } = await import('../ui.js');
-  const { TotemError } = await import('@mmnto/totem');
+// ─── Main command ───────────────────────────────────────
 
-  // Step 1: Learn from PR(s)
-  log.info(TAG, `Step 1/6 — Extracting from PR ${prNumbers.join(', ')}...`);
-  const { extractCommand } = await import('./extract.js');
-  await extractCommand(prNumbers, {
-    model: options.model,
-    fresh: options.fresh,
-    yes: options.yes,
-  });
-
-  // Step 2: Sync index
-  log.info(TAG, 'Step 2/6 — Syncing index...');
-  const { syncCommand } = await import('./sync.js');
-  await syncCommand({ full: false });
-
-  // Step 3: Triage
-  log.info(TAG, 'Step 3/6 — Generating triage roadmap...');
-  const { triageCommand } = await import('./triage.js');
-  await triageCommand({
-    model: options.model,
-    fresh: options.fresh,
-  });
-
-  // Step 4: Update project docs (if configured)
-  log.info(TAG, 'Step 4/6 — Updating project docs...');
-  try {
-    const { docsCommand } = await import('./docs.js');
-    await docsCommand([], {
-      model: options.model,
-      fresh: options.fresh,
-      yes: options.yes,
-    });
-  } catch (err) {
-    // Don't fail wrap if docs aren't configured — it's optional
-    if (err instanceof TotemError && err.code === 'CONFIG_MISSING') {
-      log.dim(TAG, 'No docs configured — skipping doc sync.');
-    } else {
-      throw err;
-    }
-  }
-
-  // Step 5: Deterministic doc injection (markdown-magic)
-  log.info(TAG, 'Step 5/6 — Injecting dynamic doc values...');
-  try {
-    const { execSync } = await import('node:child_process');
-    execSync('pnpm run docs:inject', { cwd: process.cwd(), stdio: 'pipe' });
-    log.success(TAG, 'Doc values injected.');
-  } catch (err) {
-    // execSync errors may carry details in stdout/stderr buffers
-    const msg = [
-      err instanceof Error ? err.message : String(err),
-      err && typeof err === 'object' && 'stdout' in err ? String(err.stdout) : '',
-      err && typeof err === 'object' && 'stderr' in err ? String(err.stderr) : '',
-    ].join(' ');
-    if (msg.includes('Missing script') || msg.includes('not found')) {
-      log.dim(TAG, 'docs:inject not configured — skipping.');
-    } else {
-      log.error('Totem Error', `docs:inject failed: ${msg.slice(0, 200)}`);
-      throw err;
-    }
-  }
-
-  // Step 6: Compile rules and export to AI tool configs (if configured)
-  log.info(TAG, 'Step 6/6 — Compiling rules and exporting...');
-  try {
-    const { compileCommand } = await import('./compile.js');
-    await compileCommand({
-      model: options.model,
-      fresh: options.fresh,
-      export: true,
-    });
-  } catch (err) {
-    // Don't fail wrap if compile has nothing to do
-    if (err instanceof TotemError && err.code === 'NO_LESSONS') {
-      log.dim(TAG, 'Nothing to compile — skipping.');
-    } else {
-      throw err;
-    }
-  }
-
-  log.success(
-    TAG,
-    'Wrap complete — lessons extracted, index synced, roadmap updated, docs synced, values injected, rules exported.',
+/**
+ * RETIRED as of mmnto-ai/totem#1361.
+ *
+ * `totem wrap` previously orchestrated a 6-step post-merge workflow
+ * (extract lessons, sync index, triage, update project docs, inject
+ * doc values, compile and export rules). Step 4 (`totem docs`) iterates
+ * every target in `config.docs` and runs an LLM rewrite pass. The
+ * dirty-file guard at `docs.ts:450` catches uncommitted changes but
+ * does nothing for recent committed edits, so any hand-crafted refresh
+ * of `docs/active_work.md`, `docs/roadmap.md`, or `docs/architecture.md`
+ * gets silently overwritten on the next wrap invocation.
+ *
+ * This is a Tenet 5 ("Sensors Not Actuators") violation. The command is
+ * blocked behind a hard error until three return conditions ship:
+ *
+ *   1. `--skip-docs` flag exists on wrap
+ *   2. `totem docs` has a freshness guard (skip targets whose git
+ *      author date is within the last 24 hours without `--force-regen`)
+ *   3. End-to-end regression test for wrap locks the invariant that
+ *      hand-crafted docs survive the pipeline
+ *
+ * The function signature, options interface, and test scaffolding
+ * are preserved below for institutional memory. See
+ * mmnto-ai/totem#1361 for the tracking ticket. Git log has the
+ * original 6-step implementation (most recent version in commit
+ * bd638103's parent tree).
+ */
+// eslint-disable-next-line @typescript-eslint/require-await
+export async function wrapCommand(_prNumbers: string[], _options: WrapOptions): Promise<void> {
+  throw new TotemError(
+    'CONFIG_INVALID',
+    'totem wrap is retired. It silently overwrites hand-crafted docs via the totem docs step.',
+    [
+      'Run the individual steps manually:',
+      '',
+      '  pnpm exec totem extract <pr-numbers> --yes',
+      '  pnpm exec totem sync',
+      '  pnpm exec totem compile --export',
+      '  git checkout HEAD -- .totem/compiled-rules.json',
+      '  pnpm run format',
+      '  git add .totem/lessons/ .github/copilot-instructions.md .junie/skills/totem-rules/rules.md',
+      "  git commit -m 'chore: totem postmerge lessons for <prs>'",
+      '',
+      'Tracking: mmnto-ai/totem#1361',
+    ].join('\n'),
   );
 }
+
+// TAG is kept as a named export anchor so future non-retired implementations
+// can restore their log prefix without re-deriving the token.
+export { TAG };
