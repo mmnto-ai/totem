@@ -70,13 +70,18 @@ with the merged PR numbers (space-separated, e.g. `1345 1347 1348`).
    `pnpm run format`
 
 7. Stage only the artifacts we keep: new lessons, the mutated rules
-   file, the refreshed manifest, the regenerated exports, and any
-   curation scripts preserved for institutional memory. Do NOT stage
-   `docs/active_work.md`, `docs/roadmap.md`, or
+   file, the refreshed manifest, and the regenerated exports. Do NOT
+   stage `docs/active_work.md`, `docs/roadmap.md`, or
    `docs/architecture.md` unless you hand-edited them deliberately
    (those are `totem docs` targets and a postmerge run should not
    rewrite them):
    `git add .totem/lessons/ .totem/compiled-rules.json .totem/compile-manifest.json .github/copilot-instructions.md .junie/skills/totem-rules/rules.md`
+
+   If you wrote a one-off curation script during step 4 (as was done
+   on mmnto-ai/totem#1366 with `scripts/archive-bad-postmerge-rules.cjs`),
+   stage it explicitly so the institutional memory lands with the
+   commit:
+   `git add scripts/archive-bad-postmerge-rules.cjs  # or whatever you named yours`
 
 8. Commit:
    `git commit -m "chore: totem postmerge lessons for $ARGUMENTS"`
