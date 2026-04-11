@@ -49,25 +49,6 @@ All four pre-1.15.0 blocker P0s are now closed. Phase 2 (mesh completion) can pr
 - **#1219** — Lazy-load compiler prompt templates
 - **#1350**, **#1352**, **#1354**, **#1355**, **#1357** — Follow-ups from the 2026-04-11 four-P0 sweep
 
-### Next: 1.15.0 — The Distribution Pipeline
-
-Theme: The Totem Pack Ecosystem. 1.14.0 proved the Nervous System (federated context + cached tokens); 1.15.0 lets teams bundle and share compiled rules across repositories via the npm registry. Headline work: #1059 + Strategy #35 + ADR-085 Totem Pack Ecosystem. Cleanup tickets bundled as operational chores along the way (see "Deferred to 1.15.0" below).
-
-_New queued features for 1.15.x:_
-
-- **#1307** — CLI `totem search` silently ignores `linkedIndexes`.
-- **#1308** — `totem doctor` has no Linked Indexes health check.
-
-- **Deferred to 1.15.0:**
-  - **#1059** — Rule pack distribution (headline)
-  - Strategy **#35** — Distributing compiled rules (headline)
-  - **#1221** — Cloud compile worker Sonnet routing (critical for cloud distribution)
-  - **#1232** — Thread explicit `cwd` through `compileCommand` (#1234 follow-up)
-  - **#1233** — Stray `packages/core/{}` file created during `pnpm build`
-  - **#1235** — Batch `--upgrade` hashes in `runSelfHealing`
-  - **#1218** — Broad `throw $ERR` ast-grep pattern needs refinement
-  - **#1219** — Lazy-load compiler prompt templates
-
 ### After Next: 1.16.0 — The Ingestion Pipeline
 
 Theme: Source Diversity and the Self-Healing Loop. Convert external signals (GHAS alerts, lint warnings) into Totem lessons. Headline work: Strategy #50 + #51 + ADR-086 External Alert Ingestion.
