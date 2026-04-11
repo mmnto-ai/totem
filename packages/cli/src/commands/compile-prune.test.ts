@@ -1,6 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
-import { pruneStaleNonCompilable } from './compile.js';
+import type { CompiledRule } from '@mmnto/totem';
+
+import { pruneStaleNonCompilable, pruneStaleRules } from './compile.js';
+
+// ─── Test helpers ────────────────────────────────────
+
+function makeRule(lessonHash: string, heading = `Heading for ${lessonHash}`): CompiledRule {
+  return {
+    lessonHash,
+    lessonHeading: heading,
+    pattern: 'dummy',
+    message: heading,
+    engine: 'regex',
+    compiledAt: '2026-04-10T00:00:00Z',
+  };
+}
 
 describe('pruneStaleNonCompilable', () => {
   it('returns empty result when the map is empty', () => {
@@ -76,5 +91,57 @@ describe('pruneStaleNonCompilable', () => {
     // Input map is unchanged — caller decides whether to mutate
     expect(map.size).toBe(2);
     expect(map.has('stale')).toBe(true);
+  });
+});
+
+describe('pruneStaleRules', () => {
+  it('returns an empty result when the input rules array is empty', () => {
+    const result = pruneStaleRules([], new Set(['abc']));
+    expect(result.fresh).toEqual([]);
+    expect(result.pruned).toBe(0);
+  });
+
+  it('keeps all rules when every lessonHash is still current', () => {
+    const rules = [makeRule('abc'), makeRule('def')];
+    const result = pruneStaleRules(rules, new Set(['abc', 'def']));
+
+    expect(result.fresh).toHaveLength(2);
+    expect(result.fresh.map((r) => r.lessonHash)).toEqual(['abc', 'def']);
+    expect(result.pruned).toBe(0);
+  });
+
+  it('drops rules whose source lesson has been removed', () => {
+    const rules = [makeRule('abc'), makeRule('removed-1'), makeRule('removed-2')];
+    const result = pruneStaleRules(rules, new Set(['abc']));
+
+    expect(result.fresh.map((r) => r.lessonHash)).toEqual(['abc']);
+    expect(result.pruned).toBe(2);
+  });
+
+  it('drains everything when no lessonHash matches', () => {
+    const rules = [makeRule('stale-1'), makeRule('stale-2')];
+    const result = pruneStaleRules(rules, new Set<string>());
+
+    expect(result.fresh).toEqual([]);
+    expect(result.pruned).toBe(2);
+  });
+
+  it('preserves rule identity and field order for kept rules', () => {
+    const ruleA = makeRule('abc', 'Heading A');
+    const ruleB = makeRule('def', 'Heading B');
+    const result = pruneStaleRules([ruleA, ruleB], new Set(['abc', 'def']));
+
+    // Kept rules are the same object references, so metadata (compiledAt,
+    // createdAt, etc.) is preserved verbatim — important for audit lineage.
+    expect(result.fresh[0]).toBe(ruleA);
+    expect(result.fresh[1]).toBe(ruleB);
+  });
+
+  it('does not mutate the input array', () => {
+    const rules = [makeRule('abc'), makeRule('stale')];
+    pruneStaleRules(rules, new Set(['abc']));
+
+    expect(rules).toHaveLength(2);
+    expect(rules[1]!.lessonHash).toBe('stale');
   });
 });

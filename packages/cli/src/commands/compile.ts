@@ -116,6 +116,24 @@ export function pruneStaleNonCompilable(
   return { fresh, drained: nonCompilableMap.size - fresh.length };
 }
 
+/**
+ * Filter stale compiled rules whose source lesson has been removed from the
+ * project. Returns the fresh rule list (same object references preserved to
+ * keep audit lineage intact) and a count of how many rules were dropped.
+ *
+ * Symmetrical counterpart to `pruneStaleNonCompilable` — both helpers are
+ * used by the no-op compile path (mmnto/totem#1281) so lesson removals drain
+ * the compiled rule AND any stale non-compilable entry in the same run.
+ * Pure function; does not mutate the input array.
+ */
+export function pruneStaleRules(
+  rules: readonly CompiledRule[],
+  currentHashes: Set<string>,
+): { fresh: CompiledRule[]; pruned: number } {
+  const fresh = rules.filter((r) => currentHashes.has(r.lessonHash));
+  return { fresh, pruned: rules.length - fresh.length };
+}
+
 // ─── Logging helpers ────────────────────────────────
 
 function logCompiledRule(
@@ -459,31 +477,72 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
     }
 
     if (toCompile.length === 0) {
-      // mmnto/totem#1281: even with no lessons to compile, stale non-compilable
-      // entries from lessons that were edited or removed in a previous run still
-      // need to be drained. Without this, stale entries survive forever until
-      // some future compile run happens to have real work to do.
+      // mmnto/totem#1281: even with no lessons to compile, stale entries left
+      // over from a previous run still need to be drained. Two cases share
+      // this no-op stall:
+      //  1. Stale `nonCompilable` entries from lessons that were edited or
+      //     removed (the original ticket scope).
+      //  2. Stale compiled rules whose source lesson has been removed
+      //     entirely — pointed out by GCA on PR #1331 review. Same
+      //     inconsistency vs. the active-compile branch, same fix.
+      // Without this, stale entries survive forever until some future compile
+      // run happens to have real work to do. Both counts flow into the
+      // success log so the reported state matches disk state.
       let reportedNonCompilable = nonCompilableMap.size;
+      let reportedCompiled = existingRules.length;
       if (!options.raw) {
         const currentHashes = new Set(lessons.map((l) => hashLesson(l.heading, l.body)));
-        const { fresh, drained } = pruneStaleNonCompilable(nonCompilableMap, currentHashes);
-        if (drained > 0) {
+        const { fresh: freshRules, pruned: rulesPruned } = pruneStaleRules(
+          existingRules,
+          currentHashes,
+        );
+        const { fresh: freshNonCompilable, drained } = pruneStaleNonCompilable(
+          nonCompilableMap,
+          currentHashes,
+        );
+        if (rulesPruned > 0 || drained > 0) {
           saveCompiledRulesFile(rulesPath, {
             version: 1,
-            rules: existingRules,
-            nonCompilable: fresh,
+            rules: freshRules,
+            nonCompilable: freshNonCompilable,
           });
-          log.dim(
-            TAG,
-            `Pruned ${drained} stale non-compilable entr${drained === 1 ? 'y' : 'ies'} (lessons edited or removed)`,
-          ); // totem-ignore
-          reportedNonCompilable = fresh.length;
+          if (rulesPruned > 0) {
+            log.dim(
+              TAG,
+              `Pruned ${rulesPruned} stale rule${rulesPruned === 1 ? '' : 's'} (lessons removed)`,
+            ); // totem-context: log only fires when actual draining happens
+          }
+          if (drained > 0) {
+            log.dim(
+              TAG,
+              `Pruned ${drained} stale non-compilable entr${drained === 1 ? 'y' : 'ies'} (lessons edited or removed)`,
+            ); // totem-context: log only fires when actual draining happens
+          }
+          // CR finding on PR #1331: refresh the compile manifest so its
+          // output hash and rule_count match the rewritten on-disk state.
+          // Without this, provenance/attestation flows desync silently.
+          const { generateInputHash, generateOutputHash, writeCompileManifest } =
+            await import('@mmnto/totem');
+          const lessonsDir = path.join(totemDir, 'lessons');
+          const manifestPath = path.join(totemDir, 'compile-manifest.json');
+          const inputHash = generateInputHash(lessonsDir);
+          const outputHash = generateOutputHash(rulesPath);
+          writeCompileManifest(manifestPath, {
+            compiled_at: new Date().toISOString(),
+            model: options.model ?? config.orchestrator?.defaultModel ?? 'unknown',
+            input_hash: inputHash,
+            output_hash: outputHash,
+            rule_count: freshRules.length,
+          });
+          log.dim(TAG, `Manifest: ${inputHash.slice(0, 8)}…→${outputHash.slice(0, 8)}…`); // totem-context: provenance trace matches active-compile branch
+          reportedNonCompilable = freshNonCompilable.length;
+          reportedCompiled = freshRules.length;
         }
       }
       log.success(
         TAG,
-        `All ${lessonsInScope.length} lesson(s) in scope already processed (${existingRules.length} compiled, ${reportedNonCompilable} non-compilable). Use --force to recompile.`,
-      ); // totem-ignore
+        `All ${lessonsInScope.length} lesson(s) in scope already processed (${reportedCompiled} compiled, ${reportedNonCompilable} non-compilable). Use --force to recompile.`,
+      ); // totem-context: success log reports post-prune counts
     } else {
       const { createSpinner } = await import('../ui.js');
       const spinner = await createSpinner(TAG, 'Compiling...');
@@ -805,10 +864,16 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
         // mmnto/totem#1280: Prune stale non-compilable entries (lesson was edited or removed)
         // and write the result as {hash, title} tuples for observability.
         // The helper also covers the no-op path via mmnto/totem#1281.
-        const { fresh: freshNonCompilable } = pruneStaleNonCompilable(
-          nonCompilableMap,
-          currentHashes,
-        );
+        const { fresh: freshNonCompilable, drained: nonCompilableDrained } =
+          pruneStaleNonCompilable(nonCompilableMap, currentHashes);
+        if (nonCompilableDrained > 0) {
+          // GCA finding on PR #1331: log drained entries here for parity with
+          // the no-op branch, so telemetry traces are symmetric.
+          log.dim(
+            TAG,
+            `Pruned ${nonCompilableDrained} stale non-compilable entr${nonCompilableDrained === 1 ? 'y' : 'ies'} (lessons edited or removed)`,
+          ); // totem-context: log only fires when actual draining happens
+        }
         saveCompiledRulesFile(rulesPath, {
           version: 1,
           rules: newRules,
