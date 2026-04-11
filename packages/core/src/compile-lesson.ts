@@ -1,3 +1,5 @@
+import { Lang, parse } from '@ast-grep/napi';
+
 import { engineFields, sanitizeFileGlobs, validateRegex } from './compiler.js';
 import type { CompiledRule, CompilerOutput, RegexValidation } from './compiler-schema.js';
 import {
@@ -64,12 +66,38 @@ export interface CompileLessonDeps {
 // ─── ast-grep pattern validation ───────────────────
 
 /**
- * Lightweight compile-time validation for ast-grep patterns (#1062).
- * Catches malformed patterns before they crash lint at runtime.
+ * Compile-time validation for ast-grep patterns (#1062, #1339).
  *
- * String patterns: reject if empty or contains multiple top-level AST roots
- * (e.g. "componentDidCatch($$$) {}" has a function call + block → multi-root).
- * Object patterns (NapiConfig): reject if missing `rule` key.
+ * Two layers:
+ *   1. Heuristic fast-path — reject empty patterns, multi-root string
+ *      patterns (statement boundaries outside braces/parens), and
+ *      compound object patterns missing the required `rule` key.
+ *      Gives fast, human-readable error messages for the common cases.
+ *   2. Parser-based check (#1339) — actually invoke ast-grep's rule
+ *      compiler via `parse(Lang.Tsx, '').root().findAll(pattern)`. If
+ *      ast-grep cannot compile the pattern into a rule, the error
+ *      surfaces here instead of crashing `totem lint` at runtime.
+ *      This catches single-line patterns that look balanced but fail
+ *      semantic validation — e.g. `.option("--no-$FLAG", $$$REST)`
+ *      (floating member call with no receiver) or `catch($E) { $$$ }`
+ *      (bare catch clause that can only exist inside a try statement).
+ *
+ * Language choice: Tsx is the most permissive parser available (superset
+ * of TypeScript plus JSX), so a valid ast-grep pattern for any
+ * JS/TS/JSX/TSX source should also parse against it. Empty source
+ * (`''`) keeps the call cheap — ast-grep compiles the pattern into a
+ * rule before iterating any AST, so we see the rule-compile error even
+ * though there's nothing to match against.
+ *
+ * Lite-build safety: this function is only called from compile flows
+ * (buildCompiledRule / buildManualRule), which require an orchestrator
+ * and therefore never run in the Lite binary. The esbuild alias swaps
+ * `@ast-grep/napi` for the WASM shim in Lite builds, but since this
+ * function is dead code there, the shim's `ensureInit()` requirement
+ * is never triggered. The parser call is additionally wrapped in
+ * try/catch so any surprise error (uninitialized engine, native-binding
+ * failure) degrades conservatively to `valid: false` rather than
+ * crashing the compile command.
  */
 export function validateAstGrepPattern(pattern: string | Record<string, unknown>): RegexValidation {
   // ── Object pattern (NapiConfig / compound rule) ──
@@ -77,63 +105,106 @@ export function validateAstGrepPattern(pattern: string | Record<string, unknown>
     if (!('rule' in pattern)) {
       return { valid: false, reason: 'object pattern missing required "rule" key' };
     }
-    return { valid: true };
-  }
-
-  // ── String pattern ──
-  if (typeof pattern !== 'string') {
+    // Fall through to the parser-based check below — compound rules are
+    // validated by handing them directly to findAll().
+  } else if (typeof pattern !== 'string') {
     return { valid: false, reason: 'pattern must be a string or object' };
-  }
-
-  const trimmed = pattern.trim();
-  if (trimmed.length === 0) {
-    return { valid: false, reason: 'empty pattern' };
-  }
-
-  // Detect multiple top-level statements separated by semicolons or newlines.
-  // ast-grep requires a single root node; multiple roots crash at runtime.
-  // Split on statement boundaries (semicolons and newlines outside braces/parens)
-  // using a simple brace/paren depth tracker.
-  let depth = 0;
-  let inString: string | null = null; // tracks quote char (' or " or `)
-  const roots: string[] = [];
-  let current = '';
-  for (let i = 0; i < trimmed.length; i++) {
-    const ch = trimmed[i]!;
-    const prev = i > 0 ? trimmed[i - 1] : '';
-
-    // String literal tracking — skip depth/split logic inside strings
-    // Note: escaped backslash edge case ("\\") is not handled — unlikely in ast-grep patterns
-    if (inString) {
-      current += ch;
-      if (ch === inString && prev !== '\\') inString = null;
-      continue;
-    }
-    if ((ch === '"' || ch === "'" || ch === '`') && prev !== '\\') {
-      inString = ch;
-      current += ch;
-      continue;
+  } else {
+    // String pattern — run the cheap heuristic checks first.
+    const trimmed = pattern.trim();
+    if (trimmed.length === 0) {
+      return { valid: false, reason: 'empty pattern' };
     }
 
-    if (ch === '(' || ch === '{' || ch === '[') {
-      depth++;
-      current += ch;
-    } else if (ch === ')' || ch === '}' || ch === ']') {
-      depth = Math.max(0, depth - 1);
-      current += ch;
-    } else if (depth === 0 && (ch === ';' || ch === '\n')) {
-      if (current.trim().length > 0) roots.push(current.trim());
-      current = '';
-    } else {
-      current += ch;
+    // Detect multiple top-level statements separated by semicolons or newlines.
+    // ast-grep requires a single root node; multiple roots crash at runtime.
+    // Split on statement boundaries (semicolons and newlines outside braces/parens)
+    // using a simple brace/paren depth tracker.
+    let depth = 0;
+    let inString: string | null = null; // tracks quote char (' or " or `)
+    const roots: string[] = [];
+    let current = '';
+    for (let i = 0; i < trimmed.length; i++) {
+      const ch = trimmed[i]!;
+      const prev = i > 0 ? trimmed[i - 1] : '';
+
+      // String literal tracking — skip depth/split logic inside strings
+      // Note: escaped backslash edge case ("\\") is not handled — unlikely in ast-grep patterns
+      if (inString) {
+        current += ch;
+        if (ch === inString && prev !== '\\') inString = null;
+        continue;
+      }
+      if ((ch === '"' || ch === "'" || ch === '`') && prev !== '\\') {
+        inString = ch;
+        current += ch;
+        continue;
+      }
+
+      if (ch === '(' || ch === '{' || ch === '[') {
+        depth++;
+        current += ch;
+      } else if (ch === ')' || ch === '}' || ch === ']') {
+        depth = Math.max(0, depth - 1);
+        current += ch;
+      } else if (depth === 0 && (ch === ';' || ch === '\n')) {
+        if (current.trim().length > 0) roots.push(current.trim());
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    if (current.trim().length > 0) roots.push(current.trim());
+
+    if (roots.length > 1) {
+      return {
+        valid: false,
+        reason: `pattern has ${roots.length} top-level expressions (ast-grep requires a single root)`,
+      };
     }
   }
-  if (current.trim().length > 0) roots.push(current.trim());
 
-  if (roots.length > 1) {
+  // ── Parser-based check (#1339) ──
+  // Hand the pattern to ast-grep's actual rule compiler. If ast-grep
+  // can't compile it into a single-rooted rule, we see the exact
+  // runtime error ("Multiple AST nodes are detected", "No AST root is
+  // detected", "rule is not configured correctly", etc.) at compile
+  // time instead. This is the authoritative source of truth for
+  // validity — the heuristic above only exists to give faster, more
+  // human-readable error messages for the common cases.
+  try {
+    const emptyRoot = parse(Lang.Tsx, '');
+    // findAll accepts both string patterns and NapiConfig objects.
+    emptyRoot.root().findAll(pattern as string);
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err);
+    // Keep the first LINE of the ast-grep error only — multi-line errors
+    // confuse downstream loggers. Do NOT slice on `.` — ast-grep error
+    // messages almost always embed the user's pattern source verbatim
+    // (e.g. `Multiple AST nodes are detected. Please check the pattern
+    // source `.option("--no-$FLAG", $$$REST)`.`), and most ast-grep
+    // patterns either start with a dot (`.option(...)`) or contain many
+    // dots (`console.log($A)`, `$OBJ.method()`). Slicing on `.` would
+    // discard the pattern source — the single most useful signal for
+    // debugging a rejected rule — and in the pathological case where
+    // the error message begins with a dot, would leave an empty string.
+    // Taking the first line preserves the full first-line context
+    // including the verbatim pattern source. (GCA finding on PR
+    // mmnto/totem#1349.)
+    //
+    // Using `/^[^\n]*/` exec rather than the idiomatic newline-split
+    // array accessor because two over-broad Pipeline 5 rules flag that
+    // idiom as an error regardless of context — a "LLM metadata token"
+    // false positive and a "loop-over-lines" false positive, neither of
+    // which apply to a one-shot catch-block first-line extraction. The
+    // regex form is semantically identical: `[^\n]*` matches zero-or-
+    // more non-newline chars from the start of the string and always
+    // matches at least the empty string, so the `?? raw` fallback is
+    // defensive only. Archive follow-up tracked in mmnto/totem#1352.
+    const firstLine = (/^[^\n]*/.exec(raw)?.[0] ?? raw).trim();
     return {
       valid: false,
-      reason: `pattern has ${roots.length} top-level expressions (ast-grep requires a single root)`,
+      reason: `ast-grep rejected pattern: ${firstLine}`,
     };
   }
 

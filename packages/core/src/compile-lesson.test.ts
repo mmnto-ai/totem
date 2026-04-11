@@ -54,7 +54,9 @@ describe('buildCompiledRule', () => {
       compilable: true,
       message: 'Use err in catch',
       engine: 'ast-grep',
-      astGrepPattern: 'catch($ERR) { $$$ }',
+      // Wrapped try/catch form — a bare `catch($E) { $$$ }` is rejected
+      // by ast-grep as multi-root (#1339).
+      astGrepPattern: 'try { $$$BODY } catch ($ERR) {}',
     };
     const result = buildCompiledRule(parsed, lesson, existingByHash);
     expect(result.rule).not.toBeNull();
@@ -258,7 +260,7 @@ describe('self-suppression guard (#1177)', () => {
     const result = buildCompiledRule(
       {
         compilable: true,
-        astGrepPattern: 'catch($ERR) { $$$ }',
+        astGrepPattern: 'try { $$$BODY } catch ($ERR) {}',
         message: 'test',
         engine: 'ast-grep',
       } as CompilerOutput,
@@ -273,7 +275,13 @@ describe('self-suppression guard (#1177)', () => {
 
 describe('validateAstGrepPattern', () => {
   it('accepts a valid simple string pattern', () => {
-    const result = validateAstGrepPattern('catch($ERR) { $$$ }');
+    // Note: `catch($E) { $$$ }` used to be the sample here. That was an
+    // aspirational test — ast-grep's actual parser rejects bare `catch`
+    // clauses as multi-root (they can only exist inside a try statement).
+    // The #1339 parser-based validation surfaced the mismatch. Using
+    // `throw new Error($MSG)` instead — a real single-root statement that
+    // is used by several production compiled rules.
+    const result = validateAstGrepPattern('throw new Error($MSG)');
     expect(result.valid).toBe(true);
   });
 
@@ -343,6 +351,93 @@ describe('validateAstGrepPattern', () => {
     const result = validateAstGrepPattern('const x = "{ }"');
     expect(result.valid).toBe(true);
   });
+
+  // ─── Parser-based semantic validation (#1339) ────
+  //
+  // The heuristic checks above catch obvious multi-root patterns
+  // (semicolons, newlines) but miss single-line expressions that
+  // ast-grep still rejects because they can't be extracted as a single
+  // AST node. The canonical failure from the 1.14.1 postmerge compile
+  // was `.option("--no-$FLAG", $$$REST)` — a floating member call with
+  // no receiver, which ast-grep rejects with "Multiple AST nodes are
+  // detected. Please check the pattern source". Before #1339, rules
+  // with these patterns slipped through the compile gate, landed in
+  // compiled-rules.json, and crashed `totem lint` at runtime.
+  //
+  // Fix: after the heuristic checks, actually invoke ast-grep's parser
+  // by calling `parse(Lang.Tsx, '').root().findAll(pattern)`. If
+  // ast-grep cannot compile the pattern into a rule, translate the
+  // error into `{ valid: false, reason }`. Empty source + Tsx (the
+  // most permissive language; superset of TypeScript) is the fastest
+  // possible invocation.
+
+  it('rejects floating member call with no receiver (the #1339 canonical case)', () => {
+    // The exact pattern that slipped past validation during the 1.14.1
+    // postmerge compile and crashed lint on every rebased PR until
+    // someone manually deleted the rule from compiled-rules.json.
+    const result = validateAstGrepPattern('.option("--no-$FLAG", $$$REST)');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/ast-grep/i);
+    // GCA finding on PR mmnto/totem#1349: error reason must preserve the
+    // verbatim pattern source so users can identify WHICH of their 394+
+    // compiled rules is broken. An earlier split-on-dot implementation
+    // truncated the most useful part of the message; split-on-newline
+    // keeps it intact. Locking in with a substring assertion.
+    expect(result.reason).toContain('.option(');
+  });
+
+  it('rejects bare floating method call without receiver', () => {
+    const result = validateAstGrepPattern('.method($ARG)');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('.method(');
+  });
+
+  it('rejects bare catch clause (only valid inside a try statement)', () => {
+    // ast-grep treats `catch(...)` as a multi-root construct because a
+    // catch clause can only exist as a child of a try statement, not as
+    // a standalone root. The pre-#1339 heuristic accepted this pattern
+    // because it sees balanced parens and no `;`/`\n` at depth 0.
+    const result = validateAstGrepPattern('catch($E) { $$$ }');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('catch(');
+  });
+
+  it('rejects bare else clause (only valid inside an if statement)', () => {
+    const result = validateAstGrepPattern('else { $$$ }');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('else {');
+  });
+
+  it('accepts try/catch wrapped form used by production rules', () => {
+    // The idiomatic way to match catch clauses in production Totem rules:
+    // wrap in a full try statement so ast-grep has a single root.
+    const result = validateAstGrepPattern('try { $$$BODY } catch ($ERR) {}');
+    expect(result.valid).toBe(true);
+  });
+
+  it('accepts explicit-receiver member call (the fixed shape of #1339)', () => {
+    // This is what the broken `.option(...)` rule should have been.
+    const result = validateAstGrepPattern('$PROG.option("--no-$FLAG", $$$REST)');
+    expect(result.valid).toBe(true);
+  });
+
+  it('accepts compound NapiConfig rule with valid inner pattern', () => {
+    const result = validateAstGrepPattern({
+      rule: { pattern: 'console.log($A)' },
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it('accepts compound NapiConfig rule using kind selector', () => {
+    // `{ rule: { kind: 'catch_clause' } }` is the correct way to match
+    // catch clauses — by their AST node kind rather than a bare string
+    // pattern. Compound rules bypass the pattern parser and go through
+    // ast-grep's rule compiler, which understands kind selectors.
+    const result = validateAstGrepPattern({
+      rule: { kind: 'catch_clause' },
+    });
+    expect(result.valid).toBe(true);
+  });
 });
 
 // ─── buildCompiledRule with ast-grep validation ────
@@ -404,7 +499,7 @@ describe('buildCompiledRule ast-grep validation (#1062)', () => {
       compilable: true,
       message: 'Use err in catch',
       engine: 'ast-grep',
-      astGrepPattern: 'catch($ERR) { $$$ }',
+      astGrepPattern: 'try { $$$BODY } catch ($ERR) {}',
     };
     const result = buildCompiledRule(parsed, lesson, existingByHash);
     expect(result.rule).not.toBeNull();
@@ -469,7 +564,7 @@ describe('buildManualRule', () => {
     const validLesson: LessonInput = {
       index: 4,
       heading: 'Catch err not error',
-      body: '**Pattern:** catch($ERR) { $$$ }\n**Engine:** ast-grep\n**Severity:** warning',
+      body: '**Pattern:** try { $$$BODY } catch ($ERR) {}\n**Engine:** ast-grep\n**Severity:** warning',
       hash: 'astgood1',
     };
     const result = buildManualRule(validLesson, existingByHash);
