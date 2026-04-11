@@ -101,11 +101,23 @@ Totem is a set of CLI tools, not a framework. Building blocks you wire into what
 
 The built-in MCP server exposes the knowledge base to any compatible agent — same index, no extra setup.
 
+## CI/CD and GitHub Integration
+
+Because `totem lint` is deterministic and runs in under two seconds, it drops cleanly into a CI pipeline. It supports three output formats — `text` (default), `json` for scripting, and `sarif` for security dashboards:
+
+```bash
+totem lint --format sarif --out totem.sarif
+```
+
+Pipe the SARIF file into GitHub Code Scanning (via the standard `github/codeql-action/upload-sarif` action) or any SARIF-compliant tool, and Totem's tripwires show up as inline PR annotations right where the developer wrote the code that violated a rule. The stream is deliberately scoped to error-severity findings so PR reviews don't drown in probationary warnings — warnings stay as local telemetry until a rule has enough signal to graduate.
+
+The same `--format sarif` flag works on the standalone `totem-lite` binary for CI environments without Node.js. See [CI/CD Integration](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/ci-integration.md) for pipeline recipes.
+
 ## What Works and What Doesn't
 
 Totem has three layers, and I want to be honest about where each one stands:
 
-1. **The enforcement layer works.** Compiled rules, Git hooks, the pre-push lint gate — they catch violations mechanically, offline, in under 2 seconds. This is the load-bearing floor that everything else stands on.
+1. **The enforcement layer works.** Compiled rules, Git hooks, the pre-push lint gate — they catch violations mechanically, offline, in under 2 seconds. This is the load-bearing floor that everything else stands on. And because nothing on that floor touches the network, it runs natively in air-gapped environments — no source code leaves your machine.
 2. **The planning layer works too, to my surprise.** Before the agent writes any code, `totem spec` pulls the GitHub issue body, queries the knowledge base for relevant lessons and ADRs, and dumps a structured implementation spec to `.totem/specs/<issue>.md` — architectural context, files to examine, edge cases the issue description missed, and task-by-task TDD directives with retrieved lessons injected inline as invariants. None of this is a hard tripwire — the agent could write a vague spec and ignore the retrieved context — but in practice the structured prompt reliably catches "I'm about to reinvent a helper that already exists" before the agent commits to an approach, not after. A meaningful chunk of the velocity and architectural consistency I've been hitting comes from this upstream gate, more than I expected when I first added it.
 3. **The memory layer is real infrastructure** — the index exists, it's queryable, and it's portable across agents and repos. But whether an agent _consistently acts_ on the context it retrieves is an open question I'm actively working through. Availability is deterministic. The agent's discipline is not.
 
