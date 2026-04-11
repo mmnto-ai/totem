@@ -1,5 +1,31 @@
 # @mmnto/totem
 
+## 1.14.1
+
+### Patch Changes
+
+- b76128e: 1.14.1 — Hotfix sweep (#1311)
+
+  Bundled fixes for four post-1.14.0 regressions surfaced during the first day of 1.14.0 in production:
+  - **#1304** — `totem review` and `totem lint` were running rules against on-disk content instead of staged content when files had unstaged modifications. The rule engine now loads staged blob content via `git show :path` when a path is in the index, and reads from the filesystem only when the path is unstaged. Path containment is also hardened to reject symlinks that escape the repo root.
+  - **#1305** — `lance-search` predicates were failing on any field name containing a SQL keyword or dash (`source-repo`, `file-type`) because the generated `WHERE` clause lacked backtick quoting. Field identifiers are now backtick-wrapped consistently.
+  - **#1306** — AST engine test coverage audit found an uncovered branch in `ast-query` that silently returned an empty result set for malformed tree-sitter query strings. It now throws a descriptive error so `totem compile` can surface the broken rule instead of silently dropping it.
+  - **#1309** — `totem doctor` and `totem lint` were still printing the legacy `totem review --fix` hint after that flag was removed in 1.12. Updated to the current `totem review --apply` form.
+
+- b76128e: Reject nonsense Pipeline 5 observation rules (#1324)
+
+  Pipeline 5 (auto-capture from Shield findings) was faithfully converting every source line Shield flagged into an observation rule, including lines that were pure syntactic noise (`}`, `*/`, bare braces) or comment-only. The result was a steady drip of garbage rules that users had to clean up via `git checkout -- .totem/compiled-rules.json` after every `totem review`.
+
+  `generateObservationRule()` now rejects source lines with fewer than 3 alphanumeric characters and lines that are entirely comments (JSDoc, block-comment continuation, line comments, bare hash). The check is deliberately minimal — the goal is to drop obvious noise, not to second-guess Shield's judgment on real code.
+
+  Closes #1279. Three consecutive reproductions (`*/`, `}`, and PR #1292's own cascade-fix commits) blocked on this gate in testing.
+
+- b76128e: Support tilde-fenced code blocks in lessons and compiler output (#1326)
+
+  CommonMark allows `~~~` as an alternate code-fence delimiter. Totem's lesson parser, compiler-response parser, drift detector, lesson linter, and suspicious-lesson detector were all hard-coded to recognize only triple-backtick fences, so any lesson authored with tilde fences silently lost its code blocks during extraction and compilation.
+
+  Seven files updated to match both fence styles. Every regex uses a capture group plus backreference for the opening delimiter, so opening and closing fences must match — mixing fence styles in a single block won't cross-match and produce garbage captures.
+
 ## 1.14.0
 
 ### Minor Changes

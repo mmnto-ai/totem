@@ -1,5 +1,53 @@
 # @mmnto/cli
 
+## 1.14.1
+
+### Patch Changes
+
+- 30971d7: Prune stale `nonCompilable` entries on no-op compile runs (#1281)
+
+  `totem lesson compile` was only draining stale entries from the `nonCompilable` cache when there was actual compile work to do. On a no-op run (all lessons already compiled), stale entries — left over from lessons that had been edited or removed in a previous run — survived forever until some future run happened to have real work.
+
+  The prune logic is now extracted into a pure helper (`pruneStaleNonCompilable`) and called from both branches. The no-op path only rewrites `compiled-rules.json` when there's actually something to drain, so genuinely idle runs still don't touch the file.
+
+  Closes #1281. Discovered during the #1264 E2E reproduction.
+
+- b76128e: 1.14.1 — Hotfix sweep (#1311)
+
+  Bundled fixes for four post-1.14.0 regressions surfaced during the first day of 1.14.0 in production:
+  - **#1304** — `totem review` and `totem lint` were running rules against on-disk content instead of staged content when files had unstaged modifications. The rule engine now loads staged blob content via `git show :path` when a path is in the index, and reads from the filesystem only when the path is unstaged. Path containment is also hardened to reject symlinks that escape the repo root.
+  - **#1305** — `lance-search` predicates were failing on any field name containing a SQL keyword or dash (`source-repo`, `file-type`) because the generated `WHERE` clause lacked backtick quoting. Field identifiers are now backtick-wrapped consistently.
+  - **#1306** — AST engine test coverage audit found an uncovered branch in `ast-query` that silently returned an empty result set for malformed tree-sitter query strings. It now throws a descriptive error so `totem compile` can surface the broken rule instead of silently dropping it.
+  - **#1309** — `totem doctor` and `totem lint` were still printing the legacy `totem review --fix` hint after that flag was removed in 1.12. Updated to the current `totem review --apply` form.
+
+- b76128e: Queue drain: Shield branding consistency (#1313)
+
+  Three small queue-drain items bundled into one PR (#1298, #1299, #1302):
+  - **#1298** — `totem shield` output and `totem --help` entries now consistently use "Shield" branding instead of the legacy "AI Shield" and "shield" mix that had crept in over several releases.
+  - **#1299** — `/preflight` skill doc-scope expanded to cover the cases where preflight was routinely producing "draft from memory" outputs instead of searching the knowledge base first.
+  - **#1302** — Dual-hash convention documented in `.gemini/styleguide.md` so cross-agent review produces consistent pattern/content hash formatting.
+
+- b76128e: Resolve non-staged AST paths against repo root, not cwd (#1314)
+
+  `totem review` was resolving AST engine file paths relative to the current working directory instead of the repo root when evaluating non-staged files, causing false misses for any invocation from a subdirectory. The resolver now consistently anchors against the repo root for both staged and non-staged paths. Fixes #1312.
+
+- b76128e: Refactor `totem handoff` to a deterministic journal scaffold (#1316)
+
+  `totem handoff` previously generated its output via an LLM call, which made the command slow, non-reproducible, and gated on provider availability. It's now a deterministic scaffold: the command reads git state, recent commits, and the active journal directory, then writes a pre-filled template the user (or an agent) can flesh out.
+
+  Closes #1310. Also removes ~500 lines of dead orchestration code that was only used by the old LLM path.
+
+- b76128e: Rename `totem handoff --no-edit` to `--stdout` (#1325)
+
+  **User-visible CLI change.** The `--no-edit` flag on `totem handoff` never worked: Commander.js interpreted it as a boolean negation of a nonexistent `--edit` option, so passing `--no-edit` silently set an unrelated field to `false` and the command still tried to open `$EDITOR`. The flag has been renamed to `--stdout` (with `--lite` kept as an alias) which unambiguously prints the scaffold to stdout.
+
+  Anyone who was passing `--no-edit` was getting the default behavior anyway, so there is no functional regression — just a rename to something that actually works. Fixes #1317. Also deletes the orphaned `handoff-checkpoint` schema files that were stranded when #1316 removed the LLM-path code that referenced them (#1318).
+
+- Updated dependencies [b76128e]
+- Updated dependencies [b76128e]
+- Updated dependencies [b76128e]
+  - @mmnto/totem@1.14.1
+
 ## 1.14.0
 
 ### Minor Changes
