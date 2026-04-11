@@ -49,7 +49,7 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 ### Phase 6: After PR Merge
 
 **What should happen:** Extract lessons from the merged PR(s), re-sync the index, compile new rules locally, review the resulting rules by hand.
-**Commands:** `totem extract <prs> --yes`, `totem sync`, `totem compile --export`, `git checkout HEAD -- .totem/compiled-rules.json`
+**Commands:** `totem lesson extract <prs> --yes`, `totem sync`, `totem lesson compile --export`, `git checkout HEAD -- .totem/compiled-rules.json`
 **Skill:** `/postmerge <pr-numbers>`
 **Note:** `totem wrap` is retired pending [mmnto-ai/totem#1361](https://github.com/mmnto-ai/totem/issues/1361) because its `totem docs` step silently overwrote hand-crafted committed documentation. Run the individual commands directly.
 

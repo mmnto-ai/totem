@@ -1,5 +1,3 @@
-import { TotemError } from '@mmnto/totem';
-
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Wrap';
@@ -41,17 +39,23 @@ export interface WrapOptions {
  * original 6-step implementation (most recent version in commit
  * bd638103's parent tree).
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function wrapCommand(_prNumbers: string[], _options: WrapOptions): Promise<void> {
+  // Dynamic import matches the CLI lazy-load convention used by every
+  // other command in this package (see compile.ts, check.ts, drift.ts).
+  // The original pre-retirement wrap also imported TotemError this way;
+  // preserving the pattern here keeps the un-retirement PR a clean
+  // restoration of the 6-step body.
+  const { TotemError } = await import('@mmnto/totem');
+
   throw new TotemError(
     'CONFIG_INVALID',
     'totem wrap is retired. It silently overwrites hand-crafted docs via the totem docs step.',
     [
       'Run the individual steps manually:',
       '',
-      '  pnpm exec totem extract <pr-numbers> --yes',
+      '  pnpm exec totem lesson extract <pr-numbers> --yes',
       '  pnpm exec totem sync',
-      '  pnpm exec totem compile --export',
+      '  pnpm exec totem lesson compile --export',
       '  git checkout HEAD -- .totem/compiled-rules.json',
       '  pnpm run format',
       '  git add .totem/lessons/ .github/copilot-instructions.md .junie/skills/totem-rules/rules.md',

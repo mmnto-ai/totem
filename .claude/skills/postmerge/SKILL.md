@@ -11,7 +11,7 @@ After merging PRs, run the following sequence. Replace `$ARGUMENTS`
 with the merged PR numbers (space-separated, e.g. `1345 1347 1348`).
 
 1. Extract lessons from the merged PR(s):
-   `pnpm exec totem extract $ARGUMENTS --yes`
+   `pnpm exec totem lesson extract $ARGUMENTS --yes`
 
 2. Sync the semantic index (usually already handled by the post-merge
    git hook, but running it explicitly is cheap and safe):
@@ -20,7 +20,7 @@ with the merged PR numbers (space-separated, e.g. `1345 1347 1348`).
 3. Compile new rules locally and export to AI tool configs. Do NOT
    pass `--cloud`; the cloud worker is still Gemini-only per
    mmnto-ai/totem#1221. Local compile routes to Sonnet 4.6:
-   `pnpm exec totem compile --export`
+   `pnpm exec totem lesson compile --export`
 
 4. Revert `compiled-rules.json` to the curated set. Compile will
    produce new rules from the extracted lessons, but the curated set

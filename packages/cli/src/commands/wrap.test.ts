@@ -47,16 +47,19 @@ describe('wrapCommand (retired)', () => {
     }
   });
 
-  it('lists the manual workaround sequence in the recovery hint', async () => {
+  it('lists the manual workaround sequence in the recovery hint using canonical noun-verb commands', async () => {
     try {
       await wrapCommand(['142'], {});
       expect.unreachable('wrapCommand should have thrown');
     } catch (err) {
       expect(err).toBeInstanceOf(TotemError);
       const hint = (err as TotemError).recoveryHint;
-      expect(hint).toContain('totem extract');
+      // Canonical noun-verb forms (`totem lesson extract`, `totem lesson compile`)
+      // per packages/cli/src/index.ts. The top-level `totem extract` and
+      // `totem compile` aliases are `{ hidden: true }` deprecated shims.
+      expect(hint).toContain('totem lesson extract');
       expect(hint).toContain('totem sync');
-      expect(hint).toContain('totem compile --export');
+      expect(hint).toContain('totem lesson compile --export');
       expect(hint).toContain('git checkout HEAD -- .totem/compiled-rules.json');
     }
   });
