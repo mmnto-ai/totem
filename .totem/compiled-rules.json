@@ -1374,22 +1374,6 @@
       "severity": "error"
     },
     {
-      "lessonHash": "64c9ca76055e668b",
-      "lessonHeading": "Avoid blind catches in engine fallbacks",
-      "pattern": "",
-      "message": "Avoid blind catches in engine fallbacks — verify the error is specifically a LinkError or WASM initialization error before suppressing it, to avoid hiding unrelated architectural defects.",
-      "engine": "ast-grep",
-      "astGrepPattern": "try { $$$TRY } catch ($ERR) { $$$CATCH }",
-      "compiledAt": "2026-04-06T03:20:45.695Z",
-      "createdAt": "2026-04-06T03:20:45.695Z",
-      "fileGlobs": [
-        "packages/cli/src/**/*.ts",
-        "!**/*.test.*",
-        "!**/*.spec.*"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "a485a2172b7399e9",
       "lessonHeading": "ESM intra-module mock requires re-binding",
       "pattern": "\\.\\.\\.\\s*await\\s+vi\\.importActual\\(",
@@ -4034,23 +4018,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "fe0b15605e75b256",
-      "lessonHeading": "Use explicit comments or trace logs when catch blocks",
-      "pattern": "",
-      "message": "Catch block used as a logic fallback should contain an explicit comment or trace/log call to distinguish intentional fallback from silent error swallowing.",
-      "engine": "ast-grep",
-      "astGrepPattern": "try { $$$TRY } catch ($ERR) { $$$CATCH }",
-      "compiledAt": "2026-04-06T03:26:47.676Z",
-      "createdAt": "2026-04-06T03:26:47.676Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "e9c1203c7cbfdaa4",
       "lessonHeading": "Explicit type assertions are often unnecessary when using",
       "pattern": "",
@@ -6368,20 +6335,6 @@
       "createdAt": "2026-04-11T05:06:15.165Z",
       "fileGlobs": [
         "packages/mcp/src/tools/**/*.ts"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "9ea5abc3ca635c91",
-      "lessonHeading": "Avoid '--no-' prefix for standalone flags",
-      "pattern": "",
-      "message": "Avoid '--no-' prefix for standalone flags. Commander.js treats '--no-*' as boolean negations. Use alternative naming (e.g., '--stdout' instead of '--no-edit') for flags that perform specific actions.",
-      "engine": "ast-grep",
-      "astGrepPattern": ".option(\"--no-$FLAG\", $$$REST)",
-      "compiledAt": "2026-04-11T05:06:12.985Z",
-      "createdAt": "2026-04-11T05:06:12.985Z",
-      "fileGlobs": [
-        "packages/cli/**/*.ts"
       ],
       "severity": "warning"
     }

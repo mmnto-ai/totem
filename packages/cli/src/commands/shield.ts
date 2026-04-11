@@ -15,7 +15,9 @@ import {
   wrapXml,
   writeOutput,
 } from '../utils.js';
+// totem-context: shield-templates is a pure constants + types + prompt-strings module with no runtime logic — static import is correct and the dynamic-imports-in-CLI lint rule is a false positive here
 import {
+  DISPLAY_TAG, // totem-context: pure constants module import
   MAX_CODE_RESULTS,
   MAX_DIFF_CHARS,
   MAX_FILE_CONTEXT_CHARS,
@@ -456,7 +458,7 @@ export async function learnFromVerdict(
   const { appendLessons, flagSuspiciousLessons, parseLessons, selectLessons } =
     await import('./extract.js');
 
-  log.info(TAG, 'Extracting lessons from failed verdict...'); // totem-ignore: hardcoded string
+  log.info(DISPLAY_TAG, 'Extracting lessons from failed verdict...'); // totem-ignore: hardcoded string
 
   // Assemble extraction prompt: shield verdict + diff as context
   const systemPrompt = getSystemPrompt(
@@ -500,12 +502,12 @@ export async function learnFromVerdict(
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      log.dim(TAG, `Could not query existing lessons for dedup (non-fatal): ${msg}`); // totem-ignore: msg from Error.message
+      log.dim(DISPLAY_TAG, `Could not query existing lessons for dedup (non-fatal): ${msg}`); // totem-ignore: msg from Error.message
     }
   }
 
   const prompt = sections.join('\n');
-  log.dim(TAG, `Learn prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
+  log.dim(DISPLAY_TAG, `Learn prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = await runOrchestrator({
     prompt,
@@ -520,11 +522,11 @@ export async function learnFromVerdict(
 
   const lessons = parseLessons(content);
   if (lessons.length === 0) {
-    log.dim(TAG, 'No systemic lessons extracted from verdict.'); // totem-ignore: hardcoded string
+    log.dim(DISPLAY_TAG, 'No systemic lessons extracted from verdict.'); // totem-ignore: hardcoded string
     return;
   }
 
-  log.success(TAG, `Extracted ${lessons.length} lesson(s) from verdict`); // totem-ignore: count only
+  log.success(DISPLAY_TAG, `Extracted ${lessons.length} lesson(s) from verdict`); // totem-ignore: count only
 
   // Flag and select
   const flagged = flagSuspiciousLessons(lessons);
@@ -554,7 +556,7 @@ export async function learnFromVerdict(
   });
 
   if (selected.length === 0) {
-    log.dim(TAG, 'No lessons selected — nothing written.'); // totem-ignore: hardcoded string
+    log.dim(DISPLAY_TAG, 'No lessons selected — nothing written.'); // totem-ignore: hardcoded string
     return;
   }
 
@@ -566,24 +568,24 @@ export async function learnFromVerdict(
 
   const lessonsDir = path.join(cwd, config.totemDir, 'lessons');
   appendLessons(sanitized, lessonsDir);
-  log.success(TAG, `Appended ${sanitized.length} lesson(s) to ${config.totemDir}/lessons/`); // totem-ignore: count only
+  log.success(DISPLAY_TAG, `Appended ${sanitized.length} lesson(s) to ${config.totemDir}/lessons/`); // totem-ignore: count only
 
   // Incremental sync (non-fatal — lessons are already written to disk)
   try {
-    log.info(TAG, 'Running incremental sync...');
+    log.info(DISPLAY_TAG, 'Running incremental sync...');
     const { runSync } = await import('@mmnto/totem');
     const syncResult = await runSync(config, {
       projectRoot: cwd,
       incremental: true,
-      onProgress: (msg) => log.dim(TAG, msg),
+      onProgress: (msg) => log.dim(DISPLAY_TAG, msg),
     });
     log.success(
-      TAG,
+      DISPLAY_TAG,
       `Sync complete: ${syncResult.chunksProcessed} chunks from ${syncResult.filesProcessed} files`,
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    log.warn(TAG, `Sync failed (lessons saved but not yet indexed): ${msg}`); // totem-ignore: msg from Error.message
+    log.warn(DISPLAY_TAG, `Sync failed (lessons saved but not yet indexed): ${msg}`); // totem-ignore: msg from Error.message
   }
 }
 
@@ -623,7 +625,7 @@ export async function captureObservationRules(
     } catch (err) {
       if (process.env['TOTEM_DEBUG'] === '1') {
         log.dim(
-          TAG,
+          DISPLAY_TAG,
           `Skipped ${finding.file}: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
@@ -646,7 +648,7 @@ export async function captureObservationRules(
   // Merge into existing compiled rules, skipping duplicates by lessonHash
   const rulesPath = path.join(configRoot ?? cwd, config.totemDir, 'compiled-rules.json');
   try {
-    const existing = loadCompiledRulesFile(rulesPath, (msg) => log.dim(TAG, msg));
+    const existing = loadCompiledRulesFile(rulesPath, (msg) => log.dim(DISPLAY_TAG, msg));
     const existingHashes = new Set(existing.rules.map((r) => r.lessonHash));
 
     const newRules = deduped.filter((r) => !existingHashes.has(r.lessonHash));
@@ -654,7 +656,7 @@ export async function captureObservationRules(
 
     existing.rules.push(...newRules);
     saveCompiledRulesFile(rulesPath, existing);
-    log.info(TAG, `Pipeline 5: captured ${newRules.length} observation rule(s)`);
+    log.info(DISPLAY_TAG, `Pipeline 5: captured ${newRules.length} observation rule(s)`);
 
     // Re-hash the manifest so verify-manifest stays in sync (#1155)
     const resolvedTotemDir = path.join(configRoot ?? cwd, config.totemDir);
@@ -669,7 +671,10 @@ export async function captureObservationRules(
   } catch (err) {
     // Non-fatal — auto-capture should never crash the shield command
     if (process.env['TOTEM_DEBUG'] === '1') {
-      log.dim(TAG, `Pipeline 5 save failed: ${err instanceof Error ? err.message : String(err)}`);
+      log.dim(
+        DISPLAY_TAG,
+        `Pipeline 5 save failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 }
@@ -688,7 +693,7 @@ async function handleVerdictResult(
   const { TotemError } = await import('@mmnto/totem');
 
   writeOutput(content, options.out);
-  if (options.out) log.success(TAG, `Written to ${options.out}`);
+  if (options.out) log.success(DISPLAY_TAG, `Written to ${options.out}`);
 
   if (options.raw) return;
 
@@ -705,7 +710,7 @@ async function handleVerdictResult(
     const { filterExemptedFindings, addManualSuppression } =
       await import('../exemptions/exemption-engine.js');
 
-    let shared = readSharedExemptions(resolvedTotemDir, (msg) => log.dim(TAG, msg));
+    let shared = readSharedExemptions(resolvedTotemDir, (msg) => log.dim(DISPLAY_TAG, msg));
 
     // Apply manual --suppress flags
     if (options.suppress?.length) {
@@ -713,7 +718,7 @@ async function handleVerdictResult(
       for (const label of options.suppress) {
         if (!label.trim()) continue;
         shared = addManualSuppression(shared, label, `Manual suppression via --suppress`);
-        log.info(TAG, `Suppression registered: ${label}`);
+        log.info(DISPLAY_TAG, `Suppression registered: ${label}`);
         appendExemptionEvent(
           resolvedTotemDir,
           {
@@ -724,16 +729,16 @@ async function handleVerdictResult(
             justification: `--suppress ${label}`,
             source: 'shield',
           },
-          (msg) => log.dim(TAG, msg),
+          (msg) => log.dim(DISPLAY_TAG, msg),
         );
       }
-      writeSharedExemptions(resolvedTotemDir, shared, (msg) => log.dim(TAG, msg));
+      writeSharedExemptions(resolvedTotemDir, shared, (msg) => log.dim(DISPLAY_TAG, msg));
     }
 
     // Filter exempted findings
     const { filtered, exempted } = filterExemptedFindings(structured.findings, shared);
     if (exempted.length > 0) {
-      log.dim(TAG, `${exempted.length} finding(s) exempted by suppression rules`);
+      log.dim(DISPLAY_TAG, `${exempted.length} finding(s) exempted by suppression rules`);
     }
 
     // Use filtered verdict for pass/fail, but show all findings in display
@@ -755,9 +760,9 @@ async function handleVerdictResult(
 
       const criticalFindings = filtered.filter((f) => f.severity === 'CRITICAL');
 
-      log.warn(TAG, `SHIELD OVERRIDE APPLIED: ${options.override}`);
+      log.warn(DISPLAY_TAG, `SHIELD OVERRIDE APPLIED: ${options.override}`);
       for (const finding of criticalFindings) {
-        log.warn(TAG, `  [overridden] ${finding.message}`);
+        log.warn(DISPLAY_TAG, `  [overridden] ${finding.message}`);
       }
 
       appendLedgerEvent(
@@ -770,7 +775,7 @@ async function handleVerdictResult(
           justification: options.override,
           source: 'shield',
         },
-        (msg) => log.dim(TAG, msg),
+        (msg) => log.dim(DISPLAY_TAG, msg),
       );
 
       // Track overridden findings for exemption engine (only non-exempted findings)
@@ -779,17 +784,20 @@ async function handleVerdictResult(
       const { trackFalsePositives } = await import('../exemptions/exemption-engine.js');
       const { PROMOTION_THRESHOLD } = await import('../exemptions/exemption-schema.js');
 
-      const localExemptions = readLocalExemptions(cacheDir, (msg) => log.dim(TAG, msg));
+      const localExemptions = readLocalExemptions(cacheDir, (msg) => log.dim(DISPLAY_TAG, msg));
       const tracked = trackFalsePositives(criticalFindings, 'shield', localExemptions, shared);
 
       for (const msg of tracked.promoted) {
-        log.warn(TAG, `Pattern auto-suppressed after ${PROMOTION_THRESHOLD} overrides: ${msg}`);
+        log.warn(
+          DISPLAY_TAG,
+          `Pattern auto-suppressed after ${PROMOTION_THRESHOLD} overrides: ${msg}`,
+        );
       }
 
-      writeLocalExemptions(cacheDir, tracked.local, (msg) => log.dim(TAG, msg));
+      writeLocalExemptions(cacheDir, tracked.local, (msg) => log.dim(DISPLAY_TAG, msg));
       if (tracked.promoted.length > 0) {
         shared = tracked.shared;
-        writeSharedExemptions(resolvedTotemDir, shared, (msg) => log.dim(TAG, msg));
+        writeSharedExemptions(resolvedTotemDir, shared, (msg) => log.dim(DISPLAY_TAG, msg));
         appendLedgerEvent(
           resolvedTotemDir,
           {
@@ -800,7 +808,7 @@ async function handleVerdictResult(
             justification: `Auto-promoted after ${PROMOTION_THRESHOLD} overrides`,
             source: 'shield',
           },
-          (msg) => log.dim(TAG, msg),
+          (msg) => log.dim(DISPLAY_TAG, msg),
         );
       }
     } else {
@@ -828,7 +836,8 @@ async function handleVerdictResult(
   if (verdict) {
     const verdictLabel = verdict.pass ? successColor(bold('PASS')) : errorColor(bold('FAIL'));
     const reason = verdict.reason ? ` — ${verdict.reason}` : '';
-    log.info(TAG, `Verdict: ${verdictLabel}${reason}`);
+    // totem-context: reason is either empty string or pre-prefixed with ' — ', so direct concat is intentional
+    log.info(DISPLAY_TAG, `Verdict: ${verdictLabel}${reason}`);
     if (verdict.pass) {
       await writeReviewedContentHash(cwd, config.totemDir, configRoot);
     } else if (options.override) {
@@ -836,7 +845,7 @@ async function handleVerdictResult(
       const pathMod = await import('node:path');
       const resolvedTotemDir = pathMod.join(configRoot ?? cwd, config.totemDir);
 
-      log.warn(TAG, `SHIELD OVERRIDE APPLIED: ${options.override}`);
+      log.warn(DISPLAY_TAG, `SHIELD OVERRIDE APPLIED: ${options.override}`);
 
       appendLedgerEvent(
         resolvedTotemDir,
@@ -848,7 +857,7 @@ async function handleVerdictResult(
           justification: options.override,
           source: 'shield',
         },
-        (msg) => log.dim(TAG, msg),
+        (msg) => log.dim(DISPLAY_TAG, msg),
       );
     } else {
       if (options.learn || config.shieldAutoLearn)
@@ -978,7 +987,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   // Silently upgrade the pre-push hook if it lacks review auto-refresh (#1045)
   const { upgradePrePushHookIfNeeded } = await import('./install-hooks.js');
   if (upgradePrePushHookIfNeeded(cwd)) {
-    log.dim(TAG, 'Upgraded pre-push hook with review auto-refresh');
+    log.dim(DISPLAY_TAG, 'Upgraded pre-push hook with review auto-refresh');
   }
 
   const configPath = resolveConfigPath(cwd);
@@ -994,16 +1003,19 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
 
   const incremental = await evaluateIncrementalEligibility(cwd, config.totemDir, configRoot);
   if (incremental.eligible && incremental.deltaDiff && incremental.changedFiles) {
-    log.info(TAG, `Incremental review: ${incremental.linesChanged} line(s) since last pass`);
+    log.info(
+      DISPLAY_TAG,
+      `Incremental review: ${incremental.linesChanged} line(s) since last pass`,
+    );
     diff = incremental.deltaDiff;
     changedFiles = incremental.changedFiles;
   } else {
     if (incremental.reason && incremental.reason !== 'No previous shield state') {
-      log.dim(TAG, `Full review: ${incremental.reason}`);
+      log.dim(DISPLAY_TAG, `Full review: ${incremental.reason}`);
     }
     // Get git diff — shared helper merges ignore patterns, tries staged/all
     // then falls back to branch diff, and extracts changed file paths.
-    const diffResult = await getDiffForReview(options, config, cwd, TAG);
+    const diffResult = await getDiffForReview(options, config, cwd, DISPLAY_TAG);
     if (!diffResult) {
       // No changes = trivial pass — stamp content hash
       await writeReviewedContentHash(cwd, config.totemDir, configRoot);
@@ -1016,8 +1028,8 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   // Stage 1: Classify files — fast-path for non-code-only diffs
   const classification = classifyChangedFiles(changedFiles);
   if (classification.allNonCode) {
-    log.info(TAG, 'Deterministic fast-path: all changed files are non-code');
-    log.dim(TAG, `Skipped: ${changedFiles.join(', ')}`);
+    log.info(DISPLAY_TAG, 'Deterministic fast-path: all changed files are non-code');
+    log.dim(DISPLAY_TAG, `Skipped: ${changedFiles.join(', ')}`);
     await writeReviewedContentHash(cwd, config.totemDir, configRoot);
     return;
   }
@@ -1030,11 +1042,17 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     filteredFiles = classification.codeFiles;
     if (!filteredDiff.trim()) {
       // After filtering, no code diff remains — fast-path PASS
-      log.info(TAG, 'Deterministic fast-path: no code changes after filtering non-code files');
+      log.info(
+        DISPLAY_TAG,
+        'Deterministic fast-path: no code changes after filtering non-code files',
+      );
       await writeReviewedContentHash(cwd, config.totemDir, configRoot);
       return;
     }
-    log.dim(TAG, `Filtered ${classification.nonCodeFiles.length} non-code file(s) from diff`);
+    log.dim(
+      DISPLAY_TAG,
+      `Filtered ${classification.nonCodeFiles.length} non-code file(s) from diff`,
+    );
   }
 
   // Extract annotations once (shared between hints and ledger)
@@ -1043,7 +1061,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   // Auto-detect smart review hints from the filtered diff
   const smartHints = extractShieldHints(filteredDiff, filteredFiles, cwd, annotations);
   if (smartHints.length > 0) {
-    log.dim(TAG, `${smartHints.length} smart hint(s) detected`);
+    log.dim(DISPLAY_TAG, `${smartHints.length} smart hint(s) detected`);
   }
 
   // Trap Ledger: record override events for totem-context annotations (ADR-071)
@@ -1062,10 +1080,10 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
           justification: ann.text,
           source: 'shield',
         },
-        (msg) => log.dim(TAG, msg),
+        (msg) => log.dim(DISPLAY_TAG, msg),
       );
     }
-    log.dim(TAG, `${annotations.length} annotation(s) recorded in Trap Ledger`);
+    log.dim(DISPLAY_TAG, `${annotations.length} annotation(s) recorded in Trap Ledger`);
   }
 
   // Build full-file context for small changed files (reduces false positives)
@@ -1076,12 +1094,12 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     MAX_FILE_CONTEXT_CHARS,
   );
   if (fileContext) {
-    log.dim(TAG, `File context: ${(fileContext.length / 1024).toFixed(0)}KB`);
+    log.dim(DISPLAY_TAG, `File context: ${(fileContext.length / 1024).toFixed(0)}KB`);
   }
 
   // Structural mode — context-blind LLM review, no embeddings, no Totem knowledge
   if (options.mode === 'structural') {
-    log.info(TAG, 'Running structural review (context-blind, no Totem knowledge)...');
+    log.info(DISPLAY_TAG, 'Running structural review (context-blind, no Totem knowledge)...');
 
     const systemPrompt = getSystemPrompt(
       'shield-structural',
@@ -1096,7 +1114,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       smartHints,
       fileContext,
     );
-    log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
+    log.dim(DISPLAY_TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
     const content = await runOrchestrator({
       prompt,
@@ -1132,12 +1150,12 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
 
   // Retrieve context from LanceDB — use original changedFiles for better search relevance
   const query = await buildSearchQuery(changedFiles, diff);
-  log.info(TAG, 'Querying Totem index...');
+  log.info(DISPLAY_TAG, 'Querying Totem index...');
   const context = await retrieveContext(query, store);
   const totalResults =
     context.specs.length + context.sessions.length + context.code.length + context.lessons.length;
   log.info(
-    TAG,
+    DISPLAY_TAG,
     `Found: ${context.specs.length} specs, ${context.sessions.length} sessions, ${context.code.length} code, ${context.lessons.length} lessons`,
   );
 
@@ -1153,7 +1171,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     smartHints,
     fileContext,
   );
-  log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
+  log.dim(DISPLAY_TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = await runOrchestrator({
     prompt,
