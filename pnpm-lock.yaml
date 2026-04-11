@@ -111,6 +111,9 @@ importers:
       apache-arrow:
         specifier: 17.0.0
         version: 17.0.0
+      cross-spawn:
+        specifier: ^7.0.6
+        version: 7.0.6
       glob:
         specifier: ^11.0.0
         version: 11.1.0
@@ -151,6 +154,9 @@ importers:
       '@ast-grep/wasm':
         specifier: ^0.42.1
         version: 0.42.1(web-tree-sitter@0.26.6)
+      '@types/cross-spawn':
+        specifier: ^6.0.6
+        version: 6.0.6
       '@types/mdast':
         specifier: ^4.0.0
         version: 4.0.4
@@ -1533,6 +1539,12 @@ packages:
   /@types/command-line-usage@5.0.4:
     resolution: {integrity: sha512-BwR5KP3Es/CSht0xqBcUXS3qCAUVXwpRKsV2+arxeb65atasuXG9LykC9Ab10Cw3s2raH92ZqOeILaQbsB2ACg==}
     dev: false
+
+  /@types/cross-spawn@6.0.6:
+    resolution: {integrity: sha512-fXRhhUkG4H3TQk5dBhQ7m/JDdSNHKwR2BBia62lhwEIq9xGiQKLxd6LymNhn47SjXhsUEPmxi+PKw2OkW4LLjA==}
+    dependencies:
+      '@types/node': 22.19.13
+    dev: true
 
   /@types/debug@4.1.12:
     resolution: {integrity: sha512-vIChWdVG3LG1SMxEvI/AK+FWJthlrqlTu7fbrlywTkkaONwk/UAGaULXRlf8vkzFBLVm0zkMdCquhL5aOjhXPQ==}

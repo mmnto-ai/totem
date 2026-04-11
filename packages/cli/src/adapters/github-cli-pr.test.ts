@@ -1,16 +1,20 @@
-import { execFileSync } from 'node:child_process';
-
 import { describe, expect, it, vi } from 'vitest';
+
+import { safeExec } from '@mmnto/totem';
 
 import { GitHubCliPrAdapter } from './github-cli-pr.js';
 
-vi.mock('node:child_process', () => ({
-  execFileSync: vi.fn(),
-  execFile: vi.fn(),
-  execSync: vi.fn(),
-}));
+// Mock safeExec at the @mmnto/totem boundary (mmnto/totem#1329).
+// See gh-utils.test.ts for the full rationale.
+vi.mock('@mmnto/totem', async () => {
+  const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
+  return {
+    ...actual,
+    safeExec: vi.fn(),
+  };
+});
 
-const mockedExec = vi.mocked(execFileSync);
+const mockedExec = vi.mocked(safeExec);
 
 describe('GitHubCliPrAdapter', () => {
   const adapter = new GitHubCliPrAdapter('/test/cwd');

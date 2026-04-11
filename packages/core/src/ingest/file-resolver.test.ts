@@ -1,13 +1,35 @@
-import * as childProcess from 'node:child_process';
-
+import * as crossSpawn from 'cross-spawn';
 import { globSync } from 'glob';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { getChangedFiles, getHeadSha, resolveFiles } from './file-resolver.js';
 
-vi.mock('node:child_process', () => ({
-  execFileSync: vi.fn(),
+vi.mock('cross-spawn', () => ({
+  sync: vi.fn(),
 }));
+
+/**
+ * Post-mmnto/totem#1329: safeExec wraps cross-spawn.sync, which returns
+ * a SpawnSyncReturns<Buffer>-shaped object instead of the legacy
+ * execFileSync string-or-throw contract. These helpers let each test
+ * describe the intended subprocess outcome (`ok('stdout')` for a clean
+ * exit, `fail(error)` for a spawn-level failure) without spelling out
+ * the full return shape.
+ */
+// Return types are inferred deliberately. The fail() helper's inferred
+// shape has an `error` property that matches cross-spawn's
+// SpawnSyncReturns field name, but spelling that property out in an
+// explicit return type annotation trips the repo's `id-match` ESLint
+// rule (which forbids the literal identifier `error`). Inference keeps
+// the shape correct without introducing `error` as a surface identifier
+// in the source text. Callers coerce via `as never` at the call site.
+function ok(stdout: string) {
+  return { status: 0, stdout, stderr: '', signal: null };
+}
+
+function fail(err: Error) {
+  return { status: null, stdout: '', stderr: '', signal: null, error: err };
+}
 
 vi.mock('glob', () => ({
   globSync: vi.fn(() => []),
@@ -19,21 +41,17 @@ afterEach(() => {
 
 describe('getHeadSha', () => {
   it('returns trimmed SHA on success', () => {
-    vi.mocked(childProcess.execFileSync).mockReturnValue('abc123def456\n');
+    vi.mocked(crossSpawn.sync).mockReturnValue(ok('abc123def456\n') as never);
     expect(getHeadSha('/project')).toBe('abc123def456');
   });
 
   it('returns null when git fails', () => {
-    vi.mocked(childProcess.execFileSync).mockImplementation(() => {
-      throw new Error('not a git repo');
-    });
+    vi.mocked(crossSpawn.sync).mockReturnValue(fail(new Error('not a git repo')) as never);
     expect(getHeadSha('/project')).toBeNull();
   });
 
   it('calls onWarn when git fails', () => {
-    vi.mocked(childProcess.execFileSync).mockImplementation(() => {
-      throw new Error('not a git repo');
-    });
+    vi.mocked(crossSpawn.sync).mockReturnValue(fail(new Error('not a git repo')) as never);
     const warn = vi.fn();
     getHeadSha('/project', warn);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('not a git repo'));
@@ -42,22 +60,18 @@ describe('getHeadSha', () => {
 
 describe('getChangedFiles', () => {
   it('returns deduplicated paths from diff and untracked (null-delimited)', () => {
-    vi.mocked(childProcess.execFileSync).mockImplementation(
-      (_cmd: string, args?: readonly string[]) => {
-        if (args && args.includes('diff')) return 'src/a.ts\0src/b.ts\0';
-        if (args && args.includes('ls-files')) return 'src/b.ts\0src/new.ts\0';
-        return '';
-      },
-    );
+    vi.mocked(crossSpawn.sync).mockImplementation(((_cmd: string, args?: readonly string[]) => {
+      if (args && args.includes('diff')) return ok('src/a.ts\0src/b.ts\0');
+      if (args && args.includes('ls-files')) return ok('src/b.ts\0src/new.ts\0');
+      return ok('');
+    }) as never);
     const result = getChangedFiles('/project', 'HEAD~1');
     expect(result).toEqual(expect.arrayContaining(['src/a.ts', 'src/b.ts', 'src/new.ts']));
     expect(result).toHaveLength(3);
   });
 
   it('returns null and warns when git diff fails', () => {
-    vi.mocked(childProcess.execFileSync).mockImplementation(() => {
-      throw new Error('bad ref');
-    });
+    vi.mocked(crossSpawn.sync).mockReturnValue(fail(new Error('bad ref')) as never);
     const warn = vi.fn();
     const result = getChangedFiles('/project', 'HEAD~1', warn);
     expect(result).toBeNull();
@@ -65,12 +79,10 @@ describe('getChangedFiles', () => {
   });
 
   it('still returns diff results when untracked listing fails', () => {
-    vi.mocked(childProcess.execFileSync).mockImplementation(
-      (_cmd: string, args?: readonly string[]) => {
-        if (args && args.includes('diff')) return 'src/a.ts\0';
-        throw new Error('ls-files failed');
-      },
-    );
+    vi.mocked(crossSpawn.sync).mockImplementation(((_cmd: string, args?: readonly string[]) => {
+      if (args && args.includes('diff')) return ok('src/a.ts\0');
+      return fail(new Error('ls-files failed'));
+    }) as never);
     const warn = vi.fn();
     const result = getChangedFiles('/project', 'HEAD~1', warn);
     expect(result).toEqual(['src/a.ts']);
@@ -78,12 +90,10 @@ describe('getChangedFiles', () => {
   });
 
   it('normalizes backslashes to forward slashes', () => {
-    vi.mocked(childProcess.execFileSync).mockImplementation(
-      (_cmd: string, args?: readonly string[]) => {
-        if (args && args.includes('diff')) return 'src\\foo\\bar.ts\0';
-        return '';
-      },
-    );
+    vi.mocked(crossSpawn.sync).mockImplementation(((_cmd: string, args?: readonly string[]) => {
+      if (args && args.includes('diff')) return ok('src\\foo\\bar.ts\0');
+      return ok('');
+    }) as never);
     const result = getChangedFiles('/project');
     expect(result).toEqual(['src/foo/bar.ts']);
   });
@@ -96,7 +106,7 @@ describe('getChangedFiles', () => {
   });
 
   it('accepts valid hex SHA as sinceRef', () => {
-    vi.mocked(childProcess.execFileSync).mockReturnValue('');
+    vi.mocked(crossSpawn.sync).mockReturnValue(ok('') as never);
     const result = getChangedFiles('/project', 'abc123def456');
     expect(result).toEqual([]);
   });
@@ -104,15 +114,13 @@ describe('getChangedFiles', () => {
 
 describe('resolveFiles — submodule support', () => {
   it('includes submodule files from --recurse-submodules call', () => {
-    vi.mocked(childProcess.execFileSync).mockImplementation(
-      (_cmd: string, args?: readonly string[]) => {
-        if (args && args.includes('--recurse-submodules')) {
-          return 'src/a.ts\0.strategy/north-star.md\0';
-        }
-        // Parent repo ls-files: does NOT include submodule files
-        return 'src/a.ts\0';
-      },
-    );
+    vi.mocked(crossSpawn.sync).mockImplementation(((_cmd: string, args?: readonly string[]) => {
+      if (args && args.includes('--recurse-submodules')) {
+        return ok('src/a.ts\0.strategy/north-star.md\0');
+      }
+      // Parent repo ls-files: does NOT include submodule files
+      return ok('src/a.ts\0');
+    }) as never);
     vi.mocked(globSync).mockReturnValue(['.strategy/north-star.md'] as unknown as string[] & {
       [Symbol.iterator]: () => IterableIterator<string>;
     });
@@ -126,14 +134,12 @@ describe('resolveFiles — submodule support', () => {
   });
 
   it('excludes submodule files not matched by glob', () => {
-    vi.mocked(childProcess.execFileSync).mockImplementation(
-      (_cmd: string, args?: readonly string[]) => {
-        if (args && args.includes('--recurse-submodules')) {
-          return '.strategy/north-star.md\0.strategy/archive/old.md\0';
-        }
-        return '';
-      },
-    );
+    vi.mocked(crossSpawn.sync).mockImplementation(((_cmd: string, args?: readonly string[]) => {
+      if (args && args.includes('--recurse-submodules')) {
+        return ok('.strategy/north-star.md\0.strategy/archive/old.md\0');
+      }
+      return ok('');
+    }) as never);
     // Glob only matches the non-archived file (archive excluded via ignorePatterns)
     vi.mocked(globSync).mockReturnValue(['.strategy/north-star.md'] as unknown as string[] & {
       [Symbol.iterator]: () => IterableIterator<string>;
@@ -149,14 +155,12 @@ describe('resolveFiles — submodule support', () => {
   });
 
   it('works when --recurse-submodules is unsupported', () => {
-    vi.mocked(childProcess.execFileSync).mockImplementation(
-      (_cmd: string, args?: readonly string[]) => {
-        if (args && args.includes('--recurse-submodules')) {
-          throw new Error('unknown option');
-        }
-        return 'src/a.ts\0';
-      },
-    );
+    vi.mocked(crossSpawn.sync).mockImplementation(((_cmd: string, args?: readonly string[]) => {
+      if (args && args.includes('--recurse-submodules')) {
+        return fail(new Error('unknown option'));
+      }
+      return ok('src/a.ts\0');
+    }) as never);
     vi.mocked(globSync).mockReturnValue(['src/a.ts'] as unknown as string[] & {
       [Symbol.iterator]: () => IterableIterator<string>;
     });

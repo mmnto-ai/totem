@@ -1,11 +1,8 @@
-import { execFileSync } from 'node:child_process';
-
+import * as crossSpawn from 'cross-spawn';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('node:child_process', () => ({
-  execFileSync: vi.fn(),
-  execFile: vi.fn(),
-  execSync: vi.fn(),
+vi.mock('cross-spawn', () => ({
+  sync: vi.fn(),
 }));
 
 import {
@@ -18,23 +15,42 @@ import {
   isFileDirty,
 } from './git.js';
 
+/**
+ * Post-mmnto/totem#1329: safeExec wraps cross-spawn.sync instead of
+ * child_process.execFileSync. These helpers let each test describe the
+ * intended subprocess outcome without spelling out the full
+ * SpawnSyncReturns shape on every call.
+ */
+// Return types are inferred deliberately. The fail() helper's inferred
+// shape has an `error` property that matches cross-spawn's
+// SpawnSyncReturns field name, but spelling that property out in an
+// explicit return type annotation trips the repo's `id-match` ESLint
+// rule (which forbids the literal identifier `error`). Inference keeps
+// the shape correct without introducing `error` as a surface identifier
+// in the source text. Callers coerce via `as never` at the call site.
+function ok(stdout: string) {
+  return { status: 0, stdout, stderr: '', signal: null };
+}
+
+function fail(err: Error) {
+  return { status: null, stdout: '', stderr: '', signal: null, error: err };
+}
+
 describe('getLatestTag', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('returns the latest tag', () => {
-    vi.mocked(execFileSync).mockReturnValue('v0.14.0\n');
+    vi.mocked(crossSpawn.sync).mockReturnValue(ok('v0.14.0\n') as never);
     expect(getLatestTag('/tmp')).toBe('v0.14.0');
   });
 
   it('returns null when no tags exist', () => {
-    vi.mocked(execFileSync).mockImplementation(() => {
-      throw new Error('fatal: no tags');
-    });
+    vi.mocked(crossSpawn.sync).mockReturnValue(fail(new Error('fatal: no tags')) as never);
     expect(getLatestTag('/tmp')).toBeNull();
   });
 
   it('returns null for empty output', () => {
-    vi.mocked(execFileSync).mockReturnValue('\n');
+    vi.mocked(crossSpawn.sync).mockReturnValue(ok('\n') as never);
     expect(getLatestTag('/tmp')).toBeNull();
   });
 });
@@ -43,14 +59,12 @@ describe('getTagDate', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('returns YYYY-MM-DD date for a valid tag', () => {
-    vi.mocked(execFileSync).mockReturnValue('2026-03-01T12:00:00-05:00\n');
+    vi.mocked(crossSpawn.sync).mockReturnValue(ok('2026-03-01T12:00:00-05:00\n') as never);
     expect(getTagDate('/tmp', 'v0.14.0')).toBe('2026-03-01');
   });
 
   it('returns null when tag does not exist', () => {
-    vi.mocked(execFileSync).mockImplementation(() => {
-      throw new Error('fatal: bad object');
-    });
+    vi.mocked(crossSpawn.sync).mockReturnValue(fail(new Error('fatal: bad object')) as never);
     expect(getTagDate('/tmp', 'v999.0.0')).toBeNull();
   });
 });
@@ -59,10 +73,12 @@ describe('getGitLogSince', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('returns log since a tag', () => {
-    vi.mocked(execFileSync).mockReturnValue('abc1234 feat: thing\ndef5678 fix: bug\n');
+    vi.mocked(crossSpawn.sync).mockReturnValue(
+      ok('abc1234 feat: thing\ndef5678 fix: bug\n') as never,
+    );
     const result = getGitLogSince('/tmp', 'v0.14.0');
     expect(result).toContain('abc1234');
-    expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
+    expect(vi.mocked(crossSpawn.sync)).toHaveBeenCalledWith(
       'git',
       ['log', 'v0.14.0..HEAD', '--oneline', '--max-count=50'],
       expect.any(Object),
@@ -70,9 +86,9 @@ describe('getGitLogSince', () => {
   });
 
   it('returns recent commits when no since ref provided', () => {
-    vi.mocked(execFileSync).mockReturnValue('abc1234 feat: thing\n');
+    vi.mocked(crossSpawn.sync).mockReturnValue(ok('abc1234 feat: thing\n') as never);
     getGitLogSince('/tmp');
-    expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
+    expect(vi.mocked(crossSpawn.sync)).toHaveBeenCalledWith(
       'git',
       ['log', '--oneline', '-50'],
       expect.any(Object),
@@ -80,9 +96,7 @@ describe('getGitLogSince', () => {
   });
 
   it('returns empty string on error', () => {
-    vi.mocked(execFileSync).mockImplementation(() => {
-      throw new Error('not a git repo');
-    });
+    vi.mocked(crossSpawn.sync).mockReturnValue(fail(new Error('not a git repo')) as never);
     expect(getGitLogSince('/tmp')).toBe('');
   });
 });
@@ -137,19 +151,17 @@ describe('isFileDirty', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('returns true when file has changes', () => {
-    vi.mocked(execFileSync).mockReturnValue(' M README.md\n');
+    vi.mocked(crossSpawn.sync).mockReturnValue(ok(' M README.md\n') as never);
     expect(isFileDirty('/tmp', 'README.md')).toBe(true);
   });
 
   it('returns false when file is clean', () => {
-    vi.mocked(execFileSync).mockReturnValue('');
+    vi.mocked(crossSpawn.sync).mockReturnValue(ok('') as never);
     expect(isFileDirty('/tmp', 'README.md')).toBe(false);
   });
 
   it('returns false on error', () => {
-    vi.mocked(execFileSync).mockImplementation(() => {
-      throw new Error('not a git repo');
-    });
+    vi.mocked(crossSpawn.sync).mockReturnValue(fail(new Error('not a git repo')) as never);
     expect(isFileDirty('/tmp', 'README.md')).toBe(false);
   });
 });
