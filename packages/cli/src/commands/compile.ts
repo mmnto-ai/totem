@@ -81,6 +81,41 @@ export function buildTelemetryPrefix(contextCounts: {
   ].join(' ');
 }
 
+// ─── Non-compilable cache helpers ───────────────────
+
+/**
+ * Non-compilable entry as it lives on disk after the schema transform in
+ * `@mmnto/totem` normalizes legacy `string[]` entries to `{hash, title}` tuples.
+ */
+export interface NonCompilableTuple {
+  hash: string;
+  title: string;
+}
+
+/**
+ * Filter stale entries from a non-compilable map against the current set of
+ * lesson hashes. Returns the fresh tuple-form list and a count of how many
+ * entries were drained.
+ *
+ * Extracted for mmnto/totem#1281 so the no-op compile path can drain stale
+ * entries too — previously the prune only ran when `toCompile.length > 0`,
+ * leaving stale entries stranded on no-op runs (e.g. after a lesson was
+ * removed or after a parser-bug fix invalidated old non-compilable hashes).
+ * Pure function; does not mutate the input map.
+ */
+export function pruneStaleNonCompilable(
+  nonCompilableMap: Map<string, string>,
+  currentHashes: Set<string>,
+): { fresh: NonCompilableTuple[]; drained: number } {
+  const fresh: NonCompilableTuple[] = [];
+  for (const [hash, title] of nonCompilableMap) {
+    if (currentHashes.has(hash)) {
+      fresh.push({ hash, title });
+    }
+  }
+  return { fresh, drained: nonCompilableMap.size - fresh.length };
+}
+
 // ─── Logging helpers ────────────────────────────────
 
 function logCompiledRule(
@@ -424,9 +459,30 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
     }
 
     if (toCompile.length === 0) {
+      // mmnto/totem#1281: even with no lessons to compile, stale non-compilable
+      // entries from lessons that were edited or removed in a previous run still
+      // need to be drained. Without this, stale entries survive forever until
+      // some future compile run happens to have real work to do.
+      let reportedNonCompilable = nonCompilableMap.size;
+      if (!options.raw) {
+        const currentHashes = new Set(lessons.map((l) => hashLesson(l.heading, l.body)));
+        const { fresh, drained } = pruneStaleNonCompilable(nonCompilableMap, currentHashes);
+        if (drained > 0) {
+          saveCompiledRulesFile(rulesPath, {
+            version: 1,
+            rules: existingRules,
+            nonCompilable: fresh,
+          });
+          log.dim(
+            TAG,
+            `Pruned ${drained} stale non-compilable entr${drained === 1 ? 'y' : 'ies'} (lessons edited or removed)`,
+          ); // totem-ignore
+          reportedNonCompilable = fresh.length;
+        }
+      }
       log.success(
         TAG,
-        `All ${lessonsInScope.length} lesson(s) in scope already processed (${existingRules.length} compiled, ${nonCompilableMap.size} non-compilable). Use --force to recompile.`,
+        `All ${lessonsInScope.length} lesson(s) in scope already processed (${existingRules.length} compiled, ${reportedNonCompilable} non-compilable). Use --force to recompile.`,
       ); // totem-ignore
     } else {
       const { createSpinner } = await import('../ui.js');
@@ -748,9 +804,11 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
       if (!options.raw) {
         // mmnto/totem#1280: Prune stale non-compilable entries (lesson was edited or removed)
         // and write the result as {hash, title} tuples for observability.
-        const freshNonCompilable = [...nonCompilableMap.entries()]
-          .filter(([h]) => currentHashes.has(h))
-          .map(([hash, title]) => ({ hash, title }));
+        // The helper also covers the no-op path via mmnto/totem#1281.
+        const { fresh: freshNonCompilable } = pruneStaleNonCompilable(
+          nonCompilableMap,
+          currentHashes,
+        );
         saveCompiledRulesFile(rulesPath, {
           version: 1,
           rules: newRules,
