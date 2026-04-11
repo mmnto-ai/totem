@@ -164,7 +164,7 @@ Totem supports three explicit capability tiers, auto-detected from the environme
 | ------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
 | **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `link`, `bridge`, `eject`, `lint`, `compile`, `test`, `explain`, `handoff --lite` |
 | **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`, `doctor`                                                                       |
-| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `review`, `triage`, `audit`, `briefing`, `handoff`, `extract`, `wrap`, `docs`)             |
+| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `review`, `triage`, `audit`, `briefing`, `handoff`, `extract`, `docs`)                     |
 
 A lite-tier standalone WASM binary provides core CLI functions with zero native dependencies. The embedding field in configuration files is optional; when omitted, operations default to the Lite tier boundary constraints.
 
