@@ -196,3 +196,108 @@ describe('add_lesson auth model (#844)', () => {
     expect(typeof opts.shell).toBe('boolean');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Double-heading bug (#1284)
+// ---------------------------------------------------------------------------
+
+describe('add_lesson double-heading guard (#1284)', () => {
+  let handle: (args: Record<string, unknown>) => Promise<unknown>;
+
+  beforeEach(() => {
+    _resetRateLimit();
+    lastWrittenEntry = '';
+    handle = setup();
+  });
+
+  /** Count occurrences of `## Lesson —` (all dash variants) in a string. */
+  function countLessonHeadings(entry: string): number {
+    const matches = entry.match(/^## Lesson[\s\u2014\u2013-]+/gm);
+    return matches ? matches.length : 0;
+  }
+
+  it('does not duplicate heading when body starts with canonical em-dash heading', async () => {
+    await handle({
+      lesson:
+        '## Lesson — Read-path schema changes break write-path invariants\n\nWhen modifying parsing logic that produces a data structure, also consider the writers.',
+      context_tags: ['architecture'],
+    });
+
+    expect(countLessonHeadings(lastWrittenEntry)).toBe(1);
+    expect(lastWrittenEntry).toContain(
+      '## Lesson — Read-path schema changes break write-path invariants',
+    );
+    // And the auto-generated duplicate must not appear
+    expect(lastWrittenEntry).not.toContain('## Lesson — Lesson —');
+  });
+
+  it('handles en-dash heading variant', async () => {
+    await handle({
+      lesson: '## Lesson – Use err in catch blocks\n\nDo not use error in catch blocks.',
+      context_tags: ['style'],
+    });
+
+    expect(countLessonHeadings(lastWrittenEntry)).toBe(1);
+  });
+
+  it('handles hyphen heading variant', async () => {
+    await handle({
+      lesson: '## Lesson - Plain hyphen variant\n\nBody text here.',
+      context_tags: ['test'],
+    });
+
+    expect(countLessonHeadings(lastWrittenEntry)).toBe(1);
+  });
+
+  it('preserves existing behavior when body does NOT start with a heading', async () => {
+    await handle({
+      lesson:
+        'Always validate input at trust boundaries. This is a plain lesson body with no heading.',
+      context_tags: ['security'],
+    });
+
+    // Exactly one heading should still be generated (by the auto-path)
+    expect(countLessonHeadings(lastWrittenEntry)).toBe(1);
+    expect(lastWrittenEntry).toContain('## Lesson — ');
+  });
+
+  it('strips the pre-existing heading from the body so it is not included twice in content', async () => {
+    await handle({
+      lesson: '## Lesson — First heading\n\nBody line one.\nBody line two.',
+      context_tags: ['test'],
+    });
+
+    // The body portion of the entry should contain "Body line one" and "Body line two"
+    // but should NOT contain the verbatim "## Lesson — First heading" line anywhere
+    // below the first line of the file.
+    const lines = lastWrittenEntry.split('\n');
+    const headingLineCount = lines.filter((l) => /^## Lesson[\s\u2014\u2013-]+/.test(l)).length;
+    expect(headingLineCount).toBe(1);
+    expect(lastWrittenEntry).toContain('Body line one.');
+    expect(lastWrittenEntry).toContain('Body line two.');
+  });
+
+  it('still applies tags and provenance when body has a pre-existing heading', async () => {
+    await handle({
+      lesson: '## Lesson — Heading here\n\nBody content.',
+      context_tags: ['tag-one', 'tag-two'],
+    });
+
+    expect(lastWrittenEntry).toContain('**Tags:** tag-one, tag-two');
+    expect(lastWrittenEntry).toContain('**Source:** mcp (added at ');
+  });
+
+  it('handles single-line lesson without trailing newline', async () => {
+    // Shield caught this edge case: if the caller sends just `## Lesson — Foo`
+    // with no body and no trailing newline, the earlier regex variant that
+    // required `\n+` at the end would fall through and produce a double heading.
+    await handle({
+      lesson: '## Lesson — Single line no body',
+      context_tags: ['edge-case'],
+    });
+
+    expect(countLessonHeadings(lastWrittenEntry)).toBe(1);
+    expect(lastWrittenEntry).toContain('## Lesson — Single line no body');
+    expect(lastWrittenEntry).not.toContain('## Lesson — Lesson');
+  });
+});

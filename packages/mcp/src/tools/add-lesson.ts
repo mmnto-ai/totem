@@ -180,7 +180,34 @@ export function registerAddLesson(server: McpServer): void {
             .map((t) => sanitize(t).replace(/[\n,]/g, ' ').trim())
             .filter(Boolean)
             .join(', ') || 'untagged';
-        const rawHeading = generateLessonHeading(safeLesson);
+
+        // --- Double-heading guard (#1284) ---
+        // If the caller supplies a pre-formatted lesson whose body already
+        // starts with a canonical `## Lesson — Foo` heading, extract the
+        // heading and strip it from the body. Without this, `generateLessonHeading`
+        // would derive a title from the "Lesson — Foo" text and produce
+        // `## Lesson — Lesson — Foo`, and the original heading would remain
+        // inside the body — yielding two `## Lesson — ...` lines in one file
+        // that the parser then counts as two separate lessons.
+        // The separator class matches em-dash (\u2014), en-dash (\u2013), and
+        // hyphen, consistent with the parser's LESSON_HEADING_RE in #1278.
+        // The terminator allows either trailing newlines OR end-of-string so
+        // a single-line input like `## Lesson — Foo` (no body, no trailing
+        // newline) still gets normalized instead of slipping through.
+        // `matchAll` + iterator instead of `match` to satisfy the project-wide
+        // lint rule about iterating all regex matches — the `^` anchor ensures
+        // at most one match here regardless.
+        const LESSON_HEADING_RE = /^## Lesson[\s\u2014\u2013-]+(.+?)(?:\s*\n+|\s*$)/g;
+        const headingMatch = safeLesson.matchAll(LESSON_HEADING_RE).next().value;
+        let rawHeading: string;
+        let bodyContent: string;
+        if (headingMatch) {
+          rawHeading = headingMatch[1]!;
+          bodyContent = safeLesson.slice(headingMatch[0].length).trim();
+        } else {
+          rawHeading = generateLessonHeading(safeLesson);
+          bodyContent = safeLesson.trim();
+        }
         const heading = sanitizeHeading(rawHeading);
 
         // --- Source provenance (#844) ---
@@ -189,7 +216,7 @@ export function registerAddLesson(server: McpServer): void {
         const entry =
           `## Lesson — ${heading}\n\n` +
           `**Tags:** ${safeTags}\n\n` +
-          `${safeLesson.trim()}\n` +
+          `${bodyContent}\n` +
           provenance;
 
         // Acquire lock before writing lesson, release before spawning sync
