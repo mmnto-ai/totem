@@ -2,7 +2,40 @@ import { z } from 'zod';
 
 // ─── Constants ──────────────────────────────────────────
 
+/**
+ * Internal routing key for the review command. Keep as `'Shield'` — this
+ * value is used by:
+ *
+ *   - `config.orchestrator.overrides[tag.toLowerCase()]` lookups in
+ *     `packages/cli/src/utils.ts:runOrchestrator`
+ *   - `config.orchestrator.cacheTtls[tag.toLowerCase()]` lookups in the
+ *     same function
+ *   - The temp-file naming in
+ *     `packages/cli/src/orchestrators/shell-orchestrator.ts`
+ *   - Every user `totem.config.ts` that has
+ *     `orchestrator.overrides: { shield: '...' }`
+ *
+ * Renaming this constant without a coordinated migration would silently
+ * break every one of those lookups. When the user-visible CLI command
+ * was renamed from `totem shield` to `totem review`, the log prefix was
+ * updated via `DISPLAY_TAG` below — the routing key stayed here so no
+ * existing config breaks. A full rename (TAG → `'Review'`, config
+ * migration, deprecation alias for `overrides.shield`) is tracked as
+ * tech debt; search for `DISPLAY_TAG` or `mmnto/totem#1335` to find the
+ * coordinated cleanup.
+ */
 export const TAG = 'Shield';
+
+/**
+ * User-visible log prefix for the review command. This is what shows up
+ * as `[Review]` in CLI output. Kept separate from `TAG` so the log
+ * branding can match the `totem review` command name without touching
+ * the routing key. Use `DISPLAY_TAG` for every `log.info` / `log.dim`
+ * / `log.warn` / `log.success` / `log.error` call in the review flow.
+ * Use `TAG` only when the value is passed to code that performs a
+ * config-key lookup (e.g. `runOrchestrator({ tag: TAG })`).
+ */
+export const DISPLAY_TAG = 'Review';
 export const MAX_DIFF_CHARS = 50_000;
 export const QUERY_DIFF_TRUNCATE = 2_000;
 export const SPEC_SEARCH_POOL = 15;

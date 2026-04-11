@@ -214,7 +214,8 @@ describe('extractShieldContextAnnotations', () => {
     const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
     fs.writeFileSync(path.join(tmpDir, 'legacy.ts'), '// shield-context: old style\nexport {};');
     extractShieldContextAnnotations(['legacy.ts'], tmpDir);
-    expect(warnSpy).toHaveBeenCalledWith('Shield', expect.stringContaining('shield-context'));
+    // totem-context: unit test, not an orchestrator suite — no async work to time out
+    expect(warnSpy).toHaveBeenCalledWith('Review', expect.stringContaining('shield-context'));
     warnSpy.mockRestore();
     resetShieldContextHintsWarning();
   });

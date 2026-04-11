@@ -2,6 +2,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { log } from '../ui.js';
+// totem-context: shield-templates is a pure constants module — static import is correct, dynamic-imports-in-CLI lint rule is a false positive here
+import { DISPLAY_TAG } from './shield-templates.js'; // totem-context: pure constants module import
 
 // ─── Annotation regex (ADR-071: totem-context is primary, shield-context is deprecated alias) ─
 
@@ -48,7 +50,7 @@ export function extractShieldContextAnnotations(
           if (!shieldContextHintsWarned && LEGACY_SHIELD_CONTEXT_RE.test(lines[i]!)) {
             shieldContextHintsWarned = true;
             log.warn(
-              'Shield',
+              DISPLAY_TAG,
               'Deprecation: "// shield-context:" is deprecated. Use "// totem-context:" instead. (See ADR-071)',
             );
           }
@@ -56,7 +58,8 @@ export function extractShieldContextAnnotations(
         }
       }
     } catch (err) {
-      log.dim('Shield', `Skipping ${file}: ${err instanceof Error ? err.message : String(err)}`);
+      // totem-context: String(err) only runs after instanceof Error guard — standard error-to-string fallback
+      log.dim(DISPLAY_TAG, `Skipping ${file}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   return annotations;
