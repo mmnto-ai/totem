@@ -6344,6 +6344,46 @@
         "packages/mcp/src/smoke-test.ts"
       ],
       "severity": "warning"
+    },
+    {
+      "lessonHash": "4ac94d6f9c387e1e",
+      "lessonHeading": "Account for leading whitespace in line-start parsers",
+      "pattern": "/\\^[^\\s\\\\]",
+      "message": "Start-of-string anchor (^) used without accounting for leading whitespace. Use trimStart() on input or include optional whitespace (^\\s*) to prevent failures from leading blank lines.",
+      "engine": "regex",
+      "compiledAt": "2026-04-11T05:06:18.175Z",
+      "createdAt": "2026-04-11T05:06:18.175Z",
+      "fileGlobs": [
+        "packages/mcp/src/tools/**/*.ts"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "1abb90c2493fa2b5",
+      "lessonHeading": "Handle single-line inputs in regex terminators",
+      "pattern": "/[^)]*\\\\n\\+[^/]*/",
+      "message": "Regex patterns ending in \\n+ will fail on single-line inputs without a trailing newline. Use (?:\\s*\\n+|\\s*$) to match both line-endings and end-of-string.",
+      "engine": "regex",
+      "compiledAt": "2026-04-11T05:06:15.165Z",
+      "createdAt": "2026-04-11T05:06:15.165Z",
+      "fileGlobs": [
+        "packages/mcp/src/tools/**/*.ts"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "9ea5abc3ca635c91",
+      "lessonHeading": "Avoid '--no-' prefix for standalone flags",
+      "pattern": "",
+      "message": "Avoid '--no-' prefix for standalone flags. Commander.js treats '--no-*' as boolean negations. Use alternative naming (e.g., '--stdout' instead of '--no-edit') for flags that perform specific actions.",
+      "engine": "ast-grep",
+      "astGrepPattern": ".option(\"--no-$FLAG\", $$$REST)",
+      "compiledAt": "2026-04-11T05:06:12.985Z",
+      "createdAt": "2026-04-11T05:06:12.985Z",
+      "fileGlobs": [
+        "packages/cli/**/*.ts"
+      ],
+      "severity": "warning"
     }
   ],
   "nonCompilable": [
@@ -9598,6 +9638,42 @@
     {
       "hash": "16d717f95e8cc66f",
       "title": "Resilient continuation for transient federated link failures"
+    },
+    {
+      "hash": "77c0e1865514dd31",
+      "title": "Allow absolute claims for factual bugs"
+    },
+    {
+      "hash": "6e8bee791e88c2ff",
+      "title": "Avoid unnecessary writes during no-op runs"
+    },
+    {
+      "hash": "c59c12dd7c86f22a",
+      "title": "Extract shared logic into pure helpers"
+    },
+    {
+      "hash": "722abb7c04e7597f",
+      "title": "Resolve unstaged paths against repo root"
+    },
+    {
+      "hash": "e21d5b7920e44c42",
+      "title": "Synchronize manifest metadata during cache pruning"
+    },
+    {
+      "hash": "a8fabc1cf5ab483d",
+      "title": "Synchronize versions via Changeset fixed groups"
+    },
+    {
+      "hash": "92ee97be0330aaa7",
+      "title": "Prune stale cache entries during no-op runs"
+    },
+    {
+      "hash": "a2fe564e83158b30",
+      "title": "Support dash variants in heading parsers"
+    },
+    {
+      "hash": "8c5f71e84db9dfd0",
+      "title": "Report metrics after data transformations"
     }
   ]
 }
