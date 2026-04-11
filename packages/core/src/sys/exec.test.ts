@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { safeExec } from './exec.js';
 
+// Long-running interval used to ensure the child process outlives the
+// timeout window. Any value safely larger than TIMEOUT_MS works; 30s is
+// generous enough that a slow CI runner won't race the check.
+const LONG_RUNNING_INTERVAL_MS = 30_000;
+// Timeout for the test that asserts safeExec honors its timeout option.
+// Short enough to keep the suite fast.
+const TIMEOUT_TEST_MS = 100;
+
 describe('safeExec', () => {
   it('executes a command and returns trimmed output', () => {
     // Use single quotes inside the JS expression — cmd.exe strips double quotes
@@ -50,7 +58,9 @@ describe('safeExec', () => {
       // shell: true to resolve .cmd/.bat shims, and cmd.exe would parse
       // the `=>` token in an arrow function as `=` + `>` output redirection,
       // creating a stray file named `{}` in the cwd. See mmnto/totem#1233.
-      safeExec('node', ['-e', 'setInterval(Object, 30000)'], { timeout: 100 });
+      safeExec('node', ['-e', `setInterval(Object, ${LONG_RUNNING_INTERVAL_MS})`], {
+        timeout: TIMEOUT_TEST_MS,
+      });
       expect.unreachable('should have thrown');
     } catch (err) {
       expect(err).toBeInstanceOf(Error);
