@@ -153,8 +153,9 @@ export function parseLessonsFile(content: string): ParsedLesson[] {
 export function extractFileReferences(body: string): string[] {
   const refs = new Set<string>();
 
-  // Strip fenced code blocks so we only process content outside them
-  const stripped = body.replace(/(```|~~~)[\s\S]*?\1/g, '');
+  // Strip fenced code blocks (including unclosed trailing fences) so we only
+  // process content outside them
+  const stripped = body.replace(/(```|~~~)[\s\S]*?(?:\1|$)/g, '');
   const segments = [stripped];
 
   for (const segment of segments) {
