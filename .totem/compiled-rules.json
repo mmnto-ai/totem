@@ -5306,7 +5306,9 @@
         "**/*.go",
         "**/*.rs"
       ],
-      "severity": "error"
+      "severity": "error",
+      "status": "archived",
+      "archivedReason": "Over-broad regex. The pattern matches any string literal containing \"+++ b/\" or \"--- a/\" regardless of whether the file path actually contains spaces, so it fires on every legitimate git-diff test fixture in core/cli/mcp test files. Multiple test files across the repo already have this pattern unchallenged because they predate the rule — only new test code trips it. Archived via the mmnto/totem#1345 loadCompiledRules filter after the self-healing loop was unlocked. Superseded by the broader ast-grep validation work tracked in mmnto/totem#1339. Kept in the manifest (not deleted) so telemetry on its historical triggers stays intact."
     },
     {
       "lessonHash": "541a56213e186fa9",
