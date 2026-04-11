@@ -263,7 +263,6 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
     saveCompiledRulesFile,
     scaffoldFixture,
     scaffoldFixturePath,
-    TotemParseError,
     verifyRuleExamples,
     writeCompileManifest,
   } = await import('@mmnto/totem');
@@ -528,22 +527,34 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
         try {
           existingManifestInputHash = readCompileManifest(manifestPath).input_hash;
         } catch (err) {
-          // Missing or invalid manifest → treat as stale so the refresh below
-          // synthesizes one. readCompileManifest wraps ENOENT via readJsonSafe
-          // into TotemParseError today (see packages/core/src/sys/fs.ts:17),
-          // so `instanceof TotemParseError` is the primary catch. The ENOENT
-          // fallback is belt-and-suspenders against a future refactor that
-          // might stop wrapping — if that regression ever lands, the
-          // `writes a fresh manifest when compile-manifest.json is missing
-          // entirely` test in compile-noop-refresh.test.ts keeps covering
-          // the missing-file path. Anything else (permissions, I/O failure)
-          // bubbles up deliberately — those should fail loud.
-          const isParseError = err instanceof TotemParseError;
-          const isFileNotFound =
-            typeof err === 'object' &&
-            err !== null &&
-            (err as NodeJS.ErrnoException).code === 'ENOENT';
-          if (!isParseError && !isFileNotFound) throw err;
+          // ONLY swallow "manifest does not exist" (ENOENT) — everything else
+          // bubbles up so the user sees a loud failure rather than silently
+          // having their file overwritten (Tenet 4: Fail Loud, Never Drift).
+          //
+          // readCompileManifest wraps ENOENT from readJsonSafe into a
+          // TotemParseError with code 'PARSE_FAILED', preserving the original
+          // NodeJS.ErrnoException in `.cause`. Checking the cause chain
+          // (rather than err.code or a message-substring match) correctly
+          // distinguishes missing-file from:
+          //   - corrupted JSON (cause is a SyntaxError with no `.code`)
+          //   - schema mismatch (cause is a ZodError with no `.code`)
+          //   - permission errors (cause is ErrnoException with code='EACCES'
+          //     or 'EPERM', which are NOT 'ENOENT')
+          //
+          // The message-substring approach GCA proposed on PR review would
+          // couple us to error string wording that could drift in future
+          // refactors; walking the cause chain is the structurally correct
+          // check. Bounded depth prevents pathological infinite cycles.
+          let causeWalker: unknown = err;
+          let isMissingFile = false;
+          for (let depth = 0; depth < 8 && causeWalker instanceof Error; depth++) {
+            if ((causeWalker as NodeJS.ErrnoException).code === 'ENOENT') {
+              isMissingFile = true;
+              break;
+            }
+            causeWalker = (causeWalker as Error & { cause?: unknown }).cause;
+          }
+          if (!isMissingFile) throw err;
         }
         const manifestStale = existingManifestInputHash !== currentInputHash;
 
@@ -927,8 +938,10 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
         });
 
         // ─── Write compile manifest (provenance chain) ───
-        const { generateInputHash, generateOutputHash, writeCompileManifest } =
-          await import('@mmnto/totem');
+        // CR finding on PR mmnto/totem#1348: generateInputHash/generateOutputHash/
+        // writeCompileManifest are already destructured at the top of this
+        // handler via the mmnto/totem#1337 import consolidation — no dynamic
+        // re-import needed here.
         const lessonsDir = path.join(totemDir, 'lessons');
         const manifestPath = path.join(totemDir, 'compile-manifest.json');
         const inputHash = generateInputHash(lessonsDir);

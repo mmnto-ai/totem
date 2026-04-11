@@ -245,4 +245,79 @@ describe('compileCommand no-op manifest refresh (#1337)', () => {
     expect(manifest.input_hash).toBe(generateInputHash(lessonsDir));
     expect(manifest.rule_count).toBe(1);
   });
+
+  // ─── Fail-loud regression tests (GCA review on PR #1348) ───
+  //
+  // Tenet 4 (Fail Loud, Never Drift): the no-op branch must only
+  // swallow the "manifest does not exist" case (ENOENT). Corrupted
+  // manifests, schema-mismatched manifests, and permission errors must
+  // propagate so the user sees a loud failure — silently overwriting
+  // a broken file would hide the underlying problem.
+  //
+  // These tests lock in the distinction between "missing" (safely
+  // synthesize a fresh manifest) and "broken in any other way"
+  // (re-throw, let the command fail loud).
+
+  it('propagates TotemParseError when compile-manifest.json is corrupted JSON', async () => {
+    const heading = 'Use err in catch';
+    const body = 'Do not use the identifier "error" in catch blocks.';
+    const lessonHash = hashLesson(heading, body);
+
+    setupWorkspace(tmpDir, {
+      lessons: {
+        'use-err.md': lessonMarkdown(heading, body),
+      },
+      rules: [{ lessonHash, lessonHeading: heading }],
+      omitManifest: true,
+    });
+
+    // Overwrite the manifest with malformed JSON AFTER setupWorkspace.
+    const manifestPath = path.join(tmpDir, '.totem', 'compile-manifest.json');
+    fs.writeFileSync(manifestPath, '{ this is: not valid json }', 'utf-8');
+
+    // The command must propagate the parse failure rather than silently
+    // overwriting the user's corrupt file — that would hide whatever
+    // wrote the bad bytes and erase the user's chance to debug it.
+    await expect(compileCommand({})).rejects.toMatchObject({
+      code: 'PARSE_FAILED',
+    });
+
+    // The corrupt file must still be on disk — the command must not
+    // have rewritten it.
+    expect(fs.readFileSync(manifestPath, 'utf-8')).toBe('{ this is: not valid json }');
+  });
+
+  it('propagates TotemParseError when compile-manifest.json has a schema mismatch', async () => {
+    const heading = 'Use err in catch';
+    const body = 'Do not use the identifier "error" in catch blocks.';
+    const lessonHash = hashLesson(heading, body);
+
+    setupWorkspace(tmpDir, {
+      lessons: {
+        'use-err.md': lessonMarkdown(heading, body),
+      },
+      rules: [{ lessonHash, lessonHeading: heading }],
+      omitManifest: true,
+    });
+
+    // Write a manifest whose JSON is well-formed but fails schema
+    // validation (required fields missing / wrong types).
+    const manifestPath = path.join(tmpDir, '.totem', 'compile-manifest.json');
+    const malformed = JSON.stringify(
+      {
+        // compiled_at, model, input_hash, output_hash, rule_count all missing
+        some_unexpected_key: 'whatever',
+      },
+      null,
+      2,
+    );
+    fs.writeFileSync(manifestPath, malformed, 'utf-8');
+
+    await expect(compileCommand({})).rejects.toMatchObject({
+      code: 'PARSE_FAILED',
+    });
+
+    // Corrupt file preserved verbatim.
+    expect(fs.readFileSync(manifestPath, 'utf-8')).toBe(malformed);
+  });
 });
