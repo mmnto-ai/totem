@@ -194,10 +194,16 @@ export function registerAddLesson(server: McpServer): void {
         // The terminator allows either trailing newlines OR end-of-string so
         // a single-line input like `## Lesson — Foo` (no body, no trailing
         // newline) still gets normalized instead of slipping through.
+        // Leading `\s*` absorbs blank lines or whitespace before the heading
+        // (LLM callers sometimes emit pre-formatted lessons with a leading
+        // newline). Case sensitivity intentionally matches the parser's
+        // canonical form in core/drift-detector.ts — if we accepted lowercase
+        // here we would strip a line the parser would still treat as body
+        // text, breaking round-trip semantics.
         // `matchAll` + iterator instead of `match` to satisfy the project-wide
         // lint rule about iterating all regex matches — the `^` anchor ensures
         // at most one match here regardless.
-        const LESSON_HEADING_RE = /^## Lesson[\s\u2014\u2013-]+(.+?)(?:\s*\n+|\s*$)/g;
+        const LESSON_HEADING_RE = /^\s*## Lesson[\s\u2014\u2013-]+(.+?)(?:\s*\n+|\s*$)/g;
         const headingMatch = safeLesson.matchAll(LESSON_HEADING_RE).next().value;
         let rawHeading: string;
         let bodyContent: string;

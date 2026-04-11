@@ -300,4 +300,37 @@ describe('add_lesson double-heading guard (#1284)', () => {
     expect(lastWrittenEntry).toContain('## Lesson — Single line no body');
     expect(lastWrittenEntry).not.toContain('## Lesson — Lesson');
   });
+
+  it('handles pre-formatted lesson with leading blank lines or whitespace', async () => {
+    // Both GCA and CR flagged that a caller (especially an LLM) could emit
+    // a pre-formatted lesson prefixed by blank lines or leading whitespace.
+    // Without ^\s* the detection would miss it, fall through to the auto-title
+    // path, and reproduce the double-heading bug.
+    await handle({
+      lesson: '\n\n## Lesson — Leading whitespace variant\n\nBody content.',
+      context_tags: ['test'],
+    });
+
+    expect(countLessonHeadings(lastWrittenEntry)).toBe(1);
+    expect(lastWrittenEntry).toContain('## Lesson — Leading whitespace variant');
+    expect(lastWrittenEntry).not.toContain('## Lesson — Lesson');
+  });
+
+  it('does NOT treat lowercase "## lesson" as a canonical heading', async () => {
+    // Stay case-sensitive to match the parser's LESSON_HEADING_RE
+    // (`^## Lesson [—–-] ` with capital L) in core/drift-detector.ts.
+    // If we accepted lowercase here we would strip a line the parser would
+    // treat as body text, breaking round-trip semantics. The fallback path
+    // generates a title from the full body and the lowercase line is
+    // preserved verbatim inside the written entry.
+    await handle({
+      lesson: '## lesson — not canonical heading\nSome body.',
+      context_tags: ['test'],
+    });
+
+    // Exactly one canonical "## Lesson" line at the top — and the original
+    // lowercase line is preserved verbatim in the body (not stripped).
+    expect(countLessonHeadings(lastWrittenEntry)).toBe(1);
+    expect(lastWrittenEntry).toContain('## lesson — not canonical heading');
+  });
 });

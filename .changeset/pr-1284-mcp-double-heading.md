@@ -2,7 +2,7 @@
 '@mmnto/mcp': patch
 ---
 
-Fix `add_lesson` MCP tool double-prepending `## Lesson — ` heading (#1284)
+Fix `add_lesson` MCP tool double-prepending `## Lesson —` heading (#1284)
 
 When a caller passed a pre-formatted lesson to the `add_lesson` MCP tool whose body already started with a canonical `## Lesson — Foo` heading, the tool derived a title from the first line of the body — which included the literal `Lesson —` prefix — and produced a file with `## Lesson — Lesson — Foo` as the wrapper, with the original `## Lesson — Foo` still intact inside the body. The parser correctly read that as two separate lessons.
 
