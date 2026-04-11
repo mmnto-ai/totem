@@ -6384,55 +6384,6 @@
         "packages/cli/**/*.ts"
       ],
       "severity": "warning"
-    },
-    {
-      "lessonHash": "91baf4a30b32ce18",
-      "lessonHeading": "Avoid shell metacharacters in exec arguments",
-      "pattern": "",
-      "message": "Avoid shell: true in spawn/exec calls — on Windows, cmd.exe re-parses arguments and metacharacters like => are misinterpreted as redirection operators, potentially creating stray files.",
-      "engine": "ast-grep",
-      "astGrepPattern": "spawn($CMD, $$$ARGS, { $$$BEFORE, shell: true, $$$AFTER })",
-      "compiledAt": "2026-04-11T05:06:20.823Z",
-      "createdAt": "2026-04-11T05:06:20.823Z",
-      "fileGlobs": [
-        "packages/core/src/sys/**/*.ts",
-        "!**/*.test.*",
-        "!**/*.spec.*"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "6f2480907c256629",
-      "lessonHeading": "Use matchAll for security-sensitive regex matching",
-      "pattern": "",
-      "message": "Use matchAll() instead of match() for security-sensitive regex validation. match() can be fooled by attackers shadowing malicious payloads with safe prefixes; matchAll() forces full-string evaluation.",
-      "engine": "ast-grep",
-      "astGrepPattern": "$INPUT.match($REGEX)",
-      "compiledAt": "2026-04-11T05:06:23.149Z",
-      "createdAt": "2026-04-11T05:06:23.149Z",
-      "fileGlobs": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.js",
-        "**/*.jsx"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "075012b99dbf1849",
-      "lessonHeading": "Use shell-safe snippets for timeout tests",
-      "message": "Avoid arrow functions in shell-routed Node -e scripts on Windows: '=>' is parsed as output redirection by cmd.exe. Use 'function() {}' instead of '() => {}'.",
-      "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
-      "astGrepPattern": "setInterval(() => { $$$BODY }, $MS)",
-      "compiledAt": "2026-04-11T05:28:26.388Z",
-      "createdAt": "2026-04-11T05:28:26.388Z",
-      "fileGlobs": [
-        "packages/core/src/sys/**/*.ts",
-        "!**/*.test.*",
-        "!**/*.spec.*"
-      ]
     }
   ],
   "nonCompilable": [
