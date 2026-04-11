@@ -22,6 +22,7 @@
     "@ast-grep/napi": "^0.42.0",
     "@lancedb/lancedb": "^0.26.2",
     "apache-arrow": "17.0.0",
+    "cross-spawn": "^7.0.6",
     "glob": "^11.0.0",
     "openai": "^4.77.0",
     "remark-frontmatter": "^5.0.0",
@@ -45,6 +46,7 @@
   },
   "devDependencies": {
     "@ast-grep/wasm": "^0.42.1",
+    "@types/cross-spawn": "^6.0.6",
     "@types/mdast": "^4.0.0",
     "vitest": "^3.0.0"
   },
