@@ -6339,6 +6339,94 @@
         "packages/mcp/src/tools/**/*.ts"
       ],
       "severity": "warning"
+    },
+    {
+      "lessonHash": "48f755d9a388e87f",
+      "lessonHeading": "Prefer regex over split for line extraction",
+      "pattern": "",
+      "message": "Prefer `/^[^\\n]*/.exec(str)?.[0]` over `split('\\n')[0]` to avoid false-positive lint triggers on array-access idioms.",
+      "engine": "ast-grep",
+      "astGrepPattern": "$STR.split('\\n')[0]",
+      "compiledAt": "2026-04-11T22:54:43.823Z",
+      "createdAt": "2026-04-11T22:54:43.823Z",
+      "fileGlobs": [
+        "packages/core/src/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad astGrepPattern `$STR.split('\\n')[0]` fires on any legitimate first-line extraction idiom. The underlying lesson was accurate (prefer regex for error-message parsing where the string may contain dots/newlines), but the rule as compiled does not encode that context. This is exactly the class of rule mmnto/totem#1352 was filed to archive yesterday. Auto-compiled on the 2026-04-11 PM postmerge (1.14.3/1.14.4/1.14.5 cycle). Archived via the mmnto/totem#1345 filter. Kept in the ledger so the compile worker prompt rewrite can use it as a negative training example."
+    },
+    {
+      "lessonHash": "e6c7d0b05c97f7e6",
+      "lessonHeading": "Use cross-spawn for Windows shim resolution",
+      "pattern": "",
+      "message": "Use cross-spawn instead of shell: true to resolve .cmd/.bat shims on Windows. shell: true allows cmd.exe to interpret metacharacters (&, |, >) in arguments, creating shell-injection vulnerabilities.",
+      "engine": "ast-grep",
+      "astGrepPattern": "spawn($CMD, $ARGS, { $$$BEFORE, shell: true, $$$AFTER })",
+      "compiledAt": "2026-04-11T22:54:44.065Z",
+      "createdAt": "2026-04-11T22:54:44.065Z",
+      "fileGlobs": [
+        "packages/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "0d0bbae4392c0255",
+      "lessonHeading": "Lazy-load core libraries in CLI commands",
+      "pattern": "",
+      "message": "Lazy-load core libraries in CLI command handlers using dynamic imports (e.g., `const { foo } = await import('@mcp-b/core')`) to avoid delaying CLI startup.",
+      "engine": "ast-grep",
+      "astGrepPattern": "import { $$$NAMES } from '@mcp-b/core'",
+      "compiledAt": "2026-04-11T22:54:47.652Z",
+      "createdAt": "2026-04-11T22:54:47.652Z",
+      "fileGlobs": [
+        "packages/cli/src/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Hallucinated package name. Pattern references `@mcp-b/core`, which does not exist in this repository (the canonical core package is `@mmnto/totem`). Rule would never fire on any real code in the repo. Auto-compiled on the 2026-04-11 PM postmerge. Archived via the mmnto/totem#1345 filter. Kept in the ledger as a LLM hallucination data point: the compile worker drifted to a fabricated package name despite the source lesson referencing the correct `@mmnto/totem` import. Feeds the `quality > quantity` empirical record referenced in the Sonnet 4.6 routing analysis (Strategy #73)."
+    },
+    {
+      "lessonHash": "eb59a093e36afaf2",
+      "lessonHeading": "Consolidate dynamic imports in CLI handlers",
+      "pattern": "",
+      "message": "Consolidate dynamic imports: destructure all required helpers from a single dynamic import at the top of the handler instead of using multiple separate dynamic imports.",
+      "engine": "ast-grep",
+      "astGrepPattern": "const { $VAR } = await import($MODULE)",
+      "compiledAt": "2026-04-11T22:54:47.474Z",
+      "createdAt": "2026-04-11T22:54:47.474Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Pattern `const { $VAR } = await import($MODULE)` matches every dynamic import in the CLI package, not just cases where multiple dynamic imports could be consolidated. The underlying lesson was about consolidating multiple dynamic-import destructures into a single call, but the rule does not encode the multiplicity condition. Would produce thousands of false positives on every CLI command file. Auto-compiled on the 2026-04-11 PM postmerge. Archived via the mmnto/totem#1345 filter. Kept in the ledger as an example of the compile worker producing a syntactically valid but semantically broken generalization."
+    },
+    {
+      "lessonHash": "3c4931d9071af448",
+      "lessonHeading": "Never split error messages on periods",
+      "pattern": "",
+      "message": "Never split error messages on periods — dots in error messages may be part of file paths or code patterns, truncating critical debugging context.",
+      "engine": "ast-grep",
+      "astGrepPattern": "$STR.split('.')",
+      "compiledAt": "2026-04-11T22:54:50.069Z",
+      "createdAt": "2026-04-11T22:54:50.069Z",
+      "fileGlobs": [
+        "packages/core/src/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Pattern `$STR.split('.')` fires on all dot splits: filename extension parsing (`filename.split('.')`), semantic version parsing (`'1.14.5'.split('.')`), dot-notation handling, and any arbitrary string manipulation with `.`. The underlying lesson was specific to splitting error messages containing code patterns with dots (the regression fixed in mmnto/totem#1349), but the rule is indiscriminate. Auto-compiled on the 2026-04-11 PM postmerge. Archived via the mmnto/totem#1345 filter. Kept in the ledger as the canonical example of 'the rule should have been narrower than the pattern the LLM chose'."
     }
   ],
   "nonCompilable": [
@@ -9629,6 +9717,86 @@
     {
       "hash": "8c5f71e84db9dfd0",
       "title": "Report metrics after data transformations"
+    },
+    {
+      "hash": "55d12985ff96fc92",
+      "title": "Partition manifest updates from content writes"
+    },
+    {
+      "hash": "72dfe9dcece644e8",
+      "title": "Separate enforcement and administrative loaders"
+    },
+    {
+      "hash": "85e432cb2ab37bee",
+      "title": "Inspect error cause for wrapped I/O failures"
+    },
+    {
+      "hash": "96ced32bc1b545ec",
+      "title": "Guard committed files against LLM overwrites"
+    },
+    {
+      "hash": "93a6ce091ed4ec32",
+      "title": "Export interfaces for custom error fields"
+    },
+    {
+      "hash": "0872115bfbea29ed",
+      "title": "Augment heuristics with authoritative parser checks"
+    },
+    {
+      "hash": "895b2db46f659b7f",
+      "title": "Wrap partial AST nodes in valid parents"
+    },
+    {
+      "hash": "e20f1c066f06d069",
+      "title": "Use negative filters for legacy compatibility"
+    },
+    {
+      "hash": "913e6c2efb981ce7",
+      "title": "Audit root cause helpers for vulnerabilities"
+    },
+    {
+      "hash": "224a6d0ab0c649bf",
+      "title": "Maintain air-gapped enforcement invariant"
+    },
+    {
+      "hash": "560942c77d2d0f8e",
+      "title": "Use hidden commands for graceful retirement"
+    },
+    {
+      "hash": "f7382eb95b1012bb",
+      "title": "Mock public APIs at package boundaries"
+    },
+    {
+      "hash": "01b559469e2ad93b",
+      "title": "Verify lifecycle state enforcement"
+    },
+    {
+      "hash": "f6d3ce7120393f99",
+      "title": "Refresh manifests on pure input hash drift"
+    },
+    {
+      "hash": "8c6e4314a3885614",
+      "title": "Distinguish lint format from json flags"
+    },
+    {
+      "hash": "1c2be142b58cd751",
+      "title": "Defensively handle wrapped and raw ENOENT errors"
+    },
+    {
+      "hash": "c850943345a8df3d",
+      "title": "Preserve raw spawn output in errors"
+    },
+    {
+      "hash": "a3561a6411683658",
+      "title": "Scope SARIF output to error findings"
+    },
+    {
+      "hash": "2a410feeff574b7e",
+      "title": "Guard error message sentinel prefixes"
+    },
+    {
+      "hash": "47c4c9f66c1ce03c",
+      "title": "Prefer canonical noun-verb CLI commands in docs"
     }
   ]
 }
