@@ -45,7 +45,12 @@ describe('safeExec', () => {
 
   it('respects timeout option', () => {
     try {
-      safeExec('node', ['-e', 'setTimeout(() => {}, 30000)'], { timeout: 100 });
+      // Using setInterval(Object, ...) instead of setTimeout(() => {}, ...)
+      // avoids shell metacharacters. On Windows, safeExec runs with
+      // shell: true to resolve .cmd/.bat shims, and cmd.exe would parse
+      // the `=>` token in an arrow function as `=` + `>` output redirection,
+      // creating a stray file named `{}` in the cwd. See mmnto/totem#1233.
+      safeExec('node', ['-e', 'setInterval(Object, 30000)'], { timeout: 100 });
       expect.unreachable('should have thrown');
     } catch (err) {
       expect(err).toBeInstanceOf(Error);
