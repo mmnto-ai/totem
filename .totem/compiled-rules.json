@@ -6348,50 +6348,49 @@
     {
       "lessonHash": "4ac94d6f9c387e1e",
       "lessonHeading": "Account for leading whitespace in line-start parsers",
+      "pattern": "/\\^[^\\s\\\\]",
       "message": "Start-of-string anchor (^) used without accounting for leading whitespace. Use trimStart() on input or include optional whitespace (^\\s*) to prevent failures from leading blank lines.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "/\\^[^\\s\\\\]",
       "compiledAt": "2026-04-11T05:06:18.175Z",
       "createdAt": "2026-04-11T05:06:18.175Z",
       "fileGlobs": [
         "packages/mcp/src/tools/**/*.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "1abb90c2493fa2b5",
       "lessonHeading": "Handle single-line inputs in regex terminators",
+      "pattern": "/[^)]*\\\\n\\+[^/]*/",
       "message": "Regex patterns ending in \\n+ will fail on single-line inputs without a trailing newline. Use (?:\\s*\\n+|\\s*$) to match both line-endings and end-of-string.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "/[^)]*\\\\n\\+[^/]*/",
       "compiledAt": "2026-04-11T05:06:15.165Z",
       "createdAt": "2026-04-11T05:06:15.165Z",
       "fileGlobs": [
         "packages/mcp/src/tools/**/*.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "9ea5abc3ca635c91",
       "lessonHeading": "Avoid '--no-' prefix for standalone flags",
+      "pattern": "",
       "message": "Avoid '--no-' prefix for standalone flags. Commander.js treats '--no-*' as boolean negations. Use alternative naming (e.g., '--stdout' instead of '--no-edit') for flags that perform specific actions.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": ".option(\"--no-$FLAG\", $$$REST)",
       "compiledAt": "2026-04-11T05:06:12.985Z",
       "createdAt": "2026-04-11T05:06:12.985Z",
       "fileGlobs": [
         "packages/cli/**/*.ts"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "91baf4a30b32ce18",
       "lessonHeading": "Avoid shell metacharacters in exec arguments",
+      "pattern": "",
       "message": "Avoid shell: true in spawn/exec calls — on Windows, cmd.exe re-parses arguments and metacharacters like => are misinterpreted as redirection operators, potentially creating stray files.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "spawn($CMD, $$$ARGS, { $$$BEFORE, shell: true, $$$AFTER })",
       "compiledAt": "2026-04-11T05:06:20.823Z",
       "createdAt": "2026-04-11T05:06:20.823Z",
@@ -6399,31 +6398,15 @@
         "packages/core/src/sys/**/*.ts",
         "!**/*.test.*",
         "!**/*.spec.*"
-      ]
-    },
-    {
-      "lessonHash": "ab3bc05316a478f2",
-      "lessonHeading": "Use shell-safe snippets for timeout tests",
-      "message": "Use setInterval(Object, ms) instead of arrow functions in spawned Node commands to avoid shell-sensitive characters like '=>' that trigger redirection on Windows.",
-      "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
-      "astGrepPattern": "setInterval(() => { $$$BODY }, $MS)",
-      "compiledAt": "2026-04-11T05:06:22.856Z",
-      "createdAt": "2026-04-11T05:06:22.856Z",
-      "fileGlobs": [
-        "packages/core/src/sys/**/*.ts",
-        "!**/*.test.*",
-        "!**/*.spec.*"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "6f2480907c256629",
       "lessonHeading": "Use matchAll for security-sensitive regex matching",
+      "pattern": "",
       "message": "Use matchAll() instead of match() for security-sensitive regex validation. match() can be fooled by attackers shadowing malicious payloads with safe prefixes; matchAll() forces full-string evaluation.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "$INPUT.match($REGEX)",
       "compiledAt": "2026-04-11T05:06:23.149Z",
       "createdAt": "2026-04-11T05:06:23.149Z",
@@ -6432,6 +6415,23 @@
         "**/*.tsx",
         "**/*.js",
         "**/*.jsx"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "075012b99dbf1849",
+      "lessonHeading": "Use shell-safe snippets for timeout tests",
+      "message": "Avoid arrow functions in shell-routed Node -e scripts on Windows: '=>' is parsed as output redirection by cmd.exe. Use 'function() {}' instead of '() => {}'.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "setInterval(() => { $$$BODY }, $MS)",
+      "compiledAt": "2026-04-11T05:28:26.388Z",
+      "createdAt": "2026-04-11T05:28:26.388Z",
+      "fileGlobs": [
+        "packages/core/src/sys/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
       ]
     }
   ],
