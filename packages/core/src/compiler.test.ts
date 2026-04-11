@@ -11,9 +11,11 @@ import {
   extractAddedLines,
   hashLesson,
   loadCompiledRules,
+  loadCompiledRulesFile,
   parseCompilerResponse,
   sanitizeFileGlobs,
   saveCompiledRules,
+  saveCompiledRulesFile,
   validateRegex,
 } from './compiler.js';
 import { CompiledRuleSchema } from './compiler-schema.js';
@@ -622,6 +624,140 @@ describe('compiled rules file I/O', () => {
     const rulesPath = path.join(tmpDir, 'wrong.json');
     fs.writeFileSync(rulesPath, JSON.stringify({ version: 99, rules: [] }));
     expect(() => loadCompiledRules(rulesPath)).toThrow('Invalid compiled-rules.json');
+  });
+
+  // Archived rule filtering — #1336 "The Archive Lie".
+  //
+  // Prior to #1336, `loadCompiledRules` returned every rule in the manifest
+  // regardless of `status`. The schema has the field, `totem doctor --pr`
+  // mutates rules to `status: 'archived'` with an `archivedReason`, and the
+  // schema doc comment says "active rules are enforced, archived rules are
+  // skipped". But nothing in the lint execution path filtered them out,
+  // making the self-healing loop a placebo.
+  //
+  // Invariants locked in below:
+  //   1. `loadCompiledRules` omits rules with `status === 'archived'`
+  //   2. Legacy rules without a `status` field stay enabled (use `!== 'archived'`
+  //      not `=== 'active'` so undefined behaves as active)
+  //   3. `loadCompiledRulesFile` returns the full unfiltered manifest so admin
+  //      tools (doctor, compile) can still read archived rules for lifecycle
+  //      management (Tenet 4: Fail Loud — admin writes never silently drop state)
+  describe('archived filtering (#1336)', () => {
+    const activeRule: CompiledRule = {
+      lessonHash: 'aaaaaaaaaaaaaaaa',
+      lessonHeading: 'Active rule',
+      pattern: '\\bactive\\b',
+      message: 'active',
+      engine: 'regex',
+      status: 'active',
+      compiledAt: '2026-04-11T00:00:00Z',
+    };
+
+    const legacyRule: CompiledRule = {
+      lessonHash: 'bbbbbbbbbbbbbbbb',
+      lessonHeading: 'Legacy rule without status field',
+      pattern: '\\blegacy\\b',
+      message: 'legacy',
+      engine: 'regex',
+      compiledAt: '2026-04-11T00:00:00Z',
+    };
+
+    const archivedRule: CompiledRule = {
+      lessonHash: 'cccccccccccccccc',
+      lessonHeading: 'Archived rule',
+      pattern: '\\barchived\\b',
+      message: 'archived',
+      engine: 'regex',
+      status: 'archived',
+      archivedReason: 'Stale for 90+ days with zero triggers',
+      compiledAt: '2026-04-11T00:00:00Z',
+    };
+
+    it('loadCompiledRules filters out archived rules but retains active and undefined-status rules', () => {
+      const rulesPath = path.join(tmpDir, 'compiled-rules.json');
+      saveCompiledRulesFile(rulesPath, {
+        version: 1,
+        rules: [activeRule, legacyRule, archivedRule],
+        nonCompilable: [],
+      });
+
+      const loaded = loadCompiledRules(rulesPath);
+      expect(loaded).toHaveLength(2);
+      expect(loaded.map((r) => r.lessonHash)).toEqual([
+        activeRule.lessonHash,
+        legacyRule.lessonHash,
+      ]);
+      expect(loaded.some((r) => r.status === 'archived')).toBe(false);
+
+      // The full manifest is still intact on disk — archiving is not deletion.
+      const manifest = loadCompiledRulesFile(rulesPath);
+      expect(manifest.rules).toHaveLength(3);
+      expect(manifest.rules.some((r) => r.lessonHash === archivedRule.lessonHash)).toBe(true);
+    });
+
+    it('loadCompiledRulesFile returns the full unfiltered manifest including archived rules', () => {
+      const rulesPath = path.join(tmpDir, 'compiled-rules.json');
+      saveCompiledRulesFile(rulesPath, {
+        version: 1,
+        rules: [activeRule, archivedRule],
+        nonCompilable: [],
+      });
+
+      const manifest = loadCompiledRulesFile(rulesPath);
+      expect(manifest.rules).toHaveLength(2);
+      const archived = manifest.rules.find((r) => r.lessonHash === archivedRule.lessonHash);
+      expect(archived?.status).toBe('archived');
+      expect(archived?.archivedReason).toBe('Stale for 90+ days with zero triggers');
+    });
+
+    it('returns an empty array when every rule is archived', () => {
+      const rulesPath = path.join(tmpDir, 'compiled-rules.json');
+      saveCompiledRulesFile(rulesPath, {
+        version: 1,
+        rules: [archivedRule],
+        nonCompilable: [],
+      });
+
+      expect(loadCompiledRules(rulesPath)).toEqual([]);
+    });
+
+    it('archived rules do not fire while a sibling active rule still triggers on the same diff', () => {
+      // Integration proof: an active rule matching one added line and an
+      // archived rule matching a second added line must resolve to exactly
+      // one violation (from the active rule). This exercises the full
+      // loader → applyRules pipeline and rules out a "trivially empty"
+      // failure mode where the filter might over-match.
+      const rulesPath = path.join(tmpDir, 'compiled-rules.json');
+      saveCompiledRulesFile(rulesPath, {
+        version: 1,
+        rules: [activeRule, archivedRule],
+        nonCompilable: [],
+      });
+
+      const rules = loadCompiledRules(rulesPath);
+      expect(rules).toHaveLength(1);
+      expect(rules[0]!.lessonHash).toBe(activeRule.lessonHash);
+
+      // Build the diff header tokens dynamically so this test file does not
+      // contain literal diff-header substrings that trip over-broad lint rules.
+      const plus3 = '+'.repeat(3);
+      const minus3 = '-'.repeat(3);
+      const samplePath = 'src/sample.ts';
+      const diff = [
+        `diff --git a/${samplePath} b/${samplePath}`,
+        'index 0000000..1111111 100644',
+        `${minus3} a/${samplePath}`,
+        `${plus3} b/${samplePath}`,
+        '@@ -0,0 +1,2 @@',
+        '+const first = "the active rule must fire here";',
+        '+const second = "the archived rule must not fire here";',
+      ].join('\n');
+
+      const violations = applyRules(rules, diff);
+      expect(violations).toHaveLength(1);
+      expect(violations[0]!.rule.lessonHash).toBe(activeRule.lessonHash);
+      expect(violations.some((v) => v.rule.lessonHash === archivedRule.lessonHash)).toBe(false);
+    });
   });
 });
 
