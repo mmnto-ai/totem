@@ -1,6 +1,6 @@
 {
   "name": "@mmnto/totem",
-  "version": "1.14.4",
+  "version": "1.14.5",
   "description": "Persistent memory and context layer for AI agents",
   "type": "module",
   "main": "./dist/index.js",
