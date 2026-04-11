@@ -253,14 +253,19 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
     extractManualPattern,
     extractRuleExamples,
     formatExampleFailure,
+    generateInputHash,
+    generateOutputHash,
     hashLesson,
     loadCompiledRulesFile,
     parseCompilerResponse,
     readAllLessons,
+    readCompileManifest,
     saveCompiledRulesFile,
     scaffoldFixture,
     scaffoldFixturePath,
+    TotemParseError,
     verifyRuleExamples,
+    writeCompileManifest,
   } = await import('@mmnto/totem');
 
   const cwd = process.cwd();
@@ -500,6 +505,48 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
           nonCompilableMap,
           currentHashes,
         );
+
+        // mmnto/totem#1337: detect "pure input-hash drift" — the case where
+        // a lesson file was added or removed but produced no rule/nonCompilable
+        // churn (e.g. a user deleted a lesson whose rule was already manually
+        // removed, or added a lesson that never got compiled). Both rulesPruned
+        // and drained will be zero, so the pre-1.14.3 refresh guard would skip
+        // the manifest write, leaving verify-manifest to fail on the next
+        // git push. Fix: refresh the manifest on drift even when the rules
+        // file is untouched.
+        //
+        // Carefully partition the writes:
+        //   - compiled-rules.json is rewritten ONLY when something was pruned
+        //   - compile-manifest.json is rewritten when EITHER something was
+        //     pruned OR the input_hash drifted
+        // Rewriting the rules file on pure drift would be a spurious touch
+        // that invalidates mtime-based caches downstream.
+        const lessonsDir = path.join(totemDir, 'lessons');
+        const manifestPath = path.join(totemDir, 'compile-manifest.json');
+        const currentInputHash = generateInputHash(lessonsDir);
+        let existingManifestInputHash: string | null = null;
+        try {
+          existingManifestInputHash = readCompileManifest(manifestPath).input_hash;
+        } catch (err) {
+          // Missing or invalid manifest → treat as stale so the refresh below
+          // synthesizes one. readCompileManifest wraps ENOENT via readJsonSafe
+          // into TotemParseError today (see packages/core/src/sys/fs.ts:17),
+          // so `instanceof TotemParseError` is the primary catch. The ENOENT
+          // fallback is belt-and-suspenders against a future refactor that
+          // might stop wrapping — if that regression ever lands, the
+          // `writes a fresh manifest when compile-manifest.json is missing
+          // entirely` test in compile-noop-refresh.test.ts keeps covering
+          // the missing-file path. Anything else (permissions, I/O failure)
+          // bubbles up deliberately — those should fail loud.
+          const isParseError = err instanceof TotemParseError;
+          const isFileNotFound =
+            typeof err === 'object' &&
+            err !== null &&
+            (err as NodeJS.ErrnoException).code === 'ENOENT';
+          if (!isParseError && !isFileNotFound) throw err;
+        }
+        const manifestStale = existingManifestInputHash !== currentInputHash;
+
         if (rulesPruned > 0 || drained > 0) {
           saveCompiledRulesFile(rulesPath, {
             version: 1,
@@ -518,23 +565,22 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
               `Pruned ${drained} stale non-compilable entr${drained === 1 ? 'y' : 'ies'} (lessons edited or removed)`,
             ); // totem-context: log only fires when actual draining happens
           }
-          // CR finding on PR #1331: refresh the compile manifest so its
-          // output hash and rule_count match the rewritten on-disk state.
-          // Without this, provenance/attestation flows desync silently.
-          const { generateInputHash, generateOutputHash, writeCompileManifest } =
-            await import('@mmnto/totem');
-          const lessonsDir = path.join(totemDir, 'lessons');
-          const manifestPath = path.join(totemDir, 'compile-manifest.json');
-          const inputHash = generateInputHash(lessonsDir);
+        }
+
+        if (rulesPruned > 0 || drained > 0 || manifestStale) {
+          // CR finding on PR mmnto/totem#1331: keep the compile manifest in sync
+          // with the rewritten on-disk state. Post-mmnto/totem#1337, this block
+          // also fires on pure input-hash drift — rewriting only the manifest,
+          // leaving the rules file untouched.
           const outputHash = generateOutputHash(rulesPath);
           writeCompileManifest(manifestPath, {
             compiled_at: new Date().toISOString(),
             model: options.model ?? config.orchestrator?.defaultModel ?? 'unknown',
-            input_hash: inputHash,
+            input_hash: currentInputHash,
             output_hash: outputHash,
             rule_count: freshRules.length,
           });
-          log.dim(TAG, `Manifest: ${inputHash.slice(0, 8)}…→${outputHash.slice(0, 8)}…`); // totem-context: provenance trace matches active-compile branch
+          log.dim(TAG, `Manifest: ${currentInputHash.slice(0, 8)}…→${outputHash.slice(0, 8)}…`); // totem-context: provenance trace matches active-compile branch
           reportedNonCompilable = freshNonCompilable.length;
           reportedCompiled = freshRules.length;
         }
