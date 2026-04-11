@@ -250,7 +250,7 @@ function lintLesson(lesson: ParsedLesson): LessonLintDiagnostic[] {
   {
     // Strip fenced code blocks, inline code, and URLs to avoid false positives
     const strippedBody = body
-      .replace(/```[\s\S]*?```/g, '')
+      .replace(/(```|~~~)[\s\S]*?\1/g, '')
       .replace(/`[^`]+`/g, '')
       .replace(/https?:\/\/\S+/g, '');
     // Match path-like strings: word/word/word.ext

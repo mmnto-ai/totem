@@ -228,9 +228,9 @@ export function engineFields(
 /** Strip leading/trailing backtick wrappers (e.g., `` `pattern` ``, `` ```regex\npattern\n``` ``). */
 function stripBacktickWrap(value: string): string {
   const s = value.trim();
-  // Multi-line code fence: ```lang\n...\n```
-  const fenceMatch = s.match(/^```[^\n]*\n([\s\S]*?)\n?```$/);
-  if (fenceMatch) return fenceMatch[1]!.trim();
+  // Multi-line code fence: ```lang\n...\n``` or ~~~lang\n...\n~~~
+  const fenceMatch = s.match(/^(```|~~~)[^\n]*\n([\s\S]*?)\n?\1$/);
+  if (fenceMatch) return fenceMatch[2]!.trim();
   // Single backtick wrap: `pattern` — only strip if content doesn't contain backticks
   if (s.startsWith('`') && s.endsWith('`') && s.length > 2) {
     const inner = s.slice(1, -1);
@@ -241,8 +241,8 @@ function stripBacktickWrap(value: string): string {
 
 export function parseCompilerResponse(response: string): CompilerOutput | null {
   // Try to extract JSON from the response (LLMs often wrap in ```json blocks)
-  const jsonMatch = response.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  const jsonStr = (jsonMatch?.[1] ?? response).trim();
+  const jsonMatch = response.match(/(```|~~~)(?:json)?\s*\n?([\s\S]*?)\n?\1/);
+  const jsonStr = (jsonMatch?.[2] ?? response).trim();
 
   try {
     const parsed = JSON.parse(jsonStr);
