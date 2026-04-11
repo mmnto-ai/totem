@@ -378,11 +378,18 @@ describe('validateAstGrepPattern', () => {
     const result = validateAstGrepPattern('.option("--no-$FLAG", $$$REST)');
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/ast-grep/i);
+    // GCA finding on PR mmnto/totem#1349: error reason must preserve the
+    // verbatim pattern source so users can identify WHICH of their 394+
+    // compiled rules is broken. An earlier split-on-dot implementation
+    // truncated the most useful part of the message; split-on-newline
+    // keeps it intact. Locking in with a substring assertion.
+    expect(result.reason).toContain('.option(');
   });
 
   it('rejects bare floating method call without receiver', () => {
     const result = validateAstGrepPattern('.method($ARG)');
     expect(result.valid).toBe(false);
+    expect(result.reason).toContain('.method(');
   });
 
   it('rejects bare catch clause (only valid inside a try statement)', () => {
@@ -392,11 +399,13 @@ describe('validateAstGrepPattern', () => {
     // because it sees balanced parens and no `;`/`\n` at depth 0.
     const result = validateAstGrepPattern('catch($E) { $$$ }');
     expect(result.valid).toBe(false);
+    expect(result.reason).toContain('catch(');
   });
 
   it('rejects bare else clause (only valid inside an if statement)', () => {
     const result = validateAstGrepPattern('else { $$$ }');
     expect(result.valid).toBe(false);
+    expect(result.reason).toContain('else {');
   });
 
   it('accepts try/catch wrapped form used by production rules', () => {

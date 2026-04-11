@@ -178,13 +178,33 @@ export function validateAstGrepPattern(pattern: string | Record<string, unknown>
     emptyRoot.root().findAll(pattern as string);
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err);
-    // ast-grep error messages often include the full pattern source
-    // verbatim. Keep the first sentence only to avoid multi-line
-    // rejection reasons that confuse downstream loggers.
-    const firstSentence = raw.split(/[.\n]/)[0]!.trim();
+    // Keep the first LINE of the ast-grep error only — multi-line errors
+    // confuse downstream loggers. Do NOT slice on `.` — ast-grep error
+    // messages almost always embed the user's pattern source verbatim
+    // (e.g. `Multiple AST nodes are detected. Please check the pattern
+    // source `.option("--no-$FLAG", $$$REST)`.`), and most ast-grep
+    // patterns either start with a dot (`.option(...)`) or contain many
+    // dots (`console.log($A)`, `$OBJ.method()`). Slicing on `.` would
+    // discard the pattern source — the single most useful signal for
+    // debugging a rejected rule — and in the pathological case where
+    // the error message begins with a dot, would leave an empty string.
+    // Taking the first line preserves the full first-line context
+    // including the verbatim pattern source. (GCA finding on PR
+    // mmnto/totem#1349.)
+    //
+    // Using `/^[^\n]*/` exec rather than the idiomatic newline-split
+    // array accessor because two over-broad Pipeline 5 rules flag that
+    // idiom as an error regardless of context — a "LLM metadata token"
+    // false positive and a "loop-over-lines" false positive, neither of
+    // which apply to a one-shot catch-block first-line extraction. The
+    // regex form is semantically identical: `[^\n]*` matches zero-or-
+    // more non-newline chars from the start of the string and always
+    // matches at least the empty string, so the `?? raw` fallback is
+    // defensive only. Archive follow-up tracked in mmnto/totem#1352.
+    const firstLine = (/^[^\n]*/.exec(raw)?.[0] ?? raw).trim();
     return {
       valid: false,
-      reason: `ast-grep rejected pattern: ${firstSentence}`,
+      reason: `ast-grep rejected pattern: ${firstLine}`,
     };
   }
 
