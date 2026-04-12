@@ -16,7 +16,7 @@ chmod +x .git/hooks/pre-commit .git/hooks/pre-push .git/hooks/post-merge .git/ho
 
 <!-- /docs -->
 
-This applies the execute permission that POSIX systems require. Windows users are unaffected — Git Bash executes hooks regardless of the permission bit.
+This applies the execute permission that POSIX systems require. Windows users are unaffected because Git Bash executes hooks regardless of the permission bit.
 
 ### Hooks not firing with Husky
 
