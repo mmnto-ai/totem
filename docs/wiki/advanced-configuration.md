@@ -169,7 +169,7 @@ export default {
 
 ## Scope Inference in Extract
 
-When running `totem extract` against a pull request, Totem will automatically analyze the changed files to infer the architectural scope of the PR. This suggested scope is pre-injected into the lesson extraction process, which saves time and keeps lessons correctly categorized.
+When running `totem lesson extract` against a pull request, Totem will automatically analyze the changed files to infer the architectural scope of the PR. This suggested scope is pre-injected into the lesson extraction process, which saves time and keeps lessons correctly categorized.
 
 ## Prior Art Concierge (Spec)
 
