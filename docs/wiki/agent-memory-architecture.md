@@ -17,7 +17,7 @@ Instruction files must be kept extremely lean (ideally <32 lines). If an instruc
 
 ## Knowledge Routing Decision Tree
 
-When you learn something new — a rule, a trap, a preference — route it to the right layer:
+When you learn something new (a rule, a trap, a preference), route it to the right layer:
 
 | Question                                 | If yes →                                  | Examples                                                   |
 | :--------------------------------------- | :---------------------------------------- | :--------------------------------------------------------- |
@@ -27,7 +27,7 @@ When you learn something new — a rule, a trap, a preference — route it to th
 | Is it onboarding/reference material?     | `docs/wiki/`                              | Architecture guides, setup steps, decision frameworks      |
 | Is it a personal agent preference?       | Agent memory (`~/.claude/`, `~/.gemini/`) | User's communication style, workflow preferences           |
 
-**Key principle:** Default to the most shared layer. If a rule only lives in one agent's memory, it's lost knowledge — new devs and other agents won't get it. Version-controlled files (`CLAUDE.md`, `GEMINI.md`, wiki) are the transferable configs.
+**Principle:** Default to the most shared layer. If a rule only lives in one agent's memory, it's lost knowledge. New devs and other agents won't get it. Version-controlled files (`CLAUDE.md`, `GEMINI.md`, wiki) are the transferable configs.
 
 ## Secrets Hygiene
 
