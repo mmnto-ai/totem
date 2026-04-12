@@ -4,14 +4,14 @@ Gemini Code Assist operates headlessly to review Pull Requests and flag issues. 
 
 ## 1. Config Surfaces
 
-- **Project Settings:** `.gemini/config.yaml` — Configures PR review settings, severity thresholds, exclusions, and custom rules.
-- **Style Rules:** `.gemini/styleguide.md` — Detailed syntactic rules, formatting, and coding standards used for PR reviews.
+- **Project Settings:** `.gemini/config.yaml`. Configures PR review settings, severity thresholds, exclusions, and custom rules.
+- **Style Rules:** `.gemini/styleguide.md`. Detailed syntactic rules, formatting, and coding standards used for PR reviews.
 
 **Note:** GCA has _zero overlap_ with the local Gemini CLI instruction file (`GEMINI.md`), even though both tools use the `.gemini/` directory.
 
 ## 2. Keeping Configs Lean
 
-GCA's `.gemini/config.yaml` can be as large as necessary since it acts as a configuration manifest rather than a prompt prefix. However, `.gemini/styleguide.md` should be focused strictly on rules that the PR reviewer can enforce.
+GCA's `.gemini/config.yaml` can be as large as necessary because the file is a configuration manifest. Its length doesn't affect model context the way `.gemini/styleguide.md` does, so the styleguide should stay focused strictly on rules that the PR reviewer can enforce.
 
 ## 3. Totem Integration
 
