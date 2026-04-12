@@ -20,5 +20,5 @@ The `AI_PROMPT_BLOCK` provided by `totem init` is injected into `GEMINI.md`. Thi
 ## 4. Common Pitfalls
 
 - **The Global Trap:** `~/.gemini/GEMINI.md` grows to 64+ lines of duplicate instructions and bloats the context window for every project.
-- **Dead Files:** `.gemini/gemini.md` (lowercase) is dead or unrecognized by both Gemini CLI and GCA. The correct filename is `GEMINI.md` at the project root.
+- **Dead Files:** A lowercase-named instruction file placed inside `.gemini/` is dead or unrecognized by both Gemini CLI and GCA. The correct filename is `GEMINI.md` at the project root.
 - **Secrets Leakage:** Hardcoding PATs inside `.gemini/settings.json`.
