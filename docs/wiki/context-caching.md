@@ -6,7 +6,7 @@ Context Caching is supported on the **Anthropic** provider (`anthropic:` prefix)
 
 ## Enabling Context Caching (Opt-In Preview in 1.14.0)
 
-Context Caching ships in Totem 1.14.0 as an **opt-in preview**. The plumbing is in place — orchestrator middleware, `cache_control` markers on the static prompt sections, per-call cache metric tracking — but the feature defaults to **off** so existing users aren't surprised mid-cycle by a behavior change in their token usage profile. Default activation is tracked for 1.15.0 in [mmnto/totem#1291](https://github.com/mmnto-ai/totem/issues/1291).
+Context Caching ships in Totem 1.14.0 as an **opt-in preview**. The plumbing is in place (orchestrator middleware, `cache_control` markers on the static prompt sections, per-call cache metric tracking). The feature defaults to **off** so existing users aren't surprised mid-cycle by a behavior change in their token usage profile. Default activation is tracked for 1.15.0 in [mmnto/totem#1291](https://github.com/mmnto-ai/totem/issues/1291).
 
 To enable it for the 1.14.0 preview, add the flag to your `totem.config.ts`:
 
@@ -36,8 +36,8 @@ When Totem communicates with the LLM, it splits the prompt into static and dynam
 
 Anthropic's caching operates on a **sliding TTL (Time To Live)** that resets on every cache hit. The TTL is configurable via the `cacheTTL` option in `totem.config.ts` and is constrained to two values that Anthropic supports natively:
 
-- **`cacheTTL: 300`** (5 minutes) — the default. Ephemeral cache, ~10% of normal input token cost on read.
-- **`cacheTTL: 3600`** (1 hour) — extended cache. ~2x write cost on the first call, but lets the cache survive longer gaps between operations.
+- **`cacheTTL: 300`** (5 minutes, the default). Ephemeral cache, ~10% of normal input token cost on read.
+- **`cacheTTL: 3600`** (1 hour, extended cache). ~2x write cost on the first call, but lets the cache survive longer gaps between operations.
 
 When you run a command like `totem lesson compile`, the first lesson compiled will incur the full input token cost (plus any extended-cache premium) to write the static context into the cache. Every subsequent lesson compiled within the active TTL window will read that static context from the cache at lower cost.
 
@@ -47,7 +47,7 @@ _(Note: Placing dynamic content inside the cached section of a prompt is an anti
 
 ## Provider Coverage
 
-- **Anthropic:** Supported for `totem lesson compile` and `totem review` on any `anthropic:` model that returns prompt-cache usage metrics on the response. Caching activates when `enableContextCaching: true` is set in your config and the provider returns the cache metrics — there's no specific model-name gate.
+- **Anthropic:** Supported for `totem lesson compile` and `totem review` on any `anthropic:` model that returns prompt-cache usage metrics on the response. Caching activates when `enableContextCaching: true` is set in your config and the provider returns the cache metrics. There's no specific model-name gate.
 - **Google Gemini:** Deferred pending integration with the Gemini `CachedContent` API. Tracked for 1.16.0+.
 - **Other Providers:** No caching layer is currently wired into the orchestrator middleware.
 
@@ -69,4 +69,4 @@ On the first compile call in a TTL window, you'll see the companion message inst
 
 The first call pays full input token cost to write the static context into the cache; every subsequent call within the configured `cacheTTL` window reads from it.
 
-When the provider returns cache usage metrics, cache hit/write messages appear in normal compile output (dimmed). If you make several compile calls in rapid succession within the active TTL window and you see `cache write: N tokens` on every call instead of `cache hit: N tokens`, the cache is being invalidated on each call — most likely because dynamic content has been placed inside the cached section of the prompt. If you see no cache messages at all, verify that `enableContextCaching: true` is set in your `totem.config.ts` and that you're using an `anthropic:` provider.
+When the provider returns cache usage metrics, cache hit/write messages appear in normal compile output (dimmed). If you make several compile calls in rapid succession within the active TTL window and you see `cache write: N tokens` on every call instead of `cache hit: N tokens`, the cache is being invalidated on each call. The most likely cause is dynamic content placed inside the cached section of the prompt. If you see no cache messages at all, verify that `enableContextCaching: true` is set in your `totem.config.ts` and that you're using an `anthropic:` provider.

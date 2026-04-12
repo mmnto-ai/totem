@@ -4,7 +4,7 @@ GitHub Copilot is primarily an inline completion and chat assistant inside your 
 
 ## 1. Config Surfaces
 
-- **Project Context:** `.github/copilot-instructions.md` — The standard location for project-specific instructions for Copilot Chat.
+- **Project Context:** `.github/copilot-instructions.md`. The standard location for project-specific instructions for Copilot Chat.
 
 ## 2. Keeping Configs Lean
 

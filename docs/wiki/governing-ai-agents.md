@@ -1,6 +1,6 @@
 # Governing AI Agents
 
-AI coding agents (Claude, Gemini, Cursor) are effective at solving the code directly in front of them but suffer from a fundamental limitation: they are stateless. Every new session starts from zero — no memory of what broke last time, no awareness of architectural decisions, no knowledge that a shared helper already exists.
+AI coding agents (Claude, Gemini, Cursor) are effective at solving the code directly in front of them but suffer from a fundamental limitation: they are stateless. Every new session starts from zero, with no memory of prior incidents or the shared helpers you've already written.
 
 Static documentation files (`CLAUDE.md`, `GEMINI.md`) help, but agents don't reliably act on instructions loaded into context. If governance depends on the agent reading and following a rule, it will eventually be ignored.
 
@@ -51,7 +51,7 @@ Agent: "What patterns are banned in the CLI package?"
 → Results: "Direct child_process forbidden, use safeExec..."
 ```
 
-This works with any MCP-compatible agent — Claude, Gemini, Cursor, Windsurf. See [MCP Server Setup](mcp-setup.md) for configuration.
+This works with any MCP-compatible agent: Claude, Gemini, Cursor, Windsurf. See [MCP Server Setup](mcp-setup.md) for configuration.
 
 ## The Tradeoff
 

@@ -2,11 +2,11 @@
 
 The graveyard of developer tooling is full of linters that failed because of alert fatigue. If a tool throws 50 warnings about a "vulnerability" that the developer knows is a test fixture, they stop trusting the tool. They add blanket suppression comments or use `--no-verify` to bypass the hook entirely.
 
-Traditional linters are static — they cry wolf until someone spends a weekend manually tuning the configuration. Totem takes a different approach: it observes how rules perform against real code and flags the ones that are getting noisy.
+Traditional linters are static. They cry wolf until someone spends a weekend manually tuning the configuration. Totem takes a different approach: it observes how rules perform against real code and flags the ones that are getting noisy.
 
 ## Context Telemetry
 
-Every compiled rule tracks where its matches land — in actual code, in string literals, in comments, or in regex patterns. This distribution is recorded as `contextCounts` in the rule's metrics.
+Every compiled rule tracks where its matches land: in actual code, in string literals, in comments, or in regex patterns. This distribution is recorded as `contextCounts` in the rule's metrics.
 
 A rule that fires 100 times but 80 of those matches are inside comments or string literals is not doing useful work. It's generating noise that erodes developer trust.
 
@@ -44,8 +44,8 @@ When a developer legitimately needs to bypass a rule (e.g., a test fixture that 
 const key = 'AKIAIOSFODNN7EXAMPLE';
 ```
 
-This suppresses the specific violation while leaving the rule active for the rest of the codebase.
+This suppresses the specific violation. The rule stays active for the rest of the codebase.
 
 ## The Result
 
-Rules that fire too broadly get flagged and upgraded. Rules that fire accurately stay active. Over time, the linter gets quieter and more precise — it only blocks pushes for violations the team actually cares about.
+Rules that fire too broadly get flagged and upgraded. Rules that fire accurately stay active. Over time, the linter gets quieter and more precise. It only blocks pushes for violations the team actually cares about.

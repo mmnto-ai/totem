@@ -1,18 +1,18 @@
 # Claude Code
 
-Claude Code serves as the primary depth execution and product management agent. It relies on a blend of project-level files and system directories.
+Claude Code is the primary agent for depth execution and product management. It relies on a blend of project-level files and system directories.
 
 ## 1. Config Surfaces
 
-- **Project Context:** `CLAUDE.md` — The primary source of instructions and project rules.
-- **Project Settings:** `.claude/` — Contains workspace-specific configurations (e.g., `settings.local.json`).
-- **Global Settings:** `~/.claude/` — Contains global user preferences.
+- **Project Context:** `CLAUDE.md`. The primary source of instructions and project rules.
+- **Project Settings:** `.claude/`. Contains workspace-specific configurations (e.g., `settings.local.json`).
+- **Global Settings:** `~/.claude/`. Contains global user preferences.
 - **Hooks:** Git hooks or tool-specific hooks.
-- **MCP Servers:** `.mcp.json` — Defines MCP server commands and environment pass-through.
+- **MCP Servers:** `.mcp.json`. Defines MCP server commands and environment pass-through.
 
 ## 2. Keeping Configs Lean
 
-Due to the compliance lesson (length kills compliance), `CLAUDE.md` must only contain critical development rules and the Totem AI Integration block. Avoid turning `CLAUDE.md` into a massive styleguide. Keep it <32 lines if possible, prioritizing the most important architectural constraints.
+Due to the compliance lesson (length kills compliance), `CLAUDE.md` must only contain critical development rules and the Totem AI Integration block. Avoid turning `CLAUDE.md` into a massive styleguide. Keep it under 32 lines if possible. Focus on the most important architectural constraints.
 
 ## 3. Totem Integration
 

@@ -1,5 +1,5 @@
 name: 'Totem Shield'
-description: 'Run Totem Shield quality gate on PR diffs — enforce architectural lessons in CI'
+description: 'Run the Totem Shield quality gate on PR diffs. Enforces architectural lessons in CI.'
 branding:
   icon: 'shield'
   color: 'purple'

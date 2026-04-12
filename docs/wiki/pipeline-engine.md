@@ -2,11 +2,11 @@
 
 Totem 1.9.0 introduces the Pipeline Engine, the core subsystem that governs how institutional knowledge (lessons) becomes deterministically enforced code constraints (rules).
 
-The Pipeline Engine is built around the **Create → Enforce Lifecycle**, moving Totem from a simple linter to a structural governance platform.
+The Pipeline Engine is built around the **Create → Enforce Lifecycle**. It moves Totem from a simple linter to a structural governance platform.
 
 ## The Pipelines (P1–P5)
 
-Totem supports five distinct pipelines for rule creation, ranging from zero-LLM manual authoring to fully autonomous observation capture.
+Totem supports five distinct pipelines for rule creation, from zero-LLM manual authoring to fully autonomous observation capture.
 
 | Pipeline | Name                     | LLM Required?        | Entry Point                                                                   |
 | -------- | ------------------------ | -------------------- | ----------------------------------------------------------------------------- |
@@ -20,7 +20,7 @@ Totem supports five distinct pipelines for rule creation, ranging from zero-LLM 
 
 When establishing rules, prefer pipelines in the following order: **P1 > P3 > P2**. Pipelines **P4** and **P5** are additive enhancers.
 
-1. **P1 (Manual):** The highest priority. If you know exactly what regex or AST pattern you want to block, write it by hand. It requires zero LLM API cost, is immune to prompt drift, and runs instantaneously.
+1. **P1 (Manual):** The highest priority. If you know exactly what regex or AST pattern you want to block, write it by hand. It requires zero LLM API cost and runs instantaneously. It is also immune to prompt drift.
    - _Use when:_ You have a strict, highly specific pattern (e.g., `process.exit()`).
 2. **P3 (Example-Based):** The next best option. If you don't know how to write an AST selector but you have clear examples of the "Wrong Way" and the "Right Way," P3 uses an LLM once to generate the deterministic rule for you.
    - _Use when:_ You can easily provide `bad.ts` and `good.ts` snippets in your Markdown lesson.
@@ -88,10 +88,10 @@ totem rule list
 
 The ESLint adapter imports these rule types:
 
-- `no-restricted-imports` — import paths and patterns
-- `no-restricted-globals` — global variable usage
-- `no-restricted-properties` — object.property pairs (dot, optional chaining, and bracket notation)
-- `no-restricted-syntax` — these three AST node types: ForInStatement, WithStatement, DebuggerStatement (other selectors are silently skipped)
+- `no-restricted-imports`: import paths and patterns
+- `no-restricted-globals`: global variable usage
+- `no-restricted-properties`: object.property pairs (dot, optional chaining, and bracket notation)
+- `no-restricted-syntax`: these three AST node types are ForInStatement, WithStatement, and DebuggerStatement (other selectors are silently skipped)
 
 The Semgrep adapter (`--from-semgrep`) imports pattern-based YAML rules.
 
