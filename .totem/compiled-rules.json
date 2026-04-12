@@ -6440,7 +6440,9 @@
         "**/*.json",
         "**/*.ts",
         "**/*.js"
-      ]
+      ],
+      "status": "archived",
+      "archivedReason": "Over-broad: pattern matches any .+ after (?!, including valid fixed-form lookaheads like the heading separator rules on this same file. Also contains an em dash in the message, violating voice constraints. See #1381 for the compile-gate validation ticket that would catch this class of bug."
     }
   ],
   "nonCompilable": [
