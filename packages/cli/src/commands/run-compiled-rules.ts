@@ -342,7 +342,7 @@ export async function runCompiledRules(
         // Clean pass — only emit verbose markdown when writing to file
         if (outPath) {
           lines.push('### Verdict');
-          lines.push(`**PASS** — All ${rules.length} rules passed.`);
+          lines.push(`**PASS** - All ${rules.length} rules passed.`);
           lines.push('');
           lines.push('### Details');
           lines.push('No violations detected against compiled rules.');
@@ -351,11 +351,11 @@ export async function runCompiledRules(
         lines.push('### Verdict');
         if (errors.length > 0) {
           lines.push(
-            `**FAIL** — ${errors.length} error(s)${warnings.length > 0 ? `, ${warnings.length} warning(s)` : ''} across ${rules.length} rules.`,
+            `**FAIL** - ${errors.length} error(s)${warnings.length > 0 ? `, ${warnings.length} warning(s)` : ''} across ${rules.length} rules.`,
           );
         } else {
           lines.push(
-            `**PASS** — ${warnings.length} warning(s), 0 errors across ${rules.length} rules.`,
+            `**PASS** - ${warnings.length} warning(s), 0 errors across ${rules.length} rules.`,
           );
         }
 
@@ -363,7 +363,7 @@ export async function runCompiledRules(
           lines.push('');
           lines.push('### Errors');
           for (const v of errors) {
-            lines.push(`- **${v.file}:${v.lineNumber}** — ${v.rule.message}`);
+            lines.push(`- **${v.file}:${v.lineNumber}** - ${v.rule.message}`);
             lines.push(`  Pattern: \`/${v.rule.pattern}/\``);
             lines.push(`  Lesson: "${v.rule.lessonHeading}"`);
             lines.push(`  Line: \`${v.line.trim()}\``);
@@ -375,7 +375,7 @@ export async function runCompiledRules(
           lines.push('');
           lines.push('### Warnings');
           for (const v of warnings) {
-            lines.push(`- **${v.file}:${v.lineNumber}** — ${v.rule.message}`);
+            lines.push(`- **${v.file}:${v.lineNumber}** - ${v.rule.message}`);
             lines.push(`  Pattern: \`/${v.rule.pattern}/\``);
             lines.push(`  Lesson: "${v.rule.lessonHeading}"`);
             lines.push(`  Line: \`${v.line.trim()}\``);
@@ -392,7 +392,7 @@ export async function runCompiledRules(
     if (errors.length > 0) {
       const verdictLabel = errorColor(bold('FAIL'));
       const warnSuffix = warnings.length > 0 ? `, ${warnings.length} warning(s)` : '';
-      log.info(tag, `Verdict: ${verdictLabel} — ${errors.length} error(s)${warnSuffix}`);
+      log.info(tag, `Verdict: ${verdictLabel} - ${errors.length} error(s)${warnSuffix}`);
       throw new TotemError(
         'SHIELD_FAILED',
         'Violations detected',
@@ -400,10 +400,10 @@ export async function runCompiledRules(
       );
     } else if (warnings.length > 0) {
       const verdictLabel = successColor(bold('PASS'));
-      log.info(tag, `Verdict: ${verdictLabel} — ${warnings.length} warning(s), 0 errors`);
+      log.info(tag, `Verdict: ${verdictLabel} - ${warnings.length} warning(s), 0 errors`);
     } else {
       const verdictLabel = successColor(bold('PASS'));
-      log.info(tag, `Verdict: ${verdictLabel} — ${rules.length} rules, 0 violations`);
+      log.info(tag, `Verdict: ${verdictLabel} - ${rules.length} rules, 0 violations`);
     }
 
     return { violations, findings, rules, output };

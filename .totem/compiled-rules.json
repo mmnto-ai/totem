@@ -6404,27 +6404,42 @@
     {
       "lessonHash": "7e3eefeaa85403d0",
       "lessonHeading": "Manual lessons must use the '## Lesson <separator> <Heading>' structure",
+      "pattern": "^## Lesson(?! [—–-] .+)",
       "message": "Manual lessons must use '## Lesson <separator> <Heading>' structure where separator is an em-dash (—), en-dash (–), or hyphen (-)",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^## Lesson(?! [—–-] .+)",
       "compiledAt": "2026-04-12T15:37:03.920Z",
       "createdAt": "2026-04-12T15:37:03.920Z",
       "fileGlobs": [
         "**/*.md"
-      ]
+      ],
+      "severity": "warning"
     },
     {
       "lessonHash": "6e8a7d02136381a2",
       "lessonHeading": "Use a '## Lesson <separator> <Heading>' format and 'Tags' field",
+      "pattern": "^## Lesson(?! [—–-] .+)",
       "message": "Lesson headings must use the format '## Lesson <separator> <Heading>' where separator is an em-dash (—), en-dash (–), or hyphen (-)",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^## Lesson(?! [—–-] .+)",
       "compiledAt": "2026-04-12T15:37:04.023Z",
       "createdAt": "2026-04-12T15:37:04.023Z",
       "fileGlobs": [
         "**/*.md"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "b6170de7306ddb86",
+      "lessonHeading": "Avoid greedy patterns in negative lookaheads",
+      "message": "Avoid greedy patterns (like .+) inside negative lookaheads — they can consume the separators they are meant to guard, causing false positives on valid inputs.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\(\\?!.*\\.\\+",
+      "compiledAt": "2026-04-12T16:31:15.627Z",
+      "createdAt": "2026-04-12T16:31:15.627Z",
+      "fileGlobs": [
+        "**/*.json",
+        "**/*.ts",
+        "**/*.js"
       ]
     }
   ],
@@ -9796,6 +9811,14 @@
     {
       "hash": "47c4c9f66c1ce03c",
       "title": "Prefer canonical noun-verb CLI commands in docs"
+    },
+    {
+      "hash": "e0e9ebae4a6c3fb1",
+      "title": "Consolidate rules with identical patterns"
+    },
+    {
+      "hash": "4052cb43db0f9efe",
+      "title": "Support varied dash types in Markdown"
     }
   ]
 }
