@@ -4,17 +4,17 @@ Junie is JetBrains' AI coding agent, available as an IDE plugin and a standalone
 
 ## 1. Config Surfaces
 
-- **Project Context:** `.junie/guidelines.md` (or `.junie/AGENTS.md`) — Instructions loaded into every prompt. Keep lean (<50 lines) to reduce quota burn.
-- **MCP Servers:** `.junie/mcp/mcp.json` — Project-level MCP config. **Not** `.mcp.json` at project root.
-- **Global MCP:** `~/.junie/mcp/mcp.json` — User-level MCP servers.
-- **Skills:** `.junie/skills/<name>/SKILL.md` — Task-specific knowledge loaded on demand (progressive disclosure, not injected into every prompt).
-- **No global guidelines** — unlike Claude/Gemini, Junie has no `~/.junie/guidelines.md`. Only project-level.
+- **Project Context:** `.junie/guidelines.md` (or `.junie/AGENTS.md`). Instructions loaded into every prompt. Keep lean (<50 lines) to reduce quota burn.
+- **MCP Servers:** `.junie/mcp/mcp.json`. Project-level MCP config. **Not** `.mcp.json` at project root.
+- **Global MCP:** `~/.junie/mcp/mcp.json`. User-level MCP servers.
+- **Skills:** `.junie/skills/<name>/SKILL.md`. Task-specific knowledge loaded on demand (progressive disclosure, not injected into every prompt).
+- **No global guidelines.** Unlike Claude/Gemini, Junie has no `~/.junie/guidelines.md`. Only project-level.
 
 ## 2. Keeping Configs Lean
 
-Guidelines are injected into every prompt, so length directly impacts quota usage. JetBrains recommends keeping them short — "50 lines vs 100 lines won't make much difference, 100 vs 1000 will." This matches our lean CLAUDE.md approach.
+Guidelines are injected into every prompt, so length directly impacts quota usage. JetBrains recommends keeping them short: "50 lines vs 100 lines won't make much difference, 100 vs 1000 will." This matches our lean CLAUDE.md approach.
 
-For compiled rules (which can be large), use a Junie **skill** instead of stuffing them into guidelines. Skills use progressive disclosure — Junie only loads them when the task matches the skill description.
+For compiled rules (which can be large), use a Junie **skill** instead of stuffing them into guidelines. Skills use progressive disclosure. Junie only loads them when the task matches the skill description.
 
 ## 3. Totem Integration
 
@@ -25,5 +25,5 @@ For compiled rules (which can be large), use a Junie **skill** instead of stuffi
 ## 4. Common Pitfalls
 
 - **Wrong MCP path:** Junie uses `.junie/mcp/mcp.json`, NOT `.mcp.json`. The project root `.mcp.json` is for Claude Code.
-- **Guidelines bloat:** Don't dump compiled rules into `guidelines.md` — use a skill instead. 100KB of rules in guidelines burns massive quota on every prompt.
+- **Guidelines bloat:** Don't dump compiled rules into `guidelines.md`. Use a skill instead. 100KB of rules in guidelines burns massive quota on every prompt.
 - **Hardcoded secrets:** Never put tokens in `.junie/mcp/mcp.json`. Junie inherits env vars from the shell.
