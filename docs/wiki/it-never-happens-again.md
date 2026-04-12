@@ -1,6 +1,6 @@
 # It Never Happens Again
 
-When a reviewer (human or AI) spots an architectural mistake — like using a static import instead of a lazy one, or failing to tag an error properly — they leave a comment. The developer fixes it. The PR merges.
+When a reviewer (human or AI) spots an architectural mistake, like a static import that should be lazy or an error without a proper tag, they leave a comment. The developer fixes it. The PR merges.
 
 Two days later, an agent or a junior developer makes the exact same mistake in a different file. The cycle repeats. Knowledge is trapped in merged PRs.
 
@@ -8,7 +8,7 @@ Totem breaks this cycle with a three-step loop: **Extract → Compile → Enforc
 
 ## 1. Extract the Lesson
 
-When a PR review identifies a recurring issue, extract the principle — not just the fix.
+When a PR review identifies a recurring issue, extract the underlying principle. The fix alone won't close the loop.
 
 ```bash
 totem extract <PR_NUMBER>
@@ -19,7 +19,7 @@ Totem reads the review comments, identifies the architectural pattern, and write
 _Example output:_
 
 ```markdown
-## Lesson — Lazy load CLI commands
+## Lesson - Lazy load CLI commands
 
 Tags: architecture, cli
 Never use static imports (e.g., `import fs from 'fs'`) at the top level of CLI command files. Always use dynamic imports (`await import('fs')`) inside the command handler to preserve startup latency.
@@ -55,4 +55,4 @@ No review comment. No back-and-forth. The violation is caught before the code le
 
 ## The Result
 
-The mistake happened once. It was extracted, compiled, and enforced. The same class of error is now mechanically impossible to merge — regardless of whether the author is a human, Claude, Gemini, or Cursor.
+The mistake happened once. It was extracted, compiled, and enforced. The same class of error is now mechanically impossible to merge, regardless of whether the author is a human, Claude, Gemini, or Cursor.
