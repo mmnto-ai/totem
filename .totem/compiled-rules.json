@@ -4199,7 +4199,9 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Superseded by rule 09a2284e (cross-spawn tripwire). Wrong remediation: '.cmd appending' is brittle across corepack/WSL/native binaries. Correct fix is cross-spawn, which the new rule enforces. Also over-broad globs (**/*.ts) vs the replacement's scoped sys/ target."
     },
     {
       "lessonHash": "fe49bb51fe20e80b",
