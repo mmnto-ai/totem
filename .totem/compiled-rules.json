@@ -6428,21 +6428,54 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "b6170de7306ddb86",
-      "lessonHeading": "Avoid greedy patterns in negative lookaheads",
-      "message": "Avoid greedy patterns (like .+) inside negative lookaheads — they can consume the separators they are meant to guard, causing false positives on valid inputs.",
-      "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\(\\?!.*\\.\\+",
-      "compiledAt": "2026-04-12T16:31:15.627Z",
-      "createdAt": "2026-04-12T16:31:15.627Z",
+      "lessonHash": "09a4121510399bb8",
+      "lessonHeading": "Avoid splitting error messages on periods",
+      "pattern": "",
+      "message": "Avoid splitting error messages on periods — dot-splitting truncates code snippets like .method(). Use newline-based splitting or regex instead.",
+      "engine": "ast-grep",
+      "astGrepPattern": "$STR.split('.')",
+      "compiledAt": "2026-04-12T21:00:42.877Z",
+      "createdAt": "2026-04-12T21:00:42.877Z",
       "fileGlobs": [
-        "**/*.json",
-        "**/*.ts",
-        "**/*.js"
+        "packages/core/src/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
       ],
+      "severity": "warning",
       "status": "archived",
-      "archivedReason": "Over-broad: pattern matches any .+ after (?!, including valid fixed-form lookaheads like the heading separator rules on this same file. Also contains an em dash in the message, violating voice constraints. See #1381 for the compile-gate validation ticket that would catch this class of bug."
+      "archivedReason": "Over-broad: $STR.split('.') fires on all dot splits (filename.split('.'), semver parsing, dot-notation handling). Same class as the rule archived in #1352. The lesson is specific to error-message splitting but the pattern is indiscriminate."
+    },
+    {
+      "lessonHash": "09a2284e29ae960b",
+      "lessonHeading": "Prefer cross-spawn for Windows shim resolution",
+      "pattern": "",
+      "message": "Avoid shell: true for Windows shim resolution — use cross-spawn instead to safely handle .cmd shims without shell injection risk.",
+      "engine": "ast-grep",
+      "astGrepPattern": "spawn($CMD, $ARGS, { $$$BEFORE, shell: true, $$$AFTER })",
+      "compiledAt": "2026-04-12T21:00:43.122Z",
+      "createdAt": "2026-04-12T21:00:43.122Z",
+      "fileGlobs": [
+        "packages/core/src/sys/**/*.ts",
+        "!**/*.test.*"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "aab1582b699fc252",
+      "lessonHeading": "Consolidate dynamic imports in command handlers",
+      "pattern": "",
+      "message": "Avoid inline dynamic imports inside command handlers. Consolidate all imports from a package at the top of the handler using a single destructured await import().",
+      "engine": "ast-grep",
+      "astGrepPattern": "const { $VAR } = await import($MODULE)",
+      "compiledAt": "2026-04-12T21:00:59.708Z",
+      "createdAt": "2026-04-12T21:00:59.708Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: fires on every destructured dynamic import in command handlers, which is the canonical architectural pattern per ADR-071. Every CLI command handler uses this pattern by design. Would flag hundreds of legitimate lines."
     }
   ],
   "nonCompilable": [
@@ -9815,12 +9848,88 @@
       "title": "Prefer canonical noun-verb CLI commands in docs"
     },
     {
-      "hash": "e0e9ebae4a6c3fb1",
-      "title": "Consolidate rules with identical patterns"
+      "hash": "46598200aefc5956",
+      "title": "Audit diagnostic call-sites for filters"
     },
     {
-      "hash": "4052cb43db0f9efe",
-      "title": "Support varied dash types in Markdown"
+      "hash": "1987e6190a99158c",
+      "title": "Bypass lint hallucinations with equivalent regex"
+    },
+    {
+      "hash": "93119b2c17367de1",
+      "title": "Validate DSL patterns with authoritative parsers"
+    },
+    {
+      "hash": "7f8338ab21a4a008",
+      "title": "Refresh manifests on pure input drift"
+    },
+    {
+      "hash": "22bb35a6c85b93bb",
+      "title": "Guard command line string construction"
+    },
+    {
+      "hash": "9d671ad93188c9aa",
+      "title": "Dynamic string construction signals broken rules"
+    },
+    {
+      "hash": "fccdf8df646957cb",
+      "title": "Split enforcement and administrative loaders"
+    },
+    {
+      "hash": "0d265c5b4480b15a",
+      "title": "Archive rules to preserve telemetry"
+    },
+    {
+      "hash": "4b66aaabd420de7e",
+      "title": "Ensure SARIF parity for standalone binaries"
+    },
+    {
+      "hash": "f7cd7aed658e51c4",
+      "title": "Prefer negative filters for compatibility"
+    },
+    {
+      "hash": "817bd0e7305220ba",
+      "title": "Preserve raw buffers in spawn errors"
+    },
+    {
+      "hash": "50e2654a4facf5b7",
+      "title": "Avoid diff archaeology during voice refreshes"
+    },
+    {
+      "hash": "384536aa7dbedadf",
+      "title": "Guard against future exception wrapping changes"
+    },
+    {
+      "hash": "10204875afb3139c",
+      "title": "Avoid over-broad git diff header regex"
+    },
+    {
+      "hash": "05a7f716c731ec0b",
+      "title": "Limit SARIF output to error-severity findings"
+    },
+    {
+      "hash": "fba4a1e7ebbfe680",
+      "title": "Export interfaces for custom error fields"
+    },
+    {
+      "hash": "9dd07fbf0ae1b8e6",
+      "title": "Mock package boundaries for cross-package tests"
+    },
+    {
+      "hash": "69589fab47e816fd",
+      "title": "Audit root cause helpers for vulnerabilities"
+    },
+    {
+      "hash": "4d44661bf5d0cc70",
+      "title": "Preserve technical invariants during voice refreshes"
+    },
+    {
+      "hash": "4a52301bb5595a9f",
+      "title": "Partition manifest and rule file writes"
+    },
+    {
+      "hash": "453e2841f280c632",
+      "title": "Avoid prefixes in low-level error messages"
     }
   ]
 }
