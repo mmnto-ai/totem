@@ -157,7 +157,7 @@ Compiles `.totem/lessons.md` into deterministic regex/AST rules for zero-LLM che
   - `--from-cursor`: Ingests `.cursorrules`, `.windsurfrules`, and `.cursor/rules/*.mdc` files as lessons.
   - `--upgrade <hash>`: Targets one rule by hash (full or short prefix), evicts only that rule from the cache (preserves `createdAt` metadata), recompiles through Sonnet with a telemetry-driven directive, and replaces the rule. Rejects `--cloud` (not supported) and `--force` (scoped eviction makes force redundant and dangerous).
 
-### `totem extract <pr-ids...>`
+### `totem lesson extract <pr-ids...>`
 
 Fetches merged PRs, reads comments, and extracts systemic architectural traps. Automatically infers scope from PR changed files.
 
