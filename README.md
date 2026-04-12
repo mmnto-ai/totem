@@ -49,10 +49,10 @@ Direct use of `node:child_process` is forbidden outside `core/src/sys/`. Use the
 $ git push
 [Lint] Running 393 rules (zero LLM)...
 ### Warnings
-- **packages/cli/src/git.ts:22** — Never use native child_process
+- **packages/cli/src/git.ts:22** - Never use native child_process
   Pattern: `import { execSync } from 'node:child_process'`
   Lesson: "Direct use of `node:child_process` is forbidden outside `core/src/sys/`. Use the `safeExec` shared helper instead."
-[Lint] Verdict: FAIL — Fix violations before pushing.
+[Lint] Verdict: FAIL - Fix violations before pushing.
 ```
 
 The "wrong" way becomes the "loud" way. No LLM in the loop at runtime. Just sub-second, offline enforcement.
