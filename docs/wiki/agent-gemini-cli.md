@@ -1,13 +1,13 @@
 # Gemini CLI
 
-The Gemini CLI is a powerful terminal agent designed for breadth analysis, code review, and cross-file structural edits.
+The Gemini CLI is a terminal agent for breadth analysis, code review, and cross-file structural edits.
 
 ## 1. Config Surfaces
 
-- **Project Context:** `GEMINI.md` — The main instruction file in the repository root.
-- **Project Settings:** `.gemini/settings.json` — Local configuration for UI, defaults, and model choices.
-- **Global Context:** `~/.gemini/` — Global configuration and instructions. **Warning:** Watch out for `~/.gemini/GEMINI.md` accumulating cross-project bleed and duplicates.
-- **Hooks & Skills:** `.gemini/hooks/` and `.gemini/skills/` — Project-specific reflexes and automated behaviors.
+- **Project Context:** `GEMINI.md`. The main instruction file in the repository root.
+- **Project Settings:** `.gemini/settings.json`. Local configuration for UI, defaults, and model choices.
+- **Global Context:** `~/.gemini/`. Global configuration and instructions. **Warning:** Watch out for `~/.gemini/GEMINI.md` accumulating cross-project bleed and duplicates.
+- **Hooks & Skills:** `.gemini/hooks/` and `.gemini/skills/`. Project-specific reflexes and automated behaviors.
 
 ## 2. Keeping Configs Lean
 
@@ -19,6 +19,6 @@ The `AI_PROMPT_BLOCK` provided by `totem init` is injected into `GEMINI.md`. Thi
 
 ## 4. Common Pitfalls
 
-- **The Global Trap:** `~/.gemini/GEMINI.md` growing to 64+ lines of duplicate instructions, causing massive context bloat.
-- **Dead Files:** Using `.gemini/gemini.md` (lowercase) — this file is dead/unrecognized by both Gemini CLI and GCA. The correct filename is `GEMINI.md` at the project root.
+- **The Global Trap:** `~/.gemini/GEMINI.md` grows to 64+ lines of duplicate instructions and bloats the context window for every project.
+- **Dead Files:** `.gemini/gemini.md` (lowercase) is dead or unrecognized by both Gemini CLI and GCA. The correct filename is `GEMINI.md` at the project root.
 - **Secrets Leakage:** Hardcoding PATs inside `.gemini/settings.json`.
