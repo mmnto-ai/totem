@@ -4,7 +4,7 @@ Junie is JetBrains' AI coding agent, available as an IDE plugin and a standalone
 
 ## 1. Config Surfaces
 
-- **Project Context:** `.junie/guidelines.md` (or `.junie/AGENTS.md`). Instructions loaded into every prompt. Keep lean (<50 lines) to reduce quota burn.
+- **Project Context:** `.junie/guidelines.md` (or `.junie/AGENTS.md`). Instructions loaded into every prompt. Keep the file within the instruction-file length limits (FR-C01) to reduce quota burn.
 - **MCP Servers:** `.junie/mcp/mcp.json`. Project-level MCP config. **Not** `.mcp.json` at project root.
 - **Global MCP:** `~/.junie/mcp/mcp.json`. User-level MCP servers.
 - **Skills:** `.junie/skills/<name>/SKILL.md`. Task-specific knowledge loaded on demand (progressive disclosure, not injected into every prompt).
