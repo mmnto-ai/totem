@@ -37,7 +37,7 @@ Totem turns a plain-English markdown lesson into a physical constraint that a lo
 **Input:** (`.totem/lessons/no-child-process.md`)
 
 ```markdown
-## Lesson - Never use native child_process
+## Lesson — Never use native child_process
 
 Tags: architecture
 Direct use of `node:child_process` is forbidden outside `core/src/sys/`. Use the `safeExec` shared helper instead.

@@ -19,7 +19,7 @@ Totem reads the review comments, identifies the architectural pattern, and write
 _Example output:_
 
 ```markdown
-## Lesson - Lazy load CLI commands
+## Lesson — Lazy load CLI commands
 
 Tags: architecture, cli
 Never use static imports (e.g., `import fs from 'fs'`) at the top level of CLI command files. Always use dynamic imports (`await import('fs')`) inside the command handler to preserve startup latency.

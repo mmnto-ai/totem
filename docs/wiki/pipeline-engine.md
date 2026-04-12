@@ -54,7 +54,7 @@ Then, author the lesson markdown and run `totem lesson compile` to generate the 
 Given a lesson (`.totem/lessons/db-access.md`) with explicit blocks:
 
 ````markdown
-## Lesson - Direct DB access is forbidden in UI components
+## Lesson — Direct DB access is forbidden in UI components
 
 **Wrong:**
 
