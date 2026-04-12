@@ -1,10 +1,10 @@
 # Cross-Repo Mesh (Federation)
 
-When working across multiple repositories, AI agents often hallucinate context because they cannot see the architectural decisions made in sibling repos. The Cross-Repo Mesh fixes this by connecting multiple `.lancedb` indexes into a shared semantic knowledge base, allowing agents to federate context across repository boundaries.
+When working across multiple repositories, AI agents often hallucinate context because they cannot see the architectural decisions made in sibling repos. The Cross-Repo Mesh fixes this by connecting multiple `.lancedb` indexes into a shared semantic knowledge base. Agents can then federate context across repository boundaries.
 
 ## Two ways to share lessons across repositories
 
-Totem ships **two distinct mechanisms** for cross-repository knowledge sharing. They sound similar but have very different tradeoffs — pick the one that matches your use case.
+Totem ships **two distinct mechanisms** for cross-repository knowledge sharing. They sound similar but have very different tradeoffs. Pick the one that matches your use case.
 
 ### Option 1: `linkedIndexes` config (federation mode)
 
@@ -12,7 +12,7 @@ Each repository keeps its own `.lancedb` index. Queries fan out across multiple 
 
 **Best for:** distinct repositories with their own lesson corpora, where you want each repo to maintain its own governance authority but cross-pollinate semantic context.
 
-### Option 2: `totem link <path>` CLI — pull mode
+### Option 2: `totem link <path>` CLI (pull mode)
 
 Adds the neighboring repo's `.totem/lessons/*.md` files to your local `targets: []` array in `totem.config.ts`. After running `totem sync`, those lessons get **embedded into your local LanceDB index** alongside your own. The neighboring repo's index is not queried at all — its lessons become part of yours.
 
@@ -26,7 +26,7 @@ totem link ../api-server
 totem link --unlink ../api-server
 ```
 
-Note: `totem link` modifies the `targets: []` array, NOT `linkedIndexes`. The two mechanisms are independent — you can use both at the same time on different neighboring repos if your needs vary.
+Note: `totem link` modifies the `targets: []` array, NOT `linkedIndexes`. The two mechanisms are independent. You can use both at the same time on different neighboring repos if your needs vary.
 
 ### Configuring `linkedIndexes` (federation mode)
 
@@ -58,7 +58,7 @@ When an agent calls the `search_knowledge` tool without specifying a boundary, t
 
 The results from all stores are merged using **rank-based RRF scoring** with a constant of `k=60`. Each store is treated as an independently ranked list, and each result is assigned a normalized score based on its 1-indexed position within its store: `1 / (60 + rank_within_store)`. So the top result of any store gets `1/61 ≈ 0.0164`, the second gets `1/62`, and so on. This produces correctly interleaved ranks regardless of how the underlying store scored its own results.
 
-This is a simplified form of Reciprocal Rank Fusion. The textbook RRF formula sums reciprocal ranks across multiple lists when the same document appears in more than one. Federation across linked Totem repositories assumes **disjoint corpora** — each document lives in exactly one store, distinguished by its `sourceRepo` tag — so the cross-list summation degenerates to a single per-list rank score. If you ever link two repositories that share content (e.g., a vendored submodule indexed in both), each copy would be treated as a separate document at its own rank within its source store, not deduplicated.
+This is a simplified form of Reciprocal Rank Fusion. The textbook RRF formula sums reciprocal ranks across multiple lists when the same document appears in more than one. Federation across linked Totem repositories assumes **disjoint corpora** (each document lives in exactly one store, distinguished by its `sourceRepo` tag), so the cross-list summation degenerates to a single per-list rank score. If you ever link two repositories that share content (e.g., a vendored submodule indexed in both), each copy would be treated as a separate document at its own rank within its source store, not deduplicated.
 
 This mathematical normalization eliminates score-scale bias. It ensures that a highly relevant hit from a purely vector-based linked store isn't outranked by a mediocre hit from a hybrid-search primary store just because their absolute scoring scales differ. The visible `Score:` field in the agent's results displays this normalized RRF value.
 
@@ -116,7 +116,7 @@ _(Note: Federated queries incur a slight performance overhead, roughly ~50–100
 
 ## Context Isolation (Partitions)
 
-_Partitions work orthogonally to the mesh — they scope results within the primary store, whereas the mesh federates across multiple stores. (Linked stores are currently searched in their entirety; partition filters are not propagated to linked-store queries.)_
+_Partitions work orthogonally to the mesh. They scope results within the primary store, whereas the mesh federates across multiple stores. (Linked stores are currently searched in their entirety; partition filters are not propagated to linked-store queries.)_
 
 When multiple AI agents (or one agent across packages) share a knowledge index, you can restrict search results to specific boundaries. This prevents a frontend agent from hallucinating based on backend database schemas.
 
