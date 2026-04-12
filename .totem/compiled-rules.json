@@ -2290,20 +2290,6 @@
       "severity": "warning"
     },
     {
-      "lessonHash": "c360340b1b8ff1c7",
-      "lessonHeading": "Manual lessons must use the '## Lesson — <Heading>'",
-      "pattern": "^##\\s+Lesson\\s*[^—]",
-      "message": "Manual lessons must use the '## Lesson — <Heading>' structure (with an em dash '—') to ensure compatibility with automated parsing and discovery tools.",
-      "engine": "regex",
-      "compiledAt": "2026-04-06T03:22:45.993Z",
-      "createdAt": "2026-04-06T03:22:45.993Z",
-      "fileGlobs": [
-        "**/*.md",
-        "**/*.mdx"
-      ],
-      "severity": "warning"
-    },
-    {
       "lessonHash": "f4b44468f7f5b46a",
       "lessonHeading": "Verify CLI availability in shared git hooks before execution",
       "pattern": "^[ \\t]*(?!(?:if|command|type|hash|\\[|&&|\\|\\|)\\b)\\s*(npx|pnpm|npm|yarn|eslint|prettier|lint-staged|tsc|vitest|jest|oxlint|biome|stylelint)\\b",
@@ -3580,19 +3566,6 @@
         "**/*.js",
         "**/*.tsx",
         "**/*.jsx"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "e533191ba7c58614",
-      "lessonHeading": "Use a '## Lesson — <Heading>' format and 'Tags' field",
-      "pattern": "^## Lesson(?! —)",
-      "message": "Lesson headings must use the format '## Lesson — <Heading>' (with em dash and space)",
-      "engine": "regex",
-      "compiledAt": "2026-04-06T03:25:45.158Z",
-      "createdAt": "2026-04-06T03:25:45.158Z",
-      "fileGlobs": [
-        "**/*.md"
       ],
       "severity": "warning"
     },
@@ -6427,6 +6400,32 @@
       "severity": "warning",
       "status": "archived",
       "archivedReason": "Pattern `$STR.split('.')` fires on all dot splits: filename extension parsing (`filename.split('.')`), semantic version parsing (`'1.14.5'.split('.')`), dot-notation handling, and any arbitrary string manipulation with `.`. The underlying lesson was specific to splitting error messages containing code patterns with dots (the regression fixed in mmnto/totem#1349), but the rule is indiscriminate. Auto-compiled on the 2026-04-11 PM postmerge. Archived via the mmnto/totem#1345 filter. Kept in the ledger as the canonical example of 'the rule should have been narrower than the pattern the LLM chose'."
+    },
+    {
+      "lessonHash": "7e3eefeaa85403d0",
+      "lessonHeading": "Manual lessons must use the '## Lesson <separator> <Heading>' structure",
+      "message": "Manual lessons must use '## Lesson <separator> <Heading>' structure where separator is an em-dash (—), en-dash (–), or hyphen (-)",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "^## Lesson(?! [—–-] .+)",
+      "compiledAt": "2026-04-12T15:37:03.920Z",
+      "createdAt": "2026-04-12T15:37:03.920Z",
+      "fileGlobs": [
+        "**/*.md"
+      ]
+    },
+    {
+      "lessonHash": "6e8a7d02136381a2",
+      "lessonHeading": "Use a '## Lesson <separator> <Heading>' format and 'Tags' field",
+      "message": "Lesson headings must use the format '## Lesson <separator> <Heading>' where separator is an em-dash (—), en-dash (–), or hyphen (-)",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "^## Lesson(?! [—–-] .+)",
+      "compiledAt": "2026-04-12T15:37:04.023Z",
+      "createdAt": "2026-04-12T15:37:04.023Z",
+      "fileGlobs": [
+        "**/*.md"
+      ]
     }
   ],
   "nonCompilable": [
