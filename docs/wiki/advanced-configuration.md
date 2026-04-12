@@ -43,21 +43,21 @@ The embedding provider determines how Totem converts your code and lessons into 
 | Provider   | Model                        | Dimensions | Task-Type Aware | Air-Gapped | Best For                          |
 | :--------- | :--------------------------- | :--------- | :-------------- | :--------- | :-------------------------------- |
 | **OpenAI** | `text-embedding-3-small`     | 1536       | No              | No         | Quick setup, lowest friction      |
-| **Gemini** | `gemini-embedding-2-preview` | 768        | Yes             | No         | Best quality — code-aware vectors |
+| **Gemini** | `gemini-embedding-2-preview` | 768        | Yes             | No         | Best quality, code-aware vectors  |
 | **Ollama** | `nomic-embed-text`           | 768        | No              | Yes        | Air-gapped / offline environments |
 
 ### Why Gemini Embeddings (Recommended)
 
-Gemini's `gemini-embedding-2-preview` supports **task-type instructions** — it produces different vectors depending on what you're embedding:
+Gemini's `gemini-embedding-2-preview` supports **task-type instructions**. It produces different vectors depending on what you're embedding:
 
-- `code_retrieval` for TypeScript/code chunks — understands syntax structure
-- `retrieval_document` for lessons and docs — optimized for semantic search
-- `retrieval_query` for search queries — asymmetric matching against documents
+- `code_retrieval` for TypeScript/code chunks. Understands syntax structure.
+- `retrieval_document` for lessons and docs. Optimized for semantic search.
+- `retrieval_query` for search queries. Asymmetric matching against documents.
 
 This means your code searches are more precise than generic text embeddings. The 768-dimension vectors also use **half the storage** of OpenAI (3GB vs 6GB per million vectors) with **2x search speed** and less than 1% accuracy loss.
 
 ```typescript
-// totem.config.ts — Gemini embeddings (recommended)
+// totem.config.ts - Gemini embeddings (recommended)
 embedding: {
   provider: 'gemini',
   model: 'gemini-embedding-2-preview',
@@ -68,10 +68,10 @@ Requires `GEMINI_API_KEY` in your `.env` file.
 
 ### OpenAI (Default)
 
-The simplest setup — works out of the box if you have an OpenAI key.
+The simplest setup. Works out of the box if you have an OpenAI key.
 
 ```typescript
-// totem.config.ts — OpenAI embeddings (default)
+// totem.config.ts - OpenAI embeddings (default)
 embedding: {
   provider: 'openai',
   model: 'text-embedding-3-small',
@@ -89,7 +89,7 @@ rm -rf .lancedb
 pnpm exec totem sync --full
 ```
 
-You must also **restart any running MCP servers** (close and reopen your AI agent) — the MCP server caches the embedder on first request.
+You must also **restart any running MCP servers** (close and reopen your AI agent). The MCP server caches the embedder on first request.
 
 ## Local Models (Ollama)
 
@@ -157,7 +157,7 @@ By default, the MCP integration runs via `npx -y @mmnto/mcp`, which always fetch
 
 ## Auto-Learning (shieldAutoLearn)
 
-You can configure Totem to automatically prompt for lesson extraction whenever a `totem review` (shield) fails. This accelerates the Self-Healing Loop by ensuring that every violation provides an immediate opportunity to improve the ruleset.
+You can configure Totem to automatically prompt for lesson extraction whenever a `totem review` (shield) fails. This accelerates the Self-Healing Loop. Every violation becomes an immediate opportunity to improve the ruleset.
 
 ```typescript
 // totem.config.ts
@@ -169,8 +169,8 @@ export default {
 
 ## Scope Inference in Extract
 
-When running `totem extract` against a pull request, Totem will automatically analyze the changed files to infer the architectural scope of the PR. This suggested scope is pre-injected into the lesson extraction process, saving time and ensuring lessons are correctly categorized.
+When running `totem extract` against a pull request, Totem will automatically analyze the changed files to infer the architectural scope of the PR. This suggested scope is pre-injected into the lesson extraction process, which saves time and keeps lessons correctly categorized.
 
 ## Prior Art Concierge (Spec)
 
-The `totem spec` command acts as a prior art concierge. Before generating a specification for a new feature or issue, it automatically searches your local knowledge index for existing shared helpers, internal libraries, and relevant structural lessons. This injected context prevents the AI from reinventing the wheel and forces alignment with your established architectural patterns.
+The `totem spec` command is a prior art concierge. Before it generates a specification for a new feature or issue, it automatically searches your local knowledge index for existing shared helpers, internal libraries, and relevant structural lessons. This injected context prevents the AI from reinventing the wheel and forces alignment with your established architectural patterns.
