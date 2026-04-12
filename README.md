@@ -1,6 +1,6 @@
 # Totem
 
-[![npm version](https://img.shields.io/npm/v/@mmnto/cli.svg)](https://www.npmjs.com/package/@mmnto/cli)
+[![npm version](https://img.shields.io/npm/v/@mmnto/totem.svg)](https://www.npmjs.com/package/@mmnto/totem)
 [![CI](https://github.com/mmnto-ai/totem/actions/workflows/ci.yml/badge.svg)](https://github.com/mmnto-ai/totem/actions/workflows/ci.yml)
 
 _AI coding agents are brilliant goldfish. Totem is their persistent, cross-repo memory._
