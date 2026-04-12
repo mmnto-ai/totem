@@ -4,7 +4,7 @@ This document provides a detailed breakdown of the `totem` command-line interfac
 
 > **Note:** All orchestrator commands (like `spec`, `triage`, and `extract`) currently require the [GitHub CLI (`gh`)](https://cli.github.com/) to be installed on your system.
 >
-> **Global Flags:** Every Totem command supports the `--json` flag to output structured JSON instead of human-readable text, making it trivial to pipe Totem into your own automation scripts or UI dashboards (e.g., `totem status --json`).
+> **Global Flags:** Every Totem command supports the `--json` flag to output structured JSON instead of human-readable text. This makes it trivial to pipe Totem into your own automation scripts or UI dashboards (e.g., `totem status --json`).
 
 > **Standalone Binary (Totem Lite):** If you are using the compiled standalone binary (no Node.js required), certain commands that require the LLM orchestrator or local Vector database are excluded to keep the binary small (~35MB).
 >
@@ -92,7 +92,7 @@ Verifies the integrity of the compiled rule manifest against current active rule
 
 ### `totem explain <hash>`
 
-Looks up the original markdown lesson behind a deterministic rule violation. Supports partial hash prefixes. This runs locally in milliseconds with zero LLM overhead, acting as an asynchronous mentor when a junior developer encounters an architectural block.
+Looks up the original markdown lesson behind a deterministic rule violation. Supports partial hash prefixes. The command runs locally in milliseconds with zero LLM overhead, so a junior developer stuck on an architectural block gets an asynchronous mentor without waiting for a human reviewer.
 
 ### `totem exemption`
 
@@ -223,4 +223,4 @@ Three return conditions must ship before `totem wrap` comes back: a `--skip-docs
 Adds a user-defined secret to the local DLP pipeline (`.totem/secrets.json`). Secrets are automatically masked during lesson ingestion and shield reviews.
 
 - **Flags:**
-  - `--pattern`: Treat the value as a regex pattern instead of a literal string. Patterns are validated for syntax and **ReDoS safety** — catastrophic backtracking patterns like `(a+)+$` are rejected at input time.
+  - `--pattern`: Treat the value as a regex pattern instead of a literal string. Patterns are validated for syntax and **ReDoS safety**. Catastrophic backtracking patterns like `(a+)+$` are rejected at input time.
