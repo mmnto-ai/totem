@@ -47,6 +47,17 @@ export interface CompileOptions {
    * directive into the Pipeline 2 system prompt.
    */
   upgrade?: string;
+  /**
+   * Batch upgrade mode (mmnto/totem#1235). Used by `runSelfHealing` to avoid
+   * redundant config/lesson/rules loads when upgrading N candidates. When set,
+   * the single-hash `upgrade` path is skipped and all targets compile in a
+   * single pass. Cannot be combined with `upgrade`, `cloud`, or `force`.
+   */
+  upgradeBatch?: Array<{
+    hash: string;
+    /** Telemetry directive to inject into the Pipeline 2 prompt for this lesson. */
+    telemetryPrefix?: string;
+  }>;
 }
 
 // ─── Telemetry directive (mmnto/totem#1131) ────────────────────
@@ -235,7 +246,9 @@ export function autoScaffoldFixture(
 
 // ─── Main command ───────────────────────────────────
 
-export async function compileCommand(options: CompileOptions): Promise<UpgradeOutcome | void> {
+export async function compileCommand(
+  options: CompileOptions,
+): Promise<UpgradeOutcome | UpgradeOutcome[] | void> {
   const { TotemConfigError, TotemError } = await import('@mmnto/totem');
   const { COMPILER_SYSTEM_PROMPT, PIPELINE3_COMPILER_PROMPT } =
     await import('./compile-templates.js');
@@ -330,22 +343,55 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
 
   log.info(TAG, `Found ${lessons.length} lessons`); // totem-ignore
 
-  // ─── Telemetry-driven re-compile (mmnto/totem#1131) ──
-  // --upgrade <hash> targets ONE rule by hash (full or short prefix match), evicts
-  // it from the cache so it alone gets recompiled, and threads a telemetry directive
-  // into its Pipeline 2 prompt. All other rules pass through unchanged.
+  // ─── Telemetry-driven re-compile (mmnto/totem#1131, mmnto/totem#1235) ──
+  // Both `--upgrade` (single hash) and `upgradeBatch` (array of hashes) narrow
+  // `lessonsInScope` to only the target lessons, bypass the cache for those
+  // targets, and thread per-lesson telemetry directives into Pipeline 2 prompts.
+  // All other rules pass through unchanged.
+  //
+  // Internally both paths produce `upgradeTargets`: a Map from hash to the
+  // optional telemetry prefix for that lesson. The compile loop uses this map
+  // instead of the old `upgradeTargetHash` scalar so batch mode works without
+  // duplicating the cache-bypass / outcome-tracking / stale-splice logic.
   //
   // `lessonsInScope` is what we validate and iterate for compilation. It starts
   // as the full lesson set (default behavior) and is narrowed to just the
-  // target lesson for --upgrade so that:
+  // target lesson(s) so that:
   //   1. An unrelated invalid lesson can't abort the upgrade (validateLessons)
   //   2. An unrelated cache-miss lesson doesn't leak into the compile batch
-  //   3. `totem doctor --pr` branches stay scoped to the flagged rule only
+  //   3. `totem doctor --pr` branches stay scoped to the flagged rules only
   // The full `lessons` array is still used for `currentHashes` pruning so the
-  // other 389 compiled rules remain in newRules.
-  let telemetryPrefix: string | undefined;
-  let upgradeTargetHash: string | undefined;
+  // other compiled rules remain in newRules.
+
+  // Validate that incompatible option combos are rejected up front.
+  if (options.upgradeBatch) {
+    if (options.upgrade) {
+      throw new TotemConfigError(
+        '--upgrade cannot be combined with upgradeBatch.',
+        'Use one or the other, not both.',
+        'CONFIG_INVALID',
+      );
+    }
+    if (options.cloud) {
+      throw new TotemError(
+        'UPGRADE_CLOUD_UNSUPPORTED',
+        'upgradeBatch is not supported with --cloud.',
+        'Run upgradeBatch without --cloud. The cloud worker cannot thread per-lesson telemetry directives yet (mmnto/totem#1221).',
+      );
+    }
+    if (options.force) {
+      throw new TotemConfigError(
+        'upgradeBatch cannot be combined with --force.',
+        'The upgrade path already bypasses the cache for target rules only.',
+        'CONFIG_INVALID',
+      );
+    }
+  }
+
+  // upgradeTargets: hash -> optional telemetry prefix. Set for both single and batch modes.
+  let upgradeTargets: Map<string, string | undefined> | undefined;
   let lessonsInScope: typeof lessons = lessons;
+
   if (options.upgrade) {
     if (options.cloud) {
       throw new TotemError(
@@ -388,11 +434,12 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
       );
     }
 
-    upgradeTargetHash = hashLesson(matches[0]!.heading, matches[0]!.body);
+    const upgradeTargetHash = hashLesson(matches[0]!.heading, matches[0]!.body);
     lessonsInScope = [matches[0]!];
     log.info(TAG, `--upgrade: targeting ${upgradeTargetHash} (${matches[0]!.heading})`);
 
     // Load existing telemetry to build the directive
+    let telemetryPrefix: string | undefined;
     try {
       const { loadRuleMetrics } = await import('@mmnto/totem');
       const metricsFile = loadRuleMetrics(totemDir);
@@ -410,6 +457,15 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
       const msg = err instanceof Error ? err.message : String(err);
       log.warn(TAG, `--upgrade: failed to load telemetry — ${msg}`);
     }
+    upgradeTargets = new Map([[upgradeTargetHash, telemetryPrefix]]);
+  } else if (options.upgradeBatch) {
+    upgradeTargets = new Map(
+      options.upgradeBatch.map((e) => [e.hash.toLowerCase(), e.telemetryPrefix]), // totem-ignore: hash normalization, not a file path filter
+    );
+    // Narrow lessons to those matching the batch hashes. hashLesson output is
+    // already lowercase hex so no extra normalization needed.
+    lessonsInScope = lessons.filter((l) => upgradeTargets!.has(hashLesson(l.heading, l.body)));
+    log.info(TAG, `upgradeBatch: targeting ${lessonsInScope.length} lesson(s)`);
   }
 
   // ─── Pre-compilation gate: validate Pipeline 1 metadata ──
@@ -452,11 +508,12 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
     scaffoldFixturePath,
   };
 
-  // Track the terminal outcome of the --upgrade target's compile attempt so
-  // we can return it to the caller. Default 'noop' covers the case where the
-  // target was never enqueued for some reason (shouldn't happen with the
-  // cache-bypass logic below, but safe default).
-  let upgradeOutcome: UpgradeStatus = 'noop';
+  // Track the terminal outcome per upgrade target. For single --upgrade, the
+  // map has one entry. For upgradeBatch, it has one entry per target. Default
+  // 'noop' covers the case where a target was never enqueued.
+  const upgradeOutcomes = new Map<string, UpgradeStatus>(
+    upgradeTargets ? [...upgradeTargets.keys()].map((h) => [h, 'noop' as UpgradeStatus]) : [],
+  );
 
   // ─── Phase 1: Regex compilation (requires orchestrator) ──
   if (config.orchestrator) {
@@ -480,14 +537,14 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
 
     const toCompile: LessonInput[] = [];
 
-    // For --upgrade, iterate only the target lesson so unrelated cache-miss
-    // lessons don't leak into the compile batch (mmnto/totem#1234 CR finding).
+    // For --upgrade / upgradeBatch, iterate only the target lesson(s) so
+    // unrelated cache-miss lessons don't leak into the compile batch
+    // (mmnto/totem#1234 CR finding). Upgrade targets always bypass the cache --
+    // the telemetry directive may unlock a pattern the compiler couldn't
+    // produce on the first pass.
     for (const lesson of lessonsInScope) {
       const hash = hashLesson(lesson.heading, lesson.body);
-      // --upgrade: always recompile the target, even if it's in the cache or
-      // was previously marked non-compilable. The telemetry directive may
-      // unlock a pattern the compiler couldn't produce on the first pass.
-      if (hash !== upgradeTargetHash) {
+      if (!upgradeTargets?.has(hash)) {
         if (existingByHash.has(hash)) continue; // already compiled
         if (nonCompilableMap.has(hash)) continue; // cached as non-compilable
       }
@@ -824,9 +881,11 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
           const batch = toCompile.slice(i, i + CONCURRENCY);
           const results = await Promise.all(
             batch.map((lesson) => {
-              // Per-lesson deps: telemetry prefix only applies to the --upgrade target.
-              const lessonDeps =
-                lesson.hash === upgradeTargetHash ? { ...coreDeps, telemetryPrefix } : coreDeps;
+              // Per-lesson deps: telemetry prefix only applies to upgrade targets.
+              // For upgradeBatch, each target may carry a distinct prefix.
+              const lessonDeps = upgradeTargets?.has(lesson.hash)
+                ? { ...coreDeps, telemetryPrefix: upgradeTargets.get(lesson.hash) }
+                : coreDeps;
               return withRetry(
                 () => compileLessonCore(lesson, COMPILER_SYSTEM_PROMPT, lessonDeps),
                 {
@@ -854,38 +913,38 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
           );
 
           for (const { lesson, result } of results) {
-            // --upgrade: remove the stale copy from newRules up front for any
-            // terminal outcome where the rule's state CHANGES (compiled → new
-            // pattern replaces old; skipped → rule moves to nonCompilable and
+            // Upgrade targets: remove the stale copy from newRules for any
+            // terminal outcome where the rule's state CHANGES (compiled -> new
+            // pattern replaces old; skipped -> rule moves to nonCompilable and
             // must no longer appear as an active rule). For `failed`
             // (transient error) and `noop` (no change), leave the old rule
             // intact so a flaky network / rate-limit doesn't silently delete
             // work (mmnto/totem#1234 GCA finding).
             if (
-              lesson.hash === upgradeTargetHash &&
+              upgradeTargets?.has(lesson.hash) &&
               (result.status === 'compiled' || result.status === 'skipped')
             ) {
-              const staleIdx = newRules.findIndex((r) => r.lessonHash === upgradeTargetHash);
+              const staleIdx = newRules.findIndex((r) => r.lessonHash === lesson.hash);
               if (staleIdx >= 0) newRules.splice(staleIdx, 1);
             }
 
-            // --upgrade: record the terminal outcome for the target. Used by
+            // Record the terminal outcome for each upgrade target. Used by
             // `totem doctor --pr` to distinguish real replacements from
             // noop/skipped/failed so its PR body doesn't lie about work done
             // (mmnto/totem#1234 CR finding).
-            if (lesson.hash === upgradeTargetHash) {
+            if (upgradeTargets?.has(lesson.hash)) {
               switch (result.status) {
                 case 'compiled':
-                  upgradeOutcome = 'replaced';
+                  upgradeOutcomes.set(lesson.hash, 'replaced');
                   break;
                 case 'skipped':
-                  upgradeOutcome = 'skipped';
+                  upgradeOutcomes.set(lesson.hash, 'skipped');
                   break;
                 case 'failed':
-                  upgradeOutcome = 'failed';
+                  upgradeOutcomes.set(lesson.hash, 'failed');
                   break;
                 case 'noop':
-                  upgradeOutcome = 'noop';
+                  upgradeOutcomes.set(lesson.hash, 'noop');
                   break;
               }
             }
@@ -906,11 +965,11 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
                     );
                   }
                 }
-                // --upgrade: also clear any stale nonCompilable entry so the
-                // successfully-compiled rule doesn't coexist with a
+                // Upgrade targets: also clear any stale nonCompilable entry so
+                // the successfully-compiled rule doesn't coexist with a
                 // non-compilable marker for the same hash.
-                if (lesson.hash === upgradeTargetHash) {
-                  nonCompilableMap.delete(upgradeTargetHash);
+                if (upgradeTargets?.has(lesson.hash)) {
+                  nonCompilableMap.delete(lesson.hash);
                 }
                 newRules.push(result.rule);
                 compiled++;
@@ -1011,9 +1070,18 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
     }
   }
 
-  // Return the upgrade outcome so callers can report it precisely. Only set
-  // when --upgrade was requested; default compile runs return void.
-  if (upgradeTargetHash) {
-    return { hash: upgradeTargetHash, status: upgradeOutcome };
+  // Return outcomes so callers can report precisely. Only set when --upgrade
+  // or upgradeBatch was requested; default compile runs return void.
+  if (upgradeTargets) {
+    if (options.upgradeBatch) {
+      // Batch mode: return an array of outcomes, one per requested hash.
+      return options.upgradeBatch.map((entry) => ({
+        hash: entry.hash.toLowerCase(),
+        status: upgradeOutcomes.get(entry.hash.toLowerCase()) ?? 'noop',
+      }));
+    }
+    // Single --upgrade: return scalar outcome for backwards compatibility.
+    const [hash, status] = [...upgradeOutcomes.entries()][0]!;
+    return { hash, status };
   }
 }

@@ -905,10 +905,10 @@ export async function runSelfHealing(cwd: string): Promise<void> {
     } // end fs.existsSync guard
   }
 
-  // ─── Upgrade phase: re-compile flagged rules through Sonnet (mmnto/totem#1131) ─
+  // ─── Upgrade phase: re-compile flagged rules through Sonnet (mmnto/totem#1131, #1235) ─
   const upgraded: UpgradeCandidate[] = [];
-  // Set to true whenever we invoke compileCommand({ upgrade }) — even for a
-  // noop outcome — because each call rewrites compile-manifest.json. Drives
+  // Set to true whenever we invoke compileCommand({ upgradeBatch }) — even for
+  // noop outcomes — because the call rewrites compile-manifest.json. Drives
   // the manifest-revert / manifest-stage decision below.
   let upgradePhaseTouchedManifest = false;
 
@@ -921,36 +921,56 @@ export async function runSelfHealing(cwd: string): Promise<void> {
     } else {
       console.error(`  Found ${candidates.length} upgrade candidate(s). Re-compiling...`);
 
-      // Call compileCommand directly (avoids shelling out — works regardless of pnpm/npm/global install).
-      // Each call mutates compiled-rules.json and compile-manifest.json in-place.
-      const { compileCommand } = await import('./compile.js');
-      for (const cand of candidates) {
-        try {
-          const outcome = await compileCommand({ upgrade: cand.lessonHash });
-          upgradePhaseTouchedManifest = true;
-          // Only count actual replacements. `skipped` / `noop` / `failed` all
-          // return normally but leave no real upgrade to report (mmnto/totem#1234
-          // CR finding — avoids lying in the auto-heal PR body).
-          if (outcome?.status === 'replaced') {
-            upgraded.push(cand);
-            console.error(
-              `  ${pc.green('↑')} ${cand.heading} (${(cand.nonCodeRatio * 100).toFixed(0)}% non-code)`,
-            );
-          } else if (outcome?.status === 'skipped') {
-            console.error(
-              pc.dim(`  - ${cand.heading} — compiler marked non-compilable; no upgrade`),
-            );
-          } else {
-            console.error(pc.dim(`  - ${cand.heading} — no change`));
+      // mmnto/totem#1235: build telemetry prefixes for all candidates in one
+      // metrics load, then invoke compileCommand once with upgradeBatch so the
+      // config/lessons/rules load cycle runs exactly once regardless of N.
+      const { buildTelemetryPrefix, compileCommand } = await import('./compile.js');
+      const { loadRuleMetrics } = await import('@mmnto/totem');
+      const metricsFile = loadRuleMetrics(path.join(cwd, config.totemDir));
+
+      const upgradeBatch = candidates.map((cand) => {
+        const metric = metricsFile.rules[cand.lessonHash];
+        const telemetryPrefix = metric?.contextCounts
+          ? buildTelemetryPrefix(metric.contextCounts)
+          : undefined;
+        return { hash: cand.lessonHash, telemetryPrefix };
+      });
+
+      // Build a lookup so we can map outcomes back to UpgradeCandidates for
+      // the console log and the upgraded[] list used in the PR body.
+      const candByHash = new Map(candidates.map((c) => [c.lessonHash, c]));
+
+      try {
+        const outcomes = await compileCommand({ upgradeBatch });
+        upgradePhaseTouchedManifest = true;
+        // Only count actual replacements. `skipped` / `noop` / `failed` all
+        // return normally but leave no real upgrade to report (mmnto/totem#1234
+        // CR finding — avoids lying in the auto-heal PR body).
+        if (Array.isArray(outcomes)) {
+          for (const outcome of outcomes) {
+            const cand = candByHash.get(outcome.hash);
+            if (!cand) continue;
+            if (outcome.status === 'replaced') {
+              upgraded.push(cand);
+              console.error(
+                `  ${pc.green('↑')} ${cand.heading} (${(cand.nonCodeRatio * 100).toFixed(0)}% non-code)`,
+              );
+            } else if (outcome.status === 'skipped') {
+              console.error(
+                pc.dim(`  - ${cand.heading} — compiler marked non-compilable; no upgrade`),
+              );
+            } else {
+              console.error(pc.dim(`  - ${cand.heading} — no change`));
+            }
           }
-        } catch (err) {
-          // compileCommand can throw on config errors, network hard failures,
-          // etc. Even a thrown error means the manifest may have been touched
-          // before the throw, so keep the flag set above.
-          upgradePhaseTouchedManifest = true;
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error(pc.yellow(`  - ${cand.heading} — upgrade failed: ${msg}`));
         }
+      } catch (err) {
+        // compileCommand can throw on config errors, network hard failures,
+        // etc. Even a thrown error means the manifest may have been touched
+        // before the throw, so keep the flag set above.
+        upgradePhaseTouchedManifest = true;
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(pc.yellow(`  Upgrade batch failed: ${msg}`));
       }
 
       if (upgraded.length > 0) {
