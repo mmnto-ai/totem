@@ -267,6 +267,20 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
     writeCompileManifest,
   } = await import('@mmnto/totem');
 
+  // Guard: throw a specific NO_LESSONS_DIR error instead of a generic
+  // TotemParseError when lessonsDir is absent or is not a directory.
+  // Called before both generateInputHash sites so both branches get the
+  // same explicit error with the same recovery hint.
+  const ensureLessonsDir = (dir: string): void => {
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
+      throw new TotemError(
+        'NO_LESSONS_DIR',
+        `Lessons directory not found: ${dir}`,
+        'Run `totem extract <pr>` to create lessons, or create .totem/lessons/ manually.',
+      );
+    }
+  };
+
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
   if (isGlobalConfigPath(configPath)) {
@@ -522,6 +536,7 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
         // that invalidates mtime-based caches downstream.
         const lessonsDir = path.join(totemDir, 'lessons');
         const manifestPath = path.join(totemDir, 'compile-manifest.json');
+        ensureLessonsDir(lessonsDir);
         const currentInputHash = generateInputHash(lessonsDir);
         let existingManifestInputHash: string | null = null;
         try {
@@ -944,6 +959,7 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
         // re-import needed here.
         const lessonsDir = path.join(totemDir, 'lessons');
         const manifestPath = path.join(totemDir, 'compile-manifest.json');
+        ensureLessonsDir(lessonsDir);
         const inputHash = generateInputHash(lessonsDir);
         const outputHash = generateOutputHash(rulesPath);
         writeCompileManifest(manifestPath, {

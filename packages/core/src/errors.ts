@@ -19,6 +19,7 @@ export type TotemErrorCode =
   | 'SYNC_FAILED'
   | 'GIT_FAILED'
   | 'NO_LESSONS'
+  | 'NO_LESSONS_DIR'
   | 'NO_RULES'
   | 'SHIELD_FAILED'
   | 'LINT_LESSONS_FAILED'
