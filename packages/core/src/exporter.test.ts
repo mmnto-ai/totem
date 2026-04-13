@@ -40,8 +40,8 @@ describe('formatLessonsAsMarkdown', () => {
     const result = formatLessonsAsMarkdown(makeLessons(2));
     expect(result).toContain(SENTINEL_START);
     expect(result).toContain(SENTINEL_END);
-    expect(result).toContain('- **Lesson 1** — Body of lesson 1. *(tag-a, tag-b)*');
-    expect(result).toContain('- **Lesson 2** — Body of lesson 2. *(tag-a, tag-b)*');
+    expect(result).toContain('- **Lesson 1** - Body of lesson 1. _(tag-a, tag-b)_');
+    expect(result).toContain('- **Lesson 2** - Body of lesson 2. _(tag-a, tag-b)_');
   });
 
   it('collapses multi-line bodies to single line', () => {
@@ -55,7 +55,23 @@ describe('formatLessonsAsMarkdown', () => {
       },
     ];
     const result = formatLessonsAsMarkdown(lessons);
-    expect(result).toContain('- **Multi-line** — Line one. Line two. Line three.');
+    expect(result).toContain('- **Multi-line** - Line one. Line two. Line three.');
+  });
+
+  it('escapes asterisks in body text to prevent markdown corruption', () => {
+    const lessons: ParsedLesson[] = [
+      {
+        heading: 'Glob scope test',
+        tags: ['linting'],
+        body: '**Scope:** packages/core/src/**/*.ts, !**/*.test.*\n\nSome rule body.',
+        raw: '',
+        index: 0,
+      },
+    ];
+    const result = formatLessonsAsMarkdown(lessons);
+    expect(result).toContain('\\*\\*Scope:\\*\\*');
+    expect(result).toContain('\\*\\*/\\*.ts');
+    expect(result).toContain('\\*.test.\\*');
   });
 
   it('omits tag suffix when lesson has no tags', () => {
@@ -63,8 +79,8 @@ describe('formatLessonsAsMarkdown', () => {
       { heading: 'No tags', tags: [], body: 'Body text.', raw: '', index: 0 },
     ];
     const result = formatLessonsAsMarkdown(lessons);
-    expect(result).toContain('- **No tags** — Body text.');
-    expect(result).not.toContain('*()*');
+    expect(result).toContain('- **No tags** - Body text.');
+    expect(result).not.toContain('_()');
   });
 });
 
