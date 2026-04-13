@@ -42,6 +42,13 @@ export async function searchCommand(
           continue;
         }
         const linkedEmbedder = createEmbedder(linkedEmbedding);
+        if (linkedEmbedder.dimensions !== embedder.dimensions) {
+          log.warn(
+            TAG,
+            `Linked index at ${linkedPath} produces ${linkedEmbedder.dimensions}-dim embeddings; expected ${embedder.dimensions} - skipping.`,
+          );
+          continue;
+        }
         const linkName = path.basename(resolvedPath).replace(/^\./, '');
         const linkedStore = new LanceStore(
           path.join(resolvedPath, linkedConfig.lanceDir),
@@ -106,7 +113,9 @@ export async function searchCommand(
   const allResults = [
     ...results.map((r) => ({ result: r, linkName: undefined as string | undefined })),
     ...linkedResults,
-  ].sort((a, b) => b.result.score - a.result.score);
+  ]
+    .sort((a, b) => b.result.score - a.result.score)
+    .slice(0, maxResults);
 
   if (allResults.length === 0) {
     console.log('[Totem] No results found.');
