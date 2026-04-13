@@ -6506,6 +6506,56 @@
       "severity": "warning",
       "status": "archived",
       "archivedReason": "Over-broad: fires on any command defining --format, not just misuses. The lesson is about --format being lint-only, but the pattern matches the option definition itself. upgradeTarget: compound (Proposal 226 -- needs 'not-inside' constraint to skip the lint command definition)."
+    },
+    {
+      "lessonHash": "fa0ae10d4c4077a0",
+      "lessonHeading": "Trim raw spawn output in error messages",
+      "pattern": "",
+      "message": "Trim stdout/stderr before using in error messages: use .stdout.trim() instead of .stdout",
+      "engine": "ast-grep",
+      "astGrepPattern": "new Error($$$BEFORE + $OUTPUT.stdout + $$$AFTER)",
+      "compiledAt": "2026-04-13T21:13:45.718Z",
+      "createdAt": "2026-04-13T21:13:45.718Z",
+      "fileGlobs": [
+        "packages/core/src/sys/**/*.ts",
+        "!**/*.test.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Under-broad: misses direct violations without concatenation and template literals. upgradeTarget: compound (Proposal 226)."
+    },
+    {
+      "lessonHash": "dfb376dafe54222e",
+      "lessonHeading": "Unroll error cause chains for shell execution",
+      "pattern": "",
+      "message": "Use `describeSafeExecError` to unroll error cause chains instead of manual message concatenation in shell execution wrappers.",
+      "engine": "ast-grep",
+      "astGrepPattern": "$ERR.message + $CAUSE",
+      "compiledAt": "2026-04-13T21:13:45.479Z",
+      "createdAt": "2026-04-13T21:13:45.479Z",
+      "fileGlobs": [
+        "packages/core/src/sys/**/*.ts",
+        "!**/*.test.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: $ERR.message + $CAUSE matches any string concatenation involving .message, not just error re-throws. upgradeTarget: compound (Proposal 226 -- needs inside: catch constraint)."
+    },
+    {
+      "lessonHash": "f00e5b09602bb159",
+      "lessonHeading": "Use canonical noun-verb CLI command forms",
+      "pattern": "totem\\s+(?!lesson\\s+|memory\\s+|config\\s+|help\\b|version\\b)[a-z]+(\\s|['\"`]|$)",
+      "message": "Use canonical noun-verb CLI command forms (e.g., 'totem lesson extract', 'totem lesson compile') instead of bare aliases like 'totem extract'",
+      "engine": "regex",
+      "compiledAt": "2026-04-13T21:13:49.262Z",
+      "createdAt": "2026-04-13T21:13:49.262Z",
+      "fileGlobs": [
+        "packages/cli/**/*.ts",
+        "!**/*.test.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: fires on canonical commands like totem lint, totem sync, totem review. Only totem extract and totem compile are deprecated bare aliases. Needs a narrower pattern targeting only extract/compile without the lesson prefix."
     }
   ],
   "nonCompilable": [
@@ -9980,6 +10030,18 @@
     {
       "hash": "1289fa1d738e16e2",
       "title": "Reference rule IDs over hard-coded metrics"
+    },
+    {
+      "hash": "a996999251b34eb7",
+      "title": "Warn on skipped configured resources"
+    },
+    {
+      "hash": "447dafe97597c186",
+      "title": "Use absolute paths for federated results"
+    },
+    {
+      "hash": "469f4c25bc4d2dbf",
+      "title": "Provide explicit recovery hints for missing directories"
     }
   ]
 }

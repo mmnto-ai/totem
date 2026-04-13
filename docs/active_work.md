@@ -1,8 +1,21 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.14.5` (published 2026-04-11, the tail end of the four-P0 governance sweep) with **2,765 tests** across core, CLI, and MCP packages and **394 compiled rules** (393 active, 1 archived via the #1345 filter).
+The project is at release `@mmnto/cli@1.14.7` (publishing 2026-04-13) with **2,777 tests** across core, CLI, and MCP packages and **406 compiled rules** (390 active, 16 archived).
 
-### Recently Shipped (2026-04-11, the marathon day)
+### Recently Shipped (2026-04-13)
+
+**1.14.7** (2026-04-13) -- Nervous System Capstone. Closes the 1.14.x arc.
+
+- **#1395** -- Tactical cleanup: bot reply protocol docs (#1391), NO_LESSONS_DIR guard (#1350), test-utils DRY (#1354), cause chain migration (#1357)
+- **#1396** -- Mesh completion: `totem search` federation across linkedIndexes (#1307), `totem doctor` Linked Indexes health check (#1308)
+
+**1.14.6** (2026-04-13) -- Quality Sweep Phase 1-2 and Voice Compliance.
+
+- Voice-scrub follow-ups (#1379, #1382, #1383)
+- Quality sweep: 7 over-broad rules archived, 1 duplicate lesson retired (#1387), export glob fix (#1388), throw-err archive (#1389)
+- Postmerge: 31 lessons from 1.14.3-1.14.5 marathon (#1384, #1385)
+
+### Previously Shipped (2026-04-11, the marathon day)
 
 **Two marathon sessions in one day.** Morning shipped 1.14.1 + 1.14.2 and filed four P0 governance bugs. Afternoon closed all four P0s across three patch releases.
 
