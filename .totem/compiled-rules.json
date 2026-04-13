@@ -6490,16 +6490,18 @@
     {
       "lessonHash": "f5e7acde7d976dec",
       "lessonHeading": "Differentiate format flags across CLI commands",
+      "pattern": "",
       "message": "The --format flag is exclusive to 'totem lint'. Other commands should use --json for scripting output instead.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "command($CMD).option('--format', $$$OPTS)",
       "compiledAt": "2026-04-13T03:10:07.618Z",
       "createdAt": "2026-04-13T03:10:07.618Z",
       "fileGlobs": [
         "packages/cli/src/index.ts"
-      ]
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: fires on any command defining --format, not just misuses. The lesson is about --format being lint-only, but the pattern matches the option definition itself. upgradeTarget: compound (Proposal 226 -- needs 'not-inside' constraint to skip the lint command definition)."
     }
   ],
   "nonCompilable": [
