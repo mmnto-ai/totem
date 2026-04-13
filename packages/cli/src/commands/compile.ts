@@ -276,7 +276,7 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
       throw new TotemError(
         'NO_LESSONS_DIR',
         `Lessons directory not found: ${dir}`,
-        'Run `totem extract <pr>` to create lessons, or create .totem/lessons/ manually.',
+        'Run `totem lesson extract <pr>` to create lessons, or create .totem/lessons/ manually.',
       );
     }
   };
