@@ -2291,7 +2291,9 @@
         "!**/*.test.*",
         "!**/*.spec.*"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: throw $ERR matches every throw statement. The intent is to flag re-throws in CLI handlers, but the pattern cannot distinguish re-throws from intentional error construction. upgradeTarget: compound (needs inside: catch constraint per Proposal 226). See #1218."
     },
     {
       "lessonHash": "f4b44468f7f5b46a",
@@ -5386,7 +5388,9 @@
         "packages/cli/src/commands/**/*.ts",
         "!**/*.test.*"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Duplicate of 95e66fb1 (same throw $ERR pattern, narrower scope). Both over-broad. upgradeTarget: compound. See #1218."
     },
     {
       "lessonHash": "128c55f185c04c6a",
