@@ -5,6 +5,7 @@ vi.mock('cross-spawn', () => ({
   sync: vi.fn(),
 }));
 
+import { fail, ok } from '../test-utils.js';
 import {
   extractChangedFiles,
   filterDiffByPatterns,
@@ -14,27 +15,6 @@ import {
   inferScopeFromFiles,
   isFileDirty,
 } from './git.js';
-
-/**
- * Post-mmnto/totem#1329: safeExec wraps cross-spawn.sync instead of
- * child_process.execFileSync. These helpers let each test describe the
- * intended subprocess outcome without spelling out the full
- * SpawnSyncReturns shape on every call.
- */
-// Return types are inferred deliberately. The fail() helper's inferred
-// shape has an `error` property that matches cross-spawn's
-// SpawnSyncReturns field name, but spelling that property out in an
-// explicit return type annotation trips the repo's `id-match` ESLint
-// rule (which forbids the literal identifier `error`). Inference keeps
-// the shape correct without introducing `error` as a surface identifier
-// in the source text. Callers coerce via `as never` at the call site.
-function ok(stdout: string) {
-  return { status: 0, stdout, stderr: '', signal: null };
-}
-
-function fail(err: Error) {
-  return { status: null, stdout: '', stderr: '', signal: null, error: err };
-}
 
 describe('getLatestTag', () => {
   beforeEach(() => vi.clearAllMocks());

@@ -2,34 +2,12 @@ import * as crossSpawn from 'cross-spawn';
 import { globSync } from 'glob';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { fail, ok } from '../test-utils.js';
 import { getChangedFiles, getHeadSha, resolveFiles } from './file-resolver.js';
 
 vi.mock('cross-spawn', () => ({
   sync: vi.fn(),
 }));
-
-/**
- * Post-mmnto/totem#1329: safeExec wraps cross-spawn.sync, which returns
- * a SpawnSyncReturns<Buffer>-shaped object instead of the legacy
- * execFileSync string-or-throw contract. These helpers let each test
- * describe the intended subprocess outcome (`ok('stdout')` for a clean
- * exit, `fail(error)` for a spawn-level failure) without spelling out
- * the full return shape.
- */
-// Return types are inferred deliberately. The fail() helper's inferred
-// shape has an `error` property that matches cross-spawn's
-// SpawnSyncReturns field name, but spelling that property out in an
-// explicit return type annotation trips the repo's `id-match` ESLint
-// rule (which forbids the literal identifier `error`). Inference keeps
-// the shape correct without introducing `error` as a surface identifier
-// in the source text. Callers coerce via `as never` at the call site.
-function ok(stdout: string) {
-  return { status: 0, stdout, stderr: '', signal: null };
-}
-
-function fail(err: Error) {
-  return { status: null, stdout: '', stderr: '', signal: null, error: err };
-}
 
 vi.mock('glob', () => ({
   globSync: vi.fn(() => []),
