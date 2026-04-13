@@ -47,6 +47,13 @@ export interface CompileOptions {
    * directive into the Pipeline 2 system prompt.
    */
   upgrade?: string;
+  /**
+   * Working directory for this compile run (mmnto/totem#1232). Defaults to
+   * `process.cwd()`. Pass an explicit path so callers like `runSelfHealing`
+   * can target a project directory that differs from the process working
+   * directory without relying on `process.chdir`.
+   */
+  cwd?: string;
 }
 
 // ─── Telemetry directive (mmnto/totem#1131) ────────────────────
@@ -281,7 +288,7 @@ export async function compileCommand(options: CompileOptions): Promise<UpgradeOu
     }
   };
 
-  const cwd = process.cwd();
+  const cwd = options.cwd ?? process.cwd();
   const configPath = resolveConfigPath(cwd);
   if (isGlobalConfigPath(configPath)) {
     throw new TotemConfigError(
