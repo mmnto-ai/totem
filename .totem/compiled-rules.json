@@ -482,7 +482,9 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: fires on any .split('\\n') regardless of loop context. Blocks legitimate one-shot first-line extraction in catch blocks (#1349). See #1352."
     },
     {
       "lessonHash": "3cbe6d5f6544532c",
@@ -2012,7 +2014,9 @@
         "**/*.js",
         "!**/*.test.ts"
       ],
-      "severity": "error"
+      "severity": "error",
+      "status": "archived",
+      "archivedReason": "Over-broad: fires on any .split('\\n')[0] regardless of context. The lesson is about LLM metadata parsing, not general string splitting. Blocks legitimate error-message first-line extraction. See #1352."
     },
     {
       "lessonHash": "ef230abe26dbdb31",
@@ -3839,7 +3843,9 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "error"
+      "severity": "error",
+      "status": "archived",
+      "archivedReason": "Duplicate of dc656c9238a0f80e (same lesson, regex variant). Both fire on any .split('\\n') without loop context. See #1352."
     },
     {
       "lessonHash": "c802b8588ec9d911",
@@ -4150,7 +4156,9 @@
         "**/*.js",
         "!**/*.test.ts"
       ],
-      "severity": "error"
+      "severity": "error",
+      "status": "archived",
+      "archivedReason": "Conflicts with internal error wrapper pattern: bare Error in helpers (safeExec, handleGhError) is intentional because TotemError handles prefixing automatically. The regex cannot distinguish user-facing from internal errors, and forces workarounds (#1329 string concatenation bypass). See #1355."
     },
     {
       "lessonHash": "ba29c80ef7b13c15",
@@ -6411,19 +6419,6 @@
       "engine": "regex",
       "compiledAt": "2026-04-12T15:37:03.920Z",
       "createdAt": "2026-04-12T15:37:03.920Z",
-      "fileGlobs": [
-        "**/*.md"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "6e8a7d02136381a2",
-      "lessonHeading": "Use a '## Lesson <separator> <Heading>' format and 'Tags' field",
-      "pattern": "^## Lesson(?! [—–-] .+)",
-      "message": "Lesson headings must use the format '## Lesson <separator> <Heading>' where separator is an em-dash (—), en-dash (–), or hyphen (-)",
-      "engine": "regex",
-      "compiledAt": "2026-04-12T15:37:04.023Z",
-      "createdAt": "2026-04-12T15:37:04.023Z",
       "fileGlobs": [
         "**/*.md"
       ],
