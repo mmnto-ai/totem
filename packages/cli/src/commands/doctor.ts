@@ -926,7 +926,7 @@ export async function runSelfHealing(cwd: string): Promise<void> {
       const { compileCommand } = await import('./compile.js');
       for (const cand of candidates) {
         try {
-          const outcome = await compileCommand({ upgrade: cand.lessonHash });
+          const outcome = await compileCommand({ upgrade: cand.lessonHash, cwd });
           upgradePhaseTouchedManifest = true;
           // Only count actual replacements. `skipped` / `noop` / `failed` all
           // return normally but leave no real upgrade to report (mmnto/totem#1234
