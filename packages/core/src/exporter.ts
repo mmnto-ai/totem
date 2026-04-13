@@ -25,9 +25,12 @@ export function formatLessonsAsMarkdown(lessons: ParsedLesson[]): string {
   ];
 
   for (const lesson of lessons) {
-    const bodyOneLine = lesson.body.replace(/\n+/g, ' ').trim();
-    const tags = lesson.tags.length > 0 ? ` *(${lesson.tags.join(', ')})*` : '';
-    lines.push(`- **${lesson.heading}** — ${bodyOneLine}${tags}`);
+    const escapeMarkdown = (s: string) => s.replace(/[*_]/g, '\\$&');
+    const heading = escapeMarkdown(lesson.heading);
+    const bodyOneLine = escapeMarkdown(lesson.body.replace(/\n+/g, ' ').trim());
+    const suffix =
+      lesson.tags.length > 0 ? ` ${bodyOneLine} _(${lesson.tags.join(', ')})_` : ` ${bodyOneLine}`;
+    lines.push(`- **${heading}** -${suffix}`);
   }
 
   lines.push('', SENTINEL_END);

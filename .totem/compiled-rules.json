@@ -6473,6 +6473,35 @@
       "severity": "warning",
       "status": "archived",
       "archivedReason": "Over-broad: fires on every destructured dynamic import in command handlers, which is the canonical architectural pattern per ADR-071. Every CLI command handler uses this pattern by design. Would flag hundreds of legitimate lines."
+    },
+    {
+      "lessonHash": "4ae0a01d912f8742",
+      "lessonHeading": "Use canonical CLI command forms",
+      "pattern": "`totem\\s+extract\\b",
+      "message": "Use canonical CLI command forms (e.g., `totem lesson extract`) instead of bare aliases like `totem extract`",
+      "engine": "regex",
+      "compiledAt": "2026-04-13T02:52:25.816Z",
+      "createdAt": "2026-04-13T02:52:25.816Z",
+      "fileGlobs": [
+        "docs/wiki/**/*.md"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "f5e7acde7d976dec",
+      "lessonHeading": "Differentiate format flags across CLI commands",
+      "pattern": "",
+      "message": "The --format flag is exclusive to 'totem lint'. Other commands should use --json for scripting output instead.",
+      "engine": "ast-grep",
+      "astGrepPattern": "command($CMD).option('--format', $$$OPTS)",
+      "compiledAt": "2026-04-13T03:10:07.618Z",
+      "createdAt": "2026-04-13T03:10:07.618Z",
+      "fileGlobs": [
+        "packages/cli/src/index.ts"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: fires on any command defining --format, not just misuses. The lesson is about --format being lint-only, but the pattern matches the option definition itself. upgradeTarget: compound (Proposal 226 -- needs 'not-inside' constraint to skip the lint command definition)."
     }
   ],
   "nonCompilable": [
