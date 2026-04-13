@@ -9932,6 +9932,26 @@
     {
       "hash": "453e2841f280c632",
       "title": "Avoid prefixes in low-level error messages"
+    },
+    {
+      "hash": "38b78a660a2e928a",
+      "title": "Target project-named packages for version badges"
+    },
+    {
+      "hash": "31bee49c841a92e2",
+      "title": "Prioritize lint patterns over style guides"
+    },
+    {
+      "hash": "6e1283d1217a5e5d",
+      "title": "Reword docs to avoid over-broad lint rules"
+    },
+    {
+      "hash": "021fcd85f352870b",
+      "title": "Match documentation to actual CLI output"
+    },
+    {
+      "hash": "1289fa1d738e16e2",
+      "title": "Reference rule IDs over hard-coded metrics"
     }
   ]
 }
