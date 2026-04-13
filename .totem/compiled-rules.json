@@ -6520,7 +6520,9 @@
         "packages/core/src/sys/**/*.ts",
         "!**/*.test.*"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Under-broad: misses direct violations without concatenation and template literals. upgradeTarget: compound (Proposal 226)."
     },
     {
       "lessonHash": "dfb376dafe54222e",
@@ -6535,7 +6537,9 @@
         "packages/core/src/sys/**/*.ts",
         "!**/*.test.*"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: $ERR.message + $CAUSE matches any string concatenation involving .message, not just error re-throws. upgradeTarget: compound (Proposal 226 -- needs inside: catch constraint)."
     },
     {
       "lessonHash": "f00e5b09602bb159",
@@ -10038,10 +10042,6 @@
     {
       "hash": "469f4c25bc4d2dbf",
       "title": "Provide explicit recovery hints for missing directories"
-    },
-    {
-      "hash": "3c0aff502541e99e",
-      "title": "Prefer parsed config over regex parsing"
     }
   ]
 }
