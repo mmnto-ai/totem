@@ -319,6 +319,116 @@ export function checkIndex(cwd: string, lanceDir = '.lancedb'): DiagnosticResult
   };
 }
 
+export function checkLinkedIndexes(cwd: string): DiagnosticResult {
+  const configResult = readConfigFile(cwd);
+  if (!configResult) {
+    return {
+      name: 'Linked Indexes',
+      status: 'skip',
+      message: 'No config (skipped)',
+    };
+  }
+
+  const [, content] = configResult;
+
+  if (!/linkedIndexes:\s*\[/.test(content)) {
+    return {
+      name: 'Linked Indexes',
+      status: 'skip',
+      message: '0 configured',
+    };
+  }
+
+  if (!hasEmbeddingProvider(content)) {
+    return {
+      name: 'Linked Indexes',
+      status: 'skip',
+      message: 'Lite tier (no embedding)',
+    };
+  }
+
+  // Extract linked paths from the config array
+  const arrayMatch = /linkedIndexes:\s*\[([\s\S]*?)\]/.exec(content);
+  const linkedPaths: string[] = [];
+  if (arrayMatch) {
+    const arrayContent = arrayMatch[1];
+    let m: RegExpExecArray | null;
+    const strRe = /['"]([^'"]+)['"]/g;
+    while ((m = strRe.exec(arrayContent)) !== null) {
+      linkedPaths.push(m[1]);
+    }
+  }
+
+  if (linkedPaths.length === 0) {
+    return {
+      name: 'Linked Indexes',
+      status: 'skip',
+      message: '0 configured',
+    };
+  }
+
+  const issues: string[] = [];
+  const seenNames = new Set<string>();
+  let reachable = 0;
+
+  for (const linkedPath of linkedPaths) {
+    const resolvedPath = path.resolve(cwd, linkedPath);
+    const linkName = path.basename(resolvedPath).replace(/^\./, '');
+    let entryOk = true;
+
+    if (seenNames.has(linkName)) {
+      issues.push(`name collision on '${linkName}'`);
+      entryOk = false;
+    } else {
+      seenNames.add(linkName);
+    }
+
+    if (!fs.existsSync(resolvedPath)) {
+      issues.push(`'${linkName}' path does not exist (${resolvedPath})`);
+      continue;
+    }
+
+    const lanceDbPath = path.join(resolvedPath, '.lancedb');
+    if (!fs.existsSync(lanceDbPath)) {
+      issues.push(`'${linkName}' has no .lancedb index (run totem sync in ${resolvedPath})`);
+      entryOk = false;
+    }
+
+    const linkedConfig = readConfigFile(resolvedPath);
+    if (!linkedConfig) {
+      issues.push(`'${linkName}' has no totem config`);
+      entryOk = false;
+    } else {
+      const [, linkedContent] = linkedConfig;
+      if (!hasEmbeddingProvider(linkedContent)) {
+        issues.push(`'${linkName}' has no embedding provider (dimension mismatch risk)`);
+        entryOk = false;
+      }
+    }
+
+    if (entryOk) {
+      reachable++;
+    }
+  }
+
+  const n = linkedPaths.length;
+
+  if (issues.length === 0) {
+    return {
+      name: 'Linked Indexes',
+      status: 'pass',
+      message: `${n} configured, ${reachable} reachable`,
+    };
+  }
+
+  return {
+    name: 'Linked Indexes',
+    status: 'warn',
+    message: `${n} configured, ${reachable} reachable, ${issues.length} issue(s)`,
+    remediation: issues.join('; '),
+  };
+}
+
 export async function checkSecretLeaks(
   cwd: string,
   totemDir = '.totem',
@@ -1011,6 +1121,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     checkGitHooks(cwd),
     checkEmbeddingConfig(cwd),
     checkIndex(cwd),
+    checkLinkedIndexes(cwd),
     await checkSecretLeaks(cwd),
     checkSecretsFileTracked(cwd),
     await checkUpgradeCandidates(cwd),
