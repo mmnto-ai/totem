@@ -1234,7 +1234,6 @@ Windows requires shell:true for git binary resolution. _(architecture, curated)_
 
 - **Git's porcelain output uses C-style escaping for paths** — Git's porcelain output uses C-style escaping for paths containing special characters or quotes. These must be explicitly decoded (e.g., handling backslashes and quotes) to obtain the actual filesystem path. _(git, parsing)_
 - **When outputting text sourced from external files, PR** — When outputting text sourced from external files, PR content, or LLMs to the terminal, use sanitization functions to prevent terminal injection attacks. This prevents malicious content from executing escaped sequences that could manipulate the terminal state or compromise the user's environment. _(security, cli, terminal)_
-- **Use a '## Lesson <separator> <Heading>' format and 'Tags' field** — Use a `## Lesson <separator> <Heading>` format (where `<separator>` is an em-dash, en-dash, or hyphen) and include a `Tags` field in lesson files to ensure consistency with auto-generated content and improve parsing. The parser accepts all three separator characters equivalently. _(documentation, dx)_
 - **2026-03-05T04:05:14.473Z** — **Pattern:** JSON\.parse\(._(exec|spawn|stdout|stderr)
   **Engine:** regex
   **Scope:** \*\*/_.ts, **/\*.js, !**/_.test.ts, !\*\*/_.spec.ts
