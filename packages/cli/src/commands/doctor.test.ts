@@ -14,6 +14,7 @@ import {
   checkEmbeddingConfig,
   checkGitHooks,
   checkIndex,
+  checkLinkedIndexes,
   checkSecretLeaks,
   checkSecretsFileTracked,
   checkUpgradeCandidates,
@@ -300,7 +301,7 @@ describe('doctorCommand', () => {
   it('runs without throwing', async () => {
     const results = await doctorCommand();
     expect(results).toBeDefined();
-    expect(results.length).toBe(8);
+    expect(results.length).toBe(9);
   });
 
   it('returns correct check names', async () => {
@@ -311,6 +312,7 @@ describe('doctorCommand', () => {
     expect(names).toContain('Git Hooks');
     expect(names).toContain('Embedding');
     expect(names).toContain('Index');
+    expect(names).toContain('Linked Indexes');
     expect(names).toContain('Secret Scan');
     expect(names).toContain('Secrets File Security');
     expect(names).toContain('Upgrade Candidates');
@@ -354,6 +356,7 @@ describe('doctorCommand output', () => {
     expect(output).toContain('Git Hooks');
     expect(output).toContain('Embedding');
     expect(output).toContain('Index');
+    expect(output).toContain('Linked Indexes');
     expect(output).toContain('Secret Scan');
     expect(output).toContain('Secrets File Security');
     expect(output).toContain('Upgrade Candidates');
@@ -1246,5 +1249,104 @@ describe('runSelfHealing', () => {
     const committedRules = JSON.parse(showResult.stdout ?? '');
     expect(committedRules.rules[0].status).toBe('archived');
     expect(committedRules.rules[0].archivedReason).toMatch(/after \d+ days/);
+  });
+});
+
+// ─── Linked indexes health check (#1308) ────────────────
+
+describe('checkLinkedIndexes (#1308)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('returns skip when no linkedIndexes configured', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.config.ts'),
+      `export default {
+  targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+  totemDir: '.totem',
+  embedding: { provider: 'gemini', model: 'gemini-embedding-2-preview', dimensions: 768 },
+};`,
+    );
+    const result = checkLinkedIndexes(tmpDir);
+    expect(result.status).toBe('skip');
+    expect(result.name).toBe('Linked Indexes');
+  });
+
+  it('returns skip when host has no embedding provider', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.config.ts'),
+      `export default {
+  targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+  totemDir: '.totem',
+  linkedIndexes: ['../other-repo'],
+};`,
+    );
+    const result = checkLinkedIndexes(tmpDir);
+    expect(result.status).toBe('skip');
+    expect(result.message).toContain('Lite tier');
+  });
+
+  it('returns pass when linked index is reachable', () => {
+    const linkedDir = makeTmpDir();
+    try {
+      // Set up the linked repo with a config and .lancedb
+      fs.writeFileSync(
+        path.join(linkedDir, 'totem.config.ts'),
+        `export default {
+  targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+  totemDir: '.totem',
+  embedding: { provider: 'gemini', model: 'gemini-embedding-2-preview', dimensions: 768 },
+};`,
+      );
+      const lanceDir = path.join(linkedDir, '.lancedb');
+      fs.mkdirSync(lanceDir, { recursive: true });
+      fs.writeFileSync(path.join(lanceDir, 'data.lance'), 'placeholder');
+
+      // Escape backslashes for Windows paths in the config template
+      const escapedPath = linkedDir.replace(/\\/g, '\\\\');
+      fs.writeFileSync(
+        path.join(tmpDir, 'totem.config.ts'),
+        `export default {
+  targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+  totemDir: '.totem',
+  embedding: { provider: 'gemini', model: 'gemini-embedding-2-preview', dimensions: 768 },
+  linkedIndexes: ['${escapedPath}'],
+};`,
+      );
+
+      const result = checkLinkedIndexes(tmpDir);
+      expect(result.status).toBe('pass');
+      expect(result.name).toBe('Linked Indexes');
+      expect(result.message).toContain('1 configured');
+      expect(result.message).toContain('1 reachable');
+    } finally {
+      cleanTmpDir(linkedDir);
+    }
+  });
+
+  it('returns warn when linked index path does not exist', () => {
+    const nonExistentPath = path.join(tmpDir, 'no-such-repo');
+    const escapedPath = nonExistentPath.replace(/\\/g, '\\\\');
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.config.ts'),
+      `export default {
+  targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }],
+  totemDir: '.totem',
+  embedding: { provider: 'gemini', model: 'gemini-embedding-2-preview', dimensions: 768 },
+  linkedIndexes: ['${escapedPath}'],
+};`,
+    );
+
+    const result = checkLinkedIndexes(tmpDir);
+    expect(result.status).toBe('warn');
+    expect(result.name).toBe('Linked Indexes');
+    expect(result.remediation).toContain('does not exist');
   });
 });
