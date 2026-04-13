@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.14.7` (publishing 2026-04-13) with **2,777 tests** across core, CLI, and MCP packages and **406 compiled rules** (390 active, 16 archived).
+The project is at release `@mmnto/cli@1.14.7` (publishing 2026-04-13) with **2,777 tests** across core, CLI, and MCP packages and **406 compiled rules** (388 active, 18 archived).
 
 ### Recently Shipped (2026-04-13)
 
