@@ -58,20 +58,20 @@ describe('formatLessonsAsMarkdown', () => {
     expect(result).toContain('- **Multi-line** - Line one. Line two. Line three.');
   });
 
-  it('escapes asterisks in body text to prevent markdown corruption', () => {
+  it('escapes asterisks and underscores in body and heading to prevent markdown corruption', () => {
     const lessons: ParsedLesson[] = [
       {
-        heading: 'Glob scope test',
+        heading: 'Use **/*.ts for glob matching',
         tags: ['linting'],
-        body: '**Scope:** packages/core/src/**/*.ts, !**/*.test.*\n\nSome rule body.',
+        body: '**Scope:** packages/core/src/**/*.ts, !**/*.test.*\n\nSome rule_body.',
         raw: '',
         index: 0,
       },
     ];
     const result = formatLessonsAsMarkdown(lessons);
+    expect(result).toContain('\\*\\*/\\*.ts for glob matching');
     expect(result).toContain('\\*\\*Scope:\\*\\*');
-    expect(result).toContain('\\*\\*/\\*.ts');
-    expect(result).toContain('\\*.test.\\*');
+    expect(result).toContain('rule\\_body');
   });
 
   it('omits tag suffix when lesson has no tags', () => {
