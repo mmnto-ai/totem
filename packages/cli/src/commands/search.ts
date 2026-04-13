@@ -37,7 +37,10 @@ export async function searchCommand(
         const linkedConfigPath = resolveConfigPath(resolvedPath);
         const linkedConfig = await loadConfig(linkedConfigPath);
         const linkedEmbedding = linkedConfig.embedding;
-        if (!linkedEmbedding) continue;
+        if (!linkedEmbedding) {
+          log.warn(TAG, `Linked index at ${linkedPath} has no embedding provider - skipping.`);
+          continue;
+        }
         const linkedEmbedder = createEmbedder(linkedEmbedding);
         const linkName = path.basename(resolvedPath).replace(/^\./, '');
         const linkedStore = new LanceStore(
@@ -115,7 +118,7 @@ export async function searchCommand(
     const label = repoTag + sanitize(result.label).replace(/\n/g, ' ');
     console.log(`\n--- ${label} (${result.type}) ---`);
     console.log(
-      `File: ${sanitize(result.filePath).replace(/\n/g, ' ')} | Score: ${result.score.toFixed(3)}`,
+      `File: ${sanitize(linkName ? result.absoluteFilePath : result.filePath).replace(/\n/g, ' ')} | Score: ${result.score.toFixed(3)}`,
     );
     const snippet = result.content.slice(0, 200) + (result.content.length > 200 ? '...' : '');
     console.log(sanitize(snippet));
