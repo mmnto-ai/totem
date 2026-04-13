@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { safeExec } from './exec.js';
+import { describeSafeExecError, safeExec } from './exec.js';
 
 // Long-running interval used to ensure the child process outlives the
 // timeout window. Any value safely larger than TIMEOUT_MS works; 30s is
@@ -9,6 +9,30 @@ const LONG_RUNNING_INTERVAL_MS = 30_000;
 // Timeout for the test that asserts safeExec honors its timeout option.
 // Short enough to keep the suite fast.
 const TIMEOUT_TEST_MS = 100;
+
+describe('describeSafeExecError', () => {
+  it('returns the raw string for non-Error input', () => {
+    expect(describeSafeExecError('raw string error')).toBe('raw string error');
+    expect(describeSafeExecError(42)).toBe('42');
+  });
+
+  it('returns wrapper message when there is no cause', () => {
+    const err = new Error('spawn failed');
+    expect(describeSafeExecError(err)).toBe('spawn failed');
+  });
+
+  it('appends cause message in parentheses when cause exists', () => {
+    const cause = new Error('spawn gh ENOENT');
+    const wrapper = new Error('Command failed: gh', { cause });
+    expect(describeSafeExecError(wrapper)).toBe('Command failed: gh (spawn gh ENOENT)');
+  });
+
+  it('deduplicates when cause message is already in wrapper', () => {
+    const cause = new Error('spawn gh ENOENT');
+    const wrapper = new Error('Command failed: gh: spawn gh ENOENT', { cause });
+    expect(describeSafeExecError(wrapper)).toBe('Command failed: gh: spawn gh ENOENT');
+  });
+});
 
 describe('safeExec', () => {
   it('executes a command and returns trimmed output', () => {

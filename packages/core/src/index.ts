@@ -310,7 +310,7 @@ export { appendLedgerEvent, LedgerEventSchema, readLedgerEvents } from './ledger
 
 // Shell execution (cross-platform safe wrapper)
 export type { SafeExecOptions } from './sys/exec.js';
-export { safeExec } from './sys/exec.js';
+export { describeSafeExecError, safeExec } from './sys/exec.js';
 
 // Git utilities (pure helpers — no CLI dependencies)
 export {
