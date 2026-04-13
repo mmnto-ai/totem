@@ -101,7 +101,16 @@ All overrides are recorded in the Trap Ledger (`.totem/ledger/events.ndjson`) fo
 - Library code (`@mmnto/totem` core) uses `onWarn` callbacks, never direct `console.warn`.
 - **Error cause chains (ES2022):** When re-throwing errors in `catch` blocks, always pass the original error as the `cause` property: `throw new TotemError('...', '...', err)`. NEVER concatenate `err.message` into a new error string — this destroys the original stack trace. The `handleError` debug logger traverses `.cause` chains automatically.
 
-## 10. Hash Conventions (Do Not Flag as Mismatches)
+## 10. PR Review Reply Protocol
+
+Responses to GCA findings follow a batched model by design, not because of a limitation.
+
+- You will receive ONE top-level comment per PR that addresses all findings. It will be a numbered list, one item per finding, in the order you raised them.
+- This is the established protocol. Do not flag the absence of inline replies to individual threads as missing responses.
+- Inline thread replies from this project's agents are directed at CodeRabbit (CR), which uses a different interaction model. CR and GCA coexist on the same PRs but receive replies through separate channels.
+- If a finding is declined, you will see a `review-guidance` tagged lesson added and this styleguide updated in §6.
+
+## 11. Hash Conventions (Do Not Flag as Mismatches)
 
 Totem uses **two independent hash functions** for lessons, computed over different
 inputs. They are NOT supposed to match — this is the established convention since
