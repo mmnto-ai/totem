@@ -359,7 +359,6 @@ function setupWorkspaceLegacyLessons(tmpDir: string, lessonMarkdownContent: stri
 
   // Pre-populate compiled-rules.json so every lesson is already "compiled"
   // (no actual compilation runs) and the no-op branch is entered.
-  const now = '2026-04-13T00:00:00Z';
   fs.writeFileSync(
     path.join(totemDir, 'compiled-rules.json'),
     JSON.stringify(
