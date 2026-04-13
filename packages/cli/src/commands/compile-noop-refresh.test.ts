@@ -321,3 +321,97 @@ describe('compileCommand no-op manifest refresh (#1337)', () => {
     expect(fs.readFileSync(manifestPath, 'utf-8')).toBe(malformed);
   });
 });
+
+// ─── ensureLessonsDir guard (#1350) ──────────────────
+//
+// The NO_LESSONS_DIR guard fires in the no-op branch when lessonsDir is
+// absent or is not a directory at the time generateInputHash is called.
+// The realistic trigger is a workspace that populates lessons from the
+// legacy .totem/lessons.md file so readAllLessons returns non-empty, but
+// has no .totem/lessons/ directory for generateInputHash to hash.
+//
+// The helper that writes the legacy file and config but skips lessons/:
+
+function setupWorkspaceLegacyLessons(tmpDir: string, lessonMarkdownContent: string): void {
+  fs.writeFileSync(
+    path.join(tmpDir, 'totem.config.ts'),
+    [
+      'export default {',
+      '  targets: [{ glob: "**/*.ts", type: "code", strategy: "typescript-ast" }],',
+      '  totemDir: ".totem",',
+      '  orchestrator: {',
+      '    provider: "shell",',
+      '    command: "echo should-never-run",',
+      '    defaultModel: "test-model",',
+      '  },',
+      '};',
+      '',
+    ].join('\n'),
+    'utf-8',
+  );
+
+  const totemDir = path.join(tmpDir, '.totem');
+  fs.mkdirSync(totemDir, { recursive: true });
+
+  // Write lessons via the legacy .totem/lessons.md path so readAllLessons
+  // returns non-empty without a lessons/ directory being present.
+  fs.writeFileSync(path.join(totemDir, 'lessons.md'), lessonMarkdownContent, 'utf-8');
+
+  // Pre-populate compiled-rules.json so every lesson is already "compiled"
+  // (no actual compilation runs) and the no-op branch is entered.
+  const now = '2026-04-13T00:00:00Z';
+  fs.writeFileSync(
+    path.join(totemDir, 'compiled-rules.json'),
+    JSON.stringify(
+      {
+        version: 1,
+        rules: [],
+        nonCompilable: [],
+      },
+      null,
+      2,
+    ) + '\n',
+    'utf-8',
+  );
+
+  // No compile-manifest.json and no lessons/ directory - the guard should
+  // fire before generateInputHash attempts to hash a non-existent directory.
+}
+
+describe('ensureLessonsDir guard (#1350)', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-lessons-dir-guard-'));
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+  });
+
+  it('throws NO_LESSONS_DIR when lessons directory is missing during no-op compile', async () => {
+    // Lessons come from the legacy lessons.md so readAllLessons returns
+    // non-empty and the NO_LESSONS check is bypassed. The no-op branch is
+    // entered (toCompile.length === 0 since all rules are pre-populated or
+    // there are none to add). generateInputHash(lessonsDir) then hits the
+    // ensureLessonsDir guard because .totem/lessons/ was never created.
+    const heading = 'Use err in catch';
+    const body = 'Do not use the identifier "error" in catch blocks.';
+    const lessonContent = `## Lesson - ${heading}\n\n**Tags:** test\n\n${body}\n`;
+
+    setupWorkspaceLegacyLessons(tmpDir, lessonContent);
+
+    // No .totem/lessons/ directory exists - guard must fire.
+    const totemDir = path.join(tmpDir, '.totem');
+    expect(fs.existsSync(path.join(totemDir, 'lessons'))).toBe(false);
+
+    await expect(compileCommand({})).rejects.toMatchObject({
+      code: 'NO_LESSONS_DIR',
+      message: expect.stringContaining('Lessons directory not found'),
+    });
+  });
+});
