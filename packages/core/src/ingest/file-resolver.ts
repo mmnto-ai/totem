@@ -4,7 +4,7 @@ import { globSync } from 'glob';
 
 import type { IngestTarget } from '../config-schema.js';
 import { DEFAULT_IGNORE_PATTERNS } from '../config-schema.js';
-import { safeExec } from '../sys/exec.js';
+import { describeSafeExecError, safeExec } from '../sys/exec.js';
 
 export interface ResolvedFile {
   absolutePath: string;
@@ -59,7 +59,7 @@ function getGitNonIgnoredFiles(
 
     return files;
   } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
+    const errorMsg = describeSafeExecError(err);
     const msg =
       errorMsg.includes('ENOENT') || errorMsg.includes('not found')
         ? `Command 'git' not found. Cannot use .gitignore for filtering. Falling back to ignorePatterns only.`
@@ -139,9 +139,7 @@ export function getChangedFiles(
       });
     } catch (err) {
       if (onWarn) {
-        onWarn(
-          `Failed to list untracked files: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        onWarn(`Failed to list untracked files: ${describeSafeExecError(err)}`);
       }
     }
 
@@ -154,7 +152,7 @@ export function getChangedFiles(
 
     return [...paths];
   } catch (err) {
-    const msg = `Failed to get changed files from git. Error: ${err instanceof Error ? err.message : String(err)}`;
+    const msg = `Failed to get changed files from git. Error: ${describeSafeExecError(err)}`;
     if (onWarn) {
       onWarn(msg);
     }
@@ -172,7 +170,7 @@ export function getHeadSha(projectRoot: string, onWarn?: (msg: string) => void):
     });
   } catch (err) {
     if (onWarn) {
-      onWarn(`Failed to read HEAD SHA: ${err instanceof Error ? err.message : String(err)}`);
+      onWarn(`Failed to read HEAD SHA: ${describeSafeExecError(err)}`);
     }
     return null;
   }

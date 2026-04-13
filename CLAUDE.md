@@ -43,7 +43,7 @@ After >15 turns of code changes: run `totem status`, re-query strategy ADRs for 
 
 ## Detailed Docs (read when relevant)
 
-- [Contributing rules](.claude/docs/contributing.md) — GCA replies, AI_PROMPT_BLOCK, changesets
+- [Contributing rules](.claude/docs/contributing.md) — PR bot protocol (CR/GCA), AI_PROMPT_BLOCK, changesets
 - [Architecture context](.claude/docs/architecture.md) — partitions, boundary parameter, linked indexes
 - [Agent workflow](.claude/docs/agent-workflow.md) — dispatch templates, delegation rules
 - Strategy ADRs: query `mcp__totem-strategy__search_knowledge`

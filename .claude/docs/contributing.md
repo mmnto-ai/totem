@@ -6,10 +6,25 @@
 - Use `Closes #NNN` in PR descriptions to auto-close issues.
 - Squash merge to main (user preference).
 
-## GCA (Gemini Code Assist)
+## PR Review Bot Protocol
 
-- ONE consolidated `@gemini-code-assist` comment per PR (not per finding).
-- GCA decline: add lesson with `review-guidance` tag + update `.gemini/styleguide.md` §6.
+Two bots review PRs. Their interaction models are completely different -- confusing them causes missed feedback or duplicate noise.
+
+### CodeRabbit (CR)
+
+- Reply inline to any CR comment thread freely.
+- CR reads every reply in its thread automatically -- no tagging needed.
+- Supports `@coderabbitai fix` commands to trigger automated fixes.
+- One reply per finding is fine; multiple back-and-forth exchanges are normal.
+
+### Gemini Code Assist (GCA)
+
+- ONE batched top-level PR comment per PR. Never reply inline to individual GCA comment threads.
+- Every GCA reply MUST contain `@gemini-code-assist` -- GCA only sees messages that tag it explicitly.
+- Batch all findings into a single numbered-list response: address each finding in order.
+- GCA decline: add a lesson with `review-guidance` tag + update `.gemini/styleguide.md` §6.
+
+> **WARNING:** Do not apply CR habits to GCA. Inline thread replies to GCA threads are invisible to GCA and will be silently ignored. Always compose one top-level comment with `@gemini-code-assist` and the full response.
 
 ## Publishing
 

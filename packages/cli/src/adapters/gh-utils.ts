@@ -2,7 +2,13 @@
 
 import { z } from 'zod';
 
-import { safeExec, TotemConfigError, TotemError, TotemParseError } from '@mmnto/totem';
+import {
+  describeSafeExecError,
+  safeExec,
+  TotemConfigError,
+  TotemError,
+  TotemParseError,
+} from '@mmnto/totem';
 
 import { GH_TIMEOUT_MS } from '../utils.js';
 
@@ -35,10 +41,10 @@ export function handleGhError(err: unknown, context: string): never {
     );
   }
   // safeExec wraps child-process errors: message includes stderr, cause is the original.
-  // Check both the wrapper and the cause so detection (ENOENT, rate-limit) works regardless.
+  // describeSafeExecError unrolls the cause chain so detection (ENOENT, rate-limit) works
+  // regardless of where the relevant text lives in the chain.
   const wrapperMsg = err instanceof Error ? err.message : String(err);
-  const causeMsg = err instanceof Error && err.cause instanceof Error ? err.cause.message : '';
-  const msg = `${wrapperMsg}\n${causeMsg}`;
+  const msg = describeSafeExecError(err);
   if (msg.includes('ENOENT')) {
     throw new TotemConfigError(
       'GitHub CLI (gh) is required but was not found.',

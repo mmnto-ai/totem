@@ -112,30 +112,13 @@ function wrapSpawnError(command: string, args: string[], result: SpawnResult): E
   const status = result.status;
   const signal = result.signal;
 
-  // Prefer stderr in the message body (matches the legacy format). Fall
-  // back to result.error.message for spawn-level failures with empty
-  // stderr (e.g., ENOENT), and finally to a generic failure line.
-  //
-  // Deliberate: result.error.message is inlined into the wrapper
-  // message by design, not in violation of the repo's general rule 102
-  // ("do not concatenate err.message into a new error string"). Rule
-  // 102 targets the case where a re-thrower concatenates without
-  // preserving cause, which destroys the original stack trace. This
-  // code preserves `result.error` via `{ cause }` below, so the stack
-  // trace is intact on the chain. The concat is also load-bearing for
-  // two existing callers in `packages/core/src/ingest/file-resolver.ts`
-  // (`getHeadSha` and `getChangedFiles`) that build onWarn messages
-  // from `err.message` without walking the cause chain. Stripping the
-  // concat here would silently degrade their warn text to "spawn
-  // failed" with the real reason only reachable via the cause chain.
-  // The cascading migration to walk cause in every safeExec caller is
-  // tracked as follow-up work, not scope for the mmnto/totem#1329
-  // security fix.
+  // mmnto/totem#1357: cause message no longer inlined. Callers use
+  // describeSafeExecError() to unroll the chain when needed.
   let detail: string;
   if (trimmedStderr.length > 0) {
     detail = `\n${trimmedStderr}`;
   } else if (result.error) {
-    detail = `: ${result.error.message}`;
+    detail = ': spawn failed';
   } else if (signal) {
     detail = `: killed by ${signal}`;
   } else {
@@ -190,4 +173,22 @@ function bufferOrStringToString(value: string | Buffer | null | undefined): stri
   if (value == null) return '';
   if (typeof value === 'string') return value;
   return value.toString('utf-8');
+}
+
+/**
+ * Build a human-readable description from a safeExec error, unrolling
+ * the cause chain so callers don't need to walk it manually.
+ *
+ * Deduplicates: if the cause message is already embedded in the wrapper
+ * (the pre-migration concat behavior), it is not appended again.
+ */
+export function describeSafeExecError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const wrapperMsg = err.message;
+  if (!(err.cause instanceof Error)) return wrapperMsg;
+  const causeMsg = err.cause.message;
+  // Deduplicate: if wrapper already contains the cause (pre-migration),
+  // don't double-print.
+  if (wrapperMsg.includes(causeMsg)) return wrapperMsg;
+  return `${wrapperMsg} (${causeMsg})`;
 }
