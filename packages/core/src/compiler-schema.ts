@@ -244,11 +244,27 @@ export interface RuleEventContext {
   justification?: string;
   /** AST context where the rule fired (code, string, comment, regex). */
   astContext?: AstContext;
+  /**
+   * Populated on `'failure'` events only. Holds the error message surfaced by
+   * the runtime engine (ast-grep `findAll`, regex `exec`, etc.) so `totem
+   * doctor` telemetry can aggregate rules that fail at execution time. Not
+   * used by `'trigger'` or `'suppress'` events. Kept as a string rather than
+   * the raw `unknown` so the callback interface stays cheap to consume.
+   */
+  failureReason?: string;
 }
 
-/** Callback for observability — invoked when a rule is suppressed or triggered. */
+/**
+ * Callback for observability - invoked when a rule is suppressed, triggered,
+ * or fails at runtime. The `'failure'` variant was added in mmnto/totem#1408
+ * alongside per-rule try/catch in `executeQuery`. It is intentionally distinct
+ * from `'suppress'`: suppression is a user-initiated directive (totem-ignore /
+ * totem-context), while failure is a runtime engine error on a rule that
+ * otherwise compiled. The #1412 postmerge GCA fix established this boundary,
+ * so the two values must NEVER be conflated in the Trap Ledger.
+ */
 export type RuleEventCallback = (
-  event: 'trigger' | 'suppress',
+  event: 'trigger' | 'suppress' | 'failure',
   lessonHash: string,
   context?: RuleEventContext,
 ) => void;

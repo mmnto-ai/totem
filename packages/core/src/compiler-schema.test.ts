@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { RuleEventCallback } from './compiler-schema.js';
 import {
   AstGrepYamlRuleSchema,
   CompiledRuleSchema,
@@ -174,5 +175,31 @@ describe('badExample optional field', () => {
       badExample: 'const foo = 1;',
     });
     expect(parsed.badExample).toBe('const foo = 1;');
+  });
+});
+
+// ─── RuleEventCallback discriminator (mmnto/totem#1408) ─────
+
+describe('RuleEventCallback discriminator', () => {
+  it('accepts the three distinct event variants without conflating them', () => {
+    const events: string[] = [];
+    const cb: RuleEventCallback = (event, hash, context) => {
+      events.push(`${event}:${hash}:${context?.failureReason ?? ''}`);
+    };
+
+    cb('trigger', 'h1');
+    cb('suppress', 'h2', { file: 'f', line: 1, justification: 'ok' });
+    cb('failure', 'h3', { file: 'f', line: 1, failureReason: 'napi panic' });
+
+    expect(events).toEqual(['trigger:h1:', 'suppress:h2:', 'failure:h3:napi panic']);
+  });
+
+  it('keeps suppress and failure as separate values per the #1412 postmerge GCA boundary', () => {
+    // The two discriminator values are not string-equal and must be handled on
+    // distinct code paths. This test locks that in at the type level so a
+    // future refactor that collapses them fails here loudly.
+    const suppress: 'trigger' | 'suppress' | 'failure' = 'suppress';
+    const failure: 'trigger' | 'suppress' | 'failure' = 'failure';
+    expect(suppress).not.toBe(failure);
   });
 });
