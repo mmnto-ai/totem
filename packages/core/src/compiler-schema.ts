@@ -1,8 +1,43 @@
 import { z } from 'zod';
 
+// ─── NapiConfig / compound ast-grep rule schemas ────
+
+/**
+ * Schema mirroring `@ast-grep/napi`'s `NapiConfig` interface for compound
+ * structural rules. The `rule` key is required at the Zod layer so the
+ * parse-time failure is loud and readable; the inner tree shape is handed
+ * off to `@ast-grep/napi` at the engine boundary for the authoritative
+ * validity check (see `validateAstGrepPattern`). `passthrough()` lets
+ * future napi fields (e.g. `constraints`, `transform`) survive a parse
+ * without a schema bump.
+ *
+ * The rule body is a recursive structural tree (combinators like `all`,
+ * `any`, `not`, `inside`, `has`, `precedes`, `follows`). Rather than
+ * modelling the full recursive schema with `z.lazy()`, we accept any
+ * object shape here and lean on napi to reject malformed trees. That
+ * keeps the Zod layer cheap and the authoritative check centralized.
+ */
+export const NapiConfigSchema = z
+  .object({
+    rule: z.record(z.unknown()),
+  })
+  .passthrough();
+
+export type NapiConfig = z.infer<typeof NapiConfigSchema>;
+
+/**
+ * Named alias of `NapiConfigSchema` for grep-ability. The field on
+ * `CompiledRule` is named `astGrepYamlRule` (see ADR-087); the alias
+ * lets a reader search for `AstGrepYamlRuleSchema` and land on the
+ * right definition without first knowing it's a napi config.
+ */
+export const AstGrepYamlRuleSchema = NapiConfigSchema;
+
+export type AstGrepYamlRule = NapiConfig;
+
 // ─── Compiled rule schemas ──────────────────────────
 
-export const CompiledRuleSchema = z.object({
+const CompiledRuleBaseSchema = z.object({
   /** SHA-256 hash (first 16 hex chars) of heading + body — detects edits */
   lessonHash: z.string(),
   /** Human-readable heading from the lesson (for diagnostics) */
@@ -15,8 +50,27 @@ export const CompiledRuleSchema = z.object({
   engine: z.enum(['regex', 'ast', 'ast-grep']),
   /** Tree-sitter S-expression query (required when engine is 'ast') */
   astQuery: z.string().optional(),
-  /** ast-grep pattern — string for simple patterns, object for compound rules (has/inside/not) */
-  astGrepPattern: z.union([z.string(), z.record(z.unknown())]).optional(),
+  /**
+   * Flat ast-grep pattern source (a single JS/TS expression). Mutually
+   * exclusive with `astGrepYamlRule` when `engine === 'ast-grep'`; the
+   * superRefine below enforces that.
+   */
+  astGrepPattern: z.string().optional(),
+  /**
+   * Compound ast-grep rule (NapiConfig shape). Holds structural trees
+   * that cannot be expressed as a single source snippet (all / any /
+   * not / inside / has / precedes / follows combinators). Mutually
+   * exclusive with `astGrepPattern`; see the superRefine on this
+   * schema. Smoke-test wiring lands in mmnto/totem#1408.
+   */
+  astGrepYamlRule: AstGrepYamlRuleSchema.optional(),
+  /**
+   * Optional code snippet the rule is expected to match. Stored from
+   * compiler output so the smoke-test runner (wired in
+   * mmnto/totem#1408) can re-validate the rule offline. Optional in
+   * 1.14.9; flips to required when #1408 turns on the gate.
+   */
+  badExample: z.string().optional(),
   /** ISO timestamp of when this rule was compiled */
   compiledAt: z.string(),
   /** ISO timestamp of when this rule was first created (survives recompilation) */
@@ -45,6 +99,43 @@ export const CompiledRuleSchema = z.object({
    */
   manual: z.boolean().optional(),
 });
+
+/**
+ * Shared mutual-exclusion check between the flat `astGrepPattern` string
+ * and the structural `astGrepYamlRule` object. Used by both
+ * `CompiledRuleSchema` and `CompilerOutputSchema` so the gate fires at
+ * both the LLM-output boundary and the persisted-rule boundary. Empty
+ * strings count as "not present" because `engineFields` writes
+ * `pattern: ''` alongside every ast-grep rule.
+ */
+function refineAstGrepMutualExclusion(
+  data: {
+    engine?: 'regex' | 'ast' | 'ast-grep';
+    astGrepPattern?: string;
+    astGrepYamlRule?: unknown;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  if (data.engine !== 'ast-grep') return;
+  const hasPattern = typeof data.astGrepPattern === 'string' && data.astGrepPattern.length > 0;
+  const hasYaml = data.astGrepYamlRule !== undefined;
+  if (hasPattern && hasYaml) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'ast-grep rule cannot define both astGrepPattern and astGrepYamlRule',
+      path: ['astGrepYamlRule'],
+    });
+  }
+  if (!hasPattern && !hasYaml) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'ast-grep rule must define either astGrepPattern or astGrepYamlRule',
+      path: ['astGrepPattern'],
+    });
+  }
+}
+
+export const CompiledRuleSchema = CompiledRuleBaseSchema.superRefine(refineAstGrepMutualExclusion);
 
 export type CompiledRule = z.infer<typeof CompiledRuleSchema>;
 
@@ -84,18 +175,30 @@ export type CompiledRulesFile = z.infer<typeof CompiledRulesFileSchema>;
 // ─── Compiler output schema ─────────────────────────
 
 /** Schema for the structured JSON the LLM returns when compiling a lesson. */
-export const CompilerOutputSchema = z.object({
+const CompilerOutputBaseSchema = z.object({
   compilable: z.boolean(),
   pattern: z.string().optional(),
   message: z.string().optional(),
   fileGlobs: z.array(z.string()).optional(),
   engine: z.enum(['regex', 'ast', 'ast-grep']).optional(),
   astQuery: z.string().optional(),
-  astGrepPattern: z.union([z.string(), z.record(z.unknown())]).optional(),
+  /** Flat ast-grep pattern source. Mutually exclusive with `astGrepYamlRule`. */
+  astGrepPattern: z.string().optional(),
+  /** Compound ast-grep rule (NapiConfig). Mutually exclusive with `astGrepPattern`. */
+  astGrepYamlRule: AstGrepYamlRuleSchema.optional(),
+  /**
+   * Optional code snippet the rule is expected to match. Optional in
+   * 1.14.9; gate wired in mmnto/totem#1408.
+   */
+  badExample: z.string().optional(),
   severity: z.enum(['error', 'warning']).optional(),
   /** LLM explanation for why a lesson was marked non-compilable */
   reason: z.string().optional(),
 });
+
+export const CompilerOutputSchema = CompilerOutputBaseSchema.superRefine(
+  refineAstGrepMutualExclusion,
+);
 
 export type CompilerOutput = z.infer<typeof CompilerOutputSchema>;
 

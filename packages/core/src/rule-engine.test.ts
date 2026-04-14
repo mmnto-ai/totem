@@ -79,9 +79,13 @@ describe('applyAstRulesToAdditions', () => {
     const filePath = path.join(tmpDir, 'src', 'app.ts');
     fs.writeFileSync(filePath, 'const x = 1;\n');
 
+    // Runtime-invalid ast-grep string pattern. The pattern is a bare
+    // catch clause, which ast-grep rejects as multi-root. Post-#1407
+    // the string path is the only field rule-engine's filter sees;
+    // compound-rule runtime routing lands in mmnto/totem#1408.
     const rule = makeRule({
       engine: 'ast-grep',
-      astGrepPattern: { rule: { kind: '!!!INVALID_NODE_KIND!!!' } },
+      astGrepPattern: 'catch ($ERR) { $$$BODY }',
     });
 
     const additions = [makeAddition('src/app.ts', 'const x = 1;', 1)];

@@ -122,10 +122,12 @@ export {
 // Compiler
 export type {
   AstContext,
+  AstGrepYamlRule,
   CompiledRule,
   CompiledRulesFile,
   CompilerOutput,
   DiffAddition,
+  NapiConfig,
   RuleEventCallback,
   RuleEventContext,
   Violation,
@@ -134,6 +136,7 @@ export {
   applyAstRulesToAdditions,
   applyRules,
   applyRulesToAdditions,
+  AstGrepYamlRuleSchema,
   CompiledRuleSchema,
   CompiledRulesFileSchema,
   CompilerOutputSchema,
@@ -145,6 +148,7 @@ export {
   loadCompiledRules,
   loadCompiledRulesFile,
   matchesGlob,
+  NapiConfigSchema,
   parseCompilerResponse,
   type RegexValidation,
   sanitizeFileGlobs,
@@ -289,6 +293,7 @@ export {
 // Compile manifest (signing / provenance)
 export type { CompileManifest } from './compile-manifest.js';
 export {
+  canonicalStringify,
   CompileManifestSchema,
   generateInputHash,
   generateOutputHash,

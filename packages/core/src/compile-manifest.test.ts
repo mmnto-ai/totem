@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -6,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { CompileManifest } from './compile-manifest.js';
 import {
+  canonicalStringify,
   generateInputHash,
   generateOutputHash,
   readCompileManifest,
@@ -73,6 +75,143 @@ describe('generateOutputHash', () => {
     fs.writeFileSync(pathCRLF, '{"rules": []}\r\n');
 
     expect(generateOutputHash(pathLF)).toBe(generateOutputHash(pathCRLF));
+  });
+
+  it('manifest hash generates identical hashes for astGrepYamlRule objects with differently ordered keys', () => {
+    const pathA = path.join(tmpDir, 'rules-a.json');
+    const pathB = path.join(tmpDir, 'rules-b.json');
+
+    const ruleA = {
+      lessonHash: 'abc',
+      lessonHeading: 'Test',
+      pattern: '',
+      message: 'm',
+      engine: 'ast-grep',
+      compiledAt: '2026-04-13T00:00:00Z',
+      astGrepYamlRule: {
+        rule: {
+          all: [{ pattern: 'foo($A)' }, { inside: { kind: 'function_declaration' } }],
+        },
+      },
+    };
+    // Same semantic rule, scrambled keys at every level.
+    const ruleB = {
+      engine: 'ast-grep',
+      astGrepYamlRule: {
+        rule: {
+          all: [{ pattern: 'foo($A)' }, { inside: { kind: 'function_declaration' } }],
+        },
+      },
+      pattern: '',
+      compiledAt: '2026-04-13T00:00:00Z',
+      lessonHash: 'abc',
+      message: 'm',
+      lessonHeading: 'Test',
+    };
+
+    fs.writeFileSync(pathA, JSON.stringify({ version: 1, rules: [ruleA] }, null, 2) + '\n');
+    fs.writeFileSync(pathB, JSON.stringify({ version: 1, rules: [ruleB] }, null, 2) + '\n');
+
+    expect(generateOutputHash(pathA)).toBe(generateOutputHash(pathB));
+  });
+
+  it('does not switch to canonical path when the literal string appears only in a lesson message', () => {
+    // Regression for the substring false-positive flagged on #1412:
+    // a rule whose message body contains the bytes `"astGrepYamlRule"`
+    // (e.g., a lesson about when to use the new field) must NOT flip
+    // the hash computation path. Pre-#1407 CLIs would hash the raw
+    // byte stream; a false canonical path produces different bytes.
+    const pathByteStream = path.join(tmpDir, 'rules-bytes.json');
+    const pathWithStringInMessage = path.join(tmpDir, 'rules-msg.json');
+
+    const plainRule = {
+      lessonHash: 'plain',
+      lessonHeading: 'regex rule',
+      pattern: 'foo',
+      message: 'use foo instead of bar',
+      engine: 'regex',
+      compiledAt: '2026-04-13T00:00:00Z',
+    };
+    const trickyRule = {
+      lessonHash: 'tricky',
+      lessonHeading: 'mention the field',
+      pattern: 'foo',
+      // Literal bytes `"astGrepYamlRule"` inside a message (wrapping
+      // the name in single quotes in prose would still JSON-encode to
+      // a version that does NOT contain the double-quoted token —
+      // this test uses the token explicitly to force the worst case).
+      message: 'prefer astGrepPattern over "astGrepYamlRule" for flat patterns',
+      engine: 'regex',
+      compiledAt: '2026-04-13T00:00:00Z',
+    };
+
+    const plainJson = JSON.stringify({ version: 1, rules: [plainRule] }, null, 2) + '\n';
+    const trickyJson = JSON.stringify({ version: 1, rules: [trickyRule] }, null, 2) + '\n';
+
+    fs.writeFileSync(pathByteStream, plainJson);
+    fs.writeFileSync(pathWithStringInMessage, trickyJson);
+
+    // Hashes differ (different messages), but the tricky rule must
+    // have been hashed via the raw-byte-stream path, not canonical.
+    // Proof: the canonical path on tricky would produce a different
+    // hash than crypto over the raw bytes. Compare against the raw
+    // sha256 of the file contents.
+    const expectedTrickyHash = crypto
+      .createHash('sha256')
+      .update(trickyJson.replace(/\r\n/g, '\n'))
+      .digest('hex');
+    expect(generateOutputHash(pathWithStringInMessage)).toBe(expectedTrickyHash);
+  });
+});
+
+describe('canonicalStringify', () => {
+  it('sorts top-level object keys', () => {
+    expect(canonicalStringify({ b: 2, a: 1 })).toBe(canonicalStringify({ a: 1, b: 2 }));
+  });
+
+  it('sorts keys at every nesting depth', () => {
+    const a = { z: { y: { x: 1, w: 2 } }, a: 0 };
+    const b = { a: 0, z: { y: { w: 2, x: 1 } } };
+    expect(canonicalStringify(a)).toBe(canonicalStringify(b));
+  });
+
+  it('preserves array element order (arrays are ordered by contract)', () => {
+    expect(canonicalStringify([2, 1, 3])).not.toBe(canonicalStringify([1, 2, 3]));
+  });
+
+  it('handles nested arrays of objects with scrambled keys', () => {
+    const a = {
+      rule: {
+        all: [{ pattern: 'foo', kind: 'call' }, { inside: { stopBy: 'end', kind: 'function' } }],
+      },
+    };
+    const b = {
+      rule: {
+        all: [{ kind: 'call', pattern: 'foo' }, { inside: { kind: 'function', stopBy: 'end' } }],
+      },
+    };
+    expect(canonicalStringify(a)).toBe(canonicalStringify(b));
+  });
+
+  it('is stable for primitives', () => {
+    expect(canonicalStringify('hello')).toBe('"hello"');
+    expect(canonicalStringify(42)).toBe('42');
+    expect(canonicalStringify(true)).toBe('true');
+    expect(canonicalStringify(null)).toBe('null');
+  });
+
+  it('handles undefined by omitting the key (JSON.stringify parity)', () => {
+    const a = { a: 1, b: undefined };
+    const b = { a: 1 };
+    expect(canonicalStringify(a)).toBe(canonicalStringify(b));
+  });
+
+  it('throws on a bare undefined input (contract violation)', () => {
+    // Undefined in record values is filtered out upstream; a bare
+    // undefined here means a caller bug, not malformed data on disk.
+    // Fail loud rather than silently produce the string "undefined"
+    // that would then hash to something no other input produces.
+    expect(() => canonicalStringify(undefined)).toThrow(/undefined is not a JSON value/);
   });
 });
 
