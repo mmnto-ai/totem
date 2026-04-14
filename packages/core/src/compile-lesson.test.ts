@@ -557,6 +557,117 @@ describe('buildCompiledRule ast-grep validation (#1062)', () => {
   });
 });
 
+// ─── Smoke gate wiring (mmnto/totem#1408) ────────────
+
+describe('buildCompiledRule smoke gate (mmnto/totem#1408)', () => {
+  it('rejects Pipeline 2 ast-grep rule that is missing badExample', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No debugger',
+      engine: 'ast-grep',
+      astGrepPattern: 'debugger',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+    });
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('smoke gate');
+    expect(result.rejectReason).toContain('badExample');
+  });
+
+  it('rejects Pipeline 2 ast-grep rule whose badExample produces zero matches', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No debugger',
+      engine: 'ast-grep',
+      astGrepPattern: 'debugger',
+      badExample: 'const x = 1;\n',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+    });
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('smoke gate');
+    expect(result.rejectReason).toContain('zero matches');
+  });
+
+  it('rejects Pipeline 2 regex rule that is missing badExample', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No console.log',
+      engine: 'regex',
+      pattern: 'console\\.log',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+    });
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('smoke gate');
+    expect(result.rejectReason).toContain('badExample');
+  });
+
+  it('accepts Pipeline 2 ast-grep rule whose badExample produces matches', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No debugger',
+      engine: 'ast-grep',
+      astGrepPattern: 'debugger',
+      badExample: 'debugger;\n',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+    });
+    expect(result.rule).not.toBeNull();
+    expect(result.rule!.badExample).toBe('debugger;\n');
+  });
+
+  it('persists badExample on the CompiledRule when the gate accepts', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No console.log',
+      engine: 'regex',
+      pattern: 'console\\.log',
+      badExample: 'console.log("debug")',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+    });
+    expect(result.rule).not.toBeNull();
+    expect(result.rule!.badExample).toBe('console.log("debug")');
+  });
+
+  it('honors badExampleOverride so Pipeline 3 can reuse its Bad snippet', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No console.log',
+      engine: 'regex',
+      pattern: 'console\\.log',
+      // No badExample on parsed; caller supplies it via override
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+      badExampleOverride: 'console.log("bad")',
+    });
+    expect(result.rule).not.toBeNull();
+    expect(result.rule!.badExample).toBe('console.log("bad")');
+  });
+
+  it('Pipeline 1 is unaffected (gate is opt-in via enforceSmokeGate)', () => {
+    // Without the option flag, buildCompiledRule must behave exactly as before.
+    // This pins the design invariant that Pipeline 1 / ad-hoc callers do not
+    // break in mmnto/totem#1408. The gate-flip for Pipeline 1 is a follow-up.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No console.log',
+      engine: 'regex',
+      pattern: 'console\\.log',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).not.toBeNull();
+    expect(result.rejectReason).toBeUndefined();
+  });
+});
+
 // ─── buildManualRule ────────────────────────────────
 
 describe('buildManualRule', () => {
@@ -662,6 +773,11 @@ describe('compileLesson', () => {
             pattern: 'console\\.log',
             message: 'No console.log',
             engine: 'regex' as const,
+            // mmnto/totem#1408: Pipeline 2 now requires a badExample that the
+            // smoke gate can match. Every existing happy-path test here still
+            // wants the rule to compile, so give the helper a known-good
+            // snippet that matches the pattern.
+            badExample: 'console.log("debug")',
           }
         : null,
     ),
@@ -678,6 +794,46 @@ describe('compileLesson', () => {
     const result = await compileLesson(lesson, 'system prompt', deps);
     expect(result.status).toBe('compiled');
     expect(deps.runOrchestrator).toHaveBeenCalled();
+  });
+
+  // ─── Smoke gate on Pipeline 2 (mmnto/totem#1408) ──
+
+  it('Pipeline 2 rejects a rule whose LLM output omits badExample', async () => {
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: true,
+        pattern: 'console\\.log',
+        message: 'No console.log',
+        engine: 'regex' as const,
+        // No badExample — gate must reject
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('{"compilable": true}'),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(lesson, 'system prompt', deps);
+    expect(result.status).toBe('failed');
+    expect(deps.callbacks!.onWarn).toHaveBeenCalledWith(
+      lesson.heading,
+      expect.stringContaining('smoke gate'),
+    );
+  });
+
+  it('Pipeline 2 accepts a rule whose LLM output supplies a matching badExample', async () => {
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: true,
+        pattern: 'console\\.log',
+        message: 'No console.log',
+        engine: 'regex' as const,
+        badExample: 'console.log("debug")',
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('{"compilable": true}'),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(lesson, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
   });
 
   // ─── Phase 3 systemPrompt threading (mmnto/totem#1291) ─────
@@ -740,6 +896,7 @@ describe('compileLesson', () => {
         pattern: 'console\\.log',
         message: 'No console.log',
         engine: 'regex' as const,
+        badExample: 'console.log("debug")',
       }),
       runOrchestrator: vi.fn().mockResolvedValue('{"compilable": true}'),
       existingByHash: new Map(),
@@ -1004,6 +1161,7 @@ describe('compileLesson with inline examples', () => {
             pattern: 'console\\.log',
             message: 'No console.log',
             engine: 'regex' as const,
+            badExample: 'console.log("debug")',
           }
         : null,
     ),
@@ -1143,11 +1301,14 @@ describe('compileLesson Pipeline 3 (Bad/Good snippets)', () => {
     );
   });
 
-  it('fails self-verification when pattern does not match Bad snippet', async () => {
+  it('rejects at the smoke gate when the pattern does not match the Bad snippet (mmnto/totem#1408)', async () => {
     const deps: CompileLessonDeps = {
       parseCompilerResponse: vi.fn().mockReturnValue({
         compilable: true,
-        // Pattern matches neither Bad nor Good — will fail self-test
+        // Pattern matches neither Bad nor Good - smoke gate catches this
+        // before the old self-verification step ever runs. Pre-#1408 the
+        // test asserted on the self-verification message; post-#1408 the
+        // smoke gate is the earlier (and stricter) filter.
         pattern: 'this_matches_nothing_at_all',
         message: 'Wrong pattern',
         engine: 'regex' as const,
@@ -1160,7 +1321,7 @@ describe('compileLesson Pipeline 3 (Bad/Good snippets)', () => {
     expect(result.status).toBe('failed');
     expect(deps.callbacks!.onWarn).toHaveBeenCalledWith(
       pipeline3Lesson.heading,
-      expect.stringContaining('self-verification'),
+      expect.stringContaining('smoke gate'),
     );
   });
 
