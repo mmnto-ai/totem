@@ -1,3 +1,48 @@
+// ─── Compound rule outer-combinator allow-list ──────
+
+/**
+ * Tree-sitter node kinds that are safe to use as the outer target of an
+ * `inside:` / `has:` / `not:` combinator in a compound ast-grep rule.
+ *
+ * Why a named export: the allow-list has independent value beyond the
+ * compiler prompt. `totem doctor` will lint existing compiled rules for
+ * illegal `kind:` targets, and future rule-tester hints can surface the
+ * same list. Interpolating it into the prompt keeps the two consumers in
+ * sync — a single source of truth.
+ *
+ * Why these kinds: they cover the structural contexts that show up in
+ * real lessons (control flow, function and class bodies, module-level
+ * imports and exports). Sourced from the compound ast-grep spike
+ * findings at packages/core/spikes/compound-ast-grep/findings.md (gap
+ * G-3) plus the ADR-087 / Proposal 226 design doc.
+ *
+ * Why not `pattern:` as the outer target: the spike harness test 8
+ * pinned the empirical finding that an outer `inside: { pattern: 'for
+ * ($INIT; $COND; $STEP) { $$$ }' }` silently matches zero. The
+ * combinator target must be a single-node kind match for the match
+ * engine to pin the scope reliably. The prompt (below) forbids the
+ * pattern: shape for outer targets; this list enumerates the accepted
+ * kinds.
+ */
+export const KIND_ALLOW_LIST = [
+  'for_statement',
+  'while_statement',
+  'do_statement',
+  'try_statement',
+  'catch_clause',
+  'function_declaration',
+  'method_definition',
+  'arrow_function',
+  'class_declaration',
+  'class_body',
+  'import_statement',
+  'export_statement',
+  'if_statement',
+  'switch_statement',
+] as const;
+
+export type KindAllowListEntry = (typeof KIND_ALLOW_LIST)[number];
+
 // ─── Compiler prompt ────────────────────────────────
 
 export const COMPILER_SYSTEM_PROMPT = `# Lesson Compiler — Rule Extraction

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { COMPILER_SYSTEM_PROMPT, PIPELINE3_COMPILER_PROMPT } from './compile-templates.js';
+import {
+  COMPILER_SYSTEM_PROMPT,
+  KIND_ALLOW_LIST,
+  PIPELINE3_COMPILER_PROMPT,
+} from './compile-templates.js';
 
 describe('COMPILER_SYSTEM_PROMPT', () => {
   it('includes Identity and Rules sections', () => {
@@ -54,5 +58,43 @@ describe('PIPELINE3_COMPILER_PROMPT', () => {
 
   it('identifies itself as Pipeline 3', () => {
     expect(PIPELINE3_COMPILER_PROMPT).toContain('Pipeline 3');
+  });
+});
+
+// ─── KIND_ALLOW_LIST ────────────────────────────────
+
+describe('KIND_ALLOW_LIST', () => {
+  it('is a non-empty readonly array of strings', () => {
+    expect(Array.isArray(KIND_ALLOW_LIST)).toBe(true);
+    expect(KIND_ALLOW_LIST.length).toBeGreaterThan(0);
+    for (const entry of KIND_ALLOW_LIST) {
+      expect(typeof entry).toBe('string');
+      expect(entry.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('contains the kinds from the compound spike allow-list (findings.md G-3)', () => {
+    // Lock the spike-derived minimum set so a future edit cannot silently
+    // drop one of the empirically-validated kinds. Spike reference:
+    // packages/core/spikes/compound-ast-grep/findings.md gap G-3.
+    const spikeMinimum = [
+      'for_statement',
+      'while_statement',
+      'try_statement',
+      'catch_clause',
+      'function_declaration',
+      'class_declaration',
+      'method_definition',
+      'import_statement',
+      'export_statement',
+    ];
+    for (const kind of spikeMinimum) {
+      expect(KIND_ALLOW_LIST).toContain(kind);
+    }
+  });
+
+  it('has no duplicate entries', () => {
+    const seen = new Set(KIND_ALLOW_LIST);
+    expect(seen.size).toBe(KIND_ALLOW_LIST.length);
   });
 });
