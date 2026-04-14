@@ -44,9 +44,24 @@ All filed from bot review findings during the marathon; all deferred with tracke
 - **#1355** — Tighten `Standardize exception messages` lint rule so it does not fire on internal-wrapper `Error` constructions (surfaced during #1349 and #1356).
 - **#1357** — Migrate `safeExec` callers to walk cause chain per general rule 102 (GCA concurred this deferral is legitimate).
 
-### Current: 1.15.0 — The Distribution Pipeline
+### Current: 1.14.9 — Precision Engine
 
-All four pre-1.15.0 blocker P0s are now closed. Phase 2 (mesh completion) can proceed without tripping over the same governance-engine rakes that surfaced during the 1.14.2 rename PR.
+Prerequisite for 1.15.0 Pack Distribution. Packs distribute rules, so rule quality IS the product. Shipping Pack Distribution before compound ast-grep support would distribute structural false positives to every downstream consumer. Build the precision instrument, then open the distribution pipes.
+
+Epic: mmnto-ai/totem-strategy#81. Proposal 226 in `.strategy/proposals/active/226-compound-ast-grep-rules.md`. ADR promotion is gated on the `@ast-grep/napi` YAML validation spike.
+
+**Implementation chain (strict dependency order):**
+
+- **#1406** — spike: `@ast-grep/napi` compound YAML rule validation (ADR gate)
+- **#1407** — feat(core): extend `CompiledRule` schema with `astGrepYamlRule` field
+- **#1408** — feat(core): runtime engine support for compound ast-grep rules
+- **#1409** — feat(cli): compiler prompt tuning for compound rule emission
+
+**Phase 4 (follow-up, separate ticket):** Bulk-recompile the 20+ archived rules tagged `upgradeTarget: compound` in `.totem/compiled-rules.json` using the new compiler.
+
+### Next: 1.15.0 — The Distribution Pipeline
+
+Deferred behind 1.14.9. All four pre-1.15.0 blocker P0s are already closed. Phase 2 (mesh completion) can proceed without tripping over the same governance-engine rakes that surfaced during the 1.14.2 rename PR.
 
 **Phase 2 — Mesh completion (wraps up the 1.14.0 "Nervous System Foundation" story arc):**
 
