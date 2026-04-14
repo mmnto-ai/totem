@@ -6626,6 +6626,22 @@
       "severity": "warning",
       "status": "archived",
       "archivedReason": "Inverted polarity — pattern $TEXT.replace(/;+$/, '') flags the fix action rather than the bug. The lesson teaches that declaration-pattern text() output should be trimmed; flagging .replace(/;+$/, '') would fire on every site that correctly applies the trim. Lesson body is conceptual (DX guidance) without a clear bug-side pattern to anchor a flat rule. upgradeTarget: compound — a compound rule could match SgNode.text() consumer sites without a sibling .replace, but until then the lesson is documentation, not enforcement."
+    },
+    {
+      "lessonHash": "bfbb13e85017da0e",
+      "lessonHeading": "Throw on undefined in canonical serialization",
+      "pattern": "",
+      "message": "Canonical serialization must throw on undefined values. Use a replacer that throws on undefined instead of silently omitting keys, to prevent silent data drift in hashing pipelines.",
+      "engine": "ast-grep",
+      "astGrepPattern": "JSON.stringify($OBJ)",
+      "compiledAt": "2026-04-14T16:57:11.490Z",
+      "createdAt": "2026-04-14T16:57:11.490Z",
+      "fileGlobs": [
+        "packages/core/src/compile-manifest.ts"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: pattern JSON.stringify($OBJ) matches any single-argument JSON.stringify call in compile-manifest.ts, including the legitimate primitive-serialization call inside canonicalStringify itself (line 103). The lesson intent is specifically about the canonicalStringify function, not all JSON.stringify calls in the file. upgradeTarget: compound (Proposal 226) — a compound rule with inside: function canonicalStringify(...) { $$$ } could constrain the pattern to calls that bypass canonicalStringify, catching the real anti-pattern without firing on the helper's own implementation. Phase 4 recompile candidate once #1408 and #1409 ship."
     }
   ],
   "nonCompilable": [
@@ -10140,6 +10156,18 @@
     {
       "hash": "2589c809a6efd120",
       "title": "Contain blast radius with per-rule try-catch"
+    },
+    {
+      "hash": "803a56fba57541ee",
+      "title": "Use overloads for polymorphic field routing"
+    },
+    {
+      "hash": "e5fb5a84e658b3c6",
+      "title": "Use structural checks for feature-gated hashing"
+    },
+    {
+      "hash": "fc3714d40f2ec3d0",
+      "title": "Validate plain JSON values for hashing"
     }
   ]
 }
