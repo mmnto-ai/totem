@@ -277,7 +277,14 @@ export async function applyAstRulesToAdditions(
   readStrategy?: (filePath: string) => Promise<string | null>,
 ): Promise<Violation[]> {
   const treeSitterRules = rules.filter((r) => r.engine === 'ast' && r.astQuery);
-  const astGrepRules = rules.filter((r) => r.engine === 'ast-grep' && r.astGrepPattern);
+  // Widen to include compound rules (mmnto/totem#1408). A rule is runnable
+  // when EITHER `astGrepPattern` (string) or `astGrepYamlRule` (NapiConfig
+  // object) is populated. The mutual-exclusion superRefine on
+  // CompiledRuleSchema guarantees these do not coexist, so the per-rule
+  // dispatch below can safely use an if/else on presence alone.
+  const astGrepRules = rules.filter(
+    (r) => r.engine === 'ast-grep' && (r.astGrepPattern || r.astGrepYamlRule),
+  );
   if ((treeSitterRules.length === 0 && astGrepRules.length === 0) || additions.length === 0) {
     return [];
   }
@@ -408,14 +415,26 @@ export async function applyAstRulesToAdditions(
           // Fall through — content stays null for standard file read failures
         }
         if (content) {
-          // Batch: parse file once, run all patterns
-          const queries = applicableAstGrep
-            .filter((rule) => rule.astGrepPattern != null)
-            .map((rule) => ({
-              rule: rule.astGrepPattern as AstGrepRule,
-              addedLineNumbers,
-            }));
-          const batchResults = matchAstGrepPatternsBatch(content, ext, queries);
+          // Batch: parse file once, run all patterns.
+          // Each rule carries either astGrepPattern (string) or astGrepYamlRule
+          // (NapiConfig object); the batch helper polymorphically dispatches on
+          // type. Per-rule try/catch (mmnto/totem#1408 G-7) ensures one
+          // malformed rule does not kill the whole file pass: failures flow
+          // through the onRuleFailure sink, get mapped back to a lessonHash
+          // via the query index, and surface as 'failure' RuleEvent entries.
+          const queries = applicableAstGrep.map((rule) => ({
+            rule: (rule.astGrepPattern ?? rule.astGrepYamlRule) as AstGrepRule,
+            addedLineNumbers,
+          }));
+          const batchResults = matchAstGrepPatternsBatch(content, ext, queries, (index, err) => {
+            const failedRule = applicableAstGrep[index];
+            if (!failedRule) return;
+            onRuleEvent?.('failure', failedRule.lessonHash, {
+              file,
+              line: 0,
+              failureReason: err.message,
+            });
+          });
 
           for (let i = 0; i < applicableAstGrep.length; i++) {
             const rule = applicableAstGrep[i]!;
