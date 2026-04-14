@@ -6574,6 +6574,58 @@
       "severity": "warning",
       "status": "archived",
       "archivedReason": "Over-broad: fires on legitimate CLI entry-point usage like const cwd = options.cwd ?? process.cwd(). The lesson applies to internal command invocations (sub-commands called from other commands), not to the top-level command entry. Needs a negative constraint like not-inside options.cwd resolution, upgradeTarget: compound (Proposal 226)."
+    },
+    {
+      "lessonHash": "e0313c6aed2517c0",
+      "lessonHeading": "Prefer kind over pattern for inside combinators",
+      "pattern": "",
+      "message": "Prefer 'inside: { kind: ... }' over 'inside: { pattern: ... }' — pattern-based inside combinators can silently fail at runtime.",
+      "engine": "ast-grep",
+      "astGrepPattern": "{ $$$BEFORE, inside: { $$$INNER, pattern: $PAT, $$$REST }, $$$AFTER }",
+      "compiledAt": "2026-04-14T14:25:17.550Z",
+      "createdAt": "2026-04-14T14:25:17.550Z",
+      "fileGlobs": [
+        "packages/core/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "5b85fe53468964e1",
+      "lessonHeading": "Avoid suppression events for runtime failures",
+      "pattern": "",
+      "message": "Do not use the 'suppress' event for runtime execution failures — it lacks the appropriate interface and misrepresents the architectural intent of suppression.",
+      "engine": "ast-grep",
+      "astGrepPattern": "emit('suppress', $$$ARGS)",
+      "compiledAt": "2026-04-14T14:25:16.967Z",
+      "createdAt": "2026-04-14T14:25:16.967Z",
+      "fileGlobs": [
+        "packages/core/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Hallucinated API surface — pattern emit('suppress', $$$ARGS) does not match Totem call sites. Our event API is onRuleEvent('suppress', ...) on RuleEventCallback (compiler-schema.ts:147), never emit(). Sonnet generated a generic event-emitter shape that has zero coverage in the codebase. Lesson is valid but needs source refinement before recompile to anchor to onRuleEvent or a concrete failure-event API once #1408 lands. upgradeTarget: compound — a compound rule could constrain to events.ts call sites but the underlying API mismatch must be fixed first."
+    },
+    {
+      "lessonHash": "7ea6e32171654947",
+      "lessonHeading": "Trim trailing semicolons from declaration text",
+      "pattern": "",
+      "message": "Trim trailing semicolons from declaration text using .replace(/;+$/, '') or .trimEnd() with semicolon check",
+      "engine": "ast-grep",
+      "astGrepPattern": "$TEXT.replace(/;+$/, '')",
+      "compiledAt": "2026-04-14T14:25:19.776Z",
+      "createdAt": "2026-04-14T14:25:19.776Z",
+      "fileGlobs": [
+        "packages/core/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Inverted polarity — pattern $TEXT.replace(/;+$/, '') flags the fix action rather than the bug. The lesson teaches that declaration-pattern text() output should be trimmed; flagging .replace(/;+$/, '') would fire on every site that correctly applies the trim. Lesson body is conceptual (DX guidance) without a clear bug-side pattern to anchor a flat rule. upgradeTarget: compound — a compound rule could match SgNode.text() consumer sites without a sibling .replace, but until then the lesson is documentation, not enforcement."
     }
   ],
   "nonCompilable": [
@@ -10084,6 +10136,10 @@
     {
       "hash": "83489e54d3f12773",
       "title": "Fail fast on unresolved upgrade hashes"
+    },
+    {
+      "hash": "2589c809a6efd120",
+      "title": "Contain blast radius with per-rule try-catch"
     }
   ]
 }
