@@ -440,26 +440,30 @@ describe('compileCommand cwd option (#1232)', () => {
     const body = 'Do not use the identifier "error" in catch blocks.';
     const lessonHash = hashLesson(heading, body);
 
+    // omitManifest: true so the manifest does NOT exist before compileCommand
+    // runs. If compileCommand falls back to process.cwd() instead of tmpDir,
+    // it will fail to find the config there and throw before writing any
+    // manifest. The post-call assertion then proves the correct cwd was used.
     setupWorkspace(tmpDir, {
       lessons: {
         'use-err.md': lessonMarkdown(heading, body),
       },
       rules: [{ lessonHash, lessonHeading: heading }],
-      // No manifestInputHash override - setupWorkspace computes the real hash so
-      // the no-op branch sees a fresh manifest and leaves both files untouched.
+      omitManifest: true,
     });
 
     const totemDir = path.join(tmpDir, '.totem');
     const manifestPath = path.join(totemDir, 'compile-manifest.json');
 
-    // The manifest must exist after a workspace that is already up-to-date
-    // runs through the no-op branch. Passing cwd explicitly means the command
-    // reads config and lessons from tmpDir even though process.cwd() points
-    // elsewhere.
+    // The manifest must NOT exist before the call (omitManifest: true above).
+    expect(fs.existsSync(manifestPath)).toBe(false);
+
+    // Passing cwd explicitly means the command reads config and lessons from
+    // tmpDir even though process.cwd() points elsewhere.
     await compileCommand({ cwd: tmpDir });
 
-    // Manifest must be present and valid - proves the command resolved paths
-    // relative to the explicit cwd, not process.cwd().
+    // Manifest must now exist - proves compileCommand wrote it relative to the
+    // explicit cwd, not process.cwd().
     expect(fs.existsSync(manifestPath)).toBe(true);
   });
 });

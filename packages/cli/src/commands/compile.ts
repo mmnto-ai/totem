@@ -467,11 +467,20 @@ export async function compileCommand(
     upgradeTargets = new Map([[upgradeTargetHash, telemetryPrefix]]);
   } else if (options.upgradeBatch) {
     upgradeTargets = new Map(
-      options.upgradeBatch.map((e) => [e.hash.toLowerCase(), e.telemetryPrefix]), // totem-ignore: hash normalization, not a file path filter
+      options.upgradeBatch.map((e) => [e.hash.toLowerCase(), e.telemetryPrefix]), // totem-context: hash normalization, not a file path filter
     );
     // Narrow lessons to those matching the batch hashes. hashLesson output is
     // already lowercase hex so no extra normalization needed.
     lessonsInScope = lessons.filter((l) => upgradeTargets!.has(hashLesson(l.heading, l.body)));
+    const matchedHashes = new Set(lessonsInScope.map((l) => hashLesson(l.heading, l.body)));
+    const missingHashes = [...upgradeTargets.keys()].filter((hash) => !matchedHashes.has(hash));
+    if (missingHashes.length > 0) {
+      throw new TotemError(
+        'UPGRADE_HASH_NOT_FOUND',
+        `No lesson matches hash(es): ${missingHashes.join(', ')}.`,
+        'Regenerate upgrade candidates or remove stale hashes from upgradeBatch.',
+      );
+    }
     log.info(TAG, `upgradeBatch: targeting ${lessonsInScope.length} lesson(s)`);
   }
 

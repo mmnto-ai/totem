@@ -961,7 +961,10 @@ export async function runSelfHealing(cwd: string): Promise<void> {
               console.error(
                 pc.dim(`  - ${cand.heading} — compiler marked non-compilable; no upgrade`),
               );
+            } else if (outcome.status === 'failed') {
+              console.error(pc.red(`  ✗ ${cand.heading} — upgrade failed`));
             } else {
+              // 'noop' and any other status
               console.error(pc.dim(`  - ${cand.heading} — no change`));
             }
           }

@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { hashLesson } from '@mmnto/totem';
+import { generateInputHash, hashLesson } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import { buildTelemetryPrefix, compileCommand } from './compile.js';
@@ -263,5 +263,133 @@ describe('compileCommand upgradeBatch', () => {
     await expect(compileCommand({ upgradeBatch: [] })).rejects.toMatchObject({
       code: 'CONFIG_MISSING',
     });
+  });
+});
+
+// ─── Helpers for full-tier workspace ─────────────────────────────────────────
+//
+// These tests need a full-tier config (shell orchestrator) so compileCommand
+// passes the orchestrator gate and the upgradeBatch return path is reachable.
+// The shell command is a harmless no-op because an empty batch means no LLM
+// call is ever made.
+
+function setupFullTierWorkspace(
+  tmpDir: string,
+  lessonFiles: Record<string, string>,
+  rules: Array<{ lessonHash: string; lessonHeading: string }> = [],
+): void {
+  fs.writeFileSync(
+    path.join(tmpDir, 'totem.config.ts'),
+    [
+      'export default {',
+      '  targets: [{ glob: "**/*.ts", type: "code", strategy: "typescript-ast" }],',
+      '  totemDir: ".totem",',
+      '  orchestrator: {',
+      '    provider: "shell",',
+      '    command: "echo should-never-run",',
+      '    defaultModel: "test-model",',
+      '  },',
+      '};',
+      '',
+    ].join('\n'),
+    'utf-8',
+  );
+
+  const totemDir = path.join(tmpDir, '.totem');
+  const lessonsDir = path.join(totemDir, 'lessons');
+  fs.mkdirSync(lessonsDir, { recursive: true });
+  for (const [name, body] of Object.entries(lessonFiles)) {
+    fs.writeFileSync(path.join(lessonsDir, name), body, 'utf-8');
+  }
+
+  const now = '2026-04-13T00:00:00Z';
+  fs.writeFileSync(
+    path.join(totemDir, 'compiled-rules.json'),
+    JSON.stringify(
+      {
+        version: 1,
+        rules: rules.map((r) => ({
+          lessonHash: r.lessonHash,
+          lessonHeading: r.lessonHeading,
+          pattern: 'dummy-never-matches',
+          message: r.lessonHeading,
+          engine: 'regex',
+          compiledAt: now,
+        })),
+        nonCompilable: [],
+      },
+      null,
+      2,
+    ) + '\n',
+    'utf-8',
+  );
+
+  const manifestPath = path.join(totemDir, 'compile-manifest.json');
+  fs.writeFileSync(
+    manifestPath,
+    JSON.stringify(
+      {
+        compiled_at: now,
+        model: 'test-model',
+        input_hash: generateInputHash(lessonsDir),
+        output_hash: '0000000000000000000000000000000000000000000000000000000000000000',
+        rule_count: rules.length,
+      },
+      null,
+      2,
+    ) + '\n',
+    'utf-8',
+  );
+}
+
+// ─── compileCommand upgradeBatch success paths ────────────────────────────────
+
+describe('compileCommand upgradeBatch success paths', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+  });
+
+  it('returns empty array for empty upgradeBatch', async () => {
+    setupFullTierWorkspace(tmpDir, {
+      'rule-a.md': lessonMarkdown('Use err in catch', 'Do not use error in catch blocks.'),
+    });
+
+    // An empty batch is valid. Full-tier config means the orchestrator gate
+    // passes and compileCommand reaches the return path with an empty outcomes
+    // array rather than throwing CONFIG_MISSING.
+    const outcomes = await compileCommand({ upgradeBatch: [] });
+    expect(Array.isArray(outcomes)).toBe(true);
+    expect(outcomes).toEqual([]);
+  });
+
+  it('throws UPGRADE_HASH_NOT_FOUND for a hash not present in lessons', async () => {
+    setupFullTierWorkspace(
+      tmpDir,
+      {
+        'rule-a.md': lessonMarkdown('Use err in catch', 'Do not use error in catch blocks.'),
+      },
+      [
+        {
+          lessonHash: hashLesson('Use err in catch', 'Do not use error in catch blocks.'),
+          lessonHeading: 'Use err in catch',
+        },
+      ],
+    );
+
+    // A hash that does not match any lesson should throw rather than silently
+    // returning 'noop', which could mask compile-prune mutations.
+    await expect(
+      compileCommand({ upgradeBatch: [{ hash: 'deadbeefdeadbeef' }] }),
+    ).rejects.toMatchObject({ code: 'UPGRADE_HASH_NOT_FOUND' });
   });
 });
