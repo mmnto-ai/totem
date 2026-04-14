@@ -10,7 +10,6 @@ import type {
   RuleEventCallback,
   RuleEventContext,
 } from './compiler-schema.js';
-import { TotemParseError } from './errors.js';
 import {
   applyAstRulesToAdditions,
   applyRulesToAdditions,
@@ -75,24 +74,149 @@ describe('applyAstRulesToAdditions', () => {
     expect(warnings[0]).toContain('AST query skipped');
   });
 
-  it('propagates ast-grep query errors instead of swallowing them (fail-closed)', async () => {
+  it('swallows ast-grep query errors on a single rule and emits a failure event (mmnto/totem#1408)', async () => {
     const filePath = path.join(tmpDir, 'src', 'app.ts');
     fs.writeFileSync(filePath, 'const x = 1;\n');
 
     // Runtime-invalid ast-grep string pattern. The pattern is a bare
-    // catch clause, which ast-grep rejects as multi-root. Post-#1407
-    // the string path is the only field rule-engine's filter sees;
-    // compound-rule runtime routing lands in mmnto/totem#1408.
+    // catch clause, which ast-grep rejects as multi-root. Pre-#1408 this
+    // threw TotemParseError and killed the whole batch; post-#1408 the
+    // per-rule try/catch isolates the failure to a single rule, emits a
+    // 'failure' event, and lets subsequent rules and files continue.
     const rule = makeRule({
       engine: 'ast-grep',
+      lessonHash: 'bad-rule-hash',
       astGrepPattern: 'catch ($ERR) { $$$BODY }',
     });
 
     const additions = [makeAddition('src/app.ts', 'const x = 1;', 1)];
+    const events: Array<{ event: string; hash: string; reason?: string }> = [];
 
-    await expect(applyAstRulesToAdditions([rule], additions, tmpDir)).rejects.toThrow(
-      TotemParseError,
+    const violations = await applyAstRulesToAdditions(
+      [rule],
+      additions,
+      tmpDir,
+      (event, hash, ctx) => {
+        events.push({ event, hash, reason: ctx?.failureReason });
+      },
     );
+
+    expect(violations).toEqual([]);
+    const failureEvent = events.find((e) => e.event === 'failure');
+    expect(failureEvent).toBeDefined();
+    expect(failureEvent!.hash).toBe('bad-rule-hash');
+    expect(failureEvent!.reason?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  it('one malformed ast-grep rule does not prevent subsequent rules on the same file', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      'debugger;\nconsole.log("hi");\nconst x = 1;\n',
+    );
+
+    const badRule = makeRule({
+      engine: 'ast-grep',
+      lessonHash: 'bad-rule',
+      astGrepPattern: 'catch ($ERR) { $$$BODY }', // multi-root, throws
+    });
+    const goodRule = makeRule({
+      engine: 'ast-grep',
+      lessonHash: 'good-rule',
+      astGrepPattern: 'console.log($$$)',
+    });
+
+    const additions = [
+      makeAddition('src/app.ts', 'debugger;', 1),
+      makeAddition('src/app.ts', 'console.log("hi");', 2),
+      makeAddition('src/app.ts', 'const x = 1;', 3),
+    ];
+
+    const events: Array<{ event: string; hash: string }> = [];
+    const violations = await applyAstRulesToAdditions(
+      [badRule, goodRule],
+      additions,
+      tmpDir,
+      (event, hash) => events.push({ event, hash }),
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]!.rule.lessonHash).toBe('good-rule');
+    expect(events.some((e) => e.event === 'failure' && e.hash === 'bad-rule')).toBe(true);
+  });
+
+  it('routes compound rules through NAPI object matcher and handles binding errors gracefully', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'app.ts'),
+      'try {\n  doWork();\n} catch (err) {\n}\n',
+    );
+
+    const compoundRule = makeRule({
+      engine: 'ast-grep',
+      lessonHash: 'compound-has',
+      // Empty catch — matches catch_clause nodes with no expression_statement descendants
+      astGrepPattern: undefined,
+      pattern: '',
+      astGrepYamlRule: {
+        rule: {
+          kind: 'catch_clause',
+          not: {
+            has: {
+              kind: 'statement_block',
+              has: {
+                any: [
+                  { kind: 'expression_statement' },
+                  { kind: 'variable_declaration' },
+                  { kind: 'if_statement' },
+                  { kind: 'return_statement' },
+                  { kind: 'throw_statement' },
+                ],
+                stopBy: 'end',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const additions = [
+      makeAddition('src/app.ts', 'try {', 1),
+      makeAddition('src/app.ts', '  doWork();', 2),
+      makeAddition('src/app.ts', '} catch (err) {', 3),
+      makeAddition('src/app.ts', '}', 4),
+    ];
+
+    const violations = await applyAstRulesToAdditions([compoundRule], additions, tmpDir);
+    expect(violations.length).toBeGreaterThanOrEqual(1);
+    // The outer catch_clause spans lines 3-4; the first overlapping added
+    // line (3) is where the violation gets reported.
+    expect(violations[0]!.lineNumber).toBe(3);
+  });
+
+  it('compound rule with invalid NAPI config emits failure event without crashing', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'src', 'app.ts'), 'const x = 1;\n');
+
+    const compoundRule = makeRule({
+      engine: 'ast-grep',
+      lessonHash: 'compound-bad',
+      astGrepPattern: undefined,
+      pattern: '',
+      astGrepYamlRule: { rule: { kind: '!!!INVALID_KIND!!!' } },
+    });
+
+    const additions = [makeAddition('src/app.ts', 'const x = 1;', 1)];
+    const events: Array<{ event: string; hash: string; reason?: string }> = [];
+
+    const violations = await applyAstRulesToAdditions(
+      [compoundRule],
+      additions,
+      tmpDir,
+      (event, hash, ctx) => events.push({ event, hash, reason: ctx?.failureReason }),
+    );
+
+    expect(violations).toEqual([]);
+    const failure = events.find((e) => e.event === 'failure');
+    expect(failure).toBeDefined();
+    expect(failure!.hash).toBe('compound-bad');
   });
 
   it('still returns violations for valid AST rules (regression check)', async () => {

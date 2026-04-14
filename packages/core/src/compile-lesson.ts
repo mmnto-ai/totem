@@ -1,5 +1,6 @@
 import { Lang, parse } from '@ast-grep/napi';
 
+import { runSmokeGate } from './compile-smoke-gate.js';
 import { engineFields, sanitizeFileGlobs, validateRegex } from './compiler.js';
 import type { CompiledRule, CompilerOutput, RegexValidation } from './compiler-schema.js';
 import {
@@ -227,6 +228,30 @@ function isSelfSuppressing(pattern: string): boolean {
 // ─── Rule builder (pure, no I/O) ────────────────────
 
 /**
+ * Options controlling how `buildCompiledRule` validates its input before
+ * emitting a `CompiledRule`. The smoke gate is opt-in so Pipeline 1 (manual)
+ * callers and ad-hoc test callers keep their existing behaviour unchanged;
+ * Pipeline 2 (LLM) and Pipeline 3 (example-based) opt in explicitly in the
+ * compileLesson flow.
+ */
+export interface BuildCompiledRuleOptions {
+  /**
+   * When true, the smoke gate runs after validation and before rule emission.
+   * Missing badExample or zero-match badExample both reject the rule with a
+   * rejectReason that names the gate. When false (default), the gate is
+   * skipped entirely - backward compatible.
+   */
+  enforceSmokeGate?: boolean;
+  /**
+   * Optional badExample override. When supplied, takes precedence over
+   * `parsed.badExample`. Pipeline 3 uses this to reuse its Bad snippet as the
+   * smoke-gate target without relying on the LLM to echo the snippet back in
+   * the structured output.
+   */
+  badExampleOverride?: string;
+}
+
+/**
  * Build a CompiledRule from parsed compiler output.
  * Returns { rule, rejectReason } so callers can report why a rule was rejected.
  */
@@ -234,6 +259,7 @@ export function buildCompiledRule(
   parsed: CompilerOutput,
   lesson: { hash: string; heading: string },
   existingByHash: Map<string, CompiledRule>,
+  options: BuildCompiledRuleOptions = {},
 ): BuildRuleResult {
   if (!parsed.compilable) return { rule: null };
 
@@ -243,6 +269,16 @@ export function buildCompiledRule(
   const existing = existingByHash.get(lesson.hash);
   const sanitizedGlobs = parsed.fileGlobs ? sanitizeFileGlobs(parsed.fileGlobs) : undefined;
   const globsObj = sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {};
+  // mmnto/totem#1408: the effective badExample is the override when present,
+  // else whatever the LLM echoed back in CompilerOutput. Pipeline 1 and ad-hoc
+  // callers that leave the option off bypass the gate entirely.
+  const effectiveBadExample = options.badExampleOverride ?? parsed.badExample;
+  const badExampleObj =
+    effectiveBadExample && effectiveBadExample.length > 0
+      ? { badExample: effectiveBadExample }
+      : {};
+
+  let candidate: CompiledRule;
 
   if (engine === 'ast-grep') {
     // mmnto/totem#1407 split the field. Mutual exclusion is enforced
@@ -280,61 +316,55 @@ export function buildCompiledRule(
       };
     }
 
-    return {
-      rule: {
-        lessonHash: lesson.hash,
-        lessonHeading: lesson.heading,
-        message: parsed.message,
-        engine: 'ast-grep',
-        severity,
-        ...engineFields('ast-grep', astSource),
-        compiledAt: now,
-        createdAt: existing?.createdAt ?? now,
-        ...globsObj,
-      },
+    candidate = {
+      lessonHash: lesson.hash,
+      lessonHeading: lesson.heading,
+      message: parsed.message,
+      engine: 'ast-grep',
+      severity,
+      ...engineFields('ast-grep', astSource),
+      compiledAt: now,
+      createdAt: existing?.createdAt ?? now,
+      ...globsObj,
+      ...badExampleObj,
     };
-  }
-
-  if (engine === 'ast') {
+  } else if (engine === 'ast') {
     if (!parsed.astQuery || !parsed.message) {
       return { rule: null, rejectReason: 'Missing astQuery or message' };
     }
-    return {
-      rule: {
-        lessonHash: lesson.hash,
-        lessonHeading: lesson.heading,
-        message: parsed.message,
-        engine: 'ast',
-        severity,
-        ...engineFields('ast', parsed.astQuery),
-        compiledAt: now,
-        createdAt: existing?.createdAt ?? now,
-        ...globsObj,
-      },
+    candidate = {
+      lessonHash: lesson.hash,
+      lessonHeading: lesson.heading,
+      message: parsed.message,
+      engine: 'ast',
+      severity,
+      ...engineFields('ast', parsed.astQuery),
+      compiledAt: now,
+      createdAt: existing?.createdAt ?? now,
+      ...globsObj,
+      ...badExampleObj,
     };
-  }
+  } else {
+    // Regex engine (default)
+    if (!parsed.pattern || !parsed.message) {
+      return { rule: null, rejectReason: 'Missing pattern or message' };
+    }
+    const validation = validateRegex(parsed.pattern);
+    if (!validation.valid) {
+      return { rule: null, rejectReason: `Rejected regex: ${validation.reason}` };
+    }
 
-  // Regex engine (default)
-  if (!parsed.pattern || !parsed.message) {
-    return { rule: null, rejectReason: 'Missing pattern or message' };
-  }
-  const validation = validateRegex(parsed.pattern);
-  if (!validation.valid) {
-    return { rule: null, rejectReason: `Rejected regex: ${validation.reason}` };
-  }
+    // Guard: reject patterns that match suppression directives (#1177)
+    // These rules can never fire — the engine suppresses matching lines before rule evaluation.
+    if (isSelfSuppressing(parsed.pattern)) {
+      return {
+        rule: null,
+        rejectReason:
+          'Pattern matches a suppression directive (totem-ignore/totem-context) and will self-suppress at runtime',
+      };
+    }
 
-  // Guard: reject patterns that match suppression directives (#1177)
-  // These rules can never fire — the engine suppresses matching lines before rule evaluation.
-  if (isSelfSuppressing(parsed.pattern)) {
-    return {
-      rule: null,
-      rejectReason:
-        'Pattern matches a suppression directive (totem-ignore/totem-context) and will self-suppress at runtime',
-    };
-  }
-
-  return {
-    rule: {
+    candidate = {
       lessonHash: lesson.hash,
       lessonHeading: lesson.heading,
       message: parsed.message,
@@ -344,8 +374,36 @@ export function buildCompiledRule(
       compiledAt: now,
       createdAt: existing?.createdAt ?? now,
       ...globsObj,
-    },
-  };
+      ...badExampleObj,
+    };
+  }
+
+  // mmnto/totem#1408: compile-time smoke gate. Opt-in via options so Pipeline 1
+  // and ad-hoc test callers are unaffected. The gate reuses the runtime engine
+  // entry points so a rule passing here cannot silently fail to match at
+  // runtime on identical input. Skipped for the 'ast' (Tree-sitter) engine
+  // because runSmokeGate does not yet cover S-expression queries; those rules
+  // fall back to the existing `verifyRuleExamples` path. Skipping here
+  // matches the comment in compile-smoke-gate.ts and prevents the gate from
+  // hard-rejecting a rule it is not equipped to evaluate.
+  if (options.enforceSmokeGate && candidate.engine !== 'ast') {
+    if (!effectiveBadExample) {
+      return {
+        rule: null,
+        rejectReason: 'smoke gate: missing badExample (required for Pipeline 2/3)',
+      };
+    }
+    const gate = runSmokeGate(candidate, effectiveBadExample);
+    if (!gate.matched) {
+      const suffix = gate.reason ? ` (${gate.reason})` : '';
+      return {
+        rule: null,
+        rejectReason: `smoke gate: zero matches against badExample${suffix}`,
+      };
+    }
+  }
+
+  return { rule: candidate };
 }
 
 // ─── Manual pattern builder ─────────────────────────
@@ -530,7 +588,13 @@ export async function compileLesson(
       return { status: 'skipped', hash: lesson.hash, reason: parsed.reason };
     }
 
-    const ruleResult = buildCompiledRule(parsed, lesson, existingByHash);
+    // mmnto/totem#1408: Pipeline 3 reuses its Bad snippet as the smoke-gate
+    // target. The LLM may or may not echo the snippet back in parsed.badExample;
+    // the override guarantees the gate has something to work with regardless.
+    const ruleResult = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+      badExampleOverride: snippets.bad.join('\n'),
+    });
     if (!ruleResult.rule) {
       callbacks?.onWarn?.(
         lesson.heading,
@@ -594,7 +658,13 @@ export async function compileLesson(
     return { status: 'skipped', hash: lesson.hash, reason: parsed.reason };
   }
 
-  const ruleResult = buildCompiledRule(parsed, lesson, existingByHash);
+  // mmnto/totem#1408: Pipeline 2 enforces the smoke gate. Rules without a
+  // badExample, or whose badExample fails to match the pattern, are rejected
+  // with a clear reason before landing in compiled-rules.json. The compile
+  // prompt rewrite in mmnto/totem#1409 teaches Sonnet to emit the field.
+  const ruleResult = buildCompiledRule(parsed, lesson, existingByHash, {
+    enforceSmokeGate: true,
+  });
   if (!ruleResult.rule) {
     callbacks?.onWarn?.(lesson.heading, `${ruleResult.rejectReason ?? 'Unknown error'} — skipping`);
     return { status: 'failed' };

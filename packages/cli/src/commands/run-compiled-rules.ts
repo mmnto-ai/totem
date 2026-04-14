@@ -1,4 +1,4 @@
-import type { CompiledRule, RuleEventContext, TotemFinding, Violation } from '@mmnto/totem';
+import type { CompiledRule, RuleEventCallback, TotemFinding, Violation } from '@mmnto/totem';
 
 import type { ShieldFormat } from './shield.js';
 
@@ -135,15 +135,11 @@ export async function runCompiledRules(
     // Record metrics + Trap Ledger
     const { appendLedgerEvent } = await import('@mmnto/totem');
     const metrics = loadRuleMetrics(resolvedTotemDir, (msg) => log.dim(tag, msg));
-    const ruleEventCallback = (
-      event: 'trigger' | 'suppress',
-      hash: string,
-      context?: RuleEventContext,
-    ) => {
+    const ruleEventCallback: RuleEventCallback = (event, hash, context) => {
       if (event === 'trigger') {
         recordTrigger(metrics, hash);
         recordContextHit(metrics, hash, context?.astContext);
-      } else {
+      } else if (event === 'suppress') {
         recordSuppression(metrics, hash);
         // Append to Trap Ledger (fire-and-forget)
         if (context) {
@@ -161,6 +157,16 @@ export async function runCompiledRules(
             (msg) => log.dim(tag, msg),
           );
         }
+      } else {
+        // mmnto/totem#1408: 'failure' event fires when a compiled rule's
+        // runtime findAll throws (per-rule try/catch in executeQuery). Log
+        // the hash and reason so the operator can see WHICH rule failed
+        // without crashing the batch. Metric recording (recordFailure) is
+        // a follow-up once `rule-metrics` gains a failure counter.
+        log.warn(
+          tag,
+          `rule ${hash} failed at runtime${context?.failureReason ? `: ${context.failureReason}` : ''}`,
+        );
       }
     };
     const regexViolations = applyRulesToAdditions(rules, additions, ruleEventCallback);

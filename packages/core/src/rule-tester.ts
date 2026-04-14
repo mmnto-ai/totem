@@ -160,11 +160,19 @@ export function testRule(rule: CompiledRule, fixture: RuleTestFixture): RuleTest
     passed: true,
   };
 
-  const isAstGrep = rule.engine === 'ast-grep' && rule.astGrepPattern;
+  // Either a flat astGrepPattern (string) or a compound astGrepYamlRule
+  // (NapiConfig object). Mutual exclusion is enforced by the schema
+  // superRefine; the test runner just picks whichever shape is present.
+  // mmnto/totem#1408 adds the compound path.
+  const astGrepRule: AstGrepRule | undefined =
+    rule.engine === 'ast-grep'
+      ? (rule.astGrepPattern ?? (rule.astGrepYamlRule as AstGrepRule | undefined))
+      : undefined;
+  const isAstGrep = astGrepRule !== undefined;
 
   if (isAstGrep) {
     const ext = path.extname(fixture.filePath) || '.ts';
-    const pattern = rule.astGrepPattern as AstGrepRule;
+    const pattern = astGrepRule as AstGrepRule;
 
     // Test fail block — parse all fail lines as one snippet; expect at least one match
     if (fixture.failLines.length > 0) {

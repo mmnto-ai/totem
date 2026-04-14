@@ -242,4 +242,48 @@ describe('testRule', () => {
     expect(result.passed).toBe(false);
     expect(result.missedFails).toHaveLength(1);
   });
+
+  // ─── Compound (astGrepYamlRule) support — mmnto/totem#1408 ───
+  it('passes a compound astGrepYamlRule fixture with a known-good fail/pass set', () => {
+    const compoundRule: CompiledRule = {
+      lessonHash: 'compound-has-test',
+      lessonHeading: 'Empty catch block',
+      pattern: '',
+      message: 'Empty catch block swallows errors',
+      engine: 'ast-grep',
+      compiledAt: '2026-04-13T12:00:00Z',
+      astGrepYamlRule: {
+        rule: {
+          kind: 'catch_clause',
+          not: {
+            has: {
+              kind: 'statement_block',
+              has: {
+                any: [
+                  { kind: 'expression_statement' },
+                  { kind: 'variable_declaration' },
+                  { kind: 'if_statement' },
+                  { kind: 'return_statement' },
+                  { kind: 'throw_statement' },
+                ],
+                stopBy: 'end',
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const result = testRule(compoundRule, {
+      ruleHash: 'compound-has-test',
+      filePath: 'src/app.ts',
+      failLines: ['try {', '  work();', '} catch (err) {', '}'],
+      passLines: ['try {', '  work();', '} catch (err) {', '  log(err);', '}'],
+      fixturePath: 'test.md',
+    });
+
+    expect(result.passed).toBe(true);
+    expect(result.missedFails).toHaveLength(0);
+    expect(result.falsePositives).toHaveLength(0);
+  });
 });
