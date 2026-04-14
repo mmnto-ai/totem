@@ -227,7 +227,38 @@ function normalizeShallowGlob(glob: string): string {
   return `${negated ? '!' : ''}**/${bare}`;
 }
 
-/** Build engine-specific fields for a compiled rule. */
+/**
+ * Build engine-specific fields for a compiled rule.
+ *
+ * Overloaded so only the `'ast-grep'` branch accepts a compound
+ * `Record<string, unknown>`; `'regex'` and `'ast'` are string-only.
+ * This prevents callers from passing a compound object to the regex
+ * engine and silently producing `"[object Object]"` via `String(pattern)`.
+ */
+export function engineFields(
+  engine: 'regex' | 'ast',
+  pattern: string,
+): { pattern: string; astQuery?: string };
+export function engineFields(
+  engine: 'ast-grep',
+  pattern: string | Record<string, unknown>,
+): { pattern: string; astGrepPattern?: string; astGrepYamlRule?: AstGrepYamlRule };
+// Wildcard overload for callers whose `engine` discriminator is the
+// union `'regex' | 'ast' | 'ast-grep'` and is resolved at runtime
+// (e.g., compile-lesson.ts:buildManualRule). TypeScript cannot narrow
+// the overload without the literal, so we expose the implementation
+// signature explicitly. The superRefine on `CompiledRuleSchema` is
+// the load-bearing gate; this wildcard merely keeps the type system
+// honest at call sites that legitimately forward the union.
+export function engineFields(
+  engine: 'regex' | 'ast' | 'ast-grep',
+  pattern: string | Record<string, unknown>,
+): {
+  pattern: string;
+  astGrepPattern?: string;
+  astGrepYamlRule?: AstGrepYamlRule;
+  astQuery?: string;
+};
 export function engineFields(
   engine: 'regex' | 'ast' | 'ast-grep',
   pattern: string | Record<string, unknown>,

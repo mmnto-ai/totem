@@ -89,15 +89,41 @@ export function generateInputHash(lessonsDir: string): string {
  * set. The invariant is: structurally-equivalent inputs produce
  * byte-identical outputs.
  *
+ * **Contract:** `value` MUST be plain JSON — the output of
+ * `JSON.parse()` or a literal composed of `null`, booleans, numbers,
+ * strings, arrays, and plain object literals. Class instances
+ * (`Date`, `Map`, custom classes) are not supported and may produce
+ * output that diverges from `JSON.stringify`: a `Date` serialises to
+ * `{}` rather than its ISO string, `[undefined]` throws rather than
+ * becoming `[null]`. Callers in Totem always pass `JSON.parse()`
+ * output, so these cases are unreachable in practice; the contract
+ * is documented here so future callers do not reach for this
+ * function as a drop-in `JSON.stringify` replacement.
+ *
  * Design notes:
  *   - No cycle detection. Input is expected to be a finite tree
  *     (NapiConfig + primitive scalars). Cyclic input would stack
  *     overflow; that is a hard error, not a silent degradation.
- *   - Undefined values are dropped, matching `JSON.stringify` parity.
- *   - `Date` and other class instances are serialised via their
- *     default `JSON.stringify` representation. In practice the hash
- *     payload is plain JSON already, so this never fires.
+ *   - Undefined values inside records are dropped, matching
+ *     `JSON.stringify` parity. A bare `undefined` throws — it is
+ *     not a JSON value.
  */
+/**
+ * Detect whether a parsed compiled-rules file contains at least one
+ * rule with an `astGrepYamlRule` field. Walks only the `rules` array
+ * on the top-level object; does not recurse into nested rule bodies
+ * because compound rules live exactly one level deep in the payload.
+ */
+function hasCompoundRule(parsed: unknown): boolean {
+  if (typeof parsed !== 'object' || parsed === null) return false;
+  const rules = (parsed as { rules?: unknown }).rules;
+  if (!Array.isArray(rules)) return false;
+  for (const r of rules) {
+    if (r && typeof r === 'object' && 'astGrepYamlRule' in r) return true;
+  }
+  return false;
+}
+
 export function canonicalStringify(value: unknown): string {
   if (value === undefined) {
     throw new TotemParseError(
@@ -144,14 +170,16 @@ export function generateOutputHash(rulesPath: string): string {
     const raw = fs.readFileSync(rulesPath, 'utf-8').replace(/\r\n/g, '\n');
     let payload = raw;
     // Only switch to canonical serialization when the file actually
-    // contains a compound rule. A simple substring check is safe
-    // here because JSON-stringified keys are quoted; a lesson body
-    // cannot produce the exact byte sequence without storing it in
-    // an astGrepYamlRule field.
+    // contains a compound rule. We parse first and check the real
+    // field on every rule rather than substring-matching the raw
+    // bytes: a lesson message or heading could contain the literal
+    // string `"astGrepYamlRule"` and falsely flip the path,
+    // producing a different hash than pre-#1407 CLIs computed for
+    // the same manifest. Parsing is O(file size), same as hashing.
     if (raw.includes('"astGrepYamlRule"')) {
       try {
         const parsed: unknown = JSON.parse(raw);
-        if (typeof parsed === 'object' && parsed !== null) {
+        if (hasCompoundRule(parsed)) {
           payload = canonicalStringify(parsed);
         }
       } catch {

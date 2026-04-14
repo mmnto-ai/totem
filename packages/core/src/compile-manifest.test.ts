@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -112,6 +113,54 @@ describe('generateOutputHash', () => {
     fs.writeFileSync(pathB, JSON.stringify({ version: 1, rules: [ruleB] }, null, 2) + '\n');
 
     expect(generateOutputHash(pathA)).toBe(generateOutputHash(pathB));
+  });
+
+  it('does not switch to canonical path when the literal string appears only in a lesson message', () => {
+    // Regression for the substring false-positive flagged on #1412:
+    // a rule whose message body contains the bytes `"astGrepYamlRule"`
+    // (e.g., a lesson about when to use the new field) must NOT flip
+    // the hash computation path. Pre-#1407 CLIs would hash the raw
+    // byte stream; a false canonical path produces different bytes.
+    const pathByteStream = path.join(tmpDir, 'rules-bytes.json');
+    const pathWithStringInMessage = path.join(tmpDir, 'rules-msg.json');
+
+    const plainRule = {
+      lessonHash: 'plain',
+      lessonHeading: 'regex rule',
+      pattern: 'foo',
+      message: 'use foo instead of bar',
+      engine: 'regex',
+      compiledAt: '2026-04-13T00:00:00Z',
+    };
+    const trickyRule = {
+      lessonHash: 'tricky',
+      lessonHeading: 'mention the field',
+      pattern: 'foo',
+      // Literal bytes `"astGrepYamlRule"` inside a message (wrapping
+      // the name in single quotes in prose would still JSON-encode to
+      // a version that does NOT contain the double-quoted token —
+      // this test uses the token explicitly to force the worst case).
+      message: 'prefer astGrepPattern over "astGrepYamlRule" for flat patterns',
+      engine: 'regex',
+      compiledAt: '2026-04-13T00:00:00Z',
+    };
+
+    const plainJson = JSON.stringify({ version: 1, rules: [plainRule] }, null, 2) + '\n';
+    const trickyJson = JSON.stringify({ version: 1, rules: [trickyRule] }, null, 2) + '\n';
+
+    fs.writeFileSync(pathByteStream, plainJson);
+    fs.writeFileSync(pathWithStringInMessage, trickyJson);
+
+    // Hashes differ (different messages), but the tricky rule must
+    // have been hashed via the raw-byte-stream path, not canonical.
+    // Proof: the canonical path on tricky would produce a different
+    // hash than crypto over the raw bytes. Compare against the raw
+    // sha256 of the file contents.
+    const expectedTrickyHash = crypto
+      .createHash('sha256')
+      .update(trickyJson.replace(/\r\n/g, '\n'))
+      .digest('hex');
+    expect(generateOutputHash(pathWithStringInMessage)).toBe(expectedTrickyHash);
   });
 });
 
