@@ -10168,6 +10168,22 @@
     {
       "hash": "fc3714d40f2ec3d0",
       "title": "Validate plain JSON values for hashing"
+    },
+    {
+      "hash": "d07b7064ce13bbfe",
+      "title": "Separate engine failures from user suppressions"
+    },
+    {
+      "hash": "e28571b9f791cde0",
+      "title": "Isolate rule execution in batches"
+    },
+    {
+      "hash": "113500da271d2680",
+      "title": "Gate rules only against supported engines"
+    },
+    {
+      "hash": "ab11ebbfbad8ac79",
+      "title": "Prioritize TS over TSX for parsing"
     }
   ]
 }
