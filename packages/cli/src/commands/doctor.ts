@@ -928,7 +928,16 @@ export async function runSelfHealing(cwd: string): Promise<void> {
       // directory runSelfHealing was called with, not process.cwd().
       const { buildTelemetryPrefix, compileCommand } = await import('./compile.js');
       const { loadRuleMetrics } = await import('@mmnto/totem');
-      const metricsFile = loadRuleMetrics(path.join(cwd, config.totemDir));
+      // loadRuleMetrics catches ENOENT and parse errors internally; the try/catch
+      // here is a defensive belt-and-suspenders guard for future changes.
+      let metricsFile: ReturnType<typeof loadRuleMetrics>;
+      try {
+        metricsFile = loadRuleMetrics(path.join(cwd, config.totemDir));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[Doctor] Could not load rule metrics, proceeding without telemetry - ${msg}`);
+        metricsFile = { version: 1, rules: {} };
+      }
 
       const upgradeBatch = candidates.map((cand) => {
         const metric = metricsFile.rules[cand.lessonHash];
