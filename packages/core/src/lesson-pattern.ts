@@ -17,6 +17,14 @@ export interface ManualPattern {
   severity: 'error' | 'warning';
   /** Optional rich message for the compiled rule. Falls back to lesson heading if absent. */
   message?: string;
+  /**
+   * Optional code snippet parsed from a `### Bad Example` markdown section in
+   * the lesson body. Used by the compile-time smoke gate (ADR-087 / mmnto/totem#1408)
+   * to verify the rule fires against its own bad example before landing in
+   * compiled-rules.json. Empty blocks are treated as absent. The gate is not
+   * required for Pipeline 1 rules in #1408 - a dry-run sweep precedes the flip.
+   */
+  badExample?: string;
 }
 
 export function extractField(body: string, field: string): string | undefined {
@@ -110,6 +118,39 @@ export function extractMultilineField(body: string, field: string): string | und
 }
 
 /**
+ * Extract the contents of a fenced code block that follows a `### Bad Example`
+ * heading in a lesson body. Used by the compile-time smoke gate
+ * (mmnto/totem#1408) to verify Pipeline 1 rules against their own bad
+ * example. Mirrors `extractBadGoodSnippets` for Pipeline 3 but targets a
+ * markdown heading rather than a bold field marker because Pipeline 1
+ * lessons conventionally use headings for worked examples.
+ *
+ * Returns `undefined` when:
+ *   - No `### Bad Example` heading is present
+ *   - The heading is present but no fenced code block follows before the
+ *     next heading or EOF
+ *   - The code block is empty
+ *
+ * Both ``` and ~~~ fence styles are accepted to stay aligned with
+ * `extractCodeBlock`.
+ */
+export function extractBadExample(body: string): string | undefined {
+  // Match `### Bad Example` through the first fenced block that follows.
+  // The heading-stop lookahead keeps the capture from sliding into a
+  // Good Example block when the Bad block is missing its fence.
+  const re = /(?:^|\n)#{2,6}\s*Bad\s+Example\s*\n([\s\S]*?)(?=\n#{2,6}\s|\n---\s*\n|$)/i;
+  const section = body.match(re);
+  if (!section) return undefined;
+
+  const slice = section[1] ?? '';
+  const fence = slice.match(/(?:^|\n)(```|~~~)[^\n]*\n([\s\S]*?)\n?\1/);
+  if (!fence) return undefined;
+
+  const content = (fence[2] ?? '').trim();
+  return content.length > 0 ? content : undefined;
+}
+
+/**
  * Try to extract manual pattern fields from a lesson body.
  * Returns null if the lesson doesn't contain a Pattern: field.
  */
@@ -137,7 +178,10 @@ export function extractManualPattern(body: string): ManualPattern | null {
   // when absent, and `buildManualRule` falls back to `lesson.heading` in that case.
   const message = extractMultilineField(body, 'Message');
 
-  return { pattern, engine, fileGlobs, severity, message };
+  // mmnto/totem#1408: optional Bad Example block for the compile-time smoke gate.
+  const badExample = extractBadExample(body);
+
+  return { pattern, engine, fileGlobs, severity, message, badExample };
 }
 
 /**

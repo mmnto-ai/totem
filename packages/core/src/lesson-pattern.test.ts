@@ -79,6 +79,84 @@ describe('extractManualPattern', () => {
     expect(result?.pattern).toBe('process.kill($PID, 0)');
   });
 
+  // ─── Bad Example extraction (mmnto/totem#1408) ───────
+
+  it('extracts a Bad Example section into badExample when present', () => {
+    const body = [
+      '**Pattern:** console\\.log',
+      '**Engine:** regex',
+      '**Severity:** warning',
+      '',
+      '### Bad Example',
+      '',
+      '```ts',
+      'console.log("debug")',
+      'console.log(x)',
+      '```',
+    ].join('\n');
+    const result = extractManualPattern(body);
+    expect(result).not.toBeNull();
+    expect(result?.badExample).toBe('console.log("debug")\nconsole.log(x)');
+  });
+
+  it('returns badExample undefined when no Bad Example section is present', () => {
+    const body = '**Pattern:** console\\.log\n**Engine:** regex';
+    const result = extractManualPattern(body);
+    expect(result).not.toBeNull();
+    expect(result?.badExample).toBeUndefined();
+  });
+
+  it('treats an empty Bad Example block as absent', () => {
+    const body = [
+      '**Pattern:** foo',
+      '**Engine:** regex',
+      '',
+      '### Bad Example',
+      '',
+      '```ts',
+      '```',
+    ].join('\n');
+    const result = extractManualPattern(body);
+    expect(result?.badExample).toBeUndefined();
+  });
+
+  it('accepts ~~~ fences as well as ``` fences for the Bad Example block', () => {
+    const body = [
+      '**Pattern:** foo',
+      '**Engine:** regex',
+      '',
+      '### Bad Example',
+      '',
+      '~~~ts',
+      'foo()',
+      '~~~',
+    ].join('\n');
+    const result = extractManualPattern(body);
+    expect(result?.badExample).toBe('foo()');
+  });
+
+  it('stops the Bad Example capture at the next heading', () => {
+    const body = [
+      '**Pattern:** foo',
+      '**Engine:** regex',
+      '',
+      '### Bad Example',
+      '',
+      '```ts',
+      'foo()',
+      '```',
+      '',
+      '### Good Example',
+      '',
+      '```ts',
+      'bar()',
+      '```',
+    ].join('\n');
+    const result = extractManualPattern(body);
+    expect(result?.badExample).toBe('foo()');
+    expect(result?.badExample).not.toContain('bar()');
+  });
+
   it('extracts fields with no whitespace after the closing bold marker (#1282 GCA)', () => {
     // Pre-fix, extractField required \s+ which silently rejected **Pattern:**foo
     // (no space). The lesson would fall through to Pipeline 2 instead of taking
