@@ -395,5 +395,5 @@ Or if the difference cannot be expressed as a line-level regex:
 }
 \`\`\`
 
-The compile pipeline supplies the Bad snippet to the smoke gate as a fallback, so a missing \`badExample\` will not block compilation. Including it anyway gives the gate a tighter target and helps downstream telemetry.
+Every compilable rule MUST include a non-empty \`badExample\` field. The compile pipeline's schema parse rejects output that omits it for \`ast-grep\` or \`regex\` engines, so the rule never reaches the smoke gate. Echoing a representative Bad line (or the snippet the rule was built from) is usually enough; the smoke gate runs the rule against this exact string at compile time and rejects the rule if it produces zero matches.
 `;
