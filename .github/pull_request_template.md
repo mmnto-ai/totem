@@ -14,7 +14,8 @@
 
 <!-- Describe the test coverage added to mechanically verify this fix. A change is incomplete without verification logic. -->
 
-- [ ]
+- [ ] Added/updated automated tests covering the root-cause mechanism
+- [ ] N/A (explain why verification logic is not applicable)
 
 ## Related Tickets
 
