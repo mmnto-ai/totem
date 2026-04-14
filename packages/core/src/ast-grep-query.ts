@@ -155,7 +155,11 @@ export function matchAstGrepPatternsBatch(
     try {
       return executeQuery(root, rule, addedLineNumbers, lines);
     } catch (err) {
-      const wrapped = err instanceof Error ? err : new Error(String(err));
+      // Preserve the original thrown value in `cause` so downstream
+      // error-chain walkers (rule 102) can surface the underlying
+      // napi/runtime error without losing structure. Plain string
+      // throws are wrapped but still chained.
+      const wrapped = err instanceof Error ? err : new Error(String(err), { cause: err });
       onRuleFailure(index, wrapped);
       return [];
     }

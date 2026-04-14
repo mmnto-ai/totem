@@ -174,6 +174,37 @@ describe('runSmokeGate badExample extension inference', () => {
     const result = runSmokeGate(rule, tsSnippet);
     expect(result.matched).toBe(true);
   });
+
+  // Regression for CR finding on PR #1415: multi-extension fileGlobs must
+  // try every declared extension, not just the first match. Otherwise
+  // a rule scoped to both `.js` and `.jsx` would gate on JavaScript only
+  // and false-reject JSX-flavored bad examples, breaking parity with
+  // runtime (which picks Lang.Tsx for `.jsx` files).
+  it('tries every positive extension in fileGlobs, not just the first match', () => {
+    const rule = makeAstGrepStringRule({
+      fileGlobs: ['**/*.js', '**/*.jsx'],
+      astGrepPattern: 'console.log($$$)',
+    });
+    // JSX-flavored snippet: would fail under JavaScript parser but matches
+    // under Tsx. Runtime would also use Tsx for a real `.jsx` file.
+    const jsxSnippet = 'const el = <div>{console.log("hi")}</div>;\n';
+    const result = runSmokeGate(rule, jsxSnippet);
+    expect(result.matched).toBe(true);
+  });
+
+  // Regression for CR finding on PR #1415: an unscoped rule with a TS
+  // angle-bracket cast must not be false-rejected by a TSX-only fallback.
+  // TS allows `<Foo>bar` as a type cast; TSX rejects it as an ambiguous
+  // JSX tag open. The gate tries `.ts` before `.tsx` in the fallback set.
+  it('accepts TS angle-bracket cast syntax on unscoped rules (not just TSX)', () => {
+    const rule = makeAstGrepStringRule({
+      fileGlobs: undefined, // unscoped
+      astGrepPattern: '<$TYPE>$EXPR',
+    });
+    const tsSnippet = 'const x = <Foo>bar;\n';
+    const result = runSmokeGate(rule, tsSnippet);
+    expect(result.matched).toBe(true);
+  });
 });
 
 // ─── runtime-parity invariant ────────────────────────

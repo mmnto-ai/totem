@@ -75,22 +75,33 @@ function runRegexGate(pattern: string, badExample: string): SmokeGateResult {
 }
 
 /**
- * Infer the file extension the ast-grep engine should use when parsing the
- * badExample snippet. Defaults to `.tsx` (TSX, the most permissive parser -
- * superset of TypeScript plus JSX) so a JSX-flavored bad example does not
- * falsely reject at the parser boundary. If the rule declares a fileGlobs
- * with a concrete extension, honor that; otherwise fall back to TSX.
+ * Collect the ordered list of file extensions the ast-grep engine could use
+ * when parsing the badExample. Returns every positive match from
+ * `fileGlobs`; if no globs are declared, returns a broad default set so an
+ * unscoped rule still has a chance to match the snippet under some parser.
+ *
+ * Why a list rather than a single extension: `.ts` and `.tsx` select
+ * different tree-sitter parsers that reject each other's syntax. A TS
+ * angle-bracket cast (`const x = <Foo>bar;`) parses as TS but not as TSX;
+ * a JSX element parses as TSX but not as TS. If the rule's fileGlobs
+ * allow multiple extensions, runtime will pick whichever matches the real
+ * file, so the gate must try every declared extension too. Passing on ANY
+ * extension is sufficient — runtime scans the same surface.
  */
-function inferBadExampleExt(rule: CompiledRule): string {
-  const globs = rule.fileGlobs ?? [];
-  for (const g of globs) {
+function inferBadExampleExts(rule: CompiledRule): string[] {
+  const exts = new Set<string>();
+  for (const g of rule.fileGlobs ?? []) {
     if (g.startsWith('!')) continue;
-    // Extract the trailing `.ext` for simple patterns like `*.tsx` or
-    // `**/*.test.ts`. Anything more exotic falls through to the default.
-    const match = /\.(ts|tsx|js|jsx|mjs|cjs)$/i.exec(g);
-    if (match) return `.${match[1]!.toLowerCase()}`;
+    for (const m of g.matchAll(/\.(ts|tsx|js|jsx|mjs|cjs)\b/gi)) {
+      exts.add(`.${m[1]!.toLowerCase()}`);
+    }
   }
-  return '.tsx';
+  // Unscoped rule: try the full supported set so the gate does not
+  // false-reject on a snippet that would match under some parser. Order
+  // puts TypeScript first (handles cast syntax), then TSX, then JS
+  // variants. Parity with runtime is preserved because runtime also
+  // executes the rule against any file whose extension matches.
+  return exts.size > 0 ? [...exts] : ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
 }
 
 function runAstGrepGate(
@@ -99,19 +110,20 @@ function runAstGrepGate(
   rule: CompiledRule,
 ): SmokeGateResult {
   const lineNumbers = lineNumbersFor(badExample);
-  const ext = inferBadExampleExt(rule);
-  try {
-    const matches = matchAstGrepPattern(badExample, ext, pattern, lineNumbers);
-    return matches.length > 0
-      ? { matched: true, matchCount: matches.length }
-      : { matched: false, matchCount: 0 };
-  } catch (err) {
-    return {
-      matched: false,
-      matchCount: 0,
-      reason: `ast-grep runtime error: ${firstLine(err instanceof Error ? err.message : String(err))}`,
-    };
+  let lastReason: string | undefined;
+  for (const ext of inferBadExampleExts(rule)) {
+    try {
+      const matches = matchAstGrepPattern(badExample, ext, pattern, lineNumbers);
+      if (matches.length > 0) {
+        return { matched: true, matchCount: matches.length };
+      }
+    } catch (err) {
+      lastReason = `ast-grep runtime error: ${firstLine(err instanceof Error ? err.message : String(err))}`;
+    }
   }
+  return lastReason
+    ? { matched: false, matchCount: 0, reason: lastReason }
+    : { matched: false, matchCount: 0 };
 }
 
 // ─── Public API ─────────────────────────────────────
