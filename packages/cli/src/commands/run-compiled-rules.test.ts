@@ -1066,8 +1066,9 @@ describe('TOTEM_LITE graceful AST degradation', () => {
   it('skips AST rules with warning when TOTEM_LITE=1 and AST engine fails', async () => {
     process.env['TOTEM_LITE'] = '1';
 
-    const astRule = makeRule('console.log($$$)', 'no console', 'No console', {
+    const astRule = makeRule('', 'no console', 'No console', {
       engine: 'ast-grep',
+      astGrepPattern: 'console.log($$$)',
       fileGlobs: ['**/*.ts'],
     });
     saveCompiledRules(path.join(tmpDir, TOTEM_DIR, 'compiled-rules.json'), [astRule]);
@@ -1102,8 +1103,9 @@ describe('TOTEM_LITE graceful AST degradation', () => {
   it('re-throws AST errors when NOT in lite mode', async () => {
     delete process.env['TOTEM_LITE'];
 
-    const astRule = makeRule('console.log($$$)', 'no console', 'No console', {
+    const astRule = makeRule('', 'no console', 'No console', {
       engine: 'ast-grep',
+      astGrepPattern: 'console.log($$$)',
       fileGlobs: ['**/*.ts'],
     });
     saveCompiledRules(path.join(tmpDir, TOTEM_DIR, 'compiled-rules.json'), [astRule]);
