@@ -131,19 +131,22 @@ describe('CompilerOutputSchema mutual exclusion', () => {
   });
 
   it('accepts compiler output with only astGrepYamlRule', () => {
+    // Post mmnto-ai/totem#1409: every compilable ast-grep output must
+    // carry a non-empty badExample, so the happy path here includes one.
     const parsed = CompilerOutputSchema.parse({
       compilable: true,
       engine: 'ast-grep',
       message: 'msg',
       astGrepYamlRule: { rule: { pattern: 'foo($A)' } },
+      badExample: 'foo(1)',
     });
     expect(parsed.astGrepYamlRule).toBeDefined();
   });
 });
 
-// ─── badExample optional field ───────────────────────
+// ─── CompiledRule badExample optional field ──────────
 
-describe('badExample optional field', () => {
+describe('CompiledRule badExample field', () => {
   const baseRule = {
     lessonHash: 'abc123def456',
     lessonHeading: 'Test rule',
@@ -161,12 +164,20 @@ describe('badExample optional field', () => {
     expect(parsed.badExample).toBe('const foo = 1;');
   });
 
-  it('accepts a CompiledRule without badExample (optional)', () => {
+  it('accepts a CompiledRule without badExample (optional on the persisted shape)', () => {
+    // CompiledRule stays optional because Pipeline 1 (manual) rules
+    // have not yet been taught to emit badExample — that work is
+    // deferred to mmnto-ai/totem#1414. Only CompilerOutput (the LLM
+    // gate) flips to required in mmnto-ai/totem#1409.
     const parsed = CompiledRuleSchema.parse(baseRule);
     expect(parsed.badExample).toBeUndefined();
   });
+});
 
-  it('accepts CompilerOutput with badExample set', () => {
+// ─── CompilerOutput badExample required per engine (mmnto-ai/totem#1409) ──
+
+describe('CompilerOutput badExample required by engine', () => {
+  it('accepts a regex CompilerOutput with a non-empty badExample', () => {
     const parsed = CompilerOutputSchema.parse({
       compilable: true,
       pattern: '\\bfoo\\b',
@@ -175,6 +186,101 @@ describe('badExample optional field', () => {
       badExample: 'const foo = 1;',
     });
     expect(parsed.badExample).toBe('const foo = 1;');
+  });
+
+  it('accepts an ast-grep CompilerOutput with a non-empty badExample', () => {
+    const parsed = CompilerOutputSchema.parse({
+      compilable: true,
+      message: 'No console.log',
+      engine: 'ast-grep',
+      astGrepPattern: 'console.log($A)',
+      badExample: 'console.log("debug");',
+    });
+    expect(parsed.badExample).toBe('console.log("debug");');
+  });
+
+  it('rejects a regex CompilerOutput missing badExample', () => {
+    const result = CompilerOutputSchema.safeParse({
+      compilable: true,
+      pattern: '\\bfoo\\b',
+      message: 'No foo',
+      engine: 'regex',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a regex CompilerOutput with an empty badExample string', () => {
+    const result = CompilerOutputSchema.safeParse({
+      compilable: true,
+      pattern: '\\bfoo\\b',
+      message: 'No foo',
+      engine: 'regex',
+      badExample: '',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an ast-grep CompilerOutput missing badExample', () => {
+    const result = CompilerOutputSchema.safeParse({
+      compilable: true,
+      message: 'No console.log',
+      engine: 'ast-grep',
+      astGrepPattern: 'console.log($A)',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an ast-grep compound CompilerOutput missing badExample', () => {
+    const result = CompilerOutputSchema.safeParse({
+      compilable: true,
+      message: 'No const inside for-loop',
+      engine: 'ast-grep',
+      astGrepYamlRule: {
+        rule: {
+          pattern: 'const $VAR = $VAL',
+          inside: { kind: 'for_statement', stopBy: 'end' },
+        },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts an ast engine CompilerOutput without badExample (exempt engine)', () => {
+    // Tree-sitter S-expression rules are not covered by the smoke gate
+    // in mmnto-ai/totem#1408, so the schema does not force a badExample
+    // on them. The exemption is load-bearing: removing it would reject
+    // every ast-engine rule the LLM emits today.
+    const parsed = CompilerOutputSchema.parse({
+      compilable: true,
+      message: 'AST check',
+      engine: 'ast',
+      astQuery: '(catch_clause) @c',
+    });
+    expect(parsed.engine).toBe('ast');
+    expect(parsed.badExample).toBeUndefined();
+  });
+
+  it('accepts a non-compilable CompilerOutput without badExample', () => {
+    // When compilable is false, there is no rule to smoke-test, so
+    // badExample stays optional. The reason field is what matters.
+    const parsed = CompilerOutputSchema.parse({
+      compilable: false,
+      reason: 'Conceptual architectural principle',
+    });
+    expect(parsed.compilable).toBe(false);
+  });
+
+  it('rejects a CompilerOutput with no engine field but no badExample (defaults to regex)', () => {
+    // buildCompiledRule defaults a missing engine to regex, so the
+    // schema treats the absent case the same way for gate purposes.
+    // This closes the back door where the LLM could omit engine to
+    // skip the required badExample.
+    const result = CompilerOutputSchema.safeParse({
+      compilable: true,
+      pattern: '\\bnpm\\b',
+      message: 'Use pnpm instead of npm',
+    });
+    expect(result.success).toBe(false);
   });
 });
 
