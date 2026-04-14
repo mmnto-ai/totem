@@ -153,6 +153,29 @@ describe('runSmokeGate — ast-grep compound (astGrepYamlRule)', () => {
   });
 });
 
+// ─── extension inference (GCA WARN on design review) ─
+
+describe('runSmokeGate badExample extension inference', () => {
+  it('defaults to a TSX parser so JSX-flavored bad examples still parse', () => {
+    const rule = makeAstGrepStringRule({
+      astGrepPattern: 'console.log($$$)',
+    });
+    const jsxSnippet = 'const page = <div>{console.log("hi")}</div>;\n';
+    const result = runSmokeGate(rule, jsxSnippet);
+    expect(result.matched).toBe(true);
+  });
+
+  it('honors a concrete extension from the rule fileGlobs when present', () => {
+    const rule = makeAstGrepStringRule({
+      fileGlobs: ['**/*.ts'],
+      astGrepPattern: 'debugger',
+    });
+    const tsSnippet = 'debugger;\n';
+    const result = runSmokeGate(rule, tsSnippet);
+    expect(result.matched).toBe(true);
+  });
+});
+
 // ─── runtime-parity invariant ────────────────────────
 
 describe('runSmokeGate runtime parity invariant', () => {

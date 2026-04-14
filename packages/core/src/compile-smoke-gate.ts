@@ -74,10 +74,34 @@ function runRegexGate(pattern: string, badExample: string): SmokeGateResult {
   return matchCount > 0 ? { matched: true, matchCount } : { matched: false, matchCount: 0 };
 }
 
-function runAstGrepGate(pattern: AstGrepRule, badExample: string): SmokeGateResult {
+/**
+ * Infer the file extension the ast-grep engine should use when parsing the
+ * badExample snippet. Defaults to `.tsx` (TSX, the most permissive parser -
+ * superset of TypeScript plus JSX) so a JSX-flavored bad example does not
+ * falsely reject at the parser boundary. If the rule declares a fileGlobs
+ * with a concrete extension, honor that; otherwise fall back to TSX.
+ */
+function inferBadExampleExt(rule: CompiledRule): string {
+  const globs = rule.fileGlobs ?? [];
+  for (const g of globs) {
+    if (g.startsWith('!')) continue;
+    // Extract the trailing `.ext` for simple patterns like `*.tsx` or
+    // `**/*.test.ts`. Anything more exotic falls through to the default.
+    const match = /\.(ts|tsx|js|jsx|mjs|cjs)$/i.exec(g);
+    if (match) return `.${match[1]!.toLowerCase()}`;
+  }
+  return '.tsx';
+}
+
+function runAstGrepGate(
+  pattern: AstGrepRule,
+  badExample: string,
+  rule: CompiledRule,
+): SmokeGateResult {
   const lineNumbers = lineNumbersFor(badExample);
+  const ext = inferBadExampleExt(rule);
   try {
-    const matches = matchAstGrepPattern(badExample, '.ts', pattern, lineNumbers);
+    const matches = matchAstGrepPattern(badExample, ext, pattern, lineNumbers);
     return matches.length > 0
       ? { matched: true, matchCount: matches.length }
       : { matched: false, matchCount: 0 };
@@ -117,7 +141,7 @@ export function runSmokeGate(rule: CompiledRule, badExample: string): SmokeGateR
         reason: 'ast-grep rule missing both astGrepPattern and astGrepYamlRule',
       };
     }
-    return runAstGrepGate(source, badExample);
+    return runAstGrepGate(source, badExample, rule);
   }
 
   // Tree-sitter ast engine: not wired into the gate in mmnto/totem#1408.
