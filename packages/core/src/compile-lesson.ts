@@ -381,9 +381,12 @@ export function buildCompiledRule(
   // mmnto/totem#1408: compile-time smoke gate. Opt-in via options so Pipeline 1
   // and ad-hoc test callers are unaffected. The gate reuses the runtime engine
   // entry points so a rule passing here cannot silently fail to match at
-  // runtime on identical input. Not wired to the 'ast' engine yet; callers
-  // that enforce the gate on ast rules get a skip reason they can surface.
-  if (options.enforceSmokeGate) {
+  // runtime on identical input. Skipped for the 'ast' (Tree-sitter) engine
+  // because runSmokeGate does not yet cover S-expression queries; those rules
+  // fall back to the existing `verifyRuleExamples` path. Skipping here
+  // matches the comment in compile-smoke-gate.ts and prevents the gate from
+  // hard-rejecting a rule it is not equipped to evaluate.
+  if (options.enforceSmokeGate && candidate.engine !== 'ast') {
     if (!effectiveBadExample) {
       return {
         rule: null,
