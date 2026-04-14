@@ -1,8 +1,14 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.14.7` (publishing 2026-04-13) with **2,777 tests** across core, CLI, and MCP packages and **406 compiled rules** (388 active, 18 archived).
+The project is at release `@mmnto/cli@1.14.8` (publishing 2026-04-14) with **2,785 tests** across core, CLI, and MCP packages and **407 compiled rules** (387 active, 20 archived).
 
-### Recently Shipped (2026-04-13)
+### Recently Shipped
+
+**1.14.8** (2026-04-14) -- Perf Follow-up. Final patch closing the 1.14.x cycle.
+
+- **#1401** -- Thread explicit `cwd` through `compileCommand` (#1232); batch upgrade hashes in `runSelfHealing` (#1235) to avoid N load cycles; fail-loud guard on unresolved batch hashes.
+- **#1402** -- Pull request template enforcing Mechanical Root Cause + Out of Scope structure.
+- Postmerge: 7 new lessons, 1 rule compiled (archived for over-breadth).
 
 **1.14.7** (2026-04-13) -- Nervous System Capstone. Closes the 1.14.x arc.
 

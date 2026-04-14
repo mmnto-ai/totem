@@ -6556,6 +6556,24 @@
       "severity": "warning",
       "status": "archived",
       "archivedReason": "Over-broad: fires on canonical commands like totem lint, totem sync, totem review. Only totem extract and totem compile are deprecated bare aliases. Needs a narrower pattern targeting only extract/compile without the lesson prefix."
+    },
+    {
+      "lessonHash": "9369b424c83214ba",
+      "lessonHeading": "Thread explicit cwd through command chains",
+      "pattern": "",
+      "message": "Do not use process.cwd() inside command implementations — accept and thread an explicit `cwd` parameter instead to prevent silent divergence in sub-command invocations.",
+      "engine": "ast-grep",
+      "astGrepPattern": "process.cwd()",
+      "compiledAt": "2026-04-14T00:39:20.167Z",
+      "createdAt": "2026-04-14T00:39:20.167Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: fires on legitimate CLI entry-point usage like const cwd = options.cwd ?? process.cwd(). The lesson applies to internal command invocations (sub-commands called from other commands), not to the top-level command entry. Needs a negative constraint like not-inside options.cwd resolution, upgradeTarget: compound (Proposal 226)."
     }
   ],
   "nonCompilable": [
@@ -10042,6 +10060,30 @@
     {
       "hash": "469f4c25bc4d2dbf",
       "title": "Provide explicit recovery hints for missing directories"
+    },
+    {
+      "hash": "626a09b4c2ff52a5",
+      "title": "Distinguish failures from no-ops in diagnostics"
+    },
+    {
+      "hash": "799a79fc05244341",
+      "title": "Define explicit negative scope in descriptions"
+    },
+    {
+      "hash": "7e5aded1434851f0",
+      "title": "Batch telemetry-heavy operations to reduce cycles"
+    },
+    {
+      "hash": "8a8b9f2747f0376e",
+      "title": "Require mechanical root cause in PRs"
+    },
+    {
+      "hash": "0891b8e3af330595",
+      "title": "Use deterministic mutually exclusive checkboxes"
+    },
+    {
+      "hash": "83489e54d3f12773",
+      "title": "Fail fast on unresolved upgrade hashes"
     }
   ]
 }
