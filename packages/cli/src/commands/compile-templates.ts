@@ -247,9 +247,9 @@ If the lesson points at a context not on this list, escalate to a Tree-sitter S-
 }
 \`\`\`
 
-### Compound example B: empty catch block (uses \`has\` and \`not\`)
+### Compound example B: object literal containing \`shell: true\` (uses \`has\`)
 
-The rule says "the catch_clause does NOT have a statement_block that has any real statement inside". Both \`has\` and \`not\` combine to express the absence of a body.
+The rule says "match any object literal that has \`shell: true\` as a descendant property". The \`has\` combinator expresses the containment relationship cleanly, and \`stopBy: end\` walks the full subtree rather than stopping at the immediate neighbor.
 
 \`\`\`json
 {
@@ -258,29 +258,20 @@ The rule says "the catch_clause does NOT have a statement_block that has any rea
   "pattern": "",
   "astGrepYamlRule": {
     "rule": {
-      "kind": "catch_clause",
-      "not": {
-        "has": {
-          "kind": "statement_block",
-          "has": {
-            "any": [
-              { "kind": "expression_statement" },
-              { "kind": "variable_declaration" },
-              { "kind": "if_statement" },
-              { "kind": "return_statement" },
-              { "kind": "throw_statement" }
-            ],
-            "stopBy": "end"
-          }
-        }
+      "kind": "object",
+      "has": {
+        "pattern": "shell: true",
+        "stopBy": "end"
       }
     }
   },
-  "message": "Catch block is empty - either rethrow, log, or handle the error",
-  "badExample": "try { doWork(); } catch (err) {\\n}",
+  "message": "Shell execution requires explicit opt-in - prefer safeExec or cross-spawn for Windows shim resolution",
+  "badExample": "spawn(cmd, args, { shell: true });",
   "fileGlobs": ["**/*.ts", "**/*.tsx"]
 }
 \`\`\`
+
+Note: do NOT try to express "empty catch block" via \`not: { has: { any: [...kind list...] } }\`. The inverse-of-allow-list shape produces false positives for any statement kind you forgot to enumerate (TypeScript has ~15 statement kinds, including \`for_statement\`, \`while_statement\`, \`switch_statement\`, \`try_statement\`, \`class_declaration\`, etc.). If you need to detect an empty block, use \`nthChild\` or a \`pattern:\` match on literal braces instead, and verify the rule against a badExample that exercises the common non-empty shapes.
 
 ### Compound example C: spawn() calls that are NOT inside an import statement
 
