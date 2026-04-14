@@ -40,6 +40,15 @@ function extensionToLang(ext: string): Lang | undefined {
 
 // ─── Core matching ──────────────────────────────────
 
+/**
+ * Per-rule failure sink. Invoked when `findAll` throws inside a batch. The
+ * index is the position of the failing query in the original input array so
+ * the caller can map the failure back to a `CompiledRule`. Introduced in
+ * mmnto/totem#1408 to fulfil spike finding G-7: one malformed compound rule
+ * must not blast-radius the whole file's ast-grep pass.
+ */
+export type OnRuleFailure = (index: number, err: Error) => void;
+
 function executeQuery(
   root: import('@ast-grep/napi').SgRoot,
   rule: AstGrepRule,
@@ -101,13 +110,26 @@ export function matchAstGrepPattern(
 
 /**
  * Parse a file once and run multiple ast-grep rules against it.
- * O(M + N) — file parsed exactly once regardless of rule count.
+ * O(M + N) - file parsed exactly once regardless of rule count.
  * Returns results indexed by position in the input array.
+ *
+ * When `onRuleFailure` is passed, each per-rule `findAll` call runs inside
+ * its own try/catch (spike finding G-7, mmnto/totem#1408): a malformed
+ * compound rule emits a failure event, yields an empty result array for
+ * that index, and the remaining rules continue to execute. Without the
+ * sink, the legacy fail-closed behavior holds - the first per-rule failure
+ * aborts the whole batch via `TotemParseError`.
+ *
+ * The parse-time failure (invalid source, unsupported language) still
+ * escapes via `rethrowAsParseError` regardless of the sink, because a parse
+ * error affects every query on the file and there is no way to produce
+ * honest per-rule results from a broken tree.
  */
 export function matchAstGrepPatternsBatch(
   content: string,
   ext: string,
   queries: Array<{ rule: AstGrepRule; addedLineNumbers: number[] }>,
+  onRuleFailure?: OnRuleFailure,
 ): AstGrepMatch[][] {
   if (queries.length === 0) return [];
 
@@ -118,12 +140,24 @@ export function matchAstGrepPatternsBatch(
 
   const lines = content.split('\n');
 
+  let root: import('@ast-grep/napi').SgRoot;
   try {
-    const root = parse(lang, content);
-    return queries.map(({ rule, addedLineNumbers }) =>
-      executeQuery(root, rule, addedLineNumbers, lines),
-    );
+    root = parse(lang, content);
   } catch (err) {
     rethrowAsParseError('ast-grep batch parse failed', err, AST_GREP_HINT);
   }
+
+  return queries.map(({ rule, addedLineNumbers }, index) => {
+    if (!onRuleFailure) {
+      // Legacy path: first failure aborts the whole batch.
+      return executeQuery(root, rule, addedLineNumbers, lines);
+    }
+    try {
+      return executeQuery(root, rule, addedLineNumbers, lines);
+    } catch (err) {
+      const wrapped = err instanceof Error ? err : new Error(String(err));
+      onRuleFailure(index, wrapped);
+      return [];
+    }
+  });
 }
