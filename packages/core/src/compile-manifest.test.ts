@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { CompileManifest } from './compile-manifest.js';
 import {
+  canonicalStringify,
   generateInputHash,
   generateOutputHash,
   readCompileManifest,
@@ -73,6 +74,87 @@ describe('generateOutputHash', () => {
     fs.writeFileSync(pathCRLF, '{"rules": []}\r\n');
 
     expect(generateOutputHash(pathLF)).toBe(generateOutputHash(pathCRLF));
+  });
+
+  it('manifest hash generates identical hashes for astGrepYamlRule objects with differently ordered keys', () => {
+    const pathA = path.join(tmpDir, 'rules-a.json');
+    const pathB = path.join(tmpDir, 'rules-b.json');
+
+    const ruleA = {
+      lessonHash: 'abc',
+      lessonHeading: 'Test',
+      pattern: '',
+      message: 'm',
+      engine: 'ast-grep',
+      compiledAt: '2026-04-13T00:00:00Z',
+      astGrepYamlRule: {
+        rule: {
+          all: [{ pattern: 'foo($A)' }, { inside: { kind: 'function_declaration' } }],
+        },
+      },
+    };
+    // Same semantic rule, scrambled keys at every level.
+    const ruleB = {
+      engine: 'ast-grep',
+      astGrepYamlRule: {
+        rule: {
+          all: [{ pattern: 'foo($A)' }, { inside: { kind: 'function_declaration' } }],
+        },
+      },
+      pattern: '',
+      compiledAt: '2026-04-13T00:00:00Z',
+      lessonHash: 'abc',
+      message: 'm',
+      lessonHeading: 'Test',
+    };
+
+    fs.writeFileSync(pathA, JSON.stringify({ version: 1, rules: [ruleA] }, null, 2) + '\n');
+    fs.writeFileSync(pathB, JSON.stringify({ version: 1, rules: [ruleB] }, null, 2) + '\n');
+
+    expect(generateOutputHash(pathA)).toBe(generateOutputHash(pathB));
+  });
+});
+
+describe('canonicalStringify', () => {
+  it('sorts top-level object keys', () => {
+    expect(canonicalStringify({ b: 2, a: 1 })).toBe(canonicalStringify({ a: 1, b: 2 }));
+  });
+
+  it('sorts keys at every nesting depth', () => {
+    const a = { z: { y: { x: 1, w: 2 } }, a: 0 };
+    const b = { a: 0, z: { y: { w: 2, x: 1 } } };
+    expect(canonicalStringify(a)).toBe(canonicalStringify(b));
+  });
+
+  it('preserves array element order (arrays are ordered by contract)', () => {
+    expect(canonicalStringify([2, 1, 3])).not.toBe(canonicalStringify([1, 2, 3]));
+  });
+
+  it('handles nested arrays of objects with scrambled keys', () => {
+    const a = {
+      rule: {
+        all: [{ pattern: 'foo', kind: 'call' }, { inside: { stopBy: 'end', kind: 'function' } }],
+      },
+    };
+    const b = {
+      rule: {
+        all: [{ kind: 'call', pattern: 'foo' }, { inside: { kind: 'function', stopBy: 'end' } }],
+      },
+    };
+    expect(canonicalStringify(a)).toBe(canonicalStringify(b));
+  });
+
+  it('is stable for primitives', () => {
+    expect(canonicalStringify('hello')).toBe('"hello"');
+    expect(canonicalStringify(42)).toBe('42');
+    expect(canonicalStringify(true)).toBe('true');
+    expect(canonicalStringify(null)).toBe('null');
+  });
+
+  it('handles undefined by omitting the key (JSON.stringify parity)', () => {
+    const a = { a: 1, b: undefined };
+    const b = { a: 1 };
+    expect(canonicalStringify(a)).toBe(canonicalStringify(b));
   });
 });
 

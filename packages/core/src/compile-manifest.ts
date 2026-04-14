@@ -76,14 +76,85 @@ export function generateInputHash(lessonsDir: string): string {
 }
 
 /**
+ * Deterministic JSON stringify. Walks the input tree and sorts every
+ * object's keys alphabetically before serialising. Arrays keep their
+ * element order (arrays are ordered by contract). Primitives and
+ * `null` pass through unchanged.
+ *
+ * Used by `generateOutputHash` so that a compound ast-grep rule
+ * (`astGrepYamlRule`) produces the same output hash regardless of the
+ * JS engine's property insertion order. Without this, two compile
+ * runs could emit functionally-identical rules with different key
+ * orders and trip `verify-manifest` on an otherwise stable lesson
+ * set. The invariant is: structurally-equivalent inputs produce
+ * byte-identical outputs.
+ *
+ * Design notes:
+ *   - No cycle detection. Input is expected to be a finite tree
+ *     (NapiConfig + primitive scalars). Cyclic input would stack
+ *     overflow; that is a hard error, not a silent degradation.
+ *   - Undefined values are dropped, matching `JSON.stringify` parity.
+ *   - `Date` and other class instances are serialised via their
+ *     default `JSON.stringify` representation. In practice the hash
+ *     payload is plain JSON already, so this never fires.
+ */
+export function canonicalStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return '[' + value.map((v) => canonicalStringify(v)).join(',') + ']';
+  }
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record)
+    .filter((k) => record[k] !== undefined)
+    .sort();
+  const parts: string[] = [];
+  for (const k of keys) {
+    parts.push(JSON.stringify(k) + ':' + canonicalStringify(record[k]));
+  }
+  return '{' + parts.join(',') + '}';
+}
+
+/**
  * Generate a deterministic SHA-256 hash of the compiled rules file.
  *
- * Line endings are normalized to `\n` before hashing.
+ * Line endings are normalized to `\n` before hashing. For files that
+ * contain at least one compound `astGrepYamlRule`, the payload is
+ * re-serialised through `canonicalStringify` so key-order variation
+ * inside the yaml object cannot shift the hash (mmnto/totem#1407).
+ * Files without any compound rule keep the byte-stream path for
+ * backward compatibility with manifests written by pre-#1407 CLIs:
+ * the old and new computation match byte-for-byte in that case, so
+ * every user's existing compile-manifest.json stays valid after
+ * upgrading without a forced recompile.
+ *
+ * A parse failure falls back to the raw content so verify-manifest
+ * can still catch tampering on partial writes; it does not mask the
+ * error.
  */
 export function generateOutputHash(rulesPath: string): string {
   try {
-    const content = fs.readFileSync(rulesPath, 'utf-8').replace(/\r\n/g, '\n');
-    return crypto.createHash('sha256').update(content).digest('hex');
+    const raw = fs.readFileSync(rulesPath, 'utf-8').replace(/\r\n/g, '\n');
+    let payload = raw;
+    // Only switch to canonical serialization when the file actually
+    // contains a compound rule. A simple substring check is safe
+    // here because JSON-stringified keys are quoted; a lesson body
+    // cannot produce the exact byte sequence without storing it in
+    // an astGrepYamlRule field.
+    if (raw.includes('"astGrepYamlRule"')) {
+      try {
+        const parsed: unknown = JSON.parse(raw);
+        if (typeof parsed === 'object' && parsed !== null) {
+          payload = canonicalStringify(parsed);
+        }
+      } catch {
+        // Malformed JSON: keep the raw byte stream so verify-manifest
+        // still surfaces the corruption via a mismatch rather than
+        // crashing here.
+      }
+    }
+    return crypto.createHash('sha256').update(payload).digest('hex');
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') {

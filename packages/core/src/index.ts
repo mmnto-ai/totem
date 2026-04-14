@@ -293,6 +293,7 @@ export {
 // Compile manifest (signing / provenance)
 export type { CompileManifest } from './compile-manifest.js';
 export {
+  canonicalStringify,
   CompileManifestSchema,
   generateInputHash,
   generateOutputHash,
