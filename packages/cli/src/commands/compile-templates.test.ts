@@ -20,6 +20,58 @@ describe('COMPILER_SYSTEM_PROMPT', () => {
     expect(COMPILER_SYSTEM_PROMPT).toContain('**/');
     expect(COMPILER_SYSTEM_PROMPT).toContain('Supported glob syntax only');
   });
+
+  // ─── Compound rules (mmnto-ai/totem#1409) ──────────
+
+  it('contains a Compound rules section with structural combinators', () => {
+    expect(COMPILER_SYSTEM_PROMPT).toContain('Compound rules');
+    expect(COMPILER_SYSTEM_PROMPT).toContain('inside');
+    expect(COMPILER_SYSTEM_PROMPT).toContain('has');
+    expect(COMPILER_SYSTEM_PROMPT).toContain('not');
+    expect(COMPILER_SYSTEM_PROMPT).toContain('kind:');
+  });
+
+  it('renames the misleading Compound patterns heading to Flat patterns', () => {
+    // The pre-#1409 prompt had a section titled "Compound patterns (method
+    // calls with specific arguments)" whose examples were actually flat
+    // single-node patterns using $$$ captures. That mislabel taught the
+    // LLM to call flat rules "compound" and blurred the boundary. The
+    // rewrite uses the Flat patterns heading for those examples and
+    // reserves "Compound rules" for true structural combinators.
+    expect(COMPILER_SYSTEM_PROMPT).not.toContain(
+      'Compound patterns (method calls with specific arguments)',
+    );
+    expect(COMPILER_SYSTEM_PROMPT).toContain('Flat patterns');
+  });
+
+  it('interpolates at least three KIND_ALLOW_LIST entries verbatim', () => {
+    let hits = 0;
+    for (const kind of KIND_ALLOW_LIST) {
+      if (COMPILER_SYSTEM_PROMPT.includes(kind)) hits++;
+    }
+    expect(hits).toBeGreaterThanOrEqual(3);
+  });
+
+  it('forbids the inside-pattern sharp edge from the spike findings (G-3)', () => {
+    // The for-loop inside-pattern shape silently matches zero per
+    // compound.spike.test.ts:247. The prompt must steer Sonnet away.
+    expect(COMPILER_SYSTEM_PROMPT).toMatch(/for \(\$[A-Z]+; \$[A-Z]+; \$[A-Z]+\)/);
+  });
+
+  it('has a Bad Example section that flags the field as required', () => {
+    expect(COMPILER_SYSTEM_PROMPT).toContain('Bad Example (REQUIRED)');
+    expect(COMPILER_SYSTEM_PROMPT).toContain('badExample');
+  });
+
+  it('shows badExample in the ast-grep output schema example', () => {
+    // The LLM leans heavily on the literal output schema block, so the
+    // JSON template must visibly carry badExample for the field to land
+    // in real responses. Count occurrences of the literal "badExample"
+    // key in triple-quoted code blocks as a proxy for "shows up in the
+    // example JSON".
+    const occurrences = COMPILER_SYSTEM_PROMPT.match(/"badExample":/g) ?? [];
+    expect(occurrences.length).toBeGreaterThanOrEqual(3);
+  });
 });
 
 describe('PIPELINE3_COMPILER_PROMPT', () => {
@@ -58,6 +110,12 @@ describe('PIPELINE3_COMPILER_PROMPT', () => {
 
   it('identifies itself as Pipeline 3', () => {
     expect(PIPELINE3_COMPILER_PROMPT).toContain('Pipeline 3');
+  });
+
+  // ─── badExample requirement (mmnto-ai/totem#1409) ──
+
+  it('teaches Pipeline 3 to emit a badExample field', () => {
+    expect(PIPELINE3_COMPILER_PROMPT).toContain('badExample');
   });
 });
 

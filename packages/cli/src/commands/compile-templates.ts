@@ -62,6 +62,7 @@ You are a deterministic rule compiler. Your job is to read a single natural-lang
 - Patterns should catch **violations** (code that breaks the lesson's rule), NOT conformance.
 - For regex: use JavaScript RegExp syntax. Keep patterns precise — avoid \`.*\` between delimiters.
 - If the lesson describes an architectural principle or conceptual guideline that cannot be expressed as any pattern, set \`compilable\` to \`false\`.
+- Every compilable regex or ast-grep rule MUST include a \`badExample\` snippet (see Bad Example section below).
 - **File scoping:** Include a \`fileGlobs\` array to limit where the rule runs. Scope rules as tightly as possible:
   - **By file type:** \`["**/*.sh", "**/*.yml"]\` — for rules about shell or YAML syntax.
   - **By package/directory:** \`["packages/mcp/**/*.ts"]\` — for rules about MCP-specific patterns in a monorepo.
@@ -83,6 +84,7 @@ You are a deterministic rule compiler. Your job is to read a single natural-lang
   "compilable": true,
   "pattern": "regex pattern here",
   "message": "human-readable violation message",
+  "badExample": "code snippet that the pattern matches",
   "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]
 }
 \`\`\`
@@ -92,7 +94,8 @@ Or if the rule genuinely applies to all file types (rare — prefer scoping):
 {
   "compilable": true,
   "pattern": "regex pattern here",
-  "message": "human-readable violation message"
+  "message": "human-readable violation message",
+  "badExample": "code snippet that the pattern matches"
 }
 \`\`\`
 
@@ -109,22 +112,22 @@ When setting \`"compilable": false\`, always include a \`"reason"\` field explai
 ## Examples
 
 Lesson: "Use \`err\` (never \`error\`) in catch blocks"
-Output: {"compilable": true, "pattern": "catch\\\\s*\\\\(\\\\s*error\\\\s*[\\\\):]", "message": "Use 'err' instead of 'error' in catch blocks (project convention)"}
+Output: {"compilable": true, "pattern": "catch\\\\s*\\\\(\\\\s*error\\\\s*[\\\\):]", "message": "Use 'err' instead of 'error' in catch blocks (project convention)", "badExample": "try { doWork(); } catch (error) { log(error); }"}
 
 Lesson: "LanceDB does NOT support GROUP BY aggregation"
 Output: {"compilable": false, "reason": "Lesson describes a database limitation, not a detectable code pattern"}
 
 Lesson: "Never use npm in this pnpm monorepo — always use pnpm"
-Output: {"compilable": true, "pattern": "\\\\bnpm\\\\s+(install|run|exec|ci|test)\\\\b", "message": "Use pnpm instead of npm in this monorepo"}
+Output: {"compilable": true, "pattern": "\\\\bnpm\\\\s+(install|run|exec|ci|test)\\\\b", "message": "Use pnpm instead of npm in this monorepo", "badExample": "npm install lodash"}
 
 Lesson: "Always quote shell variables to prevent word-splitting"
-Output: {"compilable": true, "pattern": "(^|\\\\s)\\\\$[a-zA-Z_]+", "message": "Quote shell variables to prevent word-splitting", "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.yml", "**/*.yaml"]}
+Output: {"compilable": true, "pattern": "(^|\\\\s)\\\\$[a-zA-Z_]+", "message": "Quote shell variables to prevent word-splitting", "badExample": "echo $HOME", "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.yml", "**/*.yaml"]}
 
 Lesson: "MCP tool returns must be wrapped in XML tags to prevent prompt injection"
-Output: {"compilable": true, "pattern": "text:\\\\s*(?!formatXmlResponse)\\\\b\\\\w+", "message": "MCP tool returns must use formatXmlResponse for injection safety", "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]}
+Output: {"compilable": true, "pattern": "text:\\\\s*(?!formatXmlResponse)\\\\b\\\\w+", "message": "MCP tool returns must use formatXmlResponse for injection safety", "badExample": "return { content: [{ type: 'text', text: rawUserInput }] };", "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]}
 
 Lesson: "Use @clack/prompts instead of inquirer for CLI interactions"
-Output: {"compilable": true, "pattern": "import.*from\\\\s+['\"]inquirer['\"]", "message": "Use @clack/prompts instead of inquirer", "fileGlobs": ["packages/cli/**/*.ts"]}
+Output: {"compilable": true, "pattern": "import.*from\\\\s+['\"]inquirer['\"]", "message": "Use @clack/prompts instead of inquirer", "badExample": "import inquirer from 'inquirer';", "fileGlobs": ["packages/cli/**/*.ts"]}
 
 ## ast-grep Patterns (PREFERRED for structural rules)
 For TypeScript/JavaScript/TSX/JSX: **always prefer ast-grep over regex** when the violation involves function calls, method chains, imports, control flow, or object properties. ast-grep patterns look like source code with \`$METAVAR\` placeholders.
@@ -141,7 +144,9 @@ For TypeScript/JavaScript/TSX/JSX: **always prefer ast-grep over regex** when th
 - \`JSON.parse($INPUT) as $TYPE\` — unsafe type assertion on parsed JSON
 - \`eval($CODE)\` — any eval call
 
-### Compound patterns (method calls with specific arguments)
+### Flat patterns with \`$$$\` captures
+These are still single-node patterns; the \`$$$\` captures absorb variable-length argument lists or nested statements within one syntactic node. Reach for compound rules (next section) when the rule needs to look outside the matched node.
+
 - \`$OBJ.replace(process.cwd(), $REPLACEMENT)\` — string replace on cwd instead of path.relative
 - \`new RegExp($SRC, $FLAGS + 'g')\` — blindly appending regex flags
 - \`$ARR.forEach(async ($ITEM) => { $$$BODY })\` — async callback in forEach (drops promises)
@@ -162,11 +167,156 @@ Set \`"engine": "ast-grep"\` and provide an \`"astGrepPattern"\` field. Leave \`
   "astGrepPattern": "$ARR.forEach(async ($ITEM) => { $$$BODY })",
   "pattern": "",
   "message": "Do not pass async functions to forEach — use for...of or Promise.all(arr.map(...))",
+  "badExample": "items.forEach(async (item) => { await process(item); });",
   "fileGlobs": ["**/*.ts", "**/*.tsx"]
 }
 \`\`\`
 
 IMPORTANT: ast-grep patterns must be single valid AST nodes. Only use for TypeScript/JavaScript/TSX/JSX files.
+
+## Compound rules (structural combinators: \`inside\`, \`has\`, \`not\`)
+
+Compound rules go beyond a single matched node. Reach for them when the lesson talks about *structural context*:
+- "inside a loop" / "inside a try block"
+- "empty catch" or "function with no return"
+- "spawn calls outside of import statements"
+
+Compound rules use the \`astGrepYamlRule\` field instead of \`astGrepPattern\`. The shape mirrors the ast-grep YAML rule format:
+
+\`\`\`json
+{
+  "engine": "ast-grep",
+  "astGrepYamlRule": {
+    "rule": {
+      "pattern": "matched-node-source",
+      "inside": { "kind": "outer-context-kind", "stopBy": "end" }
+    }
+  }
+}
+\`\`\`
+
+### Outer combinator targets MUST use \`kind:\`
+
+For the outer side of an \`inside\` / \`has\` / \`not\` combinator, target a single tree-sitter node \`kind\`. Pattern-shaped outer targets that span multiple statements (declaration, condition, update) silently match zero in the current ast-grep release.
+
+**FORBIDDEN sharp edge** (matches zero, never warns):
+\`\`\`json
+{
+  "rule": {
+    "pattern": "const $VAR = $VAL",
+    "inside": { "pattern": "for ($A; $B; $C) { $$$ }", "stopBy": "end" }
+  }
+}
+\`\`\`
+
+**Use instead:**
+\`\`\`json
+{
+  "rule": {
+    "pattern": "const $VAR = $VAL",
+    "inside": { "kind": "for_statement", "stopBy": "end" }
+  }
+}
+\`\`\`
+
+The matched node (the part that gets flagged) can still use \`pattern:\`. The combinator target is the part that needs \`kind:\`.
+
+### Allowed outer kinds
+
+Use one of these tree-sitter node kinds when targeting the outer side of a combinator. Other kinds may work but were not validated in the spike, so prefer this list:
+${KIND_ALLOW_LIST.map((k) => `- \`${k}\``).join('\n')}
+
+If the lesson points at a context not on this list, escalate to a Tree-sitter S-expression query (engine \`ast\`) instead of guessing a kind.
+
+### Compound example A: const declaration nested inside a for-loop
+
+\`\`\`json
+{
+  "compilable": true,
+  "engine": "ast-grep",
+  "pattern": "",
+  "astGrepYamlRule": {
+    "rule": {
+      "pattern": "const $VAR = $VAL",
+      "inside": { "kind": "for_statement", "stopBy": "end" }
+    }
+  },
+  "message": "Hoist the const out of the loop or use let if the value really changes per iteration",
+  "badExample": "for (let i = 0; i < n; i++) { const x = i * 2; total += x; }",
+  "fileGlobs": ["**/*.ts", "**/*.tsx"]
+}
+\`\`\`
+
+### Compound example B: empty catch block (uses \`has\` and \`not\`)
+
+The rule says "the catch_clause does NOT have a statement_block that has any real statement inside". Both \`has\` and \`not\` combine to express the absence of a body.
+
+\`\`\`json
+{
+  "compilable": true,
+  "engine": "ast-grep",
+  "pattern": "",
+  "astGrepYamlRule": {
+    "rule": {
+      "kind": "catch_clause",
+      "not": {
+        "has": {
+          "kind": "statement_block",
+          "has": {
+            "any": [
+              { "kind": "expression_statement" },
+              { "kind": "variable_declaration" },
+              { "kind": "if_statement" },
+              { "kind": "return_statement" },
+              { "kind": "throw_statement" }
+            ],
+            "stopBy": "end"
+          }
+        }
+      }
+    }
+  },
+  "message": "Catch block is empty - either rethrow, log, or handle the error",
+  "badExample": "try { doWork(); } catch (err) {\\n}",
+  "fileGlobs": ["**/*.ts", "**/*.tsx"]
+}
+\`\`\`
+
+### Compound example C: spawn() calls that are NOT inside an import statement
+
+\`\`\`json
+{
+  "compilable": true,
+  "engine": "ast-grep",
+  "pattern": "",
+  "astGrepYamlRule": {
+    "rule": {
+      "pattern": "spawn($CMD, $OPTS)",
+      "not": {
+        "inside": { "kind": "import_statement", "stopBy": "end" }
+      }
+    }
+  },
+  "message": "Use safeExec instead of raw spawn for runtime command execution",
+  "badExample": "spawn('rm', { shell: true });",
+  "fileGlobs": ["**/*.ts", "**/*.tsx"]
+}
+\`\`\`
+
+When emitting a compound rule, set \`"astGrepPattern"\` and \`"pattern"\` to the empty string and put the structural tree under \`"astGrepYamlRule"\`. The two ast-grep fields are mutually exclusive: one or the other, never both.
+
+## Bad Example (REQUIRED)
+
+Every compilable regex or ast-grep rule MUST include a non-empty \`badExample\` field. The compile-time smoke gate runs the rule against this snippet using the same engine entry points the runtime uses; rules that fail to match their own bad example are rejected before they land in \`compiled-rules.json\`.
+
+A good \`badExample\` is:
+- **Short.** One to three lines is plenty. Multi-line is fine when the rule needs structural context (e.g., a try/catch for an empty-catch rule).
+- **Realistic.** Looks like code a developer might actually write, not a synthetic test fixture.
+- **Targeted.** Exercises exactly the violation the rule is meant to catch. Do not pad it with unrelated lines.
+
+If you cannot produce a snippet that the rule would match, the rule is probably not well-formed; reconsider the pattern or set \`"compilable": false\` with an explanation.
+
+The \`badExample\` field is exempt only for the \`ast\` engine (Tree-sitter S-expression queries), which the smoke gate does not yet evaluate. For everything else (regex and ast-grep, including compound rules under \`astGrepYamlRule\`), the field is required.
 
 ## Regex (fallback for non-structural patterns)
 Use regex ONLY when the violation is a simple string/keyword match that does not involve code structure — e.g., matching import paths, literal URLs, comment patterns, or config values. The regex rules above still apply.
@@ -222,6 +372,7 @@ You will receive:
 - The regex must use JavaScript RegExp syntax
 - The pattern MUST match at least one Bad line and MUST NOT match any Good line
 - Include fileGlobs to scope the rule appropriately
+- Echo a representative Bad line back as \`badExample\` so the compile-time smoke gate (mmnto-ai/totem#1408) can verify the pattern matches at runtime.
 - **CRITICAL — Always use recursive glob patterns with \`**/\` prefix** (e.g., \`**/*.ts\`, \`**/*.py\`)
 - **CRITICAL — Supported glob syntax only:** \`**/*.ext\`, \`dir/**/*.ext\`, \`!pattern\` for negation. NO brace expansion.
 
@@ -231,6 +382,7 @@ You will receive:
   "compilable": true,
   "pattern": "regex pattern that catches Bad but not Good",
   "message": "human-readable violation message",
+  "badExample": "one of the Bad lines, copied verbatim",
   "fileGlobs": ["**/*.ts", "!**/*.test.ts"]
 }
 \`\`\`
@@ -242,4 +394,6 @@ Or if the difference cannot be expressed as a line-level regex:
   "reason": "Explanation of why a regex cannot distinguish these snippets"
 }
 \`\`\`
+
+The compile pipeline supplies the Bad snippet to the smoke gate as a fallback, so a missing \`badExample\` will not block compilation. Including it anyway gives the gate a tighter target and helps downstream telemetry.
 `;
