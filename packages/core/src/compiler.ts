@@ -15,6 +15,7 @@ import safeRegex from 'safe-regex2';
 import { z } from 'zod';
 
 import type {
+  AstGrepYamlRule,
   CompiledRule,
   CompiledRulesFile,
   CompilerOutput,
@@ -27,19 +28,23 @@ import { TotemParseError } from './errors.js';
 
 export type {
   AstContext,
+  AstGrepYamlRule,
   CompiledRule,
   CompiledRulesFile,
   CompilerOutput,
   DiffAddition,
+  NapiConfig,
   RegexValidation,
   RuleEventCallback,
   RuleEventContext,
   Violation,
 } from './compiler-schema.js';
 export {
+  AstGrepYamlRuleSchema,
   CompiledRuleSchema,
   CompiledRulesFileSchema,
   CompilerOutputSchema,
+  NapiConfigSchema,
 } from './compiler-schema.js';
 export { extractAddedLines } from './diff-parser.js';
 export {
@@ -226,12 +231,24 @@ function normalizeShallowGlob(glob: string): string {
 export function engineFields(
   engine: 'regex' | 'ast' | 'ast-grep',
   pattern: string | Record<string, unknown>,
-): { pattern: string; astGrepPattern?: string | Record<string, unknown>; astQuery?: string } {
+): {
+  pattern: string;
+  astGrepPattern?: string;
+  astGrepYamlRule?: AstGrepYamlRule;
+  astQuery?: string;
+} {
   switch (engine) {
     case 'regex':
       return { pattern: String(pattern) };
     case 'ast-grep':
-      return { pattern: '', astGrepPattern: pattern };
+      // Route strings to the flat field and objects to the compound field.
+      // mmnto/totem#1407 split the fields for explicit mutual exclusion; the
+      // caller is responsible for passing exactly one shape. The superRefine
+      // on CompiledRuleSchema gates the persisted rule.
+      if (typeof pattern === 'string') {
+        return { pattern: '', astGrepPattern: pattern };
+      }
+      return { pattern: '', astGrepYamlRule: pattern as AstGrepYamlRule };
     case 'ast':
       return { pattern: '', astQuery: String(pattern) };
   }
