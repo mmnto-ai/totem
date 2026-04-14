@@ -101,13 +101,7 @@ interface Relation extends Rule {
 
 **Today:** `matchAstGrepPatternsBatch` at `ast-grep-query.ts:121-128` wraps the whole batch in a single try/catch. One malformed compound rule blast-radiuses the whole file's ast-grep pass.
 
-**Change:** Move each `findAll` call into its own try/catch inside `executeQuery`. Route individual failures through `onRuleEvent?.('suppress', ..., { reason: 'failure-compile' })` so `totem doctor` can surface them instead of crashing the file pass.
-
-### G-8. Re-export `AstGrepRule` from the package index
-
-**Today:** The `AstGrepRule` alias at `ast-grep-query.ts:9` is not re-exported from `packages/core/src/index.ts`. External rule-pack authors would have to reach into `dist/` to reach the type.
-
-**Change:** Add the re-export during #1408 so pack authors have a public seam.
+**Change:** Move each `findAll` call into its own try/catch inside `executeQuery`. Surface individual failures through the existing `onWarn` callback already threaded through `applyAstRulesToAdditions`, OR add a new `'failure'` variant to `RuleEventCallback` in `compiler-schema.ts:147`. Do NOT overload `'suppress'` — that event is reserved for user-initiated directives (`totem-ignore` / `totem-context`) and conflating it with execution errors breaks the Trap Ledger contract on `RuleEventContext`. #1408 should choose between the `onWarn` path and a new event type explicitly in its design doc.
 
 ## Gaps for #1409 (compiler prompt)
 
@@ -125,7 +119,7 @@ None. The one sharp edge (G-3) is a prompt-and-validation issue, not a runtime b
 
 ## Test status
 
-```
+```text
 Test Files  1 passed (1)
 Tests       9 passed (9)
 Duration    244 ms

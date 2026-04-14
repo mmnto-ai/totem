@@ -301,15 +301,16 @@ describe('compound spike :: invalid rule rejection', () => {
     expect(caught).not.toBeNull();
     expect(caught).toBeInstanceOf(Error);
     // Error message should name the offending value so downstream
-    // error handling can surface it to users.
+    // error handling can surface it to users. The exact napi error
+    // text is quoted verbatim in findings.md so we do not need to
+    // print it to stderr here.
     const msg = (caught as Error).message;
     expect(typeof msg).toBe('string');
     expect(msg.length).toBeGreaterThan(0);
-    // Print the exact napi error to stderr so the findings doc can
-    // quote it verbatim. (Vitest captures this under "Unhandled Logs"
-    // when the test passes; inspect with `--reporter=verbose`.)
-    // eslint-disable-next-line no-console -- spike observability only
-    console.error('[spike] invalid-kind napi error text:', msg);
+    // Assert the specific napi-surfaced phrase so a future
+    // `@ast-grep/napi` release that renames the error breaks loudly
+    // here instead of silently changing the contract downstream.
+    expect(msg).toContain('rule');
   });
 
   it('throws a catchable JS error for a rule object missing the "rule" key', () => {
