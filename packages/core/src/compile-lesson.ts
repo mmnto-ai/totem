@@ -245,22 +245,33 @@ export function buildCompiledRule(
   const globsObj = sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {};
 
   if (engine === 'ast-grep') {
-    if (!parsed.astGrepPattern || !parsed.message) {
-      return { rule: null, rejectReason: 'Missing astGrepPattern or message' };
+    // mmnto/totem#1407 split the field. Mutual exclusion is enforced
+    // upstream by the schema superRefine; here we pick whichever the
+    // LLM emitted and route it to validation.
+    const astSource: string | Record<string, unknown> | undefined =
+      typeof parsed.astGrepPattern === 'string' && parsed.astGrepPattern.length > 0
+        ? parsed.astGrepPattern
+        : parsed.astGrepYamlRule;
+
+    if (!astSource || !parsed.message) {
+      return {
+        rule: null,
+        rejectReason: 'Missing astGrepPattern or astGrepYamlRule or message',
+      };
     }
 
-    // Validate ast-grep pattern at compile time (#1062)
-    const astValidation = validateAstGrepPattern(parsed.astGrepPattern);
+    // Validate ast-grep pattern at compile time (#1062, #1339, #1407)
+    const astValidation = validateAstGrepPattern(astSource);
     if (!astValidation.valid) {
       return { rule: null, rejectReason: `Invalid ast-grep pattern: ${astValidation.reason}` };
     }
 
-    // Guard: reject patterns that match suppression directives (#1177)
-    // These rules can never fire — the engine suppresses matching lines before rule evaluation.
-    const astPatternStr =
-      typeof parsed.astGrepPattern === 'string'
-        ? parsed.astGrepPattern
-        : JSON.stringify(parsed.astGrepPattern);
+    // Guard: reject patterns that match suppression directives (#1177).
+    // For compound rules, the existing stringify path walks the entire
+    // tree; any `totem-ignore` marker anywhere in the nested structure
+    // is caught. Deliberately no object walker here (design doc open
+    // question 2, resolved "keep existing stringify path").
+    const astPatternStr = typeof astSource === 'string' ? astSource : JSON.stringify(astSource);
     if (isSelfSuppressing(astPatternStr)) {
       return {
         rule: null,
@@ -276,7 +287,7 @@ export function buildCompiledRule(
         message: parsed.message,
         engine: 'ast-grep',
         severity,
-        ...engineFields('ast-grep', parsed.astGrepPattern),
+        ...engineFields('ast-grep', astSource),
         compiledAt: now,
         createdAt: existing?.createdAt ?? now,
         ...globsObj,

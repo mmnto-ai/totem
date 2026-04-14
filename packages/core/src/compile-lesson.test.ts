@@ -10,6 +10,7 @@ import {
   verifyRuleExamples,
 } from './compile-lesson.js';
 import type { CompiledRule, CompilerOutput } from './compiler-schema.js';
+import { CompilerOutputSchema } from './compiler-schema.js';
 
 // ─── Helpers ────────────────────────────────────────
 
@@ -241,11 +242,11 @@ describe('self-suppression guard (#1177)', () => {
     expect(result.rejectReason).toContain('self-suppress');
   });
 
-  it('rejects ast-grep object pattern containing totem-context', () => {
+  it('rejects ast-grep compound rule containing totem-context', () => {
     const result = buildCompiledRule(
       {
         compilable: true,
-        astGrepPattern: { rule: { pattern: 'totem-context: something' } },
+        astGrepYamlRule: { rule: { pattern: 'totem-context: something' } },
         message: 'test',
         engine: 'ast-grep',
       } as CompilerOutput,
@@ -481,17 +482,21 @@ describe('buildCompiledRule ast-grep validation (#1062)', () => {
     expect(result.rejectReason).toContain('top-level expressions');
   });
 
-  it('rejects ast-grep rule with object pattern missing rule key', () => {
-    const parsed: CompilerOutput = {
+  it('rejects ast-grep rule where Zod blocks a yaml rule missing the rule key', () => {
+    // The rule parameter is required by the Zod schema; construct the
+    // object as unknown to sidestep the type-narrowing and prove that
+    // parseCompilerResponse rejects it at the schema boundary rather
+    // than at buildCompiledRule. This is the invariant from the design
+    // doc: missing-rule-key is a parse-time failure, not a runtime one.
+    const malformed = {
       compilable: true,
       message: 'test',
       engine: 'ast-grep',
-      astGrepPattern: { pattern: 'console.log($A)' },
+      astGrepYamlRule: { pattern: 'console.log($A)' },
     };
-    const result = buildCompiledRule(parsed, lesson, existingByHash);
-    expect(result.rule).toBeNull();
-    expect(result.rejectReason).toContain('Invalid ast-grep pattern');
-    expect(result.rejectReason).toContain('rule');
+    // Parse with the authoritative schema to prove Zod rejects.
+    const parsed = CompilerOutputSchema.safeParse(malformed);
+    expect(parsed.success).toBe(false);
   });
 
   it('accepts valid ast-grep string pattern', () => {
@@ -506,16 +511,49 @@ describe('buildCompiledRule ast-grep validation (#1062)', () => {
     expect(result.rule!.engine).toBe('ast-grep');
   });
 
-  it('accepts valid ast-grep object pattern with rule key', () => {
+  it('accepts valid ast-grep compound rule via astGrepYamlRule', () => {
     const parsed: CompilerOutput = {
       compilable: true,
       message: 'No console.log',
       engine: 'ast-grep',
-      astGrepPattern: { rule: { pattern: 'console.log($A)' } },
+      astGrepYamlRule: { rule: { pattern: 'console.log($A)' } },
     };
     const result = buildCompiledRule(parsed, lesson, existingByHash);
     expect(result.rule).not.toBeNull();
     expect(result.rule!.engine).toBe('ast-grep');
+    expect(result.rule!.astGrepYamlRule).toEqual({ rule: { pattern: 'console.log($A)' } });
+    expect(result.rule!.astGrepPattern).toBeUndefined();
+  });
+
+  it('buildCompiledRule passes astGrepYamlRule to validateAstGrepPattern and propagates NAPI rejections', () => {
+    // Syntactically-valid Zod shape (has `rule` key) but the leaf kind
+    // is a node type ast-grep does not recognize. Zod lets it through;
+    // napi rejects it. That is the precise boundary this test pins.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'nope',
+      engine: 'ast-grep',
+      astGrepYamlRule: { rule: { kind: '!!!NOT_A_REAL_NODE_KIND!!!' } },
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('Invalid ast-grep pattern');
+    // First-line napi error quoting per #1349
+    expect(result.rejectReason).toContain('ast-grep rejected pattern');
+  });
+
+  it('isSelfSuppressing still catches compound rules with deep totem-ignore leaves', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'nope',
+      engine: 'ast-grep',
+      astGrepYamlRule: {
+        rule: { all: [{ pattern: 'foo($A)' }, { pattern: 'totem-ignore marker' }] },
+      },
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('self-suppress');
   });
 });
 
