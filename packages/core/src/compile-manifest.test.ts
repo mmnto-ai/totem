@@ -156,6 +156,14 @@ describe('canonicalStringify', () => {
     const b = { a: 1 };
     expect(canonicalStringify(a)).toBe(canonicalStringify(b));
   });
+
+  it('throws on a bare undefined input (contract violation)', () => {
+    // Undefined in record values is filtered out upstream; a bare
+    // undefined here means a caller bug, not malformed data on disk.
+    // Fail loud rather than silently produce the string "undefined"
+    // that would then hash to something no other input produces.
+    expect(() => canonicalStringify(undefined)).toThrow(/undefined is not a JSON value/);
+  });
 });
 
 describe('writeCompileManifest + readCompileManifest', () => {

@@ -99,6 +99,12 @@ export function generateInputHash(lessonsDir: string): string {
  *     payload is plain JSON already, so this never fires.
  */
 export function canonicalStringify(value: unknown): string {
+  if (value === undefined) {
+    throw new TotemParseError(
+      'canonicalStringify: undefined is not a JSON value',
+      'The manifest hash payload must be JSON-parseable. Undefined entries are filtered out of records before serialisation, so a direct undefined here indicates a caller bug rather than malformed data on disk.',
+    );
+  }
   if (value === null || typeof value !== 'object') {
     return JSON.stringify(value);
   }
