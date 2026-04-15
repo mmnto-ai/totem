@@ -29,6 +29,44 @@ export function escapeSqlString(input: string): string {
   return input.replace(/'/g, "''");
 }
 
+/**
+ * Stateless FTS-index probe. Shared by the instance-level `detectFtsIndex`
+ * that maintains `this.hasFtsIndex` and by `openReadSnapshot()` which needs
+ * to compute the flag for a fresh per-call table handle without touching
+ * shared state (mmnto/totem#1418).
+ */
+async function detectFtsIndexOnTable(
+  table: lancedb.Table | null,
+  onWarn: (msg: string) => void,
+): Promise<boolean> {
+  if (!table) return false;
+  try {
+    const indices = await table.listIndices();
+    return indices.some((idx) => idx.indexType === 'FTS' || idx.name === 'content_idx');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    onWarn(`FTS index detection failed: ${msg}`);
+    return false;
+  }
+}
+
+/**
+ * Close a per-query LanceDB connection opened by `openReadSnapshot()`.
+ * `close()` can throw in some edge cases (e.g., the underlying directory
+ * was removed mid-query). Swallow and warn so a failed close never masks
+ * a successful search result (mmnto/totem#1418).
+ */
+function closeReadSnapshot(db: lancedb.Connection, onWarn: (msg: string) => void): void {
+  try {
+    if (db.isOpen()) {
+      db.close();
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    onWarn(`LanceDB read-snapshot close failed: ${msg}`);
+  }
+}
+
 export class LanceStore {
   private db: lancedb.Connection | null = null;
   private table: lancedb.Table | null = null;
@@ -36,6 +74,12 @@ export class LanceStore {
   private embedder: Embedder;
   private hasFtsIndex = false;
   private onWarn: (msg: string) => void;
+  /**
+   * Instrumentation: number of times the read path has reopened the handle
+   * via `refreshReadHandle()`. Exposed via `readRefreshCount` so tests
+   * (mmnto/totem#1418) can assert the reopen fires on every search.
+   */
+  private readRefreshes = 0;
   /**
    * Source repo context injected at construction time. Primary stores use
    * `{ absolutePathRoot: projectRoot }` with no `sourceRepo`; linked stores
@@ -226,20 +270,7 @@ export class LanceStore {
 
   /** Check whether an FTS index exists on the table. */
   private async detectFtsIndex(): Promise<void> {
-    if (!this.table) {
-      this.hasFtsIndex = false;
-      return;
-    }
-    try {
-      const indices = await this.table.listIndices();
-      this.hasFtsIndex = indices.some(
-        (idx) => idx.indexType === 'FTS' || idx.name === 'content_idx',
-      );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.onWarn(`FTS index detection failed: ${msg}`);
-      this.hasFtsIndex = false;
-    }
+    this.hasFtsIndex = await detectFtsIndexOnTable(this.table, this.onWarn);
   }
 
   /** Whether the FTS index is available for hybrid search. */
@@ -250,55 +281,71 @@ export class LanceStore {
   /**
    * Search with optional hybrid mode (vector + FTS with RRF reranking).
    * Falls back to vector-only if no FTS index exists.
+   *
+   * Opens a fresh LanceDB snapshot for this call (mmnto/totem#1418) so an
+   * external `totem sync` cannot leave this store reading a stale view,
+   * and so concurrent searches never invalidate each other's handle.
    */
   async search(options: SearchOptions): Promise<SearchResult[]> {
-    if (!this.table) return [];
+    const snapshot = await this.openReadSnapshot();
+    try {
+      if (!snapshot.table) return [];
 
-    const maxResults = options.maxResults ?? 5;
-    const boundary = options.boundary;
-    const useHybrid = (options.hybrid ?? true) && this.hasFtsIndex;
+      const maxResults = options.maxResults ?? 5;
+      const boundary = options.boundary;
+      const useHybrid = (options.hybrid ?? true) && snapshot.hasFtsIndex;
 
-    if (useHybrid) {
-      return runHybridSearch(
-        this.table,
+      if (useHybrid) {
+        return await runHybridSearch(
+          snapshot.table,
+          this.embedder,
+          this.onWarn,
+          options.query,
+          options.typeFilter as ContentType | undefined,
+          maxResults,
+          this.sourceContext,
+          boundary,
+        );
+      }
+
+      return await runVectorSearch(
+        snapshot.table,
         this.embedder,
-        this.onWarn,
         options.query,
         options.typeFilter as ContentType | undefined,
         maxResults,
         this.sourceContext,
         boundary,
       );
+    } finally {
+      closeReadSnapshot(snapshot.db, this.onWarn);
     }
-
-    return runVectorSearch(
-      this.table,
-      this.embedder,
-      options.query,
-      options.typeFilter as ContentType | undefined,
-      maxResults,
-      this.sourceContext,
-      boundary,
-    );
   }
 
   /**
-   * FTS-only search — no embedder required.
+   * FTS-only search. No embedder required.
    * Use when embedding is unavailable (offline, no API key, cold-start fallback).
    * Requires an FTS index to exist; returns empty if none available.
+   *
+   * Opens a fresh LanceDB snapshot for this call (mmnto/totem#1418).
    */
   async searchFts(options: SearchOptions): Promise<SearchResult[]> {
-    if (!this.table || !this.hasFtsIndex) return [];
+    const snapshot = await this.openReadSnapshot();
+    try {
+      if (!snapshot.table || !snapshot.hasFtsIndex) return [];
 
-    return runFtsSearch(
-      this.table,
-      this.onWarn,
-      options.query,
-      options.typeFilter as ContentType | undefined,
-      options.maxResults ?? 5,
-      this.sourceContext,
-      options.boundary,
-    );
+      return await runFtsSearch(
+        snapshot.table,
+        this.onWarn,
+        options.query,
+        options.typeFilter as ContentType | undefined,
+        options.maxResults ?? 5,
+        this.sourceContext,
+        options.boundary,
+      );
+    } finally {
+      closeReadSnapshot(snapshot.db, this.onWarn);
+    }
   }
 
   /** Delete all chunks from a specific file (for incremental re-index). */
@@ -326,6 +373,81 @@ export class LanceStore {
     this.table = null;
     this.hasFtsIndex = false;
     await this.connect();
+  }
+
+  /**
+   * Open a fresh read snapshot (connection + table + fts flag) for a single
+   * query. Scoped to the caller, NOT written onto `this.db` / `this.table`,
+   * so concurrent searches don't race each other's handle lifetime
+   * (mmnto/totem#1418 Shield CRITICAL follow-up).
+   *
+   * **Why unconditional reopen.** The MCP server holds LanceStore for the
+   * life of the process. When `totem sync` (a separate process) rewrites
+   * `.lancedb/` files underneath us, LanceDB's in-memory manifest keeps
+   * pointing at the pre-sync snapshot. Vector search against that stale
+   * view returns empty, which falls through to FTS-only via the hybrid
+   * path, producing uniform ~0.016 RRF scores instead of real similarity
+   * ranks. The corrupt path is silent because no exception fires.
+   *
+   * **Why not mtime-check.** A benchmark (see scripts/bench-lance-open.ts)
+   * measured connect+openTable at ~0.5-1.1ms per call against real indexes.
+   * That's well under the 10ms threshold where mtime gating starts to pay
+   * for its own complexity. Reopening every time is strictly simpler and
+   * eliminates a whole category of cache-invalidation bugs.
+   *
+   * **Why per-call snapshots.** Assigning the fresh connection to `this.db`
+   * and then closing the old one from a second concurrent caller would
+   * invalidate the first caller's in-flight query. Instead each call holds
+   * its own connection + table references through the query lifetime, and
+   * closes the connection in a finally block after the results return.
+   * The instance-level `this.db` / `this.table` fields are still maintained
+   * so write paths and existing consumers (healthCheck, stats, count) see
+   * an up-to-date view on the next non-read call via `connect()`.
+   *
+   * **Why not also refresh write paths.** `totem sync` owns the writer
+   * connection exclusively inside a single process. Write operations
+   * (insert, deleteByFile, reset) already hold a consistent view for
+   * their own workflow and a mid-sequence reopen would drop the in-flight
+   * table reference that `insert()` sets during first-table creation.
+   */
+  private async openReadSnapshot(): Promise<{
+    db: lancedb.Connection;
+    table: lancedb.Table | null;
+    hasFtsIndex: boolean;
+  }> {
+    const db = await lancedb.connect(this.dbPath);
+
+    // Shield WARN guard: `tableNames()` and `openTable()` can both throw.
+    // Without this try/catch the partially-opened `db` connection would
+    // leak if either step failed, because the caller's finally block that
+    // calls `closeReadSnapshot` only runs once the snapshot object is
+    // returned. Close the connection inline before rethrowing so the
+    // failure path is leak-free.
+    try {
+      const tableNames = await db.tableNames();
+
+      let table: lancedb.Table | null = null;
+      let hasFtsIndex = false;
+      if (tableNames.includes(TOTEM_TABLE_NAME)) {
+        table = await db.openTable(TOTEM_TABLE_NAME);
+        hasFtsIndex = await detectFtsIndexOnTable(table, this.onWarn);
+      }
+
+      this.readRefreshes += 1;
+      return { db, table, hasFtsIndex };
+    } catch (err) {
+      closeReadSnapshot(db, this.onWarn);
+      throw err;
+    }
+  }
+
+  /**
+   * Test-seam instrumentation (mmnto/totem#1418): total count of read-path
+   * handle refreshes since this store was constructed. Asserted by the
+   * stale-handle regression test to confirm every search() call reopens.
+   */
+  get readRefreshCount(): number {
+    return this.readRefreshes;
   }
 
   /** Return true if the table doesn't exist or has zero rows. */
