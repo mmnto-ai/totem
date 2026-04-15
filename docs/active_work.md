@@ -1,8 +1,17 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.14.8` (publishing 2026-04-14) with **2,785 tests** across core, CLI, and MCP packages and **407 compiled rules** (387 active, 20 archived).
+The project is at release `@mmnto/cli@1.14.8` (published 2026-04-14) with **1.14.9 — Precision Engine** feature-complete on `main` and pending release. Test counts: **2,879 across core, CLI, and MCP packages**. **411 compiled rules** in the rules array (389 active, 22 archived). The `nonCompilable` ledger separately tracks 889 lessons the LLM declined to convert into rules; that array is sibling to `rules` and not counted toward `rule_count`. The next release ships compound ast-grep rule support, a compile-time smoke gate, and the `badExample` requirement that closes the LLM-hallucination loop.
 
 ### Recently Shipped
+
+**1.14.9** (feature-complete on `main`, release pending) -- The Precision Engine. Compound ast-grep rule support + compile-time smoke gate. Closes the loop on rule quality before Pack Distribution starts.
+
+- **#1410** (closes #1406) -- spike: `@ast-grep/napi` compound YAML rule validation. ADR promotion gate for Proposal 226. Empirically proved the runtime accepts NapiConfig polymorphically; identified the `inside: { pattern: ... }` silent-zero-match sharp edge that drove the `kind:` allow-list in #1409.
+- **#1412** (closes #1407) -- feat(core): `astGrepYamlRule` field on `CompiledRule` schema with mutual exclusion via `superRefine`. Optional `badExample` field added (flipped to required in #1420). Deterministic manifest hashing via `canonicalStringify` so key-order variation in compound rules cannot trip `verify-manifest`. Backward-compat guard preserves existing manifests byte-for-byte.
+- **#1415** (closes #1408) -- feat(core): runtime engine support for compound rules. Per-rule try/catch in `executeQuery` so one malformed rule cannot crash a whole file's lint pass. New `'failure'` event variant on `RuleEventCallback` (semantically distinct from `'suppress'`). New `compile-smoke-gate.ts` module that runs every Pipeline 2/3 rule against its own `badExample` snippet at compile time.
+- **#1420** (closes #1409) -- feat(cli): compiler prompt rewrite teaching Sonnet to emit compound rules with `kind:` for outer combinator targets. Flipped `CompilerOutputSchema.badExample` from optional to required for ast-grep AND regex engines. New `KIND_ALLOW_LIST` exported constant — single source of truth for permitted outer-combinator kinds, will feed `totem doctor` linting in a future release. Postmerge (#1422) extracted 4 architectural lessons; LLM correctly classified all 4 as nonCompilable.
+
+**Architectural impact:** Pipeline 2 compile throughput dropped to near zero between #1415 and #1420 because the gate started rejecting rules before Sonnet was taught to emit `badExample`. This was the gate working as designed — better zero rules than zero-match hallucinations distributed via packs. Pipeline 1 (manual) gate enforcement is deferred to #1414 pending a 136-lesson backfill sweep.
 
 **1.14.8** (2026-04-14) -- Perf Follow-up. Final patch closing the 1.14.x cycle.
 
@@ -44,24 +53,11 @@ All filed from bot review findings during the marathon; all deferred with tracke
 - **#1355** — Tighten `Standardize exception messages` lint rule so it does not fire on internal-wrapper `Error` constructions (surfaced during #1349 and #1356).
 - **#1357** — Migrate `safeExec` callers to walk cause chain per general rule 102 (GCA concurred this deferral is legitimate).
 
-### Current: 1.14.9 — Precision Engine
+### Current: 1.15.0 — The Distribution Pipeline
 
-Prerequisite for 1.15.0 Pack Distribution. Packs distribute rules, so rule quality IS the product. Shipping Pack Distribution before compound ast-grep support would distribute structural false positives to every downstream consumer. Build the precision instrument, then open the distribution pipes.
+**Blocked by the pre-1.15.0 deep review gate (#1421).** All 1.15.0 implementation tickets are paused until the foundation review passes. Rationale: Pack Distribution is the first release where rules leave the repo, so foundation bugs would distribute to every downstream consumer. Catching at the foundation layer is orders of magnitude cheaper than retro-fixing every pack consumer.
 
-Epic: mmnto-ai/totem-strategy#81. Proposal 226 in `.strategy/proposals/active/226-compound-ast-grep-rules.md`. ADR promotion is gated on the `@ast-grep/napi` YAML validation spike.
-
-**Implementation chain (strict dependency order):**
-
-- **#1406** — spike: `@ast-grep/napi` compound YAML rule validation (ADR gate)
-- **#1407** — feat(core): extend `CompiledRule` schema with `astGrepYamlRule` field
-- **#1408** — feat(core): runtime engine support for compound ast-grep rules
-- **#1409** — feat(cli): compiler prompt tuning for compound rule emission
-
-**Phase 4 (follow-up, separate ticket):** Bulk-recompile the 20+ archived rules tagged `upgradeTarget: compound` in `.totem/compiled-rules.json` using the new compiler.
-
-### Next: 1.15.0 — The Distribution Pipeline
-
-Deferred behind 1.14.9. All four pre-1.15.0 blocker P0s are already closed. Phase 2 (mesh completion) can proceed without tripping over the same governance-engine rakes that surfaced during the 1.14.2 rename PR.
+Once #1421 closes, 1.15.0 implementation work begins. Phase 2 (mesh completion) can proceed without tripping over the same governance-engine rakes that surfaced during the 1.14.2 rename PR.
 
 **Phase 2 — Mesh completion (wraps up the 1.14.0 "Nervous System Foundation" story arc):**
 
@@ -82,6 +78,13 @@ Deferred behind 1.14.9. All four pre-1.15.0 blocker P0s are already closed. Phas
 - **#1218** — Broad `throw $ERR` ast-grep pattern needs refinement
 - **#1219** — Lazy-load compiler prompt templates
 - **#1350**, **#1352**, **#1354**, **#1355**, **#1357** — Follow-ups from the 2026-04-11 four-P0 sweep
+
+**1.14.9 follow-ups (unmilestoned, unblock between cycles):**
+
+- **#1414** — Pipeline 1 smoke gate flip after 136-lesson Bad Example backfill. Mechanism shipped in #1415; hard enforcement deferred until the curation sweep.
+- **#1418** — MCP server holds a stale LanceDB handle after `totem sync` rebuilds embeddings. Surfaced empirically while syncing the strategy submodule reorg. 1.14.x patch or 1.15.0 pre-distribution hardening; Pack Distribution cannot ship a stale-handle bug in the federated query surface.
+- **#1419** — Cryptographic attestation for the Trap Ledger (SOX compliance gap). Filed at tier-3 by Gemini. Closes the gap in Proposal 225's enterprise pitch where the ledger was claimed as "cryptographically logged" but is currently a flat append-only file.
+- **#1421** — Pre-1.15.0 deep code review gate. Four-surface independent pass on `main` between 1.14.9 release and the first 1.15.0 ticket.
 
 ### After Next: 1.16.0 — The Ingestion Pipeline
 
