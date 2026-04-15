@@ -5,11 +5,9 @@ import * as path from 'node:path';
 
 import { z } from 'zod';
 
-import { TotemConfigError } from '@mmnto/totem';
-
 import { log } from '../ui.js';
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
-import { isQuotaError, MODEL_NAME_RE } from './orchestrator.js';
+import { assertValidModelName, isQuotaError } from './orchestrator.js';
 
 // ─── Constants ───────────────────────────────────────
 
@@ -102,18 +100,13 @@ export async function invokeShellOrchestrator(
   // The {model} token used to be substituted raw, which turned a config-supplied
   // string into a shell-injection sink. A malicious totem.config.ts could set
   // `defaultModel: "gemini-1.5; rm -rf /"` and ride `shell: true` straight to
-  // arbitrary code execution. The gate mirrors `resolveOrchestrator` exactly —
-  // leading-dash rejection (blocks shell-option tricks like `--exec`) plus the
-  // shared `MODEL_NAME_RE` allow-list. Using the same predicate on both surfaces
-  // keeps the validation symmetric so a model accepted upstream cannot be
-  // rejected here (and vice versa). GCA catch on mmnto/totem#1429.
-  if (model.startsWith('-') || !MODEL_NAME_RE.test(model)) {
-    throw new TotemConfigError(
-      `Shell orchestrator refuses model ${JSON.stringify(model)}. Model names may only contain word characters, dots, slashes, colons, underscores, and hyphens, and must not start with a dash. This guards against shell injection via the {model} token in orchestrator.command.`,
-      'Set orchestrator.defaultModel / overrides to a plain model identifier (e.g., "claude-sonnet-4-6", "anthropic:claude-sonnet-4-6", "gpt-5.4-mini").',
-      'CONFIG_INVALID',
-    );
-  }
+  // arbitrary code execution. `assertValidModelName` is the single shared gate
+  // used here and in `resolveOrchestrator` so any model accepted by one path
+  // is accepted by the other (and vice versa). Covers regex allow-list +
+  // leading-dash reject + post-parse model-portion check (catches `gemini:`
+  // and `anthropic:-foo` which pass the flat regex but are unsafe). CR catch
+  // on mmnto/totem#1429.
+  assertValidModelName(model);
 
   const fullPrompt =
     systemPrompt !== undefined && systemPrompt.length > 0 ? `${systemPrompt}\n\n${prompt}` : prompt;

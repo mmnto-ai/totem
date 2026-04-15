@@ -279,7 +279,7 @@ describe('invokeShellOrchestrator', () => {
             tag: 'Test',
             totemDir,
           }),
-        ).rejects.toThrow(/refuses model/);
+        ).rejects.toThrow(/Invalid model name/);
         // Critical invariant: spawn MUST NOT have been called. The allow-list
         // fires before we ever reach shell execution.
         expect(mockedSpawn).not.toHaveBeenCalled();

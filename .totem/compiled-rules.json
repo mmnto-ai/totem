@@ -6644,43 +6644,17 @@
       "archivedReason": "Over-broad: pattern JSON.stringify($OBJ) matches any single-argument JSON.stringify call in compile-manifest.ts, including the legitimate primitive-serialization call inside canonicalStringify itself (line 103). The lesson intent is specifically about the canonicalStringify function, not all JSON.stringify calls in the file. upgradeTarget: compound (Proposal 226) — a compound rule with inside: function canonicalStringify(...) { $$$ } could constrain the pattern to calls that bypass canonicalStringify, catching the real anti-pattern without firing on the helper's own implementation. Phase 4 recompile candidate once #1408 and #1409 ship."
     },
     {
-      "lessonHash": "20aa11df474faf48",
+      "lessonHash": "85bca8dcad2b19cb",
       "lessonHeading": "Pipeline 5: observation from shield",
-      "pattern": "if\\s+\\(model\\.startsWith\\('-'\\)\\s+\\|\\|\\s+!MODEL_NAME_RE\\.test\\(model\\)\\)\\s+\\{",
-      "message": "`TotemParseError` is used for a configuration validation error. Consider using `TotemConfigError` (as used in `resolveOrchestrator` for the exact same validation) to maintain consistent error semantics and avoid stylistic drift.",
-      "engine": "regex",
-      "compiledAt": "2026-04-15T05:37:10.108Z",
-      "createdAt": "2026-04-15T05:37:10.108Z",
-      "fileGlobs": [
-        "**/*.ts"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "7616deb08fb0bb7b",
-      "lessonHeading": "Pipeline 5: observation from shield",
-      "pattern": "const\\s+resolvedCmd\\s+=\\s+command",
-      "message": "Missing test for the bug fix regarding string replacement back-references (`$&`, etc.) in `invokeShellOrchestrator`. Bug fixes require corresponding `.test.ts` updates to prevent regressions.",
-      "engine": "regex",
-      "compiledAt": "2026-04-15T05:42:00.153Z",
-      "createdAt": "2026-04-15T05:42:00.153Z",
-      "fileGlobs": [
-        "**/*.ts"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "cbda3b118183c615",
-      "lessonHeading": "Pipeline 5: observation from shield",
-      "pattern": "const\\s+quotedModel\\s+=\\s+quoteShellArg\\(model\\);",
-      "message": "Missing test for bug fix: The fix to prevent regex back-references (like `$&`) in `quotedPath` or `quotedModel` from corrupting shell command interpolation requires a corresponding test case to prevent regressions.",
+      "pattern": "systemPrompt\\s+!==\\s+undefined\\s+&&\\s+systemPrompt\\.length\\s+>\\s+0\\s+\\?\\s+`\\$\\{systemPrompt\\}\\\\n\\\\n\\$\\{prompt\\}`\\s+:\\s+prompt;",
+      "message": "Calling `assertValidModelName(model)` in `invokeShellOrchestrator` introduces a double-parsing bug. `resolveOrchestrator` already strips the provider prefix and passes `parsed.model` to the invoke function. Because `assertValidModelName` applies Gate 3 (`parseModelString`), it will re-parse the already-stripped model string. This falsely rejects valid models containing colons (e.g., `shell:foo:-bar` becomes `foo:-bar`, which Gate 3 splits again, rejecting `-bar` for starting with `-`). Gate 3 is a lookahead check only needed in `resolveOrchestrator` to ensure the post-strip string doesn't start with `-`. `invokeShellOrchestrator` should revert to only checking Gate 1 and 2.",
       "engine": "regex",
       "severity": "warning",
       "fileGlobs": [
         "**/*.ts"
       ],
-      "compiledAt": "2026-04-15T05:42:20.623Z",
-      "createdAt": "2026-04-15T05:42:20.623Z"
+      "compiledAt": "2026-04-15T06:04:25.951Z",
+      "createdAt": "2026-04-15T06:04:25.951Z"
     }
   ],
   "nonCompilable": [

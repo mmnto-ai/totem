@@ -123,15 +123,43 @@ export function parseModelString(
 
 // ─── Centralized model resolution (#248) ────────────
 
+/** Characters allowed in model names — restricts shell metacharacters. */
+const MODEL_NAME_RE = /^[\w./:_-]+$/;
+
 /**
- * Characters allowed in model names — restricts shell metacharacters.
+ * Validate a model name string against shell-safety gates. Single source of
+ * truth for both `resolveOrchestrator` (config-load, raw provider:model
+ * input) and `invokeShellOrchestrator` (shell-interpolation, post-parse
+ * stripped model input).
  *
- * Exported as the single source of truth so orchestrators that perform
- * shell interpolation (`shell-orchestrator.ts`) can gate on the exact
- * same surface as `resolveOrchestrator`. Any divergence would re-open
- * the class of config-driven shell-injection mmnto/totem#1429 fixes.
+ * Two gates applied to the input string as-is:
+ *   1. **Leading-dash reject.** Blocks shell-option tricks like `--exec`.
+ *   2. **Allow-list regex.** `MODEL_NAME_RE` restricts to word chars,
+ *      dots, slashes, colons, underscores, and hyphens — covers every
+ *      model identifier used in practice (provider-qualified, namespace/
+ *      model, ollama quantized tags).
+ *
+ * Gates 1 + 2 are safe to apply at ANY stage — raw `provider:model` strings
+ * and stripped model-portions both pass the same allow-list. The post-parse
+ * "model-portion not empty and not dash-prefixed" check (Gate 3) lives
+ * inline in `resolveOrchestrator` where the split happens, NOT in this
+ * shared helper — applying it to an already-stripped model causes a
+ * double-parse that falsely rejects valid names like `foo:-bar` that were
+ * safe pre-split (Shield catch on mmnto/totem#1429 GCA round 2).
+ *
+ * CR catch on mmnto/totem#1429 round 1: exporting only the regex created
+ * a drift vector where the shell path could diverge from the config path.
+ * This helper closes that vector for the checks that BOTH paths need.
  */
-export const MODEL_NAME_RE = /^[\w./:_-]+$/;
+export function assertValidModelName(rawModel: string): void {
+  if (rawModel.startsWith('-') || !MODEL_NAME_RE.test(rawModel)) {
+    throw new TotemConfigError(
+      `Invalid model name '${rawModel}'. Model names may only contain word characters, dots, slashes, colons, underscores, and hyphens, and must not start with a dash.`,
+      'Check your orchestrator.model config value and remove any invalid characters.',
+      'CONFIG_INVALID',
+    );
+  }
+}
 
 export interface ResolvedOrchestrator {
   parsed: { provider: string; model: string };
@@ -149,13 +177,10 @@ export function resolveOrchestrator(
   baseProvider: string,
   baseInvoke: InvokeOrchestrator,
 ): ResolvedOrchestrator {
-  if (rawModel.startsWith('-') || !MODEL_NAME_RE.test(rawModel)) {
-    throw new TotemConfigError(
-      `Invalid model name '${rawModel}'. Model names may only contain word characters, dots, slashes, colons, underscores, and hyphens.`,
-      'Check your orchestrator.model config value and remove any invalid characters.',
-      'CONFIG_INVALID',
-    );
-  }
+  // Shared gates 1 + 2 (regex + leading-dash). Symmetric with the check in
+  // `invokeShellOrchestrator` so any model accepted by one path is accepted
+  // by the other.
+  assertValidModelName(rawModel);
 
   const parsed = parseModelString(rawModel, baseProvider);
 
@@ -167,6 +192,12 @@ export function resolveOrchestrator(
     );
   }
 
+  // Gate 3 — post-parse model-portion check. Applied only here, not in the
+  // shared helper, because the helper is also called from the shell-invoke
+  // path where the model has already been through parseModelString once.
+  // Double-parsing an already-stripped model splits on any embedded `:` a
+  // second time and falsely rejects inputs that were safe pre-strip (Shield
+  // catch on mmnto/totem#1429).
   if (!parsed.model || parsed.model.startsWith('-')) {
     throw new TotemConfigError(
       `Invalid model name in '${rawModel}'. The model portion must not be empty or start with a hyphen.`,
