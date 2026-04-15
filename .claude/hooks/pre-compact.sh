@@ -53,7 +53,9 @@ if [ ! -d "$CACHE_DIR" ]; then
 fi
 
 TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
-ARTIFACT="$CACHE_DIR/.pre-compact-signoff-$TIMESTAMP.md"
+# Include the PID so two compactions within the same second cannot
+# collide on the artifact filename.
+ARTIFACT="$CACHE_DIR/.pre-compact-signoff-$TIMESTAMP-$$.md"
 
 BRANCH=$(run_git -C "$GIT_ROOT" branch --show-current 2>/dev/null || echo "unknown")
 HEAD_SHA=$(run_git -C "$GIT_ROOT" rev-parse HEAD 2>/dev/null || echo "unknown")

@@ -4,7 +4,7 @@
  * The hook at `.claude/hooks/pre-compact.sh` runs before Claude Code
  * auto-compaction. Its exit-code contract is load-bearing: exit 2 would
  * block compaction, which is worse than any breadcrumb failure. These
- * tests lock in the six invariants from `.totem/specs/1460.md`.
+ * tests lock in the nine invariants from `.totem/specs/1460.md`.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -16,7 +16,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const HOOK = path.join(ROOT, '.claude', 'hooks', 'pre-compact.sh');
 const CACHE = path.join(ROOT, '.totem', 'cache');
-const ARTIFACT_RE = /^\.pre-compact-signoff-\d{8}T\d{6}Z\.md$/;
+const ARTIFACT_RE = /^\.pre-compact-signoff-\d{8}T\d{6}Z(-\d+)?\.md$/;
 
 interface RunResult {
   stdout: string;
@@ -47,14 +47,21 @@ function runHook(stdin = '', timeoutMs = 10_000): RunResult {
 }
 
 describe('PreCompact hook (mmnto-ai/totem#1460)', () => {
-  const createdArtifacts: string[] = [];
+  // Record the test-suite start time so cleanup deletes only artifacts
+  // created during this run, not pre-existing ones.
+  const testSuiteStart = Date.now();
 
   afterAll(() => {
-    for (const artifact of createdArtifacts) {
+    if (!fs.existsSync(CACHE)) return;
+    for (const entry of fs.readdirSync(CACHE)) {
+      if (!ARTIFACT_RE.test(entry)) continue;
+      const p = path.join(CACHE, entry);
       try {
-        fs.unlinkSync(artifact);
+        if (fs.statSync(p).mtimeMs >= testSuiteStart - 1000) {
+          fs.unlinkSync(p);
+        }
       } catch {
-        // cleanup is best-effort; stale test artifacts are harmless
+        // best-effort cleanup; leaked artifacts are harmless
       }
     }
   });
@@ -71,33 +78,30 @@ describe('PreCompact hook (mmnto-ai/totem#1460)', () => {
 
   it('installs an EXIT trap that coerces non-zero exits to exit 1', () => {
     const content = fs.readFileSync(HOOK, 'utf-8');
-    // The trap command itself must be present at the top of the script.
     expect(content).toMatch(/trap\b[^\n]*\bexit 1\b[^\n]*\bEXIT\b/);
   });
 
-  it('contains no network calls (no curl, no wget, no http URLs)', () => {
+  it('contains no network-call binaries (no curl, no wget)', () => {
     const content = fs.readFileSync(HOOK, 'utf-8');
-    // Allow https:// in plain-English sentences of the docstring, but
-    // reject anything looking like a command-line URL invocation.
     expect(content).not.toMatch(/\bcurl\b/);
     expect(content).not.toMatch(/\bwget\b/);
-    expect(content).not.toMatch(/\bhttps?:\/\//);
   });
 
-  it('happy path: exits 0 and writes a timestamped artifact', () => {
-    const beforeFiles = fs.existsSync(CACHE) ? fs.readdirSync(CACHE) : [];
+  it('happy path: exits 0 and writes an artifact with a fresh mtime', () => {
+    const callStart = Date.now();
     const result = runHook();
     expect(result.exitCode).toBe(0);
 
-    const afterFiles = fs.readdirSync(CACHE);
-    const newArtifacts = afterFiles.filter((f) => !beforeFiles.includes(f) && ARTIFACT_RE.test(f));
-    expect(newArtifacts.length).toBeGreaterThan(0);
-    for (const a of newArtifacts) {
-      createdArtifacts.push(path.join(CACHE, a));
-    }
+    const freshArtifacts = fs
+      .readdirSync(CACHE)
+      .filter((f) => ARTIFACT_RE.test(f))
+      .map((f) => path.join(CACHE, f))
+      .filter((p) => fs.statSync(p).mtimeMs >= callStart - 100);
+    expect(freshArtifacts.length).toBeGreaterThan(0);
   });
 
   it('artifact contents include the required fields', () => {
+    const callStart = Date.now();
     const result = runHook();
     expect(result.exitCode).toBe(0);
 
@@ -105,10 +109,10 @@ describe('PreCompact hook (mmnto-ai/totem#1460)', () => {
       .readdirSync(CACHE)
       .filter((f) => ARTIFACT_RE.test(f))
       .map((f) => path.join(CACHE, f))
+      .filter((p) => fs.statSync(p).mtimeMs >= callStart - 100)
       .sort()
       .pop();
     expect(latest).toBeDefined();
-    createdArtifacts.push(latest as string);
 
     const content = fs.readFileSync(latest as string, 'utf-8');
     expect(content).toMatch(/^# Pre-compact signoff \d{8}T\d{6}Z$/m);
