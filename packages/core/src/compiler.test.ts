@@ -922,10 +922,14 @@ describe('CompiledRuleSchema status field', () => {
 
 describe('parseCompilerResponse', () => {
   it('parses a valid compilable response', () => {
+    // Post mmnto-ai/totem#1409: regex and ast-grep compilable responses
+    // must carry a non-empty badExample. Adding one here is the
+    // realistic happy-path shape and keeps the expect-equal tight.
     const response = JSON.stringify({
       compilable: true,
       pattern: '\\bnpm\\b',
       message: 'Use pnpm instead of npm',
+      badExample: 'npm install lodash',
     });
 
     const result = parseCompilerResponse(response);
@@ -933,6 +937,7 @@ describe('parseCompilerResponse', () => {
       compilable: true,
       pattern: '\\bnpm\\b',
       message: 'Use pnpm instead of npm',
+      badExample: 'npm install lodash',
     });
   });
 
@@ -943,9 +948,10 @@ describe('parseCompilerResponse', () => {
   });
 
   it('extracts JSON from a code fence', () => {
+    // Post mmnto-ai/totem#1409: compilable regex rules need badExample.
     const response = `Here is the compiled rule:
 \`\`\`json
-{"compilable": true, "pattern": "console\\\\.log", "message": "Remove debug logging"}
+{"compilable": true, "pattern": "console\\\\.log", "message": "Remove debug logging", "badExample": "console.log('hi')"}
 \`\`\``;
 
     const result = parseCompilerResponse(response);
@@ -957,7 +963,7 @@ describe('parseCompilerResponse', () => {
   it('extracts JSON from a tilde-fenced code block (#1319)', () => {
     const response = `Here is the compiled rule:
 ~~~json
-{"compilable": true, "pattern": "console\\\\.log", "message": "Remove debug logging"}
+{"compilable": true, "pattern": "console\\\\.log", "message": "Remove debug logging", "badExample": "console.log('hi')"}
 ~~~`;
 
     const result = parseCompilerResponse(response);
@@ -997,11 +1003,13 @@ describe('parseCompilerResponse', () => {
   });
 
   it('parses a response with fileGlobs', () => {
+    // Post mmnto-ai/totem#1409: compilable regex rules need badExample.
     const response = JSON.stringify({
       compilable: true,
       pattern: '\\$[a-zA-Z_]+',
       message: 'Quote shell variables',
       fileGlobs: ['*.sh', '*.bash', '*.yml'],
+      badExample: 'echo $HOME',
     });
 
     const result = parseCompilerResponse(response);
@@ -1010,38 +1018,45 @@ describe('parseCompilerResponse', () => {
       pattern: '\\$[a-zA-Z_]+',
       message: 'Quote shell variables',
       fileGlobs: ['*.sh', '*.bash', '*.yml'],
+      badExample: 'echo $HOME',
     });
   });
 
   it('strips single backtick wrappers from pattern fields', () => {
+    // Post mmnto-ai/totem#1409: compilable ast-grep rules need badExample.
     const response = JSON.stringify({
       compilable: true,
       engine: 'ast-grep',
       astGrepPattern: '`spawn($CMD, [$$$ARGS], { shell: true })`',
       pattern: '',
       message: 'Do not use shell:true with array args',
+      badExample: 'spawn("ls", [], { shell: true });',
     });
     const result = parseCompilerResponse(response);
     expect(result!.astGrepPattern).toBe('spawn($CMD, [$$$ARGS], { shell: true })');
   });
 
   it('strips single backtick wrappers from regex pattern', () => {
+    // Post mmnto-ai/totem#1409: compilable regex rules need badExample.
     const response = JSON.stringify({
       compilable: true,
       pattern: '`\\bconsole\\.log\\b`',
       message: 'No console.log',
+      badExample: 'console.log("hi")',
     });
     const result = parseCompilerResponse(response);
     expect(result!.pattern).toBe('\\bconsole\\.log\\b');
   });
 
   it('leaves patterns without backtick wrappers unchanged', () => {
+    // Post mmnto-ai/totem#1409: compilable ast-grep rules need badExample.
     const response = JSON.stringify({
       compilable: true,
       engine: 'ast-grep',
       astGrepPattern: '$OBJ.replace(process.cwd(), $R)',
       pattern: '',
       message: 'Use path.relative',
+      badExample: 'foo.replace(process.cwd(), "")',
     });
     const result = parseCompilerResponse(response);
     expect(result!.astGrepPattern).toBe('$OBJ.replace(process.cwd(), $R)');

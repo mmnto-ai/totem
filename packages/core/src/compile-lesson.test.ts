@@ -668,6 +668,97 @@ describe('buildCompiledRule smoke gate (mmnto/totem#1408)', () => {
   });
 });
 
+// ─── Compound rule + smoke gate invariants (mmnto-ai/totem#1409) ────
+
+describe('compound rule smoke gate (mmnto-ai/totem#1409)', () => {
+  const compoundLesson: LessonInput = {
+    index: 0,
+    heading: 'No const declarations inside for loops',
+    body: 'Hoist the const out of the loop or use let.',
+    hash: 'compound-1409',
+  };
+
+  it('accepts a compound rule with inside: { kind: for_statement } against a matching badExample', () => {
+    // Happy path from the spike harness test 1: kind-based outer target
+    // is the supported way to express "inside a for-loop". The smoke
+    // gate must accept this when the badExample contains a for-loop
+    // body; that pins the canonical compound shape against silent
+    // regression.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No const inside for-loop',
+      engine: 'ast-grep',
+      astGrepYamlRule: {
+        rule: {
+          pattern: 'const $VAR = $VAL',
+          inside: { kind: 'for_statement', stopBy: 'end' },
+        },
+      },
+      badExample: 'for (let i = 0; i < 10; i++) {\n  const inside = i * 2;\n}',
+    };
+    const result = buildCompiledRule(parsed, compoundLesson, existingByHash, {
+      enforceSmokeGate: true,
+    });
+    expect(result.rule).not.toBeNull();
+    expect(result.rule!.engine).toBe('ast-grep');
+    expect(result.rule!.astGrepYamlRule).toBeDefined();
+  });
+
+  it('rejects the inside: { pattern: for ($A; $B; $C) { $$$ } } sharp edge at the smoke gate', () => {
+    // Spike harness test 8 (compound.spike.test.ts:247) pins that
+    // pattern-shaped outer targets silently match zero in 0.42.0. The
+    // prompt forbids this shape; the smoke gate is the backstop. This
+    // test holds the gate honest: feed it the forbidden shape against
+    // the same snippet that the kind-based version matches, and the
+    // gate must reject because the runtime returns zero matches.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No const inside for-loop',
+      engine: 'ast-grep',
+      astGrepYamlRule: {
+        rule: {
+          pattern: 'const $VAR = $VAL',
+          inside: {
+            pattern: 'for ($INIT; $COND; $STEP) { $$$ }',
+            stopBy: 'end',
+          },
+        },
+      },
+      badExample: 'for (let i = 0; i < 10; i++) {\n  const inside = i * 2;\n}',
+    };
+    const result = buildCompiledRule(parsed, compoundLesson, existingByHash, {
+      enforceSmokeGate: true,
+    });
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('smoke gate');
+  });
+
+  it('rejects a compound rule with no badExample at all (schema-shaped CompilerOutput, gate-shaped test)', () => {
+    // Test the buildCompiledRule layer directly - the schema layer is
+    // covered in compiler-schema.test.ts. Here we prove the smoke-gate
+    // path also rejects a compound rule that arrives with no
+    // badExample, so callers that bypass the schema (e.g., the
+    // upgrade flow) still get the gate's protection.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No const inside for-loop',
+      engine: 'ast-grep',
+      astGrepYamlRule: {
+        rule: {
+          pattern: 'const $VAR = $VAL',
+          inside: { kind: 'for_statement', stopBy: 'end' },
+        },
+      },
+    };
+    const result = buildCompiledRule(parsed, compoundLesson, existingByHash, {
+      enforceSmokeGate: true,
+    });
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('smoke gate');
+    expect(result.rejectReason).toContain('badExample');
+  });
+});
+
 // ─── buildManualRule ────────────────────────────────
 
 describe('buildManualRule', () => {

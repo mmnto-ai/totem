@@ -187,8 +187,14 @@ const CompilerOutputBaseSchema = z.object({
   /** Compound ast-grep rule (NapiConfig). Mutually exclusive with `astGrepPattern`. */
   astGrepYamlRule: AstGrepYamlRuleSchema.optional(),
   /**
-   * Optional code snippet the rule is expected to match. Optional in
-   * 1.14.9; gate wired in mmnto/totem#1408.
+   * Code snippet the rule is expected to match. Flipped from optional to
+   * engine-conditional required in mmnto-ai/totem#1409 - regex and
+   * ast-grep rules must carry a non-empty snippet so the compile-time
+   * smoke gate (#1408) can execute the rule against known-bad code
+   * before it lands in compiled-rules.json. The Zod field stays
+   * optional here; the `refineBadExampleRequired` superRefine below
+   * enforces the engine-conditional requirement so the error message
+   * can name the engine and cite the ticket.
    */
   badExample: z.string().optional(),
   severity: z.enum(['error', 'warning']).optional(),
@@ -196,9 +202,45 @@ const CompilerOutputBaseSchema = z.object({
   reason: z.string().optional(),
 });
 
-export const CompilerOutputSchema = CompilerOutputBaseSchema.superRefine(
-  refineAstGrepMutualExclusion,
-);
+/**
+ * Enforce that Pipeline 2 / Pipeline 3 LLM output carries a non-empty
+ * `badExample` for every rule whose engine is covered by the compile-time
+ * smoke gate (regex and ast-grep, per mmnto-ai/totem#1408). The `ast`
+ * engine (Tree-sitter S-expression queries) is exempt because the smoke
+ * gate does not yet evaluate those rules - forcing `badExample` there
+ * would reject every ast-engine rule the LLM emits today.
+ *
+ * An absent `engine` field counts as `regex` because `buildCompiledRule`
+ * defaults a missing engine to regex. Without that equivalence the LLM
+ * could omit `engine` and bypass the gate silently.
+ *
+ * Applies only to compilable rules. Non-compilable output carries
+ * `reason` instead of a rule and has nothing for the gate to execute.
+ */
+function refineBadExampleRequired(
+  data: {
+    compilable: boolean;
+    engine?: 'regex' | 'ast' | 'ast-grep';
+    badExample?: string;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  if (!data.compilable) return;
+  const engineRequiresBadExample = data.engine !== 'ast';
+  if (!engineRequiresBadExample) return;
+  if (typeof data.badExample === 'string' && data.badExample.length > 0) return;
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    message:
+      'badExample is required (non-empty string) for regex and ast-grep engines (mmnto-ai/totem#1409)',
+    path: ['badExample'],
+  });
+}
+
+export const CompilerOutputSchema = CompilerOutputBaseSchema.superRefine((data, ctx) => {
+  refineAstGrepMutualExclusion(data, ctx);
+  refineBadExampleRequired(data, ctx);
+});
 
 export type CompilerOutput = z.infer<typeof CompilerOutputSchema>;
 
