@@ -22,7 +22,7 @@ Not mechanically enforced. Follow these because they reduce PR bot noise.
 
 - **Before coding:** Run `/preflight <issue>`. Create a feature branch.
 - **Before pushing:** `pnpm run format` → `totem lint` → `totem review` → verify compile manifest is current.
-- **After merging:** `totem lesson extract <prs>` → `totem lesson compile --cloud <url>` (6+ lessons).
+- **After merging:** `totem lesson extract <prs>` → `totem lesson compile` (6+ lessons). The `--cloud` flag is off-path until #1221 migrates the cloud worker to Sonnet; local compile is the golden path.
 - **NEVER** use `git push --no-verify`, `totem-ignore`, or `eslint-disable` without a ticket.
 - Git pre-push hook runs `totem lint` + `totem verify-manifest` (stateless, no LLM).
 
