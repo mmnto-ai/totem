@@ -41,6 +41,11 @@ After >15 turns of code changes: run `totem status`, re-query strategy ADRs for 
 
 - **Controller, not implementer.** Delegate code+test tasks to background agents. Keep this thread for decisions.
 
+## Tool Patterns
+
+- **Prefer Monitor over Bash `sleep` loops when waiting for a signal.** Kick the long-running process to the background and Monitor it. `sleep; check; sleep; check` patterns burn cache context every iteration; Monitor streams events only when they happen. Example: launch `pnpm test --watch` in the background and Monitor it, rather than writing a shell poll loop.
+- **Use `/loop` self-paced when reacting to a future state change.** `/loop` without an interval lets the model decide when to check back. Pairs with Monitor for long watches. Example: `/loop watch the CI on this branch, react when green`.
+
 ## Detailed Docs (read when relevant)
 
 - [Contributing rules](.claude/docs/contributing.md) — PR bot protocol (CR/GCA), AI_PROMPT_BLOCK, changesets
