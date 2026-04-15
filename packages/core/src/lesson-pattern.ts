@@ -241,7 +241,8 @@ export function extractYamlRuleAfterField(
 
   let parsed: unknown;
   try {
-    parsed = YAML.parse(yamlSrc); // totem-ignore-next-line: malformed YAML is a soft failure — caller treats `null` as "no compound rule"
+    parsed = YAML.parse(yamlSrc);
+    // totem-ignore-next-line: malformed YAML is a soft failure — caller treats `null` as "no compound rule"
   } catch {
     return null;
   }

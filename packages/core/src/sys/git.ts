@@ -237,15 +237,33 @@ export function resolveGitRoot(cwd: string): string | null {
     throwIfGitMissing(err);
     // Narrow-scope null: the only legitimate silent case is "not a git
     // repository". All other failures re-throw so callers cannot confuse
-    // "not in a repo" with "git broke while asking."
+    // "not in a repo" with "git broke while asking." Walk the cause chain
+    // because safeExec wraps the git stderr inside `err.cause` while the
+    // outer `err.message` is a generic "Command failed: git rev-parse ..."
+    // wrapper.
+    if (containsNotAGitRepo(err)) return null;
     const msg = err instanceof Error ? err.message : String(err);
-    if (/not a git repository/i.test(msg)) return null;
     throw new TotemGitError(
       `Failed to resolve git root: ${msg}`,
       'Check that the working directory is accessible and git is functional.',
       err,
     );
   }
+}
+
+function containsNotAGitRepo(err: unknown): boolean {
+  let cursor: unknown = err;
+  // Walk up to 8 cause-chain hops. Coerce each cursor to string via
+  // `.message` when available and `String(cursor)` otherwise so a cause
+  // that is a plain string or object (e.g., raw stderr surfaced via
+  // `Error.cause = stderrString`) still gets matched instead of silently
+  // terminating the chain walk.
+  for (let depth = 0; depth < 8 && cursor != null; depth += 1) {
+    const msg = cursor instanceof Error ? cursor.message : String(cursor);
+    if (/not a git repository/i.test(msg)) return true;
+    cursor = cursor instanceof Error ? cursor.cause : null;
+  }
+  return false;
 }
 
 /**

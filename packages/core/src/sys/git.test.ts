@@ -1,3 +1,5 @@
+import * as path from 'node:path';
+
 import * as crossSpawn from 'cross-spawn';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -14,6 +16,7 @@ import {
   getTagDate,
   inferScopeFromFiles,
   isFileDirty,
+  resolveGitRoot,
 } from './git.js';
 
 describe('getLatestTag', () => {
@@ -143,6 +146,31 @@ describe('isFileDirty', () => {
   it('throws TotemGitError when git fails (mmnto/totem#1440 — no silent-false footgun)', () => {
     vi.mocked(crossSpawn.sync).mockReturnValue(fail(new Error('spawn failed')) as never);
     expect(() => isFileDirty('/tmp', 'README.md')).toThrow(/Failed to check dirty status/);
+  });
+});
+
+describe('resolveGitRoot (mmnto/totem#1440)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('returns the normalized repo root when git succeeds', () => {
+    vi.mocked(crossSpawn.sync).mockReturnValue(ok('/home/user/repo\n') as never);
+    expect(resolveGitRoot('/home/user/repo/src')).toBe(path.normalize('/home/user/repo'));
+  });
+
+  it('returns null only when the error is the documented "not a git repository" case', () => {
+    vi.mocked(crossSpawn.sync).mockReturnValue(
+      fail(
+        new Error('fatal: not a git repository (or any of the parent directories): .git'),
+      ) as never,
+    );
+    expect(resolveGitRoot('/tmp')).toBeNull();
+  });
+
+  it('throws TotemGitError on other git failures (permission, corruption, timeout) — no silent-null footgun', () => {
+    vi.mocked(crossSpawn.sync).mockReturnValue(
+      fail(new Error('fatal: unable to access index: permission denied')) as never,
+    );
+    expect(() => resolveGitRoot('/tmp')).toThrow(/Failed to resolve git root/);
   });
 });
 
