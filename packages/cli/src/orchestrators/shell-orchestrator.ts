@@ -127,9 +127,18 @@ export async function invokeShellOrchestrator(
   // Defense in depth: even after the allow-list above rejects shell metacharacters,
   // we still shell-quote the model token at interpolation. Matches the treatment
   // {file} has always had. Two layers: validate, then escape.
+  //
+  // Use replacer FUNCTIONS instead of string replacements. `String.prototype.replace`
+  // interprets `$&`, `$'`, `$n`, etc. in a replacement STRING as back-references, so
+  // a `cwd` that happens to contain `$&` (e.g., a directory named `project$&`) would
+  // splice the regex match back in and corrupt the interpolated command. The
+  // function form bypasses that special-casing entirely. Shield catch on
+  // mmnto/totem#1429 GCA follow-up.
   const quotedPath = quoteShellArg(tempPath);
   const quotedModel = quoteShellArg(model);
-  const resolvedCmd = command.replace(/\{file\}/g, quotedPath).replace(/\{model\}/g, quotedModel);
+  const resolvedCmd = command
+    .replace(/\{file\}/g, () => quotedPath)
+    .replace(/\{model\}/g, () => quotedModel);
 
   log.info(tag, 'Invoking orchestrator (this may take 15-60 seconds)...');
 

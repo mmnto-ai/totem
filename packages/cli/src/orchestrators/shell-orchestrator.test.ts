@@ -330,6 +330,28 @@ describe('invokeShellOrchestrator', () => {
       const quoted = cmd.includes("'gemini-2.5-pro'") || cmd.includes('"gemini-2.5-pro"');
       expect(quoted).toBe(true);
     });
+
+    it('preserves `$&` and similar back-reference sequences in the resolved command (Shield catch, regression)', async () => {
+      // `String.prototype.replace` with a STRING replacement interprets `$&`,
+      // `$'`, `$`` , and `$1` as back-reference specials. A directory with `$&`
+      // in its name would silently corrupt the interpolated command. We use
+      // replacer FUNCTIONS to bypass that special-casing. This test pins the
+      // fix by creating a tempDir whose path contains `$&` and asserting the
+      // literal sequence appears in the resolved spawn command.
+      const weirdDir = path.join(tmpDir, 'project$&cwd');
+      fs.mkdirSync(path.join(weirdDir, totemDir, 'temp'), { recursive: true });
+      emitSuccess('ok');
+      await invokeShellOrchestrator({
+        prompt: 'prompt',
+        command: 'llm --model {model} < {file}',
+        model: 'gemini-2.5-pro',
+        cwd: weirdDir,
+        tag: 'Test',
+        totemDir,
+      });
+      const cmd = mockedSpawn.mock.calls[0]![0] as string;
+      expect(cmd).toContain('project$&cwd');
+    });
   });
 
   // ─── systemPrompt threading (mmnto/totem#1291 Phase 3 cascade fix) ──
