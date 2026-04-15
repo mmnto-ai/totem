@@ -122,7 +122,7 @@ describe('PreCompact hook (mmnto-ai/totem#1460)', () => {
     expect(content).toMatch(/^# Pre-compact signoff \d{8}T\d{6}Z$/m);
     expect(content).toMatch(/\*\*Branch:\*\*/);
     expect(content).toMatch(/\*\*HEAD:\*\*/);
-    expect(content).toMatch(/## git status --short/);
+    expect(content).toMatch(/## git status --short/); // totem-context: asserting the hook's markdown heading, not running git. See #1469 for over-broad rule.
     expect(content).toMatch(/## Last 5 commits/);
   });
 
