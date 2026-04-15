@@ -25,6 +25,20 @@ interface RunResult {
   durationMs: number;
 }
 
+// 1-second buffer absorbs file systems with 1s mtime resolution (some
+// network mounts, older filesystems) where the recorded mtime may lag
+// the wall clock by a fraction of a second.
+const MTIME_BUFFER_MS = 1_000;
+
+function getFreshArtifacts(callStart: number): string[] {
+  if (!fs.existsSync(CACHE)) return [];
+  return fs
+    .readdirSync(CACHE)
+    .filter((f) => ARTIFACT_RE.test(f))
+    .map((f) => path.join(CACHE, f))
+    .filter((p) => fs.statSync(p).mtimeMs >= callStart - MTIME_BUFFER_MS);
+}
+
 function runHook(stdin = '', timeoutMs = 10_000): RunResult {
   const start = Date.now();
   try {
@@ -57,7 +71,7 @@ describe('PreCompact hook (mmnto-ai/totem#1460)', () => {
       if (!ARTIFACT_RE.test(entry)) continue;
       const p = path.join(CACHE, entry);
       try {
-        if (fs.statSync(p).mtimeMs >= testSuiteStart - 1000) {
+        if (fs.statSync(p).mtimeMs >= testSuiteStart - MTIME_BUFFER_MS) {
           fs.unlinkSync(p);
         }
       } catch {
@@ -92,11 +106,7 @@ describe('PreCompact hook (mmnto-ai/totem#1460)', () => {
     const result = runHook();
     expect(result.exitCode).toBe(0);
 
-    const freshArtifacts = fs
-      .readdirSync(CACHE)
-      .filter((f) => ARTIFACT_RE.test(f))
-      .map((f) => path.join(CACHE, f))
-      .filter((p) => fs.statSync(p).mtimeMs >= callStart - 100);
+    const freshArtifacts = getFreshArtifacts(callStart);
     expect(freshArtifacts.length).toBeGreaterThan(0);
   });
 
@@ -105,13 +115,7 @@ describe('PreCompact hook (mmnto-ai/totem#1460)', () => {
     const result = runHook();
     expect(result.exitCode).toBe(0);
 
-    const latest = fs
-      .readdirSync(CACHE)
-      .filter((f) => ARTIFACT_RE.test(f))
-      .map((f) => path.join(CACHE, f))
-      .filter((p) => fs.statSync(p).mtimeMs >= callStart - 100)
-      .sort()
-      .pop();
+    const latest = getFreshArtifacts(callStart).sort().pop();
     expect(latest).toBeDefined();
 
     const content = fs.readFileSync(latest as string, 'utf-8');
