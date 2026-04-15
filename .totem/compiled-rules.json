@@ -6642,19 +6642,6 @@
       "severity": "warning",
       "status": "archived",
       "archivedReason": "Over-broad: pattern JSON.stringify($OBJ) matches any single-argument JSON.stringify call in compile-manifest.ts, including the legitimate primitive-serialization call inside canonicalStringify itself (line 103). The lesson intent is specifically about the canonicalStringify function, not all JSON.stringify calls in the file. upgradeTarget: compound (Proposal 226) — a compound rule with inside: function canonicalStringify(...) { $$$ } could constrain the pattern to calls that bypass canonicalStringify, catching the real anti-pattern without firing on the helper's own implementation. Phase 4 recompile candidate once #1408 and #1409 ship."
-    },
-    {
-      "lessonHash": "85bca8dcad2b19cb",
-      "lessonHeading": "Pipeline 5: observation from shield",
-      "pattern": "systemPrompt\\s+!==\\s+undefined\\s+&&\\s+systemPrompt\\.length\\s+>\\s+0\\s+\\?\\s+`\\$\\{systemPrompt\\}\\\\n\\\\n\\$\\{prompt\\}`\\s+:\\s+prompt;",
-      "message": "Calling `assertValidModelName(model)` in `invokeShellOrchestrator` introduces a double-parsing bug. `resolveOrchestrator` already strips the provider prefix and passes `parsed.model` to the invoke function. Because `assertValidModelName` applies Gate 3 (`parseModelString`), it will re-parse the already-stripped model string. This falsely rejects valid models containing colons (e.g., `shell:foo:-bar` becomes `foo:-bar`, which Gate 3 splits again, rejecting `-bar` for starting with `-`). Gate 3 is a lookahead check only needed in `resolveOrchestrator` to ensure the post-strip string doesn't start with `-`. `invokeShellOrchestrator` should revert to only checking Gate 1 and 2.",
-      "engine": "regex",
-      "severity": "warning",
-      "fileGlobs": [
-        "**/*.ts"
-      ],
-      "compiledAt": "2026-04-15T06:04:25.951Z",
-      "createdAt": "2026-04-15T06:04:25.951Z"
     }
   ],
   "nonCompilable": [
