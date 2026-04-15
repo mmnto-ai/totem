@@ -50,9 +50,9 @@ Strategic research not currently scoped to 1.14.0 or 1.15.0:
 
 ## Shipped Milestones
 
-### 1.14.x: The Nervous System Foundation + Hotfix Cycle (2026-04-09 to 2026-04-15)
+### 1.14.x: Nervous System Foundation + Hotfix Cycle
 
-Eleven releases over six days. Headline foundation work in 1.14.0, a four-P0 governance sweep across 1.14.3 through 1.14.5, quality sweep + capstone in 1.14.6 and 1.14.7, perf follow-up in 1.14.8, precision + bundle release on 2026-04-15.
+Eleven releases over six days (2026-04-09 to 2026-04-15). Headline foundation work in 1.14.0, a four-P0 governance sweep across 1.14.3 through 1.14.5, quality sweep + capstone in 1.14.6 and 1.14.7, perf follow-up in 1.14.8, precision + bundle release on 2026-04-15.
 
 - **1.14.0** (2026-04-09): Cross-Repo Context Mesh (#1295), LLM Context Caching opt-in preview (#1292), `/preflight` v2 design-doc gate (#1296).
 - **1.14.1** (2026-04-11): Hotfix Sweep and Phase 1 Papercuts. Nine PRs including Pipeline 5 sanity gate, compile prune no-op fix, tilde-fence support.
