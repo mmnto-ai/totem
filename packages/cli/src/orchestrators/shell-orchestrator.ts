@@ -18,6 +18,24 @@ const TEMP_ID_BYTES = 4;
 /** execFileSync on Windows can't resolve executables without `shell: true`. */
 const IS_WIN = process.platform === 'win32';
 
+/**
+ * Model names the shell orchestrator is willing to interpolate into a shell
+ * command. Intentionally restrictive: alphanumeric, plus dot, underscore,
+ * dash, colon, slash. Colon allows provider-qualified names like
+ * `anthropic:claude-sonnet-4-6`. Slash allows `ns/model` style. Underscore
+ * covers ollama quantized tags like `llama2:13b-chat-q4_0`. First char
+ * must be alphanumeric to reject leading-dash shell-option tricks.
+ *
+ * Rejecting anything outside this set guards against a poisoned
+ * `orchestrator.defaultModel` / overrides value executing shell commands
+ * via the `{model}` token.
+ */
+const MODEL_SAFE_RE = /^[a-zA-Z0-9][\w.:/-]*$/;
+
+function quoteShellArg(value: string): string {
+  return IS_WIN ? `"${value.replace(/"/g, '""')}"` : `'${value.replace(/'/g, "'\\''")}'`;
+}
+
 // ─── Gemini CLI JSON parsing ─────────────────────────
 
 const GeminiModelStatsSchema = z.object({
@@ -80,6 +98,20 @@ export async function invokeShellOrchestrator(
   // shell CLI fallback. Caught by Shield AI on the first push attempt as
   // part of the same cascade as the Gemini/OpenAI/Ollama fixes.
   const { prompt, systemPrompt, command, model, cwd, tag, totemDir } = opts;
+
+  // Reject poisoned model names BEFORE we ever interpolate into a shell string.
+  // The {model} token used to be substituted raw, which turned a config-supplied
+  // string into a shell-injection sink. A malicious totem.config.ts could set
+  // `defaultModel: "gemini-1.5; rm -rf /"` and ride `shell: true` straight to
+  // arbitrary code execution. The allow-list covers every model name used in
+  // practice (providers, dashes, dots, colons for provider-qualified names,
+  // slashes for ns/model) and rejects everything else loud and early.
+  if (!MODEL_SAFE_RE.test(model)) {
+    throw new Error(
+      `[Totem Error] Shell orchestrator refuses model ${JSON.stringify(model)}: contains characters outside the safe set [a-zA-Z0-9._:/-]. This guards against shell injection via the {model} token in orchestrator.command.`,
+    );
+  }
+
   const fullPrompt =
     systemPrompt !== undefined && systemPrompt.length > 0 ? `${systemPrompt}\n\n${prompt}` : prompt;
   const tmpName = `totem-${tag.toLowerCase()}-${crypto.randomBytes(TEMP_ID_BYTES).toString('hex')}.md`;
@@ -89,10 +121,12 @@ export async function invokeShellOrchestrator(
 
   fs.writeFileSync(tempPath, fullPrompt, { encoding: 'utf-8', mode: 0o600 });
 
-  const quotedPath = IS_WIN
-    ? `"${tempPath.replace(/"/g, '""')}"`
-    : `'${tempPath.replace(/'/g, "'\\''")}'`;
-  const resolvedCmd = command.replace(/\{file\}/g, quotedPath).replace(/\{model\}/g, model);
+  // Defense in depth: even after the allow-list above rejects shell metacharacters,
+  // we still shell-quote the model token at interpolation. Matches the treatment
+  // {file} has always had. Two layers: validate, then escape.
+  const quotedPath = quoteShellArg(tempPath);
+  const quotedModel = quoteShellArg(model);
+  const resolvedCmd = command.replace(/\{file\}/g, quotedPath).replace(/\{model\}/g, quotedModel);
 
   log.info(tag, 'Invoking orchestrator (this may take 15-60 seconds)...');
 

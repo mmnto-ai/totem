@@ -242,6 +242,95 @@ describe('invokeShellOrchestrator', () => {
     vi.useRealTimers();
   });
 
+  // ─── Model sanitization (shell-injection defense) ──
+  //
+  // Regression tests for the RCE found during the pre-1.15.0 deep review:
+  // the `{model}` token was interpolated raw into a string executed with
+  // `shell: true`, so a poisoned config value could run arbitrary shell
+  // commands. Fix is two layers: (1) allow-list MODEL_SAFE_RE rejects
+  // metacharacters at the boundary, (2) defense-in-depth shell-quoting of
+  // the token at interpolation.
+
+  describe('model sanitization', () => {
+    const EXPLOITS = [
+      ['semicolon', 'gemini; echo pwned'],
+      ['backtick', 'gemini`echo pwned`'],
+      ['dollar-subshell', 'gemini$(echo pwned)'],
+      ['pipe', 'gemini | echo pwned'],
+      ['redirect', 'gemini > /tmp/pwned'],
+      ['newline', 'gemini\necho pwned'],
+      ['ampersand', 'gemini && echo pwned'],
+      ['space', 'gemini pwned'],
+      ['quote', "gemini'"],
+      ['dquote', 'gemini"'],
+      ['paren', 'gemini()'],
+      ['leading-dash', '-rf'],
+    ] as const;
+
+    for (const [label, badModel] of EXPLOITS) {
+      it(`rejects model with ${label} and never spawns`, async () => {
+        await expect(
+          invokeShellOrchestrator({
+            prompt: 'prompt',
+            command: 'llm --model {model} < {file}',
+            model: badModel,
+            cwd: tmpDir,
+            tag: 'Test',
+            totemDir,
+          }),
+        ).rejects.toThrow(/refuses model/);
+        // Critical invariant: spawn MUST NOT have been called. The allow-list
+        // fires before we ever reach shell execution.
+        expect(mockedSpawn).not.toHaveBeenCalled();
+      });
+    }
+
+    const BENIGN = [
+      ['simple', 'gemini-2.5-pro'],
+      ['provider-qualified', 'anthropic:claude-sonnet-4-6'],
+      ['namespaced-slash', 'ollama/gemma4'],
+      ['dotted', 'claude.sonnet.4.6'],
+      ['ollama-tag', 'gemma4:e4b'],
+      ['alphanumeric-only', 'gpt5'],
+      ['ollama-quantized', 'llama2:13b-chat-q4_0'],
+      ['underscore', 'my_model_v2'],
+    ] as const;
+
+    for (const [label, goodModel] of BENIGN) {
+      it(`accepts benign model (${label})`, async () => {
+        emitSuccess('ok');
+        await invokeShellOrchestrator({
+          prompt: 'prompt',
+          command: 'llm --model {model} < {file}',
+          model: goodModel,
+          cwd: tmpDir,
+          tag: 'Test',
+          totemDir,
+        });
+        expect(mockedSpawn).toHaveBeenCalledOnce();
+      });
+    }
+
+    it('shell-quotes the model token even after allow-list passes (defense in depth)', async () => {
+      emitSuccess('ok');
+      await invokeShellOrchestrator({
+        prompt: 'prompt',
+        command: 'llm --model {model} < {file}',
+        model: 'gemini-2.5-pro',
+        cwd: tmpDir,
+        tag: 'Test',
+        totemDir,
+      });
+      const cmd = mockedSpawn.mock.calls[0]![0] as string;
+      // Expect the model to appear inside quotes (either ' on Unix or " on
+      // Windows). This prevents a future regression that removes the
+      // allow-list but leaves interpolation unquoted from re-opening the
+      // RCE hole.
+      const quoted = cmd.includes("'gemini-2.5-pro'") || cmd.includes('"gemini-2.5-pro"');
+      expect(quoted).toBe(true);
+    });
+  });
+
   // ─── systemPrompt threading (mmnto/totem#1291 Phase 3 cascade fix) ──
 
   describe('systemPrompt threading', { timeout: 15000 }, () => {
