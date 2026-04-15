@@ -10,11 +10,25 @@
 rule:
   any:
     - pattern: spawn($$$)
+      has:
+        kind: pair
+        all:
+          - has:
+              kind: property_identifier
+              regex: ^shell$
+          - has:
+              kind: 'true'
+        stopBy: end
     - pattern: spawnSync($$$)
-  has:
-    kind: pair
-    pattern: 'shell: true'
-    stopBy: end
+      has:
+        kind: pair
+        all:
+          - has:
+              kind: property_identifier
+              regex: ^shell$
+          - has:
+              kind: 'true'
+        stopBy: end
 ```
 
 **Message:** `spawn` / `spawnSync` with `shell: true` opens a shell-injection vector. Use `safeExec` (which routes through `cross-spawn.sync` without a shell) from `packages/core/src/sys/exec.ts` instead. The single legitimate exception — the shell orchestrator at `packages/cli/src/orchestrators/shell-orchestrator.ts` that pipes prompts to third-party CLI tools — is scope-excluded via `!` glob and has its own input-sanitization gate.
