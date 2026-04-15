@@ -273,6 +273,7 @@ Provide a dummy fallback API key (e.g., 'local-only'). _(architecture, curated)_
 
 - **Export types in WASM shims** - \*\*Scope:\*\* packages/core/src/ast-grep-wasm-shim.ts When creating a WASM-based compatibility shim for a native API, ensure all used types (like SgRoot and SgNode) are exported to prevent downstream type-checking failures. _(typescript, wasm, ast-grep)_
 - **Hooks designed to block agent actions, such as shield gates** - Hooks designed to block agent actions, such as shield gates for git operations, must use synchronous execution (e.g., `execSync`) to prevent the agent from proceeding before the check completes. Using asynchronous patterns in these specific triggers can lead to race conditions where the prohibited action occurs while the validation is still running. _(nodejs, devtools, architecture)_
+- **Exempt AST engines from smoke gate requirements** - \*\*Scope:\*\* packages/core/src/compiler-schema.ts The 'ast' engine is exempt from 'badExample' requirements because the current smoke gate infrastructure only supports regex and ast-grep verification. _(architecture, validation)_
 - **File deletions and mutations in cleanup or "eject" commands** - File deletions and mutations in cleanup or "eject" commands should be wrapped in try/catch blocks so a single permission error doesn't abort the entire routine. Failures should be recorded as skipped items in a summary report rather than throwing fatal exceptions. _(cli, error-handling, filesystem)_
 - **Proactively remove references to planned features from user** - Proactively remove references to planned features from user guides to avoid misleading users about current capabilities. Aligning documentation strictly with the current release state prevents confusion regarding features slated for later development phases. _(documentation, product-roadmap, technical-writing)_
 - **When documenting high-compliance tools, explicitly state** - When documenting high-compliance tools, explicitly state what technologies are NOT used (e.g., external APIs or non-deterministic inference) to preemptively address security concerns. Maintaining strict technical accuracy, such as distinguishing between directories and files, is critical for passing "red team" reviews by senior engineers. _(documentation, communication, engineering-culture)_
@@ -1143,6 +1144,7 @@ LLMs are notoriously poor at character counting; use. _(style, curated)_
 
 The Git -- separator treats all subsequent arguments. _(architecture, curated)_
 
+- **Normalize badExample snippets before validation** - \*\*Scope:\*\* packages/core/src/compiler.ts LLM-generated code snippets must have backtick or fence wrappers stripped before validation to prevent parse failures in automated smoke gates. _(llm, validation)_
 - **Check for the presence of the global ('g') flag** - \*\*Pattern:\*\* new\s+RegExp\s\*\(\s\*[^,]+\s\*,\s\*[^,]\*\.flags\s\*\+\s\*['"][^'"]\*g
   \*\*Engine:\*\* regex
   \*\*Scope:\*\* \*\*/\*.ts, \*\*/\*.tsx, \*\*/\*.js, \*\*/\*.jsx
@@ -1411,6 +1413,7 @@ Standardize exception messages with a consistent prefix. _(architecture, curated
 
 Always iterate through all regex matches (e.g.. _(architecture, curated)_
 
+- **Prefer kind in ast-grep inside constraints** - \*\*Scope:\*\* packages/\*\*/\*.ts, !\*\*/\*.test.\*, !\*\*/\*.spec.\* Using 'inside: { pattern: ... }' in ast-grep rules can cause silent zero-matches in smoke gates; use 'inside: { kind: ... }' for reliable structural matching. _(ast-grep, linting)_
 - **Use --body-file for LLM text in CLI** - \*\*Pattern:\*\* \b--body\b(?!-file)
   \*\*Engine:\*\* regex
   \*\*Scope:\*\* \*.sh, \*.bash, \*.yml, \*.yaml, packages/cli/\*\*/\*.ts
@@ -2112,6 +2115,7 @@ Perform shell-level existence checks before invoking CLI. _(performance, curated
 Do not hardcode main...HEAD in git commands; use the configurable base branch. _(style, curated)_
 
 - **Prefer canonical noun-verb CLI commands in docs** - \*\*Scope:\*\* .claude/skills/\*\*/\*.md, docs/\*\*/\*.md Using full noun-verb command structures in automation scripts and documentation prevents future churn if short-form aliases are deprecated. _(documentation, cli, dx)_
+- **Leverage Anthropic prompt caching for compilers** - \*\*Scope:\*\* packages/cli/src/commands/compile-templates.ts Structuring large system prompts to support caching can significantly reduce costs for high-frequency LLM compiler calls within a short TTL. _(llm, performance)_
 - **Using empty catch blocks during regex compilation in audit** - Using empty catch blocks during regex compilation in audit scripts hides malformed or broken rules from maintainers. Surfacing these specific failures is critical for maintaining rule-set integrity and preventing silent coverage gaps. _(regex, validation, dev-tools)_
 - **MCP session lifecycle limitation** - \*\*Pattern:\*\* session\.(start|end)|beforeDisconnect
   \*\*Engine:\*\* regex
