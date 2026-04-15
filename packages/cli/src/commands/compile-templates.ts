@@ -26,6 +26,7 @@
  */
 export const KIND_ALLOW_LIST = [
   'for_statement',
+  'for_in_statement',
   'while_statement',
   'do_statement',
   'try_statement',
@@ -273,7 +274,9 @@ The rule says "match any object literal that has \`shell: true\` as a descendant
 
 Note: do NOT try to express "empty catch block" via \`not: { has: { any: [...kind list...] } }\`. The inverse-of-allow-list shape produces false positives for any statement kind you forgot to enumerate (TypeScript has ~15 statement kinds, including \`for_statement\`, \`while_statement\`, \`switch_statement\`, \`try_statement\`, \`class_declaration\`, etc.). If you need to detect an empty block, use \`nthChild\` or a \`pattern:\` match on literal braces instead, and verify the rule against a badExample that exercises the common non-empty shapes.
 
-### Compound example C: spawn() calls that are NOT inside an import statement
+### Compound example C: JSON.parse() that is NOT wrapped in a try block
+
+Rule says "match \`JSON.parse(\$INPUT)\` calls that are NOT descendants of a try_statement". The negative combinator is meaningful here because call expressions can legitimately appear both inside and outside a \`try\` block; flagging only the unwrapped calls catches the real anti-pattern.
 
 \`\`\`json
 {
@@ -282,17 +285,19 @@ Note: do NOT try to express "empty catch block" via \`not: { has: { any: [...kin
   "pattern": "",
   "astGrepYamlRule": {
     "rule": {
-      "pattern": "spawn($CMD, $OPTS)",
+      "pattern": "JSON.parse($INPUT)",
       "not": {
-        "inside": { "kind": "import_statement", "stopBy": "end" }
+        "inside": { "kind": "try_statement", "stopBy": "end" }
       }
     }
   },
-  "message": "Use safeExec instead of raw spawn for runtime command execution",
-  "badExample": "spawn('rm', { shell: true });",
+  "message": "Wrap JSON.parse in try/catch - malformed input throws SyntaxError with unhelpful stack context",
+  "badExample": "const config = JSON.parse(raw);",
   "fileGlobs": ["**/*.ts", "**/*.tsx"]
 }
 \`\`\`
+
+Note: the \`not: inside:\` combinator is only meaningful when the matched node (the \`pattern:\` side) can actually appear as a descendant of the outer target. Matching a call_expression with \`not: inside: import_statement\` is vacuous because call_expressions cannot structurally live inside imports (imports only carry specifiers and identifiers). Check the tree-sitter grammar before reaching for \`not:\` to avoid teaching no-op filters.
 
 When emitting a compound rule, set \`"astGrepPattern"\` and \`"pattern"\` to the empty string and put the structural tree under \`"astGrepYamlRule"\`. The two ast-grep fields are mutually exclusive: one or the other, never both.
 
