@@ -320,6 +320,92 @@ describe('LanceStore', () => {
     });
   });
 
+  describe('stale-handle resilience (mmnto/totem#1418)', () => {
+    it('surfaces rows written by a separate instance without explicit reconnect', async () => {
+      // Reader connects to an empty directory first.
+      const readerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lance-stale-'));
+      const readerEmbedder = new FakeEmbedder();
+      const reader = new LanceStore(readerDir, readerEmbedder, { absolutePathRoot: readerDir });
+      await reader.connect();
+
+      try {
+        // First query on an empty store: zero results, refresh counter ticks.
+        const initial = await reader.search({ query: 'alpha' });
+        expect(initial).toEqual([]);
+        const refreshAfterFirst = reader.readRefreshCount;
+        expect(refreshAfterFirst).toBeGreaterThan(0);
+
+        // A separate LanceStore (standing in for `totem sync` as an external
+        // process) writes rows into the SAME directory. The reader holds a
+        // stale view at this point in the timeline.
+        const writerEmbedder = new FakeEmbedder();
+        const writer = new LanceStore(readerDir, writerEmbedder, {
+          absolutePathRoot: readerDir,
+        });
+        await writer.connect();
+        await writer.insert([
+          makeChunk({ content: 'alpha fresh content from external writer', label: 'alpha-row' }),
+          makeChunk({ content: 'beta fresh content from external writer', label: 'beta-row' }),
+        ]);
+
+        // Reader queries again WITHOUT calling reconnect(). The fix reopens
+        // the LanceDB handle inside search(), so the externally-written rows
+        // become visible on this next call.
+        const refreshed = await reader.search({ query: 'alpha content' });
+        expect(refreshed.length).toBeGreaterThan(0);
+        expect(refreshed.some((r) => r.label === 'alpha-row')).toBe(true);
+
+        // Every search() call reopens. Confirms the reopen-per-query contract
+        // the fix relies on.
+        expect(reader.readRefreshCount).toBe(refreshAfterFirst + 1);
+      } finally {
+        cleanTmpDir(readerDir);
+      }
+    });
+
+    it('increments readRefreshCount on every search call', async () => {
+      await store.insert([makeChunk({ content: 'counter test content' })]);
+      const before = store.readRefreshCount;
+      await store.search({ query: 'counter' });
+      await store.search({ query: 'counter' });
+      await store.search({ query: 'counter' });
+      expect(store.readRefreshCount).toBe(before + 3);
+    });
+
+    it('increments readRefreshCount on searchFts call', async () => {
+      await store.insert([makeChunk({ content: 'fts counter content' })]);
+      await store.createFtsIndex();
+      const before = store.readRefreshCount;
+      await store.searchFts({ query: 'fts' });
+      expect(store.readRefreshCount).toBe(before + 1);
+    });
+
+    it('handles concurrent searches without one closing the other handle', async () => {
+      // Shield CRITICAL guard: the reopen-per-query strategy used to close
+      // `this.db` on every call, which would invalidate an in-flight query
+      // launched by a concurrent caller. Per-call snapshots scoped to each
+      // caller eliminate that race; this test keeps the contract locked in.
+      await store.insert([
+        makeChunk({ content: 'concurrent alpha content', label: 'alpha' }),
+        makeChunk({ content: 'concurrent beta content', label: 'beta' }),
+        makeChunk({ content: 'concurrent gamma content', label: 'gamma' }),
+      ]);
+
+      const before = store.readRefreshCount;
+      const results = await Promise.all([
+        store.search({ query: 'concurrent alpha' }),
+        store.search({ query: 'concurrent beta' }),
+        store.search({ query: 'concurrent gamma' }),
+      ]);
+
+      // Every call reopens; none fail from a sibling closing its connection.
+      expect(store.readRefreshCount).toBe(before + 3);
+      for (const r of results) {
+        expect(r.length).toBeGreaterThan(0);
+      }
+    });
+  });
+
   describe('healthCheck', () => {
     it('returns healthy for a populated index', async () => {
       await store.insert([
