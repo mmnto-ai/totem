@@ -195,9 +195,11 @@ export function getGitLogSince(cwd: string, since?: string, maxCommits = 50): st
  * Check if a specific file has uncommitted changes (staged or unstaged).
  *
  * Fails loud: throws `TotemGitError` when git is absent or errors, so callers
- * cannot mistake "git broke" for "file is clean" (mmnto/totem#1440). Callers
- * that truly want silent fallback must opt in explicitly with their own
- * try/catch + `// totem-ignore` annotation.
+ * cannot mistake "git broke" for "file is clean" (mmnto/totem#1440). The one
+ * documented silent-false case is "not a git repository" — a legitimate state
+ * for a working directory that happens to sit outside version control.
+ * Callers that truly want silent fallback for OTHER git failures must opt in
+ * explicitly with their own try/catch + `// totem-context:` annotation.
  */
 export function isFileDirty(cwd: string, filePath: string): boolean {
   try {
@@ -208,6 +210,10 @@ export function isFileDirty(cwd: string, filePath: string): boolean {
     return output.length > 0;
   } catch (err) {
     throwIfGitMissing(err);
+    // Narrow-false: mirror the `resolveGitRoot` pattern — "not a git
+    // repository" is a legit state, not a bug. Return false there so callers
+    // running in non-git contexts don't crash. All other git failures throw.
+    if (containsNotAGitRepo(err)) return false;
     throw new TotemGitError(
       `Failed to check dirty status for ${filePath}.`,
       'Ensure you are inside a git repository and the file path is valid.',

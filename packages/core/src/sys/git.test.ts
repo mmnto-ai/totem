@@ -147,6 +147,15 @@ describe('isFileDirty', () => {
     vi.mocked(crossSpawn.sync).mockReturnValue(fail(new Error('spawn failed')) as never);
     expect(() => isFileDirty('/tmp', 'README.md')).toThrow(/Failed to check dirty status/);
   });
+
+  it('returns false when the cwd is not a git repository (narrow-false, mirrors resolveGitRoot)', () => {
+    vi.mocked(crossSpawn.sync).mockReturnValue(
+      fail(
+        new Error('fatal: not a git repository (or any of the parent directories): .git'),
+      ) as never,
+    );
+    expect(isFileDirty('/tmp', 'README.md')).toBe(false);
+  });
 });
 
 describe('resolveGitRoot (mmnto/totem#1440)', () => {

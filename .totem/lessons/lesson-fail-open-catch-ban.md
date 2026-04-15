@@ -15,11 +15,11 @@ rule:
       stopBy: end
 ```
 
-**Message:** Catch clause swallows the error without re-throwing. Tenet 4 (Fail Loud, Never Drift) forbids silent degradation. Either rethrow with `throw err` / `throw new Error(..., { cause: err })`, or if the catch is genuinely a best-effort cleanup (temp file unlink, socket close, etc.) add `// totem-ignore: intentional cleanup` above the try/catch to document the exception.
+**Message:** Catch clause swallows the error without re-throwing. Tenet 4 (Fail Loud, Never Drift) forbids silent degradation. Either rethrow with `throw err` / `throw new Error(..., { cause: err })`, or if the catch is genuinely a best-effort cleanup (temp file unlink, socket close, etc.) add `// totem-context: intentional cleanup` above the try/catch to document the exception.
 
 Tenet 4 (Fail Loud, Never Drift) forbids catching an error and continuing silently. A `catch` clause that contains no `throw_statement` anywhere in its body quietly swallows the failure, corrupting the upstream signal that the sensor-based architecture depends on. The `not.has.throw_statement` combinator with `stopBy: end` walks the entire catch body subtree so that rethrows nested inside `if` / `switch` / helper-call paths still pass.
 
-**The deliberate escape hatch:** a small set of catches are legitimately swallow-on-failure because the work inside is inherently best-effort (unlinking a temp file that may already be gone, closing a handle that may already be closed). For those sites, add `// totem-ignore: intentional cleanup` above the `try` block. Never weaken the rule; document the exception at the call site.
+**The deliberate escape hatch:** a small set of catches are legitimately swallow-on-failure because the work inside is inherently best-effort (unlinking a temp file that may already be gone, closing a handle that may already be closed). For those sites, add `// totem-context: intentional cleanup` above the `try` block. Never weaken the rule; document the exception at the call site.
 
 ### Bad Example
 

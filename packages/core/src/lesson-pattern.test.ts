@@ -742,7 +742,7 @@ describe('extractManualPattern — compound ast-grep path', () => {
     });
   });
 
-  it('rejects a yaml fence when Engine is not ast-grep (returns null)', () => {
+  it('throws TotemParseError when yaml fence present but Engine is not ast-grep (CR #1454 — fail-loud on authoring mismatch)', () => {
     const body = [
       '**Engine:** regex',
       '**Pattern:**',
@@ -751,7 +751,7 @@ describe('extractManualPattern — compound ast-grep path', () => {
       '  kind: catch_clause',
       '```',
     ].join('\n');
-    expect(extractManualPattern(body)).toBeNull();
+    expect(() => extractManualPattern(body)).toThrow(/Lesson authoring error/);
   });
 
   it('still parses flat **Pattern:** values when no yaml fence is present (regression guard)', () => {

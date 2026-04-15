@@ -12,6 +12,8 @@
 
 import YAML from 'yaml';
 
+import { TotemParseError } from './errors.js';
+
 export interface ManualPattern {
   /**
    * Flat pattern text. Empty string when the lesson provides a compound
@@ -192,7 +194,11 @@ export function extractYamlRuleAfterField(
   body: string,
   field: string,
 ): Record<string, unknown> | null {
-  const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Replacer function — `'\\$&'` would still parse correctly because `$&`
+  // expanding to the matched char is exactly the intent, but the function
+  // form is the safer idiom in substitution-sensitive contexts (matches the
+  // broader repo convention, GCA catch on mmnto/totem#1454).
+  const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, (ch) => '\\' + ch);
   const startRe = new RegExp(`^(?:\\*{2})?${safeField}(?:\\*{2})?:(?:\\*{2})?.*$`, 'i');
   // Section terminator — any bold field marker OR any markdown heading stops
   // the YAML scan. CR catch on mmnto/totem#1454: without the heading guard,
@@ -283,12 +289,18 @@ export function extractManualPattern(body: string): ManualPattern | null {
 
   // Compound path: a yaml-tagged fenced block immediately below **Pattern:**.
   // Only valid for engine: ast-grep — a compound YAML rule has no meaning for
-  // regex or tree-sitter-query engines. We keep the `engine` field explicit
-  // rather than inferring from the presence of the yaml fence so lessons
-  // declare their intent up front and any mismatch is loud.
+  // regex or tree-sitter-query engines. Authoring error (yaml fence + wrong
+  // engine) fails loud instead of silently falling through to Pipeline 2/3,
+  // because a lesson that went to the trouble of writing yaml clearly
+  // intended manual compound compilation (CR catch on mmnto/totem#1454).
   const yamlRule = extractYamlRuleAfterField(body, 'Pattern');
   if (yamlRule) {
-    if (engine !== 'ast-grep') return null;
+    if (engine !== 'ast-grep') {
+      throw new TotemParseError(
+        `Lesson authoring error: yaml-tagged \`**Pattern:**\` fence found but \`**Engine:**\` is \`${engine}\`. Compound yaml rules only compile under \`ast-grep\`.`,
+        'Set `**Engine:** ast-grep` on the lesson, or replace the yaml fence with a flat one-line pattern matching the chosen engine.',
+      );
+    }
     return {
       pattern: '',
       engine: 'ast-grep',

@@ -6669,33 +6669,6 @@
       "manual": true
     },
     {
-      "lessonHash": "3e54aea32721c6f4",
-      "lessonHeading": "Ban fail-open catch blocks that skip re-throwing",
-      "pattern": "",
-      "message": "Catch clause swallows the error without re-throwing. Tenet 4 (Fail Loud, Never Drift) forbids silent degradation. Either rethrow with `throw err` / `throw new Error(..., { cause: err })`, or if the catch is genuinely a best-effort cleanup (temp file unlink, socket close, etc.) add `// totem-ignore: intentional cleanup` above the try/catch to document the exception.\n\nTenet 4 (Fail Loud, Never Drift) forbids catching an error and continuing silently. A `catch` clause that contains no `throw_statement` anywhere in its body quietly swallows the failure, corrupting the upstream signal that the sensor-based architecture depends on. The `not.has.throw_statement` combinator with `stopBy: end` walks the entire catch body subtree so that rethrows nested inside `if` / `switch` / helper-call paths still pass.",
-      "engine": "ast-grep",
-      "astGrepYamlRule": {
-        "rule": {
-          "kind": "catch_clause",
-          "not": {
-            "has": {
-              "kind": "throw_statement",
-              "stopBy": "end"
-            }
-          }
-        }
-      },
-      "compiledAt": "2026-04-15T06:32:31.630Z",
-      "createdAt": "2026-04-15T06:32:31.630Z",
-      "fileGlobs": [
-        "packages/**/*.ts",
-        "!**/*.test.ts",
-        "!**/*.spec.ts"
-      ],
-      "severity": "error",
-      "manual": true
-    },
-    {
       "lessonHash": "d0815b6769304e26",
       "lessonHeading": "Ban `spawn()` / `spawnSync()` with `shell: true`",
       "pattern": "",
@@ -6757,6 +6730,33 @@
       ],
       "severity": "error",
       "manual": true
+    },
+    {
+      "lessonHash": "87aff037d7de47a7",
+      "lessonHeading": "Ban fail-open catch blocks that skip re-throwing",
+      "message": "Catch clause swallows the error without re-throwing. Tenet 4 (Fail Loud, Never Drift) forbids silent degradation. Either rethrow with `throw err` / `throw new Error(..., { cause: err })`, or if the catch is genuinely a best-effort cleanup (temp file unlink, socket close, etc.) add `// totem-context: intentional cleanup` above the try/catch to document the exception.\n\nTenet 4 (Fail Loud, Never Drift) forbids catching an error and continuing silently. A `catch` clause that contains no `throw_statement` anywhere in its body quietly swallows the failure, corrupting the upstream signal that the sensor-based architecture depends on. The `not.has.throw_statement` combinator with `stopBy: end` walks the entire catch body subtree so that rethrows nested inside `if` / `switch` / helper-call paths still pass.",
+      "engine": "ast-grep",
+      "severity": "error",
+      "manual": true,
+      "pattern": "",
+      "astGrepYamlRule": {
+        "rule": {
+          "kind": "catch_clause",
+          "not": {
+            "has": {
+              "kind": "throw_statement",
+              "stopBy": "end"
+            }
+          }
+        }
+      },
+      "compiledAt": "2026-04-15T07:06:45.072Z",
+      "createdAt": "2026-04-15T07:06:45.072Z",
+      "fileGlobs": [
+        "packages/**/*.ts",
+        "!**/*.test.ts",
+        "!**/*.spec.ts"
+      ]
     }
   ],
   "nonCompilable": [
