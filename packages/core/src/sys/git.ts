@@ -9,6 +9,13 @@ import { safeExec } from './exec.js';
 const GIT_COMMAND_TIMEOUT_MS = 15_000;
 const GIT_DIFF_MAX_BUFFER = 10 * 1024 * 1024; // 10MB — large diffs (e.g., compiled-rules.json)
 
+/**
+ * Bound on the cause-chain walk in {@link containsNotAGitRepo}. Errors produced
+ * by `safeExec` wrap git stderr one level deep; we allow extra headroom in case
+ * a caller adds its own wrapping layer, but refuse to walk an unbounded chain.
+ */
+const ERROR_CAUSE_WALK_MAX_DEPTH = 8;
+
 function throwIfGitMissing(err: unknown): void {
   const msg = err instanceof Error ? err.message : String(err);
   if (msg.includes('ENOENT') || msg.includes('not found')) {
@@ -257,12 +264,12 @@ export function resolveGitRoot(cwd: string): string | null {
 
 function containsNotAGitRepo(err: unknown): boolean {
   let cursor: unknown = err;
-  // Walk up to 8 cause-chain hops. Coerce each cursor to string via
-  // `.message` when available and `String(cursor)` otherwise so a cause
-  // that is a plain string or object (e.g., raw stderr surfaced via
-  // `Error.cause = stderrString`) still gets matched instead of silently
-  // terminating the chain walk.
-  for (let depth = 0; depth < 8 && cursor != null; depth += 1) {
+  // Walk the cause chain up to `ERROR_CAUSE_WALK_MAX_DEPTH` hops. Coerce each
+  // cursor to string via `.message` when available and `String(cursor)`
+  // otherwise so a cause that is a plain string or object (e.g., raw stderr
+  // surfaced via `Error.cause = stderrString`) still gets matched instead of
+  // silently terminating the chain walk.
+  for (let depth = 0; depth < ERROR_CAUSE_WALK_MAX_DEPTH && cursor != null; depth += 1) {
     const msg = cursor instanceof Error ? cursor.message : String(cursor);
     if (/not a git repository/i.test(msg)) return true;
     cursor = cursor instanceof Error ? cursor.cause : null;
