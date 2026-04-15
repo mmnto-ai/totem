@@ -1,10 +1,18 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.14.8` (published 2026-04-14) with **1.14.9 — Precision Engine** feature-complete on `main` and pending release. Test counts: **2,879 across core, CLI, and MCP packages**. **411 compiled rules** in the rules array (389 active, 22 archived). The `nonCompilable` ledger separately tracks 889 lessons the LLM declined to convert into rules; that array is sibling to `rules` and not counted toward `rule_count`. The next release ships compound ast-grep rule support, a compile-time smoke gate, and the `badExample` requirement that closes the LLM-hallucination loop.
+The project is at release `@mmnto/cli@1.14.10` (published 2026-04-15). Test counts: **2,922 across core, CLI, and MCP packages**. **414 compiled rules** in the rules array (392 active, 22 archived). The `nonCompilable` ledger separately tracks 889 lessons the LLM declined to convert into rules; that array is sibling to `rules` and not counted toward `rule_count`. 1.15.0 Pack Distribution is blocked by the pre-1.15.0 deep review gate (#1421); the 2026-04-15 joint planning pass (Ultraplan + strategy-repo pair) locked a three-phase sequence of workflow setup, gated grind, and pack delivery before the first 1.15.0 implementation ticket moves.
 
 ### Recently Shipped
 
-**1.14.9** (feature-complete on `main`, release pending) -- The Precision Engine. Compound ast-grep rule support + compile-time smoke gate. Closes the loop on rule quality before Pack Distribution starts.
+**1.14.10** (2026-04-15) -- The Bundle Release. Three PRs:
+
+- **#1429** -- shell-orchestrator `{model}` token RCE fix. Three rounds of GCA + Shield review: `MODEL_NAME_RE` unification, Windows MSVCRT escape, `TotemConfigError`, replacer-function interpolation to dodge `$&` back-reference regressions.
+- **#1454** -- Pipeline 1 compound rule authoring. Four rounds of CR + GCA review. Shared `assertValidModelName` helper, `TotemParseError` for regex failures, narrow-false pattern on `isFileDirty` and `resolveGitRoot`, markdown-heading terminator on YAML scan, `totem-context:` migration on `sys/git.ts`. Three inaugural compound rules shipped (rule count 411 → 414).
+- **#1455** -- Version Packages auto-PR. Three CHANGELOG.md nits fixed inline: `MODEL_SAFE_RE` → `MODEL_NAME_RE`, `TotemError(CHECK_FAILED)` → `TotemParseError`, broken fence formatting rewritten.
+
+Follow-ups filed from this sweep: #1456 (Repomix audit commit + submodule bump), #1457 (totem-ignore → totem-context: migration), #1458 (replace back-reference idiom in lesson-pattern.ts), #1459 (fill 61 scaffolded-but-TODO fixture files).
+
+**1.14.9** (2026-04-15) -- The Precision Engine. Compound ast-grep rule support + compile-time smoke gate. Closes the loop on rule quality before Pack Distribution starts.
 
 - **#1410** (closes #1406) -- spike: `@ast-grep/napi` compound YAML rule validation. ADR promotion gate for Proposal 226. Empirically proved the runtime accepts NapiConfig polymorphically; identified the `inside: { pattern: ... }` silent-zero-match sharp edge that drove the `kind:` allow-list in #1409.
 - **#1412** (closes #1407) -- feat(core): `astGrepYamlRule` field on `CompiledRule` schema with mutual exclusion via `superRefine`. Optional `badExample` field added (flipped to required in #1420). Deterministic manifest hashing via `canonicalStringify` so key-order variation in compound rules cannot trip `verify-manifest`. Backward-compat guard preserves existing manifests byte-for-byte.
@@ -55,36 +63,75 @@ All filed from bot review findings during the marathon; all deferred with tracke
 
 ### Current: 1.15.0 — The Distribution Pipeline
 
-**Blocked by the pre-1.15.0 deep review gate (#1421).** All 1.15.0 implementation tickets are paused until the foundation review passes. Rationale: Pack Distribution is the first release where rules leave the repo, so foundation bugs would distribute to every downstream consumer. Catching at the foundation layer is orders of magnitude cheaper than retro-fixing every pack consumer.
+**Blocked by the pre-1.15.0 deep review gate (#1421).** 24 tickets carry the `pre-1.15-review` label (12 tier-1 bugs, 9 tier-2 cleanup, 3 untiered), plus follow-ups #1456-#1459 from the 2026-04-15 PR sweep. All 1.15.0 implementation tickets are paused until the foundation review passes. Pack Distribution is the first release where rules leave the repo, so foundation bugs would distribute to every downstream consumer. Catching at the foundation layer is orders of magnitude cheaper than retro-fixing every pack consumer.
 
-Once #1421 closes, 1.15.0 implementation work begins. Phase 2 (mesh completion) can proceed without tripping over the same governance-engine rakes that surfaced during the 1.14.2 rename PR.
+The 2026-04-15 joint planning pass (Ultraplan cloud session + strategy-repo pair audit) locked a three-phase sequence of workflow improvements, gated grind, and pack delivery. Phases run in order; each phase has an explicit checkpoint before the next starts.
 
-**Phase 2 — Mesh completion (wraps up the 1.14.0 "Nervous System Foundation" story arc):**
+**Phase A: Workflow setup before the grind.** Cut bot-review-cycle cost before running it 24 times.
 
-- **#1307** — CLI `totem search` silently ignores `linkedIndexes`.
-- **#1308** — `totem doctor` has no Linked Indexes health check.
+- **Preflight v2 skill:** already shipped via #1296 (1.14.0) and #1299 (1.14.1). Proposal archived to `proposals/archive/` on 2026-04-15 after both planning passes tripped on the unarchived file.
+- **Tier-2 docs promotion:** Monitor tool and `/loop` self-paced examples into CLAUDE.md. Proposal 232 Tier 2 items promoted based on recurrence during the grind.
+- **#1460:** PreCompact hook. Highest blast radius of the workflow items; test in throwaway session with manual `/compact` before enabling globally.
+- **#1462:** if-scope `review-gate.sh`. One-line settings change narrowing from every Bash call to `Bash(git push*)`. Verify on a throwaway PR.
+- **#1461:** `/autofix-pr` trial. Run on the first Phase B bundle PR (concurrent, not prerequisite) for real bot-review pressure on the round-count comparison.
 
-**Phase 3 — Pack MVP (headline 1.15.0 work):**
+**Phase A.5: Architectural gates before the grind.** Strategy-pair audit surfaced two proposals that gate 1.15.0 foundations:
 
-- **#1059** — Rule pack distribution (headline)
-- Strategy **#35** — Distributing compiled rules (headline)
-- **#1243** — Pack schema (reads Gemini's Proposal 223 in `.strategy/proposals/active/223-pack-distribution.md`)
+- **Proposal 202:** Stacked Compilation Architecture. Promote to ADR and ticket as `pre-1.15-review`. Without a layered AST → template → LLM+verify → explicit-fail fallback, packs ship the 0/6 usable-rule failure mode from the 1.6.0 stress test. Load-bearing.
+- **Proposal 228:** Zero-Trust Agent Governance. Promote to ADR and commit `@totem/pack-agent-security` to 1.15.0 as the flagship pack (first production consumer of the pack infrastructure).
 
-**Bundled cleanup:**
+**Phase B: Pre-1.15-review grind.** 24 tickets ordered for minimum cross-PR interference:
 
-- **#1221** — Cloud compile worker Sonnet routing (critical for cloud distribution)
-- **#1232** — Thread explicit `cwd` through `compileCommand` (#1234 follow-up)
-- **#1235** — Batch `--upgrade` hashes in `runSelfHealing`
-- **#1218** — Broad `throw $ERR` ast-grep pattern needs refinement
-- **#1219** — Lazy-load compiler prompt templates
-- **#1350**, **#1352**, **#1354**, **#1355**, **#1357** — Follow-ups from the 2026-04-11 four-P0 sweep
+1. **#1279 first.** Pipeline 5 over-narrow captures. De-noising step for the whole grind; workaround fired four times on the 1.14.10 branch alone.
+2. **Tactical cleanup batch:** #1456, #1457, #1458, #1459 as four small PRs. First real exercise of the Preflight v2 tactical triage posture.
+3. **Tier-1 bundles grouped by `scope:` label:** mcp, cli, compiler, orchestrator, store. One bundle per PR; within each bundle, deepest architectural layer first so cascade fixes land before surface fixes.
+4. **Tier-2 cleanup** after tier-1 closes.
+5. **Re-tier the 3 untiered** during the Phase A planning window. Any that resolve to tier-3 or post-1.0 lose the `pre-1.15-review` label per ADR-075.
 
-**1.14.9 follow-ups (unmilestoned, unblock between cycles):**
+**Phase C: Pack Distribution headline work.** Gated on ADR-085 promotion from Proposed to Accepted.
 
-- **#1414** — Pipeline 1 smoke gate flip after 136-lesson Bad Example backfill. Mechanism shipped in #1415; hard enforcement deferred until the curation sweep.
-- **#1418** — MCP server holds a stale LanceDB handle after `totem sync` rebuilds embeddings. Surfaced empirically while syncing the strategy submodule reorg. 1.14.x patch or 1.15.0 pre-distribution hardening; Pack Distribution cannot ship a stale-handle bug in the federated query surface.
-- **#1419** — Cryptographic attestation for the Trap Ledger (SOX compliance gap). Filed at tier-3 by Gemini. Closes the gap in Proposal 225's enterprise pitch where the ledger was claimed as "cryptographically logged" but is currently a flat append-only file.
-- **#1421** — Pre-1.15.0 deep code review gate. Four-surface independent pass on `main` between 1.14.9 release and the first 1.15.0 ticket.
+- **#1421 meta-gate closes.**
+- **Promote ADR-085 (Totem Pack Ecosystem) to Accepted** with the five deferred decisions resolved: SemVer mapping, local-overrides-pack merge rule, conflict resolution, pack lifecycle, signing.
+- **Decompose ADR-085 into tickets:** pack resolver in `totem.config.ts` `extends` array, pack fetcher, signature verification, hash-stable compilation (#1232 is a prerequisite), pack lifecycle commands (`totem pack publish`, `totem pack verify`).
+- **Build `@totem/pack-agent-security`** as the flagship pack (Proposal 228).
+- **Wire Proposal 229 TBench spot-check** as the pack-release gate. Full harness stays Horizon 3; the spot-check is the 1.15.0-scoped subset.
+- **Decide ADR-086 (External Alert Ingestion) fate:** defer to 1.15.1 or 1.16.0. Recommend defer; Ingestion is wide and should not ride with Distribution.
+
+**Proposal dispositions from the 2026-04-15 audit.**
+
+- **Archive (already shipped):** `preflight-v2.md` (done 2026-04-15).
+- **Promote to ADR this cycle:** 202 (Stacked Compilation, `pre-1.15-review`), 228 (Zero-Trust, 1.15.0 flagship pack).
+- **Lock at 1.16.0:** Proposal 217 (LLM context caching).
+- **Lock at 1.17.0 with open-question iteration first:** Proposal 230 (content-hash embedding cache; three open questions on `library_version` keying, eviction policy, hit-ratio telemetry).
+- **Decompose as tickets now:** Proposal 191 vectors A+B (JIT bot prompts, trap-ledger pruning). Vector C (semantic LSP) stays Horizon 3+.
+- **Split into two tickets:** Proposal 229 (TBench spot-check 1.15.0, full harness Horizon 3).
+- **Formalize decision gate before further work:** Proposal 227 (multi-axis platform strategy; architectural roadmap vs decision-framing doc is unresolved).
+- **Stay parked:** 218 (governance fine-tuning, Horizon 3), 231 (P2P Iroh, Horizon 3+).
+- **Active reference through the cycle:** 232 (archive after Tier-1 items close).
+
+**Undecomposed ADR backfill candidates.** Strategy-pair audit identified 22 Accepted ADRs with zero ticket citations; 16 are buildable. Five highest-leverage for near-term pickup (all touch pack + ingestion paths):
+
+- **ADR-004:** AST-Aware Git Diff Analysis (Tree-sitter line-mapping + scope field on compiled rules).
+- **ADR-015:** Zero-Config Architectural Detection (5-stage fingerprinting).
+- **ADR-017:** Vector Cache Invalidation & Data Drift (hash-based staleness for LanceDB).
+- **ADR-025:** `totem doctor` Diagnostic Architecture.
+- **ADR-039:** Deterministic Briefing & Handoff.
+
+Backfill these as the 24-ticket grind drains.
+
+**Milestone guidance.** Per ADR-075, the 1.15.0 GitHub milestone stays thematically locked to Pack Distribution. The 24 `pre-1.15-review` tickets track via the label filter rather than attaching to the milestone. A dedicated "Pre-1.15.0 Gate" milestone is optional; the label filter suffices.
+
+**Watch-outs.**
+
+- **Phase A:** PreCompact hook (#1460) exit-2 blocks compaction indefinitely; recoverable only by hand-editing settings.json. Test in throwaway session first.
+- **Phase B:** Scope interleaving in PRs multiplies bot-review findings. One bundle per PR; do not mix `scope: mcp` and `scope: cli` in the same diff.
+- **Phase C:** Do not change compile-pipeline substrate (Proposals 217, 230) in the same release as the pack-distribution feature on top of it. Both are quarantined to 1.16.0+.
+
+**Other pending work (unmilestoned, unblock between cycles):**
+
+- **#1414:** Pipeline 1 smoke gate flip after 136-lesson Bad Example backfill. Mechanism shipped in #1415; hard enforcement deferred until the curation sweep.
+- **#1419:** Cryptographic attestation for the Trap Ledger (SOX compliance gap). Filed at tier-3 by Gemini. Closes the gap in Proposal 225's enterprise pitch where the ledger was claimed as "cryptographically logged" but is currently a flat append-only file.
+- **#1421:** Pre-1.15.0 deep code review gate (the meta-gate for the Phase B grind).
 
 ### After Next: 1.16.0 — The Ingestion Pipeline
 

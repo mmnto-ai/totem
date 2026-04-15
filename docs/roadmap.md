@@ -6,54 +6,26 @@ Totem is a standard library for codebase governance — deterministic primitives
 
 ---
 
-## 1.13.0 — The Refinement Engine (Active — release prep)
+## 1.15.0: The Distribution Pipeline (Active)
 
-**Theme:** Telemetry-driven rule refinement, compilation routing, and structural pattern upgrades.
+**Theme:** The Totem Pack Ecosystem. 1.13.0 proved the engine can generate high-fidelity ast-grep rules. The 1.14.x cycle wired the nervous system foundation: cross-repo context mesh, LLM context caching preview, `/preflight` v2 design-doc gate, compound ast-grep rule support, compile-time smoke gate, precision engine. 1.15.0 is where proven rules leave the repo and teams bundle and share them across repositories via the npm registry.
 
-- **Compilation Routing:**
-  - [x] **Sonnet Routing:** Compile pipeline routes through Claude Sonnet 4.6 (90% correctness vs Gemini Pro's 73%, 2.4s vs 19.6s avg). Validated by Strategy #73 benchmark across 30 lessons in 4 difficulty tiers.
-  - [x] **Bulk Recompile:** All 1156 lessons recompiled through Sonnet — 438 → 393 rules, 102 regex→ast-grep upgrades, 143 noisy Gemini-hallucinated rules purged. Quality > quantity.
-  - [x] **Prompt Rewrite:** Compiler system prompt rewritten with explicit ast-grep preference, syntax cheat sheet, and 6 compound pattern examples mined from benchmark failures.
-  - [x] **Parser Hardening:** Backtick wrapper stripping in both Pipeline 1 (manual `**Pattern:**` extraction) and Pipeline 2 (LLM JSON output) so generated patterns no longer ship with code-fence artifacts.
+Blocked by the pre-1.15.0 deep review gate (#1421). 24 tickets carry the `pre-1.15-review` label. The 2026-04-15 joint planning pass (Ultraplan cloud session + strategy-repo pair audit) locked a three-phase sequence. See `docs/active_work.md` for the full phase breakdown, ticket sequencing, and proposal dispositions.
 
-- **Telemetry-Driven Refinement:**
-  - [x] **Context Telemetry:** `RuleMetric` now tracks the per-context match distribution (code, string, comment, regex, unknown). Match-context comes from the rule runner's `astContext` field; historical hits are seeded into the `unknown` bucket so older metrics remain interpretable.
-  - [x] **`totem doctor` Diagnostic:** New `checkUpgradeCandidates` flags regex rules whose telemetry shows >20% of matches landing in non-code contexts (excluding `unknown` from the ratio, with a 5-event minimum-confidence floor).
-  - [x] **`totem compile --upgrade <hash>`:** Re-compile a single targeted rule through Claude Sonnet with a telemetry-driven directive prompt. Scoped cache eviction preserves the rule's original `createdAt` metadata; failure paths leave the old rule intact (fail-safe) while replacement paths handle both `compiled` and `skipped` outcomes consistently.
-  - [x] **Self-Healing Integration:** `totem doctor --pr` upgrade phase calls `compileCommand` in-process, bundles results into the existing branch + commit + PR flow, reports only actual replacements (not noop/skipped/failed) in the auto-heal PR body, and stages `compile-manifest.json` alongside the rules file.
-  - [x] **AST Empty Catch:** 8 empty-catch rules upgraded from the legacy `ast` (Tree-sitter `#eq?`) engine to `ast-grep` structural matching, correctly handling parameterless catch blocks and multi-line empty bodies.
+- **Phase A: Workflow setup before the grind.** Cut bot-review-cycle cost before running it across 24 tickets. Monitor tool and `/loop` self-paced examples into CLAUDE.md (Proposal 232 Tier 2), PreCompact hook (#1460), review-gate `if`-scope (#1462), `/autofix-pr` trial on first Phase B bundle PR (#1461). `/preflight` v2 already shipped via #1296 + #1299; the proposal was archived 2026-04-15 once both planning passes tripped on the unarchived file.
+- **Phase A.5: Architectural gates.** Promote Proposal 202 (Stacked Compilation Architecture) and Proposal 228 (Zero-Trust Agent Governance) to ADR. Proposal 202 tickets land with `pre-1.15-review` because without a layered AST → template → LLM+verify → explicit-fail fallback, packs ship the 0/6 usable-rule failure mode from the 1.6.0 stress test. Proposal 228 becomes the 1.15.0 flagship pack `@totem/pack-agent-security`, the first production consumer of the pack infrastructure.
+- **Phase B: Pre-1.15-review grind.** 24 tickets ordered to minimize cross-PR interference. #1279 ships first as the de-noising step (Pipeline 5 over-narrow captures fired four times on the 1.14.10 branch alone). Tactical cleanup batch #1456-#1459 next. Tier-1 bundles grouped by `scope:` label (mcp, cli, compiler, orchestrator, store); one bundle per PR; deepest architectural layer first within each bundle. Tier-2 cleanup after tier-1 closes.
+- **Phase C: Pack Distribution headline.** Promote ADR-085 (Totem Pack Ecosystem) to Accepted with its five deferred decisions resolved (SemVer mapping, local-overrides-pack merge rule, conflict resolution, pack lifecycle, signing). Decompose into tickets for pack resolver, pack fetcher, signature verification, hash-stable compilation, pack lifecycle commands. Ship `@totem/pack-agent-security`. Wire Proposal 229 TBench spot-check as the pack-release gate (full harness stays Horizon 3).
 
-- **Pipeline Hygiene:**
-  - [x] **Wind Tunnel:** Skip auto-scaffolded TODO fixtures so empty placeholder fixtures don't dilute the gate signal.
-  - [x] **Extract Dedup:** Heading-level exact-match deduplication runs before embedding similarity to short-circuit duplicate ingestion at zero cost.
-  - [x] **Config Drift Test:** Replaced the line-count limit on instructional files with a token-aware character + directive count limit.
-
-- **Governance (eat your own dogfood):**
-  - [x] **Lesson Protection Rule:** A near-miss almost deleted `.totem/lessons.md` (which sources 41+ functional ast-grep rules) under the mistaken assumption it was legacy cruft. Encoded the constraint as a Pipeline 1 lint rule with severity `error` that flags the destructive shell-removal command targeting the load-bearing lessons file, at the point of intent, across all script and documentation files. Demonstrates the totem thesis: when an agent makes a mistake, write a deterministic constraint, not a sticky note.
+Quarantined out of 1.15.0: Proposal 217 (LLM context caching, 1.16.0) and Proposal 230 (content-hash embedding cache, 1.17.0). Both touch compile pipeline substrate; changing substrate and the feature built on top of it in the same release is a silent-regression risk.
 
 ---
 
-## 1.14.0 — The Distribution Pipeline (Next)
+## 1.16.0: The Ingestion Pipeline
 
-**Theme:** The Totem Pack Ecosystem. We spent 1.13.0 proving the engine can generate high-fidelity ast-grep rules — the bulk Sonnet recompile produced 393 precise rules and the refinement diagnostic closes the loop on noisy ones. 1.14.0 is about letting teams **bundle and share** those proven rules across repositories via the npm registry.
+**Theme:** Source Diversity and the Self-Healing Loop. Expand the extraction pipeline to automatically convert external signals (GitHub Advanced Security alerts and standard repository lint warnings) into deterministic Totem lessons. Where 1.13.0 refined rules from internal telemetry and 1.14.x + 1.15.0 ship the nervous system and the distribution pipeline, 1.16.0 is about where the _inputs_ come from.
 
-- **Headline Work:**
-  - [ ] **Rule Pack Distribution:** Standardized bundles for reusable rule distribution (#1059). Teams should be able to publish a versioned pack of compiled rules to npm and consume them in other projects under the same governance contract that locally-compiled rules satisfy.
-  - [ ] **Distributing Compiled Rules:** Strategy #35 research — mechanisms, versioning model, trust anchors, and integrity verification for cross-team rule sharing.
-
-- **Bundled Cleanup (operational chores on the way):**
-  - [ ] **Cloud Compile → Sonnet:** Update the cloud compile worker to route through Claude Sonnet (#1221) — critical prerequisite for cloud distribution, since packs compiled through the cloud need to meet the same quality bar as local Sonnet compile.
-  - [ ] **`cwd` Threading:** Thread explicit `cwd` through `compileCommand` so packs can be compiled from arbitrary working directories (#1232, #1234 follow-up).
-  - [ ] **Build Artifact:** Investigate and fix the stray `packages/core/{}` file produced by `pnpm build` (#1233).
-  - [ ] **Batch `--upgrade`:** Refactor `compileCommand` to accept an array of hashes so `runSelfHealing` doesn't reload config + lessons + rules + manifest per candidate (#1235).
-  - [ ] **Broad `throw $ERR` Pattern:** Refine the overly-broad ast-grep pattern (#1218).
-  - [ ] **Lazy Compile Templates:** Lazy-load compiler prompt templates to reduce CLI startup cost (#1219).
-
----
-
-## 1.15.0 — The Ingestion Pipeline
-
-**Theme:** Source Diversity and the Self-Healing Loop. Expand the extraction pipeline to automatically convert external signals — GitHub Advanced Security (GHAS) alerts and standard repository lint warnings — into deterministic Totem lessons. Where 1.13.0 refined rules from internal telemetry and 1.14.0 distributes them across teams, 1.15.0 is about where the _inputs_ come from.
+Also lands Proposal 217 (LLM context caching, quarantined out of 1.15.0 because it touches compile pipeline substrate).
 
 - **Headline Work:**
   - [ ] **GHAS / SARIF Extraction:** Convert GitHub Advanced Security alerts into Totem lessons (Strategy #50). This is the original #1131 scope we pivoted away from when telemetry-driven refinement won — now the right time, because 1.14.0 distribution gives us a way to ship the resulting rules back out.
@@ -77,6 +49,33 @@ Strategic research not currently scoped to 1.14.0 or 1.15.0:
 ---
 
 ## Shipped Milestones
+
+### 1.14.x: Nervous System Foundation + Hotfix Cycle
+
+Eleven releases over six days (2026-04-09 to 2026-04-15). Headline foundation work in 1.14.0, a four-P0 governance sweep across 1.14.3 through 1.14.5, quality sweep + capstone in 1.14.6 and 1.14.7, perf follow-up in 1.14.8, precision + bundle release on 2026-04-15.
+
+- **1.14.0** (2026-04-09): Cross-Repo Context Mesh (#1295), LLM Context Caching opt-in preview (#1292), `/preflight` v2 design-doc gate (#1296).
+- **1.14.1** (2026-04-11): Hotfix Sweep and Phase 1 Papercuts. Nine PRs including Pipeline 5 sanity gate, compile prune no-op fix, tilde-fence support.
+- **1.14.2** (2026-04-11): `DISPLAY_TAG = 'Review'` cosmetic split; `TAG = 'Shield'` internal routing key preserved (coordinated rename tracked in #1335).
+- **1.14.3** (2026-04-11): Archive Lie filter (#1345). `loadCompiledRules` now filters out archived status; self-healing loop is no longer a placebo.
+- **1.14.4** (2026-04-11): Compile manifest drift refresh (#1348) + parser-based ast-grep validation (#1349).
+- **1.14.5** (2026-04-11): `safeExec` rewrite on `cross-spawn.sync` (#1356), closing a latent Windows shell-injection vector that had been open for three weeks.
+- **1.14.6** (2026-04-13): Quality Sweep Phase 1-2 and Voice Compliance. 7 over-broad rules archived; voice-scrub follow-ups (#1379, #1382, #1383).
+- **1.14.7** (2026-04-13): Nervous System Capstone. Mesh completion (#1396), bot reply protocol docs (#1395), cause-chain migration (#1357).
+- **1.14.8** (2026-04-14): Perf Follow-up. `cwd` threading (#1401), batch upgrade hashes (#1401), PR template enforcement (#1402).
+- **1.14.9** (2026-04-15): The Precision Engine. Compound ast-grep rule support (#1410, #1412, #1415), compile-time smoke gate, `badExample` requirement (#1420) closing the LLM-hallucination loop.
+- **1.14.10** (2026-04-15): The Bundle Release. Shell-orchestrator `{model}` token RCE fix (#1429), Pipeline 1 compound rule authoring + fail-loud fixes in git.ts and rule-engine.ts (#1454).
+
+### 1.13.0: The Refinement Engine (2026-04-07)
+
+**Theme:** Telemetry-driven rule refinement, compilation routing, and structural pattern upgrades.
+
+- **Compilation Routing:** Compile pipeline routes through Claude Sonnet 4.6 (90% correctness vs Gemini Pro's 73%, 2.4s vs 19.6s avg per Strategy #73 benchmark). Bulk recompile of 1156 lessons dropped 438 rules to 393 after purging 143 noisy Gemini-hallucinated rules and upgrading 102 regex rules to ast-grep structural matching.
+- **Telemetry-Driven Refinement:** `RuleMetric.contextCounts` tracks per-context match distribution (code, string, comment, regex, unknown). `totem doctor checkUpgradeCandidates` flags regex rules with >20% non-code-context matches. `totem compile --upgrade <hash>` re-compiles a single rule with a telemetry-driven directive prompt. Self-healing `totem doctor --pr` calls `compileCommand` in-process.
+- **Pipeline Hygiene:** Wind tunnel skips auto-scaffolded TODO fixtures. Extract pipeline dedups at heading level before embedding similarity. Config drift test uses token-aware character + directive count limit.
+- **AST Coverage:** 8 empty-catch rules upgraded from the legacy Tree-sitter `#eq?` engine to ast-grep structural matching. Backtick wrapper stripping hardened in both Pipeline 1 (manual `**Pattern:**` extraction) and Pipeline 2 (LLM JSON output).
+- **Governance:** Lesson Protection Rule (Pipeline 1 lint rule, severity error) blocks destructive shell removal of `.totem/lessons.md` at the point of intent. Added after a 41-rule near-miss. Self-governance: use totem to govern totem.
+- **Standalone Binaries:** Real binaries shipped on darwin-arm64 (68 MB), linux-x64 (111 MB), win32-x64 (125 MB) via the #1241 arc (4 PRs: #1260, #1261, #1266, #1267). Original 50 MB cap was aspirational; actual Bun 1.2.x runtime baseline is 60-104 MB depending on platform.
 
 ### 1.12.0 — The Umpire & The Router (2026-04-05)
 
