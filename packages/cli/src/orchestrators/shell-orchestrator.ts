@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 import { log } from '../ui.js';
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
-import { isQuotaError } from './orchestrator.js';
+import { assertValidModelName, isQuotaError } from './orchestrator.js';
 
 // ─── Constants ───────────────────────────────────────
 
@@ -17,6 +17,21 @@ const TEMP_ID_BYTES = 4;
 
 /** execFileSync on Windows can't resolve executables without `shell: true`. */
 const IS_WIN = process.platform === 'win32';
+
+function quoteShellArg(value: string): string {
+  // Windows quoting is genuinely ambiguous — `cmd.exe` has no universal
+  // quote-escape; `""` (doubling) works inside cmd's own quote state and
+  // `\"` works for the Microsoft C-runtime argv parser used by most target
+  // binaries. Neither is safe when an unchecked string contains BOTH `"`
+  // and shell metacharacters. The real defense is the upstream allow-list
+  // (`MODEL_NAME_RE` below, which rejects `"` outright). We emit `\"` here
+  // so the quoted output at least parses correctly under MSVCRT rules for
+  // the well-known tools we pipe to (gemini, claude, ollama). If a future
+  // caller passes an unchecked path, the right fix is to pre-validate or
+  // to stop using `shell: true` — not to defeat shell quoting entirely in
+  // this helper. See GCA + Shield discussion on mmnto/totem#1429.
+  return IS_WIN ? `"${value.replace(/"/g, '\\"')}"` : `'${value.replace(/'/g, "'\\''")}'`;
+}
 
 // ─── Gemini CLI JSON parsing ─────────────────────────
 
@@ -80,6 +95,19 @@ export async function invokeShellOrchestrator(
   // shell CLI fallback. Caught by Shield AI on the first push attempt as
   // part of the same cascade as the Gemini/OpenAI/Ollama fixes.
   const { prompt, systemPrompt, command, model, cwd, tag, totemDir } = opts;
+
+  // Reject poisoned model names BEFORE we ever interpolate into a shell string.
+  // The {model} token used to be substituted raw, which turned a config-supplied
+  // string into a shell-injection sink. A malicious totem.config.ts could set
+  // `defaultModel: "gemini-1.5; rm -rf /"` and ride `shell: true` straight to
+  // arbitrary code execution. `assertValidModelName` is the single shared gate
+  // used here and in `resolveOrchestrator` so any model accepted by one path
+  // is accepted by the other (and vice versa). Covers regex allow-list +
+  // leading-dash reject + post-parse model-portion check (catches `gemini:`
+  // and `anthropic:-foo` which pass the flat regex but are unsafe). CR catch
+  // on mmnto/totem#1429.
+  assertValidModelName(model);
+
   const fullPrompt =
     systemPrompt !== undefined && systemPrompt.length > 0 ? `${systemPrompt}\n\n${prompt}` : prompt;
   const tmpName = `totem-${tag.toLowerCase()}-${crypto.randomBytes(TEMP_ID_BYTES).toString('hex')}.md`;
@@ -89,10 +117,21 @@ export async function invokeShellOrchestrator(
 
   fs.writeFileSync(tempPath, fullPrompt, { encoding: 'utf-8', mode: 0o600 });
 
-  const quotedPath = IS_WIN
-    ? `"${tempPath.replace(/"/g, '""')}"`
-    : `'${tempPath.replace(/'/g, "'\\''")}'`;
-  const resolvedCmd = command.replace(/\{file\}/g, quotedPath).replace(/\{model\}/g, model);
+  // Defense in depth: even after the allow-list above rejects shell metacharacters,
+  // we still shell-quote the model token at interpolation. Matches the treatment
+  // {file} has always had. Two layers: validate, then escape.
+  //
+  // Use replacer FUNCTIONS instead of string replacements. `String.prototype.replace`
+  // interprets `$&`, `$'`, `$n`, etc. in a replacement STRING as back-references, so
+  // a `cwd` that happens to contain `$&` (e.g., a directory named `project$&`) would
+  // splice the regex match back in and corrupt the interpolated command. The
+  // function form bypasses that special-casing entirely. Shield catch on
+  // mmnto/totem#1429 GCA follow-up.
+  const quotedPath = quoteShellArg(tempPath);
+  const quotedModel = quoteShellArg(model);
+  const resolvedCmd = command
+    .replace(/\{file\}/g, () => quotedPath)
+    .replace(/\{model\}/g, () => quotedModel);
 
   log.info(tag, 'Invoking orchestrator (this may take 15-60 seconds)...');
 
