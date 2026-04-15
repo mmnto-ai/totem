@@ -10184,6 +10184,22 @@
     {
       "hash": "ab11ebbfbad8ac79",
       "title": "Prioritize TS over TSX for parsing"
+    },
+    {
+      "hash": "ceb9f38f76c323fb",
+      "title": "Exempt AST engines from smoke gate requirements"
+    },
+    {
+      "hash": "3be381f71eb5c5b2",
+      "title": "Normalize badExample snippets before validation"
+    },
+    {
+      "hash": "da681552b9ea8898",
+      "title": "Prefer kind in ast-grep inside constraints"
+    },
+    {
+      "hash": "23fbfc8a6e82633f",
+      "title": "Leverage Anthropic prompt caching for compilers"
     }
   ]
 }
