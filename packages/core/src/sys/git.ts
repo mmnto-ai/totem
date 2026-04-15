@@ -26,6 +26,7 @@ export function getGitBranch(cwd: string): string {
   try {
     return safeExec('git', ['branch', '--show-current'], { cwd });
   } catch {
+    // totem-ignore: best-effort display query — caller surfaces "(unknown)" when git is unavailable
     return '(unknown)';
   }
 }
@@ -34,6 +35,7 @@ export function getGitStatus(cwd: string): string {
   try {
     return safeExec('git', ['status', '--porcelain'], { cwd });
   } catch {
+    // totem-ignore: best-effort status query — caller treats missing git as "no changes" for display purposes only
     return '';
   }
 }
@@ -64,6 +66,7 @@ export function getGitDiffStat(cwd: string): string {
       timeout: GIT_COMMAND_TIMEOUT_MS,
     });
   } catch {
+    // totem-ignore: best-effort diff summary — empty string is a valid "no changes / git unavailable" surface for this cosmetic helper
     return '';
   }
 }
@@ -93,6 +96,7 @@ export function getDefaultBranch(cwd: string): string {
           });
           return branch;
         } catch {
+          // totem-ignore: intentional control flow — probing multiple branch candidates, outer function throws if none match
           // Try next candidate
         }
       }
@@ -145,6 +149,7 @@ export function getTagDate(cwd: string, tag: string): string | null {
     });
     return date.slice(0, 10) || null;
   } catch {
+    // totem-ignore: best-effort tag lookup — null is the documented "not found / git unavailable" return
     return null;
   }
 }
@@ -162,6 +167,7 @@ export function getLatestTag(cwd: string): string | null {
       }) || null
     );
   } catch {
+    // totem-ignore: best-effort tag lookup — null is the documented "no tags / git unavailable" return
     return null;
   }
 }
@@ -180,12 +186,18 @@ export function getGitLogSince(cwd: string, since?: string, maxCommits = 50): st
       timeout: GIT_COMMAND_TIMEOUT_MS,
     });
   } catch {
+    // totem-ignore: best-effort log query — empty string is a valid "no log / git unavailable" surface for briefing/status displays
     return '';
   }
 }
 
 /**
  * Check if a specific file has uncommitted changes (staged or unstaged).
+ *
+ * Fails loud: throws `TotemGitError` when git is absent or errors, so callers
+ * cannot mistake "git broke" for "file is clean" (mmnto/totem#1440). Callers
+ * that truly want silent fallback must opt in explicitly with their own
+ * try/catch + `// totem-ignore` annotation.
  */
 export function isFileDirty(cwd: string, filePath: string): boolean {
   try {
@@ -194,14 +206,24 @@ export function isFileDirty(cwd: string, filePath: string): boolean {
       timeout: GIT_COMMAND_TIMEOUT_MS,
     });
     return output.length > 0;
-  } catch {
-    return false;
+  } catch (err) {
+    throwIfGitMissing(err);
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new TotemGitError(
+      `Failed to check dirty status for ${filePath}: ${msg}`,
+      'Ensure you are inside a git repository and the file path is valid.',
+      err,
+    );
   }
 }
 
 /**
  * Resolve the git repository root from any subdirectory.
- * Returns the normalized absolute path, or null if not in a git repo.
+ * Returns the normalized absolute path when inside a git repo, or `null` only
+ * when the directory is genuinely outside any git repo (the documented "not
+ * in a git repo" case). Any OTHER git failure — git binary missing, permission
+ * error, timeout, corrupted index — throws `TotemGitError` so callers cannot
+ * confuse "not a repo" with "git broke" (mmnto/totem#1440).
  */
 export function resolveGitRoot(cwd: string): string | null {
   try {
@@ -211,8 +233,18 @@ export function resolveGitRoot(cwd: string): string | null {
     });
     // git returns forward slashes even on Windows — normalize for fs operations
     return path.normalize(root);
-  } catch {
-    return null;
+  } catch (err) {
+    throwIfGitMissing(err);
+    // Narrow-scope null: the only legitimate silent case is "not a git
+    // repository". All other failures re-throw so callers cannot confuse
+    // "not in a repo" with "git broke while asking."
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/not a git repository/i.test(msg)) return null;
+    throw new TotemGitError(
+      `Failed to resolve git root: ${msg}`,
+      'Check that the working directory is accessible and git is functional.',
+      err,
+    );
   }
 }
 

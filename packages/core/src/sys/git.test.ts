@@ -140,9 +140,9 @@ describe('isFileDirty', () => {
     expect(isFileDirty('/tmp', 'README.md')).toBe(false);
   });
 
-  it('returns false on error', () => {
-    vi.mocked(crossSpawn.sync).mockReturnValue(fail(new Error('not a git repo')) as never);
-    expect(isFileDirty('/tmp', 'README.md')).toBe(false);
+  it('throws TotemGitError when git fails (mmnto/totem#1440 — no silent-false footgun)', () => {
+    vi.mocked(crossSpawn.sync).mockReturnValue(fail(new Error('spawn failed')) as never);
+    expect(() => isFileDirty('/tmp', 'README.md')).toThrow(/Failed to check dirty status/);
   });
 });
 

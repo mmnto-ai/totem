@@ -6,6 +6,7 @@ import {
   extractManualPattern,
   extractMultilineField,
   extractRuleExamples,
+  extractYamlRuleAfterField,
   stripInlineCode,
 } from './lesson-pattern.js';
 
@@ -582,5 +583,147 @@ describe('extractBadGoodSnippets', () => {
     expect(result).not.toBeNull();
     expect(result!.bad).toEqual(['const x = 1;', 'console.log(x);']);
     expect(result!.good).toEqual(['const x = 1;', 'logger.info(x);']);
+  });
+});
+
+describe('extractYamlRuleAfterField', () => {
+  it('parses a yaml-tagged fenced block following **Pattern:**', () => {
+    const body = [
+      '**Pattern:**',
+      '```yaml',
+      'rule:',
+      '  kind: catch_clause',
+      '  not:',
+      '    has:',
+      '      kind: throw_statement',
+      '      stopBy: end',
+      '```',
+      '',
+      '**Engine:** ast-grep',
+    ].join('\n');
+    const result = extractYamlRuleAfterField(body, 'Pattern');
+    expect(result).toEqual({
+      rule: {
+        kind: 'catch_clause',
+        not: {
+          has: {
+            kind: 'throw_statement',
+            stopBy: 'end',
+          },
+        },
+      },
+    });
+  });
+
+  it('accepts ~~~yaml fence style', () => {
+    const body = ['**Pattern:**', '~~~yaml', 'rule:', '  kind: catch_clause', '~~~'].join('\n');
+    const result = extractYamlRuleAfterField(body, 'Pattern');
+    expect(result).toEqual({ rule: { kind: 'catch_clause' } });
+  });
+
+  it('ignores a bare ``` fence without yaml tag (so prose code blocks pass through)', () => {
+    const body = ['**Pattern:**', '```', 'this is not a yaml rule', '```'].join('\n');
+    expect(extractYamlRuleAfterField(body, 'Pattern')).toBeNull();
+  });
+
+  it('returns null when the yaml parses to a non-object (array/string/null)', () => {
+    const arrayBody = ['**Pattern:**', '```yaml', '- foo', '- bar', '```'].join('\n');
+    const stringBody = ['**Pattern:**', '```yaml', '"just a string"', '```'].join('\n');
+    expect(extractYamlRuleAfterField(arrayBody, 'Pattern')).toBeNull();
+    expect(extractYamlRuleAfterField(stringBody, 'Pattern')).toBeNull();
+  });
+
+  it('returns null when the yaml is malformed', () => {
+    const body = ['**Pattern:**', '```yaml', '{ unterminated:', '```'].join('\n');
+    expect(extractYamlRuleAfterField(body, 'Pattern')).toBeNull();
+  });
+
+  it('stops scanning at the next bold field marker (does not cross into later sections)', () => {
+    // The yaml fence here lives AFTER a **Message:** marker, so the Pattern
+    // scanner must stop before reaching it. This guards against a lesson
+    // whose Pattern field is missing from producing a surprise match on a
+    // yaml block intended for a different field.
+    const body = [
+      '**Pattern:**',
+      'plain line, not a fence',
+      '**Message:** prose',
+      '```yaml',
+      'rule:',
+      '  kind: catch_clause',
+      '```',
+    ].join('\n');
+    expect(extractYamlRuleAfterField(body, 'Pattern')).toBeNull();
+  });
+
+  it('returns null when the fence never closes', () => {
+    const body = [
+      '**Pattern:**',
+      '```yaml',
+      'rule:',
+      '  kind: catch_clause',
+      '(EOF with no closing fence)',
+    ].join('\n');
+    expect(extractYamlRuleAfterField(body, 'Pattern')).toBeNull();
+  });
+
+  it('handles CRLF line endings (Windows-authored lessons)', () => {
+    const body = ['**Pattern:**', '```yaml', 'rule:', '  kind: catch_clause', '```'].join('\r\n');
+    const result = extractYamlRuleAfterField(body, 'Pattern');
+    expect(result).toEqual({ rule: { kind: 'catch_clause' } });
+  });
+});
+
+describe('extractManualPattern — compound ast-grep path', () => {
+  it('returns a ManualPattern with astGrepYamlRule when the Pattern field has a yaml fence', () => {
+    const body = [
+      '**Tags:** tenet-4, fail-loud',
+      '**Engine:** ast-grep',
+      '**Scope:** packages/**/*.ts, !**/*.test.ts',
+      '**Severity:** error',
+      '**Pattern:**',
+      '```yaml',
+      'rule:',
+      '  kind: catch_clause',
+      '  not:',
+      '    has:',
+      '      kind: throw_statement',
+      '      stopBy: end',
+      '```',
+      '',
+      '**Message:** never swallow errors',
+    ].join('\n');
+    const result = extractManualPattern(body);
+    expect(result).not.toBeNull();
+    expect(result!.engine).toBe('ast-grep');
+    expect(result!.pattern).toBe('');
+    expect(result!.severity).toBe('error');
+    expect(result!.fileGlobs).toEqual(['packages/**/*.ts', '!**/*.test.ts']);
+    expect(result!.message).toBe('never swallow errors');
+    expect(result!.astGrepYamlRule).toEqual({
+      rule: {
+        kind: 'catch_clause',
+        not: { has: { kind: 'throw_statement', stopBy: 'end' } },
+      },
+    });
+  });
+
+  it('rejects a yaml fence when Engine is not ast-grep (returns null)', () => {
+    const body = [
+      '**Engine:** regex',
+      '**Pattern:**',
+      '```yaml',
+      'rule:',
+      '  kind: catch_clause',
+      '```',
+    ].join('\n');
+    expect(extractManualPattern(body)).toBeNull();
+  });
+
+  it('still parses flat **Pattern:** values when no yaml fence is present (regression guard)', () => {
+    const body = ['**Pattern:** new Error($$$)', '**Engine:** ast-grep'].join('\n');
+    const result = extractManualPattern(body);
+    expect(result).not.toBeNull();
+    expect(result!.pattern).toBe('new Error($$$)');
+    expect(result!.astGrepYamlRule).toBeUndefined();
   });
 });

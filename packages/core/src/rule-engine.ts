@@ -12,6 +12,7 @@ import type {
   Violation,
 } from './compiler-schema.js';
 import { extractAddedLines } from './diff-parser.js';
+import { TotemError } from './errors.js';
 
 // ─── File glob matching ─────────────────────────────
 
@@ -213,9 +214,19 @@ export function applyRulesToAdditions(
     let re: RegExp;
     try {
       re = new RegExp(rule.pattern);
-    } catch {
-      // Skip invalid patterns (shouldn't happen if validation gate works)
-      continue;
+    } catch (err) {
+      // Fail loud (mmnto/totem#1442): invalid regex in a compiled rule means
+      // the compile-time validator was bypassed or the manifest was edited
+      // by hand. Silently skipping would mark the diff "compliant" while a
+      // load-bearing rule is mute. Throw so the operator sees exactly which
+      // rule is broken and can fix or archive it.
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new TotemError(
+        'CHECK_FAILED',
+        `Rule ${rule.lessonHash} has an invalid regex pattern and cannot be evaluated: ${msg}`,
+        `Re-run 'totem lesson compile' to regenerate the rule, or archive it via 'totem doctor --pr' if the source lesson cannot produce a valid pattern. Pattern: ${JSON.stringify(rule.pattern)}`,
+        err,
+      );
     }
 
     for (const addition of additions) {
