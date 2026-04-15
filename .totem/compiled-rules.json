@@ -6644,8 +6644,8 @@
       "archivedReason": "Over-broad: pattern JSON.stringify($OBJ) matches any single-argument JSON.stringify call in compile-manifest.ts, including the legitimate primitive-serialization call inside canonicalStringify itself (line 103). The lesson intent is specifically about the canonicalStringify function, not all JSON.stringify calls in the file. upgradeTarget: compound (Proposal 226) — a compound rule with inside: function canonicalStringify(...) { $$$ } could constrain the pattern to calls that bypass canonicalStringify, catching the real anti-pattern without firing on the helper's own implementation. Phase 4 recompile candidate once #1408 and #1409 ship."
     },
     {
-      "lessonHash": "a11eb00f0efe6475",
-      "lessonHeading": "Ban `export let` declarations (exported module-level mutable state)",
+      "lessonHash": "a5cf7ddc6237311c",
+      "lessonHeading": "Ban `export let` module-level mutable state",
       "pattern": "",
       "message": "Exported `let` bindings create cross-module shared mutable state, which breaks functional isolation and makes concurrent or sequenced code paths hard to reason about. Prefer `export const`, or wrap mutation behind an exported function/class that owns the state internally.\n\n`export let` makes a mutable binding reachable from every importer. Any module that imports it can observe different values at different times based on whoever mutated last, and any module can mutate it. That pattern breaks Tenet 12 (Platform of Primitives) because consumers cannot reason about the module's surface as a set of stable primitives — the surface is a shared global.\n\nThe related but NARROWER concern in internal module-private `let` bindings (lazy-init caches, singleton accumulators, flags used to gate one-shot behavior) is NOT banned here: those are legitimate when the mutation is confined to one file and the reader/writer pair are well-understood. The rule is deliberately tight to avoid false positives on `let cached = null` / `let initPromise: Promise<T> | null = null` idioms that appear throughout `context.ts`, `search-knowledge.ts`, and similar surfaces.\n\nThe compound rule targets `export_statement` nodes that *contain* a `lexical_declaration` matching `let $NAME = $VALUE`. The `has:` combinator walks the export statement's direct subtree to find the `let` binding inside. `const` exports are unaffected because the pattern only matches `let`.\n\n### Bad Example\n\n```ts\nexport let sharedCounter = 0;\n```\n\n### Good Example\n\n```ts\n// State stays private; mutation goes through a named API that owns the invariant.\nlet sharedCounter = 0;\nexport function incrementCounter(): number {\n  sharedCounter += 1;\n  return sharedCounter;\n}\n```\n\n## Why this needs to be compound\n\nA flat pattern `export let $NAME = $VALUE` does not match in ast-grep's TypeScript grammar because `export let` parses as an `export_statement` wrapping a `lexical_declaration`, not as a single flat node. The compound form — anchor on `export_statement`, require a `lexical_declaration` child matching `let` — navigates the parse tree to the correct target. This is a textbook use case for the `has:` combinator.",
       "engine": "ast-grep",
@@ -6658,8 +6658,8 @@
           }
         }
       },
-      "compiledAt": "2026-04-15T04:55:35.426Z",
-      "createdAt": "2026-04-15T04:55:35.426Z",
+      "compiledAt": "2026-04-15T06:32:31.629Z",
+      "createdAt": "2026-04-15T06:32:31.629Z",
       "fileGlobs": [
         "packages/**/*.ts",
         "!**/*.test.ts",
@@ -6669,8 +6669,8 @@
       "manual": true
     },
     {
-      "lessonHash": "d5f7df3b5afa0b98",
-      "lessonHeading": "Ban fail-open catch blocks that swallow errors without re-throwing",
+      "lessonHash": "3e54aea32721c6f4",
+      "lessonHeading": "Ban fail-open catch blocks that skip re-throwing",
       "pattern": "",
       "message": "Catch clause swallows the error without re-throwing. Tenet 4 (Fail Loud, Never Drift) forbids silent degradation. Either rethrow with `throw err` / `throw new Error(..., { cause: err })`, or if the catch is genuinely a best-effort cleanup (temp file unlink, socket close, etc.) add `// totem-ignore: intentional cleanup` above the try/catch to document the exception.\n\nTenet 4 (Fail Loud, Never Drift) forbids catching an error and continuing silently. A `catch` clause that contains no `throw_statement` anywhere in its body quietly swallows the failure, corrupting the upstream signal that the sensor-based architecture depends on. The `not.has.throw_statement` combinator with `stopBy: end` walks the entire catch body subtree so that rethrows nested inside `if` / `switch` / helper-call paths still pass.",
       "engine": "ast-grep",
@@ -6685,8 +6685,8 @@
           }
         }
       },
-      "compiledAt": "2026-04-15T04:55:35.427Z",
-      "createdAt": "2026-04-15T04:55:35.427Z",
+      "compiledAt": "2026-04-15T06:32:31.630Z",
+      "createdAt": "2026-04-15T06:32:31.630Z",
       "fileGlobs": [
         "packages/**/*.ts",
         "!**/*.test.ts",
@@ -6696,7 +6696,7 @@
       "manual": true
     },
     {
-      "lessonHash": "dfb36d697c9a8519",
+      "lessonHash": "a457cd4e9fba7e0e",
       "lessonHeading": "Ban `spawn()` / `spawnSync()` with `shell: true`",
       "pattern": "",
       "message": "`spawn` / `spawnSync` with `shell: true` opens a shell-injection vector. Use `safeExec` (which routes through `cross-spawn.sync` without a shell) from `packages/core/src/sys/exec.ts` instead. The single legitimate exception — the shell orchestrator at `packages/cli/src/orchestrators/shell-orchestrator.ts` that pipes prompts to third-party CLI tools — is scope-excluded via `!` glob and has its own input-sanitization gate.\n\n`shell: true` on Node's `child_process.spawn` / `spawnSync` concatenates argument strings into a shell command line. If any interpolated value contains shell metacharacters (`;`, `|`, `$(...)`, backticks, newlines, etc.), it runs as code. This is the exact class of RCE that mmnto/totem#1329 closed in 1.14.5 (`safeExec` rewrite) and mmnto/totem#1429 (the shell orchestrator `{model}` token hardening in 1.14.10).\n\nThe compound rule combines an `any:` disjunction over `spawn($$$)` and `spawnSync($$$)` call patterns with a `has:` descendant check for the `shell: true` pair in any options object. `stopBy: end` lets the descendant scan traverse the full argument subtree, so `shell: true` nested inside a destructured config or a spread still matches.\n\n**The deliberate escape hatch (one site):** `packages/cli/src/orchestrators/shell-orchestrator.ts` legitimately needs `shell: true` to invoke arbitrary CLI tools (`gemini`, `claude`, `ollama`). That file is scope-excluded via the `!` glob entry. The input-sanitization that protects it lives in the same file (`MODEL_SAFE_RE` allow-list + `quoteShellArg` defense-in-depth) and was added in 1.14.10.\n\n### Bad Example\n\n```ts\nimport { spawn } from 'node:child_process';\nspawn('ls -la', { shell: true });\n```\n\n### Good Example\n\n```ts\nimport { safeExec } from '../sys/exec.js';\nconst result = safeExec('ls', ['-la']);\n```\n\n## Why this needs to be compound\n\nA flat ast-grep pattern for `spawn(...)` matches every `spawn` call regardless of options, so it is too broad and would flag every legitimate `cross-spawn` usage. A pattern that literally spells out `spawn($CMD, { shell: true })` misses the three-argument form `spawn($CMD, $ARGS, { shell: true })` and doesn't cover `spawnSync`. The compound form — `any:` over the two call names, `has:` on `shell: true` descendants — encodes the real invariant: the danger is `shell: true` anywhere in the options, not the spawn call in isolation.",
@@ -6718,8 +6718,8 @@
           }
         }
       },
-      "compiledAt": "2026-04-15T04:55:38.845Z",
-      "createdAt": "2026-04-15T04:55:38.845Z",
+      "compiledAt": "2026-04-15T06:32:35.654Z",
+      "createdAt": "2026-04-15T06:32:35.654Z",
       "fileGlobs": [
         "packages/**/*.ts",
         "!**/*.test.ts",
@@ -6728,58 +6728,6 @@
       ],
       "severity": "error",
       "manual": true
-    },
-    {
-      "lessonHash": "612d0ca6a19f1b6f",
-      "lessonHeading": "Pipeline 5: observation from shield",
-      "pattern": "parsed\\s+=\\s+YAML\\.parse\\(yamlSrc\\);\\s+//\\s+totem-ignore-next-line:\\s+malformed\\s+YAML\\s+is\\s+a\\s+soft\\s+failure\\s+—\\s+caller\\s+treats\\s+`null`\\s+as\\s+\"no\\s+compound\\s+rule\"",
-      "message": "The `totem-ignore-next-line` comment is placed on the same line as the code it intends to ignore. This will actually suppress lint warnings on the following line (`} catch {`). Use `totem-ignore` for same-line suppression or move it to the line above.",
-      "engine": "regex",
-      "compiledAt": "2026-04-15T05:19:08.379Z",
-      "createdAt": "2026-04-15T05:19:08.379Z",
-      "fileGlobs": [
-        "**/*.ts"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "6c0d60a1b3f866b7",
-      "lessonHeading": "Pipeline 5: observation from shield",
-      "pattern": "if\\s+\\(/not\\s+a\\s+git\\s+repository/i\\.test\\(msg\\)\\)\\s+return\\s+null;",
-      "message": "Missing test coverage for `resolveGitRoot` throwing `TotemGitError` on non-repository errors. The diff updates `isFileDirty` tests to assert the new fail-loud behavior, but omits tests for `resolveGitRoot`.",
-      "engine": "regex",
-      "compiledAt": "2026-04-15T05:19:08.379Z",
-      "createdAt": "2026-04-15T05:19:08.379Z",
-      "fileGlobs": [
-        "**/*.ts"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "cf694ca028d19c47",
-      "lessonHeading": "Pipeline 5: observation from shield",
-      "pattern": "function\\s+containsNotAGitRepo\\(err:\\s+unknown\\):\\s+boolean\\s+\\{",
-      "message": "The `containsNotAGitRepo` function strictly requires `cursor` to be an `Error` instance. If `err` or any `cause` in the chain is a string (e.g., raw stderr), `cursor instanceof Error` evaluates to false, skipping the regex check and immediately terminating the loop (`cursor` becomes `null`). This breaks the detection and is a regression from the previous code which safely fell back to `String(err)`.",
-      "engine": "regex",
-      "compiledAt": "2026-04-15T05:23:00.783Z",
-      "createdAt": "2026-04-15T05:23:00.783Z",
-      "fileGlobs": [
-        "**/*.ts"
-      ],
-      "severity": "warning"
-    },
-    {
-      "lessonHash": "87341196632378dd",
-      "lessonHeading": "Pipeline 5: observation from shield",
-      "pattern": "expect\\(resolveGitRoot\\('/home/user/repo/src'\\)\\)\\.toBe\\(",
-      "message": "Using `require('node:path')` in an ESM test file will throw a `ReferenceError: require is not defined`. Import `sep` from `node:path` at the top of the file instead.",
-      "engine": "regex",
-      "severity": "warning",
-      "fileGlobs": [
-        "**/*.ts"
-      ],
-      "compiledAt": "2026-04-15T05:24:08.082Z",
-      "createdAt": "2026-04-15T05:24:08.082Z"
     }
   ],
   "nonCompilable": [

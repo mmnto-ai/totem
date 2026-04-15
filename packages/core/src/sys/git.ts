@@ -26,7 +26,7 @@ export function getGitBranch(cwd: string): string {
   try {
     return safeExec('git', ['branch', '--show-current'], { cwd });
   } catch {
-    // totem-ignore: best-effort display query — caller surfaces "(unknown)" when git is unavailable
+    // totem-context: best-effort display query — caller surfaces "(unknown)" when git is unavailable, so fail-open is the documented contract (mmnto/totem#1440)
     return '(unknown)';
   }
 }
@@ -35,7 +35,7 @@ export function getGitStatus(cwd: string): string {
   try {
     return safeExec('git', ['status', '--porcelain'], { cwd });
   } catch {
-    // totem-ignore: best-effort status query — caller treats missing git as "no changes" for display purposes only
+    // totem-context: best-effort status query — caller treats missing git as "no changes" for display purposes only (mmnto/totem#1440)
     return '';
   }
 }
@@ -66,7 +66,7 @@ export function getGitDiffStat(cwd: string): string {
       timeout: GIT_COMMAND_TIMEOUT_MS,
     });
   } catch {
-    // totem-ignore: best-effort diff summary — empty string is a valid "no changes / git unavailable" surface for this cosmetic helper
+    // totem-context: best-effort diff summary — empty string is a valid "no changes / git unavailable" surface for this cosmetic helper (mmnto/totem#1440)
     return '';
   }
 }
@@ -96,7 +96,7 @@ export function getDefaultBranch(cwd: string): string {
           });
           return branch;
         } catch {
-          // totem-ignore: intentional control flow — probing multiple branch candidates, outer function throws if none match
+          // totem-context: intentional control flow — probing multiple branch candidates, outer function throws if none match (mmnto/totem#1440)
           // Try next candidate
         }
       }
@@ -149,7 +149,7 @@ export function getTagDate(cwd: string, tag: string): string | null {
     });
     return date.slice(0, 10) || null;
   } catch {
-    // totem-ignore: best-effort tag lookup — null is the documented "not found / git unavailable" return
+    // totem-context: best-effort tag lookup — null is the documented "not found / git unavailable" return (mmnto/totem#1440)
     return null;
   }
 }
@@ -167,7 +167,7 @@ export function getLatestTag(cwd: string): string | null {
       }) || null
     );
   } catch {
-    // totem-ignore: best-effort tag lookup — null is the documented "no tags / git unavailable" return
+    // totem-context: best-effort tag lookup — null is the documented "no tags / git unavailable" return (mmnto/totem#1440)
     return null;
   }
 }
@@ -186,7 +186,7 @@ export function getGitLogSince(cwd: string, since?: string, maxCommits = 50): st
       timeout: GIT_COMMAND_TIMEOUT_MS,
     });
   } catch {
-    // totem-ignore: best-effort log query — empty string is a valid "no log / git unavailable" surface for briefing/status displays
+    // totem-context: best-effort log query — empty string is a valid "no log / git unavailable" surface for briefing/status displays (mmnto/totem#1440)
     return '';
   }
 }
@@ -208,9 +208,8 @@ export function isFileDirty(cwd: string, filePath: string): boolean {
     return output.length > 0;
   } catch (err) {
     throwIfGitMissing(err);
-    const msg = err instanceof Error ? err.message : String(err);
     throw new TotemGitError(
-      `Failed to check dirty status for ${filePath}: ${msg}`,
+      `Failed to check dirty status for ${filePath}.`,
       'Ensure you are inside a git repository and the file path is valid.',
       err,
     );
@@ -242,9 +241,8 @@ export function resolveGitRoot(cwd: string): string | null {
     // outer `err.message` is a generic "Command failed: git rev-parse ..."
     // wrapper.
     if (containsNotAGitRepo(err)) return null;
-    const msg = err instanceof Error ? err.message : String(err);
     throw new TotemGitError(
-      `Failed to resolve git root: ${msg}`,
+      'Failed to resolve git root.',
       'Check that the working directory is accessible and git is functional.',
       err,
     );

@@ -194,7 +194,11 @@ export function extractYamlRuleAfterField(
 ): Record<string, unknown> | null {
   const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const startRe = new RegExp(`^(?:\\*{2})?${safeField}(?:\\*{2})?:(?:\\*{2})?.*$`, 'i');
-  const fieldMarkerRe = /^\*{2}[A-Za-z][\w\s-]*(?::\*{2}|\*{2}:|:)/;
+  // Section terminator — any bold field marker OR any markdown heading stops
+  // the YAML scan. CR catch on mmnto/totem#1454: without the heading guard,
+  // a lesson that omits **Message:** and lands on `### Bad Example` with a
+  // yaml fence below would have the unrelated block parsed as the rule.
+  const sectionEndRe = /^(?:\*{2}[A-Za-z][\w\s-]*(?::\*{2}|\*{2}:|:)|#{2,6}\s)/;
   const fenceStartRe = /^\s*(```|~~~)yaml\s*$/i;
 
   // Split on both LF and CRLF so Windows-authored lessons don't leave trailing
@@ -214,7 +218,7 @@ export function extractYamlRuleAfterField(
   let fenceChar = '';
   for (let i = startIdx + 1; i < lines.length; i++) {
     const line = lines[i]!;
-    if (fieldMarkerRe.test(line)) return null;
+    if (sectionEndRe.test(line)) return null;
     const m = line.match(fenceStartRe);
     if (m) {
       fenceStartIdx = i;
@@ -242,7 +246,7 @@ export function extractYamlRuleAfterField(
   let parsed: unknown;
   try {
     parsed = YAML.parse(yamlSrc);
-    // totem-ignore-next-line: malformed YAML is a soft failure — caller treats `null` as "no compound rule"
+    // totem-context: malformed YAML is a soft failure for an optional compound rule — caller treats null as "no compound rule present" (GCA #1454)
   } catch {
     return null;
   }

@@ -655,6 +655,41 @@ describe('extractYamlRuleAfterField', () => {
     expect(extractYamlRuleAfterField(body, 'Pattern')).toBeNull();
   });
 
+  it('stops scanning at a markdown heading (CR #1454 — no cross-section YAML parsing)', () => {
+    // A lesson that omits **Message:** and jumps straight to `### Bad Example`
+    // or `## Why this needs to be compound` must NOT have a yaml fence under
+    // those headings parsed as the rule body. Without the heading terminator,
+    // the scanner would scoop the first yaml fence it finds anywhere after
+    // **Pattern:**, even if the author intended the block as an illustration.
+    const body = [
+      '**Pattern:**',
+      'plain line, not a fence',
+      '',
+      '### Bad Example',
+      '',
+      '```yaml',
+      'this: is-an-illustration',
+      'not: a-rule',
+      '```',
+    ].join('\n');
+    expect(extractYamlRuleAfterField(body, 'Pattern')).toBeNull();
+  });
+
+  it('stops at level-2 headings too', () => {
+    const body = [
+      '**Pattern:**',
+      'plain line',
+      '',
+      '## Why this needs to be compound',
+      '',
+      '```yaml',
+      'rule:',
+      '  kind: catch_clause',
+      '```',
+    ].join('\n');
+    expect(extractYamlRuleAfterField(body, 'Pattern')).toBeNull();
+  });
+
   it('returns null when the fence never closes', () => {
     const body = [
       '**Pattern:**',

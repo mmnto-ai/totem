@@ -1,4 +1,4 @@
-## Lesson — Ban fail-open catch blocks that swallow errors without re-throwing
+## Lesson — Ban fail-open catch blocks that skip re-throwing
 
 **Tags:** tenet-4, fail-loud, ast-grep-compound, governance
 **Engine:** ast-grep
@@ -45,4 +45,4 @@ try {
 
 A flat ast-grep pattern cannot express "catch clause whose body does not contain a throw_statement anywhere in its descendant tree." The combinator `not: { has: { kind: throw_statement, stopBy: end } }` anchored on `kind: catch_clause` encodes exactly that tree-relationship. This is one of the motivating use cases for compound ast-grep rule support (ADR-087 / Proposal 226).
 
-**Source:** Pre-1.15.0 deep review (mmnto/totem#1421). Gemini's Repomix teardown (`.strategy/audits/internal/2026-04-14-repomix-architectural-teardown.md`) flagged multiple fail-open `catch` sites in `packages/core/src/sys/git.ts` and `rule-engine.ts` (tracked in #1440, #1442). First production compound rule shipped via the new Pipeline 1 yaml-fence path.
+**Source:** Pre-1.15.0 deep review (mmnto/totem#1421). Gemini's Repomix teardown flagged multiple fail-open `catch` sites in `packages/core/src/sys/git.ts` and `rule-engine.ts` (tracked in mmnto/totem#1440 and mmnto/totem#1442). First production compound rule shipped via the new Pipeline 1 yaml-fence path.

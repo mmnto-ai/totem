@@ -1,4 +1,4 @@
-## Lesson — Ban `export let` declarations (exported module-level mutable state)
+## Lesson — Ban `export let` module-level mutable state
 
 **Tags:** tenet-12, determinism, functional-isolation, ast-grep-compound, governance
 **Engine:** ast-grep

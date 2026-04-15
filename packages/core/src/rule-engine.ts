@@ -12,7 +12,7 @@ import type {
   Violation,
 } from './compiler-schema.js';
 import { extractAddedLines } from './diff-parser.js';
-import { TotemError } from './errors.js';
+import { TotemParseError } from './errors.js';
 
 // ─── File glob matching ─────────────────────────────
 
@@ -219,11 +219,12 @@ export function applyRulesToAdditions(
       // the compile-time validator was bypassed or the manifest was edited
       // by hand. Silently skipping would mark the diff "compliant" while a
       // load-bearing rule is mute. Throw so the operator sees exactly which
-      // rule is broken and can fix or archive it.
-      const msg = err instanceof Error ? err.message : String(err);
-      throw new TotemError(
-        'CHECK_FAILED',
-        `Rule ${rule.lessonHash} has an invalid regex pattern and cannot be evaluated: ${msg}`,
+      // rule is broken and can fix or archive it. `TotemParseError` is the
+      // correct class here — an uncompilable compiled rule is a parse/
+      // compilation failure on the rule's source, not a generic check
+      // failure (GCA catch on mmnto/totem#1454).
+      throw new TotemParseError(
+        `Rule ${rule.lessonHash} has an invalid regex pattern and cannot be evaluated.`,
         `Re-run 'totem lesson compile' to regenerate the rule, or archive it via 'totem doctor --pr' if the source lesson cannot produce a valid pattern. Pattern: ${JSON.stringify(rule.pattern)}`,
         err,
       );
