@@ -41,6 +41,11 @@ After >15 turns of code changes: run `totem status`, re-query strategy ADRs for 
 
 - **Controller, not implementer.** Delegate code+test tasks to background agents. Keep this thread for decisions.
 
+## Tool Patterns
+
+- **Prefer Monitor over Bash `sleep` loops.** Background long-running processes and Monitor them. `sleep; check` burns cache every iteration; Monitor only fires on events.
+- **`/loop` self-paced for poll-and-react.** `/loop <prompt>` without an interval lets the model self-cadence. Example: `/loop watch CI, react when green`.
+
 ## Detailed Docs (read when relevant)
 
 - [Contributing rules](.claude/docs/contributing.md) — PR bot protocol (CR/GCA), AI_PROMPT_BLOCK, changesets
