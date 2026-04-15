@@ -28,6 +28,7 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(git push*)",
             "command": "bash .claude/hooks/review-gate.sh"
           }
         ]
