@@ -9,6 +9,13 @@ import { safeExec } from './exec.js';
 const GIT_COMMAND_TIMEOUT_MS = 15_000;
 const GIT_DIFF_MAX_BUFFER = 10 * 1024 * 1024; // 10MB — large diffs (e.g., compiled-rules.json)
 
+/**
+ * Bound on the cause-chain walk in {@link containsNotAGitRepo}. Errors produced
+ * by `safeExec` wrap git stderr one level deep; we allow extra headroom in case
+ * a caller adds its own wrapping layer, but refuse to walk an unbounded chain.
+ */
+const ERROR_CAUSE_WALK_MAX_DEPTH = 8;
+
 function throwIfGitMissing(err: unknown): void {
   const msg = err instanceof Error ? err.message : String(err);
   if (msg.includes('ENOENT') || msg.includes('not found')) {
@@ -26,6 +33,7 @@ export function getGitBranch(cwd: string): string {
   try {
     return safeExec('git', ['branch', '--show-current'], { cwd });
   } catch {
+    // totem-context: best-effort display query — caller surfaces "(unknown)" when git is unavailable, so fail-open is the documented contract (mmnto/totem#1440)
     return '(unknown)';
   }
 }
@@ -34,6 +42,7 @@ export function getGitStatus(cwd: string): string {
   try {
     return safeExec('git', ['status', '--porcelain'], { cwd });
   } catch {
+    // totem-context: best-effort status query — caller treats missing git as "no changes" for display purposes only (mmnto/totem#1440)
     return '';
   }
 }
@@ -64,6 +73,7 @@ export function getGitDiffStat(cwd: string): string {
       timeout: GIT_COMMAND_TIMEOUT_MS,
     });
   } catch {
+    // totem-context: best-effort diff summary — empty string is a valid "no changes / git unavailable" surface for this cosmetic helper (mmnto/totem#1440)
     return '';
   }
 }
@@ -93,6 +103,7 @@ export function getDefaultBranch(cwd: string): string {
           });
           return branch;
         } catch {
+          // totem-context: intentional control flow — probing multiple branch candidates, outer function throws if none match (mmnto/totem#1440)
           // Try next candidate
         }
       }
@@ -145,6 +156,7 @@ export function getTagDate(cwd: string, tag: string): string | null {
     });
     return date.slice(0, 10) || null;
   } catch {
+    // totem-context: best-effort tag lookup — null is the documented "not found / git unavailable" return (mmnto/totem#1440)
     return null;
   }
 }
@@ -162,6 +174,7 @@ export function getLatestTag(cwd: string): string | null {
       }) || null
     );
   } catch {
+    // totem-context: best-effort tag lookup — null is the documented "no tags / git unavailable" return (mmnto/totem#1440)
     return null;
   }
 }
@@ -180,12 +193,20 @@ export function getGitLogSince(cwd: string, since?: string, maxCommits = 50): st
       timeout: GIT_COMMAND_TIMEOUT_MS,
     });
   } catch {
+    // totem-context: best-effort log query — empty string is a valid "no log / git unavailable" surface for briefing/status displays (mmnto/totem#1440)
     return '';
   }
 }
 
 /**
  * Check if a specific file has uncommitted changes (staged or unstaged).
+ *
+ * Fails loud: throws `TotemGitError` when git is absent or errors, so callers
+ * cannot mistake "git broke" for "file is clean" (mmnto/totem#1440). The one
+ * documented silent-false case is "not a git repository" — a legitimate state
+ * for a working directory that happens to sit outside version control.
+ * Callers that truly want silent fallback for OTHER git failures must opt in
+ * explicitly with their own try/catch + `// totem-context:` annotation.
  */
 export function isFileDirty(cwd: string, filePath: string): boolean {
   try {
@@ -194,14 +215,27 @@ export function isFileDirty(cwd: string, filePath: string): boolean {
       timeout: GIT_COMMAND_TIMEOUT_MS,
     });
     return output.length > 0;
-  } catch {
-    return false;
+  } catch (err) {
+    throwIfGitMissing(err);
+    // Narrow-false: mirror the `resolveGitRoot` pattern — "not a git
+    // repository" is a legit state, not a bug. Return false there so callers
+    // running in non-git contexts don't crash. All other git failures throw.
+    if (containsNotAGitRepo(err)) return false;
+    throw new TotemGitError(
+      `Failed to check dirty status for ${filePath}.`,
+      'Ensure you are inside a git repository and the file path is valid.',
+      err,
+    );
   }
 }
 
 /**
  * Resolve the git repository root from any subdirectory.
- * Returns the normalized absolute path, or null if not in a git repo.
+ * Returns the normalized absolute path when inside a git repo, or `null` only
+ * when the directory is genuinely outside any git repo (the documented "not
+ * in a git repo" case). Any OTHER git failure — git binary missing, permission
+ * error, timeout, corrupted index — throws `TotemGitError` so callers cannot
+ * confuse "not a repo" with "git broke" (mmnto/totem#1440).
  */
 export function resolveGitRoot(cwd: string): string | null {
   try {
@@ -211,9 +245,36 @@ export function resolveGitRoot(cwd: string): string | null {
     });
     // git returns forward slashes even on Windows — normalize for fs operations
     return path.normalize(root);
-  } catch {
-    return null;
+  } catch (err) {
+    throwIfGitMissing(err);
+    // Narrow-scope null: the only legitimate silent case is "not a git
+    // repository". All other failures re-throw so callers cannot confuse
+    // "not in a repo" with "git broke while asking." Walk the cause chain
+    // because safeExec wraps the git stderr inside `err.cause` while the
+    // outer `err.message` is a generic "Command failed: git rev-parse ..."
+    // wrapper.
+    if (containsNotAGitRepo(err)) return null;
+    throw new TotemGitError(
+      'Failed to resolve git root.',
+      'Check that the working directory is accessible and git is functional.',
+      err,
+    );
   }
+}
+
+function containsNotAGitRepo(err: unknown): boolean {
+  let cursor: unknown = err;
+  // Walk the cause chain up to `ERROR_CAUSE_WALK_MAX_DEPTH` hops. Coerce each
+  // cursor to string via `.message` when available and `String(cursor)`
+  // otherwise so a cause that is a plain string or object (e.g., raw stderr
+  // surfaced via `Error.cause = stderrString`) still gets matched instead of
+  // silently terminating the chain walk.
+  for (let depth = 0; depth < ERROR_CAUSE_WALK_MAX_DEPTH && cursor != null; depth += 1) {
+    const msg = cursor instanceof Error ? cursor.message : String(cursor);
+    if (/not a git repository/i.test(msg)) return true;
+    cursor = cursor instanceof Error ? cursor.cause : null;
+  }
+  return false;
 }
 
 /**

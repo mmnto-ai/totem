@@ -237,10 +237,9 @@ describe('applyRules', () => {
     expect(violations).toHaveLength(2);
   });
 
-  it('skips rules with invalid patterns', () => {
+  it('throws on rules with invalid regex patterns (mmnto/totem#1442 — no silent-compliance footgun)', () => {
     const rules = [makeRule('[invalid', 'Bad pattern')];
-    const violations = applyRules(rules, diff);
-    expect(violations).toHaveLength(0);
+    expect(() => applyRules(rules, diff)).toThrow(/invalid regex pattern/);
   });
 
   it('returns empty for empty diff', () => {

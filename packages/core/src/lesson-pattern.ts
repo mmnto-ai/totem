@@ -3,14 +3,23 @@
  * Pipeline 1 (Proposal 186 / ADR-058): zero-LLM compilation.
  *
  * Supported fields (case-insensitive, bold or plain):
- *   **Pattern:** <regex or ast-grep pattern>
+ *   **Pattern:** <regex or flat ast-grep pattern>  OR  fenced ```yaml block below the marker (compound ast-grep)
  *   **Engine:** regex | ast | ast-grep
  *   **Scope:** glob, glob, !negated-glob
  *   **Severity:** error | warning
  *   **Message:** <single-line OR multi-line remediation message>  (#1265)
  */
 
+import YAML from 'yaml';
+
+import { TotemParseError } from './errors.js';
+
 export interface ManualPattern {
+  /**
+   * Flat pattern text. Empty string when the lesson provides a compound
+   * `astGrepYamlRule` instead. The two fields are mutually exclusive at the
+   * consumer level (buildManualRule picks whichever is set).
+   */
   pattern: string;
   engine: 'regex' | 'ast' | 'ast-grep';
   fileGlobs?: string[];
@@ -25,6 +34,16 @@ export interface ManualPattern {
    * required for Pipeline 1 rules in #1408 - a dry-run sweep precedes the flip.
    */
   badExample?: string;
+  /**
+   * Compound ast-grep rule (NapiConfig shape) parsed from a fenced ```yaml
+   * block immediately following the `**Pattern:**` marker. Mutually exclusive
+   * with the flat `pattern` string. Only valid when `engine === 'ast-grep'`.
+   *
+   * Parsing contract: the fence must be tagged `yaml` (not bare ```). The
+   * scan stops at the next bold-field marker or EOF so that downstream
+   * sections (Message, Bad Example, narrative) can live freely below.
+   */
+  astGrepYamlRule?: Record<string, unknown>;
 }
 
 export function extractField(body: string, field: string): string | undefined {
@@ -151,14 +170,101 @@ export function extractBadExample(body: string): string | undefined {
 }
 
 /**
+ * Extract a yaml-tagged fenced code block following a `**Field:**` marker.
+ *
+ * Scan starts on the line after the field marker and stops at the first
+ * subsequent bold-field marker (same terminator used by extractMultilineField)
+ * or EOF. Only yaml-tagged fences (```yaml or ~~~yaml, case-insensitive) are
+ * accepted — a bare ``` fence is ignored so lessons can still include prose
+ * code blocks below the pattern without accidentally being parsed as a rule.
+ *
+ * Returns the parsed object on success. Returns null when:
+ *   - The field marker is absent
+ *   - No yaml fence appears before the next field marker or EOF
+ *   - The fence content fails to parse as YAML
+ *   - The parsed value is not a plain object (string / array / null rejected)
+ *
+ * Motivation: Pipeline 1 (manual) authoring for compound ast-grep rules
+ * (`astGrepYamlRule` on CompiledRule). The flat string pattern captured by
+ * extractField cannot carry nested `inside:` / `has:` / `not:` combinators;
+ * a yaml fence can. Pack authors need a zero-LLM path to author compound
+ * rules ahead of the 1.15.0 Pack Distribution milestone.
+ */
+export function extractYamlRuleAfterField(
+  body: string,
+  field: string,
+): Record<string, unknown> | null {
+  // Replacer function — `'\\$&'` would still parse correctly because `$&`
+  // expanding to the matched char is exactly the intent, but the function
+  // form is the safer idiom in substitution-sensitive contexts (matches the
+  // broader repo convention, GCA catch on mmnto/totem#1454).
+  const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, (ch) => '\\' + ch);
+  const startRe = new RegExp(`^(?:\\*{2})?${safeField}(?:\\*{2})?:(?:\\*{2})?.*$`, 'i');
+  // Section terminator — any bold field marker OR any markdown heading stops
+  // the YAML scan. CR catch on mmnto/totem#1454: without the heading guard,
+  // a lesson that omits **Message:** and lands on `### Bad Example` with a
+  // yaml fence below would have the unrelated block parsed as the rule.
+  const sectionEndRe = /^(?:\*{2}[A-Za-z][\w\s-]*(?::\*{2}|\*{2}:|:)|#{2,6}\s)/;
+  const fenceStartRe = /^\s*(```|~~~)yaml\s*$/i;
+
+  // Split on both LF and CRLF so Windows-authored lessons don't leave trailing
+  // \r characters that break line-anchored regexes. Same reasoning as
+  // extractMultilineField.
+  const lines = body.split(/\r?\n/);
+  let startIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (startRe.test(lines[i]!)) {
+      startIdx = i;
+      break;
+    }
+  }
+  if (startIdx === -1) return null;
+
+  let fenceStartIdx = -1;
+  let fenceChar = '';
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (sectionEndRe.test(line)) return null;
+    const m = line.match(fenceStartRe);
+    if (m) {
+      fenceStartIdx = i;
+      fenceChar = m[1]!;
+      break;
+    }
+  }
+  if (fenceStartIdx === -1) return null;
+
+  const fenceEndRe = new RegExp(`^\\s*${fenceChar}\\s*$`);
+  const yamlLines: string[] = [];
+  let fenceClosed = false;
+  for (let i = fenceStartIdx + 1; i < lines.length; i++) {
+    if (fenceEndRe.test(lines[i]!)) {
+      fenceClosed = true;
+      break;
+    }
+    yamlLines.push(lines[i]!);
+  }
+  if (!fenceClosed) return null;
+
+  const yamlSrc = yamlLines.join('\n').trim();
+  if (yamlSrc.length === 0) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = YAML.parse(yamlSrc);
+    // totem-context: malformed YAML is a soft failure for an optional compound rule — caller treats null as "no compound rule present" (GCA #1454)
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  return parsed as Record<string, unknown>;
+}
+
+/**
  * Try to extract manual pattern fields from a lesson body.
  * Returns null if the lesson doesn't contain a Pattern: field.
  */
 export function extractManualPattern(body: string): ManualPattern | null {
-  const rawPattern = extractField(body, 'Pattern');
-  if (!rawPattern) return null;
-  const pattern = stripInlineCode(rawPattern);
-
   const engineRaw = extractField(body, 'Engine')?.toLowerCase();
   const engine: ManualPattern['engine'] =
     engineRaw === 'ast' ? 'ast' : engineRaw === 'ast-grep' ? 'ast-grep' : 'regex';
@@ -180,6 +286,36 @@ export function extractManualPattern(body: string): ManualPattern | null {
 
   // mmnto/totem#1408: optional Bad Example block for the compile-time smoke gate.
   const badExample = extractBadExample(body);
+
+  // Compound path: a yaml-tagged fenced block immediately below **Pattern:**.
+  // Only valid for engine: ast-grep — a compound YAML rule has no meaning for
+  // regex or tree-sitter-query engines. Authoring error (yaml fence + wrong
+  // engine) fails loud instead of silently falling through to Pipeline 2/3,
+  // because a lesson that went to the trouble of writing yaml clearly
+  // intended manual compound compilation (CR catch on mmnto/totem#1454).
+  const yamlRule = extractYamlRuleAfterField(body, 'Pattern');
+  if (yamlRule) {
+    if (engine !== 'ast-grep') {
+      throw new TotemParseError(
+        `Lesson authoring error: yaml-tagged \`**Pattern:**\` fence found but \`**Engine:**\` is \`${engine}\`. Compound yaml rules only compile under \`ast-grep\`.`,
+        'Set `**Engine:** ast-grep` on the lesson, or replace the yaml fence with a flat one-line pattern matching the chosen engine.',
+      );
+    }
+    return {
+      pattern: '',
+      engine: 'ast-grep',
+      fileGlobs,
+      severity,
+      message,
+      badExample,
+      astGrepYamlRule: yamlRule,
+    };
+  }
+
+  // Flat path (existing behavior).
+  const rawPattern = extractField(body, 'Pattern');
+  if (!rawPattern) return null;
+  const pattern = stripInlineCode(rawPattern);
 
   return { pattern, engine, fileGlobs, severity, message, badExample };
 }

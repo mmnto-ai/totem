@@ -480,6 +480,17 @@ export function buildManualRule(
   const manual = extractManualPattern(lesson.body);
   if (!manual) return { rule: null };
 
+  // Compound ast-grep path: the lesson authored a NapiConfig-shaped rule via
+  // a yaml fenced block under **Pattern:**. Route the parsed object through
+  // validateAstGrepPattern (which accepts both string and object shapes via
+  // the spike-validated polymorphic signature).
+  const isCompound = manual.engine === 'ast-grep' && manual.astGrepYamlRule !== undefined;
+  const astSource: string | Record<string, unknown> | undefined = isCompound
+    ? manual.astGrepYamlRule
+    : manual.engine === 'ast-grep'
+      ? manual.pattern
+      : undefined;
+
   if (manual.engine === 'regex') {
     const validation = validateRegex(manual.pattern);
     if (!validation.valid) {
@@ -488,7 +499,14 @@ export function buildManualRule(
   }
 
   if (manual.engine === 'ast-grep') {
-    const validation = validateAstGrepPattern(manual.pattern);
+    if (astSource === undefined || (typeof astSource === 'string' && astSource.length === 0)) {
+      return {
+        rule: null,
+        rejectReason:
+          'Manual ast-grep lesson has neither a flat **Pattern:** value nor a `yaml`-tagged fenced block',
+      };
+    }
+    const validation = validateAstGrepPattern(astSource);
     if (!validation.valid) {
       return { rule: null, rejectReason: `Manual ast-grep pattern rejected: ${validation.reason}` };
     }
@@ -497,6 +515,9 @@ export function buildManualRule(
   const now = new Date().toISOString();
   const existing = existingByHash.get(lesson.hash);
   const sanitizedGlobs = manual.fileGlobs ? sanitizeFileGlobs(manual.fileGlobs) : undefined;
+
+  const engineFieldArgs: string | Record<string, unknown> =
+    manual.engine === 'ast-grep' && astSource !== undefined ? astSource : manual.pattern;
 
   return {
     rule: {
@@ -513,7 +534,7 @@ export function buildManualRule(
       // so we set this flag explicitly here. Old compiled-rules.json files don't
       // have it; the legacy heuristic stays as a fallback for those.
       manual: true,
-      ...engineFields(manual.engine, manual.pattern),
+      ...engineFields(manual.engine, engineFieldArgs),
       compiledAt: now,
       createdAt: existing?.createdAt ?? now,
       ...(sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {}),
