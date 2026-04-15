@@ -416,17 +416,29 @@ export class LanceStore {
     hasFtsIndex: boolean;
   }> {
     const db = await lancedb.connect(this.dbPath);
-    const tableNames = await db.tableNames();
 
-    let table: lancedb.Table | null = null;
-    let hasFtsIndex = false;
-    if (tableNames.includes(TOTEM_TABLE_NAME)) {
-      table = await db.openTable(TOTEM_TABLE_NAME);
-      hasFtsIndex = await detectFtsIndexOnTable(table, this.onWarn);
+    // Shield WARN guard: `tableNames()` and `openTable()` can both throw.
+    // Without this try/catch the partially-opened `db` connection would
+    // leak if either step failed, because the caller's finally block that
+    // calls `closeReadSnapshot` only runs once the snapshot object is
+    // returned. Close the connection inline before rethrowing so the
+    // failure path is leak-free.
+    try {
+      const tableNames = await db.tableNames();
+
+      let table: lancedb.Table | null = null;
+      let hasFtsIndex = false;
+      if (tableNames.includes(TOTEM_TABLE_NAME)) {
+        table = await db.openTable(TOTEM_TABLE_NAME);
+        hasFtsIndex = await detectFtsIndexOnTable(table, this.onWarn);
+      }
+
+      this.readRefreshes += 1;
+      return { db, table, hasFtsIndex };
+    } catch (err) {
+      closeReadSnapshot(db, this.onWarn);
+      throw err;
     }
-
-    this.readRefreshes += 1;
-    return { db, table, hasFtsIndex };
   }
 
   /**
