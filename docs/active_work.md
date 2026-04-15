@@ -1,6 +1,6 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.14.8` (published 2026-04-14) with **1.14.9 — Precision Engine** feature-complete on `main` and pending release. Test counts: **2,879 across core, CLI, and MCP packages**. **411 compiled rules** (391 active, 20 archived). The next release ships compound ast-grep rule support, a compile-time smoke gate, and the `badExample` requirement that closes the LLM-hallucination loop.
+The project is at release `@mmnto/cli@1.14.8` (published 2026-04-14) with **1.14.9 — Precision Engine** feature-complete on `main` and pending release. Test counts: **2,879 across core, CLI, and MCP packages**. **411 compiled rules** in the rules array (389 active, 22 archived). The `nonCompilable` ledger separately tracks 889 lessons the LLM declined to convert into rules; that array is sibling to `rules` and not counted toward `rule_count`. The next release ships compound ast-grep rule support, a compile-time smoke gate, and the `badExample` requirement that closes the LLM-hallucination loop.
 
 ### Recently Shipped
 
