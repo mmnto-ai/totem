@@ -6642,6 +6642,19 @@
       "severity": "warning",
       "status": "archived",
       "archivedReason": "Over-broad: pattern JSON.stringify($OBJ) matches any single-argument JSON.stringify call in compile-manifest.ts, including the legitimate primitive-serialization call inside canonicalStringify itself (line 103). The lesson intent is specifically about the canonicalStringify function, not all JSON.stringify calls in the file. upgradeTarget: compound (Proposal 226) — a compound rule with inside: function canonicalStringify(...) { $$$ } could constrain the pattern to calls that bypass canonicalStringify, catching the real anti-pattern without firing on the helper's own implementation. Phase 4 recompile candidate once #1408 and #1409 ship."
+    },
+    {
+      "lessonHash": "20aa11df474faf48",
+      "lessonHeading": "Pipeline 5: observation from shield",
+      "pattern": "if\\s+\\(model\\.startsWith\\('-'\\)\\s+\\|\\|\\s+!MODEL_NAME_RE\\.test\\(model\\)\\)\\s+\\{",
+      "message": "`TotemParseError` is used for a configuration validation error. Consider using `TotemConfigError` (as used in `resolveOrchestrator` for the exact same validation) to maintain consistent error semantics and avoid stylistic drift.",
+      "engine": "regex",
+      "severity": "warning",
+      "fileGlobs": [
+        "**/*.ts"
+      ],
+      "compiledAt": "2026-04-15T05:37:10.108Z",
+      "createdAt": "2026-04-15T05:37:10.108Z"
     }
   ],
   "nonCompilable": [

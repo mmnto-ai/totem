@@ -123,8 +123,15 @@ export function parseModelString(
 
 // ─── Centralized model resolution (#248) ────────────
 
-/** Characters allowed in model names — restricts shell metacharacters. */
-const MODEL_NAME_RE = /^[\w./:_-]+$/;
+/**
+ * Characters allowed in model names — restricts shell metacharacters.
+ *
+ * Exported as the single source of truth so orchestrators that perform
+ * shell interpolation (`shell-orchestrator.ts`) can gate on the exact
+ * same surface as `resolveOrchestrator`. Any divergence would re-open
+ * the class of config-driven shell-injection mmnto/totem#1429 fixes.
+ */
+export const MODEL_NAME_RE = /^[\w./:_-]+$/;
 
 export interface ResolvedOrchestrator {
   parsed: { provider: string; model: string };

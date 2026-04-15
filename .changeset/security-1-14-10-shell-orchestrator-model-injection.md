@@ -8,8 +8,8 @@ The shell orchestrator used to interpolate `orchestrator.defaultModel` (and per-
 
 **Fix is defense in depth:**
 
-1. **Allow-list at the boundary.** Model names must match `^[a-zA-Z0-9][a-zA-Z0-9._:/_-]*$`. Anything outside this set throws loud before spawn is called. Covers every model name used in practice (providers, dashes, dots, colons for provider-qualified names, slashes for ns/model, underscores for ollama quantized tags).
-2. **Shell-quoting at interpolation.** Even after the allow-list passes, the model token is wrapped in shell-safe quotes (single on Unix, double on Windows) — same treatment the `{file}` token has always had. A future regression that drops the allow-list cannot re-open the hole alone.
+1. **Shared allow-list at the boundary.** The shell orchestrator now imports `MODEL_NAME_RE` from `orchestrator.ts` and applies the same leading-dash + allow-list check that `resolveOrchestrator` has always used. Single source of truth for model-name validation, symmetric across all orchestrators, no chance of one gate rejecting what another accepts. Validation errors throw `TotemConfigError` matching the sibling validator.
+2. **Shell-quoting at interpolation.** Even after the allow-list passes, the model token is wrapped in shell-safe quotes (single-quote on Unix, MSVCRT-style `\"` escape on Windows) — same treatment the `{file}` token has always had. A future regression that drops the allow-list cannot re-open the hole alone.
 
 **Regression tests added:** 12 exploit cases (semicolon, backtick, dollar-subshell, pipe, redirect, newline, ampersand, space, quote, dquote, paren, leading-dash) all rejected before `spawn()` is called. 8 benign model shapes accepted including underscore-containing ollama quantized tags. 1 defense-in-depth assertion that the model is quoted on the spawn command.
 

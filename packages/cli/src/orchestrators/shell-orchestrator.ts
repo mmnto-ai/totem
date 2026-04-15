@@ -5,9 +5,11 @@ import * as path from 'node:path';
 
 import { z } from 'zod';
 
+import { TotemConfigError } from '@mmnto/totem';
+
 import { log } from '../ui.js';
 import type { OrchestratorInvokeOptions, OrchestratorResult } from './orchestrator.js';
-import { isQuotaError } from './orchestrator.js';
+import { isQuotaError, MODEL_NAME_RE } from './orchestrator.js';
 
 // ─── Constants ───────────────────────────────────────
 
@@ -18,22 +20,19 @@ const TEMP_ID_BYTES = 4;
 /** execFileSync on Windows can't resolve executables without `shell: true`. */
 const IS_WIN = process.platform === 'win32';
 
-/**
- * Model names the shell orchestrator is willing to interpolate into a shell
- * command. Intentionally restrictive: alphanumeric, plus dot, underscore,
- * dash, colon, slash. Colon allows provider-qualified names like
- * `anthropic:claude-sonnet-4-6`. Slash allows `ns/model` style. Underscore
- * covers ollama quantized tags like `llama2:13b-chat-q4_0`. First char
- * must be alphanumeric to reject leading-dash shell-option tricks.
- *
- * Rejecting anything outside this set guards against a poisoned
- * `orchestrator.defaultModel` / overrides value executing shell commands
- * via the `{model}` token.
- */
-const MODEL_SAFE_RE = /^[a-zA-Z0-9][\w.:/-]*$/;
-
 function quoteShellArg(value: string): string {
-  return IS_WIN ? `"${value.replace(/"/g, '""')}"` : `'${value.replace(/'/g, "'\\''")}'`;
+  // Windows quoting is genuinely ambiguous — `cmd.exe` has no universal
+  // quote-escape; `""` (doubling) works inside cmd's own quote state and
+  // `\"` works for the Microsoft C-runtime argv parser used by most target
+  // binaries. Neither is safe when an unchecked string contains BOTH `"`
+  // and shell metacharacters. The real defense is the upstream allow-list
+  // (`MODEL_NAME_RE` below, which rejects `"` outright). We emit `\"` here
+  // so the quoted output at least parses correctly under MSVCRT rules for
+  // the well-known tools we pipe to (gemini, claude, ollama). If a future
+  // caller passes an unchecked path, the right fix is to pre-validate or
+  // to stop using `shell: true` — not to defeat shell quoting entirely in
+  // this helper. See GCA + Shield discussion on mmnto/totem#1429.
+  return IS_WIN ? `"${value.replace(/"/g, '\\"')}"` : `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 // ─── Gemini CLI JSON parsing ─────────────────────────
@@ -103,12 +102,16 @@ export async function invokeShellOrchestrator(
   // The {model} token used to be substituted raw, which turned a config-supplied
   // string into a shell-injection sink. A malicious totem.config.ts could set
   // `defaultModel: "gemini-1.5; rm -rf /"` and ride `shell: true` straight to
-  // arbitrary code execution. The allow-list covers every model name used in
-  // practice (providers, dashes, dots, colons for provider-qualified names,
-  // slashes for ns/model) and rejects everything else loud and early.
-  if (!MODEL_SAFE_RE.test(model)) {
-    throw new Error(
-      `[Totem Error] Shell orchestrator refuses model ${JSON.stringify(model)}: contains characters outside the safe set [a-zA-Z0-9._:/-]. This guards against shell injection via the {model} token in orchestrator.command.`,
+  // arbitrary code execution. The gate mirrors `resolveOrchestrator` exactly —
+  // leading-dash rejection (blocks shell-option tricks like `--exec`) plus the
+  // shared `MODEL_NAME_RE` allow-list. Using the same predicate on both surfaces
+  // keeps the validation symmetric so a model accepted upstream cannot be
+  // rejected here (and vice versa). GCA catch on mmnto/totem#1429.
+  if (model.startsWith('-') || !MODEL_NAME_RE.test(model)) {
+    throw new TotemConfigError(
+      `Shell orchestrator refuses model ${JSON.stringify(model)}. Model names may only contain word characters, dots, slashes, colons, underscores, and hyphens, and must not start with a dash. This guards against shell injection via the {model} token in orchestrator.command.`,
+      'Set orchestrator.defaultModel / overrides to a plain model identifier (e.g., "claude-sonnet-4-6", "anthropic:claude-sonnet-4-6", "gpt-5.4-mini").',
+      'CONFIG_INVALID',
     );
   }
 

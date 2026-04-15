@@ -247,9 +247,10 @@ describe('invokeShellOrchestrator', () => {
   // Regression tests for the RCE found during the pre-1.15.0 deep review:
   // the `{model}` token was interpolated raw into a string executed with
   // `shell: true`, so a poisoned config value could run arbitrary shell
-  // commands. Fix is two layers: (1) allow-list MODEL_SAFE_RE rejects
-  // metacharacters at the boundary, (2) defense-in-depth shell-quoting of
-  // the token at interpolation.
+  // commands. Fix is two layers: (1) the shared `MODEL_NAME_RE` allow-list
+  // (plus an explicit leading-dash reject) mirrors `resolveOrchestrator`
+  // exactly so validation is symmetric across all orchestrators, and
+  // (2) defense-in-depth shell-quoting of the token at interpolation.
 
   describe('model sanitization', () => {
     const EXPLOITS = [
