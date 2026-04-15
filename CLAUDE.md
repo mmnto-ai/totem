@@ -43,8 +43,8 @@ After >15 turns of code changes: run `totem status`, re-query strategy ADRs for 
 
 ## Tool Patterns
 
-- **Prefer Monitor over Bash `sleep` loops when waiting for a signal.** Kick the long-running process to the background and Monitor it. `sleep; check; sleep; check` patterns burn cache context every iteration; Monitor streams events only when they happen. Example: launch `pnpm test --watch` in the background and Monitor it, rather than writing a shell poll loop.
-- **Use `/loop` self-paced when reacting to a future state change.** `/loop` without an interval lets the model decide when to check back. Pairs with Monitor for long watches. Example: `/loop watch the CI on this branch, react when green`.
+- **Prefer Monitor over Bash `sleep` loops.** Background long-running processes and Monitor them. `sleep; check` burns cache every iteration; Monitor only fires on events.
+- **`/loop` self-paced for poll-and-react.** `/loop <prompt>` without an interval lets the model self-cadence. Example: `/loop watch CI, react when green`.
 
 ## Detailed Docs (read when relevant)
 
