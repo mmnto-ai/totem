@@ -48,7 +48,7 @@ CACHE_DIR="$GIT_ROOT/.totem/cache"
 mkdir -p "$CACHE_DIR" 2>/dev/null
 
 if [ ! -d "$CACHE_DIR" ]; then
-  echo "pre-compact: .totem/cache/ is not writable; skipping signoff" >&2
+  echo "[Totem Error] pre-compact: .totem/cache/ is not writable; skipping signoff" >&2
   exit 1
 fi
 
@@ -90,7 +90,7 @@ RECENT=$(run_git -C "$GIT_ROOT" log --oneline -5 2>/dev/null || echo "(git log u
 } >"$ARTIFACT" 2>/dev/null
 
 if [ ! -s "$ARTIFACT" ]; then
-  echo "pre-compact: failed to write $ARTIFACT" >&2
+  echo "[Totem Error] pre-compact: failed to write $ARTIFACT" >&2
   exit 1
 fi
 

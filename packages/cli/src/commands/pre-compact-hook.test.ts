@@ -30,6 +30,11 @@ interface RunResult {
 // the wall clock by a fraction of a second.
 const MTIME_BUFFER_MS = 1_000;
 
+// Upper bound on hook duration, per design doc invariant. Per-git-call
+// budget in the hook itself is 2s; overall 10s covers four git calls
+// plus file I/O with generous headroom.
+const HOOK_TIMEOUT_MS = 10_000;
+
 function getFreshArtifacts(callStart: number): string[] {
   if (!fs.existsSync(CACHE)) return [];
   return fs
@@ -39,7 +44,7 @@ function getFreshArtifacts(callStart: number): string[] {
     .filter((p) => fs.statSync(p).mtimeMs >= callStart - MTIME_BUFFER_MS);
 }
 
-function runHook(stdin = '', timeoutMs = 10_000): RunResult {
+function runHook(stdin = '', timeoutMs = HOOK_TIMEOUT_MS): RunResult {
   const start = Date.now();
   try {
     const stdout = execFileSync('bash', [HOOK], {
@@ -74,8 +79,10 @@ describe('PreCompact hook (mmnto-ai/totem#1460)', () => {
         if (fs.statSync(p).mtimeMs >= testSuiteStart - MTIME_BUFFER_MS) {
           fs.unlinkSync(p);
         }
-      } catch {
-        // best-effort cleanup; leaked artifacts are harmless
+      } catch (err) {
+        // Best-effort cleanup; warn but continue so one leaked file does
+        // not abort the rest of the sweep. Leaked artifacts are harmless.
+        console.warn(`pre-compact-hook.test cleanup: could not process ${p}`, err);
       }
     }
   });
@@ -127,9 +134,9 @@ describe('PreCompact hook (mmnto-ai/totem#1460)', () => {
   });
 
   it('completes within 10 seconds worst-case on a local repo', () => {
-    const result = runHook('', 10_000);
+    const result = runHook('', HOOK_TIMEOUT_MS);
     expect(result.exitCode).toBe(0);
-    expect(result.durationMs).toBeLessThan(10_000);
+    expect(result.durationMs).toBeLessThan(HOOK_TIMEOUT_MS);
   });
 
   it('ignores stdin content (runs identically with garbage input)', () => {
