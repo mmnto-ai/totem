@@ -88,7 +88,7 @@ The 2026-04-15 joint planning pass (Ultraplan cloud session + strategy-repo pair
 **Phase A.5: Architectural gates before the grind. [DONE]** Strategy-pair promoted two gating proposals to Accepted, and a third positioning ADR landed during the scope conversation:
 
 - **ADR-088 (Stacked Compilation Architecture, was Proposal 202).** Accepted on `mmnto-ai/totem-strategy#85` (2026-04-15). Phase 1 tickets decomposed on 2026-04-16 as #1479 (verify-retry loop), #1480 (unverified flag), #1481 (reason codes), #1482 (verbose trace), #1483 (doctor zero-match), all `pre-1.15-review`. Phase 2 (Layers 1 and 2) stays 1.16.0+.
-- **ADR-089 (Zero-Trust Agent Governance, was Proposal 228).** Accepted on `mmnto-ai/totem-strategy#85`. Flagship pack `@totem/pack-agent-security` commits to 1.15.0. Decomposed on 2026-04-16 into #1484-#1494 across scaffolding, security rules, install path, signing, lifecycle. Scaffolding PR (#1503) in review.
+- **ADR-089 (Zero-Trust Agent Governance, was Proposal 228).** Accepted on `mmnto-ai/totem-strategy#85`. Flagship pack `@totem/pack-agent-security` commits to 1.15.0. Decomposed on 2026-04-16 into #1484-#1494 across scaffolding, security rules, install path, signing, lifecycle. Scaffolding PR #1503 merged on 2026-04-16.
 - **ADR-085 (Totem Pack Ecosystem).** Accepted on `mmnto-ai/totem-strategy#86` with the five deferred decisions resolved (see 2026-04-16 session notes above). Resolved-decision follow-ups ticketed as #1494 (doctor shadowing warning) and #1495 (Rule Identity Model placeholder ADR).
 - **ADR-090 (Totem as the Multi-Agent State Substrate).** Accepted on `mmnto-ai/totem-strategy#87`. Not a gating proposal but landed during the same session to bound future "is this a Totem feature?" decisions. Decomposed into #1497 (rich `describe_project`), #1498 (init auto-detect), #1499 (preflight scope-triage gate), #1500 (positioning copy sweep). #1497 and #1498 attached to 1.16.0 so ADR-090's Human DX and Agent AX tracks do not pollute 1.15.0's Pack Distribution theme.
 
@@ -97,8 +97,8 @@ The 2026-04-15 joint planning pass (Ultraplan cloud session + strategy-repo pair
 1. **#1484** scaffold `@totem/pack-agent-security`. Blocks 5 security-rule and immutable-flag tickets. Merged as #1503 on 2026-04-16.
 2. **#1479** Layer 3 verify-retry loop. Biggest compounding value of the queue; would have caught both over-broad rules archived during #1503. Unblocks #1480 and #1481.
 3. **#1485** `immutable` flag on `CompiledRule`. Prerequisite for security rules to enforce the Zero-Trust story with local overrides blocked and bypasses logged to the Trap Ledger.
-4. **#1489** obfuscated-string-concat research spike. Time-boxed to 2 days. Produces the validated pattern that #1490 ships.
-5. **#1491** `totem install pack/<name>` command. Foundational CLI required before lifecycle (#1493) and Sigstore (#1492) can build on top.
+4. **#1491** `totem install pack/<name>` command. Foundational CLI required before lifecycle (#1493) and Sigstore (#1492) can build on top. Unblocks three downstream tickets.
+5. **#1489** obfuscated-string-concat research spike. Time-boxed to 2 days. Produces the validated pattern that #1490 ships.
 
 After the top-5: tactical cleanup batch (#1456, #1457, #1458 closed in #1501, #1459), Phase 1 ADR-088 completion (#1480-#1483), ADR-089 security rules (#1486-#1490), and the install / signing / lifecycle trio (#1491, #1492, #1493). Re-tier untiered tickets per ADR-075 as they surface.
 
@@ -138,7 +138,7 @@ Backfill these as the 29-ticket grind drains.
 - **Phase B:** Scope interleaving in PRs multiplies bot-review findings. One bundle per PR; do not mix `scope: mcp` and `scope: cli` in the same diff.
 - **Phase B dependency order:** Do not start #1486-#1490 security rules before #1485 (immutable flag) lands; severity cannot enforce. Do not start #1504 (pre-1.13.0 sweep) before #1479-#1483 land; there is no gate to check against.
 - **Phase C:** Do not change compile-pipeline substrate (Proposals 217, 230) in the same release as the pack-distribution feature on top of it. Both are quarantined to 1.16.0+.
-- **Incidental compiles during manifest refresh.** `totem lesson compile` refreshes `compile-manifest.json` but also compiles any ready lessons, which can ship an over-broad rule (`939ae83ed3bf28bb`, `e2341ed9229f9a60` both landed this way during 2026-04-16). Archive inline if it happens; ADR-088 Phase 1 #1479 verify-retry will prevent the class once shipped.
+- **Incidental compiles during manifest refresh.** `totem compile` refreshes `compile-manifest.json` but also compiles any ready lessons, which can ship an over-broad rule (`939ae83ed3bf28bb`, `e2341ed9229f9a60` both landed this way during 2026-04-16). Archive inline if it happens; ADR-088 Phase 1 #1479 verify-retry will prevent the class once shipped.
 
 **Other pending work (unmilestoned, unblock between cycles):**
 
