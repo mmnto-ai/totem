@@ -154,7 +154,7 @@ export function extractRuleCounts(cwd: string, totemDir: string): RuleCounts {
     let active = 0;
     let archived = 0;
     for (const rule of parsed.rules) {
-      if ((rule as { status?: string }).status === 'archived') archived += 1;
+      if (rule.status === 'archived') archived += 1;
       else active += 1;
     }
     return {
