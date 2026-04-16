@@ -28,6 +28,13 @@ vi.mock('@mmnto/totem', () => ({
   TotemError: class extends Error {
     recoveryHint?: string;
   },
+  // Stubs used by state-extractors (imported transitively via the tool).
+  resolveGitRoot: () => null,
+  safeExec: () => '',
+  readJsonSafe: () => {
+    throw new Error('mock readJsonSafe: no file in test context');
+  },
+  CompiledRulesFileSchema: { parse: (v: unknown) => v },
 }));
 
 let contextError: Error | null = null;
@@ -114,5 +121,62 @@ describe('describe_project MCP tool', () => {
     } finally {
       process.cwd = originalCwd;
     }
+  });
+
+  it('omits richState when includeRichState is false (default)', async () => {
+    const server = fakeServer();
+    registerDescribeProject(server as never);
+
+    const result = (await capturedHandler({})) as { content: { text: string }[] };
+    const parsed = JSON.parse(result.content[0]!.text);
+    expect(parsed.richState).toBeUndefined();
+    // Legacy shape preserved byte-by-byte when richState is absent.
+    expect(parsed).toEqual({
+      project: 'test-project',
+      description: 'A test project',
+      tier: 'standard',
+      rules: 10,
+      lessons: 5,
+      targets: ['**/*.ts (code/typescript-ast)'],
+      partitions: { core: ['packages/core/'] },
+      hooks: ['pre-push'],
+    });
+  });
+
+  it('omits richState when includeRichState is explicitly false', async () => {
+    const server = fakeServer();
+    registerDescribeProject(server as never);
+
+    const result = (await capturedHandler({ includeRichState: false })) as {
+      content: { text: string }[];
+    };
+    const parsed = JSON.parse(result.content[0]!.text);
+    expect(parsed.richState).toBeUndefined();
+  });
+
+  it('attaches richState when includeRichState is true', async () => {
+    const server = fakeServer();
+    registerDescribeProject(server as never);
+
+    const result = (await capturedHandler({ includeRichState: true })) as {
+      content: { text: string }[];
+    };
+    const parsed = JSON.parse(result.content[0]!.text);
+    expect(parsed.richState).toBeDefined();
+    // Legacy fields remain attached alongside richState.
+    expect(parsed.project).toBe('test-project');
+    // Rich-state contract: every documented section is present (even if null/zero/empty).
+    expect(parsed.richState).toHaveProperty('strategyPointer');
+    expect(parsed.richState).toHaveProperty('gitState');
+    expect(parsed.richState).toHaveProperty('packageVersions');
+    expect(parsed.richState).toHaveProperty('ruleCounts');
+    expect(parsed.richState).toHaveProperty('lessonCount');
+    expect(parsed.richState).toHaveProperty('testCount');
+    expect(parsed.richState).toHaveProperty('milestone');
+    expect(parsed.richState).toHaveProperty('recentPrs');
+    // testCount pinned to null for v1.
+    expect(parsed.richState.testCount).toBeNull();
+    // milestone.bestEffort pinned to true.
+    expect(parsed.richState.milestone.bestEffort).toBe(true);
   });
 });
