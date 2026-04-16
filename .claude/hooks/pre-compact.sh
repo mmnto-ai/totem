@@ -38,7 +38,7 @@ run_git() {
 
 # Resolve repo root from the script's own location. Fall back to PWD if
 # git cannot determine a toplevel (not a git repo, or git missing).
-SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)" || exit 1
 GIT_ROOT=$(run_git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || echo "")
 if [ -z "$GIT_ROOT" ]; then
   GIT_ROOT="$PWD"
@@ -47,7 +47,7 @@ fi
 CACHE_DIR="$GIT_ROOT/.totem/cache"
 mkdir -p "$CACHE_DIR" 2>/dev/null
 
-if [ ! -d "$CACHE_DIR" ]; then
+if [ ! -d "$CACHE_DIR" ] || [ ! -w "$CACHE_DIR" ]; then
   echo "[Totem Error] pre-compact: .totem/cache/ is not writable; skipping signoff" >&2
   exit 1
 fi
