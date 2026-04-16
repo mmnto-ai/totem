@@ -13,6 +13,7 @@
 import YAML from 'yaml';
 
 import { TotemParseError } from './errors.js';
+import { escapeRegex } from './regex-utils.js';
 
 export interface ManualPattern {
   /**
@@ -66,7 +67,7 @@ export function extractField(body: string, field: string): string | undefined {
   // silently rejecting `**Pattern:**foo` (no space) and `**Pattern:**` (empty value).
   // Caught by gemini-code-assist on PR #1282 as another instance of the
   // cross-helper-consistency cascade pattern documented in lesson-400fed87.
-  const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const safeField = escapeRegex(field);
   const re = new RegExp(`^(?:\\*{2})?${safeField}(?:\\*{2})?:(?:\\*{2})?[ \\t]*(.*)$`, 'im');
   const match = body.match(re);
   // Trim and treat empty as "no value" so callers' `if (!value)` checks fire correctly.
@@ -90,7 +91,7 @@ export function extractField(body: string, field: string): string | undefined {
  * Returns the trimmed value, or `undefined` if the field is absent.
  */
 export function extractMultilineField(body: string, field: string): string | undefined {
-  const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const safeField = escapeRegex(field);
   // Match the field's first line. Supports four common forms:
   //   **Field:**  ← canonical totem (asterisks both sides of colon)
   //   **Field**:  ← alternative markdown convention (asterisks before colon)
@@ -194,11 +195,7 @@ export function extractYamlRuleAfterField(
   body: string,
   field: string,
 ): Record<string, unknown> | null {
-  // Replacer function — `'\\$&'` would still parse correctly because `$&`
-  // expanding to the matched char is exactly the intent, but the function
-  // form is the safer idiom in substitution-sensitive contexts (matches the
-  // broader repo convention, GCA catch on mmnto/totem#1454).
-  const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, (ch) => '\\' + ch);
+  const safeField = escapeRegex(field);
   const startRe = new RegExp(`^(?:\\*{2})?${safeField}(?:\\*{2})?:(?:\\*{2})?.*$`, 'i');
   // Section terminator — any bold field marker OR any markdown heading stops
   // the YAML scan. CR catch on mmnto/totem#1454: without the heading guard,
@@ -328,7 +325,7 @@ export function extractManualPattern(body: string): ManualPattern | null {
  * `**Field**:`, `**Field:`, and plain `Field:`.
  */
 export function extractAllFields(body: string, field: string): string[] {
-  const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const safeField = escapeRegex(field);
   const re = new RegExp(`^(?:\\*{2})?${safeField}(?:\\*{2})?:(?:\\*{2})?[ \\t]*(.*)$`, 'gim');
   return Array.from(body.matchAll(re), (m) => m[1]!.trim());
 }
@@ -366,7 +363,7 @@ export interface BadGoodSnippets {
  * Used internally by extractBadGoodSnippets.
  */
 function extractCodeBlock(body: string, field: string): string[] | null {
-  const safeField = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const safeField = escapeRegex(field);
   // Try fenced code block after **Field:** or **Field**: (colon required, inside or outside bold)
   const fencedRe = new RegExp(
     `(?:^|\\n)\\*{0,2}${safeField}\\*{0,2}\\s*:[^\\n]*\\n(?:\\s*\\n)*(\`\`\`|~~~)[^\\n]*\\n([\\s\\S]*?)\\1`,

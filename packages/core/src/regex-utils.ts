@@ -8,9 +8,14 @@
 /**
  * Escape all regex special characters in a string so it can be used
  * as a literal match inside a `RegExp`.
+ *
+ * Uses a replacer function (not a `'\\$&'` string replacement) to
+ * match the repo convention set by `shell-orchestrator.ts` and the
+ * GCA catches on PR #1454 / #1458. Functionally equivalent but safer
+ * as a default in substitution-sensitive contexts.
  */
 export function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return s.replace(/[.*+?^${}()|[\]\\]/g, (ch) => '\\' + ch);
 }
 
 /**
