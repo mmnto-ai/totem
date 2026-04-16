@@ -4,11 +4,25 @@ import { codeToPattern, escapeRegex } from './regex-utils.js';
 
 describe('escapeRegex', () => {
   it('escapes all regex metacharacters', () => {
-    const metacharacters = '.*+?^${}()|[]\\';
+    const metacharacters = '.*+?^${}()|[]\\-';
     const escaped = escapeRegex(metacharacters);
-    expect(escaped).toBe('\\.\\*\\+\\?\\^\\$\\{\\}\\(\\)\\|\\[\\]\\\\');
+    expect(escaped).toBe('\\.\\*\\+\\?\\^\\$\\{\\}\\(\\)\\|\\[\\]\\\\\\-');
     // The escaped string should be safe to use in a RegExp
     expect(() => new RegExp(escaped)).not.toThrow();
+  });
+
+  it('escapes hyphen so output is safe inside a character class', () => {
+    // A caller that interpolates escapeRegex output into `[...]` would
+    // otherwise get a range expression by accident. GCA catch on #1501.
+    const escaped = escapeRegex('a-z');
+    expect(escaped).toBe('a\\-z');
+    const re = new RegExp(`[${escaped}]`);
+    // The character class contains `a`, `\-`, `z` as literals. `m` is
+    // not in the set and must not match.
+    expect(re.test('-')).toBe(true);
+    expect(re.test('a')).toBe(true);
+    expect(re.test('z')).toBe(true);
+    expect(re.test('m')).toBe(false);
   });
 
   it('leaves alphanumeric strings unchanged', () => {
