@@ -10,7 +10,18 @@
       "persistent": true
     },
     "test": {
-      "dependsOn": ["build"]
+      "dependsOn": ["build"],
+      "inputs": [
+        "$TURBO_ROOT/CLAUDE.md",
+        "$TURBO_ROOT/GEMINI.md",
+        "$TURBO_ROOT/.junie/guidelines.md",
+        "$TURBO_ROOT/.gemini/**",
+        "$TURBO_ROOT/tools/pre-commit",
+        "$TURBO_ROOT/tools/pre-push",
+        "$TURBO_ROOT/tools/post-merge",
+        "$TURBO_ROOT/.claude/hooks/**",
+        "**"
+      ]
     },
     "lint": {},
     "clean": {
