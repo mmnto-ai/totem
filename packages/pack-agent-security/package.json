@@ -17,6 +17,7 @@
     "README.md"
   ],
   "exports": {
+    ".": "./package.json",
     "./compiled-rules.json": "./compiled-rules.json",
     "./.totemignore": "./.totemignore"
   },

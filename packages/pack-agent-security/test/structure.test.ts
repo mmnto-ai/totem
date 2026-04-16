@@ -32,7 +32,7 @@ describe('@totem/pack-agent-security structure', () => {
     }
   });
 
-  it('package.json exports declares compiled-rules.json and .totemignore with explicit ./ prefixes', () => {
+  it('package.json exports declares root plus both data assets with explicit ./ prefixes', () => {
     const pkg = readJsonSafe<{
       exports?: Record<string, string>;
       files?: string[];
@@ -40,6 +40,9 @@ describe('@totem/pack-agent-security structure', () => {
     }>(path.join(PACK_ROOT, 'package.json'));
 
     expect(pkg.exports).toBeDefined();
+    // Root export points at package.json so bare `require.resolve('@totem/pack-agent-security')`
+    // works in strict ESM contexts. GCA catch on #1503.
+    expect(pkg.exports?.['.']).toBe('./package.json');
     expect(pkg.exports?.['./compiled-rules.json']).toBe('./compiled-rules.json');
     expect(pkg.exports?.['./.totemignore']).toBe('./.totemignore');
   });
