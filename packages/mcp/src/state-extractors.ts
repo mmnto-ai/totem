@@ -121,10 +121,14 @@ export function extractPackageVersions(cwd: string): Record<string, string> {
   for (const subdir of subdirs) {
     const pkgJson = path.join(packagesDir, subdir, 'package.json');
     try {
-      const parsed = readJsonSafe<{ name?: string; version?: string }>(pkgJson);
+      const parsed = readJsonSafe<{ name?: unknown; version?: unknown }>(pkgJson);
+      // readJsonSafe types the shape but does not enforce runtime invariants.
+      // A hand-edited package.json with a numeric version or non-string name
+      // would otherwise leak a malformed value into the response (CR catch on
+      // #1506).
       if (
-        parsed.name !== undefined &&
-        parsed.version !== undefined &&
+        typeof parsed.name === 'string' &&
+        typeof parsed.version === 'string' &&
         (FIXED_GROUP_PACKAGES as readonly string[]).includes(parsed.name)
       ) {
         result[parsed.name] = parsed.version;
@@ -245,11 +249,21 @@ export function extractTestCount(_cwd: string): number | null {
 export function extractRecentPrs(cwd: string, limit = RECENT_PRS_COUNT): RecentPr[] {
   if (resolveGitRoot(cwd) === null) return [];
 
+  // Unit separator (0x1f) is ASCII-reserved for field delimiting and never
+  // appears in commit subjects, unlike `|` which GCA flagged on #1506 as a
+  // correctness risk since commit messages routinely contain pipes.
+  const FIELD_SEP = '\x1f';
   let raw: string;
   try {
     raw = safeExec(
       'git',
-      ['log', `-n`, String(limit * 3), '--grep=#[0-9]\\+', '--format=%s|%cI|%h'],
+      [
+        'log',
+        '-n',
+        String(limit * 3),
+        '--grep=#[0-9]\\+',
+        `--format=%s${FIELD_SEP}%cI${FIELD_SEP}%h`,
+      ],
       { cwd },
     );
     // totem-context: ADR-090 substrate graceful degradation — empty list on git-log failure.
@@ -260,7 +274,7 @@ export function extractRecentPrs(cwd: string, limit = RECENT_PRS_COUNT): RecentP
 
   const results: RecentPr[] = [];
   for (const line of raw.split(/\r?\n/)) {
-    const [title, date, squashSha] = line.split('|');
+    const [title, date, squashSha] = line.split(FIELD_SEP);
     if (
       title === undefined ||
       date === undefined ||
