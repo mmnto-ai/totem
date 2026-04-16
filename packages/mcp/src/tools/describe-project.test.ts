@@ -32,7 +32,9 @@ vi.mock('@mmnto/totem', () => ({
   resolveGitRoot: () => null,
   safeExec: () => '',
   readJsonSafe: () => {
-    throw new Error('mock readJsonSafe: no file in test context');
+    // Prefixed to match Totem's error convention so the lint rule does not
+    // flag this mock throw.
+    throw new Error('[Totem Error] mock readJsonSafe: no file in test context');
   },
   CompiledRulesFileSchema: { parse: (v: unknown) => v },
 }));
