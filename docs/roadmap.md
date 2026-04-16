@@ -10,26 +10,30 @@ Totem is a standard library for codebase governance — deterministic primitives
 
 **Theme:** The Totem Pack Ecosystem. 1.13.0 proved the engine can generate high-fidelity ast-grep rules. The 1.14.x cycle wired the nervous system foundation: cross-repo context mesh, LLM context caching preview, `/preflight` v2 design-doc gate, compound ast-grep rule support, compile-time smoke gate, precision engine. 1.15.0 is where proven rules leave the repo and teams bundle and share them across repositories via the npm registry.
 
-Blocked by the pre-1.15.0 deep review gate (#1421). 24 tickets carry the `pre-1.15-review` label. The 2026-04-15 joint planning pass (Ultraplan cloud session + strategy-repo pair audit) locked a three-phase sequence. See `docs/active_work.md` for the full phase breakdown, ticket sequencing, and proposal dispositions.
+Blocked by the pre-1.15.0 deep review gate (#1421). ~29 tickets carry the `pre-1.15-review` label after the 2026-04-16 ADR-088 Phase 1 decomposition. The 2026-04-15 joint planning pass locked a three-phase sequence. See `docs/active_work.md` for the full phase breakdown, ticket sequencing, and proposal dispositions.
 
-- **Phase A: Workflow setup before the grind.** Cut bot-review-cycle cost before running it across 24 tickets. Monitor tool and `/loop` self-paced examples into CLAUDE.md (Proposal 232 Tier 2), PreCompact hook (#1460), review-gate `if`-scope (#1462), `/autofix-pr` trial on first Phase B bundle PR (#1461). `/preflight` v2 already shipped via #1296 + #1299; the proposal was archived 2026-04-15 once both planning passes tripped on the unarchived file.
-- **Phase A.5: Architectural gates.** Promote Proposal 202 (Stacked Compilation Architecture) and Proposal 228 (Zero-Trust Agent Governance) to ADR. Proposal 202 tickets land with `pre-1.15-review` because without a layered AST → template → LLM+verify → explicit-fail fallback, packs ship the 0/6 usable-rule failure mode from the 1.6.0 stress test. Proposal 228 becomes the 1.15.0 flagship pack `@totem/pack-agent-security`, the first production consumer of the pack infrastructure.
-- **Phase B: Pre-1.15-review grind.** 24 tickets ordered to minimize cross-PR interference. #1279 ships first as the de-noising step (Pipeline 5 over-narrow captures fired four times on the 1.14.10 branch alone). Tactical cleanup batch #1456-#1459 next. Tier-1 bundles grouped by `scope:` label (mcp, cli, compiler, orchestrator, store); one bundle per PR; deepest architectural layer first within each bundle. Tier-2 cleanup after tier-1 closes.
-- **Phase C: Pack Distribution headline.** Promote ADR-085 (Totem Pack Ecosystem) to Accepted with its five deferred decisions resolved (SemVer mapping, local-overrides-pack merge rule, conflict resolution, pack lifecycle, signing). Decompose into tickets for pack resolver, pack fetcher, signature verification, hash-stable compilation, pack lifecycle commands. Ship `@totem/pack-agent-security`. Wire Proposal 229 TBench spot-check as the pack-release gate (full harness stays Horizon 3).
+- **Phase A: Workflow setup before the grind. [DONE 2026-04-16]** Monitor tool and `/loop` self-paced examples into CLAUDE.md (#1466), PreCompact hook (#1470), review-gate `if`-scope (#1468), turbo cache hash-scope fix (#1472). `/preflight` v2 shipped via #1296 + #1299 (1.14.0/1.14.1). `/autofix-pr` trial remains outstanding.
+- **Phase A.5: Architectural gates. [DONE 2026-04-16]** Three ADRs Accepted on the strategy repo: ADR-088 (Stacked Compilation, from Proposal 202, `mmnto-ai/totem-strategy#85`), ADR-089 (Zero-Trust Agent Governance, from Proposal 228, `#85`), ADR-085 (Totem Pack Ecosystem, `#86`) with its five deferred decisions resolved. ADR-090 (Totem as the Multi-Agent State Substrate, `#87`) landed as the positioning principle bounding future "is this a Totem feature?" decisions.
+- **Phase B: Pre-1.15-review grind. [IN PROGRESS]** First PR #1503 merged 2026-04-16 scaffolding `@totem/pack-agent-security`. Next five by audit-driven dependency order: #1479 Layer 3 verify-retry loop (biggest compounding value, foundational), #1485 immutable severity flag (prereq for security rules), #1491 `totem install` command (prereq for pack consumption), #1489 obfuscated-string-concat research spike (time-boxed, unblocks #1490), then #1486-#1490 security rules once #1485 lands. Tactical cleanup batch (#1456, #1457, #1459) in parallel where scope allows; #1458 already closed via #1501. Tier-1 bundles grouped by `scope:` label; one bundle per PR; deepest architectural layer first within each bundle.
+- **Phase C: Pack Distribution headline.** ADR-085 Accepted, decomposition tickets filed as #1484 (scaffold, merged) + #1485 (immutable flag) + #1491 (install) + #1492 (Sigstore + in-toto) + #1493 (lifecycle) + #1494 (doctor shadowing warning). Ship `@totem/pack-agent-security` with the four attack-surface rules (#1486, #1487, #1488, #1490). Wire Proposal 229 TBench spot-check as the pack-release gate (full harness stays Horizon 3).
 
 Quarantined out of 1.15.0: Proposal 217 (LLM context caching, 1.16.0) and Proposal 230 (content-hash embedding cache, 1.17.0). Both touch compile pipeline substrate; changing substrate and the feature built on top of it in the same release is a silent-regression risk.
 
 ---
 
-## 1.16.0: The Ingestion Pipeline
+## 1.16.0: The Ingestion Pipeline + ADR-090 Substrate DX
 
-**Theme:** Source Diversity and the Self-Healing Loop. Expand the extraction pipeline to automatically convert external signals (GitHub Advanced Security alerts and standard repository lint warnings) into deterministic Totem lessons. Where 1.13.0 refined rules from internal telemetry and 1.14.x + 1.15.0 ship the nervous system and the distribution pipeline, 1.16.0 is about where the _inputs_ come from.
+**Theme:** Source Diversity, the Self-Healing Loop, and substrate-layer DX polish. Expand the extraction pipeline to convert external signals (GitHub Advanced Security alerts, lint warnings) into deterministic Totem lessons. Pair that with the Human DX and Agent AX tracks from ADR-090 so the substrate is friction-free for human setup and incoming agent sessions.
 
 Also lands Proposal 217 (LLM context caching, quarantined out of 1.15.0 because it touches compile pipeline substrate).
 
-- **Headline Work:**
-  - [ ] **GHAS / SARIF Extraction:** Convert GitHub Advanced Security alerts into Totem lessons (Strategy #50). This is the original #1131 scope we pivoted away from when telemetry-driven refinement won — now the right time, because 1.14.0 distribution gives us a way to ship the resulting rules back out.
+- **Headline Work — Ingestion:**
+  - [ ] **GHAS / SARIF Extraction:** Convert GitHub Advanced Security alerts into Totem lessons (Strategy #50). Originally scoped with #1131; telemetry-driven refinement won that cycle. 1.14.0 distribution now gives us a way to ship the resulting rules back out.
   - [ ] **Lint Warning Extraction:** Convert repository lint warnings (ESLint, Semgrep, Sonar) into actionable lessons (Strategy #51).
+
+- **Headline Work — ADR-090 Substrate DX:**
+  - [ ] **Rich `describe_project` MCP endpoint (#1497).** Agent AX track. Drops session-start briefing from ~5 tool calls to 1 by returning active roadmap, open `pre-1.15-review` tickets, current strategy pointer, rule counts, and recent merged PRs in one structured payload.
+  - [ ] **`totem init` auto-detects agent runtimes (#1498).** Human DX track. Detects Cursor, Windsurf, Claude Code and offers MCP-config injection so the substrate wires itself into the user's chosen agent runtime without manual config. Supersedes closed #124 and #129.
 
 - **Bundled Cleanup / Validation:**
   - [ ] **SARIF Hex Escape Fix:** Fix SARIF upload failing on invalid hex escape sequences (#1226) — load-bearing for the new SARIF ingestion path.
