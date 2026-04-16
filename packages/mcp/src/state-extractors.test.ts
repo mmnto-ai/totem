@@ -32,9 +32,15 @@ describe('extractGitState', () => {
     }
   });
 
-  it('returns current branch and staged/unstaged files on the live repo', () => {
+  it('returns branch (or null on detached HEAD) and staged/unstaged files on the live repo', () => {
     const state = extractGitState(REPO_ROOT);
-    expect(state.branch).toBeTypeOf('string');
+    // GitHub Actions checks out the merge commit in detached HEAD, so branch
+    // legitimately resolves to null there. Locally it is a string. Either is
+    // valid; the important invariant is that the call does not throw.
+    if (state.branch !== null) {
+      expect(state.branch).toBeTypeOf('string');
+      expect(state.branch.length).toBeGreaterThan(0);
+    }
     expect(state.uncommittedFiles.length).toBeLessThanOrEqual(UNCOMMITTED_FILES_CAP);
     // If a truncation happened the cap must be hit exactly.
     if (state.truncated) {
