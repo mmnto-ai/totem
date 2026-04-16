@@ -1,6 +1,6 @@
 # Supported Models & AI Tools Reference
 
-> **Last validated:** 2026-04-04
+> **Last validated:** 2026-04-16
 
 Totem supports four LLM provider families for orchestration, and exports project
 knowledge to all major AI coding tools. This document tracks model IDs, tool
@@ -31,20 +31,29 @@ Used by `totem review`, `totem spec`, `totem triage`, `totem extract`, etc.
 
 ### Anthropic (Claude)
 
-| Role              | Model ID            | Dated Snapshot               |
-| ----------------- | ------------------- | ---------------------------- |
-| Flagship          | `claude-opus-4-6`   | Latest Opus (1M context)     |
-| Fast/balanced     | `claude-sonnet-4-6` | Latest Sonnet                |
-| Cheapest          | `claude-haiku-4-5`  | `claude-haiku-4-5-20251001`  |
-| Previous Opus     | `claude-opus-4-5`   | Still available              |
-| Legacy Sonnet 4.5 | `claude-sonnet-4-5` | `claude-sonnet-4-5-20250929` |
-| Legacy Sonnet 4   | `claude-sonnet-4-0` | `claude-sonnet-4-20250514`   |
+| Role              | Model ID            | Dated Snapshot               | Notes                                          |
+| ----------------- | ------------------- | ---------------------------- | ---------------------------------------------- |
+| Flagship          | `claude-opus-4-7`   | (undated alias)              | 1M context, Jan 2026 cutoff, adaptive thinking |
+| Previous Opus     | `claude-opus-4-6`   | (undated alias)              | 1M context, May 2025 cutoff, still available   |
+| Fast/balanced     | `claude-sonnet-4-6` | (undated alias)              | Default for `totem compile` routing            |
+| Cheapest          | `claude-haiku-4-5`  | `claude-haiku-4-5-20251001`  |                                                |
+| Legacy Opus       | `claude-opus-4-5`   | Still available              |                                                |
+| Legacy Sonnet 4.5 | `claude-sonnet-4-5` | `claude-sonnet-4-5-20250929` |                                                |
+| Legacy Sonnet 4   | `claude-sonnet-4-0` | `claude-sonnet-4-20250514`   |                                                |
 
 **Listing API:** `GET https://api.anthropic.com/v1/models`
 
 - Auth: `X-Api-Key` header + `anthropic-version: 2023-06-01`
 - Docs: https://docs.anthropic.com/en/docs/about-claude/models
 - Note: Anthropic does **not** offer an embedding model.
+
+**Migrating to Claude Opus 4.7.** Behaviour changes if you switch any override from 4.6 to 4.7:
+
+1. `temperature`, `top_p`, and `top_k` now return 400 errors. Strip sampling params from orchestrator calls. Tracked for Totem in [#1476](https://github.com/mmnto-ai/totem/issues/1476) (seven internal call sites still pass `temperature`, latent until an override points at 4.7).
+2. `extended_thinking` is replaced by `adaptive_thinking`, steered via the `effort: low | medium | high | xhigh | max` parameter. Totem does not currently use extended thinking, so no migration needed today.
+3. New tokenizer adds a 1.0 to 1.35x token overhead vs 4.6 depending on content. Re-budget `max_tokens` if you previously tuned it for 4.6.
+
+See the [Opus 4.7 migration guide](https://platform.claude.com/docs/en/about-claude/models/migration-guide) for the full list.
 
 ### OpenAI
 
