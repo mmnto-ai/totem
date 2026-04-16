@@ -6793,18 +6793,20 @@
     {
       "lessonHash": "e2341ed9229f9a60",
       "lessonHeading": "Preserve original error context via cause",
+      "pattern": "",
       "message": "When wrapping exceptions in custom error classes, pass the original error as '{ cause: err }' to preserve the original stack trace and enable semantic error classification.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "new $ERROR($$$ARGS)",
+      "badExample": "catch (err) { throw new TotemParseError('Failed to parse'); }",
       "compiledAt": "2026-04-16T20:15:09.397Z",
       "createdAt": "2026-04-16T20:15:09.397Z",
       "fileGlobs": [
         "packages/core/**/*.ts",
         "!**/*.test.*"
       ],
-      "badExample": "catch (err) { throw new TotemParseError('Failed to parse'); }"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Incidental compile that hitched a ride on the #1484 pack-scaffold manifest refresh. Source lesson is good (error-cause propagation is a real invariant in the codebase), but the compiled ast-grep pattern `new $ERROR($$$ARGS)` matches every class instantiation in the scoped globs — `new Map(...)`, `new Set(...)`, `new Date(...)`, `new RegExp(...)`, and so on — not just error wrapping. Both CR and GCA flagged on #1503. Pattern needs a catch-context + missing-cause refinement (ADR-088 Phase 1 #1479 verify-retry loop will catch this class at compile time). Archive now; re-compile the source lesson via `totem compile --upgrade e2341ed9229f9a60` once Phase 1 gates land."
     }
   ],
   "nonCompilable": [

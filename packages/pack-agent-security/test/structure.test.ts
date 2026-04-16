@@ -44,11 +44,14 @@ describe('@totem/pack-agent-security structure', () => {
     expect(pkg.exports?.['./.totemignore']).toBe('./.totemignore');
   });
 
-  it('package.json files array lists the three shippable artifacts', () => {
+  it('package.json files array lists exactly the three shippable artifacts', () => {
     const pkg = readJsonSafe<{ files?: string[] }>(path.join(PACK_ROOT, 'package.json'));
     expect(pkg.files).toBeDefined();
-    expect(pkg.files).toEqual(
-      expect.arrayContaining(['compiled-rules.json', '.totemignore', 'README.md']),
+    // Exact set (not arrayContaining) so that an accidentally-added file to the
+    // publish surface trips this test. CR catch on #1503.
+    expect(pkg.files).toHaveLength(3);
+    expect(new Set(pkg.files)).toEqual(
+      new Set(['compiled-rules.json', '.totemignore', 'README.md']),
     );
   });
 
