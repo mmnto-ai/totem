@@ -6734,11 +6734,9 @@
     {
       "lessonHash": "87aff037d7de47a7",
       "lessonHeading": "Ban fail-open catch blocks that skip re-throwing",
+      "pattern": "",
       "message": "Catch clause swallows the error without re-throwing. Tenet 4 (Fail Loud, Never Drift) forbids silent degradation. Either rethrow with `throw err` / `throw new Error(..., { cause: err })`, or if the catch is genuinely a best-effort cleanup (temp file unlink, socket close, etc.) add `// totem-context: intentional cleanup` above the try/catch to document the exception.\n\nTenet 4 (Fail Loud, Never Drift) forbids catching an error and continuing silently. A `catch` clause that contains no `throw_statement` anywhere in its body quietly swallows the failure, corrupting the upstream signal that the sensor-based architecture depends on. The `not.has.throw_statement` combinator with `stopBy: end` walks the entire catch body subtree so that rethrows nested inside `if` / `switch` / helper-call paths still pass.",
       "engine": "ast-grep",
-      "severity": "error",
-      "manual": true,
-      "pattern": "",
       "astGrepYamlRule": {
         "rule": {
           "kind": "catch_clause",
@@ -6756,7 +6754,39 @@
         "packages/**/*.ts",
         "!**/*.test.ts",
         "!**/*.spec.ts"
-      ]
+      ],
+      "severity": "error",
+      "manual": true
+    },
+    {
+      "lessonHash": "92c5de19ec77d768",
+      "lessonHeading": "Reference root dependencies with $TURBO_ROOT",
+      "pattern": "\"\\.\\.[\\/]",
+      "message": "Use '$TURBO_ROOT/' prefix instead of relative '../' paths in turbo.json to correctly cache root-level file dependencies",
+      "engine": "regex",
+      "badExample": "\"inputs\": [\"../../.agent/instructions.md\"]",
+      "compiledAt": "2026-04-16T03:53:26.625Z",
+      "createdAt": "2026-04-16T03:53:26.625Z",
+      "fileGlobs": [
+        "**/turbo.json"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "4657d1c0f9995046",
+      "lessonHeading": "Include PID in temporary artifacts",
+      "pattern": "\\$\\(date[^)]*\\)[^$\\n]*\\.tmp[\"'\\s]|mktemp\\b(?![^\\n]*\\$\\$)",
+      "message": "Include PID ($$) in temporary artifact filenames alongside the timestamp to prevent collision races when multiple hook events fire within the same second.",
+      "engine": "regex",
+      "badExample": "tmpfile=\"/tmp/hook-$(date +%s).tmp\"",
+      "compiledAt": "2026-04-16T03:53:40.270Z",
+      "createdAt": "2026-04-16T03:53:40.270Z",
+      "fileGlobs": [
+        ".claude/hooks/**/*.sh"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad compound pattern. The second alternative `mktemp\b(?![^\n]*$$)` false-positives on every correct mktemp call; mktemp already guarantees unique names and does not require a $$ suffix. The first alternative `$(date[^)]*)[^$\n]*.tmp[...]` captures a real pattern but cannot be salvaged from the compound-alt without recompiling. Refine the source lesson to narrow scope to timestamp-only filenames that lack any uniqueness suffix, then recompile."
     }
   ],
   "nonCompilable": [
@@ -10315,6 +10345,58 @@
     {
       "hash": "23fbfc8a6e82633f",
       "title": "Leverage Anthropic prompt caching for compilers"
+    },
+    {
+      "hash": "8c49d295f5a989bb",
+      "title": "Maintain lean CLAUDE.md files"
+    },
+    {
+      "hash": "0a2054840a779d78",
+      "title": "Isolate submodule updates for revertability"
+    },
+    {
+      "hash": "17252f2d3c24b3c1",
+      "title": "Prefer mechanical local hook logic"
+    },
+    {
+      "hash": "6769fe461303c258",
+      "title": "Avoid over-broad heading length constraints"
+    },
+    {
+      "hash": "e66fd975d6652738",
+      "title": "Scope task inputs to actual file reads"
+    },
+    {
+      "hash": "a816035288cf442b",
+      "title": "Narrow hook execution using if fields"
+    },
+    {
+      "hash": "8dd220b36cc91328",
+      "title": "Retain internal guards for defense-in-depth"
+    },
+    {
+      "hash": "68c367146f6ed61b",
+      "title": "Prevent silent rule compilation failures"
+    },
+    {
+      "hash": "5ee14831d3a2a4e9",
+      "title": "Use /loop for state-change reactions"
+    },
+    {
+      "hash": "56033031bab73948",
+      "title": "Validate bash syntax during testing"
+    },
+    {
+      "hash": "286e91362cbb127a",
+      "title": "Target specific agent attack surfaces"
+    },
+    {
+      "hash": "1eea62010498cd33",
+      "title": "Archive shipped proposals to prevent planning drift"
+    },
+    {
+      "hash": "28753e5f82c6bbd8",
+      "title": "Prefer Monitor over Bash sleep loops"
     }
   ]
 }
