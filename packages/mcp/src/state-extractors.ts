@@ -41,8 +41,7 @@ export function extractGitState(cwd: string): GitState {
   }
 
   let branch: string | null = null;
-  // totem-context: substrate graceful degradation per ADR-090 — if git fails we
-  // still want to return a partial payload instead of crashing the MCP server.
+  // totem-context: ADR-090 substrate graceful degradation — partial payload over crash.
   try {
     const out = safeExec('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd });
     branch = out === 'HEAD' ? null : out;
@@ -51,8 +50,7 @@ export function extractGitState(cwd: string): GitState {
   }
 
   let allFiles: string[] = [];
-  // totem-context: substrate graceful degradation per ADR-090 — git status
-  // failure yields an empty file list, not an exception.
+  // totem-context: ADR-090 substrate graceful degradation — empty file list on git-status failure.
   try {
     const porcelain = safeExec('git', ['status', '--porcelain'], { cwd });
     if (porcelain.length > 0) {
@@ -79,8 +77,7 @@ export function extractStrategyPointer(cwd: string): StrategyPointer {
   }
 
   let sha: string | null = null;
-  // totem-context: substrate graceful degradation per ADR-090 — submodule may
-  // be uninitialized; null pointer is a valid payload shape.
+  // totem-context: ADR-090 substrate graceful degradation — null sha on uninitialized submodule.
   try {
     const full = safeExec('git', ['rev-parse', 'HEAD'], { cwd: strategyDir });
     sha = full.length >= 7 ? full.slice(0, 7) : null;
@@ -89,8 +86,7 @@ export function extractStrategyPointer(cwd: string): StrategyPointer {
   }
 
   let latestJournal: string | null = null;
-  // totem-context: substrate graceful degradation per ADR-090 — a missing
-  // .journal/ directory is non-fatal; null is the documented fallback.
+  // totem-context: ADR-090 substrate graceful degradation — null when .journal/ unreachable.
   try {
     const journalDir = path.join(strategyDir, '.journal');
     if (fs.existsSync(journalDir)) {
@@ -115,8 +111,7 @@ export function extractPackageVersions(cwd: string): Record<string, string> {
   if (!fs.existsSync(packagesDir)) return result;
 
   let subdirs: string[];
-  // totem-context: substrate graceful degradation per ADR-090 — unreadable
-  // packages/ yields an empty version map, not a crash.
+  // totem-context: ADR-090 substrate graceful degradation — empty map on unreadable packages/.
   try {
     subdirs = fs.readdirSync(packagesDir);
   } catch {
@@ -125,8 +120,7 @@ export function extractPackageVersions(cwd: string): Record<string, string> {
 
   for (const subdir of subdirs) {
     const pkgJson = path.join(packagesDir, subdir, 'package.json');
-    // totem-context: substrate graceful degradation per ADR-090 — per-package
-    // parse failures skip that one package, the rest still report.
+    // totem-context: ADR-090 substrate graceful degradation — per-package skip on parse failure.
     try {
       const parsed = readJsonSafe<{ name?: string; version?: string }>(pkgJson);
       if (
@@ -151,8 +145,7 @@ export function extractRuleCounts(cwd: string, totemDir: string): RuleCounts {
     return { active: 0, archived: 0, nonCompilable: 0 };
   }
 
-  // totem-context: substrate graceful degradation per ADR-090 — malformed or
-  // missing compile-rules manifest yields zero counts rather than a crash.
+  // totem-context: ADR-090 substrate graceful degradation — zero counts on malformed manifest.
   try {
     const parsed = readJsonSafe(rulesPath, CompiledRulesFileSchema);
     let active = 0;
@@ -176,8 +169,7 @@ export function extractRuleCounts(cwd: string, totemDir: string): RuleCounts {
 export function extractLessonCount(cwd: string, totemDir: string): number {
   const lessonsDir = path.join(cwd, totemDir, 'lessons');
   if (!fs.existsSync(lessonsDir)) return 0;
-  // totem-context: substrate graceful degradation per ADR-090 — unreadable
-  // lessons directory returns zero; agents see the missing signal explicitly.
+  // totem-context: ADR-090 substrate graceful degradation — zero count on unreadable lessons/.
   try {
     return fs.readdirSync(lessonsDir).filter((f) => f.endsWith('.md')).length;
   } catch {
@@ -194,28 +186,23 @@ export function extractLessonCount(cwd: string, totemDir: string): number {
  * ground-truth source.
  */
 export function extractMilestoneState(cwd: string): MilestoneState {
-  // totem-context: `docs/active_work.md` is the canonical briefing-source path
-  // documented in ADR-090 and the #1497 spec; hardcoding is intentional, not
-  // a config omission.
+  // totem-context: ADR-090 + #1497 canonical briefing-source path, not a config omission.
   const activeWorkPath = path.join(cwd, 'docs', 'active_work.md');
   if (!fs.existsSync(activeWorkPath)) {
     return { name: null, gateTickets: [], bestEffort: true };
   }
 
   let content: string;
-  // totem-context: substrate graceful degradation per ADR-090 — and substrate
-  // reads the unstaged disk version on purpose (the briefing reports the
-  // current working-copy state of the doc, not the git-indexed version).
+  // totem-context: ADR-090 substrate graceful degradation + intentional unstaged-disk read.
   try {
     content = fs.readFileSync(activeWorkPath, 'utf-8');
   } catch {
     return { name: null, gateTickets: [], bestEffort: true };
   }
 
-  // Milestone: first "### Current: X.Y.Z" heading (e.g. "### Current: 1.15.0 — The Distribution Pipeline").
-  // totem-context: single-match by design — the doc has exactly one Current heading;
-  // matchAll would obscure that invariant.
+  // Milestone: first "### Current: X.Y.Z" heading (the doc has exactly one).
   let name: string | null = null;
+  // totem-context: single-match by design — one Current heading; matchAll would obscure intent.
   const currentMatch = content.match(/^###\s+Current:\s*(\d+\.\d+\.\d+)/m);
   if (currentMatch?.[1] !== undefined) name = currentMatch[1];
 
@@ -259,8 +246,7 @@ export function extractRecentPrs(cwd: string, limit = RECENT_PRS_COUNT): RecentP
   if (resolveGitRoot(cwd) === null) return [];
 
   let raw: string;
-  // totem-context: substrate graceful degradation per ADR-090 — git log
-  // failure (no history, permission) yields an empty recent-PRs list.
+  // totem-context: ADR-090 substrate graceful degradation — empty list on git-log failure.
   try {
     raw = safeExec(
       'git',
