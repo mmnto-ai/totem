@@ -1,0 +1,31 @@
+{
+  "name": "@totem/pack-agent-security",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Zero-Trust Agent Governance security pack for Totem (ADR-089). Ships compound ast-grep rules that block known prompt-injection attack patterns at the commit boundary.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mmnto-ai/totem.git",
+    "directory": "packages/pack-agent-security"
+  },
+  "homepage": "https://github.com/mmnto-ai/totem#readme",
+  "bugs": "https://github.com/mmnto-ai/totem/issues",
+  "files": [
+    "compiled-rules.json",
+    ".totemignore",
+    "README.md"
+  ],
+  "exports": {
+    "./compiled-rules.json": "./compiled-rules.json",
+    "./.totemignore": "./.totemignore"
+  },
+  "scripts": {
+    "build": "echo '[pack-agent-security] no build step (data-only pack)'",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@mmnto/totem": "workspace:*",
+    "vitest": "^3.0.0"
+  }
+}

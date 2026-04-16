@@ -192,6 +192,15 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@22.19.13)(jiti@2.6.1)(yaml@2.8.2)
 
+  packages/pack-agent-security:
+    devDependencies:
+      '@mmnto/totem':
+        specifier: workspace:*
+        version: link:../core
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.4(yaml@2.8.2)
+
 packages:
 
   /@anthropic-ai/sdk@0.78.0(zod@3.25.76):
