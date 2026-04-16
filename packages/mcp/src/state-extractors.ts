@@ -41,16 +41,15 @@ export function extractGitState(cwd: string): GitState {
   }
 
   let branch: string | null = null;
-  // totem-context: ADR-090 substrate graceful degradation — partial payload over crash.
   try {
     const out = safeExec('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd });
     branch = out === 'HEAD' ? null : out;
+    // totem-context: ADR-090 substrate graceful degradation — partial payload over crash.
   } catch {
     branch = null;
   }
 
   let allFiles: string[] = [];
-  // totem-context: ADR-090 substrate graceful degradation — empty file list on git-status failure.
   try {
     const porcelain = safeExec('git', ['status', '--porcelain'], { cwd });
     if (porcelain.length > 0) {
@@ -59,6 +58,7 @@ export function extractGitState(cwd: string): GitState {
         .map((line) => line.slice(3).trim())
         .filter((name) => name.length > 0);
     }
+    // totem-context: ADR-090 substrate graceful degradation — empty file list on git-status failure.
   } catch {
     allFiles = [];
   }
@@ -77,16 +77,15 @@ export function extractStrategyPointer(cwd: string): StrategyPointer {
   }
 
   let sha: string | null = null;
-  // totem-context: ADR-090 substrate graceful degradation — null sha on uninitialized submodule.
   try {
     const full = safeExec('git', ['rev-parse', 'HEAD'], { cwd: strategyDir });
     sha = full.length >= 7 ? full.slice(0, 7) : null;
+    // totem-context: ADR-090 substrate graceful degradation — null sha on uninitialized submodule.
   } catch {
     sha = null;
   }
 
   let latestJournal: string | null = null;
-  // totem-context: ADR-090 substrate graceful degradation — null when .journal/ unreachable.
   try {
     const journalDir = path.join(strategyDir, '.journal');
     if (fs.existsSync(journalDir)) {
@@ -96,6 +95,7 @@ export function extractStrategyPointer(cwd: string): StrategyPointer {
         .sort();
       latestJournal = entries.length > 0 ? entries[entries.length - 1]! : null;
     }
+    // totem-context: ADR-090 substrate graceful degradation — null when .journal/ unreachable.
   } catch {
     latestJournal = null;
   }
@@ -111,16 +111,15 @@ export function extractPackageVersions(cwd: string): Record<string, string> {
   if (!fs.existsSync(packagesDir)) return result;
 
   let subdirs: string[];
-  // totem-context: ADR-090 substrate graceful degradation — empty map on unreadable packages/.
   try {
     subdirs = fs.readdirSync(packagesDir);
+    // totem-context: ADR-090 substrate graceful degradation — empty map on unreadable packages/.
   } catch {
     return result;
   }
 
   for (const subdir of subdirs) {
     const pkgJson = path.join(packagesDir, subdir, 'package.json');
-    // totem-context: ADR-090 substrate graceful degradation — per-package skip on parse failure.
     try {
       const parsed = readJsonSafe<{ name?: string; version?: string }>(pkgJson);
       if (
@@ -130,6 +129,7 @@ export function extractPackageVersions(cwd: string): Record<string, string> {
       ) {
         result[parsed.name] = parsed.version;
       }
+      // totem-context: ADR-090 substrate graceful degradation — per-package skip on parse failure.
     } catch {
       // Missing / unparseable package.json is a non-fatal skip.
     }
@@ -145,7 +145,6 @@ export function extractRuleCounts(cwd: string, totemDir: string): RuleCounts {
     return { active: 0, archived: 0, nonCompilable: 0 };
   }
 
-  // totem-context: ADR-090 substrate graceful degradation — zero counts on malformed manifest.
   try {
     const parsed = readJsonSafe(rulesPath, CompiledRulesFileSchema);
     let active = 0;
@@ -159,6 +158,7 @@ export function extractRuleCounts(cwd: string, totemDir: string): RuleCounts {
       archived,
       nonCompilable: parsed.nonCompilable?.length ?? 0,
     };
+    // totem-context: ADR-090 substrate graceful degradation — zero counts on malformed manifest.
   } catch {
     return { active: 0, archived: 0, nonCompilable: 0 };
   }
@@ -169,9 +169,9 @@ export function extractRuleCounts(cwd: string, totemDir: string): RuleCounts {
 export function extractLessonCount(cwd: string, totemDir: string): number {
   const lessonsDir = path.join(cwd, totemDir, 'lessons');
   if (!fs.existsSync(lessonsDir)) return 0;
-  // totem-context: ADR-090 substrate graceful degradation — zero count on unreadable lessons/.
   try {
     return fs.readdirSync(lessonsDir).filter((f) => f.endsWith('.md')).length;
+    // totem-context: ADR-090 substrate graceful degradation — zero count on unreadable lessons/.
   } catch {
     return 0;
   }
@@ -193,9 +193,9 @@ export function extractMilestoneState(cwd: string): MilestoneState {
   }
 
   let content: string;
-  // totem-context: ADR-090 substrate graceful degradation + intentional unstaged-disk read.
   try {
     content = fs.readFileSync(activeWorkPath, 'utf-8');
+    // totem-context: ADR-090 substrate graceful degradation + intentional unstaged-disk read.
   } catch {
     return { name: null, gateTickets: [], bestEffort: true };
   }
@@ -246,13 +246,13 @@ export function extractRecentPrs(cwd: string, limit = RECENT_PRS_COUNT): RecentP
   if (resolveGitRoot(cwd) === null) return [];
 
   let raw: string;
-  // totem-context: ADR-090 substrate graceful degradation — empty list on git-log failure.
   try {
     raw = safeExec(
       'git',
       ['log', `-n`, String(limit * 3), '--grep=#[0-9]\\+', '--format=%s|%cI|%h'],
       { cwd },
     );
+    // totem-context: ADR-090 substrate graceful degradation — empty list on git-log failure.
   } catch {
     return [];
   }
