@@ -141,7 +141,11 @@ export async function runCompiledRules(
         recordContextHit(metrics, hash, context?.astContext);
       } else if (event === 'suppress') {
         recordSuppression(metrics, hash);
-        // Append to Trap Ledger (fire-and-forget)
+        // Append to Trap Ledger (fire-and-forget). When the suppressed rule
+        // was shipped by a pack with immutable: true (ADR-089,
+        // mmnto-ai/totem#1485), the event carries the flag so auditors can
+        // surface every attempt to silence an enforced security rule via
+        // `jq 'select(.immutable == true)'` over events.ndjson.
         if (context) {
           appendLedgerEvent(
             resolvedTotemDir,
@@ -153,6 +157,7 @@ export async function runCompiledRules(
               line: context.line,
               justification: context.justification ?? '',
               source: 'lint',
+              ...(context.immutable === true ? { immutable: true } : {}),
             },
             (msg) => log.dim(tag, msg),
           );

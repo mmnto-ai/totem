@@ -421,6 +421,39 @@ describe('applyRulesToAdditions — event context', () => {
     });
   });
 
+  it('threads rule.immutable into the suppress event context for pack enforcement audit', () => {
+    // ADR-089 / mmnto-ai/totem#1485 — when a pack-shipped immutable rule
+    // is bypassed by an inline totem-ignore directive, the suppress event
+    // must carry `immutable: true` so the Trap Ledger writer can flag it
+    // for pack enforcement audit.
+    const rule = makeRule({
+      engine: 'regex',
+      pattern: 'dangerous\\.call',
+      lessonHash: 'immut-suppress-test',
+      immutable: true,
+      severity: 'error',
+    });
+
+    const additions: DiffAddition[] = [
+      {
+        file: 'src/attack.ts',
+        line: 'dangerous.call(); // totem-ignore',
+        lineNumber: 10,
+        precedingLine: null,
+      },
+    ];
+
+    const events: Array<{ event: string; hash: string; context?: RuleEventContext }> = [];
+    const onRuleEvent: RuleEventCallback = (event, hash, context) => {
+      events.push({ event, hash, context });
+    };
+
+    applyRulesToAdditions([rule], additions, onRuleEvent);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.event).toBe('suppress');
+    expect(events[0]!.context?.immutable).toBe(true);
+  });
+
   it('onRuleEvent callback receives file and line context on trigger', () => {
     const rule = makeRule({
       engine: 'regex',

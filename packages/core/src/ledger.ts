@@ -20,6 +20,14 @@ export const LedgerEventSchema = z.object({
   justification: z.string().default(''),
   /** Source of the event */
   source: z.enum(['lint', 'shield', 'bot']),
+  /**
+   * True when the bypassed rule was shipped by a pack with
+   * `immutable: true`. Audit consumers can filter
+   * `events.ndjson | jq 'select(.immutable == true)'` to surface every
+   * attempt to silence an enforced security rule (ADR-089,
+   * mmnto-ai/totem#1485). Absent on events from non-immutable rules.
+   */
+  immutable: z.boolean().optional(),
 });
 
 export type LedgerEvent = z.infer<typeof LedgerEventSchema>;

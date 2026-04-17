@@ -313,6 +313,10 @@ export { CustomSecretSchema, loadCustomSecrets, SecretsFileSchema } from './secr
 export type { LedgerEvent } from './ledger.js';
 export { appendLedgerEvent, LedgerEventSchema, readLedgerEvents } from './ledger.js';
 
+// Pack rule merge primitive (ADR-085 + ADR-089, mmnto-ai/totem#1485)
+export type { ImmutableOverrideBlock, MergeRulesResult } from './pack-merge.js';
+export { mergeRules } from './pack-merge.js';
+
 // Shell execution (cross-platform safe wrapper)
 export type { SafeExecOptions } from './sys/exec.js';
 export { describeSafeExecError, safeExec } from './sys/exec.js';
