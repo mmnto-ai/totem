@@ -1677,4 +1677,120 @@ describe('compileLesson Pipeline 2 verify-retry', () => {
     }
     expect(orchestratorMock).toHaveBeenCalledTimes(1);
   });
+
+  it('retries when Example Hit/Miss verification fails and succeeds on a later attempt', async () => {
+    // ADR-088 AC (mmnto-ai/totem#1479): "verifies every LLM-generated pattern
+    // against the lesson's Example Hit block. Zero-match triggers a retry."
+    // Attempt 1 produces a pattern that passes the smoke gate (matches its
+    // own badExample) but does NOT match the lesson's Example Hit.
+    // verifyRuleExamples fails; the retry path fires. Attempt 2 returns a
+    // pattern that matches both the badExample and the Example Hit.
+    const lessonWithExample: LessonInput = {
+      index: 0,
+      heading: 'No console.log in production',
+      body: 'Do not use console.log in production.\n**Example Hit:** console.log(x)',
+      hash: 'h-retry-verify',
+    };
+    const parseMock = vi
+      .fn()
+      .mockReturnValueOnce({
+        compilable: true,
+        pattern: 'zzz_only_matches_itself',
+        message: 'No console.log',
+        engine: 'regex' as const,
+        badExample: 'zzz_only_matches_itself',
+      })
+      .mockReturnValueOnce({
+        compilable: true,
+        pattern: 'console\\.log',
+        message: 'No console.log',
+        engine: 'regex' as const,
+        badExample: 'console.log("x")',
+      });
+    const orchestratorMock = vi
+      .fn()
+      .mockResolvedValueOnce('attempt-1')
+      .mockResolvedValueOnce('attempt-2');
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: parseMock,
+      runOrchestrator: orchestratorMock,
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+
+    const result = await compileLesson(lessonWithExample, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    expect(orchestratorMock).toHaveBeenCalledTimes(2);
+
+    // The retry directive must reflect the Example Hit failure (generic
+    // wording so it can serve both smoke-gate and verify failures), it
+    // must carry the prior pattern so the LLM sees what it produced, and
+    // — when the failure source is verifyRuleExamples — the "Code
+    // snippet the pattern had to match" field must show the missed
+    // Example Hit line, not the LLM's own badExample (which the pattern
+    // did match, since the smoke gate passed).
+    const userPrompt2 = orchestratorMock.mock.calls[1]![0] as string;
+    expect(userPrompt2).toContain('Previous Attempt Failed Verification');
+    expect(userPrompt2).toContain('zzz_only_matches_itself'); // pattern field
+    expect(userPrompt2).toContain('console.log(x)'); // missed Example Hit
+  });
+
+  it('exhausts retries when Example Hit/Miss verification fails on every attempt', async () => {
+    // Same Example Hit lesson as above, but the LLM never produces a
+    // pattern that matches the lesson's Example Hit. Three attempts, each
+    // passing the smoke gate but failing verifyRuleExamples. Expected
+    // outcome: skipped, reasonCode 'verify-retry-exhausted'.
+    const lessonWithExample: LessonInput = {
+      index: 0,
+      heading: 'No console.log in production',
+      body: 'Do not use console.log in production.\n**Example Hit:** console.log(x)',
+      hash: 'h-verify-exhaust',
+    };
+    const parseMock = vi.fn().mockReturnValue({
+      compilable: true,
+      pattern: 'zzz_only_matches_itself',
+      message: 'No console.log',
+      engine: 'regex' as const,
+      badExample: 'zzz_only_matches_itself',
+    });
+    const orchestratorMock = vi.fn().mockResolvedValue('always-misses');
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: parseMock,
+      runOrchestrator: orchestratorMock,
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+
+    const result = await compileLesson(lessonWithExample, 'system prompt', deps);
+    expect(result.status).toBe('skipped');
+    if (result.status === 'skipped') {
+      expect(result.reasonCode).toBe('verify-retry-exhausted');
+    }
+    expect(orchestratorMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns failed without retry when the LLM emits an invalid regex (validator rejection)', async () => {
+    // Validator-level rejection (ADR-088 + CR review on #1479). Retrying
+    // an invalid regex produces more invalid regexes and masks real LLM
+    // output quality issues. Return 'failed' so the lesson stays pending
+    // for a future recompile rather than landing in nonCompilable.
+    const parseMock = vi.fn().mockReturnValue({
+      compilable: true,
+      pattern: '[unclosed-bracket-class',
+      message: 'Invalid regex test',
+      engine: 'regex' as const,
+      badExample: 'any string',
+    });
+    const orchestratorMock = vi.fn().mockResolvedValue('invalid-regex-output');
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: parseMock,
+      runOrchestrator: orchestratorMock,
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+
+    const result = await compileLesson(lesson, 'system prompt', deps);
+    expect(result.status).toBe('failed');
+    expect(orchestratorMock).toHaveBeenCalledTimes(1);
+  });
 });

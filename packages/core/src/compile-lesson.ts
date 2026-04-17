@@ -34,7 +34,7 @@ export type CompileLessonReasonCode =
 
 export type CompileLessonResult =
   | { status: 'compiled'; rule: CompiledRule }
-  | { status: 'skipped'; hash: string; reason?: string; reasonCode?: CompileLessonReasonCode }
+  | { status: 'skipped'; hash: string; reason?: string; reasonCode: CompileLessonReasonCode }
   | { status: 'failed' }
   | { status: 'noop' };
 
@@ -629,7 +629,12 @@ export async function compileLesson(
 
     if (!parsed.compilable) {
       callbacks?.onDim?.(lesson.heading, 'Pipeline 3: not compilable — skipping');
-      return { status: 'skipped', hash: lesson.hash, reason: parsed.reason };
+      return {
+        status: 'skipped',
+        hash: lesson.hash,
+        reason: parsed.reason,
+        reasonCode: 'non-compilable',
+      };
     }
 
     // mmnto/totem#1408: Pipeline 3 reuses its Bad snippet as the smoke-gate
@@ -694,7 +699,7 @@ export async function compileLesson(
   //     with a machine-readable reason so totem doctor and downstream
   //     tooling can distinguish this from 'non-compilable'.
   const MAX_VERIFY_ATTEMPTS = 3;
-  let previousFailure: { pattern: string; badExample: string; reason: string } | null = null;
+  let previousFailure: { pattern: string; snippet: string; reason: string } | null = null;
 
   for (let attempt = 1; attempt <= MAX_VERIFY_ATTEMPTS; attempt++) {
     const userPromptParts: string[] = [];
@@ -731,48 +736,87 @@ export async function compileLesson(
 
     // Smoke gate enforcement lives in buildCompiledRule (mmnto-ai/totem#1408).
     // Rules without a badExample, or whose badExample fails to match the
-    // pattern, come back with rule === null and a rejectReason we can retry on.
+    // pattern, come back with rule === null and a rejectReason. Classify the
+    // outcome into one of four buckets:
+    //   success          — rule built AND Example Hit/Miss verify passed
+    //   retry-eligible   — smoke-gate zero-match OR verifyRuleExamples failure
+    //   missing-badexample — LLM omitted a required field (structural)
+    //   validator-failure  — invalid regex / ast-grep parse error / self-
+    //                        suppression guard; retrying would produce more
+    //                        invalid patterns, so the lesson stays pending
     const ruleResult = buildCompiledRule(parsed, lesson, existingByHash, {
       enforceSmokeGate: true,
     });
 
+    let retryReason: string;
+    let retrySnippet: string;
+
     if (ruleResult.rule) {
       const testResult = verifyRuleExamples(ruleResult.rule, lesson.body);
-      if (testResult && !testResult.passed) {
-        callbacks?.onWarn?.(lesson.heading, formatExampleFailure(testResult));
+      if (!testResult || testResult.passed) {
+        return { status: 'compiled', rule: ruleResult.rule };
+      }
+      // Example Hit/Miss verification failed against the lesson's ground
+      // truth. ADR-088 AC: "verifies every LLM-generated pattern against
+      // the lesson's Example Hit block. Zero-match triggers a retry."
+      retryReason = formatExampleFailure(testResult);
+      // The snippet the retry directive should show is the Example Hit
+      // line the pattern missed, not the LLM's own badExample (which the
+      // pattern did match, since the smoke gate passed). If missedFails
+      // is empty but the test still failed (false-positive-only case),
+      // fall back to the badExample so the directive has something
+      // concrete to anchor on.
+      retrySnippet =
+        testResult.missedFails.length > 0
+          ? testResult.missedFails.join('\n')
+          : (parsed.badExample ?? '(no snippet available)');
+    } else {
+      const rejectReason = ruleResult.rejectReason ?? 'Unknown error';
+
+      // Missing-badExample is a structural-output failure. Retrying won't
+      // teach the LLM to emit a field it just omitted — the compiler
+      // system prompt already requires it (mmnto-ai/totem#1409).
+      // Short-circuit to skipped with a distinct reasonCode.
+      if (rejectReason.includes('missing badExample')) {
+        callbacks?.onWarn?.(lesson.heading, `${rejectReason} — skipping`);
+        return {
+          status: 'skipped',
+          hash: lesson.hash,
+          reason: rejectReason,
+          reasonCode: 'missing-badexample',
+        };
+      }
+
+      // Only smoke-gate zero-match against the LLM's own badExample is
+      // retry-eligible. Validator-level rejections — invalid regex,
+      // ast-grep parse errors, self-suppression guards — are terminal.
+      // Retrying them produces more invalid patterns and wastes tokens.
+      // 'failed' keeps the rule pending for a future recompile rather
+      // than marking it permanently nonCompilable.
+      const isZeroMatch = rejectReason.startsWith('smoke gate: zero matches');
+      if (!isZeroMatch) {
+        callbacks?.onWarn?.(lesson.heading, `${rejectReason} — failing`);
         return { status: 'failed' };
       }
-      return { status: 'compiled', rule: ruleResult.rule };
+
+      retryReason = rejectReason;
+      retrySnippet = parsed.badExample ?? '(no badExample emitted)';
     }
 
-    const rejectReason = ruleResult.rejectReason ?? 'Unknown error';
-
-    // Missing-badExample is a structural-output failure, not a
-    // pattern-quality failure. Retrying won't teach the LLM to emit a
-    // field it just omitted — the compiler system prompt already asks
-    // for it (mmnto-ai/totem#1409). Short-circuit to skipped with a
-    // distinct reasonCode so the caller gets an explicit ADR-088 Layer 4
-    // failure instead of a silent nonCompilable.
-    if (rejectReason.includes('missing badExample')) {
-      callbacks?.onWarn?.(lesson.heading, `${rejectReason} — skipping`);
-      return {
-        status: 'skipped',
-        hash: lesson.hash,
-        reason: rejectReason,
-        reasonCode: 'missing-badexample',
-      };
-    }
+    // Shared retry path. Triggered by smoke-gate zero-match OR by
+    // Example Hit/Miss verify failure. Both carry a retryReason that
+    // threads back into the next LLM attempt's user prompt.
 
     // ADR-088 Decision 3: security rules zero-tolerance. No retry.
     if (deps.securityContext === true) {
       callbacks?.onWarn?.(
         lesson.heading,
-        `Security rule rejected on verify failure (no retry): ${rejectReason}`,
+        `Security rule rejected on verify failure (no retry): ${retryReason}`,
       );
       return {
         status: 'skipped',
         hash: lesson.hash,
-        reason: rejectReason,
+        reason: retryReason,
         reasonCode: 'security-verify-rejected',
       };
     }
@@ -780,12 +824,12 @@ export async function compileLesson(
     if (attempt < MAX_VERIFY_ATTEMPTS) {
       previousFailure = {
         pattern: extractPatternString(parsed),
-        badExample: parsed.badExample ?? '(no badExample emitted)',
-        reason: rejectReason,
+        snippet: retrySnippet,
+        reason: retryReason,
       };
       callbacks?.onDim?.(
         lesson.heading,
-        `Verify failed (attempt ${attempt}/${MAX_VERIFY_ATTEMPTS}): ${rejectReason} — retrying`,
+        `Verify failed (attempt ${attempt}/${MAX_VERIFY_ATTEMPTS}): ${retryReason} — retrying`,
       );
       continue;
     }
@@ -793,12 +837,12 @@ export async function compileLesson(
     // Attempts exhausted → Layer 4 fallthrough per ADR-088.
     callbacks?.onWarn?.(
       lesson.heading,
-      `Verify retry exhausted after ${MAX_VERIFY_ATTEMPTS} attempts: ${rejectReason} — skipping`,
+      `Verify retry exhausted after ${MAX_VERIFY_ATTEMPTS} attempts: ${retryReason} — skipping`,
     );
     return {
       status: 'skipped',
       hash: lesson.hash,
-      reason: `Verify retry exhausted after ${MAX_VERIFY_ATTEMPTS} attempts: ${rejectReason}`,
+      reason: `Verify retry exhausted after ${MAX_VERIFY_ATTEMPTS} attempts: ${retryReason}`,
       reasonCode: 'verify-retry-exhausted',
     };
   }
@@ -831,25 +875,25 @@ function extractPatternString(parsed: CompilerOutput): string {
  * the LLM so it can correct its output.
  */
 function buildRetryDirective(
-  failure: { pattern: string; badExample: string; reason: string },
+  failure: { pattern: string; snippet: string; reason: string },
   attempt: number,
   maxAttempts: number,
 ): string {
   return [
-    `This is attempt ${attempt} of ${maxAttempts}. The previous attempt produced a pattern that failed the compile-time smoke gate.`,
+    `This is attempt ${attempt} of ${maxAttempts}. The previous attempt produced a pattern that failed verification.`,
     '',
     '**Previous pattern:**',
     '```',
     failure.pattern,
     '```',
     '',
-    '**badExample the pattern had to match:**',
+    '**Code snippet the pattern had to match:**',
     '```',
-    failure.badExample,
+    failure.snippet,
     '```',
     '',
-    `**Gate reason:** ${failure.reason}`,
+    `**Failure reason:** ${failure.reason}`,
     '',
-    'Generate a corrected pattern that DOES match the badExample above. Keep the lesson intent unchanged; only fix the pattern so it triggers on the provided snippet.',
+    'Generate a corrected pattern that satisfies the requirements. Keep the lesson intent unchanged; only fix the pattern so it triggers correctly.',
   ].join('\n');
 }
