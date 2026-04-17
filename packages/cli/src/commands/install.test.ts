@@ -160,11 +160,13 @@ describe('detectPackageManager', () => {
 
   it('detects bun via either lockfile variant (bun.lockb binary or bun.lock text)', () => {
     // Both variants are valid Bun markers; detectPackageManager checks
-    // both. Single test covering both keeps the governance rule happy
-    // (it expects co-located references to the two lockfile names).
-    // totem-context: intentional bun lockfile fixtures for tests
-    fs.writeFileSync(path.join(tmpDir, 'bun.lockb'), '');
-    fs.writeFileSync(path.join(tmpDir, 'bun.lock'), '');
+    // both. Single test covering both variants in the same scope so
+    // downstream governance rules that expect co-located references to
+    // the two lockfile names can see both.
+    for (const lockfile of ['bun.lockb', 'bun.lock']) {
+      // totem-context: intentional bun lockfile fixtures for tests
+      fs.writeFileSync(path.join(tmpDir, lockfile), '');
+    }
     expect(detectPackageManager(fs, path, tmpDir)).toBe('bun');
   });
 
