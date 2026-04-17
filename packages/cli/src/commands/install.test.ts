@@ -3,6 +3,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { cleanTmpDir } from '../test-utils.js';
 import {
   buildTotemignoreDiff,
   detectPackageManager,
@@ -127,7 +128,7 @@ describe('detectPackageManager', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanTmpDir(tmpDir);
   });
 
   it('detects pnpm via pnpm-lock.yaml', () => {

@@ -257,6 +257,9 @@ program
   .description('Install a Totem pack (e.g., pack/my-rules)')
   .option('--yes', 'Auto-approve .totemignore merge (required for non-interactive CI)')
   .action(async (target: string, options: { yes?: boolean }) => {
+    // totem-context: handleError is never-typed; the catch forwards to
+    // the central handler which calls process.exit(1). Tenet 4 fail-loud
+    // is satisfied at the handler, not this catch block.
     try {
       const { installCommand } = await import('./commands/install.js');
       await installCommand(target, { yes: options.yes });
