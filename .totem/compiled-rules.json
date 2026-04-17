@@ -6807,6 +6807,164 @@
       "severity": "warning",
       "status": "archived",
       "archivedReason": "Incidental compile that hitched a ride on the #1484 pack-scaffold manifest refresh. Source lesson is good (error-cause propagation is a real invariant in the codebase), but the compiled ast-grep pattern `new $ERROR($$$ARGS)` matches every class instantiation in the scoped globs — `new Map(...)`, `new Set(...)`, `new Date(...)`, `new RegExp(...)`, and so on — not just error wrapping. Both CR and GCA flagged on #1503. Pattern needs a catch-context + missing-cause refinement (ADR-088 Phase 1 #1479 verify-retry loop will catch this class at compile time). Archive now; re-compile the source lesson via `totem compile --upgrade e2341ed9229f9a60` once Phase 1 gates land."
+    },
+    {
+      "lessonHash": "9e95301d0ccc339b",
+      "lessonHeading": "Restrict fallback to specific error codes",
+      "pattern": "",
+      "message": "Catch blocks implementing fallbacks must check a specific error code (e.g., err.code === 'UNAVAILABLE') before swallowing the error. Re-throw unexpected failures to avoid masking critical bugs.",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "kind": "catch_clause",
+          "not": {
+            "has": {
+              "pattern": "$ERR.code",
+              "stopBy": "end"
+            }
+          },
+          "has": {
+            "pattern": "null",
+            "stopBy": "end"
+          }
+        }
+      },
+      "badExample": "try {\n  result = await optionalService.call();\n} catch (err) {\n  result = null;\n}",
+      "compiledAt": "2026-04-17T02:13:23.492Z",
+      "createdAt": "2026-04-17T02:13:23.492Z",
+      "fileGlobs": [
+        "packages/mcp/src/**/*.ts",
+        "!**/*.test.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad astGrepYamlRule. The `has: { pattern: 'null' }` matcher with `stopBy: end` fires on any `null` literal anywhere inside a catch clause — assignments (`result = null`), returns (`return null`), comparisons (`x !== null`), type narrowings, and casts all match. Combined with the `not: has: $ERR.code` absence check, this flags many legitimate catch blocks that use `null` for reasons unrelated to the fallback-swallow pattern the lesson (PR #1506) was trying to guard. The rule's intent — require a specific error-code check before swallowing to null — is valid, but the ast-grep encoding cannot express 'fallback-assignment to null' without additional structural constraints. Auto-compiled on the 2026-04-16 postmerge. Archived via the mmnto-ai/totem#1345 filter. Kept in the ledger as a compile-worker failure mode where a positional `has:` clause under-constrains the target."
+    },
+    {
+      "lessonHash": "ae4d3065e5548794",
+      "lessonHeading": "Suppress turbo warnings for data-only packs",
+      "pattern": "",
+      "message": "Data-only packages should set 'outputs' to an empty array in turbo.json to suppress build system warnings about missing outputs.",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "kind": "pair",
+          "has": {
+            "pattern": "\"outputs\"",
+            "stopBy": "end"
+          },
+          "not": {
+            "has": {
+              "pattern": "[]",
+              "stopBy": "end"
+            }
+          }
+        }
+      },
+      "badExample": "{ \"tasks\": { \"build\": { \"outputs\": [\"dist/**\"] } } }",
+      "compiledAt": "2026-04-17T02:13:23.403Z",
+      "createdAt": "2026-04-17T02:13:23.403Z",
+      "fileGlobs": [
+        "packages/pack-agent-security/turbo.json"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "2f09502117f56a77",
+      "lessonHeading": "Prefer replacer functions over back-references",
+      "pattern": "",
+      "message": "Prefer a replacer function over string back-references like `$&`, `$1`, etc. to avoid unintended special-sequence interpretation.",
+      "engine": "ast-grep",
+      "astGrepPattern": "$STR.replace($PATTERN, $REPLACEMENT)",
+      "badExample": "str.replace(/foo/, '$&bar');",
+      "compiledAt": "2026-04-17T02:13:27.264Z",
+      "createdAt": "2026-04-17T02:13:27.264Z",
+      "fileGlobs": [
+        "packages/core/src/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad astGrepPattern `$STR.replace($PATTERN, $REPLACEMENT)` matches every two-arg `.replace()` call in `packages/core/src`, not just cases where the replacement string contains a back-reference like `$&`, `$1`, etc. The underlying lesson (from PR #1501) is accurate — prefer a replacer function when the replacement may contain special sequences — but the rule as compiled cannot encode that content-level check with a simple ast-grep pattern. Would produce many false positives on legitimate `.replace()` calls that use literal strings or already use a function replacer. Auto-compiled on the 2026-04-16 postmerge (1477/1496/1501/1503/1505/1506 cycle). Archived via the mmnto-ai/totem#1345 filter. Kept in the ledger as a compile-worker failure mode: the LLM could not distinguish the back-reference content within the replacement string and produced a generalization that covers all two-arg replace calls."
+    },
+    {
+      "lessonHash": "95d28a7da202bd67",
+      "lessonHeading": "Enforce exact package publish surface",
+      "pattern": "",
+      "message": "Use exact equality or length checks instead of expect.arrayContaining for package.json files checks — arrayContaining allows accidental artifacts to be published",
+      "engine": "ast-grep",
+      "astGrepPattern": "expect($VAL).toEqual(expect.arrayContaining($$$ARGS))",
+      "badExample": "expect(files).toEqual(expect.arrayContaining(['index.js', 'package.json']));",
+      "compiledAt": "2026-04-17T02:13:27.869Z",
+      "createdAt": "2026-04-17T02:13:27.869Z",
+      "fileGlobs": [
+        "packages/pack-agent-security/test/structure.test.ts"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "0b1fea6f34bfdc98",
+      "lessonHeading": "Use unit separators for Git parsing",
+      "pattern": "",
+      "message": "Avoid using pipe '|' as a delimiter when parsing Git log output — it can collide with commit titles. Use non-printable unit separators (e.g., '\\x1F') instead.",
+      "engine": "ast-grep",
+      "astGrepPattern": "$GIT.split('|')",
+      "badExample": "const parts = line.split('|');",
+      "compiledAt": "2026-04-17T02:13:36.321Z",
+      "createdAt": "2026-04-17T02:13:36.321Z",
+      "fileGlobs": [
+        "packages/mcp/src/**/*.ts",
+        "!**/*.test.*"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "ea865d039188a717",
+      "lessonHeading": "Assert raw strings for byte-identity",
+      "pattern": "",
+      "message": "Use raw string assertions (e.g., expect(str).toBe(expected)) instead of JSON.parse + toEqual — structural equality misses formatting and property-order drifts when byte-identical output is required.",
+      "engine": "ast-grep",
+      "astGrepPattern": "expect(JSON.parse($A)).toEqual($B)",
+      "badExample": "expect(JSON.parse(result)).toEqual({ id: 1, name: 'foo' });",
+      "compiledAt": "2026-04-17T02:13:48.951Z",
+      "createdAt": "2026-04-17T02:13:48.951Z",
+      "fileGlobs": [
+        "packages/mcp/src/**/*.test.ts",
+        "packages/mcp/src/**/*.test.tsx"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "202ceddda99eae5d",
+      "lessonHeading": "Use canonical API terms in documentation",
+      "pattern": "adaptive_thinking",
+      "message": "Use the canonical API term 'thinking' instead of internal abstraction name 'adaptive_thinking' in user-facing documentation",
+      "engine": "regex",
+      "badExample": "Set `adaptive_thinking` to true to enable extended reasoning.",
+      "compiledAt": "2026-04-17T02:13:54.788Z",
+      "createdAt": "2026-04-17T02:13:54.788Z",
+      "fileGlobs": [
+        "docs/**/*.md"
+      ],
+      "severity": "warning"
+    },
+    {
+      "lessonHash": "fe1b4123aa1f679c",
+      "lessonHeading": "Always escape hyphens in regex utilities",
+      "pattern": "",
+      "message": "Regex escape utility is missing the hyphen (-). Add it to prevent unintended range behavior when the escaped string is used inside a character class [...].",
+      "engine": "ast-grep",
+      "astGrepPattern": "$STR.replace(/[.*+?^${}()|[\\]\\\\]/g, $REPLACEMENT)",
+      "badExample": "str.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')",
+      "compiledAt": "2026-04-17T02:13:55.951Z",
+      "createdAt": "2026-04-17T02:13:55.951Z",
+      "fileGlobs": [
+        "packages/core/src/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "severity": "warning"
     }
   ],
   "nonCompilable": [
@@ -10417,6 +10575,54 @@
     {
       "hash": "28753e5f82c6bbd8",
       "title": "Prefer Monitor over Bash sleep loops"
+    },
+    {
+      "hash": "67306b549e55a50c",
+      "title": "Document dependency constraints for multi-phase work"
+    },
+    {
+      "hash": "fdb57d2403a9a37d",
+      "title": "Sync submodule pointers to ensure citation reachability"
+    },
+    {
+      "hash": "c0d17adac2ca5b39",
+      "title": "Synchronize priority sequences for consistent triage"
+    },
+    {
+      "hash": "9d0e3c1d56128aaf",
+      "title": "Guard external JSON field types"
+    },
+    {
+      "hash": "e21b7f5dce892ee4",
+      "title": "Archive over-broad blocking rules"
+    },
+    {
+      "hash": "2f6ca46b3c2dcad6",
+      "title": "Promote migration guides to markdown headings"
+    },
+    {
+      "hash": "68f1b371cdff824a",
+      "title": "Update document status to prevent triage drift"
+    },
+    {
+      "hash": "a2291a6664291cbc",
+      "title": "Test regex escaping with character classes"
+    },
+    {
+      "hash": "12437683da6f91b1",
+      "title": "Decouple submodule bumps from documentation refreshes"
+    },
+    {
+      "hash": "f570e38c355f2f7c",
+      "title": "Narrow AST-grep constructor patterns"
+    },
+    {
+      "hash": "606d0fa007b5a9e2",
+      "title": "Account for incidental compiles during manifest refresh"
+    },
+    {
+      "hash": "8d5871f196c04d2e",
+      "title": "Account for Opus 4.7 tokenization overhead"
     }
   ]
 }

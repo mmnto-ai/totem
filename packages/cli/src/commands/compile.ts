@@ -1079,10 +1079,24 @@ export async function compileCommand(
       return;
     }
 
+    // Filter lessons whose compiled rule is archived so exports never emit
+    // guidance the project has explicitly silenced. Mirrors the mmnto-ai/totem#1345
+    // lint-path filter in loadCompiledRules; closes the symmetric export-path hole.
+    const rawRulesFile = loadCompiledRulesFile(rulesPath);
+    const archivedHashes = new Set(
+      rawRulesFile.rules
+        .filter((r) => r.status === 'archived')
+        .map((r) => r.lessonHash.toLowerCase()),
+    );
+    const lessonsForExport =
+      archivedHashes.size === 0
+        ? lessons
+        : lessons.filter((l) => !archivedHashes.has(hashLesson(l.heading, l.body).toLowerCase()));
+
     for (const [name, filePath] of Object.entries(config.exports)) {
       const absPath = path.join(cwd, filePath);
-      exportLessons(lessons, absPath);
-      log.success(TAG, `Exported ${lessons.length} rules to ${filePath} (${name})`); // totem-ignore
+      exportLessons(lessonsForExport, absPath);
+      log.success(TAG, `Exported ${lessonsForExport.length} rules to ${filePath} (${name})`); // totem-ignore
     }
   }
 
