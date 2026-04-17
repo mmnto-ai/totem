@@ -9,6 +9,7 @@ import {
   detectPackageManager,
   isInExtends,
   isValidTarget,
+  resolveCompiledRulesExport,
   resolvePackName,
 } from './install.js';
 
@@ -48,6 +49,50 @@ describe('isValidTarget', () => {
     expect(isValidTarget('pack/my_pack')).toBe(false);
     expect(isValidTarget('pack/my pack')).toBe(false);
     expect(isValidTarget('pack/..')).toBe(false);
+  });
+
+  it('rejects pack names with leading hyphens (flag-injection hardening)', () => {
+    // Paired with the `--` delimiter on the pm install invocation: a
+    // name like `-rf` would otherwise parse as a package-manager flag.
+    expect(isValidTarget('pack/-rf')).toBe(false);
+    expect(isValidTarget('pack/@scope/-rf')).toBe(false);
+    expect(isValidTarget('pack/-')).toBe(false);
+  });
+
+  it('rejects targets longer than the 214-char npm package-name limit', () => {
+    const long = 'pack/' + 'a'.repeat(250);
+    expect(isValidTarget(long)).toBe(false);
+  });
+});
+
+describe('resolveCompiledRulesExport', () => {
+  it('returns a plain string export unchanged', () => {
+    expect(resolveCompiledRulesExport('./compiled-rules.json')).toBe('./compiled-rules.json');
+  });
+
+  it('returns the default condition from an exports object', () => {
+    expect(
+      resolveCompiledRulesExport({
+        default: './dist/compiled-rules.json',
+        types: './dist/compiled-rules.d.ts',
+      }),
+    ).toBe('./dist/compiled-rules.json');
+  });
+
+  it('falls back to the first string value when no default is present', () => {
+    expect(
+      resolveCompiledRulesExport({
+        import: './dist/import.json',
+        require: './dist/require.json',
+      }),
+    ).toBe('./dist/import.json');
+  });
+
+  it('returns null for unresolvable values', () => {
+    expect(resolveCompiledRulesExport(null)).toBeNull();
+    expect(resolveCompiledRulesExport(undefined)).toBeNull();
+    expect(resolveCompiledRulesExport(42)).toBeNull();
+    expect(resolveCompiledRulesExport({ types: null, default: 42 })).toBeNull();
   });
 });
 
@@ -91,6 +136,16 @@ export default { rules: [] };`;
   extends: ['old-pack'],
 */
 export default { rules: [] };`;
+    expect(isInExtends(config, 'old-pack')).toBe(false);
+  });
+
+  it('ignores extends syntax inside a string literal (GCA finding on PR #1516)', () => {
+    // A rule message or regex pattern in a string literal may happen to
+    // contain the structural sequence `extends: ['foo']`. The matcher
+    // must not treat that as the active declaration.
+    const config = `export default {
+  rules: [{ message: "Do not use extends: ['old-pack']" }],
+};`;
     expect(isInExtends(config, 'old-pack')).toBe(false);
   });
 
