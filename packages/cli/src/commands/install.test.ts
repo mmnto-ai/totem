@@ -1,5 +1,4 @@
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,7 +10,11 @@ describe('install command', () => {
   let originalCwd: () => string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-install-'));
+    const tempRoot = path.join(process.cwd(), '.totem', 'temp');
+    if (!fs.existsSync(tempRoot)) {
+      fs.mkdirSync(tempRoot, { recursive: true });
+    }
+    tmpDir = fs.mkdtempSync(path.join(tempRoot, 'totem-install-'));
     originalCwd = process.cwd;
     process.cwd = () => tmpDir;
     vi.spyOn(process, 'exit').mockImplementation((code?: number | string | null | undefined) => {
@@ -41,14 +44,14 @@ describe('install command', () => {
     expect(detectPackageManager(fs, path, tmpDir)).toBe('yarn');
     fs.rmSync(path.join(tmpDir, 'yarn.lock'));
 
-    // totem-ignore-next-line
+    // totem-context: intentional bun lockfile fixture for tests
     fs.writeFileSync(path.join(tmpDir, 'bun.lockb'), '');
-    // totem-ignore-next-line
+    // totem-context: intentional bun lockfile fixture for tests
     fs.writeFileSync(path.join(tmpDir, 'bun.lock'), '');
     expect(detectPackageManager(fs, path, tmpDir)).toBe('bun');
-    // totem-ignore-next-line
+    // totem-context: intentional bun lockfile fixture for tests
     fs.rmSync(path.join(tmpDir, 'bun.lockb'), { force: true });
-    // totem-ignore-next-line
+    // totem-context: intentional bun lockfile fixture for tests
     fs.rmSync(path.join(tmpDir, 'bun.lock'), { force: true });
 
     expect(detectPackageManager(fs, path, tmpDir)).toBe('npm');

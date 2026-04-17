@@ -482,13 +482,12 @@ program
   .command('install <target>')
   .description('Install a Totem pack (e.g., pack/my-rules)')
   .action(async (target: string) => {
-    // totem-context: intentional cleanup - handled at CLI boundary
     try {
       const { installCommand } = await import('./commands/install.js');
       await installCommand(target);
+      // totem-context: intentional cleanup - handled at CLI boundary
     } catch (err) {
       handleError(err);
-      throw err;
     }
   });
 

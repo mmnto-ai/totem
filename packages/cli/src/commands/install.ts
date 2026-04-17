@@ -5,7 +5,7 @@ export function detectPackageManager(
 ): 'pnpm' | 'yarn' | 'bun' | 'npm' {
   if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) return 'pnpm';
   if (fs.existsSync(path.join(cwd, 'yarn.lock'))) return 'yarn';
-  // totem-ignore-next-line
+  // totem-context: bun lockfile names are intentional package-manager probes
   if (fs.existsSync(path.join(cwd, 'bun.lockb')) || fs.existsSync(path.join(cwd, 'bun.lock')))
     return 'bun';
   return 'npm';
@@ -31,7 +31,7 @@ export async function installCommand(target: string): Promise<void> {
   const gitRoot = resolveGitRoot(cwd) || cwd;
   const totemDir = path.join(gitRoot, '.totem');
 
-  if (!target.startsWith('pack/') && !target.startsWith('@') && !target.match(/^[a-z0-9-]/i)) {
+  if (!/^pack\/(@[a-z0-9-]+\/)?[a-z0-9-]+$/i.test(target)) {
     throw new TotemConfigError(
       `Invalid target: ${target}. Expected format: pack/<name> or pack/@scope/<name>`,
       '',
@@ -47,13 +47,17 @@ export async function installCommand(target: string): Promise<void> {
   if (configPath && fs.existsSync(configPath)) {
     configContent = fs.readFileSync(configPath, 'utf-8');
 
-    if (
-      configContent.indexOf(`'${packName}'`) !== -1 ||
-      configContent.indexOf(`"${packName}"`) !== -1 ||
-      configContent.indexOf(`\`${packName}\``) !== -1
-    ) {
-      log.dim('Totem', `Pack ${packName} is already installed in extends array.`);
-      return;
+    const extendsMatch = configContent.match(/extends:\s*\[([^\]]*)\]/);
+    if (extendsMatch) {
+      const extendsArray = extendsMatch[1];
+      if (
+        extendsArray.indexOf(`'${packName}'`) !== -1 ||
+        extendsArray.indexOf(`"${packName}"`) !== -1 ||
+        extendsArray.indexOf(`\`${packName}\``) !== -1
+      ) {
+        log.dim('Totem', `Pack ${packName} is already installed in extends array.`);
+        return;
+      }
     }
   }
 
@@ -62,15 +66,18 @@ export async function installCommand(target: string): Promise<void> {
   try {
     const args = pm === 'npm' ? ['install', '-D', packName] : ['add', '-D', packName];
     safeExec(pm, args, { cwd: gitRoot });
-  } catch {
-    throw new TotemConfigError(`Failed to fetch pack ${packName}.`, '', 'CONFIG_INVALID');
+  } catch (err) {
+    throw new TotemConfigError(`Failed to fetch pack ${packName}.`, '', 'CONFIG_INVALID', err);
   }
 
   if (configPath && fs.existsSync(configPath)) {
     let updatedConfig = configContent;
     const extendsMatch = updatedConfig.match(/extends:\s*\[/);
     if (extendsMatch) {
-      updatedConfig = updatedConfig.replace(/extends:\s*\[/, `extends: [\n    '${packName}',`);
+      updatedConfig = updatedConfig.replace(
+        /extends:\s*\[/,
+        () => `extends: [\n    '${packName}',`,
+      );
       fs.writeFileSync(configPath, updatedConfig, 'utf-8');
       log.success('Totem', `Added ${packName} to extends array in totem.config.ts`);
     } else {
@@ -78,7 +85,7 @@ export async function installCommand(target: string): Promise<void> {
       if (exportMatch) {
         updatedConfig = updatedConfig.replace(
           /export\s+default\s+\{/,
-          `export default {\n  extends: [\n    '${packName}',\n  ],`,
+          () => `export default {\n  extends: [\n    '${packName}',\n  ],`,
         );
         fs.writeFileSync(configPath, updatedConfig, 'utf-8');
         log.success('Totem', `Added extends array with ${packName} to totem.config.ts`);
@@ -97,10 +104,7 @@ export async function installCommand(target: string): Promise<void> {
     );
   }
 
-  let packDir = path.join(gitRoot, 'node_modules', packName);
-  if (!fs.existsSync(packDir)) {
-    packDir = path.join(gitRoot, 'node_modules', packName.split('/').join(path.sep));
-  }
+  const packDir = path.join(gitRoot, 'node_modules', packName);
 
   const packPkgPath = path.join(packDir, 'package.json');
   if (!fs.existsSync(packPkgPath)) {
@@ -140,7 +144,7 @@ export async function installCommand(target: string): Promise<void> {
     );
   }
 
-  let packRulesFile;
+  let packRulesFile: import('@mmnto/totem').CompiledRulesFile | undefined;
   try {
     packRulesFile = JSON.parse(fs.readFileSync(packRulesPath, 'utf-8'));
     CompiledRulesFileSchema.parse(packRulesFile);
@@ -155,21 +159,20 @@ export async function installCommand(target: string): Promise<void> {
   const localRulesPath = path.join(totemDir, 'compiled-rules.json');
   let localRulesFile: Record<string, unknown> = { version: 1, rules: [], nonCompilable: [] };
   if (fs.existsSync(localRulesPath)) {
-    // totem-context: intentional cleanup
     try {
       const content = fs.readFileSync(localRulesPath, 'utf-8');
       localRulesFile = JSON.parse(content);
-      // totem-ignore-next-line
-    } catch {
+      // totem-context: intentional cleanup
+    } catch (_err) {
       log.error('Totem Error', `Local compiled-rules.json is unparseable. Skipping rules merge.`);
     }
   }
+  const localRulesArray = Array.isArray(localRulesFile.rules) ? localRulesFile.rules : [];
+  const packRulesArray = packRulesFile ? packRulesFile.rules : [];
 
   const { rules: mergedRules } = mergeRules(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    localRulesFile.rules as any,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (packRulesFile as any).rules,
+    localRulesArray as import('@mmnto/totem').CompiledRule[],
+    packRulesArray,
   );
   localRulesFile.rules = mergedRules;
 
@@ -188,9 +191,10 @@ export async function installCommand(target: string): Promise<void> {
         localIgnoreContent = fs.readFileSync(localIgnorePath, 'utf-8');
       }
 
+      const localLines = new Set(localIgnoreContent.split('\n').map((l) => l.trim()));
       const newLines = packIgnoreContent
         .split('\n')
-        .filter((l: string) => l.trim() && localIgnoreContent.indexOf(l.trim()) === -1);
+        .filter((l: string) => l.trim() && !localLines.has(l.trim()));
       if (newLines.length > 0) {
         const separator = localIgnoreContent && !localIgnoreContent.endsWith('\n') ? '\n' : '';
         fs.appendFileSync(
