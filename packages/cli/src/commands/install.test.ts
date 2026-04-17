@@ -213,15 +213,22 @@ describe('detectPackageManager', () => {
     expect(detectPackageManager(fs, path, tmpDir)).toBe('yarn');
   });
 
-  it('detects bun via either lockfile variant (bun.lockb binary or bun.lock text)', () => {
-    // Both variants are valid Bun markers; detectPackageManager checks
-    // both. Single test covering both variants in the same scope so
-    // downstream governance rules that expect co-located references to
-    // the two lockfile names can see both.
-    for (const lockfile of ['bun.lockb', 'bun.lock']) {
-      // totem-context: intentional bun lockfile fixtures for tests
-      fs.writeFileSync(path.join(tmpDir, lockfile), '');
-    }
+  // Variants declared on a single line so the co-located-reference
+  // rule sees both literal strings in one place. Individual tests then
+  // reference the constants to exercise each probe path independently,
+  // which catches a regression in either code path (CR finding on PR
+  // mmnto-ai/totem#1516: writing both in one test masks a broken probe).
+  const [BUN_LOCKB_FIXTURE, BUN_LOCK_FIXTURE] = ['bun.lockb', 'bun.lock'];
+
+  it('detects bun via the binary lockfile variant', () => {
+    // totem-context: intentional bun lockfile fixture for tests
+    fs.writeFileSync(path.join(tmpDir, BUN_LOCKB_FIXTURE), '');
+    expect(detectPackageManager(fs, path, tmpDir)).toBe('bun');
+  });
+
+  it('detects bun via the text lockfile variant', () => {
+    // totem-context: intentional bun lockfile fixture for tests
+    fs.writeFileSync(path.join(tmpDir, BUN_LOCK_FIXTURE), '');
     expect(detectPackageManager(fs, path, tmpDir)).toBe('bun');
   });
 
