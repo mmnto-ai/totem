@@ -20,9 +20,21 @@ export interface LessonInput {
   hash: string;
 }
 
+/**
+ * Machine-readable skip reasons. Threaded through `CompileLessonResult` so
+ * downstream consumers (totem doctor, Layer 4 fallthrough reporting per ADR-088)
+ * can distinguish why a lesson produced no rule without string-matching
+ * human-readable messages.
+ */
+export type CompileLessonReasonCode =
+  | 'non-compilable' // LLM classified the lesson as conceptual/architectural
+  | 'missing-badexample' // LLM output omitted badExample; structural failure, no retry
+  | 'verify-retry-exhausted' // Layer 3 retry loop ran to cap without producing a matching pattern
+  | 'security-verify-rejected'; // Layer 3 security rule failed verify; no retry per zero-tolerance
+
 export type CompileLessonResult =
   | { status: 'compiled'; rule: CompiledRule }
-  | { status: 'skipped'; hash: string; reason?: string }
+  | { status: 'skipped'; hash: string; reason?: string; reasonCode: CompileLessonReasonCode }
   | { status: 'failed' }
   | { status: 'noop' };
 
@@ -62,6 +74,17 @@ export interface CompileLessonDeps {
    * system prompt would invalidate the cache on every --upgrade call.
    */
   telemetryPrefix?: string;
+  /**
+   * Assert that this compile is producing a security rule. Per ADR-088
+   * Decision 3 (Layer 3 zero-tolerance), security rules that fail the smoke
+   * gate are rejected outright with no retry. Reserved for callers that know
+   * the source pack context (e.g., compiling lessons from a pack scoped
+   * `@totem/pack-agent-security` or any pack whose manifest carries an
+   * immutable severity contract). Today's `totem lesson compile` at repo
+   * level does not set this; a future pack-build command will. Defaults to
+   * false; security zero-tolerance is gated on an affirmative caller assertion.
+   */
+  securityContext?: boolean;
 }
 
 // ─── ast-grep pattern validation ───────────────────
@@ -606,7 +629,12 @@ export async function compileLesson(
 
     if (!parsed.compilable) {
       callbacks?.onDim?.(lesson.heading, 'Pipeline 3: not compilable — skipping');
-      return { status: 'skipped', hash: lesson.hash, reason: parsed.reason };
+      return {
+        status: 'skipped',
+        hash: lesson.hash,
+        reason: parsed.reason,
+        reasonCode: 'non-compilable',
+      };
     }
 
     // mmnto/totem#1408: Pipeline 3 reuses its Bad snippet as the smoke-gate
@@ -648,53 +676,224 @@ export async function compileLesson(
     return { status: 'compiled', rule: ruleResult.rule };
   }
 
-  // ── Pipeline 2: LLM compilation ──────────────────
-  // The compilerPrompt (ast-grep manual + few-shot examples, ~50KB) is the
-  // persistent system context — same bytes across every Pipeline 2 call within
-  // a session. Pass it as systemPrompt so the orchestrator can cache it
-  // (mmnto/totem#1291 Phase 3). The user prompt carries only the per-lesson
-  // body and the optional telemetry directive (which is per-rule, not cacheable).
+  // ── Pipeline 2 / Layer 3: LLM compilation with verify-retry loop ──
+  // ADR-088 Phase 1 (mmnto-ai/totem#1479). The compilerPrompt (ast-grep
+  // manual + few-shot examples, ~50KB) is the persistent system context —
+  // same bytes across every call within a session. Pass it as systemPrompt
+  // so the orchestrator can cache it (mmnto/totem#1291 Phase 3). The user
+  // prompt carries only the per-lesson body, the optional telemetry
+  // directive (per --upgrade target, not cacheable), and on retries the
+  // prior-attempt feedback block.
   //
-  // Optional telemetry directive (mmnto/totem#1131) — nudges Sonnet toward ast-grep
-  // when the existing rule is firing in strings/comments instead of code. Lives
-  // in the user prompt because it varies per --upgrade target.
-  const userPromptParts: string[] = [];
-  if (deps.telemetryPrefix) {
-    userPromptParts.push('## Telemetry-Driven Refinement Directive', deps.telemetryPrefix);
-  }
-  userPromptParts.push('## Lesson to Compile', `Heading: ${lesson.heading}`, lesson.body);
-  const userPrompt = userPromptParts.join('\n\n');
-  const response = await runOrchestrator(userPrompt, compilerPrompt);
+  // Retry semantics:
+  //   - On smoke-gate zero-match, rebuild the user prompt with a
+  //     "Previous Attempt Failed Verification" section that names the
+  //     failed pattern and the badExample it could not match, then call
+  //     the LLM again. Up to MAX_VERIFY_ATTEMPTS total attempts.
+  //   - Security context (deps.securityContext === true) disables retry:
+  //     a failing verify rejects outright with reasonCode
+  //     'security-verify-rejected' per ADR-088 Decision 3 (zero
+  //     tolerance).
+  //   - On attempt exhaustion, fall through to Layer 4 with reasonCode
+  //     'verify-retry-exhausted'. The lesson is recorded as skipped
+  //     with a machine-readable reason so totem doctor and downstream
+  //     tooling can distinguish this from 'non-compilable'.
+  const MAX_VERIFY_ATTEMPTS = 3;
+  let previousFailure: { pattern: string; snippet: string; reason: string } | null = null;
 
-  if (response == null) return { status: 'noop' };
+  for (let attempt = 1; attempt <= MAX_VERIFY_ATTEMPTS; attempt++) {
+    const userPromptParts: string[] = [];
+    if (deps.telemetryPrefix) {
+      userPromptParts.push('## Telemetry-Driven Refinement Directive', deps.telemetryPrefix);
+    }
+    if (previousFailure) {
+      userPromptParts.push(
+        '## Previous Attempt Failed Verification',
+        buildRetryDirective(previousFailure, attempt, MAX_VERIFY_ATTEMPTS),
+      );
+    }
+    userPromptParts.push('## Lesson to Compile', `Heading: ${lesson.heading}`, lesson.body);
+    const userPrompt = userPromptParts.join('\n\n');
+    const response = await runOrchestrator(userPrompt, compilerPrompt);
 
-  const parsed = parseCompilerResponse(response);
-  if (!parsed) {
-    callbacks?.onWarn?.(lesson.heading, 'Failed to parse LLM response — skipping');
-    return { status: 'failed' };
+    if (response == null) return { status: 'noop' };
+
+    const parsed = parseCompilerResponse(response);
+    if (!parsed) {
+      callbacks?.onWarn?.(lesson.heading, 'Failed to parse LLM response — skipping');
+      return { status: 'failed' };
+    }
+
+    if (!parsed.compilable) {
+      callbacks?.onDim?.(lesson.heading, 'Not compilable (conceptual/architectural) — skipping');
+      return {
+        status: 'skipped',
+        hash: lesson.hash,
+        reason: parsed.reason,
+        reasonCode: 'non-compilable',
+      };
+    }
+
+    // Smoke gate enforcement lives in buildCompiledRule (mmnto-ai/totem#1408).
+    // Rules without a badExample, or whose badExample fails to match the
+    // pattern, come back with rule === null and a rejectReason. Classify the
+    // outcome into one of four buckets:
+    //   success          — rule built AND Example Hit/Miss verify passed
+    //   retry-eligible   — smoke-gate zero-match OR verifyRuleExamples failure
+    //   missing-badexample — LLM omitted a required field (structural)
+    //   validator-failure  — invalid regex / ast-grep parse error / self-
+    //                        suppression guard; retrying would produce more
+    //                        invalid patterns, so the lesson stays pending
+    const ruleResult = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+    });
+
+    let retryReason: string;
+    let retrySnippet: string;
+
+    if (ruleResult.rule) {
+      const testResult = verifyRuleExamples(ruleResult.rule, lesson.body);
+      if (!testResult || testResult.passed) {
+        return { status: 'compiled', rule: ruleResult.rule };
+      }
+      // Example Hit/Miss verification failed against the lesson's ground
+      // truth. ADR-088 AC: "verifies every LLM-generated pattern against
+      // the lesson's Example Hit block. Zero-match triggers a retry."
+      retryReason = formatExampleFailure(testResult);
+      // The snippet the retry directive should show is the Example Hit
+      // line the pattern missed, not the LLM's own badExample (which the
+      // pattern did match, since the smoke gate passed). If missedFails
+      // is empty but the test still failed (false-positive-only case),
+      // fall back to the badExample so the directive has something
+      // concrete to anchor on.
+      retrySnippet =
+        testResult.missedFails.length > 0
+          ? testResult.missedFails.join('\n')
+          : (parsed.badExample ?? '(no snippet available)');
+    } else {
+      const rejectReason = ruleResult.rejectReason ?? 'Unknown error';
+
+      // Missing-badExample is a structural-output failure. Retrying won't
+      // teach the LLM to emit a field it just omitted — the compiler
+      // system prompt already requires it (mmnto-ai/totem#1409).
+      // Short-circuit to skipped with a distinct reasonCode.
+      if (rejectReason.includes('missing badExample')) {
+        callbacks?.onWarn?.(lesson.heading, `${rejectReason} — skipping`);
+        return {
+          status: 'skipped',
+          hash: lesson.hash,
+          reason: rejectReason,
+          reasonCode: 'missing-badexample',
+        };
+      }
+
+      // Only smoke-gate zero-match against the LLM's own badExample is
+      // retry-eligible. Validator-level rejections — invalid regex,
+      // ast-grep parse errors, self-suppression guards — are terminal.
+      // Retrying them produces more invalid patterns and wastes tokens.
+      // 'failed' keeps the rule pending for a future recompile rather
+      // than marking it permanently nonCompilable.
+      const isZeroMatch = rejectReason.startsWith('smoke gate: zero matches');
+      if (!isZeroMatch) {
+        callbacks?.onWarn?.(lesson.heading, `${rejectReason} — failing`);
+        return { status: 'failed' };
+      }
+
+      retryReason = rejectReason;
+      retrySnippet = parsed.badExample ?? '(no badExample emitted)';
+    }
+
+    // Shared retry path. Triggered by smoke-gate zero-match OR by
+    // Example Hit/Miss verify failure. Both carry a retryReason that
+    // threads back into the next LLM attempt's user prompt.
+
+    // ADR-088 Decision 3: security rules zero-tolerance. No retry.
+    if (deps.securityContext === true) {
+      callbacks?.onWarn?.(
+        lesson.heading,
+        `Security rule rejected on verify failure (no retry): ${retryReason}`,
+      );
+      return {
+        status: 'skipped',
+        hash: lesson.hash,
+        reason: retryReason,
+        reasonCode: 'security-verify-rejected',
+      };
+    }
+
+    if (attempt < MAX_VERIFY_ATTEMPTS) {
+      previousFailure = {
+        pattern: extractPatternString(parsed),
+        snippet: retrySnippet,
+        reason: retryReason,
+      };
+      callbacks?.onDim?.(
+        lesson.heading,
+        `Verify failed (attempt ${attempt}/${MAX_VERIFY_ATTEMPTS}): ${retryReason} — retrying`,
+      );
+      continue;
+    }
+
+    // Attempts exhausted → Layer 4 fallthrough per ADR-088.
+    callbacks?.onWarn?.(
+      lesson.heading,
+      `Verify retry exhausted after ${MAX_VERIFY_ATTEMPTS} attempts: ${retryReason} — skipping`,
+    );
+    return {
+      status: 'skipped',
+      hash: lesson.hash,
+      reason: `Verify retry exhausted after ${MAX_VERIFY_ATTEMPTS} attempts: ${retryReason}`,
+      reasonCode: 'verify-retry-exhausted',
+    };
   }
 
-  if (!parsed.compilable) {
-    callbacks?.onDim?.(lesson.heading, 'Not compilable (conceptual/architectural) — skipping');
-    return { status: 'skipped', hash: lesson.hash, reason: parsed.reason };
-  }
+  // Unreachable: every path inside the loop returns. Kept to satisfy the
+  // return-type checker without using a non-null assertion dance.
+  return { status: 'failed' };
+}
 
-  // mmnto/totem#1408: Pipeline 2 enforces the smoke gate. Rules without a
-  // badExample, or whose badExample fails to match the pattern, are rejected
-  // with a clear reason before landing in compiled-rules.json. The compile
-  // prompt rewrite in mmnto/totem#1409 teaches Sonnet to emit the field.
-  const ruleResult = buildCompiledRule(parsed, lesson, existingByHash, {
-    enforceSmokeGate: true,
-  });
-  if (!ruleResult.rule) {
-    callbacks?.onWarn?.(lesson.heading, `${ruleResult.rejectReason ?? 'Unknown error'} — skipping`);
-    return { status: 'failed' };
-  }
+// ─── Retry loop helpers (ADR-088 Layer 3) ──────────
 
-  const testResult = verifyRuleExamples(ruleResult.rule, lesson.body);
-  if (testResult && !testResult.passed) {
-    callbacks?.onWarn?.(lesson.heading, formatExampleFailure(testResult));
-    return { status: 'failed' };
+/**
+ * Render the parsed LLM output's pattern as a printable string for the
+ * retry-directive prompt. regex and astGrepPattern are string-native; a
+ * compound ast-grep rule is JSON-serialized so the LLM can see the
+ * structure that produced zero matches.
+ */
+function extractPatternString(parsed: CompilerOutput): string {
+  if (typeof parsed.pattern === 'string' && parsed.pattern.length > 0) return parsed.pattern;
+  if (typeof parsed.astGrepPattern === 'string' && parsed.astGrepPattern.length > 0) {
+    return parsed.astGrepPattern;
   }
-  return { status: 'compiled', rule: ruleResult.rule };
+  if (parsed.astGrepYamlRule) return JSON.stringify(parsed.astGrepYamlRule, null, 2);
+  return '(pattern unavailable)';
+}
+
+/**
+ * Build the "Previous Attempt Failed Verification" user-prompt block that
+ * threads the prior-attempt pattern, badExample, and reject reason back to
+ * the LLM so it can correct its output.
+ */
+function buildRetryDirective(
+  failure: { pattern: string; snippet: string; reason: string },
+  attempt: number,
+  maxAttempts: number,
+): string {
+  return [
+    `This is attempt ${attempt} of ${maxAttempts}. The previous attempt produced a pattern that failed verification.`,
+    '',
+    '**Previous pattern:**',
+    '```',
+    failure.pattern,
+    '```',
+    '',
+    '**Code snippet the pattern had to match:**',
+    '```',
+    failure.snippet,
+    '```',
+    '',
+    `**Failure reason:** ${failure.reason}`,
+    '',
+    'Generate a corrected pattern that satisfies the requirements. Keep the lesson intent unchanged; only fix the pattern so it triggers correctly.',
+  ].join('\n');
 }
