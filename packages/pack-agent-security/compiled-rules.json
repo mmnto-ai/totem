@@ -108,10 +108,10 @@
       "badExample": "spawn('ls', ['-la']);"
     },
     {
-      "lessonHash": "6e3543625468e73f",
+      "lessonHash": "a0b737fd43fb943e",
       "lessonHeading": "Dynamic code evaluation with non-literal arguments",
       "pattern": "",
-      "message": "Dynamic code-evaluation primitives (eval(), the Function constructor, vm.runInNewContext, vm.runInThisContext) called with non-literal arguments let a compromised agent execute attacker-controlled code at runtime. Literal string arguments pass so trusted-literal fixtures and math-parser test snippets are not flagged. If dynamic evaluation is genuinely required, use a sandboxed parser or an allowlist instead of direct code evaluation.",
+      "message": "Dynamic code-evaluation primitives let a compromised agent execute attacker-controlled code at runtime. The rule fires with different severity per primitive: eval() fires only on non-literal arguments (identifier, member access, binary expression, interpolated template); literal-string eval() passes so trusted-literal fixtures and math-parser test snippets are not flagged. The Function constructor (both new Function(...) and Function(...)), vm.runInNewContext, and vm.runInThisContext fire unconditionally — their legitimate uses are rare enough that an inline // totem-context: justification is the expected escape hatch rather than a pattern-level exemption. If dynamic evaluation is genuinely required, use a sandboxed parser or an allowlist instead of direct code evaluation.",
       "engine": "ast-grep",
       "astGrepYamlRule": {
         "rule": {

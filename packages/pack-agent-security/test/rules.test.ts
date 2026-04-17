@@ -30,7 +30,7 @@ const FIXTURE_CASES: { hash: string; bad: string; good: string }[] = [
     good: 'good-process-spawn.ts',
   },
   {
-    hash: '6e3543625468e73f',
+    hash: 'a0b737fd43fb943e',
     bad: 'bad-dynamic-eval.ts',
     good: 'good-dynamic-eval.ts',
   },

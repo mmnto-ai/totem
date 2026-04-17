@@ -47,3 +47,4 @@ require('node:child_process').exec(userInput); // totem-ignore
 require('node:child_process').execSync(userInput); // totem-ignore
 require('node:child_process').execFile(userInput); // totem-ignore
 require('node:child_process').execFileSync(userInput); // totem-ignore
+require('node:child_process').fork(userInput); // totem-ignore
