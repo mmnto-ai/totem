@@ -171,7 +171,9 @@
         "packages/cli/**/*.ts",
         "packages/cli/**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Pattern-message mismatch: astGrepPattern `import($MODULE)` fires on every dynamic import in the CLI, but the message tells developers to prefer dynamic imports. Every canonical lazy-load line trips a warning to do what it already does. Archived via #1517 + ADR-072 §3 (lazy-load via await import() established in PR #945, shipped 1.5.3)."
     },
     {
       "lessonHash": "2d364f952af19014",
@@ -383,7 +385,9 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: astGrepPattern `async function $NAME($$$PARAMS) { $$$BODY }` matches every async function in the entire codebase across **/*.ts, **/*.js, **/*.tsx, **/*.jsx. Cannot distinguish factory functions hoisting dynamic imports from any other async function. Archived via #1517."
     },
     {
       "lessonHash": "b9e4125e6a31f2cf",
@@ -1271,7 +1275,9 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: astGrepPattern `import $NAME from '$MODULE'` matches every top-level default import in packages/cli/src/commands/** regardless of whether the module is heavy. Source of the 100+ warning storm on PR #1516. ADR-072 §3 reserves lazy-loading for heavy dependencies. Archived via #1517 + ADR-072 §3 (lazy-load via await import() established in PR #945, shipped 1.5.3)."
     },
     {
       "lessonHash": "427481b534fe3392",
@@ -2198,7 +2204,9 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: astGrepPattern `import $NAME from '$MODULE'` matches every top-level default import in packages/cli/src/commands/**. Contributes to the PR #1516 warning storm. Archived via #1517 + ADR-072 §3 (lazy-load via await import() established in PR #945, shipped 1.5.3)."
     },
     {
       "lessonHash": "d940b2c9ffe92e99",
@@ -2326,7 +2334,9 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Hallucinated scope: pattern references '@core/' npm scope, which does not exist in this repository. No package.json declares it; no source file imports from it. Same failure mode as already-archived 0d0bbae4392c0255 ('@mcp-b/core'). Rule will never fire on real code. Archived via #1517."
     },
     {
       "lessonHash": "6d53d5fd241365d5",
@@ -2488,7 +2498,9 @@
         "packages/cli/**/*.ts",
         "packages/cli/**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Message forbids dynamic import() inside command function bodies, which is the canonical lazy-load pattern for all 25 CLI commands. Contradicts #1517 + ADR-072 §3 (lazy-load via await import() established in PR #945, shipped 1.5.3)."
     },
     {
       "lessonHash": "dd4542e69ec3d5a1",
@@ -2695,7 +2707,9 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Globs target packages/cli/src/commands/** but the message says \"avoid dynamic imports in shared utility modules\". Pattern fires on every canonical await import() in command handlers. Archived via #1517 + ADR-072 §3 (lazy-load via await import() established in PR #945, shipped 1.5.3)."
     },
     {
       "lessonHash": "fd5d891750fca994",
@@ -2772,7 +2786,9 @@
         "packages/cli/src/commands/**/*.ts",
         "!packages/cli/src/commands/index.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Globs include packages/cli/src/commands/** (only index.ts excluded), but the message flags dynamic imports \"detected outside CLI command entry points\". Globs contradict intent and fire on every canonical lazy-load line. Archived via #1517 + ADR-072 §3 (lazy-load via await import() established in PR #945, shipped 1.5.3)."
     },
     {
       "lessonHash": "d4b86f844e149484",
@@ -2924,7 +2940,9 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: astGrepPattern `import $NAME from '$PKG'` matches every top-level default import in packages/cli/src/commands/** with no way to distinguish heavy internal packages from cheap built-ins. Archived via #1517 + ADR-072 §3 (lazy-load via await import() established in PR #945, shipped 1.5.3)."
     },
     {
       "lessonHash": "b93bd44e6c1d2d59",
@@ -2989,7 +3007,9 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Globs `packages/cli/src/**/*.ts, !packages/cli/src/commands/**/*.ts` are over-broad: they match the CLI root entry files packages/cli/src/index.ts and index-lite.ts, which is precisely where ADR-072 §3 (PR #945) places lazy-loads of command handlers. Rule fires on every canonical `const { cmd } = await import('./commands/foo.js')` line in the two CLI bin entry files. Canonical utility-layer coverage retained via rules a1fd35ee696110b0 (utils/adapters/lib) and f6739f9ad356067a (utils/lib/helpers), which use correctly narrow globs. Archived via #1517."
     },
     {
       "lessonHash": "cccd9363ba696d53",
@@ -3622,7 +3642,9 @@
         "!**/*.test.ts",
         "!**/*.test.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: astGrepPattern `import $NAME from '$MODULE'` fires on every top-level default import across packages/cli/**. Archived via #1517 + ADR-072 §3 (lazy-load via await import() established in PR #945, shipped 1.5.3)."
     },
     {
       "lessonHash": "cb854652a786c5d7",
@@ -3653,7 +3675,9 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Globs `packages/cli/src/**/*.ts, !packages/cli/src/commands/**/*.ts` are over-broad: they match the CLI root entry files packages/cli/src/index.ts and index-lite.ts, which is precisely where ADR-072 §3 (PR #945) places lazy-loads of command handlers. Rule fires on every canonical `const { cmd } = await import('./commands/foo.js')` line in the two CLI bin entry files. Canonical utility-layer coverage retained via rules a1fd35ee696110b0 (utils/adapters/lib) and f6739f9ad356067a (utils/lib/helpers), which use correctly narrow globs. Archived via #1517."
     },
     {
       "lessonHash": "9f266a455f97fe37",
@@ -3814,7 +3838,9 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Noise rule: astGrepPattern `import($MODULE)` fires on every canonical dynamic import in command handlers with a message saying the pattern is \"required\". No action for the developer. Archived via #1517 + ADR-072 §3 (lazy-load via await import() established in PR #945, shipped 1.5.3)."
     },
     {
       "lessonHash": "b38ceed379b48068",
@@ -4044,7 +4070,9 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: astGrepPattern `import $NAME from '$MODULE'` fires on every top-level default import in packages/cli/src/commands/**. Archived via #1517 + ADR-072 §3 (lazy-load via await import() established in PR #945, shipped 1.5.3)."
     },
     {
       "lessonHash": "c962ead45bcec3a0",
@@ -4243,7 +4271,9 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Globs `packages/cli/src/**/*.ts, !packages/cli/src/commands/**/*.ts` are over-broad: they match the CLI root entry files packages/cli/src/index.ts and index-lite.ts, which is precisely where ADR-072 §3 (PR #945) places lazy-loads of command handlers. Rule fires on every canonical `const { cmd } = await import('./commands/foo.js')` line in the two CLI bin entry files. Canonical utility-layer coverage retained via rules a1fd35ee696110b0 (utils/adapters/lib) and f6739f9ad356067a (utils/lib/helpers), which use correctly narrow globs. Archived via #1517."
     },
     {
       "lessonHash": "2b570f4ebf0982cd",
@@ -4957,7 +4987,9 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Globs `packages/cli/src/**/*.ts, !packages/cli/src/commands/**/*.ts` are over-broad: they match the CLI root entry files packages/cli/src/index.ts and index-lite.ts, which is precisely where ADR-072 §3 (PR #945) places lazy-loads of command handlers. Rule fires on every canonical `const { cmd } = await import('./commands/foo.js')` line in the two CLI bin entry files. Canonical utility-layer coverage retained via rules a1fd35ee696110b0 (utils/adapters/lib) and f6739f9ad356067a (utils/lib/helpers), which use correctly narrow globs. Archived via #1517."
     },
     {
       "lessonHash": "939ae83ed3bf28bb",
@@ -4988,7 +5020,9 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: astGrepPattern `import $NAME from '$MODULE'` fires on every top-level default import in packages/cli/src/commands/**. Archived via #1517 + ADR-072 §3 (lazy-load via await import() established in PR #945, shipped 1.5.3)."
     },
     {
       "lessonHash": "916e2117b749ce03",
@@ -5677,7 +5711,9 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: astGrepPattern `import $NAME from '$MODULE'` fires on every top-level default import in packages/cli/src/commands/** with no way to identify \"heavy logic or detection modules\". Archived via #1517 + ADR-072 §3 (lazy-load via await import() established in PR #945, shipped 1.5.3)."
     },
     {
       "lessonHash": "60c2e674222dc4e5",
@@ -5781,7 +5817,9 @@
         "packages/cli/**/commands/**/*.ts",
         "packages/cli/**/commands/**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: astGrepPattern `import { $$$IMPORTS } from '$MODULE'` fires on every top-level destructured import in packages/cli/**/commands/**. Cannot distinguish heavy schemas from cheap built-ins. Archived via #1517 + ADR-072 §3 (lazy-load via await import() established in PR #945, shipped 1.5.3)."
     },
     {
       "lessonHash": "f202f65f8a198f18",
@@ -6000,7 +6038,9 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad: astGrepPattern `import $NAME from '$MODULE'` fires on every top-level default import in packages/cli/src/commands/**. Archived via #1517 + ADR-072 §3 (lazy-load via await import() established in PR #945, shipped 1.5.3)."
     },
     {
       "lessonHash": "4a408d868a972f5f",
@@ -6967,6 +7007,56 @@
       "severity": "warning"
     },
     {
+      "lessonHash": "600edf2e1c782b77",
+      "lessonHeading": "Initialize manifests with schema wrappers",
+      "message": "Initialize rule manifests as '{ \"version\": 1, \"rules\": [] }' instead of a bare array for schema-aware loader compatibility.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "const $VAR = []",
+      "compiledAt": "2026-04-17T17:41:50.379Z",
+      "createdAt": "2026-04-17T17:41:50.379Z",
+      "fileGlobs": [
+        "packages/pack-agent-security/**/*.ts",
+        "packages/pack-agent-security/**/*.js"
+      ],
+      "badExample": "const manifest = [];",
+      "status": "archived",
+      "archivedReason": "Over-broad: astGrepPattern `const $VAR = []` fires on every empty-array declaration in packages/pack-agent-security/**, not only on manifest initializers. Cannot distinguish \"const manifest = []\" (the intended target) from \"const violations = []\" or any other transient empty-array. Same failure mode as the dynamic-import rules archived under #1517."
+    },
+    {
+      "lessonHash": "28cc46c09bd5820f",
+      "lessonHeading": "Allow null branches for detached HEADs",
+      "message": "currentBranch must allow null (string | null) to handle detached HEAD states in CI. Do not hardcode a non-null branch string in test fixtures.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "currentBranch:\\s*['\"][^'\"]+['\"]",
+      "compiledAt": "2026-04-17T17:41:49.160Z",
+      "createdAt": "2026-04-17T17:41:49.160Z",
+      "fileGlobs": [
+        "packages/mcp/src/**/*.test.ts",
+        "packages/mcp/src/**/*.test.tsx"
+      ],
+      "badExample": "const gitState = { currentBranch: 'main', commits: [] };"
+    },
+    {
+      "lessonHash": "854ee1ad7fe80c40",
+      "lessonHeading": "Claude Opus 4.7 rejects sampling parameters",
+      "message": "Claude Opus 4.7 rejects temperature, top_p, and top_k sampling parameters — strip them before calling the Messages API",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "client.messages.create({ $$$ARGS, temperature: $VAL, $$$REST })",
+      "compiledAt": "2026-04-17T17:42:07.419Z",
+      "createdAt": "2026-04-17T17:42:07.419Z",
+      "fileGlobs": [
+        "packages/cli/**/*.ts"
+      ],
+      "badExample": "client.messages.create({ model: 'claude-opus-4-7', temperature: 0.7, messages: [] });",
+      "status": "archived",
+      "archivedReason": "Incomplete pattern (CodeRabbit finding on #1520): astGrepPattern `client.messages.create({ $$$ARGS, temperature: $VAL, $$$REST })` matches only calls that pass temperature, but the rule message says Opus 4.7 rejects all three of temperature, top_p, and top_k. Calls passing only top_p or top_k slip through. Archived rather than shipped incomplete; full coverage requires a compound rule authored in the source lesson."
+    },
+    {
       "lessonHash": "263c3b88dc975aa3",
       "lessonHeading": "Pipeline 5: observation from shield",
       "pattern": "badExample:\\s+parsed\\.badExample\\s+\\?\\?\\s+'\\(no\\s+badExample\\s+emitted\\)',",
@@ -6977,7 +7067,9 @@
         "**/*.ts"
       ],
       "compiledAt": "2026-04-17T04:17:14.891Z",
-      "createdAt": "2026-04-17T04:17:14.891Z"
+      "createdAt": "2026-04-17T04:17:14.891Z",
+      "status": "archived",
+      "archivedReason": "Orphan: no source lesson file exists in .totem/lessons/ for this hash. The rule was compiled at 2026-04-17T04:17:14.891Z but the parent manifest on main was generated at 2026-04-17T02:45:44 (off-by-one drift: manifest rule_count 425 vs actual 426). totem lesson compile drain step caught the orphan during #1517 refresh. Preserved in archived state for hash telemetry continuity per project convention; cannot be recompiled without re-authoring the lesson."
     }
   ],
   "nonCompilable": [
