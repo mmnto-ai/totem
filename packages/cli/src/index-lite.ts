@@ -255,11 +255,11 @@ program
 program
   .command('install <target>')
   .description('Install a Totem pack (e.g., pack/my-rules)')
-  .action(async (target: string) => {
+  .option('--yes', 'Auto-approve .totemignore merge (required for non-interactive CI)')
+  .action(async (target: string, options: { yes?: boolean }) => {
     try {
       const { installCommand } = await import('./commands/install.js');
-      await installCommand(target);
-      // totem-context: intentional cleanup - handled at CLI boundary
+      await installCommand(target, { yes: options.yes });
     } catch (err) {
       handleError(err);
     }
