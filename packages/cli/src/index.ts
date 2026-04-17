@@ -487,7 +487,7 @@ program
     // the central handler which calls process.exit(1). Tenet 4 fail-loud
     // is satisfied at the handler, not this catch block.
     try {
-      const { installCommand } = await import('./commands/install.js');
+      const { installCommand } = await import('./commands/install.js'); // totem-context: lazy import is the canonical CLI entry-point pattern (ADR-063)
       await installCommand(target, { yes: options.yes });
     } catch (err) {
       handleError(err);
