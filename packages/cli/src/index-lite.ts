@@ -258,7 +258,7 @@ program
   .option('--yes', 'Auto-approve .totemignore merge (required for non-interactive CI)')
   .action(async (target: string, options: { yes?: boolean }) => {
     try {
-      const { installCommand } = await import('./commands/install.js'); // totem-context: lazy import is the canonical CLI entry-point pattern (ADR-063)
+      const { installCommand } = await import('./commands/install.js');
       await installCommand(target, { yes: options.yes }); // totem-context: intentional cleanup — handleError is never-typed and calls process.exit(1)
     } catch (err) {
       handleError(err);
