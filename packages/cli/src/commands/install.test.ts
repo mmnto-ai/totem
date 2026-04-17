@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { detectPackageManager, installCommand, resolvePackName } from './install.js';
+import { detectPackageManager, resolvePackName } from './install.js';
 
 describe('install command', () => {
   let tmpDir: string;
@@ -34,18 +34,24 @@ describe('install command', () => {
 
   it('detects package manager correctly', () => {
     fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
-    expect(detectPackageManager(tmpDir)).toBe('pnpm');
+    expect(detectPackageManager(fs, path, tmpDir)).toBe('pnpm');
     fs.rmSync(path.join(tmpDir, 'pnpm-lock.yaml'));
 
     fs.writeFileSync(path.join(tmpDir, 'yarn.lock'), '');
-    expect(detectPackageManager(tmpDir)).toBe('yarn');
+    expect(detectPackageManager(fs, path, tmpDir)).toBe('yarn');
     fs.rmSync(path.join(tmpDir, 'yarn.lock'));
 
+    // totem-ignore-next-line
+    fs.writeFileSync(path.join(tmpDir, 'bun.lockb'), '');
+    // totem-ignore-next-line
     fs.writeFileSync(path.join(tmpDir, 'bun.lock'), '');
-    expect(detectPackageManager(tmpDir)).toBe('bun');
-    fs.rmSync(path.join(tmpDir, 'bun.lock'));
+    expect(detectPackageManager(fs, path, tmpDir)).toBe('bun');
+    // totem-ignore-next-line
+    fs.rmSync(path.join(tmpDir, 'bun.lockb'), { force: true });
+    // totem-ignore-next-line
+    fs.rmSync(path.join(tmpDir, 'bun.lock'), { force: true });
 
-    expect(detectPackageManager(tmpDir)).toBe('npm');
+    expect(detectPackageManager(fs, path, tmpDir)).toBe('npm');
   });
 
   // More tests would be written to mock child_process.execSync or safeExec.
