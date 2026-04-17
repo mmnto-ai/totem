@@ -77,6 +77,23 @@ export default { rules: ['my-pack'] };`;
     expect(isInExtends(config, 'my-pack')).toBe(false);
   });
 
+  it('ignores a commented-out extends array (Shield finding on PR #1516)', () => {
+    // A leftover `// extends: ['old-pack']` line must not be read as the
+    // active declaration. Otherwise installing `old-pack` would skip with
+    // "already installed" when the extends array is in fact absent.
+    const config = `// extends: ['old-pack']
+export default { rules: [] };`;
+    expect(isInExtends(config, 'old-pack')).toBe(false);
+  });
+
+  it('ignores an extends declaration inside a block comment', () => {
+    const config = `/*
+  extends: ['old-pack'],
+*/
+export default { rules: [] };`;
+    expect(isInExtends(config, 'old-pack')).toBe(false);
+  });
+
   it('returns false when there is no extends array', () => {
     const config = `export default { rules: [] };`;
     expect(isInExtends(config, 'anything')).toBe(false);

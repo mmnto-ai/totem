@@ -54,12 +54,62 @@ export function isValidTarget(target: string): boolean {
 }
 
 /**
+ * Strip line and block comments from a JS/TS source string. Preserves
+ * character offsets by replacing comment characters with spaces so
+ * downstream regex matches report meaningful positions. Used to keep
+ * `isInExtends` and `addToExtends` from matching inside commented-out
+ * code (e.g. a leftover `// extends: [...]` line would otherwise be
+ * read as the active extends declaration).
+ *
+ * Intentionally conservative: does not track string literals. A string
+ * that contains the literal characters `//` or `/*` will have those
+ * characters scrubbed. That is acceptable for the narrow use here
+ * because the subsequent regex only cares about `extends: [`, which is
+ * structural syntax, not string content a user is likely to have in a
+ * config file. A proper fix would parse the source with TypeScript; the
+ * cost is not justified for a pre-install check.
+ */
+function stripComments(source: string): string {
+  let result = '';
+  let i = 0;
+  while (i < source.length) {
+    if (source[i] === '/' && source[i + 1] === '/') {
+      // Line comment: replace with spaces through the next newline.
+      while (i < source.length && source[i] !== '\n') {
+        result += ' ';
+        i++;
+      }
+      continue;
+    }
+    if (source[i] === '/' && source[i + 1] === '*') {
+      // Block comment: replace with spaces through the closing */.
+      result += '  ';
+      i += 2;
+      while (i < source.length && !(source[i] === '*' && source[i + 1] === '/')) {
+        result += source[i] === '\n' ? '\n' : ' ';
+        i++;
+      }
+      if (i < source.length) {
+        result += '  ';
+        i += 2;
+      }
+      continue;
+    }
+    result += source[i];
+    i++;
+  }
+  return result;
+}
+
+/**
  * Check whether the pack is already referenced inside the `extends` array.
  * Scoped to the array contents so that a comment or unrelated property
  * containing the same string does not short-circuit the install.
+ * Comments are stripped before matching so a commented-out
+ * `// extends: ['pack']` line is not treated as an active declaration.
  */
 export function isInExtends(configContent: string, packName: string): boolean {
-  const match = configContent.match(/extends\s*:\s*\[([\s\S]*?)\]/);
+  const match = stripComments(configContent).match(/extends\s*:\s*\[([\s\S]*?)\]/);
   if (!match) return false;
   const body = match[1] ?? '';
   return (
@@ -259,22 +309,37 @@ export async function installCommand(target: string, options: InstallOptions = {
  * Returns the updated content, or null if the config shape was not
  * recognized. Uses replacer functions (never string back-references) so
  * dynamic content cannot trigger `$&` / `$1` interpretation.
+ *
+ * Search uses `stripComments` so a commented-out `// extends: [...]` is
+ * not treated as the active declaration. The edit applies to the same
+ * offset in the original content because `stripComments` preserves
+ * character positions.
  */
 function addToExtends(configContent: string, packName: string): string | null {
-  const existingExtends = /extends\s*:\s*\[/;
-  if (existingExtends.test(configContent)) {
-    return configContent.replace(
-      existingExtends,
-      () => `extends: [\n    ${JSON.stringify(packName)},`,
+  const stripped = stripComments(configContent);
+
+  const extendsMatch = stripped.match(/extends\s*:\s*\[/);
+  if (extendsMatch && extendsMatch.index !== undefined) {
+    const start = extendsMatch.index;
+    const end = start + extendsMatch[0].length;
+    return (
+      configContent.slice(0, start) +
+      `extends: [\n    ${JSON.stringify(packName)},` +
+      configContent.slice(end)
     );
   }
-  const exportDefault = /export\s+default\s+\{/;
-  if (exportDefault.test(configContent)) {
-    return configContent.replace(
-      exportDefault,
-      () => `export default {\n  extends: [${JSON.stringify(packName)}],`,
+
+  const exportMatch = stripped.match(/export\s+default\s+\{/);
+  if (exportMatch && exportMatch.index !== undefined) {
+    const start = exportMatch.index;
+    const end = start + exportMatch[0].length;
+    return (
+      configContent.slice(0, start) +
+      `export default {\n  extends: [${JSON.stringify(packName)}],` +
+      configContent.slice(end)
     );
   }
+
   return null;
 }
 
