@@ -157,6 +157,31 @@ describe('mergeRules', () => {
     expect(blocks).toEqual([]);
   });
 
+  it('does not treat an omitted local severity as a downgrade attempt', () => {
+    // CR finding on #1515: defaulting omitted localRule.severity to
+    // 'warning' records bogus blocks for local overrides that simply
+    // don't opine on severity. Runtime consumers disagree on the default
+    // (finding.ts uses 'error', compile-lesson.ts uses 'warning'), so
+    // absence is ambiguous — only an explicit 'warning' counts as a
+    // downgrade. The merged rule still gets the pack's 'error' forced.
+    const packRule = baseRule({
+      lessonHash: 'immut-implicit',
+      immutable: true,
+      severity: 'error',
+    });
+    const localRule = baseRule({
+      lessonHash: 'immut-implicit',
+      // severity intentionally omitted — local has no opinion
+      message: 'local refines message only',
+    });
+    const { rules, blocks } = mergeRules([localRule], [packRule]);
+    expect(rules).toHaveLength(1);
+    expect(rules[0]!.severity).toBe('error');
+    expect(rules[0]!.immutable).toBe(true);
+    expect(rules[0]!.message).toBe('local refines message only');
+    expect(blocks).toEqual([]);
+  });
+
   it('emits no block when the local rule does not attempt to downgrade or archive', () => {
     const packRule = baseRule({
       lessonHash: 'immut-noop',

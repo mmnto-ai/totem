@@ -111,8 +111,14 @@ export function mergeRules(
 
     // Immutable carve-out (ADR-089). Start from the local rule, then
     // force severity and clear archive status if the local attempted
-    // either of those.
-    const attemptedSeverityDowngrade = (localRule.severity ?? 'warning') !== 'error';
+    // either of those. An omitted `localRule.severity` is NOT treated as
+    // a downgrade attempt — the local override is opting out of
+    // opinionating on severity, not declaring a lower one. Only an
+    // explicit `'warning'` counts. (Runtime severity defaults vary
+    // across consumers; finding.ts defaults to 'error' while
+    // compile-lesson.ts defaults to 'warning', so inferring a downgrade
+    // from absence would produce bogus blocks.)
+    const attemptedSeverityDowngrade = localRule.severity === 'warning';
     const attemptedArchive = localRule.status === 'archived';
 
     if (attemptedSeverityDowngrade || attemptedArchive) {
@@ -129,7 +135,7 @@ export function mergeRules(
         enforcedSeverity: 'error',
       };
       if (attemptedSeverityDowngrade) {
-        block.attemptedSeverity = (localRule.severity ?? 'warning') as 'warning' | 'error';
+        block.attemptedSeverity = 'warning';
       }
       blocks.push(block);
     }
