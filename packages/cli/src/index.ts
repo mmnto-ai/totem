@@ -485,9 +485,8 @@ program
   .action(async (target: string, options: { yes?: boolean }) => {
     try {
       const { installCommand } = await import('./commands/install.js'); // totem-context: lazy import is the canonical CLI entry-point pattern (ADR-063)
-      await installCommand(target, { yes: options.yes });
+      await installCommand(target, { yes: options.yes }); // totem-context: intentional cleanup — handleError is never-typed and calls process.exit(1)
     } catch (err) {
-      // totem-context: intentional cleanup — handleError is never-typed and calls process.exit(1)
       handleError(err);
     }
   });
