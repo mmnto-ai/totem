@@ -40,8 +40,14 @@ function walkDir(dir: string, acc: string[]): void {
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return;
+  } catch (err) {
+    // CR-5 finding on #1521: don't swallow fs errors. A silent return here
+    // would turn the repo-wide FP sweep into a false-negative generator —
+    // if a directory becomes unreadable mid-sweep, the sweep would still
+    // "pass" on a partial scan. Fail loud with the offending path.
+    throw new Error(
+      `repo-sweep: failed to read directory ${dir}: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
   for (const ent of entries) {
     if (SKIP_DIRS.has(ent.name)) continue;
@@ -49,7 +55,7 @@ function walkDir(dir: string, acc: string[]): void {
     if (ent.isDirectory()) {
       walkDir(abs, acc);
     } else if (ent.isFile() && SWEEP_EXTS.has(path.extname(ent.name))) {
-      const rel = path.relative(REPO_ROOT, abs).replace(/\\/g, '/');
+      const rel = path.relative(REPO_ROOT, abs).split(path.sep).join('/');
       if (SKIP_PATH_PREFIXES.some((prefix) => rel.startsWith(prefix + '/'))) continue;
       acc.push(rel);
     }
@@ -95,8 +101,12 @@ function sweep(): Violation[] {
       let content: string;
       try {
         content = fs.readFileSync(abs, 'utf-8');
-      } catch {
-        continue;
+      } catch (err) {
+        // CR-5: fail loud on unreadable files rather than dropping them from
+        // the sweep. A silent drop would let a missing file mask a rule hit.
+        throw new Error(
+          `repo-sweep: failed to read file ${abs}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
       const lineCount = content.split('\n').length;
       const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
@@ -111,11 +121,15 @@ function sweep(): Violation[] {
 
 // ─── Allowlist ──────────────────────────────────────────
 //
-// These call sites are known-legitimate uses of the flagged primitives inside
-// Totem's own source tree. Each entry documents the hash (which rule fires),
-// the file (what path), and the reason (why the call is legit here). The
-// allowlist is (hash, file) granular — line numbers drift and are not
-// pinned here. Any violation in a file not on this list fails the sweep.
+// Known-legitimate uses of the flagged primitives inside Totem's own source
+// tree. Each entry records the hash (which rule fires), the file (what path),
+// the expected match count (CR-6 finding on #1521 — catches new matches in
+// already-allowed files instead of silently blessing them), and the reason
+// (why these calls are legit here).
+//
+// When a legitimate call site is added or removed, update the `expectedCount`
+// accordingly. When the count diverges from expected, the sweep fails with a
+// diff that identifies the new or missing line numbers.
 //
 // When adding an entry, also update the pack's README coverage notes so
 // consumers are aware that these sites are project-local exceptions rather
@@ -124,6 +138,7 @@ function sweep(): Violation[] {
 type AllowEntry = {
   hash: string;
   file: string;
+  expectedCount: number;
   reason: string;
 };
 
@@ -131,94 +146,147 @@ const ALLOWLIST: AllowEntry[] = [
   {
     hash: 'c2c09301bb56a02b',
     file: 'packages/core/src/sys/exec.ts',
+    expectedCount: 1,
     reason:
       'The safeExec helper itself. Wraps cross-spawn.sync to provide the shell-injection-safe primitive the rest of the CLI uses. All consumer spawn surfaces route through this.',
   },
   {
     hash: 'c2c09301bb56a02b',
     file: 'packages/cli/src/index.ts',
+    expectedCount: 1,
     reason:
       'Capability probe (`gh --version`) to decide whether GitHub-CLI-backed commands are available. Literal target, no user input.',
   },
   {
     hash: 'c2c09301bb56a02b',
     file: 'packages/cli/src/commands/doctor.ts',
+    expectedCount: 7,
     reason:
       '`totem doctor` invokes `spawnSync` to run git plumbing (rev-parse, ls-files, checkout) for hook installation, secrets-file checks, and manifest recovery. Literal targets, fixed args.',
   },
   {
     hash: 'c2c09301bb56a02b',
     file: 'packages/cli/src/commands/add-lesson.ts',
+    expectedCount: 1,
     reason:
       'Uses the safeExec helper (imported as `exec`) to shell out to git for metadata during lesson creation. Literal git subcommands only.',
   },
   {
     hash: 'c2c09301bb56a02b',
     file: 'packages/cli/src/commands/extract-local.ts',
+    expectedCount: 3,
     reason:
       'safeExec alias (`{ safeExec: exec }`) used for diff and commit-history retrieval during lesson extraction. Literal git subcommands with branch-name args under Totem control.',
   },
   {
     hash: 'c2c09301bb56a02b',
     file: 'packages/cli/src/commands/extract-pr.ts',
+    expectedCount: 1,
     reason: 'Same safeExec alias pattern for PR-backed lesson extraction.',
   },
   {
     hash: 'c2c09301bb56a02b',
     file: 'packages/cli/src/commands/extract-scan.ts',
+    expectedCount: 1,
     reason: 'Same safeExec alias pattern for scan-mode extraction.',
   },
   {
     hash: 'c2c09301bb56a02b',
     file: 'packages/cli/src/commands/handoff.ts',
+    expectedCount: 1,
     reason: 'safeExec alias used to read commit history during end-of-session journal scaffolding.',
   },
   {
     hash: 'c2c09301bb56a02b',
     file: 'packages/cli/src/commands/lesson.ts',
+    expectedCount: 1,
     reason: 'safeExec alias used for git plumbing when listing/inspecting lessons.',
   },
   {
     hash: 'c2c09301bb56a02b',
     file: 'packages/cli/src/orchestrators/orchestrator.ts',
+    expectedCount: 1,
     reason: 'safeExec alias for git state probes inside the LLM orchestration pipeline.',
   },
   {
     hash: 'c2c09301bb56a02b',
     file: 'packages/cli/src/orchestrators/shell-orchestrator.ts',
+    expectedCount: 2,
     reason:
       'Windows-only process-tree cleanup via `spawn(taskkill, [...])`. Literal target, fixed args. Required because Node child_process does not propagate SIGTERM on Windows.',
   },
   {
     hash: 'c2c09301bb56a02b',
     file: 'packages/mcp/src/tools/add-lesson.ts',
+    expectedCount: 2,
     reason: 'Same Windows taskkill cleanup pattern as shell-orchestrator.ts.',
   },
   {
     hash: 'c2c09301bb56a02b',
     file: 'packages/mcp/src/tools/verify-execution.ts',
+    expectedCount: 3,
     reason: 'Same Windows taskkill cleanup pattern via execFileSync.',
   },
 ];
 
-function isAllowed(v: Violation): boolean {
-  return ALLOWLIST.some((e) => e.hash === v.hash && e.file === v.file);
+function keyFor(hash: string, file: string): string {
+  return `${hash}|${file}`;
 }
 
 // ─── Tests ──────────────────────────────────────────────
 
 describe('@totem/pack-agent-security Totem-repo FP sweep', () => {
   const violations = sweep();
-  const unexpected = violations.filter((v) => !isAllowed(v));
+
+  // Per-file tallies for count-based allowlist comparison (CR-6).
+  const countsByKey = new Map<string, { lines: number[]; hash: string; file: string }>();
+  for (const v of violations) {
+    const key = keyFor(v.hash, v.file);
+    const entry = countsByKey.get(key) ?? { lines: [], hash: v.hash, file: v.file };
+    entry.lines.push(v.line);
+    countsByKey.set(key, entry);
+  }
+  const allowByKey = new Map(ALLOWLIST.map((e) => [keyFor(e.hash, e.file), e]));
 
   it('does not surface any rule violations outside the documented allowlist', () => {
-    if (unexpected.length > 0) {
-      const lines = unexpected.map((v) => `  ${v.hash}  ${v.file}:${v.line}`).join('\n');
+    const unexpectedKeys: string[] = [];
+    for (const [key, { hash, file, lines }] of countsByKey) {
+      if (!allowByKey.has(key)) {
+        unexpectedKeys.push(
+          `  ${hash}  ${file}  (${lines.length} match${lines.length === 1 ? '' : 'es'} at line${lines.length === 1 ? '' : 's'} ${lines.join(', ')})`,
+        );
+      }
+    }
+    if (unexpectedKeys.length > 0) {
       throw new Error(
-        `Unexpected rule violations in Totem source (add to ALLOWLIST with justification, or narrow the rule):\n${lines}`,
+        `Unexpected rule violations in Totem source (add to ALLOWLIST with justification, or narrow the rule):\n${unexpectedKeys.join('\n')}`,
       );
     }
-    expect(unexpected).toEqual([]);
+    expect(unexpectedKeys).toEqual([]);
+  });
+
+  it('every allowlisted (hash, file) pair still produces the expected number of matches', () => {
+    // CR-6 finding on #1521: file-level allowlisting masks regressions. If a
+    // new suspicious call is added to an allowlisted file, the hit count
+    // changes and this test fails, naming the file and showing the delta.
+    const deltas: string[] = [];
+    for (const entry of ALLOWLIST) {
+      const key = keyFor(entry.hash, entry.file);
+      const actual = countsByKey.get(key);
+      const actualCount = actual?.lines.length ?? 0;
+      if (actualCount !== entry.expectedCount) {
+        const detail = actual
+          ? `expected ${entry.expectedCount}, got ${actualCount} (actual lines: ${actual.lines.join(', ')})`
+          : `expected ${entry.expectedCount}, got ${actualCount}`;
+        deltas.push(`  ${entry.hash}  ${entry.file}: ${detail}`);
+      }
+    }
+    if (deltas.length > 0) {
+      throw new Error(
+        `Allowlist count drift (update expectedCount, or investigate the new/removed call site):\n${deltas.join('\n')}`,
+      );
+    }
+    expect(deltas).toEqual([]);
   });
 
   it('each allowlist entry references a hash that exists in the pack', () => {
@@ -229,19 +297,5 @@ describe('@totem/pack-agent-security Totem-repo FP sweep', () => {
         `Allowlist hash ${entry.hash} does not match any rule in the pack`,
       ).toBe(true);
     }
-  });
-
-  it('each allowlist entry fires in the current sweep (drift guard)', () => {
-    // If a call site is allowlisted but no longer fires, remove it. Stale
-    // allowlist entries mask regressions in the rule or the source file.
-    const fired = new Set(violations.map((v) => `${v.hash}|${v.file}`));
-    const stale = ALLOWLIST.filter((e) => !fired.has(`${e.hash}|${e.file}`));
-    if (stale.length > 0) {
-      const lines = stale.map((e) => `  ${e.hash}  ${e.file}  (${e.reason})`).join('\n');
-      throw new Error(
-        `Stale allowlist entries (no violations found — remove or fix the rule):\n${lines}`,
-      );
-    }
-    expect(stale).toEqual([]);
   });
 });

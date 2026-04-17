@@ -39,6 +39,48 @@
             },
             {
               "pattern": "execa.sync($$$ARGS)"
+            },
+            {
+              "pattern": "require('child_process').spawn($$$ARGS)"
+            },
+            {
+              "pattern": "require('node:child_process').spawn($$$ARGS)"
+            },
+            {
+              "pattern": "require('child_process').spawnSync($$$ARGS)"
+            },
+            {
+              "pattern": "require('node:child_process').spawnSync($$$ARGS)"
+            },
+            {
+              "pattern": "require('child_process').exec($$$ARGS)"
+            },
+            {
+              "pattern": "require('node:child_process').exec($$$ARGS)"
+            },
+            {
+              "pattern": "require('child_process').execSync($$$ARGS)"
+            },
+            {
+              "pattern": "require('node:child_process').execSync($$$ARGS)"
+            },
+            {
+              "pattern": "require('child_process').execFile($$$ARGS)"
+            },
+            {
+              "pattern": "require('node:child_process').execFile($$$ARGS)"
+            },
+            {
+              "pattern": "require('child_process').execFileSync($$$ARGS)"
+            },
+            {
+              "pattern": "require('node:child_process').execFileSync($$$ARGS)"
+            },
+            {
+              "pattern": "require('child_process').fork($$$ARGS)"
+            },
+            {
+              "pattern": "require('node:child_process').fork($$$ARGS)"
             }
           ]
         }
@@ -49,11 +91,15 @@
         "packages/**/*.ts",
         "packages/**/*.js",
         "!**/scripts/**",
+        "!scripts/**",
         "!**/.github/**",
+        "!.github/**",
         "!**/*.test.*",
         "!**/*.spec.*",
         "!**/test/**",
-        "!**/tests/**"
+        "!**/tests/**",
+        "!packages/**/test/**",
+        "!packages/**/tests/**"
       ],
       "category": "security",
       "severity": "error",
@@ -78,19 +124,23 @@
                 {
                   "not": {
                     "has": {
-                      "stopBy": "end",
-                      "kind": "string"
+                      "field": "arguments",
+                      "has": {
+                        "kind": "string"
+                      }
                     }
                   }
                 },
                 {
                   "not": {
                     "has": {
-                      "stopBy": "end",
-                      "kind": "template_string",
-                      "not": {
-                        "has": {
-                          "kind": "template_substitution"
+                      "field": "arguments",
+                      "has": {
+                        "kind": "template_string",
+                        "not": {
+                          "has": {
+                            "kind": "template_substitution"
+                          }
                         }
                       }
                     }
@@ -100,6 +150,9 @@
             },
             {
               "pattern": "new Function($$$ARGS)"
+            },
+            {
+              "pattern": "Function($$$ARGS)"
             },
             {
               "pattern": "vm.runInNewContext($$$ARGS)"
@@ -116,11 +169,15 @@
         "packages/**/*.ts",
         "packages/**/*.js",
         "!**/scripts/**",
+        "!scripts/**",
         "!**/.github/**",
+        "!.github/**",
         "!**/*.test.*",
         "!**/*.spec.*",
         "!**/test/**",
-        "!**/tests/**"
+        "!**/tests/**",
+        "!packages/**/test/**",
+        "!packages/**/tests/**"
       ],
       "category": "security",
       "severity": "error",
