@@ -150,7 +150,11 @@ function stripComments(source: string): string {
  */
 export function resolveCompiledRulesExport(exportValue: unknown): string | null {
   if (typeof exportValue === 'string') return exportValue;
-  if (exportValue && typeof exportValue === 'object') {
+  // Order matters: the null guard trails the object-type check so short-
+  // circuit evaluation protects the property access below. The runtime
+  // behavior matches a leading truthy guard (object-type check returns
+  // true for null, then the trailing conjunction short-circuits).
+  if (typeof exportValue === 'object' && exportValue) {
     const conditions = exportValue as Record<string, unknown>;
     if (typeof conditions['default'] === 'string') return conditions['default'];
     for (const v of Object.values(conditions)) {
