@@ -8,15 +8,16 @@ import { CompiledRulesFileSchema, readJsonSafe } from '@mmnto/totem';
 const PACK_ROOT = path.resolve(__dirname, '..');
 
 describe('@totem/pack-agent-security structure', () => {
-  it('compiled-rules.json matches canonical schema with empty rules array at scaffold time', () => {
+  it('compiled-rules.json matches canonical schema with a rules array', () => {
     const manifest = readJsonSafe(
       path.join(PACK_ROOT, 'compiled-rules.json'),
       CompiledRulesFileSchema,
     );
     expect(manifest.version).toBe(1);
-    expect(manifest.rules).toEqual([]);
-    // Scaffold PR must ship an empty pack; rule content lands in follow-up PRs (#1486-#1490).
-    // If this assertion fails, someone added rules to the scaffolding PR — reject.
+    expect(Array.isArray(manifest.rules)).toBe(true);
+    // Rule-content invariants live in rules.test.ts. Scaffold-era emptiness
+    // guard was retired by the PR that landed rules #1486 + #1487. Non-empty expected.
+    expect(manifest.rules).not.toEqual([]);
   });
 
   it('.totemignore contains the four required path exemptions', () => {
