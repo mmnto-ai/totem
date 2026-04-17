@@ -7052,7 +7052,24 @@
       "fileGlobs": [
         "packages/cli/**/*.ts"
       ],
-      "badExample": "client.messages.create({ model: 'claude-opus-4-7', temperature: 0.7, messages: [] });"
+      "badExample": "client.messages.create({ model: 'claude-opus-4-7', temperature: 0.7, messages: [] });",
+      "status": "archived",
+      "archivedReason": "Incomplete pattern (CodeRabbit finding on #1520): astGrepPattern `client.messages.create({ $$$ARGS, temperature: $VAL, $$$REST })` matches only calls that pass temperature, but the rule message says Opus 4.7 rejects all three of temperature, top_p, and top_k. Calls passing only top_p or top_k slip through. Archived rather than shipped incomplete; full coverage requires a compound rule authored in the source lesson."
+    },
+    {
+      "lessonHash": "263c3b88dc975aa3",
+      "lessonHeading": "Pipeline 5: observation from shield",
+      "pattern": "badExample:\\s+parsed\\.badExample\\s+\\?\\?\\s+'\\(no\\s+badExample\\s+emitted\\)',",
+      "message": "When retrying due to an Example Hit/Miss verification failure, the `badExample` passed to `previousFailure` is still `parsed.badExample` (the smoke gate snippet, which the pattern successfully matched). The retry directive prompt says '**Code snippet the pattern had to match:**' followed by this smoke gate snippet, which might slightly confuse the LLM since the actual failure was on the Example Hit snippet (detailed in the `Failure reason`). Consider passing the actual failed Example Hit snippet if the failure originated from `verifyRuleExamples`.",
+      "engine": "regex",
+      "severity": "warning",
+      "fileGlobs": [
+        "**/*.ts"
+      ],
+      "compiledAt": "2026-04-17T04:17:14.891Z",
+      "createdAt": "2026-04-17T04:17:14.891Z",
+      "status": "archived",
+      "archivedReason": "Orphan: no source lesson file exists in .totem/lessons/ for this hash. The rule was compiled at 2026-04-17T04:17:14.891Z but the parent manifest on main was generated at 2026-04-17T02:45:44 (off-by-one drift: manifest rule_count 425 vs actual 426). totem lesson compile drain step caught the orphan during #1517 refresh. Preserved in archived state for hash telemetry continuity per project convention; cannot be recompiled without re-authoring the lesson."
     }
   ],
   "nonCompilable": [
