@@ -479,6 +479,18 @@ program
   });
 
 program
+  .command('install <target>')
+  .description('Install a Totem pack (e.g., pack/my-rules)')
+  .action(async (target: string) => {
+    try {
+      const { installCommand } = await import('./commands/install.js');
+      await installCommand(target);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('test')
   .description('Run test fixtures against compiled rules (TDD for governance rules)')
   .option('--filter <term>', 'Filter by rule hash or heading substring')
