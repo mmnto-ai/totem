@@ -301,6 +301,13 @@ export interface RuleEventContext {
    * the raw `unknown` so the callback interface stays cheap to consume.
    */
   failureReason?: string;
+  /**
+   * True when the rule that fired this event was shipped by a pack with
+   * `immutable: true`. Threaded through so downstream ledger writers can
+   * flag immutable-rule bypass events for pack enforcement audit (ADR-089,
+   * mmnto-ai/totem#1485). Absent on events from non-immutable rules.
+   */
+  immutable?: boolean;
 }
 
 /**

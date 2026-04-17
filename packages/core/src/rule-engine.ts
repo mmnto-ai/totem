@@ -243,6 +243,7 @@ export function applyRulesToAdditions(
             file: addition.file,
             line: addition.lineNumber,
             justification: extractJustification(addition.line, addition.precedingLine),
+            immutable: rule.immutable,
           });
         }
         continue;
@@ -375,6 +376,7 @@ export async function applyAstRulesToAdditions(
                 file,
                 line: match.lineNumber,
                 justification: extractJustification(addition.line, addition.precedingLine),
+                immutable: rule.immutable,
               });
               continue;
             }
@@ -461,6 +463,7 @@ export async function applyAstRulesToAdditions(
                   justification: addition
                     ? extractJustification(addition.line, addition.precedingLine)
                     : '',
+                  immutable: rule.immutable,
                 });
                 continue;
               }
