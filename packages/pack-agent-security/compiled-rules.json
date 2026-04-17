@@ -1,4 +1,189 @@
 {
   "version": 1,
-  "rules": []
+  "rules": [
+    {
+      "lessonHash": "c2c09301bb56a02b",
+      "lessonHeading": "Unauthorized process spawning outside build paths",
+      "pattern": "",
+      "message": "Direct calls to child_process primitives (spawn, exec, execSync, execFile, fork) and execa() outside build-script paths let a compromised agent run arbitrary shell commands. The security pack allows these calls only under scripts/, .github/, or test files. Source code under packages/ must not spawn child processes directly. If a legitimate use case surfaces, document it with a // totem-context: justification or add a project-local .totemignore exemption with review.",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "any": [
+            {
+              "pattern": "spawn($$$ARGS)"
+            },
+            {
+              "pattern": "spawnSync($$$ARGS)"
+            },
+            {
+              "pattern": "exec($$$ARGS)"
+            },
+            {
+              "pattern": "execSync($$$ARGS)"
+            },
+            {
+              "pattern": "execFile($$$ARGS)"
+            },
+            {
+              "pattern": "execFileSync($$$ARGS)"
+            },
+            {
+              "pattern": "fork($$$ARGS)"
+            },
+            {
+              "pattern": "execa($$$ARGS)"
+            },
+            {
+              "pattern": "execaSync($$$ARGS)"
+            },
+            {
+              "pattern": "execa.sync($$$ARGS)"
+            },
+            {
+              "pattern": "require('child_process').spawn($$$ARGS)"
+            },
+            {
+              "pattern": "require('node:child_process').spawn($$$ARGS)"
+            },
+            {
+              "pattern": "require('child_process').spawnSync($$$ARGS)"
+            },
+            {
+              "pattern": "require('node:child_process').spawnSync($$$ARGS)"
+            },
+            {
+              "pattern": "require('child_process').exec($$$ARGS)"
+            },
+            {
+              "pattern": "require('node:child_process').exec($$$ARGS)"
+            },
+            {
+              "pattern": "require('child_process').execSync($$$ARGS)"
+            },
+            {
+              "pattern": "require('node:child_process').execSync($$$ARGS)"
+            },
+            {
+              "pattern": "require('child_process').execFile($$$ARGS)"
+            },
+            {
+              "pattern": "require('node:child_process').execFile($$$ARGS)"
+            },
+            {
+              "pattern": "require('child_process').execFileSync($$$ARGS)"
+            },
+            {
+              "pattern": "require('node:child_process').execFileSync($$$ARGS)"
+            },
+            {
+              "pattern": "require('child_process').fork($$$ARGS)"
+            },
+            {
+              "pattern": "require('node:child_process').fork($$$ARGS)"
+            }
+          ]
+        }
+      },
+      "compiledAt": "2026-04-17T18:40:00.000Z",
+      "createdAt": "2026-04-17T18:40:00.000Z",
+      "fileGlobs": [
+        "packages/**/*.ts",
+        "packages/**/*.js",
+        "!**/scripts/**",
+        "!scripts/**",
+        "!**/.github/**",
+        "!.github/**",
+        "!**/*.test.*",
+        "!**/*.spec.*",
+        "!**/test/**",
+        "!**/tests/**",
+        "!packages/**/test/**",
+        "!packages/**/tests/**"
+      ],
+      "category": "security",
+      "severity": "error",
+      "manual": true,
+      "immutable": true,
+      "badExample": "spawn('ls', ['-la']);"
+    },
+    {
+      "lessonHash": "a0b737fd43fb943e",
+      "lessonHeading": "Dynamic code evaluation with non-literal arguments",
+      "pattern": "",
+      "message": "Dynamic code-evaluation primitives let a compromised agent execute attacker-controlled code at runtime. The rule fires with different severity per primitive: eval() fires only on non-literal arguments (identifier, member access, binary expression, interpolated template); literal-string eval() passes so trusted-literal fixtures and math-parser test snippets are not flagged. The Function constructor (both new Function(...) and Function(...)), vm.runInNewContext, and vm.runInThisContext fire unconditionally — their legitimate uses are rare enough that an inline // totem-context: justification is the expected escape hatch rather than a pattern-level exemption. If dynamic evaluation is genuinely required, use a sandboxed parser or an allowlist instead of direct code evaluation.",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "any": [
+            {
+              "all": [
+                {
+                  "pattern": "eval($X)"
+                },
+                {
+                  "not": {
+                    "has": {
+                      "field": "arguments",
+                      "has": {
+                        "kind": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "not": {
+                    "has": {
+                      "field": "arguments",
+                      "has": {
+                        "kind": "template_string",
+                        "not": {
+                          "has": {
+                            "kind": "template_substitution"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "pattern": "new Function($$$ARGS)"
+            },
+            {
+              "pattern": "Function($$$ARGS)"
+            },
+            {
+              "pattern": "vm.runInNewContext($$$ARGS)"
+            },
+            {
+              "pattern": "vm.runInThisContext($$$ARGS)"
+            }
+          ]
+        }
+      },
+      "compiledAt": "2026-04-17T18:40:00.000Z",
+      "createdAt": "2026-04-17T18:40:00.000Z",
+      "fileGlobs": [
+        "packages/**/*.ts",
+        "packages/**/*.js",
+        "!**/scripts/**",
+        "!scripts/**",
+        "!**/.github/**",
+        "!.github/**",
+        "!**/*.test.*",
+        "!**/*.spec.*",
+        "!**/test/**",
+        "!**/tests/**",
+        "!packages/**/test/**",
+        "!packages/**/tests/**"
+      ],
+      "category": "security",
+      "severity": "error",
+      "manual": true,
+      "immutable": true,
+      "badExample": "eval(userInput);"
+    }
+  ]
 }
