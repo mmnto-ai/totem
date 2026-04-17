@@ -253,6 +253,19 @@ program
   });
 
 program
+  .command('install <target>')
+  .description('Install a Totem pack (e.g., pack/my-rules)')
+  .option('--yes', 'Auto-approve .totemignore merge (required for non-interactive CI)')
+  .action(async (target: string, options: { yes?: boolean }) => {
+    try {
+      const { installCommand } = await import('./commands/install.js'); // totem-context: lazy import is the canonical CLI entry-point pattern (ADR-063)
+      await installCommand(target, { yes: options.yes }); // totem-context: intentional cleanup — handleError is never-typed and calls process.exit(1)
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+program
   .command('test')
   .description('Run test fixtures against compiled rules (TDD for governance rules)')
   .option('--filter <term>', 'Filter by rule hash or heading substring')
