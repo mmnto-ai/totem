@@ -98,6 +98,13 @@ const CompiledRuleBaseSchema = z.object({
    * compiled-rules.json files; the legacy heuristic stays as a fallback.
    */
   manual: z.boolean().optional(),
+  /**
+   * Schema marker for ADR-089 Zero-Trust enforcement.
+   * Readers:
+   * - #1485 pack-merge path refuses downgrade to warning/archived locally.
+   * - #1479 Layer 3 security branch rejects outright on verify failure.
+   */
+  immutable: z.boolean().optional(),
 });
 
 /**
