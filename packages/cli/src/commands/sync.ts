@@ -1,3 +1,6 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
 import type { DriftResult, TotemConfig } from '@mmnto/totem';
 
 import type { Spinner } from '../ui.js';
@@ -5,13 +8,35 @@ import type { Spinner } from '../ui.js';
 const TAG = 'Sync';
 const PRUNE_LABEL_MAX = 70;
 
+/**
+ * Write the canonical review-extensions.txt file consumed by
+ * .claude/hooks/content-hash.sh. One extension per line, leading dot,
+ * trailing newline. Atomic via temp + rename so a concurrent hook fire
+ * sees either the old or new contents, never a partial write. (#1527)
+ */
+export function writeReviewExtensionsFile(
+  totemDirAbs: string,
+  extensions: readonly string[],
+): string {
+  if (!fs.existsSync(totemDirAbs)) {
+    fs.mkdirSync(totemDirAbs, { recursive: true });
+  }
+
+  const finalPath = path.join(totemDirAbs, 'review-extensions.txt');
+  const tmpPath = finalPath + '.tmp';
+  const payload = extensions.join('\n') + '\n';
+
+  fs.writeFileSync(tmpPath, payload, 'utf-8');
+  fs.renameSync(tmpPath, finalPath);
+
+  return finalPath;
+}
+
 export async function syncCommand(options: {
   full?: boolean;
   prune?: boolean;
   quiet?: boolean;
 }): Promise<void> {
-  const fs = await import('node:fs');
-  const path = await import('node:path');
   const { runSync, TotemError, updateRegistryEntry } = await import('@mmnto/totem');
   const { createSpinner, log } = await import('../ui.js');
   const { loadConfig, loadEnv, requireEmbedding, resolveConfigPath } = await import('../utils.js');
@@ -42,6 +67,17 @@ export async function syncCommand(options: {
       incremental,
       onProgress: (msg) => spinner.update(msg),
     });
+
+    // Emit canonical review-extensions.txt for .claude/hooks/content-hash.sh (#1527).
+    // Written on every sync, even when the user omits review.sourceExtensions
+    // (default set persisted), so downstream bash consumers see a consistent file.
+    try {
+      const totemDirAbs = path.resolve(cwd, config.totemDir);
+      writeReviewExtensionsFile(totemDirAbs, config.review.sourceExtensions);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      log.dim(TAG, `Skipped review-extensions.txt write: ${detail}`);
+    }
 
     spinner.succeed(`Done: ${result.chunksProcessed} chunks from ${result.filesProcessed} files`);
 
