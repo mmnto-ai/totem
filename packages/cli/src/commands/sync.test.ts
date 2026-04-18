@@ -167,13 +167,21 @@ describe('syncCommand', () => {
     await expect(syncCommand({ quiet: true })).resolves.toBeUndefined();
   });
 
-  it('skips canonical file write when using global config profile', async () => {
-    // A user running with only ~/.totem/totem.config.ts has no local project
-    // to wire the bash hook to; writing the canonical file into their home
-    // directory would be worse than useless. Bash hook falls back to defaults.
+  it('writes canonical file relative to cwd when using global config profile', async () => {
+    // A user running with ~/.totem/totem.config.ts may still customize
+    // review.sourceExtensions. Writing the canonical file into ~/.totem/ would
+    // orphan it away from the bash hook (which reads from git-toplevel via
+    // `git rev-parse --show-toplevel`). Falling back to cwd hits the common
+    // case where the user invokes totem from the repo root. Preserves TS/bash
+    // parity for the typical global-config flow.
     mockIsGlobalConfigPath.mockReturnValue(true);
+    mockLoadConfig.mockResolvedValue(baseConfig({ review: { sourceExtensions: ['.ts', '.rs'] } }));
+
     await syncCommand({ quiet: true });
-    expect(fs.existsSync(path.join(tmpDir, '.totem', 'review-extensions.txt'))).toBe(false);
+
+    const canonical = path.join(tmpDir, '.totem', 'review-extensions.txt');
+    expect(fs.existsSync(canonical)).toBe(true);
+    expect(fs.readFileSync(canonical, 'utf-8')).toBe('.ts\n.rs\n');
   });
 
   it('resolves canonical file path relative to configRoot when invoked from subdirectory', async () => {
