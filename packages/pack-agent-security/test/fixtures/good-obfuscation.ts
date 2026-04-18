@@ -1,51 +1,48 @@
-// Fixture for rule 1c0c5a7daefdeb4b — benign code that exercises the same
-// ambient primitives (String, Buffer, Array, string methods) as the bad
-// fixture but NOT in the obfuscation-primitive shapes. MUST NOT fire.
+// Fixture: the #1490 rule MUST NOT fire on any call below. Benign uses of
+// the same ambient primitives (String, Buffer, Array, string methods) that
+// are NOT in the obfuscation shapes the rule targets.
+/* eslint-disable no-undef */
 
-// ─── Standard string concatenation (not fragmentation) ─
-export function ok_concat(base: string, path: string) {
-  return base + '/' + path;
-}
+// @ts-nocheck — fixture file, not expected to type-check cleanly
 
-// ─── Template literals for URL assembly ─────────────
-export function ok_template_url(host: string, id: string) {
-  return `https://${host}/items/${id}`;
-}
+declare const Buffer: { from: (...a: unknown[]) => unknown };
+declare const base: string;
+declare const path: string;
+declare const host: string;
+declare const id: string;
+declare const text: string;
+declare const csv: string;
+declare const str: string;
+declare const sep: string;
+declare const records: Array<{ id: string }>;
+declare const log: (s: unknown) => void;
 
-// ─── JSON round-trip (legitimate Buffer use without hex/base64) ─
-export function ok_buffer_json(obj: unknown) {
-  const json = JSON.stringify(obj);
-  return Buffer.from(json, 'utf8');
-}
+// --- Standard string concatenation (not fragmentation) ---
+log(base + '/' + path);
 
-// ─── Buffer.from with utf-8 encoding (NOT hex or base64) ─
-export function ok_buffer_utf8(text: string) {
-  return Buffer.from(text, 'utf8');
-}
+// --- Template literals for URL assembly ---
+log(`https://${host}/items/${id}`);
 
-// ─── Array.prototype.map over non-numeric data ──────
-export function ok_map_records(records: Array<{ id: string }>) {
-  return records.map((r) => r.id);
-}
+// --- JSON round-trip (legitimate Buffer use without hex/base64) ---
+log(Buffer.from(JSON.stringify({ a: 1 }), 'utf8'));
 
-// ─── String.split without reverse-and-join ──────────
-export function ok_split_no_reverse(csv: string) {
-  return csv.split(',');
-}
+// --- Buffer.from with utf-8 encoding (NOT hex or base64) ---
+log(Buffer.from(text, 'utf8'));
 
-export function ok_split_map_join(csv: string) {
-  return csv
+// --- Array.prototype.map over non-numeric data ---
+log(records.map((r) => r.id));
+
+// --- String.split without reverse-and-join ---
+log(csv.split(','));
+log(
+  csv
     .split(',')
     .map((s) => s.trim())
-    .join(';');
-}
+    .join(';'),
+);
 
-// ─── String.prototype.split().join() without reverse() ─
-export function ok_split_join(str: string, sep: string) {
-  return str.split(sep).join('-');
-}
+// --- String.split().join() without reverse() ---
+log(str.split(sep).join('-'));
 
-// ─── Array.isArray, Array.from, etc. (other Array methods) ─
-export function ok_array_from(iter: Iterable<number>) {
-  return Array.from(iter);
-}
+// --- Other Array methods ---
+log(Array.from([1, 2, 3]));

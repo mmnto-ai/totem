@@ -1,36 +1,33 @@
-// Fixture for rule 6fa15756b8a004ef — legitimate shell-string curl/wget
-// usages that MUST NOT fire. Covers benign hosts, config-driven URLs, and
-// subdomain-anchor bypass attempts.
+// Fixture: the #1488 Rule B MUST NOT fire on any line below. Covers
+// legitimate curl/wget targets, config-driven URLs, and subdomain-anchor
+// bypass attempts.
+/* eslint-disable no-undef */
 
-// ─── curl to legitimate hosts (NOT blocklisted) ─────
-const ok_curl_openai = 'curl https://api.openai.com/v1/messages';
-const ok_curl_github = 'curl https://api.github.com/repos/mmnto-ai/totem';
-const ok_curl_npm = 'curl https://registry.npmjs.org/@mmnto/totem';
+// @ts-nocheck — fixture file, not expected to type-check cleanly
 
-// ─── wget to legitimate hosts ──────────────────────
-const ok_wget_github = 'wget https://github.com/foo/bar/releases/download/v1';
+declare const log: (s: string) => void;
+declare const apiUrl: string;
 
-// ─── Config-driven URLs inside curl strings ────────
-const apiUrl = 'https://api.example.com';
-const ok_curl_templated = `curl ${apiUrl}/v1/endpoint`;
-const ok_curl_envvar = 'curl $API_URL/v1/endpoint';
+// --- curl / wget to legitimate hosts (NOT blocklisted) ---
+log('curl https://api.openai.com/v1/messages');
+log('curl https://api.github.com/repos/mmnto-ai/totem');
+log('curl https://registry.npmjs.org/@mmnto/totem');
+log('wget https://github.com/foo/bar/releases/download/v1');
 
-// ─── Comments that mention curl but no exfil URL ───
-// The rule's regex requires curl/wget + a blocklisted host on the same line.
-// Mentions alone should not fire.
-// curl down with a good book.
-// Consider wget over HTTP/2 for performance.
+// --- Config-driven URLs inside curl strings ---
+log(`curl ${apiUrl}/v1/endpoint`);
+log('curl $API_URL/v1/endpoint');
 
-// ─── Subdomain-anchor bypass attempts ──────────────
+// --- Subdomain-anchor bypass attempts ---
 // `xtrycloudflare.com` is not a subdomain of trycloudflare.com.
-const ok_curl_xtrycloudflare = 'curl https://xtrycloudflare.com/legit';
+log('curl https://xtrycloudflare.com/legit');
 // `myngrok.io.com` is not the ngrok.io host.
-const ok_curl_myngrok = 'curl https://myngrok.io.com/api';
+log('curl https://myngrok.io.com/api');
 // `transfersh.example.com` not transfer.sh.
-const ok_curl_transfersh = 'curl https://transfersh.example.com/api';
+log('curl https://transfersh.example.com/api');
 
-// Version-shaped strings in comments are an expected limitation: the
-// per-line regex cannot see context, so a comment containing curl or wget
-// alongside an IPv4-shaped version would match. Keep the rule narrow by not
-// writing such patterns in production source. No literal example is provided
-// here because including one would trip the rule in this fixture.
+// Documentation note: version-shaped strings in comments are an expected
+// limitation — per-line regex cannot see context, so a comment containing
+// curl or wget alongside an IPv4-shaped version number would match. Do not
+// write such patterns in production source. No literal example here because
+// including one would trip the rule in this fixture.

