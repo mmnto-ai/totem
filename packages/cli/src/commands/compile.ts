@@ -247,15 +247,16 @@ export function formatVerboseTraceBlock(
   }
 
   // Defense in depth: if the trace somehow never emitted a terminal result
-  // event, synthesize one from the caller-supplied status so the verbose
-  // block always carries a final line. compileLesson pushes a result event
-  // on every return path, but a future refactor could regress that; this
-  // guard keeps the rendered block well-formed regardless.
+  // event, synthesize one from the caller-supplied `status` so the verbose
+  // block always carries a final line. `compileLesson` pushes a result
+  // event on every return path, but a future refactor could regress that;
+  // this guard keeps the rendered block well-formed regardless. We use
+  // `status` directly rather than the last event's outcome because that
+  // outcome is an intermediate marker like 'MATCH' or 'attempt-1', not the
+  // lesson's final state.
   if (!sawResult) {
-    const lastOutcome = trace[trace.length - 1]?.outcome;
-    const outcome = lastOutcome ?? status;
     const resultSuffix = reasonCode ? ` (${reasonCode})` : '';
-    lines.push('  result: ' + outcome + resultSuffix);
+    lines.push('  result: ' + status + resultSuffix);
   }
 
   return lines.join('\n');
