@@ -167,6 +167,41 @@ export const GarbageCollectionSchema = z.object({
     .default(['security']),
 });
 
+/**
+ * Doctor configuration (mmnto-ai/totem#1483). Controls the stale-rule
+ * advisory window in `totem doctor`. Both knobs are integer thresholds on
+ * `RuleMetric.evaluationCount`:
+ *
+ *   - `minRunsToEvaluate`: hard floor below which doctor never flags a rule
+ *     as stale. Protects freshly compiled rules from premature advisory.
+ *   - `staleRuleWindow`: ceiling above which a rule with zero code-context
+ *     matches (`contextCounts.code === 0`) gets flagged as stale.
+ *
+ * The `superRefine` rejects configs where the window is smaller than the
+ * floor, which would collapse the whole check into a single threshold and
+ * silently change semantics.
+ */
+export const DoctorConfigSchema = z
+  .object({
+    /** Minimum evaluationCount before a rule can be flagged stale. Default 10. */
+    staleRuleWindow: z.number().int().min(1).default(10),
+    /**
+     * Hard floor: never flag a rule whose evaluationCount is below this value,
+     * regardless of zero hits. Default 3.
+     */
+    minRunsToEvaluate: z.number().int().min(1).default(3),
+  })
+  .default({})
+  .superRefine((val, ctx) => {
+    if (val.staleRuleWindow < val.minRunsToEvaluate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `doctor.staleRuleWindow (${val.staleRuleWindow}) must be greater than or equal to doctor.minRunsToEvaluate (${val.minRunsToEvaluate})`,
+        path: ['staleRuleWindow'],
+      });
+    }
+  });
+
 export const DocTargetSchema = z.object({
   /** Relative path to the document */
   path: z.string(),
@@ -272,6 +307,9 @@ export const TotemConfigSchema = z.object({
   /** Optional: garbage collection settings for stale compiled rules */
   garbageCollection: GarbageCollectionSchema.optional(),
 
+  /** Optional: doctor stale-rule advisory thresholds (mmnto-ai/totem#1483) */
+  doctor: DoctorConfigSchema.optional(),
+
   /** Optional: pilot mode — warn-only hooks during initial adoption.
    *  `true` uses defaults (14 days / 50 pushes). Object form overrides thresholds. */
   pilot: z
@@ -306,6 +344,7 @@ export type IngestTarget = z.infer<typeof IngestTargetSchema>;
 export type EmbeddingProvider = z.infer<typeof EmbeddingProviderSchema>;
 export type Orchestrator = z.infer<typeof OrchestratorSchema>;
 export type GarbageCollectionConfig = z.infer<typeof GarbageCollectionSchema>;
+export type DoctorConfig = z.infer<typeof DoctorConfigSchema>;
 export type DocTarget = z.infer<typeof DocTargetSchema>;
 export type TotemConfig = z.infer<typeof TotemConfigSchema>;
 
