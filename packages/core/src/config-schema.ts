@@ -57,6 +57,7 @@ export const DEFAULT_IGNORE_PATTERNS = [
   '**/*.test.tsx',
   '**/*.spec.ts',
   '**/*.spec.tsx',
+  '**/.totem/review-extensions.txt',
 ];
 
 // ─── Orchestrator schemas ────────────────────────────
@@ -180,6 +181,39 @@ export const DocTargetSchema = z.object({
 export const ConfigTierSchema = z.enum(['lite', 'standard', 'full']);
 export type ConfigTier = z.infer<typeof ConfigTierSchema>;
 
+/**
+ * Default source extensions used when computing the review content hash.
+ * Historical hardcoded set, preserved for backward compatibility with
+ * pre-#1527 consumers. Polyglot repos override via `review.sourceExtensions`.
+ */
+export const DEFAULT_REVIEW_SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx'] as const;
+
+/**
+ * Per-extension schema for `review.sourceExtensions`. Accepts either `"ts"`
+ * or `".ts"` (normalizes to leading-dot form). The `.refine()` regex is the
+ * shell-injection boundary: these strings are later passed as `git ls-files`
+ * glob arguments on both the TS side (via safeExec) and the bash side
+ * (via shell globs). The regex rejects `*`, `;`, quotes, backticks, spaces,
+ * newlines, and any other character that could break out of a glob arg.
+ */
+export const ReviewSourceExtensionSchema = z
+  .string()
+  .transform((s) => (s.startsWith('.') ? s : '.' + s))
+  .refine(
+    (s) => /^\.[a-z0-9][a-z0-9.-]*$/i.test(s),
+    'must match /\\.[A-Za-z0-9.-]+/ after normalization',
+  );
+
+export const ReviewConfigSchema = z
+  .object({
+    sourceExtensions: z
+      .array(ReviewSourceExtensionSchema)
+      .min(1, 'review.sourceExtensions must contain at least one extension')
+      .default([...DEFAULT_REVIEW_SOURCE_EXTENSIONS]),
+  })
+  .passthrough()
+  .default({});
+
 export const TotemConfigSchema = z.object({
   /** Glob patterns and chunking strategies for each ingest target */
   targets: z.array(IngestTargetSchema).min(1),
@@ -258,6 +292,12 @@ export const TotemConfigSchema = z.object({
       tier: z.enum(['strict', 'standard']).default('standard'),
     })
     .optional(),
+
+  /** Review gate configuration. `sourceExtensions` drives the content-hash
+   *  computation in `writeReviewedContentHash()` and `.claude/hooks/content-hash.sh`.
+   *  Polyglot repos extend the default `['.ts', '.tsx', '.js', '.jsx']` to cover
+   *  additional source languages (e.g., `['.rs', '.gd']` for Rust + Godot). */
+  review: ReviewConfigSchema,
 });
 
 export type ChunkStrategy = z.infer<typeof ChunkStrategySchema>;
