@@ -15,7 +15,7 @@ declare const path: string;
 
 // --- Config-driven URLs (variable references, not string literals) ---
 fetch(config.API_URL);
-fetch(`${base}${path}`);
+fetch(`${base}/v1/${path}`);
 fetch(process.env.API_URL!);
 
 // --- Legitimate API hosts (NOT on the blocklist) ---
