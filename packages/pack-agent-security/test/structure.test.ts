@@ -33,7 +33,7 @@ describe('@totem/pack-agent-security structure', () => {
     }
   });
 
-  it('package.json exports declares root plus both data assets with explicit ./ prefixes', () => {
+  it('package.json exports declares root plus every data asset with explicit ./ prefixes', () => {
     const pkg = readJsonSafe<{
       exports?: Record<string, string>;
       files?: string[];
@@ -45,17 +45,18 @@ describe('@totem/pack-agent-security structure', () => {
     // works in strict ESM contexts. GCA catch on #1503.
     expect(pkg.exports?.['.']).toBe('./package.json');
     expect(pkg.exports?.['./compiled-rules.json']).toBe('./compiled-rules.json');
+    expect(pkg.exports?.['./domain-blocklist.json']).toBe('./domain-blocklist.json');
     expect(pkg.exports?.['./.totemignore']).toBe('./.totemignore');
   });
 
-  it('package.json files array lists exactly the three shippable artifacts', () => {
+  it('package.json files array lists exactly the four shippable artifacts', () => {
     const pkg = readJsonSafe<{ files?: string[] }>(path.join(PACK_ROOT, 'package.json'));
     expect(pkg.files).toBeDefined();
     // Exact set (not arrayContaining) so that an accidentally-added file to the
     // publish surface trips this test. CR catch on #1503.
-    expect(pkg.files).toHaveLength(3);
+    expect(pkg.files).toHaveLength(4);
     expect(new Set(pkg.files)).toEqual(
-      new Set(['compiled-rules.json', '.totemignore', 'README.md']),
+      new Set(['compiled-rules.json', 'domain-blocklist.json', '.totemignore', 'README.md']),
     );
   });
 

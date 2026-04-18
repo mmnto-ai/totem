@@ -88,32 +88,89 @@ type Violation = {
   line: number;
 };
 
+// totem-context: test-harness helper. Sync read is intentional (test setup,
+// no event-loop concern); fail-loud via a bare Error wrapper is a test
+// assertion failure path, not a runtime error surface.
+function readSweepFileOrThrow(abs: string): string {
+  try {
+    return fs.readFileSync(abs, 'utf-8');
+  } catch (err) {
+    throw new Error(
+      `repo-sweep: failed to read file ${abs}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+function sweepAstGrep(rule: CompiledRule, files: string[]): Violation[] {
+  const pattern = rule.astGrepYamlRule ?? rule.astGrepPattern;
+  if (!pattern) {
+    // Fail loud: a malformed rule with no pattern would silently skip the
+    // repo sweep (CR #1522 catch, same class as the unknown-engine dispatch).
+    throw new Error(
+      `repo-sweep: rule ${rule.lessonHash} declares engine 'ast-grep' but has no astGrepYamlRule or astGrepPattern`,
+    );
+  }
+  const out: Violation[] = [];
+  for (const file of files) {
+    if (!fileMatchesRuleGlobs(file, rule)) continue;
+    const abs = path.join(REPO_ROOT, file);
+    const content = readSweepFileOrThrow(abs);
+    const lineCount = content.split('\n').length;
+    const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
+    const matches = matchAstGrepPattern(content, extForFile(file), pattern, lineNumbers);
+    for (const m of matches) {
+      out.push({ hash: rule.lessonHash, file, line: m.lineNumber });
+    }
+  }
+  return out;
+}
+
+function sweepRegex(rule: CompiledRule, files: string[]): Violation[] {
+  if (!rule.pattern) {
+    throw new Error(
+      `repo-sweep: rule ${rule.lessonHash} declares engine 'regex' but has no pattern`,
+    );
+  }
+  let re: RegExp;
+  try {
+    // totem-context: pattern is the pack's own compiled rule regex, not user input
+    re = new RegExp(rule.pattern);
+  } catch (err) {
+    throw new Error(
+      `repo-sweep: rule ${rule.lessonHash} has invalid regex pattern: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  const out: Violation[] = [];
+  for (const file of files) {
+    if (!fileMatchesRuleGlobs(file, rule)) continue;
+    const abs = path.join(REPO_ROOT, file);
+    const content = readSweepFileOrThrow(abs);
+    const lines = content.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      // totem-context: non-global regex, lastIndex not mutated
+      if (re.test(lines[i]!)) {
+        out.push({ hash: rule.lessonHash, file, line: i + 1 });
+      }
+    }
+  }
+  return out;
+}
+
 function sweep(): Violation[] {
   const files = collectTargetFiles();
   const out: Violation[] = [];
   for (const rule of manifest.rules) {
-    if (rule.engine !== 'ast-grep') continue;
-    const pattern = rule.astGrepYamlRule ?? rule.astGrepPattern;
-    if (!pattern) continue;
-    for (const file of files) {
-      if (!fileMatchesRuleGlobs(file, rule)) continue;
-      const abs = path.join(REPO_ROOT, file);
-      let content: string;
-      try {
-        content = fs.readFileSync(abs, 'utf-8');
-      } catch (err) {
-        // CR-5: fail loud on unreadable files rather than dropping them from
-        // the sweep. A silent drop would let a missing file mask a rule hit.
-        throw new Error(
-          `repo-sweep: failed to read file ${abs}: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-      const lineCount = content.split('\n').length;
-      const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
-      const matches = matchAstGrepPattern(content, extForFile(file), pattern, lineNumbers);
-      for (const m of matches) {
-        out.push({ hash: rule.lessonHash, file, line: m.lineNumber });
-      }
+    if (rule.engine === 'ast-grep') {
+      out.push(...sweepAstGrep(rule, files));
+    } else if (rule.engine === 'regex') {
+      out.push(...sweepRegex(rule, files));
+    } else {
+      // Fail loud: a silent skip of an unsupported engine would let a newly-
+      // added rule go uncovered by the repo-wide FP sweep. Every engine the
+      // pack ships MUST be dispatched here (CR catch on #1522).
+      throw new Error(
+        `repo-sweep: rule ${rule.lessonHash} has unsupported engine '${rule.engine}'; extend sweep() to cover it`,
+      );
     }
   }
   return out;
