@@ -29,9 +29,7 @@ log(atob(payload));
 log(btoa(payload));
 
 // --- (6) Numeric-array .map().join() ---
-// totem-ignore: the .join('') shape IS the attack pattern under test.
-log([119, 103, 101, 116].map((c) => String.fromCharCode(c)).join(''));
+log([119, 103, 101, 116].map((c) => String.fromCharCode(c)).join('')); // totem-context: .join('') shape IS the attack pattern under test
 
 // --- (7) .split().reverse().join() string reversal ---
-// totem-ignore: the .join('') shape IS the attack pattern under test.
-log(hidden.split('').reverse().join(''));
+log(hidden.split('').reverse().join('')); // totem-context: .join('') shape IS the attack pattern under test

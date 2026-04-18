@@ -88,6 +88,19 @@ type Violation = {
   line: number;
 };
 
+// totem-context: test-harness helper. Sync read is intentional (test setup,
+// no event-loop concern); fail-loud via a bare Error wrapper is a test
+// assertion failure path, not a runtime error surface.
+function readSweepFileOrThrow(abs: string): string {
+  try {
+    return fs.readFileSync(abs, 'utf-8');
+  } catch (err) {
+    throw new Error(
+      `repo-sweep: failed to read file ${abs}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
 function sweepAstGrep(rule: CompiledRule, files: string[]): Violation[] {
   const pattern = rule.astGrepYamlRule ?? rule.astGrepPattern;
   if (!pattern) return [];
@@ -95,14 +108,7 @@ function sweepAstGrep(rule: CompiledRule, files: string[]): Violation[] {
   for (const file of files) {
     if (!fileMatchesRuleGlobs(file, rule)) continue;
     const abs = path.join(REPO_ROOT, file);
-    let content: string;
-    try {
-      content = fs.readFileSync(abs, 'utf-8');
-    } catch (err) {
-      throw new Error(
-        `repo-sweep: failed to read file ${abs}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
+    const content = readSweepFileOrThrow(abs);
     const lineCount = content.split('\n').length;
     const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
     const matches = matchAstGrepPattern(content, extForFile(file), pattern, lineNumbers);
@@ -117,6 +123,7 @@ function sweepRegex(rule: CompiledRule, files: string[]): Violation[] {
   if (!rule.pattern) return [];
   let re: RegExp;
   try {
+    // totem-context: pattern is the pack's own compiled rule regex, not user input
     re = new RegExp(rule.pattern);
   } catch (err) {
     throw new Error(
@@ -127,16 +134,10 @@ function sweepRegex(rule: CompiledRule, files: string[]): Violation[] {
   for (const file of files) {
     if (!fileMatchesRuleGlobs(file, rule)) continue;
     const abs = path.join(REPO_ROOT, file);
-    let content: string;
-    try {
-      content = fs.readFileSync(abs, 'utf-8');
-    } catch (err) {
-      throw new Error(
-        `repo-sweep: failed to read file ${abs}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
+    const content = readSweepFileOrThrow(abs);
     const lines = content.split('\n');
     for (let i = 0; i < lines.length; i++) {
+      // totem-context: non-global regex, lastIndex not mutated
       if (re.test(lines[i]!)) {
         out.push({ hash: rule.lessonHash, file, line: i + 1 });
       }
