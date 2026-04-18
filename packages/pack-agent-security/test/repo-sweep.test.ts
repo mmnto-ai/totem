@@ -88,32 +88,71 @@ type Violation = {
   line: number;
 };
 
+function sweepAstGrep(rule: CompiledRule, files: string[]): Violation[] {
+  const pattern = rule.astGrepYamlRule ?? rule.astGrepPattern;
+  if (!pattern) return [];
+  const out: Violation[] = [];
+  for (const file of files) {
+    if (!fileMatchesRuleGlobs(file, rule)) continue;
+    const abs = path.join(REPO_ROOT, file);
+    let content: string;
+    try {
+      content = fs.readFileSync(abs, 'utf-8');
+    } catch (err) {
+      throw new Error(
+        `repo-sweep: failed to read file ${abs}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    const lineCount = content.split('\n').length;
+    const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
+    const matches = matchAstGrepPattern(content, extForFile(file), pattern, lineNumbers);
+    for (const m of matches) {
+      out.push({ hash: rule.lessonHash, file, line: m.lineNumber });
+    }
+  }
+  return out;
+}
+
+function sweepRegex(rule: CompiledRule, files: string[]): Violation[] {
+  if (!rule.pattern) return [];
+  let re: RegExp;
+  try {
+    re = new RegExp(rule.pattern);
+  } catch (err) {
+    throw new Error(
+      `repo-sweep: rule ${rule.lessonHash} has invalid regex pattern: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  const out: Violation[] = [];
+  for (const file of files) {
+    if (!fileMatchesRuleGlobs(file, rule)) continue;
+    const abs = path.join(REPO_ROOT, file);
+    let content: string;
+    try {
+      content = fs.readFileSync(abs, 'utf-8');
+    } catch (err) {
+      throw new Error(
+        `repo-sweep: failed to read file ${abs}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    const lines = content.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (re.test(lines[i]!)) {
+        out.push({ hash: rule.lessonHash, file, line: i + 1 });
+      }
+    }
+  }
+  return out;
+}
+
 function sweep(): Violation[] {
   const files = collectTargetFiles();
   const out: Violation[] = [];
   for (const rule of manifest.rules) {
-    if (rule.engine !== 'ast-grep') continue;
-    const pattern = rule.astGrepYamlRule ?? rule.astGrepPattern;
-    if (!pattern) continue;
-    for (const file of files) {
-      if (!fileMatchesRuleGlobs(file, rule)) continue;
-      const abs = path.join(REPO_ROOT, file);
-      let content: string;
-      try {
-        content = fs.readFileSync(abs, 'utf-8');
-      } catch (err) {
-        // CR-5: fail loud on unreadable files rather than dropping them from
-        // the sweep. A silent drop would let a missing file mask a rule hit.
-        throw new Error(
-          `repo-sweep: failed to read file ${abs}: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-      const lineCount = content.split('\n').length;
-      const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
-      const matches = matchAstGrepPattern(content, extForFile(file), pattern, lineNumbers);
-      for (const m of matches) {
-        out.push({ hash: rule.lessonHash, file, line: m.lineNumber });
-      }
+    if (rule.engine === 'ast-grep') {
+      out.push(...sweepAstGrep(rule, files));
+    } else if (rule.engine === 'regex') {
+      out.push(...sweepRegex(rule, files));
     }
   }
   return out;

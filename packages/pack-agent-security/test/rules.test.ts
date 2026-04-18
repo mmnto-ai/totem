@@ -34,9 +34,26 @@ const FIXTURE_CASES: { hash: string; bad: string; good: string }[] = [
     bad: 'bad-dynamic-eval.ts',
     good: 'good-dynamic-eval.ts',
   },
+  {
+    hash: '79353234aa907cd9',
+    bad: 'bad-network-exfil-api.ts',
+    good: 'good-network-exfil-api.ts',
+  },
+  {
+    hash: '6fa15756b8a004ef',
+    bad: 'bad-network-exfil-shell.ts',
+    good: 'good-network-exfil-shell.ts',
+  },
+  {
+    hash: '1c0c5a7daefdeb4b',
+    bad: 'bad-obfuscation.ts',
+    good: 'good-obfuscation.ts',
+  },
 ];
 
-function runRule(rule: CompiledRule, content: string, ext = '.ts') {
+type RuleMatch = { lineNumber: number };
+
+function runAstGrepRule(rule: CompiledRule, content: string, ext = '.ts'): RuleMatch[] {
   const lineCount = content.split('\n').length;
   const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
   const pattern = rule.astGrepYamlRule ?? rule.astGrepPattern;
@@ -46,10 +63,30 @@ function runRule(rule: CompiledRule, content: string, ext = '.ts') {
   return matchAstGrepPattern(content, ext, pattern, lineNumbers);
 }
 
+function runRegexRule(rule: CompiledRule, content: string): RuleMatch[] {
+  if (!rule.pattern) {
+    throw new Error(`Rule ${rule.lessonHash} is regex but has no pattern`);
+  }
+  const re = new RegExp(rule.pattern);
+  const out: RuleMatch[] = [];
+  const lines = content.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (re.test(lines[i]!)) out.push({ lineNumber: i + 1 });
+  }
+  return out;
+}
+
+function runRule(rule: CompiledRule, content: string, ext = '.ts'): RuleMatch[] {
+  if (rule.engine === 'regex') return runRegexRule(rule, content);
+  return runAstGrepRule(rule, content, ext);
+}
+
 describe('@totem/pack-agent-security rule content', () => {
-  it('ships exactly the rule set PR1 promised (drift guard)', () => {
+  it('ships exactly the current rule set (drift guard)', () => {
     // Fail loudly if someone adds or removes a rule without updating this test.
-    expect(manifest.rules).toHaveLength(2);
+    // PR1 shipped 2 rules (#1486 + #1487). PR2 added 3 (#1488 ast-grep, #1488
+    // regex, #1490 compound). Total expected: 5.
+    expect(manifest.rules).toHaveLength(5);
     expect(Object.keys(RULE_BY_HASH).sort()).toEqual(FIXTURE_CASES.map((c) => c.hash).sort());
   });
 
@@ -61,18 +98,29 @@ describe('@totem/pack-agent-security rule content', () => {
     });
 
     it('carries the ADR-089 required markers', () => {
-      expect(rule.engine).toBe('ast-grep');
+      // Engine is constrained to the two shapes the pack ships: compound ast-grep
+      // for call-site detection (PR1's spawn + eval, PR2's network exfil + obfuscation)
+      // and plain regex for string-content scanning (PR2's shell-string curl/wget).
+      expect(['ast-grep', 'regex']).toContain(rule.engine);
       expect(rule.severity).toBe('error');
       expect(rule.category).toBe('security');
       expect(rule.manual).toBe(true);
       expect(rule.immutable).toBe(true);
     });
 
-    it('uses the compound ast-grep yaml rule shape, not a flat pattern', () => {
-      expect(rule.astGrepYamlRule).toBeDefined();
-      expect(rule.pattern).toBe('');
-      // Mutual exclusion: astGrepPattern must be empty/absent when yaml is present.
-      expect(rule.astGrepPattern ?? '').toBe('');
+    it('uses an engine-appropriate pattern shape', () => {
+      if (rule.engine === 'ast-grep') {
+        expect(rule.astGrepYamlRule).toBeDefined();
+        expect(rule.pattern).toBe('');
+        // Mutual exclusion: astGrepPattern must be empty/absent when yaml is present.
+        expect(rule.astGrepPattern ?? '').toBe('');
+      } else {
+        // Regex rules carry the pattern on the `pattern` field and must not set
+        // any ast-grep shape.
+        expect(rule.pattern.length).toBeGreaterThan(0);
+        expect(rule.astGrepYamlRule).toBeUndefined();
+        expect(rule.astGrepPattern ?? '').toBe('');
+      }
     });
 
     it('exposes belt-and-suspenders fileGlobs mirroring the pack .totemignore', () => {
@@ -121,5 +169,18 @@ describe('@totem/pack-agent-security rule content', () => {
     const hashes = manifest.rules.map((r) => r.lessonHash);
     const unique = new Set(hashes);
     expect(unique.size).toBe(hashes.length);
+  });
+
+  // Fragment-level coverage for #1490 (design doc Q2): the bad fixture has one
+  // section per sub-pattern. If any single sub-pattern regresses, the count
+  // drops below the family total and this test fails naming the shortfall.
+  it('#1490 bad fixture fires across every obfuscation sub-pattern family', () => {
+    const rule = RULE_BY_HASH['1c0c5a7daefdeb4b']!;
+    const content = fs.readFileSync(path.join(FIXTURES, 'bad-obfuscation.ts'), 'utf-8');
+    const matches = runRule(rule, content);
+    // 7 `any:` entries covering 5 primitive families (Buffer.from splits hex
+    // and base64; atob and btoa are distinct). At least 7 matches on the
+    // bad fixture means every sub-pattern family fired at least once.
+    expect(matches.length).toBeGreaterThanOrEqual(7);
   });
 });

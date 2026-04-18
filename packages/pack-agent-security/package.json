@@ -13,12 +13,14 @@
   "bugs": "https://github.com/mmnto-ai/totem/issues",
   "files": [
     "compiled-rules.json",
+    "domain-blocklist.json",
     ".totemignore",
     "README.md"
   ],
   "exports": {
     ".": "./package.json",
     "./compiled-rules.json": "./compiled-rules.json",
+    "./domain-blocklist.json": "./domain-blocklist.json",
     "./.totemignore": "./.totemignore"
   },
   "scripts": {
