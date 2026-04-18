@@ -5,6 +5,7 @@ import {
   buildManualRule,
   compileLesson,
   type CompileLessonDeps,
+  isSecurityContext,
   type LessonInput,
   validateAstGrepPattern,
   verifyRuleExamples,
@@ -1855,7 +1856,9 @@ describe('compileLesson unverified flag', () => {
 
   it('flags non-security Pipeline 2 rules as unverified when the lesson has no Example Hit', async () => {
     // Invariant #2: non-security rule without Example Hit ships with
-    // `unverified: true`. Severity stays at whatever the LLM authored.
+    // `unverified: true`. Severity passes through from the LLM output —
+    // no warning-downgrade happens here. A doctor advisory for
+    // `unverified: true` + `severity: 'error'` combos ships with #1483.
     const parseMock = vi.fn().mockReturnValue({
       compilable: true,
       pattern: 'console\\.log',
@@ -1876,6 +1879,38 @@ describe('compileLesson unverified flag', () => {
     expect(result.status).toBe('compiled');
     if (result.status === 'compiled') {
       expect(result.rule.unverified).toBe(true);
+      expect(result.rule.severity).toBe('error');
+    }
+  });
+
+  it('applies the general omitted-severity default on an unverified rule', async () => {
+    // Companion to the severity-pass-through invariant. When the LLM emits
+    // no severity, buildCompiledRule applies the general `'warning'`
+    // default (compile-lesson.ts line ~299: `parsed.severity ?? 'warning'`).
+    // That default is not ADR-088 specific: it fires for any rule without
+    // an emitted severity, unverified or not. Pinning it here guards
+    // against a future ADR-088 change that tries to force severity in
+    // addition to the existing default.
+    const parseMock = vi.fn().mockReturnValue({
+      compilable: true,
+      pattern: 'console\\.log',
+      message: 'No console.log',
+      engine: 'regex' as const,
+      badExample: 'console.log(x)',
+    });
+    const orchestratorMock = vi.fn().mockResolvedValue('{"compilable": true}');
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: parseMock,
+      runOrchestrator: orchestratorMock,
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+
+    const result = await compileLesson(lessonWithoutExampleHit, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.unverified).toBe(true);
+      expect(result.rule.severity).toBe('warning');
     }
   });
 
@@ -1990,5 +2025,44 @@ describe('compileLesson unverified flag', () => {
       expect(result.rule.unverified).toBe(true);
     }
     expect(deps.runOrchestrator).not.toHaveBeenCalled();
+  });
+});
+
+// ─── ADR-088 Decision 3: security-context signal (mmnto-ai/totem#1480) ──
+
+describe('isSecurityContext', () => {
+  // Covers both signals the helper accepts. The `deps.securityContext`
+  // branch is exercised end-to-end by compileLesson tests above; the
+  // `rule.immutable === true` branch is defense-in-depth for pack-merged
+  // rules (ADR-089) and cannot reach compileLesson's public surface today
+  // because CompilerOutput has no immutable field and the manual pattern
+  // parser does not parse `**Immutable:**`. Unit tests on the helper lock
+  // both signals so a future CompilerOutput or parser change cannot drop
+  // the rule-based branch silently.
+
+  const baseDeps: CompileLessonDeps = {
+    parseCompilerResponse: vi.fn(),
+    runOrchestrator: vi.fn(),
+    existingByHash: new Map(),
+  };
+
+  it('returns true when deps.securityContext is true', () => {
+    expect(isSecurityContext({ ...baseDeps, securityContext: true }, null)).toBe(true);
+  });
+
+  it('returns true when the built rule carries immutable: true', () => {
+    expect(isSecurityContext(baseDeps, { immutable: true })).toBe(true);
+  });
+
+  it('returns true when both signals are present', () => {
+    expect(isSecurityContext({ ...baseDeps, securityContext: true }, { immutable: true })).toBe(
+      true,
+    );
+  });
+
+  it('returns false when neither signal is present', () => {
+    expect(isSecurityContext(baseDeps, null)).toBe(false);
+    expect(isSecurityContext(baseDeps, { immutable: false })).toBe(false);
+    expect(isSecurityContext(baseDeps, {})).toBe(false);
   });
 });

@@ -604,7 +604,7 @@ function hasExampleHits(body: string): boolean {
  * threads `immutable` through `CompilerOutput` can wire Pipeline 2/3
  * into this helper without touching the call sites.
  */
-function isSecurityContext(
+export function isSecurityContext(
   deps: CompileLessonDeps,
   rule?: { immutable?: boolean } | null,
 ): boolean {
