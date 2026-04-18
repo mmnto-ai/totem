@@ -7070,7 +7070,7 @@
       ],
       "severity": "warning",
       "status": "archived",
-      "archivedReason": "Pattern matches the literal regex-author text for a boundary anchor in source/docs — meta-advice to rule authors, not an enforcement rule on consumer code. Would fire on strategy docs, compiler corpus, and any regex authoring discussion without identifying a real defect."
+      "archivedReason": "Rule captures regex-author text as an enforcement pattern. fileGlobs are scoped to packages/pack-agent-security/test/ but the rule fires on any source line that contains the literal `(?:^|\\.)` or `(?:^|\\.)|(?:^|\\.)` regex fragment — i.e. legitimate ast-grep patterns written by the pack's own test authors. The underlying guidance (prefer `[^\\w-]` boundary guards over `(?:^|\\.)` for sibling-domain bypass prevention) is authorial advice for rule authors, not a code-defect signal for consumer code."
     },
     {
       "lessonHash": "4c219e8ad6230689",
@@ -7088,7 +7088,7 @@
       ],
       "severity": "warning",
       "status": "archived",
-      "archivedReason": "Pattern fires on every legitimate net.Socket construction. The source lesson is authorial guidance about what to include when writing exfil detection rules — it is not a signal that consumer code using net.Socket is suspicious."
+      "archivedReason": "Pattern `new net.Socket($$$ARGS)` fires on every legitimate net.Socket construction. The source lesson is authorial guidance about what to include when writing exfil detection rules — it is not a signal that consumer code using net.Socket is suspicious. Proper coverage of net.Socket as an exfil surface is tracked in follow-up #1524 (aliased-namespace spawn / socket coverage)."
     },
     {
       "lessonHash": "a37823bcf1e849b5",
@@ -7115,7 +7115,7 @@
       ],
       "severity": "warning",
       "status": "archived",
-      "archivedReason": "Pattern matches every catch_clause without a throw_statement. The source lesson targets walkDir-specific error handling, but the compiled rule fires on all empty or non-rethrowing catches across the codebase. Overlaps with the existing empty-catch detection shipped in 1.13.0 (#664)."
+      "archivedReason": "Pattern matches every catch_clause without a throw_statement. The source lesson targets walkDir-specific error handling, but the compiled rule fires on all empty or non-rethrowing catches across the codebase. Overlaps with the existing empty-catch detection shipped in 1.13.0 (#664). Authorial guidance about a specific helper, overfit into a general pattern."
     },
     {
       "lessonHash": "ec8e329a673cf601",
@@ -7132,7 +7132,7 @@
       ],
       "severity": "warning",
       "status": "archived",
-      "archivedReason": "Pattern fires on every reference to the Function constructor, including legitimate type references and re-exports. The pack-agent-security rule a0b737fd43fb943e already covers dynamic code-eval constructors with proper context gating (literal-string filter, unconditional fire on Function/vm primitives)."
+      "archivedReason": "Pattern fires on every reference to the Function constructor, including legitimate type references, re-exports, and test fixtures exercising the primitive. The pack-agent-security rule a0b737fd43fb943e already covers dynamic code-eval constructors with proper context gating (literal-string filter, unconditional fire on Function / vm primitives); this compiled rule duplicates that coverage with a broader, over-firing shape."
     },
     {
       "lessonHash": "a24ec7272f1f670e",
@@ -7148,7 +7148,7 @@
       ],
       "severity": "warning",
       "status": "archived",
-      "archivedReason": "Pattern fires globally on any occurrence of currentBranch with a string literal value. The source lesson is about test-fixture null-handling for detached-HEAD coverage, but the rule has no way to scope to tests only and would over-fire on production git-state code."
+      "archivedReason": "fileGlobs are scoped to packages/mcp/src/**/*.test.ts, but the pattern fires on every test that mocks git state with a string-literal currentBranch — which is how nearly every git-mocking test sets up its fixture. The source lesson is authorial guidance about updating test fixtures to support detached-HEAD (currentBranch: null) cases, not a defect signal on existing test-fixture construction."
     },
     {
       "lessonHash": "5a746a435d763ca6",
@@ -7164,7 +7164,7 @@
       ],
       "severity": "warning",
       "status": "archived",
-      "archivedReason": "Pattern matches a broad exclude glob literally. The source lesson recommends preferring more explicit forms, which is authorial guidance — the compiled rule would flag legitimate uses of the broader glob across unrelated config files without identifying a real defect."
+      "archivedReason": "fileGlobs are scoped to packages/pack-agent-security/compiled-rules.json itself. The rule pattern matches the literal broad-exclude glob `\"!**/test/\"`, but the file already uses the explicit `packages/**/test/**` form — i.e. the rule is self-referentially scoped to the artifact it lives in and will never match. Authorial guidance misclassified as an enforcement pattern."
     },
     {
       "lessonHash": "c0f652d54da5bed0",
@@ -7196,7 +7196,7 @@
       ],
       "severity": "warning",
       "status": "archived",
-      "archivedReason": "Pattern duplicates the dynamic-code-evaluation coverage in pack-agent-security rule a0b737fd43fb943e, which handles the same non-literal-argument case via its own constraint. Retaining both would double-fire on the same site."
+      "archivedReason": "Pattern duplicates the dynamic-code-evaluation coverage in pack-agent-security rule a0b737fd43fb943e, which handles the same non-literal-argument case (binary_expression / template_string / identifier) via its own constraint. Retaining both would double-fire on the same site without adding signal."
     },
     {
       "lessonHash": "fc2d6c1f6e298d28",
@@ -7213,7 +7213,7 @@
       ],
       "severity": "warning",
       "status": "archived",
-      "archivedReason": "Pattern duplicates the semantic of 4c219e8ad6230689 (same lesson extracted twice with slightly different patterns). Same over-fire concern: flags every legitimate net.Socket construction."
+      "archivedReason": "Pattern `new net.Socket()` duplicates the semantic of 4c219e8ad6230689 (same lesson extracted twice with slightly different patterns — arg-count variants of the same constructor). Same over-fire concern: flags every legitimate net.Socket construction."
     },
     {
       "lessonHash": "de7ee11b427d201e",
@@ -7229,7 +7229,7 @@
       ],
       "severity": "warning",
       "status": "archived",
-      "archivedReason": "Pattern is a single-quote-only variant of a24ec7272f1f670e. Same over-fire concern across production code; same authorial-guidance scope mismatch."
+      "archivedReason": "Pattern is a single-quote-only variant of a24ec7272f1f670e. Same test-scoped fileGlobs (packages/mcp/src/**/*.test.ts), same misfire on legitimate test-fixture construction, same authorial-guidance scope mismatch."
     },
     {
       "lessonHash": "aeb65ba1a27ec781",
