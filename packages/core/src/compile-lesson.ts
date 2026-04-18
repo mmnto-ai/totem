@@ -64,11 +64,11 @@ export type CompileLessonReasonCode = Exclude<NonCompilableReasonCode, 'legacy-u
  * skipped. A compiled or failed lesson omits the field.
  */
 export interface LayerTraceEvent {
-  layer: 1 | 2 | 3;
+  layer: number;
   action: 'generate' | 'verify' | 'retry' | 'result';
   outcome: string;
   patternHash?: string;
-  reasonCode?: NonCompilableReasonCode;
+  reasonCode?: Exclude<NonCompilableReasonCode, 'legacy-unknown'>;
 }
 
 export type CompileLessonResult =
