@@ -287,6 +287,7 @@ export type {
   CompileLessonCallbacks,
   CompileLessonDeps,
   CompileLessonResult,
+  LayerTraceEvent,
   LessonInput,
 } from './compile-lesson.js';
 export {
