@@ -195,7 +195,13 @@ describe('@totem/pack-agent-security rule content', () => {
   // per-family coverage rather than a count floor.
   it('#1490 every any: sub-pattern fires on a synthetic attack corpus', () => {
     const rule = RULE_BY_HASH['dd24f87f46e65812']!;
-    const yaml = rule.astGrepYamlRule as { rule?: { any?: Array<{ pattern?: string }> } };
+    // Each `any:` entry is an opaque sub-rule: may be `{pattern: "..."}`, or
+    // `{all: [...]}`, or carry `constraints` / `has` / `inside`. Treating
+    // entries as `{pattern?: string}` (CR catch on #1522) silently skips
+    // any future shape that drops the bare `pattern` key, collapsing the
+    // "every sub-pattern fires" guarantee. Feed each entry through
+    // matchAstGrepPattern as its own NapiConfig so the shape is agnostic.
+    const yaml = rule.astGrepYamlRule as { rule?: { any?: Array<Record<string, unknown>> } };
     const subPatterns = yaml.rule?.any ?? [];
     expect(subPatterns.length).toBeGreaterThan(0);
 
@@ -217,9 +223,9 @@ describe('@totem/pack-agent-security rule content', () => {
 
     const shortfalls: string[] = [];
     for (const entry of subPatterns) {
-      if (!entry.pattern) continue;
-      const matches = matchAstGrepPattern(attackCorpus, '.ts', entry.pattern, lineNumbers);
-      if (matches.length === 0) shortfalls.push(entry.pattern);
+      const wrapped = { rule: entry };
+      const matches = matchAstGrepPattern(attackCorpus, '.ts', wrapped, lineNumbers);
+      if (matches.length === 0) shortfalls.push(JSON.stringify(entry));
     }
     if (shortfalls.length > 0) {
       throw new Error(
