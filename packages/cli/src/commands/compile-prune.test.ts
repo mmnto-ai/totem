@@ -2,7 +2,18 @@ import { describe, expect, it } from 'vitest';
 
 import type { CompiledRule } from '@mmnto/totem';
 
+import type { NonCompilableMapValue } from './compile.js';
 import { pruneStaleNonCompilable, pruneStaleRules } from './compile.js';
+
+// ─── 4-tuple helpers (mmnto-ai/totem#1481) ───────────
+
+function entry(
+  title: string,
+  reasonCode: NonCompilableMapValue['reasonCode'] = 'out-of-scope',
+  reason?: string,
+): NonCompilableMapValue {
+  return reason === undefined ? { title, reasonCode } : { title, reasonCode, reason };
+}
 
 // ─── Test helpers ────────────────────────────────────
 
@@ -25,39 +36,41 @@ describe('pruneStaleNonCompilable', () => {
   });
 
   it('returns all entries when every hash is still current', () => {
-    const map = new Map<string, string>([
-      ['abc', 'First lesson'],
-      ['def', 'Second lesson'],
+    const map = new Map<string, NonCompilableMapValue>([
+      ['abc', entry('First lesson')],
+      ['def', entry('Second lesson', 'missing-badexample')],
     ]);
     const current = new Set(['abc', 'def']);
 
     const result = pruneStaleNonCompilable(map, current);
 
     expect(result.fresh).toEqual([
-      { hash: 'abc', title: 'First lesson' },
-      { hash: 'def', title: 'Second lesson' },
+      { hash: 'abc', title: 'First lesson', reasonCode: 'out-of-scope' },
+      { hash: 'def', title: 'Second lesson', reasonCode: 'missing-badexample' },
     ]);
     expect(result.drained).toBe(0);
   });
 
   it('drops entries whose hashes are no longer present in current lessons', () => {
-    const map = new Map<string, string>([
-      ['abc', 'Kept lesson'],
-      ['stale1', 'Removed lesson A'],
-      ['stale2', 'Removed lesson B'],
+    const map = new Map<string, NonCompilableMapValue>([
+      ['abc', entry('Kept lesson')],
+      ['stale1', entry('Removed lesson A')],
+      ['stale2', entry('Removed lesson B')],
     ]);
     const current = new Set(['abc']);
 
     const result = pruneStaleNonCompilable(map, current);
 
-    expect(result.fresh).toEqual([{ hash: 'abc', title: 'Kept lesson' }]);
+    expect(result.fresh).toEqual([
+      { hash: 'abc', title: 'Kept lesson', reasonCode: 'out-of-scope' },
+    ]);
     expect(result.drained).toBe(2);
   });
 
   it('drains everything when no hashes are current', () => {
-    const map = new Map<string, string>([
-      ['stale1', 'Removed A'],
-      ['stale2', 'Removed B'],
+    const map = new Map<string, NonCompilableMapValue>([
+      ['stale1', entry('Removed A')],
+      ['stale2', entry('Removed B')],
     ]);
     const current = new Set<string>();
 
@@ -67,22 +80,33 @@ describe('pruneStaleNonCompilable', () => {
     expect(result.drained).toBe(2);
   });
 
-  it('preserves tuple shape including titles from legacy-normalized entries', () => {
-    // Legacy string-form entries get normalized to {hash, title: '(legacy entry)'}
-    // by the schema transform. The prune helper must preserve that title verbatim.
-    const map = new Map<string, string>([['legacy-hash', '(legacy entry)']]);
-    const current = new Set(['legacy-hash']);
+  it('preserves reasonCode and reason fields through the prune', () => {
+    // mmnto-ai/totem#1481 invariant #8: the 4-tuple must survive the prune
+    // intact, not collapse back to a 2-tuple.
+    const map = new Map<string, NonCompilableMapValue>([
+      ['hash-a', entry('Legacy entry', 'legacy-unknown')],
+      ['hash-b', entry('Modern entry', 'out-of-scope', 'Architectural principle.')],
+    ]);
+    const current = new Set(['hash-a', 'hash-b']);
 
     const result = pruneStaleNonCompilable(map, current);
 
-    expect(result.fresh).toEqual([{ hash: 'legacy-hash', title: '(legacy entry)' }]);
+    expect(result.fresh).toEqual([
+      { hash: 'hash-a', title: 'Legacy entry', reasonCode: 'legacy-unknown' },
+      {
+        hash: 'hash-b',
+        title: 'Modern entry',
+        reasonCode: 'out-of-scope',
+        reason: 'Architectural principle.',
+      },
+    ]);
     expect(result.drained).toBe(0);
   });
 
   it('does not mutate the input map', () => {
-    const map = new Map<string, string>([
-      ['abc', 'Kept'],
-      ['stale', 'Removed'],
+    const map = new Map<string, NonCompilableMapValue>([
+      ['abc', entry('Kept')],
+      ['stale', entry('Removed')],
     ]);
     const current = new Set(['abc']);
 

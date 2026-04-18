@@ -105,6 +105,21 @@ const CompiledRuleBaseSchema = z.object({
    * - #1479 Layer 3 security branch rejects outright on verify failure.
    */
   immutable: z.boolean().optional(),
+  /**
+   * ADR-088 Phase 1 Layer 3 (mmnto-ai/totem#1480). True when the rule was
+   * compiled from a lesson that lacked an Example Hit block, meaning no
+   * ground-truth fixture exists to verify the pattern against. Pipeline 2
+   * / Pipeline 3 / Pipeline 1 writers set this when the lesson body carries
+   * no `**Example Hit:**` field. Security rules with `immutable === true`
+   * or `deps.securityContext === true` are rejected outright rather than
+   * shipped unverified (see compile-lesson.ts).
+   *
+   * Absent (undefined) means the rule is verified. Never write literal
+   * `false`; absence preserves pre-#1480 manifest hashes via
+   * canonicalStringify — `{unverified: undefined}` and an absent key
+   * produce identical output.
+   */
+  unverified: z.boolean().optional(),
 });
 
 /**
@@ -147,34 +162,103 @@ export const CompiledRuleSchema = CompiledRuleBaseSchema.superRefine(refineAstGr
 export type CompiledRule = z.infer<typeof CompiledRuleSchema>;
 
 /**
- * A non-compilable lesson entry. Pre-#1280 these were opaque hash strings;
- * post-#1280 they're {hash, title} tuples for human-readable triage. The
- * loader normalizes legacy strings to tuples on read so downstream code only
- * ever sees the tuple form.
+ * Machine-readable reason for why a lesson could not be compiled into a rule.
+ * mmnto-ai/totem#1481 upgraded the `nonCompilable` ledger from opaque 2-tuples
+ * to 4-tuples with an explicit reason code so `totem doctor` and downstream
+ * telemetry can distinguish outcomes without string-matching.
+ *
+ * Enum order matches the compile-pipeline exit points (see compile-lesson.ts)
+ * followed by the legacy migration sentinel. `'legacy-unknown'` exists only
+ * so data written by pre-#1481 compile runs (2-tuple shape) round-trips
+ * through the Read schema, up-converts in memory, and re-persists without
+ * losing the hash/title pair. Fresh compile runs MUST NOT emit
+ * `'legacy-unknown'`; enforcement sits at producers, not the schema.
  */
-export const NonCompilableEntrySchema = z
+export const NonCompilableReasonCodeSchema = z.enum([
+  'no-pattern-generated',
+  'pattern-syntax-invalid',
+  'pattern-zero-match',
+  'verify-retry-exhausted',
+  'security-rule-rejected',
+  'no-pattern-found',
+  'out-of-scope',
+  'missing-badexample',
+  'legacy-unknown',
+]);
+
+export type NonCompilableReasonCode = z.infer<typeof NonCompilableReasonCodeSchema>;
+
+/**
+ * Strict Write schema for `nonCompilable` entries. Every persisted entry
+ * carries the 4-tuple `{hash, title, reasonCode, reason?}` shape. Accepts
+ * `'legacy-unknown'` so migrated pre-#1481 2-tuples round-trip to disk
+ * safely on the first post-upgrade compile; the behavioral invariant that
+ * fresh producers never emit `'legacy-unknown'` lives at the call sites,
+ * not here.
+ *
+ * Design precedent: lesson 400fed87 (Read/Write schema invariants). If
+ * writes routed through the permissive Read schema, the union-plus-
+ * transform pipeline would silently re-accept legacy 2-tuples on every
+ * save and the migration would never complete.
+ */
+export const NonCompilableEntryWriteSchema = z.object({
+  hash: z.string(),
+  title: z.string(),
+  reasonCode: NonCompilableReasonCodeSchema,
+  reason: z.string().optional(),
+});
+
+/**
+ * Permissive Read schema for `nonCompilable` entries. Accepts three shapes:
+ *   - Legacy string (pre-#1280): just the hash.
+ *   - Legacy 2-tuple (#1280 to #1481): `{hash, title}`.
+ *   - Modern 4-tuple (#1481+): `{hash, title, reasonCode, reason?}`.
+ * The transform normalizes every shape to the modern 4-tuple. Legacy shapes
+ * get `reasonCode: 'legacy-unknown'` and no `reason`.
+ */
+export const NonCompilableEntryReadSchema = z
   .union([
     z.string(),
+    // Modern 4-tuple MUST come before the legacy 2-tuple in the union so
+    // Zod's left-to-right matching grabs the richer shape first. If the
+    // legacy 2-tuple sat ahead of the modern one, a full 4-tuple would
+    // match the 2-tuple schema (which requires only `hash` + `title`) and
+    // silently drop `reasonCode` / `reason` before transform could see them.
+    NonCompilableEntryWriteSchema,
     z.object({
       hash: z.string(),
       title: z.string(),
     }),
   ])
-  .transform((entry) =>
-    typeof entry === 'string' ? { hash: entry, title: '(legacy entry)' } : entry,
-  );
+  .transform((entry) => {
+    if (typeof entry === 'string') {
+      return { hash: entry, title: '(legacy entry)', reasonCode: 'legacy-unknown' as const };
+    }
+    if ('reasonCode' in entry) {
+      return entry;
+    }
+    return { hash: entry.hash, title: entry.title, reasonCode: 'legacy-unknown' as const };
+  });
 
-export type NonCompilableEntry = z.infer<typeof NonCompilableEntrySchema>;
+/**
+ * Public `NonCompilableEntry` type is the inferred 4-tuple shape (post-Read
+ * transform). Downstream code only ever sees this shape.
+ */
+export type NonCompilableEntry = z.infer<typeof NonCompilableEntryReadSchema>;
 
 export const CompiledRulesFileSchema = z.object({
   version: z.literal(1),
   rules: z.array(CompiledRuleSchema),
   /**
-   * Lesson hashes that the LLM determined cannot be compiled (conceptual/architectural).
-   * Stored as `{hash, title}` tuples for observability (#1280). Legacy `string[]` form
-   * is accepted on read and normalized to tuples by `NonCompilableEntrySchema.transform`.
+   * Lessons that could not be compiled into a rule. 4-tuple shape since
+   * mmnto-ai/totem#1481: {hash, title, reasonCode, reason?}. The Read
+   * schema accepts the pre-#1280 string shape and the #1280-era 2-tuple
+   * and migrates both to the 4-tuple with `reasonCode: 'legacy-unknown'`.
+   * Every write site MUST route through `NonCompilableEntryWriteSchema`
+   * (or an equivalent structural check) to prevent the permissive Read
+   * transform from legitimizing legacy shapes on save.
    */
-  nonCompilable: z.array(NonCompilableEntrySchema).optional(),
+  nonCompilable: z.array(NonCompilableEntryReadSchema).optional(),
 });
 
 export type CompiledRulesFile = z.infer<typeof CompiledRulesFileSchema>;

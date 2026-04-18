@@ -5,6 +5,7 @@ import {
   buildManualRule,
   compileLesson,
   type CompileLessonDeps,
+  isSecurityContext,
   type LessonInput,
   validateAstGrepPattern,
   verifyRuleExamples,
@@ -1057,7 +1058,11 @@ describe('compileLesson', () => {
     expect(result.status).toBe('noop');
   });
 
-  it('returns failed when parseCompilerResponse returns null', async () => {
+  it('returns skipped with pattern-syntax-invalid when parseCompilerResponse returns null', async () => {
+    // mmnto-ai/totem#1481: the Pipeline 2 parse-failure exit route was
+    // upgraded from 'failed' to 'skipped' with a machine-readable
+    // reasonCode so ADR-088 Layer 4 telemetry sees every LLM-output
+    // parse error rather than losing them to the 'failed' bucket.
     const deps: CompileLessonDeps = {
       parseCompilerResponse: vi.fn().mockReturnValue(null),
       runOrchestrator: vi.fn().mockResolvedValue('bad response'),
@@ -1065,7 +1070,10 @@ describe('compileLesson', () => {
       callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
     };
     const result = await compileLesson(lesson, 'system prompt', deps);
-    expect(result.status).toBe('failed');
+    expect(result.status).toBe('skipped');
+    if (result.status === 'skipped') {
+      expect(result.reasonCode).toBe('pattern-syntax-invalid');
+    }
     expect(deps.callbacks!.onWarn).toHaveBeenCalled();
   });
 
@@ -1411,7 +1419,10 @@ describe('compileLesson Pipeline 3 (Bad/Good snippets)', () => {
         // Pattern matches neither Bad nor Good - smoke gate catches this
         // before the old self-verification step ever runs. Pre-#1408 the
         // test asserted on the self-verification message; post-#1408 the
-        // smoke gate is the earlier (and stricter) filter.
+        // smoke gate is the earlier (and stricter) filter. mmnto-ai/totem#1481
+        // further promotes the smoke-gate zero-match branch from 'failed'
+        // to 'skipped' with reasonCode 'pattern-syntax-invalid' so Layer 4
+        // telemetry gets a machine-readable entry.
         pattern: 'this_matches_nothing_at_all',
         message: 'Wrong pattern',
         engine: 'regex' as const,
@@ -1421,7 +1432,11 @@ describe('compileLesson Pipeline 3 (Bad/Good snippets)', () => {
       callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
     };
     const result = await compileLesson(pipeline3Lesson, 'system prompt', deps);
-    expect(result.status).toBe('failed');
+    expect(result.status).toBe('skipped');
+    if (result.status === 'skipped') {
+      expect(result.reasonCode).toBe('pattern-zero-match');
+      expect(result.reason).toContain('smoke gate');
+    }
     expect(deps.callbacks!.onWarn).toHaveBeenCalledWith(
       pipeline3Lesson.heading,
       expect.stringContaining('smoke gate'),
@@ -1492,7 +1507,9 @@ describe('compileLesson Pipeline 3 (Bad/Good snippets)', () => {
     expect(result.status).toBe('noop');
   });
 
-  it('returns failed when LLM response cannot be parsed', async () => {
+  it('returns skipped with pattern-syntax-invalid when Pipeline 3 LLM response cannot be parsed', async () => {
+    // mmnto-ai/totem#1481: Pipeline 3 parse-failure now lands in the ledger
+    // with a machine-readable reasonCode per ADR-088 Layer 4.
     const deps: CompileLessonDeps = {
       parseCompilerResponse: vi.fn().mockReturnValue(null),
       runOrchestrator: vi.fn().mockResolvedValue('bad response'),
@@ -1500,7 +1517,10 @@ describe('compileLesson Pipeline 3 (Bad/Good snippets)', () => {
       callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
     };
     const result = await compileLesson(pipeline3Lesson, 'system prompt', deps);
-    expect(result.status).toBe('failed');
+    expect(result.status).toBe('skipped');
+    if (result.status === 'skipped') {
+      expect(result.reasonCode).toBe('pattern-syntax-invalid');
+    }
     expect(deps.callbacks!.onWarn).toHaveBeenCalledWith(
       pipeline3Lesson.heading,
       expect.stringContaining('Pipeline 3'),
@@ -1595,7 +1615,21 @@ describe('compileLesson Pipeline 2 verify-retry', () => {
   it('rejects a security-context rule without retry when verify fails', async () => {
     // securityContext: true + zero-match on attempt 1. Zero tolerance per
     // ADR-088 Decision 3 means no retry. Expected outcome: skipped,
-    // reasonCode 'security-verify-rejected', exactly 1 orchestrator call.
+    // reasonCode 'security-rule-rejected', exactly 1 orchestrator call.
+    //
+    // mmnto-ai/totem#1480 added an upfront Example-Hit short-circuit for
+    // security context, so this test uses a lesson body that includes a
+    // non-empty Example Hit block. That keeps the test exercising the
+    // verify-path security branch, not the new no-example-hit short-circuit.
+    const securityLesson: LessonInput = {
+      index: 0,
+      heading: 'No shell injection in spawn',
+      body: [
+        'Do not pass untrusted input to spawn with shell: true.',
+        '**Example Hit:** spawn("sh", ["-c", userInput])',
+      ].join('\n'),
+      hash: 'h-security-verify',
+    };
     const parseMock = vi.fn().mockReturnValue({
       compilable: true,
       pattern: 'never_matches_xyz',
@@ -1612,15 +1646,15 @@ describe('compileLesson Pipeline 2 verify-retry', () => {
       securityContext: true,
     };
 
-    const result = await compileLesson(lesson, 'system prompt', deps);
+    const result = await compileLesson(securityLesson, 'system prompt', deps);
     expect(result.status).toBe('skipped');
     if (result.status === 'skipped') {
-      expect(result.reasonCode).toBe('security-verify-rejected');
+      expect(result.reasonCode).toBe('security-rule-rejected');
       expect(result.reason).toContain('zero matches');
     }
     expect(orchestratorMock).toHaveBeenCalledTimes(1);
     expect(deps.callbacks!.onWarn).toHaveBeenCalledWith(
-      lesson.heading,
+      securityLesson.heading,
       expect.stringContaining('Security rule rejected on verify failure'),
     );
   });
@@ -1654,9 +1688,11 @@ describe('compileLesson Pipeline 2 verify-retry', () => {
     expect(orchestratorMock).toHaveBeenCalledTimes(1);
   });
 
-  it('propagates non-compilable LLM verdict with reasonCode non-compilable', async () => {
+  it('propagates non-compilable LLM verdict with reasonCode out-of-scope', async () => {
     // Conceptual/architectural lessons that the LLM classifies as
     // non-compilable. ADR-088 Layer 4 requires a machine-readable reason.
+    // mmnto-ai/totem#1481 renamed `'non-compilable'` to `'out-of-scope'`
+    // to align the internal reason code with the persisted enum.
     const parseMock = vi.fn().mockReturnValue({
       compilable: false,
       reason: 'Architectural principle, not a pattern.',
@@ -1672,7 +1708,7 @@ describe('compileLesson Pipeline 2 verify-retry', () => {
     const result = await compileLesson(lesson, 'system prompt', deps);
     expect(result.status).toBe('skipped');
     if (result.status === 'skipped') {
-      expect(result.reasonCode).toBe('non-compilable');
+      expect(result.reasonCode).toBe('out-of-scope');
       expect(result.reason).toBe('Architectural principle, not a pattern.');
     }
     expect(orchestratorMock).toHaveBeenCalledTimes(1);
@@ -1769,11 +1805,13 @@ describe('compileLesson Pipeline 2 verify-retry', () => {
     expect(orchestratorMock).toHaveBeenCalledTimes(3);
   });
 
-  it('returns failed without retry when the LLM emits an invalid regex (validator rejection)', async () => {
-    // Validator-level rejection (ADR-088 + CR review on #1479). Retrying
-    // an invalid regex produces more invalid regexes and masks real LLM
-    // output quality issues. Return 'failed' so the lesson stays pending
-    // for a future recompile rather than landing in nonCompilable.
+  it('returns skipped with pattern-syntax-invalid when the LLM emits an invalid regex (validator rejection)', async () => {
+    // Validator-level rejection (ADR-088 Layer 4, mmnto-ai/totem#1481).
+    // Retrying an invalid regex produces more invalid regexes and wastes
+    // tokens, so no retry fires. Pre-#1481 this returned 'failed'; post-
+    // #1481 it returns 'skipped' with reasonCode 'pattern-syntax-invalid'
+    // so the ledger carries a machine-readable record per the Layer 4
+    // explicit-failure contract.
     const parseMock = vi.fn().mockReturnValue({
       compilable: true,
       pattern: '[unclosed-bracket-class',
@@ -1790,7 +1828,241 @@ describe('compileLesson Pipeline 2 verify-retry', () => {
     };
 
     const result = await compileLesson(lesson, 'system prompt', deps);
-    expect(result.status).toBe('failed');
+    expect(result.status).toBe('skipped');
+    if (result.status === 'skipped') {
+      expect(result.reasonCode).toBe('pattern-syntax-invalid');
+      expect(result.reason).toContain('Rejected regex');
+    }
     expect(orchestratorMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── ADR-088 Phase 1 Layer 3: unverified flag (mmnto-ai/totem#1480) ──
+
+describe('compileLesson unverified flag', () => {
+  const lessonWithoutExampleHit: LessonInput = {
+    index: 0,
+    heading: 'Use err not error in catch blocks',
+    body: 'Always use `err` as the variable name in catch blocks.',
+    hash: 'h-no-example',
+  };
+
+  const lessonWithExampleHit: LessonInput = {
+    index: 0,
+    heading: 'No console.log in production',
+    body: 'Do not ship console.log.\n**Example Hit:** console.log(x)',
+    hash: 'h-with-example',
+  };
+
+  it('flags non-security Pipeline 2 rules as unverified when the lesson has no Example Hit', async () => {
+    // Invariant #2: non-security rule without Example Hit ships with
+    // `unverified: true`. Severity passes through from the LLM output —
+    // no warning-downgrade happens here. A doctor advisory for
+    // `unverified: true` + `severity: 'error'` combos ships with #1483.
+    const parseMock = vi.fn().mockReturnValue({
+      compilable: true,
+      pattern: 'console\\.log',
+      message: 'No console.log',
+      engine: 'regex' as const,
+      severity: 'error' as const,
+      badExample: 'console.log(x)',
+    });
+    const orchestratorMock = vi.fn().mockResolvedValue('{"compilable": true}');
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: parseMock,
+      runOrchestrator: orchestratorMock,
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+
+    const result = await compileLesson(lessonWithoutExampleHit, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.unverified).toBe(true);
+      expect(result.rule.severity).toBe('error');
+    }
+  });
+
+  it('applies the general omitted-severity default on an unverified rule', async () => {
+    // Companion to the severity-pass-through invariant. When the LLM emits
+    // no severity, buildCompiledRule applies the general `'warning'`
+    // default (compile-lesson.ts line ~299: `parsed.severity ?? 'warning'`).
+    // That default is not ADR-088 specific: it fires for any rule without
+    // an emitted severity, unverified or not. Pinning it here guards
+    // against a future ADR-088 change that tries to force severity in
+    // addition to the existing default.
+    const parseMock = vi.fn().mockReturnValue({
+      compilable: true,
+      pattern: 'console\\.log',
+      message: 'No console.log',
+      engine: 'regex' as const,
+      badExample: 'console.log(x)',
+    });
+    const orchestratorMock = vi.fn().mockResolvedValue('{"compilable": true}');
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: parseMock,
+      runOrchestrator: orchestratorMock,
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+
+    const result = await compileLesson(lessonWithoutExampleHit, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.unverified).toBe(true);
+      expect(result.rule.severity).toBe('warning');
+    }
+  });
+
+  it('leaves unverified absent when the lesson carries a non-empty Example Hit', async () => {
+    // Invariant #1: presence of Example Hit produces unverified: undefined.
+    // The serialized JSON omits the field — `canonicalStringify`
+    // (key-sorted JSON.stringify) writes nothing for undefined values so
+    // pre-#1480 manifest hashes stay stable.
+    const parseMock = vi.fn().mockReturnValue({
+      compilable: true,
+      pattern: 'console\\.log',
+      message: 'No console.log',
+      engine: 'regex' as const,
+      badExample: 'console.log(x)',
+    });
+    const orchestratorMock = vi.fn().mockResolvedValue('{"compilable": true}');
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: parseMock,
+      runOrchestrator: orchestratorMock,
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+
+    const result = await compileLesson(lessonWithExampleHit, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.unverified).toBeUndefined();
+    }
+  });
+
+  it('treats an Example Hit that is whitespace-only as absent for the unverified flag', async () => {
+    // Edge case from spec: `**Example Hit:**   ` (whitespace-only value) is
+    // treated as no ground truth for the `unverified` signal. `trim()` on
+    // every extracted line before counting guards against false-negatives
+    // on whitespace-only examples. (The existing verify step still runs
+    // against whatever extractRuleExamples returns, so the test pattern
+    // matches the empty string to avoid tangling the test with verify
+    // semantics — scope is the unverified flag only.)
+    const lessonEmptyExample: LessonInput = {
+      index: 0,
+      heading: 'Edge case lesson',
+      body: 'Body text.\n**Example Hit:**   ',
+      hash: 'h-empty-example',
+    };
+    const parseMock = vi.fn().mockReturnValue({
+      compilable: true,
+      // Pattern that matches any string — including the trimmed-empty
+      // Example Hit — so verifyRuleExamples passes and we can assert
+      // on the unverified flag without the verify branch interfering.
+      pattern: '.*',
+      message: 'msg',
+      engine: 'regex' as const,
+      badExample: 'anything',
+    });
+    const orchestratorMock = vi.fn().mockResolvedValue('{"compilable": true}');
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: parseMock,
+      runOrchestrator: orchestratorMock,
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+
+    const result = await compileLesson(lessonEmptyExample, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.unverified).toBe(true);
+    }
+  });
+
+  it('rejects security-context lessons that lack an Example Hit with security-rule-rejected', async () => {
+    // Invariant #3: security-context lesson without Example Hit produces
+    // no rule; ledger entry carries reasonCode 'security-rule-rejected'.
+    // No orchestrator call fires (short-circuit before Pipeline 2).
+    const orchestratorMock = vi.fn();
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn(),
+      runOrchestrator: orchestratorMock,
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+      securityContext: true,
+    };
+
+    const result = await compileLesson(lessonWithoutExampleHit, 'system prompt', deps);
+    expect(result.status).toBe('skipped');
+    if (result.status === 'skipped') {
+      expect(result.reasonCode).toBe('security-rule-rejected');
+      expect(result.reason).toContain('Example Hit');
+    }
+    expect(orchestratorMock).not.toHaveBeenCalled();
+  });
+
+  it('flags Pipeline 1 manual rules as unverified when the lesson has no Example Hit', async () => {
+    // Pipeline 1 consistency (design doc Open Question 2, resolution (a)):
+    // manual rules authored without an Example Hit ship unverified too.
+    // The #1414 backfill sweep will eliminate this population eventually.
+    const manualLessonNoExample: LessonInput = {
+      index: 0,
+      heading: 'No console.log in production',
+      body: '**Pattern:** `console\\.log`\n**Engine:** regex\n**Severity:** warning\n**Scope:** **/*.ts',
+      hash: 'h-manual-no-example',
+    };
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn(),
+      runOrchestrator: vi.fn(),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+
+    const result = await compileLesson(manualLessonNoExample, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.unverified).toBe(true);
+    }
+    expect(deps.runOrchestrator).not.toHaveBeenCalled();
+  });
+});
+
+// ─── ADR-088 Decision 3: security-context signal (mmnto-ai/totem#1480) ──
+
+describe('isSecurityContext', () => {
+  // Covers both signals the helper accepts. The `deps.securityContext`
+  // branch is exercised end-to-end by compileLesson tests above; the
+  // `rule.immutable === true` branch is defense-in-depth for pack-merged
+  // rules (ADR-089) and cannot reach compileLesson's public surface today
+  // because CompilerOutput has no immutable field and the manual pattern
+  // parser does not parse `**Immutable:**`. Unit tests on the helper lock
+  // both signals so a future CompilerOutput or parser change cannot drop
+  // the rule-based branch silently.
+
+  const baseDeps: CompileLessonDeps = {
+    parseCompilerResponse: vi.fn(),
+    runOrchestrator: vi.fn(),
+    existingByHash: new Map(),
+  };
+
+  it('returns true when deps.securityContext is true', () => {
+    expect(isSecurityContext({ ...baseDeps, securityContext: true }, null)).toBe(true);
+  });
+
+  it('returns true when the built rule carries immutable: true', () => {
+    expect(isSecurityContext(baseDeps, { immutable: true })).toBe(true);
+  });
+
+  it('returns true when both signals are present', () => {
+    expect(isSecurityContext({ ...baseDeps, securityContext: true }, { immutable: true })).toBe(
+      true,
+    );
+  });
+
+  it('returns false when neither signal is present', () => {
+    expect(isSecurityContext(baseDeps, null)).toBe(false);
+    expect(isSecurityContext(baseDeps, { immutable: false })).toBe(false);
+    expect(isSecurityContext(baseDeps, {})).toBe(false);
   });
 });

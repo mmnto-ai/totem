@@ -225,7 +225,7 @@ export interface InstallOptions {
 export async function installCommand(target: string, options: InstallOptions = {}): Promise<void> {
   const fs = await import('node:fs');
   const path = await import('node:path');
-  const { safeExec, mergeRules, CompiledRulesFileSchema, TotemConfigError } =
+  const { safeExec, mergeRules, CompiledRulesFileSchema, saveCompiledRulesFile, TotemConfigError } =
     await import('@mmnto/totem');
   const { log } = await import('../ui.js');
   const { isGlobalConfigPath, resolveConfigPath } = await import('../utils.js');
@@ -391,6 +391,7 @@ export async function installCommand(target: string, options: InstallOptions = {
   mergeLocalRules(fs, totemDir, path.join(totemDir, 'compiled-rules.json'), packRulesFile, {
     mergeRules,
     CompiledRulesFileSchema,
+    saveCompiledRulesFile,
     TotemConfigError,
     log,
     tag: TAG,
@@ -467,6 +468,14 @@ interface MergeLocalRulesDeps {
     packRules: readonly CompiledRule[],
   ) => { rules: CompiledRule[]; blocks: MergeBlock[] };
   CompiledRulesFileSchema: { parse: (input: unknown) => CompiledRulesFile };
+  /**
+   * Strict writer so the pack-merge path runs every `nonCompilable` entry
+   * through `NonCompilableEntryWriteSchema` (mmnto-ai/totem#1481). Using
+   * this instead of a raw `fs.writeFileSync` keeps install.ts honest
+   * against the Read/Write schema invariant — a pack shipping a legacy
+   * 2-tuple would otherwise be silently legitimized on disk.
+   */
+  saveCompiledRulesFile: (rulesPath: string, data: CompiledRulesFile) => void;
   TotemConfigError: new (
     message: string,
     hint: string,
@@ -551,7 +560,7 @@ function mergeLocalRules(
     rules: mergedRules,
     nonCompilable: mergedNonCompilable,
   };
-  fs.writeFileSync(localRulesPath, JSON.stringify(output, null, 2) + '\n', 'utf-8');
+  deps.saveCompiledRulesFile(localRulesPath, output);
   deps.log.success(
     deps.tag,
     `Merged ${packRulesFile.rules.length} rule(s) from ${deps.packName}; ` +

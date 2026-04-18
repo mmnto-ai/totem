@@ -774,6 +774,8 @@ describe('nonCompilable tuple schema (#1280)', () => {
   it('loads legacy string-only nonCompilable arrays without errors', async () => {
     // Pre-#1280: nonCompilable was Array<string>. Existing 1.13.0 compiled-rules.json
     // files in the wild have this shape. The schema must keep accepting them.
+    // mmnto-ai/totem#1481: strings migrate to the 4-tuple shape with
+    // reasonCode: 'legacy-unknown'.
     const { loadCompiledRulesFile } = await import('./compiler.js');
     const rulesPath = path.join(tmpDir, 'compiled-rules.json');
     fs.writeFileSync(
@@ -785,14 +787,17 @@ describe('nonCompilable tuple schema (#1280)', () => {
       }),
     );
     const loaded = loadCompiledRulesFile(rulesPath);
-    // Loader normalizes legacy strings to {hash, title} tuples for downstream uniformity.
     expect(loaded.nonCompilable).toEqual([
-      { hash: 'legacy-hash-aaa', title: '(legacy entry)' },
-      { hash: 'legacy-hash-bbb', title: '(legacy entry)' },
+      { hash: 'legacy-hash-aaa', title: '(legacy entry)', reasonCode: 'legacy-unknown' },
+      { hash: 'legacy-hash-bbb', title: '(legacy entry)', reasonCode: 'legacy-unknown' },
     ]);
   });
 
-  it('loads new tuple-form nonCompilable arrays', async () => {
+  it('loads legacy 2-tuple nonCompilable arrays and migrates to 4-tuple', async () => {
+    // Pre-mmnto-ai/totem#1481: nonCompilable was Array<{hash, title}>. Files
+    // compiled between #1280 and #1481 carry this shape. The Read transform
+    // normalizes them to the 4-tuple with reasonCode: 'legacy-unknown' and
+    // preserves the original title.
     const { loadCompiledRulesFile } = await import('./compiler.js');
     const rulesPath = path.join(tmpDir, 'compiled-rules.json');
     fs.writeFileSync(
@@ -808,14 +813,58 @@ describe('nonCompilable tuple schema (#1280)', () => {
     );
     const loaded = loadCompiledRulesFile(rulesPath);
     expect(loaded.nonCompilable).toEqual([
-      { hash: 'newer-hash-1', title: 'Async error handling without context' },
-      { hash: 'newer-hash-2', title: 'SSR hydration mismatch logging' },
+      {
+        hash: 'newer-hash-1',
+        title: 'Async error handling without context',
+        reasonCode: 'legacy-unknown',
+      },
+      {
+        hash: 'newer-hash-2',
+        title: 'SSR hydration mismatch logging',
+        reasonCode: 'legacy-unknown',
+      },
     ]);
   });
 
-  it('loads mixed legacy + tuple arrays', async () => {
-    // Migration scenario: a project with stale legacy entries plus new tuple entries
-    // (e.g., someone upgraded mid-cycle). Loader normalizes both to tuples.
+  it('loads modern 4-tuple nonCompilable arrays without transforming them', async () => {
+    // Post-mmnto-ai/totem#1481 shape. The Read schema recognizes the full
+    // 4-tuple and passes it through unchanged (no 'legacy-unknown' coercion).
+    const { loadCompiledRulesFile } = await import('./compiler.js');
+    const rulesPath = path.join(tmpDir, 'compiled-rules.json');
+    fs.writeFileSync(
+      rulesPath,
+      JSON.stringify({
+        version: 1,
+        rules: [],
+        nonCompilable: [
+          {
+            hash: 'modern-1',
+            title: 'Cannot distill into a rule',
+            reasonCode: 'out-of-scope',
+            reason: 'Architectural principle.',
+          },
+          { hash: 'modern-2', title: 'Missing example', reasonCode: 'missing-badexample' },
+        ],
+      }),
+    );
+    const loaded = loadCompiledRulesFile(rulesPath);
+    expect(loaded.nonCompilable).toEqual([
+      {
+        hash: 'modern-1',
+        title: 'Cannot distill into a rule',
+        reasonCode: 'out-of-scope',
+        reason: 'Architectural principle.',
+      },
+      { hash: 'modern-2', title: 'Missing example', reasonCode: 'missing-badexample' },
+    ]);
+  });
+
+  it('loads mixed legacy + 2-tuple + 4-tuple arrays', async () => {
+    // Migration scenario: a project with stale legacy strings, intermediate
+    // 2-tuples, and fresh 4-tuples coexisting (e.g., someone upgraded mid
+    // cycle across multiple schema versions). Loader normalizes the first
+    // two shapes to 4-tuples with reasonCode: 'legacy-unknown' and leaves
+    // the modern entry untouched.
     const { loadCompiledRulesFile } = await import('./compiler.js');
     const rulesPath = path.join(tmpDir, 'compiled-rules.json');
     fs.writeFileSync(
@@ -826,40 +875,104 @@ describe('nonCompilable tuple schema (#1280)', () => {
         nonCompilable: [
           'legacy-hash',
           { hash: 'tuple-hash', title: 'Has a real title' },
+          { hash: 'modern-hash', title: 'Modern entry', reasonCode: 'out-of-scope' },
           'another-legacy',
         ],
       }),
     );
     const loaded = loadCompiledRulesFile(rulesPath);
     expect(loaded.nonCompilable).toEqual([
-      { hash: 'legacy-hash', title: '(legacy entry)' },
-      { hash: 'tuple-hash', title: 'Has a real title' },
-      { hash: 'another-legacy', title: '(legacy entry)' },
+      { hash: 'legacy-hash', title: '(legacy entry)', reasonCode: 'legacy-unknown' },
+      { hash: 'tuple-hash', title: 'Has a real title', reasonCode: 'legacy-unknown' },
+      { hash: 'modern-hash', title: 'Modern entry', reasonCode: 'out-of-scope' },
+      { hash: 'another-legacy', title: '(legacy entry)', reasonCode: 'legacy-unknown' },
     ]);
   });
 
-  it('round-trips tuple entries through save and load', async () => {
+  it('Write schema rejects malformed shapes with a loud error', async () => {
+    // Read schema is permissive (accepts 3 shapes); Write schema is strict.
+    // mmnto-ai/totem#1481 locks this separation so legacy 2-tuples cannot
+    // round-trip through save and silently stay legacy on disk.
+    const { NonCompilableEntryWriteSchema } = await import('./compiler.js');
+    // Legacy string: rejected on write.
+    expect(NonCompilableEntryWriteSchema.safeParse('raw-hash').success).toBe(false);
+    // Legacy 2-tuple: rejected on write.
+    expect(NonCompilableEntryWriteSchema.safeParse({ hash: 'h', title: 't' }).success).toBe(false);
+    // Modern 4-tuple: accepted.
+    expect(
+      NonCompilableEntryWriteSchema.safeParse({
+        hash: 'h',
+        title: 't',
+        reasonCode: 'out-of-scope',
+      }).success,
+    ).toBe(true);
+    // reasonCode: 'legacy-unknown' is explicitly accepted on write so migrated
+    // 2-tuples can round-trip to disk on the first post-#1481 compile (the
+    // behavioral invariant that fresh producers never emit 'legacy-unknown'
+    // lives at the call site, not the schema).
+    expect(
+      NonCompilableEntryWriteSchema.safeParse({
+        hash: 'h',
+        title: 't',
+        reasonCode: 'legacy-unknown',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('saveCompiledRulesFile rejects malformed nonCompilable entries', async () => {
+    // The writer is the last line of defense for the Read/Write invariant
+    // (lesson 400fed87). If a caller wires up a Read-shape entry into the
+    // save path, we fail loudly rather than persist it.
+    const { saveCompiledRulesFile } = await import('./compiler.js');
+    const rulesPath = path.join(tmpDir, 'compiled-rules.json');
+    const malformed = {
+      version: 1 as const,
+      rules: [],
+      // Deliberately a legacy 2-tuple — Read-shape leaking into Write path.
+      nonCompilable: [{ hash: 'h', title: 't' }] as unknown as Parameters<
+        typeof saveCompiledRulesFile
+      >[1]['nonCompilable'],
+    };
+    expect(() => saveCompiledRulesFile(rulesPath, malformed)).toThrowError(
+      /nonCompilable\[0\] failed strict write validation/,
+    );
+  });
+
+  it('round-trips 4-tuple entries through save and load', async () => {
     const { loadCompiledRulesFile, saveCompiledRulesFile } = await import('./compiler.js');
     const rulesPath = path.join(tmpDir, 'compiled-rules.json');
     saveCompiledRulesFile(rulesPath, {
       version: 1,
       rules: [],
       nonCompilable: [
-        { hash: 'roundtrip-1', title: 'First entry' },
-        { hash: 'roundtrip-2', title: 'Second entry' },
+        {
+          hash: 'roundtrip-1',
+          title: 'First entry',
+          reasonCode: 'out-of-scope',
+          reason: 'Architectural principle, not a pattern.',
+        },
+        { hash: 'roundtrip-2', title: 'Second entry', reasonCode: 'missing-badexample' },
       ],
     });
     const loaded = loadCompiledRulesFile(rulesPath);
     expect(loaded.nonCompilable).toEqual([
-      { hash: 'roundtrip-1', title: 'First entry' },
-      { hash: 'roundtrip-2', title: 'Second entry' },
+      {
+        hash: 'roundtrip-1',
+        title: 'First entry',
+        reasonCode: 'out-of-scope',
+        reason: 'Architectural principle, not a pattern.',
+      },
+      { hash: 'roundtrip-2', title: 'Second entry', reasonCode: 'missing-badexample' },
     ]);
   });
 
-  it('save normalizes legacy strings to tuples on the next round-trip', async () => {
-    // The loader normalizes on read, so when the same data flows back through save,
-    // the disk file gets the canonical tuple form. Legacy strings are a one-way
-    // migration: once loaded, they're tuples; once saved, they stay tuples.
+  it('save migrates legacy strings through load, persisting as 4-tuples with legacy-unknown', async () => {
+    // The Read transform normalizes legacy strings to 4-tuples on load
+    // (reasonCode: 'legacy-unknown'). When the normalized data flows back
+    // through save, the strict Write schema accepts `'legacy-unknown'`
+    // so migration round-trips safely on the first post-#1481 compile.
+    // Fresh compile paths still never emit `'legacy-unknown'` themselves
+    // (producer-side invariant, not schema-side).
     const { loadCompiledRulesFile, saveCompiledRulesFile } = await import('./compiler.js');
     const rulesPath = path.join(tmpDir, 'compiled-rules.json');
     fs.writeFileSync(
@@ -873,9 +986,53 @@ describe('nonCompilable tuple schema (#1280)', () => {
     const firstLoad = loadCompiledRulesFile(rulesPath);
     saveCompiledRulesFile(rulesPath, firstLoad);
     const onDisk = JSON.parse(fs.readFileSync(rulesPath, 'utf-8')) as {
-      nonCompilable: Array<{ hash: string; title: string } | string>;
+      nonCompilable: Array<{ hash: string; title: string; reasonCode: string }>;
     };
-    expect(onDisk.nonCompilable).toEqual([{ hash: 'legacy-only', title: '(legacy entry)' }]);
+    expect(onDisk.nonCompilable).toEqual([
+      { hash: 'legacy-only', title: '(legacy entry)', reasonCode: 'legacy-unknown' },
+    ]);
+  });
+});
+
+// ─── Manifest-hash backward compatibility (mmnto-ai/totem#1480) ──
+
+describe('CompiledRule manifest-hash stability with unverified flag', () => {
+  it('canonicalStringify yields identical output for undefined unverified and an absent field', async () => {
+    // Invariant #10: a CompiledRule compiled without `unverified` (absent)
+    // hashes identically to the same rule pre-#1480. The guard is that
+    // `canonicalStringify` walks `Object.keys` and ignores entries with
+    // `undefined` values (JSON.stringify drops them anyway). Explicit
+    // `unverified: false` would add the key and break every pre-#1480
+    // manifest hash on disk. We never write that literal; this test
+    // anchors the property.
+    const { canonicalStringify } = await import('./compile-manifest.js');
+    const preRule: CompiledRule = {
+      lessonHash: 'abc123def4567890',
+      lessonHeading: 'Test rule',
+      pattern: '\\bfoo\\b',
+      message: 'No foo',
+      engine: 'regex',
+      compiledAt: '2026-01-01T00:00:00Z',
+    };
+    const postRule: CompiledRule = { ...preRule, unverified: undefined };
+    expect(canonicalStringify(preRule)).toBe(canonicalStringify(postRule));
+  });
+
+  it('canonicalStringify differs when unverified is explicitly true', async () => {
+    // Negative control: the flag does change the hash when set. An
+    // unverified rule is a different rule from a verified one; they must
+    // hash differently so the manifest reflects the governance signal.
+    const { canonicalStringify } = await import('./compile-manifest.js');
+    const verifiedRule: CompiledRule = {
+      lessonHash: 'abc123def4567890',
+      lessonHeading: 'Test rule',
+      pattern: '\\bfoo\\b',
+      message: 'No foo',
+      engine: 'regex',
+      compiledAt: '2026-01-01T00:00:00Z',
+    };
+    const unverifiedRule: CompiledRule = { ...verifiedRule, unverified: true };
+    expect(canonicalStringify(verifiedRule)).not.toBe(canonicalStringify(unverifiedRule));
   });
 });
 
