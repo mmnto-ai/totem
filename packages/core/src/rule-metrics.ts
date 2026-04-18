@@ -30,6 +30,16 @@ const RuleMetricSchema = z.object({
   lastSuppressedAt: z.string().nullable(),
   /** Tracks where regex rules fire: code, string, comment, regex, or unknown context */
   contextCounts: ContextCountsSchema.optional(),
+  /**
+   * Number of lint runs that loaded and evaluated this rule (mmnto-ai/totem#1483).
+   * Incremented once per rule per `totem lint` / `totem review` invocation
+   * regardless of how many matches fire, so `totem doctor` can distinguish a
+   * rule that never ran from a rule that ran many times with zero matches.
+   * Defaults to 0 for pre-#1483 rule-metrics.json files; grows monotonically
+   * and never resets. ADR-088 Phase 1 Layer 4 substrate for stale-rule
+   * detection.
+   */
+  evaluationCount: z.number().int().nonnegative().default(0),
 });
 
 export type RuleMetric = z.infer<typeof RuleMetricSchema>;
@@ -91,6 +101,24 @@ export function recordSuppression(metrics: RuleMetricsFile, lessonHash: string):
   entry.lastSuppressedAt = new Date().toISOString();
 }
 
+/**
+ * Record that a lint run loaded and evaluated this rule (mmnto-ai/totem#1483).
+ * Must fire exactly once per rule per lint run — NOT once per match. The
+ * `runCompiledRules` caller loops over every active rule at the end of each
+ * run and calls this helper; multiple triggers on the same rule within one
+ * run still produce only one increment here.
+ *
+ * The caller (`runCompiledRules`) owns loop-once discipline. This helper is
+ * dumb on purpose: it takes a hash and adds one. Downstream consumers
+ * (`totem doctor` stale-rule check) rely on the invariant that
+ * `evaluationCount >= triggerCount / contextCounts.*` never holds in a way
+ * that contradicts "one run = one eval".
+ */
+export function recordEvaluation(metrics: RuleMetricsFile, lessonHash: string): void {
+  const entry = getOrCreate(metrics, lessonHash);
+  entry.evaluationCount++;
+}
+
 /** Record the AST context where a rule fired. */
 export function recordContextHit(
   metrics: RuleMetricsFile,
@@ -114,6 +142,7 @@ function getOrCreate(metrics: RuleMetricsFile, lessonHash: string): RuleMetric {
       suppressCount: 0,
       lastTriggeredAt: null,
       lastSuppressedAt: null,
+      evaluationCount: 0,
     };
     metrics.rules[lessonHash] = entry;
   }

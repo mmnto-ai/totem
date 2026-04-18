@@ -22,6 +22,7 @@ export type {
   ConfigTier,
   ContentType,
   DocTarget,
+  DoctorConfig,
   EmbeddingProvider,
   GarbageCollectionConfig,
   IngestTarget,
@@ -37,6 +38,7 @@ export {
   DEFAULT_IGNORE_PATTERNS,
   DEFAULT_REVIEW_SOURCE_EXTENSIONS,
   DocTargetSchema,
+  DoctorConfigSchema,
   EmbeddingProviderSchema,
   GarbageCollectionSchema,
   GeminiOrchestratorSchema,
@@ -275,6 +277,7 @@ export type { ContextCounts, RuleMetric, RuleMetricsFile } from './rule-metrics.
 export {
   loadRuleMetrics,
   recordContextHit,
+  recordEvaluation,
   recordSuppression,
   recordTrigger,
   saveRuleMetrics,
@@ -286,6 +289,7 @@ export type {
   CompileLessonCallbacks,
   CompileLessonDeps,
   CompileLessonResult,
+  LayerTraceEvent,
   LessonInput,
 } from './compile-lesson.js';
 export {

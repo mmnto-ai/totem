@@ -167,6 +167,26 @@ export const GarbageCollectionSchema = z.object({
     .default(['security']),
 });
 
+/**
+ * Doctor configuration (mmnto-ai/totem#1483). Controls the stale-rule
+ * advisory window in `totem doctor`. A single integer threshold on
+ * `RuleMetric.evaluationCount`.
+ */
+export const DoctorConfigSchema = z
+  .object({
+    /**
+     * Minimum cumulative `RuleMetric.evaluationCount` before `totem doctor` will
+     * flag a rule as stale (zero `contextCounts.code` over the rule's lifetime).
+     *
+     * v1 uses cumulative-lifetime semantics: a rule fires once ever, then goes
+     * silent, and stays exempt. mmnto-ai/totem#1550 tracks swapping to true
+     * rolling-window semantics via `RuleMetric.runHistory` ring buffer. The
+     * config key stays; only the underlying math upgrades. No user migration.
+     */
+    staleRuleWindow: z.number().int().min(1).default(10),
+  })
+  .default({});
+
 export const DocTargetSchema = z.object({
   /** Relative path to the document */
   path: z.string(),
@@ -272,6 +292,9 @@ export const TotemConfigSchema = z.object({
   /** Optional: garbage collection settings for stale compiled rules */
   garbageCollection: GarbageCollectionSchema.optional(),
 
+  /** Optional: doctor stale-rule advisory thresholds (mmnto-ai/totem#1483) */
+  doctor: DoctorConfigSchema.optional(),
+
   /** Optional: pilot mode — warn-only hooks during initial adoption.
    *  `true` uses defaults (14 days / 50 pushes). Object form overrides thresholds. */
   pilot: z
@@ -306,6 +329,7 @@ export type IngestTarget = z.infer<typeof IngestTargetSchema>;
 export type EmbeddingProvider = z.infer<typeof EmbeddingProviderSchema>;
 export type Orchestrator = z.infer<typeof OrchestratorSchema>;
 export type GarbageCollectionConfig = z.infer<typeof GarbageCollectionSchema>;
+export type DoctorConfig = z.infer<typeof DoctorConfigSchema>;
 export type DocTarget = z.infer<typeof DocTargetSchema>;
 export type TotemConfig = z.infer<typeof TotemConfigSchema>;
 

@@ -17,8 +17,10 @@ import {
   checkLinkedIndexes,
   checkSecretLeaks,
   checkSecretsFileTracked,
+  checkStaleRules,
   checkUpgradeCandidates,
   doctorCommand,
+  findStaleRules,
   MIN_CONTEXT_EVENTS,
   MIN_EVENTS,
   NON_CODE_THRESHOLD,
@@ -301,7 +303,7 @@ describe('doctorCommand', () => {
   it('runs without throwing', async () => {
     const results = await doctorCommand();
     expect(results).toBeDefined();
-    expect(results.length).toBe(9);
+    expect(results.length).toBe(10);
   });
 
   it('returns correct check names', async () => {
@@ -316,6 +318,7 @@ describe('doctorCommand', () => {
     expect(names).toContain('Secret Scan');
     expect(names).toContain('Secrets File Security');
     expect(names).toContain('Upgrade Candidates');
+    expect(names).toContain('Stale Rules');
   });
 });
 
@@ -360,6 +363,7 @@ describe('doctorCommand output', () => {
     expect(output).toContain('Secret Scan');
     expect(output).toContain('Secrets File Security');
     expect(output).toContain('Upgrade Candidates');
+    expect(output).toContain('Stale Rules');
   });
 
   it('outputs summary line with pass/warn/fail counts', async () => {
@@ -1348,5 +1352,389 @@ describe('checkLinkedIndexes (#1308)', () => {
     expect(result.status).toBe('warn');
     expect(result.name).toBe('Linked Indexes');
     expect(result.remediation).toContain('does not exist');
+  });
+});
+
+// ─── Stale rules (mmnto-ai/totem#1483) ──────────────────
+
+describe('findStaleRules + checkStaleRules', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  // Seed a 5-rule fixture exercising every branch of findStaleRules:
+  //   A: fresh (evaluationCount < window) — should be ignored
+  //   B: stale standard (evaluationCount >= window, 0 code hits) — flagged warn
+  //   C: stale security via category=security — flagged severe
+  //   D: healthy (evaluationCount >= window, code hits > 0) — ignored
+  //   E: stale security via immutable=true (no category) — flagged severe
+  function seedFixture(tmpDir: string, options: { window: number } = { window: 10 }): void {
+    const totemDir = path.join(tmpDir, '.totem');
+    fs.mkdirSync(totemDir, { recursive: true });
+    fs.mkdirSync(path.join(totemDir, 'cache'), { recursive: true });
+
+    const compiledRulesFile = {
+      version: 1,
+      rules: [
+        {
+          lessonHash: 'rule-A-fresh',
+          lessonHeading: 'Rule A (fresh)',
+          pattern: 'foo',
+          message: 'A',
+          engine: 'regex',
+          compiledAt: '2026-04-01T00:00:00.000Z',
+          createdAt: '2026-04-01T00:00:00.000Z',
+        },
+        {
+          lessonHash: 'rule-B-stale',
+          lessonHeading: 'Rule B (stale standard)',
+          pattern: 'bar',
+          message: 'B',
+          engine: 'regex',
+          compiledAt: '2026-03-01T00:00:00.000Z',
+          createdAt: '2026-03-01T00:00:00.000Z',
+        },
+        {
+          lessonHash: 'rule-C-stale-security',
+          lessonHeading: 'Rule C (stale security)',
+          pattern: 'baz',
+          message: 'C',
+          engine: 'regex',
+          compiledAt: '2026-02-01T00:00:00.000Z',
+          createdAt: '2026-02-01T00:00:00.000Z',
+          category: 'security' as const,
+        },
+        {
+          lessonHash: 'rule-D-healthy',
+          lessonHeading: 'Rule D (healthy)',
+          pattern: 'qux',
+          message: 'D',
+          engine: 'regex',
+          compiledAt: '2026-01-01T00:00:00.000Z',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          lessonHash: 'rule-E-stale-immutable',
+          lessonHeading: 'Rule E (stale immutable)',
+          pattern: 'zot',
+          message: 'E',
+          engine: 'regex',
+          compiledAt: '2026-02-15T00:00:00.000Z',
+          createdAt: '2026-02-15T00:00:00.000Z',
+          immutable: true,
+        },
+      ],
+      nonCompilable: [],
+    };
+    fs.writeFileSync(path.join(totemDir, 'compiled-rules.json'), JSON.stringify(compiledRulesFile));
+
+    const metricsFile = {
+      version: 1,
+      rules: {
+        'rule-A-fresh': {
+          triggerCount: 0,
+          suppressCount: 0,
+          lastTriggeredAt: null,
+          lastSuppressedAt: null,
+          evaluationCount: Math.max(0, options.window - 1),
+          contextCounts: { code: 0, string: 0, comment: 0, regex: 0, unknown: 0 },
+        },
+        'rule-B-stale': {
+          triggerCount: 0,
+          suppressCount: 0,
+          lastTriggeredAt: null,
+          lastSuppressedAt: null,
+          evaluationCount: options.window + 5,
+          contextCounts: { code: 0, string: 0, comment: 0, regex: 0, unknown: 0 },
+        },
+        'rule-C-stale-security': {
+          triggerCount: 0,
+          suppressCount: 0,
+          lastTriggeredAt: null,
+          lastSuppressedAt: null,
+          evaluationCount: options.window + 2,
+          contextCounts: { code: 0, string: 0, comment: 0, regex: 0, unknown: 0 },
+        },
+        'rule-D-healthy': {
+          triggerCount: 5,
+          suppressCount: 0,
+          lastTriggeredAt: '2026-03-15T00:00:00.000Z',
+          lastSuppressedAt: null,
+          evaluationCount: options.window + 5,
+          contextCounts: { code: 5, string: 0, comment: 0, regex: 0, unknown: 0 },
+        },
+        'rule-E-stale-immutable': {
+          triggerCount: 0,
+          suppressCount: 0,
+          lastTriggeredAt: null,
+          lastSuppressedAt: null,
+          evaluationCount: options.window + 3,
+          contextCounts: { code: 0, string: 0, comment: 0, regex: 0, unknown: 0 },
+        },
+      },
+    };
+    fs.writeFileSync(
+      path.join(totemDir, 'cache', 'rule-metrics.json'),
+      JSON.stringify(metricsFile),
+    );
+  }
+
+  it('returns null when compiled-rules.json is missing', async () => {
+    const result = await findStaleRules(tmpDir);
+    expect(result).toBeNull();
+  });
+
+  it('flags stale standard and stale security rules; ignores fresh + healthy', async () => {
+    seedFixture(tmpDir);
+    const result = await findStaleRules(tmpDir);
+    expect(result).not.toBeNull();
+    const hashes = result!.map((c) => c.lessonHash);
+    expect(hashes).toContain('rule-B-stale');
+    expect(hashes).toContain('rule-C-stale-security');
+    expect(hashes).toContain('rule-E-stale-immutable');
+    expect(hashes).not.toContain('rule-A-fresh');
+    expect(hashes).not.toContain('rule-D-healthy');
+  });
+
+  it('assigns severity "security" to category=security and immutable=true rules, ordering them first', async () => {
+    seedFixture(tmpDir);
+    const result = await findStaleRules(tmpDir);
+    expect(result).not.toBeNull();
+    // Both security rules come before any standard rule. Among the two
+    // security rules, E (evaluationCount 13) sorts ahead of C (12) by the
+    // evaluationCount-desc tiebreaker.
+    expect(result![0]!.lessonHash).toBe('rule-E-stale-immutable');
+    expect(result![0]!.severity).toBe('security');
+    expect(result![0]!.flags.immutable).toBe(true);
+    expect(result![1]!.lessonHash).toBe('rule-C-stale-security');
+    expect(result![1]!.severity).toBe('security');
+    expect(result![1]!.flags.category).toBe('security');
+    expect(result![2]!.lessonHash).toBe('rule-B-stale');
+    expect(result![2]!.severity).toBe('standard');
+  });
+
+  it('never recommends archival for security rules (category=security or immutable=true)', async () => {
+    seedFixture(tmpDir);
+    const result = await findStaleRules(tmpDir);
+    const securityRules = result!.filter((c) => c.severity === 'security');
+    expect(securityRules.length).toBe(2);
+    for (const security of securityRules) {
+      expect(security.recommendation).not.toContain('archived');
+      expect(security.recommendation).toContain('Do not archive');
+      expect(security.recommendation).toContain('totem compile --upgrade');
+    }
+  });
+
+  it('recommends either upgrade or archive for standard stale rules', async () => {
+    seedFixture(tmpDir);
+    const result = await findStaleRules(tmpDir);
+    const standard = result!.find((c) => c.severity === 'standard')!;
+    expect(standard.recommendation).toContain('totem compile --upgrade');
+    expect(standard.recommendation).toContain('archived');
+  });
+
+  it('respects a custom staleRuleWindow threshold passed through the call', async () => {
+    // Rule B has evaluationCount 15, Rule C has 12, Rule E has 13. Push the
+    // window up to 14 so only Rule B qualifies.
+    seedFixture(tmpDir, { window: 10 });
+    const result = await findStaleRules(tmpDir, '.totem', { staleRuleWindow: 14 });
+    const hashes = result!.map((c) => c.lessonHash);
+    expect(hashes).toEqual(['rule-B-stale']);
+  });
+
+  it('flags rules whose evaluationCount exactly equals staleRuleWindow', async () => {
+    // Boundary test for the >= semantics at the staleness check site. A rule
+    // with evaluationCount === staleRuleWindow and zero code hits must flag.
+    // Guards against an off-by-one regression that would flip the check to >.
+    const totemDir = path.join(tmpDir, '.totem');
+    fs.mkdirSync(path.join(totemDir, 'cache'), { recursive: true });
+    fs.writeFileSync(
+      path.join(totemDir, 'compiled-rules.json'),
+      JSON.stringify({
+        version: 1,
+        rules: [
+          {
+            lessonHash: 'rule-boundary',
+            lessonHeading: 'exact window',
+            pattern: 'x',
+            message: 'x',
+            engine: 'regex',
+            compiledAt: '2026-01-01T00:00:00.000Z',
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        nonCompilable: [],
+      }),
+    );
+    fs.writeFileSync(
+      path.join(totemDir, 'cache', 'rule-metrics.json'),
+      JSON.stringify({
+        version: 1,
+        rules: {
+          'rule-boundary': {
+            triggerCount: 0,
+            suppressCount: 0,
+            lastTriggeredAt: null,
+            lastSuppressedAt: null,
+            evaluationCount: 10,
+            contextCounts: { code: 0, string: 0, comment: 0, regex: 0, unknown: 0 },
+          },
+        },
+      }),
+    );
+    const result = await findStaleRules(tmpDir, '.totem', { staleRuleWindow: 10 });
+    const hashes = result!.map((c) => c.lessonHash);
+    expect(hashes).toEqual(['rule-boundary']);
+  });
+
+  it('never flags rules below staleRuleWindow regardless of zero hits', async () => {
+    // Seed a fresh rule with evaluationCount = 0 explicitly; should never
+    // flag even after infinite runs.
+    const totemDir = path.join(tmpDir, '.totem');
+    fs.mkdirSync(path.join(totemDir, 'cache'), { recursive: true });
+    fs.writeFileSync(
+      path.join(totemDir, 'compiled-rules.json'),
+      JSON.stringify({
+        version: 1,
+        rules: [
+          {
+            lessonHash: 'rule-zero',
+            lessonHeading: 'zero',
+            pattern: 'x',
+            message: 'x',
+            engine: 'regex',
+            compiledAt: '2026-01-01T00:00:00.000Z',
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        nonCompilable: [],
+      }),
+    );
+    fs.writeFileSync(
+      path.join(totemDir, 'cache', 'rule-metrics.json'),
+      JSON.stringify({
+        version: 1,
+        rules: {
+          'rule-zero': {
+            triggerCount: 0,
+            suppressCount: 0,
+            lastTriggeredAt: null,
+            lastSuppressedAt: null,
+            evaluationCount: 0,
+            contextCounts: { code: 0, string: 0, comment: 0, regex: 0, unknown: 0 },
+          },
+        },
+      }),
+    );
+    const result = await findStaleRules(tmpDir);
+    expect(result).toEqual([]);
+  });
+
+  it('skips archived rules', async () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    fs.mkdirSync(path.join(totemDir, 'cache'), { recursive: true });
+    fs.writeFileSync(
+      path.join(totemDir, 'compiled-rules.json'),
+      JSON.stringify({
+        version: 1,
+        rules: [
+          {
+            lessonHash: 'rule-archived',
+            lessonHeading: 'already archived',
+            pattern: 'x',
+            message: 'x',
+            engine: 'regex',
+            compiledAt: '2026-01-01T00:00:00.000Z',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            status: 'archived',
+          },
+        ],
+        nonCompilable: [],
+      }),
+    );
+    fs.writeFileSync(
+      path.join(totemDir, 'cache', 'rule-metrics.json'),
+      JSON.stringify({
+        version: 1,
+        rules: {
+          'rule-archived': {
+            triggerCount: 0,
+            suppressCount: 0,
+            lastTriggeredAt: null,
+            lastSuppressedAt: null,
+            evaluationCount: 100,
+            contextCounts: { code: 0, string: 0, comment: 0, regex: 0, unknown: 0 },
+          },
+        },
+      }),
+    );
+    const result = await findStaleRules(tmpDir);
+    expect(result).toEqual([]);
+  });
+
+  it('checkStaleRules returns pass when no rules are stale', async () => {
+    // Only seed a healthy rule.
+    const totemDir = path.join(tmpDir, '.totem');
+    fs.mkdirSync(path.join(totemDir, 'cache'), { recursive: true });
+    fs.writeFileSync(
+      path.join(totemDir, 'compiled-rules.json'),
+      JSON.stringify({
+        version: 1,
+        rules: [
+          {
+            lessonHash: 'rule-healthy',
+            lessonHeading: 'healthy',
+            pattern: 'x',
+            message: 'x',
+            engine: 'regex',
+            compiledAt: '2026-01-01T00:00:00.000Z',
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        nonCompilable: [],
+      }),
+    );
+    fs.writeFileSync(
+      path.join(totemDir, 'cache', 'rule-metrics.json'),
+      JSON.stringify({
+        version: 1,
+        rules: {
+          'rule-healthy': {
+            triggerCount: 5,
+            suppressCount: 0,
+            lastTriggeredAt: null,
+            lastSuppressedAt: null,
+            evaluationCount: 20,
+            contextCounts: { code: 5, string: 0, comment: 0, regex: 0, unknown: 0 },
+          },
+        },
+      }),
+    );
+    const result = await checkStaleRules(tmpDir);
+    expect(result.status).toBe('pass');
+  });
+
+  it('checkStaleRules returns warn with candidate details when stale rules exist', async () => {
+    seedFixture(tmpDir);
+    const result = await checkStaleRules(tmpDir);
+    expect(result.status).toBe('warn');
+    // Structured count check: seedFixture produces 2 security + 1 standard
+    // stale rule. Match explicit "N security" / "N standard" phrasing so a
+    // renderer change that drops the category split fails loud rather than
+    // passing on any digit that happens to appear anywhere in the message.
+    expect(result.message).toMatch(/\b2\s+security\b/i);
+    expect(result.message).toMatch(/\b1\s+standard\b/i);
+    expect(result.remediation).toContain('totem compile --upgrade');
+  });
+
+  it('checkStaleRules returns skip when compiled-rules.json is missing', async () => {
+    const result = await checkStaleRules(tmpDir);
+    expect(result.status).toBe('skip');
   });
 });

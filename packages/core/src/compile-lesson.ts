@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { Lang, parse } from '@ast-grep/napi';
 
 import { runSmokeGate } from './compile-smoke-gate.js';
@@ -42,11 +44,49 @@ export interface LessonInput {
  */
 export type CompileLessonReasonCode = Exclude<NonCompilableReasonCode, 'legacy-unknown'>;
 
+/**
+ * Single event inside a lesson's compile pipeline. Appended to a per-lesson
+ * `trace` array on every pipeline step (generate / verify / retry / result)
+ * and surfaced via `CompileLessonResult.trace` for the CLI `--verbose`
+ * renderer (mmnto-ai/totem#1482).
+ *
+ * `layer` numbers align with the ADR-088 staging (1 = manual, 2 = example-
+ * based, 3 = Layer 3 LLM with verify-retry). Consumers MUST tolerate unknown
+ * layer numbers so a future ADR-088 phase (dedicated Layer 1 / Layer 2
+ * telemetry) can emit without breaking the renderer.
+ *
+ * `patternHash` is a stable 16-character sha256 prefix of the emitted
+ * pattern, included only on `generate` events. Callers use it to correlate
+ * retries ("this retry produced the same pattern") without forwarding the
+ * pattern string itself.
+ *
+ * `reasonCode` is only set on the terminal `result` event when the lesson
+ * skipped. A compiled or failed lesson omits the field.
+ */
+export interface LayerTraceEvent {
+  layer: number;
+  action: 'generate' | 'verify' | 'retry' | 'result';
+  outcome: string;
+  patternHash?: string;
+  reasonCode?: Exclude<NonCompilableReasonCode, 'legacy-unknown'>;
+}
+
 export type CompileLessonResult =
-  | { status: 'compiled'; rule: CompiledRule }
-  | { status: 'skipped'; hash: string; reason?: string; reasonCode: CompileLessonReasonCode }
-  | { status: 'failed' }
-  | { status: 'noop' };
+  | { status: 'compiled'; rule: CompiledRule; trace?: LayerTraceEvent[] }
+  | {
+      status: 'skipped';
+      hash: string;
+      reason?: string;
+      reasonCode: CompileLessonReasonCode;
+      trace?: LayerTraceEvent[];
+    }
+  | { status: 'failed'; trace?: LayerTraceEvent[] }
+  | { status: 'noop'; trace?: LayerTraceEvent[] };
+
+/** Produce a stable short hash of a pattern string for trace correlation. */
+function hashPattern(pattern: string): string {
+  return createHash('sha256').update(pattern).digest('hex').slice(0, 16);
+}
 
 export interface CompileLessonCallbacks {
   onWarn?: (heading: string, message: string) => void;
@@ -626,6 +666,12 @@ export async function compileLesson(
   const { parseCompilerResponse, runOrchestrator, existingByHash, callbacks } = deps;
   const exampleHitPresent = hasExampleHits(lesson.body);
 
+  // Trace buffer (mmnto-ai/totem#1482). Populated unconditionally across all
+  // three pipelines so the CLI can choose to render it under --verbose
+  // without a per-call gate. Cost of empty-or-small arrays per lesson is
+  // negligible; gating would fork the test surface.
+  const trace: LayerTraceEvent[] = [];
+
   // ── Pipeline 1: Manual pattern (zero LLM) ────────
   const manualResult = buildManualRule(lesson, existingByHash);
   if (manualResult.rule) {
@@ -634,11 +680,18 @@ export async function compileLesson(
     if (!exampleHitPresent && isSecurityContext(deps, manualResult.rule)) {
       const reason = 'Security rule missing Example Hit block (manual)';
       callbacks?.onWarn?.(lesson.heading, `${reason} — rejecting`);
+      trace.push({
+        layer: 1,
+        action: 'result',
+        outcome: 'skipped',
+        reasonCode: 'security-rule-rejected',
+      });
       return {
         status: 'skipped',
         hash: lesson.hash,
         reason,
         reasonCode: 'security-rule-rejected',
+        trace,
       };
     }
     const testResult = verifyRuleExamples(manualResult.rule, lesson.body);
@@ -650,16 +703,19 @@ export async function compileLesson(
       // `hasExampleHits` check guards the unverified flag below without
       // changing the verify gate itself.
       callbacks?.onWarn?.(lesson.heading, formatExampleFailure(testResult));
-      return { status: 'failed' };
+      trace.push({ layer: 1, action: 'result', outcome: 'failed' });
+      return { status: 'failed', trace };
     }
     if (!exampleHitPresent) {
       manualResult.rule.unverified = true;
     }
-    return { status: 'compiled', rule: manualResult.rule };
+    trace.push({ layer: 1, action: 'result', outcome: 'compiled' });
+    return { status: 'compiled', rule: manualResult.rule, trace };
   }
   if (manualResult.rejectReason) {
     callbacks?.onWarn?.(lesson.heading, manualResult.rejectReason);
-    return { status: 'failed' };
+    trace.push({ layer: 1, action: 'result', outcome: 'failed' });
+    return { status: 'failed', trace };
   }
   // manualResult.rule === null && no rejectReason → no manual pattern, proceed to Pipeline 3 or 2
 
@@ -670,11 +726,18 @@ export async function compileLesson(
   if (!exampleHitPresent && deps.securityContext === true) {
     const reason = 'Security rule missing Example Hit block';
     callbacks?.onWarn?.(lesson.heading, `${reason} — rejecting`);
+    trace.push({
+      layer: 3,
+      action: 'result',
+      outcome: 'skipped',
+      reasonCode: 'security-rule-rejected',
+    });
     return {
       status: 'skipped',
       hash: lesson.hash,
       reason,
       reasonCode: 'security-rule-rejected',
+      trace,
     };
   }
 
@@ -702,28 +765,56 @@ export async function compileLesson(
     ].join('\n');
 
     const response = await runOrchestrator(userPrompt, systemPrompt);
-    if (response == null) return { status: 'noop' };
+    if (response == null) {
+      trace.push({ layer: 2, action: 'result', outcome: 'noop' });
+      return { status: 'noop', trace };
+    }
 
     const parsed = parseCompilerResponse(response);
     if (!parsed) {
       callbacks?.onWarn?.(lesson.heading, 'Pipeline 3: failed to parse LLM response — skipping');
+      trace.push({
+        layer: 2,
+        action: 'result',
+        outcome: 'skipped',
+        reasonCode: 'pattern-syntax-invalid',
+      });
       return {
         status: 'skipped',
         hash: lesson.hash,
         reason: 'Pipeline 3: failed to parse LLM response',
         reasonCode: 'pattern-syntax-invalid',
+        trace,
       };
     }
 
     if (!parsed.compilable) {
       callbacks?.onDim?.(lesson.heading, 'Pipeline 3: not compilable — skipping');
+      trace.push({
+        layer: 2,
+        action: 'result',
+        outcome: 'skipped',
+        reasonCode: 'out-of-scope',
+      });
       return {
         status: 'skipped',
         hash: lesson.hash,
         reason: parsed.reason,
         reasonCode: 'out-of-scope',
+        trace,
       };
     }
+
+    // Only include `patternHash` when the parsed output actually carries a
+    // pattern. Hashing the `(pattern unavailable)` fallback would make a
+    // failed generation look identical to a successful one in verbose output.
+    const pipeline3HasPattern = hasExtractablePattern(parsed);
+    trace.push({
+      layer: 2,
+      action: 'generate',
+      outcome: 'produced',
+      ...(pipeline3HasPattern ? { patternHash: hashPattern(extractPatternString(parsed)) } : {}),
+    });
 
     // mmnto/totem#1408: Pipeline 3 reuses its Bad snippet as the smoke-gate
     // target. The LLM may or may not echo the snippet back in parsed.badExample;
@@ -735,11 +826,15 @@ export async function compileLesson(
     if (!ruleResult.rule) {
       const rejectReason = ruleResult.rejectReason ?? 'Unknown error';
       callbacks?.onWarn?.(lesson.heading, `Pipeline 3: ${rejectReason} — skipping`);
+      const reasonCode = classifyBuildRejectReason(rejectReason);
+      trace.push({ layer: 2, action: 'verify', outcome: 'rejected' });
+      trace.push({ layer: 2, action: 'result', outcome: 'skipped', reasonCode });
       return {
         status: 'skipped',
         hash: lesson.hash,
         reason: `Pipeline 3: ${rejectReason}`,
-        reasonCode: classifyBuildRejectReason(rejectReason),
+        reasonCode,
+        trace,
       };
     }
 
@@ -761,8 +856,13 @@ export async function compileLesson(
         lesson.heading,
         'Pipeline 3: generated rule failed self-verification against Bad/Good snippets — skipping',
       );
-      return { status: 'failed' };
+      trace.push({ layer: 2, action: 'verify', outcome: 'self-test-failed' });
+      trace.push({ layer: 2, action: 'result', outcome: 'failed' });
+      return { status: 'failed', trace };
     }
+
+    trace.push({ layer: 2, action: 'verify', outcome: 'passed' });
+    trace.push({ layer: 2, action: 'result', outcome: 'compiled' });
 
     // Pipeline 3 rules are example-based — they always ship with a Bad snippet
     // by construction. Flag unverified only when the lesson body itself omits
@@ -772,7 +872,7 @@ export async function compileLesson(
       ruleResult.rule.unverified = true;
     }
 
-    return { status: 'compiled', rule: ruleResult.rule };
+    return { status: 'compiled', rule: ruleResult.rule, trace };
   }
 
   // ── Pipeline 2 / Layer 3: LLM compilation with verify-retry loop ──
@@ -815,28 +915,56 @@ export async function compileLesson(
     const userPrompt = userPromptParts.join('\n\n');
     const response = await runOrchestrator(userPrompt, compilerPrompt);
 
-    if (response == null) return { status: 'noop' };
+    if (response == null) {
+      trace.push({ layer: 3, action: 'result', outcome: 'noop' });
+      return { status: 'noop', trace };
+    }
 
     const parsed = parseCompilerResponse(response);
     if (!parsed) {
       callbacks?.onWarn?.(lesson.heading, 'Failed to parse LLM response — skipping');
+      trace.push({
+        layer: 3,
+        action: 'result',
+        outcome: 'skipped',
+        reasonCode: 'pattern-syntax-invalid',
+      });
       return {
         status: 'skipped',
         hash: lesson.hash,
         reason: 'Failed to parse LLM response',
         reasonCode: 'pattern-syntax-invalid',
+        trace,
       };
     }
 
     if (!parsed.compilable) {
       callbacks?.onDim?.(lesson.heading, 'Not compilable (conceptual/architectural) — skipping');
+      trace.push({
+        layer: 3,
+        action: 'result',
+        outcome: 'skipped',
+        reasonCode: 'out-of-scope',
+      });
       return {
         status: 'skipped',
         hash: lesson.hash,
         reason: parsed.reason,
         reasonCode: 'out-of-scope',
+        trace,
       };
     }
+
+    // Only include `patternHash` when the parsed output actually carries a
+    // pattern. Hashing the `(pattern unavailable)` fallback would make a
+    // failed generation look identical to a successful one in verbose output.
+    const currentHasPattern = hasExtractablePattern(parsed);
+    trace.push({
+      layer: 3,
+      action: 'generate',
+      outcome: `attempt-${attempt}`,
+      ...(currentHasPattern ? { patternHash: hashPattern(extractPatternString(parsed)) } : {}),
+    });
 
     // Smoke gate enforcement lives in buildCompiledRule (mmnto-ai/totem#1408).
     // Rules without a badExample, or whose badExample fails to match the
@@ -864,12 +992,15 @@ export async function compileLesson(
         if (!exampleHitPresent) {
           ruleResult.rule.unverified = true;
         }
-        return { status: 'compiled', rule: ruleResult.rule };
+        trace.push({ layer: 3, action: 'verify', outcome: 'MATCH' });
+        trace.push({ layer: 3, action: 'result', outcome: 'compiled' });
+        return { status: 'compiled', rule: ruleResult.rule, trace };
       }
       // Example Hit/Miss verification failed against the lesson's ground
       // truth. ADR-088 AC: "verifies every LLM-generated pattern against
       // the lesson's Example Hit block. Zero-match triggers a retry."
       retryReason = formatExampleFailure(testResult);
+      trace.push({ layer: 3, action: 'verify', outcome: 'example-hit-miss' });
       // The snippet the retry directive should show is the Example Hit
       // line the pattern missed, not the LLM's own badExample (which the
       // pattern did match, since the smoke gate passed). If missedFails
@@ -889,11 +1020,19 @@ export async function compileLesson(
       // Short-circuit to skipped with a distinct reasonCode.
       if (rejectReason.includes('missing badExample')) {
         callbacks?.onWarn?.(lesson.heading, `${rejectReason} — skipping`);
+        trace.push({ layer: 3, action: 'verify', outcome: 'missing-badexample' });
+        trace.push({
+          layer: 3,
+          action: 'result',
+          outcome: 'skipped',
+          reasonCode: 'missing-badexample',
+        });
         return {
           status: 'skipped',
           hash: lesson.hash,
           reason: rejectReason,
           reasonCode: 'missing-badexample',
+          trace,
         };
       }
 
@@ -907,16 +1046,21 @@ export async function compileLesson(
       const isZeroMatch = rejectReason.startsWith('smoke gate: zero matches');
       if (!isZeroMatch) {
         callbacks?.onWarn?.(lesson.heading, `${rejectReason} — skipping`);
+        const reasonCode = classifyBuildRejectReason(rejectReason);
+        trace.push({ layer: 3, action: 'verify', outcome: 'validator-rejected' });
+        trace.push({ layer: 3, action: 'result', outcome: 'skipped', reasonCode });
         return {
           status: 'skipped',
           hash: lesson.hash,
           reason: rejectReason,
-          reasonCode: classifyBuildRejectReason(rejectReason),
+          reasonCode,
+          trace,
         };
       }
 
       retryReason = rejectReason;
       retrySnippet = parsed.badExample ?? '(no badExample emitted)';
+      trace.push({ layer: 3, action: 'verify', outcome: 'smoke-gate-zero-match' });
     }
 
     // Shared retry path. Triggered by smoke-gate zero-match OR by
@@ -929,11 +1073,18 @@ export async function compileLesson(
         lesson.heading,
         `Security rule rejected on verify failure (no retry): ${retryReason}`,
       );
+      trace.push({
+        layer: 3,
+        action: 'result',
+        outcome: 'skipped',
+        reasonCode: 'security-rule-rejected',
+      });
       return {
         status: 'skipped',
         hash: lesson.hash,
         reason: retryReason,
         reasonCode: 'security-rule-rejected',
+        trace,
       };
     }
 
@@ -947,6 +1098,7 @@ export async function compileLesson(
         lesson.heading,
         `Verify failed (attempt ${attempt}/${MAX_VERIFY_ATTEMPTS}): ${retryReason} — retrying`,
       );
+      trace.push({ layer: 3, action: 'retry', outcome: `attempt-${attempt + 1}-scheduled` });
       continue;
     }
 
@@ -955,17 +1107,27 @@ export async function compileLesson(
       lesson.heading,
       `Verify retry exhausted after ${MAX_VERIFY_ATTEMPTS} attempts: ${retryReason} — skipping`,
     );
+    trace.push({
+      layer: 3,
+      action: 'result',
+      outcome: 'skipped',
+      reasonCode: 'verify-retry-exhausted',
+    });
     return {
       status: 'skipped',
       hash: lesson.hash,
       reason: `Verify retry exhausted after ${MAX_VERIFY_ATTEMPTS} attempts: ${retryReason}`,
       reasonCode: 'verify-retry-exhausted',
+      trace,
     };
   }
 
   // Unreachable: every path inside the loop returns. Kept to satisfy the
-  // return-type checker without using a non-null assertion dance.
-  return { status: 'failed' };
+  // return-type checker without using a non-null assertion dance. Push a
+  // terminal result event defensively so any caller relying on the
+  // terminal-result invariant still sees one even if the loop ever leaks.
+  trace.push({ layer: 3, action: 'result', outcome: 'failed' });
+  return { status: 'failed', trace };
 }
 
 // ─── Retry loop helpers (ADR-088 Layer 3) ──────────
@@ -1014,6 +1176,21 @@ function extractPatternString(parsed: CompilerOutput): string {
   }
   if (parsed.astGrepYamlRule) return JSON.stringify(parsed.astGrepYamlRule, null, 2);
   return '(pattern unavailable)';
+}
+
+/**
+ * Whether the parsed compiler output carries a concrete pattern we can hash.
+ * Callers emitting a `generate` trace event use this guard so the event
+ * records `patternHash` only when the LLM actually produced a pattern; a
+ * missing-pattern case emits the event without the field rather than
+ * hashing the `(pattern unavailable)` fallback, which would misleadingly
+ * look like a successful generation in verbose output.
+ */
+function hasExtractablePattern(parsed: CompilerOutput): boolean {
+  if (typeof parsed.pattern === 'string' && parsed.pattern.length > 0) return true;
+  if (typeof parsed.astGrepPattern === 'string' && parsed.astGrepPattern.length > 0) return true;
+  if (parsed.astGrepYamlRule) return true;
+  return false;
 }
 
 /**

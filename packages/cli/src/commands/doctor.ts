@@ -744,6 +744,167 @@ export interface UpgradeCandidate {
   nonCodeRatio: number;
 }
 
+// ─── Stale-rule detection (mmnto-ai/totem#1483) ────────
+
+/**
+ * Pure helper signature: a staleness candidate as returned by
+ * `findStaleRules`. The `severity` distinction lets the formatter label
+ * security rules visually distinct from standard rules without the caller
+ * needing to re-derive the category from the compiled rule.
+ */
+export interface StaleRuleCandidate {
+  lessonHash: string;
+  heading: string;
+  evaluationCount: number;
+  severity: 'standard' | 'security';
+  /** The recommended next step surfaced in the advisory text. */
+  recommendation: string;
+  /** Compile-metadata flags relevant to the advisory. */
+  flags: {
+    unverified?: boolean;
+    immutable?: boolean;
+    category?: string;
+  };
+}
+
+/**
+ * Pure helper: scan compiled rules + metrics and return structured
+ * stale-rule candidates. A rule is stale when it has accrued at least
+ * `staleRuleWindow` evaluations over its lifetime and has never landed a
+ * match in code context (`contextCounts.code === 0`).
+ *
+ * Security rules (`category === 'security'` OR `immutable === true`) get
+ * flagged with the `security` severity so the formatter can mark them
+ * with a higher-severity label. Per the design doc, doctor never
+ * recommends archival for security rules.
+ */
+export async function findStaleRules(
+  cwd: string,
+  totemDir = '.totem',
+  thresholds: { staleRuleWindow: number } = { staleRuleWindow: 10 },
+): Promise<StaleRuleCandidate[] | null> {
+  const totemDirAbs = path.join(cwd, totemDir);
+  const rulesPath = path.join(totemDirAbs, 'compiled-rules.json');
+  if (!fs.existsSync(rulesPath)) return null;
+
+  try {
+    const { loadCompiledRulesFile, loadRuleMetrics } = await import('@mmnto/totem');
+    const rulesFile = loadCompiledRulesFile(rulesPath);
+    const metricsFile = loadRuleMetrics(totemDirAbs);
+
+    const candidates: StaleRuleCandidate[] = [];
+    for (const rule of rulesFile.rules) {
+      // Skip archived rules — the advisory addresses active rules only.
+      if (rule.status === 'archived') continue;
+
+      const metric = metricsFile.rules[rule.lessonHash];
+      const evaluationCount = metric?.evaluationCount ?? 0;
+
+      // v1 staleness check: cumulative lifetime evaluations against a single
+      // threshold. A rule that fired once years ago then went silent stays
+      // exempt forever. mmnto-ai/totem#1550 tracks swapping to rolling-window
+      // semantics via a `RuleMetric.runHistory` ring buffer; the config key
+      // stays, only the math upgrades.
+      if (evaluationCount < thresholds.staleRuleWindow) continue;
+
+      const codeMatches = metric?.contextCounts?.code ?? 0;
+      if (codeMatches > 0) continue;
+
+      const isSecurity = rule.category === 'security' || rule.immutable === true;
+      const recommendation = isSecurity
+        ? `Review and refine the rule via totem compile --upgrade ${rule.lessonHash}. Do not archive security rules.`
+        : `Run totem compile --upgrade ${rule.lessonHash} to refine the pattern, or archive the rule by setting status: 'archived'.`;
+
+      candidates.push({
+        lessonHash: rule.lessonHash,
+        heading: rule.lessonHeading ?? rule.lessonHash,
+        evaluationCount,
+        severity: isSecurity ? 'security' : 'standard',
+        recommendation,
+        flags: {
+          unverified: rule.unverified,
+          immutable: rule.immutable,
+          category: rule.category,
+        },
+      });
+    }
+    // Surface security rules first, then by evaluationCount descending so the
+    // stalest rules lead the list.
+    return candidates.sort((a, b) => {
+      if (a.severity !== b.severity) return a.severity === 'security' ? -1 : 1;
+      return b.evaluationCount - a.evaluationCount;
+    });
+  } catch (err) {
+    // Best-effort fallback — degrade to "no data" so a corrupt rules or
+    // metrics file does not crash the doctor pipeline. Matches the
+    // `findUpgradeCandidates` sibling path in this file. The caller wraps
+    // the root cause into the telemetry fallback advisory rather than
+    // dropping the signal.
+    if (err instanceof Error && err.message.length === 0) {
+      throw err;
+    }
+    return null;
+  }
+}
+
+/**
+ * Stale-rule advisory diagnostic. Returns a single DiagnosticResult
+ * regardless of how many rules were flagged; the details list is
+ * serialized into the `message` + `remediation` fields. Per the design
+ * doc, this is advisory-only — no auto-archive, no side effects on the
+ * rules file.
+ */
+export async function checkStaleRules(
+  cwd: string,
+  totemDir = '.totem',
+  thresholds?: { staleRuleWindow: number },
+): Promise<DiagnosticResult> {
+  const rulesPath = path.join(cwd, totemDir, 'compiled-rules.json');
+  if (!fs.existsSync(rulesPath)) {
+    return {
+      name: 'Stale Rules',
+      status: 'skip',
+      message: 'compiled-rules.json missing',
+    };
+  }
+
+  const candidates = await findStaleRules(cwd, totemDir, thresholds);
+  if (candidates === null) {
+    return {
+      name: 'Stale Rules',
+      status: 'skip',
+      message: 'Could not analyze rules',
+    };
+  }
+
+  if (candidates.length === 0) {
+    return {
+      name: 'Stale Rules',
+      status: 'pass',
+      message:
+        'All active rules have exercised code-context hits or are still accruing evaluations',
+    };
+  }
+
+  const securityCount = candidates.filter((c) => c.severity === 'security').length;
+  const standardCount = candidates.length - securityCount;
+
+  // Build a compact summary line for message. Detailed per-rule guidance
+  // rides in remediation.
+  const summaryParts: string[] = [];
+  if (securityCount > 0) summaryParts.push(`${securityCount} security`);
+  if (standardCount > 0) summaryParts.push(`${standardCount} standard`);
+  const summary = summaryParts.join(', ');
+
+  const top = candidates[0]!;
+  return {
+    name: 'Stale Rules',
+    status: 'warn',
+    message: `${candidates.length} rule(s) flagged stale (${summary}); leader: ${top.lessonHash.slice(0, 8)} "${top.heading}" after ${top.evaluationCount} runs with 0 code-context hits`,
+    remediation: top.recommendation,
+  };
+}
+
 // ─── Types ──────────────────────────────────────────────
 
 export interface DoctorOptions {
@@ -1149,6 +1310,29 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
 
   console.error(`${pc.cyan('[Totem]')} Running diagnostics...\n`);
 
+  // Resolve doctor thresholds from config when available. The default window
+  // (10) lines up with the schema default so missing config still gives the
+  // documented behavior.
+  let doctorThresholds: { staleRuleWindow: number } | undefined;
+  try {
+    const { loadConfig, resolveConfigPath } = await import('../utils.js');
+    const configPath = resolveConfigPath(cwd);
+    const config = await loadConfig(configPath);
+    if (config.doctor) {
+      doctorThresholds = { staleRuleWindow: config.doctor.staleRuleWindow };
+    }
+  } catch (err) {
+    // Running `totem doctor` against a repo with no config is a valid path
+    // (every other check handles its own missing-file case). A corrupt or
+    // unreadable config lets the stale-rule check fall back to schema
+    // defaults rather than blocking the rest of the diagnostic pipeline.
+    // Surface the error only on a defective error object so sentinels
+    // still propagate.
+    if (err instanceof Error && err.message.length === 0) {
+      throw err;
+    }
+  }
+
   const results: DiagnosticResult[] = [
     checkConfig(cwd),
     checkCompiledRules(cwd),
@@ -1159,6 +1343,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     await checkSecretLeaks(cwd),
     checkSecretsFileTracked(cwd),
     await checkUpgradeCandidates(cwd),
+    await checkStaleRules(cwd, '.totem', doctorThresholds),
   ];
 
   for (const result of results) {

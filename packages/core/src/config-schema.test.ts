@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { TotemConfig } from './config-schema.js';
 import {
   DocTargetSchema,
+  DoctorConfigSchema,
   GarbageCollectionSchema,
   getConfigTier,
   OrchestratorSchema,
@@ -679,6 +680,71 @@ describe('GarbageCollectionSchema', () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.garbageCollection).toBeUndefined();
+    }
+  });
+});
+
+// ─── DoctorConfigSchema (mmnto-ai/totem#1483) ────────
+
+describe('DoctorConfigSchema', () => {
+  it('parses doctor config with default staleRuleWindow', () => {
+    const defaulted = DoctorConfigSchema.parse({});
+    expect(defaulted.staleRuleWindow).toBe(10);
+  });
+
+  it('accepts an explicit staleRuleWindow override', () => {
+    const overridden = DoctorConfigSchema.parse({ staleRuleWindow: 20 });
+    expect(overridden.staleRuleWindow).toBe(20);
+  });
+
+  it('rejects staleRuleWindow below 1', () => {
+    const result = DoctorConfigSchema.safeParse({ staleRuleWindow: 0 });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some(
+          (issue) => issue.path.join('.') === 'staleRuleWindow' && issue.code === 'too_small',
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('rejects a negative staleRuleWindow', () => {
+    const result = DoctorConfigSchema.safeParse({ staleRuleWindow: -1 });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some(
+          (issue) => issue.path.join('.') === 'staleRuleWindow' && issue.code === 'too_small',
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('TotemConfigSchema treats doctor as optional; missing value is undefined', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.doctor).toBeUndefined();
+    }
+  });
+
+  it('TotemConfigSchema fills DoctorConfigSchema defaults when doctor is present but empty', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS, doctor: {} });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.doctor).toEqual({ staleRuleWindow: 10 });
+    }
+  });
+
+  it('TotemConfigSchema accepts a doctor.staleRuleWindow override', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      doctor: { staleRuleWindow: 50 },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.doctor?.staleRuleWindow).toBe(50);
     }
   });
 });

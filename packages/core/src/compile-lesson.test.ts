@@ -2066,3 +2066,245 @@ describe('isSecurityContext', () => {
     expect(isSecurityContext(baseDeps, {})).toBe(false);
   });
 });
+
+// ─── Layer-trace events (mmnto-ai/totem#1482) ────────────
+
+describe('compileLesson trace events', () => {
+  it('Pipeline 1 manual compile emits a single layer-1 result event', async () => {
+    // Invariant: Pipeline 1 is deterministic (no LLM, no retry). One event,
+    // outcome 'compiled', layer 1.
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn(),
+      runOrchestrator: vi.fn(),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+
+    const result = await compileLesson(manualLesson, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    expect(result.trace).toBeDefined();
+    expect(result.trace).toHaveLength(1);
+    expect(result.trace![0]).toMatchObject({
+      layer: 1,
+      action: 'result',
+      outcome: 'compiled',
+    });
+    expect(deps.runOrchestrator).not.toHaveBeenCalled();
+  });
+
+  it('Pipeline 2 first-try compile emits generate + verify(MATCH) + result(compiled)', async () => {
+    const lessonOk: LessonInput = {
+      index: 0,
+      heading: 'No console.log in production',
+      body: 'Do not use console.log.\n**Example Hit:** console.log(x)',
+      hash: 'h-trace-first-try',
+    };
+    const parseMock = vi.fn().mockReturnValue({
+      compilable: true,
+      pattern: 'console\\.log',
+      message: 'No console.log',
+      engine: 'regex' as const,
+      badExample: 'console.log("x")',
+    });
+    const orchestratorMock = vi.fn().mockResolvedValue('attempt-1');
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: parseMock,
+      runOrchestrator: orchestratorMock,
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+
+    const result = await compileLesson(lessonOk, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    expect(result.trace).toBeDefined();
+    expect(result.trace).toHaveLength(3);
+
+    const [gen, verify, res] = result.trace!;
+    expect(gen).toMatchObject({ layer: 3, action: 'generate', outcome: 'attempt-1' });
+    expect(gen!.patternHash).toMatch(/^[0-9a-f]{16}$/);
+    expect(verify).toMatchObject({ layer: 3, action: 'verify', outcome: 'MATCH' });
+    expect(res).toMatchObject({ layer: 3, action: 'result', outcome: 'compiled' });
+  });
+
+  it('Pipeline 2 verify-retry-exhausted emits generate+verify per attempt plus retry scheduling and terminal result', async () => {
+    // Three attempts, each passing smoke gate but failing verifyRuleExamples.
+    // Trace should contain (generate, verify, retry) for attempts 1 and 2, then
+    // (generate, verify, result) for attempt 3.
+    const lessonWithExample: LessonInput = {
+      index: 0,
+      heading: 'No console.log in production',
+      body: 'Do not use console.log in production.\n**Example Hit:** console.log(x)',
+      hash: 'h-trace-exhaust',
+    };
+    const parseMock = vi.fn().mockReturnValue({
+      compilable: true,
+      pattern: 'zzz_only_matches_itself',
+      message: 'No console.log',
+      engine: 'regex' as const,
+      badExample: 'zzz_only_matches_itself',
+    });
+    const orchestratorMock = vi.fn().mockResolvedValue('always-misses');
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: parseMock,
+      runOrchestrator: orchestratorMock,
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+
+    const result = await compileLesson(lessonWithExample, 'system prompt', deps);
+    expect(result.status).toBe('skipped');
+    expect(result.trace).toBeDefined();
+
+    // 3 attempts × (generate + verify) = 6 events, plus 2 retry events between
+    // the first two attempts, plus 1 terminal result = 9 events total.
+    const actions = result.trace!.map((e) => e.action);
+    expect(actions).toEqual([
+      'generate',
+      'verify',
+      'retry',
+      'generate',
+      'verify',
+      'retry',
+      'generate',
+      'verify',
+      'result',
+    ]);
+    const terminal = result.trace![result.trace!.length - 1]!;
+    expect(terminal).toMatchObject({
+      layer: 3,
+      action: 'result',
+      outcome: 'skipped',
+      reasonCode: 'verify-retry-exhausted',
+    });
+  });
+
+  it('Pipeline 2 out-of-scope skip emits a single layer-3 result event with reasonCode', async () => {
+    const parseMock = vi.fn().mockReturnValue({
+      compilable: false,
+      reason: 'Architectural principle, not a pattern.',
+    });
+    const orchestratorMock = vi.fn().mockResolvedValue('{"compilable": false}');
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: parseMock,
+      runOrchestrator: orchestratorMock,
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+
+    const result = await compileLesson(lesson, 'system prompt', deps);
+    expect(result.status).toBe('skipped');
+    expect(result.trace).toHaveLength(1);
+    expect(result.trace![0]).toMatchObject({
+      layer: 3,
+      action: 'result',
+      outcome: 'skipped',
+      reasonCode: 'out-of-scope',
+    });
+  });
+
+  it('Pipeline 2 validator rejection emits generate + verify(validator-rejected) + result(skipped)', async () => {
+    // Invalid regex is terminal. No retry fires. Trace should show the
+    // generate event then the validator-rejected verify event then result.
+    const parseMock = vi.fn().mockReturnValue({
+      compilable: true,
+      pattern: '[unclosed-bracket',
+      message: 'bad regex',
+      engine: 'regex' as const,
+      badExample: 'anything',
+    });
+    const orchestratorMock = vi.fn().mockResolvedValue('invalid-regex-output');
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: parseMock,
+      runOrchestrator: orchestratorMock,
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+
+    const result = await compileLesson(lesson, 'system prompt', deps);
+    expect(result.status).toBe('skipped');
+    const actions = result.trace!.map((e) => e.action);
+    expect(actions).toEqual(['generate', 'verify', 'result']);
+    expect(result.trace![1]).toMatchObject({
+      layer: 3,
+      action: 'verify',
+      outcome: 'validator-rejected',
+    });
+    expect(result.trace![2]).toMatchObject({
+      layer: 3,
+      action: 'result',
+      outcome: 'skipped',
+      reasonCode: 'pattern-syntax-invalid',
+    });
+  });
+
+  it('Pipeline 3 example-based compile emits generate + verify + result events at layer 2', async () => {
+    const pipeline3Lesson: LessonInput = {
+      index: 0,
+      heading: 'Example-based lesson',
+      body: [
+        'Do not use console.log.',
+        '',
+        '**Bad:**',
+        '```ts',
+        'console.log("x")',
+        '```',
+        '',
+        '**Good:**',
+        '```ts',
+        'log.info("x")',
+        '```',
+      ].join('\n'),
+      hash: 'h-trace-pipeline3',
+    };
+    const parseMock = vi.fn().mockReturnValue({
+      compilable: true,
+      pattern: 'console\\.log',
+      message: 'No console.log',
+      engine: 'regex' as const,
+      badExample: 'console.log("x")',
+    });
+    const orchestratorMock = vi.fn().mockResolvedValue('pipeline-3-response');
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: parseMock,
+      runOrchestrator: orchestratorMock,
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+
+    const result = await compileLesson(pipeline3Lesson, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    const actions = result.trace!.map((e) => e.action);
+    expect(actions).toEqual(['generate', 'verify', 'result']);
+    // Pipeline 3 emits at layer 2 per the design doc reservation.
+    expect(result.trace![0]!.layer).toBe(2);
+    expect(result.trace![0]!.patternHash).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it('security-context short-circuit emits a single result event with security-rule-rejected', async () => {
+    const securityLesson: LessonInput = {
+      index: 0,
+      heading: 'No shell injection',
+      body: 'Never pass user input to spawn.',
+      hash: 'h-trace-security-short-circuit',
+    };
+    const orchestratorMock = vi.fn();
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn(),
+      runOrchestrator: orchestratorMock,
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+      securityContext: true,
+    };
+
+    const result = await compileLesson(securityLesson, 'system prompt', deps);
+    expect(result.status).toBe('skipped');
+    expect(result.trace).toHaveLength(1);
+    expect(result.trace![0]).toMatchObject({
+      layer: 3,
+      action: 'result',
+      outcome: 'skipped',
+      reasonCode: 'security-rule-rejected',
+    });
+    expect(orchestratorMock).not.toHaveBeenCalled();
+  });
+});

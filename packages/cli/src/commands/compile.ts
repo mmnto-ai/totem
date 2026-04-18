@@ -1,6 +1,7 @@
 import type {
   CompiledRule,
   CompiledRulesFile,
+  LayerTraceEvent,
   LessonInput,
   NonCompilableEntry,
   NonCompilableReasonCode,
@@ -169,6 +170,96 @@ export function pruneStaleRules(
 ): { fresh: CompiledRule[]; pruned: number } {
   const fresh = rules.filter((r) => currentHashes.has(r.lessonHash));
   return { fresh, pruned: rules.length - fresh.length };
+}
+
+// ─── Verbose trace renderer (mmnto-ai/totem#1482) ──
+
+/**
+ * Map a numeric layer from a trace event to its pipeline label. Tolerates
+ * unknown values so a future ADR-088 phase can introduce new layers without
+ * breaking the renderer.
+ */
+function pipelineLabel(layer: number): string {
+  switch (layer) {
+    case 1:
+      return 'Pipeline 1 (manual)';
+    case 2:
+      return 'Pipeline 2 (example-based)';
+    case 3:
+      return 'Pipeline 3 (LLM + verify-retry)';
+    default:
+      return `Layer ${layer}`;
+  }
+}
+
+/**
+ * Format a lesson's trace array into a single multi-line block for the
+ * `--verbose` renderer. Returns a string (no trailing newline — caller
+ * controls that). Output shape:
+ *
+ *   lesson-<hash8> "<heading>":
+ *     Layer <N> (<pipeline label>) -> <outcome> (<patternHash?>)
+ *       verify on example: <outcome>
+ *       retry N: scheduled
+ *     result: <status> (<reasonCode or detail>)
+ *
+ * The renderer is defensive: malformed / unknown layer numbers render as
+ * "(unknown)" rather than throwing.
+ */
+export function formatVerboseTraceBlock(
+  lesson: { heading: string; hash: string },
+  status: 'compiled' | 'skipped' | 'failed' | 'noop',
+  reasonCode: NonCompilableReasonCode | undefined,
+  trace: readonly LayerTraceEvent[] | undefined,
+): string {
+  const lines: string[] = [];
+  const shortHash = lesson.hash.slice(0, 8);
+  lines.push(`lesson-${shortHash} "${lesson.heading}":`);
+
+  if (!trace || trace.length === 0) {
+    lines.push(`  (no trace events recorded)`);
+    const resultSuffix = reasonCode ? ` (${reasonCode})` : '';
+    lines.push('  result: ' + status + resultSuffix);
+    return lines.join('\n');
+  }
+
+  // Separate events into prelude (generate / verify / retry) and terminal
+  // (result). The terminal lives on its own line with full framing.
+  let retryCounter = 0;
+  let sawResult = false;
+  for (const ev of trace) {
+    const label = pipelineLabel(ev.layer);
+    if (ev.action === 'generate') {
+      const detail = ev.patternHash ? ` (patternHash=${ev.patternHash})` : '';
+      lines.push(`  Layer ${ev.layer} (${label}) -> ` + ev.outcome + detail);
+    } else if (ev.action === 'verify') {
+      lines.push(`    verify on example: ${ev.outcome}`);
+    } else if (ev.action === 'retry') {
+      retryCounter++;
+      lines.push(`    retry ${retryCounter}: ${ev.outcome}`);
+    } else if (ev.action === 'result') {
+      const detail = ev.reasonCode ? ` (${ev.reasonCode})` : '';
+      lines.push('  result: ' + ev.outcome + detail);
+      sawResult = true;
+    } else {
+      lines.push(`  (unknown) ${String(ev.action)}: ${String(ev.outcome)}`);
+    }
+  }
+
+  // Defense in depth: if the trace somehow never emitted a terminal result
+  // event, synthesize one from the caller-supplied `status` so the verbose
+  // block always carries a final line. `compileLesson` pushes a result
+  // event on every return path, but a future refactor could regress that;
+  // this guard keeps the rendered block well-formed regardless. We use
+  // `status` directly rather than the last event's outcome because that
+  // outcome is an intermediate marker like 'MATCH' or 'attempt-1', not the
+  // lesson's final state.
+  if (!sawResult) {
+    const resultSuffix = reasonCode ? ` (${reasonCode})` : '';
+    lines.push('  result: ' + status + resultSuffix);
+  }
+
+  return lines.join('\n');
 }
 
 // ─── Logging helpers ────────────────────────────────
@@ -961,6 +1052,19 @@ export async function compileCommand(
           );
 
           for (const { lesson, result } of results) {
+            // mmnto-ai/totem#1482: emit the per-lesson layer-trace block when
+            // --verbose is active. The whole block ships via one stdout.write
+            // call so concurrent lessons cannot interleave their output.
+            // Non-trace verbose behavior (skipped-lesson reasons) still fires
+            // further down; this renders the structured trace alongside.
+            if (options.verbose) {
+              const resultTrace =
+                'trace' in result ? (result.trace as LayerTraceEvent[] | undefined) : undefined;
+              const reasonCode = result.status === 'skipped' ? result.reasonCode : undefined;
+              const block = formatVerboseTraceBlock(lesson, result.status, reasonCode, resultTrace);
+              process.stdout.write(block + '\n');
+            }
+
             // Upgrade targets: remove the stale copy from newRules for any
             // terminal outcome where the rule's state CHANGES (compiled -> new
             // pattern replaces old; skipped -> rule moves to nonCompilable and

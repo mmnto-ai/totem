@@ -52,6 +52,7 @@ export async function runCompiledRules(
     loadRuleMetrics,
     matchesGlob,
     recordContextHit,
+    recordEvaluation,
     recordSuppression,
     recordTrigger,
     resolveGitRoot,
@@ -272,6 +273,17 @@ export async function runCompiledRules(
     }
     if (zeroMatchRules.length > 0) {
       log.dim(tag, `${zeroMatchRules.length} rule(s) matched no files in this diff`);
+    }
+
+    // mmnto-ai/totem#1483: tick evaluationCount once per rule per lint run.
+    // Invariant: one run loads the rule set, evaluates each rule against the
+    // diff additions, and increments the counter here exactly once per
+    // lessonHash. Multiple matches on a rule within one run still produce a
+    // single increment. This counter is the "was this rule exercised" signal
+    // the doctor stale-rule check reads to distinguish a dormant rule from a
+    // rule that has genuinely sat through N lint cycles without firing.
+    for (const rule of rules) {
+      recordEvaluation(metrics, rule.lessonHash);
     }
 
     try {
