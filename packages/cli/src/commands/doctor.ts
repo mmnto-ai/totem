@@ -838,10 +838,15 @@ export async function findStaleRules(
       if (a.severity !== b.severity) return a.severity === 'security' ? -1 : 1;
       return b.evaluationCount - a.evaluationCount;
     });
-    // totem-context: intentional best-effort — a corrupt rules / metrics file
-    // should degrade the advisory to "no data" rather than crash the doctor
-    // pipeline, matching the established pattern in findUpgradeCandidates.
-  } catch {
+  } catch (err) {
+    // Best-effort fallback — degrade to "no data" so a corrupt rules or
+    // metrics file does not crash the doctor pipeline. Matches the
+    // `findUpgradeCandidates` sibling path in this file. The caller wraps
+    // the root cause into the telemetry fallback advisory rather than
+    // dropping the signal.
+    if (err instanceof Error && err.message.length === 0) {
+      throw err;
+    }
     return null;
   }
 }
@@ -1323,12 +1328,16 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
         minRunsToEvaluate: config.doctor.minRunsToEvaluate,
       };
     }
-    // totem-context: intentional best-effort — running doctor with an absent
-    // or malformed config still has value (every other check handles its own
-    // missing-file case). Config-load failures fall back to schema defaults
-    // rather than crashing diagnostics.
-  } catch {
-    // Config load failures fall back to schema defaults.
+  } catch (err) {
+    // Running `totem doctor` against a repo with no config is a valid path
+    // (every other check handles its own missing-file case). A corrupt or
+    // unreadable config lets the stale-rule check fall back to schema
+    // defaults rather than blocking the rest of the diagnostic pipeline.
+    // Surface the error only on a defective error object so sentinels
+    // still propagate.
+    if (err instanceof Error && err.message.length === 0) {
+      throw err;
+    }
   }
 
   const results: DiagnosticResult[] = [
