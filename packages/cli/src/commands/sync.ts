@@ -39,7 +39,7 @@ export async function syncCommand(options: {
 }): Promise<void> {
   const { runSync, TotemError, updateRegistryEntry } = await import('@mmnto/totem');
   const { createSpinner, log } = await import('../ui.js');
-  const { isGlobalConfigPath, loadConfig, loadEnv, requireEmbedding, resolveConfigPath } =
+  const { isGlobalConfigPath, loadConfig, loadEnv, requireEmbedding, resolveConfigPath, sanitize } =
     await import('../utils.js');
 
   const cwd = process.cwd();
@@ -85,7 +85,7 @@ export async function syncCommand(options: {
       writeReviewExtensionsFile(totemDirAbs, config.review.sourceExtensions); // totem-context: intentional cleanup — canonical file write is a convenience for the bash PreToolUse hook
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
-      log.dim(TAG, `Skipped review-extensions.txt write: ${detail}`);
+      log.dim(TAG, `Skipped review-extensions.txt write: ${sanitize(detail)}`);
     }
 
     spinner.succeed(`Done: ${result.chunksProcessed} chunks from ${result.filesProcessed} files`);

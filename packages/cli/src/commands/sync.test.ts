@@ -22,6 +22,7 @@ vi.mock('../utils.js', () => ({
   loadEnv: vi.fn(),
   loadConfig: (...args: unknown[]) => mockLoadConfig(...args),
   requireEmbedding: vi.fn(),
+  sanitize: (s: string) => s,
 }));
 
 const mockUpdateRegistryEntry = vi.fn().mockResolvedValue(undefined);
