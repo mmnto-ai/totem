@@ -45,7 +45,7 @@ const FIXTURE_CASES: { hash: string; bad: string; good: string }[] = [
     good: 'good-network-exfil-shell.ts',
   },
   {
-    hash: '1c0c5a7daefdeb4b',
+    hash: 'dd24f87f46e65812',
     bad: 'bad-obfuscation.ts',
     good: 'good-obfuscation.ts',
   },
@@ -86,7 +86,12 @@ function runRegexRule(rule: CompiledRule, content: string): RuleMatch[] {
 
 function runRule(rule: CompiledRule, content: string, ext = '.ts'): RuleMatch[] {
   if (rule.engine === 'regex') return runRegexRule(rule, content);
-  return runAstGrepRule(rule, content, ext);
+  if (rule.engine === 'ast-grep') return runAstGrepRule(rule, content, ext);
+  // Fail loud so a future engine (e.g. tree-sitter 'ast') does not silently
+  // skip test coverage. Every engine the pack ships MUST be dispatched here.
+  throw new Error(
+    `Rule ${rule.lessonHash} has unsupported engine '${rule.engine}'; extend runRule to cover it`,
+  );
 }
 
 describe('@totem/pack-agent-security rule content', () => {
@@ -179,16 +184,32 @@ describe('@totem/pack-agent-security rule content', () => {
     expect(unique.size).toBe(hashes.length);
   });
 
-  // Fragment-level coverage for #1490 (design doc Q2): the bad fixture has one
-  // section per sub-pattern. If any single sub-pattern regresses, the count
-  // drops below the family total and this test fails naming the shortfall.
-  it('#1490 bad fixture fires across every obfuscation sub-pattern family', () => {
-    const rule = RULE_BY_HASH['1c0c5a7daefdeb4b']!;
+  // Per-sub-pattern coverage for #1490: run each `any:` entry individually
+  // against the bad fixture and assert each one fires at least once. A plain
+  // `matches.length >= N` lower-bound could pass even when a single sub-pattern
+  // family regresses if another family fires N times (CR catch on #1522), so
+  // this shape proves per-family coverage rather than a count floor.
+  it('#1490 every any: sub-pattern fires on bad-obfuscation.ts', () => {
+    const rule = RULE_BY_HASH['dd24f87f46e65812']!;
+    const yaml = rule.astGrepYamlRule as { rule?: { any?: Array<{ pattern?: string }> } };
+    const subPatterns = yaml.rule?.any ?? [];
+    expect(subPatterns.length).toBeGreaterThan(0);
+
     const content = fs.readFileSync(path.join(FIXTURES, 'bad-obfuscation.ts'), 'utf-8'); // totem-context: sync read in test setup, no event-loop concern
-    const matches = runRule(rule, content);
-    // 7 `any:` entries covering 5 primitive families (Buffer.from splits hex
-    // and base64; atob and btoa are distinct). At least 7 matches on the
-    // bad fixture means every sub-pattern family fired at least once.
-    expect(matches.length).toBeGreaterThanOrEqual(7); // totem-context: lower-bound coverage assertion, not length equality
+    const lineCount = content.split('\n').length;
+    const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
+
+    const shortfalls: string[] = [];
+    for (const entry of subPatterns) {
+      if (!entry.pattern) continue;
+      const matches = matchAstGrepPattern(content, '.ts', entry.pattern, lineNumbers);
+      if (matches.length === 0) shortfalls.push(entry.pattern);
+    }
+    if (shortfalls.length > 0) {
+      throw new Error(
+        `#1490 sub-patterns that failed to fire on bad-obfuscation.ts: ${shortfalls.join(', ')}`,
+      );
+    }
+    expect(shortfalls).toEqual([]);
   });
 });

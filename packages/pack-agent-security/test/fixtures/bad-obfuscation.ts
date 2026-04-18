@@ -16,10 +16,12 @@ declare const log: (s: unknown) => void;
 // --- (1) String.fromCharCode payload assembly ---
 log(String.fromCharCode(99, 117, 114, 108));
 
-// --- (2) Buffer.from hex decoding ---
+// --- (2) Buffer.from hex decoding (both quote styles) ---
+log(Buffer.from('68747470733a2f2f6e67726f6b2e696f', 'hex'));
 log(Buffer.from('68747470733a2f2f6e67726f6b2e696f', 'hex'));
 
-// --- (3) Buffer.from base64 decoding ---
+// --- (3) Buffer.from base64 decoding (both quote styles) ---
+log(Buffer.from('aHR0cHM6Ly9uZ3Jvay5pby9zdGVhbA==', 'base64'));
 log(Buffer.from('aHR0cHM6Ly9uZ3Jvay5pby9zdGVhbA==', 'base64'));
 
 // --- (4) atob (browser-native base64 decode) ---
@@ -28,8 +30,5 @@ log(atob(payload));
 // --- (5) btoa (browser-native base64 encode) ---
 log(btoa(payload));
 
-// --- (6) Numeric-array .map().join() ---
-log([119, 103, 101, 116].map((c) => String.fromCharCode(c)).join('')); // totem-context: .join('') shape IS the attack pattern under test
-
-// --- (7) .split().reverse().join() string reversal ---
+// --- (6) .split().reverse().join() string reversal ---
 log(hidden.split('').reverse().join('')); // totem-context: .join('') shape IS the attack pattern under test

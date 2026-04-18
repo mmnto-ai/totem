@@ -154,6 +154,13 @@ function sweep(): Violation[] {
       out.push(...sweepAstGrep(rule, files));
     } else if (rule.engine === 'regex') {
       out.push(...sweepRegex(rule, files));
+    } else {
+      // Fail loud: a silent skip of an unsupported engine would let a newly-
+      // added rule go uncovered by the repo-wide FP sweep. Every engine the
+      // pack ships MUST be dispatched here (CR catch on #1522).
+      throw new Error(
+        `repo-sweep: rule ${rule.lessonHash} has unsupported engine '${rule.engine}'; extend sweep() to cover it`,
+      );
     }
   }
   return out;

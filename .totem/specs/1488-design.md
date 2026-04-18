@@ -4,11 +4,11 @@
 
 ## Scope
 
-Ship two hand-crafted rules in `packages/pack-agent-security/compiled-rules.json` that close ADR-089 attack surface 3 (Exfiltration): (a) a compound ast-grep rule flagging API-style network calls — fetch-call, axios-verb calls, http-request / https-request, and net.Socket construction — where the URL argument is a string literal containing an IPv4 literal or a blocklisted domain; (b) a regex-engine rule flagging string-literal shell commands invoking curl or wget against the same IP / domain set. Ship both at `severity: error`, `immutable: true`, `manual: true`, `category: security`, with `badExample` snippets that pass the compile-time smoke gate and paired fixture files under `test/fixtures/`.
+Ship two hand-crafted rules in `packages/pack-agent-security/compiled-rules.json` that close ADR-089 attack surface 3 (Exfiltration): (a) a compound ast-grep rule flagging API-style network calls — fetch-call, axios-verb calls, http-request / https-request — where the URL argument is a string literal containing an IPv4 literal or a blocklisted domain; (b) a regex-engine rule flagging string-literal shell commands invoking curl or wget against the same IP / domain set. Ship both at `severity: error`, `immutable: true`, `manual: true`, `category: security`, with `badExample` snippets that pass the compile-time smoke gate and paired fixture files under `test/fixtures/`.
 
 Also ship `packages/pack-agent-security/domain-blocklist.json` as an authoritative, human-reviewable source-of-truth data asset. The rule regex is baked into `compiled-rules.json` at author time; a parity test asserts no drift between the JSON asset and the baked regex. This keeps the pack data-only (no build step) while making the blocklist legible in review.
 
-**NOT in scope:** runtime JSON loading by the rule engine, build-time codegen pipeline (deferred to a follow-up ticket if the list grows past ~20 domains or update cadence exceeds monthly), IPv6 literal host matching (defer), DNS-level exfil (runtime, out of commit-boundary per ADR-089), concatenation-based URL assembly (#1490 covers obfuscation separately), changes to `@mmnto/totem` core, new CLI surface, new config fields.
+**NOT in scope:** runtime JSON loading by the rule engine, build-time codegen pipeline (deferred to a follow-up ticket if the list grows past ~20 domains or update cadence exceeds monthly), IPv6 literal host matching (defer), DNS-level exfil (runtime, out of commit-boundary per ADR-089), concatenation-based URL assembly (#1490 covers obfuscation separately), `net.Socket` construction / `socket.connect` (second-arg host is a variable in the common idiom; reliable matching requires a deeper type-scope pass and would over-fire on unrelated `obj.connect` calls — defer to follow-up), changes to `@mmnto/totem` core, new CLI surface, new config fields.
 
 ## Data model deltas
 
@@ -24,7 +24,7 @@ The existing `CompiledRulesFileSchema` covers both — no schema change. Per-rul
 | `engine`          | `"ast-grep"`                                                                                                                                                | `"regex"`                                                                                            |
 | `astGrepYamlRule` | `{rule: {any: [<per-call-site NapiConfig with $URL regex constraint>]}}`                                                                                    | absent                                                                                               |
 | `message`         | remediation: use a config-driven URL, not a hardcoded IP or exfil-host literal                                                                              | remediation: shell commands should not invoke curl or wget against hardcoded IPs or suspicious hosts |
-| `fileGlobs`       | `["packages/**/*.ts", "packages/**/*.js", "!scripts/**", "!.github/**", "!**/*.test.*", "!**/*.spec.*", "!**/test/**", "!**/tests/**"]` — mirrors PR1 shape | same                                                                                                 |
+| `fileGlobs`       | `["packages/**/*.ts", "packages/**/*.js", "!**/scripts/**", "!scripts/**", "!**/.github/**", "!.github/**", "!**/*.test.*", "!**/*.spec.*", "!**/test/**", "!**/tests/**", "!packages/**/test/**", "!packages/**/tests/**"]` — mirrors PR1 shape | same                                                                                                 |
 | `severity`        | `"error"`                                                                                                                                                   | `"error"`                                                                                            |
 | `category`        | `"security"`                                                                                                                                                | `"security"`                                                                                         |
 | `immutable`       | `true`                                                                                                                                                      | `true`                                                                                               |
@@ -50,7 +50,14 @@ The existing `CompiledRulesFileSchema` covers both — no schema change. Per-rul
 }
 ```
 
-Wildcard syntax: `*.domain.tld` → regex `(?:^|\.)(domain\.tld)` anchored so sibling-suffix bypasses (`xtrycloudflare.com`) do not match. Non-wildcard entries get anchored as `(?:^|//|\.)(domain\.tld)` to catch the host-position usage without matching `myngrok.io.com`.
+Anchor strategy (as baked into `compiled-rules.json`):
+
+- **IPv4:** `(?:\d{1,3}\.){3}\d{1,3}` — matches any IPv4-shaped literal. RFC1918 + loopback are intentionally NOT excluded (design Q2); `fileGlobs` already keeps this out of tests/scripts/.github.
+- **Non-wildcard domains** (`ngrok.io`, `transfer.sh`, `gofile.io`, `anonfiles.com`): `(?:^|[^\w.-])DOMAIN(?:$|[^\w.-])` — boundary-guard form. The prefix `[^\w.-]` rejects word / dot / dash context so `myngrok.io.com` and `ngrok.iosite.com` do not match. The suffix `[^\w.-]` rejects trailing `.` (apex-subdomain bypass like `ngrok.io.attacker.com`) and `-`.
+- **Wildcard domains** (`*.trycloudflare.com`, `*.onion`): `\.TLD(?:$|[^\w.-])` — the leading `\.` enforces "must be a subdomain", and the suffix guard prevents trailing-subdomain bypass. The apex (`trycloudflare.com` with no subdomain) is intentionally not matched because the JSON entry is a wildcard — apex coverage would require a separate non-wildcard entry.
+- **Path-scoped entries** (`pastebin.com/api`): `(?:^|[^\w.-])pastebin\.com/api` — left-anchored so `not-pastebin.com/api` does not match.
+
+The exact regex fragment baked into both Rule A's `$URL` constraint and Rule B's pattern is asserted by `parity.test.ts` — edits to `domain-blocklist.json` must be mirrored into both regexes in lockstep or the parity test fails.
 
 ### Two new fixture pairs under `packages/pack-agent-security/test/fixtures/`
 
