@@ -92,6 +92,46 @@ const archives = [
     reason:
       'Pattern fires on any YAML snippet containing `has:` with `pattern:`, which is the standard ast-grep rule-definition syntax. Would flag every shipped rule spec in .totem/compiled-rules.json, .totem/lessons/, strategy docs, and every ast-grep rule authored downstream. Pure authorial guidance, not enforcement.',
   },
+  // Second wave: re-compilation after the 13-lesson scope fix (CR nit on
+  // #1526 — dropped contradictory `!**/*.test.*` negations from lesson
+  // scope) regenerated 6 variants of the same authorial-guidance rules
+  // with new hashes. Same defect class, same archive justification.
+  {
+    hash: '25312171472f5391',
+    heading: 'Use boundary-guard anchors for domain blocklists',
+    reason:
+      'Second-wave duplicate of 523b9893cb454e70 after the lesson scope-fix triggered a re-compile. Same defect: regex matches the literal `(?:^|\\.)` boundary-anchor text, which is the standard way to author ast-grep domain patterns. Pack test authors writing rules would trigger this. Authorial guidance, not enforcement.',
+  },
+  {
+    hash: '2e3f46085651004e',
+    heading: 'Include path context in walkDir errors',
+    reason:
+      'Second-wave duplicate of a37823bcf1e849b5. Same defect: pattern `catch\\s*\\([^)]*\\)\\s*\\{\\s*\\}` fires on every empty-catch block across the codebase. Overlaps with the existing empty-catch detection shipped in 1.13.0 (#664).',
+  },
+  {
+    hash: 'dc6d5d29c10f5065',
+    heading: 'Cover all dynamic evaluation constructors',
+    reason:
+      'Second-wave duplicate of ec8e329a673cf601. Pattern `Function($$$ARGS)` fires on every reference to the Function constructor. The pack-agent-security rule a0b737fd43fb943e already covers dynamic code-eval constructors with proper context gating.',
+  },
+  {
+    hash: '07068b996b845283',
+    heading: 'Prevent eval bypasses via concatenation',
+    reason:
+      'Second-wave duplicate of c0f652d54da5bed0. Pattern duplicates the dynamic-code-evaluation coverage in pack-agent-security rule a0b737fd43fb943e, which handles the same non-literal-argument case (binary_expression / template_string / identifier) via its own constraint.',
+  },
+  {
+    hash: '8dada98dafbf80d2',
+    heading: 'Include low-level socket APIs in network rules',
+    reason:
+      'Second-wave duplicate of fc2d6c1f6e298d28 (which itself duplicated 4c219e8ad6230689). All three archives target variants of `new net.Socket(...)` compiled from the same authorial-guidance lesson. Fires on every legitimate net.Socket construction.',
+  },
+  {
+    hash: '361cdd4dc54079d2',
+    heading: 'Use field scoping for argument validation',
+    reason:
+      'Second-wave duplicate of aeb65ba1a27ec781 with a simpler regex `\\bhas\\s*:\\s*\\{`. Same defect: fires on every ast-grep rule definition that uses the `has:` combinator, which is standard authoring syntax. Would flag every rule in .totem/compiled-rules.json.',
+  },
 ];
 
 const raw = fs.readFileSync(RULES_PATH, 'utf8');
@@ -135,9 +175,16 @@ for (const { hash, heading, reason } of archives) {
   }
 }
 
+// Missing hashes are a warning rather than a fatal error: source-lesson
+// edits between script runs can cause the LLM compile-worker to emit
+// different hashes for a superseded lesson, leaving an older archive
+// entry orphaned from the manifest. The script still correctly archives
+// any currently-present hashes in the `archives` table. Rerunning after
+// a compile-worker wave is safe.
 if (missing.length > 0) {
-  console.error('[Totem Error] Hashes not found in compiled-rules.json:', missing);
-  process.exit(1);
+  console.warn(
+    `Hashes not found in compiled-rules.json (likely superseded by re-compile): ${missing.join(', ')}`,
+  );
 }
 
 for (const drift of headingDrifts) {
