@@ -25,6 +25,7 @@ function makeConfig(pilot?: TotemConfig['pilot']): TotemConfig {
     shieldIgnorePatterns: [],
     contextWarningThreshold: 40_000,
     shieldAutoLearn: false,
+    review: { sourceExtensions: ['.ts', '.tsx', '.js', '.jsx'] },
     pilot,
   } as TotemConfig;
 }

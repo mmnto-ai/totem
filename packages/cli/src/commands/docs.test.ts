@@ -83,6 +83,7 @@ function mockConfig(docs?: DocTarget[]): void {
     shieldIgnorePatterns: [],
     shieldAutoLearn: false,
     contextWarningThreshold: 40_000,
+    review: { sourceExtensions: ['.ts', '.tsx', '.js', '.jsx'] },
   });
 }
 
