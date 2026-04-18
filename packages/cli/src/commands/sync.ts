@@ -39,7 +39,8 @@ export async function syncCommand(options: {
 }): Promise<void> {
   const { runSync, TotemError, updateRegistryEntry } = await import('@mmnto/totem');
   const { createSpinner, log } = await import('../ui.js');
-  const { loadConfig, loadEnv, requireEmbedding, resolveConfigPath } = await import('../utils.js');
+  const { isGlobalConfigPath, loadConfig, loadEnv, requireEmbedding, resolveConfigPath } =
+    await import('../utils.js');
 
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
@@ -71,12 +72,23 @@ export async function syncCommand(options: {
     // Emit canonical review-extensions.txt for .claude/hooks/content-hash.sh (#1527).
     // Written on every sync, even when the user omits review.sourceExtensions
     // (default set persisted), so downstream bash consumers see a consistent file.
-    try {
-      const totemDirAbs = path.resolve(cwd, config.totemDir);
-      writeReviewExtensionsFile(totemDirAbs, config.review.sourceExtensions); // totem-context: intentional cleanup — canonical file write is a convenience for the bash PreToolUse hook
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      log.dim(TAG, `Skipped review-extensions.txt write: ${detail}`);
+    // Resolves against configRoot (not cwd) so monorepo users invoking from a
+    // subdirectory land the file at <project-root>/.totem/, where shield and
+    // the bash hook read it. Lesson 61975bb96c9bf27f / f5a75d98a43e0721.
+    // Skipped for global-only configs (~/.totem/totem.config.ts): there is no
+    // local project to wire the hook to, and the bash hook falls back to the
+    // historical default extension set on its own.
+    if (isGlobalConfigPath(configPath)) {
+      log.dim(TAG, 'Skipped review-extensions.txt write (global config profile)');
+    } else {
+      try {
+        const configRoot = path.dirname(configPath);
+        const totemDirAbs = path.resolve(configRoot, config.totemDir);
+        writeReviewExtensionsFile(totemDirAbs, config.review.sourceExtensions); // totem-context: intentional cleanup — canonical file write is a convenience for the bash PreToolUse hook
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        log.dim(TAG, `Skipped review-extensions.txt write: ${detail}`);
+      }
     }
 
     spinner.succeed(`Done: ${result.chunksProcessed} chunks from ${result.filesProcessed} files`);

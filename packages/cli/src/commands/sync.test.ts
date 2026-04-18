@@ -14,8 +14,11 @@ vi.mock('../ui.js', () => ({
 }));
 
 const mockLoadConfig = vi.fn();
+const mockResolveConfigPath = vi.fn();
+const mockIsGlobalConfigPath = vi.fn();
 vi.mock('../utils.js', () => ({
-  resolveConfigPath: vi.fn().mockReturnValue('/fake/totem.config.ts'),
+  resolveConfigPath: (...args: unknown[]) => mockResolveConfigPath(...args),
+  isGlobalConfigPath: (...args: unknown[]) => mockIsGlobalConfigPath(...args),
   loadEnv: vi.fn(),
   loadConfig: (...args: unknown[]) => mockLoadConfig(...args),
   requireEmbedding: vi.fn(),
@@ -61,6 +64,14 @@ describe('syncCommand', () => {
     process.chdir(tmpDir);
     mockLoadConfig.mockReset();
     mockLoadConfig.mockResolvedValue(baseConfig());
+    mockResolveConfigPath.mockReset();
+    mockIsGlobalConfigPath.mockReset();
+    // Default: config lives next to wherever the user invoked totem from.
+    // Individual tests override to exercise cwd !== configRoot scenarios.
+    mockResolveConfigPath.mockImplementation((cwd: unknown) =>
+      path.join(String(cwd), 'totem.config.ts'),
+    );
+    mockIsGlobalConfigPath.mockReturnValue(false);
     mockCreateSpinner.mockResolvedValue({
       update: vi.fn(),
       succeed: vi.fn(),
@@ -154,6 +165,39 @@ describe('syncCommand', () => {
     fs.mkdirSync(totemDir, { recursive: true });
     fs.mkdirSync(path.join(totemDir, 'review-extensions.txt'));
     await expect(syncCommand({ quiet: true })).resolves.toBeUndefined();
+  });
+
+  it('skips canonical file write when using global config profile', async () => {
+    // A user running with only ~/.totem/totem.config.ts has no local project
+    // to wire the bash hook to; writing the canonical file into their home
+    // directory would be worse than useless. Bash hook falls back to defaults.
+    mockIsGlobalConfigPath.mockReturnValue(true);
+    await syncCommand({ quiet: true });
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'review-extensions.txt'))).toBe(false);
+  });
+
+  it('resolves canonical file path relative to configRoot when invoked from subdirectory', async () => {
+    // Simulates a monorepo user running `totem sync` from a subdirectory such as
+    // packages/cli/ while totem.config.ts lives at the repo root. The canonical
+    // file must land at <project-root>/.totem/review-extensions.txt, matching
+    // what shield.ts and the bash PreToolUse hook read. Resolving against cwd
+    // would orphan the file under the subdirectory (lesson 61975bb96c9bf27f).
+    const subdir = path.join(tmpDir, 'packages', 'cli');
+    fs.mkdirSync(subdir, { recursive: true });
+    process.chdir(subdir);
+
+    // resolveConfigPath walks up from cwd and finds the config at the repo root.
+    mockResolveConfigPath.mockReturnValue(path.join(tmpDir, 'totem.config.ts'));
+    mockLoadConfig.mockResolvedValue(baseConfig({ review: { sourceExtensions: ['.ts', '.rs'] } }));
+
+    await syncCommand({ quiet: true });
+
+    // Canonical file lands at configRoot, never under the invoking subdirectory.
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'review-extensions.txt'))).toBe(true);
+    expect(fs.existsSync(path.join(subdir, '.totem', 'review-extensions.txt'))).toBe(false);
+    expect(fs.readFileSync(path.join(tmpDir, '.totem', 'review-extensions.txt'), 'utf-8')).toBe(
+      '.ts\n.rs\n',
+    );
   });
 });
 
