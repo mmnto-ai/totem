@@ -63,15 +63,23 @@ function runAstGrepRule(rule: CompiledRule, content: string, ext = '.ts'): RuleM
   return matchAstGrepPattern(content, ext, pattern, lineNumbers);
 }
 
+// totem-context: test-harness runRegexRule helper mirrors the production
+// engine's regex path (new RegExp + per-line .test) so the pack rules
+// execute identically in tests and at lint time. The patterns come from
+// our own hand-authored compiled-rules.json, not user input, so regex
+// injection / sanitization concerns do not apply; the pattern-validation
+// test in compiler-schema.test already asserts every shipped pattern
+// compiles. Test-assertion failures use plain `throw new Error` rather
+// than the totem error-class wrapper because this is not runtime code.
 function runRegexRule(rule: CompiledRule, content: string): RuleMatch[] {
   if (!rule.pattern) {
-    throw new Error(`Rule ${rule.lessonHash} is regex but has no pattern`);
+    throw new Error(`Rule ${rule.lessonHash} is regex but has no pattern`); // totem-context: test-harness fail-loud path
   }
-  const re = new RegExp(rule.pattern);
+  const re = new RegExp(rule.pattern); // totem-context: pattern is the compiled rule's own regex, not user input
   const out: RuleMatch[] = [];
   const lines = content.split('\n');
   for (let i = 0; i < lines.length; i++) {
-    if (re.test(lines[i]!)) out.push({ lineNumber: i + 1 });
+    if (re.test(lines[i]!)) out.push({ lineNumber: i + 1 }); // totem-context: non-global regex, lastIndex not mutated
   }
   return out;
 }
@@ -101,7 +109,7 @@ describe('@totem/pack-agent-security rule content', () => {
       // Engine is constrained to the two shapes the pack ships: compound ast-grep
       // for call-site detection (PR1's spawn + eval, PR2's network exfil + obfuscation)
       // and plain regex for string-content scanning (PR2's shell-string curl/wget).
-      expect(['ast-grep', 'regex']).toContain(rule.engine);
+      expect(['ast-grep', 'regex']).toContain(rule.engine); // totem-context: set-membership check, not string redaction
       expect(rule.severity).toBe('error');
       expect(rule.category).toBe('security');
       expect(rule.manual).toBe(true);
@@ -176,11 +184,11 @@ describe('@totem/pack-agent-security rule content', () => {
   // drops below the family total and this test fails naming the shortfall.
   it('#1490 bad fixture fires across every obfuscation sub-pattern family', () => {
     const rule = RULE_BY_HASH['1c0c5a7daefdeb4b']!;
-    const content = fs.readFileSync(path.join(FIXTURES, 'bad-obfuscation.ts'), 'utf-8');
+    const content = fs.readFileSync(path.join(FIXTURES, 'bad-obfuscation.ts'), 'utf-8'); // totem-context: sync read in test setup, no event-loop concern
     const matches = runRule(rule, content);
     // 7 `any:` entries covering 5 primitive families (Buffer.from splits hex
     // and base64; atob and btoa are distinct). At least 7 matches on the
     // bad fixture means every sub-pattern family fired at least once.
-    expect(matches.length).toBeGreaterThanOrEqual(7);
+    expect(matches.length).toBeGreaterThanOrEqual(7); // totem-context: lower-bound coverage assertion, not length equality
   });
 });
