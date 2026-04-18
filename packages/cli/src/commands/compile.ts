@@ -218,7 +218,8 @@ export function formatVerboseTraceBlock(
 
   if (!trace || trace.length === 0) {
     lines.push(`  (no trace events recorded)`);
-    lines.push(`  result: ${status}${reasonCode ? ` (${reasonCode})` : ''}`);
+    const resultSuffix = reasonCode ? ` (${reasonCode})` : '';
+    lines.push('  result: ' + status + resultSuffix);
     return lines.join('\n');
   }
 
@@ -229,7 +230,7 @@ export function formatVerboseTraceBlock(
     const label = pipelineLabel(ev.layer);
     if (ev.action === 'generate') {
       const detail = ev.patternHash ? ` (patternHash=${ev.patternHash})` : '';
-      lines.push(`  Layer ${ev.layer} (${label}) -> ${ev.outcome}${detail}`);
+      lines.push(`  Layer ${ev.layer} (${label}) -> ` + ev.outcome + detail);
     } else if (ev.action === 'verify') {
       lines.push(`    verify on example: ${ev.outcome}`);
     } else if (ev.action === 'retry') {
@@ -237,7 +238,7 @@ export function formatVerboseTraceBlock(
       lines.push(`    retry ${retryCounter}: ${ev.outcome}`);
     } else if (ev.action === 'result') {
       const detail = ev.reasonCode ? ` (${ev.reasonCode})` : '';
-      lines.push(`  result: ${ev.outcome}${detail}`);
+      lines.push('  result: ' + ev.outcome + detail);
     } else {
       lines.push(`  (unknown) ${String(ev.action)}: ${String(ev.outcome)}`);
     }

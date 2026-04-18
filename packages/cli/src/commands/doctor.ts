@@ -838,6 +838,9 @@ export async function findStaleRules(
       if (a.severity !== b.severity) return a.severity === 'security' ? -1 : 1;
       return b.evaluationCount - a.evaluationCount;
     });
+    // totem-context: intentional best-effort — a corrupt rules / metrics file
+    // should degrade the advisory to "no data" rather than crash the doctor
+    // pipeline, matching the established pattern in findUpgradeCandidates.
   } catch {
     return null;
   }
@@ -1320,6 +1323,10 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
         minRunsToEvaluate: config.doctor.minRunsToEvaluate,
       };
     }
+    // totem-context: intentional best-effort — running doctor with an absent
+    // or malformed config still has value (every other check handles its own
+    // missing-file case). Config-load failures fall back to schema defaults
+    // rather than crashing diagnostics.
   } catch {
     // Config load failures fall back to schema defaults.
   }
