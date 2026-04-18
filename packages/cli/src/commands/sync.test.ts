@@ -1,3 +1,7 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── Mocks ──────────────────────────────────────────────
@@ -9,17 +13,16 @@ vi.mock('../ui.js', () => ({
   createSpinner: (...args: unknown[]) => mockCreateSpinner(...args),
 }));
 
+const mockLoadConfig = vi.fn();
+const mockResolveConfigPath = vi.fn();
+const mockIsGlobalConfigPath = vi.fn();
 vi.mock('../utils.js', () => ({
-  resolveConfigPath: vi.fn().mockReturnValue('/fake/totem.config.ts'),
+  resolveConfigPath: (...args: unknown[]) => mockResolveConfigPath(...args),
+  isGlobalConfigPath: (...args: unknown[]) => mockIsGlobalConfigPath(...args),
   loadEnv: vi.fn(),
-  loadConfig: vi.fn().mockResolvedValue({
-    targets: [],
-    totemDir: '.totem',
-    lanceDir: '.lancedb',
-    ignorePatterns: [],
-    embedding: { provider: 'openai', model: 'text-embedding-3-small' },
-  }),
+  loadConfig: (...args: unknown[]) => mockLoadConfig(...args),
   requireEmbedding: vi.fn(),
+  sanitize: (s: string) => s,
 }));
 
 const mockUpdateRegistryEntry = vi.fn().mockResolvedValue(undefined);
@@ -38,12 +41,38 @@ vi.mock('@mmnto/totem', () => ({
   },
 }));
 
-import { syncCommand } from './sync.js';
+import { syncCommand, writeReviewExtensionsFile } from './sync.js';
+
+const baseConfig = (overrides: Record<string, unknown> = {}) => ({
+  targets: [],
+  totemDir: '.totem',
+  lanceDir: '.lancedb',
+  ignorePatterns: [],
+  embedding: { provider: 'openai', model: 'text-embedding-3-small' },
+  review: { sourceExtensions: ['.ts', '.tsx', '.js', '.jsx'] },
+  ...overrides,
+});
 
 // ─── Tests ──────────────────────────────────────────────
 
 describe('syncCommand', () => {
+  let tmpDir: string;
+  let origCwd: string;
+
   beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-sync-'));
+    origCwd = process.cwd();
+    process.chdir(tmpDir);
+    mockLoadConfig.mockReset();
+    mockLoadConfig.mockResolvedValue(baseConfig());
+    mockResolveConfigPath.mockReset();
+    mockIsGlobalConfigPath.mockReset();
+    // Default: config lives next to wherever the user invoked totem from.
+    // Individual tests override to exercise cwd !== configRoot scenarios.
+    mockResolveConfigPath.mockImplementation((cwd: unknown) =>
+      path.join(String(cwd), 'totem.config.ts'),
+    );
+    mockIsGlobalConfigPath.mockReturnValue(false);
     mockCreateSpinner.mockResolvedValue({
       update: vi.fn(),
       succeed: vi.fn(),
@@ -53,6 +82,12 @@ describe('syncCommand', () => {
   });
 
   afterEach(() => {
+    process.chdir(origCwd);
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      // best effort
+    }
     vi.clearAllMocks();
   });
 
@@ -98,5 +133,119 @@ describe('syncCommand', () => {
   it('survives registry update failure without breaking sync', async () => {
     mockUpdateRegistryEntry.mockRejectedValueOnce(new Error('EACCES'));
     await expect(syncCommand({})).resolves.toBeUndefined();
+  });
+
+  // ─── #1527: canonical review-extensions.txt write ─────
+
+  it('writes newline-separated source extensions to .totem/review-extensions.txt on sync', async () => {
+    mockLoadConfig.mockResolvedValue(
+      baseConfig({ review: { sourceExtensions: ['.ts', '.tsx', '.rs', '.gd'] } }),
+    );
+    await syncCommand({ quiet: true });
+    const canonical = path.join(tmpDir, '.totem', 'review-extensions.txt');
+    expect(fs.existsSync(canonical)).toBe(true);
+    expect(fs.readFileSync(canonical, 'utf-8')).toBe('.ts\n.tsx\n.rs\n.gd\n');
+  });
+
+  it('writes default extensions when review.sourceExtensions is omitted', async () => {
+    // config.review is defaulted by Zod — simulate the parsed form with defaults applied.
+    mockLoadConfig.mockResolvedValue(
+      baseConfig({ review: { sourceExtensions: ['.ts', '.tsx', '.js', '.jsx'] } }),
+    );
+    await syncCommand({ quiet: true });
+    const canonical = path.join(tmpDir, '.totem', 'review-extensions.txt');
+    expect(fs.existsSync(canonical)).toBe(true);
+    expect(fs.readFileSync(canonical, 'utf-8')).toBe('.ts\n.tsx\n.js\n.jsx\n');
+  });
+
+  it('survives canonical-file write failure without breaking sync', async () => {
+    // Seed a directory in the target path so mkdirSync succeeds but writeFileSync collides
+    // with a directory-not-file error. (Platform-portable way to force failure: make
+    // review-extensions.txt a directory.)
+    const totemDir = path.join(tmpDir, '.totem');
+    fs.mkdirSync(totemDir, { recursive: true });
+    fs.mkdirSync(path.join(totemDir, 'review-extensions.txt'));
+    await expect(syncCommand({ quiet: true })).resolves.toBeUndefined();
+  });
+
+  it('writes canonical file relative to cwd when using global config profile', async () => {
+    // A user running with ~/.totem/totem.config.ts may still customize
+    // review.sourceExtensions. Writing the canonical file into ~/.totem/ would
+    // orphan it away from the bash hook (which reads from git-toplevel via
+    // `git rev-parse --show-toplevel`). Falling back to cwd hits the common
+    // case where the user invokes totem from the repo root. Preserves TS/bash
+    // parity for the typical global-config flow.
+    mockIsGlobalConfigPath.mockReturnValue(true);
+    mockLoadConfig.mockResolvedValue(baseConfig({ review: { sourceExtensions: ['.ts', '.rs'] } }));
+
+    await syncCommand({ quiet: true });
+
+    const canonical = path.join(tmpDir, '.totem', 'review-extensions.txt');
+    expect(fs.existsSync(canonical)).toBe(true);
+    expect(fs.readFileSync(canonical, 'utf-8')).toBe('.ts\n.rs\n');
+  });
+
+  it('resolves canonical file path relative to configRoot when invoked from subdirectory', async () => {
+    // Simulates a monorepo user running `totem sync` from a subdirectory such as
+    // packages/cli/ while totem.config.ts lives at the repo root. The canonical
+    // file must land at <project-root>/.totem/review-extensions.txt, matching
+    // what shield.ts and the bash PreToolUse hook read. Resolving against cwd
+    // would orphan the file under the subdirectory (lesson 61975bb96c9bf27f).
+    const subdir = path.join(tmpDir, 'packages', 'cli');
+    fs.mkdirSync(subdir, { recursive: true });
+    process.chdir(subdir);
+
+    // resolveConfigPath walks up from cwd and finds the config at the repo root.
+    mockResolveConfigPath.mockReturnValue(path.join(tmpDir, 'totem.config.ts'));
+    mockLoadConfig.mockResolvedValue(baseConfig({ review: { sourceExtensions: ['.ts', '.rs'] } }));
+
+    await syncCommand({ quiet: true });
+
+    // Canonical file lands at configRoot, never under the invoking subdirectory.
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'review-extensions.txt'))).toBe(true);
+    expect(fs.existsSync(path.join(subdir, '.totem', 'review-extensions.txt'))).toBe(false);
+    expect(fs.readFileSync(path.join(tmpDir, '.totem', 'review-extensions.txt'), 'utf-8')).toBe(
+      '.ts\n.rs\n',
+    );
+  });
+});
+
+describe('writeReviewExtensionsFile', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-sync-helper-'));
+  });
+
+  afterEach(() => {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      // best effort
+    }
+  });
+
+  it('creates the directory if missing', () => {
+    const nested = path.join(tmpDir, 'nested', '.totem');
+    writeReviewExtensionsFile(nested, ['.ts']);
+    expect(fs.existsSync(path.join(nested, 'review-extensions.txt'))).toBe(true);
+  });
+
+  it('writes one extension per line with trailing newline', () => {
+    writeReviewExtensionsFile(tmpDir, ['.ts', '.rs']);
+    expect(fs.readFileSync(path.join(tmpDir, 'review-extensions.txt'), 'utf-8')).toBe('.ts\n.rs\n');
+  });
+
+  it('atomically replaces existing file content', () => {
+    writeReviewExtensionsFile(tmpDir, ['.ts']);
+    writeReviewExtensionsFile(tmpDir, ['.rs', '.gd']);
+    expect(fs.readFileSync(path.join(tmpDir, 'review-extensions.txt'), 'utf-8')).toBe('.rs\n.gd\n');
+  });
+
+  it('leaves no .tmp residue after successful write', () => {
+    writeReviewExtensionsFile(tmpDir, ['.ts', '.tsx']);
+    const files = fs.readdirSync(tmpDir);
+    expect(files).toContain('review-extensions.txt');
+    expect(files).not.toContain('review-extensions.txt.tmp');
   });
 });

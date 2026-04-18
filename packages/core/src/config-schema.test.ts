@@ -540,6 +540,102 @@ describe('requireEmbedding', () => {
 
 // ─── Garbage collection config ──────────────────────
 
+// ─── Review source extensions (mmnto/totem#1527) ──────
+
+describe('review.sourceExtensions', () => {
+  it('normalizes missing dots and rejects shell-unsafe characters', () => {
+    // Accepts both "ts" and ".ts", normalizes to leading-dot form.
+    const ok = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      review: { sourceExtensions: ['ts', '.rs'] },
+    });
+    expect(ok.success).toBe(true);
+    if (ok.success) {
+      expect(ok.data.review.sourceExtensions).toEqual(['.ts', '.rs']);
+    }
+
+    // Shell-unsafe inputs rejected.
+    const hazards = ['*.ts', 'ts; rm -rf /', '', 'ts js', '.ts`whoami`', '.ts"', ".ts'"];
+    for (const bad of hazards) {
+      const result = TotemConfigSchema.safeParse({
+        targets: BASE_TARGETS,
+        review: { sourceExtensions: [bad] },
+      });
+      expect(result.success, `extension "${bad}" should be rejected`).toBe(false);
+    }
+  });
+
+  it('defaults to historical hardcoded set when field is absent', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.review.sourceExtensions).toEqual(['.ts', '.tsx', '.js', '.jsx']);
+    }
+  });
+
+  it('defaults to historical hardcoded set when review object is empty', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      review: {},
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.review.sourceExtensions).toEqual(['.ts', '.tsx', '.js', '.jsx']);
+    }
+  });
+
+  it('rejects explicit empty array', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      review: { sourceExtensions: [] },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const paths = result.error.issues.map((i) => i.path.join('.'));
+      expect(paths.some((p) => p.includes('sourceExtensions'))).toBe(true);
+    }
+  });
+
+  it('accepts compound extensions like .d.ts via internal dots', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      review: { sourceExtensions: ['.d.ts'] },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.review.sourceExtensions).toEqual(['.d.ts']);
+    }
+  });
+
+  it('normalizes "ts" and ".ts" to the same stored form', () => {
+    const a = TotemConfigSchema.parse({
+      targets: BASE_TARGETS,
+      review: { sourceExtensions: ['ts'] },
+    });
+    const b = TotemConfigSchema.parse({
+      targets: BASE_TARGETS,
+      review: { sourceExtensions: ['.ts'] },
+    });
+    expect(a.review.sourceExtensions).toEqual(b.review.sourceExtensions);
+  });
+
+  it('passthrough tolerates unknown future review fields', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      review: {
+        sourceExtensions: ['.ts'],
+        futureUnknownField: { nested: 'value' },
+      },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      // passthrough preserves the unknown field on the parsed object
+      const asRecord = result.data.review as Record<string, unknown>;
+      expect(asRecord['futureUnknownField']).toEqual({ nested: 'value' });
+    }
+  });
+});
+
 describe('GarbageCollectionSchema', () => {
   it('rejects garbage collection config with negative minAgeDays', () => {
     const result = GarbageCollectionSchema.safeParse({ minAgeDays: -1 });

@@ -35,6 +35,7 @@ export {
   ConfigTierSchema,
   ContentTypeSchema,
   DEFAULT_IGNORE_PATTERNS,
+  DEFAULT_REVIEW_SOURCE_EXTENSIONS,
   DocTargetSchema,
   EmbeddingProviderSchema,
   GarbageCollectionSchema,
@@ -46,6 +47,8 @@ export {
   OpenAIProviderSchema,
   OrchestratorSchema,
   requireEmbedding,
+  ReviewConfigSchema,
+  ReviewSourceExtensionSchema,
   ShellOrchestratorSchema,
   TotemConfigSchema,
 } from './config-schema.js';

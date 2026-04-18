@@ -68,6 +68,7 @@ describe('learnFromVerdict', () => {
     shieldIgnorePatterns: [],
     shieldAutoLearn: false,
     contextWarningThreshold: 40_000,
+    review: { sourceExtensions: ['.ts', '.tsx', '.js', '.jsx'] },
   };
 
   const failVerdict = `### Verdict

@@ -47,6 +47,7 @@ Thumbs.db
 .totem/*.log
 .totem/*.jsonl
 .totem/.search-called
+.totem/review-extensions.txt
 
 # Local scratchpad (personal scratch files go here, not in root)
 scratchpad/

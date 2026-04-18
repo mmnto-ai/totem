@@ -368,14 +368,65 @@ export function formatVerdictForDisplay(verdict: ShieldStructuredVerdict, pass: 
 }
 
 /**
+ * Historical hardcoded source extensions for the review content hash.
+ * Kept as the fallback when a caller does not supply the config-driven set
+ * (callers on the pre-#1527 signature) so behavior is preserved.
+ */
+const LEGACY_REVIEW_SOURCE_EXTENSIONS: readonly string[] = ['.ts', '.tsx', '.js', '.jsx'];
+
+/**
+ * Refresh `<totemDir>/review-extensions.txt` if its contents do not match
+ * the supplied extension set (or the file is missing). Closes the stale-
+ * canonical-file window when a user edits `totem.config.ts` but forgets to
+ * re-run `totem sync`. Best-effort; a write failure does not block the hash
+ * computation. (#1527)
+ */
+function refreshReviewExtensionsFileIfStale(
+  totemDirAbs: string,
+  extensions: readonly string[],
+  fs: typeof import('node:fs'),
+  path: typeof import('node:path'),
+): void {
+  const canonical = path.join(totemDirAbs, 'review-extensions.txt');
+  const want = extensions.join('\n') + '\n';
+  try {
+    const current = fs.readFileSync(canonical, 'utf-8');
+    if (current === want) return; // totem-context: intentional cleanup — missing file is expected on first run
+  } catch {
+    /* fall through to write */
+  }
+  try {
+    if (!fs.existsSync(totemDirAbs)) fs.mkdirSync(totemDirAbs, { recursive: true });
+    const tmp = canonical + '.tmp';
+    fs.writeFileSync(tmp, want, 'utf-8');
+    fs.renameSync(tmp, canonical); // totem-context: intentional cleanup — canonical file is a hook convenience; write failure is TOTEM_DEBUG-only per #1527 spec
+  } catch (err) {
+    if (process.env['TOTEM_DEBUG'] === '1') {
+      console.error(
+        '[Totem Error] Review: failed to refresh review-extensions.txt:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+}
+
+/**
  * Write the .reviewed-content-hash flag on PASS.
  * Uses a content hash of tracked source files (not Git SHA) so the flag
  * survives commits, amends, and rebases. Only breaks when source files change.
+ *
+ * The `extensions` parameter drives which file types are hashed. Defaults to
+ * the historical hardcoded set for backward compatibility with callers that
+ * predate #1527. The set must be pre-validated (see
+ * `ReviewSourceExtensionSchema` in core); values are passed as `git ls-files`
+ * glob arguments via safeExec and the regex refinement is the shell-injection
+ * boundary.
  */
 export async function writeReviewedContentHash(
   cwd: string,
   totemDir: string,
   configRoot?: string,
+  extensions: readonly string[] = LEGACY_REVIEW_SOURCE_EXTENSIONS,
 ): Promise<void> {
   try {
     const path = await import('node:path');
@@ -384,14 +435,22 @@ export async function writeReviewedContentHash(
 
     // Compute content hash: hash of all tracked source file objects
     const root = configRoot ?? cwd;
-    const files = safeExec('git', ['ls-files', '-z', '*.ts', '*.tsx', '*.js', '*.jsx'], {
+    const totemDirAbs = path.join(root, totemDir);
+
+    // Auto-refresh the canonical file if it drifted from the config's set.
+    // Closes the stale-canonical-file window without requiring the user to
+    // re-run `totem sync` after editing totem.config.ts. (#1527)
+    refreshReviewExtensionsFileIfStale(totemDirAbs, extensions, fs, path);
+
+    const globArgs = extensions.map((e) => '*' + e);
+    const files = safeExec('git', ['ls-files', '-z', ...globArgs], {
       cwd: root,
     });
     if (!files.trim()) return; // No source files — nothing to stamp
 
     // Filter out deleted files (still in index but missing on disk)
     const deleted = new Set(
-      safeExec('git', ['ls-files', '--deleted', '-z', '*.ts', '*.tsx', '*.js', '*.jsx'], {
+      safeExec('git', ['ls-files', '--deleted', '-z', ...globArgs], {
         cwd: root,
       })
         .split('\0')
@@ -410,7 +469,7 @@ export async function writeReviewedContentHash(
     const normalizedHashes = objectHashes.endsWith('\n') ? objectHashes : objectHashes + '\n';
     const contentHash = crypto.createHash('sha256').update(normalizedHashes).digest('hex');
 
-    const cacheDir = path.join(configRoot ?? cwd, totemDir, 'cache');
+    const cacheDir = path.join(totemDirAbs, 'cache');
     if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(path.join(cacheDir, '.reviewed-content-hash'), contentHash);
   } catch (err) {
@@ -754,7 +813,12 @@ async function handleVerdictResult(
     }
 
     if (verdict.pass) {
-      await writeReviewedContentHash(cwd, config.totemDir, configRoot);
+      await writeReviewedContentHash(
+        cwd,
+        config.totemDir,
+        configRoot,
+        config.review.sourceExtensions,
+      );
     } else if (options.override) {
       const { appendLedgerEvent } = await import('@mmnto/totem');
 
@@ -839,7 +903,12 @@ async function handleVerdictResult(
     // totem-context: reason is either empty string or pre-prefixed with ' — ', so direct concat is intentional
     log.info(DISPLAY_TAG, `Verdict: ${verdictLabel}${reason}`);
     if (verdict.pass) {
-      await writeReviewedContentHash(cwd, config.totemDir, configRoot);
+      await writeReviewedContentHash(
+        cwd,
+        config.totemDir,
+        configRoot,
+        config.review.sourceExtensions,
+      );
     } else if (options.override) {
       const { appendLedgerEvent } = await import('@mmnto/totem');
       const pathMod = await import('node:path');
@@ -1018,7 +1087,12 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     const diffResult = await getDiffForReview(options, config, cwd, DISPLAY_TAG);
     if (!diffResult) {
       // No changes = trivial pass — stamp content hash
-      await writeReviewedContentHash(cwd, config.totemDir, configRoot);
+      await writeReviewedContentHash(
+        cwd,
+        config.totemDir,
+        configRoot,
+        config.review.sourceExtensions,
+      );
       return;
     }
     diff = diffResult.diff;
@@ -1030,7 +1104,12 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   if (classification.allNonCode) {
     log.info(DISPLAY_TAG, 'Deterministic fast-path: all changed files are non-code');
     log.dim(DISPLAY_TAG, `Skipped: ${changedFiles.join(', ')}`);
-    await writeReviewedContentHash(cwd, config.totemDir, configRoot);
+    await writeReviewedContentHash(
+      cwd,
+      config.totemDir,
+      configRoot,
+      config.review.sourceExtensions,
+    );
     return;
   }
 
@@ -1046,7 +1125,12 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
         DISPLAY_TAG,
         'Deterministic fast-path: no code changes after filtering non-code files',
       );
-      await writeReviewedContentHash(cwd, config.totemDir, configRoot);
+      await writeReviewedContentHash(
+        cwd,
+        config.totemDir,
+        configRoot,
+        config.review.sourceExtensions,
+      );
       return;
     }
     log.dim(
