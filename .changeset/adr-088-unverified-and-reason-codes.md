@@ -1,7 +1,7 @@
 ---
-'@mmnto/totem': minor
-'@mmnto/cli': minor
-'@mmnto/mcp': minor
+'@mmnto/totem': patch
+'@mmnto/cli': patch
+'@mmnto/mcp': patch
 ---
 
 ADR-088 Phase 1 Layers 3 and 4 substrate: unverified flag and reason codes.
