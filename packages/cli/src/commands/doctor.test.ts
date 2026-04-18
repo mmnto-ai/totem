@@ -1367,15 +1367,13 @@ describe('findStaleRules + checkStaleRules', () => {
     cleanTmpDir(tmpDir);
   });
 
-  // Seed the 4-rule fixture described in the design doc's test directive:
-  //   A: fresh (evaluationCount < minRunsToEvaluate) — should be ignored
+  // Seed a 5-rule fixture exercising every branch of findStaleRules:
+  //   A: fresh (evaluationCount < window) — should be ignored
   //   B: stale standard (evaluationCount >= window, 0 code hits) — flagged warn
-  //   C: stale security (same conditions + category security) — flagged severe
+  //   C: stale security via category=security — flagged severe
   //   D: healthy (evaluationCount >= window, code hits > 0) — ignored
-  function seedFixture(
-    tmpDir: string,
-    options: { window: number; floor: number } = { window: 10, floor: 3 },
-  ): void {
+  //   E: stale security via immutable=true (no category) — flagged severe
+  function seedFixture(tmpDir: string, options: { window: number } = { window: 10 }): void {
     const totemDir = path.join(tmpDir, '.totem');
     fs.mkdirSync(totemDir, { recursive: true });
     fs.mkdirSync(path.join(totemDir, 'cache'), { recursive: true });
@@ -1420,6 +1418,16 @@ describe('findStaleRules + checkStaleRules', () => {
           compiledAt: '2026-01-01T00:00:00.000Z',
           createdAt: '2026-01-01T00:00:00.000Z',
         },
+        {
+          lessonHash: 'rule-E-stale-immutable',
+          lessonHeading: 'Rule E (stale immutable)',
+          pattern: 'zot',
+          message: 'E',
+          engine: 'regex',
+          compiledAt: '2026-02-15T00:00:00.000Z',
+          createdAt: '2026-02-15T00:00:00.000Z',
+          immutable: true,
+        },
       ],
       nonCompilable: [],
     };
@@ -1433,7 +1441,7 @@ describe('findStaleRules + checkStaleRules', () => {
           suppressCount: 0,
           lastTriggeredAt: null,
           lastSuppressedAt: null,
-          evaluationCount: Math.max(0, options.floor - 1),
+          evaluationCount: Math.max(0, options.window - 1),
           contextCounts: { code: 0, string: 0, comment: 0, regex: 0, unknown: 0 },
         },
         'rule-B-stale': {
@@ -1460,6 +1468,14 @@ describe('findStaleRules + checkStaleRules', () => {
           evaluationCount: options.window + 5,
           contextCounts: { code: 5, string: 0, comment: 0, regex: 0, unknown: 0 },
         },
+        'rule-E-stale-immutable': {
+          triggerCount: 0,
+          suppressCount: 0,
+          lastTriggeredAt: null,
+          lastSuppressedAt: null,
+          evaluationCount: options.window + 3,
+          contextCounts: { code: 0, string: 0, comment: 0, regex: 0, unknown: 0 },
+        },
       },
     };
     fs.writeFileSync(
@@ -1480,28 +1496,38 @@ describe('findStaleRules + checkStaleRules', () => {
     const hashes = result!.map((c) => c.lessonHash);
     expect(hashes).toContain('rule-B-stale');
     expect(hashes).toContain('rule-C-stale-security');
+    expect(hashes).toContain('rule-E-stale-immutable');
     expect(hashes).not.toContain('rule-A-fresh');
     expect(hashes).not.toContain('rule-D-healthy');
   });
 
-  it('assigns severity "security" to category=security rules and orders them first', async () => {
+  it('assigns severity "security" to category=security and immutable=true rules, ordering them first', async () => {
     seedFixture(tmpDir);
     const result = await findStaleRules(tmpDir);
     expect(result).not.toBeNull();
-    // Security first, standard second.
-    expect(result![0]!.lessonHash).toBe('rule-C-stale-security');
+    // Both security rules come before any standard rule. Among the two
+    // security rules, E (evaluationCount 13) sorts ahead of C (12) by the
+    // evaluationCount-desc tiebreaker.
+    expect(result![0]!.lessonHash).toBe('rule-E-stale-immutable');
     expect(result![0]!.severity).toBe('security');
-    expect(result![1]!.lessonHash).toBe('rule-B-stale');
-    expect(result![1]!.severity).toBe('standard');
+    expect(result![0]!.flags.immutable).toBe(true);
+    expect(result![1]!.lessonHash).toBe('rule-C-stale-security');
+    expect(result![1]!.severity).toBe('security');
+    expect(result![1]!.flags.category).toBe('security');
+    expect(result![2]!.lessonHash).toBe('rule-B-stale');
+    expect(result![2]!.severity).toBe('standard');
   });
 
-  it('never recommends archival for security rules', async () => {
+  it('never recommends archival for security rules (category=security or immutable=true)', async () => {
     seedFixture(tmpDir);
     const result = await findStaleRules(tmpDir);
-    const security = result!.find((c) => c.severity === 'security')!;
-    expect(security.recommendation).not.toContain('archived');
-    expect(security.recommendation).toContain('Do not archive');
-    expect(security.recommendation).toContain('totem compile --upgrade');
+    const securityRules = result!.filter((c) => c.severity === 'security');
+    expect(securityRules.length).toBe(2);
+    for (const security of securityRules) {
+      expect(security.recommendation).not.toContain('archived');
+      expect(security.recommendation).toContain('Do not archive');
+      expect(security.recommendation).toContain('totem compile --upgrade');
+    }
   });
 
   it('recommends either upgrade or archive for standard stale rules', async () => {
@@ -1512,19 +1538,16 @@ describe('findStaleRules + checkStaleRules', () => {
     expect(standard.recommendation).toContain('archived');
   });
 
-  it('respects custom thresholds passed through the call', async () => {
-    // Rule B has evaluationCount = 15, Rule C has 12. Push the window up to 13
-    // so only Rule B qualifies.
-    seedFixture(tmpDir, { window: 10, floor: 3 });
-    const result = await findStaleRules(tmpDir, '.totem', {
-      staleRuleWindow: 13,
-      minRunsToEvaluate: 3,
-    });
+  it('respects a custom staleRuleWindow threshold passed through the call', async () => {
+    // Rule B has evaluationCount 15, Rule C has 12, Rule E has 13. Push the
+    // window up to 14 so only Rule B qualifies.
+    seedFixture(tmpDir, { window: 10 });
+    const result = await findStaleRules(tmpDir, '.totem', { staleRuleWindow: 14 });
     const hashes = result!.map((c) => c.lessonHash);
     expect(hashes).toEqual(['rule-B-stale']);
   });
 
-  it('never flags rules below minRunsToEvaluate regardless of zero hits', async () => {
+  it('never flags rules below staleRuleWindow regardless of zero hits', async () => {
     // Seed a fresh rule with evaluationCount = 0 explicitly; should never
     // flag even after infinite runs.
     const totemDir = path.join(tmpDir, '.totem');

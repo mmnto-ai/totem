@@ -169,38 +169,23 @@ export const GarbageCollectionSchema = z.object({
 
 /**
  * Doctor configuration (mmnto-ai/totem#1483). Controls the stale-rule
- * advisory window in `totem doctor`. Both knobs are integer thresholds on
- * `RuleMetric.evaluationCount`:
- *
- *   - `minRunsToEvaluate`: hard floor below which doctor never flags a rule
- *     as stale. Protects freshly compiled rules from premature advisory.
- *   - `staleRuleWindow`: ceiling above which a rule with zero code-context
- *     matches (`contextCounts.code === 0`) gets flagged as stale.
- *
- * The `superRefine` rejects configs where the window is smaller than the
- * floor, which would collapse the whole check into a single threshold and
- * silently change semantics.
+ * advisory window in `totem doctor`. A single integer threshold on
+ * `RuleMetric.evaluationCount`.
  */
 export const DoctorConfigSchema = z
   .object({
-    /** Minimum evaluationCount before a rule can be flagged stale. Default 10. */
-    staleRuleWindow: z.number().int().min(1).default(10),
     /**
-     * Hard floor: never flag a rule whose evaluationCount is below this value,
-     * regardless of zero hits. Default 3.
+     * Minimum cumulative `RuleMetric.evaluationCount` before `totem doctor` will
+     * flag a rule as stale (zero `contextCounts.code` over the rule's lifetime).
+     *
+     * v1 uses cumulative-lifetime semantics: a rule fires once ever, then goes
+     * silent, and stays exempt. mmnto-ai/totem#1550 tracks swapping to true
+     * rolling-window semantics via `RuleMetric.runHistory` ring buffer. The
+     * config key stays; only the underlying math upgrades. No user migration.
      */
-    minRunsToEvaluate: z.number().int().min(1).default(3),
+    staleRuleWindow: z.number().int().min(1).default(10),
   })
-  .default({})
-  .superRefine((val, ctx) => {
-    if (val.staleRuleWindow < val.minRunsToEvaluate) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `doctor.staleRuleWindow (${val.staleRuleWindow}) must be greater than or equal to doctor.minRunsToEvaluate (${val.minRunsToEvaluate})`,
-        path: ['staleRuleWindow'],
-      });
-    }
-  });
+  .default({});
 
 export const DocTargetSchema = z.object({
   /** Relative path to the document */

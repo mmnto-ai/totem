@@ -687,44 +687,38 @@ describe('GarbageCollectionSchema', () => {
 // ─── DoctorConfigSchema (mmnto-ai/totem#1483) ────────
 
 describe('DoctorConfigSchema', () => {
-  it('parses doctor config with defaults and overrides', () => {
+  it('parses doctor config with default staleRuleWindow', () => {
     const defaulted = DoctorConfigSchema.parse({});
     expect(defaulted.staleRuleWindow).toBe(10);
-    expect(defaulted.minRunsToEvaluate).toBe(3);
+  });
 
-    const overridden = DoctorConfigSchema.parse({ staleRuleWindow: 20, minRunsToEvaluate: 5 });
+  it('accepts an explicit staleRuleWindow override', () => {
+    const overridden = DoctorConfigSchema.parse({ staleRuleWindow: 20 });
     expect(overridden.staleRuleWindow).toBe(20);
-    expect(overridden.minRunsToEvaluate).toBe(5);
-  });
-
-  it('rejects doctor.staleRuleWindow less than doctor.minRunsToEvaluate', () => {
-    const result = DoctorConfigSchema.safeParse({
-      staleRuleWindow: 2,
-      minRunsToEvaluate: 5,
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues[0]!.message).toContain('staleRuleWindow');
-      expect(result.error.issues[0]!.message).toContain('minRunsToEvaluate');
-    }
-  });
-
-  it('accepts staleRuleWindow equal to minRunsToEvaluate (boundary)', () => {
-    const result = DoctorConfigSchema.safeParse({
-      staleRuleWindow: 5,
-      minRunsToEvaluate: 5,
-    });
-    expect(result.success).toBe(true);
   });
 
   it('rejects staleRuleWindow below 1', () => {
     const result = DoctorConfigSchema.safeParse({ staleRuleWindow: 0 });
     expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some(
+          (issue) => issue.path.join('.') === 'staleRuleWindow' && issue.code === 'too_small',
+        ),
+      ).toBe(true);
+    }
   });
 
-  it('rejects minRunsToEvaluate below 1', () => {
-    const result = DoctorConfigSchema.safeParse({ minRunsToEvaluate: 0 });
+  it('rejects a negative staleRuleWindow', () => {
+    const result = DoctorConfigSchema.safeParse({ staleRuleWindow: -1 });
     expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some(
+          (issue) => issue.path.join('.') === 'staleRuleWindow' && issue.code === 'too_small',
+        ),
+      ).toBe(true);
+    }
   });
 
   it('TotemConfigSchema treats doctor as optional; missing value is undefined', () => {
@@ -739,27 +733,18 @@ describe('DoctorConfigSchema', () => {
     const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS, doctor: {} });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.doctor).toEqual({ staleRuleWindow: 10, minRunsToEvaluate: 3 });
+      expect(result.data.doctor).toEqual({ staleRuleWindow: 10 });
     }
   });
 
-  it('TotemConfigSchema accepts doctor config overrides', () => {
+  it('TotemConfigSchema accepts a doctor.staleRuleWindow override', () => {
     const result = TotemConfigSchema.safeParse({
       targets: BASE_TARGETS,
-      doctor: { staleRuleWindow: 50, minRunsToEvaluate: 10 },
+      doctor: { staleRuleWindow: 50 },
     });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.doctor?.staleRuleWindow).toBe(50);
-      expect(result.data.doctor?.minRunsToEvaluate).toBe(10);
     }
-  });
-
-  it('TotemConfigSchema rejects inverted doctor window / floor', () => {
-    const result = TotemConfigSchema.safeParse({
-      targets: BASE_TARGETS,
-      doctor: { staleRuleWindow: 3, minRunsToEvaluate: 10 },
-    });
-    expect(result.success).toBe(false);
   });
 });

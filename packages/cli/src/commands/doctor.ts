@@ -769,11 +769,9 @@ export interface StaleRuleCandidate {
 
 /**
  * Pure helper: scan compiled rules + metrics and return structured
- * stale-rule candidates. A rule is stale when it has been evaluated at
- * least `staleRuleWindow` times and never landed a match in code context
- * (`contextCounts.code === 0`). Rules with `evaluationCount` below
- * `minRunsToEvaluate` are skipped entirely so freshly compiled rules do
- * not trigger premature advisories.
+ * stale-rule candidates. A rule is stale when it has accrued at least
+ * `staleRuleWindow` evaluations over its lifetime and has never landed a
+ * match in code context (`contextCounts.code === 0`).
  *
  * Security rules (`category === 'security'` OR `immutable === true`) get
  * flagged with the `security` severity so the formatter can mark them
@@ -783,10 +781,7 @@ export interface StaleRuleCandidate {
 export async function findStaleRules(
   cwd: string,
   totemDir = '.totem',
-  thresholds: { staleRuleWindow: number; minRunsToEvaluate: number } = {
-    staleRuleWindow: 10,
-    minRunsToEvaluate: 3,
-  },
+  thresholds: { staleRuleWindow: number } = { staleRuleWindow: 10 },
 ): Promise<StaleRuleCandidate[] | null> {
   const totemDirAbs = path.join(cwd, totemDir);
   const rulesPath = path.join(totemDirAbs, 'compiled-rules.json');
@@ -805,10 +800,11 @@ export async function findStaleRules(
       const metric = metricsFile.rules[rule.lessonHash];
       const evaluationCount = metric?.evaluationCount ?? 0;
 
-      // Below the floor: rule has not accrued enough runs to judge.
-      if (evaluationCount < thresholds.minRunsToEvaluate) continue;
-
-      // Below the window: keep waiting. Advisory never fires.
+      // v1 staleness check: cumulative lifetime evaluations against a single
+      // threshold. A rule that fired once years ago then went silent stays
+      // exempt forever. mmnto-ai/totem#1550 tracks swapping to rolling-window
+      // semantics via a `RuleMetric.runHistory` ring buffer; the config key
+      // stays, only the math upgrades.
       if (evaluationCount < thresholds.staleRuleWindow) continue;
 
       const codeMatches = metric?.contextCounts?.code ?? 0;
@@ -861,7 +857,7 @@ export async function findStaleRules(
 export async function checkStaleRules(
   cwd: string,
   totemDir = '.totem',
-  thresholds?: { staleRuleWindow: number; minRunsToEvaluate: number },
+  thresholds?: { staleRuleWindow: number },
 ): Promise<DiagnosticResult> {
   const rulesPath = path.join(cwd, totemDir, 'compiled-rules.json');
   if (!fs.existsSync(rulesPath)) {
@@ -1314,19 +1310,16 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
 
   console.error(`${pc.cyan('[Totem]')} Running diagnostics...\n`);
 
-  // Resolve doctor thresholds from config when available. The default pair
-  // (10 / 3) lines up with the schema defaults so missing config still gives
-  // the documented behavior.
-  let doctorThresholds: { staleRuleWindow: number; minRunsToEvaluate: number } | undefined;
+  // Resolve doctor thresholds from config when available. The default window
+  // (10) lines up with the schema default so missing config still gives the
+  // documented behavior.
+  let doctorThresholds: { staleRuleWindow: number } | undefined;
   try {
     const { loadConfig, resolveConfigPath } = await import('../utils.js');
     const configPath = resolveConfigPath(cwd);
     const config = await loadConfig(configPath);
     if (config.doctor) {
-      doctorThresholds = {
-        staleRuleWindow: config.doctor.staleRuleWindow,
-        minRunsToEvaluate: config.doctor.minRunsToEvaluate,
-      };
+      doctorThresholds = { staleRuleWindow: config.doctor.staleRuleWindow };
     }
   } catch (err) {
     // Running `totem doctor` against a repo with no config is a valid path
