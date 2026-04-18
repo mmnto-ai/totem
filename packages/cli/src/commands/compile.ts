@@ -226,6 +226,7 @@ export function formatVerboseTraceBlock(
   // Separate events into prelude (generate / verify / retry) and terminal
   // (result). The terminal lives on its own line with full framing.
   let retryCounter = 0;
+  let sawResult = false;
   for (const ev of trace) {
     const label = pipelineLabel(ev.layer);
     if (ev.action === 'generate') {
@@ -239,9 +240,22 @@ export function formatVerboseTraceBlock(
     } else if (ev.action === 'result') {
       const detail = ev.reasonCode ? ` (${ev.reasonCode})` : '';
       lines.push('  result: ' + ev.outcome + detail);
+      sawResult = true;
     } else {
       lines.push(`  (unknown) ${String(ev.action)}: ${String(ev.outcome)}`);
     }
+  }
+
+  // Defense in depth: if the trace somehow never emitted a terminal result
+  // event, synthesize one from the caller-supplied status so the verbose
+  // block always carries a final line. compileLesson pushes a result event
+  // on every return path, but a future refactor could regress that; this
+  // guard keeps the rendered block well-formed regardless.
+  if (!sawResult) {
+    const lastOutcome = trace[trace.length - 1]?.outcome;
+    const outcome = lastOutcome ?? status;
+    const resultSuffix = reasonCode ? ` (${reasonCode})` : '';
+    lines.push('  result: ' + outcome + resultSuffix);
   }
 
   return lines.join('\n');

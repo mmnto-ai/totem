@@ -765,7 +765,10 @@ export async function compileLesson(
     ].join('\n');
 
     const response = await runOrchestrator(userPrompt, systemPrompt);
-    if (response == null) return { status: 'noop', trace };
+    if (response == null) {
+      trace.push({ layer: 2, action: 'result', outcome: 'noop' });
+      return { status: 'noop', trace };
+    }
 
     const parsed = parseCompilerResponse(response);
     if (!parsed) {
@@ -909,7 +912,10 @@ export async function compileLesson(
     const userPrompt = userPromptParts.join('\n\n');
     const response = await runOrchestrator(userPrompt, compilerPrompt);
 
-    if (response == null) return { status: 'noop', trace };
+    if (response == null) {
+      trace.push({ layer: 3, action: 'result', outcome: 'noop' });
+      return { status: 'noop', trace };
+    }
 
     const parsed = parseCompilerResponse(response);
     if (!parsed) {
@@ -1111,7 +1117,10 @@ export async function compileLesson(
   }
 
   // Unreachable: every path inside the loop returns. Kept to satisfy the
-  // return-type checker without using a non-null assertion dance.
+  // return-type checker without using a non-null assertion dance. Push a
+  // terminal result event defensively so any caller relying on the
+  // terminal-result invariant still sees one even if the loop ever leaks.
+  trace.push({ layer: 3, action: 'result', outcome: 'failed' });
   return { status: 'failed', trace };
 }
 
