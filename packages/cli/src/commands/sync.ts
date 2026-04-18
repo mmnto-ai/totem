@@ -73,7 +73,7 @@ export async function syncCommand(options: {
     // (default set persisted), so downstream bash consumers see a consistent file.
     try {
       const totemDirAbs = path.resolve(cwd, config.totemDir);
-      writeReviewExtensionsFile(totemDirAbs, config.review.sourceExtensions);
+      writeReviewExtensionsFile(totemDirAbs, config.review.sourceExtensions); // totem-context: intentional cleanup — canonical file write is a convenience for the bash PreToolUse hook
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       log.dim(TAG, `Skipped review-extensions.txt write: ${detail}`);

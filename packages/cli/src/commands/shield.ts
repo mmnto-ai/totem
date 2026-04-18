@@ -391,19 +391,19 @@ function refreshReviewExtensionsFileIfStale(
   const want = extensions.join('\n') + '\n';
   try {
     const current = fs.readFileSync(canonical, 'utf-8');
-    if (current === want) return;
+    if (current === want) return; // totem-context: intentional cleanup — missing file is expected on first run
   } catch {
-    // File missing or unreadable — fall through to write.
+    /* fall through to write */
   }
   try {
     if (!fs.existsSync(totemDirAbs)) fs.mkdirSync(totemDirAbs, { recursive: true });
     const tmp = canonical + '.tmp';
     fs.writeFileSync(tmp, want, 'utf-8');
-    fs.renameSync(tmp, canonical);
+    fs.renameSync(tmp, canonical); // totem-context: intentional cleanup — canonical file is a hook convenience; write failure is TOTEM_DEBUG-only per #1527 spec
   } catch (err) {
     if (process.env['TOTEM_DEBUG'] === '1') {
       console.error(
-        '[Review] Failed to refresh review-extensions.txt:',
+        '[Totem Error] Review: failed to refresh review-extensions.txt:',
         err instanceof Error ? err.message : err,
       );
     }
