@@ -363,6 +363,7 @@ describe('doctorCommand output', () => {
     expect(output).toContain('Secret Scan');
     expect(output).toContain('Secrets File Security');
     expect(output).toContain('Upgrade Candidates');
+    expect(output).toContain('Stale Rules');
   });
 
   it('outputs summary line with pass/warn/fail counts', async () => {
@@ -1547,6 +1548,51 @@ describe('findStaleRules + checkStaleRules', () => {
     expect(hashes).toEqual(['rule-B-stale']);
   });
 
+  it('flags rules whose evaluationCount exactly equals staleRuleWindow', async () => {
+    // Boundary test for the >= semantics at the staleness check site. A rule
+    // with evaluationCount === staleRuleWindow and zero code hits must flag.
+    // Guards against an off-by-one regression that would flip the check to >.
+    const totemDir = path.join(tmpDir, '.totem');
+    fs.mkdirSync(path.join(totemDir, 'cache'), { recursive: true });
+    fs.writeFileSync(
+      path.join(totemDir, 'compiled-rules.json'),
+      JSON.stringify({
+        version: 1,
+        rules: [
+          {
+            lessonHash: 'rule-boundary',
+            lessonHeading: 'exact window',
+            pattern: 'x',
+            message: 'x',
+            engine: 'regex',
+            compiledAt: '2026-01-01T00:00:00.000Z',
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        nonCompilable: [],
+      }),
+    );
+    fs.writeFileSync(
+      path.join(totemDir, 'cache', 'rule-metrics.json'),
+      JSON.stringify({
+        version: 1,
+        rules: {
+          'rule-boundary': {
+            triggerCount: 0,
+            suppressCount: 0,
+            lastTriggeredAt: null,
+            lastSuppressedAt: null,
+            evaluationCount: 10,
+            contextCounts: { code: 0, string: 0, comment: 0, regex: 0, unknown: 0 },
+          },
+        },
+      }),
+    );
+    const result = await findStaleRules(tmpDir, '.totem', { staleRuleWindow: 10 });
+    const hashes = result!.map((c) => c.lessonHash);
+    expect(hashes).toEqual(['rule-boundary']);
+  });
+
   it('never flags rules below staleRuleWindow regardless of zero hits', async () => {
     // Seed a fresh rule with evaluationCount = 0 explicitly; should never
     // flag even after infinite runs.
@@ -1678,9 +1724,12 @@ describe('findStaleRules + checkStaleRules', () => {
     seedFixture(tmpDir);
     const result = await checkStaleRules(tmpDir);
     expect(result.status).toBe('warn');
-    expect(result.message).toContain('2');
-    expect(result.message).toContain('security');
-    expect(result.message).toContain('standard');
+    // Structured count check: seedFixture produces 2 security + 1 standard
+    // stale rule. Match explicit "N security" / "N standard" phrasing so a
+    // renderer change that drops the category split fails loud rather than
+    // passing on any digit that happens to appear anywhere in the message.
+    expect(result.message).toMatch(/\b2\s+security\b/i);
+    expect(result.message).toMatch(/\b1\s+standard\b/i);
     expect(result.remediation).toContain('totem compile --upgrade');
   });
 
