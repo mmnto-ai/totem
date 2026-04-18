@@ -805,12 +805,15 @@ export async function compileLesson(
       };
     }
 
-    const pipeline3PatternHash = hashPattern(extractPatternString(parsed));
+    // Only include `patternHash` when the parsed output actually carries a
+    // pattern. Hashing the `(pattern unavailable)` fallback would make a
+    // failed generation look identical to a successful one in verbose output.
+    const pipeline3HasPattern = hasExtractablePattern(parsed);
     trace.push({
       layer: 2,
       action: 'generate',
       outcome: 'produced',
-      patternHash: pipeline3PatternHash,
+      ...(pipeline3HasPattern ? { patternHash: hashPattern(extractPatternString(parsed)) } : {}),
     });
 
     // mmnto/totem#1408: Pipeline 3 reuses its Bad snippet as the smoke-gate
@@ -952,12 +955,15 @@ export async function compileLesson(
       };
     }
 
-    const currentPatternHash = hashPattern(extractPatternString(parsed));
+    // Only include `patternHash` when the parsed output actually carries a
+    // pattern. Hashing the `(pattern unavailable)` fallback would make a
+    // failed generation look identical to a successful one in verbose output.
+    const currentHasPattern = hasExtractablePattern(parsed);
     trace.push({
       layer: 3,
       action: 'generate',
       outcome: `attempt-${attempt}`,
-      patternHash: currentPatternHash,
+      ...(currentHasPattern ? { patternHash: hashPattern(extractPatternString(parsed)) } : {}),
     });
 
     // Smoke gate enforcement lives in buildCompiledRule (mmnto-ai/totem#1408).
@@ -1170,6 +1176,21 @@ function extractPatternString(parsed: CompilerOutput): string {
   }
   if (parsed.astGrepYamlRule) return JSON.stringify(parsed.astGrepYamlRule, null, 2);
   return '(pattern unavailable)';
+}
+
+/**
+ * Whether the parsed compiler output carries a concrete pattern we can hash.
+ * Callers emitting a `generate` trace event use this guard so the event
+ * records `patternHash` only when the LLM actually produced a pattern; a
+ * missing-pattern case emits the event without the field rather than
+ * hashing the `(pattern unavailable)` fallback, which would misleadingly
+ * look like a successful generation in verbose output.
+ */
+function hasExtractablePattern(parsed: CompilerOutput): boolean {
+  if (typeof parsed.pattern === 'string' && parsed.pattern.length > 0) return true;
+  if (typeof parsed.astGrepPattern === 'string' && parsed.astGrepPattern.length > 0) return true;
+  if (parsed.astGrepYamlRule) return true;
+  return false;
 }
 
 /**
