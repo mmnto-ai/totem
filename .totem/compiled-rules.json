@@ -7037,7 +7037,9 @@
         "packages/mcp/src/**/*.test.ts",
         "packages/mcp/src/**/*.test.tsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Pre-existing variant of the same test-fixture authorial-guidance defect class as a24ec7272f1f670e and de7ee11b427d201e. fileGlobs scope to packages/mcp/src/**/*.test.ts(x), but the pattern `currentBranch:\\s*['\"][^'\"]+['\"]` fires on every test that mocks git state with a literal currentBranch — which is how git-mocking tests normally set up fixtures. Surfaced by GCA review on #1526 as a companion to the wave-1 archives."
     },
     {
       "lessonHash": "854ee1ad7fe80c40",

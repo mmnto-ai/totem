@@ -132,10 +132,26 @@ const archives = [
     reason:
       'Second-wave duplicate of aeb65ba1a27ec781 with a simpler regex `\\bhas\\s*:\\s*\\{`. Same defect: fires on every ast-grep rule definition that uses the `has:` combinator, which is standard authoring syntax. Would flag every rule in .totem/compiled-rules.json.',
   },
+  // Pre-existing same-defect rule surfaced by GCA review on #1526.
+  // Created 2026-04-17 before this postmerge cycle; carries the same
+  // authorial-guidance defect class as a24ec7272f1f670e / de7ee11b427d201e
+  // and was silently firing on every legitimate currentBranch test mock
+  // under packages/mcp/src/**/*.test.ts{,x}.
+  {
+    hash: '28cc46c09bd5820f',
+    heading: 'Allow null branches for detached HEADs',
+    reason:
+      'Pre-existing variant of the same test-fixture authorial-guidance defect class as a24ec7272f1f670e and de7ee11b427d201e. fileGlobs scope to packages/mcp/src/**/*.test.ts(x), but the pattern `currentBranch:\\s*[\'"][^\'"]+[\'"]` fires on every test that mocks git state with a literal currentBranch — which is how git-mocking tests normally set up fixtures. Surfaced by GCA review on #1526 as a companion to the wave-1 archives.',
+  },
 ];
 
 const raw = fs.readFileSync(RULES_PATH, 'utf8');
-const manifest = JSON.parse(raw);
+let manifest;
+try {
+  manifest = JSON.parse(raw);
+} catch (err) {
+  throw new Error('[Totem Error] Failed to parse compiled-rules.json', { cause: err });
+}
 
 // Pre-index by hash and fail loud on duplicates. Using .find() per hash
 // could silently archive the wrong rule if duplicate lessonHash rows ever
@@ -191,5 +207,11 @@ for (const drift of headingDrifts) {
   console.warn(`Heading drift for ${drift.hash}: expected "${drift.expected}", got "${drift.got}"`);
 }
 
-fs.writeFileSync(RULES_PATH, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+// Atomic write via temp-file + rename. A process interruption mid-write
+// would otherwise leave compiled-rules.json truncated — which would
+// break every downstream consumer (lint, review, verify-manifest). Cost
+// is three lines; upside is zero chance of a half-written manifest.
+const tempPath = `${RULES_PATH}.tmp`;
+fs.writeFileSync(tempPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+fs.renameSync(tempPath, RULES_PATH);
 console.log(`Archived or refreshed ${updated} rules in ${RULES_PATH}`);
