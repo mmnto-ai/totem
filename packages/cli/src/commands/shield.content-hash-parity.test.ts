@@ -142,11 +142,7 @@ describe('content-hash parity (#1529)', () => {
     },
   );
 
-  // Skipped pending the companion change in .claude/hooks/content-hash.sh
-  // (see #1527 open questions). This parity case is the load-bearing one
-  // for polyglot consumers; unskip once the hook reads the canonical file.
-  // TODO(#1527): unskip after hook lands.
-  it.skip(
+  it(
     'produces byte-equal hash for custom extension set including .rs',
     { timeout: 20_000 },
     async () => {
