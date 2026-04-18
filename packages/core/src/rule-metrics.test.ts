@@ -8,6 +8,7 @@ import type { RuleMetricsFile } from './rule-metrics.js';
 import {
   loadRuleMetrics,
   recordContextHit,
+  recordEvaluation,
   recordSuppression,
   recordTrigger,
   saveRuleMetrics,
@@ -47,6 +48,7 @@ describe('loadRuleMetrics', () => {
           suppressCount: 2,
           lastTriggeredAt: '2026-01-01T00:00:00.000Z',
           lastSuppressedAt: '2026-01-02T00:00:00.000Z',
+          evaluationCount: 0,
         },
       },
     };
@@ -67,12 +69,14 @@ describe('loadRuleMetrics', () => {
           suppressCount: 1,
           lastTriggeredAt: '2026-03-01T00:00:00.000Z',
           lastSuppressedAt: null,
+          evaluationCount: 0,
         },
         hash2: {
           triggerCount: 0,
           suppressCount: 0,
           lastTriggeredAt: null,
           lastSuppressedAt: null,
+          evaluationCount: 0,
         },
       },
     };
@@ -135,6 +139,7 @@ describe('saveRuleMetrics', () => {
           suppressCount: 0,
           lastTriggeredAt: '2026-01-01T00:00:00.000Z',
           lastSuppressedAt: null,
+          evaluationCount: 0,
         },
       },
     };
@@ -150,13 +155,25 @@ describe('saveRuleMetrics', () => {
     const data1: RuleMetricsFile = {
       version: 1,
       rules: {
-        a: { triggerCount: 1, suppressCount: 0, lastTriggeredAt: null, lastSuppressedAt: null },
+        a: {
+          triggerCount: 1,
+          suppressCount: 0,
+          lastTriggeredAt: null,
+          lastSuppressedAt: null,
+          evaluationCount: 0,
+        },
       },
     };
     const data2: RuleMetricsFile = {
       version: 1,
       rules: {
-        b: { triggerCount: 2, suppressCount: 1, lastTriggeredAt: null, lastSuppressedAt: null },
+        b: {
+          triggerCount: 2,
+          suppressCount: 1,
+          lastTriggeredAt: null,
+          lastSuppressedAt: null,
+          evaluationCount: 0,
+        },
       },
     };
 
@@ -324,5 +341,100 @@ describe('recordContextHit', () => {
     expect(metrics.rules['hash1']!.triggerCount).toBe(1);
     expect(metrics.rules['hash1']!.suppressCount).toBe(1);
     expect(metrics.rules['hash1']!.contextCounts!.code).toBe(1);
+  });
+});
+
+// ─── recordEvaluation (mmnto-ai/totem#1483) ────────────
+
+describe('recordEvaluation', () => {
+  it('creates a new entry with evaluationCount 1', () => {
+    const metrics = emptyMetrics();
+    recordEvaluation(metrics, 'hash1');
+    expect(metrics.rules['hash1']).toBeDefined();
+    expect(metrics.rules['hash1']!.evaluationCount).toBe(1);
+    expect(metrics.rules['hash1']!.triggerCount).toBe(0);
+    expect(metrics.rules['hash1']!.suppressCount).toBe(0);
+  });
+
+  it('increments monotonically across calls on the same hash', () => {
+    const metrics = emptyMetrics();
+    recordEvaluation(metrics, 'hash1');
+    recordEvaluation(metrics, 'hash1');
+    recordEvaluation(metrics, 'hash1');
+    expect(metrics.rules['hash1']!.evaluationCount).toBe(3);
+  });
+
+  it('does not affect unrelated hashes', () => {
+    const metrics = emptyMetrics();
+    recordEvaluation(metrics, 'hash1');
+    recordEvaluation(metrics, 'hash2');
+    recordEvaluation(metrics, 'hash2');
+    expect(metrics.rules['hash1']!.evaluationCount).toBe(1);
+    expect(metrics.rules['hash2']!.evaluationCount).toBe(2);
+  });
+
+  it('does not affect triggerCount / suppressCount / contextCounts', () => {
+    const metrics = emptyMetrics();
+    recordTrigger(metrics, 'hash1');
+    recordSuppression(metrics, 'hash1');
+    recordContextHit(metrics, 'hash1', 'code');
+    recordEvaluation(metrics, 'hash1');
+    expect(metrics.rules['hash1']!.triggerCount).toBe(1);
+    expect(metrics.rules['hash1']!.suppressCount).toBe(1);
+    expect(metrics.rules['hash1']!.contextCounts!.code).toBe(1);
+    expect(metrics.rules['hash1']!.evaluationCount).toBe(1);
+  });
+});
+
+// ─── Pre-#1483 migration ───────────────────────────────
+
+describe('evaluationCount migration', () => {
+  it('loads a pre-#1483 metrics file (no evaluationCount field) and defaults to 0', () => {
+    // Pre-#1483 rule-metrics.json on disk had no evaluationCount field. The
+    // Zod default keeps old files loading without a migration pass.
+    const data = {
+      version: 1,
+      rules: {
+        legacyHash: {
+          triggerCount: 7,
+          suppressCount: 2,
+          lastTriggeredAt: '2026-01-01T00:00:00.000Z',
+          lastSuppressedAt: null,
+        },
+      },
+    };
+    const dir = path.join(tmpDir, 'cache');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'rule-metrics.json'), JSON.stringify(data));
+
+    const loaded = loadRuleMetrics(tmpDir);
+    expect(loaded.rules['legacyHash']).toBeDefined();
+    expect(loaded.rules['legacyHash']!.evaluationCount).toBe(0);
+    expect(loaded.rules['legacyHash']!.triggerCount).toBe(7);
+    expect(loaded.rules['legacyHash']!.suppressCount).toBe(2);
+  });
+
+  it('accrues evaluationCount after migration via recordEvaluation', () => {
+    // The first lint run after upgrade should treat migrated rules as "just
+    // loaded" — evaluationCount ticks up from 0 as normal.
+    const data = {
+      version: 1,
+      rules: {
+        legacyHash: {
+          triggerCount: 5,
+          suppressCount: 0,
+          lastTriggeredAt: null,
+          lastSuppressedAt: null,
+        },
+      },
+    };
+    const dir = path.join(tmpDir, 'cache');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'rule-metrics.json'), JSON.stringify(data));
+
+    const loaded = loadRuleMetrics(tmpDir);
+    recordEvaluation(loaded, 'legacyHash');
+    recordEvaluation(loaded, 'legacyHash');
+    expect(loaded.rules['legacyHash']!.evaluationCount).toBe(2);
   });
 });

@@ -1048,6 +1048,82 @@ describe('runCompiledRules', () => {
       mockExec.mockRestore();
     });
   });
+
+  // ─── evaluationCount per-rule per-run (mmnto-ai/totem#1483) ──
+
+  describe('evaluationCount (mmnto-ai/totem#1483)', () => {
+    it('increments evaluationCount exactly once per rule per lint run', async () => {
+      const rule1 = makeRule('console\\.log', 'No console', 'No console', {
+        lessonHash: 'hash-eval-1',
+      });
+      const rule2 = makeRule('debugger', 'No debugger', 'No debugger', {
+        lessonHash: 'hash-eval-2',
+      });
+      writeRules(tmpDir, [rule1, rule2]);
+
+      // Diff carries multiple additions including several matches for rule1.
+      // The counter still ticks once per rule regardless of match count.
+      const diff = [
+        'diff --git a/src/app.ts b/src/app.ts',
+        '--- a/src/app.ts',
+        '+++ b/src/app.ts',
+        '@@ -1,3 +1,5 @@',
+        ' // existing',
+        '+  console.log("first");',
+        '+  console.log("second");',
+        '+  console.log("third");',
+        ' // end',
+      ].join('\n');
+
+      try {
+        await runCompiledRules({
+          diff,
+          cwd: tmpDir,
+          totemDir: TOTEM_DIR,
+          format: 'json',
+          tag: 'Test',
+        });
+      } catch (err: unknown) {
+        if (!(err instanceof TotemError) || err.code !== 'SHIELD_FAILED') throw err;
+      }
+
+      const metricsPath = path.join(tmpDir, TOTEM_DIR, 'cache', 'rule-metrics.json');
+      expect(fs.existsSync(metricsPath)).toBe(true);
+      const metrics = JSON.parse(fs.readFileSync(metricsPath, 'utf-8')) as {
+        rules: Record<string, { evaluationCount?: number; triggerCount: number }>;
+      };
+      expect(metrics.rules['hash-eval-1']!.evaluationCount).toBe(1);
+      expect(metrics.rules['hash-eval-2']!.evaluationCount).toBe(1);
+      expect(metrics.rules['hash-eval-1']!.triggerCount).toBe(3);
+      expect(metrics.rules['hash-eval-2']!.triggerCount).toBe(0);
+    });
+
+    it('increments evaluationCount on each invocation (monotonic across runs)', async () => {
+      const rule = makeRule('NEVER_MATCHES_XYZ', 'Dormant rule', 'Dormant rule', {
+        lessonHash: 'hash-dormant',
+      });
+      writeRules(tmpDir, [rule]);
+
+      const diff = makeDiff('src/app.ts', '  const x = 1;');
+
+      for (let i = 0; i < 4; i++) {
+        await runCompiledRules({
+          diff,
+          cwd: tmpDir,
+          totemDir: TOTEM_DIR,
+          format: 'json',
+          tag: 'Test',
+        });
+      }
+
+      const metricsPath = path.join(tmpDir, TOTEM_DIR, 'cache', 'rule-metrics.json');
+      const metrics = JSON.parse(fs.readFileSync(metricsPath, 'utf-8')) as {
+        rules: Record<string, { evaluationCount?: number; triggerCount: number }>;
+      };
+      expect(metrics.rules['hash-dormant']!.evaluationCount).toBe(4);
+      expect(metrics.rules['hash-dormant']!.triggerCount).toBe(0);
+    });
+  });
 });
 
 describe('TOTEM_LITE graceful AST degradation', () => {

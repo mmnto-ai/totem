@@ -275,6 +275,7 @@ export type { ContextCounts, RuleMetric, RuleMetricsFile } from './rule-metrics.
 export {
   loadRuleMetrics,
   recordContextHit,
+  recordEvaluation,
   recordSuppression,
   recordTrigger,
   saveRuleMetrics,
