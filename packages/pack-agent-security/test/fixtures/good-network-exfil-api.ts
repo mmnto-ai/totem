@@ -1,8 +1,6 @@
 // Fixture: the #1488 Rule A MUST NOT fire on any call below. Covers
 // config-driven URLs, legitimate API hosts, and subdomain-anchor bypass
 // attempts the regex must decline.
-/* eslint-disable no-undef */
-
 // @ts-nocheck — fixture file, not expected to type-check cleanly
 
 declare const fetch: (...a: unknown[]) => unknown;

@@ -103,7 +103,13 @@ function readSweepFileOrThrow(abs: string): string {
 
 function sweepAstGrep(rule: CompiledRule, files: string[]): Violation[] {
   const pattern = rule.astGrepYamlRule ?? rule.astGrepPattern;
-  if (!pattern) return [];
+  if (!pattern) {
+    // Fail loud: a malformed rule with no pattern would silently skip the
+    // repo sweep (CR #1522 catch, same class as the unknown-engine dispatch).
+    throw new Error(
+      `repo-sweep: rule ${rule.lessonHash} declares engine 'ast-grep' but has no astGrepYamlRule or astGrepPattern`,
+    );
+  }
   const out: Violation[] = [];
   for (const file of files) {
     if (!fileMatchesRuleGlobs(file, rule)) continue;
@@ -120,7 +126,11 @@ function sweepAstGrep(rule: CompiledRule, files: string[]): Violation[] {
 }
 
 function sweepRegex(rule: CompiledRule, files: string[]): Violation[] {
-  if (!rule.pattern) return [];
+  if (!rule.pattern) {
+    throw new Error(
+      `repo-sweep: rule ${rule.lessonHash} declares engine 'regex' but has no pattern`,
+    );
+  }
   let re: RegExp;
   try {
     // totem-context: pattern is the pack's own compiled rule regex, not user input

@@ -73,9 +73,9 @@ Good fixtures explicitly include: a config-driven URL reference, OpenAI / Anthro
 
 ### Test harness deltas
 
-- `FIXTURE_CASES` in `rules.test.ts` grows from 2 to 4 entries.
-- `manifest.rules.length` drift-guard bumps from `2` to `4` (same file; may end up at 6 after #1490's 5 patterns land — see `1490-design.md`).
-- New parity test (either new file or added to `structure.test.ts`) asserts every domain in `domain-blocklist.json` appears, correctly anchored, in both Rule A's regex constraint and Rule B's pattern, and that no orphan domain appears in rules but not in the JSON.
+- `FIXTURE_CASES` in `rules.test.ts` grows from 2 entries (PR1) to 5 entries (PR1's spawn + eval, PR2's Rule A + Rule B + #1490 compound).
+- `manifest.rules.length` drift-guard bumps from `2` to `5`.
+- New `parity.test.ts` file asserts every domain in `domain-blocklist.json` appears, correctly anchored, in both Rule A's regex constraint and Rule B's pattern; asserts the IPv4 fragment is shared; and validates the JSON's schema shape.
 - `ALLOWLIST` in `repo-sweep.test.ts` stays empty for the two new hashes. Initial survey: zero Totem src files have hardcoded IPv4 in fetch/axios/http-request arguments, zero have curl/wget in string literals outside test-excluded paths.
 
 ## State lifecycle

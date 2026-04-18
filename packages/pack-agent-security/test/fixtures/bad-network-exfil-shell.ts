@@ -1,8 +1,6 @@
 // Fixture: the #1488 Rule B (regex) MUST fire per-line on every literal
 // below. Matches PR1's bare-statement convention. Each line carries a
 // curl or wget invocation against an IPv4 literal or blocklisted domain.
-/* eslint-disable no-undef */
-
 // @ts-nocheck — fixture file, not expected to type-check cleanly
 
 declare const log: (s: string) => void;

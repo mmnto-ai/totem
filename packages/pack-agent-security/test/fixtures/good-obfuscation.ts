@@ -1,8 +1,6 @@
 // Fixture: the #1490 rule MUST NOT fire on any call below. Benign uses of
 // the same ambient primitives (String, Buffer, Array, string methods) that
 // are NOT in the obfuscation shapes the rule targets.
-/* eslint-disable no-undef */
-
 // @ts-nocheck — fixture file, not expected to type-check cleanly
 
 declare const Buffer: { from: (...a: unknown[]) => unknown };

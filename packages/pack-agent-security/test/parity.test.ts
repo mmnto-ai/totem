@@ -20,7 +20,7 @@ const manifest = readJsonSafe(path.join(PACK_ROOT, 'compiled-rules.json'), Compi
 // same domain set. Parity here guarantees the human-reviewable JSON asset and
 // the baked regexes agree. Drift between them is a correctness bug in the
 // rule: the JSON is the source of truth, the regexes are the derived form.
-const RULE_A_HASH = '79353234aa907cd9';
+const RULE_A_HASH = '1597d56eebcf2623';
 const RULE_B_HASH = '6fa15756b8a004ef';
 
 function extractRuleAConstraintRegex(): string {

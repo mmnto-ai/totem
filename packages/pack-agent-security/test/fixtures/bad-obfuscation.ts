@@ -2,8 +2,6 @@
 // convention from PR1. The rule's per-family coverage test asserts >= 7
 // matches total, so any single sub-pattern regression drops the count
 // below 7 and fails with a diff.
-/* eslint-disable no-undef */
-
 // @ts-nocheck — fixture file, not expected to type-check cleanly
 
 declare const payload: string;

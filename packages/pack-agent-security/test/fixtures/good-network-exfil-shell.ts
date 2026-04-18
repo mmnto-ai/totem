@@ -1,8 +1,6 @@
 // Fixture: the #1488 Rule B MUST NOT fire on any line below. Covers
 // legitimate curl/wget targets, config-driven URLs, and subdomain-anchor
 // bypass attempts.
-/* eslint-disable no-undef */
-
 // @ts-nocheck — fixture file, not expected to type-check cleanly
 
 declare const log: (s: string) => void;

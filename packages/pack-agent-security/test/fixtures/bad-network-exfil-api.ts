@@ -1,7 +1,6 @@
 // Fixture: the #1488 Rule A (ast-grep) MUST fire on every call below.
 // Each line is a canonical exfil-pattern call site. Matches PR1's bare-
 // call-site convention: no function wrappers, no unused vars.
-/* eslint-disable no-undef */
 
 // @ts-nocheck — fixture file, not expected to type-check cleanly
 

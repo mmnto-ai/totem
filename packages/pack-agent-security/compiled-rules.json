@@ -186,10 +186,10 @@
       "badExample": "eval(userInput);"
     },
     {
-      "lessonHash": "79353234aa907cd9",
+      "lessonHash": "1597d56eebcf2623",
       "lessonHeading": "Network requests to hardcoded IP addresses or suspicious domains",
       "pattern": "",
-      "message": "Direct network calls (fetch, axios.*, http.request, https.request, net.Socket) with a string-literal URL containing a hardcoded IPv4 address or a domain from the pack's blocklist (pastebin.com/api, ngrok.io, *.trycloudflare.com, *.onion, transfer.sh, gofile.io, anonfiles.com) let a compromised agent exfiltrate data to attacker-controlled endpoints. Use a config-driven URL (from env, request context, or a reviewed allowlist) rather than literal IPs or exfil-pattern hosts. If a legitimate use case exists, document it with // totem-context: or add the file to the pack's .totemignore with review.",
+      "message": "Direct network calls (fetch, axios.*, http.request, https.request) with a string-literal URL containing a hardcoded IPv4 address or a domain from the pack's blocklist (pastebin.com/api, ngrok.io, *.trycloudflare.com, *.onion, transfer.sh, gofile.io, anonfiles.com) let a compromised agent exfiltrate data to attacker-controlled endpoints. Use a config-driven URL (from env, request context, or a reviewed allowlist) rather than literal IPs or exfil-pattern hosts. If a legitimate use case exists, document it with // totem-context: or add the file to the pack's .totemignore with review.",
       "engine": "ast-grep",
       "astGrepYamlRule": {
         "rule": {

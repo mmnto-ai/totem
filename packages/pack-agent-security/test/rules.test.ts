@@ -35,7 +35,7 @@ const FIXTURE_CASES: { hash: string; bad: string; good: string }[] = [
     good: 'good-dynamic-eval.ts',
   },
   {
-    hash: '79353234aa907cd9',
+    hash: '1597d56eebcf2623',
     bad: 'bad-network-exfil-api.ts',
     good: 'good-network-exfil-api.ts',
   },
