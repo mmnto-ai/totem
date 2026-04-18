@@ -2,7 +2,12 @@ import { Lang, parse } from '@ast-grep/napi';
 
 import { runSmokeGate } from './compile-smoke-gate.js';
 import { engineFields, sanitizeFileGlobs, validateRegex } from './compiler.js';
-import type { CompiledRule, CompilerOutput, RegexValidation } from './compiler-schema.js';
+import type {
+  CompiledRule,
+  CompilerOutput,
+  NonCompilableReasonCode,
+  RegexValidation,
+} from './compiler-schema.js';
 import {
   extractBadGoodSnippets,
   extractManualPattern,
@@ -25,12 +30,17 @@ export interface LessonInput {
  * downstream consumers (totem doctor, Layer 4 fallthrough reporting per ADR-088)
  * can distinguish why a lesson produced no rule without string-matching
  * human-readable messages.
+ *
+ * mmnto-ai/totem#1481 aligned this internal type 1:1 with the persisted
+ * `NonCompilableReasonCode` enum so ledger writers can pass the code through
+ * without a mapping table. `'non-compilable'` renamed to `'out-of-scope'`,
+ * `'security-verify-rejected'` renamed to `'security-rule-rejected'`, and
+ * four producer-facing codes joined: `'no-pattern-generated'`,
+ * `'pattern-syntax-invalid'`, `'pattern-zero-match'`, `'no-pattern-found'`.
+ * Fresh compile runs MUST NOT emit `'legacy-unknown'`; that sentinel exists
+ * solely for migrating pre-#1481 2-tuples.
  */
-export type CompileLessonReasonCode =
-  | 'non-compilable' // LLM classified the lesson as conceptual/architectural
-  | 'missing-badexample' // LLM output omitted badExample; structural failure, no retry
-  | 'verify-retry-exhausted' // Layer 3 retry loop ran to cap without producing a matching pattern
-  | 'security-verify-rejected'; // Layer 3 security rule failed verify; no retry per zero-tolerance
+export type CompileLessonReasonCode = Exclude<NonCompilableReasonCode, 'legacy-unknown'>;
 
 export type CompileLessonResult =
   | { status: 'compiled'; rule: CompiledRule }
@@ -568,6 +578,42 @@ export function buildManualRule(
 // ─── Single-lesson compilation ──────────────────────
 
 /**
+ * Check whether the lesson body carries a non-empty Example Hit block.
+ * ADR-088 Phase 1 Layer 3 (mmnto-ai/totem#1480): rules compiled without an
+ * Example Hit ship as `unverified: true` (non-security) or fail outright
+ * (security). Empty code fences like ```ts\n``` are treated as absent —
+ * `trim()` is applied before the length check.
+ */
+function hasExampleHits(body: string): boolean {
+  const examples = extractRuleExamples(body);
+  if (!examples) return false;
+  return examples.hits.some((line) => line.trim().length > 0);
+}
+
+/**
+ * Security-context signal for the missing-Example-Hit check. Either the
+ * compile orchestrator asserts the pack is security-scoped
+ * (`deps.securityContext === true`) OR the rule under construction already
+ * carries `immutable: true` (set by the pack manifest, ADR-089). Both
+ * paths trigger the zero-tolerance reject per ADR-088 Decision 3.
+ *
+ * The LLM-emitted `CompilerOutput` does not currently carry an `immutable`
+ * field (packs set it at pack-merge time), so the second signal only
+ * engages on the Pipeline 1 manual-rule path where `buildManualRule`
+ * could synthesize an immutable rule directly. A future change that
+ * threads `immutable` through `CompilerOutput` can wire Pipeline 2/3
+ * into this helper without touching the call sites.
+ */
+function isSecurityContext(
+  deps: CompileLessonDeps,
+  rule?: { immutable?: boolean } | null,
+): boolean {
+  if (deps.securityContext === true) return true;
+  if (rule?.immutable === true) return true;
+  return false;
+}
+
+/**
  * Compile a single lesson into a rule.
  * Handles both manual patterns (zero LLM) and LLM-compiled patterns.
  * Pure business logic — no UI, no I/O, no process.exit.
@@ -578,14 +624,36 @@ export async function compileLesson(
   deps: CompileLessonDeps,
 ): Promise<CompileLessonResult> {
   const { parseCompilerResponse, runOrchestrator, existingByHash, callbacks } = deps;
+  const exampleHitPresent = hasExampleHits(lesson.body);
 
   // ── Pipeline 1: Manual pattern (zero LLM) ────────
   const manualResult = buildManualRule(lesson, existingByHash);
   if (manualResult.rule) {
+    // ADR-088 Phase 1 Layer 3 (mmnto-ai/totem#1480): security-scoped manual
+    // rules without an Example Hit are rejected outright.
+    if (!exampleHitPresent && isSecurityContext(deps, manualResult.rule)) {
+      const reason = 'Security rule missing Example Hit block (manual)';
+      callbacks?.onWarn?.(lesson.heading, `${reason} — rejecting`);
+      return {
+        status: 'skipped',
+        hash: lesson.hash,
+        reason,
+        reasonCode: 'security-rule-rejected',
+      };
+    }
     const testResult = verifyRuleExamples(manualResult.rule, lesson.body);
     if (testResult && !testResult.passed) {
+      // A manual rule that failed its own inline examples is authoring
+      // error territory. Keep the existing 'failed' contract so the
+      // lesson stays pending rather than landing in nonCompilable.
+      // Pre-#1480 `verifyRuleExamples` fired on any hit or miss; the
+      // `hasExampleHits` check guards the unverified flag below without
+      // changing the verify gate itself.
       callbacks?.onWarn?.(lesson.heading, formatExampleFailure(testResult));
       return { status: 'failed' };
+    }
+    if (!exampleHitPresent) {
+      manualResult.rule.unverified = true;
     }
     return { status: 'compiled', rule: manualResult.rule };
   }
@@ -594,6 +662,21 @@ export async function compileLesson(
     return { status: 'failed' };
   }
   // manualResult.rule === null && no rejectReason → no manual pattern, proceed to Pipeline 3 or 2
+
+  // ADR-088 Phase 1 Layer 3 (mmnto-ai/totem#1480): security rules that enter
+  // the LLM path with no Example Hit short-circuit before the orchestrator
+  // call. Compile has no ground truth to verify against, and zero-tolerance
+  // per Decision 3 leaves nothing to retry.
+  if (!exampleHitPresent && deps.securityContext === true) {
+    const reason = 'Security rule missing Example Hit block';
+    callbacks?.onWarn?.(lesson.heading, `${reason} — rejecting`);
+    return {
+      status: 'skipped',
+      hash: lesson.hash,
+      reason,
+      reasonCode: 'security-rule-rejected',
+    };
+  }
 
   // ── Pipeline 3: Example-based compilation (Bad/Good snippets) ──
   const snippets = extractBadGoodSnippets(lesson.body);
@@ -624,7 +707,12 @@ export async function compileLesson(
     const parsed = parseCompilerResponse(response);
     if (!parsed) {
       callbacks?.onWarn?.(lesson.heading, 'Pipeline 3: failed to parse LLM response — skipping');
-      return { status: 'failed' };
+      return {
+        status: 'skipped',
+        hash: lesson.hash,
+        reason: 'Pipeline 3: failed to parse LLM response',
+        reasonCode: 'pattern-syntax-invalid',
+      };
     }
 
     if (!parsed.compilable) {
@@ -633,7 +721,7 @@ export async function compileLesson(
         status: 'skipped',
         hash: lesson.hash,
         reason: parsed.reason,
-        reasonCode: 'non-compilable',
+        reasonCode: 'out-of-scope',
       };
     }
 
@@ -645,11 +733,14 @@ export async function compileLesson(
       badExampleOverride: snippets.bad.join('\n'),
     });
     if (!ruleResult.rule) {
-      callbacks?.onWarn?.(
-        lesson.heading,
-        `Pipeline 3: ${ruleResult.rejectReason ?? 'Unknown error'} — skipping`,
-      );
-      return { status: 'failed' };
+      const rejectReason = ruleResult.rejectReason ?? 'Unknown error';
+      callbacks?.onWarn?.(lesson.heading, `Pipeline 3: ${rejectReason} — skipping`);
+      return {
+        status: 'skipped',
+        hash: lesson.hash,
+        reason: `Pipeline 3: ${rejectReason}`,
+        reasonCode: classifyBuildRejectReason(rejectReason),
+      };
     }
 
     // Self-verify: at least one Bad line should trigger, no Good line should trigger
@@ -673,6 +764,14 @@ export async function compileLesson(
       return { status: 'failed' };
     }
 
+    // Pipeline 3 rules are example-based — they always ship with a Bad snippet
+    // by construction. Flag unverified only when the lesson body itself omits
+    // the canonical Example Hit block, keeping the signal aligned with the
+    // lesson-level ground-truth rather than the Pipeline 3 self-test.
+    if (!exampleHitPresent) {
+      ruleResult.rule.unverified = true;
+    }
+
     return { status: 'compiled', rule: ruleResult.rule };
   }
 
@@ -690,14 +789,14 @@ export async function compileLesson(
   //     "Previous Attempt Failed Verification" section that names the
   //     failed pattern and the badExample it could not match, then call
   //     the LLM again. Up to MAX_VERIFY_ATTEMPTS total attempts.
-  //   - Security context (deps.securityContext === true) disables retry:
-  //     a failing verify rejects outright with reasonCode
-  //     'security-verify-rejected' per ADR-088 Decision 3 (zero
-  //     tolerance).
+  //   - Security context (deps.securityContext === true or the LLM-emitted
+  //     rule declared `immutable: true`) disables retry: a failing verify
+  //     rejects outright with reasonCode 'security-rule-rejected' per
+  //     ADR-088 Decision 3 (zero tolerance).
   //   - On attempt exhaustion, fall through to Layer 4 with reasonCode
   //     'verify-retry-exhausted'. The lesson is recorded as skipped
   //     with a machine-readable reason so totem doctor and downstream
-  //     tooling can distinguish this from 'non-compilable'.
+  //     tooling can distinguish this from 'out-of-scope'.
   const MAX_VERIFY_ATTEMPTS = 3;
   let previousFailure: { pattern: string; snippet: string; reason: string } | null = null;
 
@@ -721,7 +820,12 @@ export async function compileLesson(
     const parsed = parseCompilerResponse(response);
     if (!parsed) {
       callbacks?.onWarn?.(lesson.heading, 'Failed to parse LLM response — skipping');
-      return { status: 'failed' };
+      return {
+        status: 'skipped',
+        hash: lesson.hash,
+        reason: 'Failed to parse LLM response',
+        reasonCode: 'pattern-syntax-invalid',
+      };
     }
 
     if (!parsed.compilable) {
@@ -730,7 +834,7 @@ export async function compileLesson(
         status: 'skipped',
         hash: lesson.hash,
         reason: parsed.reason,
-        reasonCode: 'non-compilable',
+        reasonCode: 'out-of-scope',
       };
     }
 
@@ -754,6 +858,12 @@ export async function compileLesson(
     if (ruleResult.rule) {
       const testResult = verifyRuleExamples(ruleResult.rule, lesson.body);
       if (!testResult || testResult.passed) {
+        // ADR-088 Phase 1 Layer 3 (mmnto-ai/totem#1480): flag rules compiled
+        // without a non-empty Example Hit as unverified, even when the
+        // lesson carried an Example Miss (the miss still got verified).
+        if (!exampleHitPresent) {
+          ruleResult.rule.unverified = true;
+        }
         return { status: 'compiled', rule: ruleResult.rule };
       }
       // Example Hit/Miss verification failed against the lesson's ground
@@ -791,12 +901,18 @@ export async function compileLesson(
       // retry-eligible. Validator-level rejections — invalid regex,
       // ast-grep parse errors, self-suppression guards — are terminal.
       // Retrying them produces more invalid patterns and wastes tokens.
-      // 'failed' keeps the rule pending for a future recompile rather
-      // than marking it permanently nonCompilable.
+      // Record a machine-readable code in the ledger so `totem doctor`
+      // and downstream telemetry can distinguish syntax rejections from
+      // retry-exhaustion.
       const isZeroMatch = rejectReason.startsWith('smoke gate: zero matches');
       if (!isZeroMatch) {
-        callbacks?.onWarn?.(lesson.heading, `${rejectReason} — failing`);
-        return { status: 'failed' };
+        callbacks?.onWarn?.(lesson.heading, `${rejectReason} — skipping`);
+        return {
+          status: 'skipped',
+          hash: lesson.hash,
+          reason: rejectReason,
+          reasonCode: classifyBuildRejectReason(rejectReason),
+        };
       }
 
       retryReason = rejectReason;
@@ -808,7 +924,7 @@ export async function compileLesson(
     // threads back into the next LLM attempt's user prompt.
 
     // ADR-088 Decision 3: security rules zero-tolerance. No retry.
-    if (deps.securityContext === true) {
+    if (isSecurityContext(deps, ruleResult.rule)) {
       callbacks?.onWarn?.(
         lesson.heading,
         `Security rule rejected on verify failure (no retry): ${retryReason}`,
@@ -817,7 +933,7 @@ export async function compileLesson(
         status: 'skipped',
         hash: lesson.hash,
         reason: retryReason,
-        reasonCode: 'security-verify-rejected',
+        reasonCode: 'security-rule-rejected',
       };
     }
 
@@ -853,6 +969,37 @@ export async function compileLesson(
 }
 
 // ─── Retry loop helpers (ADR-088 Layer 3) ──────────
+
+/**
+ * Map a `buildCompiledRule` rejectReason string to a machine-readable
+ * `CompileLessonReasonCode`. Substring matching is deliberate: these
+ * strings originate inside `compiler.ts` / `compile-lesson.ts` and the
+ * tests on this module pin them, so prefix drift surfaces as a test
+ * failure rather than a silent reclassification.
+ *
+ *   - 'Missing pattern/message/astQuery/astGrepPattern/astGrepYamlRule'
+ *     → `'no-pattern-generated'`. The LLM emitted a structured response
+ *     without the fields needed to build a rule.
+ *   - 'Rejected regex' / 'Invalid ast-grep pattern' / 'Pattern matches a
+ *     suppression directive' → `'pattern-syntax-invalid'`. The pattern
+ *     exists but cannot be parsed / executed / safely run.
+ *   - 'smoke gate: zero matches' → `'pattern-zero-match'`. The pattern
+ *     compiled fine but did not fire against the badExample. On the
+ *     Pipeline 2 retry-loop path this branch is used for retry fuel;
+ *     the retry-exhausted terminal uses `'verify-retry-exhausted'`.
+ *     Pipeline 3 does not retry, so the gate rejection lands here
+ *     directly.
+ *   - Fallback is `'pattern-syntax-invalid'` so every skipped ledger
+ *     entry carries a specific code per ADR-088 Layer 4.
+ */
+function classifyBuildRejectReason(rejectReason: string): CompileLessonReasonCode {
+  if (rejectReason.startsWith('Missing ')) return 'no-pattern-generated';
+  if (rejectReason.startsWith('Rejected regex')) return 'pattern-syntax-invalid';
+  if (rejectReason.startsWith('Invalid ast-grep pattern')) return 'pattern-syntax-invalid';
+  if (rejectReason.includes('suppression directive')) return 'pattern-syntax-invalid';
+  if (rejectReason.startsWith('smoke gate: zero matches')) return 'pattern-zero-match';
+  return 'pattern-syntax-invalid';
+}
 
 /**
  * Render the parsed LLM output's pattern as a printable string for the

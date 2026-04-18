@@ -1,4 +1,10 @@
-import type { CompiledRule, CompiledRulesFile, LessonInput } from '@mmnto/totem';
+import type {
+  CompiledRule,
+  CompiledRulesFile,
+  LessonInput,
+  NonCompilableEntry,
+  NonCompilableReasonCode,
+} from '@mmnto/totem';
 
 // ─── Constants ──────────────────────────────────────
 
@@ -102,17 +108,19 @@ export function buildTelemetryPrefix(contextCounts: {
 // ─── Non-compilable cache helpers ───────────────────
 
 /**
- * Non-compilable entry as it lives on disk after the schema transform in
- * `@mmnto/totem` normalizes legacy `string[]` entries to `{hash, title}` tuples.
+ * Value side of the in-memory `nonCompilableMap`. Carries the title plus the
+ * machine-readable reasonCode (mmnto-ai/totem#1481) so prune / serialize
+ * steps round-trip the full 4-tuple without a lookup.
  */
-export interface NonCompilableTuple {
-  hash: string;
+export interface NonCompilableMapValue {
   title: string;
+  reasonCode: NonCompilableReasonCode;
+  reason?: string;
 }
 
 /**
  * Filter stale entries from a non-compilable map against the current set of
- * lesson hashes. Returns the fresh tuple-form list and a count of how many
+ * lesson hashes. Returns the fresh 4-tuple list and a count of how many
  * entries were drained.
  *
  * Extracted for mmnto/totem#1281 so the no-op compile path can drain stale
@@ -120,15 +128,26 @@ export interface NonCompilableTuple {
  * leaving stale entries stranded on no-op runs (e.g. after a lesson was
  * removed or after a parser-bug fix invalidated old non-compilable hashes).
  * Pure function; does not mutate the input map.
+ *
+ * mmnto-ai/totem#1481: preserves `reasonCode` and `reason` through the
+ * prune so ledger entries stay 4-tuple-shaped on disk. Dropping them back
+ * to 2-tuple would silently reintroduce `'legacy-unknown'` on the next
+ * load via the Read transform.
  */
 export function pruneStaleNonCompilable(
-  nonCompilableMap: Map<string, string>,
+  nonCompilableMap: Map<string, NonCompilableMapValue>,
   currentHashes: Set<string>,
-): { fresh: NonCompilableTuple[]; drained: number } {
-  const fresh: NonCompilableTuple[] = [];
-  for (const [hash, title] of nonCompilableMap) {
+): { fresh: NonCompilableEntry[]; drained: number } {
+  const fresh: NonCompilableEntry[] = [];
+  for (const [hash, value] of nonCompilableMap) {
     if (currentHashes.has(hash)) {
-      fresh.push({ hash, title });
+      const entry: NonCompilableEntry = {
+        hash,
+        title: value.title,
+        reasonCode: value.reasonCode,
+      };
+      if (value.reason !== undefined) entry.reason = value.reason;
+      fresh.push(entry);
     }
   }
   return { fresh, drained: nonCompilableMap.size - fresh.length };
@@ -538,11 +557,17 @@ export async function compileCommand(
       : loadCompiledRulesFile(rulesPath);
     const existingRules = existingFile.rules;
     const existingByHash = new Map(existingRules.map((r) => [r.lessonHash, r]));
-    // mmnto/totem#1280: nonCompilable is now Map<hash, title> internally for observability.
-    // The schema's transform normalizes legacy string entries to {hash, title} tuples
-    // on read, so existingFile.nonCompilable is always tuple-shaped here.
-    const nonCompilableMap = new Map<string, string>(
-      (existingFile.nonCompilable ?? []).map((entry) => [entry.hash, entry.title]),
+    // mmnto/totem#1280 + mmnto-ai/totem#1481: in-memory nonCompilable is
+    // `Map<hash, {title, reasonCode, reason?}>` so every write path carries
+    // the full 4-tuple. The schema's Read transform normalizes legacy
+    // strings and 2-tuples to the 4-tuple shape (reasonCode:
+    // 'legacy-unknown') before we reach this block, so existingFile.
+    // nonCompilable is always 4-tuple-shaped here.
+    const nonCompilableMap = new Map<string, NonCompilableMapValue>(
+      (existingFile.nonCompilable ?? []).map((entry) => [
+        entry.hash,
+        { title: entry.title, reasonCode: entry.reasonCode, reason: entry.reason },
+      ]),
     );
 
     // Note: we do NOT delete the --upgrade target from existingByHash here.
@@ -850,8 +875,15 @@ export async function compileCommand(
               continue;
             }
             if (!parsed.compilable) {
-              // mmnto/totem#1280: capture title alongside hash for observability
-              nonCompilableMap.set(lesson.hash, lesson.heading);
+              // mmnto/totem#1280: capture title alongside hash for observability.
+              // mmnto-ai/totem#1481: the cloud worker currently classifies every
+              // compilable:false outcome as out-of-scope. Granular cloud-side
+              // reasonCodes are out of scope here and track via mmnto/totem#1221.
+              nonCompilableMap.set(lesson.hash, {
+                title: lesson.heading,
+                reasonCode: 'out-of-scope',
+                reason: parsed.reason,
+              });
               skippedLessons.push({ heading: lesson.heading, reason: parsed.reason });
               skipped++;
               continue;
@@ -992,8 +1024,15 @@ export async function compileCommand(
                 logCompiledRule(log, lesson, result.rule);
                 break;
               case 'skipped':
-                // mmnto/totem#1280: capture title alongside hash for observability
-                nonCompilableMap.set(result.hash, lesson.heading);
+                // mmnto/totem#1280 + mmnto-ai/totem#1481: capture the full
+                // 4-tuple so ledger reads downstream (doctor, telemetry) see
+                // a specific reasonCode rather than normalizing to
+                // 'legacy-unknown'.
+                nonCompilableMap.set(result.hash, {
+                  title: lesson.heading,
+                  reasonCode: result.reasonCode,
+                  reason: result.reason,
+                });
                 skippedLessons.push({ heading: lesson.heading, reason: result.reason });
                 skipped++;
                 break;

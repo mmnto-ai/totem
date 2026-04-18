@@ -19,9 +19,14 @@ import type {
   CompiledRule,
   CompiledRulesFile,
   CompilerOutput,
+  NonCompilableEntry,
   RegexValidation,
 } from './compiler-schema.js';
-import { CompiledRulesFileSchema, CompilerOutputSchema } from './compiler-schema.js';
+import {
+  CompiledRulesFileSchema,
+  CompilerOutputSchema,
+  NonCompilableEntryWriteSchema,
+} from './compiler-schema.js';
 import { TotemParseError } from './errors.js';
 
 // ─── Re-exports (preserve public API) ──────────────
@@ -34,6 +39,8 @@ export type {
   CompilerOutput,
   DiffAddition,
   NapiConfig,
+  NonCompilableEntry,
+  NonCompilableReasonCode,
   RegexValidation,
   RuleEventCallback,
   RuleEventContext,
@@ -45,6 +52,9 @@ export {
   CompiledRulesFileSchema,
   CompilerOutputSchema,
   NapiConfigSchema,
+  NonCompilableEntryReadSchema,
+  NonCompilableEntryWriteSchema,
+  NonCompilableReasonCodeSchema,
 } from './compiler-schema.js';
 export { extractAddedLines } from './diff-parser.js';
 export {
@@ -166,9 +176,35 @@ export function saveCompiledRules(rulesPath: string, rules: CompiledRule[]): voi
   });
 }
 
-/** Save the full compiled rules file (rules + non-compilable cache). */
+/**
+ * Save the full compiled rules file (rules + non-compilable cache).
+ *
+ * Every `nonCompilable` entry is validated through the strict Write schema
+ * before serialization per the Read/Write schema invariant (lesson
+ * 400fed87). If a caller ever passes Read-schema-shaped data back through
+ * save, we surface the bug as a `TotemParseError` rather than letting the
+ * permissive union silently re-accept legacy shapes on disk.
+ */
 export function saveCompiledRulesFile(rulesPath: string, data: CompiledRulesFile): void {
-  fs.writeFileSync(rulesPath, JSON.stringify(data, null, 2) + '\n', {
+  const validatedNonCompilable: NonCompilableEntry[] | undefined = data.nonCompilable?.map(
+    (entry, idx) => {
+      const parsed = NonCompilableEntryWriteSchema.safeParse(entry);
+      if (!parsed.success) {
+        throw new TotemParseError(
+          `nonCompilable[${idx}] failed strict write validation: ${parsed.error.issues
+            .map((i) => i.message)
+            .join('; ')}`,
+          'Route ledger writes through NonCompilableEntryWriteSchema so legacy shapes do not leak back to disk.',
+          parsed.error,
+        );
+      }
+      return parsed.data;
+    },
+  );
+  const payload: CompiledRulesFile = validatedNonCompilable
+    ? { ...data, nonCompilable: validatedNonCompilable }
+    : data;
+  fs.writeFileSync(rulesPath, JSON.stringify(payload, null, 2) + '\n', {
     encoding: 'utf-8',
     mode: 0o644,
   });
