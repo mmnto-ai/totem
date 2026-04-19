@@ -195,7 +195,7 @@ export async function runCompiledRules(
         if (repoRoot) {
           readStrategy = async (filePath: string) => {
             try {
-              // totem-ignore-next-line — false positive: comment mentions `git ls-files`; actual call below uses --recurse-submodules
+              // totem-context: false positive — comment mentions `git ls-files`; the actual call below already uses --recurse-submodules
               // 1. Detect symlinks explicitly (git ls-files -s returns mode 120000).
               //    The `--` separator prevents filePath values starting with `-` from
               //    being interpreted as git options.

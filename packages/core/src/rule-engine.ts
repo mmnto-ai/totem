@@ -174,6 +174,14 @@ function isSuppressed(ctx: RuleEngineContext, line: string, precedingLine: strin
  * Extract justification text from totem-context: directives.
  * Checks both the current line and the preceding line.
  * Returns empty string for plain totem-ignore (no justification).
+ *
+ * @param ctx - Per-invocation rule engine context. Required so that the legacy
+ *   `shield-context:` deprecation path (reached via `matchContextDirective`)
+ *   uses the caller's logger and per-ctx latch instead of module state.
+ * @param line - The line being evaluated.
+ * @param precedingLine - The line immediately before, or null at start of file.
+ * @returns The justification text, or empty string if the line carries a plain
+ *   `totem-ignore` or no directive at all.
  */
 export function extractJustification(
   ctx: RuleEngineContext,
@@ -197,9 +205,18 @@ export function extractJustification(
 // ─── Regex rule execution ───────────────────────────
 
 /**
- * Apply compiled rules against pre-extracted diff additions.
+ * Apply compiled regex-engine rules against pre-extracted diff additions.
  * Skips additions with non-code AST context (strings, comments, regex).
- * Optional `onRuleEvent` callback enables observability metrics collection.
+ *
+ * @param ctx - Per-invocation rule engine context. Replaces the module-level
+ *   logger / deprecation-warning latch that existed pre-#1441. Callers build
+ *   one ctx per linting invocation: `{ logger, state: { hasWarnedShieldContext: false } }`.
+ * @param rules - The full rule list. This function filters to regex-engine
+ *   rules internally.
+ * @param additions - The diff additions to evaluate.
+ * @param onRuleEvent - Optional observability callback for metrics collection
+ *   on trigger / suppress / failure events.
+ * @returns All regex-based violations found.
  */
 export function applyRulesToAdditions(
   ctx: RuleEngineContext,
@@ -284,6 +301,21 @@ export function applyRulesToAdditions(
  * Handles both Tree-sitter S-expression ('ast') and ast-grep ('ast-grep') engines.
  * Async because it reads files and runs Tree-sitter queries.
  * Handles fileGlobs filtering and suppression same as regex rules.
+ *
+ * @param ctx - Per-invocation rule engine context (see {@link RuleEngineContext}).
+ * @param rules - The full rule list. This function filters to ast / ast-grep
+ *   rules internally.
+ * @param additions - The diff additions to evaluate.
+ * @param workingDirectory - Absolute path used to resolve file reads. Callers
+ *   must pass the repo root, not `process.cwd()` (#1304).
+ * @param onRuleEvent - Optional observability callback for trigger / suppress
+ *   / failure events.
+ * @param onWarn - Optional AST-path warning sink ("AST query skipped",
+ *   "Skipped file outside project", etc.). Follow-up #1552 tracks consolidating
+ *   this into `ctx.logger.warn`.
+ * @param readStrategy - Optional async reader for staged / virtual file
+ *   content. When omitted, reads from disk.
+ * @returns All AST-based violations found.
  */
 export async function applyAstRulesToAdditions(
   ctx: RuleEngineContext,
@@ -500,9 +532,10 @@ export async function applyAstRulesToAdditions(
  * This is a convenience wrapper that only handles 'regex' engine rules.
  * For 'ast' and 'ast-grep' rules, call `applyAstRulesToAdditions` separately.
  *
- * @param rules — The full list of compiled rules. This function filters to regex rules.
- * @param diff — The unified diff string.
- * @param excludeFiles — File paths to skip (e.g., compiled-rules.json to avoid self-matches).
+ * @param ctx - Per-invocation rule engine context (see {@link RuleEngineContext}).
+ * @param rules - The full list of compiled rules. This function filters to regex rules.
+ * @param diff - The unified diff string.
+ * @param excludeFiles - File paths to skip (e.g., compiled-rules.json to avoid self-matches).
  * @returns All regex-based violations found.
  */
 export function applyRules(
