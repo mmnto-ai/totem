@@ -484,10 +484,10 @@ describe('runCompiledRules', () => {
     expect(events[0]!.source).toBe('lint');
   });
 
-  // ─── setCoreLogger wiring ──────────────────────────
+  // ─── RuleEngineContext wiring (mmnto/totem#1441) ────
 
-  it('calls setCoreLogger with a warn method during execution', async () => {
-    const spy = vi.spyOn(totem, 'setCoreLogger');
+  it('threads a RuleEngineContext with a working warn logger into applyRulesToAdditions', async () => {
+    const spy = vi.spyOn(totem, 'applyRulesToAdditions');
     try {
       const rules = [makeRule('neverMatchXYZ123', 'No match', 'No match rule')];
       writeRules(tmpDir, rules);
@@ -502,11 +502,13 @@ describe('runCompiledRules', () => {
         tag: 'Test',
       });
 
-      // setCoreLogger is called once to wire the logger, once in finally to reset
+      // First positional arg is the RuleEngineContext — verify it carries a
+      // callable warn method and a fresh hasWarnedShieldContext flag.
       expect(spy).toHaveBeenCalled();
-      const firstCall = spy.mock.calls[0]![0];
-      expect(firstCall).toHaveProperty('warn');
-      expect(typeof firstCall.warn).toBe('function');
+      const ctxArg = spy.mock.calls[0]![0];
+      expect(ctxArg).toHaveProperty('logger');
+      expect(typeof ctxArg.logger.warn).toBe('function');
+      expect(ctxArg.state.hasWarnedShieldContext).toBe(false);
     } finally {
       spy.mockRestore();
     }
@@ -934,7 +936,7 @@ describe('runCompiledRules', () => {
       expect(violations).toHaveLength(1);
       expect(spyAst).toHaveBeenCalled();
       // Check that workingDirectory passed to applyAstRulesToAdditions is tmpDir (repo root), not subDir
-      expect(spyAst.mock.calls[0]![2]).toBe(tmpDir);
+      expect(spyAst.mock.calls[0]![3]).toBe(tmpDir);
       mockResolveGitRoot.mockRestore();
       mockExec.mockRestore();
       spyAst.mockRestore();
@@ -992,7 +994,7 @@ describe('runCompiledRules', () => {
       expect(violations).toHaveLength(1);
       expect(spyAst).toHaveBeenCalled();
       // Non-staged path must also resolve against repo root, not subDir
-      expect(spyAst.mock.calls[0]![2]).toBe(tmpDir);
+      expect(spyAst.mock.calls[0]![3]).toBe(tmpDir);
       mockResolveGitRoot.mockRestore();
       spyAst.mockRestore();
     });

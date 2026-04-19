@@ -28,9 +28,15 @@ import {
   type CompiledRulesFile,
   extractAddedLines,
   hashLesson,
+  type RuleEngineContext,
 } from '@mmnto/totem';
 
-import { cleanTmpDir } from '../test-utils.js';
+import { cleanTmpDir, makeRuleEngineCtx } from '../test-utils.js';
+
+let ctx: RuleEngineContext;
+beforeEach(() => {
+  ctx = makeRuleEngineCtx();
+});
 import { parseVerdict } from './shield.js';
 
 // ─── Adversarial Fixtures ────────────────────────────
@@ -188,7 +194,7 @@ function scaffoldAdversarialRepo(tmpDir: string): void {
 
 describe('Adversarial Eval — Deterministic', () => {
   it('catches all 4 planted traps via compiled rules against expected diff', () => {
-    const violations = applyRules(TRAP_RULES, EXPECTED_DIFF);
+    const violations = applyRules(ctx, TRAP_RULES, EXPECTED_DIFF);
 
     expect(violations.length).toBeGreaterThanOrEqual(4); // totem-ignore
 
@@ -201,7 +207,7 @@ describe('Adversarial Eval — Deterministic', () => {
 
   it('catches all traps with AST-aware additions pipeline', () => {
     const additions = extractAddedLines(EXPECTED_DIFF);
-    const violations = applyRulesToAdditions(TRAP_RULES, additions);
+    const violations = applyRulesToAdditions(ctx, TRAP_RULES, additions);
 
     // extractAddedLines only processes + lines, so we should still catch violations
     const headings = new Set(violations.map((v) => v.rule.lessonHeading));
@@ -221,7 +227,7 @@ describe('Adversarial Eval — Deterministic', () => {
 +  return \`Hello, \${name}!\`;
  }
 `;
-    const violations = applyRules(TRAP_RULES, cleanDiff);
+    const violations = applyRules(ctx, TRAP_RULES, cleanDiff);
     expect(violations).toHaveLength(0);
   });
 
@@ -238,7 +244,7 @@ describe('Adversarial Eval — Deterministic', () => {
       expect(diff).toContain('catch (error)');
 
       // Run compiled rules against the real diff
-      const violations = applyRules(TRAP_RULES, diff);
+      const violations = applyRules(ctx, TRAP_RULES, diff);
       expect(violations.length).toBeGreaterThanOrEqual(4); // totem-ignore
     } finally {
       cleanTmpDir(tmpDir);

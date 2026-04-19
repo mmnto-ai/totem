@@ -15,23 +15,23 @@ import {
   applyRulesToAdditions,
   extractJustification,
   matchesGlob,
-  resetShieldContextWarning,
-  setCoreLogger,
+  type RuleEngineContext,
 } from './rule-engine.js';
-import { cleanTmpDir } from './test-utils.js';
+import { cleanTmpDir, makeRuleEngineCtx } from './test-utils.js';
 
 // ─── Helpers ────────────────────────────────────────
 
 let tmpDir: string;
+let ctx: RuleEngineContext & { warnings: string[] };
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-rule-engine-'));
   fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+  ctx = makeRuleEngineCtx();
 });
 
 afterEach(() => {
   cleanTmpDir(tmpDir);
-  resetShieldContextWarning();
 });
 
 function makeRule(overrides: Partial<CompiledRule>): CompiledRule {
@@ -66,8 +66,13 @@ describe('applyAstRulesToAdditions', () => {
     // Bad queries return empty results with a warning — prevents TS-specific node names
     // from crashing lint when run against JS files (#988)
     const warnings: string[] = [];
-    const violations = await applyAstRulesToAdditions([rule], additions, tmpDir, undefined, (msg) =>
-      warnings.push(msg),
+    const violations = await applyAstRulesToAdditions(
+      ctx,
+      [rule],
+      additions,
+      tmpDir,
+      undefined,
+      (msg) => warnings.push(msg),
     );
     expect(violations).toEqual([]);
     expect(warnings.length).toBeGreaterThan(0);
@@ -93,6 +98,7 @@ describe('applyAstRulesToAdditions', () => {
     const events: Array<{ event: string; hash: string; reason?: string }> = [];
 
     const violations = await applyAstRulesToAdditions(
+      ctx,
       [rule],
       additions,
       tmpDir,
@@ -133,6 +139,7 @@ describe('applyAstRulesToAdditions', () => {
 
     const events: Array<{ event: string; hash: string }> = [];
     const violations = await applyAstRulesToAdditions(
+      ctx,
       [badRule, goodRule],
       additions,
       tmpDir,
@@ -185,7 +192,7 @@ describe('applyAstRulesToAdditions', () => {
       makeAddition('src/app.ts', '}', 4),
     ];
 
-    const violations = await applyAstRulesToAdditions([compoundRule], additions, tmpDir);
+    const violations = await applyAstRulesToAdditions(ctx, [compoundRule], additions, tmpDir);
     expect(violations.length).toBeGreaterThanOrEqual(1);
     // The outer catch_clause spans lines 3-4; the first overlapping added
     // line (3) is where the violation gets reported.
@@ -207,6 +214,7 @@ describe('applyAstRulesToAdditions', () => {
     const events: Array<{ event: string; hash: string; reason?: string }> = [];
 
     const violations = await applyAstRulesToAdditions(
+      ctx,
       [compoundRule],
       additions,
       tmpDir,
@@ -229,7 +237,7 @@ describe('applyAstRulesToAdditions', () => {
 
     const additions = [makeAddition('src/app.ts', 'console.log("hello");', 1)];
 
-    const violations = await applyAstRulesToAdditions([rule], additions, tmpDir);
+    const violations = await applyAstRulesToAdditions(ctx, [rule], additions, tmpDir);
     expect(violations).toHaveLength(1);
     expect(violations[0]!.lineNumber).toBe(1);
   });
@@ -252,6 +260,7 @@ describe('applyAstRulesToAdditions', () => {
     };
 
     const violations = await applyAstRulesToAdditions(
+      ctx,
       [rule],
       additions,
       tmpDir,
@@ -277,6 +286,7 @@ describe('applyAstRulesToAdditions', () => {
     const mockReadStrategyReturningNull = async () => null;
 
     const violations = await applyAstRulesToAdditions(
+      ctx,
       [rule],
       additions,
       tmpDir,
@@ -298,7 +308,7 @@ describe('applyAstRulesToAdditions', () => {
     const additions = [makeAddition('src/app.ts', 'console.log("disk content");', 1)];
 
     // No readStrategy argument passed
-    const violations = await applyAstRulesToAdditions([rule], additions, tmpDir);
+    const violations = await applyAstRulesToAdditions(ctx, [rule], additions, tmpDir);
     expect(violations).toHaveLength(1);
     expect(violations[0]!.line).toBe('console.log("disk content");');
   });
@@ -318,7 +328,7 @@ describe('applyAstRulesToAdditions', () => {
     const additions = [makeAddition('src/app.ts', 'console.log("hello");', 1)];
 
     // We pass repoRoot as the workingDirectory. If it uses something else (like process.cwd()), it will fail to read the file.
-    const violations = await applyAstRulesToAdditions([rule], additions, repoRoot);
+    const violations = await applyAstRulesToAdditions(ctx, [rule], additions, repoRoot);
     expect(violations).toHaveLength(1);
   });
 
@@ -348,7 +358,7 @@ describe('applyAstRulesToAdditions', () => {
       events.push({ event, hash });
     };
 
-    const violations = await applyAstRulesToAdditions([rule], additions, tmpDir, onRuleEvent);
+    const violations = await applyAstRulesToAdditions(ctx, [rule], additions, tmpDir, onRuleEvent);
     expect(violations).toHaveLength(0);
     expect(events).toEqual([{ event: 'suppress', hash: 'suppress-ast-grep-test' }]);
   });
@@ -379,7 +389,7 @@ describe('applyAstRulesToAdditions', () => {
       events.push({ event, hash });
     };
 
-    const violations = await applyAstRulesToAdditions([rule], additions, tmpDir, onRuleEvent);
+    const violations = await applyAstRulesToAdditions(ctx, [rule], additions, tmpDir, onRuleEvent);
     expect(violations).toHaveLength(0);
     expect(events).toEqual([{ event: 'suppress', hash: 'suppress-tree-sitter-test' }]);
   });
@@ -409,7 +419,7 @@ describe('applyRulesToAdditions — event context', () => {
       events.push({ event, hash, context });
     };
 
-    const violations = applyRulesToAdditions([rule], additions, onRuleEvent);
+    const violations = applyRulesToAdditions(ctx, [rule], additions, onRuleEvent);
     expect(violations).toHaveLength(0);
     expect(events).toHaveLength(1);
     expect(events[0]!.event).toBe('suppress');
@@ -448,7 +458,7 @@ describe('applyRulesToAdditions — event context', () => {
       events.push({ event, hash, context });
     };
 
-    applyRulesToAdditions([rule], additions, onRuleEvent);
+    applyRulesToAdditions(ctx, [rule], additions, onRuleEvent);
     expect(events).toHaveLength(1);
     expect(events[0]!.event).toBe('suppress');
     expect(events[0]!.context?.immutable).toBe(true);
@@ -475,7 +485,7 @@ describe('applyRulesToAdditions — event context', () => {
       events.push({ event, hash, context });
     };
 
-    const violations = applyRulesToAdditions([rule], additions, onRuleEvent);
+    const violations = applyRulesToAdditions(ctx, [rule], additions, onRuleEvent);
     expect(violations).toHaveLength(1);
     expect(events).toHaveLength(1);
     expect(events[0]!.event).toBe('trigger');
@@ -506,7 +516,7 @@ describe('applyRulesToAdditions — event context', () => {
       events.push({ event, hash, context });
     };
 
-    const violations = applyRulesToAdditions([rule], additions, onRuleEvent);
+    const violations = applyRulesToAdditions(ctx, [rule], additions, onRuleEvent);
     expect(violations).toHaveLength(0);
     expect(events).toHaveLength(1);
     expect(events[0]!.event).toBe('suppress');
@@ -538,7 +548,7 @@ describe('applyRulesToAdditions — event context', () => {
       events.push({ event, hash, context });
     };
 
-    const violations = applyRulesToAdditions([rule], additions, onRuleEvent);
+    const violations = applyRulesToAdditions(ctx, [rule], additions, onRuleEvent);
     expect(violations).toHaveLength(0);
     expect(events).toHaveLength(1);
     expect(events[0]!.event).toBe('suppress');
@@ -550,10 +560,6 @@ describe('applyRulesToAdditions — event context', () => {
   });
 
   it('shield-context: legacy alias suppresses rule with deprecation warning', () => {
-    resetShieldContextWarning();
-    const warnings: string[] = [];
-    setCoreLogger({ warn: (msg) => warnings.push(msg) });
-
     const rule = makeRule({
       engine: 'regex',
       pattern: 'console\\.log',
@@ -569,19 +575,13 @@ describe('applyRulesToAdditions — event context', () => {
       },
     ];
 
-    const violations = applyRulesToAdditions([rule], additions);
+    const violations = applyRulesToAdditions(ctx, [rule], additions);
     expect(violations).toHaveLength(0);
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain('shield-context');
-
-    resetShieldContextWarning();
+    expect(ctx.warnings).toHaveLength(1);
+    expect(ctx.warnings[0]).toContain('shield-context');
   });
 
   it('shield-context: on preceding line suppresses with deprecation warning', () => {
-    resetShieldContextWarning();
-    const warnings: string[] = [];
-    setCoreLogger({ warn: (msg) => warnings.push(msg) });
-
     const rule = makeRule({
       engine: 'regex',
       pattern: 'console\\.log',
@@ -597,11 +597,64 @@ describe('applyRulesToAdditions — event context', () => {
       },
     ];
 
-    const violations = applyRulesToAdditions([rule], additions);
+    const violations = applyRulesToAdditions(ctx, [rule], additions);
     expect(violations).toHaveLength(0);
-    expect(warnings).toHaveLength(1);
+    expect(ctx.warnings).toHaveLength(1);
+  });
 
-    resetShieldContextWarning();
+  it('isolates deprecation-warning state across distinct ctx instances (mmnto/totem#1441)', () => {
+    // Concurrency-isolation invariant: two sequential applyRulesToAdditions
+    // calls with distinct ctx objects each see their own one-shot deprecation
+    // warning. Pre-#1441, module-level `shieldContextDeprecationWarned` would
+    // latch after the first call and silently swallow the second.
+    const rule = makeRule({
+      engine: 'regex',
+      pattern: 'console\\.log',
+      lessonHash: 'isolation-test',
+    });
+    const additions: DiffAddition[] = [
+      {
+        file: 'src/app.ts',
+        line: 'console.log("hi"); // shield-context: reason',
+        lineNumber: 1,
+        precedingLine: null,
+      },
+    ];
+
+    const ctxA = makeRuleEngineCtx();
+    const ctxB = makeRuleEngineCtx();
+    applyRulesToAdditions(ctxA, [rule], additions);
+    applyRulesToAdditions(ctxB, [rule], additions);
+
+    expect(ctxA.warnings).toHaveLength(1);
+    expect(ctxB.warnings).toHaveLength(1);
+    expect(ctxA.state.hasWarnedShieldContext).toBe(true);
+    expect(ctxB.state.hasWarnedShieldContext).toBe(true);
+  });
+
+  it('latches deprecation warning per ctx (repeat hits on same ctx warn once)', () => {
+    const rule = makeRule({
+      engine: 'regex',
+      pattern: 'console\\.log',
+      lessonHash: 'latch-test',
+    });
+    const additions: DiffAddition[] = [
+      {
+        file: 'src/app.ts',
+        line: 'console.log("a"); // shield-context: one',
+        lineNumber: 1,
+        precedingLine: null,
+      },
+      {
+        file: 'src/app.ts',
+        line: 'console.log("b"); // shield-context: two',
+        lineNumber: 2,
+        precedingLine: null,
+      },
+    ];
+
+    applyRulesToAdditions(ctx, [rule], additions);
+    expect(ctx.warnings).toHaveLength(1);
   });
 });
 
@@ -609,22 +662,25 @@ describe('applyRulesToAdditions — event context', () => {
 
 describe('extractJustification', () => {
   it('returns empty string for plain totem-ignore', () => {
-    expect(extractJustification('code(); // totem-ignore', null)).toBe('');
+    expect(extractJustification(ctx, 'code(); // totem-ignore', null)).toBe('');
   });
 
   it('extracts justification from same-line totem-context:', () => {
-    expect(extractJustification('code(); // totem-context: needed for DLP', null)).toBe(
+    expect(extractJustification(ctx, 'code(); // totem-context: needed for DLP', null)).toBe(
       'needed for DLP',
     );
   });
 
   it('extracts justification from preceding line totem-context:', () => {
-    expect(extractJustification('code();', '// totem-context: audit trail')).toBe('audit trail');
+    expect(extractJustification(ctx, 'code();', '// totem-context: audit trail')).toBe(
+      'audit trail',
+    );
   });
 
   it('prefers same-line over preceding line', () => {
     expect(
       extractJustification(
+        ctx,
         'code(); // totem-context: same-line reason',
         '// totem-context: preceding reason',
       ),
@@ -632,40 +688,36 @@ describe('extractJustification', () => {
   });
 
   it('trims whitespace from justification', () => {
-    expect(extractJustification('code(); // totem-context:   extra spaces  ', null)).toBe(
+    expect(extractJustification(ctx, 'code(); // totem-context:   extra spaces  ', null)).toBe(
       'extra spaces',
     );
   });
 
   it('extracts justification from same-line shield-context: (legacy)', () => {
-    resetShieldContextWarning();
-    const warnings: string[] = [];
-    setCoreLogger({ warn: (msg) => warnings.push(msg) });
-    expect(extractJustification('code(); // shield-context: legacy DLP', null)).toBe('legacy DLP');
-    expect(warnings).toHaveLength(1);
-    resetShieldContextWarning();
+    expect(extractJustification(ctx, 'code(); // shield-context: legacy DLP', null)).toBe(
+      'legacy DLP',
+    );
+    expect(ctx.warnings).toHaveLength(1);
   });
 
   it('extracts justification from preceding line shield-context: (legacy)', () => {
-    resetShieldContextWarning();
-    const warnings: string[] = [];
-    setCoreLogger({ warn: (msg) => warnings.push(msg) });
-    expect(extractJustification('code();', '// shield-context: legacy audit')).toBe('legacy audit');
-    expect(warnings).toHaveLength(1);
-    resetShieldContextWarning();
+    expect(extractJustification(ctx, 'code();', '// shield-context: legacy audit')).toBe(
+      'legacy audit',
+    );
+    expect(ctx.warnings).toHaveLength(1);
   });
 
   it('prefers totem-context: over shield-context: (precedence)', () => {
-    resetShieldContextWarning();
-    const warnings: string[] = [];
-    setCoreLogger({ warn: (msg) => warnings.push(msg) });
     // Same-line totem-context wins over preceding-line shield-context
     expect(
-      extractJustification('code(); // totem-context: new reason', '// shield-context: old reason'),
+      extractJustification(
+        ctx,
+        'code(); // totem-context: new reason',
+        '// shield-context: old reason',
+      ),
     ).toBe('new reason');
     // totem-context matched first — shield-context deprecation warning should NOT fire
-    expect(warnings).toHaveLength(0);
-    resetShieldContextWarning();
+    expect(ctx.warnings).toHaveLength(0);
   });
 });
 

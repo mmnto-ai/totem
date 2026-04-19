@@ -1,11 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   applyRules,
   applyRulesToAdditions,
   type CompiledRule,
   type DiffAddition,
+  type RuleEngineContext,
 } from './compiler.js';
+import { makeRuleEngineCtx } from './test-utils.js';
+
+let ctx: RuleEngineContext;
+beforeEach(() => {
+  ctx = makeRuleEngineCtx();
+});
 
 // ─── Adversarial Evaluation Harness ─────────────────
 //
@@ -77,7 +84,7 @@ describe('adversarial evaluation harness', () => {
 +      - run: npm run test
        - run: pnpm build
 `;
-    const violations = applyRules(ADVERSARIAL_RULES, diff);
+    const violations = applyRules(ctx, ADVERSARIAL_RULES, diff);
     expect(violations.length).toBeGreaterThan(0); // totem-ignore
     expect(violations.some((v) => v.rule.lessonHeading === 'Never use npm')).toBe(true);
   });
@@ -93,7 +100,7 @@ describe('adversarial evaluation harness', () => {
 +    console.error(error);
    }
 `;
-    const violations = applyRules(ADVERSARIAL_RULES, diff);
+    const violations = applyRules(ctx, ADVERSARIAL_RULES, diff);
     expect(violations.some((v) => v.rule.lessonHeading === 'Use err not error')).toBe(true);
   });
 
@@ -108,7 +115,7 @@ describe('adversarial evaluation harness', () => {
 +  debugger;
    return res.json();
 `;
-    const violations = applyRules(ADVERSARIAL_RULES, diff);
+    const violations = applyRules(ctx, ADVERSARIAL_RULES, diff);
     const debugViolations = violations.filter(
       (v) => v.rule.lessonHeading === 'No debugger in production',
     );
@@ -125,7 +132,7 @@ describe('adversarial evaluation harness', () => {
 +  return fetchData().catch(() => {})
  }
 `;
-    const violations = applyRules(ADVERSARIAL_RULES, diff);
+    const violations = applyRules(ctx, ADVERSARIAL_RULES, diff);
     expect(violations.some((v) => v.rule.lessonHeading === 'No empty catch blocks')).toBe(true);
   });
 
@@ -139,7 +146,7 @@ describe('adversarial evaluation harness', () => {
 +  // FIXME: this is a temporary hack
    return validateToken(token);
 `;
-    const violations = applyRules(ADVERSARIAL_RULES, diff);
+    const violations = applyRules(ctx, ADVERSARIAL_RULES, diff);
     const todoViolations = violations.filter(
       (v) => v.rule.lessonHeading === 'No TODO in production',
     );
@@ -156,7 +163,7 @@ describe('adversarial evaluation harness', () => {
 +  password: 'hunter2',
  };
 `;
-    const violations = applyRules(ADVERSARIAL_RULES, diff);
+    const violations = applyRules(ctx, ADVERSARIAL_RULES, diff);
     expect(violations.some((v) => v.rule.lessonHeading === 'No hardcoded secrets')).toBe(true);
   });
 
@@ -170,7 +177,7 @@ describe('adversarial evaluation harness', () => {
 +  metadata: any;
  }
 `;
-    const violations = applyRules(ADVERSARIAL_RULES, diff);
+    const violations = applyRules(ctx, ADVERSARIAL_RULES, diff);
     expect(violations.some((v) => v.rule.lessonHeading === 'No any types')).toBe(true);
   });
 
@@ -184,7 +191,7 @@ describe('adversarial evaluation harness', () => {
 +  return \`Hello, \${name}!\`;
  }
 `;
-    const violations = applyRules(ADVERSARIAL_RULES, diff);
+    const violations = applyRules(ctx, ADVERSARIAL_RULES, diff);
     expect(violations).toHaveLength(0);
   });
 
@@ -197,7 +204,7 @@ describe('adversarial evaluation harness', () => {
 +  debugger; // totem-ignore
    run();
 `;
-    const violations = applyRules(ADVERSARIAL_RULES, diff);
+    const violations = applyRules(ctx, ADVERSARIAL_RULES, diff);
     const debugViolations = violations.filter(
       (v) => v.rule.lessonHeading === 'No debugger in production',
     );
@@ -220,7 +227,7 @@ describe('adversarial evaluation harness', () => {
 +  const data: any = fetch('/api');
  }
 `;
-    const violations = applyRules(ADVERSARIAL_RULES, diff);
+    const violations = applyRules(ctx, ADVERSARIAL_RULES, diff);
     // Should catch: debugger, TODO, error (not err), any
     expect(violations.length).toBeGreaterThanOrEqual(4); // totem-ignore
 
@@ -264,7 +271,7 @@ describe('AST gating suppresses false positives', () => {
       },
     ];
 
-    const violations = applyRulesToAdditions(rules, additions);
+    const violations = applyRulesToAdditions(ctx, rules, additions);
     expect(violations).toHaveLength(0);
   });
 
@@ -281,7 +288,7 @@ describe('AST gating suppresses false positives', () => {
       },
     ];
 
-    const violations = applyRulesToAdditions(rules, additions);
+    const violations = applyRulesToAdditions(ctx, rules, additions);
     expect(violations).toHaveLength(0);
   });
 
@@ -298,7 +305,7 @@ describe('AST gating suppresses false positives', () => {
       },
     ];
 
-    const violations = applyRulesToAdditions(rules, additions);
+    const violations = applyRulesToAdditions(ctx, rules, additions);
     expect(violations.length).toBeGreaterThan(0); // totem-ignore
     expect(violations.some((v) => v.rule.lessonHeading === 'No debugger in production')).toBe(true);
   });
@@ -317,7 +324,7 @@ describe('AST gating suppresses false positives', () => {
       },
     ];
 
-    const violations = applyRulesToAdditions(rules, additions);
+    const violations = applyRulesToAdditions(ctx, rules, additions);
     expect(violations.length).toBeGreaterThan(0); // totem-ignore
   });
 });

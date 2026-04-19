@@ -100,27 +100,26 @@ export interface CoreLogger {
   warn(message: string): void;
 }
 
-let shieldContextDeprecationWarned = false;
-let coreLogger: CoreLogger = { warn: () => {} }; // no-op default — CLI must wire its own logger
+/**
+ * Per-invocation execution context for the rule engine (mmnto/totem#1441).
+ * Replaces module-level `coreLogger` + `shieldContextDeprecationWarned` state
+ * so concurrent / federated rule evaluations cannot bleed logger configuration
+ * or deprecation-warning latching across each other. Callers instantiate one
+ * ctx per linting invocation; the engine threads it through every helper that
+ * can reach the legacy `shield-context:` directive path.
+ */
+export interface RuleEngineContext {
+  logger: CoreLogger;
+  state: { hasWarnedShieldContext: boolean };
+}
 
-function warnShieldContextDeprecation(): void {
-  if (!shieldContextDeprecationWarned) {
-    shieldContextDeprecationWarned = true;
-    coreLogger.warn(
+function warnShieldContextDeprecation(ctx: RuleEngineContext): void {
+  if (!ctx.state.hasWarnedShieldContext) {
+    ctx.state.hasWarnedShieldContext = true;
+    ctx.logger.warn(
       '⚠ Deprecation: "// shield-context:" is deprecated. Use "// totem-context:" instead. (See ADR-071)',
     );
   }
-}
-
-/** Set the logger for core diagnostics. CLI should call this at startup. */
-export function setCoreLogger(logger: CoreLogger): void {
-  coreLogger = logger;
-}
-
-/** @internal — exposed for testing only */
-export function resetShieldContextWarning(): void {
-  shieldContextDeprecationWarned = false;
-  coreLogger = { warn: () => {} };
 }
 
 /**
@@ -133,40 +132,40 @@ export function resetShieldContextWarning(): void {
  * Syntax-agnostic: works with any comment style (//, #, HTML comments, block comments).
  */
 /** Check if a line contains a context directive (totem-context or legacy shield-context). */
-function hasContextDirective(l: string): boolean {
+function hasContextDirective(ctx: RuleEngineContext, l: string): boolean {
   if (l.includes(CONTEXT_MARKER)) return true;
   if (l.includes(LEGACY_CONTEXT_MARKER)) {
-    warnShieldContextDeprecation();
+    warnShieldContextDeprecation(ctx);
     return true;
   }
   return false;
 }
 
 /** Extract justification from a context directive on a single line, or null if none. */
-function matchContextDirective(l: string): string | null {
+function matchContextDirective(ctx: RuleEngineContext, l: string): string | null {
   const primary = l.match(CONTEXT_RE);
   if (primary) return primary[1]!.trim();
   const legacy = l.match(LEGACY_CONTEXT_RE);
   if (legacy) {
-    warnShieldContextDeprecation();
+    warnShieldContextDeprecation(ctx);
     return legacy[1]!.trim();
   }
   return null;
 }
 
-function isSuppressed(line: string, precedingLine: string | null): boolean {
+function isSuppressed(ctx: RuleEngineContext, line: string, precedingLine: string | null): boolean {
   // Same-line: 'totem-ignore' substring also matches 'totem-ignore-next-line',
   // so directive lines themselves are inherently suppressed.
   if (line.includes(SUPPRESS_MARKER)) return true;
 
   // Same-line: totem-context: or shield-context: (legacy)
-  if (hasContextDirective(line)) return true;
+  if (hasContextDirective(ctx, line)) return true;
 
   // Next-line: preceding line contains the next-line directive
   if (precedingLine != null && precedingLine.includes(SUPPRESS_NEXT_LINE_MARKER)) return true;
 
   // Next-line: preceding line contains a context directive
-  if (precedingLine != null && hasContextDirective(precedingLine)) return true;
+  if (precedingLine != null && hasContextDirective(ctx, precedingLine)) return true;
 
   return false;
 }
@@ -176,14 +175,18 @@ function isSuppressed(line: string, precedingLine: string | null): boolean {
  * Checks both the current line and the preceding line.
  * Returns empty string for plain totem-ignore (no justification).
  */
-export function extractJustification(line: string, precedingLine: string | null): string {
+export function extractJustification(
+  ctx: RuleEngineContext,
+  line: string,
+  precedingLine: string | null,
+): string {
   // Check current line for context directive
-  const sameLine = matchContextDirective(line);
+  const sameLine = matchContextDirective(ctx, line);
   if (sameLine) return sameLine;
 
   // Check preceding line for context directive
   if (precedingLine) {
-    const prevLine = matchContextDirective(precedingLine);
+    const prevLine = matchContextDirective(ctx, precedingLine);
     if (prevLine) return prevLine;
   }
 
@@ -199,6 +202,7 @@ export function extractJustification(line: string, precedingLine: string | null)
  * Optional `onRuleEvent` callback enables observability metrics collection.
  */
 export function applyRulesToAdditions(
+  ctx: RuleEngineContext,
   rules: CompiledRule[],
   additions: DiffAddition[],
   onRuleEvent?: RuleEventCallback,
@@ -237,12 +241,12 @@ export function applyRulesToAdditions(
       }
 
       // Skip if suppressed via inline directive
-      if (isSuppressed(addition.line, addition.precedingLine)) {
+      if (isSuppressed(ctx, addition.line, addition.precedingLine)) {
         if (re.test(addition.line)) {
           onRuleEvent?.('suppress', rule.lessonHash, {
             file: addition.file,
             line: addition.lineNumber,
-            justification: extractJustification(addition.line, addition.precedingLine),
+            justification: extractJustification(ctx, addition.line, addition.precedingLine),
             immutable: rule.immutable,
           });
         }
@@ -282,6 +286,7 @@ export function applyRulesToAdditions(
  * Handles fileGlobs filtering and suppression same as regex rules.
  */
 export async function applyAstRulesToAdditions(
+  ctx: RuleEngineContext,
   rules: CompiledRule[],
   additions: DiffAddition[],
   workingDirectory: string,
@@ -371,11 +376,11 @@ export async function applyAstRulesToAdditions(
 
           for (const match of matches) {
             const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
-            if (addition && isSuppressed(addition.line, addition.precedingLine)) {
+            if (addition && isSuppressed(ctx, addition.line, addition.precedingLine)) {
               onRuleEvent?.('suppress', rule.lessonHash, {
                 file,
                 line: match.lineNumber,
-                justification: extractJustification(addition.line, addition.precedingLine),
+                justification: extractJustification(ctx, addition.line, addition.precedingLine),
                 immutable: rule.immutable,
               });
               continue;
@@ -456,12 +461,12 @@ export async function applyAstRulesToAdditions(
 
             for (const match of matches) {
               const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
-              if (addition && isSuppressed(addition.line, addition.precedingLine)) {
+              if (addition && isSuppressed(ctx, addition.line, addition.precedingLine)) {
                 onRuleEvent?.('suppress', rule.lessonHash, {
                   file,
                   line: match.lineNumber,
                   justification: addition
-                    ? extractJustification(addition.line, addition.precedingLine)
+                    ? extractJustification(ctx, addition.line, addition.precedingLine)
                     : '',
                   immutable: rule.immutable,
                 });
@@ -501,6 +506,7 @@ export async function applyAstRulesToAdditions(
  * @returns All regex-based violations found.
  */
 export function applyRules(
+  ctx: RuleEngineContext,
   rules: CompiledRule[],
   diff: string,
   excludeFiles?: string[],
@@ -513,5 +519,5 @@ export function applyRules(
     additions = additions.filter((a) => !excluded.has(a.file));
   }
 
-  return applyRulesToAdditions(rules, additions);
+  return applyRulesToAdditions(ctx, rules, additions);
 }
