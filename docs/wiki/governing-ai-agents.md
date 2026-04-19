@@ -8,24 +8,24 @@ Totem addresses this with two mechanisms: **context injection** (give the agent 
 
 ## 1. Context Injection (Session Start Hooks)
 
-Wire `totem briefing` into your agent's startup hook so the agent receives the project's live state before it takes any action:
+Wire `totem status` into your agent's startup hook so the agent receives the project's live health state before it takes any action:
 
 ```text
-[Briefing] @mmnto/cli@1.14.0 | main | 2 uncommitted | lint: 0 errors
-[Briefing] Manifest: STALE (lessons changed since last compile)
-[Briefing] Status: compile required before push
-[Reflex] Compile after extract — CI gate rejects stale manifests
+[Status] Branch: main (dirty)
+[Status] Rules: 439 compiled
+[Status] Lessons: 1134
+[Status] Manifest: fresh
+[Status] Shield: stale (code changed since last pass)
 ```
 
 Example hook for Gemini (`.gemini/hooks/SessionStart.js`):
 
 ```javascript
 const { execSync } = require('child_process');
-const output = execSync('totem briefing', { encoding: 'utf-8' });
-console.log(output);
+execSync('totem status', { stdio: ['ignore', 'inherit', 'inherit'] });
 ```
 
-The agent now knows it needs to run `totem compile` before pushing, and has recent lessons fresh in its context window.
+The agent now sees whether the manifest is fresh, whether the review stamp is stale, and the current rule and lesson counts before taking any action.
 
 ## 2. Deterministic Enforcement (Pre-Push Hook)
 

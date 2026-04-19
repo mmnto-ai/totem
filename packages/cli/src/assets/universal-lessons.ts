@@ -62,7 +62,7 @@ Never interpolate user-controlled strings directly into shell commands. Use para
 
 **Tags:** ai-behavior, context-window, design-decision
 
-When an AI agent's context window fills up, it loses earlier instructions and begins contradicting its own prior outputs. Break long tasks into smaller, well-scoped steps. Use handoff artifacts (like \`totem bridge\` or \`totem handoff\`) to preserve context across session boundaries.
+When an AI agent's context window fills up, it loses earlier instructions and begins contradicting its own prior outputs. Break long tasks into smaller, well-scoped steps. Use handoff artifacts (\`totem handoff\`) to preserve context across session boundaries.
 
 ## Lesson — Idempotent Scaffolding
 

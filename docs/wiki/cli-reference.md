@@ -167,10 +167,6 @@ Fetches merged PRs, reads comments, and extracts systemic architectural traps. A
 
 ## Context & Workflow
 
-### `totem briefing`
-
-Fetches your current git branch, uncommitted changes, open PRs, and recent session momentum. Generates a quick startup briefing for your AI.
-
 ### `totem triage`
 
 Fetches open GitHub issues and generates a prioritized roadmap. Ideal for planning your next task in `docs/active_work.md`.
@@ -183,17 +179,9 @@ Categorized bot review triage. Fetches CodeRabbit and GCA comments, heuristicall
 
 Extracts systemic lessons from resolved bot review comments on a merged PR. The other half of the Self-Healing Loop.
 
-### `totem audit`
-
-Performs a strategic backlog audit with a human approval gate. Synthesizes task dependencies.
-
 ### `totem spec <issue-ids...>`
 
 Fetches GitHub Issues and synthesizes a pre-work spec. Injects a prior art concierge (shared helper registry) enriched by your project's vector DB lessons to prevent hallucinations.
-
-### `totem bridge`
-
-Assesses your current mid-task state and creates a lightweight breadcrumb file. Ideal for when your AI agent's context window gets too full and you need to start a new session.
 
 ### `totem handoff`
 

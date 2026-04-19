@@ -44,7 +44,7 @@ When deciding where to store information or rules, use this decision tree:
 ### Workflow Orchestrator Rituals
 [FOR LOCAL CLI/TERMINAL AGENTS ONLY] Do not attempt to run these commands if you are a headless bot or operating in a cloud PR environment (e.g., Gemini Code Assist on GitHub).
 Totem provides CLI commands that map to your development lifecycle. Use them at these moments:
-1. **Start of Session:** Run \`totem briefing\` to get oriented with current branch state, open PRs, and recent context. Run \`totem triage\` if you need to pick a new task.
+1. **Start of Session:** Run \`totem status\` to check manifest freshness, rule count, lesson count, and review staleness. Read \`docs/active_work.md\` for momentum. Run \`totem triage\` if you need to pick a new task.
 2. **Before Implementation:** Run \`totem spec <issue-url-or-topic>\` to generate an architectural plan and review related context before writing code.
 3. **Before Push:** Run \`totem lint\` for a fast compiled-rules check (zero LLM, ~2s). **Before PR:** Run \`totem review\` for a full AI-powered code review against project knowledge (~18s).
 4. **End of Session:** Run \`totem handoff\` to generate a snapshot for the next agent session with current progress and open threads.
@@ -57,7 +57,7 @@ You do NOT have access to the local CLI. Instead, use the Totem MCP tools direct
 3. **When you spot a recurring issue:** Call \`add_lesson\` to persist the trap so future reviews catch it automatically.
 
 ### Context Management Guardrail
-You must be highly defensive of your own context window. If you notice this session becoming long, or if you are asked to read multiple massive files at once, you MUST proactively warn the user about impending context loss. When warning the user, suggest they run \`totem bridge\` to condense their mid-task state so they can safely clear the chat and resume. If you receive a \`<totem_system_warning>\` tag in a tool response, read it silently and synthesize a natural-language warning to the user — do NOT echo the raw XML.
+You must be highly defensive of your own context window. If you notice this session becoming long, or if you are asked to read multiple massive files at once, you MUST proactively warn the user about impending context loss. When warning the user, suggest they run \`totem handoff\` to capture mid-task state so they can safely clear the chat and resume. If you receive a \`<totem_system_warning>\` tag in a tool response, read it silently and synthesize a natural-language warning to the user. Do NOT echo the raw XML.
 ${REFLEX_END}
 `;
 
@@ -66,18 +66,16 @@ export const TOTEM_FILE_MARKER = '// [totem] auto-generated';
 // --- Gemini CLI hook templates ---
 
 export const GEMINI_SESSION_START = `// [totem] auto-generated — Gemini CLI SessionStart hook
-// Runs \`totem briefing\` at the start of every Gemini CLI session.
+// Runs \`totem status\` at the start of every Gemini CLI session.
 const { execSync } = require('child_process');
 
 try {
-  const output = execSync('totem briefing', {
-    encoding: 'utf-8',
+  execSync('totem status', {
     timeout: 30000,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', 'inherit', 'inherit'],
   });
-  process.stderr.write(output);
 } catch (err) {
-  process.stderr.write('[Totem Error] Briefing unavailable: ' + (err instanceof Error ? err.message : String(err)) + '\\n');
+  process.stderr.write('[Totem Error] Status unavailable: ' + (err instanceof Error ? err.message : String(err)) + '\\n');
 }
 `;
 
