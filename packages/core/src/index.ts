@@ -161,10 +161,10 @@ export {
   NonCompilableReasonCodeSchema,
   parseCompilerResponse,
   type RegexValidation,
+  type RuleEngineContext,
   sanitizeFileGlobs,
   saveCompiledRules,
   saveCompiledRulesFile,
-  setCoreLogger,
   validateRegex,
 } from './compiler.js';
 

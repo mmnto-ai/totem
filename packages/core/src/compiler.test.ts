@@ -13,13 +13,19 @@ import {
   loadCompiledRules,
   loadCompiledRulesFile,
   parseCompilerResponse,
+  type RuleEngineContext,
   sanitizeFileGlobs,
   saveCompiledRules,
   saveCompiledRulesFile,
   validateRegex,
 } from './compiler.js';
 import { CompiledRuleSchema } from './compiler-schema.js';
-import { cleanTmpDir } from './test-utils.js';
+import { cleanTmpDir, makeRuleEngineCtx } from './test-utils.js';
+
+let ctx: RuleEngineContext;
+beforeEach(() => {
+  ctx = makeRuleEngineCtx();
+});
 
 // ─── hashLesson ──────────────────────────────────────
 
@@ -216,7 +222,7 @@ describe('applyRules', () => {
 
   it('detects a simple pattern violation', () => {
     const rules = [makeRule('\\bnpm\\.install\\b', 'Do not call npm.install directly')];
-    const violations = applyRules(rules, diff);
+    const violations = applyRules(ctx, rules, diff);
     expect(violations).toHaveLength(1);
     expect(violations[0]!.rule.message).toBe('Do not call npm.install directly');
     expect(violations[0]!.file).toBe('src/app.ts');
@@ -224,7 +230,7 @@ describe('applyRules', () => {
 
   it('returns no violations when patterns do not match', () => {
     const rules = [makeRule('\\byarn\\b', 'Do not use yarn')];
-    const violations = applyRules(rules, diff);
+    const violations = applyRules(ctx, rules, diff);
     expect(violations).toHaveLength(0);
   });
 
@@ -233,33 +239,33 @@ describe('applyRules', () => {
       makeRule('\\bnpm\\b', 'Do not use npm'),
       makeRule('\\berror\\b', 'Use err, not error'),
     ];
-    const violations = applyRules(rules, diff);
+    const violations = applyRules(ctx, rules, diff);
     expect(violations).toHaveLength(2);
   });
 
   it('throws on rules with invalid regex patterns (mmnto/totem#1442 — no silent-compliance footgun)', () => {
     const rules = [makeRule('[invalid', 'Bad pattern')];
-    expect(() => applyRules(rules, diff)).toThrow(/invalid regex pattern/);
+    expect(() => applyRules(ctx, rules, diff)).toThrow(/invalid regex pattern/);
   });
 
   it('returns empty for empty diff', () => {
     const rules = [makeRule('anything', 'test')];
-    expect(applyRules(rules, '')).toEqual([]);
+    expect(applyRules(ctx, rules, '')).toEqual([]);
   });
 
   it('returns empty for empty rules', () => {
-    expect(applyRules([], diff)).toEqual([]);
+    expect(applyRules(ctx, [], diff)).toEqual([]);
   });
 
   it('excludes files listed in excludeFiles', () => {
     const rules = [makeRule('\\bnpm\\.install\\b', 'Do not call npm.install directly')];
-    const violations = applyRules(rules, diff, ['src/app.ts']);
+    const violations = applyRules(ctx, rules, diff, ['src/app.ts']);
     expect(violations).toHaveLength(0);
   });
 
   it('still detects violations in non-excluded files', () => {
     const rules = [makeRule('\\bnpm\\.install\\b', 'Do not call npm.install directly')];
-    const violations = applyRules(rules, diff, ['other-file.ts']);
+    const violations = applyRules(ctx, rules, diff, ['other-file.ts']);
     expect(violations).toHaveLength(1);
   });
 
@@ -286,7 +292,7 @@ describe('applyRules', () => {
 
   it('applies rule to all files when fileGlobs is absent', () => {
     const rules = [makeRule('\\$\\w+', 'Found a dollar-sign variable')];
-    const violations = applyRules(rules, multiFileDiff);
+    const violations = applyRules(ctx, rules, multiFileDiff);
     expect(violations).toHaveLength(2); // matches in both .sh and .ts
   });
 
@@ -297,7 +303,7 @@ describe('applyRules', () => {
         fileGlobs: ['*.sh', '*.bash'],
       },
     ];
-    const violations = applyRules(rules, multiFileDiff);
+    const violations = applyRules(ctx, rules, multiFileDiff);
     expect(violations).toHaveLength(1);
     expect(violations[0]!.file).toBe('deploy.sh');
   });
@@ -309,7 +315,7 @@ describe('applyRules', () => {
         fileGlobs: ['*.py'],
       },
     ];
-    const violations = applyRules(rules, multiFileDiff);
+    const violations = applyRules(ctx, rules, multiFileDiff);
     expect(violations).toHaveLength(0);
   });
 
@@ -320,7 +326,7 @@ describe('applyRules', () => {
         fileGlobs: ['**/*.ts'],
       },
     ];
-    const violations = applyRules(rules, multiFileDiff);
+    const violations = applyRules(ctx, rules, multiFileDiff);
     expect(violations).toHaveLength(1);
     expect(violations[0]!.file).toBe('src/utils.ts');
   });
@@ -332,7 +338,7 @@ describe('applyRules', () => {
         fileGlobs: [],
       },
     ];
-    const violations = applyRules(rules, multiFileDiff);
+    const violations = applyRules(ctx, rules, multiFileDiff);
     expect(violations).toHaveLength(2);
   });
 
@@ -343,7 +349,7 @@ describe('applyRules', () => {
         fileGlobs: ['*.sh', '*.ts', '!*.sh'],
       },
     ];
-    const violations = applyRules(rules, multiFileDiff);
+    const violations = applyRules(ctx, rules, multiFileDiff);
     expect(violations).toHaveLength(1);
     expect(violations[0]!.file).toBe('src/utils.ts');
   });
@@ -381,7 +387,7 @@ describe('applyRules', () => {
         fileGlobs: ['packages/mcp/**/*.ts'],
       },
     ];
-    const violations = applyRules(rules, monorepoMultiFileDiff);
+    const violations = applyRules(ctx, rules, monorepoMultiFileDiff);
     expect(violations).toHaveLength(2); // server.ts + tools.test.ts
     expect(violations.every((v) => v.file!.startsWith('packages/mcp/'))).toBe(true);
   });
@@ -393,7 +399,7 @@ describe('applyRules', () => {
         fileGlobs: ['packages/mcp/**/*.ts', '!**/*.test.ts'],
       },
     ];
-    const violations = applyRules(rules, monorepoMultiFileDiff);
+    const violations = applyRules(ctx, rules, monorepoMultiFileDiff);
     expect(violations).toHaveLength(1);
     expect(violations[0]!.file).toBe('packages/mcp/src/server.ts');
   });
@@ -405,7 +411,7 @@ describe('applyRules', () => {
         fileGlobs: ['packages/cli/**/*.ts'],
       },
     ];
-    const violations = applyRules(rules, monorepoMultiFileDiff);
+    const violations = applyRules(ctx, rules, monorepoMultiFileDiff);
     expect(violations).toHaveLength(0);
   });
 
@@ -423,7 +429,7 @@ describe('applyRules', () => {
     ].join('\n');
 
     const rules = [makeRule('\\bnpm\\.install\\b', 'Do not call npm.install directly')];
-    const violations = applyRules(rules, suppressedDiff);
+    const violations = applyRules(ctx, rules, suppressedDiff);
     expect(violations).toHaveLength(0);
   });
 
@@ -440,7 +446,7 @@ describe('applyRules', () => {
     ].join('\n');
 
     const rules = [makeRule('\\bnpm\\.install\\b', 'Do not call npm.install directly')];
-    const violations = applyRules(rules, suppressedDiff);
+    const violations = applyRules(ctx, rules, suppressedDiff);
     expect(violations).toHaveLength(0);
   });
 
@@ -459,7 +465,7 @@ describe('applyRules', () => {
     ].join('\n');
 
     const rules = [makeRule('\\bnpm\\.install\\b', 'Do not call npm.install directly')];
-    const violations = applyRules(rules, suppressedDiff);
+    const violations = applyRules(ctx, rules, suppressedDiff);
     expect(violations).toHaveLength(0);
   });
 
@@ -475,7 +481,7 @@ describe('applyRules', () => {
     ].join('\n');
 
     const rules = [makeRule('\\bnpm\\.install\\b', 'Do not call npm.install directly')];
-    const violations = applyRules(rules, plainDiff);
+    const violations = applyRules(ctx, rules, plainDiff);
     expect(violations).toHaveLength(1);
   });
 
@@ -492,7 +498,7 @@ describe('applyRules', () => {
     ].join('\n');
 
     const rules = [makeRule('\\$[A-Z_]+', 'Quote shell variables')];
-    const violations = applyRules(rules, suppressedDiff);
+    const violations = applyRules(ctx, rules, suppressedDiff);
     expect(violations).toHaveLength(0);
   });
 
@@ -508,7 +514,7 @@ describe('applyRules', () => {
     ].join('\n');
 
     const rules = [makeRule('\\bnpm\\.install\\b', 'Do not call npm.install')];
-    const violations = applyRules(rules, suppressedDiff);
+    const violations = applyRules(ctx, rules, suppressedDiff);
     expect(violations).toHaveLength(0);
   });
 
@@ -527,7 +533,7 @@ describe('applyRules', () => {
       makeRule('\\bnpm\\.install\\b', 'Do not call npm.install'),
       makeRule('\\berror\\b', 'Use err, not error'),
     ];
-    const violations = applyRules(rules, suppressedDiff);
+    const violations = applyRules(ctx, rules, suppressedDiff);
     expect(violations).toHaveLength(0);
   });
 
@@ -543,7 +549,7 @@ describe('applyRules', () => {
     ].join('\n');
 
     const rules = [makeRule('\\bnpm\\.install\\b', 'Do not call npm.install')];
-    const violations = applyRules(rules, suppressedDiff);
+    const violations = applyRules(ctx, rules, suppressedDiff);
     expect(violations).toHaveLength(0);
   });
 
@@ -571,7 +577,7 @@ describe('applyRules', () => {
         fileGlobs: ['*.ts', '!*.test.ts', '!*.spec.ts'],
       },
     ];
-    const violations = applyRules(rules, testFileDiff);
+    const violations = applyRules(ctx, rules, testFileDiff);
     expect(violations).toHaveLength(1);
     expect(violations[0]!.file).toBe('src/utils.ts');
   });
@@ -752,7 +758,7 @@ describe('compiled rules file I/O', () => {
         '+const second = "the archived rule must not fire here";',
       ].join('\n');
 
-      const violations = applyRules(rules, diff);
+      const violations = applyRules(ctx, rules, diff);
       expect(violations).toHaveLength(1);
       expect(violations[0]!.rule.lessonHash).toBe(activeRule.lessonHash);
       expect(violations.some((v) => v.rule.lessonHash === archivedRule.lessonHash)).toBe(false);

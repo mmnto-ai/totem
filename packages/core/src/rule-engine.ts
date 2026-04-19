@@ -100,27 +100,26 @@ export interface CoreLogger {
   warn(message: string): void;
 }
 
-let shieldContextDeprecationWarned = false;
-let coreLogger: CoreLogger = { warn: () => {} }; // no-op default — CLI must wire its own logger
+/**
+ * Per-invocation execution context for the rule engine (mmnto/totem#1441).
+ * Replaces module-level `coreLogger` + `shieldContextDeprecationWarned` state
+ * so concurrent / federated rule evaluations cannot bleed logger configuration
+ * or deprecation-warning latching across each other. Callers instantiate one
+ * ctx per linting invocation; the engine threads it through every helper that
+ * can reach the legacy `shield-context:` directive path.
+ */
+export interface RuleEngineContext {
+  logger: CoreLogger;
+  state: { hasWarnedShieldContext: boolean };
+}
 
-function warnShieldContextDeprecation(): void {
-  if (!shieldContextDeprecationWarned) {
-    shieldContextDeprecationWarned = true;
-    coreLogger.warn(
+function warnShieldContextDeprecation(ctx: RuleEngineContext): void {
+  if (!ctx.state.hasWarnedShieldContext) {
+    ctx.state.hasWarnedShieldContext = true;
+    ctx.logger.warn(
       '⚠ Deprecation: "// shield-context:" is deprecated. Use "// totem-context:" instead. (See ADR-071)',
     );
   }
-}
-
-/** Set the logger for core diagnostics. CLI should call this at startup. */
-export function setCoreLogger(logger: CoreLogger): void {
-  coreLogger = logger;
-}
-
-/** @internal — exposed for testing only */
-export function resetShieldContextWarning(): void {
-  shieldContextDeprecationWarned = false;
-  coreLogger = { warn: () => {} };
 }
 
 /**
@@ -133,40 +132,40 @@ export function resetShieldContextWarning(): void {
  * Syntax-agnostic: works with any comment style (//, #, HTML comments, block comments).
  */
 /** Check if a line contains a context directive (totem-context or legacy shield-context). */
-function hasContextDirective(l: string): boolean {
+function hasContextDirective(ctx: RuleEngineContext, l: string): boolean {
   if (l.includes(CONTEXT_MARKER)) return true;
   if (l.includes(LEGACY_CONTEXT_MARKER)) {
-    warnShieldContextDeprecation();
+    warnShieldContextDeprecation(ctx);
     return true;
   }
   return false;
 }
 
 /** Extract justification from a context directive on a single line, or null if none. */
-function matchContextDirective(l: string): string | null {
+function matchContextDirective(ctx: RuleEngineContext, l: string): string | null {
   const primary = l.match(CONTEXT_RE);
   if (primary) return primary[1]!.trim();
   const legacy = l.match(LEGACY_CONTEXT_RE);
   if (legacy) {
-    warnShieldContextDeprecation();
+    warnShieldContextDeprecation(ctx);
     return legacy[1]!.trim();
   }
   return null;
 }
 
-function isSuppressed(line: string, precedingLine: string | null): boolean {
+function isSuppressed(ctx: RuleEngineContext, line: string, precedingLine: string | null): boolean {
   // Same-line: 'totem-ignore' substring also matches 'totem-ignore-next-line',
   // so directive lines themselves are inherently suppressed.
   if (line.includes(SUPPRESS_MARKER)) return true;
 
   // Same-line: totem-context: or shield-context: (legacy)
-  if (hasContextDirective(line)) return true;
+  if (hasContextDirective(ctx, line)) return true;
 
   // Next-line: preceding line contains the next-line directive
   if (precedingLine != null && precedingLine.includes(SUPPRESS_NEXT_LINE_MARKER)) return true;
 
   // Next-line: preceding line contains a context directive
-  if (precedingLine != null && hasContextDirective(precedingLine)) return true;
+  if (precedingLine != null && hasContextDirective(ctx, precedingLine)) return true;
 
   return false;
 }
@@ -175,15 +174,27 @@ function isSuppressed(line: string, precedingLine: string | null): boolean {
  * Extract justification text from totem-context: directives.
  * Checks both the current line and the preceding line.
  * Returns empty string for plain totem-ignore (no justification).
+ *
+ * @param ctx - Per-invocation rule engine context. Required so that the legacy
+ *   `shield-context:` deprecation path (reached via `matchContextDirective`)
+ *   uses the caller's logger and per-ctx latch instead of module state.
+ * @param line - The line being evaluated.
+ * @param precedingLine - The line immediately before, or null at start of file.
+ * @returns The justification text, or empty string if the line carries a plain
+ *   `totem-ignore` or no directive at all.
  */
-export function extractJustification(line: string, precedingLine: string | null): string {
+export function extractJustification(
+  ctx: RuleEngineContext,
+  line: string,
+  precedingLine: string | null,
+): string {
   // Check current line for context directive
-  const sameLine = matchContextDirective(line);
+  const sameLine = matchContextDirective(ctx, line);
   if (sameLine) return sameLine;
 
   // Check preceding line for context directive
   if (precedingLine) {
-    const prevLine = matchContextDirective(precedingLine);
+    const prevLine = matchContextDirective(ctx, precedingLine);
     if (prevLine) return prevLine;
   }
 
@@ -194,11 +205,21 @@ export function extractJustification(line: string, precedingLine: string | null)
 // ─── Regex rule execution ───────────────────────────
 
 /**
- * Apply compiled rules against pre-extracted diff additions.
+ * Apply compiled regex-engine rules against pre-extracted diff additions.
  * Skips additions with non-code AST context (strings, comments, regex).
- * Optional `onRuleEvent` callback enables observability metrics collection.
+ *
+ * @param ctx - Per-invocation rule engine context. Replaces the module-level
+ *   logger / deprecation-warning latch that existed pre-#1441. Callers build
+ *   one ctx per linting invocation: `{ logger, state: { hasWarnedShieldContext: false } }`.
+ * @param rules - The full rule list. This function filters to regex-engine
+ *   rules internally.
+ * @param additions - The diff additions to evaluate.
+ * @param onRuleEvent - Optional observability callback for metrics collection
+ *   on trigger / suppress / failure events.
+ * @returns All regex-based violations found.
  */
 export function applyRulesToAdditions(
+  ctx: RuleEngineContext,
   rules: CompiledRule[],
   additions: DiffAddition[],
   onRuleEvent?: RuleEventCallback,
@@ -237,12 +258,12 @@ export function applyRulesToAdditions(
       }
 
       // Skip if suppressed via inline directive
-      if (isSuppressed(addition.line, addition.precedingLine)) {
+      if (isSuppressed(ctx, addition.line, addition.precedingLine)) {
         if (re.test(addition.line)) {
           onRuleEvent?.('suppress', rule.lessonHash, {
             file: addition.file,
             line: addition.lineNumber,
-            justification: extractJustification(addition.line, addition.precedingLine),
+            justification: extractJustification(ctx, addition.line, addition.precedingLine),
             immutable: rule.immutable,
           });
         }
@@ -280,8 +301,24 @@ export function applyRulesToAdditions(
  * Handles both Tree-sitter S-expression ('ast') and ast-grep ('ast-grep') engines.
  * Async because it reads files and runs Tree-sitter queries.
  * Handles fileGlobs filtering and suppression same as regex rules.
+ *
+ * @param ctx - Per-invocation rule engine context (see {@link RuleEngineContext}).
+ * @param rules - The full rule list. This function filters to ast / ast-grep
+ *   rules internally.
+ * @param additions - The diff additions to evaluate.
+ * @param workingDirectory - Absolute path used to resolve file reads. Callers
+ *   must pass the repo root, not `process.cwd()` (#1304).
+ * @param onRuleEvent - Optional observability callback for trigger / suppress
+ *   / failure events.
+ * @param onWarn - Optional AST-path warning sink ("AST query skipped",
+ *   "Skipped file outside project", etc.). Follow-up #1552 tracks consolidating
+ *   this into `ctx.logger.warn`.
+ * @param readStrategy - Optional async reader for staged / virtual file
+ *   content. When omitted, reads from disk.
+ * @returns All AST-based violations found.
  */
 export async function applyAstRulesToAdditions(
+  ctx: RuleEngineContext,
   rules: CompiledRule[],
   additions: DiffAddition[],
   workingDirectory: string,
@@ -371,11 +408,11 @@ export async function applyAstRulesToAdditions(
 
           for (const match of matches) {
             const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
-            if (addition && isSuppressed(addition.line, addition.precedingLine)) {
+            if (addition && isSuppressed(ctx, addition.line, addition.precedingLine)) {
               onRuleEvent?.('suppress', rule.lessonHash, {
                 file,
                 line: match.lineNumber,
-                justification: extractJustification(addition.line, addition.precedingLine),
+                justification: extractJustification(ctx, addition.line, addition.precedingLine),
                 immutable: rule.immutable,
               });
               continue;
@@ -456,12 +493,12 @@ export async function applyAstRulesToAdditions(
 
             for (const match of matches) {
               const addition = fileAdditions.find((a) => a.lineNumber === match.lineNumber);
-              if (addition && isSuppressed(addition.line, addition.precedingLine)) {
+              if (addition && isSuppressed(ctx, addition.line, addition.precedingLine)) {
                 onRuleEvent?.('suppress', rule.lessonHash, {
                   file,
                   line: match.lineNumber,
                   justification: addition
-                    ? extractJustification(addition.line, addition.precedingLine)
+                    ? extractJustification(ctx, addition.line, addition.precedingLine)
                     : '',
                   immutable: rule.immutable,
                 });
@@ -495,12 +532,14 @@ export async function applyAstRulesToAdditions(
  * This is a convenience wrapper that only handles 'regex' engine rules.
  * For 'ast' and 'ast-grep' rules, call `applyAstRulesToAdditions` separately.
  *
- * @param rules — The full list of compiled rules. This function filters to regex rules.
- * @param diff — The unified diff string.
- * @param excludeFiles — File paths to skip (e.g., compiled-rules.json to avoid self-matches).
+ * @param ctx - Per-invocation rule engine context (see {@link RuleEngineContext}).
+ * @param rules - The full list of compiled rules. This function filters to regex rules.
+ * @param diff - The unified diff string.
+ * @param excludeFiles - File paths to skip (e.g., compiled-rules.json to avoid self-matches).
  * @returns All regex-based violations found.
  */
 export function applyRules(
+  ctx: RuleEngineContext,
   rules: CompiledRule[],
   diff: string,
   excludeFiles?: string[],
@@ -513,5 +552,5 @@ export function applyRules(
     additions = additions.filter((a) => !excluded.has(a.file));
   }
 
-  return applyRulesToAdditions(rules, additions);
+  return applyRulesToAdditions(ctx, rules, additions);
 }

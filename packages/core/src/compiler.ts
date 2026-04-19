@@ -64,7 +64,7 @@ export {
   type CoreLogger,
   extractJustification,
   matchesGlob,
-  setCoreLogger,
+  type RuleEngineContext,
 } from './rule-engine.js';
 
 // ─── Hashing ────────────────────────────────────────

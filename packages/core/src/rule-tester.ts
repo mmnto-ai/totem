@@ -3,7 +3,7 @@ import * as path from 'node:path';
 
 import type { AstGrepRule } from './ast-grep-query.js';
 import { matchAstGrepPattern } from './ast-grep-query.js';
-import type { CompiledRule, DiffAddition } from './compiler.js';
+import type { CompiledRule, DiffAddition, RuleEngineContext } from './compiler.js';
 import { applyRulesToAdditions, loadCompiledRules } from './compiler.js';
 import { getErrorMessage } from './errors.js';
 
@@ -202,10 +202,16 @@ export function testRule(rule: CompiledRule, fixture: RuleTestFixture): RuleTest
       }
     }
   } else {
-    // Regex-engine rules — test line by line
+    // Regex-engine rules — test line by line. Fixture runs are synthetic;
+    // any shield-context: deprecation that slips through goes to a no-op
+    // logger to keep fixture semantics isolated from production warnings.
+    const ctx: RuleEngineContext = {
+      logger: { warn: () => {} },
+      state: { hasWarnedShieldContext: false },
+    };
     for (const line of fixture.failLines) {
       const additions = linesToAdditions([line], fixture.filePath);
-      const violations = applyRulesToAdditions([rule], additions);
+      const violations = applyRulesToAdditions(ctx, [rule], additions);
       if (violations.length === 0) {
         result.missedFails.push(line);
       }
@@ -213,7 +219,7 @@ export function testRule(rule: CompiledRule, fixture: RuleTestFixture): RuleTest
 
     for (const line of fixture.passLines) {
       const additions = linesToAdditions([line], fixture.filePath);
-      const violations = applyRulesToAdditions([rule], additions);
+      const violations = applyRulesToAdditions(ctx, [rule], additions);
       if (violations.length > 0) {
         result.falsePositives.push(line);
       }

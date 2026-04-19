@@ -4,9 +4,20 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { applyRules, type CompiledRule, loadCompiledRules, saveCompiledRules } from '@mmnto/totem';
+import {
+  applyRules,
+  type CompiledRule,
+  loadCompiledRules,
+  type RuleEngineContext,
+  saveCompiledRules,
+} from '@mmnto/totem';
 
-import { cleanTmpDir } from '../test-utils.js';
+import { cleanTmpDir, makeRuleEngineCtx } from '../test-utils.js';
+
+let ctx: RuleEngineContext;
+beforeEach(() => {
+  ctx = makeRuleEngineCtx();
+});
 import {
   assemblePrompt,
   assembleStructuralPrompt,
@@ -195,7 +206,7 @@ describe('compiled rules engine', () => {
 +}
 `;
 
-    const violations = applyRules(rules, diff);
+    const violations = applyRules(ctx, rules, diff);
     expect(violations).toHaveLength(1);
     expect(violations[0]!.rule.message).toBe('Use err, not error, in catch blocks');
     expect(violations[0]!.file).toBe('src/handler.ts');
@@ -215,7 +226,7 @@ describe('compiled rules engine', () => {
  export default foo;
 `;
 
-    const violations = applyRules(rules, diff);
+    const violations = applyRules(ctx, rules, diff);
     expect(violations).toHaveLength(0);
   });
 

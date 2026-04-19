@@ -1,5 +1,7 @@
 import * as fs from 'node:fs';
 
+import type { RuleEngineContext } from './rule-engine.js';
+
 /**
  * Remove a temporary directory with retry semantics for Windows ENOTEMPTY flakes.
  * Safe to call with falsy paths (no-op).
@@ -7,6 +9,20 @@ import * as fs from 'node:fs';
 export function cleanTmpDir(dir: string | undefined): void {
   if (!dir) return;
   fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+}
+
+/**
+ * Build a fresh `RuleEngineContext` for a test. Captures warnings into the
+ * returned `warnings` array so assertions can introspect logger output
+ * without setting up module-level spies.
+ */
+export function makeRuleEngineCtx(): RuleEngineContext & { warnings: string[] } {
+  const warnings: string[] = [];
+  return {
+    logger: { warn: (msg: string) => warnings.push(msg) },
+    state: { hasWarnedShieldContext: false },
+    warnings,
+  };
 }
 
 // ---- cross-spawn mock helpers ----
