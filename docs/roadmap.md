@@ -23,13 +23,16 @@ Quarantined out of 1.15.0: Proposal 217 (LLM context caching, 1.16.0) and Propos
 
 ## 1.16.0: The Ingestion Pipeline + ADR-090 Substrate DX
 
-**Theme:** Source Diversity, the Self-Healing Loop, and substrate-layer DX polish. Expand the extraction pipeline to convert external signals (GitHub Advanced Security alerts, lint warnings) into deterministic Totem lessons. Pair that with the Human DX and Agent AX tracks from ADR-090 so the substrate is friction-free for human setup and incoming agent sessions.
+**Theme:** Deterministic architectural enforcement through a five-stage ingestion funnel (`Extract → Classify → Compile → Verify-Against-Codebase → Activate`) per **ADR-091 Ingestion Pipeline Refinements** (promoted 2026-04-19 via Proposal 234). Pair the pipeline with the Human DX and Agent AX tracks from ADR-090 so the substrate is friction-free for human setup and incoming agent sessions.
 
 Also lands Proposal 217 (LLM context caching, quarantined out of 1.15.0 because it touches compile pipeline substrate).
 
-- **Headline Work — Ingestion:**
-  - [ ] **GHAS / SARIF Extraction:** Convert GitHub Advanced Security alerts into Totem lessons (Strategy #50). Originally scoped with #1131; telemetry-driven refinement won that cycle. 1.14.0 distribution now gives us a way to ship the resulting rules back out.
-  - [ ] **Lint Warning Extraction:** Convert repository lint warnings (ESLint, Semgrep, Sonar) into actionable lessons (Strategy #51).
+- **Headline Work — Ingestion (ADR-091 funnel):**
+  - [ ] **Classifier gate (Stage 2):** Routes candidates into Compile vs Candidate Debt per ADR-091. Strategy-side implementation ticket pending decomposition.
+  - [ ] **Verify-Against-Codebase (Stage 4):** Runs compiled candidate against a baseline snapshot before Activate. Strategy-side implementation ticket pending decomposition.
+  - [ ] **GHAS / SARIF Extraction:** Convert GitHub Advanced Security alerts into Totem lessons (Strategy #50). Originally scoped with #1131; telemetry-driven refinement won that cycle. ADR-086 External Alert Ingestion gates this.
+  - [ ] **Lint Warning Extraction:** Convert repository lint warnings (ESLint, Semgrep, Sonar) into actionable lessons (Strategy #51 ↔ totem#1253 `totem extract-lint`).
+  - [ ] **ADR-mining extractor:** Decision-record ingestion into the same funnel. Strategy-side implementation ticket pending decomposition.
 
 - **Headline Work — ADR-090 Substrate DX:**
   - [ ] **Rich `describe_project` MCP endpoint (#1497).** Agent AX track. Drops session-start briefing from ~5 tool calls to 1 by returning active roadmap, open `pre-1.15-review` tickets, current strategy pointer, rule counts, and recent merged PRs in one structured payload.
@@ -54,9 +57,9 @@ Strategic research not currently scoped to 1.14.0 or 1.15.0:
 
 ## Shipped Milestones
 
-### 1.14.x: Nervous System Foundation + Hotfix Cycle
+### 1.14.x: Foundation + Pack Substrate
 
-Eleven releases over six days (2026-04-09 to 2026-04-15). Headline foundation work in 1.14.0, a four-P0 governance sweep across 1.14.3 through 1.14.5, quality sweep + capstone in 1.14.6 and 1.14.7, perf follow-up in 1.14.8, precision + bundle release on 2026-04-15.
+Fourteen releases over ten days (2026-04-09 to 2026-04-19). Headline foundation work in 1.14.0, a four-P0 governance sweep across 1.14.3 through 1.14.5, quality sweep + capstone in 1.14.6 and 1.14.7, perf follow-up in 1.14.8, precision + bundle release on 2026-04-15, ADR-088 Phase 1 substrate + `@totem/pack-agent-security` flagship pack in 1.14.11-13.
 
 - **1.14.0** (2026-04-09): Cross-Repo Context Mesh (#1295), LLM Context Caching opt-in preview (#1292), `/preflight` v2 design-doc gate (#1296).
 - **1.14.1** (2026-04-11): Hotfix Sweep and Phase 1 Papercuts. Nine PRs including Pipeline 5 sanity gate, compile prune no-op fix, tilde-fence support.
@@ -69,6 +72,9 @@ Eleven releases over six days (2026-04-09 to 2026-04-15). Headline foundation wo
 - **1.14.8** (2026-04-14): Perf Follow-up. `cwd` threading (#1401), batch upgrade hashes (#1401), PR template enforcement (#1402).
 - **1.14.9** (2026-04-15): The Precision Engine. Compound ast-grep rule support (#1410, #1412, #1415), compile-time smoke gate, `badExample` requirement (#1420) closing the LLM-hallucination loop.
 - **1.14.10** (2026-04-15): The Bundle Release. Shell-orchestrator `{model}` token RCE fix (#1429), Pipeline 1 compound rule authoring + fail-loud fixes in git.ts and rule-engine.ts (#1454).
+- **1.14.11** (2026-04-17 → 2026-04-18): Pre-1.15-review Phase B first wave. `@totem/pack-agent-security` scaffold (#1503), ADR-088 Phase 1 Layer 3 verify-retry (#1513), immutable severity flag + pack-merge primitive (#1510, #1515), `totem install pack/<name>` (#1516). `--force` / `--no-force` content-hash stamping (#1531).
+- **1.14.12** (2026-04-18): ADR-088 Phase 1 Layers 3+4 substrate. `unverified` flag on `CompiledRule` (#1544), `nonCompilable` 4-tuple with `NonCompilableReasonCodeSchema` enum (9 values), Read/Write schema split, security zero-tolerance (#1548), `--verbose` layer trace + `totem doctor` stale-rule advisory (#1549). Five security rules shipped on the flagship pack (#1521, #1522).
+- **1.14.13** (2026-04-19): RuleEngineContext thread-through. `fix(core)` removes `setCoreLogger` / `resetShieldContextWarning` module-level state in favor of `RuleEngineContext` threaded through `applyRulesToAdditions`, `applyAstRulesToAdditions`, `applyRules`, `extractJustification` (#1553). Closes the #1441 shared-mutable-global concurrency hazard. Inline archive of over-broad `TotemError($MSG, $$$REST)` rule (`4b091a1bc7d286d6`) via postmerge #1568.
 
 ### 1.13.0: The Refinement Engine (2026-04-07)
 
