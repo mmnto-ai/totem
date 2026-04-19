@@ -22,8 +22,7 @@ Example hook for Gemini (`.gemini/hooks/SessionStart.js`):
 
 ```javascript
 const { execSync } = require('child_process');
-const output = execSync('totem status', { encoding: 'utf-8' });
-process.stderr.write(output);
+execSync('totem status', { stdio: ['ignore', 'inherit', 'inherit'] });
 ```
 
 The agent now sees whether the manifest is fresh, whether the review stamp is stale, and the current rule and lesson counts before taking any action.
