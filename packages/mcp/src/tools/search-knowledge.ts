@@ -559,7 +559,7 @@ async function performSearch(
       '\n\n' +
       formatSystemWarning(
         'You just ingested a large amount of context. You may be at risk of forgetting earlier instructions. ' +
-          'Consider warning the user about context pressure and suggest running `totem bridge` to consolidate.',
+          'Consider warning the user about context pressure and suggest running `totem handoff` to capture mid-session state.',
       );
   }
 

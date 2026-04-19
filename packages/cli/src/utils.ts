@@ -323,7 +323,7 @@ const CONDENSED_LESSON_LENGTH = 120;
 
 /**
  * Format lessons as a prompt section with character budgeting.
- * Use `condensed` for high-frequency commands (briefing, triage) to save tokens.
+ * Use `condensed` for high-frequency commands (triage) to save tokens.
  * Returns empty string if no lessons fit within the budget.
  */
 export function formatLessonSection(
@@ -364,9 +364,8 @@ export interface OrchestratorRunOptions {
 
 const DEFAULT_TTLS: Record<string, number> = {
   triage: 3600, // 1 hour
-  briefing: 1800, // 30 min
   spec: 3600, // 1 hour
-  docs: 0, // No cache — each run should reflect latest state
+  docs: 0, // No cache, each run should reflect latest state
   shield: 0,
   learn: 0,
 };
