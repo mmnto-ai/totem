@@ -2122,11 +2122,16 @@ describe('compileLesson unverified flag', () => {
     }
   });
 
-  it('leaves unverified absent when the lesson carries a non-empty Example Hit', async () => {
-    // Invariant #1: presence of Example Hit produces unverified: undefined.
-    // The serialized JSON omits the field — `canonicalStringify`
-    // (key-sorted JSON.stringify) writes nothing for undefined values so
-    // pre-#1480 manifest hashes stay stable.
+  it('ships Pipeline 2 rules as unverified: true even when the lesson carries a non-empty Example Hit (ADR-089 zero-trust default, mmnto-ai/totem#1581)', async () => {
+    // Pre-#1581 invariant: presence of Example Hit produced
+    // unverified: undefined. Post-#1581: LLM-generated rules (Pipeline 2
+    // and Pipeline 3) always ship unverified: true regardless of Example
+    // Hit presence. The LLM cannot self-certify structural invariants;
+    // Example Hit/Miss is an LLM-produced artifact of the compile process,
+    // not a human sign-off. Activation requires `totem rule promote
+    // <hash>` or the ADR-091 Stage 4 Codebase Verifier in 1.16.0.
+    // Pipeline 1 (manual) keeps its pre-#1581 conditional semantics; see
+    // the Pipeline 1 test below.
     const parseMock = vi.fn().mockReturnValue({
       compilable: true,
       pattern: 'console\\.log',
@@ -2146,7 +2151,7 @@ describe('compileLesson unverified flag', () => {
     const result = await compileLesson(lessonWithExampleHit, 'system prompt', deps);
     expect(result.status).toBe('compiled');
     if (result.status === 'compiled') {
-      expect(result.rule.unverified).toBeUndefined();
+      expect(result.rule.unverified).toBe(true);
     }
   });
 

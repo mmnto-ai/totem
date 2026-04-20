@@ -917,13 +917,15 @@ export async function compileLesson(
     trace.push({ layer: 2, action: 'verify', outcome: 'passed' });
     trace.push({ layer: 2, action: 'result', outcome: 'compiled' });
 
-    // Pipeline 3 rules are example-based — they always ship with a Bad snippet
-    // by construction. Flag unverified only when the lesson body itself omits
-    // the canonical Example Hit block, keeping the signal aligned with the
-    // lesson-level ground-truth rather than the Pipeline 3 self-test.
-    if (!exampleHitPresent) {
-      ruleResult.rule.unverified = true;
-    }
+    // ADR-089 zero-trust default (mmnto-ai/totem#1581): every LLM-generated
+    // rule ships `unverified: true` unconditionally. Pipeline 3 self-test
+    // against Bad/Good snippets is not a human sign-off; Example Hit/Miss
+    // is also an LLM-produced artifact of the compile process. Activation
+    // requires `totem rule promote <hash>` or the ADR-091 Stage 4 Codebase
+    // Verifier in 1.16.0. `exampleHitPresent` retained in trace scope for
+    // Pipeline 1 (manual) guard below, which keeps its pre-#1581 semantics
+    // because manual rules are human-authored and self-evidencing.
+    ruleResult.rule.unverified = true;
 
     return { status: 'compiled', rule: ruleResult.rule, trace };
   }
@@ -1039,12 +1041,15 @@ export async function compileLesson(
     if (ruleResult.rule) {
       const testResult = verifyRuleExamples(ruleResult.rule, lesson.body);
       if (!testResult || testResult.passed) {
-        // ADR-088 Phase 1 Layer 3 (mmnto-ai/totem#1480): flag rules compiled
-        // without a non-empty Example Hit as unverified, even when the
-        // lesson carried an Example Miss (the miss still got verified).
-        if (!exampleHitPresent) {
-          ruleResult.rule.unverified = true;
-        }
+        // ADR-089 zero-trust default (mmnto-ai/totem#1581): every
+        // LLM-generated rule ships `unverified: true` unconditionally,
+        // even when Example Hit/Miss verification passed. The LLM cannot
+        // self-certify structural invariants; activation requires
+        // `totem rule promote <hash>` or the ADR-091 Stage 4 Codebase
+        // Verifier in 1.16.0. Pre-#1581 behavior keyed on
+        // `exampleHitPresent`; under zero-trust that signal is an
+        // authoring heuristic rather than a trust boundary.
+        ruleResult.rule.unverified = true;
         trace.push({ layer: 3, action: 'verify', outcome: 'MATCH' });
         trace.push({ layer: 3, action: 'result', outcome: 'compiled' });
         return { status: 'compiled', rule: ruleResult.rule, trace };
