@@ -6,7 +6,7 @@ Context Caching is supported on the **Anthropic** provider (`anthropic:` prefix)
 
 ## Enabling Context Caching (Opt-In Preview in 1.14.0)
 
-Context Caching ships in Totem 1.14.0 as an **opt-in preview**. The plumbing is in place (orchestrator middleware, `cache_control` markers on the static prompt sections, per-call cache metric tracking). The feature defaults to **off** so existing users aren't surprised mid-cycle by a behavior change in their token usage profile. Default activation is tracked for 1.15.0 in [mmnto/totem#1291](https://github.com/mmnto-ai/totem/issues/1291).
+Context Caching ships in Totem 1.14.0 as an **opt-in preview**. The plumbing is in place (orchestrator middleware, `cache_control` markers on the static prompt sections, per-call cache metric tracking). The feature defaults to **off** so existing users aren't surprised mid-cycle by a behavior change in their token usage profile. Default activation is tracked for 1.16.0+ in [mmnto/totem#1291](https://github.com/mmnto-ai/totem/issues/1291).
 
 To enable it for the 1.14.0 preview, add the flag to your `totem.config.ts`:
 
