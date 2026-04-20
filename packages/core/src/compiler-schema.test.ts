@@ -285,6 +285,87 @@ describe('CompilerOutput badExample required by engine', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('rejects a regex CompilerOutput with a whitespace-only badExample', () => {
+    // Flagged by CodeRabbit on mmnto-ai/totem#1591: a blank string passes
+    // `length > 0` but the smoke gate's early-return on `trim().length === 0`
+    // would treat it as a no-op, so the required-field check must use
+    // `.trim().length > 0` to close the hole.
+    const result = CompilerOutputSchema.safeParse({
+      compilable: true,
+      pattern: '\\bfoo\\b',
+      message: 'No foo',
+      engine: 'regex',
+      badExample: '   \t\n  ',
+      goodExample: 'const bar = 1;',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ─── CompilerOutput goodExample required per engine (mmnto-ai/totem#1580) ──
+
+describe('CompilerOutput goodExample required by engine', () => {
+  it('accepts a regex CompilerOutput with a non-empty goodExample', () => {
+    const parsed = CompilerOutputSchema.parse({
+      compilable: true,
+      pattern: '\\bfoo\\b',
+      message: 'No foo',
+      engine: 'regex',
+      badExample: 'const foo = 1;',
+      goodExample: 'const bar = 1;',
+    });
+    expect(parsed.goodExample).toBe('const bar = 1;');
+  });
+
+  it('rejects a regex CompilerOutput missing goodExample', () => {
+    const result = CompilerOutputSchema.safeParse({
+      compilable: true,
+      pattern: '\\bfoo\\b',
+      message: 'No foo',
+      engine: 'regex',
+      badExample: 'const foo = 1;',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a regex CompilerOutput with an empty goodExample string', () => {
+    const result = CompilerOutputSchema.safeParse({
+      compilable: true,
+      pattern: '\\bfoo\\b',
+      message: 'No foo',
+      engine: 'regex',
+      badExample: 'const foo = 1;',
+      goodExample: '',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a regex CompilerOutput with a whitespace-only goodExample', () => {
+    // The case CodeRabbit flagged directly on mmnto-ai/totem#1591: a
+    // blank string satisfies `length > 0` but has zero over-matching
+    // coverage because the smoke gate treats it as no-op.
+    const result = CompilerOutputSchema.safeParse({
+      compilable: true,
+      pattern: '\\bfoo\\b',
+      message: 'No foo',
+      engine: 'regex',
+      badExample: 'const foo = 1;',
+      goodExample: '   \t\n  ',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts an ast engine CompilerOutput without goodExample (exempt engine)', () => {
+    const parsed = CompilerOutputSchema.parse({
+      compilable: true,
+      message: 'AST check',
+      engine: 'ast',
+      astQuery: '(catch_clause) @c',
+    });
+    expect(parsed.engine).toBe('ast');
+    expect(parsed.goodExample).toBeUndefined();
+  });
 });
 
 // ─── RuleEventCallback discriminator (mmnto/totem#1408) ─────

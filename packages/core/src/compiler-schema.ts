@@ -342,7 +342,12 @@ function refineBadExampleRequired(
   if (!data.compilable) return;
   const engineRequiresBadExample = data.engine !== 'ast';
   if (!engineRequiresBadExample) return;
-  if (typeof data.badExample === 'string' && data.badExample.length > 0) return;
+  // `.trim().length > 0` rather than `.length > 0` because the smoke gate
+  // treats whitespace-only snippets as no-ops via its own early-return,
+  // so a blank string would slip through schema validation but provide
+  // zero gate coverage. Flagged by CodeRabbit on mmnto-ai/totem#1591 for
+  // `goodExample`; the same hole existed on `badExample` since #1409.
+  if (typeof data.badExample === 'string' && data.badExample.trim().length > 0) return;
   ctx.addIssue({
     code: z.ZodIssueCode.custom,
     message:
@@ -370,7 +375,11 @@ function refineGoodExampleRequired(
   if (!data.compilable) return;
   const engineRequiresGoodExample = data.engine !== 'ast';
   if (!engineRequiresGoodExample) return;
-  if (typeof data.goodExample === 'string' && data.goodExample.length > 0) return;
+  // `.trim().length > 0` rather than `.length > 0` so a whitespace-only
+  // goodExample cannot satisfy the required-field check. The smoke gate's
+  // early-return on `snippet.trim().length === 0` would treat the blank
+  // string as a no-op, producing zero over-matching coverage.
+  if (typeof data.goodExample === 'string' && data.goodExample.trim().length > 0) return;
   ctx.addIssue({
     code: z.ZodIssueCode.custom,
     message:
