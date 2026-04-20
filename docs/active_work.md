@@ -238,7 +238,8 @@ _#1279 (Pipeline 5 hallucination bug) shipped in 1.14.1 as the pre-ingestion san
 - Strategy **#62** — Model-specific prompt adapters (partially addressed by #1220 rewrite)
 - Strategy **#64** — Model Routing Matrix (partially addressed by #73 benchmark)
 - **#1236** — Revisit 6 silenced upgrade-target lessons (1.13.0 cleanup)
-- **#1504** — Post-ADR-088 audit of pre-1.13.0 rule corpus. Hard-blocked on #1479-#1483 landing. One-shot sweep of ~230 rules compiled before the Refinement Engine; expected 30-50% archive rate based on the 1.13.0 recompile precedent. Filed 2026-04-16 after back-to-back archives of over-broad pre-1.13.0 rules (`939ae83ed3bf28bb` in #1503, `e2341ed9229f9a60` from incidental compile).
+
+_Note on `#1504`: moved out of Horizon 3+ into the **1.16.0 "ADR-091 Stage 4 Codebase Verifier and the legacy corpus audit"** section above. The #1479-#1483 hard-block from the original 2026-04-16 filing is obsolete (those shipped in 1.14.12); the actual prerequisite is ADR-091 Stage 4 per the 2026-04-20 dependency-inversion discovery._
 
 ### Recently Completed
 
