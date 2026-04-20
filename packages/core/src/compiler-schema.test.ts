@@ -175,6 +175,65 @@ describe('CompiledRule badExample field', () => {
   });
 });
 
+// ─── CompiledRule archivedAt field (mmnto-ai/totem#1589) ─────
+
+describe('CompiledRule archivedAt field', () => {
+  const baseArchivedRule = {
+    lessonHash: 'abc123def456',
+    lessonHeading: 'Archived rule',
+    pattern: '\\bfoo\\b',
+    message: 'No foo',
+    engine: 'regex' as const,
+    compiledAt: '2026-04-13T12:00:00Z',
+    status: 'archived' as const,
+    archivedReason: 'Over-matching pattern',
+    archivedAt: '2026-04-13T12:05:00Z',
+  };
+
+  it('accepts a CompiledRule with archivedAt set', () => {
+    const parsed = CompiledRuleSchema.parse(baseArchivedRule);
+    expect(parsed.archivedAt).toBe('2026-04-13T12:05:00Z');
+  });
+
+  it('preserves archivedAt across a parse → serialize → parse round-trip', () => {
+    // The pre-#1589 bug: CompiledRuleBaseSchema had no archivedAt field,
+    // so Zod silently stripped it on every round-trip. Every compile-write
+    // cycle erased prior archivedAt values from compiled-rules.json,
+    // eroding the institutional first-archive-provenance ledger.
+    const firstParse = CompiledRuleSchema.parse(baseArchivedRule);
+    const serialized = JSON.parse(JSON.stringify(firstParse)) as unknown;
+    const secondParse = CompiledRuleSchema.parse(serialized);
+    expect(secondParse.archivedAt).toBe('2026-04-13T12:05:00Z');
+    expect(secondParse.archivedReason).toBe('Over-matching pattern');
+    expect(secondParse.status).toBe('archived');
+  });
+
+  it('accepts an active CompiledRule without archivedAt (optional, absent for active rules)', () => {
+    const activeRule = {
+      lessonHash: 'abc123def456',
+      lessonHeading: 'Active rule',
+      pattern: '\\bfoo\\b',
+      message: 'No foo',
+      engine: 'regex' as const,
+      compiledAt: '2026-04-13T12:00:00Z',
+    };
+    const parsed = CompiledRuleSchema.parse(activeRule);
+    expect(parsed.archivedAt).toBeUndefined();
+    expect(parsed.status).toBeUndefined();
+  });
+
+  it('preserves the full archive tuple (status + archivedReason + archivedAt) together', () => {
+    // Pins the invariant that the three archive-related fields survive
+    // together so `totem doctor` telemetry and the postmerge ledger have
+    // a complete record. Archive scripts set all three via raw JSON
+    // mutation; the schema must not strip any of them.
+    const parsed = CompiledRuleSchema.parse(baseArchivedRule);
+    expect(parsed.status).toBe('archived');
+    expect(parsed.archivedReason).toBe('Over-matching pattern');
+    expect(parsed.archivedAt).toBe('2026-04-13T12:05:00Z');
+  });
+});
+
 // ─── CompilerOutput badExample required per engine (mmnto-ai/totem#1409) ──
 
 describe('CompilerOutput badExample required by engine', () => {
