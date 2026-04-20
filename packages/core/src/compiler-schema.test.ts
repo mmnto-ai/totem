@@ -366,6 +366,45 @@ describe('CompilerOutput goodExample required by engine', () => {
     expect(parsed.engine).toBe('ast');
     expect(parsed.goodExample).toBeUndefined();
   });
+
+  it('rejects an ast-grep CompilerOutput missing goodExample', () => {
+    const result = CompilerOutputSchema.safeParse({
+      compilable: true,
+      message: 'No console.log',
+      engine: 'ast-grep',
+      astGrepPattern: 'console.log($A)',
+      badExample: 'console.log("debug");',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an ast-grep CompilerOutput with a whitespace-only goodExample', () => {
+    const result = CompilerOutputSchema.safeParse({
+      compilable: true,
+      message: 'No console.log',
+      engine: 'ast-grep',
+      astGrepPattern: 'console.log($A)',
+      badExample: 'console.log("debug");',
+      goodExample: '   \n\t ',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an ast-grep compound CompilerOutput missing goodExample', () => {
+    const result = CompilerOutputSchema.safeParse({
+      compilable: true,
+      message: 'No const inside for-loop',
+      engine: 'ast-grep',
+      astGrepYamlRule: {
+        rule: {
+          pattern: 'const $VAR = $VAL',
+          inside: { kind: 'for_statement', stopBy: 'end' },
+        },
+      },
+      badExample: 'for (let i = 0; i < 10; i++) { const x = 1; }',
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 // ─── RuleEventCallback discriminator (mmnto/totem#1408) ─────
