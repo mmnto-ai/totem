@@ -905,6 +905,167 @@ export async function checkStaleRules(
   };
 }
 
+// ─── Grandfathered-rule advisory (mmnto-ai/totem#1603) ─
+
+/**
+ * ISO timestamp for the 1.13.0 ship date. Rules whose vintage timestamp
+ * precedes this never saw the ADR-088 Phase 1 substrate fields
+ * (`badExample`, `goodExample`, `unverified`) during their compile. Used
+ * by `findLegacyGrandfatheredRules` to categorize the pre-zero-trust
+ * cohort the 2026-04-20 audit measured at 357 of 378 active rules.
+ */
+export const V_1_13_0_SHIP_DATE_ISO = '2026-04-07T00:00:00.000Z';
+
+export type GrandfatheredReasonCode = 'vintage-pre-1.13.0' | 'no-badExample' | 'no-goodExample';
+
+export interface GrandfatheredRuleCandidate {
+  lessonHash: string;
+  heading: string;
+  /** Non-empty: rules with zero applicable reasons are not returned. */
+  reasons: GrandfatheredReasonCode[];
+  /** `createdAt` when present, `compiledAt` otherwise; used for the vintage check. */
+  vintage: string;
+}
+
+/**
+ * Pure helper: scan compiled rules and return the grandfathered
+ * pre-zero-trust cohort categorized by reason. A rule is a candidate
+ * when it is active (`status !== 'archived'`) and lacks the `unverified`
+ * flag from ADR-089 part 1 (mmnto-ai/totem#1581). Each candidate gets
+ * every reason that applies:
+ *
+ *   - `vintage-pre-1.13.0`: vintage timestamp precedes the 1.13.0 ship date.
+ *   - `no-badExample`: empty or absent `badExample` field.
+ *   - `no-goodExample`: empty or absent `goodExample` field.
+ *
+ * Rules with at least one reason are returned; rules that satisfy all
+ * three substrate checks are omitted.
+ *
+ * Returns `null` when `compiled-rules.json` is missing or unreadable,
+ * matching the fallback convention used by `findStaleRules` so the
+ * caller can render a `skip` diagnostic rather than fail the pipeline.
+ */
+export async function findLegacyGrandfatheredRules(
+  cwd: string,
+  totemDir = '.totem',
+): Promise<GrandfatheredRuleCandidate[] | null> {
+  const rulesPath = path.join(cwd, totemDir, 'compiled-rules.json');
+  if (!fs.existsSync(rulesPath)) return null;
+
+  try {
+    const { loadCompiledRulesFile } = await import('@mmnto/totem');
+    const rulesFile = loadCompiledRulesFile(rulesPath);
+
+    const candidates: GrandfatheredRuleCandidate[] = [];
+    for (const rule of rulesFile.rules) {
+      if (rule.status === 'archived') continue;
+      if (rule.unverified === true) continue;
+
+      const vintage = rule.createdAt ?? rule.compiledAt;
+      const reasons: GrandfatheredReasonCode[] = [];
+      if (vintage < V_1_13_0_SHIP_DATE_ISO) reasons.push('vintage-pre-1.13.0');
+      if (!rule.badExample || rule.badExample.trim().length === 0) {
+        reasons.push('no-badExample');
+      }
+      if (!rule.goodExample || rule.goodExample.trim().length === 0) {
+        reasons.push('no-goodExample');
+      }
+
+      if (reasons.length === 0) continue;
+
+      candidates.push({
+        lessonHash: rule.lessonHash,
+        heading: rule.lessonHeading,
+        reasons,
+        vintage,
+      });
+    }
+
+    // Sort by reason count desc (worst-off first), then vintage asc
+    // (oldest first) so the leader line surfaces the most affected rule.
+    return candidates.sort((a, b) => {
+      if (a.reasons.length !== b.reasons.length) return b.reasons.length - a.reasons.length;
+      return a.vintage.localeCompare(b.vintage);
+    });
+  } catch (err) {
+    // Matches `findStaleRules` fallback: corrupt or unreadable rules file
+    // degrades to "no data" so one bad read cannot crash the diagnostic
+    // pipeline. Defective Error objects (empty message) still propagate.
+    if (err instanceof Error && err.message.length === 0) {
+      throw err;
+    }
+    return null;
+  }
+}
+
+/**
+ * Grandfathered-rule advisory diagnostic. Summarizes the pre-zero-trust
+ * cohort by reason code. Advisory-only (`warn`): ADR-091 Stage 4
+ * Codebase Verifier (1.16.0, mmnto-ai/totem#1504) is the empirical
+ * audit path; this check gives users a triage-able surface until that
+ * ships.
+ */
+export async function checkGrandfatheredRules(
+  cwd: string,
+  totemDir = '.totem',
+): Promise<DiagnosticResult> {
+  const rulesPath = path.join(cwd, totemDir, 'compiled-rules.json');
+  if (!fs.existsSync(rulesPath)) {
+    return {
+      name: 'Grandfathered Rules',
+      status: 'skip',
+      message: 'compiled-rules.json missing',
+    };
+  }
+
+  const candidates = await findLegacyGrandfatheredRules(cwd, totemDir);
+  if (candidates === null) {
+    return {
+      name: 'Grandfathered Rules',
+      status: 'skip',
+      message: 'Could not analyze rules',
+    };
+  }
+
+  if (candidates.length === 0) {
+    return {
+      name: 'Grandfathered Rules',
+      status: 'pass',
+      message: 'All active rules carry the ADR-089 zero-trust substrate',
+    };
+  }
+
+  const reasonCounts: Record<GrandfatheredReasonCode, number> = {
+    'vintage-pre-1.13.0': 0,
+    'no-badExample': 0,
+    'no-goodExample': 0,
+  };
+  for (const candidate of candidates) {
+    for (const reason of candidate.reasons) {
+      reasonCounts[reason]++;
+    }
+  }
+
+  const summaryParts: string[] = [];
+  if (reasonCounts['vintage-pre-1.13.0'] > 0) {
+    summaryParts.push(`${reasonCounts['vintage-pre-1.13.0']} vintage-pre-1.13.0`);
+  }
+  if (reasonCounts['no-badExample'] > 0) {
+    summaryParts.push(`${reasonCounts['no-badExample']} no-badExample`);
+  }
+  if (reasonCounts['no-goodExample'] > 0) {
+    summaryParts.push(`${reasonCounts['no-goodExample']} no-goodExample`);
+  }
+
+  return {
+    name: 'Grandfathered Rules',
+    status: 'warn',
+    message: `${candidates.length} grandfathered rule(s): ${summaryParts.join(', ')}`,
+    remediation:
+      'Pre-zero-trust cohort. ADR-091 Stage 4 Codebase Verifier (1.16.0) will empirically validate these against real code; see mmnto-ai/totem#1504.',
+  };
+}
+
 // ─── Types ──────────────────────────────────────────────
 
 export interface DoctorOptions {
@@ -1344,6 +1505,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     checkSecretsFileTracked(cwd),
     await checkUpgradeCandidates(cwd),
     await checkStaleRules(cwd, '.totem', doctorThresholds),
+    await checkGrandfatheredRules(cwd),
   ];
 
   for (const result of results) {
