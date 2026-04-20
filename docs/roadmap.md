@@ -6,22 +6,7 @@ Totem is a standard library for codebase governance — deterministic primitives
 
 ---
 
-## 1.15.0: The Distribution Pipeline (Active)
-
-**Theme:** The Totem Pack Ecosystem. 1.13.0 proved the engine can generate high-fidelity ast-grep rules. The 1.14.x cycle wired the nervous system foundation: cross-repo context mesh, LLM context caching preview, `/preflight` v2 design-doc gate, compound ast-grep rule support, compile-time smoke gate, precision engine. 1.15.0 is where proven rules leave the repo and teams bundle and share them across repositories via the npm registry.
-
-Blocked by the pre-1.15.0 deep review gate (#1421). ~29 tickets carry the `pre-1.15-review` label after the 2026-04-16 ADR-088 Phase 1 decomposition. The 2026-04-15 joint planning pass locked a three-phase sequence. See `docs/active_work.md` for the full phase breakdown, ticket sequencing, and proposal dispositions.
-
-- **Phase A: Workflow setup before the grind. [DONE 2026-04-16]** Monitor tool and `/loop` self-paced examples into CLAUDE.md (#1466), PreCompact hook (#1470), review-gate `if`-scope (#1468), turbo cache hash-scope fix (#1472). `/preflight` v2 shipped via #1296 + #1299 (1.14.0/1.14.1). `/autofix-pr` trial remains outstanding.
-- **Phase A.5: Architectural gates. [DONE 2026-04-16]** Three ADRs Accepted on the strategy repo: ADR-088 (Stacked Compilation, from Proposal 202, `mmnto-ai/totem-strategy#85`), ADR-089 (Zero-Trust Agent Governance, from Proposal 228, `#85`), ADR-085 (Totem Pack Ecosystem, `#86`) with its five deferred decisions resolved. ADR-090 (Totem as the Multi-Agent State Substrate, `#87`) landed as the positioning principle bounding future "is this a Totem feature?" decisions.
-- **Phase B: Pre-1.15-review grind. [IN PROGRESS]** First PR #1503 merged 2026-04-16 scaffolding `@totem/pack-agent-security`. Next five by audit-driven dependency order: #1479 Layer 3 verify-retry loop (biggest compounding value, foundational), #1485 immutable severity flag (prereq for security rules), #1491 `totem install` command (prereq for pack consumption), #1489 obfuscated-string-concat research spike (time-boxed, unblocks #1490), then #1486-#1490 security rules once #1485 lands. Tactical cleanup batch (#1456, #1457, #1459) in parallel where scope allows; #1458 already closed via #1501. Tier-1 bundles grouped by `scope:` label; one bundle per PR; deepest architectural layer first within each bundle.
-- **Phase C: Pack Distribution headline.** ADR-085 Accepted, decomposition tickets filed as #1484 (scaffold, merged) + #1485 (immutable flag) + #1491 (install) + #1492 (Sigstore + in-toto) + #1493 (lifecycle) + #1494 (doctor shadowing warning). Ship `@totem/pack-agent-security` with the four attack-surface rules (#1486, #1487, #1488, #1490). Wire Proposal 229 TBench spot-check as the pack-release gate (full harness stays Horizon 3).
-
-Quarantined out of 1.15.0: Proposal 217 (LLM context caching, 1.16.0) and Proposal 230 (content-hash embedding cache, 1.17.0). Both touch compile pipeline substrate; changing substrate and the feature built on top of it in the same release is a silent-regression risk.
-
----
-
-## 1.16.0: The Ingestion Pipeline + ADR-090 Substrate DX
+## 1.16.0: Ingestion + Substrate DX (Active)
 
 **Theme:** Deterministic architectural enforcement through a five-stage ingestion funnel (`Extract → Classify → Compile → Verify-Against-Codebase → Activate`) per **ADR-091 Ingestion Pipeline Refinements** (promoted 2026-04-19 via Proposal 234). Pair the pipeline with the Human DX and Agent AX tracks from ADR-090 so the substrate is friction-free for human setup and incoming agent sessions.
 
@@ -46,7 +31,7 @@ Also lands Proposal 217 (LLM context caching, quarantined out of 1.15.0 because 
 
 ## Backlog — Horizon 3+
 
-Strategic research not currently scoped to 1.14.0 or 1.15.0:
+Strategic research not currently scoped to 1.16.0:
 
 - **Strategy #6** — Adversarial trap corpus: evaluation suite to test the deterministic engine against evasion techniques
 - **Strategy #62** — Model-specific prompt adapters (partially addressed by #1220 rewrite)
@@ -56,6 +41,18 @@ Strategic research not currently scoped to 1.14.0 or 1.15.0:
 ---
 
 ## Shipped Milestones
+
+### 1.15.0: Pack Distribution (2026-04-20)
+
+The first shippable Totem pack plus the compile-hardening and zero-trust substrate that makes packs safe to distribute. Published `@mmnto/cli@1.15.0`, `@mmnto/totem@1.15.0`, `@mmnto/mcp@1.15.0` to npm on 2026-04-20 PM. `@totem/pack-agent-security` stays workspace-private pending #1492 Sigstore signing (tracked as #1609).
+
+- **Pack Distribution:** `@totem/pack-agent-security` flagship pack (5 immutable security rules covering unauthorized process spawning, dynamic code evaluation, network exfiltration, obfuscated string assembly), `totem install pack/<name>` command, `pack-merge` primitive refusing immutable downgrade, content-hash substrate across TypeScript and bash.
+- **Zero-trust default (ADR-089):** Pipeline 2 and Pipeline 3 LLM-generated rules ship `unverified: true` unconditionally; `totem rule promote <hash>` atomic activation CLI; Pipeline 1 (manual) keeps its conditional semantics.
+- **Compile hardening (ADR-088 Phase 1):** Layer 3 verify-retry, bidirectional smoke gate (`badExample` + `goodExample`), `archivedAt` round-trip preservation, 9-value `NonCompilableReasonCodeSchema` enum, `totem doctor` stale-rule + grandfathered-rule advisories.
+- **Platform:** Compound ast-grep rules (ADR-087, from Proposal 226), Windows shell-injection fix in `safeExec` via `cross-spawn.sync`, Cross-Repo Context Mesh, standalone binaries on darwin-arm64 / linux-x64 / win32-x64.
+- **Positioning:** ADR-090 (Multi-Agent State Substrate) bounds future "is this a Totem feature?" decisions; ADR-091 (Ingestion Pipeline Refinements) redefines the 1.16.0 ingestion flow as a 5-stage funnel; ADR-085 (Pack Ecosystem) accepted with five deferred decisions resolved.
+
+Ship-gate completion: #1580 goodExample smoke gate (1.14.15), #1589 archivedAt schema (1.14.16), #1581 part 1 zero-trust default + promote CLI (1.14.16), #1581 part 2 grandfathered advisory (1.14.17), pack-agent-security ≥5 immutable rules with fixture-backed tests (57 unit tests).
 
 ### 1.14.x: Foundation + Pack Substrate
 
