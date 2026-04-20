@@ -100,14 +100,14 @@ Manage rule exemptions for specific files or lines that deliberately bypass a st
 
 ### `totem review`
 
-The core of the Codebase Immune System. Reads your uncommitted diff and checks it against compiled rules and vector DB traps. Pipeline 5 automatically captures warnings from findings.
+The core of the Codebase Immune System. Reads your uncommitted diff and checks it against compiled rules and vector DB traps. Pipeline 5 observation auto-capture is off by default; opt in per invocation with `--auto-capture`.
 
 - **Flags:**
   - `--deterministic`: Runs lightning-fast zero-LLM checks using `compiled-rules.json` (sub-3 seconds).
   - `--format sarif`: Exports violations in SARIF 2.1.0 format.
   - `--format json`: Exports structured JSON including a unified `findings[]` array (ADR-071 Unified Findings Model) alongside raw `violations[]`.
   - `--learn`: Prompts you to extract a new lesson if a violation is found.
-  - `--no-auto-capture`: Disables Pipeline 5 observation auto-capture during the review.
+  - `--auto-capture`: Enables Pipeline 5 observation auto-capture during the review (off by default).
 
 ### `totem test`
 

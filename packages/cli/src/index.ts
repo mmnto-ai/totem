@@ -240,8 +240,8 @@ const reviewOptions = (cmd: Command) =>
       [] as string[], // totem-context: Commander accumulator default — not untrusted input
     )
     .option(
-      '--no-auto-capture',
-      'Disable Pipeline 5 auto-capture of observation rules from findings',
+      '--auto-capture',
+      'Enable Pipeline 5 auto-capture of observation rules from findings (off by default; captured rules are context-less and apply globally)',
     );
 
 async function runReview(opts: {
