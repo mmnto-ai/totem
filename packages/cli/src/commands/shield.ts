@@ -808,7 +808,7 @@ async function handleVerdictResult(
     console.error(display);
 
     // ─── Pipeline 5: auto-capture observation rules ──
-    if (options.autoCapture !== false) {
+    if (options.autoCapture === true) {
       await captureObservationRules(filtered, cwd, config, configRoot);
     }
 
