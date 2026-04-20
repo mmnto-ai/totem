@@ -101,8 +101,8 @@ The first shippable Totem pack plus the compile-hardening and zero-trust substra
 
 #### Ship-gate completion
 
-| Slot | Ticket                                                              | Status               | Ship              |
-| ---- | ------------------------------------------------------------------- | -------------------- | ----------------- |
+| Slot | Ticket                                                              | Status            | Ship              |
+| ---- | ------------------------------------------------------------------- | ----------------- | ----------------- |
 | 1    | **#1580** smoke-gate `goodExample` over-matching check              | Merged (PR #1591) | 1.14.15           |
 | 2    | **#1589** `CompiledRuleSchema` missing `archivedAt` silent-strip    | Merged (PR #1599) | 1.14.16           |
 | 3    | **#1581 part 1** zero-trust default + `totem rule promote` CLI      | Merged (PR #1601) | 1.14.16           |
