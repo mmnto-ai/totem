@@ -27,12 +27,12 @@ const TARGET_HASH = '501000ab9c41230b';
 const ARCHIVED_REASON =
   "Over-matching: pattern targets the string-shorthand form `stdio: 'pipe'` but the defect it was generalized from used the array form `stdio: ['ignore', 'pipe', 'pipe']`, so the regex does not match the actual bug sites in .gemini/hooks/SessionStart.js or init-templates.ts. `stdio: 'pipe'` is also a legitimate Node.js pattern when the caller wants to capture stdout via execSync's return value. The lesson is valid guidance but the structural rule form cannot express it without false positives; revisit as an astGrepYamlRule compound rule after ADR-091 Stage 4 Codebase Verifier ships.";
 
-const raw = fs.readFileSync(RULES_PATH, 'utf8');
 let data;
 try {
+  const raw = fs.readFileSync(RULES_PATH, 'utf8');
   data = JSON.parse(raw);
 } catch (err) {
-  throw new Error(`[Totem Error] Failed to parse ${RULES_PATH}`, { cause: err });
+  throw new Error(`[Totem Error] Failed to read or parse ${RULES_PATH}`, { cause: err });
 }
 
 const matches = data.rules.filter((rule) => rule.lessonHash === TARGET_HASH);
