@@ -7243,11 +7243,11 @@
     {
       "lessonHash": "4b091a1bc7d286d6",
       "lessonHeading": "Avoid manual prefixes in TotemError messages",
+      "pattern": "",
       "message": "TotemError automatically prepends '[Totem Error]' — do not include it manually in the message argument",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "new TotemError($MSG, $$$REST)",
+      "badExample": "throw new TotemError('[Totem Error] something went wrong', context);",
       "compiledAt": "2026-04-19T06:35:58.782Z",
       "createdAt": "2026-04-19T06:35:58.782Z",
       "fileGlobs": [
@@ -7255,11 +7255,30 @@
         "!**/*.test.*",
         "!**/*.spec.*"
       ],
-      "badExample": "throw new TotemError('[Totem Error] something went wrong', context);",
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Over-broad pattern: astGrepPattern `new TotemError($MSG, $$$REST)` matches every TotemError construction, not just manual-prefix inclusions. 34 legitimate call sites in production code would fire on every lint run. The lesson intent is to ban `new TotemError(\"[Totem Error] ...\")` but the compile worker could not express the literal-prefix constraint as an ast-grep pattern. Archived via #1553 postmerge cycle; candidate for ADR-091 Stage 4 Verify-Against-Codebase auto-archive once implemented.",
+      "unverified": true,
+      "archivedAt": "2026-04-19T06:37:57.975Z"
+    },
+    {
+      "lessonHash": "501000ab9c41230b",
+      "lessonHeading": "Inherit stdio for startup hooks",
+      "message": "Use stdio: 'inherit' instead of 'pipe' in startup hooks — 'pipe' swallows stderr output from the child process",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "stdio\\s*:\\s*['\"]pipe['\"]",
+      "compiledAt": "2026-04-20T15:26:04.307Z",
+      "createdAt": "2026-04-20T15:26:04.307Z",
+      "fileGlobs": [
+        ".gemini/hooks/**/*.js",
+        "packages/cli/src/commands/init-templates.ts"
+      ],
+      "badExample": "spawn('npm', ['install'], { stdio: 'pipe' });",
       "unverified": true,
       "status": "archived",
-      "archivedAt": "2026-04-19T06:37:57.975Z",
-      "archivedReason": "Over-broad pattern: astGrepPattern `new TotemError($MSG, $$$REST)` matches every TotemError construction, not just manual-prefix inclusions. 34 legitimate call sites in production code would fire on every lint run. The lesson intent is to ban `new TotemError(\"[Totem Error] ...\")` but the compile worker could not express the literal-prefix constraint as an ast-grep pattern. Archived via #1553 postmerge cycle; candidate for ADR-091 Stage 4 Verify-Against-Codebase auto-archive once implemented."
+      "archivedReason": "Over-matching: pattern targets the string-shorthand form `stdio: 'pipe'` but the defect it was generalized from used the array form `stdio: ['ignore', 'pipe', 'pipe']`, so the regex does not match the actual bug sites in .gemini/hooks/SessionStart.js or init-templates.ts. `stdio: 'pipe'` is also a legitimate Node.js pattern when the caller wants to capture stdout via execSync's return value. The lesson is valid guidance but the structural rule form cannot express it without false positives; revisit as an astGrepYamlRule compound rule after ADR-091 Stage 4 Codebase Verifier ships.",
+      "archivedAt": "2026-04-20T15:27:18.905Z"
     }
   ],
   "nonCompilable": [
@@ -12013,6 +12032,36 @@
       "title": "Escape triple backticks in Markdown regex",
       "reasonCode": "pattern-syntax-invalid",
       "reason": "Failed to parse LLM response"
+    },
+    {
+      "hash": "d49cb63a072e8b45",
+      "title": "Gate auto-capture behind codebase verifiers",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a strategic/architectural principle about feature gating and quality control pipelines. There is no detectable code pattern that distinguishes 'auto-capture behind verifiers' from 'auto-capture without verifiers' — the presence or absence of classifiers and verifiers is a system-design concern, not a syntactic or structural pattern in source code."
+    },
+    {
+      "hash": "4575dfa91c52acda",
+      "title": "Mirror template patterns in documentation",
+      "reasonCode": "out-of-scope",
+      "reason": "The lesson requires comparing documentation examples against production template values (specific stdio and timeout configurations), which cannot be expressed as a single pattern match. Detecting 'configuration drift' between two separate files requires cross-file semantic comparison that no single regex or AST pattern can perform."
+    },
+    {
+      "hash": "f30f1dde0278c4e3",
+      "title": "Sync hook templates with registry",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a procedural/process requirement (verify a specific file when deprecating CLI features) that cannot be expressed as a detectable code pattern. There is no syntactic anti-pattern to match — the violation is an omission (failing to update init-templates.ts when removing a command elsewhere), which requires cross-file semantic analysis beyond what regex or AST patterns can express."
+    },
+    {
+      "hash": "a1e62d65bc76bc81",
+      "title": "Prevent context-less rule pollution",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a configuration default/architectural principle (LLM rule capture should default to OFF) that cannot be detected as a code pattern — there is no specific syntax, function call, or structural element to match against in source files."
+    },
+    {
+      "hash": "a81525814e20d2a8",
+      "title": "Avoid abrupt CLI flag removal",
+      "reasonCode": "out-of-scope",
+      "reason": "Detecting whether a removed/renamed CLI flag has a deprecated alias requires cross-version diffing and semantic understanding of the flag lifecycle — there is no single-file code pattern that distinguishes a safe removal (with alias) from an abrupt removal (without alias)."
     }
   ]
 }
