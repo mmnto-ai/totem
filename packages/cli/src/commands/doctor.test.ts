@@ -13,6 +13,7 @@ import {
   checkConfig,
   checkEmbeddingConfig,
   checkGitHooks,
+  checkGrandfatheredRules,
   checkIndex,
   checkLinkedIndexes,
   checkSecretLeaks,
@@ -20,11 +21,13 @@ import {
   checkStaleRules,
   checkUpgradeCandidates,
   doctorCommand,
+  findLegacyGrandfatheredRules,
   findStaleRules,
   MIN_CONTEXT_EVENTS,
   MIN_EVENTS,
   NON_CODE_THRESHOLD,
   runSelfHealing,
+  V_1_13_0_SHIP_DATE_ISO,
 } from './doctor.js';
 
 // ─── Helpers ────────────────────────────────────────────
@@ -303,7 +306,7 @@ describe('doctorCommand', () => {
   it('runs without throwing', async () => {
     const results = await doctorCommand();
     expect(results).toBeDefined();
-    expect(results.length).toBe(10);
+    expect(results.length).toBe(11);
   });
 
   it('returns correct check names', async () => {
@@ -319,6 +322,7 @@ describe('doctorCommand', () => {
     expect(names).toContain('Secrets File Security');
     expect(names).toContain('Upgrade Candidates');
     expect(names).toContain('Stale Rules');
+    expect(names).toContain('Grandfathered Rules');
   });
 });
 
@@ -1736,5 +1740,324 @@ describe('findStaleRules + checkStaleRules', () => {
   it('checkStaleRules returns skip when compiled-rules.json is missing', async () => {
     const result = await checkStaleRules(tmpDir);
     expect(result.status).toBe('skip');
+  });
+});
+
+// ─── Grandfathered rules (mmnto-ai/totem#1603) ──────────
+
+describe('findLegacyGrandfatheredRules + checkGrandfatheredRules', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  function writeRules(tmpDir: string, rules: unknown[]): void {
+    const totemDir = path.join(tmpDir, '.totem');
+    fs.mkdirSync(totemDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(totemDir, 'compiled-rules.json'),
+      JSON.stringify({ version: 1, rules, nonCompilable: [] }),
+    );
+  }
+
+  // Post-1.13.0 timestamp used to neutralize the vintage reason in tests
+  // that target a single reason code in isolation.
+  const POST_1_13_0 = '2026-04-08T00:00:00.000Z';
+  const PRE_1_13_0 = '2026-02-01T00:00:00.000Z';
+
+  it('returns null when compiled-rules.json is missing', async () => {
+    const result = await findLegacyGrandfatheredRules(tmpDir);
+    expect(result).toBeNull();
+  });
+
+  it('flags a rule for vintage-pre-1.13.0 in isolation', async () => {
+    writeRules(tmpDir, [
+      {
+        lessonHash: 'rule-vintage',
+        lessonHeading: 'vintage only',
+        pattern: 'x',
+        message: 'x',
+        engine: 'regex',
+        compiledAt: PRE_1_13_0,
+        createdAt: PRE_1_13_0,
+        badExample: 'bad snippet',
+        goodExample: 'good snippet',
+      },
+    ]);
+    const result = await findLegacyGrandfatheredRules(tmpDir);
+    expect(result).toEqual([
+      expect.objectContaining({
+        lessonHash: 'rule-vintage',
+        reasons: ['vintage-pre-1.13.0'],
+      }),
+    ]);
+  });
+
+  it('flags a rule for no-badExample in isolation', async () => {
+    writeRules(tmpDir, [
+      {
+        lessonHash: 'rule-no-bad',
+        lessonHeading: 'missing bad',
+        pattern: 'x',
+        message: 'x',
+        engine: 'regex',
+        compiledAt: POST_1_13_0,
+        createdAt: POST_1_13_0,
+        goodExample: 'good snippet',
+      },
+    ]);
+    const result = await findLegacyGrandfatheredRules(tmpDir);
+    expect(result).toEqual([
+      expect.objectContaining({
+        lessonHash: 'rule-no-bad',
+        reasons: ['no-badExample'],
+      }),
+    ]);
+  });
+
+  it('flags a rule for no-goodExample in isolation', async () => {
+    writeRules(tmpDir, [
+      {
+        lessonHash: 'rule-no-good',
+        lessonHeading: 'missing good',
+        pattern: 'x',
+        message: 'x',
+        engine: 'regex',
+        compiledAt: POST_1_13_0,
+        createdAt: POST_1_13_0,
+        badExample: 'bad snippet',
+      },
+    ]);
+    const result = await findLegacyGrandfatheredRules(tmpDir);
+    expect(result).toEqual([
+      expect.objectContaining({
+        lessonHash: 'rule-no-good',
+        reasons: ['no-goodExample'],
+      }),
+    ]);
+  });
+
+  it('treats whitespace-only substrate snippets as absent', async () => {
+    writeRules(tmpDir, [
+      {
+        lessonHash: 'rule-whitespace',
+        lessonHeading: 'whitespace snippets',
+        pattern: 'x',
+        message: 'x',
+        engine: 'regex',
+        compiledAt: POST_1_13_0,
+        createdAt: POST_1_13_0,
+        badExample: '   ',
+        goodExample: '\n\t',
+      },
+    ]);
+    const result = await findLegacyGrandfatheredRules(tmpDir);
+    expect(result!.length).toBe(1);
+    expect(result![0]!.reasons.sort()).toEqual(['no-badExample', 'no-goodExample']);
+  });
+
+  it('aggregates multiple reasons on a single rule', async () => {
+    writeRules(tmpDir, [
+      {
+        lessonHash: 'rule-all-three',
+        lessonHeading: 'full legacy',
+        pattern: 'x',
+        message: 'x',
+        engine: 'regex',
+        compiledAt: PRE_1_13_0,
+        createdAt: PRE_1_13_0,
+      },
+    ]);
+    const result = await findLegacyGrandfatheredRules(tmpDir);
+    expect(result!.length).toBe(1);
+    expect(result![0]!.reasons).toEqual(['vintage-pre-1.13.0', 'no-badExample', 'no-goodExample']);
+  });
+
+  it('skips archived rules', async () => {
+    writeRules(tmpDir, [
+      {
+        lessonHash: 'rule-archived',
+        lessonHeading: 'archived legacy',
+        pattern: 'x',
+        message: 'x',
+        engine: 'regex',
+        compiledAt: PRE_1_13_0,
+        createdAt: PRE_1_13_0,
+        status: 'archived',
+      },
+    ]);
+    const result = await findLegacyGrandfatheredRules(tmpDir);
+    expect(result).toEqual([]);
+  });
+
+  it('skips rules with unverified: true (post zero-trust cohort)', async () => {
+    writeRules(tmpDir, [
+      {
+        lessonHash: 'rule-unverified',
+        lessonHeading: 'zero-trust marker present',
+        pattern: 'x',
+        message: 'x',
+        engine: 'regex',
+        compiledAt: PRE_1_13_0,
+        createdAt: PRE_1_13_0,
+        unverified: true,
+      },
+    ]);
+    const result = await findLegacyGrandfatheredRules(tmpDir);
+    expect(result).toEqual([]);
+  });
+
+  it('omits rules that satisfy all three substrate checks', async () => {
+    writeRules(tmpDir, [
+      {
+        lessonHash: 'rule-substrate-complete',
+        lessonHeading: 'fully verified',
+        pattern: 'x',
+        message: 'x',
+        engine: 'regex',
+        compiledAt: POST_1_13_0,
+        createdAt: POST_1_13_0,
+        badExample: 'bad',
+        goodExample: 'good',
+      },
+    ]);
+    const result = await findLegacyGrandfatheredRules(tmpDir);
+    expect(result).toEqual([]);
+  });
+
+  it('treats vintage at the exact 1.13.0 ship date as NOT pre-1.13.0', async () => {
+    // Boundary test: `<` semantics, not `<=`. A rule whose createdAt equals
+    // V_1_13_0_SHIP_DATE_ISO shipped with 1.13.0 and carries the substrate
+    // expectation forward, so it does not count as vintage.
+    writeRules(tmpDir, [
+      {
+        lessonHash: 'rule-at-boundary',
+        lessonHeading: 'boundary',
+        pattern: 'x',
+        message: 'x',
+        engine: 'regex',
+        compiledAt: V_1_13_0_SHIP_DATE_ISO,
+        createdAt: V_1_13_0_SHIP_DATE_ISO,
+        badExample: 'bad',
+        goodExample: 'good',
+      },
+    ]);
+    const result = await findLegacyGrandfatheredRules(tmpDir);
+    expect(result).toEqual([]);
+  });
+
+  it('falls back to compiledAt when createdAt is absent', async () => {
+    writeRules(tmpDir, [
+      {
+        lessonHash: 'rule-no-createdat',
+        lessonHeading: 'no createdAt',
+        pattern: 'x',
+        message: 'x',
+        engine: 'regex',
+        compiledAt: PRE_1_13_0,
+        badExample: 'bad',
+        goodExample: 'good',
+      },
+    ]);
+    const result = await findLegacyGrandfatheredRules(tmpDir);
+    expect(result!.length).toBe(1);
+    expect(result![0]!.reasons).toEqual(['vintage-pre-1.13.0']);
+    expect(result![0]!.vintage).toBe(PRE_1_13_0);
+  });
+
+  it('sorts worst-off first, then oldest vintage first', async () => {
+    writeRules(tmpDir, [
+      {
+        lessonHash: 'rule-one-reason-new',
+        lessonHeading: 'one reason, newer vintage',
+        pattern: 'x',
+        message: 'x',
+        engine: 'regex',
+        compiledAt: POST_1_13_0,
+        createdAt: POST_1_13_0,
+        badExample: 'bad',
+      },
+      {
+        lessonHash: 'rule-all-three-newer',
+        lessonHeading: 'three reasons, newer vintage',
+        pattern: 'x',
+        message: 'x',
+        engine: 'regex',
+        compiledAt: '2026-03-15T00:00:00.000Z',
+        createdAt: '2026-03-15T00:00:00.000Z',
+      },
+      {
+        lessonHash: 'rule-all-three-older',
+        lessonHeading: 'three reasons, older vintage',
+        pattern: 'x',
+        message: 'x',
+        engine: 'regex',
+        compiledAt: '2026-01-01T00:00:00.000Z',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    const result = await findLegacyGrandfatheredRules(tmpDir);
+    const hashes = result!.map((c) => c.lessonHash);
+    expect(hashes).toEqual(['rule-all-three-older', 'rule-all-three-newer', 'rule-one-reason-new']);
+  });
+
+  it('checkGrandfatheredRules returns skip when compiled-rules.json is missing', async () => {
+    const result = await checkGrandfatheredRules(tmpDir);
+    expect(result.status).toBe('skip');
+  });
+
+  it('checkGrandfatheredRules returns pass when no rules are grandfathered', async () => {
+    writeRules(tmpDir, [
+      {
+        lessonHash: 'rule-verified',
+        lessonHeading: 'verified',
+        pattern: 'x',
+        message: 'x',
+        engine: 'regex',
+        compiledAt: POST_1_13_0,
+        createdAt: POST_1_13_0,
+        badExample: 'bad',
+        goodExample: 'good',
+      },
+    ]);
+    const result = await checkGrandfatheredRules(tmpDir);
+    expect(result.status).toBe('pass');
+  });
+
+  it('checkGrandfatheredRules returns warn with per-reason counts and ADR-091 remediation', async () => {
+    writeRules(tmpDir, [
+      {
+        lessonHash: 'rule-a',
+        lessonHeading: 'A',
+        pattern: 'x',
+        message: 'x',
+        engine: 'regex',
+        compiledAt: PRE_1_13_0,
+        createdAt: PRE_1_13_0,
+      },
+      {
+        lessonHash: 'rule-b',
+        lessonHeading: 'B',
+        pattern: 'x',
+        message: 'x',
+        engine: 'regex',
+        compiledAt: POST_1_13_0,
+        createdAt: POST_1_13_0,
+        badExample: 'bad',
+      },
+    ]);
+    const result = await checkGrandfatheredRules(tmpDir);
+    expect(result.status).toBe('warn');
+    expect(result.message).toMatch(/2 grandfathered rule\(s\)/);
+    expect(result.message).toMatch(/1 vintage-pre-1\.13\.0/);
+    expect(result.message).toMatch(/1 no-badExample/);
+    expect(result.message).toMatch(/2 no-goodExample/);
+    expect(result.remediation).toContain('ADR-091 Stage 4');
+    expect(result.remediation).toContain('mmnto-ai/totem#1504');
   });
 });
