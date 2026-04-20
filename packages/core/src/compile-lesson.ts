@@ -479,7 +479,16 @@ export function buildCompiledRule(
   // matches the comment in compile-smoke-gate.ts and prevents the gate from
   // hard-rejecting a rule it is not equipped to evaluate.
   if (options.enforceSmokeGate && candidate.engine !== 'ast') {
-    if (!effectiveBadExample) {
+    // `.trim().length > 0` mirrors the schema refines. A caller who
+    // bypasses schema parsing and supplies a whitespace-only override
+    // would otherwise slip through the !effectiveExample check because
+    // `'   '` is truthy, and then runSmokeGate's early-return on
+    // `trim().length === 0` would report matched: false for both
+    // checks — under-match would (correctly) reject but for the wrong
+    // reason, and over-match would (incorrectly) accept.
+    const hasBadExample =
+      typeof effectiveBadExample === 'string' && effectiveBadExample.trim().length > 0;
+    if (!hasBadExample) {
       return {
         rule: null,
         rejectReason: 'smoke gate: missing badExample (required for Pipeline 2/3)',
@@ -497,7 +506,9 @@ export function buildCompiledRule(
     // badExample (above) AND must NOT fire on its goodExample. Symmetric
     // guards catch the under-match and over-match defect classes with the
     // same deterministic engine the runtime uses.
-    if (!effectiveGoodExample) {
+    const hasGoodExample =
+      typeof effectiveGoodExample === 'string' && effectiveGoodExample.trim().length > 0;
+    if (!hasGoodExample) {
       return {
         rule: null,
         rejectReason: 'smoke gate: missing goodExample (required for Pipeline 2/3)',

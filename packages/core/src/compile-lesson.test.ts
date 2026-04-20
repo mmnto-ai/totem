@@ -895,6 +895,43 @@ describe('buildCompiledRule goodExample over-matching check', () => {
     expect(result.rule!.goodExample).toBe('logger.info("from parsed")');
   });
 
+  it('rejects a whitespace-only goodExample with missing-goodexample (parity with schema refine)', () => {
+    // Shield flagged on mmnto-ai/totem#1591: `if (!effectiveGoodExample)`
+    // treats `'   '` as truthy, and runSmokeGate's early-return on
+    // `trim().length === 0` then reports matched: false, so a
+    // whitespace-only goodExample would otherwise pass the gate with
+    // zero coverage. The `.trim().length > 0` guard closes the hole.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No console.log',
+      engine: 'regex',
+      pattern: 'console\\.log',
+      badExample: 'console.log("bad")',
+      goodExample: '   \t\n  ',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+    });
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('missing goodExample');
+  });
+
+  it('rejects a whitespace-only badExample with missing-badexample (symmetric guard)', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No console.log',
+      engine: 'regex',
+      pattern: 'console\\.log',
+      badExample: '   \t\n  ',
+      goodExample: 'logger.info("good")',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+    });
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('missing badExample');
+  });
+
   it('empty-string goodExampleOverride clobbers parsed.goodExample (the trap the Pipeline 3 guard exists to prevent)', () => {
     // Nullish coalescing (`??`) treats `''` as defined, so passing an
     // empty string override suppresses the parsed value. This test pins
