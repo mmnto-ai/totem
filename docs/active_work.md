@@ -1,10 +1,18 @@
 ### Active Work Summary
 
-The project is at release `@mmnto/cli@1.14.14` (published 2026-04-20 AM); Version Packages PR #1592 is landing 1.14.15 on npm next. Test counts: **3,162 across four packages** (`packages/core`, `packages/cli`, `packages/mcp`, `packages/pack-agent-security`). **440 compiled rules** in the root manifest's `rules` array (378 active, 62 archived; rules with unset `status` are treated as active per the `CompiledRuleSchema` default), plus 5 immutable rules shipped in `packages/pack-agent-security/compiled-rules.json`. The `nonCompilable` ledger is sibling to `rules` and not counted toward `rule_count`; it currently holds 953 entries tracking lessons the LLM declined to convert into rules. **1,140 lessons on disk.** 1.15.0 Pack Distribution is blocked by the pre-1.15.0 deep review gate (#1421); the 2026-04-15 joint planning pass locked a three-phase sequence of workflow setup, gated grind, and pack delivery. **Phase A and Phase A.5 landed on 2026-04-16.** ADR-085 (Pack Ecosystem), ADR-087 (Compound ast-grep Rules, promoted 2026-04-18), ADR-088 (Stacked Compilation), ADR-089 (Zero-Trust Agent Governance), ADR-090 (Multi-Agent State Substrate), and ADR-091 (Ingestion Pipeline Refinements, promoted 2026-04-19) all Accepted. **2026-04-20 ship-gate lock: #1580 → #1589 → #1581 is the locked pre-1.15.0 compile-hardening sequence** (see "1.15.0 Ship Gate" section below for the dependency-inversion discovery that moved #1504 to 1.16.0). **Full corpus audit completed 2026-04-19** — see `.strategy/docs/active_work.md` and `.strategy/docs/roadmap.md` for the authoritative strategy-side state post-audit.
+**1.15.0 Pack Distribution shipped to npm on 2026-04-20 PM.** The project is at release `@mmnto/cli@1.15.0` (plus `@mmnto/totem@1.15.0`, `@mmnto/mcp@1.15.0`; `@totem/pack-agent-security` stays workspace-private pending #1492 Sigstore signing, tracked as #1609). Test counts: **1,743+ across four packages** (`packages/core`, `packages/cli`, `packages/mcp`, `packages/pack-agent-security`; exact post-session count pending verification run). **440 compiled rules** in the root manifest's `rules` array (378 active, 62 archived; rules with unset `status` are treated as active per the `CompiledRuleSchema` default), plus 5 immutable rules shipped in `packages/pack-agent-security/compiled-rules.json`. The `nonCompilable` ledger is sibling to `rules` and not counted toward `rule_count`; it currently holds 953 entries tracking lessons the LLM declined to convert into rules. **1,140 lessons on disk.** ADR-085 (Pack Ecosystem), ADR-087 (Compound ast-grep Rules, promoted 2026-04-18), ADR-088 (Stacked Compilation), ADR-089 (Zero-Trust Agent Governance), ADR-090 (Multi-Agent State Substrate), and ADR-091 (Ingestion Pipeline Refinements, promoted 2026-04-19) all Accepted. **Full corpus audit completed 2026-04-19** — see `.strategy/docs/active_work.md` and `.strategy/docs/roadmap.md` for the authoritative strategy-side state post-audit. Focus shifts to **1.16.0 Ingestion Pipeline + ADR-091 Stage 4 Codebase Verifier**; see "Current: 1.16.0" section below.
 
 ### Recently Shipped
 
-**2026-04-20** (1.14.14 shipped; 1.14.15 landing) -- Compile-hardening trio sprint + LC feedback triage + ship-gate lock.
+**2026-04-20 PM** (1.15.0 cut and published) -- Pack Distribution release shipped. All four ship-gate items merged; 1.14.14 through 1.14.17 patches landed across the day, then the minor bump.
+
+- **PR #1604 (`e449910d`)** → 1.14.17 -- `totem doctor` grandfathered-rule advisory (part 2 of #1581). Surfaces the pre-zero-trust cohort (active rules without the ADR-089 `unverified` flag) categorized by `vintage-pre-1.13.0`, `no-badExample`, `no-goodExample`. Real-corpus output: 378 grandfathered rule(s): 358 vintage-pre-1.13.0, 371 no-badExample, 378 no-goodExample. Advisory-only (`warn`) diagnostic. ADR-091 Stage 4 Codebase Verifier (1.16.0, #1504) is the empirical audit path; the advisory gives users a triage surface until that ships. Closes #1603 + #1581.
+- **PR #1606 (`dbe578a8`)** → **1.14.17 published** -- Version Packages auto-PR bundling #1603.
+- **PR #1607 (`f9c287b1`)** -- Minor-level changeset. Documents Pack Distribution (`@totem/pack-agent-security`, `totem install pack/<name>`, `pack-merge` immutable-downgrade refusal, content-hash substrate), zero-trust default (ADR-089), compile hardening (ADR-088 Phase 1 plus two doctor advisories), compound ast-grep rules (ADR-087), positioning ADRs (ADR-085, ADR-090, ADR-091). GCA flagged `shield` vs canonical `review` in the notes (fixed); GCA also flagged `nonCompilable` 4-tuple terminology (declined: project-canonical per `compiler-schema.ts:238,267-269`).
+- **PR #1608 (`a42f09d4`)** → **1.15.0 published** -- Version Packages auto-PR shipping 1.15.0. Publish workflow ran 50s. GCA flagged `"private": true` on `packages/pack-agent-security/package.json` (declined: deliberate pre-signing scaffolding per ADR-085; follow-up filed as #1609 blocked on #1492 Sigstore signing).
+- **Tickets filed this session.** 4 total: #1603 (doctor advisory, shipped), #1605 (tier-3 defensive cleanup in `findStaleRules`), #1609 (tier-2 pack `private:false` gate blocked on #1492), plus follow-ups across the day.
+
+**2026-04-20 AM/midday** (1.14.14 / 1.14.15 / 1.14.16 shipped) -- Compile-hardening trio sprint + LC feedback triage + ship-gate lock.
 
 - **PR #1584 (`b7eb2951`)** -- Orphan command cleanup. Deleted seven dead source files (`briefing.ts`, `bridge.ts`, `audit.ts` plus their `.test.ts` / `-templates.ts` siblings). Fixed the shipped Gemini `SessionStart.js` hook that had been failing with "unknown command 'briefing'" since PR #755 (2026-03-20). Closes #1583.
 - **PR #1585 (`e073dc00`)** -- `totem review --auto-capture` flipped to opt-in. Pipeline 5 auto-capture defaults to OFF; the flag was `--no-auto-capture` and had been opt-out since 1.14.1. Liquid City Session 6 audit measured 8-rule wave across 5 review invocations producing 13 `totem lint` warnings under the old default. Closes #1579.
@@ -87,150 +95,103 @@ All filed from bot review findings during the marathon; all deferred with tracke
 - **#1355** — Tighten `Standardize exception messages` lint rule so it does not fire on internal-wrapper `Error` constructions (surfaced during #1349 and #1356).
 - **#1357** — Migrate `safeExec` callers to walk cause chain per general rule 102 (GCA concurred this deferral is legitimate).
 
-### Current: 1.15.0 — The Distribution Pipeline
+### Shipped: 1.15.0 — The Distribution Pipeline (2026-04-20)
 
-**Phase A and Phase A.5 landed on 2026-04-16.** Phase B grind underway. The pre-1.15.0 deep review gate (#1421) stays open until Phase B drains. ~29 tickets carry the `pre-1.15-review` label after today's decomposition (5 ADR-088 Phase 1 tickets added, tier-1 overload relieved via 4 demotions, see 2026-04-16 session notes above).
+The first shippable Totem pack plus the compile-hardening and zero-trust substrate that makes packs safe to distribute. All four ship-gate items merged; `@mmnto/cli@1.15.0`, `@mmnto/totem@1.15.0`, `@mmnto/mcp@1.15.0` on npm.
 
-#### 1.15.0 Ship Gate (locked 2026-04-20)
+#### Ship-gate completion
 
-Three-ticket sequence that must merge before 1.15.0 external ship. Ordered by dependency and cost:
+| Slot | Ticket                                                              | Status            | Ship              |
+| ---- | ------------------------------------------------------------------- | ----------------- | ----------------- |
+| 1    | **#1580** smoke-gate `goodExample` over-matching check              | Merged (PR #1591) | 1.14.15           |
+| 2    | **#1589** `CompiledRuleSchema` missing `archivedAt` silent-strip    | Merged (PR #1599) | 1.14.16           |
+| 3    | **#1581 part 1** zero-trust default + `totem rule promote` CLI      | Merged (PR #1601) | 1.14.16           |
+| 4    | **#1581 part 2** grandfathered-rule advisory                        | Merged (PR #1604) | 1.14.17           |
+| —    | `@totem/pack-agent-security` ≥ 5 immutable rules with test fixtures | Verified          | 5 rules, 57 tests |
 
-| Slot | Ticket                                                                                     | Status               | Why this slot                                                                                                                                                                                                                                                   |
-| ---- | ------------------------------------------------------------------------------------------ | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | **#1580** smoke-gate `goodExample` over-matching check                                     | ✅ Merged (PR #1591) | Closes 10-of-10 bad-rate defect class from 2026-04-18 security-pack postmerge                                                                                                                                                                                   |
-| 2    | **#1589** `CompiledRuleSchema` missing `archivedAt` silent-strip                           | Next                 | Silent ledger erosion undermines the Governance OS premise; cheapest structural fix                                                                                                                                                                             |
-| 3    | **#1581** zero-trust default + `totem rules promote` CLI (Option 1 + Categorized Advisory) | After #1589          | Ships the ADR-089 zero-trust policy; new compiles land `unverified: true`; `totem doctor` advisory categorizes the 357 grandfathered legacy rules by reason (no-example, no-anchor, vintage-pre-1.13.0) so users can triage rather than face a wall of warnings |
+The 2026-04-20 dependency-inversion discovery moved **#1504** (post-ADR-088 legacy corpus audit) to 1.16.0 behind ADR-091 Stage 4 Codebase Verifier: 357 of 378 active rules (94%) are pre-1.13.0 with zero `badExample` / `goodExample` / `unverified` substrate coverage, and #1504's Phase 1 gates assume those fields. The Codebase Verifier runs rules empirically against actual code and does not depend on the snippet fixtures the legacy cohort lacks.
 
-**Ship-gate acceptance criteria:**
+#### Deferred follow-ups (unmilestoned, pick up between cycles)
 
-- All three merged
-- No tier-1 silent-data-loss tickets open
-- `@totem/pack-agent-security` has ≥5 immutable rules with test fixtures in the pack
-
-**Dependency inversion discovery (2026-04-20).** Earlier drafts of the gate included **#1504** (post-ADR-088 audit of pre-1.13.0 rule corpus) as a prerequisite to #1581 so the 378 active rules would be audited before #1581 grandfathered them behind the zero-trust exemption. Empirical check revealed:
-
-- Pre-1.13.0 cohort is **357 of 378 active rules** (94%), not the ~230 the #1504 ticket estimated.
-- **Zero of the 357 have `badExample`, `goodExample`, or the `unverified` flag populated.**
-- #1504's acceptance criteria say "run each rule through Phase 1 gates" (Layer 3 verify-retry, smoke gate, doctor zero-match). Layer 3 and smoke gate both require the substrate fields the legacy corpus lacks. Only doctor zero-match can fire on legacy rules; the other 70% of the gate surface no-ops.
-
-Correct home for the legacy-corpus audit is **1.16.0 behind ADR-091 Stage 4 Codebase Verifier**, which runs rules empirically against actual code and does not need the substrate fields to flag over/under-match. #1504 moved to 1.16.0 accordingly.
-
-**#1581 scope (Option 1 + Categorized Advisory):**
-
-- New rules compile as `unverified: true` unconditionally (prospective only)
-- Existing 378 rules stay grandfathered (absent `unverified` flag)
-- `totem doctor` advisory groups the 357 pre-1.13.0 legacy rules by reason: `no-example-fixtures`, `no-example-hit-anchors`, `vintage-pre-1.13.0`
-- `totem rules promote <hash>` CLI flips `unverified: true → absent`; must ship in the same PR as the default flip (hand-editing `compiled-rules.json` to promote is the anti-pattern the tool exists to prevent)
-
-The doctor advisory is noisy (357 entries) but that is the mechanically true state of the corpus. Categorization gives users a triage-able surface.
-
-#### Deferred from the ship gate
-
-- **#1582** (`totem spec` path-existence guard against hallucinated file paths). Cheap, opportunistic. Bundle with #1581 if the PR stays tight; otherwise 1.15.x.
-- **#1587** (archive-in-place durability: manifest output-hash drift + `--force` silent-overwrite + `totem lesson archive <hash>` atomic command + skill doc update). LC items 7 + 8 deduped here with revised three-part fix plan.
-- **#1590** (init.test.ts Windows CI flake). Tier-3. Addressed by rerun today; harden whenever.
-- **#1593** (bot-review parser: CR outside-diff + nit-nesting + GCA inline-fallback blindspots). Tier-2. Actively costing review-cycle rounds but not ship-blocking.
-- **#1597** (agent-workflow PR-page spot-check, companion to #1593). Tier-3 docs.
+- **#1582** (`totem spec` path-existence guard). Cheap, opportunistic; next-cycle bundle candidate.
+- **#1587** (archive-in-place durability: manifest output-hash drift + `--force` silent-overwrite + `totem lesson archive <hash>` atomic command + skill doc update).
+- **#1590** (init.test.ts Windows CI flake). Tier-3.
+- **#1593** (bot-review parser: CR outside-diff + nit-nesting + GCA inline-fallback blindspots). Tier-2.
 - **#1594** (iterative review docs for large-scope PRs). Tier-3.
 - **#1595** (`verify_execution` as default post-amend hook). Tier-3, ADR-090 adjacent, routed to Gemini.
-- **#1596** (`type: 'reference'` indexing schema). Tier-2, Proposal 233 Gap 5 intersection, routed to Gemini for proposal-level scoping.
-- **#1598** (compile-worker context-sensitive lesson extraction gap). Tier-2. Sibling class to #1523; LC items 9 + 10 folded in. Reduces forever-CR-nag loop at source.
-- **#1504** (post-ADR-088 legacy corpus audit). Moved to 1.16.0 behind Codebase Verifier per dependency inversion above.
+- **#1596** (`type: 'reference'` indexing schema). Tier-2, Proposal 233 Gap 5 intersection, routed to Gemini.
+- **#1597** (agent-workflow PR-page spot-check, companion to #1593). Tier-3 docs.
+- **#1598** (compile-worker context-sensitive lesson extraction gap). Tier-2.
+- **#1600** (signoff skill filename template). Tier-3 docs.
+- **#1605** (drop defensive `?? lessonHash` fallback from `findStaleRules`). Tier-3.
+- **#1609** (flip `packages/pack-agent-security/package.json` `private: false` when #1492 Sigstore signing lands). Tier-2, blocked on #1492.
 
-The 2026-04-15 joint planning pass (Ultraplan cloud session + strategy-repo pair audit) locked a three-phase sequence of workflow improvements, gated grind, and pack delivery. Phases run in order; each phase has an explicit checkpoint before the next starts.
+#### Undecomposed ADR backfill candidates
 
-**Phase A: Workflow setup before the grind. [DONE]** Cut bot-review-cycle cost before running it across the grind.
+Strategy-pair 2026-04-16 audit identified 22 Accepted ADRs with zero ticket citations; 16 are buildable. Five highest-leverage (all touch pack + ingestion paths):
 
-- **Preflight v2 skill** shipped via #1296 (1.14.0) and #1299 (1.14.1). Proposal archived 2026-04-15.
-- **Tier-2 docs promoted** to CLAUDE.md via #1466 (Monitor tool over sleep loops, `/loop` self-paced for poll-and-react).
-- **PreCompact hook** shipped via #1470. Three-run happy-path drill verified the exit-code contract.
-- **review-gate if-scope** narrowed via #1468 to `Bash(git push*)` so the hook no longer slows every Bash call.
-- **Turbo cache hash-scope fix** shipped via #1472, correcting the silent-cache-hit gap discovered during #1466 round-trip.
-- **/autofix-pr trial** remains outstanding; run when the first Phase B bundle PR accumulates bot pressure.
+- **ADR-004** — AST-Aware Git Diff Analysis (Tree-sitter line-mapping + scope field on compiled rules).
+- **ADR-015** — Zero-Config Architectural Detection (5-stage fingerprinting).
+- **ADR-017** — Vector Cache Invalidation & Data Drift (hash-based staleness for LanceDB).
+- **ADR-025** — `totem doctor` Diagnostic Architecture.
+- **ADR-039** — Deterministic Briefing & Handoff.
 
-**Phase A.5: Architectural gates before the grind. [DONE]** Strategy-pair promoted two gating proposals to Accepted, and a third positioning ADR landed during the scope conversation:
+### Current: 1.16.0 — Ingestion + Substrate DX
 
-- **ADR-088 (Stacked Compilation Architecture, was Proposal 202).** Accepted on `mmnto-ai/totem-strategy#85` (2026-04-15). Phase 1 tickets decomposed on 2026-04-16 as #1479 (verify-retry loop), #1480 (unverified flag), #1481 (reason codes), #1482 (verbose trace), #1483 (doctor zero-match), all `pre-1.15-review`. Phase 2 (Layers 1 and 2) stays 1.16.0+.
-- **ADR-089 (Zero-Trust Agent Governance, was Proposal 228).** Accepted on `mmnto-ai/totem-strategy#85`. Flagship pack `@totem/pack-agent-security` commits to 1.15.0. Decomposed on 2026-04-16 into #1484-#1494 across scaffolding, security rules, install path, signing, lifecycle. Scaffolding PR #1503 merged on 2026-04-16.
-- **ADR-085 (Totem Pack Ecosystem).** Accepted on `mmnto-ai/totem-strategy#86` with the five deferred decisions resolved (see 2026-04-16 session notes above). Resolved-decision follow-ups ticketed as #1494 (doctor shadowing warning) and #1495 (Rule Identity Model placeholder ADR).
-- **ADR-090 (Totem as the Multi-Agent State Substrate).** Accepted on `mmnto-ai/totem-strategy#87`. Not a gating proposal but landed during the same session to bound future "is this a Totem feature?" decisions. Decomposed into #1497 (rich `describe_project`), #1498 (init auto-detect), #1499 (preflight scope-triage gate), #1500 (positioning copy sweep). #1497 and #1498 attached to 1.16.0 so ADR-090's Human DX and Agent AX tracks do not pollute 1.15.0's Pack Distribution theme.
+**Theme:** Deterministic architectural enforcement through the ADR-091 five-stage ingestion funnel (`Extract → Classify → Compile → Verify-Against-Codebase → Activate`) paired with the ADR-090 Human DX and Agent AX tracks. Source diversity (GHAS, lint, ADRs) plus the verifier that makes empirically-grounded rule generation safe.
 
-**Phase B: Pre-1.15-review grind. [IN PROGRESS]** Gemini's 2026-04-16 backlog audit reordered the first five PRs by dependency bottleneck and compounding payoff:
+#### Headline work — Ingestion (ADR-091 funnel)
 
-1. **#1484** scaffold `@totem/pack-agent-security`. Blocks 5 security-rule and immutable-flag tickets. Merged as #1503 on 2026-04-16.
-2. **#1479** Layer 3 verify-retry loop. Biggest compounding value of the queue; would have caught both over-broad rules archived during #1503. Unblocks #1480 and #1481.
-3. **#1485** `immutable` flag on `CompiledRule`. Prerequisite for security rules to enforce the Zero-Trust story with local overrides blocked and bypasses logged to the Trap Ledger.
-4. **#1491** `totem install pack/<name>` command. Foundational CLI required before lifecycle (#1493) and Sigstore (#1492) can build on top. Unblocks three downstream tickets.
-5. **#1489** obfuscated-string-concat research spike. Time-boxed to 2 days. Produces the validated pattern that #1490 ships.
+- [ ] **Classifier gate (Stage 2):** Routes candidates into Compile vs Candidate Debt per ADR-091. Strategy-side implementation ticket pending decomposition.
+- [ ] **ADR-091 Stage 4 Codebase Verifier:** Runs compiled candidate against a baseline snapshot before Activate. Headline 1.16.0 substrate; does not depend on `badExample` / `goodExample` snippet fixtures so it can validate the legacy corpus empirically. Strategy-side implementation ticket pending decomposition.
+- [ ] **#1504** post-ADR-088 audit of pre-1.13.0 rule corpus (357 active rules). Moved here from the 1.15.0 ship gate per the 2026-04-20 dependency-inversion discovery. Expected archive rate 30-50% of the grandfathered cohort.
+- [ ] **GHAS / SARIF Extraction** (Strategy #50). Convert GitHub Advanced Security alerts into Totem lessons. ADR-086 External Alert Ingestion gates this.
+- [ ] **Lint Warning Extraction** (Strategy #51 ↔ totem#1253 `totem extract-lint`). Convert ESLint / Semgrep / Sonar warnings into actionable lessons.
+- [ ] **ADR-mining extractor.** Decision-record ingestion into the same funnel. Strategy-side implementation ticket pending decomposition.
 
-After the top-5: tactical cleanup batch (#1456, #1457, #1458 closed in #1501, #1459), Phase 1 ADR-088 completion (#1480-#1483), ADR-089 security rules (#1486-#1490), and the install / signing / lifecycle trio (#1491, #1492, #1493). Re-tier untiered tickets per ADR-075 as they surface.
+#### Headline work — ADR-090 Substrate DX
 
-**Phase C: Pack Distribution headline work.** Unblocked now that ADR-085 is Accepted.
+- [ ] **#1497** — rich `describe_project` MCP endpoint. Drops session-start briefing from ~5 tool calls to 1. Agent AX track.
+- [ ] **#1498** — `totem init` auto-detects Cursor / Windsurf / Claude Code and injects MCP config. Human DX track. Supersedes closed #124 and #129.
 
-- **#1421 meta-gate closes** when Phase B drains.
-- **Build `@totem/pack-agent-security`** as the flagship pack (ADR-089 implementation via #1484 scaffold + rule tickets).
-- **Wire Proposal 229 TBench spot-check** as the pack-release gate. Full harness stays Horizon 3; the spot-check is the 1.15.0-scoped subset.
-- **Decide ADR-086 (External Alert Ingestion) fate.** Recommend defer to 1.16.0; Ingestion is wide and should not ride with Distribution.
+#### Bundled cleanup / validation
 
-**Proposal dispositions (updated 2026-04-16).**
+- [ ] **#1226** SARIF upload hex escape fix — load-bearing for the new SARIF ingestion path.
+- [ ] **Governance eval harness** (Strategy #17) — validates that ingested rules actually catch what GHAS / lint flagged.
 
-- **Promoted to Accepted ADR:** 202 → ADR-088 (Stacked Compilation), 228 → ADR-089 (Zero-Trust Agent Governance), both on `mmnto-ai/totem-strategy#85`. Plus ADR-090 (Multi-Agent State Substrate, new this session) on `#87`.
-- **Archived:** `preflight-v2.md` (done 2026-04-15).
-- **Lock at 1.16.0:** Proposal 217 (LLM context caching).
-- **Lock at 1.17.0 with open-question iteration first:** Proposal 230 (content-hash embedding cache; three open questions on `library_version` keying, eviction policy, hit-ratio telemetry).
+#### Carried over from 1.15.0 quarantines
+
+- Proposal 217 (LLM context caching). Compile-pipeline substrate; quarantined out of 1.15.0 to avoid distribution-feature-on-substrate-change silent regressions.
+
+#### Proposal dispositions (updated 2026-04-20)
+
+- **Promoted to Accepted ADR:** 202 → ADR-088, 228 → ADR-089, 234 → ADR-091. Plus ADR-085, ADR-087, ADR-090 accepted across the 1.15.0 cycle.
+- **Archived:** `preflight-v2.md` (2026-04-15) plus 8 obsolete proposals archived during the 2026-04-19 full corpus audit.
+- **Lock at 1.17.0 with open-question iteration first:** Proposal 230 (content-hash embedding cache).
 - **Decompose as tickets now:** Proposal 191 vectors A+B (JIT bot prompts, trap-ledger pruning). Vector C (semantic LSP) stays Horizon 3+.
-- **Split into two tickets:** Proposal 229 (TBench spot-check 1.15.0, full harness Horizon 3).
-- **Formalize decision gate before further work:** Proposal 227 (multi-axis platform strategy; architectural roadmap vs decision-framing doc is unresolved).
+- **Split into two tickets:** Proposal 229 (TBench spot-check near-term, full harness Horizon 3).
+- **Formalize decision gate before further work:** Proposal 227 (multi-axis platform strategy).
 - **Stay parked:** 218 (governance fine-tuning, Horizon 3), 231 (P2P Iroh, Horizon 3+).
-- **Active reference through the cycle:** 232 (archive after Tier-1 items close).
 
-**Undecomposed ADR backfill candidates.** Strategy-pair audit identified 22 Accepted ADRs with zero ticket citations; 16 are buildable. Five highest-leverage for near-term pickup (all touch pack + ingestion paths):
+#### Tier-1 drain queue (post-1.15.0)
 
-- **ADR-004:** AST-Aware Git Diff Analysis (Tree-sitter line-mapping + scope field on compiled rules).
-- **ADR-015:** Zero-Config Architectural Detection (5-stage fingerprinting).
-- **ADR-017:** Vector Cache Invalidation & Data Drift (hash-based staleness for LanceDB).
-- **ADR-025:** `totem doctor` Diagnostic Architecture.
-- **ADR-039:** Deterministic Briefing & Handoff.
+- **#1432** add_lesson concurrency
+- **#1435** CompilerOutputSchema round-trip
+- **#1431** MarkdownChunker YAML
+- **#1555 / #1556 / #1557** totem spec correctness
+- **#1569 / #1570 / #1572** compile-worker durability cluster
+- **#1504** pre-1.13.0 legacy corpus audit (now attached to the Codebase Verifier above)
+- **#1226** SARIF hex escape (already listed under Bundled cleanup)
 
-Backfill these as the 29-ticket grind drains.
+#### Watch-outs
 
-**Milestone guidance.** Per ADR-075, the 1.15.0 GitHub milestone stays thematically locked to Pack Distribution. The `pre-1.15-review` tickets track via the label filter rather than attaching to the milestone. A dedicated "Pre-1.15.0 Gate" milestone is optional; the label filter suffices. ADR-089 implementation tickets (#1484-#1494) ARE attached to the 1.15.0 milestone because they are thematic Pack Distribution work. ADR-090 tickets (#1497, #1498) attach to 1.16.0 by audit recommendation.
+- **Substrate separation.** Do not change compile-pipeline substrate (Proposal 217 context caching, Proposal 230 embedding cache) in the same release as the features built on top of it.
+- **Incidental compiles during manifest refresh.** `totem compile` refreshes `compile-manifest.json` and also compiles any ready lessons, which can ship an over-broad rule. The ADR-088 Phase 1 #1479 verify-retry prevents the class; archive inline if one slips.
 
-**Watch-outs.**
+#### Other pending work (unmilestoned, unblock between cycles)
 
-- **Phase B:** Scope interleaving in PRs multiplies bot-review findings. One bundle per PR; do not mix `scope: mcp` and `scope: cli` in the same diff.
-- **Phase B dependency order:** Do not start #1486-#1490 security rules before #1485 (immutable flag) lands; severity cannot enforce. #1504 (pre-1.13.0 legacy corpus sweep) now deferred to 1.16.0 behind ADR-091 Stage 4 Codebase Verifier; the 2026-04-20 empirical check showed 357 of 378 active rules lack the substrate fields (`badExample` / `goodExample` / `unverified`) that #1504's Phase 1 gates assume, so 70% of the gate surface would no-op on the legacy cohort.
-- **Phase C:** Do not change compile-pipeline substrate (Proposals 217, 230) in the same release as the pack-distribution feature on top of it. Both are quarantined to 1.16.0+.
-- **Incidental compiles during manifest refresh.** `totem compile` refreshes `compile-manifest.json` but also compiles any ready lessons, which can ship an over-broad rule (`939ae83ed3bf28bb`, `e2341ed9229f9a60` both landed this way during 2026-04-16). Archive inline if it happens; ADR-088 Phase 1 #1479 verify-retry will prevent the class once shipped.
-
-**Other pending work (unmilestoned, unblock between cycles):**
-
-- **#1414:** Pipeline 1 smoke gate flip after 136-lesson Bad Example backfill. Mechanism shipped in #1415; hard enforcement deferred until the curation sweep.
-- **#1419:** Cryptographic attestation for the Trap Ledger (SOX compliance gap). Filed at tier-3 by Gemini. Closes the gap in Proposal 225's enterprise pitch where the ledger was claimed as "cryptographically logged" but is currently a flat append-only file.
-- **#1421:** Pre-1.15.0 deep code review gate (the meta-gate for the Phase B grind).
-
-### After Next: 1.16.0 — The Ingestion Pipeline
-
-Theme: Source Diversity, the Self-Healing Loop, and substrate-layer DX polish aligned with ADR-090. Convert external signals (GHAS alerts, lint warnings) into Totem lessons. Pair with the Human DX and Agent AX tracks from ADR-090 so the substrate is friction-free for both human setup and incoming agent sessions.
-
-- **Headline (Ingestion):**
-  - Strategy **#50** — GHAS / SARIF alert extraction
-  - Strategy **#51** — Lint warning extraction
-  - **#1226** — SARIF upload hex escape fix (load-bearing for SARIF ingestion)
-  - Strategy **#17** — Governance eval harness (validate ingested inputs)
-
-- **ADR-090 substrate DX work attached to 1.16.0:**
-  - **#1497** — rich `describe_project` MCP endpoint. Drops session-start briefing from ~5 tool calls to 1. Agent AX track.
-  - **#1498** — `totem init` auto-detects Cursor / Windsurf / Claude Code and injects MCP config. Human DX track. Supersedes closed #124 and #129.
-
-- **ADR-091 Stage 4 Codebase Verifier and the legacy corpus audit:**
-  - **ADR-091 Stage 4** — empirical run-against-codebase verifier that flags over/under-match without needing `badExample` / `goodExample` snippet fixtures. 1.16.0 headline substrate.
-  - **#1504** — post-ADR-088 audit of pre-1.13.0 rule corpus (357 active rules). Moved here from the 1.15.0 ship gate after the 2026-04-20 dependency-inversion discovery: the legacy cohort lacks the substrate fields the Phase 1 gates assume, so only the Codebase Verifier can validate it empirically. Expected archive rate 30-50% of the 357 grandfathered rules.
-
-- **Infrastructure carried over from 1.15.0 quarantines:**
-  - Proposal 217 (LLM context caching). Compile-pipeline substrate; quarantined out of 1.15.0 to avoid distribution-feature-on-substrate-change silent regressions.
-
-_#1279 (Pipeline 5 hallucination bug) shipped in 1.14.1 as the pre-ingestion sanity gate — item removed._
+- **#1414** Pipeline 1 smoke gate flip after 136-lesson Bad Example backfill. Mechanism shipped in #1415; hard enforcement deferred until the curation sweep.
+- **#1419** Cryptographic attestation for the Trap Ledger (SOX compliance gap). Tier-3. Closes the gap in Proposal 225's enterprise pitch where the ledger was claimed as "cryptographically logged" but is currently a flat append-only file.
 
 ### Backlog (Horizon 3+)
 
@@ -242,6 +203,16 @@ _#1279 (Pipeline 5 hallucination bug) shipped in 1.14.1 as the pre-ingestion san
 _Note on `#1504`: moved out of Horizon 3+ into the **1.16.0 "ADR-091 Stage 4 Codebase Verifier and the legacy corpus audit"** section above. The #1479-#1483 hard-block from the original 2026-04-16 filing is obsolete (those shipped in 1.14.12); the actual prerequisite is ADR-091 Stage 4 per the 2026-04-20 dependency-inversion discovery._
 
 ### Recently Completed
+
+**1.15.0 — Pack Distribution (2026-04-20)**
+
+The first shippable Totem pack plus the compile-hardening and zero-trust substrate that makes packs safe to distribute. Full release-notes body: `.changeset/` CHANGELOG entry (synthesized into `CHANGELOG.md` on publish).
+
+- **Pack Distribution:** `@totem/pack-agent-security` flagship pack (5 immutable security rules), `totem install pack/<name>`, `pack-merge` immutable-downgrade refusal, content-hash substrate.
+- **Zero-trust default (ADR-089):** Pipeline 2 + Pipeline 3 LLM rules ship `unverified: true` unconditionally; `totem rule promote <hash>` atomic activation CLI.
+- **Compile hardening (ADR-088 Phase 1):** Layer 3 verify-retry, bidirectional smoke gate (`badExample` + `goodExample`), `archivedAt` round-trip preservation, 9-value reason-code enum, two new `totem doctor` advisories (stale + grandfathered).
+- **Platform:** Compound ast-grep rules (ADR-087), Windows `safeExec` shell-injection fix, Cross-Repo Context Mesh, standalone binaries.
+- **Positioning:** ADR-090 (Multi-Agent State Substrate), ADR-091 (5-stage ingestion funnel), ADR-085 (Pack Ecosystem, five deferred decisions resolved).
 
 **1.14.x cycle — Nervous System Foundation + Hotfix Sweep + Four-P0 Governance Sweep (2026-04-09 → 2026-04-11)**
 
