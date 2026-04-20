@@ -511,3 +511,172 @@ describe('rule scaffold', () => {
     expect(fs.existsSync(customPath)).toBe(true);
   });
 });
+
+// ─── rule promote (ADR-089 zero-trust activation, mmnto-ai/totem#1581) ──
+
+describe('rule promote', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+    // Reset between tests so one test's error exit does not poison the next.
+    // Without this the Node runtime keeps the last set exitCode and vitest
+    // reports success-with-exit-1, failing CI even when all tests pass.
+    process.exitCode = 0;
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+    vi.restoreAllMocks();
+    // Restore exitCode so subsequent describe blocks and the vitest runner
+    // itself exit cleanly (Shield finding on #1581 part 1 review).
+    process.exitCode = 0;
+  });
+
+  /** Write a manifest alongside the rules file so the promote command can refresh it. */
+  async function writeManifest(totemDir: string, rulesPath: string): Promise<void> {
+    const { generateOutputHash } = await import('@mmnto/totem');
+    const manifestPath = path.join(totemDir, 'compile-manifest.json');
+    const manifest = {
+      version: 1 as const,
+      compiled_at: '2026-04-20T12:00:00.000Z',
+      model: 'test-model',
+      input_hash: 'deadbeef'.repeat(8),
+      output_hash: generateOutputHash(rulesPath),
+      rule_count: 1,
+    };
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
+  }
+
+  it('removes the unverified flag from a matching rule and refreshes the manifest', async () => {
+    const unverifiedRule = {
+      ...SAMPLE_RULES[0]!,
+      lessonHash: 'aaaa1111aaaa1111',
+      unverified: true,
+    };
+    const { totemDir } = scaffold(tmpDir, [unverifiedRule]);
+    const rulesPath = path.join(totemDir, 'compiled-rules.json');
+    await writeManifest(totemDir, rulesPath);
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { rulePromoteCommand } = await import('./rule.js');
+    await rulePromoteCommand('aaaa');
+
+    const rules = JSON.parse(fs.readFileSync(rulesPath, 'utf-8')) as { rules: unknown[] };
+    const promoted = rules.rules[0] as { unverified?: boolean; lessonHash: string };
+    expect(promoted.unverified).toBeUndefined();
+
+    const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
+    expect(output).toContain('Promoted rule');
+    expect(output).toContain('Manifest refreshed');
+  });
+
+  it('refreshes the manifest output_hash to match the mutated rules file', async () => {
+    const { generateOutputHash } = await import('@mmnto/totem');
+    const unverifiedRule = {
+      ...SAMPLE_RULES[0]!,
+      lessonHash: 'bbbb2222bbbb2222',
+      unverified: true,
+    };
+    const { totemDir } = scaffold(tmpDir, [unverifiedRule]);
+    const rulesPath = path.join(totemDir, 'compiled-rules.json');
+    const manifestPath = path.join(totemDir, 'compile-manifest.json');
+    await writeManifest(totemDir, rulesPath);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { rulePromoteCommand } = await import('./rule.js');
+    await rulePromoteCommand('bbbb');
+
+    const updatedManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as {
+      output_hash: string;
+    };
+    const currentRulesHash = generateOutputHash(rulesPath);
+    expect(updatedManifest.output_hash).toBe(currentRulesHash);
+  });
+
+  it('errors when no rule matches the prefix', async () => {
+    const unverifiedRule = {
+      ...SAMPLE_RULES[0]!,
+      lessonHash: 'cccc3333cccc3333',
+      unverified: true,
+    };
+    const { totemDir } = scaffold(tmpDir, [unverifiedRule]);
+    const rulesPath = path.join(totemDir, 'compiled-rules.json');
+    await writeManifest(totemDir, rulesPath);
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { rulePromoteCommand } = await import('./rule.js');
+    await rulePromoteCommand('no-such-prefix');
+
+    const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
+    expect(output).toContain('No rule found');
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('errors with a disambiguation list when the prefix matches multiple rules', async () => {
+    const { totemDir } = scaffold(tmpDir, [
+      { ...SAMPLE_RULES[0]!, lessonHash: 'dddd4444aaaaaaaa', unverified: true },
+      { ...SAMPLE_RULES[0]!, lessonHash: 'dddd4444bbbbbbbb', unverified: true },
+    ]);
+    const rulesPath = path.join(totemDir, 'compiled-rules.json');
+    await writeManifest(totemDir, rulesPath);
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { rulePromoteCommand } = await import('./rule.js');
+    await rulePromoteCommand('dddd4444');
+
+    const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
+    expect(output).toContain('Ambiguous');
+    expect(output).toContain('matches 2 rules');
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('refuses to promote an archived rule', async () => {
+    const archivedRule = {
+      ...SAMPLE_RULES[0]!,
+      lessonHash: 'eeee5555eeee5555',
+      unverified: true,
+      status: 'archived',
+      archivedReason: 'Test archive',
+    };
+    const { totemDir } = scaffold(tmpDir, [archivedRule]);
+    const rulesPath = path.join(totemDir, 'compiled-rules.json');
+    await writeManifest(totemDir, rulesPath);
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { rulePromoteCommand } = await import('./rule.js');
+    await rulePromoteCommand('eeee');
+
+    const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
+    expect(output).toContain('archived');
+    expect(output).toContain('Unarchive');
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('no-ops with a warning when the rule is already verified', async () => {
+    const verifiedRule = {
+      ...SAMPLE_RULES[0]!,
+      lessonHash: 'ffff6666ffff6666',
+      // No unverified field — canonical "verified" state.
+    };
+    const { totemDir } = scaffold(tmpDir, [verifiedRule]);
+    const rulesPath = path.join(totemDir, 'compiled-rules.json');
+    await writeManifest(totemDir, rulesPath);
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { rulePromoteCommand } = await import('./rule.js');
+    await rulePromoteCommand('ffff');
+
+    const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
+    expect(output).toContain('already verified');
+  });
+});

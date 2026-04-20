@@ -281,3 +281,105 @@ export async function ruleTestCommand(id: string): Promise<void> {
   }
   console.error('');
 }
+
+/**
+ * Promote an unverified rule to active (remove the `unverified` flag).
+ *
+ * ADR-089 zero-trust default (mmnto-ai/totem#1581): newly compiled
+ * LLM-generated rules ship with `unverified: true`. They stay silent at
+ * lint time until a human explicitly promotes them or the ADR-091 Stage 4
+ * Codebase Verifier (1.16.0) empirically validates them.
+ *
+ * Atomic surface: reads the full manifest (including archived rules),
+ * validates the target is an active unverified rule, flips the flag,
+ * writes `compiled-rules.json` via tmp + rename, recomputes the
+ * manifest's `output_hash`, and writes the manifest back. All in one
+ * command so hand-editing `compiled-rules.json` plus manual manifest
+ * refresh never becomes the blessed path.
+ */
+export async function rulePromoteCommand(id: string): Promise<void> {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { log, bold } = await import('../ui.js');
+  const { loadCompiledRulesFile, generateOutputHash, readCompileManifest, writeCompileManifest } =
+    await import('@mmnto/totem');
+  const { loadConfig, resolveConfigPath } = await import('../utils.js');
+
+  const cwd = process.cwd();
+  const configPath = resolveConfigPath(cwd);
+  const config = await loadConfig(configPath);
+  const totemDir = path.join(cwd, config.totemDir);
+  const rulesPath = path.join(totemDir, 'compiled-rules.json');
+  const manifestPath = path.join(totemDir, 'compile-manifest.json');
+
+  if (!fs.existsSync(rulesPath)) {
+    log.error('Totem Error', `No compiled-rules.json at ${rulesPath}. Run 'totem compile' first.`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const manifest = loadCompiledRulesFile(rulesPath);
+  const matches = manifest.rules.filter((r) =>
+    r.lessonHash.toLowerCase().startsWith(id.toLowerCase()),
+  );
+
+  if (matches.length === 0) {
+    log.error('Totem Error', `No rule found matching '${id}'`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (matches.length > 1) {
+    log.warn(TAG, `Ambiguous prefix '${id}' matches ${matches.length} rules:`);
+    for (const m of matches) {
+      log.info(TAG, `  ${bold(m.lessonHash)} \u2014 ${m.lessonHeading}`);
+    }
+    log.dim(TAG, 'Provide more characters to disambiguate.');
+    process.exitCode = 1;
+    return;
+  }
+
+  const rule = matches[0]!;
+
+  if (rule.status === 'archived') {
+    log.error('Totem Error', `Rule ${rule.lessonHash} is archived. Unarchive it before promoting.`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (rule.unverified !== true) {
+    log.warn(
+      TAG,
+      `Rule ${rule.lessonHash} is already verified (unverified flag absent or false). No action.`,
+    );
+    return;
+  }
+
+  // Delete the field rather than writing `unverified: false`. Absence is
+  // the canonical "verified" state per the CompiledRuleSchema docs; see
+  // compiler-schema.ts on the `unverified` field which explicitly says
+  // "Never write literal `false`". Preserves pre-#1480 manifest hashes
+  // when an unverified rule gets promoted back to the original shape.
+  delete rule.unverified;
+
+  // Atomic write with the same JSON.stringify(data, null, 2) + '\n' shape
+  // used by compile-lesson.ts and rule-mutator.ts — the canonical on-disk
+  // format for compiled-rules.json. Manifest hashes are canonicalized
+  // inside `generateOutputHash` below; the write itself matches the
+  // existing convention byte-for-byte. Tmp-file + rename prevents torn
+  // writes if the process crashes mid-save.
+  const tmpPath = `${rulesPath}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(manifest, null, 2) + '\n', { encoding: 'utf-8' });
+  fs.renameSync(tmpPath, rulesPath);
+
+  // Refresh the manifest's output_hash so verify-manifest passes on the
+  // next push. Keeps the blessed path atomic instead of asking the user
+  // to run a separate refresh command.
+  const compileManifest = readCompileManifest(manifestPath);
+  compileManifest.output_hash = generateOutputHash(rulesPath);
+  compileManifest.compiled_at = new Date().toISOString();
+  writeCompileManifest(manifestPath, compileManifest);
+
+  log.success(TAG, `Promoted rule ${bold(rule.lessonHash)} — ${rule.lessonHeading}`);
+  log.dim(TAG, 'Manifest refreshed. `totem verify-manifest` should pass.');
+}

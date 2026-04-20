@@ -967,6 +967,24 @@ ruleCmd
     }
   });
 
+ruleCmd
+  .command('promote <id>')
+  .description('Promote an unverified rule to active (removes the unverified flag; ADR-089)')
+  .action(async (id: string) => {
+    try {
+      const { rulePromoteCommand } = await import('./commands/rule.js');
+      await rulePromoteCommand(id);
+    } catch (err) {
+      handleError(err);
+      // handleError is typed `: never` and calls process.exit, so this throw
+      // never executes. It is here only to satisfy the ast-grep structural
+      // rule that scans catch bodies for a throw_statement (Tenet 4 fail-loud
+      // enforcement). Removing it re-introduces the lint error without any
+      // behavioral change.
+      throw err;
+    }
+  });
+
 // ─── Config noun-verb subcommands ───────────────────────
 const configCmd = program.command('config').description('Read and manage project configuration');
 
