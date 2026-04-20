@@ -322,6 +322,13 @@ export interface BuildCompiledRuleOptions {
    * the structured output.
    */
   badExampleOverride?: string;
+  /**
+   * Optional goodExample override (mmnto-ai/totem#1580). When supplied,
+   * takes precedence over `parsed.goodExample`. Pipeline 3 uses this to
+   * reuse its Good snippet as the over-matching check target without
+   * relying on the LLM to echo the snippet back.
+   */
+  goodExampleOverride?: string;
 }
 
 /**
@@ -349,6 +356,15 @@ export function buildCompiledRule(
   const badExampleObj =
     effectiveBadExample && effectiveBadExample.length > 0
       ? { badExample: effectiveBadExample }
+      : {};
+  // mmnto-ai/totem#1580: the effective goodExample mirrors bad — override
+  // wins, else whatever the LLM echoed back. Persisted on the rule so
+  // downstream over-matching checks (and future recompile cycles) have
+  // the ground-truth negative fixture without needing the source lesson.
+  const effectiveGoodExample = options.goodExampleOverride ?? parsed.goodExample;
+  const goodExampleObj =
+    effectiveGoodExample && effectiveGoodExample.length > 0
+      ? { goodExample: effectiveGoodExample }
       : {};
 
   let candidate: CompiledRule;
@@ -400,6 +416,7 @@ export function buildCompiledRule(
       createdAt: existing?.createdAt ?? now,
       ...globsObj,
       ...badExampleObj,
+      ...goodExampleObj,
     };
   } else if (engine === 'ast') {
     if (!parsed.astQuery || !parsed.message) {
@@ -416,6 +433,7 @@ export function buildCompiledRule(
       createdAt: existing?.createdAt ?? now,
       ...globsObj,
       ...badExampleObj,
+      ...goodExampleObj,
     };
   } else {
     // Regex engine (default)
@@ -448,6 +466,7 @@ export function buildCompiledRule(
       createdAt: existing?.createdAt ?? now,
       ...globsObj,
       ...badExampleObj,
+      ...goodExampleObj,
     };
   }
 
@@ -472,6 +491,23 @@ export function buildCompiledRule(
       return {
         rule: null,
         rejectReason: `smoke gate: zero matches against badExample${suffix}`,
+      };
+    }
+    // mmnto-ai/totem#1580: over-matching check. The rule must fire on its
+    // badExample (above) AND must NOT fire on its goodExample. Symmetric
+    // guards catch the under-match and over-match defect classes with the
+    // same deterministic engine the runtime uses.
+    if (!effectiveGoodExample) {
+      return {
+        rule: null,
+        rejectReason: 'smoke gate: missing goodExample (required for Pipeline 2/3)',
+      };
+    }
+    const overMatchGate = runSmokeGate(candidate, effectiveGoodExample);
+    if (overMatchGate.matched) {
+      return {
+        rule: null,
+        rejectReason: `smoke gate: matches goodExample (over-matching: ${overMatchGate.matchCount} match${overMatchGate.matchCount === 1 ? '' : 'es'})`,
       };
     }
   }
@@ -822,6 +858,7 @@ export async function compileLesson(
     const ruleResult = buildCompiledRule(parsed, lesson, existingByHash, {
       enforceSmokeGate: true,
       badExampleOverride: snippets.bad.join('\n'),
+      goodExampleOverride: snippets.good.join('\n'),
     });
     if (!ruleResult.rule) {
       const rejectReason = ruleResult.rejectReason ?? 'Unknown error';
@@ -1160,6 +1197,8 @@ function classifyBuildRejectReason(rejectReason: string): CompileLessonReasonCod
   if (rejectReason.startsWith('Invalid ast-grep pattern')) return 'pattern-syntax-invalid';
   if (rejectReason.includes('suppression directive')) return 'pattern-syntax-invalid';
   if (rejectReason.startsWith('smoke gate: zero matches')) return 'pattern-zero-match';
+  if (rejectReason.startsWith('smoke gate: matches goodExample')) return 'matches-good-example';
+  if (rejectReason.startsWith('smoke gate: missing goodExample')) return 'missing-goodexample';
   return 'pattern-syntax-invalid';
 }
 

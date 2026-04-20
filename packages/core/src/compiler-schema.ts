@@ -71,6 +71,16 @@ const CompiledRuleBaseSchema = z.object({
    * 1.14.9; flips to required when #1408 turns on the gate.
    */
   badExample: z.string().optional(),
+  /**
+   * Optional code snippet the rule MUST NOT match. mmnto-ai/totem#1580
+   * added the over-matching check: the compile-time smoke gate runs the
+   * rule against `goodExample` and rejects it with reason code
+   * `'matches-good-example'` if the pattern fires. Optional at the
+   * persisted-rule boundary for backward compatibility with pre-#1580
+   * rules; `CompilerOutputSchema` requires it for regex and ast-grep
+   * producers (see `refineGoodExampleRequired`).
+   */
+  goodExample: z.string().optional(),
   /** ISO timestamp of when this rule was compiled */
   compiledAt: z.string(),
   /** ISO timestamp of when this rule was first created (survives recompilation) */
@@ -183,6 +193,8 @@ export const NonCompilableReasonCodeSchema = z.enum([
   'no-pattern-found',
   'out-of-scope',
   'missing-badexample',
+  'missing-goodexample',
+  'matches-good-example',
   'legacy-unknown',
 ]);
 
@@ -288,6 +300,17 @@ const CompilerOutputBaseSchema = z.object({
    * can name the engine and cite the ticket.
    */
   badExample: z.string().optional(),
+  /**
+   * Code snippet the rule MUST NOT match. Flipped from optional to
+   * engine-conditional required in mmnto-ai/totem#1580 - regex and
+   * ast-grep rules must carry a non-empty snippet so the compile-time
+   * smoke gate can assert the pattern does not over-match on known-good
+   * code before it lands in compiled-rules.json. The Zod field stays
+   * optional here; the `refineGoodExampleRequired` superRefine below
+   * enforces the engine-conditional requirement so the error message
+   * can name the engine and cite the ticket.
+   */
+  goodExample: z.string().optional(),
   severity: z.enum(['error', 'warning']).optional(),
   /** LLM explanation for why a lesson was marked non-compilable */
   reason: z.string().optional(),
@@ -328,9 +351,38 @@ function refineBadExampleRequired(
   });
 }
 
+/**
+ * Symmetric counterpart of `refineBadExampleRequired` for the over-matching
+ * check shipped in mmnto-ai/totem#1580. Every Pipeline 2 / Pipeline 3
+ * compilable rule must carry a non-empty `goodExample` so the smoke gate
+ * can assert the pattern does not fire on known-good code. Same engine
+ * carve-out as badExample: `ast` engine exempt because the gate does not
+ * yet evaluate Tree-sitter S-expression queries.
+ */
+function refineGoodExampleRequired(
+  data: {
+    compilable: boolean;
+    engine?: 'regex' | 'ast' | 'ast-grep';
+    goodExample?: string;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  if (!data.compilable) return;
+  const engineRequiresGoodExample = data.engine !== 'ast';
+  if (!engineRequiresGoodExample) return;
+  if (typeof data.goodExample === 'string' && data.goodExample.length > 0) return;
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    message:
+      'goodExample is required (non-empty string) for regex and ast-grep engines (mmnto-ai/totem#1580)',
+    path: ['goodExample'],
+  });
+}
+
 export const CompilerOutputSchema = CompilerOutputBaseSchema.superRefine((data, ctx) => {
   refineAstGrepMutualExclusion(data, ctx);
   refineBadExampleRequired(data, ctx);
+  refineGoodExampleRequired(data, ctx);
 });
 
 export type CompilerOutput = z.infer<typeof CompilerOutputSchema>;

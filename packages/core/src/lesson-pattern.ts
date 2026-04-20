@@ -171,6 +171,30 @@ export function extractBadExample(body: string): string | undefined {
 }
 
 /**
+ * Extract the contents of a fenced code block that follows a `### Good Example`
+ * heading in a lesson body. Symmetric counterpart of `extractBadExample`, used
+ * by the mmnto-ai/totem#1580 over-matching check: the compile-time smoke gate
+ * runs the compiled rule against `goodExample` and rejects it if the pattern
+ * fires.
+ *
+ * Returns `undefined` under the same conditions as `extractBadExample` (no
+ * heading, no fence, empty block). Both fence styles (``` and ~~~) are
+ * accepted for parity with `extractCodeBlock`.
+ */
+export function extractGoodExample(body: string): string | undefined {
+  const re = /(?:^|\n)#{2,6}\s*Good\s+Example\s*\n([\s\S]*?)(?=\n#{2,6}\s|\n---\s*\n|$)/i;
+  const section = body.match(re);
+  if (!section) return undefined;
+
+  const slice = section[1] ?? '';
+  const fence = slice.match(/(?:^|\n)(```|~~~)[^\n]*\n([\s\S]*?)\n?\1/);
+  if (!fence) return undefined;
+
+  const content = (fence[2] ?? '').trim();
+  return content.length > 0 ? content : undefined;
+}
+
+/**
  * Extract a yaml-tagged fenced code block following a `**Field:**` marker.
  *
  * Scan starts on the line after the field marker and stops at the first

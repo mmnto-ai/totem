@@ -583,6 +583,7 @@ describe('buildCompiledRule smoke gate (mmnto/totem#1408)', () => {
       engine: 'ast-grep',
       astGrepPattern: 'debugger',
       badExample: 'const x = 1;\n',
+      goodExample: '// placeholder\n',
     };
     const result = buildCompiledRule(parsed, lesson, existingByHash, {
       enforceSmokeGate: true,
@@ -614,6 +615,7 @@ describe('buildCompiledRule smoke gate (mmnto/totem#1408)', () => {
       engine: 'ast-grep',
       astGrepPattern: 'debugger',
       badExample: 'debugger;\n',
+      goodExample: '// placeholder\n',
     };
     const result = buildCompiledRule(parsed, lesson, existingByHash, {
       enforceSmokeGate: true,
@@ -629,6 +631,7 @@ describe('buildCompiledRule smoke gate (mmnto/totem#1408)', () => {
       engine: 'regex',
       pattern: 'console\\.log',
       badExample: 'console.log("debug")',
+      goodExample: '// placeholder\n',
     };
     const result = buildCompiledRule(parsed, lesson, existingByHash, {
       enforceSmokeGate: true,
@@ -648,9 +651,11 @@ describe('buildCompiledRule smoke gate (mmnto/totem#1408)', () => {
     const result = buildCompiledRule(parsed, lesson, existingByHash, {
       enforceSmokeGate: true,
       badExampleOverride: 'console.log("bad")',
+      goodExampleOverride: 'logger.info("good")',
     });
     expect(result.rule).not.toBeNull();
     expect(result.rule!.badExample).toBe('console.log("bad")');
+    expect(result.rule!.goodExample).toBe('logger.info("good")');
   });
 
   it('Pipeline 1 is unaffected (gate is opt-in via enforceSmokeGate)', () => {
@@ -696,6 +701,7 @@ describe('compound rule smoke gate (mmnto-ai/totem#1409)', () => {
         },
       },
       badExample: 'for (let i = 0; i < 10; i++) {\n  const inside = i * 2;\n}',
+      goodExample: '// placeholder\n',
     };
     const result = buildCompiledRule(parsed, compoundLesson, existingByHash, {
       enforceSmokeGate: true,
@@ -726,6 +732,7 @@ describe('compound rule smoke gate (mmnto-ai/totem#1409)', () => {
         },
       },
       badExample: 'for (let i = 0; i < 10; i++) {\n  const inside = i * 2;\n}',
+      goodExample: '// placeholder\n',
     };
     const result = buildCompiledRule(parsed, compoundLesson, existingByHash, {
       enforceSmokeGate: true,
@@ -757,6 +764,114 @@ describe('compound rule smoke gate (mmnto-ai/totem#1409)', () => {
     expect(result.rule).toBeNull();
     expect(result.rejectReason).toContain('smoke gate');
     expect(result.rejectReason).toContain('badExample');
+  });
+});
+
+// ─── over-matching check (mmnto-ai/totem#1580) ───────
+
+describe('buildCompiledRule goodExample over-matching check', () => {
+  it('rejects a regex rule that fires on its goodExample', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No console.log',
+      engine: 'regex',
+      pattern: 'console\\.log',
+      // badExample exercises the pattern (matches) — gate under-match passes.
+      badExample: 'console.log("debug")',
+      // goodExample also matches the pattern, which means the rule is
+      // over-broad and fires on known-correct code. The gate must reject.
+      goodExample: 'console.log("intentional system message")',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+    });
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('smoke gate');
+    expect(result.rejectReason).toContain('matches goodExample');
+    expect(result.rejectReason).toContain('over-matching');
+  });
+
+  it('rejects an ast-grep rule that fires on its goodExample', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No debugger',
+      engine: 'ast-grep',
+      astGrepPattern: 'debugger',
+      badExample: 'debugger;',
+      goodExample: 'debugger;\n// should have been removed before commit',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+    });
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('matches goodExample');
+  });
+
+  it('accepts a regex rule whose pattern fires on badExample but not goodExample', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No console.log',
+      engine: 'regex',
+      pattern: 'console\\.log',
+      badExample: 'console.log("debug")',
+      goodExample: 'logger.info("intentional")',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+    });
+    expect(result.rule).not.toBeNull();
+    expect(result.rule!.goodExample).toBe('logger.info("intentional")');
+  });
+
+  it('rejects a rule that is missing goodExample (required for Pipeline 2/3)', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No console.log',
+      engine: 'regex',
+      pattern: 'console\\.log',
+      badExample: 'console.log("debug")',
+      // goodExample absent — caller did not supply it and schema
+      // layer was bypassed. Gate must still reject.
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+    });
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('smoke gate');
+    expect(result.rejectReason).toContain('missing goodExample');
+  });
+
+  it('honors goodExampleOverride so Pipeline 3 can reuse its Good snippet', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No console.log',
+      engine: 'regex',
+      pattern: 'console\\.log',
+      badExample: 'console.log("bad")',
+      // No goodExample on parsed; caller supplies it via override.
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+      goodExampleOverride: 'logger.info("good")',
+    });
+    expect(result.rule).not.toBeNull();
+    expect(result.rule!.goodExample).toBe('logger.info("good")');
+  });
+
+  it('persists goodExample on the CompiledRule when the gate accepts', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No debugger',
+      engine: 'ast-grep',
+      astGrepPattern: 'debugger',
+      badExample: 'debugger;',
+      goodExample: 'const x = 1;',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+    });
+    expect(result.rule).not.toBeNull();
+    expect(result.rule!.goodExample).toBe('const x = 1;');
   });
 });
 
@@ -870,6 +985,7 @@ describe('compileLesson', () => {
             // wants the rule to compile, so give the helper a known-good
             // snippet that matches the pattern.
             badExample: 'console.log("debug")',
+            goodExample: '// placeholder\n',
           }
         : null,
     ),
@@ -931,6 +1047,7 @@ describe('compileLesson', () => {
         message: 'No console.log',
         engine: 'regex' as const,
         badExample: 'console.log("debug")',
+        goodExample: '// placeholder\n',
       }),
       runOrchestrator: vi.fn().mockResolvedValue('{"compilable": true}'),
       existingByHash: new Map(),
@@ -1001,6 +1118,7 @@ describe('compileLesson', () => {
         message: 'No console.log',
         engine: 'regex' as const,
         badExample: 'console.log("debug")',
+        goodExample: '// placeholder\n',
       }),
       runOrchestrator: vi.fn().mockResolvedValue('{"compilable": true}'),
       existingByHash: new Map(),
@@ -1273,6 +1391,7 @@ describe('compileLesson with inline examples', () => {
             message: 'No console.log',
             engine: 'regex' as const,
             badExample: 'console.log("debug")',
+            goodExample: '// placeholder\n',
           }
         : null,
     ),
@@ -1550,6 +1669,7 @@ describe('compileLesson Pipeline 2 verify-retry', () => {
         message: 'No console.log',
         engine: 'regex' as const,
         badExample: 'console.log("debug")',
+        goodExample: '// placeholder\n',
       })
       .mockReturnValueOnce({
         compilable: true,
@@ -1557,6 +1677,7 @@ describe('compileLesson Pipeline 2 verify-retry', () => {
         message: 'No console.log',
         engine: 'regex' as const,
         badExample: 'console.log("debug")',
+        goodExample: '// placeholder\n',
       });
     const orchestratorMock = vi
       .fn()
@@ -1594,6 +1715,7 @@ describe('compileLesson Pipeline 2 verify-retry', () => {
       message: 'No console.log',
       engine: 'regex' as const,
       badExample: 'console.log("debug")',
+      goodExample: '// placeholder\n',
     });
     const orchestratorMock = vi.fn().mockResolvedValue('always-bad');
     const deps: CompileLessonDeps = {
@@ -1735,6 +1857,7 @@ describe('compileLesson Pipeline 2 verify-retry', () => {
         message: 'No console.log',
         engine: 'regex' as const,
         badExample: 'zzz_only_matches_itself',
+        goodExample: '// placeholder\n',
       })
       .mockReturnValueOnce({
         compilable: true,
@@ -1742,6 +1865,7 @@ describe('compileLesson Pipeline 2 verify-retry', () => {
         message: 'No console.log',
         engine: 'regex' as const,
         badExample: 'console.log("x")',
+        goodExample: '// placeholder\n',
       });
     const orchestratorMock = vi
       .fn()
@@ -1788,6 +1912,7 @@ describe('compileLesson Pipeline 2 verify-retry', () => {
       message: 'No console.log',
       engine: 'regex' as const,
       badExample: 'zzz_only_matches_itself',
+      goodExample: '// placeholder\n',
     });
     const orchestratorMock = vi.fn().mockResolvedValue('always-misses');
     const deps: CompileLessonDeps = {
@@ -1818,6 +1943,7 @@ describe('compileLesson Pipeline 2 verify-retry', () => {
       message: 'Invalid regex test',
       engine: 'regex' as const,
       badExample: 'any string',
+      goodExample: '// placeholder\n',
     });
     const orchestratorMock = vi.fn().mockResolvedValue('invalid-regex-output');
     const deps: CompileLessonDeps = {
@@ -1866,6 +1992,7 @@ describe('compileLesson unverified flag', () => {
       engine: 'regex' as const,
       severity: 'error' as const,
       badExample: 'console.log(x)',
+      goodExample: '// placeholder\n',
     });
     const orchestratorMock = vi.fn().mockResolvedValue('{"compilable": true}');
     const deps: CompileLessonDeps = {
@@ -1897,6 +2024,7 @@ describe('compileLesson unverified flag', () => {
       message: 'No console.log',
       engine: 'regex' as const,
       badExample: 'console.log(x)',
+      goodExample: '// placeholder\n',
     });
     const orchestratorMock = vi.fn().mockResolvedValue('{"compilable": true}');
     const deps: CompileLessonDeps = {
@@ -1925,6 +2053,7 @@ describe('compileLesson unverified flag', () => {
       message: 'No console.log',
       engine: 'regex' as const,
       badExample: 'console.log(x)',
+      goodExample: '// placeholder\n',
     });
     const orchestratorMock = vi.fn().mockResolvedValue('{"compilable": true}');
     const deps: CompileLessonDeps = {
@@ -1957,13 +2086,18 @@ describe('compileLesson unverified flag', () => {
     };
     const parseMock = vi.fn().mockReturnValue({
       compilable: true,
-      // Pattern that matches any string — including the trimmed-empty
-      // Example Hit — so verifyRuleExamples passes and we can assert
-      // on the unverified flag without the verify branch interfering.
-      pattern: '.*',
+      // Pattern that matches both the trimmed-empty Example Hit (via
+      // `^$`) AND the badExample "anything" (via `\banything\b`) so
+      // verifyRuleExamples passes without interference. The goodExample
+      // `// placeholder` is constructed to not satisfy either alternative
+      // so the mmnto-ai/totem#1580 over-matching check also passes.
+      // No trailing newline on goodExample so the line-split doesn't
+      // produce an empty trailing line that would match `^$`.
+      pattern: '^$|\\banything\\b',
       message: 'msg',
       engine: 'regex' as const,
       badExample: 'anything',
+      goodExample: '// placeholder',
     });
     const orchestratorMock = vi.fn().mockResolvedValue('{"compilable": true}');
     const deps: CompileLessonDeps = {
@@ -2105,6 +2239,7 @@ describe('compileLesson trace events', () => {
       message: 'No console.log',
       engine: 'regex' as const,
       badExample: 'console.log("x")',
+      goodExample: '// placeholder\n',
     });
     const orchestratorMock = vi.fn().mockResolvedValue('attempt-1');
     const deps: CompileLessonDeps = {
@@ -2142,6 +2277,7 @@ describe('compileLesson trace events', () => {
       message: 'No console.log',
       engine: 'regex' as const,
       badExample: 'zzz_only_matches_itself',
+      goodExample: '// placeholder\n',
     });
     const orchestratorMock = vi.fn().mockResolvedValue('always-misses');
     const deps: CompileLessonDeps = {
@@ -2211,6 +2347,7 @@ describe('compileLesson trace events', () => {
       message: 'bad regex',
       engine: 'regex' as const,
       badExample: 'anything',
+      goodExample: '// placeholder\n',
     });
     const orchestratorMock = vi.fn().mockResolvedValue('invalid-regex-output');
     const deps: CompileLessonDeps = {
@@ -2262,6 +2399,7 @@ describe('compileLesson trace events', () => {
       message: 'No console.log',
       engine: 'regex' as const,
       badExample: 'console.log("x")',
+      goodExample: '// placeholder\n',
     });
     const orchestratorMock = vi.fn().mockResolvedValue('pipeline-3-response');
     const deps: CompileLessonDeps = {

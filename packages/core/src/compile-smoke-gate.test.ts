@@ -207,6 +207,54 @@ describe('runSmokeGate badExample extension inference', () => {
   });
 });
 
+// ─── over-matching check (mmnto-ai/totem#1580) ───────
+
+describe('runSmokeGate over-matching check', () => {
+  it('reports matched=true when a regex rule fires on a goodExample (the caller then rejects)', () => {
+    // Simulates the mmnto-ai/totem#1580 over-matching detection flow:
+    // the caller runs the rule against `goodExample` and treats a match
+    // as a rejection signal. The gate itself is role-agnostic.
+    const rule = makeRegexRule({ pattern: 'console\\.log' });
+    const overlyGood = 'console.log("this should not match a good example");\n';
+    const result = runSmokeGate(rule, overlyGood);
+    expect(result.matched).toBe(true);
+    expect(result.matchCount).toBeGreaterThan(0);
+  });
+
+  it('reports matched=false when a well-scoped regex rule does not fire on goodExample', () => {
+    const rule = makeRegexRule({ pattern: 'console\\.log' });
+    const goodExample = 'logger.info("correct usage")\n';
+    const result = runSmokeGate(rule, goodExample);
+    expect(result.matched).toBe(false);
+    expect(result.matchCount).toBe(0);
+  });
+
+  it('reports matched=true when an ast-grep rule fires on a goodExample', () => {
+    const rule = makeAstGrepStringRule();
+    const overlyGood = 'debugger;\nconst x = 1;\n';
+    const result = runSmokeGate(rule, overlyGood);
+    expect(result.matched).toBe(true);
+  });
+
+  it('reports matched=false when an ast-grep rule does not fire on goodExample', () => {
+    const rule = makeAstGrepStringRule();
+    const goodExample = 'const x = 1;\n';
+    const result = runSmokeGate(rule, goodExample);
+    expect(result.matched).toBe(false);
+  });
+
+  it('treats an empty goodExample as no-op (early return, matched=false)', () => {
+    // The smoke gate's caller treats matched=false against goodExample
+    // as "over-matching check passed". An empty goodExample short-circuits
+    // to matched=false so the check is effectively a no-op rather than
+    // crashing the engine on an empty snippet.
+    const rule = makeRegexRule();
+    const result = runSmokeGate(rule, '');
+    expect(result.matched).toBe(false);
+    expect(result.matchCount).toBe(0);
+  });
+});
+
 // ─── runtime-parity invariant ────────────────────────
 
 describe('runSmokeGate runtime parity invariant', () => {

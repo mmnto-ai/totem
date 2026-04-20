@@ -139,6 +139,7 @@ describe('CompilerOutputSchema mutual exclusion', () => {
       message: 'msg',
       astGrepYamlRule: { rule: { pattern: 'foo($A)' } },
       badExample: 'foo(1)',
+      goodExample: 'bar(1)',
     });
     expect(parsed.astGrepYamlRule).toBeDefined();
   });
@@ -184,6 +185,7 @@ describe('CompilerOutput badExample required by engine', () => {
       message: 'No foo',
       engine: 'regex',
       badExample: 'const foo = 1;',
+      goodExample: 'const bar = 1;',
     });
     expect(parsed.badExample).toBe('const foo = 1;');
   });
@@ -195,6 +197,7 @@ describe('CompilerOutput badExample required by engine', () => {
       engine: 'ast-grep',
       astGrepPattern: 'console.log($A)',
       badExample: 'console.log("debug");',
+      goodExample: 'logger.info("debug");',
     });
     expect(parsed.badExample).toBe('console.log("debug");');
   });
