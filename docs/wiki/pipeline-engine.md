@@ -8,13 +8,13 @@ The Pipeline Engine is built around the **Create → Enforce Lifecycle**. It mov
 
 Totem supports five distinct pipelines for rule creation, from zero-LLM manual authoring to fully autonomous observation capture.
 
-| Pipeline | Name                     | LLM Required?        | Entry Point                                                                   |
-| -------- | ------------------------ | -------------------- | ----------------------------------------------------------------------------- |
-| **P1**   | Manual Rules             | No                   | `totem rule scaffold` → author lesson → `totem lesson compile`                |
-| **P2**   | LLM-Generated            | Yes                  | `totem lesson compile` (from extracted lessons)                               |
-| **P3**   | Example-Based            | Yes                  | `totem lesson compile` (from Bad/Good code snippets in `.totem/lessons/*.md`) |
-| **P4**   | Import                   | No                   | `totem import --from-eslint`, `totem import --from-semgrep`                   |
-| **P5**   | Observation Auto-Capture | No (at capture time) | Automatic during `totem review` (opt out with `--no-auto-capture`)            |
+| Pipeline | Name                     | LLM Required?        | Entry Point                                                                                                        |
+| -------- | ------------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **P1**   | Manual Rules             | No                   | `totem rule scaffold` → author lesson → `totem lesson compile`                                                     |
+| **P2**   | LLM-Generated            | Yes                  | `totem lesson compile` (from extracted lessons)                                                                    |
+| **P3**   | Example-Based            | Yes                  | `totem lesson compile` (from Bad/Good code snippets in `.totem/lessons/*.md`)                                      |
+| **P4**   | Import                   | No                   | `totem import --from-eslint`, `totem import --from-semgrep`                                                        |
+| **P5**   | Observation Auto-Capture | No (at capture time) | Opt-in on `totem review` via `--auto-capture` (off by default; captured rules are context-less and apply globally) |
 
 ## Priority Order and Strategy
 
@@ -27,7 +27,7 @@ When establishing rules, prefer pipelines in the following order: **P1 > P3 > P2
 3. **P2 (LLM/Sonnet):** Fallback. Generates rules from prose explanations in extracted lessons. Powered by Claude Sonnet 4.6. Highly capable but requires well-written lessons.
    - _Use when:_ Rules are derived from PR review feedback where strict examples weren't provided.
 4. **P4 (Import):** The bootstrapping pipeline. Use this on Day 1 to suck in your existing `eslint-plugin-no-restricted-syntax` configurations into the fast Totem engine.
-5. **P5 (Observation Capture):** The auto-pilot. P5 listens to `totem review` outputs. When a bot flags a specific line, P5 deterministically extracts that line into a `severity: warning` rule so the team is alerted next time it happens.
+5. **P5 (Observation Capture):** Opt-in auto-capture. When invoked with `totem review --auto-capture`, P5 extracts the flagged line into a `severity: warning` rule. Default is off because captured rules are context-less and apply globally; enable per-invocation only when you want to seed rules from the current review pass.
 
 ## Usage Examples
 
@@ -97,10 +97,10 @@ The Semgrep adapter (`--from-semgrep`) imports pattern-based YAML rules.
 
 ### Pipeline 5: Auto-Capture
 
-Run your standard review. If the PR contains violations, P5 will automatically stage the offending lines as warnings in your rule list.
+Run review with `--auto-capture` to stage flagged lines as warnings in your rule list. Default is off.
 
 ```bash
-totem review --deterministic
+totem review --auto-capture
 ```
 
-_(To skip capture in CI or final push workflows, use `totem review --deterministic --no-auto-capture`)_
+_(Auto-capture will resume as a default once ADR-091 Stage 2 Classifier and Stage 4 Codebase Verifier ship in 1.16.0 and the LLM-emitted rule loop has gates that prevent context-less emissions.)_
