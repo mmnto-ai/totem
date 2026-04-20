@@ -541,13 +541,17 @@ describe('rule promote', () => {
   async function writeManifest(totemDir: string, rulesPath: string): Promise<void> {
     const { generateOutputHash } = await import('@mmnto/totem');
     const manifestPath = path.join(totemDir, 'compile-manifest.json');
+    // Derive rule_count from the file instead of hardcoding so the fixture
+    // stays accurate when callers write multi-rule scenarios (CR nit review
+    // on PR #1601).
+    const parsedRules = JSON.parse(fs.readFileSync(rulesPath, 'utf-8')) as { rules?: unknown[] };
     const manifest = {
       version: 1 as const,
       compiled_at: '2026-04-20T12:00:00.000Z',
       model: 'test-model',
       input_hash: 'deadbeef'.repeat(8),
       output_hash: generateOutputHash(rulesPath),
-      rule_count: 1,
+      rule_count: parsedRules.rules?.length ?? 0,
     };
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
   }
@@ -678,5 +682,9 @@ describe('rule promote', () => {
 
     const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
     expect(output).toContain('already verified');
+    // Pin that the idempotent no-op does not set a failure exitCode.
+    // Catches regressions where the warning path accidentally turns into
+    // an error path (CR review on PR #1601).
+    expect(process.exitCode ?? 0).toBe(0);
   });
 });

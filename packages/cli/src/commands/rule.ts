@@ -355,6 +355,14 @@ export async function rulePromoteCommand(id: string): Promise<void> {
     return;
   }
 
+  // Preflight the manifest read BEFORE mutating compiled-rules.json.
+  // If the manifest is missing, corrupt, or unwritable, we want to fail
+  // out now — not after writing the rules file. Otherwise the rule would
+  // be half-promoted (compiled-rules.json flipped, manifest stale) and
+  // verify-manifest would fail on the next push with no rollback path.
+  // CR review on PR #1601 flagged this as a partial-state atomicity bug.
+  const compileManifest = readCompileManifest(manifestPath);
+
   // Delete the field rather than writing `unverified: false`. Absence is
   // the canonical "verified" state per the CompiledRuleSchema docs; see
   // compiler-schema.ts on the `unverified` field which explicitly says
@@ -373,9 +381,10 @@ export async function rulePromoteCommand(id: string): Promise<void> {
   fs.renameSync(tmpPath, rulesPath);
 
   // Refresh the manifest's output_hash so verify-manifest passes on the
-  // next push. Keeps the blessed path atomic instead of asking the user
-  // to run a separate refresh command.
-  const compileManifest = readCompileManifest(manifestPath);
+  // next push. Uses the compileManifest loaded above (preflighted) so
+  // the mutation order is: read-manifest → mutate-rules → write-rules →
+  // update-manifest. Missing/corrupt manifest would have thrown above,
+  // preserving compiled-rules.json's pre-promote state.
   compileManifest.output_hash = generateOutputHash(rulesPath);
   compileManifest.compiled_at = new Date().toISOString();
   writeCompileManifest(manifestPath, compileManifest);
