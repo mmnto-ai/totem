@@ -25,7 +25,7 @@ import type { CompiledRule } from './compiler-schema.js';
 // ─── Types ──────────────────────────────────────────
 
 export interface SmokeGateResult {
-  /** True when the rule produced at least one match against the badExample. */
+  /** True when the rule produced at least one match against the snippet. */
   matched: boolean;
   /** Number of matches the engine reported. Zero when `matched` is false. */
   matchCount: number;
@@ -55,7 +55,7 @@ function lineNumbersFor(snippet: string): number[] {
 
 // ─── Engine runners ─────────────────────────────────
 
-function runRegexGate(pattern: string, badExample: string): SmokeGateResult {
+function runRegexGate(pattern: string, snippet: string): SmokeGateResult {
   let re: RegExp;
   try {
     re = new RegExp(pattern);
@@ -68,7 +68,7 @@ function runRegexGate(pattern: string, badExample: string): SmokeGateResult {
   }
 
   let matchCount = 0;
-  for (const line of badExample.split('\n')) {
+  for (const line of snippet.split('\n')) {
     if (re.test(line)) matchCount++;
   }
   return matchCount > 0 ? { matched: true, matchCount } : { matched: false, matchCount: 0 };
@@ -106,14 +106,14 @@ function inferBadExampleExts(rule: CompiledRule): string[] {
 
 function runAstGrepGate(
   pattern: AstGrepRule,
-  badExample: string,
+  snippet: string,
   rule: CompiledRule,
 ): SmokeGateResult {
-  const lineNumbers = lineNumbersFor(badExample);
+  const lineNumbers = lineNumbersFor(snippet);
   let lastReason: string | undefined;
   for (const ext of inferBadExampleExts(rule)) {
     try {
-      const matches = matchAstGrepPattern(badExample, ext, pattern, lineNumbers);
+      const matches = matchAstGrepPattern(snippet, ext, pattern, lineNumbers);
       if (matches.length > 0) {
         return { matched: true, matchCount: matches.length };
       }
@@ -129,18 +129,22 @@ function runAstGrepGate(
 // ─── Public API ─────────────────────────────────────
 
 /**
- * Run the smoke gate for a compiled rule. Returns a `SmokeGateResult` so the
- * caller can decide whether to accept or reject the rule. The caller is
- * responsible for the "zero matches means reject" decision; this function
- * only reports what the engine says.
+ * Run the smoke gate for a compiled rule against an arbitrary snippet.
+ * Callers interpret `matched === true` based on the snippet's role:
+ *   - badExample check: under-matching when matched is false → reject
+ *   - goodExample check (mmnto-ai/totem#1580): over-matching when matched
+ *     is true → reject
+ *
+ * This function is intentionally role-agnostic and only reports what the
+ * engine says; the accept/reject decision belongs to the caller.
  */
-export function runSmokeGate(rule: CompiledRule, badExample: string): SmokeGateResult {
-  if (!badExample || badExample.trim().length === 0) {
+export function runSmokeGate(rule: CompiledRule, snippet: string): SmokeGateResult {
+  if (!snippet || snippet.trim().length === 0) {
     return { matched: false, matchCount: 0 };
   }
 
   if (rule.engine === 'regex') {
-    return runRegexGate(rule.pattern, badExample);
+    return runRegexGate(rule.pattern, snippet);
   }
 
   if (rule.engine === 'ast-grep') {
@@ -153,7 +157,7 @@ export function runSmokeGate(rule: CompiledRule, badExample: string): SmokeGateR
         reason: 'ast-grep rule missing both astGrepPattern and astGrepYamlRule',
       };
     }
-    return runAstGrepGate(source, badExample, rule);
+    return runAstGrepGate(source, snippet, rule);
   }
 
   // Tree-sitter ast engine: not wired into the gate in mmnto/totem#1408.

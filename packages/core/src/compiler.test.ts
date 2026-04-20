@@ -1092,6 +1092,7 @@ describe('parseCompilerResponse', () => {
       pattern: '\\bnpm\\b',
       message: 'Use pnpm instead of npm',
       badExample: 'npm install lodash',
+      goodExample: 'pnpm install lodash',
     });
 
     const result = parseCompilerResponse(response);
@@ -1100,6 +1101,7 @@ describe('parseCompilerResponse', () => {
       pattern: '\\bnpm\\b',
       message: 'Use pnpm instead of npm',
       badExample: 'npm install lodash',
+      goodExample: 'pnpm install lodash',
     });
   });
 
@@ -1113,7 +1115,7 @@ describe('parseCompilerResponse', () => {
     // Post mmnto-ai/totem#1409: compilable regex rules need badExample.
     const response = `Here is the compiled rule:
 \`\`\`json
-{"compilable": true, "pattern": "console\\\\.log", "message": "Remove debug logging", "badExample": "console.log('hi')"}
+{"compilable": true, "pattern": "console\\\\.log", "message": "Remove debug logging", "badExample": "console.log('hi')", "goodExample": "logger.info('hi')"}
 \`\`\``;
 
     const result = parseCompilerResponse(response);
@@ -1125,7 +1127,7 @@ describe('parseCompilerResponse', () => {
   it('extracts JSON from a tilde-fenced code block (#1319)', () => {
     const response = `Here is the compiled rule:
 ~~~json
-{"compilable": true, "pattern": "console\\\\.log", "message": "Remove debug logging", "badExample": "console.log('hi')"}
+{"compilable": true, "pattern": "console\\\\.log", "message": "Remove debug logging", "badExample": "console.log('hi')", "goodExample": "logger.info('hi')"}
 ~~~`;
 
     const result = parseCompilerResponse(response);
@@ -1172,6 +1174,7 @@ describe('parseCompilerResponse', () => {
       message: 'Quote shell variables',
       fileGlobs: ['*.sh', '*.bash', '*.yml'],
       badExample: 'echo $HOME',
+      goodExample: 'echo "$HOME"',
     });
 
     const result = parseCompilerResponse(response);
@@ -1181,6 +1184,7 @@ describe('parseCompilerResponse', () => {
       message: 'Quote shell variables',
       fileGlobs: ['*.sh', '*.bash', '*.yml'],
       badExample: 'echo $HOME',
+      goodExample: 'echo "$HOME"',
     });
   });
 
@@ -1193,6 +1197,7 @@ describe('parseCompilerResponse', () => {
       pattern: '',
       message: 'Do not use shell:true with array args',
       badExample: 'spawn("ls", [], { shell: true });',
+      goodExample: "spawn('ls', [], { shell: process.platform === 'win32' });",
     });
     const result = parseCompilerResponse(response);
     expect(result!.astGrepPattern).toBe('spawn($CMD, [$$$ARGS], { shell: true })');
@@ -1205,6 +1210,7 @@ describe('parseCompilerResponse', () => {
       pattern: '`\\bconsole\\.log\\b`',
       message: 'No console.log',
       badExample: 'console.log("hi")',
+      goodExample: 'logger.info("hi")',
     });
     const result = parseCompilerResponse(response);
     expect(result!.pattern).toBe('\\bconsole\\.log\\b');
@@ -1219,6 +1225,7 @@ describe('parseCompilerResponse', () => {
       pattern: '',
       message: 'Use path.relative',
       badExample: 'foo.replace(process.cwd(), "")',
+      goodExample: 'path.relative(process.cwd(), foo)',
     });
     const result = parseCompilerResponse(response);
     expect(result!.astGrepPattern).toBe('$OBJ.replace(process.cwd(), $R)');
