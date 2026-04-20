@@ -7258,7 +7258,8 @@
       "severity": "warning",
       "status": "archived",
       "archivedReason": "Over-broad pattern: astGrepPattern `new TotemError($MSG, $$$REST)` matches every TotemError construction, not just manual-prefix inclusions. 34 legitimate call sites in production code would fire on every lint run. The lesson intent is to ban `new TotemError(\"[Totem Error] ...\")` but the compile worker could not express the literal-prefix constraint as an ast-grep pattern. Archived via #1553 postmerge cycle; candidate for ADR-091 Stage 4 Verify-Against-Codebase auto-archive once implemented.",
-      "unverified": true
+      "unverified": true,
+      "archivedAt": "2026-04-19T06:37:57.975Z"
     },
     {
       "lessonHash": "501000ab9c41230b",

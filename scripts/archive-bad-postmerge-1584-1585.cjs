@@ -13,6 +13,10 @@
  * Node.js pattern when the caller wants to capture stdout via execSync's
  * return value; flagging it with a `warning` severity would produce
  * false positives on any intentional capture call added later.
+ *
+ * Idempotent: re-running refreshes archivedReason and the timestamp even
+ * if the rule is already archived. Hash-collision guard aborts if more
+ * than one rule shares the target lessonHash.
  */
 
 const fs = require('node:fs');
@@ -24,27 +28,36 @@ const ARCHIVED_REASON =
   "Over-matching: pattern targets the string-shorthand form `stdio: 'pipe'` but the defect it was generalized from used the array form `stdio: ['ignore', 'pipe', 'pipe']`, so the regex does not match the actual bug sites in .gemini/hooks/SessionStart.js or init-templates.ts. `stdio: 'pipe'` is also a legitimate Node.js pattern when the caller wants to capture stdout via execSync's return value. The lesson is valid guidance but the structural rule form cannot express it without false positives; revisit as an astGrepYamlRule compound rule after ADR-091 Stage 4 Codebase Verifier ships.";
 
 const raw = fs.readFileSync(RULES_PATH, 'utf8');
-const data = JSON.parse(raw);
-
-let mutated = 0;
-for (const rule of data.rules) {
-  if (rule.lessonHash !== TARGET_HASH) continue;
-  if (rule.status === 'archived') {
-    console.error(`[skip] ${TARGET_HASH} already archived`);
-    continue;
-  }
-  rule.status = 'archived';
-  rule.archivedReason = ARCHIVED_REASON;
-  rule.archivedAt = new Date().toISOString();
-  mutated += 1;
+let data;
+try {
+  data = JSON.parse(raw);
+} catch (err) {
+  throw new Error(`[Totem Error] Failed to parse ${RULES_PATH}`, { cause: err });
 }
 
-if (mutated === 0) {
-  console.error(`[fail] no active rule matched lessonHash ${TARGET_HASH}`);
+const matches = data.rules.filter((rule) => rule.lessonHash === TARGET_HASH);
+
+if (matches.length === 0) {
+  console.error(`[Totem Error] no rule matched lessonHash ${TARGET_HASH}`);
   process.exit(1);
+}
+
+if (matches.length > 1) {
+  console.error(
+    `[Totem Error] hash collision: ${matches.length} rules share lessonHash ${TARGET_HASH}`,
+  );
+  process.exit(1);
+}
+
+const rule = matches[0];
+const wasArchived = rule.status === 'archived';
+rule.status = 'archived';
+rule.archivedReason = ARCHIVED_REASON;
+if (!wasArchived) {
+  rule.archivedAt = new Date().toISOString();
 }
 
 const tmp = `${RULES_PATH}.tmp`;
 fs.writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n');
 fs.renameSync(tmp, RULES_PATH);
-console.log(`[done] archived ${mutated} rule(s) with hash ${TARGET_HASH}`);
+console.log(`[done] ${wasArchived ? 'refreshed' : 'archived'} rule with hash ${TARGET_HASH}`);
