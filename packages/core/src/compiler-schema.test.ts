@@ -201,7 +201,7 @@ describe('CompiledRule archivedAt field', () => {
     // cycle erased prior archivedAt values from compiled-rules.json,
     // eroding the institutional first-archive-provenance ledger.
     const firstParse = CompiledRuleSchema.parse(baseArchivedRule);
-    const serialized = JSON.parse(JSON.stringify(firstParse)) as unknown;
+    const serialized: unknown = JSON.parse(JSON.stringify(firstParse));
     const secondParse = CompiledRuleSchema.parse(serialized);
     expect(secondParse.archivedAt).toBe('2026-04-13T12:05:00Z');
     expect(secondParse.archivedReason).toBe('Over-matching pattern');
