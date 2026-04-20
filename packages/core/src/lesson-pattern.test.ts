@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   extractAllFields,
+  extractBadExample,
   extractBadGoodSnippets,
+  extractGoodExample,
   extractManualPattern,
   extractMultilineField,
   extractRuleExamples,
@@ -760,5 +762,112 @@ describe('extractManualPattern — compound ast-grep path', () => {
     expect(result).not.toBeNull();
     expect(result!.pattern).toBe('new Error($$$)');
     expect(result!.astGrepYamlRule).toBeUndefined();
+  });
+});
+
+// ─── extractBadExample / extractGoodExample ──────────
+
+describe('extractBadExample', () => {
+  it('extracts a fenced code block after ### Bad Example', () => {
+    const body = ['### Bad Example', '', '```ts', 'throw new Error("boom");', '```'].join('\n');
+    expect(extractBadExample(body)).toBe('throw new Error("boom");');
+  });
+
+  it('accepts tilde fences too', () => {
+    const body = ['### Bad Example', '', '~~~ts', 'foo()', '~~~'].join('\n');
+    expect(extractBadExample(body)).toBe('foo()');
+  });
+
+  it('returns undefined when no Bad Example heading is present', () => {
+    const body = '### Good Example\n\n```ts\nbar()\n```';
+    expect(extractBadExample(body)).toBeUndefined();
+  });
+
+  it('returns undefined when the heading is present but no fence follows', () => {
+    const body = '### Bad Example\n\nprose without a fence\n\n### Something Else';
+    expect(extractBadExample(body)).toBeUndefined();
+  });
+
+  it('returns undefined when the fenced block is empty', () => {
+    const body = '### Bad Example\n\n```ts\n```';
+    expect(extractBadExample(body)).toBeUndefined();
+  });
+
+  it('does not slide into a following Good Example block when Bad lacks a fence', () => {
+    const body = [
+      '### Bad Example',
+      '',
+      'prose only — no fence',
+      '',
+      '### Good Example',
+      '',
+      '```ts',
+      'correctForm()',
+      '```',
+    ].join('\n');
+    expect(extractBadExample(body)).toBeUndefined();
+  });
+
+  it('matches the Bad heading case-insensitively', () => {
+    const body = '### BAD Example\n```ts\nfoo()\n```';
+    expect(extractBadExample(body)).toBe('foo()');
+  });
+});
+
+describe('extractGoodExample', () => {
+  it('extracts a fenced code block after ### Good Example', () => {
+    const body = [
+      '### Good Example',
+      '',
+      '```ts',
+      'try { doWork(); } catch (err) { log(err); }',
+      '```',
+    ].join('\n');
+    expect(extractGoodExample(body)).toBe('try { doWork(); } catch (err) { log(err); }');
+  });
+
+  it('accepts tilde fences too', () => {
+    const body = '### Good Example\n\n~~~ts\nlogger.info(msg)\n~~~';
+    expect(extractGoodExample(body)).toBe('logger.info(msg)');
+  });
+
+  it('returns undefined when no Good Example heading is present', () => {
+    const body = '### Bad Example\n\n```ts\nfoo()\n```';
+    expect(extractGoodExample(body)).toBeUndefined();
+  });
+
+  it('returns undefined when the heading is present but no fence follows', () => {
+    const body = '### Good Example\n\nplain prose\n\n### Done';
+    expect(extractGoodExample(body)).toBeUndefined();
+  });
+
+  it('returns undefined when the fenced block is empty', () => {
+    const body = '### Good Example\n\n```ts\n```';
+    expect(extractGoodExample(body)).toBeUndefined();
+  });
+
+  it('extracts Good after Bad when both blocks are present', () => {
+    // Parity scenario: a Pipeline 1 lesson that defines both Bad and
+    // Good Example blocks should let the caller pull each independently.
+    const body = [
+      '### Bad Example',
+      '',
+      '```ts',
+      'badCall()',
+      '```',
+      '',
+      '### Good Example',
+      '',
+      '```ts',
+      'goodCall()',
+      '```',
+    ].join('\n');
+    expect(extractBadExample(body)).toBe('badCall()');
+    expect(extractGoodExample(body)).toBe('goodCall()');
+  });
+
+  it('matches the Good heading case-insensitively', () => {
+    const body = '### good Example\n```ts\nfoo()\n```';
+    expect(extractGoodExample(body)).toBe('foo()');
   });
 });

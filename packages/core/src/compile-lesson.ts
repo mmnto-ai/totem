@@ -857,8 +857,13 @@ export async function compileLesson(
     // the override guarantees the gate has something to work with regardless.
     const ruleResult = buildCompiledRule(parsed, lesson, existingByHash, {
       enforceSmokeGate: true,
-      badExampleOverride: snippets.bad.join('\n'),
-      goodExampleOverride: snippets.good.join('\n'),
+      // Guard empty snippet arrays so they don't clobber parsed.badExample
+      // or parsed.goodExample via ?? in buildCompiledRule. `[].join('\n')`
+      // is the empty string, which is defined and would win over the LLM's
+      // echo-back. Pipeline 3's extractBadGoodSnippets requires both Bad
+      // and Good to be present, so the .length check is belt-and-braces.
+      badExampleOverride: snippets.bad.length > 0 ? snippets.bad.join('\n') : undefined,
+      goodExampleOverride: snippets.good.length > 0 ? snippets.good.join('\n') : undefined,
     });
     if (!ruleResult.rule) {
       const rejectReason = ruleResult.rejectReason ?? 'Unknown error';

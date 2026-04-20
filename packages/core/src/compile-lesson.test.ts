@@ -873,6 +873,49 @@ describe('buildCompiledRule goodExample over-matching check', () => {
     expect(result.rule).not.toBeNull();
     expect(result.rule!.goodExample).toBe('const x = 1;');
   });
+
+  it('falls back to parsed.goodExample when goodExampleOverride is undefined', () => {
+    // Pins the Pipeline 3 contract: the call site passes `undefined`
+    // (not an empty string) when snippets.good is empty, so buildCompiledRule's
+    // `options.goodExampleOverride ?? parsed.goodExample` correctly resolves
+    // to the LLM-echoed value.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No console.log',
+      engine: 'regex',
+      pattern: 'console\\.log',
+      badExample: 'console.log("bad")',
+      goodExample: 'logger.info("from parsed")',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+      goodExampleOverride: undefined,
+    });
+    expect(result.rule).not.toBeNull();
+    expect(result.rule!.goodExample).toBe('logger.info("from parsed")');
+  });
+
+  it('empty-string goodExampleOverride clobbers parsed.goodExample (the trap the Pipeline 3 guard exists to prevent)', () => {
+    // Nullish coalescing (`??`) treats `''` as defined, so passing an
+    // empty string override suppresses the parsed value. This test pins
+    // that behavior so the Pipeline 3 call site's .length guard in
+    // compile-lesson.ts (snippets.good.length > 0 ? ... : undefined)
+    // stays load-bearing.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      message: 'No console.log',
+      engine: 'regex',
+      pattern: 'console\\.log',
+      badExample: 'console.log("bad")',
+      goodExample: 'logger.info("from parsed")',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      enforceSmokeGate: true,
+      goodExampleOverride: '',
+    });
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('missing goodExample');
+  });
 });
 
 // ─── buildManualRule ────────────────────────────────
