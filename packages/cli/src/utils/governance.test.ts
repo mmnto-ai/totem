@@ -7,12 +7,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanTmpDir } from '../test-utils.js';
 
 function makeTmpDir(prefix = 'totem-gov-'): string {
-  // Canonicalize via realpathSync so `/tmp -> /private/tmp` on macOS and
-  // Windows short-name `RUNNER~1` paths both collapse to the same form
-  // `git rev-parse --show-toplevel` returns. Without this, path-equality
-  // assertions fail on macos-latest and windows-latest CI runners while
-  // passing on ubuntu.
-  return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
+  // Canonicalize via `realpathSync.native` so the tmp path collapses to the
+  // same form `git rev-parse --show-toplevel` returns. `.native` is required
+  // because plain `realpathSync` resolves POSIX symlinks (macOS `/tmp ->
+  // /private/tmp`) but NOT Windows 8.3 short names (`C:\Users\RUNNER~1\...`
+  // → `C:\Users\runneradmin\...`). Without `.native`, path-equality
+  // assertions fail on windows-latest CI while passing on macos and ubuntu.
+  return fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
 }
 
 function initGit(dir: string): void {

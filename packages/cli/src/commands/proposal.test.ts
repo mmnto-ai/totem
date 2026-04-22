@@ -7,9 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanTmpDir } from '../test-utils.js';
 
 function makeTmpDir(): string {
-  // Canonicalize via realpathSync for macOS `/tmp -> /private/tmp` and
-  // Windows short-name parity with `git rev-parse --show-toplevel`.
-  return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-proposal-')));
+  // `.native` expands Windows 8.3 short names; plain `realpathSync` does not.
+  // Required for parity with `git rev-parse --show-toplevel` on Windows CI.
+  return fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-proposal-')));
 }
 
 function initGit(dir: string): void {
