@@ -418,7 +418,12 @@ export function scaffoldGovernanceArtifact(
   const filename = formatArtifactFilename(id, cleanTitle);
   const filePath = path.join(paths.targetDir, filename);
 
-  // Collision guard — hard error per spec (no --force, no auto-bump).
+  // Collision pre-check gives a clean user-facing error on the common path.
+  // The authoritative collision guard is the `flag: 'wx'` on `writeFileSync`
+  // below, which closes the TOCTOU race between the pre-check and the write
+  // (a concurrent scaffolder could slip in between the two). Keeping both
+  // gives a nice error when the file already exists AND safety against the
+  // narrow race window.
   if (fs.existsSync(filePath)) {
     throw new TotemError(
       'CONFIG_INVALID',
@@ -439,7 +444,20 @@ export function scaffoldGovernanceArtifact(
   // Ensure parent dir exists (it should, from resolveGovernancePaths, but
   // cheap to defend against a manually-pruned target).
   fs.mkdirSync(paths.targetDir, { recursive: true });
-  fs.writeFileSync(filePath, rendered, 'utf-8');
+  try {
+    // `flag: 'wx'` = write exclusive. Atomic fail with EEXIST if the file
+    // was created between the pre-check and now. Closes the TOCTOU race.
+    fs.writeFileSync(filePath, rendered, { encoding: 'utf-8', flag: 'wx' });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      throw new TotemError(
+        'CONFIG_INVALID',
+        `Artifact already exists at ${filePath}.`,
+        'A concurrent scaffolder created this file between the pre-check and the write. Re-run the command to pick up a fresh NNN.',
+      );
+    }
+    throw err;
+  }
 
   const hookResult = runPostScaffoldHooks({
     rootDir: paths.rootDir,
