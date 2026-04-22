@@ -244,13 +244,16 @@ export function renderArtifactTemplate(opts: RenderTemplateOptions): string {
     template = type === 'proposal' ? DEFAULT_PROPOSAL_TEMPLATE : DEFAULT_ADR_TEMPLATE;
   }
 
-  // Replacer-function form avoids the `$&` / `$1` back-reference trap in
-  // `String.prototype.replace`'s string-replacement mode. A title like
-  // `Fix $foo bug` would otherwise mis-render. See PR #1429 review cycle.
-  return template
-    .replace(/\{\{TITLE\}\}/g, () => title)
-    .replace(/\{\{DATE\}\}/g, () => date)
-    .replace(/\{\{ID\}\}/g, () => id);
+  // Single-pass regex + keyed replacer function. Two reasons:
+  //   1. Sequential `.replace()` calls allow template injection (a title of
+  //      `{{DATE}}` would be substituted into the template and then picked
+  //      up by the next pass as an actual DATE token). One pass eliminates
+  //      that class of bug.
+  //   2. The replacer-function form avoids `$&` / `$1` back-reference
+  //      interpretation in the replacement string (see PR #1429 review
+  //      cycle). A title like `Fix $foo bug` mis-renders otherwise.
+  const replacements: Record<string, string> = { TITLE: title, DATE: date, ID: id };
+  return template.replace(/\{\{(TITLE|DATE|ID)\}\}/g, (_match, key) => replacements[key]!);
 }
 
 // ─── Post-scaffold hooks ────────────────────────────────

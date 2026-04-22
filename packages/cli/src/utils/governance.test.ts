@@ -281,6 +281,30 @@ describe('renderArtifactTemplate', () => {
 
     expect(rendered).toBe('# Fix $foo and $& and $1 in ledger\n');
   });
+
+  it('resists template-token injection from user-provided title (single-pass)', async () => {
+    // A naive sequential-replace implementation substitutes `{{DATE}}` from
+    // the title in pass 1, then the pass-2 DATE regex matches the freshly-
+    // inserted `{{DATE}}` and swaps in the date value. GCA caught this on
+    // PR #1615. Single-pass regex with keyed lookup eliminates the class.
+    const tplDir = path.join(tmpDir, 'templates');
+    fs.mkdirSync(tplDir, { recursive: true });
+    const tplPath = path.join(tplDir, 'adr.md');
+    fs.writeFileSync(tplPath, '{{TITLE}} / {{DATE}}\n', 'utf-8');
+
+    const { renderArtifactTemplate } = await import('./governance.js');
+    const rendered = renderArtifactTemplate({
+      type: 'adr',
+      id: '001',
+      title: '{{DATE}}',
+      templatePath: tplPath,
+      date: '2026-04-22',
+    });
+
+    // Title stays literal. The `{{DATE}}` in the template body resolves;
+    // the `{{DATE}}` inside the title does NOT.
+    expect(rendered).toBe('{{DATE}} / 2026-04-22\n');
+  });
 });
 
 describe('runPostScaffoldHooks', () => {
