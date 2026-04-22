@@ -985,6 +985,38 @@ ruleCmd
     }
   });
 
+// ─── Proposal noun-verb subcommands ─────────────────────
+// mmnto/totem#1288: scaffold NNN-prefixed proposals in <strategy>/proposals/active/.
+const proposalCmd = program.command('proposal').description('Manage governance proposals');
+
+proposalCmd
+  .command('new <title>')
+  .description('Scaffold a new NNN-prefixed proposal under proposals/active/')
+  .action(async (title: string) => {
+    try {
+      const { proposalNewCommand } = await import('./commands/proposal.js');
+      await proposalNewCommand(title); // totem-context: handleError (catch below) is terminal — declared `: never` and exits via process.exit.
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+// ─── ADR noun-verb subcommands ──────────────────────────
+// mmnto/totem#1288: scaffold NNN-prefixed ADRs in <strategy>/adr/ per ADR-091 heading convention.
+const adrCmd = program.command('adr').description('Manage Architecture Decision Records');
+
+adrCmd
+  .command('new <title>')
+  .description('Scaffold a new NNN-prefixed ADR under adr/ (heading: `# ADR NNN: Title`)')
+  .action(async (title: string) => {
+    try {
+      const { adrNewCommand } = await import('./commands/adr.js');
+      await adrNewCommand(title); // totem-context: handleError (catch below) is terminal — declared `: never` and exits via process.exit.
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
 // ─── Config noun-verb subcommands ───────────────────────
 const configCmd = program.command('config').description('Read and manage project configuration');
 
