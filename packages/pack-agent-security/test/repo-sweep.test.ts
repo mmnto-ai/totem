@@ -274,6 +274,13 @@ const ALLOWLIST: AllowEntry[] = [
   },
   {
     hash: 'c2c09301bb56a02b',
+    file: 'packages/cli/src/utils/governance.ts',
+    expectedCount: 2,
+    reason:
+      '`totem proposal new` and `totem adr new` scaffolding orchestrator (#1288). Calls `pnpm run docs:inject` and `git add <file> <dashboard>` via safeExec (imported as `exec`). Literal binary names, structured argv. User-provided title is sanitized to `[a-z0-9-]+` before reaching the argv surface, so no shell-injection vector.',
+  },
+  {
+    hash: 'c2c09301bb56a02b',
     file: 'packages/mcp/src/tools/add-lesson.ts',
     expectedCount: 2,
     reason: 'Same Windows taskkill cleanup pattern as shell-orchestrator.ts.',
