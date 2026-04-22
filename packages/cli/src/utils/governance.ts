@@ -12,6 +12,8 @@ import * as path from 'node:path';
 
 import { resolveGitRoot, safeExec, TotemError } from '@mmnto/totem';
 
+import { log } from '../ui.js';
+
 export type GovernanceType = 'proposal' | 'adr';
 
 export interface ScaffoldOptions {
@@ -163,6 +165,28 @@ export function formatArtifactFilename(id: string, title: string): string {
   return `${id}-${slug}.md`;
 }
 
+/**
+ * Sanitize a raw title for safe inclusion in the scaffolded markdown body.
+ *
+ * Strips C0 control characters and `DEL` (0x00-0x1F, 0x7F) — most notably
+ * newlines, carriage returns, and tabs — then collapses any remaining run
+ * of whitespace to a single space and trims the edges. Without this pass,
+ * a title like `Fix\n## Fake Heading` would inject a fresh markdown block
+ * into the scaffolded artifact, shifting document structure out of the
+ * scaffolder's control. The `#` character itself is allowed through on
+ * purpose: a single-line heading that contains `#` characters stays a
+ * single h1 heading in markdown.
+ */
+export function sanitizeArtifactTitle(title: string): string {
+  return (
+    title
+      // eslint-disable-next-line no-control-regex -- intentional: strip ASCII C0 controls + DEL
+      .replace(/[\x00-\x1F\x7F]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
+}
+
 // ─── Template engine ────────────────────────────────────
 
 /**
@@ -308,9 +332,9 @@ export function runPostScaffoldHooks(opts: PostScaffoldHookOptions): PostScaffol
     dashboardRefreshed = true; // totem-context: intentional warn-and-continue per spec 1288 — dashboard refresh failure must not strand the scaffolded artifact on disk.
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    // eslint-disable-next-line no-console -- intentional stderr warning per spec
-    console.warn(
-      `[Totem Warning] docs:inject did not run cleanly (${msg}). Dashboard not refreshed; run 'pnpm run docs:inject' manually.`,
+    log.warn(
+      'Totem',
+      `docs:inject did not run cleanly (${msg}). Dashboard not refreshed; run 'pnpm run docs:inject' manually.`,
     );
   }
 
@@ -320,9 +344,9 @@ export function runPostScaffoldHooks(opts: PostScaffoldHookOptions): PostScaffol
     staged = true; // totem-context: intentional warn-and-continue per spec 1288 — git add failure must not strand the scaffolded artifact on disk.
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    // eslint-disable-next-line no-console -- intentional stderr warning per spec
-    console.warn(
-      `[Totem Warning] git add failed (${msg}). File created but not staged; run 'git add' manually.`,
+    log.warn(
+      'Totem',
+      `git add failed (${msg}). File created but not staged; run 'git add' manually.`,
     );
   }
 
@@ -384,8 +408,14 @@ export function scaffoldGovernanceArtifact(
 ): ScaffoldArtifactResult {
   const paths = resolveGovernancePaths(options.cwd, options.type);
 
+  // Sanitize once at the orchestrator entry. Both the filename slug and the
+  // template body render against the cleaned form so a title carrying
+  // newlines, tabs, or control characters cannot inject markdown blocks
+  // into the scaffolded artifact.
+  const cleanTitle = sanitizeArtifactTitle(options.title);
+
   const id = internals.forceId ?? getNextArtifactId(paths.targetDir);
-  const filename = formatArtifactFilename(id, options.title);
+  const filename = formatArtifactFilename(id, cleanTitle);
   const filePath = path.join(paths.targetDir, filename);
 
   // Collision guard — hard error per spec (no --force, no auto-bump).
@@ -401,7 +431,7 @@ export function scaffoldGovernanceArtifact(
   const rendered = renderArtifactTemplate({
     type: options.type,
     id,
-    title: options.title,
+    title: cleanTitle,
     templatePath: paths.templatePath,
     date,
   });

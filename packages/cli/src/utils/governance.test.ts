@@ -169,6 +169,34 @@ describe('formatArtifactFilename', () => {
   });
 });
 
+describe('sanitizeArtifactTitle', () => {
+  it('replaces newlines, tabs, and other C0 control characters with spaces', async () => {
+    const { sanitizeArtifactTitle } = await import('./governance.js');
+    expect(sanitizeArtifactTitle('Fix\n## Fake Heading')).toBe('Fix ## Fake Heading');
+    expect(sanitizeArtifactTitle('Multi\tline\rtext')).toBe('Multi line text');
+    expect(sanitizeArtifactTitle('bellecho')).toBe('bell echo');
+  });
+
+  it('strips DEL (0x7F)', async () => {
+    const { sanitizeArtifactTitle } = await import('./governance.js');
+    expect(sanitizeArtifactTitle('helloworld')).toBe('hello world');
+  });
+
+  it('collapses runs of whitespace and trims edges', async () => {
+    const { sanitizeArtifactTitle } = await import('./governance.js');
+    expect(sanitizeArtifactTitle('   multiple    spaces    ')).toBe('multiple spaces');
+  });
+
+  it('preserves `#` and other markdown-meaningful characters that stay single-line-safe', async () => {
+    const { sanitizeArtifactTitle } = await import('./governance.js');
+    // `#` inside a single-line heading is still part of the h1, so we don't strip it.
+    expect(sanitizeArtifactTitle('Add # char support')).toBe('Add # char support');
+    // Same for `$`, `{`, `}` — the template renderer uses a keyed replacer so
+    // these cannot inject further substitutions.
+    expect(sanitizeArtifactTitle('Handle $foo and {{X}}')).toBe('Handle $foo and {{X}}');
+  });
+});
+
 describe('renderArtifactTemplate', () => {
   let tmpDir: string;
 
@@ -351,8 +379,8 @@ describe('runPostScaffoldHooks', () => {
 
   it('stages artifact and readme without crashing if docs:inject fails', async () => {
     const warnings: string[] = [];
-    const origWarn = console.warn;
-    console.warn = (msg: unknown) => {
+    const origWarn = console.error;
+    console.error = (msg: unknown) => {
       warnings.push(String(msg));
     };
 
@@ -383,14 +411,14 @@ describe('runPostScaffoldHooks', () => {
       const combined = warnings.join('\n');
       expect(combined).toMatch(/docs:inject/i);
     } finally {
-      console.warn = origWarn;
+      console.error = origWarn;
     }
   });
 
   it('reports staged:false when git add fails but does not throw', async () => {
     const warnings: string[] = [];
-    const origWarn = console.warn;
-    console.warn = (msg: unknown) => {
+    const origWarn = console.error;
+    console.error = (msg: unknown) => {
       warnings.push(String(msg));
     };
 
@@ -413,7 +441,7 @@ describe('runPostScaffoldHooks', () => {
       expect(result.staged).toBe(false);
       expect(warnings.join('\n')).toMatch(/stage|git add/i);
     } finally {
-      console.warn = origWarn;
+      console.error = origWarn;
     }
   });
 });
@@ -487,12 +515,48 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
     expect(written).not.toContain('# ADR-001');
   });
 
+  it('sanitizes titles carrying newlines or control characters before templating', async () => {
+    // Caught by CodeRabbit on PR #1615. A title with embedded newlines
+    // would otherwise inject fresh markdown blocks into the scaffolded
+    // artifact. Orchestrator sanitizes at the entry so both filename and
+    // template body see the cleaned form.
+    initGit(tmpDir);
+    fs.mkdirSync(path.join(tmpDir, 'proposals', 'active'), { recursive: true });
+
+    const exec = (): void => {};
+
+    const { scaffoldGovernanceArtifact } = await import('./governance.js');
+    const result = scaffoldGovernanceArtifact(
+      {
+        type: 'proposal',
+        title: 'Fix the thing\n## Injected Fake Heading\n- Not a real list',
+        cwd: tmpDir,
+      },
+      { exec, date: '2026-04-22' },
+    );
+
+    const written = fs.readFileSync(result.filePath, 'utf-8');
+    // Heading is a single line; no injected newline-bounded blocks.
+    const lines = written.split('\n');
+    expect(lines[0]).toBe(
+      '# Proposal 001: Fix the thing ## Injected Fake Heading - Not a real list',
+    );
+    // Ensure no fresh `##` heading or `-` list item appears at line-start
+    // anywhere in the body above the template's own `## Problem Statement`.
+    const bodyLines = lines.slice(
+      0,
+      lines.findIndex((l) => l === '## Problem Statement'),
+    );
+    const injectedHeading = bodyLines.find((l, i) => i > 0 && l.startsWith('## '));
+    expect(injectedHeading).toBeUndefined();
+  });
+
   it('creates file on disk even when docs:inject is missing', async () => {
     initGit(tmpDir);
     fs.mkdirSync(path.join(tmpDir, 'proposals', 'active'), { recursive: true });
 
-    const origWarn = console.warn;
-    console.warn = () => {};
+    const origWarn = console.error;
+    console.error = () => {};
     try {
       const exec = (cmd: string, args: string[]): void => {
         if (cmd === 'pnpm' && args.includes('docs:inject')) {
@@ -510,7 +574,7 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
       // File must still be on disk despite docs:inject failing.
       expect(fs.existsSync(result.filePath)).toBe(true);
     } finally {
-      console.warn = origWarn;
+      console.error = origWarn;
     }
   });
 
