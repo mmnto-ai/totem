@@ -244,10 +244,13 @@ export function renderArtifactTemplate(opts: RenderTemplateOptions): string {
     template = type === 'proposal' ? DEFAULT_PROPOSAL_TEMPLATE : DEFAULT_ADR_TEMPLATE;
   }
 
+  // Replacer-function form avoids the `$&` / `$1` back-reference trap in
+  // `String.prototype.replace`'s string-replacement mode. A title like
+  // `Fix $foo bug` would otherwise mis-render. See PR #1429 review cycle.
   return template
-    .replace(/\{\{TITLE\}\}/g, title)
-    .replace(/\{\{DATE\}\}/g, date)
-    .replace(/\{\{ID\}\}/g, id);
+    .replace(/\{\{TITLE\}\}/g, () => title)
+    .replace(/\{\{DATE\}\}/g, () => date)
+    .replace(/\{\{ID\}\}/g, () => id);
 }
 
 // ─── Post-scaffold hooks ────────────────────────────────

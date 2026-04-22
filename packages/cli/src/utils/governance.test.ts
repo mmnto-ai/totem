@@ -252,6 +252,29 @@ describe('renderArtifactTemplate', () => {
     // Both occurrences of each variable should be substituted.
     expect(rendered).toBe('X / X / 2026-04-21 / 2026-04-21\n');
   });
+
+  it('renders titles containing `$` characters literally (no back-reference interpretation)', async () => {
+    // `String.prototype.replace` interprets `$&`, `$1`, etc. in the
+    // replacement string as back-references. Titles can legitimately
+    // contain `$` (prices, shell variable names, etc.) and must not be
+    // mangled. The implementation uses a replacer-function form to dodge
+    // this trap; see PR #1429 for the canonical bug class.
+    const tplDir = path.join(tmpDir, 'templates');
+    fs.mkdirSync(tplDir, { recursive: true });
+    const tplPath = path.join(tplDir, 'proposal.md');
+    fs.writeFileSync(tplPath, '# {{TITLE}}\n', 'utf-8');
+
+    const { renderArtifactTemplate } = await import('./governance.js');
+    const rendered = renderArtifactTemplate({
+      type: 'proposal',
+      id: '001',
+      title: 'Fix $foo and $& and $1 in ledger',
+      templatePath: tplPath,
+      date: '2026-04-22',
+    });
+
+    expect(rendered).toBe('# Fix $foo and $& and $1 in ledger\n');
+  });
 });
 
 describe('runPostScaffoldHooks', () => {
