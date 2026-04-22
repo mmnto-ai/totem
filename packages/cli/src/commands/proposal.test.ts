@@ -7,7 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanTmpDir } from '../test-utils.js';
 
 function makeTmpDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'totem-proposal-'));
+  // Canonicalize via realpathSync for macOS `/tmp -> /private/tmp` and
+  // Windows short-name parity with `git rev-parse --show-toplevel`.
+  return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-proposal-')));
 }
 
 function initGit(dir: string): void {

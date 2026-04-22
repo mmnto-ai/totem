@@ -7,7 +7,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanTmpDir } from '../test-utils.js';
 
 function makeTmpDir(prefix = 'totem-gov-'): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  // Canonicalize via realpathSync so `/tmp -> /private/tmp` on macOS and
+  // Windows short-name `RUNNER~1` paths both collapse to the same form
+  // `git rev-parse --show-toplevel` returns. Without this, path-equality
+  // assertions fail on macos-latest and windows-latest CI runners while
+  // passing on ubuntu.
+  return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
 }
 
 function initGit(dir: string): void {
