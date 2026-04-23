@@ -132,7 +132,7 @@ When the lesson carries such a guard AND the guard cannot be captured structural
 }
 \`\`\`
 
-The \`reasonCode\` field is optional and narrow — \`"context-required"\` is the only value you may emit. Absence of the field means the existing generic out-of-scope classification applies.
+The \`reasonCode\` field is optional and narrow — \`"context-required"\` and \`"semantic-analysis-required"\` (see Semantic Analysis Classifier below) are the only values you may emit. Absence of the field means the existing generic out-of-scope classification applies.
 
 **Worked examples (DO emit \`context-required\`):**
 
@@ -520,7 +520,7 @@ When you cannot write a regex that distinguishes the Bad lines from the Good lin
 }
 \`\`\`
 
-The \`reasonCode\` field is optional and narrow — \`"context-required"\` is the only value you may emit. Absence of the field keeps the default classification.
+The \`reasonCode\` field is optional and narrow — \`"context-required"\` and \`"semantic-analysis-required"\` (see Semantic Analysis Classifier below) are the only values you may emit. Absence of the field keeps the default classification.
 
 **Anti-lazy guard:** when \`fileGlobs\` CAN express the distinguishing scope (e.g., "only in JSON files", "only in test files"), compile normally with the appropriate glob. Only fall back to \`context-required\` when the structural tools genuinely cannot reach the guard.
 

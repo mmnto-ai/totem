@@ -1125,6 +1125,15 @@ export async function compileCommand(
                 failed++;
                 continue;
               }
+              // Upgrade/force sweep: clear any stale ledger entry (including
+              // permanent classifier codes) when the user is deliberately
+              // re-compiling via --upgrade or --force. Mirrors the local
+              // compiled branch's upgrade-target prune for cloud parity
+              // (GCA mmnto-ai/totem#1640 round-1 finding; previously only the local
+              // compiled branch had this prune).
+              if (upgradeTargets?.has(lesson.hash) || options.force) {
+                nonCompilableMap.delete(lesson.hash);
+              }
               // mmnto-ai/totem#1627 stale-ledger prune (cloud path): mirror
               // the local `compiled` branch's sweep of any stale
               // retry-pending ledger entry so cloud and local cycles
