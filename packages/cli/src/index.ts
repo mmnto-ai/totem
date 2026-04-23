@@ -784,6 +784,20 @@ lessonCmd
   });
 
 lessonCmd
+  .command('archive <hash>')
+  .description('Archive a compiled rule (flip status, refresh manifest, regenerate exports)')
+  .option('--reason <string>', 'Reason for archiving (recorded in archivedReason)')
+  .action(async (hash: string, opts: { reason?: string }) => {
+    try {
+      const { lessonArchiveCommand } = await import('./commands/lesson.js');
+      await lessonArchiveCommand(hash, opts);
+    } catch (err) {
+      handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
+      throw err;
+    }
+  });
+
+lessonCmd
   .command('compile')
   .description('Compile lessons into deterministic regex rules')
   .option('--raw', 'Output compiler prompts without LLM synthesis')
@@ -803,6 +817,10 @@ lessonCmd
     '--upgrade <hash>',
     'Re-compile a single rule with telemetry-driven ast-grep guidance (mmnto/totem#1131)',
   )
+  .option(
+    '--refresh-manifest',
+    'Recompute compile-manifest.json output_hash from current compiled-rules.json (no LLM; mmnto-ai/totem#1587)',
+  )
   .action(
     async (opts: {
       raw?: boolean;
@@ -816,6 +834,7 @@ lessonCmd
       cloud?: string;
       verbose?: boolean;
       upgrade?: string;
+      refreshManifest?: boolean;
     }) => {
       try {
         const { compileCommand } = await import('./commands/compile.js');

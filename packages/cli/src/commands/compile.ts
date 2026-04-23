@@ -72,6 +72,16 @@ export interface CompileOptions {
     /** Telemetry directive to inject into the Pipeline 2 prompt for this lesson. */
     telemetryPrefix?: string;
   }>;
+  /**
+   * Recompute `compile-manifest.json`'s `output_hash` from the current
+   * `compiled-rules.json` state without invoking the LLM or touching any
+   * lessons (mmnto-ai/totem#1587). Exists to support the postmerge
+   * inline-archive workflow where a curation script mutates
+   * `status: 'archived'` on a rule directly; `--refresh-manifest` is the
+   * blessed way to re-sync the manifest afterwards. Cannot combine with
+   * `--force`.
+   */
+  refreshManifest?: boolean;
 }
 
 // ─── Telemetry directive (mmnto/totem#1131) ────────────────────
@@ -426,6 +436,42 @@ export async function compileCommand(
   const totemDir = path.join(cwd, config.totemDir);
   const rulesPath = path.join(totemDir, COMPILED_RULES_FILE);
 
+  // ─── --refresh-manifest primitive (mmnto-ai/totem#1587) ─────────
+  // No-LLM path that recomputes `output_hash` from current
+  // `compiled-rules.json` state. Supports the postmerge inline-archive
+  // workflow where a curation script mutates `status: 'archived'` on a
+  // rule directly. Preflights the manifest read before any write
+  // (mmnto-ai/totem#1601 CR pattern): missing/corrupt manifest fails
+  // loud without side effects.
+  if (options.refreshManifest) {
+    if (options.force) {
+      throw new TotemConfigError(
+        '--refresh-manifest cannot be combined with --force.',
+        '--refresh-manifest is a no-LLM primitive that only recomputes output_hash. Use one or the other, not both.',
+        'CONFIG_INVALID',
+      );
+    }
+    const manifestPath = path.join(totemDir, 'compile-manifest.json');
+    if (!fs.existsSync(rulesPath)) {
+      throw new TotemError(
+        'NO_RULES',
+        `No compiled-rules.json at ${rulesPath}.`,
+        "Run 'totem lesson compile' first to generate the rules file.",
+      );
+    }
+    const compileManifest = readCompileManifest(manifestPath);
+    const freshOutputHash = generateOutputHash(rulesPath);
+    if (compileManifest.output_hash === freshOutputHash) {
+      log.info(TAG, 'Manifest already fresh — no changes.');
+      return;
+    }
+    compileManifest.output_hash = freshOutputHash;
+    compileManifest.compiled_at = new Date().toISOString();
+    writeCompileManifest(manifestPath, compileManifest);
+    log.success(TAG, `Manifest refreshed: output_hash ${freshOutputHash.slice(0, 8)}…`);
+    return;
+  }
+
   const lessons = readAllLessons(totemDir);
 
   // Ingest cursor instructions if --from-cursor
@@ -643,9 +689,13 @@ export async function compileCommand(
 
   // ─── Phase 1: Regex compilation (requires orchestrator) ──
   if (config.orchestrator) {
-    const existingFile: CompiledRulesFile = options.force
-      ? { version: 1, rules: [], nonCompilable: [] }
-      : loadCompiledRulesFile(rulesPath);
+    // Always load the existing file so lifecycle fields (status,
+    // archivedReason, archivedAt) survive --force recompile (mmnto-ai/
+    // totem#1587). The cache-skip logic below gates on !options.force so
+    // every lesson still goes through the compile loop under --force;
+    // buildCompiledRule then pulls the lifecycle fields from `existing`
+    // onto the new rule via preserveLifecycleFields.
+    const existingFile: CompiledRulesFile = loadCompiledRulesFile(rulesPath);
     const existingRules = existingFile.rules;
     const existingByHash = new Map(existingRules.map((r) => [r.lessonHash, r]));
     // mmnto/totem#1280 + mmnto-ai/totem#1481: in-memory nonCompilable is
@@ -654,11 +704,17 @@ export async function compileCommand(
     // strings and 2-tuples to the 4-tuple shape (reasonCode:
     // 'legacy-unknown') before we reach this block, so existingFile.
     // nonCompilable is always 4-tuple-shaped here.
+    //
+    // --force resets the nonCompilable ledger so previously-failed
+    // lessons get re-attempted with whatever prompt improvements landed.
+    // Failures that happen this pass re-populate the map.
     const nonCompilableMap = new Map<string, NonCompilableMapValue>(
-      (existingFile.nonCompilable ?? []).map((entry) => [
-        entry.hash,
-        { title: entry.title, reasonCode: entry.reasonCode, reason: entry.reason },
-      ]),
+      options.force
+        ? []
+        : (existingFile.nonCompilable ?? []).map((entry) => [
+            entry.hash,
+            { title: entry.title, reasonCode: entry.reasonCode, reason: entry.reason },
+          ]),
     );
 
     // Note: we do NOT delete the --upgrade target from existingByHash here.
@@ -677,8 +733,12 @@ export async function compileCommand(
     for (const lesson of lessonsInScope) {
       const hash = hashLesson(lesson.heading, lesson.body);
       if (!upgradeTargets?.has(hash)) {
-        if (existingByHash.has(hash)) continue; // already compiled
-        if (nonCompilableMap.has(hash)) continue; // cached as non-compilable
+        // --force bypasses both caches: every lesson re-enters the
+        // compile loop so pattern regenerates, while buildCompiledRule
+        // pulls lifecycle fields forward from the existingByHash lookup
+        // (mmnto-ai/totem#1587).
+        if (!options.force && existingByHash.has(hash)) continue; // already compiled
+        if (!options.force && nonCompilableMap.has(hash)) continue; // cached as non-compilable
       }
       toCompile.push({ index: lesson.index, heading: lesson.heading, body: lesson.body, hash });
     }
@@ -812,7 +872,14 @@ export async function compileCommand(
       let skipped = 0;
       let failed = 0;
       const skippedLessons: { heading: string; reason?: string }[] = [];
-      const newRules: CompiledRule[] = [...existingRules];
+      // Under --force, start fresh: every lesson re-enters the compile
+      // loop and produces a new rule, with lifecycle fields preserved via
+      // existingByHash -> buildCompiledRule. Initializing from
+      // existingRules would double-count each re-compiled rule
+      // (mmnto-ai/totem#1587). The dangling-archive guard is implicit:
+      // rules whose source lesson was deleted are never re-compiled under
+      // --force so they drop naturally.
+      const newRules: CompiledRule[] = options.force ? [] : [...existingRules];
 
       const currentHashes = new Set(lessons.map((l) => hashLesson(l.heading, l.body)));
       const freshRules = newRules.filter((r) => currentHashes.has(r.lessonHash));

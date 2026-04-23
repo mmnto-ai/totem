@@ -332,6 +332,27 @@ export interface BuildCompiledRuleOptions {
 }
 
 /**
+ * Extract archive lifecycle fields from an existing compiled rule so they
+ * carry forward during `--force` recompile (mmnto-ai/totem#1587). Lifecycle
+ * fields are additive state owned by `totem lesson archive` and the
+ * postmerge curation scripts; `--force` regenerates the pattern but must
+ * not silently un-archive. `createdAt` is preserved separately at each
+ * engine site because its fallback is `now` rather than absent.
+ *
+ * The dangling-archive guard is implicit: a lesson whose source was
+ * deleted is not in `toCompile`, so buildCompiledRule is never called
+ * for it, so its lifecycle fields are never resurrected onto new output.
+ */
+function preserveLifecycleFields(existing: CompiledRule | undefined): Partial<CompiledRule> {
+  if (!existing) return {};
+  const preserved: Partial<CompiledRule> = {};
+  if (existing.status !== undefined) preserved.status = existing.status;
+  if (existing.archivedReason !== undefined) preserved.archivedReason = existing.archivedReason;
+  if (existing.archivedAt !== undefined) preserved.archivedAt = existing.archivedAt;
+  return preserved;
+}
+
+/**
  * Build a CompiledRule from parsed compiler output.
  * Returns { rule, rejectReason } so callers can report why a rule was rejected.
  */
@@ -414,6 +435,7 @@ export function buildCompiledRule(
       ...engineFields('ast-grep', astSource),
       compiledAt: now,
       createdAt: existing?.createdAt ?? now,
+      ...preserveLifecycleFields(existing),
       ...globsObj,
       ...badExampleObj,
       ...goodExampleObj,
@@ -431,6 +453,7 @@ export function buildCompiledRule(
       ...engineFields('ast', parsed.astQuery),
       compiledAt: now,
       createdAt: existing?.createdAt ?? now,
+      ...preserveLifecycleFields(existing),
       ...globsObj,
       ...badExampleObj,
       ...goodExampleObj,
@@ -464,6 +487,7 @@ export function buildCompiledRule(
       ...engineFields('regex', parsed.pattern),
       compiledAt: now,
       createdAt: existing?.createdAt ?? now,
+      ...preserveLifecycleFields(existing),
       ...globsObj,
       ...badExampleObj,
       ...goodExampleObj,
@@ -657,6 +681,7 @@ export function buildManualRule(
       ...engineFields(manual.engine, engineFieldArgs),
       compiledAt: now,
       createdAt: existing?.createdAt ?? now,
+      ...preserveLifecycleFields(existing),
       ...(sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {}),
     },
   };
