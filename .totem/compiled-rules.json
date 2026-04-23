@@ -7283,10 +7283,9 @@
     {
       "lessonHash": "8dbddb677f738249",
       "lessonHeading": "Warn on non-critical hook failures",
+      "pattern": "",
       "message": "Post-scaffold hooks (e.g. git add, doc injection) should warn-and-continue rather than re-throwing in catch blocks, to avoid leaving artifacts in a half-finished state.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepYamlRule": {
         "rule": {
           "kind": "throw_statement",
@@ -7296,6 +7295,8 @@
           }
         }
       },
+      "badExample": "try {\n  await gitAdd(files);\n} catch (err) {\n  throw new Error(`git add failed: ${err}`);\n}",
+      "goodExample": "try {\n  await gitAdd(files);\n} catch (err) {\n  console.warn(`git add failed, continuing: ${err}`);\n}",
       "compiledAt": "2026-04-23T00:14:18.341Z",
       "createdAt": "2026-04-23T00:14:18.341Z",
       "fileGlobs": [
@@ -7303,12 +7304,63 @@
         "!**/*.test.*",
         "!**/*.spec.*"
       ],
-      "badExample": "try {\n  await gitAdd(files);\n} catch (err) {\n  throw new Error(`git add failed: ${err}`);\n}",
-      "goodExample": "try {\n  await gitAdd(files);\n} catch (err) {\n  console.warn(`git add failed, continuing: ${err}`);\n}",
-      "unverified": true,
+      "severity": "warning",
       "status": "archived",
       "archivedReason": "Pattern `throw_statement` inside `catch_clause` fires on every re-throw in packages/**/*.ts, not just the post-scaffold-hook catches the lesson targets. Directly contradicts `lesson-fail-open-catch-ban` (bans silent-swallow semantics for non-terminal handlers). Terminal-handler refinement tracked in #1614. The lesson itself is valid guidance for scaffold-orchestrator code paths, but the context constraint (post-scaffold hooks only) cannot be captured structurally via ast-grep. Sibling class to #1598 (compile-worker context-sensitive lesson extraction gap). Archived during PR #1615 postmerge 2026-04-22.",
-      "archivedAt": "2026-04-23T00:14:18.341Z"
+      "archivedAt": "2026-04-23T00:14:18.341Z",
+      "unverified": true
+    },
+    {
+      "lessonHash": "7c442ee7110e0f08",
+      "lessonHeading": "Conditional archival metadata preservation",
+      "pattern": "",
+      "message": "Only preserve archivedReason/archivedAt when existing item status is 'archived' — guard these fields inside an if-statement checking status",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "kind": "pair",
+          "has": {
+            "kind": "property_identifier",
+            "regex": "^(archivedReason|archivedAt)$"
+          },
+          "not": {
+            "inside": {
+              "kind": "if_statement",
+              "stopBy": "end"
+            }
+          }
+        }
+      },
+      "badExample": "const merged = { ...existing, archivedReason: existing.archivedReason, archivedAt: existing.archivedAt };",
+      "goodExample": "if (existing.status === 'archived') { merged.archivedReason = existing.archivedReason; merged.archivedAt = existing.archivedAt; }",
+      "compiledAt": "2026-04-23T02:48:31.602Z",
+      "createdAt": "2026-04-23T02:48:31.602Z",
+      "fileGlobs": [
+        "packages/core/src/compile-lesson.ts"
+      ],
+      "severity": "warning",
+      "unverified": true
+    },
+    {
+      "lessonHash": "6062411790b92591",
+      "lessonHeading": "Use TotemError for CLI validation",
+      "pattern": "",
+      "message": "Use TotemError instead of TotemConfigError for CLI-layer validation to maintain proper architectural boundaries between the CLI and core packages.",
+      "engine": "ast-grep",
+      "astGrepPattern": "new TotemConfigError($$$ARGS)",
+      "badExample": "throw new TotemConfigError('Invalid config value');",
+      "goodExample": "throw new TotemError('Invalid config value');",
+      "compiledAt": "2026-04-23T02:48:19.510Z",
+      "createdAt": "2026-04-23T02:48:19.510Z",
+      "fileGlobs": [
+        "packages/cli/**/*.ts",
+        "!**/*.test.*"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "Pattern `new TotemConfigError($$$ARGS)` fires on every CLI-layer use, contradicting the declined GCA finding on PR mmnto-ai/totem#1629. TotemConfigError is used in 10+ CLI files (7x in compile.ts alone) for flag-conflict validation per the canonical compile.ts:486 --upgrade/upgradeBatch precedent. The source lesson reflects GCA's hallucinated-rule-citation argument; adopting it as a rule would codify the false claim as project policy. Taxonomy refinement for CLI vs core error classes is tracked in mmnto-ai/totem#1630, not via a blanket ban on TotemConfigError.",
+      "archivedAt": "2026-04-23T02:49:57.677Z"
     }
   ],
   "nonCompilable": [
@@ -12128,6 +12180,36 @@
       "title": "Spy on logger contracts in tests",
       "reasonCode": "out-of-scope",
       "reason": "The lesson describes an architectural testing principle — prefer asserting on logger method calls over internal transport outputs — which cannot be expressed as a structural code pattern. There is no specific forbidden API, import, or syntax to detect; the violation depends on understanding what constitutes 'internal transport output' versus 'high-level logger methods', which requires semantic reasoning beyond what regex or AST patterns can capture."
+    },
+    {
+      "hash": "190990d0af1c74da",
+      "title": "Validate rules before manifest refresh",
+      "reasonCode": "out-of-scope",
+      "reason": "The lesson describes an architectural/procedural requirement — preload and validate a file before updating its manifest hash — which is a multi-step ordering constraint across function calls and control flow. There is no single detectable code pattern (e.g., a forbidden call, import, or construct) that reliably distinguishes a violation from correct code without understanding the full execution order and validation logic present in the surrounding context."
+    },
+    {
+      "hash": "a6ec2f12489697d4",
+      "title": "Treat duplicate hashes as data corruption",
+      "reasonCode": "out-of-scope",
+      "reason": "The lesson describes an architectural/behavioral principle about how to handle duplicate hashes (fail fast on data corruption vs. treating them as ambiguous prefixes). This is a design decision about control flow semantics that cannot be expressed as a detectable code pattern — there is no specific syntactic construct whose presence or absence indicates whether duplicates are treated as corruption."
+    },
+    {
+      "hash": "3c1e19d4f06ee756",
+      "title": "Initialize working sets from existing data",
+      "reasonCode": "out-of-scope",
+      "reason": "The lesson describes a defensive initialization pattern (copy existing data before overwriting during forced updates) that requires understanding the semantic intent of variable assignments and control flow context. There is no reliable structural pattern that distinguishes 'working set initialized from existing data' vs 'working set initialized empty' without false positives — the rule depends on business logic about what constitutes a 'forced update' path and what data should be preserved, which cannot be expressed as a regex or AST pattern."
+    },
+    {
+      "hash": "73c6a012f2ac3c72",
+      "title": "Enforce exclusivity for manifest refresh",
+      "reasonCode": "out-of-scope",
+      "reason": "The lesson describes a semantic/logical constraint between two CLI flags (--refresh-manifest and --force must be mutually exclusive). Detecting whether the argument parser enforces this exclusivity requires understanding the control flow and option validation logic across the command handler, which cannot be expressed as a structural AST pattern or regex match against source lines."
+    },
+    {
+      "hash": "8c40d9dcbcd723ce",
+      "title": "Mirror local cleanup in cloud paths",
+      "reasonCode": "out-of-scope",
+      "reason": "The lesson describes an architectural/behavioral requirement — that cloud compilation paths must mirror local cleanup logic when a lesson is marked non-compilable. This is a design/flow correctness concern (ensuring a delete/remove call exists in a specific conditional branch) that cannot be reliably expressed as a structural AST or regex pattern without high false-positive or false-negative rates. The rule depends on understanding the semantic intent of a broader control flow (what happens when compilable===false in the cloud path vs. local path), which is beyond what a single-node ast-grep pattern or regex can capture."
     }
   ]
 }
