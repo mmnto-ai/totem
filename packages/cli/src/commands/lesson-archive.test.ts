@@ -215,6 +215,54 @@ describe('lessonArchiveCommand (#1587)', () => {
     expect(fs.readFileSync(manifestPath, 'utf-8')).toBe(manifestBefore);
   });
 
+  it('fails before mutating compiled-rules.json when compile-manifest.json is corrupt', async () => {
+    // Load-bearing atomicity contract (CR finding on PR #1629): the
+    // preflight manifest read must fail out BEFORE any write to
+    // compiled-rules.json. A corrupt manifest must not leave the rules
+    // file half-archived.
+    setupWorkspace(tmpDir, [{ lessonHash: 'abc123def456abcd', lessonHeading: 'Use err in catch' }]);
+
+    const totemDir = path.join(tmpDir, '.totem');
+    const rulesPath = path.join(totemDir, 'compiled-rules.json');
+    const manifestPath = path.join(totemDir, 'compile-manifest.json');
+
+    fs.writeFileSync(manifestPath, '{ this is: not valid json }', 'utf-8');
+    const rulesBefore = fs.readFileSync(rulesPath, 'utf-8'); // totem-ignore — test-fixture read, not static-analysis path
+
+    await expect(
+      lessonArchiveCommand('abc123def456abcd', { reason: 'should not apply' }),
+    ).rejects.toMatchObject({ code: 'PARSE_FAILED' });
+
+    // compiled-rules.json must be untouched.
+    expect(fs.readFileSync(rulesPath, 'utf-8')).toBe(rulesBefore); // totem-ignore — test-fixture read, not static-analysis path
+  });
+
+  it('fails before mutating compiled-rules.json when compiled-rules.json itself has duplicate hashes', async () => {
+    // Data-corruption surface (CR finding on PR mmnto-ai/totem#1629): duplicate full
+    // hashes are not prefix ambiguity; fail fast with a distinct signal.
+    setupWorkspace(tmpDir, [{ lessonHash: 'abc123def456abcd', lessonHeading: 'Rule A' }]);
+
+    const totemDir = path.join(tmpDir, '.totem');
+    const rulesPath = path.join(totemDir, 'compiled-rules.json');
+    const manifestPath = path.join(totemDir, 'compile-manifest.json');
+
+    // Rewrite the rules file with two entries carrying the SAME lessonHash.
+    const rulesJson = JSON.parse(fs.readFileSync(rulesPath, 'utf-8')); // totem-ignore — test-fixture read, not static-analysis path
+    rulesJson.rules.push({ ...rulesJson.rules[0], lessonHeading: 'Rule A duplicate' });
+    fs.writeFileSync(rulesPath, JSON.stringify(rulesJson, null, 2) + '\n', 'utf-8');
+
+    const rulesBefore = fs.readFileSync(rulesPath, 'utf-8'); // totem-ignore — test-fixture read, not static-analysis path
+    const manifestBefore = fs.readFileSync(manifestPath, 'utf-8'); // totem-ignore — test-fixture read, not static-analysis path
+
+    await lessonArchiveCommand('abc123def456abcd', { reason: 'duplicate' });
+
+    expect(process.exitCode).toBe(1);
+    process.exitCode = 0;
+
+    expect(fs.readFileSync(rulesPath, 'utf-8')).toBe(rulesBefore);
+    expect(fs.readFileSync(manifestPath, 'utf-8')).toBe(manifestBefore);
+  });
+
   it('uses a default reason when --reason is omitted', async () => {
     setupWorkspace(tmpDir, [{ lessonHash: 'abc123def456abcd', lessonHeading: 'Use err in catch' }]);
 

@@ -154,12 +154,41 @@ export async function lessonArchiveCommand(id: string, opts: { reason?: string }
   const manifestPath = path.join(totemDir, 'compile-manifest.json');
 
   if (!fs.existsSync(rulesPath)) {
-    log.error('Totem Error', `No compiled-rules.json at ${rulesPath}. Run 'totem compile' first.`);
+    log.error(
+      'Totem Error',
+      `No compiled-rules.json at ${rulesPath}. Run 'totem lesson compile' first.`,
+    );
     process.exitCode = 1;
     return;
   }
 
   const rulesFile = loadCompiledRulesFile(rulesPath);
+
+  // Pre-index pass with duplicate-collision abort (CR finding on PR mmnto-ai/totem#1629).
+  // Duplicate full hashes in compiled-rules.json are data corruption, not
+  // prefix ambiguity; the "provide more characters to disambiguate" hint
+  // is impossible to satisfy when the full hash itself collides. Surface
+  // this as a distinct failure mode before prefix resolution runs.
+  const byHash = new Map<string, CompiledRule>();
+  const duplicates = new Set<string>();
+  for (const r of rulesFile.rules) {
+    const key = r.lessonHash.toLowerCase();
+    if (byHash.has(key)) {
+      duplicates.add(key);
+    } else {
+      byHash.set(key, r);
+    }
+  }
+  if (duplicates.size > 0) {
+    log.error(
+      'Totem Error',
+      `compiled-rules.json contains duplicate lessonHash entries: ${[...duplicates].join(', ')}`,
+    );
+    log.dim(TAG, 'This is data corruption. Run `totem verify-manifest` and investigate.');
+    process.exitCode = 1;
+    return;
+  }
+
   const matches = rulesFile.rules.filter((r: CompiledRule) =>
     r.lessonHash.toLowerCase().startsWith(id.toLowerCase()),
   );

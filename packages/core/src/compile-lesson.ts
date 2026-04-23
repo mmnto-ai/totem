@@ -347,8 +347,14 @@ function preserveLifecycleFields(existing: CompiledRule | undefined): Partial<Co
   if (!existing) return {};
   const preserved: Partial<CompiledRule> = {};
   if (existing.status !== undefined) preserved.status = existing.status;
-  if (existing.archivedReason !== undefined) preserved.archivedReason = existing.archivedReason;
-  if (existing.archivedAt !== undefined) preserved.archivedAt = existing.archivedAt;
+  // archivedReason and archivedAt are only meaningful when status is
+  // 'archived'. Copying them onto an active rule (or one with absent
+  // status) would leave the rule in a half-archived state that later
+  // lesson-archive idempotency logic cannot safely untangle.
+  if (existing.status === 'archived') {
+    if (existing.archivedReason !== undefined) preserved.archivedReason = existing.archivedReason;
+    if (existing.archivedAt !== undefined) preserved.archivedAt = existing.archivedAt;
+  }
   return preserved;
 }
 

@@ -182,6 +182,25 @@ export function pruneStaleRules(
   return { fresh, pruned: rules.length - fresh.length };
 }
 
+/**
+ * Replace-by-lessonHash if an entry with the same hash is already in the
+ * array; otherwise append. Preserves array order for existing entries so
+ * the compile loop's output stays stable across runs.
+ *
+ * Used by the --force durability path (mmnto-ai/totem#1587) and the
+ * non-force add-new-rule path: all success-side pushes go through this
+ * helper so transient compile failures leave old rules intact and
+ * repeated successes do not double-insert.
+ */
+export function upsertRule(rules: CompiledRule[], rule: CompiledRule): void {
+  const idx = rules.findIndex((r) => r.lessonHash === rule.lessonHash);
+  if (idx >= 0) {
+    rules[idx] = rule;
+  } else {
+    rules.push(rule);
+  }
+}
+
 // ─── Verbose trace renderer (mmnto-ai/totem#1482) ──
 
 /**
@@ -459,6 +478,13 @@ export async function compileCommand(
         "Run 'totem lesson compile' first to generate the rules file.",
       );
     }
+    // Validate compiled-rules.json by parsing it through the schema
+    // BEFORE refreshing the manifest. Without this, a corrupt rules file
+    // gets its new byte-level hash written to the manifest and
+    // verify-manifest stops surfacing the corruption — silent drift.
+    // loadCompiledRulesFile throws TotemParseError on malformed JSON or
+    // schema violations (CR finding on PR mmnto-ai/totem#1629).
+    const compiledRulesFile = loadCompiledRulesFile(rulesPath);
     const compileManifest = readCompileManifest(manifestPath);
     const freshOutputHash = generateOutputHash(rulesPath);
     if (compileManifest.output_hash === freshOutputHash) {
@@ -467,6 +493,7 @@ export async function compileCommand(
     }
     compileManifest.output_hash = freshOutputHash;
     compileManifest.compiled_at = new Date().toISOString();
+    compileManifest.rule_count = compiledRulesFile.rules.length;
     writeCompileManifest(manifestPath, compileManifest);
     log.success(TAG, `Manifest refreshed: output_hash ${freshOutputHash.slice(0, 8)}…`);
     return;
@@ -872,14 +899,14 @@ export async function compileCommand(
       let skipped = 0;
       let failed = 0;
       const skippedLessons: { heading: string; reason?: string }[] = [];
-      // Under --force, start fresh: every lesson re-enters the compile
-      // loop and produces a new rule, with lifecycle fields preserved via
-      // existingByHash -> buildCompiledRule. Initializing from
-      // existingRules would double-count each re-compiled rule
-      // (mmnto-ai/totem#1587). The dangling-archive guard is implicit:
-      // rules whose source lesson was deleted are never re-compiled under
-      // --force so they drop naturally.
-      const newRules: CompiledRule[] = options.force ? [] : [...existingRules];
+      // Always initialize newRules from existingRules so transient compile
+      // failures (network/rate-limit/manual reject/example-verification/
+      // cloud parse) under --force do NOT silently drop rules. Each push
+      // site uses upsertRule below to replace-by-lessonHash on successful
+      // compile, so the old rule survives when a new rule fails to
+      // produce (CR finding on PR mmnto-ai/totem#1629). Dangling-archive guard still
+      // runs via the currentHashes filter below.
+      const newRules: CompiledRule[] = [...existingRules];
 
       const currentHashes = new Set(lessons.map((l) => hashLesson(l.heading, l.body)));
       const freshRules = newRules.filter((r) => currentHashes.has(r.lessonHash));
@@ -946,7 +973,7 @@ export async function compileCommand(
                 );
               }
             }
-            newRules.push(manualResult.rule);
+            upsertRule(newRules, manualResult.rule);
             compiled++;
             logCompiledRule(log, lesson, manualResult.rule);
           } else if (manualResult.rejectReason) {
@@ -1056,7 +1083,7 @@ export async function compileCommand(
                 failed++;
                 continue;
               }
-              newRules.push(ruleResult.rule);
+              upsertRule(newRules, ruleResult.rule);
               compiled++;
               logCompiledRule(log, lesson, ruleResult.rule);
             } else {
@@ -1132,15 +1159,20 @@ export async function compileCommand(
               process.stdout.write(block + '\n');
             }
 
-            // Upgrade targets: remove the stale copy from newRules for any
-            // terminal outcome where the rule's state CHANGES (compiled -> new
-            // pattern replaces old; skipped -> rule moves to nonCompilable and
-            // must no longer appear as an active rule). For `failed`
-            // (transient error) and `noop` (no change), leave the old rule
-            // intact so a flaky network / rate-limit doesn't silently delete
-            // work (mmnto/totem#1234 GCA finding).
+            // Upgrade and --force: remove the stale copy from newRules for
+            // any terminal outcome where the rule's state CHANGES (compiled
+            // -> new pattern replaces old via upsertRule below; skipped ->
+            // rule moves to nonCompilable and must no longer appear as an
+            // active rule). For `failed` (transient error) and `noop` (no
+            // change), leave the old rule intact so a flaky network /
+            // rate-limit doesn't silently delete work (mmnto/totem#1234
+            // GCA finding; mmnto-ai/totem#1587 extension to cover --force).
+            //
+            // The `compiled` case is redundant with upsertRule's replace-
+            // by-hash semantics, but the splice still matters for `skipped`
+            // where no rule is pushed back.
             if (
-              upgradeTargets?.has(lesson.hash) &&
+              (upgradeTargets?.has(lesson.hash) || options.force) &&
               (result.status === 'compiled' || result.status === 'skipped')
             ) {
               const staleIdx = newRules.findIndex((r) => r.lessonHash === lesson.hash);
@@ -1190,7 +1222,7 @@ export async function compileCommand(
                 if (upgradeTargets?.has(lesson.hash)) {
                   nonCompilableMap.delete(lesson.hash);
                 }
-                newRules.push(result.rule);
+                upsertRule(newRules, result.rule);
                 compiled++;
                 logCompiledRule(log, lesson, result.rule);
                 break;
