@@ -98,6 +98,15 @@ export class RegexEvaluator {
    */
   private respawnPromise: Promise<void> | null = null;
   /**
+   * Worker-online gate (mmnto-ai/totem#1641, CI round-1 fix). The Node
+   * `Worker` constructor returns before the thread is actually running
+   * (thread-spawn takes ~30-50ms). If `evaluate()` starts its timeout
+   * timer before the worker is online, a slow CI box can trip a
+   * spurious timeout on the first batch. Gate postMessage on this
+   * promise so cold-start cost never counts against the budget.
+   */
+  private workerReady: Promise<void> = Promise.resolve();
+  /**
    * Consecutive-respawn counter (Shield review round-1). If the worker
    * keeps dying at spawn time (missing worker.js, syntax error in the
    * worker script, etc.), unbounded respawn becomes a CPU-pegging loop.
@@ -148,6 +157,12 @@ export class RegexEvaluator {
     if (this.respawnPromise) {
       await this.respawnPromise;
     }
+
+    // Wait for the worker thread to finish spawning before posting.
+    // Cold-start (thread spawn + module load) is ~30-50ms and must not
+    // count against the batch timeout budget, otherwise a slow CI box
+    // trips a spurious timeout on the first batch (CI round-1 fix).
+    await this.workerReady;
 
     try {
       return await this.evaluateOnce(input);
@@ -218,9 +233,13 @@ export class RegexEvaluator {
   }
 
   private spawnWorker(): void {
-    this.worker = new Worker(resolveWorkerPath());
-    this.worker.on('message', (response: EvaluateResponse) => this.handleMessage(response));
-    this.worker.on('error', () => {
+    const worker = new Worker(resolveWorkerPath());
+    this.worker = worker;
+    this.workerReady = new Promise<void>((resolve) => {
+      worker.once('online', () => resolve());
+    });
+    worker.on('message', (response: EvaluateResponse) => this.handleMessage(response));
+    worker.on('error', () => {
       // Worker crashed outside of a normal message flow (e.g., an
       // internal error). The queued-evaluate lock only releases when
       // the in-flight promise resolves, so we must await respawn before
