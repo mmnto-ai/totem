@@ -1374,6 +1374,79 @@ describe('compileLesson', () => {
     }
   });
 
+  it('routes LLM context-required signal to reasonCode context-required (Pipeline 2, mmnto-ai/totem#1598)', async () => {
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: false,
+        reasonCode: 'context-required',
+        reason:
+          'Lesson constrains scope to an enclosing function ("inside _process") the pattern cannot express.',
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('response'),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(lesson, 'system prompt', deps);
+    expect(result.status).toBe('skipped');
+    if (result.status === 'skipped') {
+      expect(result.reasonCode).toBe('context-required');
+    }
+  });
+
+  it('falls back to out-of-scope when LLM omits reasonCode on a non-compilable response', async () => {
+    // Backward compatibility: LLM responses that mark compilable:false without
+    // the reasonCode field continue to route through the generic out-of-scope
+    // exit path. Only the narrow context-required signal opts into the new
+    // classifier bucket.
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: false,
+        reason: 'Describes a conceptual principle, not a code pattern',
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('response'),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(lesson, 'system prompt', deps);
+    expect(result.status).toBe('skipped');
+    if (result.status === 'skipped') {
+      expect(result.reasonCode).toBe('out-of-scope');
+    }
+  });
+
+  it('anti-lazy: compiles a structurally-capturable scope-sensitive lesson when LLM supplies a pattern', async () => {
+    // The context-required escape hatch (mmnto-ai/totem#1598) risks lazy-
+    // rejection of lessons whose scope CAN be captured structurally (fileGlobs,
+    // kind-scoped ast-grep, etc.). Lock in that a valid compilable response
+    // with a pattern still compiles even when the lesson body literally
+    // contains the escape-hatch trigger keywords ("inside", "only for new").
+    // The compiler routing must trust `compilable:true` and must not scan the
+    // lesson body for escape-hatch triggers. CR PR mmnto-ai/totem#1639 round-1
+    // flagged that a fixture without scope markers left this invariant
+    // untested; the explicit scope-sensitive body closes that gap.
+    const scopeSensitiveLesson: LessonInput = {
+      index: 0,
+      heading: 'Use logger inside request handlers (anti-lazy #1598)',
+      body: 'Always use logger inside request handlers; only for new handlers, console.log is forbidden. The scope here IS expressible structurally via fileGlobs, so the LLM must compile despite the "inside" and "only for new" trigger keywords in the body.',
+      hash: 'antilazy1598scopesensitive',
+    };
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: true,
+        pattern: 'console\\.log',
+        message: 'Use logger inside request handlers instead of console.log',
+        engine: 'regex' as const,
+        badExample: 'console.log("debug")',
+        goodExample: 'logger.info("debug")',
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('response'),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(scopeSensitiveLesson, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+  });
+
   it('calls onWarn callback on failures', async () => {
     const deps: CompileLessonDeps = {
       parseCompilerResponse: vi.fn().mockReturnValue(null),
@@ -1665,6 +1738,25 @@ describe('compileLesson Pipeline 3 (Bad/Good snippets)', () => {
       pipeline3Lesson.heading,
       expect.stringContaining('Pipeline 3'),
     );
+  });
+
+  it('routes LLM context-required signal to reasonCode context-required (Pipeline 3, mmnto-ai/totem#1598)', async () => {
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: false,
+        reasonCode: 'context-required',
+        reason:
+          'Lesson constrains scope to "only for NEW proposal IDs"; pattern cannot distinguish new from existing.',
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('response'),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(pipeline3Lesson, 'system prompt', deps);
+    expect(result.status).toBe('skipped');
+    if (result.status === 'skipped') {
+      expect(result.reasonCode).toBe('context-required');
+    }
   });
 
   it('rejects at the smoke gate when the pattern does not match the Bad snippet (mmnto/totem#1408)', async () => {

@@ -1074,9 +1074,15 @@ export async function compileCommand(
             }
             if (!parsed.compilable) {
               // mmnto/totem#1280: capture title alongside hash for observability.
-              // mmnto-ai/totem#1481: the cloud worker currently classifies every
-              // compilable:false outcome as out-of-scope. Granular cloud-side
-              // reasonCodes are out of scope here and track via mmnto/totem#1221.
+              // mmnto-ai/totem#1481: the cloud worker defaults compilable:false
+              // outcomes to out-of-scope. Granular cloud-side reasonCodes track
+              // via mmnto/totem#1221.
+              //
+              // mmnto-ai/totem#1598: respect the LLM's context-required signal
+              // on the cloud path the same way local Pipeline 2 / 3 routing in
+              // core/compile-lesson.ts does. Mirroring the routing here keeps
+              // downstream ledger triage consistent whether the compile ran
+              // locally or through the cloud worker.
               //
               // Under --force / upgrade, evict any stale active-rule entry so
               // we don't leave the old rule alive while also marking the same
@@ -1085,9 +1091,11 @@ export async function compileCommand(
               if (upgradeTargets?.has(lesson.hash) || options.force) {
                 removeRuleByHash(newRules, lesson.hash);
               }
+              const reasonCode =
+                parsed.reasonCode === 'context-required' ? 'context-required' : 'out-of-scope';
               nonCompilableMap.set(lesson.hash, {
                 title: lesson.heading,
-                reasonCode: 'out-of-scope',
+                reasonCode,
                 reason: parsed.reason,
               });
               skippedLessons.push({ heading: lesson.heading, reason: parsed.reason });

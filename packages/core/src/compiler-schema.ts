@@ -206,6 +206,13 @@ export const NonCompilableReasonCodeSchema = z.enum([
   'missing-badexample',
   'missing-goodexample',
   'matches-good-example',
+  // `context-required` (mmnto-ai/totem#1598) classifies lessons whose hazard
+  // is scope-bounded by a context (e.g., "inside X", "only for NEW items")
+  // that cannot be captured structurally in a single-line regex or ast-grep
+  // pattern. Distinct from `out-of-scope` (conceptual / architectural) —
+  // context-required lessons describe real code defects; the compiler simply
+  // cannot produce a non-false-positive-prone rule.
+  'context-required',
   'legacy-unknown',
 ]);
 
@@ -325,6 +332,19 @@ const CompilerOutputBaseSchema = z.object({
   severity: z.enum(['error', 'warning']).optional(),
   /** LLM explanation for why a lesson was marked non-compilable */
   reason: z.string().optional(),
+  /**
+   * LLM-emittable classifier code (mmnto-ai/totem#1598). Narrower than
+   * `NonCompilableReasonCodeSchema` because most reason codes
+   * (`verify-retry-exhausted`, `missing-badexample`, `security-rule-rejected`,
+   * etc.) are emitted by core routing, not the LLM. Exposing the full enum
+   * to the LLM would let it bypass core classification by forging an
+   * internal sentinel. This narrow enum lists only the codes the compile
+   * prompt is allowed to produce.
+   *
+   * Only valid when `compilable === false`. Enforced by
+   * `refineReasonCodeRequiresNonCompilable` below.
+   */
+  reasonCode: z.enum(['context-required']).optional(),
 });
 
 /**
@@ -399,10 +419,30 @@ function refineGoodExampleRequired(
   });
 }
 
+/**
+ * `reasonCode` is meaningful only when the LLM classifies a lesson as
+ * non-compilable. Compilable output carries a pattern + examples, not a
+ * classifier code. Enforcing the asymmetry at the schema prevents the LLM
+ * from emitting contradictory output like `{compilable: true, reasonCode: 'context-required'}`.
+ */
+function refineReasonCodeRequiresNonCompilable(
+  data: { compilable: boolean; reasonCode?: string },
+  ctx: z.RefinementCtx,
+): void {
+  if (data.reasonCode === undefined) return;
+  if (!data.compilable) return;
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    message: 'reasonCode is only valid when compilable is false (mmnto-ai/totem#1598)',
+    path: ['reasonCode'],
+  });
+}
+
 export const CompilerOutputSchema = CompilerOutputBaseSchema.superRefine((data, ctx) => {
   refineAstGrepMutualExclusion(data, ctx);
   refineBadExampleRequired(data, ctx);
   refineGoodExampleRequired(data, ctx);
+  refineReasonCodeRequiresNonCompilable(data, ctx);
 });
 
 export type CompilerOutput = z.infer<typeof CompilerOutputSchema>;
