@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest';
 import type { CompiledRule } from '@mmnto/totem';
 
 import type { NonCompilableMapValue } from './compile.js';
-import { pruneStaleNonCompilable, pruneStaleRules, upsertRule } from './compile.js';
+import {
+  pruneStaleNonCompilable,
+  pruneStaleRules,
+  removeRuleByHash,
+  upsertRule,
+} from './compile.js';
 
 // ─── 4-tuple helpers (mmnto-ai/totem#1481) ───────────
 
@@ -209,5 +214,30 @@ describe('upsertRule', () => {
 
     expect(rules).toHaveLength(1);
     expect(rules[0]).toBe(replacement);
+  });
+});
+
+// ─── removeRuleByHash (mmnto-ai/totem#1587 + mmnto-ai/totem#1629 cloud parity) ──
+
+describe('removeRuleByHash', () => {
+  it('removes the matching rule in place and preserves order of the rest', () => {
+    const ruleA = makeRule('abc', 'A');
+    const ruleB = makeRule('def', 'B');
+    const ruleC = makeRule('ghi', 'C');
+    const rules = [ruleA, ruleB, ruleC];
+    removeRuleByHash(rules, 'def');
+
+    expect(rules).toHaveLength(2);
+    expect(rules[0]).toBe(ruleA);
+    expect(rules[1]).toBe(ruleC);
+  });
+
+  it('is a no-op when the hash does not match any rule', () => {
+    const rules = [makeRule('abc'), makeRule('def')];
+    removeRuleByHash(rules, 'missing');
+
+    expect(rules).toHaveLength(2);
+    expect(rules[0]!.lessonHash).toBe('abc');
+    expect(rules[1]!.lessonHash).toBe('def');
   });
 });

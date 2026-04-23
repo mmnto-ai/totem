@@ -201,6 +201,19 @@ export function upsertRule(rules: CompiledRule[], rule: CompiledRule): void {
   }
 }
 
+/**
+ * Remove the first rule matching `lessonHash` from `rules`, in place.
+ * No-op when no match. Used on the `--force` / upgrade skipped paths in
+ * both local and cloud workers: when a lesson transitions to
+ * non-compilable, any pre-existing rule for the same hash must be evicted
+ * from the active set, otherwise --force leaves the old rule alive while
+ * also marking the hash non-compilable (mmnto-ai/totem#1629 CR finding).
+ */
+export function removeRuleByHash(rules: CompiledRule[], lessonHash: string): void {
+  const idx = rules.findIndex((r) => r.lessonHash === lessonHash);
+  if (idx >= 0) rules.splice(idx, 1);
+}
+
 // ─── Verbose trace renderer (mmnto-ai/totem#1482) ──
 
 /**
@@ -1064,6 +1077,14 @@ export async function compileCommand(
               // mmnto-ai/totem#1481: the cloud worker currently classifies every
               // compilable:false outcome as out-of-scope. Granular cloud-side
               // reasonCodes are out of scope here and track via mmnto/totem#1221.
+              //
+              // Under --force / upgrade, evict any stale active-rule entry so
+              // we don't leave the old rule alive while also marking the same
+              // hash non-compilable (mmnto-ai/totem#1629 CR finding — symmetry
+              // with the local skipped path).
+              if (upgradeTargets?.has(lesson.hash) || options.force) {
+                removeRuleByHash(newRules, lesson.hash);
+              }
               nonCompilableMap.set(lesson.hash, {
                 title: lesson.heading,
                 reasonCode: 'out-of-scope',
@@ -1173,8 +1194,7 @@ export async function compileCommand(
               (upgradeTargets?.has(lesson.hash) || options.force) &&
               result.status === 'skipped'
             ) {
-              const staleIdx = newRules.findIndex((r) => r.lessonHash === lesson.hash);
-              if (staleIdx >= 0) newRules.splice(staleIdx, 1);
+              removeRuleByHash(newRules, lesson.hash);
             }
 
             // Record the terminal outcome for each upgrade target. Used by
