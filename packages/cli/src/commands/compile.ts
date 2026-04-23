@@ -428,6 +428,7 @@ export async function compileCommand(
     generateInputHash,
     generateOutputHash,
     hashLesson,
+    LEDGER_RETRY_PENDING_CODES,
     loadCompiledRulesFile,
     parseCompilerResponse,
     readAllLessons,
@@ -435,6 +436,7 @@ export async function compileCommand(
     saveCompiledRulesFile,
     scaffoldFixture,
     scaffoldFixturePath,
+    shouldWriteToLedger,
     verifyRuleExamples,
     writeCompileManifest,
   } = await import('@mmnto/totem');
@@ -1078,11 +1080,12 @@ export async function compileCommand(
               // outcomes to out-of-scope. Granular cloud-side reasonCodes track
               // via mmnto/totem#1221.
               //
-              // mmnto-ai/totem#1598: respect the LLM's context-required signal
-              // on the cloud path the same way local Pipeline 2 / 3 routing in
-              // core/compile-lesson.ts does. Mirroring the routing here keeps
-              // downstream ledger triage consistent whether the compile ran
-              // locally or through the cloud worker.
+              // mmnto-ai/totem#1598 + mmnto-ai/totem#1634: respect the LLM's
+              // narrow classifier signal (`context-required` or
+              // `semantic-analysis-required`) on the cloud path the same way
+              // local Pipeline 2 / 3 routing in core/compile-lesson.ts does.
+              // Mirroring keeps downstream ledger triage consistent whether
+              // the compile ran locally or through the cloud worker.
               //
               // Under --force / upgrade, evict any stale active-rule entry so
               // we don't leave the old rule alive while also marking the same
@@ -1091,13 +1094,23 @@ export async function compileCommand(
               if (upgradeTargets?.has(lesson.hash) || options.force) {
                 removeRuleByHash(newRules, lesson.hash);
               }
-              const reasonCode =
-                parsed.reasonCode === 'context-required' ? 'context-required' : 'out-of-scope';
-              nonCompilableMap.set(lesson.hash, {
-                title: lesson.heading,
-                reasonCode,
-                reason: parsed.reason,
-              });
+              const reasonCode: NonCompilableReasonCode = parsed.reasonCode ?? 'out-of-scope';
+              // mmnto-ai/totem#1627: cloud !compilable responses reach this
+              // block only with a permanent classifier code today — the
+              // cloud worker never forwards smoke-gate retry-pending codes
+              // through the `!compilable` branch (those surface on the
+              // `buildCompiledRule` path below, which already returns a
+              // failed/skipped result distinct from the ledger write). The
+              // guard is defense in depth: if a future cloud-worker change
+              // started emitting retry-pending codes here, we would not
+              // silently pollute the ledger.
+              if (shouldWriteToLedger(reasonCode)) {
+                nonCompilableMap.set(lesson.hash, {
+                  title: lesson.heading,
+                  reasonCode,
+                  reason: parsed.reason,
+                });
+              }
               skippedLessons.push({ heading: lesson.heading, reason: parsed.reason });
               skipped++;
               continue;
@@ -1112,12 +1125,44 @@ export async function compileCommand(
                 failed++;
                 continue;
               }
+              // Upgrade/force sweep: clear any stale ledger entry (including
+              // permanent classifier codes) when the user is deliberately
+              // re-compiling via --upgrade or --force. Mirrors the local
+              // compiled branch's upgrade-target prune for cloud parity
+              // (GCA mmnto-ai/totem#1640 round-1 finding; previously only the local
+              // compiled branch had this prune).
+              if (upgradeTargets?.has(lesson.hash) || options.force) {
+                nonCompilableMap.delete(lesson.hash);
+              }
+              // mmnto-ai/totem#1627 stale-ledger prune (cloud path): mirror
+              // the local `compiled` branch's sweep of any stale
+              // retry-pending ledger entry so cloud and local cycles
+              // produce identical ledger state on a clean compile.
+              {
+                const prior = nonCompilableMap.get(lesson.hash);
+                if (prior && LEDGER_RETRY_PENDING_CODES.has(prior.reasonCode)) {
+                  nonCompilableMap.delete(lesson.hash);
+                }
+              }
               upsertRule(newRules, ruleResult.rule);
               compiled++;
               logCompiledRule(log, lesson, ruleResult.rule);
             } else {
               if (ruleResult.rejectReason) {
                 log.warn(TAG, `[${lesson.heading}] ${ruleResult.rejectReason} — skipping`);
+              }
+              // mmnto-ai/totem#1627 stale-ledger prune (cloud smoke-gate
+              // rejection): any buildCompiledRule rejection on the cloud
+              // path is retry-pending (syntax-invalid, zero-match,
+              // matches-good-example, missing-*example) since parsed.compilable
+              // was true. Mirror the local skipped-branch guard: if a prior
+              // retry-pending entry sits in the ledger for this hash, drop
+              // it so the ledger reflects current-run truth. Permanent
+              // entries stay — they shouldn't be overwritten by a transient
+              // compile failure. Shield review round-2 finding.
+              const prior = nonCompilableMap.get(lesson.hash);
+              if (prior && LEDGER_RETRY_PENDING_CODES.has(prior.reasonCode)) {
+                nonCompilableMap.delete(lesson.hash);
               }
               failed++;
             }
@@ -1248,20 +1293,57 @@ export async function compileCommand(
                 if (upgradeTargets?.has(lesson.hash)) {
                   nonCompilableMap.delete(lesson.hash);
                 }
+                // mmnto-ai/totem#1627 stale-ledger prune: if a prior run
+                // landed this lesson in nonCompilable under a retry-pending
+                // code (smoke-gate failure, missing-example, etc.) and the
+                // lesson now compiles cleanly, drop the stale entry so the
+                // ledger reflects current truth. Permanent entries
+                // (out-of-scope, context-required, semantic-analysis-required,
+                // security-rule-rejected) stay — those should never coexist
+                // with a fresh rule, but if they do, the surrounding
+                // workflow has other concerns to flag first.
+                {
+                  const prior = nonCompilableMap.get(lesson.hash);
+                  if (prior && LEDGER_RETRY_PENDING_CODES.has(prior.reasonCode)) {
+                    nonCompilableMap.delete(lesson.hash);
+                  }
+                }
                 upsertRule(newRules, result.rule);
                 compiled++;
                 logCompiledRule(log, lesson, result.rule);
                 break;
               case 'skipped':
-                // mmnto/totem#1280 + mmnto-ai/totem#1481: capture the full
-                // 4-tuple so ledger reads downstream (doctor, telemetry) see
-                // a specific reasonCode rather than normalizing to
-                // 'legacy-unknown'.
-                nonCompilableMap.set(result.hash, {
-                  title: lesson.heading,
-                  reasonCode: result.reasonCode,
-                  reason: result.reason,
-                });
+                // mmnto-ai/totem#1627: guard the ledger write against
+                // retry-pending codes. Smoke-gate failures and LLM-output
+                // transient errors are retry-eligible; writing them to
+                // nonCompilable marks them permanent and blocks the next
+                // compile cycle from ever producing a rule. Permanent
+                // classifier codes (out-of-scope, context-required,
+                // semantic-analysis-required, security-rule-rejected,
+                // no-pattern-*, legacy-unknown) still write as before.
+                if (shouldWriteToLedger(result.reasonCode)) {
+                  // mmnto/totem#1280 + mmnto-ai/totem#1481: capture the
+                  // full 4-tuple so ledger reads downstream (doctor,
+                  // telemetry) see a specific reasonCode rather than
+                  // normalizing to 'legacy-unknown'.
+                  nonCompilableMap.set(result.hash, {
+                    title: lesson.heading,
+                    reasonCode: result.reasonCode,
+                    reason: result.reason,
+                  });
+                } else {
+                  // Retry-pending outcome. If a prior retry-pending entry
+                  // still sits in the ledger for this hash, drop it so the
+                  // ledger reflects the current run rather than the stale
+                  // one. Permanent entries (out-of-scope, etc.) stay —
+                  // they shouldn't be overwritten by a transient failure
+                  // against the same hash. Shield review finding on
+                  // mmnto-ai/totem#1598 / #1634 bundle.
+                  const prior = nonCompilableMap.get(result.hash);
+                  if (prior && LEDGER_RETRY_PENDING_CODES.has(prior.reasonCode)) {
+                    nonCompilableMap.delete(result.hash);
+                  }
+                }
                 skippedLessons.push({ heading: lesson.heading, reason: result.reason });
                 skipped++;
                 break;

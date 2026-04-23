@@ -867,15 +867,14 @@ export async function compileLesson(
     }
 
     if (!parsed.compilable) {
-      // mmnto-ai/totem#1598: when the LLM flags a lesson as non-compilable
-      // because its hazard is scope-bounded by a context the pattern cannot
-      // capture (e.g., "inside X", "only for NEW items"), it signals with
-      // `reasonCode: 'context-required'`. Route to the distinct ledger bucket
-      // so downstream triage can distinguish structural-cannot-capture from
-      // generic conceptual-principle lessons. Absent the signal, keep the
-      // existing out-of-scope fallback.
-      const reasonCode =
-        parsed.reasonCode === 'context-required' ? 'context-required' : 'out-of-scope';
+      // mmnto-ai/totem#1598 + mmnto-ai/totem#1634: when the LLM flags a
+      // lesson as non-compilable via one of the narrow LLM-emittable
+      // classifier codes (`context-required`, `semantic-analysis-required`),
+      // thread the code through to the ledger so downstream triage can
+      // distinguish structural-cannot-capture from semantic-analysis-required
+      // from generic conceptual-principle lessons. Absent the signal, keep
+      // the existing out-of-scope fallback.
+      const reasonCode = parsed.reasonCode ?? 'out-of-scope';
       callbacks?.onDim?.(lesson.heading, 'Pipeline 3: not compilable — skipping');
       trace.push({
         layer: 2,
@@ -1034,12 +1033,11 @@ export async function compileLesson(
     }
 
     if (!parsed.compilable) {
-      // mmnto-ai/totem#1598: see Pipeline 3 block above. Same classifier
-      // routing applies here — an LLM `context-required` signal lands in its
-      // own ledger bucket; everything else retains the generic out-of-scope
-      // classification.
-      const reasonCode =
-        parsed.reasonCode === 'context-required' ? 'context-required' : 'out-of-scope';
+      // mmnto-ai/totem#1598 + mmnto-ai/totem#1634: see Pipeline 3 block above.
+      // Same classifier routing applies here — the LLM may emit either
+      // `context-required` or `semantic-analysis-required`; both thread
+      // through. Absent signal defaults to the generic out-of-scope bucket.
+      const reasonCode = parsed.reasonCode ?? 'out-of-scope';
       callbacks?.onDim?.(lesson.heading, 'Not compilable (conceptual/architectural) — skipping');
       trace.push({
         layer: 3,

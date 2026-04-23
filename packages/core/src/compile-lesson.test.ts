@@ -1393,6 +1393,25 @@ describe('compileLesson', () => {
     }
   });
 
+  it('routes LLM semantic-analysis-required signal to reasonCode semantic-analysis-required (Pipeline 2, mmnto-ai/totem#1634)', async () => {
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: false,
+        reasonCode: 'semantic-analysis-required',
+        reason:
+          'Lesson requires closure-body AST analysis (captured-float assignment inside par_iter_mut().for_each).',
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('response'),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(lesson, 'system prompt', deps);
+    expect(result.status).toBe('skipped');
+    if (result.status === 'skipped') {
+      expect(result.reasonCode).toBe('semantic-analysis-required');
+    }
+  });
+
   it('falls back to out-of-scope when LLM omits reasonCode on a non-compilable response', async () => {
     // Backward compatibility: LLM responses that mark compilable:false without
     // the reasonCode field continue to route through the generic out-of-scope
@@ -1756,6 +1775,25 @@ describe('compileLesson Pipeline 3 (Bad/Good snippets)', () => {
     expect(result.status).toBe('skipped');
     if (result.status === 'skipped') {
       expect(result.reasonCode).toBe('context-required');
+    }
+  });
+
+  it('routes LLM semantic-analysis-required signal to reasonCode semantic-analysis-required (Pipeline 3, mmnto-ai/totem#1634)', async () => {
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: false,
+        reasonCode: 'semantic-analysis-required',
+        reason:
+          'Multi-file contract: rule applies cross-system; single-lesson-body pattern cannot express the multi-file hazard.',
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('response'),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(pipeline3Lesson, 'system prompt', deps);
+    expect(result.status).toBe('skipped');
+    if (result.status === 'skipped') {
+      expect(result.reasonCode).toBe('semantic-analysis-required');
     }
   });
 

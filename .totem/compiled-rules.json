@@ -7357,10 +7357,10 @@
         "!**/*.test.*"
       ],
       "severity": "warning",
-      "unverified": true,
       "status": "archived",
       "archivedReason": "Pattern `new TotemConfigError($$$ARGS)` fires on every CLI-layer use, contradicting the declined GCA finding on PR mmnto-ai/totem#1629. TotemConfigError is used in 10+ CLI files (7x in compile.ts alone) for flag-conflict validation per the canonical compile.ts:486 --upgrade/upgradeBatch precedent. The source lesson reflects GCA's hallucinated-rule-citation argument; adopting it as a rule would codify the false claim as project policy. Taxonomy refinement for CLI vs core error classes is tracked in mmnto-ai/totem#1630, not via a blanket ban on TotemConfigError.",
-      "archivedAt": "2026-04-23T02:49:57.677Z"
+      "archivedAt": "2026-04-23T02:49:57.677Z",
+      "unverified": true
     }
   ],
   "nonCompilable": [
@@ -12152,28 +12152,10 @@
       "reason": "The lesson describes an architectural/annotation convention (marking process-terminating functions so linting rules treat them as terminal) rather than a detectable code pattern. There is no single syntactic anti-pattern to flag — the lesson is guidance for rule authors, not a constraint on source code structure."
     },
     {
-      "hash": "5cf273df4f8596a2",
-      "title": "Escape back-references in template substitution",
-      "reasonCode": "matches-good-example",
-      "reason": "smoke gate: matches goodExample (over-matching: 1 match)"
-    },
-    {
-      "hash": "513f3b194be8d66d",
-      "title": "Stage specific files in CLI tools",
-      "reasonCode": "matches-good-example",
-      "reason": "smoke gate: matches goodExample (over-matching: 1 match)"
-    },
-    {
       "hash": "108bbf3012cc61f7",
       "title": "Validate inputs before performing side effects",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes an architectural principle about ordering validation before side effects. There is no detectable code pattern that distinguishes 'validation before side effects' from 'side effects before validation' — the rule requires understanding the semantic intent and ordering of arbitrary validation logic relative to arbitrary I/O operations, which cannot be expressed as a structural or textual pattern."
-    },
-    {
-      "hash": "577b552647817478",
-      "title": "Normalize temp paths for cross-platform equality",
-      "reasonCode": "matches-good-example",
-      "reason": "smoke gate: matches goodExample (over-matching: 1 match)"
     },
     {
       "hash": "1d8aecd02fc367ec",
@@ -12210,6 +12192,36 @@
       "title": "Mirror local cleanup in cloud paths",
       "reasonCode": "out-of-scope",
       "reason": "The lesson describes an architectural/behavioral requirement — that cloud compilation paths must mirror local cleanup logic when a lesson is marked non-compilable. This is a design/flow correctness concern (ensuring a delete/remove call exists in a specific conditional branch) that cannot be reliably expressed as a structural AST or regex pattern without high false-positive or false-negative rates. The rule depends on understanding the semantic intent of a broader control flow (what happens when compilable===false in the cloud path vs. local path), which is beyond what a single-node ast-grep pattern or regex can capture."
+    },
+    {
+      "hash": "cd74a9236711ae18",
+      "title": "Use typed reason codes for LLM signals",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/schema design principle (use a typed reasonCode field instead of parsing prose sentinels) that cannot be detected as a code pattern — it requires understanding the semantic intent of a field and whether routing logic parses free-form strings vs. a typed enum/union, which no regex or AST pattern can reliably distinguish."
+    },
+    {
+      "hash": "4c1e62e35baed44c",
+      "title": "Narrow LLM output enums to prevent forgery",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural design principle (using narrow enums for LLM-facing fields) that requires semantic understanding of which fields are LLM-facing versus internal-only. No detectable code pattern can distinguish a correctly-scoped enum from an overly-broad one without domain knowledge of the schema's intent."
+    },
+    {
+      "hash": "be6168b66e28c8ea",
+      "title": "Trust explicit classification over content heuristics",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/logic principle about trusting explicit flags over heuristic re-scanning. There is no detectable code pattern that distinguishes 'trusting a flag' from 're-scanning body text' without understanding the full control-flow semantics of the routing logic."
+    },
+    {
+      "hash": "5e4abf91dec43177",
+      "title": "Enforce structural compilation over context escapes",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a meta-rule about the rule compiler's decision process (when to emit 'context-required'), not a detectable pattern in source code. There is no code construct in packages/cli/src/commands/compile-templates.ts that can be flagged to enforce this principle."
+    },
+    {
+      "hash": "6b5c0e8786a0f309",
+      "title": "Validate mutually exclusive LLM output fields",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural validation pattern (using Zod superRefine for mutual exclusivity between fields) that requires understanding the semantic relationship between schema fields. No detectable code pattern can distinguish a missing superRefine from one that validates the wrong fields, or distinguish ambiguous model responses from valid ones."
     }
   ]
 }

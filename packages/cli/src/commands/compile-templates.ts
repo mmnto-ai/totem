@@ -132,7 +132,7 @@ When the lesson carries such a guard AND the guard cannot be captured structural
 }
 \`\`\`
 
-The \`reasonCode\` field is optional and narrow — \`"context-required"\` is the only value you may emit. Absence of the field means the existing generic out-of-scope classification applies.
+The \`reasonCode\` field is optional and narrow — \`"context-required"\` and \`"semantic-analysis-required"\` (see Semantic Analysis Classifier below) are the only values you may emit. Absence of the field means the existing generic out-of-scope classification applies.
 
 **Worked examples (DO emit \`context-required\`):**
 
@@ -152,6 +152,55 @@ The existence of this escape hatch does **not** license lazy rejection. A scope-
 - Lesson: "No \`console.log\` inside React render methods" → scope is captured by an ast-grep \`inside: { kind: 'method_definition', has: { kind: 'identifier', regex: '^render$' } }\` combinator. Compile normally if you can express it; only fall back to \`context-required\` when the structural tools genuinely cannot reach the guard.
 
 **Rule of thumb:** ask "can any of \`fileGlobs\`, ast-grep \`kind:\`, \`inside:\`, \`has:\`, or \`regex:\` express the guard the lesson describes?" If yes, compile. If no, emit \`context-required\`.
+
+### Semantic Analysis Classifier (mmnto-ai/totem#1634)
+
+Some lessons describe real code defects whose hazard requires **semantic or multi-file analysis** that a single-line pattern cannot perform. Unlike \`context-required\` (where the guard is expressible in principle but the LLM lacks the structural vocabulary), these lessons describe hazards the compiler genuinely cannot reach from the lesson body alone.
+
+Four sub-classes signal this:
+
+- **Multi-file contracts.** The hazard is cross-system drift (e.g., "renaming \`SpatialEntry.x\` must also update every consumer"). Matching one file in isolation says nothing about the contract.
+- **Closure-body AST analysis.** The hazard depends on what happens inside a closure passed to a parallel iterator (e.g., "captured-float assignment inside \`.par_iter_mut().for_each(...)\`"). The outer call is fine; the violation is about the body.
+- **System-parameter-aware scoping.** The hazard depends on other system parameters in the same function (e.g., "\`Local<Vec<T>>\` is banned only when the enclosing system uses \`par_iter_mut\` somewhere else"). Pattern sees only the one annotation.
+- **Project-state-conditional semantics.** The hazard applies until some ADR graduates, then relaxes (e.g., "Do NOT introduce rayon — this rule applies pre-ADR-022, relaxes after"). No pattern can read project state.
+
+When the lesson carries a hazard of any of these sub-classes AND the compiler cannot perform the required analysis, emit:
+
+\`\`\`json
+{
+  "compilable": false,
+  "reasonCode": "semantic-analysis-required",
+  "reason": "Hazard requires <multi-file / closure-body / system-param / project-state-conditional> analysis; single-pattern rule cannot express it."
+}
+\`\`\`
+
+The \`reasonCode\` field is narrow — \`"context-required"\` and \`"semantic-analysis-required"\` are the only values you may emit. Use \`semantic-analysis-required\` when the compiler's analytical capability is the bottleneck; use \`context-required\` when the guard exists but the pattern cannot express it structurally.
+
+**Worked examples (DO emit \`semantic-analysis-required\`):**
+
+- Lesson: "Parallel float reductions break lockstep determinism (use \`Parallel<T>\` for scratch under \`par_iter_mut\`)"
+  - Hazard is a closure body that writes to a captured floating-point scalar. Pattern \`\\.par_iter_mut\\(\\)\\.for_each\\(\` matches every parallel iteration including the non-offending ones. Detecting the real hazard requires parsing the closure body.
+  - Output: \`{"compilable": false, "reasonCode": "semantic-analysis-required", "reason": "Closure-body AST analysis required to detect captured-float assignment inside par_iter_mut().for_each."}\`
+
+- Lesson: "\`Local<Vec<T>>\` is banned under \`par_iter_mut\` (use \`Parallel<T>\`)"
+  - Hazard depends on whether the enclosing system uses \`par_iter_mut\` anywhere in its body. Pattern \`Local<Vec<\\$T>>\` fires on every Local<Vec<T>> regardless. Detecting the real hazard requires walking the SystemParam tuple.
+  - Output: \`{"compilable": false, "reasonCode": "semantic-analysis-required", "reason": "Hazard requires walking the SystemParam tuple; single-line pattern cannot see sibling parameters."}\`
+
+- Lesson: "Do NOT introduce rayon (pre-ADR-022 only)"
+  - Hazard is project-state-conditional: applies before ADR-022 graduates, relaxes after. No pattern can read ADR state.
+  - Output: \`{"compilable": false, "reasonCode": "semantic-analysis-required", "reason": "Project-state-conditional: rule applies pre-ADR-022; compiler cannot read governance state."}\`
+
+**Anti-lazy guard (DO compile):**
+
+Not every lesson that mentions a parallel iterator or a system parameter requires semantic analysis. Compile normally when:
+
+- The hazard is the surface pattern itself (e.g., "never use \`unwrap()\` in production code" — compile as \`\\bunwrap\\(\\)\`).
+- The scope is expressible via \`fileGlobs\` (e.g., "no \`console.log\` in production" with \`fileGlobs: ["**/*.ts", "!**/*.test.ts"]\`).
+- ast-grep \`kind:\` / \`inside:\` / \`has:\` can reach the enclosing context.
+
+Only fall back to \`semantic-analysis-required\` when the analysis the lesson demands is genuinely outside the compiler's reach.
+
+**Rule of thumb:** ask "does detecting the hazard require analyzing code the pattern cannot see (other files, closure bodies, sibling parameters, project state)?" If yes, emit \`semantic-analysis-required\`. If no, compile — or fall back to \`context-required\` if the guard is local but structurally inexpressible.
 
 ## Examples
 
@@ -471,9 +520,32 @@ When you cannot write a regex that distinguishes the Bad lines from the Good lin
 }
 \`\`\`
 
-The \`reasonCode\` field is optional and narrow — \`"context-required"\` is the only value you may emit. Absence of the field keeps the default classification.
+The \`reasonCode\` field is optional and narrow — \`"context-required"\` and \`"semantic-analysis-required"\` (see Semantic Analysis Classifier below) are the only values you may emit. Absence of the field keeps the default classification.
 
 **Anti-lazy guard:** when \`fileGlobs\` CAN express the distinguishing scope (e.g., "only in JSON files", "only in test files"), compile normally with the appropriate glob. Only fall back to \`context-required\` when the structural tools genuinely cannot reach the guard.
+
+### Semantic Analysis Classifier (mmnto-ai/totem#1634)
+
+Even with Bad and Good snippets in hand, some lessons describe hazards that require **semantic or multi-file analysis** the compiler cannot perform. Four sub-classes:
+
+- **Multi-file contracts.** The Bad and Good snippets differ only in the presence of consistent updates in other files. Pattern fires the same on both.
+- **Closure-body AST analysis.** The Bad snippet's violation is about what happens inside a closure; the Good snippet's closure body differs, but the outer call is identical.
+- **System-parameter-aware scoping.** The Bad and Good snippets match identically; the hazard depends on sibling function parameters the snippet window does not show.
+- **Project-state-conditional semantics.** The Bad snippet is a violation now but becomes correct after some ADR graduates.
+
+When the snippet pair cannot be distinguished by any single-line pattern because the distinguishing analysis lives outside the pattern's reach, emit:
+
+\`\`\`json
+{
+  "compilable": false,
+  "reasonCode": "semantic-analysis-required",
+  "reason": "Bad and Good snippets differ only in analysis outside pattern reach (multi-file / closure-body / sibling-param / project-state)."
+}
+\`\`\`
+
+The \`reasonCode\` field is narrow — \`"context-required"\` and \`"semantic-analysis-required"\` are the only values you may emit. Use \`semantic-analysis-required\` when the required analysis exceeds the compiler's capability; use \`context-required\` when a structural guard exists but the pattern vocabulary cannot express it.
+
+**Anti-lazy guard:** compile normally when the distinguishing difference is on the Bad/Good lines themselves or when \`fileGlobs\` can scope the rule. Only emit \`semantic-analysis-required\` when no pattern can discriminate the snippet pair regardless of vocabulary.
 
 Every compilable rule MUST include non-empty \`badExample\` AND \`goodExample\` fields. The compile pipeline's schema parse rejects output that omits either one for \`ast-grep\` or \`regex\` engines, so the rule never reaches the smoke gate. The smoke gate then runs the rule against both snippets: the pattern MUST match \`badExample\` (zero matches here rejects with reason code \`pattern-zero-match\`) and MUST NOT match \`goodExample\` (any match here rejects with reason code \`matches-good-example\`).
 `;
