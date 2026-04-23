@@ -223,7 +223,10 @@ export async function runCompiledRules(
   const fs = await import('node:fs');
   const writeRegexTelemetry = (record: import('@mmnto/totem').RegexTelemetry): void => {
     try {
-      const tempDir = path.join(cwd, totemDir, 'temp');
+      // Use `resolvedTotemDir` (which respects `configRoot`) rather than
+      // `cwd` so telemetry lands next to compile-manifest.json when the
+      // caller runs lint from a sub-directory (CR PR #1644 round-1).
+      const tempDir = path.join(resolvedTotemDir, 'temp');
       fs.mkdirSync(tempDir, { recursive: true });
       const entry = {
         type: 'regex-execution' as const,

@@ -251,6 +251,23 @@ export class RegexEvaluator {
         this.rejectAllPendingAsCrash();
       });
     });
+    worker.on('exit', (code) => {
+      // GCA PR #1644 round-1 — handle unexpected worker exits (OOM kill,
+      // internal Node crash) that do not surface through the `error`
+      // event. Skip respawn on graceful exit (code 0) and on explicit
+      // dispose (terminate() drives exit with non-zero, but we only
+      // spin up the respawn after checking the flag). Skip if this
+      // handle is no longer the active worker — `respawnWorker` calls
+      // `terminate()` on the prior worker before setting a new one, and
+      // the exit event for the old handle fires after the field has
+      // moved on; respawning again would leak a thread.
+      if (this.disposed) return;
+      if (code === 0) return;
+      if (this.worker !== worker) return;
+      void this.respawnWorker().finally(() => {
+        this.rejectAllPendingAsCrash();
+      });
+    });
   }
 
   private async respawnWorker(): Promise<void> {

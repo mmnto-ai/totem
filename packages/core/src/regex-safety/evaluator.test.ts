@@ -144,6 +144,54 @@ describe('RegexEvaluator — error cases', () => {
   });
 });
 
+describe('RegexEvaluator — worker exit recovery (mmnto-ai/totem#1641 GCA round-1)', () => {
+  it('respawns after an unexpected non-zero exit and accepts subsequent evaluations', async () => {
+    // Opt into the worker's test-only crash hook; child worker threads
+    // inherit the parent process env so the gate fires inside the
+    // worker. Restored in the `finally` block after dispose.
+    const prior = process.env.TOTEM_TEST_WORKER_CRASH_HOOK;
+    process.env.TOTEM_TEST_WORKER_CRASH_HOOK = '1';
+    const evaluator = new RegexEvaluator({ timeoutMs: 2000, softWarningMs: 100 });
+    try {
+      // Fire a crash-signal batch. The worker's test-only hook calls
+      // process.exit(1), which surfaces to the evaluator as an `exit`
+      // event with a non-zero code (no `error` event fires on OOM /
+      // internal crash paths). The exit handler respawns the worker
+      // and calls rejectAllPendingAsCrash(), which resolves the batch
+      // as a timeout before the main-thread timer fires. The test
+      // asserts that a follow-up evaluate() against the fresh worker
+      // succeeds — the exit handler is the only path that would have
+      // triggered the respawn on an exit-without-error crash.
+      const crashBatch = evaluator.evaluate({
+        ruleHash: 'crash',
+        pattern: '__TOTEM_TEST_CRASH__',
+        flags: '',
+        lines: ['trigger'],
+      });
+      await crashBatch;
+
+      // After the exit handler respawns, a normal evaluate must succeed.
+      const next = await evaluator.evaluate({
+        ruleHash: 'after-crash',
+        pattern: 'foo',
+        flags: '',
+        lines: ['foo', 'bar'],
+      });
+      expect(next.kind).toBe('ok');
+      if (next.kind === 'ok') {
+        expect(next.matchedIndices).toEqual([0]);
+      }
+    } finally {
+      await evaluator.dispose();
+      if (prior === undefined) {
+        delete process.env.TOTEM_TEST_WORKER_CRASH_HOOK;
+      } else {
+        process.env.TOTEM_TEST_WORKER_CRASH_HOOK = prior;
+      }
+    }
+  });
+});
+
 describe('RegexEvaluator — serialization', () => {
   it('serializes concurrent evaluate() calls onto the single worker', async () => {
     // Two in-flight evaluations must queue, not overlap. The second

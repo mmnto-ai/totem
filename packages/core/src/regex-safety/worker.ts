@@ -28,6 +28,16 @@ export type EvaluateResponse =
   | { id: string; kind: 'error'; message: string };
 
 parentPort?.on('message', (msg: EvaluateRequest) => {
+  // Test-only crash hook for the evaluator's exit-handler regression
+  // test (mmnto-ai/totem#1641 GCA round-1). Gated on the env var
+  // `TOTEM_TEST_WORKER_CRASH_HOOK=1` so an attacker-supplied pattern
+  // matching the sentinel string cannot crash a production worker.
+  // Production code never sets this env var; only the evaluator test
+  // opts in via process.env before constructing the evaluator.
+  if (process.env.TOTEM_TEST_WORKER_CRASH_HOOK === '1' && msg.pattern === '__TOTEM_TEST_CRASH__') {
+    process.exit(1);
+  }
+
   const { id, pattern, flags, lines } = msg;
 
   let re: RegExp;
