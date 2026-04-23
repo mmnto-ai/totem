@@ -469,6 +469,14 @@ export function buildCompiledRule(
     if (!parsed.pattern || !parsed.message) {
       return { rule: null, rejectReason: 'Missing pattern or message' };
     }
+    // mmnto-ai/totem#1641 Change 2 invariant: `validateRegex` (safe-regex2
+    // static complexity check) MUST run before any smoke-gate evaluation
+    // so catastrophic-backtracking patterns are rejected before the gate
+    // executes them against the badExample/goodExample snippets. The
+    // smoke gate below (enforceSmokeGate via runSmokeGate) expects this
+    // ordering; a future refactor that re-orders these stages would
+    // expose the compile smoke gate to the same ReDoS vector the lint
+    // runtime bound (RegexEvaluator) now protects against.
     const validation = validateRegex(parsed.pattern);
     if (!validation.valid) {
       return { rule: null, rejectReason: `Rejected regex: ${validation.reason}` };

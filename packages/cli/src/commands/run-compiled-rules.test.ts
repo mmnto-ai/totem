@@ -486,8 +486,12 @@ describe('runCompiledRules', () => {
 
   // ─── RuleEngineContext wiring (mmnto/totem#1441) ────
 
-  it('threads a RuleEngineContext with a working warn logger into applyRulesToAdditions', async () => {
-    const spy = vi.spyOn(totem, 'applyRulesToAdditions');
+  it('threads a RuleEngineContext with a working warn logger into the bounded regex path', async () => {
+    // mmnto-ai/totem#1641 swapped the runtime regex path from the sync
+    // `applyRulesToAdditions` to the bounded worker-backed
+    // `applyRulesToAdditionsBounded`. The test spies on the new function
+    // to confirm the RuleEngineContext still threads through correctly.
+    const spy = vi.spyOn(totem, 'applyRulesToAdditionsBounded');
     try {
       const rules = [makeRule('neverMatchXYZ123', 'No match', 'No match rule')];
       writeRules(tmpDir, rules);

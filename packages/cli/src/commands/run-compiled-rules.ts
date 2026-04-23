@@ -1,4 +1,11 @@
-import type { CompiledRule, RuleEventCallback, TotemFinding, Violation } from '@mmnto/totem';
+import type {
+  CompiledRule,
+  RuleEventCallback,
+  RuleTimeoutOutcome,
+  TimeoutMode,
+  TotemFinding,
+  Violation,
+} from '@mmnto/totem';
 
 import type { ShieldFormat } from './shield.js';
 
@@ -17,6 +24,13 @@ export interface RunCompiledRulesOptions {
   configRoot?: string;
   /** True if we are linting staged changes only */
   isStaged?: boolean;
+  /**
+   * Bounded regex execution timeout mode (mmnto-ai/totem#1641). `strict`
+   * (default) surfaces regex timeouts as lint errors that contribute to
+   * the non-zero exit code. `lenient` skips the timing-out rule-file pair
+   * with a visible warning and excludes timeouts from the exit code.
+   */
+  regexTimeoutMode?: TimeoutMode;
 }
 
 export interface RunCompiledRulesResult {
@@ -25,6 +39,13 @@ export interface RunCompiledRulesResult {
   findings: TotemFinding[];
   rules: CompiledRule[];
   output: string;
+  /**
+   * Any regex rule-file pairs that timed out during bounded evaluation
+   * (mmnto-ai/totem#1641). Empty on healthy runs. Strict mode expects the
+   * CLI caller to fail non-zero when non-empty; lenient mode emits
+   * warnings only.
+   */
+  regexTimeouts: RuleTimeoutOutcome[];
 }
 
 // ─── Constants ──────────────────────────────────────
@@ -45,7 +66,7 @@ export async function runCompiledRules(
   const { writeOutput } = await import('../utils.js');
   const {
     applyAstRulesToAdditions,
-    applyRulesToAdditions,
+    applyRulesToAdditionsBounded,
     enrichWithAstContext,
     extractAddedLines,
     loadCompiledRules,
@@ -55,6 +76,7 @@ export async function runCompiledRules(
     recordEvaluation,
     recordSuppression,
     recordTrigger,
+    RegexEvaluator,
     resolveGitRoot,
     safeExec,
     saveRuleMetrics,
@@ -62,8 +84,18 @@ export async function runCompiledRules(
   } = await import('@mmnto/totem');
   type RuleEngineContext = import('@mmnto/totem').RuleEngineContext;
 
-  const { diff, cwd, totemDir, format, outPath, exportPaths, ignorePatterns, tag, isStaged } =
-    options;
+  const {
+    diff,
+    cwd,
+    totemDir,
+    format,
+    outPath,
+    exportPaths,
+    ignorePatterns,
+    tag,
+    isStaged,
+    regexTimeoutMode,
+  } = options;
 
   // Per-invocation rule-engine context (ADR-071 + mmnto/totem#1441): logger
   // threads into the engine as a parameter rather than a module-level setter,
@@ -180,7 +212,66 @@ export async function runCompiledRules(
       );
     }
   };
-  const regexViolations = applyRulesToAdditions(ruleCtx, rules, additions, ruleEventCallback);
+  // mmnto-ai/totem#1641: bounded regex evaluation with per-rule-per-file
+  // timeout. Strict (default) surfaces timeouts as lint errors; lenient
+  // skips the timing-out rule-file pair with a warning. Evaluator spawns
+  // a single persistent worker for the whole lint run and disposes at
+  // the end of this function. Telemetry records are appended to the
+  // existing `.totem/temp/telemetry.jsonl` sink tagged `type: 'regex-execution'`
+  // so downstream tooling can filter regex metrics from LLM metrics.
+  const effectiveTimeoutMode: TimeoutMode = regexTimeoutMode ?? 'strict';
+  const fs = await import('node:fs');
+  const writeRegexTelemetry = (record: import('@mmnto/totem').RegexTelemetry): void => {
+    try {
+      // Use `resolvedTotemDir` (which respects `configRoot`) rather than
+      // `cwd` so telemetry lands next to compile-manifest.json when the
+      // caller runs lint from a sub-directory (CR PR #1644 round-1).
+      const tempDir = path.join(resolvedTotemDir, 'temp');
+      fs.mkdirSync(tempDir, { recursive: true });
+      const entry = {
+        type: 'regex-execution' as const,
+        timestamp: new Date().toISOString(),
+        ...record,
+      };
+      fs.appendFileSync(
+        path.join(tempDir, 'telemetry.jsonl'),
+        JSON.stringify(entry) + '\n',
+        'utf-8',
+      ); // totem-context: intentional best-effort telemetry sink — failures are surfaced via log.warn below rather than rethrown so disk-full or permission errors on the telemetry path do not break lint.
+    } catch (err) {
+      log.warn(
+        tag,
+        `Failed to write regex telemetry: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  };
+  const regexEvaluator = new RegexEvaluator({}, writeRegexTelemetry);
+  let regexViolations: Violation[] = [];
+  const regexTimeouts: RuleTimeoutOutcome[] = [];
+  try {
+    const bounded = await applyRulesToAdditionsBounded(
+      ruleCtx,
+      rules,
+      additions,
+      {
+        evaluator: regexEvaluator,
+        timeoutMode: effectiveTimeoutMode,
+        repoRoot: repoRoot ?? cwd,
+      },
+      ruleEventCallback,
+    );
+    regexViolations = bounded.violations;
+    regexTimeouts.push(...bounded.timeoutOutcomes);
+    for (const timeout of bounded.timeoutOutcomes) {
+      const modeLabel = timeout.mode === 'strict' ? 'error' : 'skipped';
+      log.warn(
+        tag,
+        `rule ${timeout.ruleHash} timed out after ${timeout.elapsedMs}ms on ${timeout.file} (${modeLabel})`,
+      );
+    }
+  } finally {
+    await regexEvaluator.dispose();
+  }
 
   // Run AST rules (async — reads files and runs Tree-sitter/ast-grep queries)
   const astRules = rules.filter((r) => r.engine === 'ast' || r.engine === 'ast-grep');
@@ -438,5 +529,5 @@ export async function runCompiledRules(
     log.info(tag, `Verdict: ${verdictLabel} - ${rules.length} rules, 0 violations`);
   }
 
-  return { violations, findings, rules, output };
+  return { violations, findings, rules, output, regexTimeouts };
 }
