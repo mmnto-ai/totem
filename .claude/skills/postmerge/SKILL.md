@@ -32,16 +32,26 @@ with the merged PR numbers (space-separated, e.g. `1345 1347 1348`).
      names, or file paths that do not exist in the repo
    - The `lessonHeading` accurately describes the rule's behavior
 
-   For any rule that fails these checks, mutate
-   `.totem/compiled-rules.json` to add `status: 'archived'` and a
-   detailed `archivedReason` explaining the specific failure mode.
-   The mmnto-ai/totem#1345 archive filter in `loadCompiledRules`
-   silences archived rules at lint time while preserving them in the
-   ledger for future compile-worker prompt regression analysis. See
-   `scripts/archive-bad-postmerge-rules.cjs` (committed on
-   mmnto-ai/totem#1366) for the canonical mutation script shape.
-   Match target rules by `lessonHash`, not `lessonHeading` (headings
-   are auto-truncated to 60 chars and are not guaranteed unique).
+   For any rule that fails these checks, archive it with the atomic
+   `totem lesson archive <hash> --reason "<specific failure mode>"`
+   command (mmnto-ai/totem#1587). The command flips the rule's
+   `status` to `archived`, stamps `archivedAt` on first transition,
+   refreshes `compile-manifest.json`'s `output_hash`, and regenerates
+   the copilot and junie exports so the archived rule stops flowing
+   into downstream AI tool configs — all in one invocation.
+
+   ```bash
+   pnpm exec totem lesson archive 8dbddb67 --reason "Pattern fires on every throw-in-catch; lesson's real scope is post-scaffold hooks only"
+   ```
+
+   Use as many characters of the hash as needed to unambiguously
+   match one rule. The command matches on `lessonHash` prefix;
+   ambiguous prefixes print the candidates and exit non-zero with
+   no mutation. Idempotent on rerun — `archivedReason` refreshes,
+   `archivedAt` is preserved. The mmnto-ai/totem#1345 archive filter
+   in `loadCompiledRules` silences archived rules at lint time while
+   preserving them in the ledger for future compile-worker prompt
+   regression analysis.
 
    **Do NOT** use `git checkout HEAD -- .totem/compiled-rules.json`
    to revert the entire rules file. Reverting rules while keeping
@@ -49,8 +59,8 @@ with the merged PR numbers (space-separated, e.g. `1345 1347 1348`).
    (manifest.input_hash reflects the new lessons, output_hash
    reflects the reverted rules, verify-manifest fails on push). This
    is the symmetric counterpart of the mmnto-ai/totem#1337 bug.
-   Archive-in-place is the intended curation surface; reverting is
-   not.
+   Archive-in-place via `totem lesson archive` is the intended
+   curation surface; reverting is not.
 
    Empirical baseline: approximately 2 of every 6 auto-compiled
    rules are bad (1.14.1 postmerge), and the 2026-04-11 PM postmerge
@@ -58,18 +68,10 @@ with the merged PR numbers (space-separated, e.g. `1345 1347 1348`).
    under Strategy #73 and Strategy #62. Every archivedReason is
    feedback that informs that rewrite.
 
-5. Refresh the manifest and exports. After any mutation to
-   `compiled-rules.json`, re-run step 3's compile command. It will
-   detect the rules file drift via mmnto-ai/totem#1348's no-op
-   refresh path, update `compile-manifest.json` hashes, and
-   regenerate the copilot and junie exports so they filter the
-   newly archived rules out of the exported markdown:
-   `pnpm exec totem lesson compile --export`
-
-6. Format everything compile touched:
+5. Format everything compile and archive touched:
    `pnpm run format`
 
-7. Stage only the artifacts we keep: new lessons, the mutated rules
+6. Stage only the artifacts we keep: new lessons, the mutated rules
    file, the refreshed manifest, and the regenerated exports. Do NOT
    stage `docs/active_work.md`, `docs/roadmap.md`, or
    `docs/architecture.md` unless you hand-edited them deliberately
@@ -77,19 +79,30 @@ with the merged PR numbers (space-separated, e.g. `1345 1347 1348`).
    rewrite them):
    `git add .totem/lessons/ .totem/compiled-rules.json .totem/compile-manifest.json .github/copilot-instructions.md .junie/skills/totem-rules/rules.md`
 
-   If you wrote a one-off curation script during step 4 (as was done
-   on mmnto-ai/totem#1366 with `scripts/archive-bad-postmerge-rules.cjs`),
-   stage it explicitly so the institutional memory lands with the
-   commit:
-   `git add scripts/archive-bad-postmerge-rules.cjs  # or whatever you named yours`
-
-8. Commit:
+7. Commit:
    `git commit -m "chore: totem postmerge lessons for $ARGUMENTS"`
 
-9. Report: how many lessons extracted, how many rules compiled, how
-   many were archived inline with reasons, and whether any new
-   tickets were filed for rules that need source-lesson refinement
-   before they can be re-compiled cleanly.
+8. Report: how many lessons extracted, how many rules compiled, how
+   many were archived with `totem lesson archive` and their reasons,
+   and whether any new tickets were filed for rules that need source-
+   lesson refinement before they can be re-compiled cleanly.
+
+**Historical note.** Postmerge curation scripts at
+`scripts/archive-bad-postmerge-*.cjs` (first introduced on
+mmnto-ai/totem#1366, last used on mmnto-ai/totem#1625) are retired.
+Those scripts hand-mutated `compiled-rules.json` and relied on a
+subsequent `totem lesson compile --export` call to refresh the
+manifest, but that no-op path only detected input-hash drift — not
+output-hash drift from inline mutations (the exact gap
+mmnto-ai/totem#1587 closed). `totem lesson archive` replaces them
+with one atomic call that handles the mutation + manifest refresh +
+export regeneration in a single step. Existing scripts stay in
+history for audit but should not be invoked in new postmerge cycles.
+
+For an output-hash-only refresh without archiving (e.g., after
+manual edits to compiled-rules.json for other lifecycle reasons),
+use `pnpm exec totem lesson compile --refresh-manifest` — the
+no-LLM primitive that backs the atomic archive command.
 
 The retirement error from `totem wrap` produces this same workaround
 text at runtime, so if you forget the sequence, just run

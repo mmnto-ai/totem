@@ -1,3 +1,5 @@
+import type { CompiledRule } from '@mmnto/totem';
+
 const TAG = 'Lesson';
 
 // ─── Helpers ───────────────────────────────────────────
@@ -107,4 +109,161 @@ export async function lessonAddCommand(text: string): Promise<void> {
     const message = err instanceof Error ? err.message : String(err);
     log.warn(TAG, `Failed to trigger background sync: ${message}`);
   }
+}
+
+/**
+ * Archive a compiled rule by flipping its `status` to `'archived'`, setting
+ * the `archivedReason`, stamping `archivedAt` on first transition, and
+ * refreshing the compile manifest so `totem verify-manifest` passes on the
+ * next push (mmnto-ai/totem#1587).
+ *
+ * Atomic surface matches `rulePromoteCommand` (rule.ts:300-394): preflight
+ * the manifest read BEFORE mutating compiled-rules.json so a missing or
+ * corrupt manifest fails loud without leaving the rules file half-written.
+ * Tmp-file + rename on the rules write prevents torn writes if the process
+ * crashes mid-save.
+ *
+ * Idempotent on rerun. First archive transition owns `archivedAt`;
+ * subsequent invocations refresh `archivedReason` only. Matches the
+ * canonical archive-script pattern standardized in mmnto-ai/totem#1625.
+ *
+ * Supersedes the hand-rolled `scripts/archive-bad-postmerge-*.cjs` pattern
+ * for postmerge curation; the `/postmerge` skill calls this command
+ * directly after Task 4 of mmnto-ai/totem#1587 ships.
+ */
+export async function lessonArchiveCommand(id: string, opts: { reason?: string }): Promise<void> {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { log, bold } = await import('../ui.js');
+  const {
+    exportLessons,
+    generateOutputHash,
+    hashLesson,
+    loadCompiledRulesFile,
+    readAllLessons,
+    readCompileManifest,
+    writeCompileManifest,
+  } = await import('@mmnto/totem');
+  const { loadConfig, resolveConfigPath } = await import('../utils.js');
+
+  const cwd = process.cwd();
+  const configPath = resolveConfigPath(cwd);
+  const config = await loadConfig(configPath);
+  const totemDir = path.join(cwd, config.totemDir);
+  const rulesPath = path.join(totemDir, 'compiled-rules.json');
+  const manifestPath = path.join(totemDir, 'compile-manifest.json');
+
+  if (!fs.existsSync(rulesPath)) {
+    log.error(
+      'Totem Error',
+      `No compiled-rules.json at ${rulesPath}. Run 'totem lesson compile' first.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  const rulesFile = loadCompiledRulesFile(rulesPath);
+
+  // Pre-index pass with duplicate-collision abort (CR finding on PR mmnto-ai/totem#1629).
+  // Duplicate full hashes in compiled-rules.json are data corruption, not
+  // prefix ambiguity; the "provide more characters to disambiguate" hint
+  // is impossible to satisfy when the full hash itself collides. Surface
+  // this as a distinct failure mode before prefix resolution runs.
+  const byHash = new Map<string, CompiledRule>();
+  const duplicates = new Set<string>();
+  for (const r of rulesFile.rules) {
+    const key = r.lessonHash.toLowerCase();
+    if (byHash.has(key)) {
+      duplicates.add(key);
+    } else {
+      byHash.set(key, r);
+    }
+  }
+  if (duplicates.size > 0) {
+    log.error(
+      'Totem Error',
+      `compiled-rules.json contains duplicate lessonHash entries: ${[...duplicates].join(', ')}`,
+    );
+    log.dim(TAG, 'This is data corruption. Run `totem verify-manifest` and investigate.');
+    process.exitCode = 1;
+    return;
+  }
+
+  const matches = rulesFile.rules.filter((r: CompiledRule) =>
+    r.lessonHash.toLowerCase().startsWith(id.toLowerCase()),
+  );
+
+  if (matches.length === 0) {
+    log.error('Totem Error', `No rule found matching '${id}'`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (matches.length > 1) {
+    log.warn(TAG, `Ambiguous prefix '${id}' matches ${matches.length} rules:`);
+    for (const m of matches) {
+      log.info(TAG, `  ${bold(m.lessonHash)} — ${m.lessonHeading}`);
+    }
+    log.dim(TAG, 'Provide more characters to disambiguate.');
+    process.exitCode = 1;
+    return;
+  }
+
+  const rule = matches[0]!;
+
+  // Preflight the manifest read BEFORE mutating rules.json (mmnto-ai/
+  // totem#1601 CR pattern on rulePromoteCommand). Missing / corrupt /
+  // unwritable manifest must fail out before any side effects on the
+  // rules file.
+  const compileManifest = readCompileManifest(manifestPath);
+
+  // Idempotent lifecycle transition: first archive owns archivedAt;
+  // reruns refresh archivedReason but leave archivedAt untouched. Matches
+  // the canonical archive-script shape standardized in mmnto-ai/totem#1625.
+  const wasAlreadyArchived = rule.status === 'archived';
+  rule.status = 'archived';
+  rule.archivedReason = opts.reason ?? 'Archived via `totem lesson archive`';
+  if (!rule.archivedAt) {
+    rule.archivedAt = new Date().toISOString();
+  }
+
+  // Atomic tmp+rename write matching the canonical on-disk format used
+  // by compile-lesson.ts, rule-mutator.ts, and rulePromoteCommand.
+  const tmpPath = `${rulesPath}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(rulesFile, null, 2) + '\n', { encoding: 'utf-8' });
+  fs.renameSync(tmpPath, rulesPath);
+
+  // Refresh the manifest's output_hash so verify-manifest passes on the
+  // next push. Uses the compileManifest loaded above (preflighted) so the
+  // mutation order is: read-manifest -> mutate-rules -> write-rules ->
+  // update-manifest.
+  compileManifest.output_hash = generateOutputHash(rulesPath);
+  compileManifest.compiled_at = new Date().toISOString();
+  writeCompileManifest(manifestPath, compileManifest);
+
+  // Regenerate exports so the archived rule gets filtered out of
+  // copilot-instructions.md and junie rules.md (mirrors the compile.ts
+  // mmnto-ai/totem#1345 export-path filter). No-op if no exports are
+  // configured.
+  if (config.exports && Object.keys(config.exports).length > 0) {
+    const lessons = readAllLessons(totemDir);
+    const archivedHashes = new Set(
+      rulesFile.rules
+        .filter((r: CompiledRule) => r.status === 'archived')
+        .map((r: CompiledRule) => r.lessonHash.toLowerCase()),
+    );
+    const lessonsForExport =
+      archivedHashes.size === 0
+        ? lessons
+        : lessons.filter((l) => !archivedHashes.has(hashLesson(l.heading, l.body).toLowerCase()));
+    for (const [name, filePath] of Object.entries(config.exports)) {
+      const absPath = path.join(cwd, filePath);
+      exportLessons(lessonsForExport, absPath);
+      log.dim(TAG, `Exported ${lessonsForExport.length} rules to ${filePath} (${name})`);
+    }
+  }
+
+  const verb = wasAlreadyArchived ? 'Refreshed archive' : 'Archived';
+  log.success(TAG, `${verb} for rule ${bold(rule.lessonHash)} — ${rule.lessonHeading}`);
+  log.dim(TAG, 'Manifest refreshed. `totem verify-manifest` should pass.');
 }

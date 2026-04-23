@@ -158,6 +158,62 @@ describe('buildCompiledRule', () => {
     expect(result.rule!.createdAt).toBe('2025-01-01T00:00:00.000Z');
   });
 
+  it('preserves archive lifecycle fields (status, archivedReason, archivedAt) from existing rule (#1587)', () => {
+    // When --force recompiles a rule that was previously archived by a
+    // postmerge curation script, the archive lifecycle fields must carry
+    // forward. Otherwise `--force` silently un-archives every archived
+    // rule in the corpus — the exact bug LC Claude identified.
+    const existing = new Map<string, CompiledRule>();
+    existing.set('abc123', {
+      lessonHash: 'abc123',
+      lessonHeading: 'old',
+      pattern: 'old',
+      message: 'old',
+      engine: 'regex',
+      compiledAt: '2026-01-01T00:00:00.000Z',
+      createdAt: '2025-01-01T00:00:00.000Z',
+      status: 'archived',
+      archivedReason: 'Over-broad in test contexts',
+      archivedAt: '2026-04-15T00:00:00.000Z',
+    });
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: 'console\\.log',
+      message: 'No console.log',
+      engine: 'regex',
+    };
+    const result = buildCompiledRule(parsed, lesson, existing);
+    expect(result.rule!.status).toBe('archived');
+    expect(result.rule!.archivedReason).toBe('Over-broad in test contexts');
+    expect(result.rule!.archivedAt).toBe('2026-04-15T00:00:00.000Z');
+  });
+
+  it('does not set lifecycle fields when existing rule has none (#1587)', () => {
+    // Non-archived existing rule: lifecycle fields stay absent on the new
+    // rule. Zod strips undefined; explicit absence is the canonical
+    // "active" state per CompiledRuleSchema.
+    const existing = new Map<string, CompiledRule>();
+    existing.set('abc123', {
+      lessonHash: 'abc123',
+      lessonHeading: 'old',
+      pattern: 'old',
+      message: 'old',
+      engine: 'regex',
+      compiledAt: '2026-01-01T00:00:00.000Z',
+      createdAt: '2025-01-01T00:00:00.000Z',
+    });
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: 'console\\.log',
+      message: 'No console.log',
+      engine: 'regex',
+    };
+    const result = buildCompiledRule(parsed, lesson, existing);
+    expect(result.rule!.status).toBeUndefined();
+    expect(result.rule!.archivedReason).toBeUndefined();
+    expect(result.rule!.archivedAt).toBeUndefined();
+  });
+
   it('includes sanitized fileGlobs when provided', () => {
     const parsed: CompilerOutput = {
       compilable: true,
