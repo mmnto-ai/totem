@@ -64,6 +64,13 @@ Safely removes all Totem git hooks, config files, agent prompt injections, and t
 
 Stateless, zero-LLM linting against `compiled-rules.json`. It reads the compiled constraints and evaluates your local files.
 
+Regex rules execute under a runtime timeout budget in a persistent worker thread so catastrophic-backtracking patterns (ReDoS) cannot hang the lint run. The timeout behavior is configurable via `--timeout-mode`:
+
+- `--timeout-mode strict` (default) — any rule-file pair that exceeds the budget fails the lint run non-zero. This is the CI path.
+- `--timeout-mode lenient` — skip the offending rule-file pair with a visible warning; exit code is unchanged. Useful for local iteration when a known-slow rule is under investigation.
+
+Timeout outcomes land in `.totem/temp/telemetry.jsonl` tagged `type: 'regex-execution'` with repo-relative path redaction. This is distinct from the input-time ReDoS check on `totem add-secret --pattern` below — that rejects dangerous patterns at authoring time, while the lint-time budget enforces termination against any pattern that slips through.
+
 ### `totem rule list` / `totem rule scaffold`
 
 Manage your deterministic rules (Pipeline 1). `rule list` outputs active rules, and `rule scaffold` creates a template for manual rule authoring.
