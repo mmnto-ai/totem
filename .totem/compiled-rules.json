@@ -7258,27 +7258,57 @@
       "severity": "warning",
       "status": "archived",
       "archivedReason": "Over-broad pattern: astGrepPattern `new TotemError($MSG, $$$REST)` matches every TotemError construction, not just manual-prefix inclusions. 34 legitimate call sites in production code would fire on every lint run. The lesson intent is to ban `new TotemError(\"[Totem Error] ...\")` but the compile worker could not express the literal-prefix constraint as an ast-grep pattern. Archived via #1553 postmerge cycle; candidate for ADR-091 Stage 4 Verify-Against-Codebase auto-archive once implemented.",
-      "unverified": true,
-      "archivedAt": "2026-04-19T06:37:57.975Z"
+      "archivedAt": "2026-04-19T06:37:57.975Z",
+      "unverified": true
     },
     {
       "lessonHash": "501000ab9c41230b",
       "lessonHeading": "Inherit stdio for startup hooks",
+      "pattern": "stdio\\s*:\\s*['\"]pipe['\"]",
       "message": "Use stdio: 'inherit' instead of 'pipe' in startup hooks — 'pipe' swallows stderr output from the child process",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "stdio\\s*:\\s*['\"]pipe['\"]",
+      "badExample": "spawn('npm', ['install'], { stdio: 'pipe' });",
       "compiledAt": "2026-04-20T15:26:04.307Z",
       "createdAt": "2026-04-20T15:26:04.307Z",
       "fileGlobs": [
         ".gemini/hooks/**/*.js",
         "packages/cli/src/commands/init-templates.ts"
       ],
-      "badExample": "spawn('npm', ['install'], { stdio: 'pipe' });",
-      "unverified": true,
+      "severity": "warning",
       "status": "archived",
       "archivedReason": "Over-matching: pattern targets the string-shorthand form `stdio: 'pipe'` but the defect it was generalized from used the array form `stdio: ['ignore', 'pipe', 'pipe']`, so the regex does not match the actual bug sites in .gemini/hooks/SessionStart.js or init-templates.ts. `stdio: 'pipe'` is also a legitimate Node.js pattern when the caller wants to capture stdout via execSync's return value. The lesson is valid guidance but the structural rule form cannot express it without false positives; revisit as an astGrepYamlRule compound rule after ADR-091 Stage 4 Codebase Verifier ships.",
-      "archivedAt": "2026-04-20T15:27:18.905Z"
+      "archivedAt": "2026-04-20T15:27:18.905Z",
+      "unverified": true
+    },
+    {
+      "lessonHash": "8dbddb677f738249",
+      "lessonHeading": "Warn on non-critical hook failures",
+      "message": "Post-scaffold hooks (e.g. git add, doc injection) should warn-and-continue rather than re-throwing in catch blocks, to avoid leaving artifacts in a half-finished state.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepYamlRule": {
+        "rule": {
+          "kind": "throw_statement",
+          "inside": {
+            "kind": "catch_clause",
+            "stopBy": "end"
+          }
+        }
+      },
+      "compiledAt": "2026-04-23T00:14:18.341Z",
+      "createdAt": "2026-04-23T00:14:18.341Z",
+      "fileGlobs": [
+        "packages/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "badExample": "try {\n  await gitAdd(files);\n} catch (err) {\n  throw new Error(`git add failed: ${err}`);\n}",
+      "goodExample": "try {\n  await gitAdd(files);\n} catch (err) {\n  console.warn(`git add failed, continuing: ${err}`);\n}",
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "Pattern `throw_statement` inside `catch_clause` fires on every re-throw in packages/**/*.ts, not just the post-scaffold-hook catches the lesson targets. Directly contradicts `lesson-fail-open-catch-ban` (bans silent-swallow semantics for non-terminal handlers). Terminal-handler refinement tracked in #1614. The lesson itself is valid guidance for scaffold-orchestrator code paths, but the context constraint (post-scaffold hooks only) cannot be captured structurally via ast-grep. Sibling class to #1598 (compile-worker context-sensitive lesson extraction gap). Archived during PR #1615 postmerge 2026-04-22.",
+      "archivedAt": "2026-04-23T00:14:18.341Z"
     }
   ],
   "nonCompilable": [
@@ -12062,6 +12092,42 @@
       "title": "Avoid abrupt CLI flag removal",
       "reasonCode": "out-of-scope",
       "reason": "Detecting whether a removed/renamed CLI flag has a deprecated alias requires cross-version diffing and semantic understanding of the flag lifecycle — there is no single-file code pattern that distinguishes a safe removal (with alias) from an abrupt removal (without alias)."
+    },
+    {
+      "hash": "35de83ede484f989",
+      "title": "Annotate terminal handlers for AST-grep",
+      "reasonCode": "out-of-scope",
+      "reason": "The lesson describes an architectural/annotation convention (marking process-terminating functions so linting rules treat them as terminal) rather than a detectable code pattern. There is no single syntactic anti-pattern to flag — the lesson is guidance for rule authors, not a constraint on source code structure."
+    },
+    {
+      "hash": "5cf273df4f8596a2",
+      "title": "Escape back-references in template substitution",
+      "reasonCode": "matches-good-example",
+      "reason": "smoke gate: matches goodExample (over-matching: 1 match)"
+    },
+    {
+      "hash": "513f3b194be8d66d",
+      "title": "Stage specific files in CLI tools",
+      "reasonCode": "matches-good-example",
+      "reason": "smoke gate: matches goodExample (over-matching: 1 match)"
+    },
+    {
+      "hash": "108bbf3012cc61f7",
+      "title": "Validate inputs before performing side effects",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural principle about ordering validation before side effects. There is no detectable code pattern that distinguishes 'validation before side effects' from 'side effects before validation' — the rule requires understanding the semantic intent and ordering of arbitrary validation logic relative to arbitrary I/O operations, which cannot be expressed as a structural or textual pattern."
+    },
+    {
+      "hash": "577b552647817478",
+      "title": "Normalize temp paths for cross-platform equality",
+      "reasonCode": "matches-good-example",
+      "reason": "smoke gate: matches goodExample (over-matching: 1 match)"
+    },
+    {
+      "hash": "1d8aecd02fc367ec",
+      "title": "Spy on logger contracts in tests",
+      "reasonCode": "out-of-scope",
+      "reason": "The lesson describes an architectural testing principle — prefer asserting on logger method calls over internal transport outputs — which cannot be expressed as a structural code pattern. There is no specific forbidden API, import, or syntax to detect; the violation depends on understanding what constitutes 'internal transport output' versus 'high-level logger methods', which requires semantic reasoning beyond what regex or AST patterns can capture."
     }
   ]
 }
