@@ -113,6 +113,46 @@ Or if the lesson cannot be compiled:
 
 When setting \`"compilable": false\`, always include a \`"reason"\` field explaining why the lesson cannot be compiled into a regex/AST pattern (e.g., "Lesson describes a conceptual architectural principle, not a detectable code pattern").
 
+### Context Constraints Classifier (mmnto-ai/totem#1598)
+
+Some lessons describe **real code defects** whose hazard is bounded by a **context the pattern cannot capture**. The violation depends on WHERE the code appears, not just WHAT the code is. A naive pattern would fire on every surface match, producing a false-positive-prone rule.
+
+Markers that signal a context constraint in the lesson body:
+- "**inside** X", "**within** X", "**when wrapped in** X", "**when called from** X" — scope guards
+- "**only for new** X", "**only when** X", "**except when** X" — conditional guards
+- "**must not** X ... **when** Y" — combined guards
+
+When the lesson carries such a guard AND the guard cannot be captured structurally (i.e., no \`fileGlobs\` / \`kind:\` / \`inside:\` combinator in ast-grep can express it), emit:
+
+\`\`\`json
+{
+  "compilable": false,
+  "reasonCode": "context-required",
+  "reason": "Lesson constrains scope to <the guard>; the pattern cannot distinguish violations from legitimate usage."
+}
+\`\`\`
+
+The \`reasonCode\` field is optional and narrow — \`"context-required"\` is the only value you may emit. Absence of the field means the existing generic out-of-scope classification applies.
+
+**Worked examples (DO emit \`context-required\`):**
+
+- Lesson: "\`sim.tick()\` must not advance inside \`_process\`"
+  - Naive pattern \`sim\\.tick\\(\` would fire on the legitimate \`_physics_process()\` body. The guard ("inside \`_process\`") is a Godot runtime callback name, not a file-level or node-level scope expressible in regex or ast-grep.
+  - Correct output: \`{"compilable": false, "reasonCode": "context-required", "reason": "Lesson restricts sim.tick() to non-_process callbacks; pattern cannot distinguish _process from _physics_process enclosure."}\`
+
+- Lesson: "new follow-up proposal IDs must not collide with existing ones"
+  - Naive pattern \`Proposal\\s+0*([0-9]+)\` would fire on every existing \`Proposal 042\` reference in the repo. The guard ("new IDs only") requires knowing which IDs are new at compile time, which no pattern can express.
+  - Correct output: \`{"compilable": false, "reasonCode": "context-required", "reason": "Lesson applies only to newly-introduced IDs; pattern cannot distinguish new from existing references."}\`
+
+**Anti-lazy guard (DO compile):**
+
+The existence of this escape hatch does **not** license lazy rejection. A scope-sensitive lesson whose guard IS expressible structurally MUST still compile:
+
+- Lesson: "Use double quotes inside JSON files" → scope is captured by \`fileGlobs: ["**/*.json"]\`. Compile normally.
+- Lesson: "No \`console.log\` inside React render methods" → scope is captured by an ast-grep \`inside: { kind: 'method_definition', has: { kind: 'identifier', regex: '^render$' } }\` combinator. Compile normally if you can express it; only fall back to \`context-required\` when the structural tools genuinely cannot reach the guard.
+
+**Rule of thumb:** ask "can any of \`fileGlobs\`, ast-grep \`kind:\`, \`inside:\`, \`has:\`, or \`regex:\` express the guard the lesson describes?" If yes, compile. If no, emit \`context-required\`.
+
 ## Examples
 
 Lesson: "Use \`err\` (never \`error\`) in catch blocks"

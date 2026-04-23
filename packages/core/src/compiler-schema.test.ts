@@ -6,6 +6,9 @@ import {
   CompiledRuleSchema,
   CompilerOutputSchema,
   NapiConfigSchema,
+  NonCompilableEntryReadSchema,
+  NonCompilableEntryWriteSchema,
+  NonCompilableReasonCodeSchema,
 } from './compiler-schema.js';
 
 // ─── NapiConfigSchema / AstGrepYamlRuleSchema ────────
@@ -489,5 +492,78 @@ describe('RuleEventCallback discriminator', () => {
     const suppress: 'trigger' | 'suppress' | 'failure' = 'suppress';
     const failure: 'trigger' | 'suppress' | 'failure' = 'failure';
     expect(suppress).not.toBe(failure);
+  });
+});
+
+// ─── NonCompilableReasonCode 'context-required' (mmnto-ai/totem#1598) ────
+
+describe("NonCompilableReasonCodeSchema 'context-required'", () => {
+  it('accepts the context-required reason code', () => {
+    expect(() => NonCompilableReasonCodeSchema.parse('context-required')).not.toThrow();
+  });
+
+  it('keeps legacy-unknown as the terminal enum value', () => {
+    const values = NonCompilableReasonCodeSchema.options;
+    expect(values[values.length - 1]).toBe('legacy-unknown');
+    expect(values).toContain('context-required');
+  });
+
+  it('round-trips a NonCompilable ledger entry carrying context-required', () => {
+    const entry = {
+      hash: 'a'.repeat(16),
+      title: 'sim.tick() must not advance inside _process',
+      reasonCode: 'context-required' as const,
+      reason: 'Lesson constrains scope to an enclosing function; regex cannot capture the guard.',
+    };
+    const written = NonCompilableEntryWriteSchema.parse(entry);
+    const read = NonCompilableEntryReadSchema.parse(written);
+    expect(read).toEqual(entry);
+  });
+});
+
+describe('CompilerOutputSchema context-required reasonCode', () => {
+  it('accepts a non-compilable output with reasonCode context-required', () => {
+    const parsed = CompilerOutputSchema.parse({
+      compilable: false,
+      reasonCode: 'context-required',
+      reason:
+        'Lesson references an enclosing scope ("inside _process") the pattern cannot express.',
+    });
+    expect(parsed.compilable).toBe(false);
+    expect(parsed.reasonCode).toBe('context-required');
+  });
+
+  it('accepts a non-compilable output without a reasonCode (falls back to generic out-of-scope)', () => {
+    // Backward compatibility: LLM responses that set compilable:false without
+    // a reasonCode continue to route through the existing out-of-scope exit.
+    const parsed = CompilerOutputSchema.parse({
+      compilable: false,
+      reason: 'Conceptual architectural principle.',
+    });
+    expect(parsed.compilable).toBe(false);
+    expect(parsed.reasonCode).toBeUndefined();
+  });
+
+  it('rejects compilable output with a reasonCode (reasonCode is for non-compilable exits only)', () => {
+    const result = CompilerOutputSchema.safeParse({
+      compilable: true,
+      pattern: 'foo',
+      badExample: 'foo()',
+      goodExample: 'bar()',
+      reasonCode: 'context-required',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a reasonCode value outside the LLM-emittable vocabulary', () => {
+    // Internal codes like verify-retry-exhausted are emitted by core routing,
+    // never by the LLM. Locking this in prevents the LLM from bypassing core
+    // classification by emitting an internal sentinel.
+    const result = CompilerOutputSchema.safeParse({
+      compilable: false,
+      reasonCode: 'verify-retry-exhausted',
+      reason: 'stolen sentinel',
+    });
+    expect(result.success).toBe(false);
   });
 });
