@@ -1,5 +1,20 @@
 # @mmnto/cli
 
+## 1.15.2
+
+### Patch Changes
+
+- 1c766c2: 1.15.2 ships the archive-in-place durability substrate from #1587 and the new `totem lesson archive` atomic command.
+
+  ## Governance durability (closes #1587)
+  - `totem lesson compile --refresh-manifest` — new no-LLM primitive that recomputes `compile-manifest.json` output_hash from the current `compiled-rules.json` state. Closes the postmerge inline-archive gap where the no-op compile path only detected input-hash drift. Strict exclusivity with `--force`.
+  - `totem lesson compile --force` now preserves `status`, `archivedReason`, and `archivedAt` additively on rules whose `lessonHash` survives to the new output. Transient compile failures (network / rate-limit / manual reject / example-verification / cloud parse) leave the old rule intact instead of silently dropping it. Implemented via the new `preserveLifecycleFields` helper in core and `upsertRule` / `removeRuleByHash` helpers in the CLI compile loop (replace-by-hash on success; remove-on-skipped; unchanged on failed / noop). Dangling-archive guard preserved — rules whose source lesson was deleted are never resurrected.
+  - `totem lesson archive <hash> [--reason <string>]` — new atomic command mirroring `totem rule promote`. Flips the rule's `status` to `archived`, stamps `archivedAt` on first transition, preserves `archivedAt` on reruns, refreshes the manifest, and regenerates copilot + junie exports — all in one call. Matches prefix on `lessonHash`; duplicate-full-hash collisions surface as data-corruption errors distinct from prefix ambiguity.
+  - `/postmerge` skill doc rewritten to call `totem lesson archive` directly, retiring the hand-rolled `scripts/archive-bad-postmerge-*.cjs` pattern.
+
+- Updated dependencies [1c766c2]
+  - @mmnto/totem@1.15.2
+
 ## 1.15.1
 
 ### Patch Changes
