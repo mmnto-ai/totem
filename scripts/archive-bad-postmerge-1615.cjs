@@ -27,23 +27,31 @@ const TARGET = {
   archivedAt: '2026-04-23T00:14:18.341Z',
 };
 
-const manifest = JSON.parse(fs.readFileSync(RULES_PATH, 'utf8'));
+const manifest = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(RULES_PATH, 'utf8'));
+  } catch (err) {
+    throw new Error(`[Totem Error] Failed to parse ${RULES_PATH}`, { cause: err });
+  }
+})();
 const idx = manifest.rules.findIndex((r) => r.lessonHash === TARGET.lessonHash);
 if (idx === -1) {
-  console.error(`Rule with lessonHash ${TARGET.lessonHash} not found. Nothing to do.`);
+  console.error(
+    `[Totem Error] Rule with lessonHash ${TARGET.lessonHash} not found. Nothing to do.`,
+  );
   process.exit(0);
 }
 
 const rule = manifest.rules[idx];
 if (rule.status === 'archived') {
-  console.log(
-    `Rule ${TARGET.lessonHash} already archived. Refreshing archivedReason + archivedAt.`,
-  );
+  console.log(`Rule ${TARGET.lessonHash} already archived. Refreshing archivedReason only.`);
 }
 
 rule.status = 'archived';
 rule.archivedReason = TARGET.archivedReason;
-rule.archivedAt = TARGET.archivedAt;
+if (!rule.archivedAt) {
+  rule.archivedAt = TARGET.archivedAt;
+}
 
 fs.writeFileSync(RULES_PATH, JSON.stringify(manifest, null, 2) + '\n');
 console.log(`Archived rule ${TARGET.lessonHash} (${rule.lessonHeading}).`);
