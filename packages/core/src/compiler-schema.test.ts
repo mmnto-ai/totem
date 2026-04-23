@@ -5,10 +5,12 @@ import {
   AstGrepYamlRuleSchema,
   CompiledRuleSchema,
   CompilerOutputSchema,
+  LEDGER_RETRY_PENDING_CODES,
   NapiConfigSchema,
   NonCompilableEntryReadSchema,
   NonCompilableEntryWriteSchema,
   NonCompilableReasonCodeSchema,
+  shouldWriteToLedger,
 } from './compiler-schema.js';
 
 // ─── NapiConfigSchema / AstGrepYamlRuleSchema ────────
@@ -565,5 +567,114 @@ describe('CompilerOutputSchema context-required reasonCode', () => {
       reason: 'stolen sentinel',
     });
     expect(result.success).toBe(false);
+  });
+});
+
+// ─── NonCompilableReasonCode 'semantic-analysis-required' (mmnto-ai/totem#1634) ────
+
+describe("NonCompilableReasonCodeSchema 'semantic-analysis-required'", () => {
+  it('accepts the semantic-analysis-required reason code', () => {
+    expect(() => NonCompilableReasonCodeSchema.parse('semantic-analysis-required')).not.toThrow();
+  });
+
+  it('keeps legacy-unknown as the terminal enum value after the #1634 addition', () => {
+    const values = NonCompilableReasonCodeSchema.options;
+    expect(values[values.length - 1]).toBe('legacy-unknown');
+    expect(values).toContain('semantic-analysis-required');
+  });
+
+  it('round-trips a NonCompilable ledger entry carrying semantic-analysis-required', () => {
+    const entry = {
+      hash: 'b'.repeat(16),
+      title: 'Parallel float reductions break lockstep determinism',
+      reasonCode: 'semantic-analysis-required' as const,
+      reason:
+        'Closure-body AST analysis required to detect captured-float assignment inside par_iter_mut().for_each.',
+    };
+    const written = NonCompilableEntryWriteSchema.parse(entry);
+    const read = NonCompilableEntryReadSchema.parse(written);
+    expect(read).toEqual(entry);
+  });
+});
+
+describe('CompilerOutputSchema semantic-analysis-required reasonCode', () => {
+  it('accepts a non-compilable output with reasonCode semantic-analysis-required', () => {
+    const parsed = CompilerOutputSchema.parse({
+      compilable: false,
+      reasonCode: 'semantic-analysis-required',
+      reason: 'Hazard requires walking the SystemParam tuple; pattern cannot see other params.',
+    });
+    expect(parsed.compilable).toBe(false);
+    expect(parsed.reasonCode).toBe('semantic-analysis-required');
+  });
+
+  it('still accepts context-required (existing #1598 value stays in the narrow enum)', () => {
+    const parsed = CompilerOutputSchema.parse({
+      compilable: false,
+      reasonCode: 'context-required',
+      reason: 'Enclosing-function guard.',
+    });
+    expect(parsed.reasonCode).toBe('context-required');
+  });
+});
+
+// ─── LEDGER_RETRY_PENDING_CODES + shouldWriteToLedger (mmnto-ai/totem#1627) ───
+
+describe('LEDGER_RETRY_PENDING_CODES', () => {
+  it('is a strict subset of NonCompilableReasonCodeSchema.options', () => {
+    // Locks in that every retry-pending code is a legitimate enum member.
+    // A typo like 'patern-syntax-invalid' would fail here before it ships.
+    const enumValues = new Set<string>(NonCompilableReasonCodeSchema.options);
+    for (const code of LEDGER_RETRY_PENDING_CODES) {
+      expect(enumValues.has(code)).toBe(true);
+    }
+  });
+
+  it('does not include legacy-unknown (legacy is a migration sentinel, not retry-eligible)', () => {
+    expect(LEDGER_RETRY_PENDING_CODES.has('legacy-unknown')).toBe(false);
+  });
+
+  it('does not include terminal classifier codes (out-of-scope, context-required, semantic-analysis-required)', () => {
+    // These describe structural incapacity — the rule will never compile
+    // cleanly no matter how many retries. They are permanent ledger entries.
+    expect(LEDGER_RETRY_PENDING_CODES.has('out-of-scope')).toBe(false);
+    expect(LEDGER_RETRY_PENDING_CODES.has('context-required')).toBe(false);
+    expect(LEDGER_RETRY_PENDING_CODES.has('semantic-analysis-required')).toBe(false);
+    expect(LEDGER_RETRY_PENDING_CODES.has('security-rule-rejected')).toBe(false);
+  });
+
+  it('includes every known smoke-gate + LLM-output transient failure code', () => {
+    // Explicit whitelist so a future refactor that narrows the set fails
+    // here loudly rather than silently re-introducing ledger pollution.
+    expect(LEDGER_RETRY_PENDING_CODES.has('pattern-syntax-invalid')).toBe(true);
+    expect(LEDGER_RETRY_PENDING_CODES.has('pattern-zero-match')).toBe(true);
+    expect(LEDGER_RETRY_PENDING_CODES.has('verify-retry-exhausted')).toBe(true);
+    expect(LEDGER_RETRY_PENDING_CODES.has('missing-badexample')).toBe(true);
+    expect(LEDGER_RETRY_PENDING_CODES.has('missing-goodexample')).toBe(true);
+    expect(LEDGER_RETRY_PENDING_CODES.has('matches-good-example')).toBe(true);
+  });
+});
+
+describe('shouldWriteToLedger', () => {
+  it('writes permanent classifier codes to the ledger', () => {
+    expect(shouldWriteToLedger('out-of-scope')).toBe(true);
+    expect(shouldWriteToLedger('context-required')).toBe(true);
+    expect(shouldWriteToLedger('semantic-analysis-required')).toBe(true);
+    expect(shouldWriteToLedger('security-rule-rejected')).toBe(true);
+    expect(shouldWriteToLedger('no-pattern-found')).toBe(true);
+    expect(shouldWriteToLedger('no-pattern-generated')).toBe(true);
+    expect(shouldWriteToLedger('legacy-unknown')).toBe(true);
+  });
+
+  it('suppresses retry-pending smoke-gate and LLM-output failures from the ledger', () => {
+    // mmnto-ai/totem#1627: writing these to nonCompilable marks retriable
+    // transient failures as permanent, blocking future re-compile cycles
+    // from ever producing a rule once the prompt improves.
+    expect(shouldWriteToLedger('pattern-syntax-invalid')).toBe(false);
+    expect(shouldWriteToLedger('pattern-zero-match')).toBe(false);
+    expect(shouldWriteToLedger('verify-retry-exhausted')).toBe(false);
+    expect(shouldWriteToLedger('missing-badexample')).toBe(false);
+    expect(shouldWriteToLedger('missing-goodexample')).toBe(false);
+    expect(shouldWriteToLedger('matches-good-example')).toBe(false);
   });
 });

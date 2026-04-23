@@ -51,10 +51,12 @@ export {
   CompiledRuleSchema,
   CompiledRulesFileSchema,
   CompilerOutputSchema,
+  LEDGER_RETRY_PENDING_CODES,
   NapiConfigSchema,
   NonCompilableEntryReadSchema,
   NonCompilableEntryWriteSchema,
   NonCompilableReasonCodeSchema,
+  shouldWriteToLedger,
 } from './compiler-schema.js';
 export { extractAddedLines } from './diff-parser.js';
 export {

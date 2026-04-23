@@ -152,6 +152,7 @@ export {
   extractAddedLines,
   extractJustification,
   hashLesson,
+  LEDGER_RETRY_PENDING_CODES,
   loadCompiledRules,
   loadCompiledRulesFile,
   matchesGlob,
@@ -165,6 +166,7 @@ export {
   sanitizeFileGlobs,
   saveCompiledRules,
   saveCompiledRulesFile,
+  shouldWriteToLedger,
   validateRegex,
 } from './compiler.js';
 

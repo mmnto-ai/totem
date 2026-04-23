@@ -213,10 +213,53 @@ export const NonCompilableReasonCodeSchema = z.enum([
   // context-required lessons describe real code defects; the compiler simply
   // cannot produce a non-false-positive-prone rule.
   'context-required',
+  // `semantic-analysis-required` (mmnto-ai/totem#1634) classifies lessons
+  // whose hazard requires semantic or multi-file analysis the compiler
+  // cannot perform from a single lesson body: multi-file contracts,
+  // closure-body AST analysis, system-parameter-aware scoping, or
+  // project-state-conditional semantics. Sibling to `context-required`;
+  // both are permanent (structural incapacity, not transient failure).
+  'semantic-analysis-required',
   'legacy-unknown',
 ]);
 
 export type NonCompilableReasonCode = z.infer<typeof NonCompilableReasonCodeSchema>;
+
+/**
+ * Reason codes that represent retry-eligible transient failures, not
+ * permanent non-compilability (mmnto-ai/totem#1627). Writing these to
+ * `nonCompilable` in `compiled-rules.json` marks a lesson as permanently
+ * unfit for a rule, which blocks future compile-worker prompt improvements
+ * from ever producing a rule for that lesson.
+ *
+ * Every member MUST also appear in `NonCompilableReasonCodeSchema`. The
+ * corresponding test at `compiler-schema.test.ts` enforces this as a strict
+ * subset check. The type annotation below also catches a typo at compile
+ * time (a non-member string would fail assignment to
+ * `NonCompilableReasonCode`).
+ */
+export const LEDGER_RETRY_PENDING_CODES: ReadonlySet<NonCompilableReasonCode> = new Set([
+  'pattern-syntax-invalid',
+  'pattern-zero-match',
+  'verify-retry-exhausted',
+  'missing-badexample',
+  'missing-goodexample',
+  'matches-good-example',
+]);
+
+/**
+ * Policy predicate for the `nonCompilable` ledger in `compiled-rules.json`
+ * (mmnto-ai/totem#1627). Returns true for reason codes that represent
+ * permanent structural incapacity (conceptual lessons, context guards,
+ * semantic-analysis-required hazards, security rejections) and false for
+ * retry-eligible transient failures. Callers use the return value to gate
+ * `nonCompilableMap.set` so the ledger reflects "lesson genuinely cannot
+ * be a rule" rather than "compile attempt produced a bad pattern this
+ * time around."
+ */
+export function shouldWriteToLedger(reasonCode: NonCompilableReasonCode): boolean {
+  return !LEDGER_RETRY_PENDING_CODES.has(reasonCode);
+}
 
 /**
  * Strict Write schema for `nonCompilable` entries. Every persisted entry
@@ -333,8 +376,8 @@ const CompilerOutputBaseSchema = z.object({
   /** LLM explanation for why a lesson was marked non-compilable */
   reason: z.string().optional(),
   /**
-   * LLM-emittable classifier code (mmnto-ai/totem#1598). Narrower than
-   * `NonCompilableReasonCodeSchema` because most reason codes
+   * LLM-emittable classifier code (mmnto-ai/totem#1598, extended by #1634).
+   * Narrower than `NonCompilableReasonCodeSchema` because most reason codes
    * (`verify-retry-exhausted`, `missing-badexample`, `security-rule-rejected`,
    * etc.) are emitted by core routing, not the LLM. Exposing the full enum
    * to the LLM would let it bypass core classification by forging an
@@ -344,7 +387,7 @@ const CompilerOutputBaseSchema = z.object({
    * Only valid when `compilable === false`. Enforced by
    * `refineReasonCodeRequiresNonCompilable` below.
    */
-  reasonCode: z.enum(['context-required']).optional(),
+  reasonCode: z.enum(['context-required', 'semantic-analysis-required']).optional(),
 });
 
 /**
