@@ -170,6 +170,22 @@ export {
   validateRegex,
 } from './compiler.js';
 
+// Bounded regex evaluation (mmnto-ai/totem#1641)
+export {
+  applyRulesToAdditionsBounded,
+  type BoundedApplyOptions,
+  type BoundedApplyResult,
+  type RuleTimeoutOutcome,
+  type TimeoutMode,
+} from './regex-safety/apply-rules-bounded.js';
+export {
+  type EvaluateInput,
+  type EvaluateResult,
+  RegexEvaluator,
+  type RegexEvaluatorConfig,
+} from './regex-safety/evaluator.js';
+export { redactPath, type RegexTelemetry, RegexTelemetrySchema } from './regex-safety/telemetry.js';
+
 // Rule testing
 export {
   isTodoFixture,

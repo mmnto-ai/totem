@@ -33,7 +33,13 @@ vi.mock('../git.js', () => ({
 // ─── Mock run-compiled-rules to avoid needing real rules ─
 
 vi.mock('./run-compiled-rules.js', () => ({
-  runCompiledRules: async () => ({ violations: [], rules: [], output: '' }),
+  runCompiledRules: async () => ({
+    violations: [],
+    rules: [],
+    output: '',
+    findings: [],
+    regexTimeouts: [],
+  }),
 }));
 
 // ─── Helpers ────────────────────────────────────────────
@@ -158,5 +164,81 @@ describe('lintCommand staleness check', () => {
 
     // Should not throw — staleness check is wrapped in try/catch
     await expect(lintCommand({})).resolves.toBeUndefined();
+  });
+});
+
+// ─── Regex timeout strict/lenient mode (mmnto-ai/totem#1641) ────
+
+describe('lintCommand regex timeout handling', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+    fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), 'export default {};', 'utf-8');
+    const { lessonsDir, rulesPath, manifestPath } = scaffold(tmpDir);
+    writeValidManifest(manifestPath, lessonsDir, rulesPath);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+
+  it('throws TotemError in strict mode when regex timeouts are present', async () => {
+    vi.doMock('./run-compiled-rules.js', () => ({
+      runCompiledRules: async () => ({
+        violations: [],
+        rules: [],
+        output: '',
+        findings: [],
+        regexTimeouts: [
+          { ruleHash: 'hungRule', file: 'app.ts', elapsedMs: 120, mode: 'strict' as const },
+        ],
+      }),
+    }));
+
+    const { lintCommand } = await import('./lint.js');
+    await expect(lintCommand({ timeoutMode: 'strict' })).rejects.toThrow(
+      /Regex evaluation timed out/,
+    );
+  });
+
+  it('does not throw in lenient mode even when regex timeouts are present', async () => {
+    vi.doMock('./run-compiled-rules.js', () => ({
+      runCompiledRules: async () => ({
+        violations: [],
+        rules: [],
+        output: '',
+        findings: [],
+        regexTimeouts: [
+          { ruleHash: 'hungRule', file: 'app.ts', elapsedMs: 120, mode: 'lenient' as const },
+        ],
+      }),
+    }));
+
+    const { lintCommand } = await import('./lint.js');
+    await expect(lintCommand({ timeoutMode: 'lenient' })).resolves.toBeUndefined();
+  });
+
+  it('does not throw in strict mode when regex timeouts array is empty', async () => {
+    // Locks in that the strict-mode throw fires ONLY on non-empty timeouts,
+    // not on every strict-mode run.
+    vi.doMock('./run-compiled-rules.js', () => ({
+      runCompiledRules: async () => ({
+        violations: [],
+        rules: [],
+        output: '',
+        findings: [],
+        regexTimeouts: [],
+      }),
+    }));
+
+    const { lintCommand } = await import('./lint.js');
+    await expect(lintCommand({ timeoutMode: 'strict' })).resolves.toBeUndefined();
   });
 });

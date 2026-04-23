@@ -187,12 +187,17 @@ program
     '--pr-comment [number]',
     'Post a summary comment on a PR (auto-infers number in GitHub Actions)',
   )
+  .option(
+    '--timeout-mode <mode>',
+    'Regex timeout mode: strict (default, fail CI on timeout) or lenient (skip timing-out rules with warning)',
+  )
   .action(
     async (opts: {
       out?: string;
       format?: string;
       staged?: boolean;
       prComment?: string | true;
+      timeoutMode?: string;
     }) => {
       try {
         const { lintCommand } = await import('./commands/lint.js');
@@ -202,10 +207,19 @@ program
             : opts.prComment
               ? parseInt(opts.prComment, 10)
               : undefined;
+        if (opts.timeoutMode && opts.timeoutMode !== 'strict' && opts.timeoutMode !== 'lenient') {
+          const { TotemConfigError } = await import('@mmnto/totem');
+          throw new TotemConfigError(
+            `Invalid --timeout-mode "${opts.timeoutMode}". Use "strict" or "lenient".`,
+            "Run 'totem lint --help' for valid options.",
+            'CONFIG_INVALID',
+          );
+        }
         await lintCommand({
           ...opts,
           format: opts.format as 'text' | 'sarif' | 'json' | undefined,
           prComment,
+          timeoutMode: opts.timeoutMode as 'strict' | 'lenient' | undefined,
         });
       } catch (err) {
         handleError(err);

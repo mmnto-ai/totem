@@ -153,7 +153,11 @@ function matchContextDirective(ctx: RuleEngineContext, l: string): string | null
   return null;
 }
 
-function isSuppressed(ctx: RuleEngineContext, line: string, precedingLine: string | null): boolean {
+export function isSuppressed(
+  ctx: RuleEngineContext,
+  line: string,
+  precedingLine: string | null,
+): boolean {
   // Same-line: 'totem-ignore' substring also matches 'totem-ignore-next-line',
   // so directive lines themselves are inherently suppressed.
   if (line.includes(SUPPRESS_MARKER)) return true;

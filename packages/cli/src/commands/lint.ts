@@ -1,3 +1,5 @@
+import type { TimeoutMode } from '@mmnto/totem';
+
 import type { ShieldFormat } from './shield.js';
 
 // ─── Types ──────────────────────────────────────────
@@ -8,6 +10,13 @@ export interface LintOptions {
   staged?: boolean;
   /** PR number to post a comment on, or `true` to auto-infer from GitHub Actions env */
   prComment?: number | true;
+  /**
+   * Bounded regex execution timeout mode (mmnto-ai/totem#1641). `strict`
+   * (default) surfaces pattern-evaluation timeouts as lint errors.
+   * `lenient` skips the timing-out rule-file pair with a warning and
+   * does not contribute to the exit code.
+   */
+  timeoutMode?: TimeoutMode;
 }
 
 // ─── Command ────────────────────────────────────────
@@ -63,8 +72,10 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   const allIgnore = [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])];
   const exportPaths = config.exports ? Object.values(config.exports) : undefined;
 
+  const timeoutMode: TimeoutMode = options.timeoutMode ?? 'strict';
+
   const startTime = Date.now();
-  const { violations, rules } = await runCompiledRules({
+  const { violations, rules, regexTimeouts } = await runCompiledRules({
     diff: result.diff,
     cwd,
     totemDir: config.totemDir,
@@ -75,7 +86,24 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     tag: TAG,
     configRoot,
     isStaged: !!options.staged,
+    regexTimeoutMode: timeoutMode,
   });
+
+  // mmnto-ai/totem#1641: strict mode surfaces any regex-evaluation timeout
+  // as a non-zero exit. Lenient mode logged warnings inside runCompiledRules
+  // and excludes timeouts from the exit code. The sub-shell CLI layer
+  // throws a TotemError so the existing exit-code wiring picks it up.
+  if (timeoutMode === 'strict' && regexTimeouts.length > 0) {
+    const { TotemError } = await import('@mmnto/totem');
+    const summary = regexTimeouts
+      .map((t) => `${t.ruleHash} on ${t.file} (${t.elapsedMs}ms)`)
+      .join('; ');
+    throw new TotemError(
+      'CHECK_FAILED',
+      `Regex evaluation timed out on ${regexTimeouts.length} rule-file pair(s): ${summary}`,
+      "Run with '--timeout-mode lenient' to skip timing-out rules, archive the offending rule via 'totem doctor --pr', or increase the timeout budget.",
+    );
+  }
 
   // Post PR comment if requested (zero-API-keys invariant: only behind --pr-comment flag)
   if (options.prComment == null) return;
