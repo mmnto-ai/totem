@@ -1418,14 +1418,23 @@ describe('compileLesson', () => {
     // The context-required escape hatch (mmnto-ai/totem#1598) risks lazy-
     // rejection of lessons whose scope CAN be captured structurally (fileGlobs,
     // kind-scoped ast-grep, etc.). Lock in that a valid compilable response
-    // with a pattern still compiles even when the lesson body references scope
-    // keywords like "inside". The compiler routing must trust `compilable:true`
-    // and must not scan the lesson body for escape-hatch triggers.
+    // with a pattern still compiles even when the lesson body literally
+    // contains the escape-hatch trigger keywords ("inside", "only for new").
+    // The compiler routing must trust `compilable:true` and must not scan the
+    // lesson body for escape-hatch triggers. CR PR mmnto-ai/totem#1639 round-1
+    // flagged that a fixture without scope markers left this invariant
+    // untested; the explicit scope-sensitive body closes that gap.
+    const scopeSensitiveLesson: LessonInput = {
+      index: 0,
+      heading: 'Use logger inside request handlers (anti-lazy #1598)',
+      body: 'Always use logger inside request handlers; only for new handlers, console.log is forbidden. The scope here IS expressible structurally via fileGlobs, so the LLM must compile despite the "inside" and "only for new" trigger keywords in the body.',
+      hash: 'antilazy1598scopesensitive',
+    };
     const deps: CompileLessonDeps = {
       parseCompilerResponse: vi.fn().mockReturnValue({
         compilable: true,
         pattern: 'console\\.log',
-        message: 'Use logger inside handlers instead of console.log',
+        message: 'Use logger inside request handlers instead of console.log',
         engine: 'regex' as const,
         badExample: 'console.log("debug")',
         goodExample: 'logger.info("debug")',
@@ -1434,7 +1443,7 @@ describe('compileLesson', () => {
       existingByHash: new Map(),
       callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
     };
-    const result = await compileLesson(lesson, 'system prompt', deps);
+    const result = await compileLesson(scopeSensitiveLesson, 'system prompt', deps);
     expect(result.status).toBe('compiled');
   });
 

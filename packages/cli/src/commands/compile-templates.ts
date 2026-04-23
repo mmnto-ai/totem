@@ -453,5 +453,27 @@ Or if the difference cannot be expressed as a line-level regex:
 }
 \`\`\`
 
+### Context Constraints Classifier (mmnto-ai/totem#1598)
+
+Some lessons describe **real code defects** whose hazard depends on a **context the pattern cannot capture**. The Bad snippet and Good snippet may look textually similar aside from their surrounding context — the violation is about WHERE the code appears, not just WHAT the code is. A naive regex derived from the Bad line would fire on every surface match, producing a false-positive-prone rule.
+
+Markers in the lesson body that signal this class:
+- "**inside** X", "**within** X", "**when wrapped in** X", "**when called from** X" — scope guards
+- "**only for new** X", "**only when** X", "**except when** X" — conditional guards
+
+When you cannot write a regex that distinguishes the Bad lines from the Good lines because the distinguishing context lives outside the snippet itself (and \`fileGlobs\` alone cannot close the gap), emit:
+
+\`\`\`json
+{
+  "compilable": false,
+  "reasonCode": "context-required",
+  "reason": "Lesson constrains scope to <the guard>; Bad and Good snippets differ only in surrounding context the pattern cannot see."
+}
+\`\`\`
+
+The \`reasonCode\` field is optional and narrow — \`"context-required"\` is the only value you may emit. Absence of the field keeps the default classification.
+
+**Anti-lazy guard:** when \`fileGlobs\` CAN express the distinguishing scope (e.g., "only in JSON files", "only in test files"), compile normally with the appropriate glob. Only fall back to \`context-required\` when the structural tools genuinely cannot reach the guard.
+
 Every compilable rule MUST include non-empty \`badExample\` AND \`goodExample\` fields. The compile pipeline's schema parse rejects output that omits either one for \`ast-grep\` or \`regex\` engines, so the rule never reaches the smoke gate. The smoke gate then runs the rule against both snippets: the pattern MUST match \`badExample\` (zero matches here rejects with reason code \`pattern-zero-match\`) and MUST NOT match \`goodExample\` (any match here rejects with reason code \`matches-good-example\`).
 `;
