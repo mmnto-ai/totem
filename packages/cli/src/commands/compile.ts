@@ -1159,21 +1159,19 @@ export async function compileCommand(
               process.stdout.write(block + '\n');
             }
 
-            // Upgrade and --force: remove the stale copy from newRules for
-            // any terminal outcome where the rule's state CHANGES (compiled
-            // -> new pattern replaces old via upsertRule below; skipped ->
-            // rule moves to nonCompilable and must no longer appear as an
-            // active rule). For `failed` (transient error) and `noop` (no
-            // change), leave the old rule intact so a flaky network /
-            // rate-limit doesn't silently delete work (mmnto/totem#1234
-            // GCA finding; mmnto-ai/totem#1587 extension to cover --force).
-            //
-            // The `compiled` case is redundant with upsertRule's replace-
-            // by-hash semantics, but the splice still matters for `skipped`
-            // where no rule is pushed back.
+            // Upgrade and --force: remove the stale copy from newRules when
+            // the rule moves to nonCompilable (status === 'skipped') and
+            // must no longer appear as an active rule. The `compiled` case
+            // is handled by upsertRule below (replace-by-lessonHash in
+            // place, preserving array order — splicing here would defeat
+            // that by forcing upsertRule to append). For `failed`
+            // (transient error) and `noop` (no change), leave the old rule
+            // intact so a flaky network / rate-limit doesn't silently
+            // delete work (mmnto/totem#1234 GCA finding; mmnto-ai/totem#1587
+            // extension to cover --force).
             if (
               (upgradeTargets?.has(lesson.hash) || options.force) &&
-              (result.status === 'compiled' || result.status === 'skipped')
+              result.status === 'skipped'
             ) {
               const staleIdx = newRules.findIndex((r) => r.lessonHash === lesson.hash);
               if (staleIdx >= 0) newRules.splice(staleIdx, 1);

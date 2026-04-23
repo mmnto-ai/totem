@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { CompiledRule } from '@mmnto/totem';
 
 import type { NonCompilableMapValue } from './compile.js';
-import { pruneStaleNonCompilable, pruneStaleRules } from './compile.js';
+import { pruneStaleNonCompilable, pruneStaleRules, upsertRule } from './compile.js';
 
 // ─── 4-tuple helpers (mmnto-ai/totem#1481) ───────────
 
@@ -167,5 +167,47 @@ describe('pruneStaleRules', () => {
 
     expect(rules).toHaveLength(2);
     expect(rules[1]!.lessonHash).toBe('stale');
+  });
+});
+
+// ─── upsertRule (mmnto-ai/totem#1587) ────────────────
+
+describe('upsertRule', () => {
+  it('appends when no entry with the same lessonHash exists', () => {
+    const rules = [makeRule('abc'), makeRule('def')];
+    const fresh = makeRule('ghi', 'New rule');
+    upsertRule(rules, fresh);
+
+    expect(rules).toHaveLength(3);
+    expect(rules[2]).toBe(fresh);
+  });
+
+  it('replaces in-place when an entry with the same lessonHash exists', () => {
+    // Order preservation is load-bearing: re-compiling a mid-array rule
+    // under --force must NOT move it to the end. Appending instead of
+    // replacing causes diff churn in compiled-rules.json on every force
+    // run (CR finding on PR mmnto-ai/totem#1629).
+    const ruleA = makeRule('abc', 'Old A');
+    const ruleB = makeRule('def', 'B');
+    const ruleC = makeRule('ghi', 'C');
+    const rules = [ruleA, ruleB, ruleC];
+    const replacement = makeRule('abc', 'New A');
+    upsertRule(rules, replacement);
+
+    expect(rules).toHaveLength(3);
+    expect(rules[0]).toBe(replacement);
+    expect(rules[0]!.lessonHeading).toBe('New A');
+    expect(rules[1]).toBe(ruleB);
+    expect(rules[2]).toBe(ruleC);
+  });
+
+  it('is idempotent when called twice with the same rule object', () => {
+    const rules = [makeRule('abc', 'Original')];
+    const replacement = makeRule('abc', 'Updated');
+    upsertRule(rules, replacement);
+    upsertRule(rules, replacement);
+
+    expect(rules).toHaveLength(1);
+    expect(rules[0]).toBe(replacement);
   });
 });
