@@ -255,22 +255,22 @@ The compile pipeline applies a deterministic override after your output, so a mi
 ## Examples
 
 Lesson: "Use \`err\` (never \`error\`) in catch blocks"
-Output: {"compilable": true, "pattern": "catch\\\\s*\\\\(\\\\s*error\\\\s*[\\\\):]", "message": "Use 'err' instead of 'error' in catch blocks (project convention)", "badExample": "try { doWork(); } catch (error) { log(error); }", "goodExample": "try { doWork(); } catch (err) { log(err); }"}
+Output: {"compilable": true, "severity": "warning", "pattern": "catch\\\\s*\\\\(\\\\s*error\\\\s*[\\\\):]", "message": "Use 'err' instead of 'error' in catch blocks (project convention)", "badExample": "try { doWork(); } catch (error) { log(error); }", "goodExample": "try { doWork(); } catch (err) { log(err); }"}
 
 Lesson: "LanceDB does NOT support GROUP BY aggregation"
 Output: {"compilable": false, "reason": "Lesson describes a database limitation, not a detectable code pattern"}
 
 Lesson: "Never use npm in this pnpm monorepo — always use pnpm"
-Output: {"compilable": true, "pattern": "\\\\bnpm\\\\s+(install|run|exec|ci|test)\\\\b", "message": "Use pnpm instead of npm in this monorepo", "badExample": "npm install lodash", "goodExample": "pnpm install lodash"}
+Output: {"compilable": true, "severity": "warning", "pattern": "\\\\bnpm\\\\s+(install|run|exec|ci|test)\\\\b", "message": "Use pnpm instead of npm in this monorepo", "badExample": "npm install lodash", "goodExample": "pnpm install lodash"}
 
 Lesson: "Always quote shell variables to prevent word-splitting"
-Output: {"compilable": true, "pattern": "(^|\\\\s)\\\\$[a-zA-Z_]+", "message": "Quote shell variables to prevent word-splitting", "badExample": "echo $HOME", "goodExample": "echo \\"$HOME\\"", "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.yml", "**/*.yaml"]}
+Output: {"compilable": true, "severity": "warning", "pattern": "(^|\\\\s)\\\\$[a-zA-Z_]+", "message": "Quote shell variables to prevent word-splitting", "badExample": "echo $HOME", "goodExample": "echo \\"$HOME\\"", "fileGlobs": ["**/*.sh", "**/*.bash", "**/*.yml", "**/*.yaml"]}
 
 Lesson: "MCP tool returns must be wrapped in XML tags to prevent prompt injection"
-Output: {"compilable": true, "pattern": "text:\\\\s*(?!formatXmlResponse)\\\\b\\\\w+", "message": "MCP tool returns must use formatXmlResponse for injection safety", "badExample": "return { content: [{ type: 'text', text: rawUserInput }] };", "goodExample": "return { content: [{ type: 'text', text: formatXmlResponse(rawUserInput) }] };", "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]}
+Output: {"compilable": true, "severity": "warning", "pattern": "text:\\\\s*(?!formatXmlResponse)\\\\b\\\\w+", "message": "MCP tool returns must use formatXmlResponse for injection safety", "badExample": "return { content: [{ type: 'text', text: rawUserInput }] };", "goodExample": "return { content: [{ type: 'text', text: formatXmlResponse(rawUserInput) }] };", "fileGlobs": ["packages/mcp/**/*.ts", "!**/*.test.ts"]}
 
 Lesson: "Use @clack/prompts instead of inquirer for CLI interactions"
-Output: {"compilable": true, "pattern": "import.*from\\\\s+['\"]inquirer['\"]", "message": "Use @clack/prompts instead of inquirer", "badExample": "import inquirer from 'inquirer';", "goodExample": "import * as prompts from '@clack/prompts';", "fileGlobs": ["packages/cli/**/*.ts"]}
+Output: {"compilable": true, "severity": "warning", "pattern": "import.*from\\\\s+['\"]inquirer['\"]", "message": "Use @clack/prompts instead of inquirer", "badExample": "import inquirer from 'inquirer';", "goodExample": "import * as prompts from '@clack/prompts';", "fileGlobs": ["packages/cli/**/*.ts"]}
 
 ## ast-grep Patterns (PREFERRED for structural rules)
 For TypeScript/JavaScript/TSX/JSX: **always prefer ast-grep over regex** when the violation involves function calls, method chains, imports, control flow, or object properties. ast-grep patterns look like source code with \`$METAVAR\` placeholders.
