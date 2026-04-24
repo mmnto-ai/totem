@@ -932,6 +932,17 @@ describe('parseDeclaredSeverity', () => {
     expect(parseDeclaredSeverity('Severity: **warning**,')).toBe('warning');
   });
 
+  it('tolerates backtick-wrapped values with bold markers or trailing punctuation', () => {
+    // Order-of-operations matters: `stripInlineCode` only matches when
+    // backticks are at absolute string edges. Running markdown/punctuation
+    // strip first isolates the core value; then `stripInlineCode` removes
+    // the backticks around it. GCA round-3 finding on
+    // mmnto-ai/totem#1658.
+    expect(parseDeclaredSeverity('Severity: **`error`**')).toBe('error');
+    expect(parseDeclaredSeverity('Severity: `error`.')).toBe('error');
+    expect(parseDeclaredSeverity('Severity: **`warning`**.')).toBe('warning');
+  });
+
   it('tolerates comma or semicolon after the severity value', () => {
     expect(parseDeclaredSeverity('Severity: error,')).toBe('error');
     expect(parseDeclaredSeverity('Severity: warning;')).toBe('warning');

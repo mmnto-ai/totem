@@ -69,17 +69,19 @@ export interface ManualPattern {
 export function parseDeclaredSeverity(body: string): 'error' | 'warning' | undefined {
   const raw = extractField(body, 'Severity');
   if (!raw) return undefined;
-  // Strip backtick wrappers first (e.g. `error`), then leading and trailing
-  // markdown boundary markers (`*`, `_`) and trailing sentence punctuation
-  // (`.`, `,`, `;`, `:`, `!`, `?`). Single pass covers both ends: leading
-  // strip handles `Severity: **error**`-shape; trailing strip handles
-  // `Severity: error.`, `**Severity: error**`, and the combined
-  // `**error**.` shape. Tolerates GCA and CR review findings on
-  // mmnto-ai/totem#1658 (bot review rounds 1 + 2, 2026-04-24).
-  const normalized = stripInlineCode(raw.trim())
-    .replace(/^[*_]+|[*_.,;:!?]+$/g, '')
+  // Strip markdown boundary markers (`*`, `_`) and trailing sentence
+  // punctuation (`.`, `,`, `;`, `:`, `!`, `?`) FIRST, then strip backtick
+  // wrappers. Order is load-bearing: `stripInlineCode` only matches when
+  // backticks are at the absolute string edges, so running it first leaves
+  // backticks in place on shapes like `**\`error\`**` (bold-wrapped
+  // backticks) or `` `error`. `` (backticks followed by punctuation). The
+  // outer strip pass isolates the core value; stripInlineCode then removes
+  // the backticks around it. GCA round-3 finding on mmnto-ai/totem#1658.
+  const stripped = raw
     .trim()
-    .toLowerCase();
+    .replace(/^[*_]+|[*_.,;:!?]+$/g, '')
+    .trim();
+  const normalized = stripInlineCode(stripped).toLowerCase();
   return normalized === 'error' || normalized === 'warning' ? normalized : undefined;
 }
 
