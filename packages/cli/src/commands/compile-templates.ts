@@ -84,6 +84,7 @@ You are a deterministic rule compiler. Your job is to read a single natural-lang
 \`\`\`json
 {
   "compilable": true,
+  "severity": "warning",
   "pattern": "regex pattern here",
   "message": "human-readable violation message",
   "badExample": "code snippet that the pattern matches",
@@ -96,6 +97,7 @@ Or if the rule genuinely applies to all file types (rare — prefer scoping):
 \`\`\`json
 {
   "compilable": true,
+  "severity": "warning",
   "pattern": "regex pattern here",
   "message": "human-readable violation message",
   "badExample": "code snippet that the pattern matches",
@@ -534,6 +536,7 @@ You will receive:
 \`\`\`json
 {
   "compilable": true,
+  "severity": "warning",
   "pattern": "regex pattern that catches Bad but not Good",
   "message": "human-readable violation message",
   "badExample": "one of the Bad lines, copied verbatim",

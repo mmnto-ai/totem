@@ -53,14 +53,34 @@ export interface ManualPattern {
  * normalized `'error' | 'warning'` value if declared, otherwise `undefined`.
  *
  * Reuses `extractField` for the prose-extraction rules (markdown-bold
- * tolerance, mandatory colon, case-insensitive match, line-anchored). Added
- * as a shared helper so the compile pipeline's declared-severity override
- * (in `compile-lesson.ts::compileLesson`) and the CLI's cloud-path override
- * (in `compile.ts`) normalize from a single source of truth.
+ * tolerance, mandatory colon, case-insensitive match, line-anchored). Then
+ * strips trailing markdown boundary markers and sentence punctuation so
+ * common shapes like `**Severity: error.**` (full-line bold with period),
+ * `**Severity:** error.` (trailing period on the value), and
+ * `**Severity:** \`error\`` (backtick-wrapped value) all normalize to the
+ * same token. Strict equality follows the strip so out-of-vocabulary tokens
+ * (`info`, `critical`) still return `undefined` and preserve the
+ * compile-pipeline's default fallback to `'warning'`.
+ *
+ * Added as a shared helper so the compile pipeline's declared-severity
+ * override (in `compile-lesson.ts::compileLesson`) and the CLI's cloud-path
+ * override (in `compile.ts`) normalize from a single source of truth.
  */
 export function parseDeclaredSeverity(body: string): 'error' | 'warning' | undefined {
-  const raw = extractField(body, 'Severity')?.toLowerCase();
-  return raw === 'error' || raw === 'warning' ? raw : undefined;
+  const raw = extractField(body, 'Severity');
+  if (!raw) return undefined;
+  // Strip backtick wrappers first (e.g. `error`), then leading and trailing
+  // markdown boundary markers (`*`, `_`) and trailing sentence punctuation
+  // (`.`, `,`, `;`, `:`, `!`, `?`). Single pass covers both ends: leading
+  // strip handles `Severity: **error**`-shape; trailing strip handles
+  // `Severity: error.`, `**Severity: error**`, and the combined
+  // `**error**.` shape. Tolerates GCA and CR review findings on
+  // mmnto-ai/totem#1658 (bot review rounds 1 + 2, 2026-04-24).
+  const normalized = stripInlineCode(raw.trim())
+    .replace(/^[*_]+|[*_.,;:!?]+$/g, '')
+    .trim()
+    .toLowerCase();
+  return normalized === 'error' || normalized === 'warning' ? normalized : undefined;
 }
 
 export function extractField(body: string, field: string): string | undefined {

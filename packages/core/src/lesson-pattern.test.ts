@@ -898,18 +898,43 @@ describe('parseDeclaredSeverity', () => {
   });
 
   it('tolerates trailing period after the severity value', () => {
-    // lesson-ef0ba0d7 on liquid-city uses "**Severity: error.**" shape; the
-    // extractField helper captures the whole value including trailing
-    // punctuation, so the exact prose shape drives the match behavior.
-    // The current helper returns the raw extracted value; a trailing period
-    // makes the normalized value "error." which does not match the enum,
-    // so the helper returns undefined. If/when extractField is taught to
-    // strip trailing punctuation this test locks in the expected behavior
-    // change. For now, the LC exhibit's prose needs the period outside the
-    // bold marker (`**Severity: error.**` -> value captured as `error.**`)
-    // which is handled by parseDeclaredSeverity returning undefined, and
-    // the LLM's fallback emission survives. Document the boundary here.
-    expect(parseDeclaredSeverity('Severity: error.')).toBeUndefined();
+    // Matches the liquid-city ADR-008 exhibits where lesson prose ends the
+    // severity line with a period (`**Severity:** error.`). The helper
+    // strips trailing sentence punctuation so the author's intent survives.
+    // mmnto-ai/totem#1658 R1 GCA + CR finding.
+    expect(parseDeclaredSeverity('Severity: error.')).toBe('error');
+    expect(parseDeclaredSeverity('**Severity:** error.')).toBe('error');
+  });
+
+  it('tolerates full-line bold markdown wrapping severity and value', () => {
+    // Shape `**Severity: error**` is common in author prose. extractField
+    // captures `error**`; the trailing-markdown strip normalizes to `error`.
+    expect(parseDeclaredSeverity('**Severity: error**')).toBe('error');
+    expect(parseDeclaredSeverity('**Severity: warning**')).toBe('warning');
+  });
+
+  it('tolerates backtick-wrapped values', () => {
+    expect(parseDeclaredSeverity('**Severity:** `error`')).toBe('error');
+    expect(parseDeclaredSeverity('Severity: `warning`')).toBe('warning');
+  });
+
+  it('tolerates leading markdown markers on the value', () => {
+    // Shape `Severity: **error**` — leading `**` must strip alongside
+    // trailing. Shield round-2 finding on mmnto-ai/totem#1658.
+    expect(parseDeclaredSeverity('Severity: **error**')).toBe('error');
+    expect(parseDeclaredSeverity('Severity: **warning**')).toBe('warning');
+  });
+
+  it('tolerates combined bold-then-punctuation shape like error**.', () => {
+    // Punctuation outside the markdown markers. Both sets must strip to
+    // reach the bare `error` / `warning` token.
+    expect(parseDeclaredSeverity('Severity: **error**.')).toBe('error');
+    expect(parseDeclaredSeverity('Severity: **warning**,')).toBe('warning');
+  });
+
+  it('tolerates comma or semicolon after the severity value', () => {
+    expect(parseDeclaredSeverity('Severity: error,')).toBe('error');
+    expect(parseDeclaredSeverity('Severity: warning;')).toBe('warning');
   });
 
   it('returns undefined when no Severity field is present', () => {
