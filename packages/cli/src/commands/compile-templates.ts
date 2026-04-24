@@ -202,6 +202,40 @@ Only fall back to \`semantic-analysis-required\` when the analysis the lesson de
 
 **Rule of thumb:** ask "does detecting the hazard require analyzing code the pattern cannot see (other files, closure bodies, sibling parameters, project state)?" If yes, emit \`semantic-analysis-required\`. If no, compile — or fall back to \`context-required\` if the guard is local but structurally inexpressible.
 
+### Test-Contract Scope Classifier (mmnto-ai/totem#1626)
+
+Some lessons describe **behavior that executes inside test files**: assertion conventions, spy or mock contracts, test-fixture hygiene. The default \`fileGlobs\` guidance above excludes test files (\`!**/*.test.*\`), which inverts the intent for this class. The rule ships with tests excluded from scope and never fires where it is meant to govern.
+
+Positive signals (any one alone is enough to classify):
+- The lesson carries the \`testing\` tag.
+- \`badExample\` or \`goodExample\` contains test-framework calls: \`describe(\`, \`it(\`, \`test(\`, \`expect(\`, \`vi.mock(\`, \`jest.mock(\`, \`beforeEach(\`, \`afterEach(\`, \`vi.spyOn(\`, \`jest.spyOn(\`.
+- Lesson body describes behavior specific to test execution (assertion patterns, spy contracts, test fixtures, mocked-dependency setup).
+
+When a lesson is a test-contract, emit \`fileGlobs\` that INCLUDE test files. The conventional broad set covers typical monorepo test layouts:
+
+\`\`\`json
+{"fileGlobs": ["**/*.test.*", "**/*.spec.*", "**/tests/**/*.*", "**/__tests__/**/*.*"]}
+\`\`\`
+
+If the lesson clearly targets a narrower test directory (e.g., "only for e2e tests in \`packages/e2e\`"), preserve that narrow glob rather than blanket-replacing it with the broad default. Specificity beats the default when the lesson carries it.
+
+**False-positive trap.** The word "contract" alone does NOT make a lesson test-scoped. Lessons titled "Define strict API Data Contracts" or "Versioning contracts for REST endpoints" describe application-surface invariants, not test conventions. Require the \`testing\` tag OR test-framework code in the examples alongside any keyword match before classifying as test-contract.
+
+**Worked examples (emit test-inclusive fileGlobs):**
+
+- Lesson: "Normalize temp paths for cross-platform equality" with \`goodExample\` using \`expect(actual).toBe(normalizePath(expected))\`.
+  - Output: \`{"compilable": true, "pattern": "...", "message": "...", "badExample": "...", "goodExample": "...", "fileGlobs": ["**/*.test.*", "**/*.spec.*", "**/tests/**/*.*", "**/__tests__/**/*.*"]}\`
+
+- Lesson: "Spy on logger contracts in tests" tagged \`testing\`, with examples using \`vi.spyOn(logger, 'error')\`.
+  - Output: same test-inclusive fileGlobs set.
+
+**Anti-lazy guard (do NOT emit test-inclusive fileGlobs):**
+
+- Lesson: "Define strict API Data Contracts" with REST handler examples, no \`expect\`, no \`describe\`, no \`testing\` tag.
+  - Output: application-scope fileGlobs with the usual test exclusion, e.g., \`["packages/api/**/*.ts", "!**/*.test.*"]\`.
+
+**Rule of thumb:** ask "does the hazard this lesson describes actually HAPPEN inside test code?" If yes, emit test-inclusive fileGlobs. If the lesson is about production code that has nothing to do with tests, keep the standard exclusion pattern.
+
 ## Examples
 
 Lesson: "Use \`err\` (never \`error\`) in catch blocks"
@@ -546,6 +580,39 @@ When the snippet pair cannot be distinguished by any single-line pattern because
 The \`reasonCode\` field is narrow — \`"context-required"\` and \`"semantic-analysis-required"\` are the only values you may emit. Use \`semantic-analysis-required\` when the required analysis exceeds the compiler's capability; use \`context-required\` when a structural guard exists but the pattern vocabulary cannot express it.
 
 **Anti-lazy guard:** compile normally when the distinguishing difference is on the Bad/Good lines themselves or when \`fileGlobs\` can scope the rule. Only emit \`semantic-analysis-required\` when no pattern can discriminate the snippet pair regardless of vocabulary.
+
+### Test-Contract Scope Classifier (mmnto-ai/totem#1626)
+
+Some lessons describe **behavior that executes inside test files**: assertion conventions, spy or mock contracts, test-fixture hygiene. A default \`fileGlobs\` of \`"!**/*.test.*"\` inverts the intent for this class, shipping a rule that can never fire on the code it is meant to govern.
+
+Positive signals (any one alone is enough to classify):
+- The lesson carries the \`testing\` tag.
+- The Bad or Good snippet contains test-framework calls: \`describe(\`, \`it(\`, \`test(\`, \`expect(\`, \`vi.mock(\`, \`jest.mock(\`, \`beforeEach(\`, \`afterEach(\`, \`vi.spyOn(\`, \`jest.spyOn(\`.
+- Lesson body describes behavior specific to test execution (assertion patterns, spy contracts, test fixtures, mocked-dependency setup).
+
+When the lesson is a test-contract, emit \`fileGlobs\` that INCLUDE test files. The conventional broad set covers typical monorepo test layouts:
+
+\`\`\`json
+{"fileGlobs": ["**/*.test.*", "**/*.spec.*", "**/tests/**/*.*", "**/__tests__/**/*.*"]}
+\`\`\`
+
+If the lesson clearly targets a narrower test directory (e.g., "only for e2e tests in \`packages/e2e\`"), preserve that narrow glob rather than blanket-replacing it with the broad default.
+
+**False-positive trap.** The word "contract" alone does NOT make a lesson test-scoped. Lessons titled "Define strict API Data Contracts" or "Versioning contracts for REST endpoints" describe application-surface invariants. Require the \`testing\` tag OR test-framework code in the examples alongside any keyword match before classifying as test-contract.
+
+**Worked examples (emit test-inclusive fileGlobs):**
+
+- Lesson: "Normalize temp paths for cross-platform equality" with Good snippet \`expect(actual).toBe(normalizePath(expected))\`.
+  - Output: test-inclusive fileGlobs from the conventional broad set.
+- Lesson: "Spy on logger contracts in tests" tagged \`testing\`, with examples using \`vi.spyOn(logger, 'error')\`.
+  - Output: test-inclusive fileGlobs from the conventional broad set.
+
+**Anti-lazy guard (do NOT emit test-inclusive fileGlobs):**
+
+- Lesson: "Define strict API Data Contracts" with REST handler snippets, no \`expect\`, no \`describe\`, no \`testing\` tag.
+  - Output: application-scope fileGlobs with the usual test exclusion, e.g., \`["packages/api/**/*.ts", "!**/*.test.*"]\`.
+
+**Rule of thumb:** ask "does the hazard this lesson describes actually HAPPEN inside test code?" If yes, emit test-inclusive fileGlobs. If the lesson is about production code, keep the standard exclusion pattern.
 
 Every compilable rule MUST include non-empty \`badExample\` AND \`goodExample\` fields. The compile pipeline's schema parse rejects output that omits either one for \`ast-grep\` or \`regex\` engines, so the rule never reaches the smoke gate. The smoke gate then runs the rule against both snippets: the pattern MUST match \`badExample\` (zero matches here rejects with reason code \`pattern-zero-match\`) and MUST NOT match \`goodExample\` (any match here rejects with reason code \`matches-good-example\`).
 `;
