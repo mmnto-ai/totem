@@ -251,6 +251,7 @@ export {
   extractField,
   extractManualPattern,
   extractRuleExamples,
+  parseDeclaredSeverity,
   stripInlineCode,
 } from './lesson-pattern.js';
 export type { IngestionSanitizeOptions } from './sanitize.js';

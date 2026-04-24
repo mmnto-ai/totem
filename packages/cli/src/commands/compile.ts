@@ -431,6 +431,7 @@ export async function compileCommand(
     LEDGER_RETRY_PENDING_CODES,
     loadCompiledRulesFile,
     parseCompilerResponse,
+    parseDeclaredSeverity,
     readAllLessons,
     readCompileManifest,
     saveCompiledRulesFile,
@@ -469,6 +470,41 @@ export async function compileCommand(
 
   const totemDir = path.join(cwd, config.totemDir);
   const rulesPath = path.join(totemDir, COMPILED_RULES_FILE);
+
+  // mmnto-ai/totem#1656: shared helper for severity-override telemetry.
+  // Closes over the per-invocation `totemDir` (cwd-aware) so records land
+  // next to the other telemetry artifacts when compile runs from a
+  // sub-directory (sibling of mmnto-ai/totem#1645). Called from both the
+  // local compile path (via the `onSeverityOverride` callback on
+  // CompileLessonDeps) and the cloud compile path (inline when
+  // buildCompiledRule reports a severityOverride on the cloud result).
+  const writeSeverityOverrideTelemetry = (
+    lesson: { heading: string; hash: string },
+    event: { from: 'error' | 'warning' | undefined; to: 'error' | 'warning' },
+  ): void => {
+    try {
+      const tempDir = path.join(totemDir, 'temp');
+      fs.mkdirSync(tempDir, { recursive: true });
+      const entry = {
+        type: 'severity-override' as const,
+        timestamp: new Date().toISOString(),
+        lessonHash: lesson.hash,
+        lessonHeading: lesson.heading,
+        from: event.from,
+        to: event.to,
+      };
+      fs.appendFileSync(
+        path.join(tempDir, 'telemetry.jsonl'),
+        JSON.stringify(entry) + '\n',
+        'utf-8',
+      ); // totem-context: intentional best-effort telemetry sink — severity-override records are a prompt-tuning signal, not correctness-critical. Sink failures (disk full, permissions, concurrent writer) must not interfere with compile results (mmnto-ai/totem#1656).
+    } catch (err) {
+      log.warn(
+        TAG,
+        `Failed to write severity-override telemetry: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  };
 
   // ─── --refresh-manifest primitive (mmnto-ai/totem#1587) ─────────
   // No-LLM path that recomputes `output_hash` from current
@@ -959,6 +995,12 @@ export async function compileCommand(
         callbacks: {
           onWarn: (heading: string, msg: string) => log.warn(TAG, `[${heading}] ${msg}`),
           onDim: (heading: string, msg: string) => log.dim(TAG, `[${heading}] ${msg}`),
+          // mmnto-ai/totem#1656: append severity-override telemetry when the
+          // post-LLM override in buildCompiledRule changes the emitted
+          // severity. Uses totemDir (cwd-aware) so records land next to
+          // other telemetry artifacts when compile runs from a sub-directory.
+          // Best-effort — sink failures do not interfere with compile results.
+          onSeverityOverride: writeSeverityOverrideTelemetry,
         },
       };
 
@@ -1116,7 +1158,20 @@ export async function compileCommand(
               continue;
             }
 
-            const ruleResult = buildCompiledRule(parsed, lesson, existingByHash);
+            // mmnto-ai/totem#1656: declared severity from lesson prose wins
+            // over the LLM's emission. Post-LLM override is deterministic;
+            // the prompt directive reduces the frequency of mismatch but
+            // the override guarantees correctness on the cloud path too.
+            const declaredSeverity = parseDeclaredSeverity(lesson.body);
+            const ruleResult = buildCompiledRule(parsed, lesson, existingByHash, {
+              declaredSeverityOverride: declaredSeverity,
+            });
+            if (ruleResult.severityOverride) {
+              writeSeverityOverrideTelemetry(
+                { heading: lesson.heading, hash: lesson.hash },
+                ruleResult.severityOverride,
+              );
+            }
             if (ruleResult.rule) {
               // Verify rule against inline Example Hit/Miss lines
               const testResult = verifyRuleExamples(ruleResult.rule, lesson.body);

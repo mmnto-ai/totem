@@ -47,6 +47,44 @@ export interface ManualPattern {
   astGrepYamlRule?: Record<string, unknown>;
 }
 
+/**
+ * Parse the declared severity from a lesson body's `**Severity:** error` /
+ * `Severity: warning` prose convention (mmnto-ai/totem#1656). Returns the
+ * normalized `'error' | 'warning'` value if declared, otherwise `undefined`.
+ *
+ * Reuses `extractField` for the prose-extraction rules (markdown-bold
+ * tolerance, mandatory colon, case-insensitive match, line-anchored). Then
+ * strips trailing markdown boundary markers and sentence punctuation so
+ * common shapes like `**Severity: error.**` (full-line bold with period),
+ * `**Severity:** error.` (trailing period on the value), and
+ * `**Severity:** \`error\`` (backtick-wrapped value) all normalize to the
+ * same token. Strict equality follows the strip so out-of-vocabulary tokens
+ * (`info`, `critical`) still return `undefined` and preserve the
+ * compile-pipeline's default fallback to `'warning'`.
+ *
+ * Added as a shared helper so the compile pipeline's declared-severity
+ * override (in `compile-lesson.ts::compileLesson`) and the CLI's cloud-path
+ * override (in `compile.ts`) normalize from a single source of truth.
+ */
+export function parseDeclaredSeverity(body: string): 'error' | 'warning' | undefined {
+  const raw = extractField(body, 'Severity');
+  if (!raw) return undefined;
+  // Strip markdown boundary markers (`*`, `_`) and trailing sentence
+  // punctuation (`.`, `,`, `;`, `:`, `!`, `?`) FIRST, then strip backtick
+  // wrappers. Order is load-bearing: `stripInlineCode` only matches when
+  // backticks are at the absolute string edges, so running it first leaves
+  // backticks in place on shapes like `**\`error\`**` (bold-wrapped
+  // backticks) or `` `error`. `` (backticks followed by punctuation). The
+  // outer strip pass isolates the core value; stripInlineCode then removes
+  // the backticks around it. GCA round-3 finding on mmnto-ai/totem#1658.
+  const stripped = raw
+    .trim()
+    .replace(/^[*_]+|[*_.,;:!?]+$/g, '')
+    .trim();
+  const normalized = stripInlineCode(stripped).toLowerCase();
+  return normalized === 'error' || normalized === 'warning' ? normalized : undefined;
+}
+
 export function extractField(body: string, field: string): string | undefined {
   // Match all common bold/colon variants (#1282 — caught by Shield AI as a
   // partial-fix consequence of extending extractMultilineField):

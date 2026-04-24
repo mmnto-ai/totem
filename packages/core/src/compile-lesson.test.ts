@@ -235,6 +235,123 @@ describe('buildCompiledRule', () => {
     const result = buildCompiledRule(parsed, lesson, existingByHash);
     expect(result.rule!.severity).toBe('warning');
   });
+
+  // ─── Declared severity override (mmnto-ai/totem#1656) ──
+
+  it('honors declaredSeverityOverride when LLM emits a different severity', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: 'test',
+      message: 'test',
+      engine: 'regex',
+      severity: 'warning',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      declaredSeverityOverride: 'error',
+    });
+    expect(result.rule!.severity).toBe('error');
+    expect(result.severityOverride).toEqual({ from: 'warning', to: 'error' });
+  });
+
+  it('honors declaredSeverityOverride when LLM emits no severity', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: 'test',
+      message: 'test',
+      engine: 'regex',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      declaredSeverityOverride: 'error',
+    });
+    expect(result.rule!.severity).toBe('error');
+    expect(result.severityOverride).toEqual({ from: undefined, to: 'error' });
+  });
+
+  it('omits severityOverride marker when declared severity matches LLM output', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: 'test',
+      message: 'test',
+      engine: 'regex',
+      severity: 'error',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      declaredSeverityOverride: 'error',
+    });
+    expect(result.rule!.severity).toBe('error');
+    expect(result.severityOverride).toBeUndefined();
+  });
+
+  it('omits severityOverride marker when no declared severity provided', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: 'test',
+      message: 'test',
+      engine: 'regex',
+      severity: 'warning',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule!.severity).toBe('warning');
+    expect(result.severityOverride).toBeUndefined();
+  });
+
+  it('omits severityOverride marker when declared warning matches the default fallback', () => {
+    // LLM emits no severity AND declared is 'warning'. The emitted severity
+    // would have defaulted to 'warning' anyway, so the override changes
+    // nothing in the final rule. Marker must not fire — it would be
+    // telemetry noise on every lesson that declares its severity as warning.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: 'test',
+      message: 'test',
+      engine: 'regex',
+      // severity deliberately omitted (undefined)
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      declaredSeverityOverride: 'warning',
+    });
+    expect(result.rule!.severity).toBe('warning');
+    expect(result.severityOverride).toBeUndefined();
+  });
+
+  it('preserves severityOverride on rejection paths too', () => {
+    // CR round-3 finding on mmnto-ai/totem#1658: if the LLM drifts on
+    // severity AND emits an invalid pattern, the rejection path must still
+    // surface severityOverride so telemetry captures exactly the
+    // prompt-drift cases this signal is meant to detect.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: '(unclosed',
+      message: 'test',
+      engine: 'regex',
+      severity: 'warning',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      declaredSeverityOverride: 'error',
+    });
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('Rejected regex');
+    expect(result.severityOverride).toEqual({ from: 'warning', to: 'error' });
+  });
+
+  it('does not fabricate severityOverride on rejection paths when declared severity matches', () => {
+    // Inverse of the above: rejection path + no actual drift = no marker.
+    // The rejection is still reported; only the severity-override signal
+    // stays absent.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: '(unclosed',
+      message: 'test',
+      engine: 'regex',
+      severity: 'error',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      declaredSeverityOverride: 'error',
+    });
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('Rejected regex');
+    expect(result.severityOverride).toBeUndefined();
+  });
 });
 
 // ─── self-suppression guard (#1177) ────────────────
