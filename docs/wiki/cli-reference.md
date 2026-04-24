@@ -71,6 +71,8 @@ Regex rules execute under a runtime timeout budget in a persistent worker thread
 
 Timeout outcomes land in `.totem/temp/telemetry.jsonl` tagged `type: 'regex-execution'` with repo-relative path redaction. This is distinct from the input-time ReDoS check on `totem add-secret --pattern` below — that rejects dangerous patterns at authoring time, while the lint-time budget enforces termination against any pattern that slips through.
 
+For authoring patterns that pass the input-time gate, see [Regex Safety](regex-safety.md), which documents two empirically-verified safe forms for module-path-tolerant identifier matching (a class the gate makes non-obvious).
+
 ### `totem rule list` / `totem rule scaffold`
 
 Manage your deterministic rules (Pipeline 1). `rule list` outputs active rules, and `rule scaffold` creates a template for manual rule authoring.

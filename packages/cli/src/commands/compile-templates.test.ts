@@ -223,6 +223,48 @@ describe('Declared Severity directive (mmnto-ai/totem#1656)', () => {
   });
 });
 
+// ─── Module-Path-Tolerant Regex Patterns (mmnto-ai/totem#1657) ──
+
+describe('Module-Path-Tolerant Regex Patterns (mmnto-ai/totem#1657)', () => {
+  describe('COMPILER_SYSTEM_PROMPT', () => {
+    it('declares the section with the #1657 issue reference', () => {
+      expect(COMPILER_SYSTEM_PROMPT).toContain('Module-Path-Tolerant Regex');
+      expect(COMPILER_SYSTEM_PROMPT).toContain('mmnto-ai/totem#1657');
+    });
+
+    it('documents Form 1 (suffix-anchor) verbatim', () => {
+      expect(COMPILER_SYSTEM_PROMPT).toContain('(?:::|\\b)Target\\b');
+    });
+
+    it('documents Form 2 (bounded wrapper) verbatim', () => {
+      expect(COMPILER_SYSTEM_PROMPT).toContain('\\bWrapper\\s*<[^<>]{0,256}\\bTarget\\s*>');
+    });
+
+    it('names the trap shape from item 016 so the LLM does not re-emit it', () => {
+      expect(COMPILER_SYSTEM_PROMPT).toContain('\\b(?:[A-Za-z_]\\w*::)*Target\\b');
+    });
+  });
+
+  describe('PIPELINE3_COMPILER_PROMPT', () => {
+    it('declares the section with the #1657 issue reference (parity with COMPILER_SYSTEM_PROMPT)', () => {
+      expect(PIPELINE3_COMPILER_PROMPT).toContain('Module-Path-Tolerant Regex');
+      expect(PIPELINE3_COMPILER_PROMPT).toContain('mmnto-ai/totem#1657');
+    });
+
+    it('documents Form 1 (suffix-anchor) verbatim', () => {
+      expect(PIPELINE3_COMPILER_PROMPT).toContain('(?:::|\\b)Target\\b');
+    });
+
+    it('documents Form 2 (bounded wrapper) verbatim', () => {
+      expect(PIPELINE3_COMPILER_PROMPT).toContain('\\bWrapper\\s*<[^<>]{0,256}\\bTarget\\s*>');
+    });
+
+    it('names the trap shape from item 016 so the LLM does not re-emit it', () => {
+      expect(PIPELINE3_COMPILER_PROMPT).toContain('\\b(?:[A-Za-z_]\\w*::)*Target\\b');
+    });
+  });
+});
+
 // ─── KIND_ALLOW_LIST ────────────────────────────────
 
 describe('KIND_ALLOW_LIST', () => {

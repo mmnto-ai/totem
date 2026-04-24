@@ -95,6 +95,98 @@ describe('validateRegex', () => {
   });
 });
 
+// ─── Module-path-tolerant regex idioms (mmnto-ai/totem#1657) ─────
+//
+// Pins the empirically-verified safe forms documented in the compile
+// prompts and `docs/wiki/regex-safety.md`. These tests intentionally
+// reference the literal pattern strings the docs cite so a docs change
+// to a different pattern is caught here.
+//
+// Authoring intent: catch references to a target identifier with
+// optional module-path qualification (`crate::state::RunState`,
+// `super::RunState`, bare `RunState`). The naive shape with nested
+// quantifiers — `\b(?:[A-Za-z_]\w*::)*RunState\b` — is rejected by
+// safe-regex2's star-height heuristic regardless of whether the inner
+// `::` separator is unambiguous, so the docs recommend two genuinely-
+// safe forms:
+//
+//  - Form 1 (suffix-anchor):     (?:::|\b)<IDENT>\b
+//  - Form 2 (bounded wrapper):   \b<WRAPPER>\s*<[^<>]{0,256}\b<IDENT>\s*>
+
+describe('module-path-tolerant regex patterns (#1657)', () => {
+  // Form 1 — suffix-anchor: identifier-anywhere intent.
+  const FORM_1 = String.raw`(?:::|\b)RunState\b`;
+
+  // Form 2 — bounded wrapper: typed-container-scoped intent
+  // (e.g., catching `ResMut<RunState>` mutations specifically).
+  const FORM_2 = String.raw`\bResMut\s*<[^<>]{0,256}\bRunState\s*>`;
+
+  // Item 016's originally-proposed safe form. Empirically rejected by
+  // safe-regex2 because `\w*` nests under `(?:...)*`. Pinning this
+  // rejection prevents a future docs PR from re-documenting the
+  // impossible shape.
+  const ITEM_016_PROPOSED = String.raw`\b(?:[A-Za-z_]\w*::)*RunState\b`;
+
+  // The original liquid-city#77 R2 unsafe form (the GCA-suggested
+  // shape that started this whole investigation). Pinning the
+  // rejection guards against safe-regex2 weakening in a future bump.
+  const ORIGINAL_UNSAFE = String.raw`\bResMut\s*<\s*(?:[A-Za-z_][A-Za-z0-9_:]*::)?RunState\s*>`;
+
+  it('Form 1 (suffix-anchor) passes the ReDoS gate', () => {
+    expect(validateRegex(FORM_1)).toEqual({ valid: true });
+  });
+
+  it('Form 2 (bounded wrapper) passes the ReDoS gate', () => {
+    expect(validateRegex(FORM_2)).toEqual({ valid: true });
+  });
+
+  it('item 016 proposed form is rejected (locks the empirical correction)', () => {
+    const result = validateRegex(ITEM_016_PROPOSED);
+    expect(result.valid).toBe(false);
+    expect(result.reason).toBe('ReDoS vulnerability detected');
+  });
+
+  it('original liquid-city#77 unsafe form is rejected (no regression)', () => {
+    const result = validateRegex(ORIGINAL_UNSAFE);
+    expect(result.valid).toBe(false);
+    expect(result.reason).toBe('ReDoS vulnerability detected');
+  });
+
+  it('Form 1 matches the intended cases (bare, ::-prefixed, &mut)', () => {
+    const re = new RegExp(FORM_1);
+    expect(re.test('ResMut<RunState>')).toBe(true);
+    expect(re.test('ResMut<crate::state::RunState>')).toBe(true);
+    expect(re.test('ResMut<super::RunState>')).toBe(true);
+    expect(re.test('&mut RunState')).toBe(true);
+    expect(re.test('&mut super::RunState')).toBe(true);
+  });
+
+  it('Form 1 does not over-match identifier-prefix collisions', () => {
+    const re = new RegExp(FORM_1);
+    expect(re.test('MyRunState')).toBe(false);
+    expect(re.test('RunStateExtra')).toBe(false);
+  });
+
+  it('Form 2 matches only inside ResMut<...> wrappers', () => {
+    const re = new RegExp(FORM_2);
+    expect(re.test('ResMut<RunState>')).toBe(true);
+    expect(re.test('ResMut<crate::state::RunState>')).toBe(true);
+    expect(re.test('ResMut<super::RunState>')).toBe(true);
+    expect(re.test('fn foo(state: ResMut<crate::director::state::RunState>) {}')).toBe(true);
+  });
+
+  it('Form 2 does not match RunState references outside ResMut<>', () => {
+    const re = new RegExp(FORM_2);
+    expect(re.test('&mut RunState')).toBe(false);
+    expect(re.test('let x: RunState = ...;')).toBe(false);
+  });
+
+  it('Form 2 does not over-match identifier-prefix collisions inside the wrapper', () => {
+    const re = new RegExp(FORM_2);
+    expect(re.test('ResMut<RunStateExtra>')).toBe(false);
+  });
+});
+
 // ─── extractAddedLines ──────────────────────────────
 
 describe('extractAddedLines', () => {
