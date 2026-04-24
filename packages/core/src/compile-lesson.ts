@@ -413,6 +413,17 @@ export function buildCompiledRule(
       ? { from: emittedSeverity, to: declaredSeverity }
       : undefined;
 
+  // Thread `severityOverride` through rejection paths too (mmnto-ai/totem
+  // #1658 CR round-3 finding). If the LLM drifts on severity AND emits an
+  // invalid/missing pattern, the telemetry signal still fires — the
+  // rejection captures exactly the prompt-drift cases this signal is
+  // meant to detect, and dropping the marker on those paths would
+  // undercount drift measurement.
+  const reject = (rejectReason: string): BuildRuleResult =>
+    severityOverride
+      ? { rule: null, rejectReason, severityOverride }
+      : { rule: null, rejectReason };
+
   const engine = parsed.engine ?? 'regex';
   const now = new Date().toISOString();
   const existing = existingByHash.get(lesson.hash);
@@ -448,16 +459,13 @@ export function buildCompiledRule(
         : parsed.astGrepYamlRule;
 
     if (!astSource || !parsed.message) {
-      return {
-        rule: null,
-        rejectReason: 'Missing astGrepPattern or astGrepYamlRule or message',
-      };
+      return reject('Missing astGrepPattern or astGrepYamlRule or message');
     }
 
     // Validate ast-grep pattern at compile time (#1062, #1339, #1407)
     const astValidation = validateAstGrepPattern(astSource);
     if (!astValidation.valid) {
-      return { rule: null, rejectReason: `Invalid ast-grep pattern: ${astValidation.reason}` };
+      return reject(`Invalid ast-grep pattern: ${astValidation.reason}`);
     }
 
     // Guard: reject patterns that match suppression directives (#1177).
@@ -467,11 +475,9 @@ export function buildCompiledRule(
     // question 2, resolved "keep existing stringify path").
     const astPatternStr = typeof astSource === 'string' ? astSource : JSON.stringify(astSource);
     if (isSelfSuppressing(astPatternStr)) {
-      return {
-        rule: null,
-        rejectReason:
-          'Pattern matches a suppression directive (totem-ignore/totem-context) and will self-suppress at runtime',
-      };
+      return reject(
+        'Pattern matches a suppression directive (totem-ignore/totem-context) and will self-suppress at runtime',
+      );
     }
 
     candidate = {
@@ -490,7 +496,7 @@ export function buildCompiledRule(
     };
   } else if (engine === 'ast') {
     if (!parsed.astQuery || !parsed.message) {
-      return { rule: null, rejectReason: 'Missing astQuery or message' };
+      return reject('Missing astQuery or message');
     }
     candidate = {
       lessonHash: lesson.hash,
@@ -509,7 +515,7 @@ export function buildCompiledRule(
   } else {
     // Regex engine (default)
     if (!parsed.pattern || !parsed.message) {
-      return { rule: null, rejectReason: 'Missing pattern or message' };
+      return reject('Missing pattern or message');
     }
     // mmnto-ai/totem#1641 Change 2 invariant: `validateRegex` (safe-regex2
     // static complexity check) MUST run before any smoke-gate evaluation
@@ -521,17 +527,15 @@ export function buildCompiledRule(
     // runtime bound (RegexEvaluator) now protects against.
     const validation = validateRegex(parsed.pattern);
     if (!validation.valid) {
-      return { rule: null, rejectReason: `Rejected regex: ${validation.reason}` };
+      return reject(`Rejected regex: ${validation.reason}`);
     }
 
     // Guard: reject patterns that match suppression directives (#1177)
     // These rules can never fire — the engine suppresses matching lines before rule evaluation.
     if (isSelfSuppressing(parsed.pattern)) {
-      return {
-        rule: null,
-        rejectReason:
-          'Pattern matches a suppression directive (totem-ignore/totem-context) and will self-suppress at runtime',
-      };
+      return reject(
+        'Pattern matches a suppression directive (totem-ignore/totem-context) and will self-suppress at runtime',
+      );
     }
 
     candidate = {
@@ -569,18 +573,12 @@ export function buildCompiledRule(
     const hasBadExample =
       typeof effectiveBadExample === 'string' && effectiveBadExample.trim().length > 0;
     if (!hasBadExample) {
-      return {
-        rule: null,
-        rejectReason: 'smoke gate: missing badExample (required for Pipeline 2/3)',
-      };
+      return reject('smoke gate: missing badExample (required for Pipeline 2/3)');
     }
     const gate = runSmokeGate(candidate, effectiveBadExample);
     if (!gate.matched) {
       const suffix = gate.reason ? ` (${gate.reason})` : '';
-      return {
-        rule: null,
-        rejectReason: `smoke gate: zero matches against badExample${suffix}`,
-      };
+      return reject(`smoke gate: zero matches against badExample${suffix}`);
     }
     // mmnto-ai/totem#1580: over-matching check. The rule must fire on its
     // badExample (above) AND must NOT fire on its goodExample. Symmetric
@@ -589,17 +587,13 @@ export function buildCompiledRule(
     const hasGoodExample =
       typeof effectiveGoodExample === 'string' && effectiveGoodExample.trim().length > 0;
     if (!hasGoodExample) {
-      return {
-        rule: null,
-        rejectReason: 'smoke gate: missing goodExample (required for Pipeline 2/3)',
-      };
+      return reject('smoke gate: missing goodExample (required for Pipeline 2/3)');
     }
     const overMatchGate = runSmokeGate(candidate, effectiveGoodExample);
     if (overMatchGate.matched) {
-      return {
-        rule: null,
-        rejectReason: `smoke gate: matches goodExample (over-matching: ${overMatchGate.matchCount} match${overMatchGate.matchCount === 1 ? '' : 'es'})`,
-      };
+      return reject(
+        `smoke gate: matches goodExample (over-matching: ${overMatchGate.matchCount} match${overMatchGate.matchCount === 1 ? '' : 'es'})`,
+      );
     }
   }
 

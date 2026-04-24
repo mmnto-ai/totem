@@ -313,6 +313,45 @@ describe('buildCompiledRule', () => {
     expect(result.rule!.severity).toBe('warning');
     expect(result.severityOverride).toBeUndefined();
   });
+
+  it('preserves severityOverride on rejection paths too', () => {
+    // CR round-3 finding on mmnto-ai/totem#1658: if the LLM drifts on
+    // severity AND emits an invalid pattern, the rejection path must still
+    // surface severityOverride so telemetry captures exactly the
+    // prompt-drift cases this signal is meant to detect.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: '(unclosed',
+      message: 'test',
+      engine: 'regex',
+      severity: 'warning',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      declaredSeverityOverride: 'error',
+    });
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('Rejected regex');
+    expect(result.severityOverride).toEqual({ from: 'warning', to: 'error' });
+  });
+
+  it('does not fabricate severityOverride on rejection paths when declared severity matches', () => {
+    // Inverse of the above: rejection path + no actual drift = no marker.
+    // The rejection is still reported; only the severity-override signal
+    // stays absent.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: '(unclosed',
+      message: 'test',
+      engine: 'regex',
+      severity: 'error',
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash, {
+      declaredSeverityOverride: 'error',
+    });
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('Rejected regex');
+    expect(result.severityOverride).toBeUndefined();
+  });
 });
 
 // ─── self-suppression guard (#1177) ────────────────
