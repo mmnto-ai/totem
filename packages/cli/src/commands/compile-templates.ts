@@ -252,6 +252,30 @@ The compile pipeline applies a deterministic override after your output, so a mi
 
 **Anti-lazy guard:** do not classify "severity" language in free prose as a declaration. A lesson body that says "this prevents a severe error" or "a warning message appears" is NOT declaring severity. Only the structured \`Severity:\` key with a colon counts.
 
+### Module-Path-Tolerant Regex Patterns (mmnto-ai/totem#1657)
+
+Compile-time ReDoS validation rejects nested repetition. The naive shape \`\\b(?:[A-Za-z_]\\w*::)*Target\\b\` (an identifier-class with \`\\w*\` inside an outer \`(?:...)*\`) triggers safe-regex2's star-height heuristic regardless of whether the inner \`::\` separator is unambiguous. The shape \`\\bWrapper\\s*<\\s*(?:[A-Za-z_][A-Za-z0-9_:]*::)?Target\\s*>\` fails for the same reason (the embedded \`:\` in the character class plus the literal \`::\` terminator is the canonical adversarial backtracking shape).
+
+When a lesson asks for matches that tolerate optional module-path qualification (e.g., \`crate::state::RunState\`, \`super::RunState\`, bare \`RunState\`), use one of these two empirically-verified safe forms instead:
+
+**Form 1 — Suffix-anchor (identifier-anywhere intent):**
+
+\`\`\`regex
+(?:::|\\b)Target\\b
+\`\`\`
+
+Star height 1. Matches bare \`Target\`, \`crate::state::Target\`, \`super::Target\`, \`&mut Target\`. Does not over-match \`MyTarget\` or \`TargetExtra\` (trailing \`\\b\`). Use when the rule should fire on the identifier regardless of its surrounding container.
+
+**Form 2 — Bounded wrapper (typed-container scoped):**
+
+\`\`\`regex
+\\bWrapper\\s*<[^<>]{0,256}\\bTarget\\s*>
+\`\`\`
+
+Star height 1 (\`{0,256}\` is a bounded quantifier; \`[^<>]\` has no nested quantifier). Matches only when \`Target\` appears inside \`Wrapper<...>\` brackets with bounded path content between. Use when the rule should fire specifically on a typed-container hardening intent (e.g., \`ResMut<RunState>\` mutations).
+
+**Anti-lazy guard:** do NOT emit \`\\b(?:[A-Za-z_]\\w*::)*Target\\b\` or \`\\bWrapper\\s*<\\s*(?:[A-Za-z_][A-Za-z0-9_:]*::)?Target\\s*>\` — both fail safe-regex2's star-height check at compile time and the rule will be rejected with reason \`Rejected regex: ReDoS vulnerability detected\`.
+
 ## Examples
 
 Lesson: "Use \`err\` (never \`error\`) in catch blocks"
@@ -644,6 +668,30 @@ Read the lesson body for a \`Severity: <level>\` declaration and **honor it** in
 The compile pipeline applies a deterministic override after your output, so a mismatch is corrected silently. Honoring the declaration keeps your output self-consistent and avoids wasted telemetry records.
 
 **Anti-lazy guard:** do not classify "severity" language in free prose as a declaration. A lesson body that mentions "this prevents a severe error" or "a warning message appears" is NOT declaring severity. Only the structured \`Severity:\` key with a colon counts.
+
+### Module-Path-Tolerant Regex Patterns (mmnto-ai/totem#1657)
+
+Compile-time ReDoS validation rejects nested repetition. The naive shape \`\\b(?:[A-Za-z_]\\w*::)*Target\\b\` (an identifier-class with \`\\w*\` inside an outer \`(?:...)*\`) triggers safe-regex2's star-height heuristic regardless of whether the inner \`::\` separator is unambiguous. The shape \`\\bWrapper\\s*<\\s*(?:[A-Za-z_][A-Za-z0-9_:]*::)?Target\\s*>\` fails for the same reason.
+
+When the Bad-vs-Good distinction calls for matching an identifier with optional module-path qualification (e.g., \`crate::state::RunState\`, \`super::RunState\`, bare \`RunState\`), use one of these two empirically-verified safe forms instead:
+
+**Form 1 — Suffix-anchor (identifier-anywhere intent):**
+
+\`\`\`regex
+(?:::|\\b)Target\\b
+\`\`\`
+
+Star height 1. Matches bare \`Target\`, \`::-prefixed\` paths, and \`&mut\`-style references. Does not over-match \`MyTarget\` (trailing \`\\b\`).
+
+**Form 2 — Bounded wrapper (typed-container scoped):**
+
+\`\`\`regex
+\\bWrapper\\s*<[^<>]{0,256}\\bTarget\\s*>
+\`\`\`
+
+Star height 1 (bounded quantifier; \`[^<>]\` has no nested quantifier). Matches only when \`Target\` appears inside \`Wrapper<...>\` with bounded path content between.
+
+**Anti-lazy guard:** do NOT emit nested-quantifier shapes — they fail the gate at compile time.
 
 Every compilable rule MUST include non-empty \`badExample\` AND \`goodExample\` fields. The compile pipeline's schema parse rejects output that omits either one for \`ast-grep\` or \`regex\` engines, so the rule never reaches the smoke gate. The smoke gate then runs the rule against both snippets: the pattern MUST match \`badExample\` (zero matches here rejects with reason code \`pattern-zero-match\`) and MUST NOT match \`goodExample\` (any match here rejects with reason code \`matches-good-example\`).
 `;
