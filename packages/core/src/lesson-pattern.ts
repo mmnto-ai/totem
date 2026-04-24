@@ -47,6 +47,22 @@ export interface ManualPattern {
   astGrepYamlRule?: Record<string, unknown>;
 }
 
+/**
+ * Parse the declared severity from a lesson body's `**Severity:** error` /
+ * `Severity: warning` prose convention (mmnto-ai/totem#1656). Returns the
+ * normalized `'error' | 'warning'` value if declared, otherwise `undefined`.
+ *
+ * Reuses `extractField` for the prose-extraction rules (markdown-bold
+ * tolerance, mandatory colon, case-insensitive match, line-anchored). Added
+ * as a shared helper so the compile pipeline's declared-severity override
+ * (in `compile-lesson.ts::compileLesson`) and the CLI's cloud-path override
+ * (in `compile.ts`) normalize from a single source of truth.
+ */
+export function parseDeclaredSeverity(body: string): 'error' | 'warning' | undefined {
+  const raw = extractField(body, 'Severity')?.toLowerCase();
+  return raw === 'error' || raw === 'warning' ? raw : undefined;
+}
+
 export function extractField(body: string, field: string): string | undefined {
   // Match all common bold/colon variants (#1282 — caught by Shield AI as a
   // partial-fix consequence of extending extractMultilineField):

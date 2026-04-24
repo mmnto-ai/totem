@@ -14,6 +14,7 @@ import {
   extractBadGoodSnippets,
   extractManualPattern,
   extractRuleExamples,
+  parseDeclaredSeverity,
 } from './lesson-pattern.js';
 import type { RuleTestResult } from './rule-tester.js';
 import { testRule } from './rule-tester.js';
@@ -91,6 +92,17 @@ function hashPattern(pattern: string): string {
 export interface CompileLessonCallbacks {
   onWarn?: (heading: string, message: string) => void;
   onDim?: (heading: string, message: string) => void;
+  /**
+   * Fires when the declared-severity override (mmnto-ai/totem#1656) actually
+   * changed the emitted severity. CLI callers use this to write telemetry
+   * records tagged `type: 'severity-override'` for prompt-tuning feedback —
+   * frequent fires mean the prompt directive is drifting. Absent = core runs
+   * without telemetry plumbing.
+   */
+  onSeverityOverride?: (
+    lesson: { heading: string; hash: string },
+    event: { from: 'error' | 'warning' | undefined; to: 'error' | 'warning' },
+  ) => void;
 }
 
 export interface CompileLessonDeps {
@@ -329,6 +341,16 @@ export interface BuildCompiledRuleOptions {
    * relying on the LLM to echo the snippet back.
    */
   goodExampleOverride?: string;
+  /**
+   * Optional declared-severity override (mmnto-ai/totem#1656). When
+   * supplied, takes precedence over `parsed.severity` regardless of
+   * LLM emission. Sourced from the lesson body's `**Severity:** error`
+   * / `Severity: warning` prose convention. `buildCompiledRule`
+   * reports the override event in `BuildRuleResult.severityOverride`
+   * when the override actually changes the emitted severity, so CLI
+   * callers can record telemetry for prompt-tuning feedback.
+   */
+  declaredSeverityOverride?: 'error' | 'warning';
 }
 
 /**
@@ -370,7 +392,27 @@ export function buildCompiledRule(
 ): BuildRuleResult {
   if (!parsed.compilable) return { rule: null };
 
-  const severity = parsed.severity ?? 'warning';
+  // mmnto-ai/totem#1656: declared severity (parsed from the lesson body's
+  // `**Severity:** error` / `Severity: warning` prose convention) wins over
+  // the LLM's emission. Post-LLM override is the deterministic safety net
+  // for prompt-directive drift. The `severityOverride` marker is populated
+  // only when the override actually changed the outcome, so CLI callers
+  // can emit telemetry for prompt-tuning feedback without noise.
+  //
+  // Marker fires when the declared value differs from what the final rule
+  // WOULD HAVE SHIPPED without the override (i.e., `emittedSeverity ??
+  // 'warning'`). If the LLM emits nothing and the declaration is 'warning',
+  // the final severity is 'warning' both ways and the marker stays absent
+  // (Shield finding on initial PR round).
+  const declaredSeverity = options.declaredSeverityOverride;
+  const emittedSeverity = parsed.severity;
+  const severity: 'error' | 'warning' = declaredSeverity ?? emittedSeverity ?? 'warning';
+  const wouldHaveShipped = emittedSeverity ?? 'warning';
+  const severityOverride =
+    declaredSeverity !== undefined && declaredSeverity !== wouldHaveShipped
+      ? { from: emittedSeverity, to: declaredSeverity }
+      : undefined;
+
   const engine = parsed.engine ?? 'regex';
   const now = new Date().toISOString();
   const existing = existingByHash.get(lesson.hash);
@@ -561,7 +603,7 @@ export function buildCompiledRule(
     }
   }
 
-  return { rule: candidate };
+  return severityOverride ? { rule: candidate, severityOverride } : { rule: candidate };
 }
 
 // ─── Manual pattern builder ─────────────────────────
@@ -569,6 +611,14 @@ export function buildCompiledRule(
 export interface BuildRuleResult {
   rule: CompiledRule | null;
   rejectReason?: string;
+  /**
+   * Populated when `declaredSeverityOverride` actually changed the emitted
+   * severity (mmnto-ai/totem#1656). Absent when no override was supplied, or
+   * when the override matched the LLM's emission. CLI callers use this as a
+   * telemetry signal for prompt-tuning feedback — frequent overrides mean
+   * the prompt directive is drifting and the LLM needs a stronger signal.
+   */
+  severityOverride?: { from: 'error' | 'warning' | undefined; to: 'error' | 'warning' };
 }
 
 /**
@@ -752,6 +802,13 @@ export async function compileLesson(
   const { parseCompilerResponse, runOrchestrator, existingByHash, callbacks } = deps;
   const exampleHitPresent = hasExampleHits(lesson.body);
 
+  // mmnto-ai/totem#1656: extract the declared severity from the lesson body
+  // via the shared `parseDeclaredSeverity` helper (same parser surface as
+  // `buildFrontmatterFromLegacy`). Threaded into every `buildCompiledRule`
+  // call below so the post-LLM override is authoritative regardless of
+  // whether the prompt directive holds.
+  const declaredSeverity = parseDeclaredSeverity(lesson.body);
+
   // Trace buffer (mmnto-ai/totem#1482). Populated unconditionally across all
   // three pipelines so the CLI can choose to render it under --verbose
   // without a per-call gate. Cost of empty-or-small arrays per lesson is
@@ -915,6 +972,7 @@ export async function compileLesson(
     // the override guarantees the gate has something to work with regardless.
     const ruleResult = buildCompiledRule(parsed, lesson, existingByHash, {
       enforceSmokeGate: true,
+      declaredSeverityOverride: declaredSeverity,
       // Guard empty snippet arrays so they don't clobber parsed.badExample
       // or parsed.goodExample via ?? in buildCompiledRule. `[].join('\n')`
       // is the empty string, which is defined and would win over the LLM's
@@ -923,6 +981,12 @@ export async function compileLesson(
       badExampleOverride: snippets.bad.length > 0 ? snippets.bad.join('\n') : undefined,
       goodExampleOverride: snippets.good.length > 0 ? snippets.good.join('\n') : undefined,
     });
+    if (ruleResult.severityOverride) {
+      callbacks?.onSeverityOverride?.(
+        { heading: lesson.heading, hash: lesson.hash },
+        ruleResult.severityOverride,
+      );
+    }
     if (!ruleResult.rule) {
       const rejectReason = ruleResult.rejectReason ?? 'Unknown error';
       callbacks?.onWarn?.(lesson.heading, `Pipeline 3: ${rejectReason} — skipping`);
@@ -1085,7 +1149,14 @@ export async function compileLesson(
     //                        invalid patterns, so the lesson stays pending
     const ruleResult = buildCompiledRule(parsed, lesson, existingByHash, {
       enforceSmokeGate: true,
+      declaredSeverityOverride: declaredSeverity,
     });
+    if (ruleResult.severityOverride) {
+      callbacks?.onSeverityOverride?.(
+        { heading: lesson.heading, hash: lesson.hash },
+        ruleResult.severityOverride,
+      );
+    }
 
     let retryReason: string;
     let retrySnippet: string;

@@ -184,6 +184,45 @@ describe('Test-Contract Scope Classifier (mmnto-ai/totem#1626)', () => {
   });
 });
 
+// ─── Declared Severity directive (mmnto-ai/totem#1656) ──
+
+describe('Declared Severity directive (mmnto-ai/totem#1656)', () => {
+  describe('COMPILER_SYSTEM_PROMPT', () => {
+    it('declares the directive section with the #1656 issue reference', () => {
+      expect(COMPILER_SYSTEM_PROMPT).toContain('Declared Severity');
+      expect(COMPILER_SYSTEM_PROMPT).toContain('mmnto-ai/totem#1656');
+    });
+
+    it('references the Severity prose convention used by lesson authors', () => {
+      expect(COMPILER_SYSTEM_PROMPT).toMatch(/`?Severity:\s*(error|warning)`?/i);
+    });
+
+    it('names both valid severity values for emission', () => {
+      expect(COMPILER_SYSTEM_PROMPT).toContain("'error'");
+      expect(COMPILER_SYSTEM_PROMPT).toContain("'warning'");
+    });
+
+    it('instructs the LLM to honor the declared severity when present', () => {
+      expect(COMPILER_SYSTEM_PROMPT).toMatch(/honor|honour|emit.*declared|match.*declared/i);
+    });
+  });
+
+  describe('PIPELINE3_COMPILER_PROMPT', () => {
+    it('declares the directive section with the #1656 issue reference', () => {
+      expect(PIPELINE3_COMPILER_PROMPT).toContain('Declared Severity');
+      expect(PIPELINE3_COMPILER_PROMPT).toContain('mmnto-ai/totem#1656');
+    });
+
+    it('references the Severity prose convention used by lesson authors', () => {
+      expect(PIPELINE3_COMPILER_PROMPT).toMatch(/`?Severity:\s*(error|warning)`?/i);
+    });
+
+    it('instructs the LLM to honor the declared severity when present', () => {
+      expect(PIPELINE3_COMPILER_PROMPT).toMatch(/honor|honour|emit.*declared|match.*declared/i);
+    });
+  });
+});
+
 // ─── KIND_ALLOW_LIST ────────────────────────────────
 
 describe('KIND_ALLOW_LIST', () => {

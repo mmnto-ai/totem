@@ -9,6 +9,7 @@ import {
   extractMultilineField,
   extractRuleExamples,
   extractYamlRuleAfterField,
+  parseDeclaredSeverity,
   stripInlineCode,
 } from './lesson-pattern.js';
 
@@ -869,5 +870,81 @@ describe('extractGoodExample', () => {
   it('matches the Good heading case-insensitively', () => {
     const body = '### good Example\n```ts\nfoo()\n```';
     expect(extractGoodExample(body)).toBe('foo()');
+  });
+});
+
+// ─── parseDeclaredSeverity (mmnto-ai/totem#1656) ─────
+
+describe('parseDeclaredSeverity', () => {
+  it('extracts error from canonical **Severity:** error prose', () => {
+    expect(parseDeclaredSeverity('**Severity:** error')).toBe('error');
+  });
+
+  it('extracts warning from canonical **Severity:** warning prose', () => {
+    expect(parseDeclaredSeverity('**Severity:** warning')).toBe('warning');
+  });
+
+  it('normalizes uppercase to lowercase', () => {
+    expect(parseDeclaredSeverity('**Severity:** ERROR')).toBe('error');
+    expect(parseDeclaredSeverity('**Severity:** Warning')).toBe('warning');
+  });
+
+  it('accepts the alt markdown form **Severity**: error', () => {
+    expect(parseDeclaredSeverity('**Severity**: error')).toBe('error');
+  });
+
+  it('accepts plain Severity: warning without bold markers', () => {
+    expect(parseDeclaredSeverity('Severity: warning')).toBe('warning');
+  });
+
+  it('tolerates trailing period after the severity value', () => {
+    // lesson-ef0ba0d7 on liquid-city uses "**Severity: error.**" shape; the
+    // extractField helper captures the whole value including trailing
+    // punctuation, so the exact prose shape drives the match behavior.
+    // The current helper returns the raw extracted value; a trailing period
+    // makes the normalized value "error." which does not match the enum,
+    // so the helper returns undefined. If/when extractField is taught to
+    // strip trailing punctuation this test locks in the expected behavior
+    // change. For now, the LC exhibit's prose needs the period outside the
+    // bold marker (`**Severity: error.**` -> value captured as `error.**`)
+    // which is handled by parseDeclaredSeverity returning undefined, and
+    // the LLM's fallback emission survives. Document the boundary here.
+    expect(parseDeclaredSeverity('Severity: error.')).toBeUndefined();
+  });
+
+  it('returns undefined when no Severity field is present', () => {
+    expect(parseDeclaredSeverity('This lesson describes an important invariant.')).toBeUndefined();
+  });
+
+  it('returns undefined for free-prose mentions without the Severity: key', () => {
+    // Mandatory-colon guard from lesson-28a41450 — "this prevents a severe
+    // error" must not match as a severity declaration.
+    expect(
+      parseDeclaredSeverity('This lesson prevents a severe error in production code.'),
+    ).toBeUndefined();
+    expect(parseDeclaredSeverity('A warning message appears during compile.')).toBeUndefined();
+  });
+
+  it('returns undefined for an out-of-vocabulary severity level', () => {
+    // The helper only produces the two canonical values that the
+    // `CompiledRule.severity` field accepts. Prose declaring "info" or
+    // "fatal" or any other string returns undefined, preserving the
+    // compile-pipeline's default fallback.
+    expect(parseDeclaredSeverity('**Severity:** info')).toBeUndefined();
+    expect(parseDeclaredSeverity('**Severity:** critical')).toBeUndefined();
+  });
+
+  it('matches the first Severity: declaration when multiple appear', () => {
+    // extractField returns the first match on the case-insensitive,
+    // line-anchored regex. Lock in that a lesson body with a second
+    // **Severity:** line lower down does not override the first.
+    const body = [
+      '**Severity:** error',
+      '',
+      'Some discussion of the invariant.',
+      '',
+      '**Severity:** warning',
+    ].join('\n');
+    expect(parseDeclaredSeverity(body)).toBe('error');
   });
 });

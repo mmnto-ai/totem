@@ -236,6 +236,20 @@ If the lesson clearly targets a narrower test directory (e.g., "only for e2e tes
 
 **Rule of thumb:** ask "does the hazard this lesson describes actually HAPPEN inside test code?" If yes, emit test-inclusive fileGlobs. If the lesson is about production code that has nothing to do with tests, keep the standard exclusion pattern.
 
+### Declared Severity (mmnto-ai/totem#1656)
+
+Lessons sometimes declare their intended severity in prose, using the convention \`**Severity:** error\` or \`Severity: warning\` on its own line (tolerant of bold or italic markdown). The severity carries load-bearing semantics: totem's CI integration treats \`'error'\` as blocking and \`'warning'\` as advisory.
+
+Read the lesson body for a \`Severity: <level>\` declaration and **honor it** in your \`"severity"\` output:
+
+- Prose says \`Severity: error\` → emit \`"severity": "error"\`.
+- Prose says \`Severity: warning\` → emit \`"severity": "warning"\`.
+- No \`Severity:\` line → fall back to the default \`"severity": "warning"\`.
+
+The compile pipeline applies a deterministic override after your output, so a mismatch between your emission and the declared severity is corrected silently. But honoring the declaration the first time saves a round-trip and keeps your output self-consistent.
+
+**Anti-lazy guard:** do not classify "severity" language in free prose as a declaration. A lesson body that says "this prevents a severe error" or "a warning message appears" is NOT declaring severity. Only the structured \`Severity:\` key with a colon counts.
+
 ## Examples
 
 Lesson: "Use \`err\` (never \`error\`) in catch blocks"
@@ -613,6 +627,20 @@ If the lesson clearly targets a narrower test directory (e.g., "only for e2e tes
   - Output: application-scope fileGlobs with the usual test exclusion, e.g., \`["packages/api/**/*.ts", "!**/*.test.*"]\`.
 
 **Rule of thumb:** ask "does the hazard this lesson describes actually HAPPEN inside test code?" If yes, emit test-inclusive fileGlobs. If the lesson is about production code, keep the standard exclusion pattern.
+
+### Declared Severity (mmnto-ai/totem#1656)
+
+Lessons sometimes declare their intended severity in prose, using the convention \`**Severity:** error\` or \`Severity: warning\` on its own line (tolerant of bold or italic markdown). Totem's CI integration treats \`'error'\` as blocking and \`'warning'\` as advisory, so the declaration is load-bearing.
+
+Read the lesson body for a \`Severity: <level>\` declaration and **honor it** in your \`"severity"\` output:
+
+- Prose says \`Severity: error\` → emit \`"severity": "error"\`.
+- Prose says \`Severity: warning\` → emit \`"severity": "warning"\`.
+- No \`Severity:\` line → fall back to the default \`"severity": "warning"\`.
+
+The compile pipeline applies a deterministic override after your output, so a mismatch is corrected silently. Honoring the declaration keeps your output self-consistent and avoids wasted telemetry records.
+
+**Anti-lazy guard:** do not classify "severity" language in free prose as a declaration. A lesson body that mentions "this prevents a severe error" or "a warning message appears" is NOT declaring severity. Only the structured \`Severity:\` key with a colon counts.
 
 Every compilable rule MUST include non-empty \`badExample\` AND \`goodExample\` fields. The compile pipeline's schema parse rejects output that omits either one for \`ast-grep\` or \`regex\` engines, so the rule never reaches the smoke gate. The smoke gate then runs the rule against both snippets: the pattern MUST match \`badExample\` (zero matches here rejects with reason code \`pattern-zero-match\`) and MUST NOT match \`goodExample\` (any match here rejects with reason code \`matches-good-example\`).
 `;
