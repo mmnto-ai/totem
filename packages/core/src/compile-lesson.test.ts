@@ -511,6 +511,24 @@ describe('buildCompiledRule', () => {
     expect(result.rule!.fileGlobs).toEqual(['**/*.ts']);
     expect(result.scopeOverride).toBeUndefined();
   });
+
+  it('expands brace groups via sanitizeFileGlobs on the source-Scope path (CR PR #1674)', () => {
+    // Author writes brace-expansion form; parseDeclaredScope keeps it as a
+    // single token (top-level-only comma split) so sanitizeFileGlobs can
+    // expand it downstream. LLM emits the expanded form. After sanitization
+    // both reduce to identical sets, so no override fires.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: 'test',
+      message: 'test',
+      engine: 'regex',
+      fileGlobs: ['**/*.ts', '**/*.tsx'],
+    };
+    const lessonBody = '**Scope:** **/*.{ts,tsx}';
+    const result = buildCompiledRule(parsed, lesson, existingByHash, { lessonBody });
+    expect(result.rule!.fileGlobs).toEqual(['**/*.ts', '**/*.tsx']);
+    expect(result.scopeOverride).toBeUndefined();
+  });
 });
 
 // ─── self-suppression guard (#1177) ────────────────

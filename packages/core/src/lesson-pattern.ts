@@ -322,19 +322,36 @@ export function extractYamlRuleAfterField(
 /**
  * Parse the lesson body's `**Scope:**` prose declaration into a glob list.
  *
- * Returns `undefined` when the field is absent OR the value is empty / whitespace-only.
- * Returns a non-empty `string[]` otherwise. Order is preserved as authored;
- * `!`-prefixed exclusion entries are kept verbatim. Used by both Pipeline 1
- * (`extractManualPattern`) and Pipeline 2/3 (`buildCompiledRule` override path
- * for mmnto-ai/totem#1665).
+ * Splits on TOP-LEVEL commas only — commas nested inside `{...}` brace groups
+ * are preserved as part of a single glob token, so brace-expanded patterns
+ * like `**\/*.{ts,tsx}` and `!**\/*.{test,spec}.{ts,tsx}` survive intact for
+ * `sanitizeFileGlobs` to expand downstream. Returns `undefined` when the field
+ * is absent OR the value is empty / whitespace-only. Returns a non-empty
+ * `string[]` otherwise; order is preserved as authored, `!`-prefixed
+ * exclusion entries are kept verbatim.
+ *
+ * Used by both Pipeline 1 (`extractManualPattern`) and Pipeline 2/3
+ * (`buildCompiledRule` override path for mmnto-ai/totem#1665).
  */
 export function parseDeclaredScope(body: string): string[] | undefined {
   const scopeRaw = extractField(body, 'Scope');
   if (!scopeRaw) return undefined;
-  const globs = scopeRaw
-    .split(',')
-    .map((g) => g.trim())
-    .filter(Boolean);
+  const globs: string[] = [];
+  let current = '';
+  let braceDepth = 0;
+  for (const ch of scopeRaw) {
+    if (ch === '{') braceDepth++;
+    else if (ch === '}') braceDepth = Math.max(0, braceDepth - 1);
+    if (ch === ',' && braceDepth === 0) {
+      const value = current.trim();
+      if (value) globs.push(value);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  const tail = current.trim();
+  if (tail) globs.push(tail);
   return globs.length > 0 ? globs : undefined;
 }
 

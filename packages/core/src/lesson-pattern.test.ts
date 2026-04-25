@@ -1044,6 +1044,39 @@ describe('parseDeclaredScope', () => {
     expect(manual?.fileGlobs).toEqual(parseDeclaredScope(body));
     expect(manual?.fileGlobs).toEqual(['packages/core/**/*.ts', '!**/*.test.*']);
   });
+
+  it('preserves commas inside brace groups (CR PR #1674 finding)', () => {
+    // `**/*.{ts,tsx}` is a single glob token — a naive comma-split would
+    // shatter it into '**/*.{ts' and 'tsx}'. Top-level-only splitting
+    // keeps the brace expression intact for sanitizeFileGlobs to expand
+    // downstream. Pre-fix, both Pipeline 1 (extractManualPattern) and
+    // Pipeline 2/3 (parseDeclaredScope override) silently mis-scoped these.
+    expect(parseDeclaredScope('**Scope:** **/*.{ts,tsx}')).toEqual(['**/*.{ts,tsx}']);
+  });
+
+  it('handles nested brace groups', () => {
+    // `!**/*.{test,spec}.{ts,tsx}` has two brace groups — both must stay
+    // intact in the single glob token.
+    expect(parseDeclaredScope('**Scope:** !**/*.{test,spec}.{ts,tsx}')).toEqual([
+      '!**/*.{test,spec}.{ts,tsx}',
+    ]);
+  });
+
+  it('still splits top-level commas alongside brace groups', () => {
+    // Mixed case: brace-expanded entry + comma-separated additional entries.
+    expect(parseDeclaredScope('**Scope:** **/*.{ts,tsx}, !**/*.test.*, !**/*.spec.*')).toEqual([
+      '**/*.{ts,tsx}',
+      '!**/*.test.*',
+      '!**/*.spec.*',
+    ]);
+  });
+
+  it('handles unbalanced closing brace defensively', () => {
+    // Authoring slip: extra `}` without an opening `{`. Should not crash;
+    // braceDepth saturates at 0 so a top-level comma after the rogue `}`
+    // still splits.
+    expect(parseDeclaredScope('**Scope:** foo}, bar')).toEqual(['foo}', 'bar']);
+  });
 });
 
 // ─── isGlobSetEqual (mmnto-ai/totem#1665) ──────────
