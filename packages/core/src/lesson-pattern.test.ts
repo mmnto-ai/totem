@@ -9,6 +9,8 @@ import {
   extractMultilineField,
   extractRuleExamples,
   extractYamlRuleAfterField,
+  isGlobSetEqual,
+  parseDeclaredScope,
   parseDeclaredSeverity,
   stripInlineCode,
 } from './lesson-pattern.js';
@@ -982,5 +984,144 @@ describe('parseDeclaredSeverity', () => {
       '**Severity:** warning',
     ].join('\n');
     expect(parseDeclaredSeverity(body)).toBe('error');
+  });
+});
+
+// ─── parseDeclaredScope (mmnto-ai/totem#1665) ──────────
+
+describe('parseDeclaredScope', () => {
+  it('parses a comma-separated Scope: declaration', () => {
+    expect(parseDeclaredScope('**Scope:** packages/core/**/*.ts')).toEqual([
+      'packages/core/**/*.ts',
+    ]);
+  });
+
+  it('preserves leading-! exclusion entries verbatim', () => {
+    expect(
+      parseDeclaredScope('**Scope:** packages/zomboid-sim/src/**/*.rs, !**/*.test.*, !**/*.spec.*'),
+    ).toEqual(['packages/zomboid-sim/src/**/*.rs', '!**/*.test.*', '!**/*.spec.*']);
+  });
+
+  it('preserves authored order', () => {
+    expect(parseDeclaredScope('**Scope:** !**/*.test.*, packages/core/**/*.ts')).toEqual([
+      '!**/*.test.*',
+      'packages/core/**/*.ts',
+    ]);
+  });
+
+  it('returns undefined when Scope: is missing', () => {
+    expect(parseDeclaredScope('Just a body with no Scope line.')).toBeUndefined();
+  });
+
+  it('returns undefined when Scope: value is empty', () => {
+    expect(parseDeclaredScope('**Scope:**')).toBeUndefined();
+  });
+
+  it('returns undefined when Scope: value is whitespace-only', () => {
+    expect(parseDeclaredScope('**Scope:**   ')).toBeUndefined();
+  });
+
+  it('filters empty entries from accidental double-commas', () => {
+    expect(parseDeclaredScope('**Scope:** A,,B,  ,C')).toEqual(['A', 'B', 'C']);
+  });
+
+  it('returns undefined when the entire value collapses to empty after split + filter', () => {
+    expect(parseDeclaredScope('**Scope:** ,,,')).toBeUndefined();
+  });
+
+  it('matches the same logic extractManualPattern uses (Pipeline 1 regression pin)', () => {
+    // After mmnto-ai/totem#1665, extractManualPattern delegates Scope parsing
+    // to parseDeclaredScope. This test pins that the manual-pattern path
+    // produces identical fileGlobs to a direct parseDeclaredScope call so
+    // the refactor doesn't drift the two surfaces.
+    const body = [
+      '**Pattern:** \\beval\\(',
+      '**Engine:** regex',
+      '**Scope:** packages/core/**/*.ts, !**/*.test.*',
+      '**Severity:** error',
+    ].join('\n');
+    const manual = extractManualPattern(body);
+    expect(manual?.fileGlobs).toEqual(parseDeclaredScope(body));
+    expect(manual?.fileGlobs).toEqual(['packages/core/**/*.ts', '!**/*.test.*']);
+  });
+
+  it('preserves commas inside brace groups (CR PR #1674 finding)', () => {
+    // `**/*.{ts,tsx}` is a single glob token — a naive comma-split would
+    // shatter it into '**/*.{ts' and 'tsx}'. Top-level-only splitting
+    // keeps the brace expression intact for sanitizeFileGlobs to expand
+    // downstream. Pre-fix, both Pipeline 1 (extractManualPattern) and
+    // Pipeline 2/3 (parseDeclaredScope override) silently mis-scoped these.
+    expect(parseDeclaredScope('**Scope:** **/*.{ts,tsx}')).toEqual(['**/*.{ts,tsx}']);
+  });
+
+  it('handles nested brace groups', () => {
+    // `!**/*.{test,spec}.{ts,tsx}` has two brace groups — both must stay
+    // intact in the single glob token.
+    expect(parseDeclaredScope('**Scope:** !**/*.{test,spec}.{ts,tsx}')).toEqual([
+      '!**/*.{test,spec}.{ts,tsx}',
+    ]);
+  });
+
+  it('still splits top-level commas alongside brace groups', () => {
+    // Mixed case: brace-expanded entry + comma-separated additional entries.
+    expect(parseDeclaredScope('**Scope:** **/*.{ts,tsx}, !**/*.test.*, !**/*.spec.*')).toEqual([
+      '**/*.{ts,tsx}',
+      '!**/*.test.*',
+      '!**/*.spec.*',
+    ]);
+  });
+
+  it('handles unbalanced closing brace defensively', () => {
+    // Authoring slip: extra `}` without an opening `{`. Should not crash;
+    // braceDepth saturates at 0 so a top-level comma after the rogue `}`
+    // still splits.
+    expect(parseDeclaredScope('**Scope:** foo}, bar')).toEqual(['foo}', 'bar']);
+  });
+});
+
+// ─── isGlobSetEqual (mmnto-ai/totem#1665) ──────────
+
+describe('isGlobSetEqual', () => {
+  it('returns true for two empty arrays', () => {
+    expect(isGlobSetEqual([], [])).toBe(true);
+  });
+
+  it('returns true for identical arrays', () => {
+    expect(isGlobSetEqual(['a', 'b'], ['a', 'b'])).toBe(true);
+  });
+
+  it('is order-insensitive', () => {
+    expect(isGlobSetEqual(['a', 'b'], ['b', 'a'])).toBe(true);
+  });
+
+  it('is duplicate-insensitive (set semantics)', () => {
+    expect(isGlobSetEqual(['a', 'a'], ['a'])).toBe(true);
+  });
+
+  it('returns false when sizes differ after dedup', () => {
+    expect(isGlobSetEqual(['a'], ['a', 'b'])).toBe(false);
+  });
+
+  it("treats '!' prefix as part of the string (sign matters)", () => {
+    expect(isGlobSetEqual(['!**/*.test.*'], ['**/*.test.*'])).toBe(false);
+  });
+
+  it('returns false when one side has an entry the other lacks', () => {
+    expect(isGlobSetEqual(['a', 'b', '!c'], ['a', 'b'])).toBe(false);
+  });
+
+  it('returns true on referential equality fast-path', () => {
+    const arr = ['a', 'b'];
+    expect(isGlobSetEqual(arr, arr)).toBe(true);
+  });
+
+  it('does not mutate inputs', () => {
+    const a = ['x', 'y'];
+    const b = ['y', 'x'];
+    const snapshotA = a.slice();
+    const snapshotB = b.slice();
+    isGlobSetEqual(a, b);
+    expect(a).toEqual(snapshotA);
+    expect(b).toEqual(snapshotB);
   });
 });
