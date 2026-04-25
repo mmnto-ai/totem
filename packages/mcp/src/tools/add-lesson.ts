@@ -145,6 +145,7 @@ export function registerAddLesson(server: McpServer): void {
           .describe('Tags for categorization (e.g. ["caching", "nextjs", "trap"])'),
         applies_to: z
           .array(LessonRoleSchema)
+          .min(1, 'At least one applies_to role is required when provided')
           .optional()
           .describe(
             'Optional role-of-code applicability per strategy item 020. ' +
