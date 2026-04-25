@@ -320,6 +320,42 @@ export function extractYamlRuleAfterField(
 }
 
 /**
+ * Parse the lesson body's `**Scope:**` prose declaration into a glob list.
+ *
+ * Returns `undefined` when the field is absent OR the value is empty / whitespace-only.
+ * Returns a non-empty `string[]` otherwise. Order is preserved as authored;
+ * `!`-prefixed exclusion entries are kept verbatim. Used by both Pipeline 1
+ * (`extractManualPattern`) and Pipeline 2/3 (`buildCompiledRule` override path
+ * for mmnto-ai/totem#1665).
+ */
+export function parseDeclaredScope(body: string): string[] | undefined {
+  const scopeRaw = extractField(body, 'Scope');
+  if (!scopeRaw) return undefined;
+  const globs = scopeRaw
+    .split(',')
+    .map((g) => g.trim())
+    .filter(Boolean);
+  return globs.length > 0 ? globs : undefined;
+}
+
+/**
+ * Set-of-strings equality on glob arrays. Order-insensitive,
+ * duplicate-insensitive. Sign characters (`!` exclusion prefix) are part of
+ * the string and matter for equality — `'!**\/*.test.*'` does not equal
+ * `'**\/*.test.*'`. Used by mmnto-ai/totem#1665 divergence detection.
+ */
+export function isGlobSetEqual(a: readonly string[], b: readonly string[]): boolean {
+  if (a === b) return true;
+  const setA = new Set(a);
+  const setB = new Set(b);
+  if (setA.size !== setB.size) return false;
+  for (const entry of setA) {
+    if (!setB.has(entry)) return false;
+  }
+  return true;
+}
+
+/**
  * Try to extract manual pattern fields from a lesson body.
  * Returns null if the lesson doesn't contain a Pattern: field.
  */
@@ -328,13 +364,7 @@ export function extractManualPattern(body: string): ManualPattern | null {
   const engine: ManualPattern['engine'] =
     engineRaw === 'ast' ? 'ast' : engineRaw === 'ast-grep' ? 'ast-grep' : 'regex';
 
-  const scopeRaw = extractField(body, 'Scope');
-  const fileGlobs = scopeRaw
-    ? scopeRaw
-        .split(',')
-        .map((g) => g.trim())
-        .filter(Boolean)
-    : undefined;
+  const fileGlobs = parseDeclaredScope(body);
 
   const severityRaw = extractField(body, 'Severity')?.toLowerCase();
   const severity: ManualPattern['severity'] = severityRaw === 'error' ? 'error' : 'warning';

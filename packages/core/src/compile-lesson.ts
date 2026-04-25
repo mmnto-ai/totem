@@ -14,6 +14,8 @@ import {
   extractBadGoodSnippets,
   extractManualPattern,
   extractRuleExamples,
+  isGlobSetEqual,
+  parseDeclaredScope,
   parseDeclaredSeverity,
 } from './lesson-pattern.js';
 import type { RuleTestResult } from './rule-tester.js';
@@ -102,6 +104,18 @@ export interface CompileLessonCallbacks {
   onSeverityOverride?: (
     lesson: { heading: string; hash: string },
     event: { from: 'error' | 'warning' | undefined; to: 'error' | 'warning' },
+  ) => void;
+  /**
+   * Fires when the declared-scope override (mmnto-ai/totem#1665) actually
+   * changed the emitted `fileGlobs`. CLI callers use this to write telemetry
+   * records tagged `type: 'scope-override'` for prompt-tuning feedback —
+   * frequent fires mean the LLM is drifting on Scope preservation. Absent =
+   * core runs without telemetry plumbing. Mirrors `onSeverityOverride`
+   * shape and discipline from #1656.
+   */
+  onScopeOverride?: (
+    lesson: { heading: string; hash: string },
+    event: { from: string[] | undefined; to: string[] },
   ) => void;
 }
 
@@ -351,6 +365,18 @@ export interface BuildCompiledRuleOptions {
    * callers can record telemetry for prompt-tuning feedback.
    */
   declaredSeverityOverride?: 'error' | 'warning';
+  /**
+   * Optional lesson body for declared-scope override (mmnto-ai/totem#1665).
+   * When supplied AND the body declares a `**Scope:**` line, the parsed
+   * source-Scope glob list takes precedence over `parsed.fileGlobs`
+   * regardless of LLM emission. Author-declared intent always wins; #1626's
+   * test-contract auto-include heuristic only applies when source omits Scope.
+   * `buildCompiledRule` reports the override event in
+   * `BuildRuleResult.scopeOverride` when the override actually changes the
+   * emitted globs, so CLI callers can record telemetry for prompt-tuning
+   * feedback (mirrors `declaredSeverityOverride` from #1656).
+   */
+  lessonBody?: string;
 }
 
 /**
@@ -413,21 +439,42 @@ export function buildCompiledRule(
       ? { from: emittedSeverity, to: declaredSeverity }
       : undefined;
 
-  // Thread `severityOverride` through rejection paths too (mmnto-ai/totem
-  // #1658 CR round-3 finding). If the LLM drifts on severity AND emits an
-  // invalid/missing pattern, the telemetry signal still fires — the
-  // rejection captures exactly the prompt-drift cases this signal is
-  // meant to detect, and dropping the marker on those paths would
-  // undercount drift measurement.
-  const reject = (rejectReason: string): BuildRuleResult =>
-    severityOverride
-      ? { rule: null, rejectReason, severityOverride }
-      : { rule: null, rejectReason };
+  // mmnto-ai/totem#1665: declared scope (parsed from the lesson body's
+  // `**Scope:**` prose convention) wins over the LLM's emission. Author
+  // intent is supreme; #1626's test-contract auto-include heuristic only
+  // applies when source omits Scope. The `scopeOverride` marker fires only
+  // when the override actually changed the outcome (mirrors `severityOverride`
+  // discipline from #1656).
+  //
+  // Both source-declared and LLM-emitted lists pass through `sanitizeFileGlobs`
+  // for parity (brace expansion, shallow → recursive normalization). Set-of-
+  // strings equality uses the post-sanitization values so an authored
+  // `**/*.{ts,js}` matches an LLM-emitted `['**/*.ts', '**/*.js']`.
+  const llmGlobsSanitized = parsed.fileGlobs ? sanitizeFileGlobs(parsed.fileGlobs) : undefined;
+  const declaredScope = options.lessonBody ? parseDeclaredScope(options.lessonBody) : undefined;
+  const declaredScopeSanitized = declaredScope ? sanitizeFileGlobs(declaredScope) : undefined;
+
+  const sanitizedGlobs = declaredScopeSanitized ?? llmGlobsSanitized;
+  const scopeOverride =
+    declaredScopeSanitized !== undefined &&
+    !isGlobSetEqual(declaredScopeSanitized, llmGlobsSanitized ?? [])
+      ? { from: llmGlobsSanitized, to: declaredScopeSanitized }
+      : undefined;
+
+  // Thread overrides through rejection paths too (mmnto-ai/totem#1658 CR
+  // round-3 finding). If the LLM drifts AND emits an invalid/missing
+  // pattern, the telemetry signal still fires — the rejection captures
+  // exactly the prompt-drift cases this signal is meant to detect.
+  const reject = (rejectReason: string): BuildRuleResult => {
+    const result: BuildRuleResult = { rule: null, rejectReason };
+    if (severityOverride) result.severityOverride = severityOverride;
+    if (scopeOverride) result.scopeOverride = scopeOverride;
+    return result;
+  };
 
   const engine = parsed.engine ?? 'regex';
   const now = new Date().toISOString();
   const existing = existingByHash.get(lesson.hash);
-  const sanitizedGlobs = parsed.fileGlobs ? sanitizeFileGlobs(parsed.fileGlobs) : undefined;
   const globsObj = sanitizedGlobs && sanitizedGlobs.length > 0 ? { fileGlobs: sanitizedGlobs } : {};
   // mmnto/totem#1408: the effective badExample is the override when present,
   // else whatever the LLM echoed back in CompilerOutput. Pipeline 1 and ad-hoc
@@ -597,7 +644,10 @@ export function buildCompiledRule(
     }
   }
 
-  return severityOverride ? { rule: candidate, severityOverride } : { rule: candidate };
+  const result: BuildRuleResult = { rule: candidate };
+  if (severityOverride) result.severityOverride = severityOverride;
+  if (scopeOverride) result.scopeOverride = scopeOverride;
+  return result;
 }
 
 // ─── Manual pattern builder ─────────────────────────
@@ -613,6 +663,15 @@ export interface BuildRuleResult {
    * the prompt directive is drifting and the LLM needs a stronger signal.
    */
   severityOverride?: { from: 'error' | 'warning' | undefined; to: 'error' | 'warning' };
+  /**
+   * Populated when source-declared `**Scope:**` actually changed the emitted
+   * `fileGlobs` (mmnto-ai/totem#1665). Absent when no `lessonBody` was
+   * supplied, when the body declared no Scope, or when the LLM emission
+   * already matched the source declaration. CLI callers use this as a
+   * telemetry signal for prompt-tuning feedback — frequent overrides mean
+   * the LLM is dropping or hallucinating Scope entries.
+   */
+  scopeOverride?: { from: string[] | undefined; to: string[] };
 }
 
 /**
@@ -967,6 +1026,7 @@ export async function compileLesson(
     const ruleResult = buildCompiledRule(parsed, lesson, existingByHash, {
       enforceSmokeGate: true,
       declaredSeverityOverride: declaredSeverity,
+      lessonBody: lesson.body,
       // Guard empty snippet arrays so they don't clobber parsed.badExample
       // or parsed.goodExample via ?? in buildCompiledRule. `[].join('\n')`
       // is the empty string, which is defined and would win over the LLM's
@@ -979,6 +1039,15 @@ export async function compileLesson(
       callbacks?.onSeverityOverride?.(
         { heading: lesson.heading, hash: lesson.hash },
         ruleResult.severityOverride,
+      );
+    }
+    if (ruleResult.scopeOverride) {
+      // totem-context: telemetry-only callback (mmnto-ai/totem#1665). Silent
+      // when omitted is the intended contract — drift telemetry is observability,
+      // not correctness. The override itself already applied in buildCompiledRule.
+      callbacks?.onScopeOverride?.(
+        { heading: lesson.heading, hash: lesson.hash },
+        ruleResult.scopeOverride,
       );
     }
     if (!ruleResult.rule) {
@@ -1144,11 +1213,21 @@ export async function compileLesson(
     const ruleResult = buildCompiledRule(parsed, lesson, existingByHash, {
       enforceSmokeGate: true,
       declaredSeverityOverride: declaredSeverity,
+      lessonBody: lesson.body,
     });
     if (ruleResult.severityOverride) {
       callbacks?.onSeverityOverride?.(
         { heading: lesson.heading, hash: lesson.hash },
         ruleResult.severityOverride,
+      );
+    }
+    if (ruleResult.scopeOverride) {
+      // totem-context: telemetry-only callback (mmnto-ai/totem#1665). Silent
+      // when omitted is the intended contract — drift telemetry is observability,
+      // not correctness. The override itself already applied in buildCompiledRule.
+      callbacks?.onScopeOverride?.(
+        { heading: lesson.heading, hash: lesson.hash },
+        ruleResult.scopeOverride,
       );
     }
 

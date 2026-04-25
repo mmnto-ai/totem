@@ -506,6 +506,51 @@ export async function compileCommand(
     }
   };
 
+  // mmnto-ai/totem#1665: scope-override telemetry, mirroring the
+  // severity-override helper above. Records lessons where author-declared
+  // **Scope:** in the lesson body diverged from the LLM's emitted fileGlobs.
+  // Frequent fires mean the LLM is dropping or hallucinating Scope entries
+  // and the prompt directive needs sharpening.
+  const writeScopeOverrideTelemetry = (
+    lesson: { heading: string; hash: string },
+    event: { from: string[] | undefined; to: string[] },
+  ): void => {
+    // totem-context: intentional cleanup — telemetry sink failures (disk full,
+    // permissions, concurrent writer) must not block compile correctness.
+    // Mirrors writeSeverityOverrideTelemetry's posture (mmnto-ai/totem#1656).
+    try {
+      const tempDir = path.join(totemDir, 'temp');
+      fs.mkdirSync(tempDir, { recursive: true });
+      const entry = {
+        type: 'scope-override' as const,
+        timestamp: new Date().toISOString(),
+        lessonHash: lesson.hash,
+        lessonHeading: lesson.heading,
+        from: event.from,
+        to: event.to,
+      };
+      fs.appendFileSync(
+        path.join(tempDir, 'telemetry.jsonl'),
+        JSON.stringify(entry) + '\n',
+        'utf-8',
+      );
+    } catch (err) {
+      log.warn(
+        TAG,
+        `Failed to write scope-override telemetry: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      // Best-effort sink: swallow expected IO failures (disk full, permissions,
+      // concurrent writer races) so telemetry never blocks compile. Unexpected
+      // errors propagate per Tenet 4 — silently swallowing TypeErrors or
+      // assertion failures would mask real bugs in the telemetry shape.
+      const code = (err as NodeJS.ErrnoException | undefined)?.code;
+      const expectedIoCodes = new Set(['ENOENT', 'EACCES', 'EPERM', 'ENOSPC', 'EBUSY', 'EROFS']);
+      if (!(err instanceof Error) || !code || !expectedIoCodes.has(code)) {
+        throw err;
+      }
+    }
+  };
+
   // ─── --refresh-manifest primitive (mmnto-ai/totem#1587) ─────────
   // No-LLM path that recomputes `output_hash` from current
   // `compiled-rules.json` state. Supports the postmerge inline-archive
@@ -1001,6 +1046,10 @@ export async function compileCommand(
           // other telemetry artifacts when compile runs from a sub-directory.
           // Best-effort — sink failures do not interfere with compile results.
           onSeverityOverride: writeSeverityOverrideTelemetry,
+          // mmnto-ai/totem#1665: append scope-override telemetry when the
+          // source-Scope override changes the emitted fileGlobs. Same
+          // best-effort discipline as severity above.
+          onScopeOverride: writeScopeOverrideTelemetry,
         },
       };
 
@@ -1162,14 +1211,23 @@ export async function compileCommand(
             // over the LLM's emission. Post-LLM override is deterministic;
             // the prompt directive reduces the frequency of mismatch but
             // the override guarantees correctness on the cloud path too.
+            // mmnto-ai/totem#1665: same posture for source-declared Scope —
+            // author intent overrides LLM emission on the cloud path too.
             const declaredSeverity = parseDeclaredSeverity(lesson.body);
             const ruleResult = buildCompiledRule(parsed, lesson, existingByHash, {
               declaredSeverityOverride: declaredSeverity,
+              lessonBody: lesson.body,
             });
             if (ruleResult.severityOverride) {
               writeSeverityOverrideTelemetry(
                 { heading: lesson.heading, hash: lesson.hash },
                 ruleResult.severityOverride,
+              );
+            }
+            if (ruleResult.scopeOverride) {
+              writeScopeOverrideTelemetry(
+                { heading: lesson.heading, hash: lesson.hash },
+                ruleResult.scopeOverride,
               );
             }
             if (ruleResult.rule) {

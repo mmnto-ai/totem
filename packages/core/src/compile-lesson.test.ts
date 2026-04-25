@@ -352,6 +352,165 @@ describe('buildCompiledRule', () => {
     expect(result.rejectReason).toContain('Rejected regex');
     expect(result.severityOverride).toBeUndefined();
   });
+
+  // ─── scopeOverride (mmnto-ai/totem#1665) ──────────
+
+  it('overrides LLM-dropped exclusions when source declares Scope', () => {
+    // The exhibit case: lesson source declares test-exclusions but the LLM
+    // emits a stripped fileGlobs. Author intent always wins.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: 'test',
+      message: 'test',
+      engine: 'regex',
+      fileGlobs: ['packages/zomboid-sim/src/**/*.rs'],
+    };
+    const lessonBody = '**Scope:** packages/zomboid-sim/src/**/*.rs, !**/*.test.*, !**/*.spec.*';
+    const result = buildCompiledRule(parsed, lesson, existingByHash, { lessonBody });
+    expect(result.rule!.fileGlobs).toEqual([
+      'packages/zomboid-sim/src/**/*.rs',
+      '!**/*.test.*',
+      '!**/*.spec.*',
+    ]);
+    expect(result.scopeOverride).toEqual({
+      from: ['packages/zomboid-sim/src/**/*.rs'],
+      to: ['packages/zomboid-sim/src/**/*.rs', '!**/*.test.*', '!**/*.spec.*'],
+    });
+  });
+
+  it('overrides LLM-hallucinated additions when source declares a different Scope', () => {
+    // Inverse direction: LLM auto-includes test patterns the author did not declare.
+    // #1626's auto-include heuristic is not honored when source declares Scope —
+    // author intent wins over heuristic.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: 'test',
+      message: 'test',
+      engine: 'regex',
+      fileGlobs: ['packages/api/**/*.ts', '**/*.test.*', '**/*.spec.*'],
+    };
+    const lessonBody = '**Scope:** packages/api/**/*.ts';
+    const result = buildCompiledRule(parsed, lesson, existingByHash, { lessonBody });
+    expect(result.rule!.fileGlobs).toEqual(['packages/api/**/*.ts']);
+    expect(result.scopeOverride).toEqual({
+      from: ['packages/api/**/*.ts', '**/*.test.*', '**/*.spec.*'],
+      to: ['packages/api/**/*.ts'],
+    });
+  });
+
+  it('omits scopeOverride marker when LLM emission already matches source-Scope', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: 'test',
+      message: 'test',
+      engine: 'regex',
+      fileGlobs: ['packages/api/**/*.ts', '!**/*.test.*'],
+    };
+    const lessonBody = '**Scope:** packages/api/**/*.ts, !**/*.test.*';
+    const result = buildCompiledRule(parsed, lesson, existingByHash, { lessonBody });
+    expect(result.rule!.fileGlobs).toEqual(['packages/api/**/*.ts', '!**/*.test.*']);
+    expect(result.scopeOverride).toBeUndefined();
+  });
+
+  it('omits scopeOverride marker when set-equal but order differs', () => {
+    // Order-insensitive set equality: same entries different order = no override.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: 'test',
+      message: 'test',
+      engine: 'regex',
+      fileGlobs: ['!**/*.test.*', 'packages/api/**/*.ts'],
+    };
+    const lessonBody = '**Scope:** packages/api/**/*.ts, !**/*.test.*';
+    const result = buildCompiledRule(parsed, lesson, existingByHash, { lessonBody });
+    expect(result.scopeOverride).toBeUndefined();
+  });
+
+  it('does not override when source omits Scope (preserves LLM emission, no marker)', () => {
+    // Backward-compat path: lessons without **Scope:** keep the LLM emission
+    // exactly as-is (including any #1626 test-contract auto-include).
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: 'test',
+      message: 'test',
+      engine: 'regex',
+      fileGlobs: ['**/*.test.*', '**/*.spec.*'],
+    };
+    const lessonBody = 'A test-contract lesson body with no Scope line.';
+    const result = buildCompiledRule(parsed, lesson, existingByHash, { lessonBody });
+    expect(result.rule!.fileGlobs).toEqual(['**/*.test.*', '**/*.spec.*']);
+    expect(result.scopeOverride).toBeUndefined();
+  });
+
+  it('does not override when lessonBody option is omitted (current-behavior preservation)', () => {
+    // Caller that does not opt into the override path (e.g., ad-hoc test
+    // harnesses) gets exactly today's behavior — no parsing, no marker.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: 'test',
+      message: 'test',
+      engine: 'regex',
+      fileGlobs: ['**/*.ts'],
+    };
+    const result = buildCompiledRule(parsed, lesson, existingByHash);
+    expect(result.rule!.fileGlobs).toEqual(['**/*.ts']);
+    expect(result.scopeOverride).toBeUndefined();
+  });
+
+  it('overrides when source declares Scope but LLM emits nothing', () => {
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: 'test',
+      message: 'test',
+      engine: 'regex',
+      // fileGlobs deliberately undefined
+    };
+    const lessonBody = '**Scope:** packages/core/**/*.ts';
+    const result = buildCompiledRule(parsed, lesson, existingByHash, { lessonBody });
+    expect(result.rule!.fileGlobs).toEqual(['packages/core/**/*.ts']);
+    expect(result.scopeOverride).toEqual({
+      from: undefined,
+      to: ['packages/core/**/*.ts'],
+    });
+  });
+
+  it('preserves scopeOverride on rejection paths too', () => {
+    // Mirrors the severityOverride rejection-path test. If the LLM drifts on
+    // Scope AND emits an invalid pattern, the rejection still surfaces the
+    // marker so telemetry captures exactly the prompt-drift cases.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: '(unclosed',
+      message: 'test',
+      engine: 'regex',
+      fileGlobs: ['**/*.ts'],
+    };
+    const lessonBody = '**Scope:** packages/core/**/*.ts, !**/*.test.*';
+    const result = buildCompiledRule(parsed, lesson, existingByHash, { lessonBody });
+    expect(result.rule).toBeNull();
+    expect(result.rejectReason).toContain('Rejected regex');
+    expect(result.scopeOverride).toEqual({
+      from: ['**/*.ts'],
+      to: ['packages/core/**/*.ts', '!**/*.test.*'],
+    });
+  });
+
+  it('normalizes shallow globs through sanitizeFileGlobs on the source-Scope path', () => {
+    // sanitizeFileGlobs converts shallow `*.ts` to recursive `**/*.ts`. Both
+    // source-derived and LLM-emitted lists pass through it, so an authored
+    // `*.ts` matches an LLM-emitted `**/*.ts` and no override fires.
+    const parsed: CompilerOutput = {
+      compilable: true,
+      pattern: 'test',
+      message: 'test',
+      engine: 'regex',
+      fileGlobs: ['**/*.ts'],
+    };
+    const lessonBody = '**Scope:** *.ts';
+    const result = buildCompiledRule(parsed, lesson, existingByHash, { lessonBody });
+    expect(result.rule!.fileGlobs).toEqual(['**/*.ts']);
+    expect(result.scopeOverride).toBeUndefined();
+  });
 });
 
 // ─── self-suppression guard (#1177) ────────────────
