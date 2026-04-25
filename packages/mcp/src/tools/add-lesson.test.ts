@@ -10,15 +10,30 @@ vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   McpServer: class {},
 }));
 
-vi.mock('@mmnto/totem', () => ({
-  acquireLock: vi.fn(async () => vi.fn()),
-  generateLessonHeading: vi.fn((body: string) => body.slice(0, 40)),
-  sanitize: vi.fn((t: string) => t),
-  writeLessonFileAsync: vi.fn(async (_dir: string, entry: string) => {
-    lastWrittenEntry = entry;
-    return '/fake/lessons/lesson-001.md';
-  }),
-}));
+vi.mock('@mmnto/totem', async () => {
+  const { z } = await import('zod');
+  return {
+    acquireLock: vi.fn(async () => vi.fn()),
+    generateLessonHeading: vi.fn((body: string) => body.slice(0, 40)),
+    sanitize: vi.fn((t: string) => t),
+    writeLessonFileAsync: vi.fn(async (_dir: string, entry: string) => {
+      lastWrittenEntry = entry;
+      return '/fake/lessons/lesson-001.md';
+    }),
+    // Real enum so AddLessonInputSchema validation behaves authentically
+    // for applies_to coverage (item 020).
+    LessonRoleSchema: z.enum([
+      'mutator',
+      'boundary',
+      'aggregator',
+      'hot-path',
+      'boundary-test',
+      'infrastructure',
+      'presentation',
+      'any',
+    ]),
+  };
+});
 
 vi.mock('../context.js', () => ({
   getContext: vi.fn(async () => ({
@@ -160,6 +175,42 @@ describe('add_lesson auth model (#844)', () => {
     // Verify it looks like an ISO timestamp
     const match = lastWrittenEntry.match(/added at (\d{4}-\d{2}-\d{2}T[\d:.]+Z?)/);
     expect(match).not.toBeNull();
+  });
+
+  // --- applies_to (strategy item 020) ---
+
+  it('omits **Applies-to:** line when applies_to is not provided', async () => {
+    await handle({ lesson: 'No role declared', context_tags: ['test'] });
+    expect(lastWrittenEntry).not.toContain('**Applies-to:**');
+  });
+
+  it('serializes applies_to as kebab-case **Applies-to:** prose line', async () => {
+    await handle({
+      lesson: 'A mutator-only lesson',
+      context_tags: ['determinism'],
+      applies_to: ['mutator', 'boundary'],
+    });
+    expect(lastWrittenEntry).toContain('**Applies-to:** mutator, boundary');
+  });
+
+  it('rejects unknown role in applies_to', async () => {
+    const result = (await handle({
+      lesson: 'Bad role',
+      context_tags: ['test'],
+      applies_to: ['mutator', 'database'],
+    })) as { isError: boolean; content: Array<{ text: string }> };
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('Validation error');
+  });
+
+  it('rejects empty applies_to array', async () => {
+    const result = (await handle({
+      lesson: 'Empty role list',
+      context_tags: ['test'],
+      applies_to: [],
+    })) as { isError: boolean; content: Array<{ text: string }> };
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('Validation error');
   });
 
   // --- Heading sanitization ---

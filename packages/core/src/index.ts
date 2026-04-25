@@ -58,8 +58,12 @@ export {
 // Lesson Frontmatter (ADR-070)
 export type { FrontmatterParseResult } from './lesson-frontmatter.js';
 export { buildFrontmatterFromLegacy, extractFrontmatter } from './lesson-frontmatter.js';
-export type { LessonFrontmatter } from './types.js';
-export { LessonFrontmatterSchema } from './types.js';
+export type { LessonFrontmatter, LessonRole } from './types.js';
+export { LessonFrontmatterSchema, LessonRoleSchema } from './types.js';
+
+// Lesson role-applicability filter (strategy item 020)
+export type { LessonWithAppliesTo } from './lesson-role-filter.js';
+export { filterLessonsByRole } from './lesson-role-filter.js';
 
 // Types
 export type {

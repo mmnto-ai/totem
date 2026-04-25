@@ -5,7 +5,13 @@ import * as path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-import { acquireLock, generateLessonHeading, sanitize, writeLessonFileAsync } from '@mmnto/totem';
+import {
+  acquireLock,
+  generateLessonHeading,
+  LessonRoleSchema,
+  sanitize,
+  writeLessonFileAsync,
+} from '@mmnto/totem';
 
 import { getContext, reconnectStore } from '../context.js';
 import { detectPackageManager } from '../utils.js';
@@ -28,6 +34,7 @@ export function _resetRateLimit(): void {
 const AddLessonInputSchema = z.object({
   lesson: z.string().min(1, 'Lesson body must be a non-empty string'),
   context_tags: z.array(z.string().min(1)).min(1, 'At least one context tag is required'),
+  applies_to: z.array(LessonRoleSchema).min(1).optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -136,12 +143,20 @@ export function registerAddLesson(server: McpServer): void {
         context_tags: z
           .array(z.string())
           .describe('Tags for categorization (e.g. ["caching", "nextjs", "trap"])'),
+        applies_to: z
+          .array(LessonRoleSchema)
+          .optional()
+          .describe(
+            'Optional role-of-code applicability per strategy item 020. ' +
+              'One or more of: mutator, boundary, aggregator, hot-path, boundary-test, ' +
+              'infrastructure, presentation, any. Omit to default to ["any"].',
+          ),
       },
       annotations: {
         readOnlyHint: false,
       },
     },
-    async ({ lesson, context_tags }) => {
+    async ({ lesson, context_tags, applies_to }) => {
       // --- Rate limiting (#844) ---
       if (sessionLessonCount >= MAX_LESSONS_PER_SESSION) {
         return {
@@ -156,7 +171,7 @@ export function registerAddLesson(server: McpServer): void {
       }
 
       // --- Schema validation (#844) ---
-      const parsed = AddLessonInputSchema.safeParse({ lesson, context_tags });
+      const parsed = AddLessonInputSchema.safeParse({ lesson, context_tags, applies_to });
       if (!parsed.success) {
         const issues = parsed.error.issues.map((i) => i.message).join('; ');
         return {
@@ -219,9 +234,16 @@ export function registerAddLesson(server: McpServer): void {
         // --- Source provenance (#844) ---
         const provenance = `\n**Source:** mcp (added at ${new Date().toISOString()})`;
 
+        // Serialize applies-to in canonical kebab-case wire form (item 020).
+        // Snake-case at the MCP boundary, kebab-case in the lesson markdown.
+        const appliesToLine = parsed.data.applies_to
+          ? `**Applies-to:** ${parsed.data.applies_to.join(', ')}\n\n`
+          : '';
+
         const entry =
           `## Lesson — ${heading}\n\n` +
           `**Tags:** ${safeTags}\n\n` +
+          appliesToLine +
           `${bodyContent}\n` +
           provenance;
 
