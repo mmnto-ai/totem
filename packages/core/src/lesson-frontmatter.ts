@@ -10,6 +10,23 @@ import { type LessonFrontmatter, LessonFrontmatterSchema } from './types.js';
 
 const FRONTMATTER_RE = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 
+// Map kebab-case YAML keys (the canonical wire form per item 020) to the
+// camelCase schema keys used internally. Item 020 keeps `applies-to:` aligned
+// with the prose `**Applies-to:**` form and the upstream-feedback house style;
+// the schema stays camelCase per TS conventions.
+const WIRE_KEY_REMAP: Record<string, string> = {
+  'applies-to': 'appliesTo',
+};
+
+function remapWireKeys(raw: unknown): unknown {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    out[WIRE_KEY_REMAP[k] ?? k] = v;
+  }
+  return out;
+}
+
 export interface FrontmatterParseResult {
   frontmatter: LessonFrontmatter;
   /** Content after the YAML block (or full content if no YAML) */
@@ -45,7 +62,7 @@ export function extractFrontmatter(
 
   try {
     const raw = YAML.parse(yamlBlock);
-    const result = LessonFrontmatterSchema.safeParse(raw ?? {});
+    const result = LessonFrontmatterSchema.safeParse(remapWireKeys(raw ?? {}));
 
     if (!result.success) {
       onWarn?.(`Invalid frontmatter: ${result.error.issues.map((i) => i.message).join(', ')}`);
@@ -73,7 +90,7 @@ export function extractFrontmatter(
 
 /**
  * Build a LessonFrontmatter from legacy markdown fields.
- * Maps **Tags:**, **Pattern:**, **Engine:**, **Scope:**, **Severity:** into the schema.
+ * Maps **Tags:**, **Pattern:**, **Engine:**, **Scope:**, **Severity:**, **Applies-to:** into the schema.
  */
 export function buildFrontmatterFromLegacy(tags: string[], body: string): LessonFrontmatter {
   const fm: Record<string, unknown> = { tags };
@@ -82,6 +99,7 @@ export function buildFrontmatterFromLegacy(tags: string[], body: string): Lesson
   const engine = extractField(body, 'Engine')?.toLowerCase();
   const scope = extractField(body, 'Scope');
   const severity = extractField(body, 'Severity')?.toLowerCase();
+  const appliesTo = extractField(body, 'Applies-to');
 
   if (pattern) {
     const validEngines = ['regex', 'ast', 'ast-grep'];
@@ -102,6 +120,12 @@ export function buildFrontmatterFromLegacy(tags: string[], body: string): Lesson
 
   if (severity === 'error' || severity === 'warning') {
     fm.severity = severity;
+  }
+
+  // Pass the raw prose string through; the schema preprocessor handles
+  // splitting, lowercasing, empty-array normalization, and enum validation.
+  if (appliesTo !== undefined) {
+    fm.appliesTo = appliesTo;
   }
 
   const result = LessonFrontmatterSchema.safeParse(fm);

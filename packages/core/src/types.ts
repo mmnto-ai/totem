@@ -170,6 +170,41 @@ export interface HealthCheckResult {
 
 // ─── Lesson Frontmatter Schema (ADR-070) ──────────
 
+// Closed role taxonomy (strategy item 020). Lowercase canonical form;
+// preprocessor lowercases input so authoring forgiveness doesn't bleed downstream.
+export const LessonRoleSchema = z.enum([
+  'mutator',
+  'boundary',
+  'aggregator',
+  'hot-path',
+  'boundary-test',
+  'infrastructure',
+  'presentation',
+  'any',
+]);
+
+export type LessonRole = z.infer<typeof LessonRoleSchema>;
+
+// Coerce YAML list / YAML scalar / comma-separated prose / mixed-case input
+// to a canonical lowercase LessonRole[]. Empty input (after split + filter)
+// normalizes to ['any'] so the downstream "no roles apply" failure mode
+// can't surface from authoring slips.
+const appliesToPreprocessor = z.preprocess((val) => {
+  if (val === undefined || val === null) return ['any'];
+  let arr: string[];
+  if (typeof val === 'string') {
+    arr = val
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter((s) => s.length > 0);
+  } else if (Array.isArray(val)) {
+    arr = val.map((s) => String(s).trim().toLowerCase()).filter((s) => s.length > 0);
+  } else {
+    return val;
+  }
+  return arr.length === 0 ? ['any'] : arr;
+}, z.array(LessonRoleSchema).min(1));
+
 export const LessonFrontmatterSchema = z.object({
   // Core Taxonomy
   type: z.literal('trap').default('trap'),
@@ -185,6 +220,11 @@ export const LessonFrontmatterSchema = z.object({
       globs: z.array(z.string()).optional(),
     })
     .optional(),
+
+  // Role-of-code applicability (strategy item 020). Always non-empty;
+  // missing field defaults to ['any'] for backwards compat across the
+  // pre-1.16.0 corpus.
+  appliesTo: appliesToPreprocessor.default(['any']),
 
   // Ecosystem Targeting
   ecosystem: z

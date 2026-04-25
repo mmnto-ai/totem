@@ -260,3 +260,143 @@ describe('buildFrontmatterFromLegacy', () => {
     expect(fm.compilation?.engine).toBe('regex');
   });
 });
+
+// ─── appliesTo (strategy item 020) ───────────────────
+
+describe('extractFrontmatter — appliesTo', () => {
+  it("defaults to ['any'] when applies-to is omitted", () => {
+    const content = `---
+category: architecture
+---
+## Lesson — No applies-to
+
+Body.`;
+
+    const result = extractFrontmatter(content);
+    expect(result.frontmatter.appliesTo).toEqual(['any']);
+  });
+
+  it('parses YAML list of roles', () => {
+    const content = `---
+applies-to: [mutator, boundary]
+---
+## Lesson — List form
+
+Body.`;
+
+    const result = extractFrontmatter(content);
+    expect(result.frontmatter.appliesTo).toEqual(['mutator', 'boundary']);
+  });
+
+  it('parses YAML scalar role into a single-element list', () => {
+    const content = `---
+applies-to: mutator
+---
+## Lesson — Scalar form
+
+Body.`;
+
+    const result = extractFrontmatter(content);
+    expect(result.frontmatter.appliesTo).toEqual(['mutator']);
+  });
+
+  it("normalizes empty YAML list to ['any']", () => {
+    const content = `---
+applies-to: []
+---
+## Lesson — Empty list
+
+Body.`;
+
+    const result = extractFrontmatter(content);
+    expect(result.frontmatter.appliesTo).toEqual(['any']);
+  });
+
+  it('lowercases mixed-case input', () => {
+    const content = `---
+applies-to: [MUTATOR, Any]
+---
+## Lesson — Mixed case
+
+Body.`;
+
+    const result = extractFrontmatter(content);
+    expect(result.frontmatter.appliesTo).toEqual(['mutator', 'any']);
+  });
+
+  it('falls back to defaults and warns on unknown role', () => {
+    const warnings: string[] = [];
+    const content = `---
+applies-to: [mutator, database]
+---
+## Lesson — Bad role
+
+Body.`;
+
+    const result = extractFrontmatter(content, (msg) => warnings.push(msg));
+    expect(result.validYaml).toBe(false);
+    expect(result.frontmatter.appliesTo).toEqual(['any']); // default
+    expect(warnings.length).toBeGreaterThan(0);
+  });
+
+  it('preserves authored element order', () => {
+    const a = extractFrontmatter(`---
+applies-to: [boundary, mutator]
+---
+## Lesson — Order A
+
+Body.`);
+    const b = extractFrontmatter(`---
+applies-to: [mutator, boundary]
+---
+## Lesson — Order B
+
+Body.`);
+    expect(a.frontmatter.appliesTo).toEqual(['boundary', 'mutator']);
+    expect(b.frontmatter.appliesTo).toEqual(['mutator', 'boundary']);
+  });
+
+  it('accepts hot-path and boundary-test roles', () => {
+    const content = `---
+applies-to: [hot-path, boundary-test]
+---
+## Lesson — Hyphenated roles
+
+Body.`;
+
+    const result = extractFrontmatter(content);
+    expect(result.frontmatter.appliesTo).toEqual(['hot-path', 'boundary-test']);
+  });
+});
+
+describe('buildFrontmatterFromLegacy — appliesTo', () => {
+  it("defaults to ['any'] when **Applies-to:** is missing", () => {
+    const fm = buildFrontmatterFromLegacy([], 'Just a body.');
+    expect(fm.appliesTo).toEqual(['any']);
+  });
+
+  it('parses comma-separated prose form', () => {
+    const fm = buildFrontmatterFromLegacy([], '**Applies-to:** mutator, boundary');
+    expect(fm.appliesTo).toEqual(['mutator', 'boundary']);
+  });
+
+  it('parses single-role prose form', () => {
+    const fm = buildFrontmatterFromLegacy([], '**Applies-to:** mutator');
+    expect(fm.appliesTo).toEqual(['mutator']);
+  });
+
+  it("normalizes whitespace-only prose to ['any']", () => {
+    const fm = buildFrontmatterFromLegacy([], '**Applies-to:**   ');
+    expect(fm.appliesTo).toEqual(['any']);
+  });
+
+  it('lowercases mixed-case prose', () => {
+    const fm = buildFrontmatterFromLegacy([], '**Applies-to:** Mutator, ANY');
+    expect(fm.appliesTo).toEqual(['mutator', 'any']);
+  });
+
+  it('falls back to defaults on unknown prose role', () => {
+    const fm = buildFrontmatterFromLegacy([], '**Applies-to:** mutator, database');
+    expect(fm.appliesTo).toEqual(['any']); // whole-frontmatter fallback
+  });
+});
