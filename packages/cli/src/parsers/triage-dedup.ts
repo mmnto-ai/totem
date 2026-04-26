@@ -134,13 +134,14 @@ export function deduplicateFindings(findings: NormalizedBotFinding[]): Categoriz
     } else {
       // Body-hash fallback for synthesized findings without an upstream
       // comment ID (today: extractReviewBodyFindings produces these with
-      // `file: '(review body)'`). Map key is the body string itself —
-      // bounded length, no crypto cost, V8 handles long string keys
-      // natively.
-      const key = `${finding.file}|${finding.body}`;
+      // `file: '(review body)'`). Map key includes `tool` so two
+      // synthesized findings from different bots with identical bodies
+      // stay distinct — preserves the cross-bot-independence symmetry
+      // the strict-by-id path provides for inline findings.
+      const key = `${finding.tool}|${finding.file}|${finding.body}`;
       if (seenBodyKeys.has(key)) continue;
       seenBodyKeys.add(key);
-      dedupKey = `body:${finding.file}|${finding.body}`;
+      dedupKey = `body:${finding.tool}|${finding.file}|${finding.body}`;
     }
 
     result.push({

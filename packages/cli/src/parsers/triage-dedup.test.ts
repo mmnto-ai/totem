@@ -197,6 +197,28 @@ describe('deduplicateFindings', () => {
     expect(result).toHaveLength(2);
   });
 
+  it('preserves cross-bot independence on the body-hash fallback path (CR + GCA same body → distinct)', () => {
+    // Body-hash key includes `tool` so two synthesized findings from
+    // different bots with identical bodies stay distinct. Symmetry with
+    // the strict-by-id path's cross-bot independence for inline findings
+    // (CR R1 review finding on PR #1690 — fixed in this round).
+    const findings: NormalizedBotFinding[] = [
+      makeFinding({
+        tool: 'coderabbit',
+        file: '(review body)',
+        body: 'Identical synthesized finding text',
+      }),
+      makeFinding({
+        tool: 'gca',
+        file: '(review body)',
+        body: 'Identical synthesized finding text',
+      }),
+    ];
+    const result = deduplicateFindings(findings);
+    expect(result).toHaveLength(2);
+    expect(result.map((r) => r.tool).sort()).toEqual(['coderabbit', 'gca']);
+  });
+
   it('does not merge a synthesized finding with an inline finding even when bodies match', () => {
     // No-id × has-id mixed case: the inline path is keyed by id, the
     // synthesized path is keyed by (file, body). Their key spaces don't
