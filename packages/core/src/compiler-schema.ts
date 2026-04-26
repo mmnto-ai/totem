@@ -220,6 +220,16 @@ export const NonCompilableReasonCodeSchema = z.enum([
   // project-state-conditional semantics. Sibling to `context-required`;
   // both are permanent (structural incapacity, not transient failure).
   'semantic-analysis-required',
+  // `self-suppressing-pattern` (mmnto-ai/totem#1664) classifies lessons whose
+  // compiled pattern would match a suppression directive (`totem-ignore` /
+  // `totem-context`) and self-suppress at runtime — the rule could never
+  // fire even if it shipped. Pre-#1664 this rejection was misclassified as
+  // `pattern-syntax-invalid` (a retry-pending code), leaving the lesson
+  // invisibly stuck in the retry path with no `nonCompilable` ledger entry.
+  // Self-suppression is structural, so this code is terminal (NOT in
+  // `LEDGER_RETRY_PENDING_CODES`); ledger writes record the audit trail
+  // bot reviewers can cite per strategy upstream-feedback item 021.
+  'self-suppressing-pattern',
   'legacy-unknown',
 ]);
 

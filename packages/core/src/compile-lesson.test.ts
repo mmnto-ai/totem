@@ -2091,6 +2091,31 @@ describe('compileLesson Pipeline 3 (Bad/Good snippets)', () => {
     }
   });
 
+  it('classifies self-suppressing pattern rejection as self-suppressing-pattern (Pipeline 3, mmnto-ai/totem#1664)', async () => {
+    // Pre-#1664 the rejectReason "Pattern matches a suppression directive..."
+    // mapped to 'pattern-syntax-invalid', a retry-pending code, leaving the
+    // lesson invisibly stuck with no nonCompilable ledger entry. Now it maps
+    // to the dedicated 'self-suppressing-pattern' terminal code so bot
+    // reviewers can cite the audit trail per strategy upstream-feedback 021.
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: true,
+        pattern: '\\btotem-ignore\\b',
+        message: 'should not compile',
+        engine: 'regex' as const,
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('response'),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+    const result = await compileLesson(pipeline3Lesson, 'system prompt', deps);
+    expect(result.status).toBe('skipped');
+    if (result.status === 'skipped') {
+      expect(result.reasonCode).toBe('self-suppressing-pattern');
+      expect(result.reason).toContain('self-suppress');
+    }
+  });
+
   it('rejects at the smoke gate when the pattern does not match the Bad snippet (mmnto/totem#1408)', async () => {
     const deps: CompileLessonDeps = {
       parseCompilerResponse: vi.fn().mockReturnValue({

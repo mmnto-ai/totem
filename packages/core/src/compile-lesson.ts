@@ -1396,9 +1396,16 @@ export async function compileLesson(
  *   - 'Missing pattern/message/astQuery/astGrepPattern/astGrepYamlRule'
  *     → `'no-pattern-generated'`. The LLM emitted a structured response
  *     without the fields needed to build a rule.
- *   - 'Rejected regex' / 'Invalid ast-grep pattern' / 'Pattern matches a
- *     suppression directive' → `'pattern-syntax-invalid'`. The pattern
- *     exists but cannot be parsed / executed / safely run.
+ *   - 'Rejected regex' / 'Invalid ast-grep pattern' →
+ *     `'pattern-syntax-invalid'`. The pattern exists but cannot be parsed
+ *     / executed / safely run. Retry-pending — the LLM may produce a
+ *     valid pattern on the next attempt.
+ *   - 'Pattern matches a suppression directive' →
+ *     `'self-suppressing-pattern'` (mmnto-ai/totem#1664). The pattern
+ *     would match `totem-ignore` / `totem-context` and self-suppress at
+ *     runtime — structural, not transient. Terminal (writes to ledger)
+ *     so bot reviewers can cite the reasonCode instead of synthesizing
+ *     a "missing from manifest" finding (item 021 audit-trail gap).
  *   - 'smoke gate: zero matches' → `'pattern-zero-match'`. The pattern
  *     compiled fine but did not fire against the badExample. On the
  *     Pipeline 2 retry-loop path this branch is used for retry fuel;
@@ -1412,7 +1419,7 @@ function classifyBuildRejectReason(rejectReason: string): CompileLessonReasonCod
   if (rejectReason.startsWith('Missing ')) return 'no-pattern-generated';
   if (rejectReason.startsWith('Rejected regex')) return 'pattern-syntax-invalid';
   if (rejectReason.startsWith('Invalid ast-grep pattern')) return 'pattern-syntax-invalid';
-  if (rejectReason.includes('suppression directive')) return 'pattern-syntax-invalid';
+  if (rejectReason.includes('suppression directive')) return 'self-suppressing-pattern';
   if (rejectReason.startsWith('smoke gate: zero matches')) return 'pattern-zero-match';
   if (rejectReason.startsWith('smoke gate: matches goodExample')) return 'matches-good-example';
   if (rejectReason.startsWith('smoke gate: missing goodExample')) return 'missing-goodexample';
