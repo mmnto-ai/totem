@@ -634,13 +634,17 @@ describe('LEDGER_RETRY_PENDING_CODES', () => {
     expect(LEDGER_RETRY_PENDING_CODES.has('legacy-unknown')).toBe(false);
   });
 
-  it('does not include terminal classifier codes (out-of-scope, context-required, semantic-analysis-required)', () => {
+  it('does not include terminal classifier codes (out-of-scope, context-required, semantic-analysis-required, self-suppressing-pattern)', () => {
     // These describe structural incapacity — the rule will never compile
     // cleanly no matter how many retries. They are permanent ledger entries.
     expect(LEDGER_RETRY_PENDING_CODES.has('out-of-scope')).toBe(false);
     expect(LEDGER_RETRY_PENDING_CODES.has('context-required')).toBe(false);
     expect(LEDGER_RETRY_PENDING_CODES.has('semantic-analysis-required')).toBe(false);
     expect(LEDGER_RETRY_PENDING_CODES.has('security-rule-rejected')).toBe(false);
+    // mmnto-ai/totem#1664: self-suppression is structural (the pattern would
+    // match totem-ignore / totem-context tokens at runtime). Retrying compile
+    // produces the same self-suppressing pattern, so it is terminal.
+    expect(LEDGER_RETRY_PENDING_CODES.has('self-suppressing-pattern')).toBe(false);
   });
 
   it('includes every known smoke-gate + LLM-output transient failure code', () => {
@@ -664,6 +668,10 @@ describe('shouldWriteToLedger', () => {
     expect(shouldWriteToLedger('no-pattern-found')).toBe(true);
     expect(shouldWriteToLedger('no-pattern-generated')).toBe(true);
     expect(shouldWriteToLedger('legacy-unknown')).toBe(true);
+    // mmnto-ai/totem#1664: self-suppressing-pattern is terminal (structural,
+    // not transient) — the audit trail in nonCompilable lets bot reviewers
+    // cite a stable reasonCode instead of synthesizing "missing from manifest".
+    expect(shouldWriteToLedger('self-suppressing-pattern')).toBe(true);
   });
 
   it('suppresses retry-pending smoke-gate and LLM-output failures from the ledger', () => {
