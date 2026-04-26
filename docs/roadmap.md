@@ -14,7 +14,7 @@ Also lands Proposal 217 (LLM context caching, quarantined out of 1.15.0 because 
 
 - **Headline Work — Ingestion (ADR-091 funnel):**
   - [ ] **Classifier gate (Stage 2):** Routes candidates into Compile vs Candidate Debt per ADR-091. Strategy-side implementation ticket pending decomposition.
-  - [ ] **Verify-Against-Codebase (Stage 4):** Runs compiled candidate against a baseline snapshot before Activate. Strategy-side implementation ticket pending decomposition.
+  - [ ] **Verify-Against-Codebase (Stage 4):** Runs compiled candidate against a baseline snapshot before Activate. Decomposed by strategy Claude into **totem#1682 / #1683 / #1684 / #1685 / #1686** during the 2026-04-25/26 session (strategy PR #143).
   - [ ] **GHAS / SARIF Extraction:** Convert GitHub Advanced Security alerts into Totem lessons (Strategy #50). Originally scoped with #1131; telemetry-driven refinement won that cycle. ADR-086 External Alert Ingestion gates this.
   - [ ] **Lint Warning Extraction:** Convert repository lint warnings (ESLint, Semgrep, Sonar) into actionable lessons (Strategy #51 ↔ totem#1253 `totem extract-lint`).
   - [ ] **ADR-mining extractor:** Decision-record ingestion into the same funnel. Strategy-side implementation ticket pending decomposition.
@@ -53,6 +53,17 @@ The first shippable Totem pack plus the compile-hardening and zero-trust substra
 - **Positioning:** ADR-090 (Multi-Agent State Substrate) bounds future "is this a Totem feature?" decisions; ADR-091 (Ingestion Pipeline Refinements) redefines the 1.16.0 ingestion flow as a 5-stage funnel; ADR-085 (Pack Ecosystem) accepted with five deferred decisions resolved.
 
 Ship-gate completion: #1580 goodExample smoke gate (1.14.15), #1589 archivedAt schema (1.14.16), #1581 part 1 zero-trust default + promote CLI (1.14.16), #1581 part 2 grandfathered advisory (1.14.17), pack-agent-security ≥5 immutable rules with fixture-backed tests (57 unit tests).
+
+**1.15.x patch trail (2026-04-22 → 2026-04-26):** Eight patch releases over five days closing the LC-velocity classifier batch and the strategy upstream-feedback queue.
+
+- **1.15.1** (2026-04-22): `totem proposal new` + `totem adr new` governance authoring scaffolding (#1615). LC upstream triage closeout: 8 totem tickets (#1617-#1624) + 4 strategy items (Proposals 244 + 245, ADR TEMPLATE, strategy#109).
+- **1.15.2** (2026-04-22): Archive-in-place durability (#1587). `totem lesson compile --refresh-manifest` no-LLM primitive + `totem lesson archive <hash>` atomic command.
+- **1.15.3** (2026-04-23): Compile-worker quality cluster + runtime ReDoS defense. `context-required` classifier (#1639 closes #1598), `semantic-analysis-required` classifier + ledger hygiene (#1640 closes #1634 + #1627), bounded regex execution via persistent Node worker thread + `totem lint --timeout-mode` flag (#1644 closes #1641).
+- **1.15.4** (2026-04-24): LC-velocity classifier improvements. Test-contract scope classifier (#1652 closes #1626), declared severity override (#1658 closes #1656).
+- **1.15.5** (2026-04-25): `applies-to` lesson frontmatter substrate (#1667 closes #1663). Closed role taxonomy of seven values plus `'any'` fallback. Strategy upstream-feedback item 020.
+- **1.15.6** (2026-04-25): source-Scope override (#1674 closes #1665). Author-declared `**Scope:**` overrides LLM emission and the #1626 test-contract auto-include heuristic. Strategy upstream-feedback item 023.
+- **1.15.7** (2026-04-26): `self-suppressing-pattern` reasonCode (#1688 closes #1664). New ledger entry on `NonCompilableReasonCodeSchema` for compile-time self-suppression detection. Strategy upstream-feedback item 021.
+- **1.15.8** (2026-04-26): `totem triage-pr` strict-by-id dedup (#1690 closes #1666). Deterministic `rootCommentId` replaces fuzzy fingerprint matching. Strategy upstream-feedback item 024.
 
 ### 1.14.x: Foundation + Pack Substrate
 
