@@ -7361,6 +7361,26 @@
       "archivedReason": "Pattern `new TotemConfigError($$$ARGS)` fires on every CLI-layer use, contradicting the declined GCA finding on PR mmnto-ai/totem#1629. TotemConfigError is used in 10+ CLI files (7x in compile.ts alone) for flag-conflict validation per the canonical compile.ts:486 --upgrade/upgradeBatch precedent. The source lesson reflects GCA's hallucinated-rule-citation argument; adopting it as a rule would codify the false claim as project policy. Taxonomy refinement for CLI vs core error classes is tracked in mmnto-ai/totem#1630, not via a blanket ban on TotemConfigError.",
       "archivedAt": "2026-04-23T02:49:57.677Z",
       "unverified": true
+    },
+    {
+      "lessonHash": "331027ebb0a2014a",
+      "lessonHeading": "Avoid simple comma splitting for globs",
+      "pattern": "",
+      "message": "Avoid splitting glob strings by commas — this breaks brace expansion patterns like {ts,tsx}. Use a brace-aware glob parser instead.",
+      "engine": "ast-grep",
+      "astGrepPattern": "$STR.split(\",\")",
+      "badExample": "const parts = globStr.split(\",\");",
+      "goodExample": "const parts = parseGlobs(globStr);",
+      "compiledAt": "2026-04-26T01:23:40.128Z",
+      "createdAt": "2026-04-26T01:23:40.128Z",
+      "fileGlobs": [
+        "packages/core/src/lesson-pattern.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "Pattern $STR.split(\",\") is over-broad — matches any .split(',') call in lesson-pattern.ts regardless of whether it's splitting glob strings, while the actual fix was a domain-specific brace-aware parser. Lesson body content is correct documentation but doesn't translate to a useful structural detection rule.",
+      "archivedAt": "2026-04-26T01:25:00.626Z"
     }
   ],
   "nonCompilable": [
@@ -12222,6 +12242,48 @@
       "title": "Validate mutually exclusive LLM output fields",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes an architectural validation pattern (using Zod superRefine for mutual exclusivity between fields) that requires understanding the semantic relationship between schema fields. No detectable code pattern can distinguish a missing superRefine from one that validates the wrong fields, or distinguish ambiguous model responses from valid ones."
+    },
+    {
+      "hash": "3662e64a03300a60",
+      "title": "Use sign-sensitive glob set comparison",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a conceptual algorithmic requirement (order-insensitive, duplicate-insensitive, negation-sensitive set comparison) that cannot be expressed as a detectable code pattern. No specific banned construct or structural anti-pattern can be identified."
+    },
+    {
+      "hash": "6f110e68fa66727c",
+      "title": "Normalize polymorphic metadata inputs",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/design principle (use Zod preprocessors to normalize polymorphic inputs into canonical arrays) that cannot be detected as a code pattern. There is no specific anti-pattern to match — the absence of a Zod preprocessor on a schema field requires semantic understanding of intent and data flow, not a structural or textual pattern."
+    },
+    {
+      "hash": "64129016a0fc2419",
+      "title": "Remap kebab-case keys at boundaries",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/transformation principle (remapping kebab-case to camelCase at a parsing boundary) that cannot be expressed as a detectable code pattern — there is no syntactic anti-pattern to match; the violation is the absence of a mapping step, which requires semantic understanding of the full parsing pipeline."
+    },
+    {
+      "hash": "b9e4128644af84dd",
+      "title": "Honor source scope over LLM emission",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural precedence rule about how source-declared scope declarations should override LLM-generated globs during compilation — a runtime/logic ordering constraint that cannot be expressed as a detectable code pattern in source files."
+    },
+    {
+      "hash": "9e2600a7a32ad02d",
+      "title": "Default missing metadata to inclusive values",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a data-defaulting convention (use 'any' for missing categorization fields) that requires semantic analysis to detect — a pattern cannot distinguish a missing default from an intentional empty value, nor can it verify that downstream filtering logic handles the field correctly. No structural code pattern can express this invariant."
+    },
+    {
+      "hash": "95801331c7fd1a25",
+      "title": "Selective rethrow for best-effort I/O",
+      "reasonCode": "context-required",
+      "reason": "Lesson requires distinguishing which catch blocks wrap best-effort I/O (e.g., telemetry) versus critical I/O, and whether the caught error's code is ENOENT/EACCES — neither the file scope nor a structural pattern can determine whether a given catch block is guarding a best-effort operation or whether the rethrow logic is absent."
+    },
+    {
+      "hash": "577b552647817478",
+      "title": "Normalize temp paths for cross-platform equality",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a best-practice for path normalization in tests (use realpathSync on temp dirs), but the rule would need to detect the *absence* of realpathSync wrapping around temp directory creation — which requires semantic analysis to determine whether a given path variable originates from a temp dir and whether it is later normalized before comparison. No surface pattern can distinguish a correctly-normalized path from a missing normalization."
     }
   ]
 }
