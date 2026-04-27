@@ -1791,18 +1791,55 @@ describe('verifyRuleExamples', () => {
     expect(result).toBeNull();
   });
 
-  it('returns null for non-regex engine', () => {
+  it('returns null for the Tree-sitter `ast` engine (testRule cannot run S-expression queries)', () => {
     const rule: CompiledRule = {
       lessonHash: 'h2',
       lessonHeading: 'test',
-      message: 'ast rule',
-      engine: 'ast-grep',
-      astGrepPattern: 'console.log($A)',
+      message: 'tree-sitter rule',
+      engine: 'ast',
+      astQuery: '(call_expression (identifier) @console)',
       pattern: '',
       compiledAt: new Date().toISOString(),
     };
     const body = '**Example Hit:** console.log(x)';
     expect(verifyRuleExamples(rule, body)).toBeNull();
+  });
+
+  it('runs verification for ast-grep engine and PASSes on a matching badExample (mmnto-ai/totem#1699)', () => {
+    const rule: CompiledRule = {
+      lessonHash: 'h2-astgrep-pass',
+      lessonHeading: 'test',
+      message: 'no console.log via ast-grep',
+      engine: 'ast-grep',
+      astGrepPattern: 'console.log($A)',
+      pattern: '',
+      compiledAt: new Date().toISOString(),
+    };
+    const body = '**Example Hit:** console.log("test")\n**Example Miss:** logger.info("test")';
+    const result = verifyRuleExamples(rule, body);
+    expect(result).not.toBeNull();
+    expect(result!.passed).toBe(true);
+  });
+
+  it('runs verification for ast-grep engine and FAILs when the pattern also matches the goodExample (mmnto-ai/totem#1699)', () => {
+    // Over-broad pattern: matches every `new $ERROR($$$ARGS)` — the kind of
+    // shape that shipped pre-#1699 because verifyRuleExamples short-circuited
+    // ast-grep. With the guard narrowed, this rule is caught.
+    const rule: CompiledRule = {
+      lessonHash: 'h2-astgrep-overbroad',
+      lessonHeading: 'test',
+      message: 'over-broad ast-grep',
+      engine: 'ast-grep',
+      astGrepPattern: 'new $ERROR($$$ARGS)',
+      pattern: '',
+      compiledAt: new Date().toISOString(),
+    };
+    const body =
+      '**Example Hit:** const err = new TotemError("boom")\n**Example Miss:** const widget = new Widget(opts)';
+    const result = verifyRuleExamples(rule, body);
+    expect(result).not.toBeNull();
+    expect(result!.passed).toBe(false);
+    expect(result!.falsePositives.length).toBeGreaterThan(0);
   });
 
   it('passes when hits match and misses do not', () => {

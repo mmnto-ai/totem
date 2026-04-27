@@ -696,13 +696,17 @@ export function deriveVirtualFilePath(rule: CompiledRule): string {
 
 /**
  * Verify a compiled rule against inline Example Hit/Miss lines.
- * Returns null if no examples exist or engine is not regex.
+ * Returns null if no examples exist or engine is `'ast'` (Tree-sitter).
+ * Tree-sitter rules are skipped because `testRule`'s non-`ast-grep` branch
+ * runs the regex pipeline (`applyRulesToAdditions`), which does not handle
+ * S-expression queries. Regex and ast-grep rules both flow through to
+ * `testRule`. mmnto-ai/totem#1699.
  * Returns RuleTestResult if verification was run.
  */
 export function verifyRuleExamples(rule: CompiledRule, body: string): RuleTestResult | null {
   const examples = extractRuleExamples(body);
   if (!examples) return null;
-  if (rule.engine !== 'regex') return null;
+  if (rule.engine !== 'regex' && rule.engine !== 'ast-grep') return null;
 
   const fixture = {
     ruleHash: rule.lessonHash,
