@@ -385,7 +385,7 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
 
   // 10. Overwrite confirmation if file exists with newer lastUpdated
   if (fs.existsSync(outputPath)) {
-    const existingNewer = await isExistingOutputNewer(outputPath, lastUpdated, log);
+    const existingNewer = isExistingOutputNewer(outputPath, lastUpdated, log);
     if (existingNewer) {
       const proceed = await confirmOverwrite(outputPath, options.yes ?? false, log);
       if (!proceed) {
@@ -484,11 +484,11 @@ function pickDominantSeverity(buckets: SeverityBucket[]): SeverityBucket {
   return 'nit';
 }
 
-async function isExistingOutputNewer(
+function isExistingOutputNewer(
   outputPath: string,
   prospectiveTimestamp: string,
   log: { warn: (tag: string, msg: string) => void },
-): Promise<boolean> {
+): boolean {
   try {
     const raw = fs.readFileSync(outputPath, 'utf-8');
     const parsed = JSON.parse(raw) as { lastUpdated?: unknown };
