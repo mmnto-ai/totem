@@ -65,12 +65,13 @@ vi.mock('@mmnto/totem', async () => {
   };
 });
 
-// Must import after mock setup — vitest hoists vi.mock
-const { safeExec, getGitDiff, getGitBranchDiff, getGitDiffRange } = await import('@mmnto/totem');
-const mockSafeExec = vi.mocked(safeExec);
-const mockGetGitDiff = vi.mocked(getGitDiff);
-const mockGetGitBranchDiff = vi.mocked(getGitBranchDiff);
-const mockGetGitDiffRange = vi.mocked(getGitDiffRange);
+// Must import after mock setup — vitest hoists vi.mock.
+// Aliased so the imports don't shadow the top-of-file re-export checks.
+const totemMod = await import('@mmnto/totem');
+const mockSafeExec = vi.mocked(totemMod.safeExec);
+const mockGetGitDiff = vi.mocked(totemMod.getGitDiff);
+const mockGetGitBranchDiff = vi.mocked(totemMod.getGitBranchDiff);
+const mockGetGitDiffRange = vi.mocked(totemMod.getGitDiffRange);
 
 describe('isAncestor', () => {
   it('returns true for direct ancestor', () => {
