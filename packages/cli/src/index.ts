@@ -235,6 +235,10 @@ const reviewOptions = (cmd: Command) =>
     .option('--model <name>', 'Override the default model for the orchestrator')
     .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
     .option('--staged', 'Review only staged changes (default: all uncommitted)')
+    .option(
+      '--diff <ref-range>',
+      'Review an explicit git diff range (e.g. "HEAD^..HEAD" or "main...feature"). Bypasses the implicit working-tree → staged → branch-vs-base fallback.',
+    )
     .option('--deterministic', 'REMOVED — use `totem lint` instead', false)
     .option('--format <format>', 'REMOVED — use `totem lint --format` instead')
     .option(
@@ -256,6 +260,19 @@ const reviewOptions = (cmd: Command) =>
     .option(
       '--auto-capture',
       'Enable Pipeline 5 auto-capture of observation rules from findings (off by default; captured rules are context-less and apply globally)',
+    )
+    .addHelpText(
+      'after',
+      [
+        '',
+        'Diff resolution (when --diff is omitted):',
+        '  1. --staged          → staged-only diff',
+        '  2. (default)         → working-tree diff (all uncommitted)',
+        '  3. (fallback)        → branch-vs-base diff when 1/2 produce nothing',
+        'The chosen path is logged to stderr; large diffs (>50000 chars)',
+        'trigger an explicit truncation warning before the LLM call.',
+        '',
+      ].join('\n'),
     );
 
 async function runReview(opts: {
@@ -264,6 +281,7 @@ async function runReview(opts: {
   model?: string;
   fresh?: boolean;
   staged?: boolean;
+  diff?: string;
   deterministic?: boolean;
   format?: string;
   mode?: string;

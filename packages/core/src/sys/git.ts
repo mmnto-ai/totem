@@ -145,6 +145,46 @@ export function getGitBranchDiff(cwd: string, base?: string): string {
 }
 
 /**
+ * Run `git diff <range>` for an explicitly supplied ref range (e.g.
+ * `HEAD^..HEAD`, `main...feature`). Used by `totem review --diff` to
+ * bypass the implicit working-tree → staged → branch-vs-base fallback chain.
+ *
+ * Rejects ranges starting with `-` to defuse git-flag injection (e.g.
+ * `--diff --no-index`); `safeExec`'s arg-array form already prevents shell
+ * metacharacter expansion on the range itself.
+ */
+export function getGitDiffRange(cwd: string, range: string): string {
+  const trimmed = range.trim();
+  if (trimmed.length === 0) {
+    throw new TotemGitError(
+      'Empty ref range supplied to --diff.',
+      'Provide a non-empty range, e.g. --diff "HEAD^..HEAD" or --diff "main...feature".',
+    );
+  }
+  if (trimmed.startsWith('-')) {
+    throw new TotemGitError(
+      `Invalid ref range: ${trimmed}. Ranges may not start with '-' (git-flag injection guard).`,
+      'Provide a positional ref range such as "HEAD^..HEAD" without leading dashes.',
+    );
+  }
+  try {
+    return safeExec('git', ['diff', trimmed], {
+      cwd,
+      timeout: GIT_COMMAND_TIMEOUT_MS,
+      maxBuffer: GIT_DIFF_MAX_BUFFER,
+    });
+  } catch (err) {
+    throwIfGitMissing(err);
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new TotemGitError(
+      `Failed to compute diff for range '${trimmed}': ${msg}`,
+      `Verify the range is valid. Try 'git diff ${trimmed}' to confirm git accepts it; missing refs may need 'git fetch origin'.`,
+      err,
+    );
+  }
+}
+
+/**
  * Get the author date of a tag in YYYY-MM-DD format.
  * Returns null if tag doesn't exist or lookup fails.
  */

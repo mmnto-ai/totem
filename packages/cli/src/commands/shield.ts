@@ -483,6 +483,46 @@ export async function writeReviewedContentHash(
   }
 }
 
+/**
+ * Record a shield override: append the override event to the Trap Ledger
+ * AND stamp the reviewed-content-hash so the push-gate hook unblocks.
+ *
+ * mmnto-ai/totem#1716: prior to this helper the override branch only wrote the ledger
+ * entry; the missing stamp left the contributor stuck behind the push-gate
+ * with a tribal-knowledge `git reset --soft HEAD~1 && totem review --staged`
+ * workaround. Override is a legitimate completion path (with logged
+ * justification) and must produce the same cache state as a passing review.
+ */
+export async function recordShieldOverride(params: {
+  override: string;
+  cwd: string;
+  totemDir: string;
+  configRoot?: string;
+  sourceExtensions?: readonly string[];
+}): Promise<void> {
+  const path = await import('node:path');
+  const { appendLedgerEvent } = await import('@mmnto/totem');
+  const resolvedTotemDir = path.join(params.configRoot ?? params.cwd, params.totemDir);
+  appendLedgerEvent(
+    resolvedTotemDir,
+    {
+      timestamp: new Date().toISOString(),
+      type: 'override',
+      ruleId: 'shield-override',
+      file: '(shield)',
+      justification: params.override,
+      source: 'shield',
+    },
+    (msg) => log.dim(DISPLAY_TAG, msg),
+  );
+  await writeReviewedContentHash(
+    params.cwd,
+    params.totemDir,
+    params.configRoot,
+    params.sourceExtensions,
+  );
+}
+
 // ─── Main command ───────────────────────────────────────
 
 export type ShieldFormat = 'text' | 'sarif' | 'json';
@@ -493,6 +533,8 @@ export interface ShieldOptions {
   model?: string;
   fresh?: boolean;
   staged?: boolean;
+  /** Explicit ref range for `git diff` (mmnto-ai/totem#1717). Bypasses implicit fallback chain. */
+  diff?: string;
   mode?: 'standard' | 'structural';
   learn?: boolean;
   yes?: boolean;
@@ -820,8 +862,6 @@ async function handleVerdictResult(
         config.review.sourceExtensions,
       );
     } else if (options.override) {
-      const { appendLedgerEvent } = await import('@mmnto/totem');
-
       const criticalFindings = filtered.filter((f) => f.severity === 'CRITICAL');
 
       log.warn(DISPLAY_TAG, `SHIELD OVERRIDE APPLIED: ${options.override}`);
@@ -829,24 +869,20 @@ async function handleVerdictResult(
         log.warn(DISPLAY_TAG, `  [overridden] ${finding.message}`);
       }
 
-      appendLedgerEvent(
-        resolvedTotemDir,
-        {
-          timestamp: new Date().toISOString(),
-          type: 'override',
-          ruleId: 'shield-override',
-          file: '(shield)',
-          justification: options.override,
-          source: 'shield',
-        },
-        (msg) => log.dim(DISPLAY_TAG, msg),
-      );
+      await recordShieldOverride({
+        override: options.override,
+        cwd,
+        totemDir: config.totemDir,
+        configRoot,
+        sourceExtensions: config.review.sourceExtensions,
+      });
 
       // Track overridden findings for exemption engine (only non-exempted findings)
       const { readLocalExemptions, writeLocalExemptions } =
         await import('../exemptions/exemption-store.js');
       const { trackFalsePositives } = await import('../exemptions/exemption-engine.js');
       const { PROMOTION_THRESHOLD } = await import('../exemptions/exemption-schema.js');
+      const { appendLedgerEvent } = await import('@mmnto/totem');
 
       const localExemptions = readLocalExemptions(cacheDir, (msg) => log.dim(DISPLAY_TAG, msg));
       const tracked = trackFalsePositives(criticalFindings, 'shield', localExemptions, shared);
@@ -910,24 +946,15 @@ async function handleVerdictResult(
         config.review.sourceExtensions,
       );
     } else if (options.override) {
-      const { appendLedgerEvent } = await import('@mmnto/totem');
-      const pathMod = await import('node:path');
-      const resolvedTotemDir = pathMod.join(configRoot ?? cwd, config.totemDir);
-
       log.warn(DISPLAY_TAG, `SHIELD OVERRIDE APPLIED: ${options.override}`);
 
-      appendLedgerEvent(
-        resolvedTotemDir,
-        {
-          timestamp: new Date().toISOString(),
-          type: 'override',
-          ruleId: 'shield-override',
-          file: '(shield)',
-          justification: options.override,
-          source: 'shield',
-        },
-        (msg) => log.dim(DISPLAY_TAG, msg),
-      );
+      await recordShieldOverride({
+        override: options.override,
+        cwd,
+        totemDir: config.totemDir,
+        configRoot,
+        sourceExtensions: config.review.sourceExtensions,
+      });
     } else {
       if (options.learn || config.shieldAutoLearn)
         await learnFromVerdict(content, diff, options, config, cwd, configRoot);

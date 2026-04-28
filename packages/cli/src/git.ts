@@ -6,6 +6,7 @@ export {
   getGitBranch,
   getGitBranchDiff,
   getGitDiff,
+  getGitDiffRange,
   getGitDiffStat,
   getGitLogSince,
   getGitStatus,
@@ -87,8 +88,12 @@ export function getDiffBetween(cwd: string, base: string, head?: string): string
 
 // ─── Diff-for-review helper (CLI-only — uses log from ui.js) ─────
 
+export type DiffForReviewSource = 'explicit-range' | 'staged' | 'uncommitted' | 'branch-vs-base';
+
 export interface DiffForReviewOptions {
   staged?: boolean;
+  /** Explicit ref range (mmnto-ai/totem#1717). When set, bypasses the implicit fallback chain. */
+  diff?: string;
 }
 
 export interface DiffForReviewConfig {
@@ -99,13 +104,34 @@ export interface DiffForReviewConfig {
 export interface DiffForReviewResult {
   diff: string;
   changedFiles: string[];
+  /** Which path produced the diff (mmnto-ai/totem#1717 — surfaced for operator-visible logging). */
+  source: DiffForReviewSource;
 }
+
+/**
+ * Maximum diff size (in characters) before the prompt assembler truncates.
+ * Mirrored from `shield-templates.MAX_DIFF_CHARS` so the resolution-layer
+ * warning fires on the same threshold as the actual truncation site.
+ *
+ * Kept as a separate constant here rather than imported from
+ * `commands/shield-templates.ts` to avoid a circular CLI dependency
+ * (`git.ts` is intended to be substrate for many commands, not just review).
+ */
+export const REVIEW_DIFF_TRUNCATION_THRESHOLD = 50_000;
 
 /**
  * Shared diff-fetching logic used by both `shield` and `lint` commands.
  *
- * Merges ignore patterns, gets staged/all diff, filters by patterns,
- * falls back to branch diff, and extracts changed files.
+ * Resolution order:
+ *   1. `--diff <range>` (explicit, no fallback)
+ *   2. `--staged` (staged-only) or working-tree (`all`) diff
+ *   3. Branch-vs-base diff (`<default>...HEAD`) when 2 yields nothing
+ *
+ * The chosen resolution path is logged to stderr (mmnto-ai/totem#1717) so the operator's
+ * mental model matches the actual git invocation. Diffs exceeding
+ * `REVIEW_DIFF_TRUNCATION_THRESHOLD` chars surface a warning here, before
+ * the LLM call is made, so the operator can re-run with a narrower
+ * `--diff <range>` instead of paying for a degraded review.
  *
  * Returns `null` when no changes are detected.
  */
@@ -122,26 +148,53 @@ export async function getDiffForReview(
     getDefaultBranch,
     getGitBranchDiff,
     getGitDiff,
+    getGitDiffRange,
   } = await import('@mmnto/totem');
 
   const allIgnore = [...config.ignorePatterns, ...(config.shieldIgnorePatterns ?? [])];
-  const mode = options.staged ? 'staged' : 'all';
-  log.info(tag, `Getting ${mode === 'staged' ? 'staged' : 'uncommitted'} diff...`);
-  let diff = filterDiffByPatterns(getGitDiff(mode, cwd), allIgnore);
 
-  if (!diff.trim()) {
-    const base = getDefaultBranch(cwd);
-    log.dim(tag, `No relevant changes. Falling back to branch diff (${base}...HEAD)...`);
-    diff = filterDiffByPatterns(getGitBranchDiff(cwd, base), allIgnore);
+  let diff: string;
+  let source: DiffForReviewSource;
+
+  if (options.diff !== undefined) {
+    // Explicit-range path — no fallback. getGitDiffRange rejects flag-injection
+    // (leading `-`) and empty values; ignore patterns still apply per repo policy.
+    log.info(tag, `Diff source: explicit range (${options.diff})`);
+    diff = filterDiffByPatterns(getGitDiffRange(cwd, options.diff), allIgnore);
+    source = 'explicit-range';
+    if (!diff.trim()) {
+      log.warn(tag, `Explicit range '${options.diff}' produced no diff. Nothing to review.`);
+      return null;
+    }
+  } else {
+    const mode: 'staged' | 'all' = options.staged ? 'staged' : 'all';
+    const sourceLabel: DiffForReviewSource = options.staged ? 'staged' : 'uncommitted';
+    log.info(tag, `Diff source: ${sourceLabel}`);
+    diff = filterDiffByPatterns(getGitDiff(mode, cwd), allIgnore);
+    source = sourceLabel;
+
+    if (!diff.trim()) {
+      const base = getDefaultBranch(cwd);
+      log.info(tag, `Diff source: branch-vs-base (${base}...HEAD)`);
+      diff = filterDiffByPatterns(getGitBranchDiff(cwd, base), allIgnore);
+      source = 'branch-vs-base';
+    }
+
+    if (!diff.trim()) {
+      log.warn(tag, 'No changes detected. Nothing to review.');
+      return null;
+    }
   }
 
-  if (!diff.trim()) {
-    log.warn(tag, 'No changes detected. Nothing to review.');
-    return null;
+  if (diff.length > REVIEW_DIFF_TRUNCATION_THRESHOLD) {
+    log.warn(
+      tag,
+      `Diff exceeds ${REVIEW_DIFF_TRUNCATION_THRESHOLD} chars (${diff.length}). LLM review will see truncated content; re-run with a narrower --diff <range> to avoid degraded findings.`,
+    );
   }
 
   const changedFiles = extractChangedFiles(diff);
   log.info(tag, `Changed files (${changedFiles.length}): ${changedFiles.join(', ')}`);
 
-  return { diff, changedFiles };
+  return { diff, changedFiles, source };
 }
