@@ -396,3 +396,21 @@ export { codeToPattern, escapeRegex } from './regex-utils.js';
 // Pipeline 5 — observation-based auto-capture from shield findings
 export type { ObservationInput } from './pipeline-observation.js';
 export { deduplicateObservations, generateObservationRule } from './pipeline-observation.js';
+
+// Recurrence-stats schemas + helpers (mmnto-ai/totem#1715)
+export type {
+  RecurrencePattern,
+  RecurrenceSeverityBucket,
+  RecurrenceStats,
+  RecurrenceTool,
+} from './recurrence-stats.js';
+export {
+  computeSignature,
+  jaccard,
+  normalizeFindingBody,
+  RecurrencePatternSchema,
+  RecurrenceSeverityBucketSchema,
+  RecurrenceStatsSchema,
+  RecurrenceToolSchema,
+  tokenizeForJaccard,
+} from './recurrence-stats.js';

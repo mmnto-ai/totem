@@ -1,4 +1,21 @@
-export async function statsCommand(): Promise<void> {
+export interface StatsOptions {
+  patternRecurrence?: boolean;
+  threshold?: number;
+  historyDepth?: number;
+  yes?: boolean;
+}
+
+export async function statsCommand(options: StatsOptions = {}): Promise<void> {
+  if (options.patternRecurrence) {
+    const { runRecurrenceStats } = await import('./recurrence-stats.js');
+    await runRecurrenceStats({
+      threshold: options.threshold,
+      historyDepth: options.historyDepth,
+      yes: options.yes,
+    });
+    return;
+  }
+
   const path = await import('node:path');
   const { createEmbedder, LanceStore } = await import('@mmnto/totem');
   const { loadConfig, loadEnv, requireEmbedding, resolveConfigPath } = await import('../utils.js');
