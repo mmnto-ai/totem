@@ -175,9 +175,8 @@ export function getGitDiffRange(cwd: string, range: string): string {
     });
   } catch (err) {
     throwIfGitMissing(err);
-    const msg = err instanceof Error ? err.message : String(err);
     throw new TotemGitError(
-      `Failed to compute diff for range '${trimmed}': ${msg}`,
+      `Failed to compute diff for range '${trimmed}'.`,
       `Verify the range is valid. Try 'git diff ${trimmed}' to confirm git accepts it; missing refs may need 'git fetch origin'.`,
       err,
     );

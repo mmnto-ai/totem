@@ -7,6 +7,7 @@ import { Command } from 'commander';
 import { z } from 'zod';
 
 import { initCommand } from './commands/init.js';
+import { REVIEW_DIFF_TRUNCATION_THRESHOLD } from './git.js';
 import { TotemHelp } from './help.js';
 import { reapOrphanedTempFiles } from './utils.js';
 
@@ -269,7 +270,7 @@ const reviewOptions = (cmd: Command) =>
         '  1. --staged          → staged-only diff',
         '  2. (default)         → working-tree diff (all uncommitted)',
         '  3. (fallback)        → branch-vs-base diff when 1/2 produce nothing',
-        'The chosen path is logged to stderr; large diffs (>50000 chars)',
+        `The chosen path is logged to stderr; large diffs (>${REVIEW_DIFF_TRUNCATION_THRESHOLD} chars)`,
         'trigger an explicit truncation warning before the LLM call.',
         '',
       ].join('\n'),

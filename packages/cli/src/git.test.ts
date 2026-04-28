@@ -9,6 +9,7 @@ import {
   getGitBranch,
   getGitBranchDiff,
   getGitDiff,
+  getGitDiffRange,
   getGitDiffStat,
   getGitLogSince,
   getGitStatus,
@@ -30,6 +31,7 @@ describe('git re-exports', () => {
     expect(typeof getGitBranch).toBe('function');
     expect(typeof getGitBranchDiff).toBe('function');
     expect(typeof getGitDiff).toBe('function');
+    expect(typeof getGitDiffRange).toBe('function');
     expect(typeof getGitDiffStat).toBe('function');
     expect(typeof getGitLogSince).toBe('function');
     expect(typeof getGitStatus).toBe('function');
