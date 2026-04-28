@@ -136,14 +136,64 @@ program
 program
   .command('stats')
   .description('Show index statistics')
-  .action(async () => {
-    try {
-      const { statsCommand } = await import('./commands/stats.js');
-      await statsCommand();
-    } catch (err) {
-      handleError(err);
-    }
-  });
+  .option(
+    '--pattern-recurrence',
+    'Cluster bot-review findings + trap-ledger overrides across the most recent merged PRs and write .totem/recurrence-stats.json (mmnto-ai/totem#1715)',
+  )
+  .option(
+    '--threshold <n>',
+    'Recurrence mode: minimum occurrences for a pattern to land in the headline output (default: 5)',
+    '5',
+  )
+  .option(
+    '--history-depth <n>',
+    'Recurrence mode: number of recent merged PRs to scan (default: 50, capped at 200)',
+    '50',
+  )
+  .option(
+    '--yes',
+    'Recurrence mode: auto-confirm overwrite when an existing recurrence-stats.json is newer',
+  )
+  .addHelpText(
+    'after',
+    [
+      '',
+      'Recurrence mode (--pattern-recurrence):',
+      '  Fetches bot-review findings across the most recent merged PRs (default 50,',
+      '  capped at 200 via --history-depth) plus trap-ledger override events,',
+      '  clusters them by a normalized signature, filters out clusters covered by',
+      '  existing compiled rules (Jaccard >= 0.6 on rule message), and writes the',
+      '  surviving patterns at-or-above --threshold to .totem/recurrence-stats.json.',
+      '  Requires the GitHub CLI (`gh`) authenticated against the current repo.',
+      '',
+    ].join('\n'),
+  )
+  .action(
+    async (opts: {
+      patternRecurrence?: boolean;
+      threshold?: string;
+      historyDepth?: string;
+      yes?: boolean;
+    }) => {
+      try {
+        const threshold = opts.threshold ? parseInt(opts.threshold, 10) : undefined;
+        const historyDepth = opts.historyDepth ? parseInt(opts.historyDepth, 10) : undefined;
+        if (opts.patternRecurrence) {
+          requireGhCli();
+        }
+        const { statsCommand } = await import('./commands/stats.js');
+        await statsCommand({
+          patternRecurrence: opts.patternRecurrence,
+          threshold,
+          historyDepth,
+          yes: opts.yes,
+        });
+      } catch (err) {
+        handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
+        throw err;
+      }
+    },
+  );
 
 program
   .command('explain <hash>')
