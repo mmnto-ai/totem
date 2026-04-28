@@ -11,6 +11,7 @@ import { fail, ok } from '../test-utils.js';
 import {
   extractChangedFiles,
   filterDiffByPatterns,
+  getGitDiffRange,
   getGitLogSince,
   getLatestTag,
   getTagDate,
@@ -49,6 +50,54 @@ describe('getTagDate', () => {
   it('returns null when tag does not exist', () => {
     vi.mocked(crossSpawn.sync).mockReturnValue(fail(new Error('fatal: bad object')) as never);
     expect(getTagDate('/tmp', 'v999.0.0')).toBeNull();
+  });
+});
+
+describe('getGitDiffRange (#1717)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('returns diff output for a valid ref range', () => {
+    vi.mocked(crossSpawn.sync).mockReturnValue(
+      ok('diff --git a/foo.ts b/foo.ts\n+const x = 1;\n') as never,
+    );
+    const result = getGitDiffRange('/tmp', 'HEAD^..HEAD');
+    expect(result).toContain('+const x = 1;');
+    expect(vi.mocked(crossSpawn.sync)).toHaveBeenCalledWith(
+      'git',
+      ['diff', 'HEAD^..HEAD'],
+      expect.any(Object),
+    );
+  });
+
+  it('trims whitespace before invoking git', () => {
+    vi.mocked(crossSpawn.sync).mockReturnValue(ok('') as never);
+    getGitDiffRange('/tmp', '  main...feature  ');
+    expect(vi.mocked(crossSpawn.sync)).toHaveBeenCalledWith(
+      'git',
+      ['diff', 'main...feature'],
+      expect.any(Object),
+    );
+  });
+
+  it('rejects empty ranges before invoking git', () => {
+    expect(() => getGitDiffRange('/tmp', '')).toThrow(/Empty ref range/);
+    expect(() => getGitDiffRange('/tmp', '   ')).toThrow(/Empty ref range/);
+    expect(vi.mocked(crossSpawn.sync)).not.toHaveBeenCalled();
+  });
+
+  it('rejects ranges starting with a dash to defuse git-flag injection', () => {
+    expect(() => getGitDiffRange('/tmp', '--no-index')).toThrow(/may not start with '-'/);
+    expect(() => getGitDiffRange('/tmp', '-p')).toThrow(/may not start with '-'/);
+    expect(vi.mocked(crossSpawn.sync)).not.toHaveBeenCalled();
+  });
+
+  it('wraps git failures in a TotemGitError with actionable hint', () => {
+    vi.mocked(crossSpawn.sync).mockReturnValue(
+      fail(new Error("fatal: bad revision 'nope..nope'")) as never,
+    );
+    expect(() => getGitDiffRange('/tmp', 'nope..nope')).toThrow(
+      /Failed to compute diff for range 'nope..nope'/,
+    );
   });
 });
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   extractChangedFiles,
@@ -9,6 +9,7 @@ import {
   getGitBranch,
   getGitBranchDiff,
   getGitDiff,
+  getGitDiffRange,
   getGitDiffStat,
   getGitLogSince,
   getGitStatus,
@@ -30,6 +31,7 @@ describe('git re-exports', () => {
     expect(typeof getGitBranch).toBe('function');
     expect(typeof getGitBranchDiff).toBe('function');
     expect(typeof getGitDiff).toBe('function');
+    expect(typeof getGitDiffRange).toBe('function');
     expect(typeof getGitDiffStat).toBe('function');
     expect(typeof getGitLogSince).toBe('function');
     expect(typeof getGitStatus).toBe('function');
@@ -58,12 +60,20 @@ vi.mock('@mmnto/totem', async () => {
   return {
     ...actual,
     safeExec: vi.fn(),
+    getGitDiff: vi.fn(),
+    getGitBranchDiff: vi.fn(),
+    getGitDiffRange: vi.fn(),
+    getDefaultBranch: vi.fn(() => 'main'),
   };
 });
 
-// Must import after mock setup — vitest hoists vi.mock
-const { safeExec } = await import('@mmnto/totem');
-const mockSafeExec = vi.mocked(safeExec);
+// Must import after mock setup — vitest hoists vi.mock.
+// Aliased so the imports don't shadow the top-of-file re-export checks.
+const totemMod = await import('@mmnto/totem');
+const mockSafeExec = vi.mocked(totemMod.safeExec);
+const mockGetGitDiff = vi.mocked(totemMod.getGitDiff);
+const mockGetGitBranchDiff = vi.mocked(totemMod.getGitBranchDiff);
+const mockGetGitDiffRange = vi.mocked(totemMod.getGitDiffRange);
 
 describe('isAncestor', () => {
   it('returns true for direct ancestor', () => {
@@ -161,5 +171,76 @@ describe('getDiffBetween', () => {
       throw new Error('git error');
     });
     expect(getDiffBetween('/tmp', 'abc123')).toBe('');
+  });
+});
+
+// ─── getDiffForReview --diff (#1717) ─────────────────
+
+describe('getDiffForReview --diff (#1717)', () => {
+  const config = { ignorePatterns: [] as string[] };
+  const sampleDiff = 'diff --git a/foo.ts b/foo.ts\n+++ b/foo.ts\n@@ -1 +1 @@\n+x';
+
+  beforeEach(() => {
+    mockGetGitDiffRange.mockReset();
+    mockGetGitDiff.mockReset();
+    mockGetGitBranchDiff.mockReset();
+  });
+
+  it('uses the explicit-range path and reports source: explicit-range', async () => {
+    mockGetGitDiffRange.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({ diff: 'HEAD^..HEAD' }, config, '/tmp', 'Review');
+    expect(result).not.toBeNull();
+    expect(result!.source).toBe('explicit-range');
+    expect(mockGetGitDiffRange).toHaveBeenCalledWith('/tmp', 'HEAD^..HEAD');
+  });
+
+  it('skips the staged/working/branch fallback chain when --diff is set', async () => {
+    mockGetGitDiffRange.mockReturnValue(sampleDiff);
+    await getDiffForReview({ diff: 'main...feature' }, config, '/tmp', 'Review');
+    expect(mockGetGitDiffRange).toHaveBeenCalledTimes(1);
+    expect(mockGetGitDiff).not.toHaveBeenCalled();
+    expect(mockGetGitBranchDiff).not.toHaveBeenCalled();
+  });
+
+  it('returns null when explicit range produces an empty diff', async () => {
+    mockGetGitDiffRange.mockReturnValue('');
+    const result = await getDiffForReview({ diff: 'HEAD..HEAD' }, config, '/tmp', 'Review');
+    expect(result).toBeNull();
+  });
+
+  it('still applies ignore patterns to the explicit-range diff', async () => {
+    const lockfileDiff = [
+      'diff --git a/package-lock.json b/package-lock.json',
+      '--- a/package-lock.json',
+      '+++ b/package-lock.json',
+      '@@ -1 +1 @@',
+      '-{"v":1}',
+      '+{"v":2}',
+      '',
+    ].join('\n');
+    mockGetGitDiffRange.mockReturnValue(lockfileDiff);
+    const result = await getDiffForReview(
+      { diff: 'HEAD^..HEAD' },
+      { ignorePatterns: ['package-lock.json'] },
+      '/tmp',
+      'Review',
+    );
+    expect(result).toBeNull();
+  });
+
+  it('reports source: branch-vs-base when the working-tree diff is empty', async () => {
+    mockGetGitDiff.mockReturnValue('');
+    mockGetGitBranchDiff.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({}, config, '/tmp', 'Review');
+    expect(result).not.toBeNull();
+    expect(result!.source).toBe('branch-vs-base');
+  });
+
+  it('reports source: staged when --staged is set and produces a diff', async () => {
+    mockGetGitDiff.mockReturnValue(sampleDiff);
+    const result = await getDiffForReview({ staged: true }, config, '/tmp', 'Review');
+    expect(result).not.toBeNull();
+    expect(result!.source).toBe('staged');
+    expect(mockGetGitDiff).toHaveBeenCalledWith('staged', '/tmp');
   });
 });

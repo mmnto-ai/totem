@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -27,6 +28,7 @@ import {
   formatVerdictForDisplay,
   MAX_DIFF_CHARS,
   parseVerdict,
+  recordShieldOverride,
   SHIELD_LEARN_SYSTEM_PROMPT,
   STRUCTURAL_SYSTEM_PROMPT,
   writeReviewedContentHash,
@@ -407,6 +409,86 @@ describe('writeReviewedContentHash', () => {
       expect(content).toMatch(/^[a-f0-9]{64}$/);
     },
   );
+});
+
+// ─── recordShieldOverride (#1716) ─────────────────────
+
+describe('recordShieldOverride (#1716)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-override-stamp-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  function gitInit(cwd: string): void {
+    execFileSync('git', ['init', '-q'], { cwd, stdio: 'pipe' });
+    execFileSync('git', ['config', 'user.email', 'test@totem.local'], { cwd, stdio: 'pipe' });
+    execFileSync('git', ['config', 'user.name', 'totem-test'], { cwd, stdio: 'pipe' });
+    execFileSync('git', ['config', 'commit.gpgsign', 'false'], { cwd, stdio: 'pipe' });
+  }
+
+  function gitCommitAll(cwd: string): void {
+    execFileSync('git', ['add', '-A'], { cwd, stdio: 'pipe' });
+    execFileSync('git', ['commit', '-q', '-m', 'fixture'], { cwd, stdio: 'pipe' });
+  }
+
+  it(
+    'writes the override event to the trap ledger and stamps reviewed-content-hash',
+    { timeout: 15_000 },
+    async () => {
+      gitInit(tmpDir);
+      fs.writeFileSync(path.join(tmpDir, 'index.ts'), 'export const x = 1;\n');
+      gitCommitAll(tmpDir);
+
+      await recordShieldOverride({
+        override: 'False positive: signature is type-safe',
+        cwd: tmpDir,
+        totemDir: '.totem',
+      });
+
+      const eventsPath = path.join(tmpDir, '.totem', 'ledger', 'events.ndjson');
+      expect(fs.existsSync(eventsPath)).toBe(true);
+      const events = fs
+        .readFileSync(eventsPath, 'utf-8')
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe('override');
+      expect(events[0].ruleId).toBe('shield-override');
+      expect(events[0].justification).toBe('False positive: signature is type-safe');
+      expect(events[0].source).toBe('shield');
+
+      const flagPath = path.join(tmpDir, '.totem', 'cache', '.reviewed-content-hash');
+      expect(fs.existsSync(flagPath)).toBe(true);
+      expect(fs.readFileSync(flagPath, 'utf-8').trim()).toMatch(/^[a-f0-9]{64}$/);
+    },
+  );
+
+  it('honors configRoot when stamping the cache and writing the ledger', async () => {
+    gitInit(tmpDir);
+    const sub = path.join(tmpDir, 'subproject');
+    fs.mkdirSync(sub);
+    fs.writeFileSync(path.join(sub, 'index.ts'), 'export const y = 2;\n');
+    gitCommitAll(tmpDir);
+
+    await recordShieldOverride({
+      override: 'Documented exemption — see ADR-083',
+      cwd: sub,
+      totemDir: '.totem',
+      configRoot: tmpDir,
+    });
+
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'ledger', 'events.ndjson'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'cache', '.reviewed-content-hash'))).toBe(
+      true,
+    );
+  });
 });
 
 // ─── extractStructuredVerdict ─────────────────────────

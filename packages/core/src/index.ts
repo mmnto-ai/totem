@@ -364,6 +364,7 @@ export {
   getGitBranch,
   getGitBranchDiff,
   getGitDiff,
+  getGitDiffRange,
   getGitDiffStat,
   getGitLogSince,
   getGitStatus,
