@@ -11,12 +11,12 @@
  * No LLM. No GitHub API writes. Stateless per invocation.
  */
 
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-
-import { z } from 'zod';
-
 import type { NormalizedBotFinding } from '../parsers/bot-review-parser.js';
+
+// totem-context: type-only imports above are erased at compile time and don't
+// violate the lazy-import command policy (mmnto-ai/totem#1729 CR R1). All
+// runtime imports (node:fs, node:path, zod, @mmnto/totem, helpers, adapters)
+// are dynamic — see runRecurrenceStats body.
 
 // ─── Constants ───────────────────────────────────────
 
@@ -42,13 +42,6 @@ interface AnnotatedFinding {
   prNumber: string | undefined;
   observedAt: string;
 }
-
-// ─── gh PR list schema ──────────────────────────────
-
-const GhMergedPrListItemSchema = z.object({
-  number: z.number(),
-  mergedAt: z.string().nullable().optional(),
-});
 
 // ─── Severity bucket mapping ────────────────────────
 
@@ -83,6 +76,11 @@ function toSeverityBucket(
 // ─── Main entrypoint ────────────────────────────────
 
 export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}): Promise<void> {
+  // Dynamic imports per `packages/cli/src/commands/**` lazy-import policy
+  // (mmnto-ai/totem#1729 CR R1).
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { z } = await import('zod');
   const { GitHubCliPrAdapter } = await import('../adapters/github-cli-pr.js');
   const { handleGhError, ghFetchAndParse } = await import('../adapters/gh-utils.js');
   const { log } = await import('../ui.js');
@@ -104,6 +102,12 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
     tokenizeForJaccard,
   } = await import('@mmnto/totem');
   const { loadConfig, resolveConfigPath } = await import('../utils.js');
+
+  // Schema is local to the run path so the zod import stays lazy.
+  const GhMergedPrListItemSchema = z.object({
+    number: z.number(),
+    mergedAt: z.string().nullable().optional(),
+  });
 
   const cwd = process.cwd();
 
@@ -388,7 +392,18 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
 
   // 10. Overwrite confirmation if file exists with newer lastUpdated
   if (fs.existsSync(outputPath)) {
-    const existingNewer = isExistingOutputNewer(outputPath, lastUpdated, log);
+    let existingNewer = false;
+    try {
+      const raw = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(raw) as { lastUpdated?: unknown };
+      if (typeof parsed.lastUpdated === 'string') {
+        existingNewer = parsed.lastUpdated > lastUpdated;
+      }
+      // totem-context: best-effort read — an unparseable existing file is treated as "not newer" so the overwrite path proceeds rather than erroring. Atomic temp+rename below protects user data; log.warn surfaces parse failures for diagnostics.
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn(TAG, `Could not read existing recurrence-stats.json: ${msg}`);
+    }
     if (existingNewer) {
       const proceed = await confirmOverwrite(outputPath, options.yes ?? false, log);
       if (!proceed) {
@@ -398,11 +413,21 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
     }
   }
 
-  // 11. Atomic write
+  // 11. Atomic write — unique temp filename (PID + epoch ms + random) so
+  //     concurrent invocations don't race on the same .tmp path
+  //     (mmnto-ai/totem#1729 CR R1 + R2). PID alone is identical across
+  //     in-process awaits and Date.now() can collide on the same ms; the
+  //     random suffix closes both gaps deterministically.
   fs.mkdirSync(totemDir, { recursive: true });
-  const tmp = outputPath + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(stats, null, 2) + '\n', 'utf-8');
-  fs.renameSync(tmp, outputPath);
+  const crypto = await import('node:crypto');
+  const tmp = `${outputPath}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(stats, null, 2) + '\n', 'utf-8');
+    fs.renameSync(tmp, outputPath);
+  } finally {
+    // Defensive cleanup if rename failed mid-flight.
+    if (fs.existsSync(tmp)) fs.rmSync(tmp, { force: true });
+  }
 
   // 12. Stdout summary (via log → stderr; mirrors statsCommand voice)
   log.info(TAG, `Wrote ${outputPath}`);
@@ -485,24 +510,6 @@ function pickDominantSeverity(buckets: SeverityBucket[]): SeverityBucket {
     if (buckets.includes(candidate)) return candidate;
   }
   return 'nit';
-}
-
-function isExistingOutputNewer(
-  outputPath: string,
-  prospectiveTimestamp: string,
-  log: { warn: (tag: string, msg: string) => void },
-): boolean {
-  try {
-    const raw = fs.readFileSync(outputPath, 'utf-8');
-    const parsed = JSON.parse(raw) as { lastUpdated?: unknown };
-    if (typeof parsed.lastUpdated !== 'string') return false;
-    return parsed.lastUpdated > prospectiveTimestamp;
-    // totem-context: best-effort read — an unparseable existing file is treated as "not newer" so the overwrite path proceeds rather than erroring. Atomic temp+rename in the caller protects user data; log.warn surfaces the parse failure for diagnostics.
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    log.warn(TAG, `Could not read existing recurrence-stats.json: ${msg}`);
-    return false;
-  }
 }
 
 async function confirmOverwrite(

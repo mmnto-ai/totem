@@ -321,7 +321,40 @@ describe('runRecurrenceStats', () => {
     await runRecurrenceStats({ threshold: 1, historyDepth: 5, yes: true });
 
     expect(fs.existsSync(path.join(totemDir, 'recurrence-stats.json'))).toBe(true);
-    expect(fs.existsSync(path.join(totemDir, 'recurrence-stats.json.tmp'))).toBe(false);
+    // No .tmp residue under any name (covers the legacy fixed-name path
+    // AND the unique PID+timestamp form introduced for mmnto-ai/totem#1729 CR R1).
+    const residue = fs.readdirSync(totemDir).filter((f) => f.endsWith('.tmp'));
+    expect(residue).toEqual([]);
+  });
+
+  it('survives concurrent invocations without temp-file collision', async () => {
+    mockGhFetchAndParse.mockReturnValue([{ number: 650, mergedAt: '2026-04-01T00:00:00.000Z' }]);
+    mockFetchPr.mockReturnValue({
+      number: 650,
+      title: 't',
+      body: '',
+      state: 'merged',
+      comments: [],
+      reviews: [],
+    });
+    mockFetchReviewComments.mockReturnValue([
+      makeReviewComment({ id: 6501, body: 'Concurrent invocation test finding.' }),
+    ]);
+
+    // Two parallel invocations would collide on a fixed `.tmp` path; the
+    // PID+epochMs suffix introduced for mmnto-ai/totem#1729 CR R1 keeps
+    // them disjoint. Both must resolve and the final file must be valid.
+    await Promise.all([
+      runRecurrenceStats({ threshold: 1, historyDepth: 5, yes: true }),
+      runRecurrenceStats({ threshold: 1, historyDepth: 5, yes: true }),
+    ]);
+
+    expect(fs.existsSync(path.join(totemDir, 'recurrence-stats.json'))).toBe(true);
+    const stats = loadStats();
+    expect(stats.version).toBe(1);
+    // No .tmp residue under any name
+    const residue = fs.readdirSync(totemDir).filter((f) => f.endsWith('.tmp'));
+    expect(residue).toEqual([]);
   });
 
   it('does not throw when compiled-rules.json is missing', async () => {
