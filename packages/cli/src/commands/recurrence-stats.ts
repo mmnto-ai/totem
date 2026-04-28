@@ -154,10 +154,6 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
 
   for (const pr of prList) {
     const prNum = pr.number;
-    // totem-context: per-PR resilience — log + continue with partial data per the
-    // mmnto-ai/totem#1715 design (rate-limit / transient adapter failures must
-    // not abort the whole scan; the final report flags partial coverage via
-    // prsScanned < historyDepth).
     try {
       const prData = adapter.fetchPr(prNum);
       const reviewComments = adapter.fetchReviewComments(prNum);
@@ -213,6 +209,7 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
       }
 
       prsScanned.push(String(prNum));
+      // totem-context: per-PR catch swallows transient errors by design — log + continue with partial data per the mmnto-ai/totem#1715 failure-mode table; the scan must not abort on rate-limit / adapter failures, and prsScanned < historyDepth surfaces partial coverage in the final report.
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       log.warn(TAG, `PR #${prNum}: skipped (${msg})`);
@@ -309,12 +306,9 @@ export async function runRecurrenceStats(options: RunRecurrenceStatsOptions = {}
   // 6. Coverage filter against compiled rules
   const rulesPath = path.join(totemDir, 'compiled-rules.json');
   let compiledRules: Array<{ message: string }> = [];
-  // totem-context: intentional fallback — per the mmnto-ai/totem#1715 design,
-  // a missing or malformed compiled-rules.json must not abort the recurrence
-  // scan; coverage routing is just disabled and every cluster lands in
-  // headline `patterns` with `coveredByRule: false`.
   try {
     compiledRules = loadCompiledRules(rulesPath) as Array<{ message: string }>;
+    // totem-context: missing/malformed compiled-rules.json disables coverage routing only — every cluster lands in headline `patterns` with `coveredByRule: false` per the mmnto-ai/totem#1715 failure-mode table. The scan must not abort on a missing manifest.
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log.warn(TAG, `Could not load compiled rules: ${msg} — coverage check disabled.`);
@@ -498,15 +492,12 @@ function isExistingOutputNewer(
   prospectiveTimestamp: string,
   log: { warn: (tag: string, msg: string) => void },
 ): boolean {
-  // totem-context: best-effort read — an unparseable existing file is
-  // treated as "not newer" so the overwrite path proceeds rather than
-  // erroring. The user's data isn't lost (atomic temp+rename), and the
-  // log.warn surfaces the parse failure for diagnostics.
   try {
     const raw = fs.readFileSync(outputPath, 'utf-8');
     const parsed = JSON.parse(raw) as { lastUpdated?: unknown };
     if (typeof parsed.lastUpdated !== 'string') return false;
     return parsed.lastUpdated > prospectiveTimestamp;
+    // totem-context: best-effort read — an unparseable existing file is treated as "not newer" so the overwrite path proceeds rather than erroring. Atomic temp+rename in the caller protects user data; log.warn surfaces the parse failure for diagnostics.
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log.warn(TAG, `Could not read existing recurrence-stats.json: ${msg}`);
