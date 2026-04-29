@@ -554,6 +554,14 @@ export interface ShieldOptions {
    * them throws `TotemConfigError CONFIG_INVALID`.
    */
   estimate?: boolean;
+  /**
+   * Pattern-history overlay opt-out (mmnto-ai/totem#1731). Default `true`
+   * (enabled) when undefined; opt out via `--no-history`. Only effective
+   * with `--estimate`; silently ignored on the LLM path. Commander
+   * auto-inverts the negative flag, so the user-facing surface is
+   * `--no-history` and this field receives `false` when the flag is set.
+   */
+  history?: boolean;
 }
 
 // ─── Deterministic mode (delegates to shared engine) ─

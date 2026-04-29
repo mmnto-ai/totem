@@ -417,3 +417,767 @@ describe('shieldCommand --estimate incompatibility guard', () => {
     await expect(shieldCommand({ estimate: true, suppress: [] })).resolves.toBeUndefined();
   });
 });
+
+// ─── Pattern-history overlay (mmnto-ai/totem#1731) ────────
+
+// Helpers shared across the overlay tests. The substrate's `tokenizeForJaccard`
+// drops stopwords + tokens of length ≤ 2 (see
+// `packages/core/src/recurrence-stats.ts:STOPWORDS`), so fixture tokens are
+// chosen 4+ chars and outside that stoplist.
+function writeSubstrate(
+  tmpDir: string,
+  payload: unknown,
+  totemDirName = '.totem',
+  fileName = 'recurrence-stats.json',
+): string {
+  const totemDir = path.join(tmpDir, totemDirName);
+  fs.mkdirSync(totemDir, { recursive: true });
+  const filePath = path.join(totemDir, fileName);
+  fs.writeFileSync(
+    filePath,
+    typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2),
+    'utf-8',
+  );
+  return filePath;
+}
+
+function makeSubstratePayload(
+  patterns: Array<{
+    signature: string;
+    sampleBodies: string[];
+    occurrences?: number;
+    prs?: string[];
+  }>,
+): unknown {
+  return {
+    version: 1,
+    lastUpdated: '2026-04-29T00:00:00.000Z',
+    thresholdApplied: 5,
+    historyDepth: 50,
+    prsScanned: ['1700', '1710'],
+    patterns: patterns.map((p) => ({
+      signature: p.signature,
+      tool: 'coderabbit',
+      severityBucket: 'medium',
+      occurrences: p.occurrences ?? 3,
+      prs: p.prs ?? ['1700', '1710'],
+      sampleBodies: p.sampleBodies,
+      firstSeen: '2026-04-01T00:00:00.000Z',
+      lastSeen: '2026-04-28T00:00:00.000Z',
+      paths: [],
+      coveredByRule: false,
+    })),
+    coveredPatterns: [],
+  };
+}
+
+function diffWithAdditions(addedLines: string[]): string {
+  const header =
+    'diff --git a/foo.ts b/foo.ts\n--- a/foo.ts\n+++ b/foo.ts\n@@ -1 +1,2 @@\n existing\n';
+  return header + addedLines.map((l) => `+${l}`).join('\n') + '\n';
+}
+
+function infoLines(): string[] {
+  return mockLog.info.mock.calls.map((c) => String(c[1] ?? ''));
+}
+
+function dimLines(): string[] {
+  return mockLog.dim.mock.calls.map((c) => String(c[1] ?? ''));
+}
+
+function warnLines(): string[] {
+  return mockLog.warn.mock.calls.map((c) => String(c[1] ?? ''));
+}
+
+describe('runEstimate — pattern-history overlay', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-history-'));
+    originalCwd = process.cwd();
+    mockGetDiffForReview.mockReset();
+    mockRunCompiledRules.mockReset();
+    mockRunCompiledRules.mockResolvedValue(runCompiledRulesPassResult());
+    for (const fn of Object.values(mockLog)) {
+      (fn as ReturnType<typeof vi.fn>).mockReset();
+    }
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+  });
+
+  // ─── Default-on / opt-out semantics ─────────────────
+
+  it('skips the overlay entirely when options.history === false (--no-history)', async () => {
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([
+        {
+          signature: 'sig-aaaa',
+          sampleBodies: ['avoid using async-storage in render-path components'],
+        },
+      ]),
+    );
+    mockGetDiffForReview.mockResolvedValue(
+      diffResult({
+        diff: diffWithAdditions(['avoid async-storage render-path components']),
+      }),
+    );
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true, history: false }, makeConfig(), tmpDir, tmpDir);
+
+    const all = [...infoLines(), ...dimLines(), ...warnLines()];
+    expect(all.some((l) => /Pattern-history/i.test(l))).toBe(false);
+  });
+
+  it('runs the overlay by default when options.history is undefined', async () => {
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([
+        {
+          signature: 'sig-bbbb',
+          sampleBodies: ['avoid using async-storage in render-path components'],
+        },
+      ]),
+    );
+    mockGetDiffForReview.mockResolvedValue(
+      diffResult({
+        diff: diffWithAdditions(['avoid async-storage render-path components everywhere']),
+      }),
+    );
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    const all = [...infoLines(), ...dimLines(), ...warnLines()];
+    expect(all.some((l) => /Pattern-history/i.test(l))).toBe(true);
+  });
+
+  // ─── Substrate-missing / malformed degradation ──────
+
+  it('emits a single dim hint when recurrence-stats.json is missing', async () => {
+    mockGetDiffForReview.mockResolvedValue(diffResult());
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    const hints = dimLines().filter((l) => /Pattern-history layer skipped/.test(l));
+    expect(hints).toHaveLength(1);
+    expect(hints[0]).toMatch(/totem stats --pattern-recurrence/);
+    // Warn surface is untouched by the missing-substrate path.
+    expect(warnLines()).toHaveLength(0);
+  });
+
+  it('emits a single warn line when recurrence-stats.json is malformed JSON', async () => {
+    writeSubstrate(tmpDir, '{ "not": valid json'); // garbage
+    mockGetDiffForReview.mockResolvedValue(diffResult());
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await expect(
+      runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir),
+    ).resolves.toBeUndefined();
+
+    const warns = warnLines().filter((l) => /Pattern-history layer skipped/.test(l));
+    expect(warns).toHaveLength(1);
+  });
+
+  it('emits a single warn line when recurrence-stats.json fails the schema projection', async () => {
+    // CR mmnto-ai/totem#1739 R4 nitpick: build a VALID substrate first,
+    // then corrupt only the projected field we want to lock. The prior
+    // shape `{ version: 1, patterns: [{ signature: 42 }] }` was malformed
+    // in multiple ways, so the test stayed green even if the projection
+    // stopped validating signature and rejected some other gap.
+    const payload = makeSubstratePayload([
+      {
+        signature: 'sig-will-be-corrupted',
+        sampleBodies: ['avoid using async-storage in render-path components'],
+      },
+    ]) as { patterns: Array<{ signature: unknown }> };
+    payload.patterns[0]!.signature = 42;
+    writeSubstrate(tmpDir, payload);
+    mockGetDiffForReview.mockResolvedValue(diffResult());
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await expect(
+      runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir),
+    ).resolves.toBeUndefined();
+
+    const warns = warnLines().filter((l) => /Pattern-history layer skipped/.test(l));
+    expect(warns).toHaveLength(1);
+  });
+
+  // ─── CR mmnto-ai/totem#1739 R4 (Minor) — empty prs[] regression ─
+
+  it('skips patterns with empty prs[] and renders other patterns normally', async () => {
+    // Substrate-by-construction always emits ≥1 PR per cluster (see
+    // `runRecurrenceStats`), but the projection schema does not enforce
+    // `prs.min(1)`. A tampered substrate with `prs: []` would otherwise
+    // render as "in PRs (containment: 0.83)" — a no-signal stanza. The
+    // overlay skips such patterns at match time so the graceful-degrade
+    // contract holds without converting it into a parse failure.
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([
+        {
+          signature: 'sig-empty-prs-skipped',
+          prs: [],
+          sampleBodies: ['avoid using async-storage in render-path components'],
+        },
+        {
+          signature: 'sig-normal-rendered',
+          prs: ['1700', '1710'],
+          sampleBodies: ['avoid using async-storage in render-path components'],
+        },
+      ]),
+    );
+    mockGetDiffForReview.mockResolvedValue(
+      diffResult({
+        diff: diffWithAdditions(['avoid async-storage render-path components']),
+      }),
+    );
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    const lines = infoLines();
+    expect(lines.some((l) => /sig-empty-prs-skipped/.test(l))).toBe(false);
+    expect(lines.some((l) => /sig-normal-rendered/.test(l))).toBe(true);
+  });
+
+  // ─── Containment-coefficient asymmetry — the load-bearing test ──
+
+  it('uses asymmetric containment so a small pattern matches a much larger diff', async () => {
+    // Pattern has 5 unique significant tokens. Diff contains all 5 PLUS
+    // ~500 unrelated tokens. Containment is 5/5 = 1.0; whole-diff
+    // Jaccard would be 5 / (5 + 500) ≈ 0.01 — well below 0.4.
+    const patternBody = 'foobar quuxify slartib mariocart wibblewobble';
+    const filler = Array.from({ length: 500 }, (_, i) => `unrelated${i}token`).join(' ');
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([{ signature: 'sig-asym', sampleBodies: [patternBody] }]),
+    );
+    mockGetDiffForReview.mockResolvedValue(
+      diffResult({ diff: diffWithAdditions([`${patternBody} ${filler}`]) }),
+    );
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    const lines = infoLines();
+    // The containment line for our match must surface with 1.00.
+    expect(lines.some((l) => /sig-asym/.test(l) && /containment: 1\.00/.test(l))).toBe(true);
+
+    // Sanity: the same fixture fed through Jaccard would NOT have rendered
+    // a match (Jaccard ≈ 5/505 ≈ 0.0099 < 0.4). We assert the contrapositive
+    // by computing Jaccard via the substrate helper and asserting < 0.05.
+    const { jaccard, tokenizeForJaccard } = await import('@mmnto/totem');
+    const j = jaccard(
+      tokenizeForJaccard(patternBody),
+      tokenizeForJaccard(`${patternBody} ${filler}`),
+    );
+    expect(j).toBeLessThan(0.05);
+  });
+
+  // ─── Match-rendering details ────────────────────────
+
+  it('renders the section header with blank separator lines and a per-match block', async () => {
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([
+        {
+          signature: 'sig-cccc',
+          occurrences: 7,
+          prs: ['1700', '1710', '1720'],
+          sampleBodies: ['avoid using async-storage in render-path components consistently'],
+        },
+      ]),
+    );
+    mockGetDiffForReview.mockResolvedValue(
+      diffResult({
+        diff: diffWithAdditions(['avoid async-storage render-path components consistently']),
+      }),
+    );
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    const lines = infoLines();
+    // Section header + summary line both present, both under [Estimate].
+    expect(lines).toContain('─── Pattern-history layer ───');
+    expect(lines.some((l) => /1 historical pattern\(s\) match this diff \(uncovered/.test(l))).toBe(
+      true,
+    );
+    // Blank-line separators (Q4 spec).
+    expect(lines.filter((l) => l === '').length).toBeGreaterThanOrEqual(2);
+    // PR list rendered with hash prefixes.
+    expect(lines.some((l) => /sig-cccc/.test(l) && /#1700, #1710, #1720/.test(l))).toBe(true);
+
+    // Tag is Estimate on every overlay info line.
+    for (const call of mockLog.info.mock.calls) {
+      expect(call[0]).toBe('Estimate');
+    }
+  });
+
+  it('truncates the rendered sample body to 120 chars with internal whitespace collapsed', async () => {
+    const longBody =
+      '   foobar    multi-line   sample body  '.repeat(20) + 'quuxify slartib trailingstuff';
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([{ signature: 'sig-trunc', sampleBodies: [longBody] }]),
+    );
+    mockGetDiffForReview.mockResolvedValue(
+      diffResult({
+        diff: diffWithAdditions(['foobar multi-line sample body quuxify slartib trailingstuff']),
+      }),
+    );
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    const sampleLine = infoLines().find((l) => /^ {4}".*"$/.test(l));
+    expect(sampleLine).toBeDefined();
+    const inner = sampleLine!.replace(/^ {4}"|"$/g, '');
+    // Collapsed internal whitespace — no double spaces.
+    expect(inner).not.toMatch(/ {2,}/);
+    // 120 chars + ellipsis.
+    expect(inner.length).toBeLessThanOrEqual(121); // 120 + the ellipsis
+    expect(inner.endsWith('…')).toBe(true);
+  });
+
+  it('emits a single dim "0 matches" line when no pattern clears the threshold', async () => {
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([
+        {
+          signature: 'sig-disjoint',
+          sampleBodies: ['totally unrelated patternwords nowherenear thedifff'],
+        },
+      ]),
+    );
+    mockGetDiffForReview.mockResolvedValue(
+      diffResult({ diff: diffWithAdditions(['something completely orthogonal happening here']) }),
+    );
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    const dims = dimLines().filter((l) => /Pattern-history layer: 0 matches/.test(l));
+    expect(dims).toHaveLength(1);
+    expect(dims[0]).toMatch(/0\.4/);
+  });
+
+  // ─── Substrate row hygiene ──────────────────────────
+
+  it('skips patterns whose sampleBodies array is empty', async () => {
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([
+        // Pattern A — empty bodies; must NOT render.
+        { signature: 'sig-empty', sampleBodies: [] },
+        // Pattern B — full match; must render.
+        {
+          signature: 'sig-keeper',
+          sampleBodies: ['avoid using async-storage in render-path components'],
+        },
+      ]),
+    );
+    mockGetDiffForReview.mockResolvedValue(
+      diffResult({ diff: diffWithAdditions(['avoid async-storage render-path components']) }),
+    );
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    const lines = infoLines();
+    expect(lines.some((l) => /sig-empty/.test(l))).toBe(false);
+    expect(lines.some((l) => /sig-keeper/.test(l))).toBe(true);
+  });
+
+  it('skips patterns whose sampleBodies tokenize to an empty significant set', async () => {
+    // Substrate `tokenizeForJaccard` drops stopwords + ≤2-char tokens.
+    // A body of "the a is to of" yields zero significant tokens —
+    // containment is structurally undefined, so we skip.
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([
+        // Pattern A — pure stopwords; must NOT render.
+        { signature: 'sig-stopwords', sampleBodies: ['the a is to of and or'] },
+        // Pattern B — full match; must render.
+        {
+          signature: 'sig-realsignal',
+          sampleBodies: ['avoid using async-storage in render-path components'],
+        },
+      ]),
+    );
+    mockGetDiffForReview.mockResolvedValue(
+      diffResult({ diff: diffWithAdditions(['avoid async-storage render-path components']) }),
+    );
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    const lines = infoLines();
+    expect(lines.some((l) => /sig-stopwords/.test(l))).toBe(false);
+    expect(lines.some((l) => /sig-realsignal/.test(l))).toBe(true);
+  });
+
+  it('does NOT touch coveredPatterns[] — only patterns[] are matched', async () => {
+    const payload = {
+      version: 1,
+      lastUpdated: '2026-04-29T00:00:00.000Z',
+      thresholdApplied: 5,
+      historyDepth: 50,
+      prsScanned: ['1700'],
+      patterns: [
+        // Uncovered — matchable.
+        {
+          signature: 'sig-uncovered',
+          tool: 'coderabbit',
+          severityBucket: 'medium',
+          occurrences: 3,
+          prs: ['1700'],
+          sampleBodies: ['avoid using async-storage in render-path components'],
+          firstSeen: '2026-04-01T00:00:00.000Z',
+          lastSeen: '2026-04-28T00:00:00.000Z',
+          paths: [],
+          coveredByRule: false,
+        },
+      ],
+      coveredPatterns: [
+        // Already covered — must NOT render even though body matches.
+        {
+          signature: 'sig-covered',
+          tool: 'coderabbit',
+          severityBucket: 'medium',
+          occurrences: 4,
+          prs: ['1701'],
+          sampleBodies: ['avoid using async-storage in render-path components'],
+          firstSeen: '2026-04-01T00:00:00.000Z',
+          lastSeen: '2026-04-28T00:00:00.000Z',
+          paths: [],
+          coveredByRule: true,
+        },
+      ],
+    };
+    writeSubstrate(tmpDir, payload);
+    mockGetDiffForReview.mockResolvedValue(
+      diffResult({ diff: diffWithAdditions(['avoid async-storage render-path components']) }),
+    );
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    const lines = infoLines();
+    expect(lines.some((l) => /sig-uncovered/.test(l))).toBe(true);
+    expect(lines.some((l) => /sig-covered/.test(l))).toBe(false);
+  });
+
+  // ─── Diff-tokenization edge cases ───────────────────
+
+  it('does not let `+++ b/file.ts` headers poison the diff token pool', async () => {
+    // The pattern's only-significant token is the file basename. If the
+    // overlay tokenized the `+++ b/foo.ts` header, this would match —
+    // it must NOT.
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([{ signature: 'sig-poison', sampleBodies: ['poisonword'] }]),
+    );
+    // Diff with no real additions — only the +++ file header.
+    const diffNoAdditions =
+      'diff --git a/poisonword.ts b/poisonword.ts\n' +
+      '--- a/poisonword.ts\n' +
+      '+++ b/poisonword.ts\n' +
+      '@@ -1 +1 @@\n' +
+      ' unchanged\n';
+    mockGetDiffForReview.mockResolvedValue(diffResult({ diff: diffNoAdditions }));
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    const lines = infoLines();
+    expect(lines.some((l) => /sig-poison/.test(l))).toBe(false);
+  });
+
+  it('preserves added lines starting with `++` (the header guard requires a trailing space)', async () => {
+    // Pre-push Sonnet pickup on CR R4: `line.startsWith('+++')` would
+    // misclassify `+++increment;` (a real addition of `++increment;`) as
+    // a file header. The guard now requires `'+++ '` with trailing space,
+    // which is the actual unified-diff format for `+++ <path>` headers.
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([{ signature: 'sig-plusplus', sampleBodies: ['increment counter'] }]),
+    );
+    // Real added line of `++increment;` is rendered as `+++increment;` in
+    // the unified diff. The header `+++ b/foo.ts` (with space) must still
+    // be filtered.
+    const diffWithPlusPlus =
+      'diff --git a/foo.ts b/foo.ts\n' +
+      '--- a/foo.ts\n' +
+      '+++ b/foo.ts\n' +
+      '@@ -1 +1,2 @@\n' +
+      ' existing\n' +
+      '+++increment counter\n';
+    mockGetDiffForReview.mockResolvedValue(diffResult({ diff: diffWithPlusPlus }));
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    const lines = infoLines();
+    // Pattern matches because `increment` and `counter` survived tokenization.
+    expect(lines.some((l) => /sig-plusplus/.test(l))).toBe(true);
+  });
+
+  it('orders matches by containment desc, then signature asc, deterministically', async () => {
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([
+        // 100% containment (3/3): aaa-pattern.
+        {
+          signature: 'aaa-pattern',
+          sampleBodies: ['lattermost foobaz quuxquux'],
+        },
+        // 100% containment (3/3): bbb-pattern (same containment as aaa, lex-sorted).
+        {
+          signature: 'bbb-pattern',
+          sampleBodies: ['lattermost foobaz quuxquux'],
+        },
+        // ~50% containment: ccc-pattern.
+        {
+          signature: 'ccc-pattern',
+          sampleBodies: ['lattermost foobaz quuxquux missing-token-here'],
+        },
+      ]),
+    );
+    mockGetDiffForReview.mockResolvedValue(
+      diffResult({ diff: diffWithAdditions(['lattermost foobaz quuxquux']) }),
+    );
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    const lines = infoLines();
+    const aaaIdx = lines.findIndex((l) => /aaa-pattern/.test(l));
+    const bbbIdx = lines.findIndex((l) => /bbb-pattern/.test(l));
+    const cccIdx = lines.findIndex((l) => /ccc-pattern/.test(l));
+    expect(aaaIdx).toBeGreaterThan(-1);
+    expect(bbbIdx).toBeGreaterThan(-1);
+    expect(cccIdx).toBeGreaterThan(-1);
+    // aaa before bbb (lex tiebreak at same containment), bbb before ccc (higher containment).
+    expect(aaaIdx).toBeLessThan(bbbIdx);
+    expect(bbbIdx).toBeLessThan(cccIdx);
+  });
+
+  // ─── No-LLM defense-in-depth (overlay is a static-source-grep target) ──
+
+  it('overlay source has no LLM imports — extends the no-LLM static-source-grep', async () => {
+    const estimatePath = path.join(__dirname, 'shield-estimate.ts');
+    const source = fs.readFileSync(estimatePath, 'utf-8');
+    // Forbidden import paths and symbols specific to the LLM Verification
+    // Layer. Mirrors the mmnto-ai/totem#1714 + #1713 patterns.
+    expect(source).not.toMatch(/from ['"]@mmnto\/totem-orchestrator['"]/);
+    expect(source).not.toMatch(/getOrchestrator/);
+    expect(source).not.toMatch(/\bAnthropic\b/);
+    expect(source).not.toMatch(/\bOpenAI\b/);
+    expect(source).not.toMatch(/\bgemini\b/i);
+    // The mmnto-ai/totem#1714 grep already blocks runOrchestrator /
+    // requireEmbedding / LanceStore / createEmbedder / `from '../utils.js'`
+    // — re-asserting here keeps the overlay's guard intact under future
+    // refactors.
+    expect(source).not.toMatch(/runOrchestrator/);
+    expect(source).not.toMatch(/requireEmbedding/);
+    expect(source).not.toMatch(/LanceStore/);
+    expect(source).not.toMatch(/createEmbedder/);
+  });
+
+  // CR mmnto-ai/totem#1739 R3 (Major): symbol-only grep can't catch
+  // a TRANSITIVE-load regression where the overlay starts importing
+  // a benign-looking module that itself pulls the orchestrator graph.
+  // Specifically: `cli/src/utils.ts` has a static value-import of
+  // `./orchestrators/orchestrator.js`, so any future drift to
+  // `await import('../utils.js')` in shield-estimate would silently
+  // re-introduce the orchestrator graph onto the estimate path.
+  // Module-path bans + a dynamic-import allowlist close that gap.
+  it('does not statically or dynamically import any orchestrator-loading module path', async () => {
+    const estimatePath = path.join(__dirname, 'shield-estimate.ts');
+    const source = fs.readFileSync(estimatePath, 'utf-8');
+
+    // Direct orchestrator imports (static or dynamic).
+    expect(source).not.toMatch(/['"]\.\.\/orchestrators\//);
+    // Transitive load via utils.ts (which statically imports the orchestrator
+    // graph at utils.ts:18). The overlay must route sanitizeForTerminal
+    // through `terminal-sanitize.js` instead.
+    expect(source).not.toMatch(/['"]\.\.\/utils\.js['"]/);
+
+    // Dynamic-import allowlist — every `await import(...)` in shield-estimate
+    // resolves to one of these. Mirrors the retrospect.test.ts:524 guard.
+    const allowedDynamicImports = [
+      "await import('node:fs')",
+      "await import('node:path')",
+      "await import('zod')",
+      "await import('../ui.js')",
+      "await import('../git.js')",
+      "await import('./run-compiled-rules.js')",
+      "await import('@mmnto/totem')",
+      "await import('../terminal-sanitize.js')",
+    ];
+    let residual = source;
+    for (const expected of allowedDynamicImports) {
+      // totem-context: stripping allowed dynamic-import substrings to assert no stray imports remain — empty separator is the correct semantics for the source-grep guard.
+      residual = residual.split(expected).join('');
+    }
+    expect(residual).not.toMatch(/await import\(['"][^'"]+['"]\)/);
+  });
+
+  // ─── CR mmnto-ai/totem#1739 R1 (Major) — configRoot path resolution ─
+
+  it('resolves the substrate path relative to configRoot, not cwd', async () => {
+    // Substrate written at configRoot (project root). cwd is a nested
+    // working dir with no `.totem/` of its own. Pre-fix the overlay would
+    // probe `<nestedCwd>/.totem/recurrence-stats.json`, miss, and emit
+    // the "skipped" hint — disabling the overlay despite the substrate
+    // existing at configRoot. Post-fix the overlay resolves against
+    // configRoot and finds the substrate.
+    const nestedCwd = path.join(tmpDir, 'nested', 'subdir');
+    fs.mkdirSync(nestedCwd, { recursive: true });
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([
+        {
+          signature: 'sig-rooted-at-configroot',
+          sampleBodies: ['avoid using async-storage in render-path components'],
+        },
+      ]),
+    );
+    mockGetDiffForReview.mockResolvedValue(
+      diffResult({
+        diff: diffWithAdditions(['avoid async-storage render-path components']),
+      }),
+    );
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    // cwd = nested working dir (substrate-empty), configRoot = project root
+    // (substrate lives here).
+    await runEstimate({ estimate: true }, makeConfig(), nestedCwd, tmpDir);
+
+    const all = [...infoLines(), ...dimLines()];
+    expect(all.some((l) => /sig-rooted-at-configroot/.test(l))).toBe(true);
+    // Skipped-hint MUST NOT fire — the substrate was found via configRoot.
+    expect(all.some((l) => /Pattern-history layer skipped/.test(l))).toBe(false);
+  });
+
+  // ─── CR mmnto-ai/totem#1739 R1 (Major) — terminal-injection defense ─
+
+  it('sanitizes ANSI/control bytes in substrate-derived signature, PR list, and sample body', async () => {
+    // A tampered substrate could plant CSI sequences (`\x1b[...]`) that
+    // spoof cursor moves or color resets when rendered to stderr. Closes
+    // the same class CR caught on `retrospect.ts` PR mmnto-ai/totem#1734.
+    const ansi = '\x1b[31mRED\x1b[0m';
+    const ctrlC0 = '\x07'; // BEL — a C0 control byte
+    const ctrlC1 = '\x9b'; // CSI 8-bit equivalent — a C1 control byte
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([
+        {
+          signature: `sig-${ansi}-aaaa`,
+          prs: [`1700${ansi}`, `${ctrlC0}1710`],
+          // totem-context: adjacent ${ctrlC0}${ctrlC1} placeholders are an intentional fixture — both C0 (BEL \x07) and C1 (CSI 8-bit \x9b) bytes need to land in the rendered output so the sanitizer test asserts both are stripped. The disjoint-concat rule targets `${a}${b}` token-fusing, not adjacent control-byte fixtures.
+          sampleBodies: [`avoid ${ansi} async-storage render-path ${ctrlC0}${ctrlC1} components`],
+        },
+      ]),
+    );
+    mockGetDiffForReview.mockResolvedValue(
+      diffResult({
+        diff: diffWithAdditions(['avoid async-storage render-path components']),
+      }),
+    );
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    // No ESC, BEL (C0), or CSI-8bit (C1) bytes survive sanitization.
+    const all = [...infoLines(), ...dimLines(), ...warnLines()];
+    for (const line of all) {
+      expect(line).not.toContain('\x1b');
+      expect(line).not.toContain('\x07');
+      expect(line).not.toContain('\x9b');
+    }
+    // The pattern still rendered — sanitization stripped the unsafe bytes,
+    // not the surrounding text.
+    expect(all.some((l) => /sig-.*-aaaa/.test(l))).toBe(true);
+  });
+});
+
+// ─── Runtime orchestrator spy guard (mirrors retrospect.test.ts:546) ──
+//
+// Static-source inspection alone can be fooled by a transitive import.
+// Mock the orchestrator factory module at runtime; if anything in the
+// estimate-overlay import chain reaches it, the spy fires. We require
+// zero invocations.
+const orchestratorSpy = vi.fn();
+vi.mock('../orchestrators/orchestrator.js', () => ({
+  createOrchestrator: (...args: unknown[]) => {
+    orchestratorSpy(...args);
+    return () => {
+      throw new Error('createOrchestrator must NEVER be called from runEstimate');
+    };
+  },
+  resolveOrchestrator: (...args: unknown[]) => {
+    orchestratorSpy(...args);
+    throw new Error('resolveOrchestrator must NEVER be called from runEstimate');
+  },
+}));
+
+describe('runEstimate — runtime orchestrator spy', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-est-spy-'));
+    originalCwd = process.cwd();
+    orchestratorSpy.mockClear();
+    mockGetDiffForReview.mockReset();
+    mockRunCompiledRules.mockReset();
+    mockRunCompiledRules.mockResolvedValue(runCompiledRulesPassResult());
+    for (const fn of Object.values(mockLog)) {
+      (fn as ReturnType<typeof vi.fn>).mockReset();
+    }
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+  });
+
+  it('never invokes createOrchestrator or resolveOrchestrator across an end-to-end run with the overlay', async () => {
+    // Substrate present + matching pattern — exercises the full overlay
+    // path. This is the load-bearing assertion: even with the overlay
+    // active, the orchestrator spy stays at 0.
+    fs.mkdirSync(path.join(tmpDir, '.totem'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, '.totem', 'recurrence-stats.json'),
+      JSON.stringify(
+        makeSubstratePayload([
+          {
+            signature: 'sig-spy',
+            sampleBodies: ['avoid using async-storage in render-path components'],
+          },
+        ]),
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    mockGetDiffForReview.mockResolvedValue(
+      diffResult({ diff: diffWithAdditions(['avoid async-storage render-path components']) }),
+    );
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    expect(orchestratorSpy).toHaveBeenCalledTimes(0);
+  });
+});
