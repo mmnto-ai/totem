@@ -19,6 +19,7 @@ import {
   resolveGitRoot,
   resolveStrategyRoot,
   safeExec,
+  type StrategyResolverConfig,
 } from '@mmnto/totem';
 
 import {
@@ -89,8 +90,11 @@ export function extractGitState(cwd: string): GitState {
  *   resolver's actionable reason instead of seeing an empty pointer that
  *   could be confused with a present-but-uninitialized submodule.
  */
-export function extractStrategyPointer(cwd: string): StrategyPointer {
-  const status = resolveStrategyRoot(cwd);
+export function extractStrategyPointer(
+  cwd: string,
+  config?: StrategyResolverConfig,
+): StrategyPointer {
+  const status = resolveStrategyRoot(cwd, { config });
   if (!status.resolved) {
     return { resolved: false, reason: status.reason };
   }

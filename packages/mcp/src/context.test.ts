@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ServerContext } from './context.js';
-import { _reconnectOnContext, loadEnv } from './context.js';
+import { _reconnectOnContext, dedupeEffectiveLinks, loadEnv } from './context.js';
 
 describe('loadEnv', () => {
   let tmpDir: string;
@@ -214,5 +214,57 @@ describe('_reconnectOnContext', () => {
     expect(broken).toHaveBeenCalledOnce();
     expect(okB).toHaveBeenCalledOnce();
     expect(ctx.linkedStoreInitErrors.size).toBe(0);
+  });
+});
+
+describe('dedupeEffectiveLinks (mmnto-ai/totem#1710 R2)', () => {
+  const projectRoot = path.resolve('/fake/project');
+
+  it('keeps a single entry untouched', () => {
+    const out = dedupeEffectiveLinks(projectRoot, [
+      { path: '/abs/path/strategy', nameOverride: 'strategy' },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]?.nameOverride).toBe('strategy');
+  });
+
+  it('drops a literal entry whose resolved path matches an earlier auto-injected entry', () => {
+    // Auto-inject (first) carries the override; literal '../totem-strategy'
+    // resolves to the same physical path. The dedup must keep the FIRST
+    // entry (with the stable 'strategy' name override) and drop the literal.
+    const siblingAbs = path.resolve(projectRoot, '..', 'totem-strategy');
+    const out = dedupeEffectiveLinks(projectRoot, [
+      { path: siblingAbs, nameOverride: 'strategy' },
+      { path: '../totem-strategy' },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]?.nameOverride).toBe('strategy');
+    expect(out[0]?.path).toBe(siblingAbs);
+  });
+
+  it('keeps two entries pointing at distinct paths', () => {
+    const out = dedupeEffectiveLinks(projectRoot, [
+      { path: '/abs/path/strategy', nameOverride: 'strategy' },
+      { path: '../sibling-other' },
+    ]);
+    expect(out).toHaveLength(2);
+  });
+
+  it('drops a duplicate caused by `.strategy` literal aliasing the same submodule path', () => {
+    const submoduleAbs = path.resolve(projectRoot, '.strategy');
+    const out = dedupeEffectiveLinks(projectRoot, [
+      { path: submoduleAbs, nameOverride: 'strategy' },
+      { path: '.strategy' },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]?.nameOverride).toBe('strategy');
+  });
+
+  it('treats different absolute paths as distinct even if basenames collide', () => {
+    const out = dedupeEffectiveLinks(projectRoot, [
+      { path: '/abs/repo-a/strategy', nameOverride: 'strategy' },
+      { path: '/abs/repo-b/strategy' },
+    ]);
+    expect(out).toHaveLength(2);
   });
 });

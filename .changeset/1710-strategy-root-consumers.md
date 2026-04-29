@@ -28,9 +28,11 @@ gracefully when the strategy root is unresolvable.
 **`@mmnto/cli`:**
 
 - `totem proposal new` / `totem adr new` use `resolveStrategyRoot` and
-  throw an actionable `TotemError` (ADR-088) with sibling-clone hint
-  when unresolved. Standalone strategy-repo case (cwd IS the strategy
-  repo) is detected before the resolver runs.
+  throw an actionable `TotemError(CONFIG_MISSING)` with a sibling-clone
+  hint and `TOTEM_STRATEGY_ROOT` reference when unresolved (per the
+  ADR-088 design rationale on actionable error UX). Standalone
+  strategy-repo case (cwd IS the strategy repo) is detected before the
+  resolver runs.
 - New `totem doctor` "Strategy Root" advisory diagnostic (`pass` /
   `warn`, never `fail`).
 - Bench scripts (`scripts/benchmark-compile.ts`, `scripts/bench-lance-open.ts`)

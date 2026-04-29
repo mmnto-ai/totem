@@ -139,6 +139,37 @@ function deriveLinkName(linkedPath: string, cwd: string): string {
   return base.replace(/^\./, '');
 }
 
+export interface EffectiveLinkCandidate {
+  path: string;
+  nameOverride?: string;
+}
+
+/**
+ * Dedupe a list of effective linkedIndex candidates by their RESOLVED
+ * absolute path. First-wins so the auto-injected strategy entry (with its
+ * stable `'strategy'` link name) takes precedence over a legacy literal in
+ * `config.linkedIndexes` pointing at the same physical store
+ * (mmnto-ai/totem#1710 R2 / CR R2).
+ *
+ * Pure function — exported so unit tests can exercise the dedup contract
+ * without standing up the full `initContext` pipeline (LanceStore +
+ * embedder + jiti config loader).
+ */
+export function dedupeEffectiveLinks(
+  projectRoot: string,
+  candidates: ReadonlyArray<EffectiveLinkCandidate>,
+): EffectiveLinkCandidate[] {
+  const seen = new Set<string>();
+  const out: EffectiveLinkCandidate[] = [];
+  for (const candidate of candidates) {
+    const resolvedAbs = path.resolve(projectRoot, candidate.path);
+    if (seen.has(resolvedAbs)) continue;
+    seen.add(resolvedAbs);
+    out.push(candidate);
+  }
+  return out;
+}
+
 /**
  * Load environment variables from .env file (does not override existing).
  */
@@ -223,24 +254,32 @@ async function initContext(): Promise<ServerContext> {
   // config); zero-config projects without a strategy repo skip silently.
   // Read env via `Object.hasOwn` rather than `process.env.X !== undefined`
   // per a project-local lint rule against the latter idiom.
-  const effectiveLinks: Array<{ path: string; nameOverride?: string }> = [];
+  //
+  // Dedupe by RESOLVED ABSOLUTE PATH (mmnto-ai/totem#1710 R2 / CR R2): if a
+  // legacy config still lists `'.strategy'` (or `'../totem-strategy'`) AND
+  // the resolver auto-injects the same physical store under name
+  // `'strategy'`, we must not queue the same LanceStore twice — federated
+  // search would return duplicate hits. The existing collision guard below
+  // catches name collisions but not path-via-different-name collisions, so
+  // we dedupe candidates upfront.
+  const candidates: EffectiveLinkCandidate[] = [];
   const strategyExpected =
     Object.hasOwn(process.env, 'TOTEM_STRATEGY_ROOT') ||
     Object.hasOwn(process.env, 'STRATEGY_ROOT') ||
     config.strategyRoot !== undefined;
   const strategyStatus = resolveStrategyRoot(projectRoot, { config });
   if (strategyStatus.resolved) {
-    effectiveLinks.push({ path: strategyStatus.path, nameOverride: 'strategy' });
+    candidates.push({ path: strategyStatus.path, nameOverride: 'strategy' });
   } else if (strategyExpected) {
     linkedStoreInitErrors.set(
       'strategy',
       `Strategy root expected but not resolvable: ${strategyStatus.reason}`,
     );
   }
-
   for (const linkedPath of config.linkedIndexes ?? []) {
-    effectiveLinks.push({ path: linkedPath });
+    candidates.push({ path: linkedPath });
   }
+  const effectiveLinks = dedupeEffectiveLinks(projectRoot, candidates);
 
   for (const { path: linkedPath, nameOverride } of effectiveLinks) {
     const name = nameOverride ?? deriveLinkName(linkedPath, projectRoot);

@@ -288,6 +288,26 @@ describe('resolveStrategyRoot git-root anchoring', () => {
     });
   });
 
+  it('honors absolute env values without probing gitRoot (lazy probe — CR R2)', () => {
+    // Simulate a real-world scenario: resolveGitRoot would throw (permission
+    // error, corrupt index), but the user has set TOTEM_STRATEGY_ROOT to an
+    // absolute path. The resolver MUST not short-circuit on the throw — the
+    // env override has to win precedence-1.
+    const target = mkDir(path.join(tmpRoot, 'absolute-target'));
+    // Pass the gitRoot option as undefined so the resolver attempts the
+    // probe; rely on the cwd being a real git-less tmpdir to ensure the
+    // probe path is exercised. When gitRoot probing fails or returns null,
+    // an absolute env value still wins.
+    const status = resolveStrategyRoot(cwd, {
+      env: { TOTEM_STRATEGY_ROOT: target },
+    });
+    expect(status).toEqual({
+      resolved: true,
+      path: path.normalize(target),
+      source: 'env',
+    });
+  });
+
   it('anchors relative env values at cwd when gitRoot is null', () => {
     const sibling = mkDir(path.join(cwd, '..', 'totem-strategy'));
     const status = resolveStrategyRoot(cwd, {

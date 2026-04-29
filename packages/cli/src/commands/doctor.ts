@@ -445,9 +445,12 @@ export function checkLinkedIndexes(cwd: string): DiagnosticResult {
  * graph (matches `checkSecretLeaks` and the rest of the diagnostics that
  * need core).
  */
-export async function checkStrategyRoot(cwd: string): Promise<DiagnosticResult> {
+export async function checkStrategyRoot(
+  cwd: string,
+  config?: { strategyRoot?: string },
+): Promise<DiagnosticResult> {
   const { resolveStrategyRoot } = await import('@mmnto/totem');
-  const status = resolveStrategyRoot(cwd);
+  const status = resolveStrategyRoot(cwd, { config });
   if (status.resolved) {
     const rel = path.relative(cwd, status.path) || '.';
     return {
@@ -1507,14 +1510,18 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
 
   console.error(`${pc.cyan('[Totem]')} Running diagnostics...\n`);
 
-  // Resolve doctor thresholds from config when available. The default window
-  // (10) lines up with the schema default so missing config still gives the
-  // documented behavior.
+  // Resolve doctor thresholds + strategyRoot from config when available. The
+  // default window (10) lines up with the schema default so missing config
+  // still gives the documented behavior. mmnto-ai/totem#1710 R2: capture
+  // `strategyRoot` here too so `checkStrategyRoot` honors the precedence-2
+  // config layer.
   let doctorThresholds: { staleRuleWindow: number } | undefined;
+  let loadedConfig: { strategyRoot?: string } | undefined;
   try {
     const { loadConfig, resolveConfigPath } = await import('../utils.js');
     const configPath = resolveConfigPath(cwd);
     const config = await loadConfig(configPath);
+    loadedConfig = config;
     if (config.doctor) {
       doctorThresholds = { staleRuleWindow: config.doctor.staleRuleWindow };
     }
@@ -1537,7 +1544,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     checkEmbeddingConfig(cwd),
     checkIndex(cwd),
     checkLinkedIndexes(cwd),
-    await checkStrategyRoot(cwd),
+    await checkStrategyRoot(cwd, loadedConfig),
     await checkSecretLeaks(cwd),
     checkSecretsFileTracked(cwd),
     await checkUpgradeCandidates(cwd),

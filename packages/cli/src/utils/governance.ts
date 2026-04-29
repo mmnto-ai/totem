@@ -10,7 +10,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { resolveGitRoot, resolveStrategyRoot, safeExec, TotemError } from '@mmnto/totem';
+import {
+  resolveGitRoot,
+  resolveStrategyRoot,
+  safeExec,
+  type StrategyResolverConfig,
+  TotemError,
+} from '@mmnto/totem';
 
 import { log } from '../ui.js';
 
@@ -20,6 +26,12 @@ export interface ScaffoldOptions {
   type: GovernanceType;
   title: string;
   cwd: string;
+  /**
+   * Loaded `TotemConfig` (or any object with a `strategyRoot?: string` field).
+   * Forwarded to the strategy-root resolver so `TotemConfig.strategyRoot`
+   * wins precedence-2 over the sibling / submodule layers (mmnto-ai/totem#1710).
+   */
+  config?: StrategyResolverConfig;
 }
 
 export interface GovernancePaths {
@@ -31,6 +43,29 @@ export interface GovernancePaths {
   templatePath: string;
   /** Dashboard README refreshed by `docs:inject`. */
   dashboardFile: string;
+}
+
+/**
+ * Best-effort `TotemConfig` load for the governance commands. Returns
+ * `undefined` when the config is missing or unparseable — both are
+ * legitimate states for a freshly-cloned consumer repo, and the strategy-
+ * root resolver still has env / sibling / submodule layers to fall back on.
+ *
+ * Shared by `proposalNewCommand` and `adrNewCommand` so the load idiom +
+ * its `// totem-context: intentional best-effort` annotation live in one
+ * place (mmnto-ai/totem#1710 R2).
+ */
+export async function loadGovernanceConfig(
+  cwd: string,
+): Promise<StrategyResolverConfig | undefined> {
+  try {
+    const { loadConfig, resolveConfigPath } = await import('../utils.js');
+    const config = (await loadConfig(resolveConfigPath(cwd))) as StrategyResolverConfig;
+    return config;
+    // totem-context: intentional best-effort load — missing/unparseable config is a legitimate state for a freshly-cloned consumer repo; resolver's other layers (env / sibling / submodule) still apply.
+  } catch {
+    return undefined;
+  }
 }
 
 function targetSubpath(type: GovernanceType): string {
@@ -61,7 +96,11 @@ function templateFilename(type: GovernanceType): string {
  *
  * Also throws `TotemError` when cwd is not inside a git repo.
  */
-export function resolveGovernancePaths(cwd: string, type: GovernanceType): GovernancePaths {
+export function resolveGovernancePaths(
+  cwd: string,
+  type: GovernanceType,
+  config?: StrategyResolverConfig,
+): GovernancePaths {
   const gitRoot = resolveGitRoot(cwd);
   if (gitRoot === null) {
     throw new TotemError(
@@ -83,7 +122,7 @@ export function resolveGovernancePaths(cwd: string, type: GovernanceType): Gover
   if (standaloneHasTarget && standaloneHasTemplates) {
     rootDir = gitRoot;
   } else {
-    const status = resolveStrategyRoot(cwd, { gitRoot });
+    const status = resolveStrategyRoot(cwd, { gitRoot, config });
     if (!status.resolved) {
       throw new TotemError(
         'CONFIG_MISSING',
@@ -414,7 +453,7 @@ export function scaffoldGovernanceArtifact(
   options: ScaffoldOptions,
   internals: ScaffoldArtifactInternals = {},
 ): ScaffoldArtifactResult {
-  const paths = resolveGovernancePaths(options.cwd, options.type);
+  const paths = resolveGovernancePaths(options.cwd, options.type, options.config);
 
   // Sanitize once at the orchestrator entry. Both the filename slug and the
   // template body render against the cleaned form so a title carrying

@@ -83,14 +83,16 @@ function readEnvValue(env: Record<string, string | undefined>): string | undefin
 
 /**
  * Resolve a raw value (env or config) to an absolute path. Absolute values
- * are returned as-is; relative values anchor at the supplied base
- * (`gitRoot ?? cwd`) via `path.join` so that an absolute user-provided
- * value doesn't override the anchor (which `path.resolve` would).
+ * are returned as-is and bypass the anchor; relative values anchor at the
+ * lazily-evaluated base (`anchorThunk()`) via `path.join` so that an
+ * absolute user-provided value doesn't override the anchor (which
+ * `path.resolve` would). The thunk lets the resolver defer the
+ * `resolveGitRoot` probe until the relative path actually needs it.
  */
-function resolveValue(raw: string, anchor: string): string {
+function resolveValue(raw: string, anchorThunk: () => string): string {
   const trimmed = raw.trim();
   if (path.isAbsolute(trimmed)) return path.normalize(trimmed);
-  return path.normalize(path.join(anchor, trimmed));
+  return path.normalize(path.join(anchorThunk(), trimmed));
 }
 
 /**
@@ -110,38 +112,59 @@ function isDirectory(p: string): boolean {
 /**
  * Walk the four-layer precedence chain. Returns a `StrategyRootStatus`
  * discriminated union.
+ *
+ * The git-root probe is lazy. `resolveGitRoot` can throw `TotemGitError` on
+ * permission errors or a corrupted index; an eager probe would short-circuit
+ * an absolute env / config override that doesn't need git context at all.
+ * `getAnchor` defers the probe and swallows throws, so absolute overrides
+ * always get their precedence-1 / precedence-2 chance.
  */
 export function resolveStrategyRoot(
   cwd: string,
   options: StrategyResolverOptions = {},
 ): StrategyRootStatus {
   const env = options.env ?? process.env;
-  const gitRoot = options.gitRoot !== undefined ? options.gitRoot : resolveGitRoot(cwd);
   const config = options.config;
-  // Unified anchor — gitRoot when available, cwd otherwise. The cwd fallback
-  // matches the design spec's "Missing git context" trap and lets relative
-  // env / config / sibling / submodule layers resolve in non-git contexts
-  // (e.g., a one-off script outside a checkout). Downstream consumers
-  // validate the resolved path and fail loudly if the cwd-anchored result
-  // isn't viable.
-  const anchor = gitRoot ?? cwd;
 
-  // Layer 1 — env var
+  let cachedAnchor: string | undefined;
+  const getAnchor = (): string => {
+    if (cachedAnchor !== undefined) return cachedAnchor;
+    let gitRoot: string | null;
+    if (options.gitRoot !== undefined) {
+      gitRoot = options.gitRoot;
+    } else {
+      try {
+        gitRoot = resolveGitRoot(cwd);
+        // totem-context: intentional fall-through — resolveGitRoot throws on permission errors / corrupted index; fall back to cwd so absolute overrides and downstream consumers (governance throw, doctor warn, MCP unresolved payload) handle the wrong-path case explicitly.
+      } catch {
+        gitRoot = null;
+      }
+    }
+    cachedAnchor = gitRoot ?? cwd;
+    return cachedAnchor;
+  };
+
+  // Layer 1 — env var. Absolute values bypass the anchor probe entirely
+  // (resolveValue's `path.isAbsolute` short-circuits before calling the thunk).
   const envValue = readEnvValue(env);
   if (envValue !== undefined) {
-    const resolved = resolveValue(envValue, anchor);
+    const resolved = resolveValue(envValue, getAnchor);
     if (isDirectory(resolved)) {
       return { resolved: true, path: resolved, source: 'env' };
     }
   }
 
-  // Layer 2 — config field
+  // Layer 2 — config field. Same absolute-bypass behavior.
   if (config?.strategyRoot !== undefined && config.strategyRoot.trim().length > 0) {
-    const resolved = resolveValue(config.strategyRoot, anchor);
+    const resolved = resolveValue(config.strategyRoot, getAnchor);
     if (isDirectory(resolved)) {
       return { resolved: true, path: resolved, source: 'config' };
     }
   }
+
+  // Layers 3 + 4 require an anchor — sibling and submodule are both relative
+  // to the anchor by construction.
+  const anchor = getAnchor();
 
   // Layer 3 — sibling at <anchor>/../totem-strategy
   const sibling = path.normalize(path.join(anchor, '..', SIBLING_DIRNAME));

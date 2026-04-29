@@ -5,6 +5,7 @@ import {
   CONFIG_FILES,
   describeProject,
   type ProjectDescription,
+  type TotemConfig,
   TotemConfigSchema,
   TotemError,
 } from '@mmnto/totem';
@@ -26,6 +27,7 @@ interface LegacyContext {
   legacy: ProjectDescription;
   projectRoot: string;
   totemDir: string;
+  config: TotemConfig;
 }
 
 /**
@@ -46,6 +48,7 @@ async function getLegacyContext(): Promise<LegacyContext> {
       legacy: describeProject(ctx.config, ctx.projectRoot),
       projectRoot: ctx.projectRoot,
       totemDir: ctx.config.totemDir,
+      config: ctx.config,
     };
   } catch {
     // Expected on Lite tier — fall through to direct config load
@@ -86,12 +89,17 @@ async function getLegacyContext(): Promise<LegacyContext> {
     legacy: describeProject(config, configRoot),
     projectRoot: configRoot,
     totemDir: config.totemDir,
+    config,
   };
 }
 
-function buildRichState(projectRoot: string, totemDir: string): RichProjectState {
+function buildRichState(
+  projectRoot: string,
+  totemDir: string,
+  config: TotemConfig,
+): RichProjectState {
   return {
-    strategyPointer: extractStrategyPointer(projectRoot),
+    strategyPointer: extractStrategyPointer(projectRoot, config),
     gitState: extractGitState(projectRoot),
     packageVersions: extractPackageVersions(projectRoot),
     ruleCounts: extractRuleCounts(projectRoot, totemDir),
@@ -121,9 +129,9 @@ export function registerDescribeProject(server: McpServer): void {
     },
     async (args: { includeRichState?: boolean }) => {
       try {
-        const { legacy, projectRoot, totemDir } = await getLegacyContext();
+        const { legacy, projectRoot, totemDir, config } = await getLegacyContext();
         const output: DescribeProjectOutput = args.includeRichState
-          ? { ...legacy, richState: buildRichState(projectRoot, totemDir) }
+          ? { ...legacy, richState: buildRichState(projectRoot, totemDir, config) }
           : { ...legacy };
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(output, null, 2) }],
