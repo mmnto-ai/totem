@@ -220,7 +220,7 @@ The classifier is a fixed table over the four-axis cube `(severityBucket × roun
   [Retrospect]   • If next round contains only nit-severity findings, ship + file 3 follow-up issue(s) for the route-out candidates above.
   ```
 
-- **Out of scope (v0.1):** auto-filing follow-up issues (`--auto-file` is deferred to a follow-up ticket because mass-filing is irreversible), comment-drift detection, trap-ledger writes, LLM-driven classification.
+- **Not supported in this command:** `--auto-file` (mass issue filing), comment-drift detection, trap-ledger writes, LLM-driven classification.
 
 ### `totem review-learn <pr-number>`
 

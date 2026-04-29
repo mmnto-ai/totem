@@ -116,6 +116,7 @@ describe('GitHubCliPrAdapter', () => {
           diffHunk: '@@ -1,3 +1,4 @@',
           inReplyToId: undefined,
           createdAt: '2026-03-01T00:00:00Z',
+          pullRequestReviewId: null,
         },
         {
           id: 101,
@@ -125,6 +126,7 @@ describe('GitHubCliPrAdapter', () => {
           diffHunk: '@@ -1,3 +1,4 @@',
           inReplyToId: 100,
           createdAt: '2026-03-01T01:00:00Z',
+          pullRequestReviewId: null,
         },
       ]);
     });

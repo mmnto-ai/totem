@@ -23,6 +23,8 @@
  * surface emits suggested titles + bodies that the human can copy-paste.
  */
 
+import type { RetrospectFinding } from '@mmnto/totem';
+
 import type { NormalizedBotFinding } from '../parsers/bot-review-parser.js';
 
 // totem-context: type-only imports above are erased at compile time and don't
@@ -38,6 +40,27 @@ const DEFAULT_THRESHOLD = 5;
 const BODY_EXCERPT_MAX = 280;
 /** Jaccard similarity above which a finding signature is treated as covered by an existing compiled rule. Mirrors `recurrence-stats.ts` `COVERAGE_JACCARD_THRESHOLD`. */
 const RULE_COVERAGE_JACCARD_THRESHOLD = 0.6;
+/** Max chars rendered for a finding's body excerpt in the console report. */
+const RENDER_SNIPPET_MAX = 80;
+
+/**
+ * Strip ANSI/control bytes from text that originated in untrusted GitHub
+ * review content before it lands in `log.dim()`. Per CR mmnto-ai/totem#1734
+ * round-2: raw `bodyExcerpt` printed without sanitization is a terminal-
+ * injection vector (a hostile reviewer can plant CSI sequences that spoof
+ * cursor moves or color resets).
+ *
+ * Removes:
+ * - CSI sequences (ESC `[` … final byte): the standard ANSI escape form.
+ * - C0/C1 control bytes other than `\n` and `\t` (which `replace(/\s+/g, ' ')`
+ *   downstream collapses anyway, but pre-replacing makes the surface stable
+ *   regardless of caller order).
+ */
+function sanitizeForTerminal(value: string): string {
+  return value
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, ' ');
+}
 
 // ─── Public option surface ───────────────────────────
 
@@ -159,11 +182,12 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
       user_login: r.user_login,
     }));
 
-  // Pre-compute the SHA bucket for each finding via timestamp join.
-  // For each inline bot comment, find the latest bot review submission
-  // whose `submitted_at <= comment.createdAt`, take its commit_id.
-  // Comments without a parent submission (rare — orphan inline) bucket
-  // into the synthetic '' SHA.
+  // Bucket each finding by the parent review submission's commit_id.
+  // Per CR mmnto-ai/totem#1734 round-2: `created_at` can predate
+  // `submitted_at` for pending/draft reviews, so a timestamp join
+  // mis-attributes the head SHA. The GitHub API exposes
+  // `pull_request_review_id` on each review comment as the stable
+  // foreign key back to its parent submission — we use that.
   const sortedSubs = [...botSubmissions].sort((a, b) => {
     const at = a.submitted_at ?? '';
     const bt = b.submitted_at ?? '';
@@ -171,19 +195,14 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
     if (at > bt) return 1;
     return 0;
   });
-  function shaForInlineComment(createdAt: string | undefined): string {
-    if (!createdAt) return '';
-    let chosen = '';
-    for (const s of sortedSubs) {
-      const t = s.submitted_at ?? '';
-      if (t.length === 0) continue;
-      if (t <= createdAt) {
-        chosen = typeof s.commit_id === 'string' ? s.commit_id : '';
-      } else {
-        break;
-      }
-    }
-    return chosen;
+  /** review_id → commit_id lookup over bot-authored submissions only. */
+  const reviewIdToSha = new Map<number, string>();
+  for (const s of botSubmissions) {
+    if (typeof s.commit_id === 'string') reviewIdToSha.set(s.id, s.commit_id);
+  }
+  function shaForInlineComment(reviewId: number | null | undefined): string {
+    if (typeof reviewId !== 'number') return '';
+    return reviewIdToSha.get(reviewId) ?? '';
   }
 
   // 3. Inline + review-body bot finding extraction.
@@ -214,7 +233,7 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
         resolutionSignal: 'none',
         rootCommentId: c.id,
       },
-      sha: shaForInlineComment(c.createdAt),
+      sha: shaForInlineComment(c.pullRequestReviewId),
       observedAt: c.createdAt ?? '',
     });
   }
@@ -338,19 +357,10 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
     observedAt: f.observedAt,
   }));
 
-  const enriched: Array<{
-    signature: string;
-    tool: 'coderabbit' | 'gca' | 'sarif' | 'override' | 'unknown';
-    severityBucket: 'critical' | 'high' | 'medium' | 'low' | 'nit';
-    bodyExcerpt: string;
-    file: string;
-    line?: number;
-    roundNumber: number;
-    crossPrRecurrence: number;
-    coveredByRule: boolean;
-    classification: 'route-out' | 'in-pr-fix' | 'undetermined';
-    routeOutReason?: string;
-  }> = [];
+  // Per discriminated union (CR mmnto-ai/totem#1734 round-2): `routeOutReason`
+  // is present iff `classification === 'route-out'`; the schema infers
+  // `RetrospectFinding` accordingly.
+  const enriched: RetrospectFinding[] = [];
 
   for (const a of annotated) {
     const normalized = normalizeFindingBody(a.finding.body);
@@ -382,7 +392,7 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
       coveredByRule,
     });
 
-    enriched.push({
+    const base = {
       signature,
       tool,
       severityBucket,
@@ -392,9 +402,23 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
       roundNumber: a.roundNumber > 0 ? a.roundNumber : 1,
       crossPrRecurrence,
       coveredByRule,
-      classification: verdict.classification,
-      routeOutReason: verdict.routeOutReason,
-    });
+    };
+    if (verdict.classification === 'route-out' && verdict.routeOutReason !== undefined) {
+      enriched.push({
+        ...base,
+        classification: 'route-out',
+        routeOutReason: verdict.routeOutReason,
+      });
+    } else if (verdict.classification === 'route-out') {
+      // Defensive: classifier returned 'route-out' without a reason — should
+      // be unreachable per the table. Fail loud (Tenet 4) so the missing
+      // catalog entry surfaces immediately.
+      throw new Error(
+        `[Totem Error] classifier returned route-out without routeOutReason for signature ${signature}`,
+      );
+    } else {
+      enriched.push({ ...base, classification: verdict.classification });
+    }
   }
 
   // 8. Distribution counts.
@@ -547,8 +571,11 @@ function renderReport(report: RenderableReport, log: MinimalLogger): void {
   if (report.routeOutCandidates.length > 0) {
     log.info(TAG, `Route-out candidates (${report.routeOutCandidates.length}):`);
     for (const f of report.routeOutCandidates) {
-      const snippet = f.bodyExcerpt.replace(/\s+/g, ' ').slice(0, 80);
-      const reason = f.routeOutReason ?? '';
+      const snippet = sanitizeForTerminal(f.bodyExcerpt)
+        .replace(/\s+/g, ' ')
+        .slice(0, RENDER_SNIPPET_MAX);
+      // Schema discriminates: `f.classification === 'route-out'` guarantees `routeOutReason`.
+      const reason = f.routeOutReason;
       log.dim(
         TAG,
         `  [r${f.roundNumber}] ${f.severityBucket} ${f.signature} — ${snippet} (${reason})`,
@@ -562,7 +589,9 @@ function renderReport(report: RenderableReport, log: MinimalLogger): void {
   if (report.inPrFixes.length > 0) {
     log.info(TAG, `In-PR fixes (${report.inPrFixes.length}):`);
     for (const f of report.inPrFixes) {
-      const snippet = f.bodyExcerpt.replace(/\s+/g, ' ').slice(0, 80);
+      const snippet = sanitizeForTerminal(f.bodyExcerpt)
+        .replace(/\s+/g, ' ')
+        .slice(0, RENDER_SNIPPET_MAX);
       log.dim(TAG, `  [r${f.roundNumber}] ${f.severityBucket} ${f.signature} — ${snippet}`);
     }
   } else {
@@ -573,7 +602,9 @@ function renderReport(report: RenderableReport, log: MinimalLogger): void {
   if (report.undetermined.length > 0) {
     log.info(TAG, `Undetermined (${report.undetermined.length}):`);
     for (const f of report.undetermined) {
-      const snippet = f.bodyExcerpt.replace(/\s+/g, ' ').slice(0, 80);
+      const snippet = sanitizeForTerminal(f.bodyExcerpt)
+        .replace(/\s+/g, ' ')
+        .slice(0, RENDER_SNIPPET_MAX);
       log.dim(TAG, `  [r${f.roundNumber}] ${f.severityBucket} ${f.signature} — ${snippet}`);
     }
   }

@@ -78,6 +78,7 @@ function makeInlineComment(overrides: {
   filePath?: string;
   line?: number;
   createdAt?: string;
+  pullRequestReviewId?: number | null;
 }) {
   return {
     id: overrides.id,
@@ -87,6 +88,11 @@ function makeInlineComment(overrides: {
     diffHunk: `@@ -1,3 +${overrides.line ?? 42},3 @@`,
     inReplyToId: undefined,
     createdAt: overrides.createdAt ?? '2026-04-29T01:00:30.000Z',
+    // Default to the first review submission's id so timestamp-free joins
+    // still work for the existing fixtures. Tests explicitly exercising
+    // round-grouping override this.
+    pullRequestReviewId:
+      overrides.pullRequestReviewId === undefined ? 1 : overrides.pullRequestReviewId,
   };
 }
 
@@ -508,20 +514,17 @@ describe('runRetrospect — no-LLM invariant', () => {
     expect(source).not.toMatch(/LanceStore/);
   });
 
-  // ─── Runtime guard ────────────────────────────────────
-  // Even if some import sneaks in, the orchestrator factory must not be
-  // called during a retrospect run. We inspect the on-disk source again
-  // because mocking the orchestrator factory at runtime would be a
-  // tautology — the import is statically banned by the guard above.
+  // ─── Dynamic-import allowlist ────────────────────────
+  // Every `await import(...)` in retrospect.ts must resolve to a known
+  // non-LLM module. Closes the static-source-grep gap where a transitive
+  // orchestrator import via a benign-looking path would be missed.
 
-  it('keeps every runtime call sourced from non-LLM modules', async () => {
+  it('keeps every dynamic import sourced from non-LLM modules', async () => {
     const cmdSource = fs.readFileSync(path.join(__dirname, 'retrospect.ts'), 'utf-8');
-    // Confirm every dynamic import in the command resolves to a known
-    // non-LLM module. The list mirrors the static-import section near
-    // the top of runRetrospect.
     const allowedDynamicImports = [
       "await import('node:fs')",
       "await import('node:path')",
+      "await import('node:crypto')",
       "await import('zod')",
       "await import('../adapters/github-cli-pr.js')",
       "await import('../ui.js')",
@@ -529,12 +532,58 @@ describe('runRetrospect — no-LLM invariant', () => {
       "await import('@mmnto/totem')",
       "await import('../utils.js')",
     ];
-    // Each one should be present at least once.
+    // Strip allowed imports; what's left should contain NO stray imports.
+    let residual = cmdSource;
     for (const expected of allowedDynamicImports) {
-      expect(cmdSource).toContain(expected);
+      // totem-context: we're stripping allowed dynamic-import substrings, not concatenating tokens. The empty separator is the correct semantics for the static-source-grep guard.
+      residual = residual.split(expected).join('');
     }
-    // No stray `await import('...orchestrator...')` lines.
-    expect(cmdSource).not.toMatch(/await import\(['"][^'"]*orchestrator[^'"]*['"]\)/);
+    // Any remaining `await import(...)` is a guard violation.
+    expect(residual).not.toMatch(/await import\(['"][^'"]+['"]\)/);
+  });
+});
+
+// ─── Runtime orchestrator spy guard ────────────────────────
+// Per CR mmnto-ai/totem#1734 round-2: source-text inspection alone can
+// be fooled by a transitive import or an aliased dynamic import. Mock the
+// orchestrator factory module at runtime; if anything in retrospect's
+// import chain reaches it, the spy fires. We require zero invocations.
+//
+// vi.mock is hoisted, so this block lives at module scope.
+const orchestratorSpy = vi.fn();
+vi.mock('../orchestrators/orchestrator.js', () => ({
+  createOrchestrator: (...args: unknown[]) => {
+    orchestratorSpy(...args);
+    return () => {
+      throw new Error('createOrchestrator must NEVER be called from runRetrospect');
+    };
+  },
+  resolveOrchestrator: (...args: unknown[]) => {
+    orchestratorSpy(...args);
+    throw new Error('resolveOrchestrator must NEVER be called from runRetrospect');
+  },
+}));
+
+describe('runRetrospect — runtime orchestrator spy', () => {
+  it('never invokes createOrchestrator or resolveOrchestrator across a real run', async () => {
+    orchestratorSpy.mockClear();
+
+    mockFetchPr.mockReturnValue(makePr({ number: 1713 }));
+    mockFetchReviews.mockReturnValue([
+      makeReview({ id: 1, commit_id: 'sha-A', submitted_at: '2026-04-29T01:00:00.000Z' }),
+      makeReview({ id: 2, commit_id: 'sha-B', submitted_at: '2026-04-29T02:00:00.000Z' }),
+      makeReview({ id: 3, commit_id: 'sha-C', submitted_at: '2026-04-29T03:00:00.000Z' }),
+      makeReview({ id: 4, commit_id: 'sha-D', submitted_at: '2026-04-29T04:00:00.000Z' }),
+      makeReview({ id: 5, commit_id: 'sha-E', submitted_at: '2026-04-29T05:00:00.000Z' }),
+    ]);
+    mockFetchReviewComments.mockReturnValue([
+      makeInlineComment({ id: 100, createdAt: '2026-04-29T01:30:00.000Z' }),
+    ]);
+
+    const { runRetrospect } = await import('./retrospect.js');
+    await runRetrospect({ prNumber: '1713', threshold: 5, force: true });
+
+    expect(orchestratorSpy).toHaveBeenCalledTimes(0);
   });
 });
 
@@ -615,6 +664,111 @@ describe('runRetrospect — input validation (mmnto-ai/totem#1734 review-1)', ()
     await expect(runRetrospect({ prNumber: '0', force: true })).rejects.toThrow(
       /Invalid PR number/,
     );
+  });
+});
+
+describe('runRetrospect — pull_request_review_id round-grouping (CR mmnto-ai/totem#1734 R2)', () => {
+  it('buckets each finding via review_id even when comment.created_at predates submitted_at (draft review)', async () => {
+    mockFetchPr.mockReturnValue(makePr({ number: 1713 }));
+    // Two reviews: review-1 SUBMITTED much later than its comments were CREATED
+    // (comments were drafted while the review was pending). A timestamp join
+    // would mis-attribute review-1's comments to review-2 because comment
+    // createdAt < review-1 submittedAt < review-2 submittedAt is FALSE here.
+    mockFetchReviews.mockReturnValue([
+      makeReview({
+        id: 1,
+        commit_id: 'sha-A',
+        submitted_at: '2026-04-29T05:00:00.000Z',
+        user_login: 'coderabbitai[bot]',
+      }),
+      makeReview({
+        id: 2,
+        commit_id: 'sha-B',
+        submitted_at: '2026-04-29T05:30:00.000Z',
+        user_login: 'coderabbitai[bot]',
+      }),
+    ]);
+    mockFetchReviewComments.mockReturnValue([
+      // Comment drafted at 04:30 (BEFORE review-1's submitted_at 05:00)
+      // — pending review behavior. Foreign-key join puts it into review-1
+      // (sha-A); a naive timestamp join would put it nowhere (no SHA
+      // satisfies submitted_at <= 04:30).
+      makeInlineComment({
+        id: 100,
+        author: 'coderabbitai[bot]',
+        createdAt: '2026-04-29T04:30:00.000Z',
+        pullRequestReviewId: 1,
+      }),
+      // Comment drafted at 05:25 (BETWEEN review-1 and review-2's
+      // submitted_at) but belongs to review-2 (foreign key). A timestamp
+      // join would mis-attribute it to review-1 (sha-A).
+      makeInlineComment({
+        id: 101,
+        author: 'coderabbitai[bot]',
+        createdAt: '2026-04-29T05:25:00.000Z',
+        pullRequestReviewId: 2,
+      }),
+    ]);
+
+    const outPath = path.join(tmpDir, 'out.json');
+    const { runRetrospect } = await import('./retrospect.js');
+    await runRetrospect({ prNumber: '1713', threshold: 1, force: true, out: outPath });
+
+    const report = JSON.parse(fs.readFileSync(outPath, 'utf-8'));
+    expect(report.totalFindings).toBe(2);
+    // Two distinct rounds (one per SHA) confirm the foreign-key join.
+    expect(report.rounds.length).toBe(2);
+    expect(new Set(report.rounds.map((r: { headSha: string }) => r.headSha))).toEqual(
+      new Set(['sha-A', 'sha-B']),
+    );
+  });
+});
+
+describe('runRetrospect — terminal-output sanitization (CR mmnto-ai/totem#1734 R2)', () => {
+  it('strips ANSI/control bytes from bodyExcerpt before logging', async () => {
+    // Set up enough rounds to clear the threshold so the renderer fires.
+    mockFetchPr.mockReturnValue(makePr({ number: 1713 }));
+    mockFetchReviews.mockReturnValue([
+      makeReview({
+        id: 1,
+        commit_id: 'sha-A',
+        submitted_at: '2026-04-29T01:00:00.000Z',
+        user_login: 'coderabbitai[bot]',
+      }),
+      makeReview({
+        id: 2,
+        commit_id: 'sha-B',
+        submitted_at: '2026-04-29T02:00:00.000Z',
+        user_login: 'coderabbitai[bot]',
+      }),
+    ]);
+    // Hostile body: ANSI red-fg + cursor-up + bell + raw control bytes.
+    const hostile = '\x1b[31mFAKE CRITICAL\x1b[0m\x1b[2A\x07 should look fine after sanitize';
+    mockFetchReviewComments.mockReturnValue([
+      makeInlineComment({
+        id: 100,
+        body: hostile,
+        author: 'coderabbitai[bot]',
+        pullRequestReviewId: 1,
+      }),
+    ]);
+
+    const { runRetrospect } = await import('./retrospect.js');
+    await runRetrospect({ prNumber: '1713', threshold: 1, force: true });
+
+    // Every log call's args[1] must contain no escape or control bytes.
+    const allLogs = [
+      ...mockLog.info.mock.calls,
+      ...mockLog.dim.mock.calls,
+      ...mockLog.warn.mock.calls,
+    ];
+    for (const call of allLogs) {
+      const text = String(call[1] ?? '');
+      // eslint-disable-next-line no-control-regex
+      expect(text).not.toMatch(/\x1b\[/);
+      // eslint-disable-next-line no-control-regex
+      expect(text).not.toMatch(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/);
+    }
   });
 });
 

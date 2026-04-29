@@ -48,8 +48,22 @@ export type RetrospectClassification = z.infer<typeof RetrospectClassificationSc
 /** Source classification of a finding (mirror of `RecurrenceTool` minus `'mixed'`). */
 const RetrospectFindingToolSchema = z.enum(['coderabbit', 'gca', 'sarif', 'override', 'unknown']);
 
-/** A single bot finding enriched with substrate signals + classification. */
-export const RetrospectFindingSchema = z.object({
+/**
+ * Closed catalog of `route-out` reasons. The Zod-side mirror of
+ * `RETROSPECT_ROUTE_OUT_REASONS` (defined later in the file). Used by the
+ * discriminated `RetrospectFindingSchema` to enforce the deterministic
+ * contract: every `route-out` finding carries a reason from this enum, and
+ * non-route-out findings forbid the field entirely. Per CR mmnto-ai/totem#1734
+ * round-2.
+ */
+export const RetrospectRouteOutReasonSchema = z.enum([
+  'covered by existing compiled rule',
+  'rule-covered class flagged late — retroactive shouldn’t block ship',
+  'frequent across other PRs — file follow-up to compile into a rule',
+  'low/nit severity flagged late in the bot-review loop',
+]);
+
+const RetrospectFindingBaseSchema = z.object({
   /** Stable signature hash (16-char) — matches the recurrence-stats vocabulary. */
   signature: z.string().min(1),
   /** Source bot/tool. */
@@ -68,11 +82,30 @@ export const RetrospectFindingSchema = z.object({
   crossPrRecurrence: z.number().int().min(0),
   /** True if the signature heuristically maps to an existing compiled rule (Jaccard ≥ 0.6). */
   coveredByRule: z.boolean(),
-  /** Deterministic classification verdict. */
-  classification: RetrospectClassificationSchema,
-  /** Reason string from a fixed catalog when classification is `route-out`. */
-  routeOutReason: z.string().optional(),
 });
+
+/**
+ * Discriminated union on `classification`: `route-out` requires a reason from
+ * the closed catalog; `in-pr-fix` and `undetermined` forbid the field entirely.
+ * Per CR mmnto-ai/totem#1734 round-2 — the prior `routeOutReason: z.string().optional()`
+ * leaked the deterministic contract.
+ */
+export const RetrospectFindingSchema = z.discriminatedUnion('classification', [
+  RetrospectFindingBaseSchema.extend({
+    classification: z.literal('route-out'),
+    /** Reason from the closed catalog (`RETROSPECT_ROUTE_OUT_REASONS`). */
+    routeOutReason: RetrospectRouteOutReasonSchema,
+  }),
+  // `.strict()` so a stray `routeOutReason` on a non-route-out finding fails
+  // the schema instead of being silently stripped — the deterministic
+  // contract is "reason iff route-out", and silent-strip would hide a bug.
+  RetrospectFindingBaseSchema.extend({
+    classification: z.literal('in-pr-fix'),
+  }).strict(),
+  RetrospectFindingBaseSchema.extend({
+    classification: z.literal('undetermined'),
+  }).strict(),
+]);
 
 export type RetrospectFinding = z.infer<typeof RetrospectFindingSchema>;
 
@@ -342,7 +375,12 @@ export function classifyFinding(input: ClassifyFindingInput): {
 export function buildStopConditions(
   report: Pick<
     RetrospectReport,
-    'rounds' | 'routeOutCandidates' | 'inPrFixes' | 'dedupRate' | 'findingDistribution'
+    | 'rounds'
+    | 'routeOutCandidates'
+    | 'inPrFixes'
+    | 'undetermined'
+    | 'dedupRate'
+    | 'findingDistribution'
   >,
 ): string[] {
   const out: string[] = [];
@@ -359,9 +397,13 @@ export function buildStopConditions(
   }
 
   // 2. ≥ 50% of LAST round's findings are rule-covered → consider shipping.
+  //    Denominator must include `undetermined` so uncovered findings without
+  //    a verdict don't get hidden from the ratio (CR mmnto-ai/totem#1734
+  //    round-2). Otherwise the stop condition can fire early when a chunk
+  //    of the round is undetermined-uncovered.
   if (lastRound && lastRound.findingCount > 0) {
     const lastRoundFindings = report.routeOutCandidates
-      .concat(report.inPrFixes)
+      .concat(report.inPrFixes, report.undetermined)
       .filter((f) => f.roundNumber === lastRound.roundNumber);
     const ruleCovered = lastRoundFindings.filter((f) => f.coveredByRule).length;
     const ratio = ruleCovered / Math.max(1, lastRoundFindings.length);

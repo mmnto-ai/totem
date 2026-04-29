@@ -7476,10 +7476,10 @@
         "packages/core/src/sys/git.ts"
       ],
       "severity": "warning",
-      "unverified": true,
       "status": "archived",
       "archivedReason": "Duplicate of db1a795f — same astGrepPattern (new Error($MSG + $ERR)), same fileGlobs (packages/core/src/sys/git.ts), same goodExample shape (cause property). Two related lessons from the same PR (mmnto-ai/totem#1727 / mmnto-ai/totem#1729) compiled into structurally identical rules. Keeping db1a795f as the canonical.",
-      "archivedAt": "2026-04-29T03:15:25.913Z"
+      "archivedAt": "2026-04-29T03:15:25.913Z",
+      "unverified": true
     }
   ],
   "nonCompilable": [

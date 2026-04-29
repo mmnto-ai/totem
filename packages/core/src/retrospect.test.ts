@@ -22,23 +22,96 @@ import {
 
 // ─── Helpers ───────────────────────────────────────────
 
-function makeFinding(overrides: Partial<RetrospectFinding>): RetrospectFinding {
-  return {
+type FindingOverrides = {
+  signature?: string;
+  tool?: 'coderabbit' | 'gca' | 'sarif' | 'override' | 'unknown';
+  severityBucket?: 'critical' | 'high' | 'medium' | 'low' | 'nit';
+  bodyExcerpt?: string;
+  file?: string;
+  line?: number;
+  roundNumber?: number;
+  crossPrRecurrence?: number;
+  coveredByRule?: boolean;
+  classification?: 'route-out' | 'in-pr-fix' | 'undetermined';
+  routeOutReason?: RetrospectFinding extends { routeOutReason: infer R } ? R : never;
+};
+
+function makeFinding(overrides: FindingOverrides = {}): RetrospectFinding {
+  const base = {
     signature: '0123456789abcdef',
-    tool: 'coderabbit',
-    severityBucket: 'medium',
+    tool: 'coderabbit' as const,
+    severityBucket: 'medium' as const,
     bodyExcerpt: 'a finding',
     file: 'src/x.ts',
     line: 10,
     roundNumber: 1,
     crossPrRecurrence: 0,
     coveredByRule: false,
-    classification: 'in-pr-fix',
-    ...overrides,
   };
+  const classification = overrides.classification ?? 'in-pr-fix';
+  const merged = {
+    ...base,
+    ...overrides,
+    classification,
+  };
+  if (classification === 'route-out') {
+    return {
+      ...merged,
+      classification: 'route-out',
+      routeOutReason: overrides.routeOutReason ?? 'covered by existing compiled rule',
+    };
+  }
+  // in-pr-fix and undetermined forbid routeOutReason; strip if present.
+  const { routeOutReason: _, ...rest } = merged as typeof merged & {
+    routeOutReason?: unknown;
+  };
+  void _;
+  return { ...rest, classification } as RetrospectFinding;
 }
 
 // ─── Schemas ──────────────────────────────────────────
+
+describe('RetrospectFindingSchema discriminated union (CR mmnto-ai/totem#1734 R2)', () => {
+  it('accepts a route-out finding with a catalog reason', () => {
+    const result = RetrospectFindingSchema.safeParse(makeFinding({ classification: 'route-out' }));
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a route-out finding without routeOutReason', () => {
+    const finding = makeFinding({ classification: 'route-out' });
+    // Strip routeOutReason → schema must reject.
+    const { routeOutReason: _, ...stripped } = finding as typeof finding & {
+      routeOutReason: string;
+    };
+    void _;
+    const result = RetrospectFindingSchema.safeParse(stripped);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a route-out finding with a routeOutReason outside the catalog', () => {
+    const result = RetrospectFindingSchema.safeParse({
+      ...makeFinding({ classification: 'route-out' }),
+      routeOutReason: 'arbitrary prose not in the enum',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an in-pr-fix finding that carries a routeOutReason', () => {
+    const result = RetrospectFindingSchema.safeParse({
+      ...makeFinding({ classification: 'in-pr-fix' }),
+      routeOutReason: 'covered by existing compiled rule',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an undetermined finding that carries a routeOutReason', () => {
+    const result = RetrospectFindingSchema.safeParse({
+      ...makeFinding({ classification: 'undetermined' }),
+      routeOutReason: 'covered by existing compiled rule',
+    });
+    expect(result.success).toBe(false);
+  });
+});
 
 describe('RetrospectRoundSchema', () => {
   it('parses a well-formed round', () => {
@@ -392,12 +465,18 @@ describe('buildStopConditions', () => {
     over: Partial<RetrospectReport>,
   ): Pick<
     RetrospectReport,
-    'rounds' | 'routeOutCandidates' | 'inPrFixes' | 'dedupRate' | 'findingDistribution'
+    | 'rounds'
+    | 'routeOutCandidates'
+    | 'inPrFixes'
+    | 'undetermined'
+    | 'dedupRate'
+    | 'findingDistribution'
   > {
     return {
       rounds: [],
       routeOutCandidates: [],
       inPrFixes: [],
+      undetermined: [],
       dedupRate: 0,
       findingDistribution: { byTool: {}, bySeverity: {}, byClassification: {} },
       ...over,
@@ -406,6 +485,39 @@ describe('buildStopConditions', () => {
 
   it('emits nothing on a totally empty report', () => {
     expect(buildStopConditions(reportShell({}))).toEqual([]);
+  });
+
+  it('uses undetermined findings in the rule-covered ratio denominator (CR mmnto-ai/totem#1734 R2)', () => {
+    // 1 covered route-out + 0 inPrFixes + 2 uncovered undetermined → 33% covered.
+    // Pre-fix denominator excluded undetermined → 100% covered → false-fire.
+    const conditions = buildStopConditions(
+      reportShell({
+        rounds: [{ roundNumber: 8, submittedAt: '2026-04-29T00:00:00.000Z', findingCount: 3 }],
+        routeOutCandidates: [
+          makeFinding({
+            roundNumber: 8,
+            coveredByRule: true,
+            classification: 'route-out',
+            signature: 'a',
+          }),
+        ],
+        undetermined: [
+          makeFinding({
+            roundNumber: 8,
+            coveredByRule: false,
+            classification: 'undetermined',
+            signature: 'b',
+          }),
+          makeFinding({
+            roundNumber: 8,
+            coveredByRule: false,
+            classification: 'undetermined',
+            signature: 'c',
+          }),
+        ],
+      }),
+    );
+    expect(conditions.find((c) => c.includes('covered by compiled rules'))).toBeUndefined();
   });
 
   it('emits the route-out follow-up suggestion with N=1 when one route-out candidate exists', () => {

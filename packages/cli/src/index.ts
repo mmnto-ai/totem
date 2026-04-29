@@ -14,6 +14,11 @@ import { reapOrphanedTempFiles } from './utils.js';
 const require = createRequire(import.meta.url);
 const { version } = z.object({ version: z.string() }).parse(require('../package.json'));
 
+// Retrospect thresholds (mmnto-ai/totem#1713). Shared across option default,
+// help text, and validation so they don't drift.
+const RETROSPECT_DEFAULT_THRESHOLD = 5;
+const RETROSPECT_MIN_THRESHOLD = 1;
+
 function requireGhCli(): void {
   try {
     execSync('gh --version', { stdio: 'ignore', timeout: 3000 });
@@ -428,8 +433,8 @@ program
   )
   .option(
     '--threshold <n>',
-    'Minimum bot-review round count to render the report (default: 5)',
-    '5',
+    `Minimum bot-review round count to render the report (default: ${RETROSPECT_DEFAULT_THRESHOLD})`,
+    String(RETROSPECT_DEFAULT_THRESHOLD),
   )
   .option('--force', 'Bypass the threshold gate and render even if rounds < threshold')
   .option('--out <path>', 'Write the JSON report to a file (deterministic two-space indent)')
@@ -461,11 +466,11 @@ program
       let threshold: number | undefined;
       if (opts.threshold !== undefined) {
         const n = Number(opts.threshold);
-        if (!Number.isInteger(n) || n <= 0) {
+        if (!Number.isInteger(n) || n < RETROSPECT_MIN_THRESHOLD) {
           const { TotemConfigError } = await import('@mmnto/totem');
           throw new TotemConfigError(
             `Invalid --threshold value: ${opts.threshold}`,
-            "Pass a positive integer (e.g. '--threshold 5').",
+            `Pass an integer >= ${RETROSPECT_MIN_THRESHOLD} (e.g. '--threshold ${RETROSPECT_DEFAULT_THRESHOLD}').`,
             'CONFIG_INVALID',
           );
         }

@@ -37,6 +37,14 @@ export interface StandardReviewComment {
   diffHunk: string;
   inReplyToId?: number;
   createdAt?: string;
+  /**
+   * ID of the parent review submission, or `null` for non-review (issue) comments.
+   * Used by `totem retrospect` to bucket inline findings into push-based rounds
+   * via the review's `commit_id` rather than a fragile timestamp join (CR
+   * mmnto-ai/totem#1734 round-2 — `created_at` can predate `submitted_at` for
+   * pending/draft reviews).
+   */
+  pullRequestReviewId?: number | null;
 }
 
 export interface StandardCodeScanAlert {

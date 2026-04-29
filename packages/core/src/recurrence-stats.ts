@@ -47,8 +47,15 @@ export type RecurrenceSeverityBucket = z.infer<typeof RecurrenceSeverityBucketSc
  * - `'override'`: trap-ledger override events surface as `medium`
  * - any other tool (`'unknown'`, `undefined`): keyword-mapped from the raw severity string
  */
+/**
+ * Derived from `RecurrenceTool` to prevent type drift; `'mixed'` is a
+ * post-cluster aggregate label that no caller passes here. Per CR
+ * mmnto-ai/totem#1734 round-2.
+ */
+export type SeverityBucketTool = Exclude<RecurrenceTool, 'mixed'> | undefined;
+
 export function toSeverityBucket(
-  tool: 'coderabbit' | 'gca' | 'sarif' | 'override' | 'unknown' | undefined,
+  tool: SeverityBucketTool,
   severity: string,
 ): RecurrenceSeverityBucket {
   // totem-context: `severity` is a CR/GCA severity label string ('critical', 'major', etc.), not a filesystem path. toLowerCase + chained || comparisons here are deliberate equality fan-outs, not numeric defaulting; the lint warnings on this function are false positives.

@@ -50,6 +50,14 @@ const GhReviewCommentSchema = z.object({
   diff_hunk: z.string(),
   in_reply_to_id: z.number().optional(),
   created_at: z.string().optional(),
+  /**
+   * Stable link from a review comment back to its parent review submission.
+   * Per CR mmnto-ai/totem#1734 round-2: `created_at` can predate the parent
+   * review's `submitted_at` for pending/draft reviews, so timestamp joins
+   * mis-attribute the head SHA. `pull_request_review_id` is the foreign
+   * key. Null for non-review comments (issue comments).
+   */
+  pull_request_review_id: z.number().nullable().optional(),
 });
 
 // Subset of `repos/<owner>/<repo>/pulls/<N>/reviews`. We only consume
@@ -155,6 +163,7 @@ export class GitHubCliPrAdapter implements PrAdapter {
       diffHunk: c.diff_hunk,
       inReplyToId: c.in_reply_to_id,
       createdAt: c.created_at,
+      pullRequestReviewId: c.pull_request_review_id ?? null,
     }));
   }
 
