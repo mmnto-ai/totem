@@ -10,7 +10,7 @@ import {
   TotemError,
 } from '@mmnto/totem';
 
-import { getContext } from '../context.js';
+import { getContext, loadEnv } from '../context.js';
 import { type DescribeProjectOutput, type RichProjectState } from '../schemas/describe-project.js';
 import {
   extractGitState,
@@ -58,6 +58,14 @@ async function getLegacyContext(): Promise<LegacyContext> {
   // Only .ts configs are supported here — jiti cannot parse YAML/TOML.
   // YAML/TOML users will have getContext() succeed since those configs
   // still define an embedding provider (Standard/Full tier).
+  //
+  // Load `.env` before reading config so env-derived fields (e.g.,
+  // `TOTEM_STRATEGY_ROOT` consumed by the strategy-root resolver inside
+  // `extractStrategyPointer`) match the main `getContext()` path. Without
+  // this, the Lite-tier `describe_project` payload could disagree with
+  // the rich-state path on the same repo (mmnto-ai/totem#1710 R3 / CR R3).
+  loadEnv(projectRoot);
+
   let configPath: string | null = null;
   for (const file of CONFIG_FILES) {
     const candidate = path.join(projectRoot, file);
@@ -116,10 +124,11 @@ export function registerDescribeProject(server: McpServer): void {
     {
       description:
         'Returns a structured JSON summary of the project governance scope: rules, lessons, config tier, partitions, targets, and hooks. Pass `includeRichState: true` to append a session-briefing payload (git state, strategy pointer, package versions, rule/lesson counts, milestone, recent PRs). Fast, deterministic, no LLM required.',
-      // totem-context: MCP SDK's registerTool accepts a Zod raw shape, not a
-      // JSON Schema object. This matches the convention already used in
-      // search-knowledge.ts and add-lesson.ts. The SDK converts the shape to
-      // JSON Schema internally before exposing the tool to clients.
+      // MCP SDK's registerTool accepts a Zod raw shape, not a JSON Schema
+      // object — same convention as search-knowledge.ts and add-lesson.ts.
+      // The SDK converts the shape to JSON Schema internally before
+      // exposing the tool to clients.
+      // totem-context: MCP SDK registerTool accepts a Zod raw shape, not a JSON Schema object.
       inputSchema: {
         includeRichState: z.boolean().optional(),
       },

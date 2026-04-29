@@ -1514,14 +1514,19 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
   // default window (10) lines up with the schema default so missing config
   // still gives the documented behavior. mmnto-ai/totem#1710 R2: capture
   // `strategyRoot` here too so `checkStrategyRoot` honors the precedence-2
-  // config layer.
+  // config layer. R3 (CR): only use the config's `strategyRoot` when the
+  // resolved path is the repo-local file. A global `~/.totem/` profile is
+  // a personal default for tier/embedder choice and must NOT leak its
+  // strategyRoot across every repo on disk.
   let doctorThresholds: { staleRuleWindow: number } | undefined;
   let loadedConfig: { strategyRoot?: string } | undefined;
   try {
-    const { loadConfig, resolveConfigPath } = await import('../utils.js');
+    const { loadConfig, resolveConfigPath, isGlobalConfigPath } = await import('../utils.js');
     const configPath = resolveConfigPath(cwd);
     const config = await loadConfig(configPath);
-    loadedConfig = config;
+    if (!isGlobalConfigPath(configPath)) {
+      loadedConfig = config;
+    }
     if (config.doctor) {
       doctorThresholds = { staleRuleWindow: config.doctor.staleRuleWindow };
     }

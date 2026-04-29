@@ -263,10 +263,19 @@ async function initContext(): Promise<ServerContext> {
   // catches name collisions but not path-via-different-name collisions, so
   // we dedupe candidates upfront.
   const candidates: EffectiveLinkCandidate[] = [];
+  // Mirror `resolveStrategyRoot`'s whitespace-as-unset rule (R3 / CR R3):
+  // `TOTEM_STRATEGY_ROOT="   "` or `strategyRoot: ' '` would otherwise
+  // mark `strategyExpected=true` while the resolver sees nothing,
+  // surfacing a "Strategy root expected but not resolvable" warning that
+  // never goes away.
+  const envHas = (key: string): boolean => {
+    const v = process.env[key];
+    return typeof v === 'string' && v.trim().length > 0;
+  };
   const strategyExpected =
-    Object.hasOwn(process.env, 'TOTEM_STRATEGY_ROOT') ||
-    Object.hasOwn(process.env, 'STRATEGY_ROOT') ||
-    config.strategyRoot !== undefined;
+    envHas('TOTEM_STRATEGY_ROOT') ||
+    envHas('STRATEGY_ROOT') ||
+    (typeof config.strategyRoot === 'string' && config.strategyRoot.trim().length > 0);
   const strategyStatus = resolveStrategyRoot(projectRoot, { config });
   if (strategyStatus.resolved) {
     candidates.push({ path: strategyStatus.path, nameOverride: 'strategy' });

@@ -730,3 +730,73 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
     expect(entries).toEqual([]);
   });
 });
+
+describe('loadGovernanceConfig (mmnto-ai/totem#1710 R3 — global config leak)', () => {
+  let tmpDir: string;
+  let homeDir: string;
+  let originalCwd: string;
+  let originalHomeEnv: string | undefined;
+  let originalUserprofile: string | undefined;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    homeDir = makeTmpDir('totem-home-');
+    originalCwd = process.cwd();
+    // os.homedir() reads HOME on POSIX and USERPROFILE on Windows; redirect
+    // both so the test runs cross-platform without leaking a real
+    // ~/.totem/ profile into the assertion.
+    originalHomeEnv = process.env['HOME'];
+    originalUserprofile = process.env['USERPROFILE'];
+    process.env['HOME'] = homeDir;
+    process.env['USERPROFILE'] = homeDir;
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (originalHomeEnv === undefined) {
+      delete process.env['HOME'];
+    } else {
+      process.env['HOME'] = originalHomeEnv;
+    }
+    if (originalUserprofile === undefined) {
+      delete process.env['USERPROFILE'];
+    } else {
+      process.env['USERPROFILE'] = originalUserprofile;
+    }
+    cleanTmpDir(tmpDir);
+    cleanTmpDir(homeDir);
+  });
+
+  it('returns undefined when the resolved config lives in the global ~/.totem/ profile', async () => {
+    // No local config in tmpDir — so resolveConfigPath walks up to the
+    // global ~/.totem/ profile. A user's personal global config
+    // typically encodes tier/embedder choices, NOT a strategy pointer
+    // for one specific repo. Loading it for governance scaffolding
+    // would let one user's strategyRoot leak across every repo on disk.
+    initGit(tmpDir);
+    const globalTotemDir = path.join(homeDir, '.totem');
+    fs.mkdirSync(globalTotemDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(globalTotemDir, 'totem.config.ts'),
+      "export default { targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }], strategyRoot: '/some/personal/strategy' };\n",
+      'utf-8',
+    );
+
+    const { loadGovernanceConfig } = await import('./governance.js');
+    const config = await loadGovernanceConfig(tmpDir);
+    expect(config).toBeUndefined();
+  });
+
+  it('returns the local config when one exists in cwd', async () => {
+    initGit(tmpDir);
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.config.ts'),
+      "export default { targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }], strategyRoot: '../totem-strategy' };\n",
+      'utf-8',
+    );
+
+    const { loadGovernanceConfig } = await import('./governance.js');
+    const config = await loadGovernanceConfig(tmpDir);
+    expect(config?.strategyRoot).toBe('../totem-strategy');
+  });
+});

@@ -52,18 +52,22 @@ export type DescribeProjectInput = z.infer<typeof DescribeProjectInputSchema>;
  * documented in CHANGELOG.
  */
 export const StrategyPointerSchema = z.discriminatedUnion('resolved', [
-  z.object({
-    resolved: z.literal(true),
-    /** Short-form 7-char SHA of the resolved strategy HEAD. Null when git rev-parse fails inside the strategy dir. */
-    sha: z.string().nullable(),
-    /** Filename of the most recent `<strategyRoot>/.journal/*.md` entry, no path. Null when `.journal/` is missing or empty. */
-    latestJournal: z.string().nullable(),
-  }),
-  z.object({
-    resolved: z.literal(false),
-    /** Human-readable reason from the strategy-root resolver. */
-    reason: z.string(),
-  }),
+  z
+    .object({
+      resolved: z.literal(true),
+      /** Short-form 7-char SHA of the resolved strategy HEAD. Null when git rev-parse fails inside the strategy dir. */
+      sha: z.string().nullable(),
+      /** Filename of the most recent `<strategyRoot>/.journal/*.md` entry, no path. Null when `.journal/` is missing or empty. */
+      latestJournal: z.string().nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      resolved: z.literal(false),
+      /** Human-readable reason from the strategy-root resolver. */
+      reason: z.string(),
+    })
+    .strict(),
 ]);
 export type StrategyPointer = z.infer<typeof StrategyPointerSchema>;
 

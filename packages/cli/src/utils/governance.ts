@@ -47,9 +47,13 @@ export interface GovernancePaths {
 
 /**
  * Best-effort `TotemConfig` load for the governance commands. Returns
- * `undefined` when the config is missing or unparseable — both are
- * legitimate states for a freshly-cloned consumer repo, and the strategy-
- * root resolver still has env / sibling / submodule layers to fall back on.
+ * `undefined` when the config is missing, unparseable, OR resolves to the
+ * global `~/.totem/` profile — both missing and unparseable are legitimate
+ * states for a freshly-cloned consumer repo, and a global-profile config
+ * is intentionally NOT used as a repo-local `strategyRoot` source (that
+ * would let one user's personal pointer leak across every repo on disk).
+ * The strategy-root resolver still has env / sibling / submodule layers
+ * to fall back on (mmnto-ai/totem#1710 R3 — CR R3 global-config-leak fix).
  *
  * Shared by `proposalNewCommand` and `adrNewCommand` so the load idiom +
  * its `// totem-context: intentional best-effort` annotation live in one
@@ -59,8 +63,10 @@ export async function loadGovernanceConfig(
   cwd: string,
 ): Promise<StrategyResolverConfig | undefined> {
   try {
-    const { loadConfig, resolveConfigPath } = await import('../utils.js');
-    const config = (await loadConfig(resolveConfigPath(cwd))) as StrategyResolverConfig;
+    const { loadConfig, resolveConfigPath, isGlobalConfigPath } = await import('../utils.js');
+    const configPath = resolveConfigPath(cwd);
+    if (isGlobalConfigPath(configPath)) return undefined;
+    const config = (await loadConfig(configPath)) as StrategyResolverConfig;
     return config;
     // totem-context: intentional best-effort load — missing/unparseable config is a legitimate state for a freshly-cloned consumer repo; resolver's other layers (env / sibling / submodule) still apply.
   } catch {

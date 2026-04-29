@@ -176,6 +176,29 @@ describe('StrategyPointerSchema (mmnto-ai/totem#1710)', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('rejects extra keys on the resolved branch (R3 — strict mode)', () => {
+    // Without .strict(), Zod silently strips unknown keys. .strict() makes
+    // the discriminated union catch a producer-side bug where the wrong
+    // branch fields leak into a payload (e.g., a `reason` accidentally
+    // emitted alongside a successful resolution).
+    const result = StrategyPointerSchema.safeParse({
+      resolved: true,
+      sha: 'abc1234',
+      latestJournal: null,
+      reason: 'should not appear',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects extra keys on the unresolved branch (R3 — strict mode)', () => {
+    const result = StrategyPointerSchema.safeParse({
+      resolved: false,
+      reason: 'No strategy root resolvable.',
+      latestJournal: 'should-not-appear.md',
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('RichProjectStateSchema', () => {
