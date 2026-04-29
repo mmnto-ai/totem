@@ -1,5 +1,5 @@
 ---
-'@mmnto/mcp': major
+'@mmnto/mcp': minor
 '@mmnto/cli': patch
 ---
 
@@ -11,12 +11,27 @@ gracefully when the strategy root is unresolvable.
 
 **`@mmnto/mcp`:**
 
-- **Breaking:** `describe_project` rich-state `strategyPointer` payload
-  flips from `{ sha, latestJournal }` to a discriminated union:
+- **Schema shape change (treated as minor — see rationale below):**
+  `describe_project` rich-state `strategyPointer` payload flips from
+  `{ sha, latestJournal }` to a discriminated union:
   `{ resolved: true, sha, latestJournal } | { resolved: false, reason }`.
   Agents that read the rich-state pointer must check `resolved` before
   reading `sha` / `latestJournal`. Only affects callers that opted in via
   `includeRichState: true` — the legacy slim payload is byte-identical.
+
+  **Rationale for minor (not major):** (a) success-path is additive —
+  the resolved branch preserves both `sha` and `latestJournal` fields;
+  the failure-path now structures what was previously a pair of `null`s
+  into a `{ resolved: false, reason }` envelope. (b) No known
+  programmatic JSON consumers — the field is consumed across the totem
+  ecosystem (mmnto-ai/totem, mmnto-ai/totem-strategy,
+  mmnto-ai/totem-playground) exclusively as agent-rendered text via
+  SessionStart hooks. (c) No queued cluster of breaking changes to ride
+  alongside in a 2.0.0 bundle. The deferred-breaking-changes ledger
+  (mmnto-ai/totem#1746) records this decision so the precedent stays
+  visible; when that ledger reaches 2-3 substantive items, that bundle
+  becomes 2.0.0.
+
 - **Auto-injected strategy linkedIndex.** `initContext` consults
   `resolveStrategyRoot` and prepends the resolved strategy path to the
   linkedIndexes iteration with a stable link name `'strategy'`. Boundary
