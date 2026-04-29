@@ -1,9 +1,7 @@
 import type { TotemConfig } from '@mmnto/totem';
 
 import type { ShieldOptions } from './shield.js';
-// totem-context: shield-templates is a pure constants module — static
-// import is correct and the dynamic-imports-in-CLI lint rule is a false
-// positive here. Same pattern as shield.ts's DISPLAY_TAG import.
+// totem-context: shield-templates is a pure constants + types module with no runtime logic; static import matches the established shield.ts:19 DISPLAY_TAG pattern and the lazy-import lint rule is a false positive here
 import { ESTIMATE_DISPLAY_TAG } from './shield-templates.js';
 
 /**
