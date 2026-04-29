@@ -19,8 +19,9 @@ discriminated union so callers can pattern-match on `resolved` without a
 type assertion. Relative env / config values anchor at the git root, not at
 deep cwd.
 
-This PR ships the substrate only (resolver + types + config field +
-re-exports + 22 unit tests). Programmatic-consumer ports
+This entry covers the core substrate: resolver + types + config field +
+re-exports + unit tests. Programmatic-consumer ports
 (`extractStrategyPointer`, `resolveGovernancePaths`, MCP `initContext`
-linkedIndexes, bench scripts) and the `StrategyPointerSchema` discriminated
-union land in the follow-up consumer-port PR.
+linkedIndexes, bench scripts) and the `StrategyPointerSchema`
+discriminated union ship in the same PR via
+`1710-strategy-root-consumers.md`.

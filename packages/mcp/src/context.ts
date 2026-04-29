@@ -284,9 +284,22 @@ async function initContext(): Promise<ServerContext> {
   if (strategyStatus.resolved) {
     candidates.push({ path: strategyStatus.path, nameOverride: 'strategy' });
   } else if (strategyExpected) {
+    // `strategyStatus.reason` carries env/config-derived path text
+    // verbatim. The downstream consumer (`search-knowledge` Case 3)
+    // wraps this string in `formatSystemWarning` → returns as text
+    // content to the agent. An MCP client that renders the text in a
+    // terminal would interpret embedded ANSI/CR. Strip those bytes
+    // before persisting (mmnto-ai/totem#1710 R6 / CR R6 Major). Inline
+    // regex matches the canonical `terminal-sanitize.ts` strip in
+    // `packages/cli/src/`; mmnto-ai/totem#1744 consolidates the helper
+    // into `@mmnto/totem` so this duplication can be retired.
+    const safeReason = strategyStatus.reason
+      // totem-context: inlined canonical `sanitizeForTerminal` regex — cross-package import deferred to mmnto-ai/totem#1744 (sanitizer consolidation into @mmnto/totem core).
+      .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+      .replace(/[\x00-\x08\x0b-\x0d\x0e-\x1f\x7f-\x9f]/g, ' ');
     linkedStoreInitErrors.set(
       'strategy',
-      `Strategy root expected but not resolvable: ${strategyStatus.reason}`,
+      `Strategy root expected but not resolvable: ${safeReason}`,
     );
   }
   for (const linkedPath of config.linkedIndexes ?? []) {

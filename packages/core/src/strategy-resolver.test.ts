@@ -162,13 +162,16 @@ describe('resolveStrategyRoot precedence', () => {
   it('treats a non-string config.strategyRoot as unset (R5 — type guard)', () => {
     // The resolver is exported. A JS caller (or a TS caller using
     // `as` casting) can pass a non-string — the resolver must treat
-    // that as "unset" instead of crashing in `.trim()`.
+    // that as "unset" instead of crashing in `.trim()`. The
+    // `unknown` cast keeps the test honest (no eslint-disable
+    // suppression / no policy escape per CR R6) while still
+    // exercising the runtime guard.
     mkDir(path.join(strategyParent, 'totem-strategy'));
     const status = resolveStrategyRoot(cwd, {
       env: {},
       gitRoot,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      config: { strategyRoot: 42 as any },
+      // totem-context: the cast is the SUBJECT of the test — we're proving the resolver's runtime guard catches non-string inputs that bypass TS, not skipping Zod validation.
+      config: { strategyRoot: 42 as unknown as string },
     });
     expect(status.resolved).toBe(true);
     if (status.resolved) {

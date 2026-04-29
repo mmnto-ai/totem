@@ -110,9 +110,14 @@ export function resolveGovernancePaths(
 ): GovernancePaths {
   const gitRoot = resolveGitRoot(cwd);
   if (gitRoot === null) {
+    // Sanitize `cwd` here too — the sister branch already does this for
+    // the resolved-but-no-layout error (mmnto-ai/totem#1710 R5). A working
+    // directory name with embedded ANSI/CR bytes would otherwise hit the
+    // CLI raw on the not-in-git-repo path (mmnto-ai/totem#1710 R6 / CR R6
+    // outside-diff Major).
     throw new TotemError(
       'CONFIG_MISSING',
-      `Not inside a git repository: ${cwd}`,
+      `Not inside a git repository: ${sanitizeForTerminal(cwd)}`,
       'Run this command from inside a Totem or Totem-strategy repository checkout.',
     );
   }

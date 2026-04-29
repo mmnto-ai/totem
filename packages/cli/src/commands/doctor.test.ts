@@ -1404,11 +1404,14 @@ describe('checkStrategyRoot (mmnto-ai/totem#1710)', () => {
     expect(result.message).toMatch(/^env →/);
   });
 
-  it('strips ANSI/CR control bytes from diagnostic strings (R4 — terminal injection)', async () => {
-    // Hostile env value with embedded ANSI + CR. Without sanitization the
-    // unresolved-path diagnostic would echo these bytes through `log.warn`
-    // and rewind the cursor / spoof colors when `totem doctor` rendered it.
-    process.env.TOTEM_STRATEGY_ROOT = `${tmpDir}/missing\x1b[31mEVIL\x1b[0m\rOVERWRITE`;
+  it('strips ANSI/CR/newline/tab control bytes from diagnostic strings (R4/R6 — terminal injection)', async () => {
+    // Hostile env value with embedded ANSI + CR + newlines + tabs.
+    // Without sanitization the unresolved-path diagnostic would echo
+    // these bytes through `log.warn` and rewind the cursor / spoof colors
+    // when `totem doctor` rendered it. R6 also flattens \n/\t to prevent
+    // forged extra log lines (`sanitizeForTerminal` deliberately preserves
+    // \n/\t for multi-line content; the doctor caller flattens).
+    process.env.TOTEM_STRATEGY_ROOT = `${tmpDir}/missing\x1b[31mEVIL\x1b[0m\r\n\n[fake] OK\tTAB`;
 
     const result = await checkStrategyRoot(tmpDir);
     expect(result.status).toBe('warn');
@@ -1417,6 +1420,8 @@ describe('checkStrategyRoot (mmnto-ai/totem#1710)', () => {
     expect(result.remediation).toBeDefined();
     expect(result.remediation).not.toMatch(/\x1b\[/);
     expect(result.remediation).not.toMatch(/\r/);
+    expect(result.remediation).not.toMatch(/\n/);
+    expect(result.remediation).not.toMatch(/\t/);
   });
 });
 

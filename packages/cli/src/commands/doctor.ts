@@ -456,9 +456,19 @@ export async function checkStrategyRoot(
   // inputs (`TOTEM_STRATEGY_ROOT`, `STRATEGY_ROOT`, `TotemConfig.strategyRoot`).
   // A hostile env var with embedded ANSI/CR bytes would otherwise rewind the
   // cursor or spoof colors when `totem doctor` renders the diagnostic
-  // (mmnto-ai/totem#1710 R4 / CR R4 Major).
+  // (mmnto-ai/totem#1710 R4 / CR R4 Major). R6 (CR R6 Major):
+  // `sanitizeForTerminal` intentionally preserves `\n`/`\t` for
+  // multi-line content, but these single-line diagnostic strings must
+  // ALSO collapse those bytes — otherwise a value like
+  // `TOTEM_STRATEGY_ROOT=$'\n\n[fake] OK'` could forge an extra log
+  // line. `flatten` runs after the ANSI/CR strip.
+  const flatten = (s: string): string =>
+    s
+      .replace(/[\t\n]+/g, ' ')
+      .replace(/ {2,}/g, ' ')
+      .trim();
   if (status.resolved) {
-    const rel = sanitizeForTerminal(path.relative(cwd, status.path) || '.');
+    const rel = flatten(sanitizeForTerminal(path.relative(cwd, status.path) || '.'));
     return {
       name: 'Strategy Root',
       status: 'pass',
@@ -470,7 +480,7 @@ export async function checkStrategyRoot(
     name: 'Strategy Root',
     status: 'warn',
     message: 'unresolved',
-    remediation: `${sanitizeForTerminal(status.reason)} Affected: describe_project pointer, proposal/adr scaffolding, federated strategy search, bench scripts.`,
+    remediation: `${flatten(sanitizeForTerminal(status.reason))} Affected: describe_project pointer, proposal/adr scaffolding, federated strategy search, bench scripts.`,
   };
 }
 
