@@ -35,6 +35,31 @@ packages/
   mcp/    @mmnto/mcp     MCP server
 ```
 
+## Strategy Repo Expectations
+
+A handful of Totem surfaces consult a sibling **strategy repo** (`mmnto-ai/totem-strategy`) for ADRs, proposals, journals, and the federated knowledge index:
+
+- `totem proposal new` / `totem adr new` scaffolding
+- MCP `describe_project` rich-state pointer
+- Federated `search_knowledge` (the strategy linked-index is auto-injected when resolvable)
+- The `scripts/benchmark-compile.ts` and `scripts/bench-lance-open.ts` benchmarks
+
+The path is resolved by `resolveStrategyRoot` (see `packages/core/src/strategy-resolver.ts`) in this precedence order:
+
+1. `TOTEM_STRATEGY_ROOT` env var (`STRATEGY_ROOT` accepted as a legacy alias).
+2. `strategyRoot` field in `totem.config.ts`.
+3. Sibling clone at `../totem-strategy/` next to your totem checkout.
+4. Legacy `.strategy/` submodule at the totem checkout root.
+
+**Recommended setup for new contributors:** clone `mmnto-ai/totem-strategy` as a sibling directory:
+
+```bash
+cd <parent-of-totem>
+git clone https://github.com/mmnto-ai/totem-strategy.git
+```
+
+This gives you the full surface without the submodule ceremony. If the strategy repo isn't present, the affected commands degrade with actionable error messages — they don't silently fail. Run `totem doctor` to see which surfaces are affected.
+
 ## Contributor License Agreement (CLA)
 
 All contributors must sign our [Contributor License Agreement](.github/CLA.md) before their first Pull Request can be merged. This is a one-time requirement.

@@ -19,6 +19,7 @@ import {
   checkSecretLeaks,
   checkSecretsFileTracked,
   checkStaleRules,
+  checkStrategyRoot,
   checkUpgradeCandidates,
   doctorCommand,
   findLegacyGrandfatheredRules,
@@ -306,7 +307,7 @@ describe('doctorCommand', () => {
   it('runs without throwing', async () => {
     const results = await doctorCommand();
     expect(results).toBeDefined();
-    expect(results.length).toBe(11);
+    expect(results.length).toBe(12);
   });
 
   it('returns correct check names', async () => {
@@ -318,6 +319,7 @@ describe('doctorCommand', () => {
     expect(names).toContain('Embedding');
     expect(names).toContain('Index');
     expect(names).toContain('Linked Indexes');
+    expect(names).toContain('Strategy Root');
     expect(names).toContain('Secret Scan');
     expect(names).toContain('Secrets File Security');
     expect(names).toContain('Upgrade Candidates');
@@ -1356,6 +1358,46 @@ describe('checkLinkedIndexes (#1308)', () => {
     expect(result.status).toBe('warn');
     expect(result.name).toBe('Linked Indexes');
     expect(result.remediation).toContain('does not exist');
+  });
+});
+
+// ─── Strategy root (mmnto-ai/totem#1710) ──────────────────
+
+describe('checkStrategyRoot (mmnto-ai/totem#1710)', () => {
+  let tmpDir: string;
+  let prevEnvPrimary: string | undefined;
+  let prevEnvAlias: string | undefined;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    prevEnvPrimary = process.env.TOTEM_STRATEGY_ROOT;
+    prevEnvAlias = process.env.STRATEGY_ROOT;
+    delete process.env.TOTEM_STRATEGY_ROOT;
+    delete process.env.STRATEGY_ROOT;
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+    if (prevEnvPrimary !== undefined) process.env.TOTEM_STRATEGY_ROOT = prevEnvPrimary;
+    if (prevEnvAlias !== undefined) process.env.STRATEGY_ROOT = prevEnvAlias;
+  });
+
+  it('returns warn (NOT fail) when no strategy root resolves', async () => {
+    const result = await checkStrategyRoot(tmpDir);
+    expect(result.status).toBe('warn');
+    expect(result.name).toBe('Strategy Root');
+    expect(result.remediation).toMatch(/describe_project|proposal|federated/);
+  });
+
+  it('returns pass when TOTEM_STRATEGY_ROOT points to a real directory', async () => {
+    const target = path.join(tmpDir, 'elsewhere');
+    fs.mkdirSync(target, { recursive: true });
+    process.env.TOTEM_STRATEGY_ROOT = target;
+
+    const result = await checkStrategyRoot(tmpDir);
+    expect(result.status).toBe('pass');
+    expect(result.name).toBe('Strategy Root');
+    expect(result.message).toMatch(/^env →/);
   });
 });
 

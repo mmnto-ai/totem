@@ -30,6 +30,10 @@ vi.mock('@mmnto/totem', () => ({
   },
   // Stubs used by state-extractors (imported transitively via the tool).
   resolveGitRoot: () => null,
+  resolveStrategyRoot: () => ({
+    resolved: false,
+    reason: 'mock state-extractors test: no strategy root',
+  }),
   safeExec: () => '',
   readJsonSafe: () => {
     // Prefixed to match Totem's error convention so the lint rule does not

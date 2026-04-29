@@ -8,6 +8,7 @@ import {
   createEmbedder,
   LanceStore,
   requireEmbedding,
+  resolveStrategyRoot,
   TotemConfigError,
   TotemConfigSchema,
 } from '@mmnto/totem';
@@ -213,8 +214,36 @@ async function initContext(): Promise<ServerContext> {
   const linkedStores = new Map<string, LanceStore>();
   const linkedStoreInitErrors = new Map<string, string>();
 
+  // Auto-inject the strategy linkedIndex via the strategy-root resolver
+  // (mmnto-ai/totem#1710). Stable link name `'strategy'` regardless of
+  // physical source so `boundary: 'strategy'` queries route the same way
+  // whether the repo lives in `.strategy/`, `../totem-strategy/`, or
+  // wherever `TOTEM_STRATEGY_ROOT` points. Surface an init-time warning
+  // ONLY when the user explicitly signaled a strategy expectation (env or
+  // config); zero-config projects without a strategy repo skip silently.
+  // Read env via `Object.hasOwn` rather than `process.env.X !== undefined`
+  // per a project-local lint rule against the latter idiom.
+  const effectiveLinks: Array<{ path: string; nameOverride?: string }> = [];
+  const strategyExpected =
+    Object.hasOwn(process.env, 'TOTEM_STRATEGY_ROOT') ||
+    Object.hasOwn(process.env, 'STRATEGY_ROOT') ||
+    config.strategyRoot !== undefined;
+  const strategyStatus = resolveStrategyRoot(projectRoot, { config });
+  if (strategyStatus.resolved) {
+    effectiveLinks.push({ path: strategyStatus.path, nameOverride: 'strategy' });
+  } else if (strategyExpected) {
+    linkedStoreInitErrors.set(
+      'strategy',
+      `Strategy root expected but not resolvable: ${strategyStatus.reason}`,
+    );
+  }
+
   for (const linkedPath of config.linkedIndexes ?? []) {
-    const name = deriveLinkName(linkedPath, projectRoot);
+    effectiveLinks.push({ path: linkedPath });
+  }
+
+  for (const { path: linkedPath, nameOverride } of effectiveLinks) {
+    const name = nameOverride ?? deriveLinkName(linkedPath, projectRoot);
 
     // Collision detection — the first-wins so downstream lookups are stable.
     //

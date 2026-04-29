@@ -39,12 +39,32 @@ export type DescribeProjectInput = z.infer<typeof DescribeProjectInputSchema>;
 
 // ─── Rich state sub-schemas ────────────────────────────────────────────────
 
-export const StrategyPointerSchema = z.object({
-  /** Short-form 7-char SHA of the strategy submodule HEAD. Null when no submodule. */
-  sha: z.string().nullable(),
-  /** Filename of the most recent `.strategy/.journal/*.md` entry, no path. */
-  latestJournal: z.string().nullable(),
-});
+/**
+ * Strategy-pointer payload (mmnto-ai/totem#1710).
+ *
+ * Discriminated union on the `resolved` flag so consumers can pattern-match
+ * without inferring intent from null fields. The `resolved: false` branch
+ * surfaces the resolver's `reason` string so an agent reading the rich-state
+ * payload can render an actionable message instead of an empty pointer.
+ *
+ * Pre-1710 callers received `{ sha, latestJournal }` directly. The new shape
+ * is a breaking change to the MCP `describe_project` rich-state output;
+ * documented in CHANGELOG.
+ */
+export const StrategyPointerSchema = z.discriminatedUnion('resolved', [
+  z.object({
+    resolved: z.literal(true),
+    /** Short-form 7-char SHA of the resolved strategy HEAD. Null when git rev-parse fails inside the strategy dir. */
+    sha: z.string().nullable(),
+    /** Filename of the most recent `<strategyRoot>/.journal/*.md` entry, no path. Null when `.journal/` is missing or empty. */
+    latestJournal: z.string().nullable(),
+  }),
+  z.object({
+    resolved: z.literal(false),
+    /** Human-readable reason from the strategy-root resolver. */
+    reason: z.string(),
+  }),
+]);
 export type StrategyPointer = z.infer<typeof StrategyPointerSchema>;
 
 export const GitStateSchema = z.object({

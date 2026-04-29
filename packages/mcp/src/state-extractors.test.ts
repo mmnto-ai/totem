@@ -49,25 +49,45 @@ describe('extractGitState', () => {
   });
 });
 
-describe('extractStrategyPointer', () => {
-  it('returns null/null when .strategy/ is absent', () => {
+describe('extractStrategyPointer (mmnto-ai/totem#1710)', () => {
+  let prevEnvPrimary: string | undefined;
+  let prevEnvAlias: string | undefined;
+  beforeEach(() => {
+    // Isolate the resolver from any developer-shell env override so the
+    // "absent strategy" test can reach the unresolved branch deterministically.
+    prevEnvPrimary = process.env.TOTEM_STRATEGY_ROOT;
+    prevEnvAlias = process.env.STRATEGY_ROOT;
+    delete process.env.TOTEM_STRATEGY_ROOT;
+    delete process.env.STRATEGY_ROOT;
+  });
+  afterEach(() => {
+    if (prevEnvPrimary !== undefined) process.env.TOTEM_STRATEGY_ROOT = prevEnvPrimary;
+    if (prevEnvAlias !== undefined) process.env.STRATEGY_ROOT = prevEnvAlias;
+  });
+
+  it('returns the unresolved branch when no strategy root is reachable', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-nostrat-'));
     try {
       const ptr = extractStrategyPointer(tmp);
-      expect(ptr.sha).toBeNull();
-      expect(ptr.latestJournal).toBeNull();
+      expect(ptr.resolved).toBe(false);
+      if (!ptr.resolved) {
+        expect(ptr.reason).toMatch(/strategy/i);
+      }
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
 
-  it('returns a 7-char SHA and a journal filename on the live repo', () => {
+  it('returns the resolved branch with a 7-char SHA and journal filename on the live repo', () => {
     const ptr = extractStrategyPointer(REPO_ROOT);
-    if (ptr.sha !== null) {
-      expect(ptr.sha).toMatch(/^[0-9a-f]{7}$/);
-    }
-    if (ptr.latestJournal !== null) {
-      expect(ptr.latestJournal).toMatch(/\.md$/);
+    expect(ptr.resolved).toBe(true);
+    if (ptr.resolved) {
+      if (ptr.sha !== null) {
+        expect(ptr.sha).toMatch(/^[0-9a-f]{7}$/);
+      }
+      if (ptr.latestJournal !== null) {
+        expect(ptr.latestJournal).toMatch(/\.md$/);
+      }
     }
   });
 });

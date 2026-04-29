@@ -87,6 +87,56 @@ describe('resolveGovernancePaths', () => {
     const { resolveGovernancePaths } = await import('./governance.js');
     expect(() => resolveGovernancePaths(tmpDir, 'proposal')).toThrow(/strategy/i);
   });
+
+  it('error message names the canonical sibling clone path and env var (mmnto-ai/totem#1710)', async () => {
+    initGit(tmpDir);
+    const { resolveGovernancePaths } = await import('./governance.js');
+    let caught: unknown;
+    try {
+      resolveGovernancePaths(tmpDir, 'proposal');
+    } catch (err) {
+      caught = err;
+    }
+    const totemErr = caught as { message?: string; recoveryHint?: string };
+    const combined = `${totemErr.message ?? ''}\n${totemErr.recoveryHint ?? ''}`;
+    expect(combined).toMatch(/totem-strategy/i);
+    expect(combined).toMatch(/TOTEM_STRATEGY_ROOT/);
+  });
+
+  it('resolves sibling strategy path via the resolver when ../totem-strategy exists (mmnto-ai/totem#1710)', async () => {
+    // Layout:
+    //   <parent>/repo/.git/   ← gitRoot (created via initGit)
+    //   <parent>/totem-strategy/proposals/active/
+    const repo = path.join(tmpDir, 'repo');
+    fs.mkdirSync(repo, { recursive: true });
+    initGit(repo);
+
+    const sibling = path.join(tmpDir, 'totem-strategy');
+    fs.mkdirSync(path.join(sibling, 'proposals', 'active'), { recursive: true });
+
+    const { resolveGovernancePaths } = await import('./governance.js');
+    const paths = resolveGovernancePaths(repo, 'proposal');
+
+    expect(paths.rootDir).toBe(path.normalize(sibling));
+    expect(paths.targetDir).toBe(path.normalize(path.join(sibling, 'proposals', 'active')));
+  });
+
+  it('resolves env-driven strategy path when TOTEM_STRATEGY_ROOT is set (mmnto-ai/totem#1710)', async () => {
+    initGit(tmpDir);
+    const elsewhere = path.join(tmpDir, 'elsewhere-strategy');
+    fs.mkdirSync(path.join(elsewhere, 'proposals', 'active'), { recursive: true });
+
+    const prev = process.env.TOTEM_STRATEGY_ROOT;
+    process.env.TOTEM_STRATEGY_ROOT = elsewhere;
+    try {
+      const { resolveGovernancePaths } = await import('./governance.js');
+      const paths = resolveGovernancePaths(tmpDir, 'proposal');
+      expect(paths.rootDir).toBe(path.normalize(elsewhere));
+    } finally {
+      if (prev === undefined) delete process.env.TOTEM_STRATEGY_ROOT;
+      else process.env.TOTEM_STRATEGY_ROOT = prev;
+    }
+  });
 });
 
 describe('getNextArtifactId', () => {

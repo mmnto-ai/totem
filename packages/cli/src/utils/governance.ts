@@ -10,7 +10,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { resolveGitRoot, safeExec, TotemError } from '@mmnto/totem';
+import { resolveGitRoot, resolveStrategyRoot, safeExec, TotemError } from '@mmnto/totem';
 
 import { log } from '../ui.js';
 
@@ -33,8 +33,6 @@ export interface GovernancePaths {
   dashboardFile: string;
 }
 
-const STRATEGY_SUBDIR = '.strategy';
-
 function targetSubpath(type: GovernanceType): string {
   return type === 'proposal' ? path.join('proposals', 'active') : 'adr';
 }
@@ -46,15 +44,22 @@ function templateFilename(type: GovernanceType): string {
 /**
  * Resolve governance paths for the current invocation.
  *
- * Two supported contexts:
- * 1. **Submodule case** — `<gitRoot>/.strategy/` exists. Used when Totem is
- *    the parent repo and `.strategy/` is a submodule/worktree.
- * 2. **Standalone case** — `<gitRoot>` itself is the strategy repo
- *    (`proposals/active/` sits at the repo root). Used when the CLI is run
- *    from inside the strategy repo directly.
+ * Two layout shapes supported:
  *
- * Throws `TotemError` when cwd is not inside a git repo, or when neither
- * layout can be detected.
+ * 1. **Standalone (cwd IS the strategy repo)** — `<gitRoot>` itself contains
+ *    `proposals/` or `adr/` at the top level. Used when the CLI runs from
+ *    inside the strategy repo directly. Detected here in the helper before
+ *    delegating to the resolver because the strategy-root resolver answers
+ *    "where IS the strategy repo from somewhere else", not "are we INSIDE
+ *    one already."
+ *
+ * 2. **Resolved (cwd is in a consuming repo)** — defer to
+ *    `resolveStrategyRoot` (mmnto-ai/totem#1710). The resolver walks env →
+ *    config → sibling → submodule precedence and returns an absolute path.
+ *    Throws an actionable `TotemError` (ADR-088) when none of the layers
+ *    resolve.
+ *
+ * Also throws `TotemError` when cwd is not inside a git repo.
  */
 export function resolveGovernancePaths(cwd: string, type: GovernanceType): GovernancePaths {
   const gitRoot = resolveGitRoot(cwd);
@@ -66,24 +71,22 @@ export function resolveGovernancePaths(cwd: string, type: GovernanceType): Gover
     );
   }
 
-  const submoduleRoot = path.join(gitRoot, STRATEGY_SUBDIR);
-  const submoduleHasProposals = fs.existsSync(path.join(submoduleRoot, 'proposals'));
-  const submoduleHasAdr = fs.existsSync(path.join(submoduleRoot, 'adr'));
-
   const standaloneHasProposals = fs.existsSync(path.join(gitRoot, 'proposals'));
   const standaloneHasAdr = fs.existsSync(path.join(gitRoot, 'adr'));
 
   let rootDir: string;
-  if (submoduleHasProposals || submoduleHasAdr) {
-    rootDir = submoduleRoot;
-  } else if (standaloneHasProposals || standaloneHasAdr) {
+  if (standaloneHasProposals || standaloneHasAdr) {
     rootDir = gitRoot;
   } else {
-    throw new TotemError(
-      'CONFIG_MISSING',
-      `No Totem-strategy layout found under ${gitRoot}.`,
-      'Expected either a `.strategy/` submodule or top-level `proposals/` and `adr/` directories. Clone or link the strategy repo first.',
-    );
+    const status = resolveStrategyRoot(cwd, { gitRoot });
+    if (!status.resolved) {
+      throw new TotemError(
+        'CONFIG_MISSING',
+        `No Totem-strategy layout found from ${cwd}.`,
+        `Clone the strategy repo as a sibling (e.g., \`git clone <strategy-url> ${path.join(path.dirname(gitRoot), 'totem-strategy')}\`), set the TOTEM_STRATEGY_ROOT env var, or initialize the legacy \`.strategy/\` submodule. Resolver detail: ${status.reason}`,
+      );
+    }
+    rootDir = status.path;
   }
 
   const targetDir = path.join(rootDir, targetSubpath(type));

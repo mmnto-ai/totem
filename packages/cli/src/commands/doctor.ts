@@ -429,6 +429,42 @@ export function checkLinkedIndexes(cwd: string): DiagnosticResult {
   };
 }
 
+/**
+ * Strategy-root resolver diagnostic (mmnto-ai/totem#1710).
+ *
+ * Runs `resolveStrategyRoot` and reports which precedence layer matched.
+ * Advisory only: `warn` (not `fail`) on unresolved so a freshly-cloned
+ * project without a strategy repo doesn't fail the doctor pass.
+ *
+ * Affected consumer surfaces if unresolved: MCP `describe_project`
+ * rich-state pointer, `totem proposal new` / `totem adr new`, federated
+ * search via the auto-injected strategy linkedIndex, the bench scripts
+ * under `scripts/`.
+ *
+ * Async + dynamic import to keep `@mmnto/totem` off the CLI cold-start
+ * graph (matches `checkSecretLeaks` and the rest of the diagnostics that
+ * need core).
+ */
+export async function checkStrategyRoot(cwd: string): Promise<DiagnosticResult> {
+  const { resolveStrategyRoot } = await import('@mmnto/totem');
+  const status = resolveStrategyRoot(cwd);
+  if (status.resolved) {
+    const rel = path.relative(cwd, status.path) || '.';
+    return {
+      name: 'Strategy Root',
+      status: 'pass',
+      message: `${status.source} → ${rel}`,
+    };
+  }
+
+  return {
+    name: 'Strategy Root',
+    status: 'warn',
+    message: 'unresolved',
+    remediation: `${status.reason} Affected: describe_project pointer, proposal/adr scaffolding, federated strategy search, bench scripts.`,
+  };
+}
+
 export async function checkSecretLeaks(
   cwd: string,
   totemDir = '.totem',
@@ -1501,6 +1537,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     checkEmbeddingConfig(cwd),
     checkIndex(cwd),
     checkLinkedIndexes(cwd),
+    await checkStrategyRoot(cwd),
     await checkSecretLeaks(cwd),
     checkSecretsFileTracked(cwd),
     await checkUpgradeCandidates(cwd),

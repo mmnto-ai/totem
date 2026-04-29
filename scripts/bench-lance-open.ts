@@ -10,7 +10,10 @@
  * Usage:
  *   pnpm tsx scripts/bench-lance-open.ts [path-to-lancedb]
  *
- * Default path: .strategy/.lancedb
+ * Default path: `<strategyRoot>/.lancedb` resolved via `resolveStrategyRoot`
+ * (mmnto-ai/totem#1710). When the strategy root is unresolvable, the script
+ * hard-fails with an actionable message; explicit positional arg always
+ * wins over the resolver default.
  */
 import { createRequire } from 'node:module';
 import * as path from 'node:path';
@@ -22,11 +25,23 @@ import { performance } from 'node:perf_hooks';
 const localRequire = createRequire(path.resolve(process.cwd(), 'packages/core/package.json'));
 const lancedb = localRequire('@lancedb/lancedb') as typeof import('@lancedb/lancedb');
 
-const DEFAULT_PATH = path.resolve(process.cwd(), '.strategy/.lancedb');
+import { resolveStrategyRoot } from '../packages/core/src/strategy-resolver.js';
+
 const TABLE_NAME = 'totem_chunks';
 
 async function main(): Promise<void> {
-  const dbPath = process.argv[2] ?? DEFAULT_PATH;
+  let dbPath = process.argv[2];
+  if (dbPath === undefined) {
+    const strategyStatus = resolveStrategyRoot(process.cwd());
+    if (!strategyStatus.resolved) {
+      console.error(`[bench] Cannot resolve default LanceDB path: ${strategyStatus.reason}`);
+      console.error(
+        '[bench] Pass an explicit path (e.g., `pnpm tsx scripts/bench-lance-open.ts /path/to/.lancedb`), set TOTEM_STRATEGY_ROOT, or configure totem.config.ts:strategyRoot.',
+      );
+      process.exit(1);
+    }
+    dbPath = path.join(strategyStatus.path, '.lancedb');
+  }
   const iterations = Number(process.env.ITERATIONS ?? '100');
 
   console.log(`[bench] dbPath=${dbPath} iterations=${iterations}`);

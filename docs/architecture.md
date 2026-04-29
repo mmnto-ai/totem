@@ -249,9 +249,11 @@ The `.totem/lessons/` directory acts as an explicit version-controlled ledger of
 
 Users are offered an optional Universal Baseline during initialization. These foundational lessons feature audience tags and include fix guidance to resolve architectural violations. Language packs proactively provide baseline lessons tailored for specific programming environments. This solves the cold-start problem where a fresh install has no initial knowledge to retrieve.
 
-## The `.strategy/` Submodule
+## The Strategy Repo (Configurable Root)
 
-For secure collaboration, proprietary guidelines and sensitive orchestration instructions are isolated in a `.strategy/` directory. By managing it as a private git submodule, teams ensure confidential workflows remain access-controlled. It houses deep research and architecture analysis documents without encumbering the distributable core codebase. The strategy submodule operates its own instance to enforce rules specifically within its domain.
+For secure collaboration, proprietary guidelines and sensitive orchestration instructions are isolated in a sibling `totem-strategy` repository. It houses deep research, ADRs, proposals, and journal entries without encumbering the distributable core codebase. The strategy repo runs its own Totem instance to enforce rules specifically within its domain.
+
+Totem surfaces consult the strategy repo via `resolveStrategyRoot` (`packages/core/src/strategy-resolver.ts`) which walks four precedence layers: `TOTEM_STRATEGY_ROOT` env var (`STRATEGY_ROOT` accepted as a legacy alias) → `totem.config.ts:strategyRoot` field → sibling clone at `../totem-strategy/` → legacy `.strategy/` submodule. The first layer that resolves to a real directory wins. Each consumer surface (MCP `describe_project`, governance scaffolding, federated search, bench scripts, `totem doctor`) handles unresolvable state with actionable graceful degradation rather than silent failure. See `CONTRIBUTING.md` for the recommended sibling-clone setup.
 
 ## Scope & Limitations
 
