@@ -591,6 +591,12 @@ describe('toSeverityBucket (re-used from recurrence-stats — single source of t
     ['gca' as const, 'low', 'low'],
     ['gca' as const, 'unknown', 'low'],
     ['override' as const, 'anything', 'medium'],
+    // SARIF v2.1.0 §3.27.10 result.level vocabulary — explicit branch added for mmnto-ai/totem#1734 review-1.
+    ['sarif' as const, 'error', 'high'],
+    ['sarif' as const, 'warning', 'medium'],
+    ['sarif' as const, 'note', 'low'],
+    ['sarif' as const, 'none', 'low'],
+    ['sarif' as const, 'unknown', 'low'],
     ['unknown' as const, 'critical', 'critical'],
     ['unknown' as const, 'major', 'high'],
     ['unknown' as const, 'warning', 'medium'],

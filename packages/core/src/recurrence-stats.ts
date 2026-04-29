@@ -43,8 +43,9 @@ export type RecurrenceSeverityBucket = z.infer<typeof RecurrenceSeverityBucketSc
  * Tool inputs:
  * - `'coderabbit'`: `critical` / `major` / `minor` / `*` → `critical` / `high` / `medium` / `low`
  * - `'gca'`: `high` / `medium` / `low` → identical buckets; default `low`
+ * - `'sarif'`: SARIF level vocabulary (`error` / `warning` / `note` / `none`) → `high` / `medium` / `low` / `low`
  * - `'override'`: trap-ledger override events surface as `medium`
- * - any other tool (`'sarif'`, `'unknown'`, `undefined`): keyword-mapped from the raw severity string
+ * - any other tool (`'unknown'`, `undefined`): keyword-mapped from the raw severity string
  */
 export function toSeverityBucket(
   tool: 'coderabbit' | 'gca' | 'sarif' | 'override' | 'unknown' | undefined,
@@ -63,6 +64,14 @@ export function toSeverityBucket(
     if (s === 'high') return 'high';
     if (s === 'medium') return 'medium';
     if (s === 'low') return 'low';
+    return 'low';
+  }
+  if (tool === 'sarif') {
+    // SARIF v2.1.0 §3.27.10 result.level vocabulary.
+    if (s === 'error') return 'high';
+    if (s === 'warning') return 'medium';
+    if (s === 'note') return 'low';
+    if (s === 'none') return 'low';
     return 'low';
   }
   // unknown tool / synthesized review-body

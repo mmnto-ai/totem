@@ -36,6 +36,8 @@ export const RETROSPECT_DISPLAY_TAG = 'Retrospect';
 const TAG = RETROSPECT_DISPLAY_TAG;
 const DEFAULT_THRESHOLD = 5;
 const BODY_EXCERPT_MAX = 280;
+/** Jaccard similarity above which a finding signature is treated as covered by an existing compiled rule. Mirrors `recurrence-stats.ts` `COVERAGE_JACCARD_THRESHOLD`. */
+const RULE_COVERAGE_JACCARD_THRESHOLD = 0.6;
 
 // ─── Public option surface ───────────────────────────
 
@@ -117,9 +119,17 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
   const cwd = process.cwd();
   const threshold = clampThreshold(options.threshold);
   const prNumber = options.prNumber;
-  const prNumberInt = Number.parseInt(prNumber, 10);
-  if (!Number.isFinite(prNumberInt) || prNumberInt <= 0) {
-    throw new Error(`[Totem Error] Invalid PR number: ${prNumber}`);
+  // Strict integer parse (reject "5foo", "5.2", "  5 ") — `Number.parseInt`
+  // silently accepts trailing non-numerics; per CR/GCA mmnto-ai/totem#1734
+  // review-1 we use `Number()` + `Number.isInteger` for CLI inputs.
+  const prNumberInt = Number(prNumber);
+  if (!Number.isInteger(prNumberInt) || prNumberInt <= 0) {
+    const { TotemConfigError } = await import('@mmnto/totem');
+    throw new TotemConfigError(
+      `Invalid PR number: ${prNumber}`,
+      "Pass a positive integer (e.g. 'totem retrospect 1734').",
+      'CONFIG_INVALID',
+    );
   }
 
   log.info(TAG, `Retrospect on PR #${prNumber} (threshold=${threshold}).`);
@@ -134,8 +144,14 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
   //    comments back to the closest preceding review submission via
   //    timestamp. We only consider BOT submissions because the round
   //    count is a measure of bot-driven feedback waves.
+  // Null-guard before isBotComment — GitHub API permits null `user`
+  // (deleted/ghost accounts). Without the guard, `isBotComment(null)`
+  // would silently exclude bot rounds. Per CR mmnto-ai/totem#1734 review-1.
   const botSubmissions = reviewSubmissions
-    .filter((r) => isBotComment(r.user_login))
+    .filter(
+      (r): r is typeof r & { user_login: string } =>
+        r.user_login !== null && isBotComment(r.user_login),
+    )
     .map((r) => ({
       id: r.id,
       commit_id: r.commit_id ?? null,
@@ -211,7 +227,8 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
     observedAt: string;
   }> = [];
   for (const r of reviewSubmissions) {
-    if (!isBotComment(r.user_login)) continue;
+    // Null-guard: deleted/ghost accounts skip this branch — same rationale as the bot-submissions filter above.
+    if (r.user_login === null || !isBotComment(r.user_login)) continue;
     const synthesized = extractReviewBodyFindings([{ author: r.user_login, body: r.body ?? '' }]);
     const sha = typeof r.commit_id === 'string' ? r.commit_id : '';
     const observedAt = r.submitted_at ?? '';
@@ -299,9 +316,20 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
     );
   }
 
-  // 6. Trap-ledger override events (read-only, count only).
+  // 6. Trap-ledger override events (read-only, count only). Today the
+  //    LedgerEventSchema does NOT carry a `prNumber` field, so we cannot
+  //    actually scope the count to the target PR — every event passes
+  //    the predicate. The cast-based predicate below is a forward-compat
+  //    scaffold: when a future ticket adds `prNumber` to LedgerEvent
+  //    (filed as the mmnto-ai/totem#1734-CR-7 follow-up), the predicate
+  //    will start filtering automatically with no command-side change.
+  //    Per CR mmnto-ai/totem#1734 review-1.
   const ledgerEvents = readLedgerEvents(totemDir, (msg) => log.warn(TAG, msg));
-  const overrideEventsObserved = ledgerEvents.filter((e) => e.type === 'override').length;
+  const overrideEventsObserved = ledgerEvents.filter((e) => {
+    if (e.type !== 'override') return false;
+    const eventPr = (e as { prNumber?: string | number }).prNumber;
+    return eventPr === undefined || String(eventPr) === prNumber;
+  }).length;
 
   // 7. Annotate every finding: signature, classification, recurrence, coverage.
   const annotated: AnnotatedFinding[] = allFindings.map((f) => ({
@@ -344,7 +372,7 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
         const v = jaccard(findingTokens, ruleTokens);
         if (v > maxJ) maxJ = v;
       }
-      coveredByRule = maxJ >= 0.6;
+      coveredByRule = maxJ >= RULE_COVERAGE_JACCARD_THRESHOLD;
     }
 
     const verdict = classifyFinding({

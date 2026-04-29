@@ -69,7 +69,13 @@ const GhPrReviewSchema = z.object({
 
 export interface StandardPrReviewSubmission {
   id: number;
-  user_login: string;
+  /**
+   * GitHub login of the review submitter, or `null` for deleted/ghost
+   * accounts (the GitHub API permits a null `user` object). Callers
+   * MUST null-guard before passing to `isBotComment` so unknown authors
+   * don't silently appear as non-bot — see CR mmnto-ai/totem#1734 review-1.
+   */
+  user_login: string | null;
   commit_id?: string | null;
   submitted_at?: string | null;
   state: string;
@@ -173,7 +179,7 @@ export class GitHubCliPrAdapter implements PrAdapter {
     );
     return reviews.map((r) => ({
       id: r.id,
-      user_login: r.user?.login ?? '',
+      user_login: r.user?.login ?? null,
       commit_id: r.commit_id ?? undefined,
       submitted_at: r.submitted_at ?? undefined,
       state: r.state,

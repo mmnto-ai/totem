@@ -456,7 +456,21 @@ program
   .action(async (prNumber: string, opts: { threshold?: string; force?: boolean; out?: string }) => {
     requireGhCli();
     try {
-      const threshold = opts.threshold ? parseInt(opts.threshold, 10) : undefined;
+      // Strict integer parse — `parseInt` accepts trailing non-numerics
+      // ("5foo" → 5). Per GCA mmnto-ai/totem#1734 review-1.
+      let threshold: number | undefined;
+      if (opts.threshold !== undefined) {
+        const n = Number(opts.threshold);
+        if (!Number.isInteger(n) || n <= 0) {
+          const { TotemConfigError } = await import('@mmnto/totem');
+          throw new TotemConfigError(
+            `Invalid --threshold value: ${opts.threshold}`,
+            "Pass a positive integer (e.g. '--threshold 5').",
+            'CONFIG_INVALID',
+          );
+        }
+        threshold = n;
+      }
       const { runRetrospect } = await import('./commands/retrospect.js');
       await runRetrospect({
         prNumber,

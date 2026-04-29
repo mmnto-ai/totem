@@ -55,7 +55,7 @@ const mockLog = vi.mocked(uiModule.log);
 
 function makeReview(overrides: {
   id: number;
-  user_login?: string;
+  user_login?: string | null;
   commit_id?: string | null;
   submitted_at?: string;
   state?: string;
@@ -63,7 +63,7 @@ function makeReview(overrides: {
 }) {
   return {
     id: overrides.id,
-    user_login: overrides.user_login ?? 'coderabbitai[bot]',
+    user_login: overrides.user_login === undefined ? 'coderabbitai[bot]' : overrides.user_login,
     commit_id: overrides.commit_id ?? 'sha-default',
     submitted_at: overrides.submitted_at ?? '2026-04-29T01:00:00.000Z',
     state: overrides.state ?? 'COMMENTED',
@@ -581,4 +581,86 @@ describe('runRetrospect — classification fan-out', () => {
       expect(target[0].severityBucket).toBe(expectedSeverity);
     },
   );
+});
+
+describe('runRetrospect — input validation (mmnto-ai/totem#1734 review-1)', () => {
+  it('rejects PR number with trailing non-numerics (Number.isInteger guard)', async () => {
+    mockFetchPr.mockReturnValue(makePr({ number: 1713 }));
+    mockFetchReviews.mockReturnValue([]);
+    mockFetchReviewComments.mockReturnValue([]);
+
+    const { runRetrospect } = await import('./retrospect.js');
+    await expect(runRetrospect({ prNumber: '1713foo', force: true })).rejects.toThrow(
+      /Invalid PR number/,
+    );
+  });
+
+  it('rejects fractional PR number (e.g. "5.2")', async () => {
+    mockFetchPr.mockReturnValue(makePr({ number: 1713 }));
+    mockFetchReviews.mockReturnValue([]);
+    mockFetchReviewComments.mockReturnValue([]);
+
+    const { runRetrospect } = await import('./retrospect.js');
+    await expect(runRetrospect({ prNumber: '5.2', force: true })).rejects.toThrow(
+      /Invalid PR number/,
+    );
+  });
+
+  it('rejects non-positive PR number', async () => {
+    mockFetchPr.mockReturnValue(makePr({ number: 1713 }));
+    mockFetchReviews.mockReturnValue([]);
+    mockFetchReviewComments.mockReturnValue([]);
+
+    const { runRetrospect } = await import('./retrospect.js');
+    await expect(runRetrospect({ prNumber: '0', force: true })).rejects.toThrow(
+      /Invalid PR number/,
+    );
+  });
+});
+
+describe('runRetrospect — null user_login (deleted/ghost accounts)', () => {
+  it('skips review submissions whose user_login is null without inflating round count', async () => {
+    mockFetchPr.mockReturnValue(makePr({ number: 1713 }));
+    mockFetchReviews.mockReturnValue([
+      makeReview({
+        id: 1,
+        commit_id: 'sha-A',
+        submitted_at: '2026-04-29T01:00:00.000Z',
+        user_login: 'coderabbitai[bot]',
+      }),
+      // GitHub API returns null user for deleted/ghost accounts.
+      makeReview({
+        id: 2,
+        commit_id: 'sha-B',
+        submitted_at: '2026-04-29T01:30:00.000Z',
+        user_login: null,
+      }),
+    ]);
+    mockFetchReviewComments.mockReturnValue([
+      makeInlineComment({
+        id: 100,
+        author: 'coderabbitai[bot]',
+        createdAt: '2026-04-29T01:05:00.000Z',
+      }),
+      makeInlineComment({
+        id: 101,
+        // Inline comment from a deleted account — author would be 'ghost' or empty
+        // in practice; here we model it via the parser path via isBotComment('').
+        author: 'ghost',
+        createdAt: '2026-04-29T01:35:00.000Z',
+      }),
+    ]);
+
+    const outPath = path.join(tmpDir, 'out.json');
+    const { runRetrospect } = await import('./retrospect.js');
+    await runRetrospect({ prNumber: '1713', force: true, out: outPath });
+
+    const report = JSON.parse(fs.readFileSync(outPath, 'utf-8'));
+    // Only the bot-authored finding survives; the ghost-authored one drops.
+    expect(report.totalFindings).toBe(1);
+    // Round count reflects only bot rounds (sha-A); sha-B is skipped because
+    // its review submission's user_login is null.
+    expect(report.rounds.length).toBe(1);
+    expect(report.rounds[0].headSha).toBe('sha-A');
+  });
 });
