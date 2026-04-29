@@ -435,6 +435,19 @@ function scoreLesson(
 // ── Main ──
 
 async function runBenchmark() {
+  // Resolve the strategy root up-front so an unresolvable pointer fails
+  // fast — without this guard the script would burn the full benchmark
+  // loop (LLM calls + report assembly) before discovering it has nowhere
+  // to write the output (mmnto-ai/totem#1710 R4 / CR R4 Major).
+  const strategyStatus = resolveStrategyRoot(process.cwd());
+  if (!strategyStatus.resolved) {
+    console.error(`[bench] Cannot write report: ${strategyStatus.reason}`);
+    console.error(
+      '[bench] Set TOTEM_STRATEGY_ROOT, configure totem.config.ts:strategyRoot, or run from inside the totem checkout with a sibling totem-strategy clone.',
+    );
+    process.exit(1);
+  }
+
   COMPILER_PROMPT = (await import('../packages/cli/src/commands/compile-templates.js'))
     .COMPILER_SYSTEM_PROMPT;
 
@@ -618,15 +631,8 @@ async function runBenchmark() {
     }
   }
 
-  const strategyStatus = resolveStrategyRoot(process.cwd());
-  if (!strategyStatus.resolved) {
-    console.error(`[bench] Cannot write report: ${strategyStatus.reason}`);
-    console.error(
-      '[bench] Set TOTEM_STRATEGY_ROOT, configure totem.config.ts:strategyRoot, or run from inside the totem checkout with a sibling totem-strategy clone.',
-    );
-    process.exit(1);
-  }
-
+  // `strategyStatus` was validated at the top of `runBenchmark` — its
+  // `resolved: true` branch is guaranteed at this point.
   const report = lines.join('\n');
   const fs = await import('node:fs');
   const path = await import('node:path');

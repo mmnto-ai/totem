@@ -252,8 +252,12 @@ async function initContext(): Promise<ServerContext> {
   // wherever `TOTEM_STRATEGY_ROOT` points. Surface an init-time warning
   // ONLY when the user explicitly signaled a strategy expectation (env or
   // config); zero-config projects without a strategy repo skip silently.
-  // Read env via `Object.hasOwn` rather than `process.env.X !== undefined`
-  // per a project-local lint rule against the latter idiom.
+  // Validate env values for non-whitespace content rather than testing
+  // for `!== undefined` — the project-local lint rule wants whitespace
+  // validation (`/\S/.test`) so a `TOTEM_STRATEGY_ROOT="   "` accident
+  // doesn't trigger the warning slot. `Object.hasOwn` was rejected in
+  // R4 because it adds no safety beyond the trim-and-length check and
+  // breaks Windows' case-insensitive env-var resolution.
   //
   // Dedupe by RESOLVED ABSOLUTE PATH (mmnto-ai/totem#1710 R2 / CR R2): if a
   // legacy config still lists `'.strategy'` (or `'../totem-strategy'`) AND

@@ -1403,6 +1403,21 @@ describe('checkStrategyRoot (mmnto-ai/totem#1710)', () => {
     expect(result.name).toBe('Strategy Root');
     expect(result.message).toMatch(/^env →/);
   });
+
+  it('strips ANSI/CR control bytes from diagnostic strings (R4 — terminal injection)', async () => {
+    // Hostile env value with embedded ANSI + CR. Without sanitization the
+    // unresolved-path diagnostic would echo these bytes through `log.warn`
+    // and rewind the cursor / spoof colors when `totem doctor` rendered it.
+    process.env.TOTEM_STRATEGY_ROOT = `${tmpDir}/missing\x1b[31mEVIL\x1b[0m\rOVERWRITE`;
+
+    const result = await checkStrategyRoot(tmpDir);
+    expect(result.status).toBe('warn');
+    // Message itself is the static string — the env value flows into
+    // `remediation` via `status.reason`.
+    expect(result.remediation).toBeDefined();
+    expect(result.remediation).not.toMatch(/\x1b\[/);
+    expect(result.remediation).not.toMatch(/\r/);
+  });
 });
 
 // ─── Stale rules (mmnto-ai/totem#1483) ──────────────────

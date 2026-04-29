@@ -36,7 +36,7 @@ async function main(): Promise<void> {
     if (!strategyStatus.resolved) {
       console.error(`[bench] Cannot resolve default LanceDB path: ${strategyStatus.reason}`);
       console.error(
-        '[bench] Pass an explicit path (e.g., `pnpm tsx scripts/bench-lance-open.ts /path/to/.lancedb`), set TOTEM_STRATEGY_ROOT, or configure totem.config.ts:strategyRoot.',
+        '[bench] Pass an explicit path (e.g., `pnpm tsx scripts/bench-lance-open.ts /path/to/.lancedb`) or set TOTEM_STRATEGY_ROOT.',
       );
       process.exit(1);
     }

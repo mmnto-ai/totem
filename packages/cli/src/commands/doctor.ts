@@ -450,9 +450,15 @@ export async function checkStrategyRoot(
   config?: { strategyRoot?: string },
 ): Promise<DiagnosticResult> {
   const { resolveStrategyRoot } = await import('@mmnto/totem');
+  const { sanitizeForTerminal } = await import('../terminal-sanitize.js');
   const status = resolveStrategyRoot(cwd, { config });
+  // `status.path` and `status.reason` are derived from env/config-controlled
+  // inputs (`TOTEM_STRATEGY_ROOT`, `STRATEGY_ROOT`, `TotemConfig.strategyRoot`).
+  // A hostile env var with embedded ANSI/CR bytes would otherwise rewind the
+  // cursor or spoof colors when `totem doctor` renders the diagnostic
+  // (mmnto-ai/totem#1710 R4 / CR R4 Major).
   if (status.resolved) {
-    const rel = path.relative(cwd, status.path) || '.';
+    const rel = sanitizeForTerminal(path.relative(cwd, status.path) || '.');
     return {
       name: 'Strategy Root',
       status: 'pass',
@@ -464,7 +470,7 @@ export async function checkStrategyRoot(
     name: 'Strategy Root',
     status: 'warn',
     message: 'unresolved',
-    remediation: `${status.reason} Affected: describe_project pointer, proposal/adr scaffolding, federated strategy search, bench scripts.`,
+    remediation: `${sanitizeForTerminal(status.reason)} Affected: describe_project pointer, proposal/adr scaffolding, federated strategy search, bench scripts.`,
   };
 }
 
