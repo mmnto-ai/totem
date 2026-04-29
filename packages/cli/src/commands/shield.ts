@@ -541,6 +541,19 @@ export interface ShieldOptions {
   override?: string;
   suppress?: string[];
   autoCapture?: boolean;
+  /**
+   * Pre-flight deterministic-rule estimator (mmnto-ai/totem#1714). When
+   * true, `shieldCommand` short-circuits to `runEstimate` in
+   * `shield-estimate.ts`: same diff-resolution chain as the LLM review
+   * path, then `runCompiledRules` against `compiled-rules.json`, then
+   * return — no orchestrator, no embedder, no LanceDB. Output is labeled
+   * `[Estimate]` (`ESTIMATE_DISPLAY_TAG`) instead of `[Review]` so log
+   * lines unmistakably read as a forecast. Mutually incompatible with
+   * `--learn`, `--auto-capture`, `--override`, `--suppress`, `--fresh`,
+   * `--mode`, and `--raw` — these only apply to the LLM path; combining
+   * them throws `TotemConfigError CONFIG_INVALID`.
+   */
+  estimate?: boolean;
 }
 
 // ─── Deterministic mode (delegates to shared engine) ─
@@ -1063,6 +1076,44 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const { filterDiffByPatterns, getDiffForReview } = await import('../git.js');
   const { classifyChangedFiles } = await import('./shield-classify.js');
   const { extractShieldContextAnnotations, extractShieldHints } = await import('./shield-hints.js');
+
+  // mmnto-ai/totem#1714: --estimate is the deterministic-rule pre-flight
+  // path. Reject incompatible flag combinations BEFORE any other
+  // validation (e.g. the --override length check below) so the user-
+  // facing error names the actual conflict (`--override is incompatible
+  // with --estimate`) instead of a misleading downstream constraint.
+  if (options.estimate) {
+    type IncompatibleFlag = readonly [keyof ShieldOptions, string];
+    const incompatible: readonly IncompatibleFlag[] = [
+      ['learn', '--learn'],
+      ['autoCapture', '--auto-capture'],
+      ['override', '--override'],
+      ['suppress', '--suppress'],
+      ['fresh', '--fresh'],
+      ['mode', '--mode'],
+      ['raw', '--raw'],
+    ];
+    for (const [key, flag] of incompatible) {
+      const value = options[key];
+      // totem-context: boolean OR in a presence-test, not a numeric-metric default — `??` would change "absent or explicitly-disabled" to "absent" and let `--fresh=false` slip through
+      if (value === undefined || value === false) continue;
+      if (Array.isArray(value) && value.length === 0) continue;
+      throw new TotemConfigError(
+        `${flag} is incompatible with --estimate.`,
+        'Drop the incompatible flag, or run without --estimate.',
+        'CONFIG_INVALID',
+      );
+    }
+
+    const cwd = process.cwd();
+    const configPath = resolveConfigPath(cwd);
+    const configRoot = path.dirname(configPath);
+    loadEnv(cwd);
+    const config = await loadConfig(configPath);
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate(options, config, cwd, configRoot);
+    return;
+  }
 
   if (options.mode && options.mode !== 'standard' && options.mode !== 'structural') {
     throw new TotemConfigError(

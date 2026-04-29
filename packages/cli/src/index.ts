@@ -312,6 +312,10 @@ const reviewOptions = (cmd: Command) =>
       '--auto-capture',
       'Enable Pipeline 5 auto-capture of observation rules from findings (off by default; captured rules are context-less and apply globally)',
     )
+    .option(
+      '--estimate',
+      'Pre-flight deterministic-rule estimator (zero-LLM). Runs compiled-rules.json against the diff and prints predicted findings tagged [Estimate]. Bypasses the LLM Verification Layer entirely. Incompatible with --learn, --auto-capture, --override, --suppress, --fresh, --mode, and --raw.',
+    )
     .addHelpText(
       'after',
       [
@@ -322,6 +326,15 @@ const reviewOptions = (cmd: Command) =>
         '  3. (fallback)        → branch-vs-base diff when 1/2 produce nothing',
         `The chosen path is logged to stderr; large diffs (>${REVIEW_DIFF_TRUNCATION_THRESHOLD} chars)`,
         'trigger an explicit truncation warning before the LLM call.',
+        '',
+        'Pre-flight estimator (--estimate):',
+        '  Runs the same deterministic engine as `totem lint` against the diff',
+        '  resolved by the chain above and returns immediately — no orchestrator,',
+        '  no embedding, no LanceDB. Output is labeled [Estimate] (not [Review])',
+        '  so log lines unmistakably read as a forecast. Use this to predict bot',
+        '  findings before opening a PR. Example:',
+        // totem-context: documented git-range example in --help text for users of --diff, not a hardcoded base-branch reference in product code
+        '    totem review --estimate --diff main...HEAD',
         '',
       ].join('\n'),
     );
@@ -341,6 +354,7 @@ async function runReview(opts: {
   override?: string;
   suppress?: string[];
   autoCapture?: boolean;
+  estimate?: boolean;
 }): Promise<void> {
   // Redirect removed --deterministic flag to totem lint
   if (opts.deterministic) {
