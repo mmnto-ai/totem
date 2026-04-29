@@ -185,6 +185,43 @@ Fetches open GitHub issues and generates a prioritized roadmap. Ideal for planni
 
 Categorized bot review triage. Fetches CodeRabbit and GCA comments, heuristically maps their severities, and groups them by impact to prevent alert fatigue.
 
+### `totem retrospect <pr-number>`
+
+Bot-tax circuit-breaker (mmnto-ai/totem#1713). Analyzes a PR's bot-review history live, groups findings into push-based rounds (one round per `commit_id` from `gh api repos/.../pulls/N/reviews`), enriches each finding with cross-PR-recurrence flags from `.totem/recurrence-stats.json` and rule-coverage flags from `.totem/compiled-rules.json`, and emits a deterministic verdict for each finding: `route-out`, `in-pr-fix`, or `undetermined`. No LLM. No GitHub mutation. Read-only outside the optional `--out <path>` JSON write.
+
+The classifier is a fixed table over the four-axis cube `(severityBucket × roundPosition × crossPrRecurrenceBucket × coveredByRule)`. Severity vocabulary is shared with `totem stats --pattern-recurrence` so the bot-tax cluster has a single source of truth.
+
+- **Flags:**
+  - `--threshold <n>`: Minimum bot-review round count to render the report (default: 5). Sub-threshold runs exit 0 with a benign skip; pass `--force` to inspect anyway.
+  - `--force`: Bypass the threshold gate.
+  - `--out <path>`: Write the JSON report to a file (deterministic two-space indent). Suitable for `jq` or GitHub Actions composition.
+
+- **Threshold semantics:** below threshold → exit 0 with a one-line skip message (the circuit-breaker does NOT fail CI on benign PRs). At-or-above threshold → render the full report. Mirrors `totem stats --pattern-recurrence` default of `5`.
+
+- **Graceful degrade:** missing or malformed `recurrence-stats.json` sets `substrateAvailable: false` and zeroes every finding's `crossPrRecurrence`; missing `compiled-rules.json` sets `compiledRulesAvailable: false` and forces `coveredByRule: false`. Both paths log a warning and continue — they do not abort.
+
+- **Example:**
+
+  ```bash
+  totem retrospect 1732 --threshold 5 --out .totem/retrospect-1732.json
+  ```
+
+  Sample output excerpt:
+
+  ```text
+  [Retrospect] PR #1732 (open) — 7 round(s), 12 bot finding(s).
+  [Retrospect]   substrate=available, compiled-rules=available, dedup-rate=42%
+  [Retrospect]   tool: coderabbit:9 gca:3
+  [Retrospect]   severity: medium:6 low:4 nit:2
+  [Retrospect]   classification: in-pr-fix:8 route-out:3 undetermined:1
+  [Retrospect] Route-out candidates (3):
+  [Retrospect]   [r6] low 4f3a... — Avoid using `any` — prefer `unknown`. (covered by existing compiled rule)
+  [Retrospect] Stop conditions:
+  [Retrospect]   • If next round contains only nit-severity findings, ship + file 3 follow-up issue(s) for the route-out candidates above.
+  ```
+
+- **Out of scope (v0.1):** auto-filing follow-up issues (`--auto-file` is deferred to a follow-up ticket because mass-filing is irreversible), comment-drift detection, trap-ledger writes, LLM-driven classification.
+
 ### `totem review-learn <pr-number>`
 
 Extracts systemic lessons from resolved bot review comments on a merged PR. The other half of the Self-Healing Loop.

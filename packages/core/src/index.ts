@@ -413,4 +413,26 @@ export {
   RecurrenceStatsSchema,
   RecurrenceToolSchema,
   tokenizeForJaccard,
+  toSeverityBucket,
 } from './recurrence-stats.js';
+
+// Retrospect schemas + helpers (mmnto-ai/totem#1713)
+export type {
+  RetrospectClassification,
+  RetrospectFinding,
+  RetrospectReport,
+  RetrospectRound,
+} from './retrospect.js';
+export {
+  buildStopConditions,
+  classifyFinding,
+  computeDedupRate,
+  groupFindingsByRound,
+  RetrospectClassificationSchema,
+  RetrospectFindingSchema,
+  RetrospectReportSchema,
+  RetrospectRoundSchema,
+  signatureOfBody,
+  toCrossPrBucket,
+  toRoundPosition,
+} from './retrospect.js';

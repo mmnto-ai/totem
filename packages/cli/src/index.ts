@@ -422,6 +422,56 @@ program
   });
 
 program
+  .command('retrospect <pr-number>')
+  .description(
+    'Bot-tax circuit-breaker — push-grouped review-round retrospective with route-out heuristics (mmnto-ai/totem#1713)',
+  )
+  .option(
+    '--threshold <n>',
+    'Minimum bot-review round count to render the report (default: 5)',
+    '5',
+  )
+  .option('--force', 'Bypass the threshold gate and render even if rounds < threshold')
+  .option('--out <path>', 'Write the JSON report to a file (deterministic two-space indent)')
+  // totem-context: --auto-file is intentionally NOT exposed in v0.1 per
+  // .totem/specs/1713.md Q2 — mass-filing follow-up issues is irreversible
+  // and the human can copy-paste the suggested titles + bodies. Re-add via a
+  // follow-up ticket.
+  .addHelpText(
+    'after',
+    [
+      '',
+      'Reads PR review history live, groups findings into push-based rounds via',
+      "each review submission's commit_id, enriches findings with cross-PR",
+      'recurrence + rule-coverage flags from .totem/recurrence-stats.json and',
+      '.totem/compiled-rules.json (read-only; both are graceful-degrade), and',
+      'classifies each finding as route-out / in-pr-fix / undetermined via a',
+      'deterministic table. No LLM. No GitHub API writes. Sub-threshold runs',
+      'exit 0 (pass --force to inspect anyway).',
+      '',
+      'Requires the GitHub CLI (`gh`) authenticated against the current repo.',
+      '',
+    ].join('\n'),
+  )
+  .action(async (prNumber: string, opts: { threshold?: string; force?: boolean; out?: string }) => {
+    requireGhCli();
+    try {
+      const threshold = opts.threshold ? parseInt(opts.threshold, 10) : undefined;
+      const { runRetrospect } = await import('./commands/retrospect.js');
+      await runRetrospect({
+        prNumber,
+        threshold,
+        force: opts.force,
+        out: opts.out,
+      });
+    } catch (err) {
+      handleError(err);
+      // totem-context: handleError returns `never` (process.exit), so the throw is unreachable but required to satisfy the Tenet 4 fail-loud rule that bans bare-catch silent-degrade. Mirrors the stats command at line ~192.
+      throw err;
+    }
+  });
+
+program
   .command('triage')
   .description('Prioritize open issues into an active work roadmap')
   .option('--raw', 'Output retrieved context without LLM synthesis')

@@ -52,6 +52,30 @@ const GhReviewCommentSchema = z.object({
   created_at: z.string().optional(),
 });
 
+// Subset of `repos/<owner>/<repo>/pulls/<N>/reviews`. We only consume
+// the fields the bot-tax circuit-breaker needs (commit_id for push-based
+// round grouping, submitted_at for ordering, user.login for bot
+// detection, state + body for surface-level filtering). Strictly typed
+// so an upstream API shape change surfaces as a TotemParseError instead
+// of silently widening the round count.
+const GhPrReviewSchema = z.object({
+  id: z.number(),
+  user: z.object({ login: z.string() }).nullable(),
+  commit_id: z.string().nullable().optional(),
+  submitted_at: z.string().nullable().optional(),
+  state: z.string(),
+  body: z.string().nullable(),
+});
+
+export interface StandardPrReviewSubmission {
+  id: number;
+  user_login: string;
+  commit_id?: string | null;
+  submitted_at?: string | null;
+  state: string;
+  body: string;
+}
+
 const GhCodeScanAlertSchema = z
   .object({
     number: z.number(),
@@ -125,6 +149,35 @@ export class GitHubCliPrAdapter implements PrAdapter {
       diffHunk: c.diff_hunk,
       inReplyToId: c.in_reply_to_id,
       createdAt: c.created_at,
+    }));
+  }
+
+  /**
+   * Fetch the per-submission review record for a PR, exposing
+   * `commit_id` (head SHA at review time) and `submitted_at` so callers
+   * can group findings into push-based rounds. The shape returned by
+   * `gh pr view --json reviews` (used by `fetchPr`) intentionally does
+   * NOT include `commit_id`, so the bot-tax circuit-breaker
+   * (mmnto-ai/totem#1713) reaches for the lower-level paginated
+   * `repos/<owner>/<repo>/pulls/<N>/reviews` endpoint.
+   *
+   * Read-only. No GitHub mutation.
+   */
+  fetchReviews(prNumber: number): StandardPrReviewSubmission[] {
+    const nwo = this.getRepoNwo();
+    const reviews = ghFetchAndParse(
+      ['api', `repos/${nwo}/pulls/${prNumber}/reviews`, '--paginate'],
+      z.array(GhPrReviewSchema),
+      `review submissions for PR #${prNumber}`,
+      this.cwd,
+    );
+    return reviews.map((r) => ({
+      id: r.id,
+      user_login: r.user?.login ?? '',
+      commit_id: r.commit_id ?? undefined,
+      submitted_at: r.submitted_at ?? undefined,
+      state: r.state,
+      body: r.body ?? '',
     }));
   }
 
