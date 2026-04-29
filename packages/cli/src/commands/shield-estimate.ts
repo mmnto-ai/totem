@@ -152,7 +152,7 @@ async function runPatternHistoryOverlay(args: {
       z.object({
         signature: z.string(),
         occurrences: z.number(),
-        // totem-context: substrate-emitted PR numbers; an empty string is substrate corruption (not user input) and would surface as a Zod-failure-on-parse downstream — converting silent overlay-skip into a hard graceful-degrade.
+        // totem-context: substrate-by-construction emits ≥1 PR per cluster; `.min(1)` is intentionally absent to preserve the graceful-degrade contract — an empty array is caught at match time (`if (pat.prs.length === 0) continue` below) rather than hard-failing the parse. Per CR mmnto-ai/totem#1739 R5 doc-cleanup nit.
         prs: z.array(z.string()),
         // totem-context: substrate-emitted sample bodies; the overlay already skips empty-body patterns at match time, so `.min(1)` would convert silent skip into a hard parse failure that breaks the graceful-degrade contract.
         sampleBodies: z.array(z.string()),
