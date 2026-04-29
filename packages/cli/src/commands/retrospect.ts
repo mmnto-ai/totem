@@ -257,6 +257,7 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
         for (const pr of others) set.add(pr);
         crossPrIndex.set(entry.signature, set);
       }
+      // totem-context: malformed substrate is a graceful-degrade path per the mmnto-ai/totem#1713 failure-mode table — log + continue with `crossPrRecurrence: 0` for every finding; `substrateAvailable: false` surfaces the degradation in the report so the consumer can see it explicitly. Hard-erroring would block the circuit-breaker the user invoked retrospect to run.
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       log.warn(
@@ -286,6 +287,7 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
       const compiledRules = loadCompiledRules(rulesPath) as Array<{ message: string }>;
       compiledRulesAvailable = true;
       ruleTokenSets = compiledRules.map((r) => tokenizeForJaccard(r.message ?? ''));
+      // totem-context: malformed compiled-rules.json is a graceful-degrade path per the mmnto-ai/totem#1713 failure-mode table — log + continue with `coveredByRule: false` for every finding; `compiledRulesAvailable: false` surfaces the degradation. Mirrors the pattern in `runRecurrenceStats` step 6 ("missing/malformed compiled-rules.json disables coverage routing only").
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       log.warn(TAG, `Could not load compiled rules: ${msg} — coverage check disabled.`);
