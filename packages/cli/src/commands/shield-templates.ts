@@ -36,6 +36,17 @@ export const TAG = 'Shield';
  * config-key lookup (e.g. `runOrchestrator({ tag: TAG })`).
  */
 export const DISPLAY_TAG = 'Review';
+
+/**
+ * User-visible log prefix for the `totem review --estimate` pre-flight
+ * deterministic-rule run (mmnto-ai/totem#1714). Distinct from
+ * `DISPLAY_TAG` so estimator output is unmistakably labeled as a
+ * forecast rather than a final LLM verdict. Every `log.info` /
+ * `log.dim` / `log.warn` call emitted from the estimate code path
+ * (`shield-estimate.ts`) MUST use this constant, never `DISPLAY_TAG`.
+ */
+export const ESTIMATE_DISPLAY_TAG = 'Estimate';
+
 export const MAX_DIFF_CHARS = 50_000;
 export const QUERY_DIFF_TRUNCATE = 2_000;
 export const SPEC_SEARCH_POOL = 15;

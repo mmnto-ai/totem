@@ -117,6 +117,7 @@ The core of the Codebase Immune System. Reads your uncommitted diff and checks i
   - `--format json`: Exports structured JSON including a unified `findings[]` array (ADR-071 Unified Findings Model) alongside raw `violations[]`.
   - `--learn`: Prompts you to extract a new lesson if a violation is found.
   - `--auto-capture`: Enables Pipeline 5 observation auto-capture during the review (off by default).
+  - `--estimate`: Pre-flight deterministic-rule predictor (zero-LLM). Runs `compiled-rules.json` against the diff and prints predicted findings tagged `[Estimate]` so they are not conflated with an LLM verdict. Bypasses the entire Verification Layer — no orchestrator, no embedder, no LanceDB. Useful for predicting bot findings before opening a PR. Example: `totem review --estimate --diff main...HEAD`. Incompatible with `--learn`, `--auto-capture`, `--override`, `--suppress`, `--fresh`, `--mode`, and `--raw`.
 
 ### `totem test`
 
