@@ -586,7 +586,19 @@ describe('runEstimate — pattern-history overlay', () => {
   });
 
   it('emits a single warn line when recurrence-stats.json fails the schema projection', async () => {
-    writeSubstrate(tmpDir, { version: 1, patterns: [{ signature: 42 /* not a string */ }] });
+    // CR mmnto-ai/totem#1739 R4 nitpick: build a VALID substrate first,
+    // then corrupt only the projected field we want to lock. The prior
+    // shape `{ version: 1, patterns: [{ signature: 42 }] }` was malformed
+    // in multiple ways, so the test stayed green even if the projection
+    // stopped validating signature and rejected some other gap.
+    const payload = makeSubstratePayload([
+      {
+        signature: 'sig-will-be-corrupted',
+        sampleBodies: ['avoid using async-storage in render-path components'],
+      },
+    ]) as { patterns: Array<{ signature: unknown }> };
+    payload.patterns[0]!.signature = 42;
+    writeSubstrate(tmpDir, payload);
     mockGetDiffForReview.mockResolvedValue(diffResult());
 
     const { runEstimate } = await import('./shield-estimate.js');
@@ -596,6 +608,44 @@ describe('runEstimate — pattern-history overlay', () => {
 
     const warns = warnLines().filter((l) => /Pattern-history layer skipped/.test(l));
     expect(warns).toHaveLength(1);
+  });
+
+  // ─── CR mmnto-ai/totem#1739 R4 (Minor) — empty prs[] regression ─
+
+  it('skips patterns with empty prs[] and renders other patterns normally', async () => {
+    // Substrate-by-construction always emits ≥1 PR per cluster (see
+    // `runRecurrenceStats`), but the projection schema does not enforce
+    // `prs.min(1)`. A tampered substrate with `prs: []` would otherwise
+    // render as "in PRs (containment: 0.83)" — a no-signal stanza. The
+    // overlay skips such patterns at match time so the graceful-degrade
+    // contract holds without converting it into a parse failure.
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([
+        {
+          signature: 'sig-empty-prs-skipped',
+          prs: [],
+          sampleBodies: ['avoid using async-storage in render-path components'],
+        },
+        {
+          signature: 'sig-normal-rendered',
+          prs: ['1700', '1710'],
+          sampleBodies: ['avoid using async-storage in render-path components'],
+        },
+      ]),
+    );
+    mockGetDiffForReview.mockResolvedValue(
+      diffResult({
+        diff: diffWithAdditions(['avoid async-storage render-path components']),
+      }),
+    );
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    const lines = infoLines();
+    expect(lines.some((l) => /sig-empty-prs-skipped/.test(l))).toBe(false);
+    expect(lines.some((l) => /sig-normal-rendered/.test(l))).toBe(true);
   });
 
   // ─── Containment-coefficient asymmetry — the load-bearing test ──

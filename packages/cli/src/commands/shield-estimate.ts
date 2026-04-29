@@ -208,6 +208,13 @@ async function runPatternHistoryOverlay(args: {
   const matches: PatternHistoryMatch[] = [];
   for (const pat of parsed.patterns) {
     if (pat.sampleBodies.length === 0) continue;
+    // Substrate-by-construction emits ≥1 PR per cluster (see
+    // `runRecurrenceStats`), but the projection schema doesn't enforce
+    // `prs.min(1)` — keeping it open preserves the graceful-degrade
+    // contract on a malformed substrate. Skip the rendering for an
+    // empty PR list since the stanza ("in PRs ") would carry no signal.
+    // Per CR mmnto-ai/totem#1739 R4 (Minor).
+    if (pat.prs.length === 0) continue;
     // Q2 (locked): union of all up-to-3 sample bodies, not just [0]. The
     // bodies share a normalized signature so their vocabulary overlaps;
     // the union gives a more complete picture of the pattern's tokens
