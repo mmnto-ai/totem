@@ -17,6 +17,16 @@ describe('sanitizeForTerminal', () => {
     expect(sanitizeForTerminal('del\x7fhere')).toBe('del here');
   });
 
+  it('strips \\r (CR) — a bare CR rewinds the terminal cursor', () => {
+    // CR mmnto-ai/totem#1739 R3 Critical: \r alone overwrites the current
+    // terminal line; preserving it would defeat the sanitizer's whole
+    // purpose. \n still survives.
+    expect(sanitizeForTerminal('safe\rrewound')).toBe('safe rewound');
+    expect(sanitizeForTerminal('safe\r\nwindows')).toBe('safe \nwindows');
+    // No CR survives anywhere in the output.
+    expect(sanitizeForTerminal('a\rb\rc\rd')).not.toContain('\r');
+  });
+
   it('replaces C1 control bytes (\\x80-\\x9f) with a space — closes the original \\x7f gap', () => {
     // \x9b is the 8-bit CSI introducer — directly equivalent to ESC [ on
     // 8-bit-clean terminals. CR mmnto-ai/totem#1739 R2 caught the original

@@ -914,6 +914,45 @@ describe('runEstimate — pattern-history overlay', () => {
     expect(source).not.toMatch(/createEmbedder/);
   });
 
+  // CR mmnto-ai/totem#1739 R3 (Major): symbol-only grep can't catch
+  // a TRANSITIVE-load regression where the overlay starts importing
+  // a benign-looking module that itself pulls the orchestrator graph.
+  // Specifically: `cli/src/utils.ts` has a static value-import of
+  // `./orchestrators/orchestrator.js`, so any future drift to
+  // `await import('../utils.js')` in shield-estimate would silently
+  // re-introduce the orchestrator graph onto the estimate path.
+  // Module-path bans + a dynamic-import allowlist close that gap.
+  it('does not statically or dynamically import any orchestrator-loading module path', async () => {
+    const estimatePath = path.join(__dirname, 'shield-estimate.ts');
+    const source = fs.readFileSync(estimatePath, 'utf-8');
+
+    // Direct orchestrator imports (static or dynamic).
+    expect(source).not.toMatch(/['"]\.\.\/orchestrators\//);
+    // Transitive load via utils.ts (which statically imports the orchestrator
+    // graph at utils.ts:18). The overlay must route sanitizeForTerminal
+    // through `terminal-sanitize.js` instead.
+    expect(source).not.toMatch(/['"]\.\.\/utils\.js['"]/);
+
+    // Dynamic-import allowlist — every `await import(...)` in shield-estimate
+    // resolves to one of these. Mirrors the retrospect.test.ts:524 guard.
+    const allowedDynamicImports = [
+      "await import('node:fs')",
+      "await import('node:path')",
+      "await import('zod')",
+      "await import('../ui.js')",
+      "await import('../git.js')",
+      "await import('./run-compiled-rules.js')",
+      "await import('@mmnto/totem')",
+      "await import('../terminal-sanitize.js')",
+    ];
+    let residual = source;
+    for (const expected of allowedDynamicImports) {
+      // totem-context: stripping allowed dynamic-import substrings to assert no stray imports remain — empty separator is the correct semantics for the source-grep guard.
+      residual = residual.split(expected).join('');
+    }
+    expect(residual).not.toMatch(/await import\(['"][^'"]+['"]\)/);
+  });
+
   // ─── CR mmnto-ai/totem#1739 R1 (Major) — configRoot path resolution ─
 
   it('resolves the substrate path relative to configRoot, not cwd', async () => {
