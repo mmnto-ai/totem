@@ -902,6 +902,35 @@ describe('runEstimate — pattern-history overlay', () => {
     expect(lines.some((l) => /sig-poison/.test(l))).toBe(false);
   });
 
+  it('preserves added lines starting with `++` (the header guard requires a trailing space)', async () => {
+    // Pre-push Sonnet pickup on CR R4: `line.startsWith('+++')` would
+    // misclassify `+++increment;` (a real addition of `++increment;`) as
+    // a file header. The guard now requires `'+++ '` with trailing space,
+    // which is the actual unified-diff format for `+++ <path>` headers.
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([{ signature: 'sig-plusplus', sampleBodies: ['increment counter'] }]),
+    );
+    // Real added line of `++increment;` is rendered as `+++increment;` in
+    // the unified diff. The header `+++ b/foo.ts` (with space) must still
+    // be filtered.
+    const diffWithPlusPlus =
+      'diff --git a/foo.ts b/foo.ts\n' +
+      '--- a/foo.ts\n' +
+      '+++ b/foo.ts\n' +
+      '@@ -1 +1,2 @@\n' +
+      ' existing\n' +
+      '+++increment counter\n';
+    mockGetDiffForReview.mockResolvedValue(diffResult({ diff: diffWithPlusPlus }));
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    const lines = infoLines();
+    // Pattern matches because `increment` and `counter` survived tokenization.
+    expect(lines.some((l) => /sig-plusplus/.test(l))).toBe(true);
+  });
+
   it('orders matches by containment desc, then signature asc, deterministically', async () => {
     writeSubstrate(
       tmpDir,

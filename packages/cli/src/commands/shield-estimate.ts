@@ -278,14 +278,20 @@ async function runPatternHistoryOverlay(args: {
 
 /**
  * Extract added lines from a unified diff into a single newline-joined
- * string. Strips the leading `+` and intentionally skips `+++` file
- * headers so file paths don't poison the token pool.
+ * string. Strips the leading `+` and intentionally skips `+++ <path>`
+ * file headers so file paths don't poison the token pool.
+ *
+ * Header guard requires a trailing space (`'+++ '`) so a real added line
+ * of code starting with `++` (e.g., `++increment;` rendered as
+ * `+++increment;` in the unified diff) is NOT misclassified as a header.
+ * The trailing space is mandated by the unified-diff format. Pre-push
+ * Sonnet pickup on `mmnto-ai/totem#1739` R4.
  */
 function extractDiffAdditions(diff: string): string {
   const out: string[] = [];
   for (const line of diff.split(/\r?\n/)) {
     if (!line.startsWith('+')) continue; // totem-context: `line` is a string-typed split result, not a fileGlobs config entry — the startsWith lint rule targets the latter.
-    if (line.startsWith('+++')) continue; // totem-context: same as the line above — string-typed split result.
+    if (line.startsWith('+++ ')) continue; // totem-context: same as the line above — string-typed split result.
     out.push(line.slice(1));
   }
   return out.join('\n');
