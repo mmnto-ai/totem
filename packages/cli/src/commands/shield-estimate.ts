@@ -95,7 +95,16 @@ export async function runEstimate(
   // (mmnto-ai/totem#1731). Default-on; Commander auto-inverts the negative
   // flag, so `options.history === false` is the explicit opt-out.
   if (options.history === false) return;
-  await runPatternHistoryOverlay({ diff: diffResult.diff, cwd, totemDir: config.totemDir });
+  // Substrate path is rooted at `configRoot` (the dir containing
+  // `totem.config.ts`), NOT `cwd` — invocations from a nested working dir
+  // would otherwise probe `<cwd>/.totem/recurrence-stats.json` and disable
+  // the overlay even though the substrate exists at the project root.
+  // Per CR mmnto-ai/totem#1739 round-1 (Major).
+  await runPatternHistoryOverlay({
+    diff: diffResult.diff,
+    configRoot,
+    totemDir: config.totemDir,
+  });
 }
 
 /**
@@ -112,7 +121,7 @@ export async function runEstimate(
  */
 async function runPatternHistoryOverlay(args: {
   diff: string;
-  cwd: string;
+  configRoot: string;
   totemDir: string;
 }): Promise<void> {
   const fs = await import('node:fs');
@@ -120,6 +129,7 @@ async function runPatternHistoryOverlay(args: {
   const { z } = await import('zod');
   const { log } = await import('../ui.js');
   const { tokenizeForJaccard } = await import('@mmnto/totem');
+  const { sanitizeForTerminal } = await import('../utils.js');
 
   // Inline 4-field projection of `RecurrenceStatsSchema` (the canonical
   // shape lives in `packages/core/src/recurrence-stats.ts`). Same
@@ -145,7 +155,7 @@ async function runPatternHistoryOverlay(args: {
     ),
   });
 
-  const substratePath = path.join(args.cwd, args.totemDir, 'recurrence-stats.json');
+  const substratePath = path.join(args.configRoot, args.totemDir, 'recurrence-stats.json');
   if (!fs.existsSync(substratePath)) {
     log.dim(
       ESTIMATE_DISPLAY_TAG,
@@ -234,13 +244,22 @@ async function runPatternHistoryOverlay(args: {
   );
   log.info(ESTIMATE_DISPLAY_TAG, '');
 
+  // Sanitize every substrate-derived field before stderr — `signature`,
+  // `prs`, and `sampleBody` come from `recurrence-stats.json` on disk, and
+  // a tampered substrate could plant ANSI/CSI sequences that spoof cursor
+  // moves or color resets. Per CR mmnto-ai/totem#1739 round-1 (Major);
+  // mirrors the `sanitizeForTerminal` defense `retrospect.ts` already
+  // applies to GitHub-sourced bodyExcerpt content.
   for (const m of matches) {
-    const prList = m.prs.map((p) => `#${p}`).join(', ');
+    const prList = m.prs.map((p) => `#${sanitizeForTerminal(p)}`).join(', ');
     log.info(
       ESTIMATE_DISPLAY_TAG,
-      `  ${m.signature} — ${m.occurrences}x in PRs ${prList} (containment: ${m.containment.toFixed(2)})`,
+      `  ${sanitizeForTerminal(m.signature)} — ${m.occurrences}x in PRs ${prList} (containment: ${m.containment.toFixed(2)})`,
     );
-    const truncated = truncateSampleBody(m.sampleBody, PATTERN_HISTORY_SAMPLE_BODY_MAX);
+    const truncated = truncateSampleBody(
+      sanitizeForTerminal(m.sampleBody),
+      PATTERN_HISTORY_SAMPLE_BODY_MAX,
+    );
     log.info(ESTIMATE_DISPLAY_TAG, `    "${truncated}"`);
   }
 }

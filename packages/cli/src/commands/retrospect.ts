@@ -43,24 +43,9 @@ const RULE_COVERAGE_JACCARD_THRESHOLD = 0.6;
 /** Max chars rendered for a finding's body excerpt in the console report. */
 const RENDER_SNIPPET_MAX = 80;
 
-/**
- * Strip ANSI/control bytes from text that originated in untrusted GitHub
- * review content before it lands in `log.dim()`. Per CR mmnto-ai/totem#1734
- * round-2: raw `bodyExcerpt` printed without sanitization is a terminal-
- * injection vector (a hostile reviewer can plant CSI sequences that spoof
- * cursor moves or color resets).
- *
- * Removes:
- * - CSI sequences (ESC `[` … final byte): the standard ANSI escape form.
- * - C0/C1 control bytes other than `\n` and `\t` (which `replace(/\s+/g, ' ')`
- *   downstream collapses anyway, but pre-replacing makes the surface stable
- *   regardless of caller order).
- */
-function sanitizeForTerminal(value: string): string {
-  return value
-    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
-    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, ' ');
-}
+// `sanitizeForTerminal` was promoted to `cli/src/utils.ts` per CR mmnto-ai/totem#1739
+// round-1 — single-source-of-truth for the bot-tax cluster's terminal-injection defense
+// (`shield-estimate.ts` reads substrate-derived fields and uses the same helper).
 
 // ─── Public option surface ───────────────────────────
 
@@ -117,7 +102,7 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
     toSeverityBucket,
     tokenizeForJaccard,
   } = await import('@mmnto/totem');
-  const { loadConfig, resolveConfigPath } = await import('../utils.js');
+  const { loadConfig, resolveConfigPath, sanitizeForTerminal } = await import('../utils.js');
 
   // Local schema — the recurrence-stats file shape is defined in core,
   // but reading it here keeps the zod import lazy.
@@ -485,7 +470,7 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
   }
 
   // 11. Render console report.
-  renderReport(report, log);
+  renderReport(report, log, sanitizeForTerminal);
 
   // 12. Optional --out write (deterministic two-space JSON).
   if (options.out) {
@@ -540,7 +525,11 @@ interface RenderableReport {
   overrideEventsObserved: number;
 }
 
-function renderReport(report: RenderableReport, log: MinimalLogger): void {
+function renderReport(
+  report: RenderableReport,
+  log: MinimalLogger,
+  sanitizeForTerminal: (value: string) => string,
+): void {
   log.info(
     TAG,
     `PR #${report.prNumber} (${report.prState}) — ${report.rounds.length} round(s), ${report.totalFindings} bot finding(s).`,

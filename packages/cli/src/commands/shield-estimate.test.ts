@@ -913,6 +913,81 @@ describe('runEstimate — pattern-history overlay', () => {
     expect(source).not.toMatch(/LanceStore/);
     expect(source).not.toMatch(/createEmbedder/);
   });
+
+  // ─── CR mmnto-ai/totem#1739 R1 (Major) — configRoot path resolution ─
+
+  it('resolves the substrate path relative to configRoot, not cwd', async () => {
+    // Substrate written at configRoot (project root). cwd is a nested
+    // working dir with no `.totem/` of its own. Pre-fix the overlay would
+    // probe `<nestedCwd>/.totem/recurrence-stats.json`, miss, and emit
+    // the "skipped" hint — disabling the overlay despite the substrate
+    // existing at configRoot. Post-fix the overlay resolves against
+    // configRoot and finds the substrate.
+    const nestedCwd = path.join(tmpDir, 'nested', 'subdir');
+    fs.mkdirSync(nestedCwd, { recursive: true });
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([
+        {
+          signature: 'sig-rooted-at-configroot',
+          sampleBodies: ['avoid using async-storage in render-path components'],
+        },
+      ]),
+    );
+    mockGetDiffForReview.mockResolvedValue(
+      diffResult({
+        diff: diffWithAdditions(['avoid async-storage render-path components']),
+      }),
+    );
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    // cwd = nested working dir (substrate-empty), configRoot = project root
+    // (substrate lives here).
+    await runEstimate({ estimate: true }, makeConfig(), nestedCwd, tmpDir);
+
+    const all = [...infoLines(), ...dimLines()];
+    expect(all.some((l) => /sig-rooted-at-configroot/.test(l))).toBe(true);
+    // Skipped-hint MUST NOT fire — the substrate was found via configRoot.
+    expect(all.some((l) => /Pattern-history layer skipped/.test(l))).toBe(false);
+  });
+
+  // ─── CR mmnto-ai/totem#1739 R1 (Major) — terminal-injection defense ─
+
+  it('sanitizes ANSI/control bytes in substrate-derived signature, PR list, and sample body', async () => {
+    // A tampered substrate could plant CSI sequences (`\x1b[...]`) that
+    // spoof cursor moves or color resets when rendered to stderr. Closes
+    // the same class CR caught on `retrospect.ts` PR mmnto-ai/totem#1734.
+    const ansi = '\x1b[31mRED\x1b[0m';
+    const ctrl = '\x07'; // BEL — a C0 control byte
+    writeSubstrate(
+      tmpDir,
+      makeSubstratePayload([
+        {
+          signature: `sig-${ansi}-aaaa`,
+          prs: [`1700${ansi}`, `${ctrl}1710`],
+          sampleBodies: [`avoid ${ansi} async-storage render-path ${ctrl} components`],
+        },
+      ]),
+    );
+    mockGetDiffForReview.mockResolvedValue(
+      diffResult({
+        diff: diffWithAdditions(['avoid async-storage render-path components']),
+      }),
+    );
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+    // No ESC byte (\x1b) survives sanitization.
+    const all = [...infoLines(), ...dimLines(), ...warnLines()];
+    for (const line of all) {
+      expect(line).not.toContain('\x1b');
+      expect(line).not.toContain('\x07');
+    }
+    // The pattern still rendered — sanitization stripped the unsafe bytes,
+    // not the surrounding text.
+    expect(all.some((l) => /sig-.*-aaaa/.test(l))).toBe(true);
+  });
 });
 
 // ─── Runtime orchestrator spy guard (mirrors retrospect.test.ts:546) ──

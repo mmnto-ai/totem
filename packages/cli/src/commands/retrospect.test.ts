@@ -42,11 +42,18 @@ vi.mock('../ui.js', () => ({
   },
 }));
 
-// Mock loadConfig + resolveConfigPath to a tmp totemDir.
-vi.mock('../utils.js', () => ({
-  loadConfig: vi.fn().mockImplementation(async () => ({ totemDir: '.totem' })),
-  resolveConfigPath: vi.fn().mockReturnValue(''),
-}));
+// Mock loadConfig + resolveConfigPath to a tmp totemDir; keep the real
+// `sanitizeForTerminal` (promoted to `utils.ts` per CR mmnto-ai/totem#1739
+// R1, shared with `shield-estimate.ts`) so the existing terminal-output
+// sanitization test still exercises the real regex.
+vi.mock('../utils.js', async () => {
+  const actual = await vi.importActual<typeof import('../utils.js')>('../utils.js');
+  return {
+    ...actual,
+    loadConfig: vi.fn().mockImplementation(async () => ({ totemDir: '.totem' })),
+    resolveConfigPath: vi.fn().mockReturnValue(''),
+  };
+});
 
 const uiModule = await import('../ui.js');
 const mockLog = vi.mocked(uiModule.log);
