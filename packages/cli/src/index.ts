@@ -321,6 +321,10 @@ const reviewOptions = (cmd: Command) =>
       '--estimate',
       'Pre-flight deterministic-rule estimator (zero-LLM). Runs compiled-rules.json against the diff and prints predicted findings tagged [Estimate]. Bypasses the LLM Verification Layer entirely. Incompatible with --learn, --auto-capture, --override, --suppress, --fresh, --mode, and --raw.',
     )
+    .option(
+      '--no-history',
+      'Pattern-history overlay (effective only with --estimate). On by default; pass --no-history to skip the overlay even when .totem/recurrence-stats.json is present. No effect on the LLM review path.',
+    )
     .addHelpText(
       'after',
       [
@@ -341,6 +345,14 @@ const reviewOptions = (cmd: Command) =>
         // totem-context: documented git-range example in --help text for users of --diff, not a hardcoded base-branch reference in product code
         '    totem review --estimate --diff main...HEAD',
         '',
+        'Pattern-history layer (default on with --estimate; opt out via --no-history):',
+        '  After the deterministic pass, the estimator reads',
+        '  .totem/recurrence-stats.json (mmnto-ai/totem#1715 substrate) and emits a',
+        '  separate stanza listing historically recurring patterns whose tokens',
+        '  are present in the diff additions above a containment threshold of 0.4.',
+        '  Patterns already covered by a compiled rule are skipped; missing or',
+        '  malformed substrate degrades gracefully with a single hint line.',
+        '',
       ].join('\n'),
     );
 
@@ -360,6 +372,7 @@ async function runReview(opts: {
   suppress?: string[];
   autoCapture?: boolean;
   estimate?: boolean;
+  history?: boolean;
 }): Promise<void> {
   // Redirect removed --deterministic flag to totem lint
   if (opts.deterministic) {

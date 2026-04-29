@@ -118,6 +118,26 @@ The core of the Codebase Immune System. Reads your uncommitted diff and checks i
   - `--learn`: Prompts you to extract a new lesson if a violation is found.
   - `--auto-capture`: Enables Pipeline 5 observation auto-capture during the review (off by default).
   - `--estimate`: Pre-flight deterministic-rule predictor (zero-LLM). Runs `compiled-rules.json` against the diff and prints predicted findings tagged `[Estimate]` so they are not conflated with an LLM verdict. Bypasses the entire Verification Layer — no orchestrator, no embedder, no LanceDB. Useful for predicting bot findings before opening a PR. Example: `totem review --estimate --diff main...HEAD`. Incompatible with `--learn`, `--auto-capture`, `--override`, `--suppress`, `--fresh`, `--mode`, and `--raw`.
+  - `--no-history`: Disables the pattern-history overlay layer on the `--estimate` path. The overlay is on by default when `.totem/recurrence-stats.json` is present; pass `--no-history` to skip it. Has no effect on the LLM review path.
+
+#### Pattern-history layer (mmnto-ai/totem#1731)
+
+After the deterministic-rule pass, `--estimate` reads `.totem/recurrence-stats.json` (the substrate written by `totem stats --pattern-recurrence`) and emits a separate stanza listing historically recurring patterns whose tokens are present in the diff additions above a containment threshold of 0.4. The overlay output is tagged `[Estimate]` and rendered below the deterministic verdict with a blank-line separator so users cannot conflate "rule X will fire at file:line" with "this diff resembles a recurrent pattern that no rule yet covers."
+
+- Patterns already covered by a compiled rule are skipped; the overlay surfaces only the `patterns[]` array, never `coveredPatterns[]`.
+- Containment is asymmetric: at least 40% of the pattern's significant tokens (after the substrate's stopword + length filter) must appear in the diff additions for a match.
+- Missing or malformed `.totem/recurrence-stats.json` degrades gracefully. The estimator logs a one-line hint and continues; the deterministic-pass output is unchanged.
+- `--no-history` skips the overlay even when the substrate is present.
+
+Example output stanza:
+
+```text
+[Estimate] ─── Pattern-history layer ───
+[Estimate] 2 historical pattern(s) match this diff (uncovered by current rules):
+[Estimate]
+[Estimate]   a3f1c2d4e5b6 — 7x in PRs #1700, #1710, #1720 (containment: 0.83)
+[Estimate]     "avoid using async-storage in render-path components"
+```
 
 ### `totem test`
 
