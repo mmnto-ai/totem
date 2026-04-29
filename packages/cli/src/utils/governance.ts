@@ -71,11 +71,16 @@ export function resolveGovernancePaths(cwd: string, type: GovernanceType): Gover
     );
   }
 
-  const standaloneHasProposals = fs.existsSync(path.join(gitRoot, 'proposals'));
-  const standaloneHasAdr = fs.existsSync(path.join(gitRoot, 'adr'));
+  // Standalone detection requires BOTH the type-specific target subdir AND
+  // a `templates/` folder at the repo root. The conjunction catches the
+  // canonical strategy-repo layout (proposals/active/ + adr/ + templates/)
+  // while avoiding false positives on consumer repos that happen to ship a
+  // top-level `adr/` docs folder without a strategy substrate.
+  const standaloneHasTarget = fs.existsSync(path.join(gitRoot, targetSubpath(type)));
+  const standaloneHasTemplates = fs.existsSync(path.join(gitRoot, 'templates'));
 
   let rootDir: string;
-  if (standaloneHasProposals || standaloneHasAdr) {
+  if (standaloneHasTarget && standaloneHasTemplates) {
     rootDir = gitRoot;
   } else {
     const status = resolveStrategyRoot(cwd, { gitRoot });

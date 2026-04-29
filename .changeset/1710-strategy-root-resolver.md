@@ -1,5 +1,5 @@
 ---
-'@mmnto/totem': patch
+'@mmnto/totem': minor
 ---
 
 feat(core): `resolveStrategyRoot` substrate (mmnto-ai/totem#1710)

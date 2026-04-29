@@ -62,9 +62,12 @@ describe('resolveGovernancePaths', () => {
 
   it('resolves standalone strategy path when submodule prefix is missing', async () => {
     initGit(tmpDir);
-    // Standalone strategy repo — `proposals/active/` lives at the git root, no `.strategy/` prefix.
+    // Standalone strategy repo — `adr/` lives at the git root, no `.strategy/` prefix.
+    // `templates/` sentinel at the root distinguishes a real strategy repo from a
+    // consumer repo that happens to ship a top-level `adr/` docs folder.
     fs.mkdirSync(path.join(tmpDir, 'proposals', 'active'), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, 'adr'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
 
     const { resolveGovernancePaths } = await import('./governance.js');
     const paths = resolveGovernancePaths(tmpDir, 'adr');
@@ -73,6 +76,17 @@ describe('resolveGovernancePaths', () => {
     expect(paths.targetDir).toBe(path.normalize(path.join(tmpDir, 'adr')));
     expect(paths.dashboardFile).toBe(path.normalize(path.join(tmpDir, 'README.md')));
     expect(paths.templatePath).toBe(path.normalize(path.join(tmpDir, 'templates', 'adr.md')));
+  });
+
+  it('rejects standalone false-positive when a consumer repo has only adr/ without templates/', async () => {
+    initGit(tmpDir);
+    // Consumer repo with a top-level `adr/` docs folder but NO `templates/`
+    // and NO sibling/submodule strategy. Pre-tightening, this would have
+    // false-positively scaffolded into the consumer's adr/ folder.
+    fs.mkdirSync(path.join(tmpDir, 'adr'), { recursive: true });
+
+    const { resolveGovernancePaths } = await import('./governance.js');
+    expect(() => resolveGovernancePaths(tmpDir, 'adr')).toThrow(/strategy/i);
   });
 
   it('throws TotemError when cwd is not inside a git repository', async () => {
@@ -514,6 +528,7 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
     initGit(tmpDir);
     fs.mkdirSync(path.join(tmpDir, 'proposals', 'active'), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, 'adr'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
 
     const calls: Array<{ cmd: string; args: string[] }> = [];
     const exec = (cmd: string, args: string[]): void => {
@@ -549,6 +564,7 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
     initGit(tmpDir);
     fs.mkdirSync(path.join(tmpDir, 'proposals', 'active'), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, 'adr'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
 
     const exec = (): void => {};
 
@@ -572,6 +588,7 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
     // template body see the cleaned form.
     initGit(tmpDir);
     fs.mkdirSync(path.join(tmpDir, 'proposals', 'active'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
 
     const exec = (): void => {};
 
@@ -604,6 +621,7 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
   it('creates file on disk even when docs:inject is missing', async () => {
     initGit(tmpDir);
     fs.mkdirSync(path.join(tmpDir, 'proposals', 'active'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
 
     const origWarn = console.error;
     console.error = () => {};
@@ -632,6 +650,7 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
     initGit(tmpDir);
     const target = path.join(tmpDir, 'proposals', 'active');
     fs.mkdirSync(target, { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
     fs.writeFileSync(path.join(target, '001-alpha.md'), '# a\n', 'utf-8');
     fs.writeFileSync(path.join(target, '003-beta.md'), '# b\n', 'utf-8');
 
@@ -649,6 +668,7 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
     initGit(tmpDir);
     const target = path.join(tmpDir, 'proposals', 'active');
     fs.mkdirSync(target, { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
     // Seed with the exact filename the scaffolder would generate for this title:
     // id=001 + slug='collide' ⇒ '001-collide.md'. We force this by ALSO seeding a
     // higher-numbered file so getNextArtifactId returns 002, then we seed 002-collide.md
@@ -688,6 +708,7 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
   it('throws TotemError BEFORE touching disk when title sanitizes to empty', async () => {
     initGit(tmpDir);
     fs.mkdirSync(path.join(tmpDir, 'proposals', 'active'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
 
     const execCalls: string[] = [];
     const exec = (cmd: string): void => {

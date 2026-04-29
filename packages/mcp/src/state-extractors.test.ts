@@ -61,8 +61,12 @@ describe('extractStrategyPointer (mmnto-ai/totem#1710)', () => {
     delete process.env.STRATEGY_ROOT;
   });
   afterEach(() => {
-    if (prevEnvPrimary !== undefined) process.env.TOTEM_STRATEGY_ROOT = prevEnvPrimary;
-    if (prevEnvAlias !== undefined) process.env.STRATEGY_ROOT = prevEnvAlias;
+    // Symmetric restore: when prev was undefined, the env var was unset
+    // before this suite ran — DELETE rather than leak the test's value.
+    if (prevEnvPrimary === undefined) delete process.env.TOTEM_STRATEGY_ROOT;
+    else process.env.TOTEM_STRATEGY_ROOT = prevEnvPrimary;
+    if (prevEnvAlias === undefined) delete process.env.STRATEGY_ROOT;
+    else process.env.STRATEGY_ROOT = prevEnvAlias;
   });
 
   it('returns the unresolved branch when no strategy root is reachable', () => {

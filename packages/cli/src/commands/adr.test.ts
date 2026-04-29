@@ -52,6 +52,7 @@ describe('adrNewCommand', () => {
     initGit(tmpDir);
     fs.mkdirSync(path.join(tmpDir, 'proposals', 'active'), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, 'adr'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const { adrNewCommand } = await import('./adr.js');
@@ -73,6 +74,7 @@ describe('adrNewCommand', () => {
   it('respects gap numbering in adr/ directory', async () => {
     initGit(tmpDir);
     fs.mkdirSync(path.join(tmpDir, 'adr'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, 'adr', '001-alpha.md'), '# a\n', 'utf-8');
     fs.writeFileSync(path.join(tmpDir, 'adr', '004-beta.md'), '# b\n', 'utf-8');
 

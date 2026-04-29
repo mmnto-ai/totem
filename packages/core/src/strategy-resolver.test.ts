@@ -242,11 +242,22 @@ describe('resolveStrategyRoot git-root anchoring', () => {
     });
   });
 
-  it('returns unresolved when gitRoot is null and no env/config override is set', () => {
+  it('falls back to cwd-anchored sibling/submodule when gitRoot is null', () => {
+    // <cwd>/../totem-strategy is the cwd-anchored sibling location.
+    const sibling = mkDir(path.join(cwd, '..', 'totem-strategy'));
+    const status = resolveStrategyRoot(cwd, { gitRoot: null, env: emptyEnv() });
+    expect(status).toEqual({
+      resolved: true,
+      path: path.normalize(sibling),
+      source: 'sibling',
+    });
+  });
+
+  it('returns unresolved when gitRoot is null AND no cwd-anchored layer matches', () => {
     const status = resolveStrategyRoot(cwd, { gitRoot: null, env: emptyEnv() });
     expect(status.resolved).toBe(false);
     if (!status.resolved) {
-      expect(status.reason).toMatch(/git/i);
+      expect(status.reason).toMatch(/strategy/i);
     }
   });
 
@@ -277,12 +288,17 @@ describe('resolveStrategyRoot git-root anchoring', () => {
     });
   });
 
-  it('returns unresolved when gitRoot is null and env value is relative', () => {
+  it('anchors relative env values at cwd when gitRoot is null', () => {
+    const sibling = mkDir(path.join(cwd, '..', 'totem-strategy'));
     const status = resolveStrategyRoot(cwd, {
       gitRoot: null,
       env: { TOTEM_STRATEGY_ROOT: '../totem-strategy' },
     });
-    expect(status.resolved).toBe(false);
+    expect(status).toEqual({
+      resolved: true,
+      path: path.normalize(sibling),
+      source: 'env',
+    });
   });
 });
 

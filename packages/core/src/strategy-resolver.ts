@@ -82,16 +82,15 @@ function readEnvValue(env: Record<string, string | undefined>): string | undefin
 }
 
 /**
- * Resolve a raw value (env or config) to an absolute path. Relative values
- * anchor at `gitRoot` when available; absolute values are returned as-is.
- * Returns `null` when the value is relative AND `gitRoot` is null (the
- * caller cannot anchor a relative path without a repo root).
+ * Resolve a raw value (env or config) to an absolute path. Absolute values
+ * are returned as-is; relative values anchor at the supplied base
+ * (`gitRoot ?? cwd`) via `path.join` so that an absolute user-provided
+ * value doesn't override the anchor (which `path.resolve` would).
  */
-function resolveValue(raw: string, gitRoot: string | null): string | null {
+function resolveValue(raw: string, anchor: string): string {
   const trimmed = raw.trim();
   if (path.isAbsolute(trimmed)) return path.normalize(trimmed);
-  if (gitRoot === null) return null;
-  return path.normalize(path.resolve(gitRoot, trimmed));
+  return path.normalize(path.join(anchor, trimmed));
 }
 
 /**
@@ -119,45 +118,40 @@ export function resolveStrategyRoot(
   const env = options.env ?? process.env;
   const gitRoot = options.gitRoot !== undefined ? options.gitRoot : resolveGitRoot(cwd);
   const config = options.config;
+  // Unified anchor — gitRoot when available, cwd otherwise. The cwd fallback
+  // matches the design spec's "Missing git context" trap and lets relative
+  // env / config / sibling / submodule layers resolve in non-git contexts
+  // (e.g., a one-off script outside a checkout). Downstream consumers
+  // validate the resolved path and fail loudly if the cwd-anchored result
+  // isn't viable.
+  const anchor = gitRoot ?? cwd;
 
   // Layer 1 — env var
   const envValue = readEnvValue(env);
   if (envValue !== undefined) {
-    const resolved = resolveValue(envValue, gitRoot);
-    if (resolved !== null && isDirectory(resolved)) {
+    const resolved = resolveValue(envValue, anchor);
+    if (isDirectory(resolved)) {
       return { resolved: true, path: resolved, source: 'env' };
     }
   }
 
   // Layer 2 — config field
   if (config?.strategyRoot !== undefined && config.strategyRoot.trim().length > 0) {
-    const resolved = resolveValue(config.strategyRoot, gitRoot);
-    if (resolved !== null && isDirectory(resolved)) {
+    const resolved = resolveValue(config.strategyRoot, anchor);
+    if (isDirectory(resolved)) {
       return { resolved: true, path: resolved, source: 'config' };
     }
   }
 
-  // Layers 3 + 4 require a known git root — sibling and submodule are both
-  // anchored at `<gitRoot>` and there is no useful fallback when we cannot
-  // find one. Surfacing the unresolved status here is the actionable signal:
-  // the agent gets back "no git root" instead of a stale-path footgun.
-  if (gitRoot === null) {
-    return {
-      resolved: false,
-      reason:
-        'No strategy root resolvable: cwd is outside a git repository and no absolute env / config override is set.',
-    };
-  }
-
-  // Layer 3 — sibling at <gitRoot>/../totem-strategy
-  const sibling = path.normalize(path.resolve(gitRoot, '..', SIBLING_DIRNAME));
+  // Layer 3 — sibling at <anchor>/../totem-strategy
+  const sibling = path.normalize(path.join(anchor, '..', SIBLING_DIRNAME));
   if (isDirectory(sibling)) {
     return { resolved: true, path: sibling, source: 'sibling' };
   }
 
-  // Layer 4 — submodule at <gitRoot>/.strategy (legacy path; kept until
+  // Layer 4 — submodule at <anchor>/.strategy (legacy path; kept until
   // the gitlink-removal follow-up retires `.gitmodules`).
-  const submodule = path.normalize(path.join(gitRoot, SUBMODULE_DIRNAME));
+  const submodule = path.normalize(path.join(anchor, SUBMODULE_DIRNAME));
   if (isDirectory(submodule)) {
     return { resolved: true, path: submodule, source: 'submodule' };
   }

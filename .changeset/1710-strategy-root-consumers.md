@@ -1,5 +1,5 @@
 ---
-'@mmnto/mcp': minor
+'@mmnto/mcp': major
 '@mmnto/cli': patch
 ---
 
