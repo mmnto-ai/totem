@@ -447,7 +447,6 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
 interface MinimalLogger {
   info(tag: string, msg: string): void;
   warn(tag: string, msg: string): void;
-  error(tag: string, msg: string): void;
   dim(tag: string, msg: string): void;
 }
 
