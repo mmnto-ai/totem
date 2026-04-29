@@ -1,6 +1,6 @@
 {
   "name": "@totem/pack-agent-security",
-  "version": "1.16.1",
+  "version": "1.17.0",
   "private": true,
   "description": "Zero-Trust Agent Governance security pack for Totem (ADR-089). Ships compound ast-grep rules that block known prompt-injection attack patterns at the commit boundary.",
   "license": "MIT",
