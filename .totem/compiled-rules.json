@@ -7480,6 +7480,74 @@
       "archivedReason": "Duplicate of db1a795f — same astGrepPattern (new Error($MSG + $ERR)), same fileGlobs (packages/core/src/sys/git.ts), same goodExample shape (cause property). Two related lessons from the same PR (mmnto-ai/totem#1727 / mmnto-ai/totem#1729) compiled into structurally identical rules. Keeping db1a795f as the canonical.",
       "archivedAt": "2026-04-29T03:15:25.913Z",
       "unverified": true
+    },
+    {
+      "lessonHash": "26bd1934c46c1103",
+      "lessonHeading": "Resolve substrate files relative to configRoot",
+      "pattern": "",
+      "message": "Use configRoot instead of process.cwd() when resolving substrate file paths to ensure consistent behavior across execution contexts.",
+      "engine": "ast-grep",
+      "astGrepPattern": "path.join(process.cwd(), $$$ARGS)",
+      "badExample": "const substratePath = path.join(process.cwd(), 'substrate.md');",
+      "goodExample": "const substratePath = path.join(configRoot, 'substrate.md');",
+      "compiledAt": "2026-04-29T17:11:22.396Z",
+      "createdAt": "2026-04-29T17:11:22.396Z",
+      "fileGlobs": [
+        "packages/cli/src/**/*.ts",
+        "!**/*.test.*"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "Pattern fires on every path.join(process.cwd(), ...) including legitimate test-source reads (lesson.test.ts, search.test.ts) and install-test tmp dirs. Lesson scope is substrate-file lookups in command code where configRoot is the right base; compiled rule lost that nuance and over-matches across the codebase.",
+      "archivedAt": "2026-04-29T17:12:42.962Z"
+    },
+    {
+      "lessonHash": "38fc929f07d83bf4",
+      "lessonHeading": "Use unique temp names for atomic writes",
+      "pattern": "",
+      "message": "Temporary filenames for atomic writes must include crypto.randomUUID() to prevent collisions during concurrent executions. PID-only or timestamp-only suffixes can collide.",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "any": [
+            {
+              "pattern": "`${$A}.tmp.${process.pid}`"
+            },
+            {
+              "pattern": "`${$A}.tmp.${Date.now()}`"
+            },
+            {
+              "pattern": "`${$A}-tmp-${process.pid}`"
+            },
+            {
+              "pattern": "`${$A}-tmp-${Date.now()}`"
+            },
+            {
+              "pattern": "`${$A}.${process.pid}.tmp`"
+            },
+            {
+              "pattern": "`${$A}.${Date.now()}.tmp`"
+            },
+            {
+              "pattern": "path.join($DIR, `.tmp.${process.pid}`)"
+            },
+            {
+              "pattern": "path.join($DIR, `.tmp.${Date.now()}`)"
+            }
+          ]
+        }
+      },
+      "badExample": "const tmpFile = `${targetPath}.tmp.${process.pid}`;",
+      "goodExample": "const tmpFile = `${targetPath}.tmp.${crypto.randomUUID()}`;",
+      "compiledAt": "2026-04-29T17:11:30.283Z",
+      "createdAt": "2026-04-29T17:11:30.283Z",
+      "fileGlobs": [
+        "packages/cli/**/*.ts",
+        "!**/*.test.*"
+      ],
+      "severity": "warning",
+      "unverified": true
     }
   ],
   "nonCompilable": [
@@ -12539,6 +12607,18 @@
       "title": "Use Jaccard similarity for deterministic coverage",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes an algorithmic design choice (use Jaccard similarity instead of LLM embeddings for rule mapping) — there is no detectable code pattern that distinguishes a Jaccard implementation from a missing or incorrect one in source code."
+    },
+    {
+      "hash": "e027dd46b359d7c0",
+      "title": "Assert import boundaries in LLM-free tests",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Hazard requires multi-file transitive import analysis; a single-pattern rule cannot determine whether a module transitively imports a heavy dependency graph across the full module resolution chain."
+    },
+    {
+      "hash": "0543874eac198193",
+      "title": "Use containment coefficient for diff matching",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Lesson describes an algorithmic choice (Jaccard vs. containment coefficient) for similarity scoring; detecting which formula is used requires semantic analysis of mathematical expressions across multiple variables and operations, not a surface-level pattern match."
     }
   ]
 }
