@@ -1,0 +1,31 @@
+/**
+ * Dependency-light terminal-injection defense.
+ *
+ * Strips ANSI/control bytes from text that originated in untrusted sources
+ * (GitHub review content, on-disk substrate files, etc.) before it lands
+ * in a `log.*` call. Per CR mmnto-ai/totem#1734 R2 + mmnto-ai/totem#1739
+ * R2: raw text printed without sanitization is a terminal-injection
+ * vector — a hostile reviewer or a tampered substrate can plant CSI
+ * sequences that spoof cursor moves or color resets.
+ *
+ * Removes:
+ * - CSI sequences (ESC `[` … final byte): the standard ANSI escape form.
+ * - C0 control bytes other than `\n` and `\t` (which `replace(/\s+/g, ' ')`
+ *   downstream collapses anyway, but pre-replacing makes the surface
+ *   stable regardless of caller order).
+ * - C1 control bytes `\x80-\x9f`: 8-bit control-sequence variants per
+ *   ECMA-48; CR mmnto-ai/totem#1739 R2 caught the original regex
+ *   stopped at `\x7f`.
+ *
+ * **No imports.** This file is intentionally dep-light so the
+ * `mmnto-ai/totem#1731` pattern-history overlay on `--estimate` can pull
+ * it in without dragging the orchestrator graph in via `cli/src/utils.ts`
+ * (which has a static import of `./orchestrators/orchestrator.js`). Per
+ * CR mmnto-ai/totem#1739 R2 (Major).
+ */
+// totem-context: regex char-class with hex escapes targets specific control bytes — not the unbounded `.*` quantifier the ReDoS rule flags
+export function sanitizeForTerminal(value: string): string {
+  return value
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g, ' ');
+}

@@ -958,14 +958,16 @@ describe('runEstimate — pattern-history overlay', () => {
     // spoof cursor moves or color resets when rendered to stderr. Closes
     // the same class CR caught on `retrospect.ts` PR mmnto-ai/totem#1734.
     const ansi = '\x1b[31mRED\x1b[0m';
-    const ctrl = '\x07'; // BEL — a C0 control byte
+    const ctrlC0 = '\x07'; // BEL — a C0 control byte
+    const ctrlC1 = '\x9b'; // CSI 8-bit equivalent — a C1 control byte
     writeSubstrate(
       tmpDir,
       makeSubstratePayload([
         {
           signature: `sig-${ansi}-aaaa`,
-          prs: [`1700${ansi}`, `${ctrl}1710`],
-          sampleBodies: [`avoid ${ansi} async-storage render-path ${ctrl} components`],
+          prs: [`1700${ansi}`, `${ctrlC0}1710`],
+          // totem-context: adjacent ${ctrlC0}${ctrlC1} placeholders are an intentional fixture — both C0 (BEL \x07) and C1 (CSI 8-bit \x9b) bytes need to land in the rendered output so the sanitizer test asserts both are stripped. The disjoint-concat rule targets `${a}${b}` token-fusing, not adjacent control-byte fixtures.
+          sampleBodies: [`avoid ${ansi} async-storage render-path ${ctrlC0}${ctrlC1} components`],
         },
       ]),
     );
@@ -978,11 +980,12 @@ describe('runEstimate — pattern-history overlay', () => {
     const { runEstimate } = await import('./shield-estimate.js');
     await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
 
-    // No ESC byte (\x1b) survives sanitization.
+    // No ESC, BEL (C0), or CSI-8bit (C1) bytes survive sanitization.
     const all = [...infoLines(), ...dimLines(), ...warnLines()];
     for (const line of all) {
       expect(line).not.toContain('\x1b');
       expect(line).not.toContain('\x07');
+      expect(line).not.toContain('\x9b');
     }
     // The pattern still rendered — sanitization stripped the unsafe bytes,
     // not the surrounding text.

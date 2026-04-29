@@ -28,30 +28,12 @@ export const IS_WIN = process.platform === 'win32';
 /** Timeout for GitHub CLI calls (ms). */
 export const GH_TIMEOUT_MS = 15_000;
 
-/**
- * Strip ANSI/control bytes from text that originated in untrusted sources
- * (GitHub review content, on-disk substrate files, etc.) before it lands in
- * a `log.*` call. Per CR mmnto-ai/totem#1734 round-2: raw text printed
- * without sanitization is a terminal-injection vector — a hostile reviewer
- * or a tampered substrate can plant CSI sequences that spoof cursor moves
- * or color resets.
- *
- * Removes:
- * - CSI sequences (ESC `[` … final byte): the standard ANSI escape form.
- * - C0/C1 control bytes other than `\n` and `\t` (which `replace(/\s+/g, ' ')`
- *   downstream collapses anyway, but pre-replacing makes the surface stable
- *   regardless of caller order).
- *
- * Shared by the bot-tax cluster: `retrospect.ts` (review-body excerpts) and
- * `shield-estimate.ts` (substrate-derived sample bodies + signatures + PR
- * lists, per CR mmnto-ai/totem#1739 round-1).
- */
-// totem-context: regex char-class with hex escapes targets specific control bytes — not the unbounded `.*` quantifier the ReDoS rule flags
-export function sanitizeForTerminal(value: string): string {
-  return value
-    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
-    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, ' ');
-}
+// `sanitizeForTerminal` lives in `./terminal-sanitize.ts` per CR
+// mmnto-ai/totem#1739 R2 — a dep-light helper file so the pattern-history
+// overlay on `--estimate` can lazy-import it without dragging the
+// orchestrator graph in via this module's static import of
+// `./orchestrators/orchestrator.js`.
+export { sanitizeForTerminal } from './terminal-sanitize.js';
 
 /**
  * Load environment variables from .env file (does not override existing).

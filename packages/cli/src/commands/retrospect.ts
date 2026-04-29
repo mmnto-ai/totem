@@ -102,6 +102,13 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
     toSeverityBucket,
     tokenizeForJaccard,
   } = await import('@mmnto/totem');
+  // `sanitizeForTerminal` is re-exported from `../utils.js` (canonical
+  // location: `./terminal-sanitize.ts` — see CR mmnto-ai/totem#1739 R2).
+  // Routing it through `terminal-sanitize.js` would NOT save load cost
+  // here because utils.js is already in this command's lazy-import set
+  // for `loadConfig` + `resolveConfigPath`; the orchestrator graph is
+  // already in. The dep-light routing matters for `shield-estimate.ts`'s
+  // pattern-history overlay (which doesn't otherwise load utils).
   const { loadConfig, resolveConfigPath, sanitizeForTerminal } = await import('../utils.js');
 
   // Local schema — the recurrence-stats file shape is defined in core,

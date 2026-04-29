@@ -129,7 +129,12 @@ async function runPatternHistoryOverlay(args: {
   const { z } = await import('zod');
   const { log } = await import('../ui.js');
   const { tokenizeForJaccard } = await import('@mmnto/totem');
-  const { sanitizeForTerminal } = await import('../utils.js');
+  // Imported from `terminal-sanitize.js` (dep-light) NOT `../utils.js`.
+  // Per CR mmnto-ai/totem#1739 R2 (Major): `cli/src/utils.ts` statically
+  // imports `./orchestrators/orchestrator.js`, so loading utils on the
+  // estimate path would transitively pull the orchestrator graph in
+  // and break this PR's no-orchestrator-imports invariant.
+  const { sanitizeForTerminal } = await import('../terminal-sanitize.js');
 
   // Inline 4-field projection of `RecurrenceStatsSchema` (the canonical
   // shape lives in `packages/core/src/recurrence-stats.ts`). Same
