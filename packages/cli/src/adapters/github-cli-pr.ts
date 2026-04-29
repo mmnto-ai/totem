@@ -11,6 +11,7 @@ import type {
   StandardCodeScanAlert,
   StandardPr,
   StandardPrListItem,
+  StandardPrReviewSubmission,
   StandardReviewComment,
 } from './pr-adapter.js';
 
@@ -44,13 +45,45 @@ const GhPrSchema = z.object({
 
 const GhReviewCommentSchema = z.object({
   id: z.number(),
-  user: z.object({ login: z.string() }),
+  // Nullable for deleted/ghost accounts — mirrors `GhPrReviewSchema.user`.
+  // Per Sonnet review on mmnto-ai/totem#1734 round-2.
+  user: z.object({ login: z.string() }).nullable(),
   body: z.string(),
   path: z.string(),
   diff_hunk: z.string(),
   in_reply_to_id: z.number().optional(),
   created_at: z.string().optional(),
+  /**
+   * Stable link from a review comment back to its parent review submission.
+   * Per CR mmnto-ai/totem#1734 round-2: `created_at` can predate the parent
+   * review's `submitted_at` for pending/draft reviews, so timestamp joins
+   * mis-attribute the head SHA. `pull_request_review_id` is the foreign
+   * key. Null for non-review comments (issue comments).
+   */
+  pull_request_review_id: z.number().nullable().optional(),
 });
+
+// Subset of `repos/<owner>/<repo>/pulls/<N>/reviews`. We only consume
+// the fields the bot-tax circuit-breaker needs (commit_id for push-based
+// round grouping, submitted_at for ordering, user.login for bot
+// detection, state + body for surface-level filtering). Strictly typed
+// so an upstream API shape change surfaces as a TotemParseError instead
+// of silently widening the round count.
+const GhPrReviewSchema = z.object({
+  id: z.number(),
+  user: z.object({ login: z.string() }).nullable(),
+  commit_id: z.string().nullable().optional(),
+  submitted_at: z.string().nullable().optional(),
+  state: z.string(),
+  body: z.string().nullable(),
+});
+
+// `StandardPrReviewSubmission` lives in `pr-adapter.ts` (the platform-neutral
+// surface). Per CR mmnto-ai/totem#1734 round-2 the `fetchReviews` method also
+// lives on the `PrAdapter` interface so consumers can stay decoupled from the
+// concrete adapter implementation. Callers MUST null-guard `user_login` before
+// passing to `isBotComment` (deleted/ghost accounts surface as null per the
+// GitHub API).
 
 const GhCodeScanAlertSchema = z
   .object({
@@ -119,12 +152,46 @@ export class GitHubCliPrAdapter implements PrAdapter {
     );
     return comments.map((c) => ({
       id: c.id,
-      author: c.user.login,
+      // `user` may be null for deleted/ghost accounts; coerce to '' so the
+      // existing `StandardReviewComment.author: string` contract holds.
+      // `isBotComment('')` correctly returns false, so the comment drops
+      // out of bot-detection paths without surfacing as a non-bot author.
+      author: c.user?.login ?? '',
       body: c.body,
       path: c.path,
       diffHunk: c.diff_hunk,
       inReplyToId: c.in_reply_to_id,
       createdAt: c.created_at,
+      pullRequestReviewId: c.pull_request_review_id ?? null,
+    }));
+  }
+
+  /**
+   * Fetch the per-submission review record for a PR, exposing
+   * `commit_id` (head SHA at review time) and `submitted_at` so callers
+   * can group findings into push-based rounds. The shape returned by
+   * `gh pr view --json reviews` (used by `fetchPr`) intentionally does
+   * NOT include `commit_id`, so the bot-tax circuit-breaker
+   * (mmnto-ai/totem#1713) reaches for the lower-level paginated
+   * `repos/<owner>/<repo>/pulls/<N>/reviews` endpoint.
+   *
+   * Read-only. No GitHub mutation.
+   */
+  fetchReviews(prNumber: number): StandardPrReviewSubmission[] {
+    const nwo = this.getRepoNwo();
+    const reviews = ghFetchAndParse(
+      ['api', `repos/${nwo}/pulls/${prNumber}/reviews`, '--paginate'],
+      z.array(GhPrReviewSchema),
+      `review submissions for PR #${prNumber}`,
+      this.cwd,
+    );
+    return reviews.map((r) => ({
+      id: r.id,
+      user_login: r.user?.login ?? null,
+      commit_id: r.commit_id ?? undefined,
+      submitted_at: r.submitted_at ?? undefined,
+      state: r.state,
+      body: r.body ?? '',
     }));
   }
 

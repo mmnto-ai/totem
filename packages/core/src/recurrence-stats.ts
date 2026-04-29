@@ -35,6 +35,63 @@ export const RecurrenceSeverityBucketSchema = z.enum(['critical', 'high', 'mediu
 
 export type RecurrenceSeverityBucket = z.infer<typeof RecurrenceSeverityBucketSchema>;
 
+/**
+ * Map a tool-specific raw severity string into the normalized
+ * `RecurrenceSeverityBucket` vocabulary. Single source of truth across
+ * the bot-tax cluster (mmnto-ai/totem#1715, #1714, #1713).
+ *
+ * Tool inputs:
+ * - `'coderabbit'`: `critical` / `major` / `minor` / `*` → `critical` / `high` / `medium` / `low`
+ * - `'gca'`: `high` / `medium` / `low` → identical buckets; default `low`
+ * - `'sarif'`: SARIF level vocabulary (`error` / `warning` / `note` / `none`) → `high` / `medium` / `low` / `low`
+ * - `'override'`: trap-ledger override events surface as `medium`
+ * - any other tool (`'unknown'`, `undefined`): keyword-mapped from the raw severity string
+ */
+/**
+ * Derived from `RecurrenceTool` to prevent type drift; `'mixed'` is a
+ * post-cluster aggregate label that no caller passes here. Per CR
+ * mmnto-ai/totem#1734 round-2.
+ */
+export type SeverityBucketTool = Exclude<RecurrenceTool, 'mixed'> | undefined;
+
+export function toSeverityBucket(
+  tool: SeverityBucketTool,
+  severity: string,
+): RecurrenceSeverityBucket {
+  // totem-context: `severity` is a CR/GCA severity label string ('critical', 'major', etc.), not a filesystem path. toLowerCase + chained || comparisons here are deliberate equality fan-outs, not numeric defaulting; the lint warnings on this function are false positives.
+  const s = severity.toLowerCase();
+  if (tool === 'override') return 'medium';
+  if (tool === 'coderabbit') {
+    if (s === 'critical') return 'critical';
+    if (s === 'major') return 'high';
+    if (s === 'minor') return 'medium';
+    return 'low';
+  }
+  if (tool === 'gca') {
+    if (s === 'high') return 'high';
+    if (s === 'medium') return 'medium';
+    if (s === 'low') return 'low';
+    return 'low';
+  }
+  if (tool === 'sarif') {
+    // SARIF v2.1.0 §3.27.10 result.level vocabulary.
+    if (s === 'error') return 'high';
+    if (s === 'warning') return 'medium';
+    if (s === 'note') return 'low';
+    if (s === 'none') return 'low';
+    return 'low';
+  }
+  // unknown tool / synthesized review-body
+  if (s === 'critical') return 'critical';
+  // totem-context: `||` here is a chained equality fan-out across severity-label aliases, NOT a numeric default. The nullish-coalescing rule is a false positive on these comparison branches.
+  if (s === 'high' || s === 'major') return 'high';
+  // totem-context: chained equality fan-out — see comment above.
+  if (s === 'medium' || s === 'minor' || s === 'warning') return 'medium';
+  // totem-context: chained equality fan-out — see comment above.
+  if (s === 'low' || s === 'info') return 'low';
+  return 'nit';
+}
+
 /** A single cross-PR cluster of bot/override findings sharing one signature. */
 export const RecurrencePatternSchema = z.object({
   /** Stable hash of the normalized pattern body — used as cluster key */

@@ -14,6 +14,11 @@ import { reapOrphanedTempFiles } from './utils.js';
 const require = createRequire(import.meta.url);
 const { version } = z.object({ version: z.string() }).parse(require('../package.json'));
 
+// Retrospect thresholds (mmnto-ai/totem#1713). Shared across option default,
+// help text, and validation so they don't drift.
+const RETROSPECT_DEFAULT_THRESHOLD = 5;
+const RETROSPECT_MIN_THRESHOLD = 1;
+
 function requireGhCli(): void {
   try {
     execSync('gh --version', { stdio: 'ignore', timeout: 3000 });
@@ -418,6 +423,70 @@ program
       await triagePrCommand(prNumber, { interactive: opts.interactive });
     } catch (err) {
       handleError(err);
+    }
+  });
+
+program
+  .command('retrospect <pr-number>')
+  .description(
+    'Bot-tax circuit-breaker — push-grouped review-round retrospective with route-out heuristics (mmnto-ai/totem#1713)',
+  )
+  .option(
+    '--threshold <n>',
+    `Minimum bot-review round count to render the report (default: ${RETROSPECT_DEFAULT_THRESHOLD})`,
+    String(RETROSPECT_DEFAULT_THRESHOLD),
+  )
+  .option('--force', 'Bypass the threshold gate and render even if rounds < threshold')
+  .option('--out <path>', 'Write the JSON report to a file (deterministic two-space indent)')
+  // totem-context: --auto-file is intentionally NOT exposed in v0.1 per
+  // .totem/specs/1713.md Q2 — mass-filing follow-up issues is irreversible
+  // and the human can copy-paste the suggested titles + bodies. Re-add via a
+  // follow-up ticket.
+  .addHelpText(
+    'after',
+    [
+      '',
+      'Reads PR review history live, groups findings into push-based rounds via',
+      "each review submission's commit_id, enriches findings with cross-PR",
+      'recurrence + rule-coverage flags from .totem/recurrence-stats.json and',
+      '.totem/compiled-rules.json (read-only; both are graceful-degrade), and',
+      'classifies each finding as route-out / in-pr-fix / undetermined via a',
+      'deterministic table. No LLM. No GitHub API writes. Sub-threshold runs',
+      'exit 0 (pass --force to inspect anyway).',
+      '',
+      'Requires the GitHub CLI (`gh`) authenticated against the current repo.',
+      '',
+    ].join('\n'),
+  )
+  .action(async (prNumber: string, opts: { threshold?: string; force?: boolean; out?: string }) => {
+    requireGhCli();
+    try {
+      // Strict integer parse — `parseInt` accepts trailing non-numerics
+      // ("5foo" → 5). Per GCA mmnto-ai/totem#1734 review-1.
+      let threshold: number | undefined;
+      if (opts.threshold !== undefined) {
+        const n = Number(opts.threshold);
+        if (!Number.isInteger(n) || n < RETROSPECT_MIN_THRESHOLD) {
+          const { TotemConfigError } = await import('@mmnto/totem');
+          throw new TotemConfigError(
+            `Invalid --threshold value: ${opts.threshold}`,
+            `Pass an integer >= ${RETROSPECT_MIN_THRESHOLD} (e.g. '--threshold ${RETROSPECT_DEFAULT_THRESHOLD}').`,
+            'CONFIG_INVALID',
+          );
+        }
+        threshold = n;
+      }
+      const { runRetrospect } = await import('./commands/retrospect.js');
+      await runRetrospect({
+        prNumber,
+        threshold,
+        force: opts.force,
+        out: opts.out,
+      });
+    } catch (err) {
+      handleError(err);
+      // totem-context: handleError returns `never` (process.exit), so the throw is unreachable but required to satisfy the Tenet 4 fail-loud rule that bans bare-catch silent-degrade. Mirrors the stats command at line ~192.
+      throw err;
     }
   });
 

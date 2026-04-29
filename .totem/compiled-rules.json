@@ -7377,10 +7377,109 @@
         "packages/core/src/lesson-pattern.ts"
       ],
       "severity": "warning",
-      "unverified": true,
       "status": "archived",
       "archivedReason": "Pattern $STR.split(\",\") is over-broad — matches any .split(',') call in lesson-pattern.ts regardless of whether it's splitting glob strings, while the actual fix was a domain-specific brace-aware parser. Lesson body content is correct documentation but doesn't translate to a useful structural detection rule.",
-      "archivedAt": "2026-04-26T01:25:00.626Z"
+      "archivedAt": "2026-04-26T01:25:00.626Z",
+      "unverified": true
+    },
+    {
+      "lessonHash": "a8d925e6306435bf",
+      "lessonHeading": "Map minor bot findings to nit severity",
+      "pattern": "severity:\\s*['\"]low['\"]",
+      "message": "Map minor/non-critical bot findings to 'nit' severity instead of 'low' for semantic clarity",
+      "engine": "regex",
+      "badExample": "return { severity: 'low', message: finding.description };",
+      "goodExample": "return { severity: 'nit', message: finding.description };",
+      "compiledAt": "2026-04-29T03:13:35.213Z",
+      "createdAt": "2026-04-29T03:13:35.213Z",
+      "fileGlobs": [
+        "packages/cli/**/*.ts",
+        "!**/*.test.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Pattern severity:\\s*['\"]low['\"] scoped to packages/cli/**/*.ts is over-broad. The lesson targets bot-review-parser severity mapping specifically (CR/GCA finding normalization), but the pattern fires on any 'low' severity literal across the entire CLI surface (shell findings, telemetry levels, audit results, etc.). Source lesson scope needs narrowing to packages/cli/src/parsers/** before re-compile.",
+      "archivedAt": "2026-04-29T03:15:22.063Z",
+      "unverified": true
+    },
+    {
+      "lessonHash": "db1a795ffbd27a10",
+      "lessonHeading": "Use cause property for error wrapping",
+      "pattern": "",
+      "message": "Avoid concatenating error messages when re-throwing. Use the 'cause' property instead: new Error('message', { cause: originalError })",
+      "engine": "ast-grep",
+      "astGrepPattern": "new Error($MSG + $ERR)",
+      "badExample": "throw new Error('Failed to run git: ' + err.message);",
+      "goodExample": "throw new Error('Failed to run git', { cause: err });",
+      "compiledAt": "2026-04-29T03:13:33.167Z",
+      "createdAt": "2026-04-29T03:13:33.167Z",
+      "fileGlobs": [
+        "packages/core/src/sys/git.ts"
+      ],
+      "severity": "warning",
+      "unverified": true
+    },
+    {
+      "lessonHash": "7ead2c2fe3d7d2be",
+      "lessonHeading": "Map unknown CodeRabbit severities to nit",
+      "pattern": "",
+      "message": "Default unknown CodeRabbit severity strings to 'nit' instead of 'low' to correctly categorize minor findings",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "pattern": "$VAR ?? 'low'"
+        }
+      },
+      "badExample": "const severity = rawSeverity ?? 'low';",
+      "goodExample": "const severity = rawSeverity ?? 'nit';",
+      "compiledAt": "2026-04-29T03:13:38.454Z",
+      "createdAt": "2026-04-29T03:13:38.454Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/recurrence-stats.ts"
+      ],
+      "severity": "warning",
+      "unverified": true
+    },
+    {
+      "lessonHash": "51ce685e6c7e68a1",
+      "lessonHeading": "Block leading hyphens in Git ranges",
+      "pattern": "",
+      "message": "Inverted startsWith('-') check: use `if (range.startsWith('-')) throw` to block leading hyphens, not the negated form",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "pattern": "!$RANGE.startsWith('-')"
+        }
+      },
+      "badExample": "if (!range.startsWith('-')) { throw new Error('invalid range'); }",
+      "goodExample": "if (range.startsWith('-')) { throw new Error('invalid range'); }",
+      "compiledAt": "2026-04-29T03:14:00.582Z",
+      "createdAt": "2026-04-29T03:14:00.582Z",
+      "fileGlobs": [
+        "packages/core/src/sys/git.ts"
+      ],
+      "severity": "warning",
+      "unverified": true
+    },
+    {
+      "lessonHash": "d6bcc038f1cc2b82",
+      "lessonHeading": "Prefer Error cause over concatenation",
+      "pattern": "",
+      "message": "Use 'cause' property instead of string concatenation when re-throwing errors: new Error('msg', { cause: err })",
+      "engine": "ast-grep",
+      "astGrepPattern": "new Error($MSG + $ERR)",
+      "badExample": "throw new Error('Failed to fetch: ' + err);",
+      "goodExample": "throw new Error('Failed to fetch', { cause: err });",
+      "compiledAt": "2026-04-29T03:13:43.090Z",
+      "createdAt": "2026-04-29T03:13:43.090Z",
+      "fileGlobs": [
+        "packages/core/src/sys/git.ts"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Duplicate of db1a795f — same astGrepPattern (new Error($MSG + $ERR)), same fileGlobs (packages/core/src/sys/git.ts), same goodExample shape (cause property). Two related lessons from the same PR (mmnto-ai/totem#1727 / mmnto-ai/totem#1729) compiled into structurally identical rules. Keeping db1a795f as the canonical.",
+      "archivedAt": "2026-04-29T03:15:25.913Z",
+      "unverified": true
     }
   ],
   "nonCompilable": [
@@ -12284,6 +12383,162 @@
       "title": "Normalize temp paths for cross-platform equality",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes a best-practice for path normalization in tests (use realpathSync on temp dirs), but the rule would need to detect the *absence* of realpathSync wrapping around temp directory creation — which requires semantic analysis to determine whether a given path variable originates from a temp dir and whether it is later normalized before comparison. No surface pattern can distinguish a correctly-normalized path from a missing normalization."
+    },
+    {
+      "hash": "6e345a454b8718c0",
+      "title": "Guard Git ranges against flag injection",
+      "reasonCode": "context-required",
+      "reason": "Lesson requires detecting whether a Git ref range variable has been validated for a leading-dash check before being passed to a shell command. A pattern cannot distinguish a validated ref from an unvalidated one — the guard (a preceding startsWith('-') or /^-/ check on the range variable) is a semantic data-flow property, not a structural AST shape expressible via fileGlobs, kind:, inside:, or has: combinators."
+    },
+    {
+      "hash": "4f85cc11f6b68d91",
+      "title": "Apply ignore patterns to explicit diffs",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/behavioral requirement about applying ignore patterns to diff ranges — there is no detectable code pattern that distinguishes a diff call that correctly applies ignore patterns from one that does not. Detecting the violation requires semantic analysis of which ignore patterns are active and whether they are threaded through to explicit diff range code paths."
+    },
+    {
+      "hash": "5293e602fd90b09e",
+      "title": "Derive metadata from resolved diff sources",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Hazard requires multi-file semantic analysis: detecting whether the 'staged' value passed downstream was derived from the resolved diff result versus the raw CLI flag requires tracking data flow across function boundaries, which no single-pattern rule can express."
+    },
+    {
+      "hash": "9f9a23f46df605e7",
+      "title": "Use Jaccard similarity for pattern coverage",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an algorithmic/mathematical heuristic (Jaccard similarity threshold selection) for pattern coverage analysis, not a detectable code pattern. There is no specific code construct, API call, or syntax violation that can be matched with a regex or AST rule."
+    },
+    {
+      "hash": "f5e5b03e299a6f06",
+      "title": "Derive staged status from resolved diffs",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural principle about deriving metadata flags from resolved diff sources rather than raw CLI flags. There is no detectable code pattern that distinguishes 'isStaged set from raw CLI flags' from 'isStaged set from resolved diff source' — both would appear as assignments like `isStaged = someValue` and the correctness depends on the semantic origin of the value, which requires multi-file data-flow analysis."
+    },
+    {
+      "hash": "f876728d37456145",
+      "title": "Surface truncation warnings before processing",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural principle about where to place input validation logic (at the resolution layer, before LLM processing). There is no detectable code pattern that distinguishes a correctly-placed size check from a misplaced one — the rule requires understanding the call graph and execution order across multiple layers."
+    },
+    {
+      "hash": "74cc937fc39e2c5f",
+      "title": "Sort PR identifiers numerically",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Detecting whether an array of PR identifiers is sorted numerically vs. lexically requires runtime value analysis and comparison of array element ordering — a single-pattern rule cannot inspect the relative ordering of values in an array literal or sort comparator."
+    },
+    {
+      "hash": "ccfbd8dd165c2f48",
+      "title": "Order flag incompatibility guards first",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a code organization/ordering principle within validation logic. There is no detectable surface pattern that distinguishes 'incompatibility guard' code from 'value validation' code — the rule requires understanding the semantic intent of each conditional block, which is beyond what regex or AST structural patterns can express."
+    },
+    {
+      "hash": "956aebfab8806cdf",
+      "title": "Normalize findings by stripping transient metadata",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Hazard requires semantic analysis to determine whether a finding's signature/identity computation strips transient metadata (file paths, line numbers, code fences, URLs); no single-pattern rule can distinguish a normalization function that correctly strips these fields from one that omits the stripping step."
+    },
+    {
+      "hash": "d3278ec3e198d170",
+      "title": "Ensure per-item resilience in batch processing",
+      "reasonCode": "context-required",
+      "reason": "Lesson requires detecting the absence of per-item try/catch inside batch-processing loops over external data. A pattern matching forEach/map/for-of loops without inner try/catch would fire on every loop in the codebase, and no structural combinator can distinguish 'loops over external API data' from other loops."
+    },
+    {
+      "hash": "a0420db6d8b9b43f",
+      "title": "Warn on large diffs before LLM",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural placement principle (where to surface diff truncation warnings — at the resolution layer before LLM invocation) rather than a detectable code pattern. No specific function call, import, or structural construct can be matched to distinguish compliant from non-compliant implementations."
+    },
+    {
+      "hash": "c90a0cc7229421d2",
+      "title": "Execute rule engine for accurate predictions",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural principle about using a rule engine instead of glob matching for predictions. There is no detectable code pattern that distinguishes 'simple glob matching' from 'rule engine execution' — the violation depends on the internal logic and data flow of the prediction system, not any surface-level syntax or API call."
+    },
+    {
+      "hash": "f113a4452bfb2ec5",
+      "title": "Sync help text with runtime constants",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural principle (keeping help text in sync with named constants) that requires semantic analysis to detect — a pattern cannot determine whether a numeric literal in a help string corresponds to a runtime constant or is an independent, intentional value."
+    },
+    {
+      "hash": "c97e26f3b4451ef8",
+      "title": "Prefer engine execution for citations",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural principle about which code path to invoke (engine execution vs. glob matching) for citation accuracy. There is no detectable surface pattern — the distinction between 'full rule engine' and 'simple glob matching' depends on the semantic intent of the calling code, not any specific syntax, API call, or import that can be matched structurally."
+    },
+    {
+      "hash": "d365cd5e91fd337e",
+      "title": "Lazy load CLI display templates",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Detecting whether a static import is a 'display tag or template' used inside a 'command handler' requires semantic analysis of import targets and their usage context across multiple files; a single-pattern rule cannot distinguish display template imports from other legitimate static imports."
+    },
+    {
+      "hash": "f048d814f56b89e4",
+      "title": "Implement per-item catch in batch pipelines",
+      "reasonCode": "context-required",
+      "reason": "Lesson requires detecting the absence of per-item catch blocks inside batch pipeline loops; pattern cannot distinguish loops that already have per-item error handling from those that do not without analyzing the full loop body structure and its error-handling coverage."
+    },
+    {
+      "hash": "09d8c8f981a7d1d5",
+      "title": "Normalize signatures for cross-PR clustering",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a data normalization algorithm (stripping paths, line references, code fences, and URLs from text) for clustering purposes — this is a conceptual/architectural principle about how to compute stable signatures, not a detectable code pattern that can be expressed as a regex or AST rule."
+    },
+    {
+      "hash": "80c26b5b8d68cd3f",
+      "title": "Avoid stamping cache on forecasts",
+      "reasonCode": "context-required",
+      "reason": "Lesson restricts cache-stamp operations to estimation/empty-diff run contexts; a pattern matching cache update calls cannot distinguish whether the call site is inside an estimation or empty-diff code path without multi-file control-flow analysis."
+    },
+    {
+      "hash": "1faa92e37a134952",
+      "title": "Lazy-load CLI command constants",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural pattern (lazy-loading via dynamic imports inside command handlers) that requires semantic analysis to distinguish: (1) static imports at module top-level vs. dynamic imports inside handler functions, and (2) whether the imported values are 'display tags and templates' vs. other constants. No single ast-grep pattern or regex can reliably identify that a static import of a display/template constant is being used inside a command handler rather than at module initialization time, without multi-file or semantic context."
+    },
+    {
+      "hash": "3ebe62b34b3c2282",
+      "title": "Lazy load heavy modules in CLI handlers",
+      "reasonCode": "context-required",
+      "reason": "Lesson requires distinguishing top-level static imports from dynamic imports inside command handler functions; a pattern matching 'import ... from \"node:fs\"' would fire on legitimate dynamic imports and cannot structurally determine whether the import is at the module top-level versus inside a handler body without full AST context that ast-grep's current combinator set cannot reliably express for import_statement nodes."
+    },
+    {
+      "hash": "e1578312c3722ebc",
+      "title": "Prioritize incompatibility guards over validation",
+      "reasonCode": "context-required",
+      "reason": "Lesson describes an ordering constraint between two code sections (incompatibility checks must precede validation logic) within a function body; no pattern can distinguish whether a given validation call appears before or after an incompatibility guard without analyzing the relative position of sibling statements."
+    },
+    {
+      "hash": "9725558abf5f953d",
+      "title": "Ensure override paths update content-hash cache",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Hazard requires multi-file semantic analysis: detecting whether a manual override path updates the content-hash cache requires tracking data flow across the override logic and cache update calls, which a single-pattern rule cannot express."
+    },
+    {
+      "hash": "5f230b2a86fed7be",
+      "title": "Log diff source discriminators for transparency",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/observability principle — 'log the chosen source when using fallback chains' — that requires understanding control flow across multiple branches and their logging behavior. No single pattern can detect the absence of a log statement in the context of a fallback chain without semantic analysis of the surrounding logic."
+    },
+    {
+      "hash": "a2dea5e6e77a1105",
+      "title": "Synchronize caches in override paths",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural invariant requiring semantic analysis across multiple code paths (override vs. passing paths) to verify that the same state caches are updated in both. No single pattern can detect which caches are updated in which branch or whether they are synchronized."
+    },
+    {
+      "hash": "65dec4532eabb337",
+      "title": "Guard review cache against forecast runs",
+      "reasonCode": "context-required",
+      "reason": "Lesson constrains the violation to forecast/estimate execution paths; a pattern matching cache-stamp calls cannot distinguish whether the call site is reachable from a forecast run versus a normal push-gate run without control-flow analysis across multiple call frames."
+    },
+    {
+      "hash": "4cf1c5ec337a4f16",
+      "title": "Use Jaccard similarity for deterministic coverage",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an algorithmic design choice (use Jaccard similarity instead of LLM embeddings for rule mapping) — there is no detectable code pattern that distinguishes a Jaccard implementation from a missing or incorrect one in source code."
     }
   ]
 }
