@@ -51,7 +51,11 @@ describe('DescribeProjectOutputSchema backward compatibility', () => {
 
   it('accepts legacy shape with richState populated', () => {
     const rich = {
-      strategyPointer: { sha: 'abc1234', latestJournal: '2026-04-16-session.md' },
+      strategyPointer: {
+        resolved: true as const,
+        sha: 'abc1234',
+        latestJournal: '2026-04-16-session.md',
+      },
       gitState: { branch: 'main', uncommittedFiles: [], truncated: false },
       packageVersions: { '@mmnto/cli': '1.14.10' },
       ruleCounts: { active: 10, archived: 2, nonCompilable: 3 },
@@ -117,17 +121,90 @@ describe('MilestoneStateSchema', () => {
   });
 });
 
-describe('StrategyPointerSchema', () => {
-  it('allows both fields null (no submodule)', () => {
-    const parsed = StrategyPointerSchema.parse({ sha: null, latestJournal: null });
-    expect(parsed.sha).toBeNull();
+describe('StrategyPointerSchema (mmnto-ai/totem#1710)', () => {
+  it('accepts the resolved branch with both git fields null', () => {
+    const parsed = StrategyPointerSchema.parse({
+      resolved: true,
+      sha: null,
+      latestJournal: null,
+    });
+    if (parsed.resolved) {
+      expect(parsed.sha).toBeNull();
+      expect(parsed.latestJournal).toBeNull();
+    } else {
+      expect.fail('expected resolved branch');
+    }
+  });
+
+  it('accepts the resolved branch with non-null git fields', () => {
+    const parsed = StrategyPointerSchema.parse({
+      resolved: true,
+      sha: 'd387716',
+      latestJournal: 'claude-0006-pattern-history-overlay-1.17.1.md',
+    });
+    if (parsed.resolved) {
+      expect(parsed.sha).toBe('d387716');
+      expect(parsed.latestJournal).toBe('claude-0006-pattern-history-overlay-1.17.1.md');
+    }
+  });
+
+  it('accepts the unresolved branch with a reason string', () => {
+    const parsed = StrategyPointerSchema.parse({
+      resolved: false,
+      reason: 'No strategy root resolvable: cwd is outside a git repository.',
+    });
+    if (!parsed.resolved) {
+      expect(parsed.reason).toMatch(/strategy/);
+    } else {
+      expect.fail('expected unresolved branch');
+    }
+  });
+
+  it('rejects malformed mixes (resolved=true without sha)', () => {
+    const result = StrategyPointerSchema.safeParse({
+      resolved: true,
+      latestJournal: null,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects malformed mixes (resolved=false with sha)', () => {
+    const result = StrategyPointerSchema.safeParse({
+      resolved: false,
+      sha: 'abc1234',
+      latestJournal: null,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects extra keys on the resolved branch (R3 — strict mode)', () => {
+    // Without .strict(), Zod silently strips unknown keys. .strict() makes
+    // the discriminated union catch a producer-side bug where the wrong
+    // branch fields leak into a payload (e.g., a `reason` accidentally
+    // emitted alongside a successful resolution).
+    const result = StrategyPointerSchema.safeParse({
+      resolved: true,
+      sha: 'abc1234',
+      latestJournal: null,
+      reason: 'should not appear',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects extra keys on the unresolved branch (R3 — strict mode)', () => {
+    const result = StrategyPointerSchema.safeParse({
+      resolved: false,
+      reason: 'No strategy root resolvable.',
+      latestJournal: 'should-not-appear.md',
+    });
+    expect(result.success).toBe(false);
   });
 });
 
 describe('RichProjectStateSchema', () => {
   it('allows testCount: null explicitly', () => {
     const parsed = RichProjectStateSchema.parse({
-      strategyPointer: { sha: null, latestJournal: null },
+      strategyPointer: { resolved: true, sha: null, latestJournal: null },
       gitState: { branch: null, uncommittedFiles: [], truncated: false },
       packageVersions: {},
       ruleCounts: { active: 0, archived: 0, nonCompilable: 0 },
@@ -137,6 +214,22 @@ describe('RichProjectStateSchema', () => {
       recentPrs: [],
     });
     expect(parsed.testCount).toBeNull();
+  });
+
+  it('embeds the unresolved strategy-pointer branch (#1710)', () => {
+    const parsed = RichProjectStateSchema.parse({
+      strategyPointer: { resolved: false, reason: 'no sibling, no submodule' },
+      gitState: { branch: 'main', uncommittedFiles: [], truncated: false },
+      packageVersions: {},
+      ruleCounts: { active: 0, archived: 0, nonCompilable: 0 },
+      lessonCount: 0,
+      testCount: null,
+      milestone: { name: null, gateTickets: [], bestEffort: true },
+      recentPrs: [],
+    });
+    if (!parsed.strategyPointer.resolved) {
+      expect(parsed.strategyPointer.reason).toBe('no sibling, no submodule');
+    }
   });
 });
 

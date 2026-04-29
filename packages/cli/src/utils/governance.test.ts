@@ -62,9 +62,12 @@ describe('resolveGovernancePaths', () => {
 
   it('resolves standalone strategy path when submodule prefix is missing', async () => {
     initGit(tmpDir);
-    // Standalone strategy repo — `proposals/active/` lives at the git root, no `.strategy/` prefix.
+    // Standalone strategy repo — `adr/` lives at the git root, no `.strategy/` prefix.
+    // `templates/` sentinel at the root distinguishes a real strategy repo from a
+    // consumer repo that happens to ship a top-level `adr/` docs folder.
     fs.mkdirSync(path.join(tmpDir, 'proposals', 'active'), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, 'adr'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
 
     const { resolveGovernancePaths } = await import('./governance.js');
     const paths = resolveGovernancePaths(tmpDir, 'adr');
@@ -73,6 +76,17 @@ describe('resolveGovernancePaths', () => {
     expect(paths.targetDir).toBe(path.normalize(path.join(tmpDir, 'adr')));
     expect(paths.dashboardFile).toBe(path.normalize(path.join(tmpDir, 'README.md')));
     expect(paths.templatePath).toBe(path.normalize(path.join(tmpDir, 'templates', 'adr.md')));
+  });
+
+  it('rejects standalone false-positive when a consumer repo has only adr/ without templates/', async () => {
+    initGit(tmpDir);
+    // Consumer repo with a top-level `adr/` docs folder but NO `templates/`
+    // and NO sibling/submodule strategy. Pre-tightening, this would have
+    // false-positively scaffolded into the consumer's adr/ folder.
+    fs.mkdirSync(path.join(tmpDir, 'adr'), { recursive: true });
+
+    const { resolveGovernancePaths } = await import('./governance.js');
+    expect(() => resolveGovernancePaths(tmpDir, 'adr')).toThrow(/strategy/i);
   });
 
   it('throws TotemError when cwd is not inside a git repository', async () => {
@@ -86,6 +100,56 @@ describe('resolveGovernancePaths', () => {
     // Neither `.strategy/proposals/` nor top-level `proposals/`.
     const { resolveGovernancePaths } = await import('./governance.js');
     expect(() => resolveGovernancePaths(tmpDir, 'proposal')).toThrow(/strategy/i);
+  });
+
+  it('error message names the canonical sibling clone path and env var (mmnto-ai/totem#1710)', async () => {
+    initGit(tmpDir);
+    const { resolveGovernancePaths } = await import('./governance.js');
+    let caught: unknown;
+    try {
+      resolveGovernancePaths(tmpDir, 'proposal');
+    } catch (err) {
+      caught = err;
+    }
+    const totemErr = caught as { message?: string; recoveryHint?: string };
+    const combined = `${totemErr.message ?? ''}\n${totemErr.recoveryHint ?? ''}`;
+    expect(combined).toMatch(/totem-strategy/i);
+    expect(combined).toMatch(/TOTEM_STRATEGY_ROOT/);
+  });
+
+  it('resolves sibling strategy path via the resolver when ../totem-strategy exists (mmnto-ai/totem#1710)', async () => {
+    // Layout:
+    //   <parent>/repo/.git/   ← gitRoot (created via initGit)
+    //   <parent>/totem-strategy/proposals/active/
+    const repo = path.join(tmpDir, 'repo');
+    fs.mkdirSync(repo, { recursive: true });
+    initGit(repo);
+
+    const sibling = path.join(tmpDir, 'totem-strategy');
+    fs.mkdirSync(path.join(sibling, 'proposals', 'active'), { recursive: true });
+
+    const { resolveGovernancePaths } = await import('./governance.js');
+    const paths = resolveGovernancePaths(repo, 'proposal');
+
+    expect(paths.rootDir).toBe(path.normalize(sibling));
+    expect(paths.targetDir).toBe(path.normalize(path.join(sibling, 'proposals', 'active')));
+  });
+
+  it('resolves env-driven strategy path when TOTEM_STRATEGY_ROOT is set (mmnto-ai/totem#1710)', async () => {
+    initGit(tmpDir);
+    const elsewhere = path.join(tmpDir, 'elsewhere-strategy');
+    fs.mkdirSync(path.join(elsewhere, 'proposals', 'active'), { recursive: true });
+
+    const prev = process.env.TOTEM_STRATEGY_ROOT;
+    process.env.TOTEM_STRATEGY_ROOT = elsewhere;
+    try {
+      const { resolveGovernancePaths } = await import('./governance.js');
+      const paths = resolveGovernancePaths(tmpDir, 'proposal');
+      expect(paths.rootDir).toBe(path.normalize(elsewhere));
+    } finally {
+      if (prev === undefined) delete process.env.TOTEM_STRATEGY_ROOT;
+      else process.env.TOTEM_STRATEGY_ROOT = prev;
+    }
   });
 });
 
@@ -464,6 +528,7 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
     initGit(tmpDir);
     fs.mkdirSync(path.join(tmpDir, 'proposals', 'active'), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, 'adr'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
 
     const calls: Array<{ cmd: string; args: string[] }> = [];
     const exec = (cmd: string, args: string[]): void => {
@@ -499,6 +564,7 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
     initGit(tmpDir);
     fs.mkdirSync(path.join(tmpDir, 'proposals', 'active'), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, 'adr'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
 
     const exec = (): void => {};
 
@@ -522,6 +588,7 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
     // template body see the cleaned form.
     initGit(tmpDir);
     fs.mkdirSync(path.join(tmpDir, 'proposals', 'active'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
 
     const exec = (): void => {};
 
@@ -554,6 +621,7 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
   it('creates file on disk even when docs:inject is missing', async () => {
     initGit(tmpDir);
     fs.mkdirSync(path.join(tmpDir, 'proposals', 'active'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
 
     const origWarn = console.error;
     console.error = () => {};
@@ -582,6 +650,7 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
     initGit(tmpDir);
     const target = path.join(tmpDir, 'proposals', 'active');
     fs.mkdirSync(target, { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
     fs.writeFileSync(path.join(target, '001-alpha.md'), '# a\n', 'utf-8');
     fs.writeFileSync(path.join(target, '003-beta.md'), '# b\n', 'utf-8');
 
@@ -599,6 +668,7 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
     initGit(tmpDir);
     const target = path.join(tmpDir, 'proposals', 'active');
     fs.mkdirSync(target, { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
     // Seed with the exact filename the scaffolder would generate for this title:
     // id=001 + slug='collide' ⇒ '001-collide.md'. We force this by ALSO seeding a
     // higher-numbered file so getNextArtifactId returns 002, then we seed 002-collide.md
@@ -638,6 +708,7 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
   it('throws TotemError BEFORE touching disk when title sanitizes to empty', async () => {
     initGit(tmpDir);
     fs.mkdirSync(path.join(tmpDir, 'proposals', 'active'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
 
     const execCalls: string[] = [];
     const exec = (cmd: string): void => {
@@ -657,5 +728,75 @@ describe('scaffoldGovernanceArtifact (orchestrator)', () => {
     // No files written.
     const entries = fs.readdirSync(path.join(tmpDir, 'proposals', 'active'));
     expect(entries).toEqual([]);
+  });
+});
+
+describe('loadGovernanceConfig (mmnto-ai/totem#1710 R3 — global config leak)', () => {
+  let tmpDir: string;
+  let homeDir: string;
+  let originalCwd: string;
+  let originalHomeEnv: string | undefined;
+  let originalUserprofile: string | undefined;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    homeDir = makeTmpDir('totem-home-');
+    originalCwd = process.cwd();
+    // os.homedir() reads HOME on POSIX and USERPROFILE on Windows; redirect
+    // both so the test runs cross-platform without leaking a real
+    // ~/.totem/ profile into the assertion.
+    originalHomeEnv = process.env['HOME'];
+    originalUserprofile = process.env['USERPROFILE'];
+    process.env['HOME'] = homeDir;
+    process.env['USERPROFILE'] = homeDir;
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (originalHomeEnv === undefined) {
+      delete process.env['HOME'];
+    } else {
+      process.env['HOME'] = originalHomeEnv;
+    }
+    if (originalUserprofile === undefined) {
+      delete process.env['USERPROFILE'];
+    } else {
+      process.env['USERPROFILE'] = originalUserprofile;
+    }
+    cleanTmpDir(tmpDir);
+    cleanTmpDir(homeDir);
+  });
+
+  it('returns undefined when the resolved config lives in the global ~/.totem/ profile', async () => {
+    // No local config in tmpDir — so resolveConfigPath walks up to the
+    // global ~/.totem/ profile. A user's personal global config
+    // typically encodes tier/embedder choices, NOT a strategy pointer
+    // for one specific repo. Loading it for governance scaffolding
+    // would let one user's strategyRoot leak across every repo on disk.
+    initGit(tmpDir);
+    const globalTotemDir = path.join(homeDir, '.totem');
+    fs.mkdirSync(globalTotemDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(globalTotemDir, 'totem.config.ts'),
+      "export default { targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }], strategyRoot: '/some/personal/strategy' };\n",
+      'utf-8',
+    );
+
+    const { loadGovernanceConfig } = await import('./governance.js');
+    const config = await loadGovernanceConfig(tmpDir);
+    expect(config).toBeUndefined();
+  });
+
+  it('returns the local config when one exists in cwd', async () => {
+    initGit(tmpDir);
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.config.ts'),
+      "export default { targets: [{ glob: '**/*.ts', type: 'code', strategy: 'typescript-ast' }], strategyRoot: '../totem-strategy' };\n",
+      'utf-8',
+    );
+
+    const { loadGovernanceConfig } = await import('./governance.js');
+    const config = await loadGovernanceConfig(tmpDir);
+    expect(config?.strategyRoot).toBe('../totem-strategy');
   });
 });

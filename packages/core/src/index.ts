@@ -378,6 +378,14 @@ export {
 // Filesystem helpers
 export { readJsonSafe } from './sys/fs.js';
 
+// Strategy-root resolver (mmnto-ai/totem#1710)
+export type {
+  StrategyResolverConfig,
+  StrategyResolverOptions,
+  StrategyRootStatus,
+} from './strategy-resolver.js';
+export { resolveStrategyRoot } from './strategy-resolver.js';
+
 // Semgrep adapter (Pipeline 4 — import rules from Semgrep YAML)
 export type { SemgrepImportResult } from './semgrep-adapter.js';
 export { parseSemgrepRules } from './semgrep-adapter.js';

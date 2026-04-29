@@ -52,6 +52,7 @@ describe('proposalNewCommand', () => {
     initGit(tmpDir);
     fs.mkdirSync(path.join(tmpDir, 'proposals', 'active'), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, 'adr'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const { proposalNewCommand } = await import('./proposal.js');

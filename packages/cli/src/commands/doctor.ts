@@ -429,6 +429,61 @@ export function checkLinkedIndexes(cwd: string): DiagnosticResult {
   };
 }
 
+/**
+ * Strategy-root resolver diagnostic (mmnto-ai/totem#1710).
+ *
+ * Runs `resolveStrategyRoot` and reports which precedence layer matched.
+ * Advisory only: `warn` (not `fail`) on unresolved so a freshly-cloned
+ * project without a strategy repo doesn't fail the doctor pass.
+ *
+ * Affected consumer surfaces if unresolved: MCP `describe_project`
+ * rich-state pointer, `totem proposal new` / `totem adr new`, federated
+ * search via the auto-injected strategy linkedIndex, the bench scripts
+ * under `scripts/`.
+ *
+ * Async + dynamic import to keep `@mmnto/totem` off the CLI cold-start
+ * graph (matches `checkSecretLeaks` and the rest of the diagnostics that
+ * need core).
+ */
+export async function checkStrategyRoot(
+  cwd: string,
+  config?: { strategyRoot?: string },
+): Promise<DiagnosticResult> {
+  const { resolveStrategyRoot } = await import('@mmnto/totem');
+  const { sanitizeForTerminal } = await import('../terminal-sanitize.js');
+  const status = resolveStrategyRoot(cwd, { config });
+  // `status.path` and `status.reason` are derived from env/config-controlled
+  // inputs (`TOTEM_STRATEGY_ROOT`, `STRATEGY_ROOT`, `TotemConfig.strategyRoot`).
+  // A hostile env var with embedded ANSI/CR bytes would otherwise rewind the
+  // cursor or spoof colors when `totem doctor` renders the diagnostic
+  // (mmnto-ai/totem#1710 R4 / CR R4 Major). R6 (CR R6 Major):
+  // `sanitizeForTerminal` intentionally preserves `\n`/`\t` for
+  // multi-line content, but these single-line diagnostic strings must
+  // ALSO collapse those bytes — otherwise a value like
+  // `TOTEM_STRATEGY_ROOT=$'\n\n[fake] OK'` could forge an extra log
+  // line. `flatten` runs after the ANSI/CR strip.
+  const flatten = (s: string): string =>
+    s
+      .replace(/[\t\n]+/g, ' ')
+      .replace(/ {2,}/g, ' ')
+      .trim();
+  if (status.resolved) {
+    const rel = flatten(sanitizeForTerminal(path.relative(cwd, status.path) || '.'));
+    return {
+      name: 'Strategy Root',
+      status: 'pass',
+      message: `${status.source} → ${rel}`,
+    };
+  }
+
+  return {
+    name: 'Strategy Root',
+    status: 'warn',
+    message: 'unresolved',
+    remediation: `${flatten(sanitizeForTerminal(status.reason))} Affected: describe_project pointer, proposal/adr scaffolding, federated strategy search, bench scripts.`,
+  };
+}
+
 export async function checkSecretLeaks(
   cwd: string,
   totemDir = '.totem',
@@ -1471,14 +1526,23 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
 
   console.error(`${pc.cyan('[Totem]')} Running diagnostics...\n`);
 
-  // Resolve doctor thresholds from config when available. The default window
-  // (10) lines up with the schema default so missing config still gives the
-  // documented behavior.
+  // Resolve doctor thresholds + strategyRoot from config when available. The
+  // default window (10) lines up with the schema default so missing config
+  // still gives the documented behavior. mmnto-ai/totem#1710 R2: capture
+  // `strategyRoot` here too so `checkStrategyRoot` honors the precedence-2
+  // config layer. R3 (CR): only use the config's `strategyRoot` when the
+  // resolved path is the repo-local file. A global `~/.totem/` profile is
+  // a personal default for tier/embedder choice and must NOT leak its
+  // strategyRoot across every repo on disk.
   let doctorThresholds: { staleRuleWindow: number } | undefined;
+  let loadedConfig: { strategyRoot?: string } | undefined;
   try {
-    const { loadConfig, resolveConfigPath } = await import('../utils.js');
+    const { loadConfig, resolveConfigPath, isGlobalConfigPath } = await import('../utils.js');
     const configPath = resolveConfigPath(cwd);
     const config = await loadConfig(configPath);
+    if (!isGlobalConfigPath(configPath)) {
+      loadedConfig = config;
+    }
     if (config.doctor) {
       doctorThresholds = { staleRuleWindow: config.doctor.staleRuleWindow };
     }
@@ -1501,6 +1565,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     checkEmbeddingConfig(cwd),
     checkIndex(cwd),
     checkLinkedIndexes(cwd),
+    await checkStrategyRoot(cwd, loadedConfig),
     await checkSecretLeaks(cwd),
     checkSecretsFileTracked(cwd),
     await checkUpgradeCandidates(cwd),

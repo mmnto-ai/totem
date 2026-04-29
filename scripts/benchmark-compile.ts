@@ -4,10 +4,14 @@
  * Gemini Pro vs gemma4:26b head-to-head on 30 curated lessons.
  *
  * Usage: pnpm tsx scripts/benchmark-compile.ts
- * Output: .strategy/research/benchmark-compilation-quality-results.md
+ * Output: <strategyRoot>/research/benchmark-compilation-quality-results.md
+ *
+ * Strategy root is resolved via `resolveStrategyRoot` (mmnto-ai/totem#1710);
+ * hard-fails when unresolvable.
  */
 
 import { parseCompilerResponse, validateRegex } from '../packages/core/src/compiler.js';
+import { resolveStrategyRoot } from '../packages/core/src/strategy-resolver.js';
 
 const GEMINI_MODEL = 'gemini-3.1-pro-preview';
 const ANTHROPIC_MODEL = 'claude-sonnet-4-6';
@@ -431,6 +435,19 @@ function scoreLesson(
 // ── Main ──
 
 async function runBenchmark() {
+  // Resolve the strategy root up-front so an unresolvable pointer fails
+  // fast — without this guard the script would burn the full benchmark
+  // loop (LLM calls + report assembly) before discovering it has nowhere
+  // to write the output (mmnto-ai/totem#1710 R4 / CR R4 Major).
+  const strategyStatus = resolveStrategyRoot(process.cwd());
+  if (!strategyStatus.resolved) {
+    console.error(`[bench] Cannot write report: ${strategyStatus.reason}`);
+    console.error(
+      '[bench] Set TOTEM_STRATEGY_ROOT or run from inside the totem checkout with a sibling totem-strategy clone.',
+    );
+    process.exit(1);
+  }
+
   COMPILER_PROMPT = (await import('../packages/cli/src/commands/compile-templates.js'))
     .COMPILER_SYSTEM_PROMPT;
 
@@ -614,17 +631,22 @@ async function runBenchmark() {
     }
   }
 
+  // `strategyStatus` was validated at the top of `runBenchmark` — its
+  // `resolved: true` branch is guaranteed at this point.
   const report = lines.join('\n');
   const fs = await import('node:fs');
-  fs.writeFileSync('.strategy/research/benchmark-compilation-quality-results.md', report);
-  console.error(`\nReport written to .strategy/research/benchmark-compilation-quality-results.md`);
+  const path = await import('node:path');
+  const researchDir = path.join(strategyStatus.path, 'research');
+  fs.mkdirSync(researchDir, { recursive: true });
+
+  const reportPath = path.join(researchDir, 'benchmark-compilation-quality-results.md');
+  fs.writeFileSync(reportPath, report);
+  console.error(`\nReport written to ${reportPath}`);
 
   // Also write raw JSON for analysis
-  fs.writeFileSync(
-    '.strategy/research/benchmark-compilation-quality-raw.json',
-    JSON.stringify(results, null, 2),
-  );
-  console.error(`Raw data written to .strategy/research/benchmark-compilation-quality-raw.json`);
+  const rawPath = path.join(researchDir, 'benchmark-compilation-quality-raw.json');
+  fs.writeFileSync(rawPath, JSON.stringify(results, null, 2));
+  console.error(`Raw data written to ${rawPath}`);
 }
 
 runBenchmark().catch((err) => {

@@ -21,7 +21,9 @@ export async function adrNewCommand(title: string, options: AdrNewOptions = {}):
   const { scaffoldGovernanceArtifact } = await import('../utils/governance.js');
 
   const cwd = options.cwd ?? process.cwd();
-  const result = scaffoldGovernanceArtifact({ type: 'adr', title, cwd });
+  const { loadGovernanceConfig } = await import('../utils/governance.js');
+  const config = await loadGovernanceConfig(cwd);
+  const result = scaffoldGovernanceArtifact({ type: 'adr', title, cwd, config });
 
   const relPath = path.relative(cwd, result.filePath);
   const dashboardSummary = result.dashboardRefreshed

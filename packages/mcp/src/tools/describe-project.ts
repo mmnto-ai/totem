@@ -5,11 +5,12 @@ import {
   CONFIG_FILES,
   describeProject,
   type ProjectDescription,
+  type TotemConfig,
   TotemConfigSchema,
   TotemError,
 } from '@mmnto/totem';
 
-import { getContext } from '../context.js';
+import { getContext, loadEnv } from '../context.js';
 import { type DescribeProjectOutput, type RichProjectState } from '../schemas/describe-project.js';
 import {
   extractGitState,
@@ -26,6 +27,7 @@ interface LegacyContext {
   legacy: ProjectDescription;
   projectRoot: string;
   totemDir: string;
+  config: TotemConfig;
 }
 
 /**
@@ -46,6 +48,7 @@ async function getLegacyContext(): Promise<LegacyContext> {
       legacy: describeProject(ctx.config, ctx.projectRoot),
       projectRoot: ctx.projectRoot,
       totemDir: ctx.config.totemDir,
+      config: ctx.config,
     };
   } catch {
     // Expected on Lite tier — fall through to direct config load
@@ -55,6 +58,14 @@ async function getLegacyContext(): Promise<LegacyContext> {
   // Only .ts configs are supported here — jiti cannot parse YAML/TOML.
   // YAML/TOML users will have getContext() succeed since those configs
   // still define an embedding provider (Standard/Full tier).
+  //
+  // Load `.env` before reading config so env-derived fields (e.g.,
+  // `TOTEM_STRATEGY_ROOT` consumed by the strategy-root resolver inside
+  // `extractStrategyPointer`) match the main `getContext()` path. Without
+  // this, the Lite-tier `describe_project` payload could disagree with
+  // the rich-state path on the same repo (mmnto-ai/totem#1710 R3 / CR R3).
+  loadEnv(projectRoot);
+
   let configPath: string | null = null;
   for (const file of CONFIG_FILES) {
     const candidate = path.join(projectRoot, file);
@@ -86,12 +97,17 @@ async function getLegacyContext(): Promise<LegacyContext> {
     legacy: describeProject(config, configRoot),
     projectRoot: configRoot,
     totemDir: config.totemDir,
+    config,
   };
 }
 
-function buildRichState(projectRoot: string, totemDir: string): RichProjectState {
+function buildRichState(
+  projectRoot: string,
+  totemDir: string,
+  config: TotemConfig,
+): RichProjectState {
   return {
-    strategyPointer: extractStrategyPointer(projectRoot),
+    strategyPointer: extractStrategyPointer(projectRoot, config),
     gitState: extractGitState(projectRoot),
     packageVersions: extractPackageVersions(projectRoot),
     ruleCounts: extractRuleCounts(projectRoot, totemDir),
@@ -108,10 +124,11 @@ export function registerDescribeProject(server: McpServer): void {
     {
       description:
         'Returns a structured JSON summary of the project governance scope: rules, lessons, config tier, partitions, targets, and hooks. Pass `includeRichState: true` to append a session-briefing payload (git state, strategy pointer, package versions, rule/lesson counts, milestone, recent PRs). Fast, deterministic, no LLM required.',
-      // totem-context: MCP SDK's registerTool accepts a Zod raw shape, not a
-      // JSON Schema object. This matches the convention already used in
-      // search-knowledge.ts and add-lesson.ts. The SDK converts the shape to
-      // JSON Schema internally before exposing the tool to clients.
+      // MCP SDK's registerTool accepts a Zod raw shape, not a JSON Schema
+      // object — same convention as search-knowledge.ts and add-lesson.ts.
+      // The SDK converts the shape to JSON Schema internally before
+      // exposing the tool to clients.
+      // totem-context: MCP SDK registerTool accepts a Zod raw shape, not a JSON Schema object.
       inputSchema: {
         includeRichState: z.boolean().optional(),
       },
@@ -121,9 +138,9 @@ export function registerDescribeProject(server: McpServer): void {
     },
     async (args: { includeRichState?: boolean }) => {
       try {
-        const { legacy, projectRoot, totemDir } = await getLegacyContext();
+        const { legacy, projectRoot, totemDir, config } = await getLegacyContext();
         const output: DescribeProjectOutput = args.includeRichState
-          ? { ...legacy, richState: buildRichState(projectRoot, totemDir) }
+          ? { ...legacy, richState: buildRichState(projectRoot, totemDir, config) }
           : { ...legacy };
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(output, null, 2) }],

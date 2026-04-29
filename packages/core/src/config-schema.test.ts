@@ -108,6 +108,42 @@ describe('TotemConfigSchema', () => {
       expect(result.data.docs).toBeUndefined();
     }
   });
+
+  it('accepts strategyRoot as an optional string (mmnto-ai/totem#1710)', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      strategyRoot: '../totem-strategy',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.strategyRoot).toBe('../totem-strategy');
+    }
+  });
+
+  it('treats strategyRoot as undefined when omitted', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.strategyRoot).toBeUndefined();
+    }
+  });
+
+  it('rejects blank or whitespace-only strategyRoot (mmnto-ai/totem#1710 R3)', () => {
+    // The resolver already trims at runtime, but the schema must fail
+    // fast at config-parse time so a typo surfaces in `loadConfig` rather
+    // than silently falling through to the next precedence layer.
+    const blank = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      strategyRoot: '',
+    });
+    expect(blank.success).toBe(false);
+
+    const whitespace = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      strategyRoot: '   ',
+    });
+    expect(whitespace.success).toBe(false);
+  });
 });
 
 // ─── Orchestrator schema ─────────────────────────────

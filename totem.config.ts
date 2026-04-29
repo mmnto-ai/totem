@@ -65,7 +65,12 @@ const config: TotemConfig = {
 
   repositories: ['mmnto-ai/totem', 'mmnto-ai/totem-strategy'],
 
-  linkedIndexes: ['.strategy'],
+  // mmnto-ai/totem#1710: the strategy linkedIndex is auto-injected by the
+  // MCP context init via `resolveStrategyRoot`. Listing it here is no
+  // longer required — the resolver handles env / config / sibling /
+  // submodule precedence regardless of where the strategy repo sits.
+  // Keep `linkedIndexes` empty unless adding genuinely third-party indexes.
+  linkedIndexes: [],
 
   partitions: {
     core: ['packages/core/'],

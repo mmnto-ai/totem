@@ -13,7 +13,14 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { CompiledRulesFileSchema, readJsonSafe, resolveGitRoot, safeExec } from '@mmnto/totem';
+import {
+  CompiledRulesFileSchema,
+  readJsonSafe,
+  resolveGitRoot,
+  resolveStrategyRoot,
+  safeExec,
+  type StrategyResolverConfig,
+} from '@mmnto/totem';
 
 import {
   type GitState,
@@ -68,19 +75,36 @@ export function extractGitState(cwd: string): GitState {
   return { branch, uncommittedFiles, truncated };
 }
 
-// ─── Strategy submodule pointer ────────────────────────────────────────────
+// ─── Strategy pointer ──────────────────────────────────────────────────────
 
-export function extractStrategyPointer(cwd: string): StrategyPointer {
-  const strategyDir = path.join(cwd, '.strategy');
-  if (!fs.existsSync(strategyDir)) {
-    return { sha: null, latestJournal: null };
+/**
+ * Resolve the strategy root via `resolveStrategyRoot` and return the rich-state
+ * pointer for the MCP `describe_project` payload (mmnto-ai/totem#1710).
+ *
+ * Two outcomes:
+ * - **Resolved:** `{ resolved: true, sha, latestJournal }`. `sha` and
+ *   `latestJournal` follow the existing graceful-degrade contract — null when
+ *   `git rev-parse` fails or `.journal/` is missing/empty inside the resolved
+ *   directory. The agent gets a real pointer when one exists.
+ * - **Unresolved:** `{ resolved: false, reason }`. The agent reads the
+ *   resolver's actionable reason instead of seeing an empty pointer that
+ *   could be confused with a present-but-uninitialized submodule.
+ */
+export function extractStrategyPointer(
+  cwd: string,
+  config?: StrategyResolverConfig,
+): StrategyPointer {
+  const status = resolveStrategyRoot(cwd, { config });
+  if (!status.resolved) {
+    return { resolved: false, reason: status.reason };
   }
 
+  const strategyDir = status.path;
   let sha: string | null = null;
   try {
     const full = safeExec('git', ['rev-parse', 'HEAD'], { cwd: strategyDir });
     sha = full.length >= 7 ? full.slice(0, 7) : null;
-    // totem-context: ADR-090 substrate graceful degradation — null sha on uninitialized submodule.
+    // totem-context: ADR-090 substrate graceful degradation — null sha on uninitialized strategy.
   } catch {
     sha = null;
   }
@@ -100,7 +124,7 @@ export function extractStrategyPointer(cwd: string): StrategyPointer {
     latestJournal = null;
   }
 
-  return { sha, latestJournal };
+  return { resolved: true, sha, latestJournal };
 }
 
 // ─── Package versions (fixed group only) ───────────────────────────────────

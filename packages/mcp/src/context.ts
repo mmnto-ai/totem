@@ -8,6 +8,7 @@ import {
   createEmbedder,
   LanceStore,
   requireEmbedding,
+  resolveStrategyRoot,
   TotemConfigError,
   TotemConfigSchema,
 } from '@mmnto/totem';
@@ -138,6 +139,37 @@ function deriveLinkName(linkedPath: string, cwd: string): string {
   return base.replace(/^\./, '');
 }
 
+export interface EffectiveLinkCandidate {
+  path: string;
+  nameOverride?: string;
+}
+
+/**
+ * Dedupe a list of effective linkedIndex candidates by their RESOLVED
+ * absolute path. First-wins so the auto-injected strategy entry (with its
+ * stable `'strategy'` link name) takes precedence over a legacy literal in
+ * `config.linkedIndexes` pointing at the same physical store
+ * (mmnto-ai/totem#1710 R2 / CR R2).
+ *
+ * Pure function — exported so unit tests can exercise the dedup contract
+ * without standing up the full `initContext` pipeline (LanceStore +
+ * embedder + jiti config loader).
+ */
+export function dedupeEffectiveLinks(
+  projectRoot: string,
+  candidates: ReadonlyArray<EffectiveLinkCandidate>,
+): EffectiveLinkCandidate[] {
+  const seen = new Set<string>();
+  const out: EffectiveLinkCandidate[] = [];
+  for (const candidate of candidates) {
+    const resolvedAbs = path.resolve(projectRoot, candidate.path);
+    if (seen.has(resolvedAbs)) continue;
+    seen.add(resolvedAbs);
+    out.push(candidate);
+  }
+  return out;
+}
+
 /**
  * Load environment variables from .env file (does not override existing).
  */
@@ -213,8 +245,75 @@ async function initContext(): Promise<ServerContext> {
   const linkedStores = new Map<string, LanceStore>();
   const linkedStoreInitErrors = new Map<string, string>();
 
+  // Auto-inject the strategy linkedIndex via the strategy-root resolver
+  // (mmnto-ai/totem#1710). Stable link name `'strategy'` regardless of
+  // physical source so `boundary: 'strategy'` queries route the same way
+  // whether the repo lives in `.strategy/`, `../totem-strategy/`, or
+  // wherever `TOTEM_STRATEGY_ROOT` points. Surface an init-time warning
+  // ONLY when the user explicitly signaled a strategy expectation (env or
+  // config); zero-config projects without a strategy repo skip silently.
+  // Validate env values for non-whitespace content rather than testing
+  // for `!== undefined` — the project-local lint rule wants whitespace
+  // validation (`/\S/.test`) so a `TOTEM_STRATEGY_ROOT="   "` accident
+  // doesn't trigger the warning slot. `Object.hasOwn` was rejected in
+  // R4 because it adds no safety beyond the trim-and-length check and
+  // breaks Windows' case-insensitive env-var resolution.
+  //
+  // Dedupe by RESOLVED ABSOLUTE PATH (mmnto-ai/totem#1710 R2 / CR R2): if a
+  // legacy config still lists `'.strategy'` (or `'../totem-strategy'`) AND
+  // the resolver auto-injects the same physical store under name
+  // `'strategy'`, we must not queue the same LanceStore twice — federated
+  // search would return duplicate hits. The existing collision guard below
+  // catches name collisions but not path-via-different-name collisions, so
+  // we dedupe candidates upfront.
+  const candidates: EffectiveLinkCandidate[] = [];
+  // Mirror `resolveStrategyRoot`'s whitespace-as-unset rule (R3 / CR R3):
+  // `TOTEM_STRATEGY_ROOT="   "` or `strategyRoot: ' '` would otherwise
+  // mark `strategyExpected=true` while the resolver sees nothing,
+  // surfacing a "Strategy root expected but not resolvable" warning that
+  // never goes away.
+  const envHas = (key: string): boolean => {
+    const v = process.env[key];
+    return typeof v === 'string' && v.trim().length > 0;
+  };
+  const strategyExpected =
+    envHas('TOTEM_STRATEGY_ROOT') ||
+    envHas('STRATEGY_ROOT') ||
+    (typeof config.strategyRoot === 'string' && config.strategyRoot.trim().length > 0);
+  const strategyStatus = resolveStrategyRoot(projectRoot, { config });
+  if (strategyStatus.resolved) {
+    candidates.push({ path: strategyStatus.path, nameOverride: 'strategy' });
+  } else if (strategyExpected) {
+    // `strategyStatus.reason` carries env/config-derived path text
+    // verbatim. The downstream consumer (`search-knowledge` Case 3)
+    // wraps this string in `formatSystemWarning` → returns as text
+    // content to the agent. An MCP client that renders the text in a
+    // terminal would interpret embedded ANSI/CR/newlines/tabs. Strip
+    // ANSI/CR + collapse \n/\t to single spaces before persisting
+    // (mmnto-ai/totem#1710 R6 / CR R6 Major + R7 / CR R7 Major). The
+    // ANSI/CR strip matches the canonical `terminal-sanitize.ts`
+    // regex in `packages/cli/src/`; the \n/\t flatten matches the
+    // doctor.ts pattern. mmnto-ai/totem#1744 consolidates both into
+    // a single shared helper in @mmnto/totem core.
+    const safeReason = strategyStatus.reason
+      // totem-context: inlined canonical `sanitizeForTerminal` regex — cross-package import deferred to mmnto-ai/totem#1744 (sanitizer consolidation into @mmnto/totem core).
+      .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+      .replace(/[\x00-\x08\x0b-\x0d\x0e-\x1f\x7f-\x9f]/g, ' ')
+      .replace(/[\t\n]+/g, ' ')
+      .replace(/ {2,}/g, ' ')
+      .trim();
+    linkedStoreInitErrors.set(
+      'strategy',
+      `Strategy root expected but not resolvable: ${safeReason}`,
+    );
+  }
   for (const linkedPath of config.linkedIndexes ?? []) {
-    const name = deriveLinkName(linkedPath, projectRoot);
+    candidates.push({ path: linkedPath });
+  }
+  const effectiveLinks = dedupeEffectiveLinks(projectRoot, candidates);
+
+  for (const { path: linkedPath, nameOverride } of effectiveLinks) {
+    const name = nameOverride ?? deriveLinkName(linkedPath, projectRoot);
 
     // Collision detection — the first-wins so downstream lookups are stable.
     //

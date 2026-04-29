@@ -10,8 +10,15 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { resolveGitRoot, safeExec, TotemError } from '@mmnto/totem';
+import {
+  resolveGitRoot,
+  resolveStrategyRoot,
+  safeExec,
+  type StrategyResolverConfig,
+  TotemError,
+} from '@mmnto/totem';
 
+import { sanitizeForTerminal } from '../terminal-sanitize.js';
 import { log } from '../ui.js';
 
 export type GovernanceType = 'proposal' | 'adr';
@@ -20,6 +27,12 @@ export interface ScaffoldOptions {
   type: GovernanceType;
   title: string;
   cwd: string;
+  /**
+   * Loaded `TotemConfig` (or any object with a `strategyRoot?: string` field).
+   * Forwarded to the strategy-root resolver so `TotemConfig.strategyRoot`
+   * wins precedence-2 over the sibling / submodule layers (mmnto-ai/totem#1710).
+   */
+  config?: StrategyResolverConfig;
 }
 
 export interface GovernancePaths {
@@ -33,7 +46,34 @@ export interface GovernancePaths {
   dashboardFile: string;
 }
 
-const STRATEGY_SUBDIR = '.strategy';
+/**
+ * Best-effort `TotemConfig` load for the governance commands. Returns
+ * `undefined` when the config is missing, unparseable, OR resolves to the
+ * global `~/.totem/` profile — both missing and unparseable are legitimate
+ * states for a freshly-cloned consumer repo, and a global-profile config
+ * is intentionally NOT used as a repo-local `strategyRoot` source (that
+ * would let one user's personal pointer leak across every repo on disk).
+ * The strategy-root resolver still has env / sibling / submodule layers
+ * to fall back on (mmnto-ai/totem#1710 R3 — CR R3 global-config-leak fix).
+ *
+ * Shared by `proposalNewCommand` and `adrNewCommand` so the load idiom +
+ * its `// totem-context: intentional best-effort` annotation live in one
+ * place (mmnto-ai/totem#1710 R2).
+ */
+export async function loadGovernanceConfig(
+  cwd: string,
+): Promise<StrategyResolverConfig | undefined> {
+  try {
+    const { loadConfig, resolveConfigPath, isGlobalConfigPath } = await import('../utils.js');
+    const configPath = resolveConfigPath(cwd);
+    if (isGlobalConfigPath(configPath)) return undefined;
+    const config = (await loadConfig(configPath)) as StrategyResolverConfig;
+    return config;
+    // totem-context: intentional best-effort load — missing/unparseable config is a legitimate state for a freshly-cloned consumer repo; resolver's other layers (env / sibling / submodule) still apply.
+  } catch {
+    return undefined;
+  }
+}
 
 function targetSubpath(type: GovernanceType): string {
   return type === 'proposal' ? path.join('proposals', 'active') : 'adr';
@@ -46,44 +86,72 @@ function templateFilename(type: GovernanceType): string {
 /**
  * Resolve governance paths for the current invocation.
  *
- * Two supported contexts:
- * 1. **Submodule case** — `<gitRoot>/.strategy/` exists. Used when Totem is
- *    the parent repo and `.strategy/` is a submodule/worktree.
- * 2. **Standalone case** — `<gitRoot>` itself is the strategy repo
- *    (`proposals/active/` sits at the repo root). Used when the CLI is run
- *    from inside the strategy repo directly.
+ * Two layout shapes supported:
  *
- * Throws `TotemError` when cwd is not inside a git repo, or when neither
- * layout can be detected.
+ * 1. **Standalone (cwd IS the strategy repo)** — `<gitRoot>` itself contains
+ *    `proposals/` or `adr/` at the top level. Used when the CLI runs from
+ *    inside the strategy repo directly. Detected here in the helper before
+ *    delegating to the resolver because the strategy-root resolver answers
+ *    "where IS the strategy repo from somewhere else", not "are we INSIDE
+ *    one already."
+ *
+ * 2. **Resolved (cwd is in a consuming repo)** — defer to
+ *    `resolveStrategyRoot` (mmnto-ai/totem#1710). The resolver walks env →
+ *    config → sibling → submodule precedence and returns an absolute path.
+ *    Throws an actionable `TotemError` (ADR-088) when none of the layers
+ *    resolve.
+ *
+ * Also throws `TotemError` when cwd is not inside a git repo.
  */
-export function resolveGovernancePaths(cwd: string, type: GovernanceType): GovernancePaths {
+export function resolveGovernancePaths(
+  cwd: string,
+  type: GovernanceType,
+  config?: StrategyResolverConfig,
+): GovernancePaths {
   const gitRoot = resolveGitRoot(cwd);
   if (gitRoot === null) {
+    // Sanitize `cwd` here too — the sister branch already does this for
+    // the resolved-but-no-layout error (mmnto-ai/totem#1710 R5). A working
+    // directory name with embedded ANSI/CR bytes would otherwise hit the
+    // CLI raw on the not-in-git-repo path (mmnto-ai/totem#1710 R6 / CR R6
+    // outside-diff Major).
     throw new TotemError(
       'CONFIG_MISSING',
-      `Not inside a git repository: ${cwd}`,
+      `Not inside a git repository: ${sanitizeForTerminal(cwd)}`,
       'Run this command from inside a Totem or Totem-strategy repository checkout.',
     );
   }
 
-  const submoduleRoot = path.join(gitRoot, STRATEGY_SUBDIR);
-  const submoduleHasProposals = fs.existsSync(path.join(submoduleRoot, 'proposals'));
-  const submoduleHasAdr = fs.existsSync(path.join(submoduleRoot, 'adr'));
-
-  const standaloneHasProposals = fs.existsSync(path.join(gitRoot, 'proposals'));
-  const standaloneHasAdr = fs.existsSync(path.join(gitRoot, 'adr'));
+  // Standalone detection requires BOTH the type-specific target subdir AND
+  // a `templates/` folder at the repo root. The conjunction catches the
+  // canonical strategy-repo layout (proposals/active/ + adr/ + templates/)
+  // while avoiding false positives on consumer repos that happen to ship a
+  // top-level `adr/` docs folder without a strategy substrate.
+  const standaloneHasTarget = fs.existsSync(path.join(gitRoot, targetSubpath(type)));
+  const standaloneHasTemplates = fs.existsSync(path.join(gitRoot, 'templates'));
 
   let rootDir: string;
-  if (submoduleHasProposals || submoduleHasAdr) {
-    rootDir = submoduleRoot;
-  } else if (standaloneHasProposals || standaloneHasAdr) {
+  if (standaloneHasTarget && standaloneHasTemplates) {
     rootDir = gitRoot;
   } else {
-    throw new TotemError(
-      'CONFIG_MISSING',
-      `No Totem-strategy layout found under ${gitRoot}.`,
-      'Expected either a `.strategy/` submodule or top-level `proposals/` and `adr/` directories. Clone or link the strategy repo first.',
-    );
+    const status = resolveStrategyRoot(cwd, { gitRoot, config });
+    if (!status.resolved) {
+      // Sanitize filesystem- and env-derived strings before they flow
+      // into the CLI-rendered TotemError. `cwd` and `gitRoot` are
+      // process inputs; `status.reason` carries env values
+      // (`TOTEM_STRATEGY_ROOT`, `STRATEGY_ROOT`) and config values
+      // verbatim. ANSI/CR bytes there would rewind the cursor when the
+      // error is rendered (mmnto-ai/totem#1710 R5 / CR R5 Major).
+      const safeCwd = sanitizeForTerminal(cwd);
+      const safeClonePath = sanitizeForTerminal(path.join(path.dirname(gitRoot), 'totem-strategy'));
+      const safeReason = sanitizeForTerminal(status.reason);
+      throw new TotemError(
+        'CONFIG_MISSING',
+        `No Totem-strategy layout found from ${safeCwd}.`,
+        `Clone the strategy repo as a sibling (e.g., \`git clone <strategy-url> ${safeClonePath}\`), set the TOTEM_STRATEGY_ROOT env var, or initialize the legacy \`.strategy/\` submodule. Resolver detail: ${safeReason}`,
+      );
+    }
+    rootDir = status.path;
   }
 
   const targetDir = path.join(rootDir, targetSubpath(type));
@@ -406,7 +474,7 @@ export function scaffoldGovernanceArtifact(
   options: ScaffoldOptions,
   internals: ScaffoldArtifactInternals = {},
 ): ScaffoldArtifactResult {
-  const paths = resolveGovernancePaths(options.cwd, options.type);
+  const paths = resolveGovernancePaths(options.cwd, options.type, options.config);
 
   // Sanitize once at the orchestrator entry. Both the filename slug and the
   // template body render against the cleaned form so a title carrying

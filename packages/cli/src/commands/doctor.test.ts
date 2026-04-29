@@ -19,6 +19,7 @@ import {
   checkSecretLeaks,
   checkSecretsFileTracked,
   checkStaleRules,
+  checkStrategyRoot,
   checkUpgradeCandidates,
   doctorCommand,
   findLegacyGrandfatheredRules,
@@ -306,7 +307,7 @@ describe('doctorCommand', () => {
   it('runs without throwing', async () => {
     const results = await doctorCommand();
     expect(results).toBeDefined();
-    expect(results.length).toBe(11);
+    expect(results.length).toBe(12);
   });
 
   it('returns correct check names', async () => {
@@ -318,6 +319,7 @@ describe('doctorCommand', () => {
     expect(names).toContain('Embedding');
     expect(names).toContain('Index');
     expect(names).toContain('Linked Indexes');
+    expect(names).toContain('Strategy Root');
     expect(names).toContain('Secret Scan');
     expect(names).toContain('Secrets File Security');
     expect(names).toContain('Upgrade Candidates');
@@ -1356,6 +1358,70 @@ describe('checkLinkedIndexes (#1308)', () => {
     expect(result.status).toBe('warn');
     expect(result.name).toBe('Linked Indexes');
     expect(result.remediation).toContain('does not exist');
+  });
+});
+
+// ─── Strategy root (mmnto-ai/totem#1710) ──────────────────
+
+describe('checkStrategyRoot (mmnto-ai/totem#1710)', () => {
+  let tmpDir: string;
+  let prevEnvPrimary: string | undefined;
+  let prevEnvAlias: string | undefined;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    prevEnvPrimary = process.env.TOTEM_STRATEGY_ROOT;
+    prevEnvAlias = process.env.STRATEGY_ROOT;
+    delete process.env.TOTEM_STRATEGY_ROOT;
+    delete process.env.STRATEGY_ROOT;
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+    // Symmetric restore: when prev was undefined, the env var was unset
+    // before this suite ran — DELETE rather than leak the test's value.
+    if (prevEnvPrimary === undefined) delete process.env.TOTEM_STRATEGY_ROOT;
+    else process.env.TOTEM_STRATEGY_ROOT = prevEnvPrimary;
+    if (prevEnvAlias === undefined) delete process.env.STRATEGY_ROOT;
+    else process.env.STRATEGY_ROOT = prevEnvAlias;
+  });
+
+  it('returns warn (NOT fail) when no strategy root resolves', async () => {
+    const result = await checkStrategyRoot(tmpDir);
+    expect(result.status).toBe('warn');
+    expect(result.name).toBe('Strategy Root');
+    expect(result.remediation).toMatch(/describe_project|proposal|federated/);
+  });
+
+  it('returns pass when TOTEM_STRATEGY_ROOT points to a real directory', async () => {
+    const target = path.join(tmpDir, 'elsewhere');
+    fs.mkdirSync(target, { recursive: true });
+    process.env.TOTEM_STRATEGY_ROOT = target;
+
+    const result = await checkStrategyRoot(tmpDir);
+    expect(result.status).toBe('pass');
+    expect(result.name).toBe('Strategy Root');
+    expect(result.message).toMatch(/^env →/);
+  });
+
+  it('strips ANSI/CR/newline/tab control bytes from diagnostic strings (R4/R6 — terminal injection)', async () => {
+    // Hostile env value with embedded ANSI + CR + newlines + tabs.
+    // Without sanitization the unresolved-path diagnostic would echo
+    // these bytes through `log.warn` and rewind the cursor / spoof colors
+    // when `totem doctor` rendered it. R6 also flattens \n/\t to prevent
+    // forged extra log lines (`sanitizeForTerminal` deliberately preserves
+    // \n/\t for multi-line content; the doctor caller flattens).
+    process.env.TOTEM_STRATEGY_ROOT = `${tmpDir}/missing\x1b[31mEVIL\x1b[0m\r\n\n[fake] OK\tTAB`;
+
+    const result = await checkStrategyRoot(tmpDir);
+    expect(result.status).toBe('warn');
+    // Message itself is the static string — the env value flows into
+    // `remediation` via `status.reason`.
+    expect(result.remediation).toBeDefined();
+    expect(result.remediation).not.toMatch(/\x1b\[/);
+    expect(result.remediation).not.toMatch(/\r/);
+    expect(result.remediation).not.toMatch(/\n/);
+    expect(result.remediation).not.toMatch(/\t/);
   });
 });
 
