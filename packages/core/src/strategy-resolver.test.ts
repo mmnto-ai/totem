@@ -158,6 +158,23 @@ describe('resolveStrategyRoot precedence', () => {
       source: 'sibling',
     });
   });
+
+  it('treats a non-string config.strategyRoot as unset (R5 — type guard)', () => {
+    // The resolver is exported. A JS caller (or a TS caller using
+    // `as` casting) can pass a non-string — the resolver must treat
+    // that as "unset" instead of crashing in `.trim()`.
+    mkDir(path.join(strategyParent, 'totem-strategy'));
+    const status = resolveStrategyRoot(cwd, {
+      env: {},
+      gitRoot,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      config: { strategyRoot: 42 as any },
+    });
+    expect(status.resolved).toBe(true);
+    if (status.resolved) {
+      expect(status.source).toBe('sibling');
+    }
+  });
 });
 
 // ─── isDirectory guard ─────────────────────────────────────────────────────

@@ -154,8 +154,12 @@ export function resolveStrategyRoot(
     }
   }
 
-  // Layer 2 — config field. Same absolute-bypass behavior.
-  if (config?.strategyRoot !== undefined && config.strategyRoot.trim().length > 0) {
+  // Layer 2 — config field. Same absolute-bypass behavior. The
+  // `typeof string` guard is load-bearing: `resolveStrategyRoot` is
+  // exported, and a JS caller (or unsafe cast) could pass a non-string
+  // `strategyRoot` that would crash `.trim()` with `TypeError`. Treating
+  // a non-string as "unset" preserves the discriminated-union contract.
+  if (typeof config?.strategyRoot === 'string' && config.strategyRoot.trim().length > 0) {
     const resolved = resolveValue(config.strategyRoot, getAnchor);
     if (isDirectory(resolved)) {
       return { resolved: true, path: resolved, source: 'config' };

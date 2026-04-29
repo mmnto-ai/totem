@@ -443,7 +443,7 @@ async function runBenchmark() {
   if (!strategyStatus.resolved) {
     console.error(`[bench] Cannot write report: ${strategyStatus.reason}`);
     console.error(
-      '[bench] Set TOTEM_STRATEGY_ROOT, configure totem.config.ts:strategyRoot, or run from inside the totem checkout with a sibling totem-strategy clone.',
+      '[bench] Set TOTEM_STRATEGY_ROOT or run from inside the totem checkout with a sibling totem-strategy clone.',
     );
     process.exit(1);
   }

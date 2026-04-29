@@ -18,6 +18,7 @@ import {
   TotemError,
 } from '@mmnto/totem';
 
+import { sanitizeForTerminal } from '../terminal-sanitize.js';
 import { log } from '../ui.js';
 
 export type GovernanceType = 'proposal' | 'adr';
@@ -130,10 +131,19 @@ export function resolveGovernancePaths(
   } else {
     const status = resolveStrategyRoot(cwd, { gitRoot, config });
     if (!status.resolved) {
+      // Sanitize filesystem- and env-derived strings before they flow
+      // into the CLI-rendered TotemError. `cwd` and `gitRoot` are
+      // process inputs; `status.reason` carries env values
+      // (`TOTEM_STRATEGY_ROOT`, `STRATEGY_ROOT`) and config values
+      // verbatim. ANSI/CR bytes there would rewind the cursor when the
+      // error is rendered (mmnto-ai/totem#1710 R5 / CR R5 Major).
+      const safeCwd = sanitizeForTerminal(cwd);
+      const safeClonePath = sanitizeForTerminal(path.join(path.dirname(gitRoot), 'totem-strategy'));
+      const safeReason = sanitizeForTerminal(status.reason);
       throw new TotemError(
         'CONFIG_MISSING',
-        `No Totem-strategy layout found from ${cwd}.`,
-        `Clone the strategy repo as a sibling (e.g., \`git clone <strategy-url> ${path.join(path.dirname(gitRoot), 'totem-strategy')}\`), set the TOTEM_STRATEGY_ROOT env var, or initialize the legacy \`.strategy/\` submodule. Resolver detail: ${status.reason}`,
+        `No Totem-strategy layout found from ${safeCwd}.`,
+        `Clone the strategy repo as a sibling (e.g., \`git clone <strategy-url> ${safeClonePath}\`), set the TOTEM_STRATEGY_ROOT env var, or initialize the legacy \`.strategy/\` submodule. Resolver detail: ${safeReason}`,
       );
     }
     rootDir = status.path;
