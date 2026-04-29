@@ -132,6 +132,76 @@ describe('GitHubCliPrAdapter', () => {
     });
   });
 
+  describe('fetchReviews', () => {
+    it('maps gh API output to StandardPrReviewSubmission with commit_id + submitted_at', () => {
+      // First call: getRepoNwo
+      mockedExec.mockReturnValueOnce('mmnto-ai/totem\n');
+      // Second call: paginated reviews
+      mockedExec.mockReturnValueOnce(
+        JSON.stringify([
+          {
+            id: 100,
+            user: { login: 'coderabbitai[bot]' },
+            commit_id: 'sha-A',
+            submitted_at: '2026-04-29T01:00:00Z',
+            state: 'COMMENTED',
+            body: 'Round 1 review.',
+          },
+          {
+            id: 101,
+            user: null, // deleted/ghost account — surfaces as null user_login
+            commit_id: 'sha-B',
+            submitted_at: '2026-04-29T02:00:00Z',
+            state: 'COMMENTED',
+            body: '',
+          },
+          {
+            id: 102,
+            user: { login: 'human-reviewer' },
+            commit_id: null,
+            submitted_at: null,
+            state: 'PENDING',
+            body: null,
+          },
+        ]),
+      );
+
+      const result = adapter.fetchReviews(42);
+      expect(result).toEqual([
+        {
+          id: 100,
+          user_login: 'coderabbitai[bot]',
+          commit_id: 'sha-A',
+          submitted_at: '2026-04-29T01:00:00Z',
+          state: 'COMMENTED',
+          body: 'Round 1 review.',
+        },
+        {
+          id: 101,
+          user_login: null,
+          commit_id: 'sha-B',
+          submitted_at: '2026-04-29T02:00:00Z',
+          state: 'COMMENTED',
+          body: '',
+        },
+        {
+          id: 102,
+          user_login: 'human-reviewer',
+          commit_id: undefined,
+          submitted_at: undefined,
+          state: 'PENDING',
+          body: '',
+        },
+      ]);
+    });
+
+    it('returns empty array when no reviews', () => {
+      mockedExec.mockReturnValueOnce('mmnto-ai/totem\n');
+      mockedExec.mockReturnValueOnce('[]');
+      expect(adapter.fetchReviews(99)).toEqual([]);
+    });
+  });
+
   describe('fetchCodeScanningAlerts', () => {
     it('maps gh API output to StandardCodeScanAlert format', () => {
       // First call: getRepoNwo

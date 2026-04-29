@@ -11,6 +11,7 @@ import type {
   StandardCodeScanAlert,
   StandardPr,
   StandardPrListItem,
+  StandardPrReviewSubmission,
   StandardReviewComment,
 } from './pr-adapter.js';
 
@@ -44,7 +45,9 @@ const GhPrSchema = z.object({
 
 const GhReviewCommentSchema = z.object({
   id: z.number(),
-  user: z.object({ login: z.string() }),
+  // Nullable for deleted/ghost accounts — mirrors `GhPrReviewSchema.user`.
+  // Per Sonnet review on mmnto-ai/totem#1734 round-2.
+  user: z.object({ login: z.string() }).nullable(),
   body: z.string(),
   path: z.string(),
   diff_hunk: z.string(),
@@ -75,20 +78,12 @@ const GhPrReviewSchema = z.object({
   body: z.string().nullable(),
 });
 
-export interface StandardPrReviewSubmission {
-  id: number;
-  /**
-   * GitHub login of the review submitter, or `null` for deleted/ghost
-   * accounts (the GitHub API permits a null `user` object). Callers
-   * MUST null-guard before passing to `isBotComment` so unknown authors
-   * don't silently appear as non-bot — see CR mmnto-ai/totem#1734 review-1.
-   */
-  user_login: string | null;
-  commit_id?: string | null;
-  submitted_at?: string | null;
-  state: string;
-  body: string;
-}
+// `StandardPrReviewSubmission` lives in `pr-adapter.ts` (the platform-neutral
+// surface). Per CR mmnto-ai/totem#1734 round-2 the `fetchReviews` method also
+// lives on the `PrAdapter` interface so consumers can stay decoupled from the
+// concrete adapter implementation. Callers MUST null-guard `user_login` before
+// passing to `isBotComment` (deleted/ghost accounts surface as null per the
+// GitHub API).
 
 const GhCodeScanAlertSchema = z
   .object({
@@ -157,7 +152,11 @@ export class GitHubCliPrAdapter implements PrAdapter {
     );
     return comments.map((c) => ({
       id: c.id,
-      author: c.user.login,
+      // `user` may be null for deleted/ghost accounts; coerce to '' so the
+      // existing `StandardReviewComment.author: string` contract holds.
+      // `isBotComment('')` correctly returns false, so the comment drops
+      // out of bot-detection paths without surfacing as a non-bot author.
+      author: c.user?.login ?? '',
       body: c.body,
       path: c.path,
       diffHunk: c.diff_hunk,

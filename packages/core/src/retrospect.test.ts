@@ -15,6 +15,7 @@ import {
   RetrospectReportSchema,
   type RetrospectReviewSubmission,
   RetrospectRoundSchema,
+  type RetrospectRouteOutReason,
   signatureOfBody,
   toCrossPrBucket,
   toRoundPosition,
@@ -33,7 +34,7 @@ type FindingOverrides = {
   crossPrRecurrence?: number;
   coveredByRule?: boolean;
   classification?: 'route-out' | 'in-pr-fix' | 'undetermined';
-  routeOutReason?: RetrospectFinding extends { routeOutReason: infer R } ? R : never;
+  routeOutReason?: RetrospectRouteOutReason;
 };
 
 function makeFinding(overrides: FindingOverrides = {}): RetrospectFinding {
