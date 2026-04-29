@@ -288,15 +288,20 @@ async function initContext(): Promise<ServerContext> {
     // verbatim. The downstream consumer (`search-knowledge` Case 3)
     // wraps this string in `formatSystemWarning` → returns as text
     // content to the agent. An MCP client that renders the text in a
-    // terminal would interpret embedded ANSI/CR. Strip those bytes
-    // before persisting (mmnto-ai/totem#1710 R6 / CR R6 Major). Inline
-    // regex matches the canonical `terminal-sanitize.ts` strip in
-    // `packages/cli/src/`; mmnto-ai/totem#1744 consolidates the helper
-    // into `@mmnto/totem` so this duplication can be retired.
+    // terminal would interpret embedded ANSI/CR/newlines/tabs. Strip
+    // ANSI/CR + collapse \n/\t to single spaces before persisting
+    // (mmnto-ai/totem#1710 R6 / CR R6 Major + R7 / CR R7 Major). The
+    // ANSI/CR strip matches the canonical `terminal-sanitize.ts`
+    // regex in `packages/cli/src/`; the \n/\t flatten matches the
+    // doctor.ts pattern. mmnto-ai/totem#1744 consolidates both into
+    // a single shared helper in @mmnto/totem core.
     const safeReason = strategyStatus.reason
       // totem-context: inlined canonical `sanitizeForTerminal` regex — cross-package import deferred to mmnto-ai/totem#1744 (sanitizer consolidation into @mmnto/totem core).
       .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
-      .replace(/[\x00-\x08\x0b-\x0d\x0e-\x1f\x7f-\x9f]/g, ' ');
+      .replace(/[\x00-\x08\x0b-\x0d\x0e-\x1f\x7f-\x9f]/g, ' ')
+      .replace(/[\t\n]+/g, ' ')
+      .replace(/ {2,}/g, ' ')
+      .trim();
     linkedStoreInitErrors.set(
       'strategy',
       `Strategy root expected but not resolvable: ${safeReason}`,
