@@ -108,6 +108,25 @@ describe('TotemConfigSchema', () => {
       expect(result.data.docs).toBeUndefined();
     }
   });
+
+  it('accepts strategyRoot as an optional string (mmnto-ai/totem#1710)', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      strategyRoot: '../totem-strategy',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.strategyRoot).toBe('../totem-strategy');
+    }
+  });
+
+  it('treats strategyRoot as undefined when omitted', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.strategyRoot).toBeUndefined();
+    }
+  });
 });
 
 // ─── Orchestrator schema ─────────────────────────────

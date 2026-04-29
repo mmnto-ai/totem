@@ -280,6 +280,16 @@ export const TotemConfigSchema = z.object({
   /** Optional: paths to other totem-managed directories whose indexes should be queried alongside this one (e.g., ['.strategy', '../docs-repo']) */
   linkedIndexes: z.array(z.string()).optional(),
 
+  /**
+   * Optional: path override for the strategy repository (mmnto-ai/totem#1710).
+   *
+   * Resolved relative to the git root by `resolveStrategyRoot`, with the
+   * `TOTEM_STRATEGY_ROOT` (or legacy `STRATEGY_ROOT`) env var taking
+   * precedence. When unset, the resolver falls back to a sibling
+   * `../totem-strategy/` clone, then to the legacy `.strategy/` submodule.
+   */
+  strategyRoot: z.string().optional(),
+
   /** Optional: named partitions mapping logical aliases to file path prefixes for context isolation (e.g., { core: ['packages/core/'], mcp: ['packages/mcp/'] }) */
   partitions: z.record(z.array(z.string().min(1)).min(1)).optional(),
 
