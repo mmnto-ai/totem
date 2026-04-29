@@ -220,6 +220,45 @@ describe('runEstimate', () => {
     expect(rcrArgs.isStaged).toBe(true);
   });
 
+  // mmnto-ai/totem#1732 CR R2 — `--diff` outranks `--staged` in
+  // `getDiffForReview`. `isStaged` must follow the resolved
+  // `DiffForReviewSource`, not the raw CLI flag, so the staged-index
+  // read strategy only kicks in for genuinely staged runs.
+  it('derives isStaged from diffResult.source, not options.staged, when both --diff and --staged are passed', async () => {
+    mockGetDiffForReview.mockResolvedValue(diffResult({ source: 'explicit-range' }));
+    mockRunCompiledRules.mockResolvedValue(runCompiledRulesPassResult());
+
+    const { runEstimate } = await import('./shield-estimate.js');
+    await runEstimate(
+      { estimate: true, staged: true, diff: 'main...HEAD' },
+      makeConfig(),
+      tmpDir,
+      tmpDir,
+    );
+
+    const rcrArgs = mockRunCompiledRules.mock.calls[0]![0];
+    expect(rcrArgs.isStaged).toBe(false);
+  });
+
+  it.each([
+    ['uncommitted', false] as const,
+    ['branch-vs-base', false] as const,
+    ['explicit-range', false] as const,
+    ['staged', true] as const,
+  ])(
+    'isStaged is true iff resolved source is "staged" (source=%s → isStaged=%s)',
+    async (source, expected) => {
+      mockGetDiffForReview.mockResolvedValue(diffResult({ source }));
+      mockRunCompiledRules.mockResolvedValue(runCompiledRulesPassResult());
+
+      const { runEstimate } = await import('./shield-estimate.js');
+      await runEstimate({ estimate: true }, makeConfig(), tmpDir, tmpDir);
+
+      const rcrArgs = mockRunCompiledRules.mock.calls[0]![0];
+      expect(rcrArgs.isStaged).toBe(expected);
+    },
+  );
+
   it('forwards options.out as outPath into runCompiledRules', async () => {
     mockGetDiffForReview.mockResolvedValue(diffResult());
     mockRunCompiledRules.mockResolvedValue(runCompiledRulesPassResult());

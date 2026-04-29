@@ -55,6 +55,12 @@ export async function runEstimate(
     ignorePatterns: config.ignorePatterns,
     tag: ESTIMATE_DISPLAY_TAG,
     configRoot,
-    isStaged: !!options.staged,
+    // Source-of-truth for staged-mode is the resolved `DiffForReviewSource`,
+    // not the raw `options.staged` flag. `--diff` outranks `--staged` in
+    // `getDiffForReview` (mmnto-ai/totem#1717), so passing both flags must
+    // not cause `runCompiledRules` to use the staged-index read strategy
+    // when the diff actually came from an explicit range
+    // (mmnto-ai/totem#1732 CR R2).
+    isStaged: diffResult.source === 'staged',
   });
 }
