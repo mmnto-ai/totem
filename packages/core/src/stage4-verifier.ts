@@ -242,19 +242,24 @@ function classifyFile(
     if (!fileMatchesGlobs(filePath, ruleFileGlobs)) return 'baseline';
   }
   // File matches rule scope (or rule has no scope). Now check baseline overrides.
-  // Baseline globs are positive-only by construction (the resolver does
-  // set-difference on `configExclude` rather than emitting `!`-prefixed
-  // entries), so `fileMatchesGlobs` simplifies to "matches any baseline glob".
   //
-  // Guard the empty-globs case explicitly. `fileMatchesGlobs` has default-
-  // allow semantics on an empty positive set (returns `true` so a rule with
-  // empty fileGlobs runs everywhere, which is the rule-engine's contract).
-  // Stage 4's baseline doesn't share that contract — an empty baseline means
-  // "nothing is baseline-excluded", not "everything is baseline-excluded."
-  // Without the length guard, a consumer who `exclude`-s every default
-  // baseline glob would see every file classified as baseline → all rule
-  // violations suppressed. (Sonnet pre-push catch.)
-  if (baseline.excludeFileGlobs.length > 0 && fileMatchesGlobs(filePath, baseline.excludeFileGlobs))
+  // Guard against empty positive set explicitly. `fileMatchesGlobs` has
+  // default-allow semantics when its positive-glob set is empty (returns
+  // `true` so a rule with empty fileGlobs runs everywhere — that's the
+  // rule-engine's contract). Stage 4's baseline doesn't share that
+  // contract: an empty positive set means "nothing positively baseline-
+  // excluded", not "everything is baseline-excluded."
+  //
+  // Two empty-positive cases land here in practice:
+  // 1. Consumer `exclude`-s every default baseline glob → `excludeFileGlobs`
+  //    is fully empty (Sonnet R0 catch).
+  // 2. Consumer `extend`-s with only `!`-prefixed entries AND `exclude`-s
+  //    every default → `excludeFileGlobs` has only negatives, no positives
+  //    (GCA mmnto-ai/totem#1766 R1 catch).
+  // Both produce a baseline that classifies every file as baseline absent
+  // this guard, suppressing all rule violations.
+  const hasPositiveBaseline = baseline.excludeFileGlobs.some((g) => !g.startsWith('!'));
+  if (hasPositiveBaseline && fileMatchesGlobs(filePath, baseline.excludeFileGlobs))
     return 'baseline';
   return 'in-scope';
 }

@@ -35,13 +35,11 @@ export default {
     cloudFallback: true, // Whether to use Totem cloud API if local fails
   },
 
-  reviewOptions: {
-    format: 'json', // Output format: 'text', 'json', 'sarif'
-    deterministicOnly: false, // If true, never use the LLM for reviews
-  },
-
-  // Stage 4 verification baseline (mmnto-ai/totem#1683)
+  // Review configuration. `TotemConfigSchema` reads only the `review` key
+  // (a flat `reviewOptions` is not in the schema). All review-related
+  // settings live here.
   review: {
+    // Stage 4 verification baseline (mmnto-ai/totem#1683)
     stage4Baseline: {
       // Globs added to the default baseline (test/fixture patterns).
       // Files matching these globs are treated as out-of-scope when a

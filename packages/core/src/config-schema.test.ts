@@ -766,6 +766,44 @@ describe('review.stage4Baseline', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('rejects unknown keys like typos (CR mmnto-ai/totem#1766 R1)', () => {
+    // `exlcude` (transposed) silently passed through under the original
+    // `.passthrough()` schema; now caught at parse time so misconfiguration
+    // surfaces immediately instead of becoming load-bearing-but-ignored.
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      review: {
+        stage4Baseline: { exlcude: ['**/foo/**'] },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects unknown keys like extends/excludes plurals (CR mmnto-ai/totem#1766 R1)', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      review: {
+        stage4Baseline: { extends: ['**/foo/**'], excludes: ['**/bar/**'] },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('continues to reject allowlist with the naming-discipline message even alongside unknown keys', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      review: {
+        stage4Baseline: { allowlist: ['**/foo/**'], typo: ['**/bar/**'] },
+      },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const messages = result.error.issues.map((i) => i.message).join('\n');
+      expect(messages).toMatch(/baseline/);
+      expect(messages).toMatch(/1683/);
+    }
+  });
 });
 
 describe('GarbageCollectionSchema', () => {

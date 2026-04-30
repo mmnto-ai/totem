@@ -233,6 +233,8 @@ export const ReviewSourceExtensionSchema = z
  * an `allowlist` key with a pointer to mmnto-ai/totem#1683 so a future
  * regression surfaces at config-parse time, not in a silent passthrough.
  */
+const STAGE4_BASELINE_KNOWN_KEYS = new Set(['extend', 'exclude']);
+
 export const Stage4BaselineConfigSchema = z
   .object({
     extend: z.array(z.string()).default([]),
@@ -240,13 +242,30 @@ export const Stage4BaselineConfigSchema = z
   })
   .passthrough()
   .superRefine((data, ctx) => {
-    if ('allowlist' in (data as Record<string, unknown>)) {
+    const raw = data as Record<string, unknown>;
+    // Naming-discipline guard: the `allowlist` key gets a custom error
+    // message that points at mmnto-ai/totem#1683 so a future regression
+    // surfaces with the right rationale at config-parse time.
+    if ('allowlist' in raw) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:
           "Use 'baseline' framing (extend / exclude) — 'allowlist' is rejected per mmnto-ai/totem#1683 naming discipline.",
         path: ['allowlist'],
       });
+    }
+    // Reject other unknown keys (e.g. typos like `exlcude`/`extends`) at
+    // parse time rather than letting them silently passthrough and become
+    // load-bearing-but-ignored config (CR mmnto-ai/totem#1766 R1).
+    for (const key of Object.keys(raw)) {
+      if (key === 'allowlist') continue; // handled above with a custom message
+      if (!STAGE4_BASELINE_KNOWN_KEYS.has(key)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.unrecognized_keys,
+          keys: [key],
+          path: [],
+        });
+      }
     }
   });
 

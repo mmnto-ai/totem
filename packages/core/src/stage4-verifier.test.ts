@@ -210,6 +210,24 @@ describe('verifyAgainstCodebase with consumer excluding every default baseline g
     expect(result.outcome).not.toBe('out-of-scope');
     expect(result.baselineMatches).toEqual([]);
   });
+
+  it('keeps in-scope hits when excludeFileGlobs has only !-prefixed entries (GCA mmnto-ai/totem#1766 R1)', async () => {
+    // Negative-only baseline: positive set is empty, but the array is
+    // non-empty. The original `length > 0` guard would have fired
+    // `fileMatchesGlobs` which returns true for every file not matching
+    // the negative — silently classifying everything as baseline.
+    const baseline: Stage4Baseline = {
+      excludeFileGlobs: ['!**/never-matches/**'],
+      extendedFromIgnoreFile: [],
+      extendedFromConfig: ['!**/never-matches/**'],
+      excludedFromConfig: [...DEFAULT_BASELINE_GLOBS],
+    };
+    const files = new Map<string, string>([['packages/cli/src/server.ts', "console.log('hit')\n"]]);
+    const result = await verifyAgainstCodebase(makeRule(), baseline, makeDeps(files));
+    expect(result.outcome).not.toBe('out-of-scope');
+    expect(result.baselineMatches).toEqual([]);
+    expect(result.inScopeMatches).toContain('packages/cli/src/server.ts');
+  });
 });
 
 // ─── STAGE4_MANIFEST_EXCLUSIONS (mmnto-ai/totem#1765) ─
