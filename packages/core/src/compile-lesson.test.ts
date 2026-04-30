@@ -3430,6 +3430,66 @@ describe('compileLesson Stage 4 integration', () => {
     );
   });
 
+  it('Pipeline 3 (Bad/Good example-based) wires Stage 4 — outcome mutates the rule (CR mmnto-ai/totem#1757 R2)', async () => {
+    // Stage 4 is wired into both Pipeline 2 and Pipeline 3 success
+    // branches. The other tests in this block pin Pipeline 2; this case
+    // covers Pipeline 3 so a regression in the Pipeline 3 hook can't
+    // bypass verification while the Pipeline 2 cases stay green.
+    const verifyStage4 = vi.fn().mockResolvedValue({
+      outcome: 'in-scope-bad-example',
+      baselineMatches: [],
+      inScopeMatches: ['packages/cli/src/foo.ts'],
+      candidateDebtLines: [],
+    });
+    const onStage4Outcome = vi.fn();
+    const onWarn = vi.fn();
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: true,
+        pattern: 'console\\.log',
+        message: 'No console.log',
+        engine: 'regex' as const,
+        badExample: "console.log('debug')",
+        goodExample: '// noop',
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('{"compilable": true}'),
+      existingByHash: new Map(),
+      callbacks: { onWarn, onDim: vi.fn(), onStage4Outcome },
+      verifyStage4,
+    };
+    // Pipeline 3 dispatches when `extractBadGoodSnippets` returns
+    // snippets — body needs explicit Bad/Good code blocks AND no
+    // manual `**Pattern:**` (else Pipeline 1 wins).
+    const pipeline3Lesson: LessonInput = {
+      index: 0,
+      heading: 'No console.log in production',
+      body: [
+        '**Bad:**',
+        '',
+        '```ts',
+        "console.log('debug')",
+        '```',
+        '',
+        '**Good:**',
+        '',
+        '```ts',
+        '// noop',
+        '```',
+      ].join('\n'),
+      hash: 'h-stage4-p3',
+    };
+    const result = await compileLesson(pipeline3Lesson, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.confidence).toBe('high');
+    }
+    expect(verifyStage4).toHaveBeenCalledTimes(1);
+    expect(onStage4Outcome).toHaveBeenCalledTimes(1);
+    expect(result.trace).toContainEqual(
+      expect.objectContaining({ layer: 4, action: 'verify', outcome: 'in-scope-bad-example' }),
+    );
+  });
+
   it('Pipeline 1 (manual rule) bypasses Stage 4 — verifyStage4 not invoked', async () => {
     // Pipeline 1 manual rules are human-authored and self-evidencing per the
     // Pipeline 1 / unverified semantics; Stage 4 is a safety net for LLM-

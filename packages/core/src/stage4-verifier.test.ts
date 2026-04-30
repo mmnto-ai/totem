@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { CompiledRule } from './compiler-schema.js';
 import {
@@ -8,6 +12,7 @@ import {
   type Stage4VerifierDeps,
   verifyAgainstCodebase,
 } from './stage4-verifier.js';
+import { cleanTmpDir } from './test-utils.js';
 
 // ─── Helpers ────────────────────────────────────────
 
@@ -293,6 +298,60 @@ describe('verifyAgainstCodebase custom baseline overrides', () => {
     const result = await verifyAgainstCodebase(makeRule(), customBaseline, makeDeps(files));
     expect(result.outcome).toBe('out-of-scope');
     expect(result.baselineMatches).toEqual(['packages/cli/src/migrations/001-init.ts']);
+  });
+});
+
+// ─── ast-grep engine path ──────────────────────────
+
+describe('verifyAgainstCodebase ast-grep engine (CR mmnto-ai/totem#1757 R2)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-stage4-astgrep-'));
+    fs.mkdirSync(path.join(tmpDir, 'packages', 'cli', 'src'), { recursive: true });
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('routes ast-grep rules through the AST matcher and reports in-scope-bad-example', async () => {
+    // The four-outcome contract above only exercises the regex engine.
+    // ast-grep rules go through `applyAstRulesToAdditions`, which reads
+    // file content from disk via `workingDirectory`, so the test stages
+    // a real tmpDir alongside the synthetic readFile callback used to
+    // build additions. Confirms the engine dispatch in
+    // `runRuleAgainstAllFiles` does not silently fall back to regex.
+    const filePath = 'packages/cli/src/foo.ts';
+    const fileContent = "console.log('debug')\n";
+    fs.writeFileSync(path.join(tmpDir, filePath), fileContent);
+
+    const astRule: CompiledRule = {
+      lessonHash: 'h-ast',
+      lessonHeading: 'No console.log',
+      pattern: 'console.log($X)',
+      astGrepPattern: 'console.log($X)',
+      message: 'no console.log',
+      engine: 'ast-grep',
+      compiledAt: new Date().toISOString(),
+      badExample: "console.log('debug')",
+      goodExample: '// noop',
+      fileGlobs: ['packages/cli/src/**/*.ts'],
+    };
+
+    const deps: Stage4VerifierDeps = {
+      listFiles: async () => [filePath],
+      readFile: async (file) => {
+        if (file === filePath) return fileContent;
+        throw new Error(`stub readFile: ${file} not in fixture map`);
+      },
+      workingDirectory: tmpDir,
+    };
+
+    const result = await verifyAgainstCodebase(astRule, getDefaultBaseline(), deps);
+    expect(result.outcome).toBe('in-scope-bad-example');
+    expect(result.inScopeMatches).toEqual([filePath]);
+    expect(result.baselineMatches).toEqual([]);
   });
 });
 

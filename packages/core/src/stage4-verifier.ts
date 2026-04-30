@@ -363,10 +363,10 @@ export async function verifyAgainstCodebase(
       // Fail loud per Tenet 4. The file showed up in listFiles() so its
       // absence here is a real environment problem (race with deletion,
       // permission change, broken symlink). The operator needs to see
-      // exactly which file failed.
-      throw new Error(
-        `Stage 4 verifier could not read ${file}: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      // exactly which file failed; preserving `cause` keeps the original
+      // stack/context intact (CR mmnto-ai/totem#1757 R2 — the prior
+      // `${err.message}` concat flattened the original exception).
+      throw new Error(`Stage 4 verifier could not read ${file}.`, { cause: err });
     }
     additions.push(...fileToAdditions(file, content));
   }
