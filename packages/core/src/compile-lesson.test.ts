@@ -3522,11 +3522,11 @@ describe('compileLesson Stage 4 integration', () => {
       candidateDebtLines: ['console.log(\x1b[31m"red"\x1b[0m)', 'console.log("\x07bell")'],
     });
     await compileLesson(makePipeline2Lesson(), 'system prompt', deps);
-    const warnArgs = onWarn.mock.calls.find(([, msg]: [string, string]) =>
-      msg.includes('candidate debt'),
+    const warnCall = onWarn.mock.calls.find(
+      (call) => typeof call[1] === 'string' && (call[1] as string).includes('candidate debt'),
     );
-    expect(warnArgs).toBeDefined();
-    const message = warnArgs![1] as string;
+    expect(warnCall).toBeDefined();
+    const message = warnCall![1] as string;
     // No raw ESC, no raw BEL after sanitization.
     expect(message).not.toMatch(/\x1b/);
     expect(message).not.toMatch(/\x07/);
