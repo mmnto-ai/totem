@@ -433,6 +433,70 @@ describe('verifyAgainstCodebase rule without fileGlobs', () => {
   });
 });
 
+describe('verifyAgainstCodebase test-contract rule scope vs baseline (CR mmnto-ai/totem#1766 R3)', () => {
+  it('keeps test-scoped rule hits as in-scope when fileGlobs literally claims a baseline glob', async () => {
+    // A test-contract rule legitimately scopes itself to test files. Without
+    // R3 baseline-subtraction, classifyFile matched the rule scope first
+    // (file matches `**/*.test.*`) then re-classified the same file as
+    // baseline (because `**/*.test.*` is in `DEFAULT_BASELINE_GLOBS`),
+    // routing the rule to `out-of-scope` on its own intended corpus.
+    const testContractRule = makeRule({
+      fileGlobs: ['**/*.test.*'],
+      pattern: 'fdescribe',
+      badExample: 'fdescribe("focused", () => {})',
+    });
+    const files = new Map<string, string>([
+      ['packages/cli/src/foo.test.ts', 'fdescribe("focused", () => {})\n'],
+    ]);
+    const result = await verifyAgainstCodebase(
+      testContractRule,
+      getDefaultBaseline(),
+      makeDeps(files),
+    );
+    expect(result.outcome).toBe('in-scope-bad-example');
+    expect(result.inScopeMatches).toEqual(['packages/cli/src/foo.test.ts']);
+    expect(result.baselineMatches).toEqual([]);
+  });
+
+  it('keeps fixtures-scoped rule hits as in-scope when fileGlobs literally claims **/__fixtures__/**', async () => {
+    const fixtureRule = makeRule({
+      fileGlobs: ['**/__fixtures__/**'],
+      pattern: 'TODO',
+      badExample: '// TODO: replace fixture',
+    });
+    const files = new Map<string, string>([
+      ['packages/cli/src/__fixtures__/sample.ts', '// TODO: replace fixture\n'],
+    ]);
+    const result = await verifyAgainstCodebase(fixtureRule, getDefaultBaseline(), makeDeps(files));
+    expect(result.outcome).toBe('in-scope-bad-example');
+    expect(result.inScopeMatches).toEqual(['packages/cli/src/__fixtures__/sample.ts']);
+  });
+
+  it('still classifies non-claimed baseline files as baseline (no over-subtraction)', async () => {
+    // Rule scopes to `**/*.test.*` only — this claims that one baseline glob.
+    // A file at `packages/__tests__/foo.test.ts` matches BOTH `**/*.test.*`
+    // (rule scope, claimed) AND `**/__tests__/**` (baseline, NOT claimed).
+    // After subtraction the baseline still contains `**/__tests__/**`, so the
+    // file must classify as baseline. This locks in that subtraction is
+    // surgical (byte-equal on the entry the rule claimed) rather than a
+    // wholesale baseline disable.
+    const testContractRule = makeRule({
+      fileGlobs: ['**/*.test.*'],
+      pattern: 'console\\.log',
+    });
+    const files = new Map<string, string>([
+      ['packages/__tests__/foo.test.ts', "console.log('debug')\n"],
+    ]);
+    const result = await verifyAgainstCodebase(
+      testContractRule,
+      getDefaultBaseline(),
+      makeDeps(files),
+    );
+    expect(result.outcome).toBe('out-of-scope');
+    expect(result.baselineMatches).toEqual(['packages/__tests__/foo.test.ts']);
+  });
+});
+
 // ─── Failure modes ────────────────────────────────
 
 describe('verifyAgainstCodebase failure modes', () => {
