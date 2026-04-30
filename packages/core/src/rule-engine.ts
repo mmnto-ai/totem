@@ -80,7 +80,18 @@ export function matchesGlob(filePath: string, glob: string): boolean {
     return rest.endsWith(ext); // totem-ignore — this IS the glob matcher
   }
 
-  // Literal filename match (e.g., "Dockerfile")
+  // Literal-glob fallback. Two shapes carry different match contracts
+  // (mmnto-ai/totem#1758 second hole):
+  // - Bare filename (no `/`, e.g., "Dockerfile"): match anywhere in the
+  //   tree — `Dockerfile` should match `src/Dockerfile`.
+  // - Path-shaped literal (contains `/`, e.g., "src/foo.ts"): repo-relative
+  //   path that MUST match exactly. The earlier suffix-match form
+  //   (`endsWith('/' + glob)`) caused `src/foo.ts` to spuriously match
+  //   `packages/src/foo.ts`. CR mmnto-ai/totem#1766 R1 surfaced this as
+  //   the matching pair to the `**/dir/**` recursion fix earlier in the
+  //   PR.
+  // totem-context: detecting any slash in the glob string (mmnto-ai/totem#1758) — `.includes('/', 1)` would skip a leading slash, which is the opposite of the path-shape vs bare-filename distinction this branch needs.
+  if (glob.includes('/')) return normalized === glob;
   return normalized === glob || normalized.endsWith('/' + glob);
 }
 

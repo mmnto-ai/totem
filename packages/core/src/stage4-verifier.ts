@@ -177,11 +177,34 @@ export const STAGE4_MANIFEST_EXCLUSIONS: readonly string[] = ['.totem/compiled-r
 // ─── Baseline resolver (mmnto-ai/totem#1683) ────────
 
 export interface ResolveStage4BaselineInput {
+  /** Globs parsed from `# stage4-baseline:` directives in `.totemignore`. */
   readonly ignoreDirectives?: readonly string[];
+  /** Globs from `review.stage4Baseline.extend` in `totem.config.ts`. */
   readonly configExtend?: readonly string[];
+  /** Globs from `review.stage4Baseline.exclude` in `totem.config.ts`. */
   readonly configExclude?: readonly string[];
 }
 
+/**
+ * Compute the effective Stage 4 baseline for a compile run.
+ *
+ * Composition: `defaults ∪ ignoreDirectives ∪ configExtend ∖ configExclude`.
+ * `configExclude` is set-difference (LAST), so a consumer can remove a
+ * default baseline glob like `**\/tests/**` when their project legitimately
+ * treats `tests/` as production. Set membership uses byte-equal comparison
+ * on the glob string, NOT path matching — `exclude: ['**\/tests/**']`
+ * removes that exact default entry, not every glob that happens to match
+ * a `tests/` path.
+ *
+ * Pure function. Does NOT read the filesystem; the CLI integration site
+ * reads `.totemignore` and parses it via `parseStage4BaselineDirectives`
+ * before passing the directives in.
+ *
+ * @param input - The three composition inputs (all optional / default to `[]`).
+ * @returns A `Stage4Baseline` whose `excludeFileGlobs` is consumed by the
+ *   verifier and whose three provenance arrays are read by `totem doctor`
+ *   (T4 / `mmnto-ai/totem#1685`) and trace events.
+ */
 export function resolveStage4Baseline(input: ResolveStage4BaselineInput): Stage4Baseline {
   const ignoreDirectives = input.ignoreDirectives ?? [];
   const configExtend = input.configExtend ?? [];
@@ -204,6 +227,33 @@ export function resolveStage4Baseline(input: ResolveStage4BaselineInput): Stage4
 
 const STAGE4_BASELINE_DIRECTIVE_RE = /^#\s*stage4-baseline:\s*(.+?)\s*$/;
 
+/**
+ * Extract `# stage4-baseline: <glob>` directives from `.totemignore` content
+ * (or any line-oriented text). The leading `#` is REQUIRED — the directive
+ * lives on a comment line so it doesn't interfere with the rest of
+ * `.totemignore`'s ignore semantics. Variable whitespace around the `#`,
+ * the colon, and the body is allowed; the regex collapses it.
+ *
+ * Returns the globs in source order. Empty / whitespace-only directive
+ * bodies are skipped silently (no throw). The directive name is
+ * case-sensitive to match `.totemignore`'s overall convention.
+ *
+ * Pure function (`string → string[]`) so it can be invoked from any core
+ * consumer. CLI reads the file and hands the content to this helper;
+ * MCP integrations may want the same surface in the future.
+ *
+ * @param content - Raw `.totemignore` text (or any line-oriented content).
+ *   Empty or undefined returns `[]`. CRLF and LF line endings both work.
+ * @returns Glob strings extracted from `# stage4-baseline:` lines, in
+ *   source order, excluding empty/whitespace-only directive bodies.
+ *
+ * @example
+ * ```ts
+ * parseStage4BaselineDirectives('# stage4-baseline: build/**\nsrc/temp/**');
+ * // → ['build/**']  (only the directive line; 'src/temp/**' is ordinary
+ * //                 .totemignore content, not a stage4 directive)
+ * ```
+ */
 export function parseStage4BaselineDirectives(content: string): string[] {
   if (!content) return [];
   const out: string[] = [];

@@ -784,4 +784,26 @@ describe('matchesGlob', () => {
     expect(matchesGlob('a/b/foo/bar.ts', '**/foo/bar.ts')).toBe(true);
     expect(matchesGlob('a/b/foo/baz.ts', '**/foo/bar.ts')).toBe(false);
   });
+
+  // mmnto-ai/totem#1758 second hole (CR mmnto-ai/totem#1766 R1 catch):
+  // path-shaped literal globs MUST match exactly, not as a "/"-prefix
+  // suffix. The pre-fix matcher returned `endsWith('/' + glob)`, so
+  // `src/foo.ts` spuriously matched `packages/src/foo.ts`. Bare filenames
+  // (no `/`) keep their original behavior — `Dockerfile` continues to
+  // match `src/Dockerfile`.
+  it('requires exact match for path-shaped literal globs (mmnto-ai/totem#1758)', () => {
+    // Exact match: yes
+    expect(matchesGlob('src/foo.ts', 'src/foo.ts')).toBe(true);
+    // Suffix-only match must FAIL: this is the bug the consolidation fixes
+    expect(matchesGlob('packages/src/foo.ts', 'src/foo.ts')).toBe(false);
+    expect(matchesGlob('a/b/c/src/foo.ts', 'src/foo.ts')).toBe(false);
+  });
+
+  it('preserves bare-filename suffix matching for paths without `/` (mmnto-ai/totem#1758)', () => {
+    // Bare literal still matches at any depth (no `/` means "filename only")
+    expect(matchesGlob('Dockerfile', 'Dockerfile')).toBe(true);
+    expect(matchesGlob('src/Dockerfile', 'Dockerfile')).toBe(true);
+    expect(matchesGlob('packages/cli/Dockerfile', 'Dockerfile')).toBe(true);
+    expect(matchesGlob('Dockerfile.dev', 'Dockerfile')).toBe(false);
+  });
 });

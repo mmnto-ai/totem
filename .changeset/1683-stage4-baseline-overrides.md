@@ -32,5 +32,3 @@ Fix: `STAGE4_MANIFEST_EXCLUSIONS = ['.totem/compiled-rules.json']` exported cons
 **CLI wiring:**
 
 `compileCommand` reads `.totemignore` once per compile run, parses directives, and composes the baseline via `resolveStage4Baseline(...)` with overrides from `config.review.stage4Baseline`. The cached baseline is reused across all rules in the batch. ENOENT on `.totemignore` is graceful (treated as no directives); other read errors propagate fail-loud per Tenet 4.
-
-**Bot-review tail:** Sonnet pre-push catches and CR/GCA findings will be addressed in PR amendment rounds. The held `postmerge/1743-1747-1745-1749` bundle was deferred from this PR (Q4 deviation from the approved design doc) — the diff turned out to be 41 lesson files + 336 lines of compiled-rules.json + 182 lines of auto-mirror docs, not "metadata-only" — adding it would expand the bot-review surface beyond the substrate scope. Will ride a future feature PR.

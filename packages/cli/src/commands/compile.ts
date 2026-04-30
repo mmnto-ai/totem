@@ -650,12 +650,21 @@ export async function compileCommand(
   // `buildStage4Verifier` because `cwd`/`repoRoot` are only safe to resolve
   // once the verifier is actually invoked (compile may bail out earlier).
   let stage4BaselineCache: import('@mmnto/totem').Stage4Baseline | undefined;
-  // Manifest exclusions (mmnto-ai/totem#1765): exclude
-  // `.totem/compiled-rules.json` (and any future siblings) from the corpus
-  // before rules run, so a regex rule's own `badExample` text in the
-  // manifest doesn't self-match and route every regex rule to
-  // `outcome: 'out-of-scope'` regardless of real codebase risk.
-  const stage4ManifestExclusionSet = new Set<string>(STAGE4_MANIFEST_EXCLUSIONS);
+  // Manifest exclusions (mmnto-ai/totem#1765): exclude the manifest file
+  // from the corpus before rules run, so a regex rule's own `badExample`
+  // text in the manifest doesn't self-match and route every regex rule
+  // to `outcome: 'out-of-scope'` regardless of real codebase risk.
+  //
+  // The default `.totem/compiled-rules.json` ships in
+  // `STAGE4_MANIFEST_EXCLUSIONS`. Consumers who override `config.totemDir`
+  // (e.g. `.my-totem`) put their manifest at `<totemDir>/compiled-rules.json`,
+  // which doesn't match the default — so we ALSO add the active manifest
+  // path computed from config. CR mmnto-ai/totem#1766 R1 catch.
+  const activeManifestPath = path.join(config.totemDir, 'compiled-rules.json').replace(/\\/g, '/');
+  const stage4ManifestExclusionSet = new Set<string>([
+    ...STAGE4_MANIFEST_EXCLUSIONS,
+    activeManifestPath,
+  ]);
   const buildStage4Verifier = () => {
     return async (rule: import('@mmnto/totem').CompiledRule) => {
       if (stage4RepoRootCache === undefined) {
