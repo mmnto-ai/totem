@@ -43,9 +43,9 @@ const RULE_COVERAGE_JACCARD_THRESHOLD = 0.6;
 /** Max chars rendered for a finding's body excerpt in the console report. */
 const RENDER_SNIPPET_MAX = 80;
 
-// `sanitizeForTerminal` was promoted to `cli/src/utils.ts` per CR mmnto-ai/totem#1739
-// round-1 — single-source-of-truth for the bot-tax cluster's terminal-injection defense
-// (`shield-estimate.ts` reads substrate-derived fields and uses the same helper).
+// `sanitizeForTerminal` lives in `@mmnto/totem` core per mmnto-ai/totem#1744 —
+// promoted from the cli-only file added in CR mmnto-ai/totem#1739 R2 so MCP and
+// other downstream consumers can share the canonical helper.
 
 // ─── Public option surface ───────────────────────────
 
@@ -99,17 +99,11 @@ export async function runRetrospect(options: RunRetrospectOptions): Promise<void
     normalizeFindingBody,
     readLedgerEvents,
     RetrospectReportSchema,
+    sanitizeForTerminal,
     toSeverityBucket,
     tokenizeForJaccard,
   } = await import('@mmnto/totem');
-  // `sanitizeForTerminal` is re-exported from `../utils.js` (canonical
-  // location: `./terminal-sanitize.ts` — see CR mmnto-ai/totem#1739 R2).
-  // Routing it through `terminal-sanitize.js` would NOT save load cost
-  // here because utils.js is already in this command's lazy-import set
-  // for `loadConfig` + `resolveConfigPath`; the orchestrator graph is
-  // already in. The dep-light routing matters for `shield-estimate.ts`'s
-  // pattern-history overlay (which doesn't otherwise load utils).
-  const { loadConfig, resolveConfigPath, sanitizeForTerminal } = await import('../utils.js');
+  const { loadConfig, resolveConfigPath } = await import('../utils.js');
 
   // Local schema — the recurrence-stats file shape is defined in core,
   // but reading it here keeps the zod import lazy.

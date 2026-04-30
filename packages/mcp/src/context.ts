@@ -9,6 +9,7 @@ import {
   LanceStore,
   requireEmbedding,
   resolveStrategyRoot,
+  sanitizeForTerminal,
   TotemConfigError,
   TotemConfigSchema,
 } from '@mmnto/totem';
@@ -289,16 +290,14 @@ async function initContext(): Promise<ServerContext> {
     // wraps this string in `formatSystemWarning` → returns as text
     // content to the agent. An MCP client that renders the text in a
     // terminal would interpret embedded ANSI/CR/newlines/tabs. Strip
-    // ANSI/CR + collapse \n/\t to single spaces before persisting
-    // (mmnto-ai/totem#1710 R6 / CR R6 Major + R7 / CR R7 Major). The
-    // ANSI/CR strip matches the canonical `terminal-sanitize.ts`
-    // regex in `packages/cli/src/`; the \n/\t flatten matches the
-    // doctor.ts pattern. mmnto-ai/totem#1744 consolidates both into
-    // a single shared helper in @mmnto/totem core.
-    const safeReason = strategyStatus.reason
-      // totem-context: inlined canonical `sanitizeForTerminal` regex — cross-package import deferred to mmnto-ai/totem#1744 (sanitizer consolidation into @mmnto/totem core).
-      .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
-      .replace(/[\x00-\x08\x0b-\x0d\x0e-\x1f\x7f-\x9f]/g, ' ')
+    // ANSI/CR via the canonical `sanitizeForTerminal` from `@mmnto/totem`
+    // (mmnto-ai/totem#1744 — consolidated from cli's helper); then
+    // flatten `\n`/`\t` to single spaces because this single-line
+    // diagnostic must collapse multi-line content (mmnto-ai/totem#1710
+    // R7 / CR R7 Major). The flatten step is intentionally inline
+    // because `sanitizeForTerminal` preserves `\n`/`\t` for callers that
+    // want multi-line content.
+    const safeReason = sanitizeForTerminal(strategyStatus.reason)
       .replace(/[\t\n]+/g, ' ')
       .replace(/ {2,}/g, ' ')
       .trim();

@@ -18,11 +18,12 @@
  *   ECMA-48; CR mmnto-ai/totem#1739 R2 caught the original regex
  *   stopped at `\x7f`.
  *
- * **No imports.** This file is intentionally dep-light so the
- * `mmnto-ai/totem#1731` pattern-history overlay on `--estimate` can pull
- * it in without dragging the orchestrator graph in via `cli/src/utils.ts`
- * (which has a static import of `./orchestrators/orchestrator.js`). Per
- * CR mmnto-ai/totem#1739 R2 (Major).
+ * **No imports.** Pure synchronous string manipulation — adding deps
+ * here would pull them transitively into every `@mmnto/totem` consumer.
+ * Originally landed in `@mmnto/cli` per CR mmnto-ai/totem#1739 R2 to
+ * keep the pattern-history overlay on `--estimate` off the orchestrator
+ * graph; promoted to `@mmnto/totem` core in mmnto-ai/totem#1744 so MCP
+ * and other downstream consumers can use it without taking a CLI dep.
  */
 // totem-context: regex char-class with hex escapes targets specific control bytes — not the unbounded `.*` quantifier the ReDoS rule flags
 export function sanitizeForTerminal(value: string): string {

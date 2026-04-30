@@ -1009,7 +1009,8 @@ describe('runEstimate — pattern-history overlay', () => {
     expect(source).not.toMatch(/['"]\.\.\/orchestrators\//);
     // Transitive load via utils.ts (which statically imports the orchestrator
     // graph at utils.ts:18). The overlay must route sanitizeForTerminal
-    // through `terminal-sanitize.js` instead.
+    // through `@mmnto/totem` (mmnto-ai/totem#1744) — core does not transit
+    // the orchestrator graph.
     expect(source).not.toMatch(/['"]\.\.\/utils\.js['"]/);
 
     // Dynamic-import allowlist — every `await import(...)` in shield-estimate
@@ -1022,7 +1023,6 @@ describe('runEstimate — pattern-history overlay', () => {
       "await import('../git.js')",
       "await import('./run-compiled-rules.js')",
       "await import('@mmnto/totem')",
-      "await import('../terminal-sanitize.js')",
     ];
     let residual = source;
     for (const expected of allowedDynamicImports) {

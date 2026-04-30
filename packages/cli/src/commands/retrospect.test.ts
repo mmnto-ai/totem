@@ -43,9 +43,9 @@ vi.mock('../ui.js', () => ({
 }));
 
 // Mock loadConfig + resolveConfigPath to a tmp totemDir; spread the rest
-// of utils so re-exports like `sanitizeForTerminal` (and constants like
-// `IS_WIN`/`GH_TIMEOUT_MS`) stay accessible. Per Sonnet review of CR R2:
-// dropping the spread is fragile to future drift in the dependency graph.
+// of utils so constants like `IS_WIN`/`GH_TIMEOUT_MS` stay accessible.
+// Per Sonnet review of CR R2: dropping the spread is fragile to future
+// drift in the dependency graph.
 vi.mock('../utils.js', async () => {
   const actual = await vi.importActual<typeof import('../utils.js')>('../utils.js');
   return {
