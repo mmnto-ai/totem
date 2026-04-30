@@ -388,7 +388,7 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   });
   if (defaultPath) {
     writeOutput(content, defaultPath);
-    log.success(TAG, `Spec saved to ${path.relative(cwd, defaultPath)}`);
+    log.success(TAG, `Spec saved to ${sanitizeForTerminal(path.relative(cwd, defaultPath))}`);
   } else {
     log.dim(TAG, 'No default save path — writing to stdout. Use --out <path> to save.');
     writeOutput(content);
