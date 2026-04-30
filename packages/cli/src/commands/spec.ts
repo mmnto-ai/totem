@@ -379,7 +379,8 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   }
   if (options.out) {
     writeOutput(content, options.out);
-    log.success(TAG, `Written to ${sanitizeForTerminal(options.out)}`);
+    const safeOut = sanitizeForTerminal(options.out).replace(/[\n\t]+/g, ' ');
+    log.success(TAG, `Written to ${safeOut}`);
     return;
   }
   const defaultPath = resolveDefaultSpecPath(parsed, cwd, {
@@ -388,7 +389,11 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   });
   if (defaultPath) {
     writeOutput(content, defaultPath);
-    log.success(TAG, `Spec saved to ${sanitizeForTerminal(path.relative(cwd, defaultPath))}`);
+    const safeRelativePath = sanitizeForTerminal(path.relative(cwd, defaultPath)).replace(
+      /[\n\t]+/g,
+      ' ',
+    );
+    log.success(TAG, `Spec saved to ${safeRelativePath}`);
   } else {
     log.dim(TAG, 'No default save path — writing to stdout. Use --out <path> to save.');
     writeOutput(content);
