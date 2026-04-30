@@ -237,6 +237,7 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
     createEmbedder,
     LanceStore: LanceStoreImpl,
     resolveGitRoot,
+    sanitizeForTerminal,
     TotemConfigError,
   } = await import('@mmnto/totem');
   const { log } = await import('../ui.js');
@@ -378,7 +379,7 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   }
   if (options.out) {
     writeOutput(content, options.out);
-    log.success(TAG, `Written to ${options.out}`);
+    log.success(TAG, `Written to ${sanitizeForTerminal(options.out)}`);
     return;
   }
   const defaultPath = resolveDefaultSpecPath(parsed, cwd, {
@@ -389,7 +390,7 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
     writeOutput(content, defaultPath);
     log.success(TAG, `Spec saved to ${path.relative(cwd, defaultPath)}`);
   } else {
-    log.dim(TAG, 'Multi-input — writing to stdout. Use --out <path> to save.');
+    log.dim(TAG, 'No default save path — writing to stdout. Use --out <path> to save.');
     writeOutput(content);
   }
 }
