@@ -172,6 +172,15 @@ export function getDefaultBaseline(): Stage4Baseline {
 
 // ─── Manifest exclusions (mmnto-ai/totem#1765) ──────
 
+/**
+ * Static manifest paths excluded from Stage 4 corpus to prevent rules with
+ * a `badExample` field from self-matching against their own entry in the
+ * compiled manifest. CLI integration (`packages/cli/src/commands/compile.ts`)
+ * additionally computes a `totemDir`-aware path at runtime
+ * (`path.join(config.totemDir, 'compiled-rules.json')` normalized to forward
+ * slashes) and adds it to the exclusion set so consumers who override
+ * `config.totemDir` are covered too.
+ */
 export const STAGE4_MANIFEST_EXCLUSIONS: readonly string[] = ['.totem/compiled-rules.json'];
 
 // ─── Baseline resolver (mmnto-ai/totem#1683) ────────
