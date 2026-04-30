@@ -301,6 +301,68 @@ describe('verifyAgainstCodebase custom baseline overrides', () => {
   });
 });
 
+// ─── fileToAdditions trailing-blank handling ──────
+
+describe("verifyAgainstCodebase fileToAdditions doesn't synthesize trailing blank line (CR mmnto-ai/totem#1757 R3)", () => {
+  it('does not match a `^$` blank-line pattern against a newline-terminated single-line file', async () => {
+    // Pre-fix: `split(/\r?\n/)` on `'foo\n'` produced `['foo', '']`,
+    // and the empty trailing element would fire any rule with
+    // pattern `^$`. The fix drops the trailing empty when content
+    // was newline-terminated, so the only addition is line 1: `foo`.
+    const blankLineRule = makeRule({
+      pattern: '^$',
+      message: 'no blank lines',
+      badExample: '',
+    });
+    const files = new Map<string, string>([
+      // Newline-terminated single-line file. Pre-fix: would fire on
+      // synthetic blank line 2; post-fix: no fire.
+      ['packages/cli/src/foo.ts', 'foo\n'],
+    ]);
+    const result = await verifyAgainstCodebase(
+      blankLineRule,
+      getDefaultBaseline(),
+      makeDeps(files),
+    );
+    expect(result.outcome).toBe('no-matches');
+  });
+
+  it('handles empty file content without producing a synthetic addition', async () => {
+    const blankLineRule = makeRule({ pattern: '^$', message: 'no blank lines', badExample: '' });
+    const files = new Map<string, string>([['packages/cli/src/empty.ts', '']]);
+    const result = await verifyAgainstCodebase(
+      blankLineRule,
+      getDefaultBaseline(),
+      makeDeps(files),
+    );
+    expect(result.outcome).toBe('no-matches');
+  });
+
+  it('still detects real blank lines inside the file body', async () => {
+    // Real blank line on line 2 must still fire — the fix only strips
+    // the synthetic terminator, not legitimate interior blank lines.
+    const blankLineRule = makeRule({
+      pattern: '^$',
+      message: 'no blank lines',
+      badExample: '',
+      fileGlobs: undefined,
+    });
+    const files = new Map<string, string>([['packages/cli/src/foo.ts', 'first\n\nthird\n']]);
+    const result = await verifyAgainstCodebase(
+      blankLineRule,
+      getDefaultBaseline(),
+      makeDeps(files),
+    );
+    // The interior blank line fires the pattern. Whether the outcome
+    // is 'in-scope-bad-example' or 'candidate-debt' depends on the
+    // bad-example match logic, but the file MUST appear in
+    // `inScopeMatches` either way — proof the rule fired and the fix
+    // didn't suppress real blank-line detection.
+    expect(['in-scope-bad-example', 'candidate-debt']).toContain(result.outcome);
+    expect(result.inScopeMatches).toEqual(['packages/cli/src/foo.ts']);
+  });
+});
+
 // ─── ast-grep engine path ──────────────────────────
 
 describe('verifyAgainstCodebase ast-grep engine (CR mmnto-ai/totem#1757 R2)', () => {

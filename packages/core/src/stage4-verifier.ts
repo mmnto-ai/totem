@@ -242,7 +242,18 @@ function classifyFile(
  * lines a Tree-sitter classifier labels as code.
  */
 function fileToAdditions(file: string, content: string): DiffAddition[] {
+  // CR mmnto-ai/totem#1757 R3: don't synthesize a trailing blank line.
+  // `''.split(/\r?\n/)` returns `['']` and `'foo\n'.split(/\r?\n/)`
+  // returns `['foo', '']`, both of which would inject a non-existent
+  // blank addition. A pattern like `^$` (blank-line detector) would
+  // then falsely fire on every newline-terminated file in the
+  // codebase, flipping rules into out-of-scope or candidate-debt for
+  // the wrong reason.
+  if (content.length === 0) return [];
   const lines = content.split(/\r?\n/);
+  if (/\r?\n$/.test(content)) {
+    lines.pop();
+  }
   const additions: DiffAddition[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? '';

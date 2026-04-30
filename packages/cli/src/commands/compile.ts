@@ -631,6 +631,17 @@ export async function compileCommand(
   // the file enumeration and the working-tree `readFile`.
   let stage4RepoRootCache: string | undefined;
   let stage4FilesCache: readonly string[] | undefined;
+  // CR mmnto-ai/totem#1757 R3: cache file CONTENTS across rules in the
+  // batch, not just file paths. The verifier runs per Pipeline 2/3 rule;
+  // without this, every rule re-reads the same on-disk files, so total
+  // disk I/O is O(rules × files). Lazy `Promise<string>` map keeps the
+  // memory footprint bounded to files actually inspected by ANY rule —
+  // no upfront slurp of the whole tree. Cache lifetime is one compile
+  // run (function-local) and is GC'd when `compileCommand` returns.
+  // T5 (mmnto-ai/totem#1686) owns bounded LRU eviction + streaming
+  // short-circuit if a million-file monorepo ever runs into the
+  // "files-actually-touched" memory bound.
+  const stage4ReadFileCache = new Map<string, Promise<string>>();
   const buildStage4Verifier = () => {
     return async (rule: import('@mmnto/totem').CompiledRule) => {
       if (stage4RepoRootCache === undefined) {
@@ -665,15 +676,21 @@ export async function compileCommand(
       }
       return verifyAgainstCodebase(rule, getDefaultBaseline(), {
         listFiles: async () => stage4FilesCache!,
-        readFile: async (file: string) => {
+        readFile: (file: string) => {
           // Read from the working tree, anchored at the repo root so the
           // repo-relative paths returned by the
           // `git ls-files --recurse-submodules` enumeration above
           // resolve correctly even when `compileCommand` was invoked with
           // a nested `cwd`. Throws on missing file (Tenet 4 fail-loud) —
           // the verifier wraps the error with the offending filename in
-          // its own throw site.
-          return fs.promises.readFile(path.join(repoRoot, file), 'utf-8');
+          // its own throw site. The pending Promise is cached so
+          // subsequent rules in the same batch share the read.
+          let pending = stage4ReadFileCache.get(file);
+          if (!pending) {
+            pending = fs.promises.readFile(path.join(repoRoot, file), 'utf-8');
+            stage4ReadFileCache.set(file, pending);
+          }
+          return pending;
         },
         workingDirectory: repoRoot,
       });
