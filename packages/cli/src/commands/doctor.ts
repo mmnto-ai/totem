@@ -449,8 +449,7 @@ export async function checkStrategyRoot(
   cwd: string,
   config?: { strategyRoot?: string },
 ): Promise<DiagnosticResult> {
-  const { resolveStrategyRoot } = await import('@mmnto/totem');
-  const { sanitizeForTerminal } = await import('../terminal-sanitize.js');
+  const { resolveStrategyRoot, sanitizeForTerminal } = await import('@mmnto/totem');
   const status = resolveStrategyRoot(cwd, { config });
   // `status.path` and `status.reason` are derived from env/config-controlled
   // inputs (`TOTEM_STRATEGY_ROOT`, `STRATEGY_ROOT`, `TotemConfig.strategyRoot`).

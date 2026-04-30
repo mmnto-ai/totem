@@ -401,6 +401,9 @@ export { formatSharedHelpers, getSharedHelpers } from './sys/helpers.js';
 // Regex utilities (centralized escape + Pipeline 5 pattern builder)
 export { codeToPattern, escapeRegex } from './regex-utils.js';
 
+// Terminal-injection defense (mmnto-ai/totem#1744 — promoted from cli)
+export { sanitizeForTerminal } from './terminal-sanitize.js';
+
 // Pipeline 5 — observation-based auto-capture from shield findings
 export type { ObservationInput } from './pipeline-observation.js';
 export { deduplicateObservations, generateObservationRule } from './pipeline-observation.js';

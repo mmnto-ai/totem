@@ -14,11 +14,11 @@ import {
   resolveGitRoot,
   resolveStrategyRoot,
   safeExec,
+  sanitizeForTerminal,
   type StrategyResolverConfig,
   TotemError,
 } from '@mmnto/totem';
 
-import { sanitizeForTerminal } from '../terminal-sanitize.js';
 import { log } from '../ui.js';
 
 export type GovernanceType = 'proposal' | 'adr';

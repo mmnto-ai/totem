@@ -28,13 +28,6 @@ export const IS_WIN = process.platform === 'win32';
 /** Timeout for GitHub CLI calls (ms). */
 export const GH_TIMEOUT_MS = 15_000;
 
-// `sanitizeForTerminal` lives in `./terminal-sanitize.ts` per CR
-// mmnto-ai/totem#1739 R2 — a dep-light helper file so the pattern-history
-// overlay on `--estimate` can lazy-import it without dragging the
-// orchestrator graph in via this module's static import of
-// `./orchestrators/orchestrator.js`.
-export { sanitizeForTerminal } from './terminal-sanitize.js';
-
 /**
  * Load environment variables from .env file (does not override existing).
  * Uses the `dotenv` library for robust parsing of inline comments, quoted
