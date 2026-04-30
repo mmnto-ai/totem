@@ -91,8 +91,43 @@ const CompiledRuleBaseSchema = z.object({
   category: z.enum(['security', 'architecture', 'style', 'performance']).optional(),
   /** Severity level — error blocks CI, warning reports but doesn't fail */
   severity: z.enum(['error', 'warning']).optional(),
-  /** Lifecycle status — active rules are enforced, archived rules are skipped */
-  status: z.enum(['active', 'archived']).optional(),
+  /**
+   * Lifecycle status. Three values:
+   *   - `'active'`         — rule is enforced by `totem lint`/`totem review`.
+   *   - `'archived'`       — rule is preserved on disk (telemetry continuity)
+   *                          but skipped at lint time. `loadCompiledRules`
+   *                          filters these out (`compiler.ts:132`).
+   *   - `'untested-against-codebase'` — Stage 4 verifier (mmnto-ai/totem#1682)
+   *                          ran against the consumer's codebase but found
+   *                          zero matches. The rule's runtime behavior on
+   *                          real code is unknown; treated as inert at lint
+   *                          time the same way `'archived'` is, but with a
+   *                          distinct lifecycle semantic so a subsequent
+   *                          compile cycle in a populated repo can re-run
+   *                          Stage 4 and promote to `'active'`.
+   *
+   * Distinct from the boolean `unverified` flag below: `unverified` is set
+   * by ADR-089 zero-trust default on every LLM-generated rule (post-Layer-3
+   * pass); `'untested-against-codebase'` is set by Stage 4 when the
+   * verifier's deterministic codebase walk produced no hits. A rule can be
+   * `unverified: true` AND `status: 'untested-against-codebase'`
+   * simultaneously — they answer different questions (author-trust vs
+   * empirical-firing).
+   */
+  status: z.enum(['active', 'archived', 'untested-against-codebase']).optional(),
+  /**
+   * Stage 4 confidence (mmnto-ai/totem#1682). Set to `'high'` when Stage 4's
+   * codebase walk found in-scope matches that are structurally equivalent
+   * to the rule's `badExample` — the rule fires on real code, and that real
+   * code has the exact authored shape, so the rule is doing what the lesson
+   * intended. Single-valued enum in T1; future Stage 4 phases may add a
+   * `'low'` value (currently no writer; deferred per ticket #1682 Open
+   * Question 2). Absent (undefined) means Stage 4 has not assigned a
+   * confidence — either the rule was archived, the verifier produced
+   * Candidate Debt outcome (forced `severity: 'warning'` carries that
+   * signal instead), or Stage 4 has not yet run on this rule.
+   */
+  confidence: z.enum(['high']).optional(),
   /** Reason for archiving (when status is 'archived') */
   archivedReason: z.string().optional(),
   /**
@@ -230,6 +265,17 @@ export const NonCompilableReasonCodeSchema = z.enum([
   // `LEDGER_RETRY_PENDING_CODES`); ledger writes record the audit trail
   // bot reviewers can cite per strategy upstream-feedback item 021.
   'self-suppressing-pattern',
+  // `stage4-out-of-scope-match` (mmnto-ai/totem#1682) classifies rules that
+  // Stage 4 (Verify-Against-Codebase) auto-archived because the pattern
+  // fired on files in the verification baseline — files outside the
+  // lesson's `fileGlobs` scope, test files, or fixture directories. The
+  // rule is over-broad by definition: it matches legitimate code, not just
+  // the authored hazard shape. Stage 4 surfaces the offending paths in the
+  // archive's `archivedReason` text (T1 baseline behavior); structured
+  // path persistence lands in T3 (mmnto-ai/totem#1684) via
+  // `.totem/rule-metrics.json`. Terminal: re-running compile re-evaluates
+  // against the current codebase but does not enter the retry path.
+  'stage4-out-of-scope-match',
   'legacy-unknown',
 ]);
 
