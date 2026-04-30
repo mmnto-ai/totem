@@ -1,5 +1,7 @@
 # @totem/pack-agent-security
 
+## 1.19.0
+
 ## 1.18.3
 
 ## 1.18.2
