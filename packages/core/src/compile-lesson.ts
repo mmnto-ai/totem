@@ -20,6 +20,8 @@ import {
 } from './lesson-pattern.js';
 import type { RuleTestResult } from './rule-tester.js';
 import { testRule } from './rule-tester.js';
+import type { Stage4VerificationResult } from './stage4-verifier.js';
+import { sanitizeForTerminal } from './terminal-sanitize.js';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -117,6 +119,22 @@ export interface CompileLessonCallbacks {
     lesson: { heading: string; hash: string },
     event: { from: string[] | undefined; to: string[] },
   ) => void;
+  /**
+   * Fires after Stage 4 verification returns a result (mmnto-ai/totem#1682).
+   * CLI callers use this to write telemetry records tagged
+   * `type: 'stage4-verify'` to `.totem/temp/telemetry.jsonl`. Absent = core
+   * runs without telemetry plumbing. The result mirrors the discriminated
+   * union returned by `verifyAgainstCodebase`; see ADR-091 §"Stage 4" for
+   * the four-outcome contract. Telemetry path-redaction (per
+   * mmnto-ai/totem#1644 precedent) is the caller's responsibility — the
+   * verifier returns repo-relative paths, but the telemetry writer must
+   * apply the `<extern:<sha256-12>>` redaction for any path outside the
+   * repo root.
+   */
+  onStage4Outcome?: (
+    lesson: { heading: string; hash: string },
+    result: Stage4VerificationResult,
+  ) => void;
 }
 
 export interface CompileLessonDeps {
@@ -161,6 +179,31 @@ export interface CompileLessonDeps {
    * false; security zero-tolerance is gated on an affirmative caller assertion.
    */
   securityContext?: boolean;
+  /**
+   * ADR-091 Stage 4 Verify-Against-Codebase verifier (mmnto-ai/totem#1682).
+   * When provided, runs after Layer 3 verify-retry produces a compiled rule
+   * (Pipeline 2 / Pipeline 3 only — Pipeline 1 manual rules bypass Stage 4
+   * because they are human-authored). The callback returns a discriminated
+   * `Stage4VerificationResult` and `compileLesson` mutates the rule in-place
+   * per the four-outcome contract:
+   *
+   *   - `'no-matches'`           → `status: 'untested-against-codebase'`
+   *   - `'out-of-scope'`         → `status: 'archived'`, `archivedReason`
+   *                                cites the offending paths, archive
+   *                                timestamp set
+   *   - `'in-scope-bad-example'` → `confidence: 'high'` (status remains
+   *                                unset / 'active')
+   *   - `'candidate-debt'`       → force `severity: 'warning'`, log the
+   *                                candidate-debt sites via `onWarn`
+   *
+   * Absent (undefined) means Stage 4 does not run. The compiled rule keeps
+   * its Layer 3 zero-trust shape (`unverified: true`, status absent =
+   * active). Callers that don't have filesystem access (cloud compile
+   * worker, packs without consumer codebase) leave this absent; consumer-
+   * side `totem lint` runs the verifier later via the
+   * `pending-verification` flow shipped in T3 (mmnto-ai/totem#1684).
+   */
+  verifyStage4?: (rule: CompiledRule) => Promise<Stage4VerificationResult>;
 }
 
 // ─── ast-grep pattern validation ───────────────────
@@ -910,6 +953,142 @@ function detectTestScopeMismatch(
 }
 
 /**
+ * Apply ADR-091 Stage 4 verification to a freshly-compiled rule
+ * (mmnto-ai/totem#1682). Runs only when `deps.verifyStage4` is set; absent
+ * means the caller does not have a codebase to verify against (cloud compile,
+ * unit tests). Mutates the rule in-place per the four-outcome contract and
+ * appends a `layer: 4` trace event so `totem compile --verbose` and downstream
+ * telemetry can observe the verdict.
+ *
+ * Returns `true` when the rule was archived by Stage 4 (the caller should
+ * still ship the rule — `loadCompiledRules` filters archived rules at lint
+ * time, but the manifest preserves them for telemetry continuity per
+ * `lesson-a2f799c0`). Returns `false` for any other outcome.
+ */
+async function applyStage4(
+  rule: CompiledRule,
+  lesson: LessonInput,
+  deps: CompileLessonDeps,
+  callbacks: CompileLessonCallbacks | undefined,
+  trace: LayerTraceEvent[],
+): Promise<boolean> {
+  if (!deps.verifyStage4) return false;
+
+  const result = await deps.verifyStage4(rule);
+
+  callbacks?.onStage4Outcome?.({ heading: lesson.heading, hash: lesson.hash }, result);
+
+  switch (result.outcome) {
+    case 'no-matches': {
+      // Don't clobber a previously archived lifecycle. `preserveLifecycleFields`
+      // carries `status: 'archived'` (and its `archivedReason`/`archivedAt`)
+      // forward on `--force` recompile; setting `'untested-against-codebase'`
+      // unconditionally would silently un-archive rules that the postmerge
+      // curation path explicitly silenced (CR mmnto-ai/totem#1757 R1).
+      if (rule.status !== 'archived') {
+        rule.status = 'untested-against-codebase';
+      }
+      trace.push({ layer: 4, action: 'verify', outcome: 'no-matches' });
+      return false;
+    }
+    case 'in-scope-bad-example': {
+      rule.confidence = 'high';
+      // Clear a carry-forward `'untested-against-codebase'` status so a
+      // previously-untested rule that now finds matches gets promoted to
+      // active (the F6 lint-path filter in `loadCompiledRules` excludes
+      // `'untested-against-codebase'`, so without this clear the rule
+      // would stay inert despite Stage 4 producing positive evidence).
+      // Sonnet pre-push review on the F3+F6 seam (CR mmnto-ai/totem#1757
+      // R1). `'archived'` is preserved — that's an explicit lifecycle
+      // decision; `'untested-against-codebase'` is a Stage 4-managed
+      // intermediate state that promotion can clear.
+      if (rule.status === 'untested-against-codebase') rule.status = 'active';
+      trace.push({ layer: 4, action: 'verify', outcome: 'in-scope-bad-example' });
+      return false;
+    }
+    case 'candidate-debt': {
+      // Force severity to 'warning' so the rule is alive and logs hits but
+      // cannot break CI on first run — ADR-091 §"Stage 4: Candidate Debt"
+      // is explicit. `buildCompiledRule` defaults severity to 'warning'
+      // when neither declared nor emitted, but persisted pre-1.16.0 rules
+      // can still arrive with `severity: undefined` (back-compat per
+      // schema); treating undefined as a no-op would let an older rule
+      // skip the candidate-debt downgrade if a future lint pass starts
+      // interpreting undefined as 'error'. Setting unconditionally to
+      // 'warning' is post-condition-explicit without violating the
+      // never-elevate contract — 'warning' is the floor, not above it.
+      if (rule.severity !== 'warning') rule.severity = 'warning';
+      // Promote a carry-forward `'untested-against-codebase'` rule to
+      // active — same rationale as the in-scope-bad-example branch above.
+      // Candidate-debt is positive evidence the rule fires on real code;
+      // the warning severity carries the human-confirmation signal.
+      if (rule.status === 'untested-against-codebase') rule.status = 'active';
+      trace.push({ layer: 4, action: 'verify', outcome: 'candidate-debt' });
+      // Surface the debt sites so `totem doctor` (mmnto-ai/totem#1685) and
+      // human reviewers can decide whether to confirm or archive. Cap the
+      // displayed sample to keep the warning concise; the full list lives
+      // in telemetry via `onStage4Outcome`. Sanitize first — debt lines
+      // are raw repository code that can carry CSI / control bytes from a
+      // tampered file, and `onWarn` lands in terminal output (CR
+      // mmnto-ai/totem#1757 R1, mirrors the #1743 R4-R7 sanitization wave).
+      const safeDebtLines = result.candidateDebtLines.map(sanitizeForTerminal);
+      const totalDebt = safeDebtLines.length;
+      const sampleSuffix = formatSampleSuffix(safeDebtLines.slice(0, 3), ' | ', totalDebt, 3);
+      callbacks?.onWarn?.(
+        lesson.heading,
+        `Stage 4: candidate debt — ${totalDebt} site(s) outside the badExample shape: ${sampleSuffix}`,
+      );
+      return false;
+    }
+    case 'out-of-scope': {
+      rule.status = 'archived';
+      rule.archivedAt = new Date().toISOString();
+      // Sanitize before formatting — paths are repo-relative strings but
+      // a hostile filename (e.g. via a typosquatting commit) could plant
+      // CSI bytes that survive into `archivedReason` (persisted to
+      // compiled-rules.json) and `onWarn` (terminal). Same vector class
+      // as candidate-debt above (CR mmnto-ai/totem#1757 R1).
+      const safeBaselineMatches = result.baselineMatches.map(sanitizeForTerminal);
+      const totalBaseline = safeBaselineMatches.length;
+      const pathSuffix = formatSampleSuffix(
+        safeBaselineMatches.slice(0, 5),
+        ', ',
+        totalBaseline,
+        5,
+      );
+      rule.archivedReason = `Stage 4 (mmnto-ai/totem#1682): pattern fired on ${totalBaseline} file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: ${pathSuffix}. reasonCode: stage4-out-of-scope-match.`;
+      trace.push({
+        layer: 4,
+        action: 'verify',
+        outcome: 'out-of-scope',
+        reasonCode: 'stage4-out-of-scope-match',
+      });
+      callbacks?.onWarn?.(
+        lesson.heading,
+        `Stage 4: archived — pattern fired on ${totalBaseline} file(s) in the verification baseline (${pathSuffix})`,
+      );
+      return true;
+    }
+  }
+}
+
+/**
+ * Joins a sample slice with a separator and appends a "(+ N more)" tail when
+ * the full count exceeds the sample size. Used by the Stage 4 callback emit
+ * sites to keep template-literal substitutions adjacent-with-delimiter.
+ */
+function formatSampleSuffix(
+  sample: readonly string[],
+  separator: string,
+  total: number,
+  sampleLimit: number,
+): string {
+  const head = sample.join(separator);
+  if (total <= sampleLimit) return head;
+  return `${head} (+ ${total - sampleLimit} more)`;
+}
+
+/**
  * Compile a single lesson into a rule.
  * Handles both manual patterns (zero LLM) and LLM-compiled patterns.
  * Pure business logic — no UI, no I/O, no process.exit.
@@ -1174,6 +1353,14 @@ export async function compileLesson(
     // because manual rules are human-authored and self-evidencing.
     ruleResult.rule.unverified = true;
 
+    // ADR-091 Stage 4 (mmnto-ai/totem#1682): orthogonal to ADR-089's
+    // `unverified` flag — Stage 4 mutates `status` / `confidence` / `severity`
+    // based on a deterministic codebase walk. Runs only if the caller wired
+    // `deps.verifyStage4`; absent means the consumer codebase is not
+    // reachable (cloud compile / packs) and the verifier defers to T3's
+    // pending-verification flow.
+    await applyStage4(ruleResult.rule, lesson, deps, callbacks, trace);
+
     return { status: 'compiled', rule: ruleResult.rule, trace };
   }
 
@@ -1321,6 +1508,13 @@ export async function compileLesson(
         ruleResult.rule.unverified = true;
         trace.push({ layer: 3, action: 'verify', outcome: 'MATCH' });
         trace.push({ layer: 3, action: 'result', outcome: 'compiled' });
+
+        // ADR-091 Stage 4 (mmnto-ai/totem#1682). See Pipeline 3 site above
+        // for the full rationale. Same contract: orthogonal to ADR-089
+        // unverified flag; mutates status/confidence/severity per the
+        // four-outcome verifier result.
+        await applyStage4(ruleResult.rule, lesson, deps, callbacks, trace);
+
         return { status: 'compiled', rule: ruleResult.rule, trace };
       }
       // Example Hit/Miss verification failed against the lesson's ground

@@ -28,6 +28,7 @@ interface RuleSpec {
   lessonHash: string;
   lessonHeading: string;
   archived?: boolean;
+  untestedAgainstCodebase?: boolean;
 }
 
 function setupWorkspace(
@@ -77,7 +78,9 @@ function setupWorkspace(
           compiledAt: now,
           ...(r.archived
             ? { status: 'archived' as const, archivedReason: 'over-broad in test' }
-            : {}),
+            : r.untestedAgainstCodebase
+              ? { status: 'untested-against-codebase' as const }
+              : {}),
         })),
         nonCompilable: [],
       },
@@ -150,6 +153,43 @@ describe('compileCommand --export archive filter', () => {
 
     expect(exported).toContain(liveHeading);
     expect(exported).not.toContain(archivedHeading);
+  });
+
+  it("excludes lessons whose compiled rule is 'untested-against-codebase' from the export (CR mmnto-ai/totem#1757 R2)", async () => {
+    // F6 made `loadCompiledRules` filter `'untested-against-codebase'`
+    // alongside `'archived'`. The export-path predicate has to match or
+    // agent-rendered guidance diverges from the runtime enforcement
+    // surface — Stage 4 declared the rule's behavior unknown, so we
+    // shouldn't be telling the AI agent to rely on it either.
+    const liveHeading = 'Keep this guidance';
+    const liveBody = 'Good advice that should always ship.';
+    const untestedHeading = 'Stage 4 saw nothing';
+    const untestedBody = 'Pattern never fired against the consumer codebase.';
+
+    setupWorkspace(
+      tmpDir,
+      {
+        'live.md': lessonMarkdown(liveHeading, liveBody),
+        'untested.md': lessonMarkdown(untestedHeading, untestedBody),
+      },
+      [
+        { lessonHash: hashLesson(liveHeading, liveBody), lessonHeading: liveHeading },
+        {
+          lessonHash: hashLesson(untestedHeading, untestedBody),
+          lessonHeading: untestedHeading,
+          untestedAgainstCodebase: true,
+        },
+      ],
+      'copilot-instructions.md',
+    );
+
+    await compileCommand({ export: true });
+
+    const exportPath = path.join(tmpDir, 'copilot-instructions.md');
+    const exported = fs.readFileSync(exportPath, 'utf-8');
+
+    expect(exported).toContain(liveHeading);
+    expect(exported).not.toContain(untestedHeading);
   });
 
   it('passes all lessons through when no rules are archived (no-op filter)', async () => {

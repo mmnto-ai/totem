@@ -239,6 +239,100 @@ describe('CompiledRule archivedAt field', () => {
   });
 });
 
+// ─── Stage 4 Verify-Against-Codebase schema deltas (mmnto-ai/totem#1682) ──
+
+describe('CompiledRule status field — Stage 4 untested-against-codebase value', () => {
+  const stage4UntestedRule = {
+    lessonHash: 'abc123def456',
+    lessonHeading: 'Stage 4 untested rule',
+    pattern: '\\bfoo\\b',
+    message: 'No foo',
+    engine: 'regex' as const,
+    compiledAt: '2026-04-30T12:00:00Z',
+    status: 'untested-against-codebase' as const,
+  };
+
+  it("accepts a CompiledRule with status 'untested-against-codebase'", () => {
+    const parsed = CompiledRuleSchema.parse(stage4UntestedRule);
+    expect(parsed.status).toBe('untested-against-codebase');
+  });
+
+  it("preserves status: 'untested-against-codebase' across round-trip", () => {
+    const firstParse = CompiledRuleSchema.parse(stage4UntestedRule);
+    const serialized: unknown = JSON.parse(JSON.stringify(firstParse));
+    const secondParse = CompiledRuleSchema.parse(serialized);
+    expect(secondParse.status).toBe('untested-against-codebase');
+  });
+
+  it('rejects an unknown status value', () => {
+    const bogus = { ...stage4UntestedRule, status: 'pending-verification' };
+    expect(() => CompiledRuleSchema.parse(bogus)).toThrow();
+  });
+});
+
+describe('CompiledRule confidence field (mmnto-ai/totem#1682)', () => {
+  const baseRule = {
+    lessonHash: 'abc123def456',
+    lessonHeading: 'High-confidence rule',
+    pattern: '\\bfoo\\b',
+    message: 'No foo',
+    engine: 'regex' as const,
+    compiledAt: '2026-04-30T12:00:00Z',
+  };
+
+  it("accepts a CompiledRule with confidence: 'high'", () => {
+    const parsed = CompiledRuleSchema.parse({ ...baseRule, confidence: 'high' });
+    expect(parsed.confidence).toBe('high');
+  });
+
+  it('accepts a CompiledRule without a confidence field (absent = unset)', () => {
+    const parsed = CompiledRuleSchema.parse(baseRule);
+    expect(parsed.confidence).toBeUndefined();
+  });
+
+  it('rejects an unknown confidence value', () => {
+    const bogus = { ...baseRule, confidence: 'medium' };
+    expect(() => CompiledRuleSchema.parse(bogus)).toThrow();
+  });
+
+  it('preserves confidence across a round-trip', () => {
+    const firstParse = CompiledRuleSchema.parse({ ...baseRule, confidence: 'high' });
+    const serialized: unknown = JSON.parse(JSON.stringify(firstParse));
+    const secondParse = CompiledRuleSchema.parse(serialized);
+    expect(secondParse.confidence).toBe('high');
+  });
+
+  it("survives concurrently with status: 'untested-against-codebase' (orthogonal axes)", () => {
+    const parsed = CompiledRuleSchema.parse({
+      ...baseRule,
+      status: 'untested-against-codebase' as const,
+      confidence: 'high' as const,
+    });
+    expect(parsed.status).toBe('untested-against-codebase');
+    expect(parsed.confidence).toBe('high');
+  });
+});
+
+describe("NonCompilableReasonCodeSchema 'stage4-out-of-scope-match' (mmnto-ai/totem#1682)", () => {
+  it("accepts 'stage4-out-of-scope-match' as a valid reason code", () => {
+    expect(() => NonCompilableReasonCodeSchema.parse('stage4-out-of-scope-match')).not.toThrow();
+  });
+
+  it("includes 'stage4-out-of-scope-match' in the enum options", () => {
+    const values = NonCompilableReasonCodeSchema.options;
+    expect(values).toContain('stage4-out-of-scope-match');
+  });
+
+  it("treats 'stage4-out-of-scope-match' as terminal (NOT in LEDGER_RETRY_PENDING_CODES)", () => {
+    // Stage 4 archive is structural — re-running compile re-evaluates against
+    // the current codebase, but the rule is not retry-eligible the way
+    // `pattern-zero-match` or `verify-retry-exhausted` are. shouldWriteToLedger
+    // returns true, meaning ledger writes record the audit trail.
+    expect(LEDGER_RETRY_PENDING_CODES.has('stage4-out-of-scope-match')).toBe(false);
+    expect(shouldWriteToLedger('stage4-out-of-scope-match')).toBe(true);
+  });
+});
+
 // ─── CompilerOutput badExample required per engine (mmnto-ai/totem#1409) ──
 
 describe('CompilerOutput badExample required by engine', () => {

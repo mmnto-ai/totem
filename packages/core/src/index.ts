@@ -325,6 +325,19 @@ export {
   verifyRuleExamples,
 } from './compile-lesson.js';
 
+// Stage 4 Verify-Against-Codebase verifier (mmnto-ai/totem#1682)
+export type {
+  Stage4Baseline,
+  Stage4Outcome,
+  Stage4VerificationResult,
+  Stage4VerifierDeps,
+} from './stage4-verifier.js';
+export {
+  DEFAULT_BASELINE_GLOBS,
+  getDefaultBaseline,
+  verifyAgainstCodebase,
+} from './stage4-verifier.js';
+
 // Compile manifest (signing / provenance)
 export type { CompileManifest } from './compile-manifest.js';
 export {

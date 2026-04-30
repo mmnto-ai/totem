@@ -3271,3 +3271,407 @@ describe('compileLesson trace events', () => {
     expect(orchestratorMock).not.toHaveBeenCalled();
   });
 });
+
+// ─── ADR-091 Stage 4 integration (mmnto-ai/totem#1682) ──
+
+describe('compileLesson Stage 4 integration', () => {
+  function makePipeline2Deps(
+    stage4Result?: import('./stage4-verifier.js').Stage4VerificationResult,
+  ) {
+    const onWarn = vi.fn();
+    const onDim = vi.fn();
+    const onStage4Outcome = vi.fn();
+    const verifyStage4 = stage4Result ? vi.fn().mockResolvedValue(stage4Result) : undefined;
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: true,
+        pattern: 'console\\.log',
+        message: 'No console.log',
+        engine: 'regex' as const,
+        badExample: 'console.log("debug")',
+        goodExample: '// noop\n',
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('{"compilable": true}'),
+      existingByHash: new Map(),
+      callbacks: { onWarn, onDim, onStage4Outcome },
+      ...(verifyStage4 ? { verifyStage4 } : {}),
+    };
+    return { deps, onWarn, onStage4Outcome, verifyStage4 };
+  }
+
+  function makePipeline2Lesson(): LessonInput {
+    return {
+      index: 0,
+      heading: 'Pipeline 2 stage 4 lesson',
+      body: 'Body without manual pattern, no Bad/Good snippets — Pipeline 2 path.',
+      hash: 'h-stage4-p2',
+    };
+  }
+
+  it('does NOT invoke Stage 4 when deps.verifyStage4 is absent (existing behavior preserved)', async () => {
+    const { deps } = makePipeline2Deps();
+    const result = await compileLesson(makePipeline2Lesson(), 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.status).toBeUndefined();
+      expect(result.rule.confidence).toBeUndefined();
+    }
+    expect(deps.callbacks!.onStage4Outcome).not.toHaveBeenCalled();
+  });
+
+  it("Pipeline 2: 'no-matches' outcome sets status='untested-against-codebase'", async () => {
+    const { deps, onStage4Outcome } = makePipeline2Deps({
+      outcome: 'no-matches',
+      baselineMatches: [],
+      inScopeMatches: [],
+      candidateDebtLines: [],
+    });
+    const result = await compileLesson(makePipeline2Lesson(), 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.status).toBe('untested-against-codebase');
+      expect(result.rule.confidence).toBeUndefined();
+      expect(result.rule.archivedReason).toBeUndefined();
+    }
+    expect(onStage4Outcome).toHaveBeenCalledTimes(1);
+    expect(result.trace).toContainEqual(
+      expect.objectContaining({ layer: 4, action: 'verify', outcome: 'no-matches' }),
+    );
+  });
+
+  it("Pipeline 2: 'in-scope-bad-example' outcome sets confidence='high'", async () => {
+    const { deps, onStage4Outcome } = makePipeline2Deps({
+      outcome: 'in-scope-bad-example',
+      baselineMatches: [],
+      inScopeMatches: ['packages/cli/src/foo.ts'],
+      candidateDebtLines: [],
+    });
+    const result = await compileLesson(makePipeline2Lesson(), 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.confidence).toBe('high');
+      expect(result.rule.status).toBeUndefined();
+    }
+    expect(onStage4Outcome).toHaveBeenCalledTimes(1);
+    expect(result.trace).toContainEqual(
+      expect.objectContaining({ layer: 4, action: 'verify', outcome: 'in-scope-bad-example' }),
+    );
+  });
+
+  it("Pipeline 2: 'candidate-debt' outcome forces severity='warning' and emits onWarn", async () => {
+    const { deps, onWarn, onStage4Outcome } = makePipeline2Deps({
+      outcome: 'candidate-debt',
+      baselineMatches: [],
+      inScopeMatches: ['packages/cli/src/foo.ts', 'packages/cli/src/bar.ts'],
+      candidateDebtLines: [
+        'console.log(`${env.X}`)',
+        'console.log(req.body.id)',
+        "console.log('a')",
+        "console.log('b')",
+      ],
+    });
+    // Make the rule's declared severity 'error' to verify the force-downgrade.
+    (deps.parseCompilerResponse as ReturnType<typeof vi.fn>).mockReturnValue({
+      compilable: true,
+      pattern: 'console\\.log',
+      message: 'No console.log',
+      engine: 'regex' as const,
+      badExample: 'console.log("debug")',
+      goodExample: '// noop\n',
+      severity: 'error',
+    });
+
+    const result = await compileLesson(makePipeline2Lesson(), 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.severity).toBe('warning');
+    }
+    expect(onStage4Outcome).toHaveBeenCalledTimes(1);
+    expect(result.trace).toContainEqual(
+      expect.objectContaining({ layer: 4, action: 'verify', outcome: 'candidate-debt' }),
+    );
+    // Sample of debt sites should be emitted via onWarn.
+    expect(onWarn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.stringContaining('Stage 4: candidate debt'),
+    );
+    expect(onWarn).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('+ 1 more'));
+  });
+
+  it("Pipeline 2: 'out-of-scope' outcome archives the rule with reasonCode + paths in archivedReason", async () => {
+    const { deps, onWarn, onStage4Outcome } = makePipeline2Deps({
+      outcome: 'out-of-scope',
+      baselineMatches: ['packages/core/src/transport.ts', 'packages/cli/src/foo.test.ts'],
+      inScopeMatches: ['packages/cli/src/foo.ts'],
+      candidateDebtLines: [],
+    });
+    const result = await compileLesson(makePipeline2Lesson(), 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.status).toBe('archived');
+      expect(result.rule.archivedAt).toBeDefined();
+      expect(result.rule.archivedReason).toContain('Stage 4');
+      expect(result.rule.archivedReason).toContain('stage4-out-of-scope-match');
+      expect(result.rule.archivedReason).toContain('packages/core/src/transport.ts');
+      expect(result.rule.archivedReason).toContain('packages/cli/src/foo.test.ts');
+    }
+    expect(onStage4Outcome).toHaveBeenCalledTimes(1);
+    expect(result.trace).toContainEqual(
+      expect.objectContaining({
+        layer: 4,
+        action: 'verify',
+        outcome: 'out-of-scope',
+        reasonCode: 'stage4-out-of-scope-match',
+      }),
+    );
+    expect(onWarn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.stringContaining('Stage 4: archived'),
+    );
+  });
+
+  it('Pipeline 3 (Bad/Good example-based) wires Stage 4 — outcome mutates the rule (CR mmnto-ai/totem#1757 R2)', async () => {
+    // Stage 4 is wired into both Pipeline 2 and Pipeline 3 success
+    // branches. The other tests in this block pin Pipeline 2; this case
+    // covers Pipeline 3 so a regression in the Pipeline 3 hook can't
+    // bypass verification while the Pipeline 2 cases stay green.
+    const verifyStage4 = vi.fn().mockResolvedValue({
+      outcome: 'in-scope-bad-example',
+      baselineMatches: [],
+      inScopeMatches: ['packages/cli/src/foo.ts'],
+      candidateDebtLines: [],
+    });
+    const onStage4Outcome = vi.fn();
+    const onWarn = vi.fn();
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: true,
+        pattern: 'console\\.log',
+        message: 'No console.log',
+        engine: 'regex' as const,
+        badExample: "console.log('debug')",
+        goodExample: '// noop',
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('{"compilable": true}'),
+      existingByHash: new Map(),
+      callbacks: { onWarn, onDim: vi.fn(), onStage4Outcome },
+      verifyStage4,
+    };
+    // Pipeline 3 dispatches when `extractBadGoodSnippets` returns
+    // snippets — body needs explicit Bad/Good code blocks AND no
+    // manual `**Pattern:**` (else Pipeline 1 wins).
+    const pipeline3Lesson: LessonInput = {
+      index: 0,
+      heading: 'No console.log in production',
+      body: [
+        '**Bad:**',
+        '',
+        '```ts',
+        "console.log('debug')",
+        '```',
+        '',
+        '**Good:**',
+        '',
+        '```ts',
+        '// noop',
+        '```',
+      ].join('\n'),
+      hash: 'h-stage4-p3',
+    };
+    const result = await compileLesson(pipeline3Lesson, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.confidence).toBe('high');
+    }
+    expect(verifyStage4).toHaveBeenCalledTimes(1);
+    expect(onStage4Outcome).toHaveBeenCalledTimes(1);
+    expect(result.trace).toContainEqual(
+      expect.objectContaining({ layer: 4, action: 'verify', outcome: 'in-scope-bad-example' }),
+    );
+  });
+
+  it('Pipeline 1 (manual rule) bypasses Stage 4 — verifyStage4 not invoked', async () => {
+    // Pipeline 1 manual rules are human-authored and self-evidencing per the
+    // Pipeline 1 / unverified semantics; Stage 4 is a safety net for LLM-
+    // generated patterns. The integration site only invokes Stage 4 from
+    // Pipeline 2 / Pipeline 3 success branches.
+    const verifyStage4 = vi.fn().mockResolvedValue({
+      outcome: 'no-matches',
+      baselineMatches: [],
+      inScopeMatches: [],
+      candidateDebtLines: [],
+    });
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn(),
+      runOrchestrator: vi.fn(),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+      verifyStage4,
+    };
+    const result = await compileLesson(manualLesson, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    expect(verifyStage4).not.toHaveBeenCalled();
+  });
+
+  it('preserves the layer-3 MATCH trace event alongside the new layer-4 verify event', async () => {
+    // Stage 4 appends to the trace; it does not replace existing events.
+    // The CLI --verbose renderer relies on the full sequence.
+    const { deps } = makePipeline2Deps({
+      outcome: 'no-matches',
+      baselineMatches: [],
+      inScopeMatches: [],
+      candidateDebtLines: [],
+    });
+    const result = await compileLesson(makePipeline2Lesson(), 'system prompt', deps);
+    expect(result.trace).toContainEqual(
+      expect.objectContaining({ layer: 3, action: 'verify', outcome: 'MATCH' }),
+    );
+    expect(result.trace).toContainEqual(
+      expect.objectContaining({ layer: 3, action: 'result', outcome: 'compiled' }),
+    );
+    expect(result.trace).toContainEqual(
+      expect.objectContaining({ layer: 4, action: 'verify', outcome: 'no-matches' }),
+    );
+  });
+
+  it("'in-scope-bad-example' promotes a carry-forward 'untested-against-codebase' rule to 'active' — CR mmnto-ai/totem#1757 R2", async () => {
+    // F6 filters `'untested-against-codebase'` out of the lint path, so
+    // a recompile that produces positive Stage 4 evidence MUST clear the
+    // stale status or the rule stays inert despite high-confidence
+    // matches. Tested for both in-scope-bad-example (this case) and
+    // candidate-debt (next case).
+    const lesson = makePipeline2Lesson();
+    const { deps } = makePipeline2Deps({
+      outcome: 'in-scope-bad-example',
+      baselineMatches: [],
+      inScopeMatches: ['packages/cli/src/foo.ts'],
+      candidateDebtLines: [],
+    });
+    deps.existingByHash = new Map([
+      [
+        lesson.hash,
+        {
+          lessonHash: lesson.hash,
+          message: 'previously-untested',
+          pattern: 'console\\.log',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          status: 'untested-against-codebase',
+        } as CompiledRule,
+      ],
+    ]);
+    const result = await compileLesson(lesson, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.status).toBe('active');
+      expect(result.rule.confidence).toBe('high');
+    }
+  });
+
+  it("'candidate-debt' promotes a carry-forward 'untested-against-codebase' rule to 'active' — CR mmnto-ai/totem#1757 R2", async () => {
+    const lesson = makePipeline2Lesson();
+    const { deps } = makePipeline2Deps({
+      outcome: 'candidate-debt',
+      baselineMatches: [],
+      inScopeMatches: ['packages/cli/src/foo.ts'],
+      candidateDebtLines: ['console.log(req.body.id)'],
+    });
+    deps.existingByHash = new Map([
+      [
+        lesson.hash,
+        {
+          lessonHash: lesson.hash,
+          message: 'previously-untested',
+          pattern: 'console\\.log',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          status: 'untested-against-codebase',
+        } as CompiledRule,
+      ],
+    ]);
+    const result = await compileLesson(lesson, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.status).toBe('active');
+      expect(result.rule.severity).toBe('warning');
+    }
+  });
+
+  it("'no-matches' preserves a previously archived rule's status (carry-forward) — CR mmnto-ai/totem#1757 R1", async () => {
+    // `preserveLifecycleFields` carries `status: 'archived'` (and its
+    // `archivedReason`/`archivedAt`) forward on `--force` recompile.
+    // Setting `status = 'untested-against-codebase'` unconditionally on
+    // a `'no-matches'` outcome would silently un-archive a rule that
+    // postmerge curation explicitly silenced.
+    const lesson = makePipeline2Lesson();
+    const { deps } = makePipeline2Deps({
+      outcome: 'no-matches',
+      baselineMatches: [],
+      inScopeMatches: [],
+      candidateDebtLines: [],
+    });
+    deps.existingByHash = new Map([
+      [
+        lesson.hash,
+        {
+          lessonHash: lesson.hash,
+          message: 'previously-archived',
+          pattern: 'console\\.log',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          status: 'archived',
+          archivedReason: 'manual archive (postmerge curation)',
+          archivedAt: '2026-02-01T00:00:00.000Z',
+        } as CompiledRule,
+      ],
+    ]);
+    const result = await compileLesson(lesson, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.status).toBe('archived');
+      expect(result.rule.archivedReason).toBe('manual archive (postmerge curation)');
+      expect(result.rule.archivedAt).toBe('2026-02-01T00:00:00.000Z');
+    }
+  });
+
+  it("'candidate-debt' sanitizes CSI bytes in debtLines before onWarn — CR mmnto-ai/totem#1757 R1", async () => {
+    // Repository code can carry CSI / control bytes from a tampered
+    // file. `onWarn` lands in terminal output; raw text would let a
+    // hostile pattern spoof cursor moves or color resets. Mirrors the
+    // #1743 R4-R7 sanitization wave on the agent-rendered surface.
+    const { deps, onWarn } = makePipeline2Deps({
+      outcome: 'candidate-debt',
+      baselineMatches: [],
+      inScopeMatches: ['packages/cli/src/foo.ts'],
+      candidateDebtLines: ['console.log(\x1b[31m"red"\x1b[0m)', 'console.log("\x07bell")'],
+    });
+    await compileLesson(makePipeline2Lesson(), 'system prompt', deps);
+    const warnCall = onWarn.mock.calls.find(
+      (call) => typeof call[1] === 'string' && (call[1] as string).includes('candidate debt'),
+    );
+    expect(warnCall).toBeDefined();
+    const message = warnCall![1] as string;
+    // No raw ESC, no raw BEL after sanitization.
+    expect(message).not.toMatch(/\x1b/);
+    expect(message).not.toMatch(/\x07/);
+    // Visible code shape preserved (CSI sequence stripped, payload kept).
+    expect(message).toContain('"red"');
+  });
+
+  it("'out-of-scope' sanitizes CSI bytes in baselineMatches before archivedReason — CR mmnto-ai/totem#1757 R1", async () => {
+    // Path text persists into compiled-rules.json (`archivedReason`)
+    // and surfaces in `onWarn`. A hostile filename with CSI bytes would
+    // re-emerge whenever the manifest is tailed in a terminal.
+    const { deps } = makePipeline2Deps({
+      outcome: 'out-of-scope',
+      baselineMatches: ['packages/cli/src/\x1b[31mhostile\x1b[0m.test.ts'],
+      inScopeMatches: ['packages/cli/src/foo.ts'],
+      candidateDebtLines: [],
+    });
+    const result = await compileLesson(makePipeline2Lesson(), 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.archivedReason).toBeDefined();
+      expect(result.rule.archivedReason!).not.toMatch(/\x1b/);
+      // Path payload still present, just stripped of escape bytes.
+      expect(result.rule.archivedReason!).toContain('hostile');
+    }
+  });
+});

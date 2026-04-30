@@ -818,6 +818,44 @@ describe('compiled rules file I/O', () => {
       expect(loadCompiledRules(rulesPath)).toEqual([]);
     });
 
+    it("loadCompiledRules filters out 'untested-against-codebase' rules (CR mmnto-ai/totem#1757 R1)", () => {
+      // Stage 4 (mmnto-ai/totem#1682) added an `'untested-against-codebase'`
+      // status that the schema docstring at compiler-schema.ts:100-107
+      // commits to as inert-like-archived. The lint-path filter must
+      // honor that: a rule the verifier never matched against the
+      // consumer's codebase has unknown runtime behavior and must not
+      // fire — that uncertainty is the whole point of the status.
+      const untestedRule: CompiledRule = {
+        lessonHash: 'dddddddddddddddd',
+        lessonHeading: 'Untested rule',
+        pattern: '\\buntested\\b',
+        message: 'untested',
+        engine: 'regex',
+        status: 'untested-against-codebase',
+        compiledAt: '2026-04-30T00:00:00Z',
+      };
+      const rulesPath = path.join(tmpDir, 'compiled-rules.json');
+      saveCompiledRulesFile(rulesPath, {
+        version: 1,
+        rules: [activeRule, legacyRule, archivedRule, untestedRule],
+        nonCompilable: [],
+      });
+
+      const loaded = loadCompiledRules(rulesPath);
+      expect(loaded).toHaveLength(2);
+      expect(loaded.map((r) => r.lessonHash).sort()).toEqual(
+        [activeRule.lessonHash, legacyRule.lessonHash].sort(),
+      );
+      expect(loaded.some((r) => r.status === 'untested-against-codebase')).toBe(false);
+
+      // The full manifest still preserves the untested entry so admin
+      // tools (doctor, compile) can promote it back to 'active' on the
+      // next Stage 4 cycle.
+      const manifest = loadCompiledRulesFile(rulesPath);
+      expect(manifest.rules).toHaveLength(4);
+      expect(manifest.rules.some((r) => r.status === 'untested-against-codebase')).toBe(true);
+    });
+
     it('archived rules do not fire while a sibling active rule still triggers on the same diff', () => {
       // Integration proof: an active rule matching one added line and an
       // archived rule matching a second added line must resolve to exactly

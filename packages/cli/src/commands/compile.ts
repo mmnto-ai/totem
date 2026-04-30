@@ -427,6 +427,7 @@ export async function compileCommand(
     formatExampleFailure,
     generateInputHash,
     generateOutputHash,
+    getDefaultBaseline,
     hashLesson,
     LEDGER_RETRY_PENDING_CODES,
     loadCompiledRulesFile,
@@ -434,10 +435,13 @@ export async function compileCommand(
     parseDeclaredSeverity,
     readAllLessons,
     readCompileManifest,
+    safeExec,
+    sanitizeForTerminal,
     saveCompiledRulesFile,
     scaffoldFixture,
     scaffoldFixturePath,
     shouldWriteToLedger,
+    verifyAgainstCodebase,
     verifyRuleExamples,
     writeCompileManifest,
   } = await import('@mmnto/totem');
@@ -549,6 +553,148 @@ export async function compileCommand(
         throw err;
       }
     }
+  };
+
+  // mmnto-ai/totem#1682: Stage 4 telemetry sink. Records the four-outcome
+  // verifier verdict per lesson so prompt-tuning workflows can spot
+  // patterns of out-of-scope archives or candidate-debt clusters. Same
+  // best-effort discipline as severity-override / scope-override above —
+  // sink failures must not interfere with compile correctness.
+  const writeStage4Telemetry = (
+    lesson: { heading: string; hash: string },
+    result: import('@mmnto/totem').Stage4VerificationResult,
+  ): void => {
+    try {
+      const tempDir = path.join(totemDir, 'temp');
+      fs.mkdirSync(tempDir, { recursive: true });
+      const entry = {
+        type: 'stage4-verify' as const,
+        timestamp: new Date().toISOString(),
+        lessonHash: lesson.hash,
+        // Lesson heading is user-authored prose. CR mmnto-ai/totem#1757 R2
+        // — same vector class as the path sample below; sanitize to keep
+        // `.totem/temp/telemetry.jsonl` safe to tail in a terminal.
+        lessonHeading: sanitizeForTerminal(lesson.heading),
+        outcome: result.outcome,
+        baselineMatchCount: result.baselineMatches.length,
+        inScopeMatchCount: result.inScopeMatches.length,
+        candidateDebtCount: result.candidateDebtLines.length,
+        // Sample only — full path lists can be reconstructed by re-running
+        // the verifier; the telemetry record is for aggregate signal, not
+        // forensic recovery. `baselineMatches` is `readonly string[]`
+        // (repo-relative paths, not source code per
+        // `Stage4VerificationResult.baselineMatches` in
+        // `packages/core/src/stage4-verifier.ts:78`). Sanitize even so —
+        // a hostile filename could plant CSI bytes that survive into
+        // `.totem/temp/telemetry.jsonl` and re-emerge when the file is
+        // tailed in a terminal (CR mmnto-ai/totem#1757 R1, mirrors the
+        // #1743 R4-R7 sanitization wave).
+        baselineMatchSample: result.baselineMatches.slice(0, 5).map(sanitizeForTerminal),
+      };
+      fs.appendFileSync(
+        path.join(tempDir, 'telemetry.jsonl'),
+        JSON.stringify(entry) + '\n',
+        'utf-8',
+      );
+    } catch (err) {
+      log.warn(
+        TAG,
+        `Failed to write stage4-verify telemetry: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      const code = (err as NodeJS.ErrnoException | undefined)?.code;
+      const expectedIoCodes = new Set(['ENOENT', 'EACCES', 'EPERM', 'ENOSPC', 'EBUSY', 'EROFS']);
+      if (!(err instanceof Error) || !code || !expectedIoCodes.has(code)) {
+        throw err;
+      }
+    }
+  };
+
+  // mmnto-ai/totem#1682: Stage 4 verifier filesystem callbacks. Lazily
+  // initialized once per compile run so the file enumeration is cached
+  // across all lessons compiled in this batch (T1 walks per-rule; T5 in
+  // mmnto-ai/totem#1686 introduces cross-rule batching). The callbacks
+  // resolve to the consumer's local working tree via the git enumeration
+  // adapter (`safeExec` call below), which gives us the canonical project
+  // file set with `.gitignore` already applied; falling back to a
+  // recursive walk would scan `node_modules/` and other non-project trees.
+  //
+  // CR mmnto-ai/totem#1757 R1: anchor enumeration AND file reads at the
+  // git repository root, not `cwd`. When `compileCommand` is invoked with
+  // a nested `cwd` (e.g. `compileCommand({ cwd: './packages/cli' })`),
+  // `git ls-files --recurse-submodules` from that nested directory returns
+  // paths relative to that directory. But every compiled rule's
+  // `fileGlobs` is repo-relative by construction (lessons declare scopes
+  // like `packages/**/*.ts`), so a nested-relative file list breaks
+  // `fileMatchesGlobs()` in `stage4-verifier.ts` and silently
+  // misclassifies in-scope hits as `'no-matches'`. Resolve to the repo
+  // top-level once via `git rev-parse --show-toplevel` and use it for both
+  // the file enumeration and the working-tree `readFile`.
+  let stage4RepoRootCache: string | undefined;
+  let stage4FilesCache: readonly string[] | undefined;
+  // CR mmnto-ai/totem#1757 R3: cache file CONTENTS across rules in the
+  // batch, not just file paths. The verifier runs per Pipeline 2/3 rule;
+  // without this, every rule re-reads the same on-disk files, so total
+  // disk I/O is O(rules × files). Lazy `Promise<string>` map keeps the
+  // memory footprint bounded to files actually inspected by ANY rule —
+  // no upfront slurp of the whole tree. Cache lifetime is one compile
+  // run (function-local) and is GC'd when `compileCommand` returns.
+  // T5 (mmnto-ai/totem#1686) owns bounded LRU eviction + streaming
+  // short-circuit if a million-file monorepo ever runs into the
+  // "files-actually-touched" memory bound.
+  const stage4ReadFileCache = new Map<string, Promise<string>>();
+  const buildStage4Verifier = () => {
+    return async (rule: import('@mmnto/totem').CompiledRule) => {
+      if (stage4RepoRootCache === undefined) {
+        // `safeExec` is synchronous (sync `spawnSync` wrapper at
+        // `packages/core/src/sys/exec.ts:48`) and returns the trimmed
+        // stdout string directly — no `await`, no `.stdout` unwrap.
+        // Fail-loud if `cwd` is not inside a git repo.
+        const repoRoot: string = safeExec('git', ['rev-parse', '--show-toplevel'], {
+          cwd,
+          env: { ...process.env, LC_ALL: 'C' },
+        });
+        stage4RepoRootCache = repoRoot;
+      }
+      const repoRoot = stage4RepoRootCache;
+      if (stage4FilesCache === undefined) {
+        // Single git invocation per compile run; reused across all rules
+        // in the batch. `LC_ALL=C` keeps output stable across locales.
+        // Fail-loud if git is unavailable — this gate is the ADR-091
+        // substrate's load-bearing invariant.
+        //
+        // `-z` (NUL-separator) is load-bearing: without it, git C-quotes
+        // filenames containing non-ASCII bytes, control characters, or
+        // whitespace (e.g. `"src/\303\244.ts"` for `src/ä.ts`), which
+        // breaks `path.join(repoRoot, file)` with ENOENT. `-z` emits
+        // raw bytes separated by NUL with NO escaping, so split on `\0`.
+        // (Sonnet pre-push review on the F2 fix.)
+        const lsOutput: string = safeExec('git', ['ls-files', '-z', '--recurse-submodules'], {
+          cwd: repoRoot,
+          env: { ...process.env, LC_ALL: 'C' },
+        });
+        stage4FilesCache = lsOutput.split('\0').filter((line) => line.length > 0);
+      }
+      return verifyAgainstCodebase(rule, getDefaultBaseline(), {
+        listFiles: async () => stage4FilesCache!,
+        readFile: (file: string) => {
+          // Read from the working tree, anchored at the repo root so the
+          // repo-relative paths returned by the
+          // `git ls-files --recurse-submodules` enumeration above
+          // resolve correctly even when `compileCommand` was invoked with
+          // a nested `cwd`. Throws on missing file (Tenet 4 fail-loud) —
+          // the verifier wraps the error with the offending filename in
+          // its own throw site. The pending Promise is cached so
+          // subsequent rules in the same batch share the read.
+          let pending = stage4ReadFileCache.get(file);
+          if (!pending) {
+            pending = fs.promises.readFile(path.join(repoRoot, file), 'utf-8');
+            stage4ReadFileCache.set(file, pending);
+          }
+          return pending;
+        },
+        workingDirectory: repoRoot,
+      });
+    };
   };
 
   // ─── --refresh-manifest primitive (mmnto-ai/totem#1587) ─────────
@@ -1037,6 +1183,15 @@ export async function compileCommand(
           }),
         existingByHash,
         pipeline3Prompt: PIPELINE3_COMPILER_PROMPT,
+        // mmnto-ai/totem#1682: ADR-091 Stage 4 verifier — runs after Layer 3
+        // produces a compiled rule (Pipeline 2 / Pipeline 3 only) and routes
+        // the rule into one of four outcomes based on a deterministic walk
+        // of the consumer's local working tree. Cloud-compile and
+        // pack-build paths leave this absent; consumer-side `totem lint`
+        // runs the verifier later via the pending-verification flow shipped
+        // in T3 (mmnto-ai/totem#1684). The closure caches the file
+        // enumeration across all rules in this batch.
+        verifyStage4: buildStage4Verifier(),
         callbacks: {
           onWarn: (heading: string, msg: string) => log.warn(TAG, `[${heading}] ${msg}`),
           onDim: (heading: string, msg: string) => log.dim(TAG, `[${heading}] ${msg}`),
@@ -1050,6 +1205,12 @@ export async function compileCommand(
           // source-Scope override changes the emitted fileGlobs. Same
           // best-effort discipline as severity above.
           onScopeOverride: writeScopeOverrideTelemetry,
+          // mmnto-ai/totem#1682: append Stage 4 telemetry tagged
+          // `type: 'stage4-verify'`. Records the four-outcome verdict per
+          // lesson so prompt-tuning can spot out-of-scope-archive clusters
+          // or candidate-debt drift. Same best-effort discipline as the
+          // sibling sinks.
+          onStage4Outcome: writeStage4Telemetry,
         },
       };
 
@@ -1542,19 +1703,23 @@ export async function compileCommand(
       return;
     }
 
-    // Filter lessons whose compiled rule is archived so exports never emit
-    // guidance the project has explicitly silenced. Mirrors the mmnto-ai/totem#1345
-    // lint-path filter in loadCompiledRules; closes the symmetric export-path hole.
+    // Filter lessons whose compiled rule is inert so exports never emit
+    // guidance the runtime loader suppresses. Mirrors the mmnto-ai/totem#1345
+    // lint-path filter in loadCompiledRules; closes the symmetric export-path
+    // hole. CR mmnto-ai/totem#1757 R2 extended the inert set to include
+    // `'untested-against-codebase'` (Stage 4) — `loadCompiledRules` excludes
+    // those alongside `'archived'`, so the export path has to as well or
+    // the agent-rendered guidance diverges from the enforcement surface.
     const rawRulesFile = loadCompiledRulesFile(rulesPath);
-    const archivedHashes = new Set(
+    const inertHashes = new Set(
       rawRulesFile.rules
-        .filter((r) => r.status === 'archived')
+        .filter((r) => r.status === 'archived' || r.status === 'untested-against-codebase')
         .map((r) => r.lessonHash.toLowerCase()),
     );
     const lessonsForExport =
-      archivedHashes.size === 0
+      inertHashes.size === 0
         ? lessons
-        : lessons.filter((l) => !archivedHashes.has(hashLesson(l.heading, l.body).toLowerCase()));
+        : lessons.filter((l) => !inertHashes.has(hashLesson(l.heading, l.body).toLowerCase()));
 
     for (const [name, filePath] of Object.entries(config.exports)) {
       const absPath = path.join(cwd, filePath);

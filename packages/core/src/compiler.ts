@@ -107,16 +107,23 @@ export function validateRegex(pattern: string): RegexValidation {
 /**
  * Load compiled rules from a JSON file. Returns empty array if file missing.
  *
- * Filters out rules with `status === 'archived'` so the lint execution path,
- * rule tester, and every other consumer that enforces rules treats archived
- * entries as silenced (#1336 — "The Archive Lie"). Rules without a `status`
- * field (legacy manifests compiled before the lifecycle state was added) are
- * treated as active — hence `!== 'archived'` rather than `=== 'active'`.
+ * Filters out rules with inert lifecycle status so the lint execution path,
+ * rule tester, and every other consumer that enforces rules treats them as
+ * silenced (#1336 — "The Archive Lie"). Two inert states qualify:
+ *   - `'archived'` — explicitly silenced via curation (#1336).
+ *   - `'untested-against-codebase'` — Stage 4 (mmnto-ai/totem#1682) ran
+ *     against the consumer's codebase and produced zero matches. The
+ *     rule's runtime behavior is unknown; the schema docstring at
+ *     `compiler-schema.ts:100-107` commits to inert-like-archived
+ *     semantics, and this filter is what enforces that contract.
+ *
+ * Rules without a `status` field (legacy manifests compiled before the
+ * lifecycle state was added) are treated as active.
  *
  * Admin and write-path consumers that need to see archived rules (e.g.
  * `totem doctor --pr` lifecycle management, `totem compile` pruning) should
  * use {@link loadCompiledRulesFile} instead, which returns the unfiltered
- * manifest so archived entries remain visible for telemetry and state
+ * manifest so inert entries remain visible for telemetry and state
  * transitions.
  */
 export function loadCompiledRules(
@@ -129,7 +136,9 @@ export function loadCompiledRules(
     const raw = fs.readFileSync(rulesPath, 'utf-8');
     const json = JSON.parse(raw) as unknown;
     const parsed = CompiledRulesFileSchema.parse(json);
-    return parsed.rules.filter((r) => r.status !== 'archived');
+    return parsed.rules.filter(
+      (r) => r.status !== 'archived' && r.status !== 'untested-against-codebase',
+    );
   } catch (err) {
     if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'ENOENT') return [];
     if (err instanceof z.ZodError) {
