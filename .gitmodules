@@ -1,3 +1,0 @@
-[submodule ".strategy"]
-	path = .strategy
-	url = https://github.com/mmnto-ai/totem-strategy.git

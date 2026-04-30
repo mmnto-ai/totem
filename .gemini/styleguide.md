@@ -154,5 +154,6 @@ When reviewing PRs that touch `.totem/compiled-rules.json` or
 `.totem/lessons/lesson-*.md`, do not flag mismatches between the 16-char
 `lessonHash` field and the 8-char filename hash. They are independent
 identifiers by design. If a future change unifies them under a single scheme,
-that will be discussed in a strategy proposal under `.strategy/proposals/`,
-not as a code review finding.
+that will be discussed in a strategy proposal under
+`<strategyRoot>/proposals/` (resolved by `resolveStrategyRoot`, typically a
+sibling `../totem-strategy/` clone), not as a code review finding.

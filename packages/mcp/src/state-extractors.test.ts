@@ -82,16 +82,25 @@ describe('extractStrategyPointer (mmnto-ai/totem#1710)', () => {
     }
   });
 
-  it('returns the resolved branch with a 7-char SHA and journal filename on the live repo', () => {
+  it('returns the resolved branch with a 7-char SHA and journal filename on the live repo', (ctx) => {
     const ptr = extractStrategyPointer(REPO_ROOT);
-    expect(ptr.resolved).toBe(true);
-    if (ptr.resolved) {
-      if (ptr.sha !== null) {
-        expect(ptr.sha).toMatch(/^[0-9a-f]{7}$/);
-      }
-      if (ptr.latestJournal !== null) {
-        expect(ptr.latestJournal).toMatch(/\.md$/);
-      }
+    // Integration assertion only runs when strategy is reachable on the
+    // running host. After the `.strategy` submodule retirement
+    // (mmnto-ai/totem#1749), the resolver legitimately returns
+    // `unresolved` on CI runners that have no env override, no
+    // `TotemConfig.strategyRoot`, and no sibling `../totem-strategy/`
+    // clone. The unresolved branch is covered by the prior test; the
+    // shape of the resolved branch is covered by the resolver's own
+    // unit tests in `packages/core/src/strategy-resolver.test.ts`.
+    if (!ptr.resolved) {
+      ctx.skip();
+      return;
+    }
+    if (ptr.sha !== null) {
+      expect(ptr.sha).toMatch(/^[0-9a-f]{7}$/);
+    }
+    if (ptr.latestJournal !== null) {
+      expect(ptr.latestJournal).toMatch(/\.md$/);
     }
   });
 });
