@@ -47,7 +47,11 @@
 
 import type { CompiledRule, DiffAddition, Violation } from './compiler-schema.js';
 import type { CoreLogger, RuleEngineContext } from './rule-engine.js';
-import { applyAstRulesToAdditions, applyRulesToAdditions } from './rule-engine.js';
+import {
+  applyAstRulesToAdditions,
+  applyRulesToAdditions,
+  fileMatchesGlobs,
+} from './rule-engine.js';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -55,7 +59,7 @@ export interface Stage4Baseline {
   /**
    * Glob patterns the rule MUST NOT fire on. Files matching any of these
    * globs are part of the verification baseline — a match on one of them
-   * is evidence the pattern is over-broad. T1 ships with `DEFAULT_BASELINE_GLOBS`
+   * is evidence the pattern is over-broad. T1 shipped with `DEFAULT_BASELINE_GLOBS`
    * (test + fixture patterns); T2 (mmnto-ai/totem#1683) layers consumer
    * `extend` / `exclude` overrides via `review.stage4Baseline` config.
    *
@@ -64,6 +68,28 @@ export interface Stage4Baseline {
    * from `rule.fileGlobs` at evaluation time.
    */
   readonly excludeFileGlobs: readonly string[];
+
+  /**
+   * Provenance: globs added via `# stage4-baseline:` directives in the
+   * consumer's `.totemignore` file. Empty when no such directives. Read
+   * by `totem doctor` (T4) and trace events; the verifier itself only
+   * reads `excludeFileGlobs`.
+   */
+  readonly extendedFromIgnoreFile: readonly string[];
+
+  /**
+   * Provenance: globs added via `review.stage4Baseline.extend` in
+   * `totem.config.ts`. Empty when not configured.
+   */
+  readonly extendedFromConfig: readonly string[];
+
+  /**
+   * Provenance: globs removed from the default baseline via
+   * `review.stage4Baseline.exclude` in `totem.config.ts`. Empty when not
+   * configured. Useful for diagnosing why a rule fires on a path the
+   * consumer expected to be in the baseline.
+   */
+  readonly excludedFromConfig: readonly string[];
 }
 
 export type Stage4Outcome =
@@ -133,75 +159,121 @@ export const DEFAULT_BASELINE_GLOBS: readonly string[] = [
   '**/fixtures/**',
 ];
 
+/**
+ * Backwards-compatible shorthand for `resolveStage4Baseline({})`. Returns the
+ * default baseline (test + fixture globs) with empty provenance arrays. Kept
+ * because pre-T2 callers (early CLI integration sites, tests) pass no
+ * overrides; new callers should prefer `resolveStage4Baseline` directly so
+ * config + .totemignore overrides flow through.
+ */
 export function getDefaultBaseline(): Stage4Baseline {
-  // T1: the default baseline is rule-independent (every rule gets the same
-  // test/fixture exclusion). T2 (mmnto-ai/totem#1683) introduces per-config
-  // `extend`/`exclude` overrides; the function signature accepts a rule
-  // parameter then so per-rule baseline derivation can layer on top.
-  return { excludeFileGlobs: DEFAULT_BASELINE_GLOBS };
+  return resolveStage4Baseline({});
 }
 
-// ─── Glob matching (matches rule-engine semantics) ─
+// ─── Manifest exclusions (mmnto-ai/totem#1765) ──────
 
-function matchesGlob(filePath: string, glob: string): boolean {
-  // Normalize Windows backslashes to forward slashes — globs use forward
-  // slashes universally, repo paths come back from git-ls-files in either
-  // shape on Windows depending on core.autocrlf.
-  const normalized = filePath.replace(/\\/g, '/');
+/**
+ * Static manifest paths excluded from Stage 4 corpus to prevent rules with
+ * a `badExample` field from self-matching against their own entry in the
+ * compiled manifest. CLI integration (`packages/cli/src/commands/compile.ts`)
+ * additionally computes a `totemDir`-aware path at runtime
+ * (`path.join(config.totemDir, 'compiled-rules.json')` normalized to forward
+ * slashes) and adds it to the exclusion set so consumers who override
+ * `config.totemDir` are covered too.
+ */
+export const STAGE4_MANIFEST_EXCLUSIONS: readonly string[] = ['.totem/compiled-rules.json'];
 
-  // Exact glob match — escape regex metacharacters except `*`, `?`, and
-  // brace groups, then expand `**` to `.*`, `*` to `[^/]*`, `?` to `.`.
-  if (glob.includes('*') || glob.includes('?') || glob.includes('{')) {
-    const regexPattern = globToRegex(glob);
-    return new RegExp(`^${regexPattern}$`).test(normalized);
+// ─── Baseline resolver (mmnto-ai/totem#1683) ────────
+
+export interface ResolveStage4BaselineInput {
+  /** Globs parsed from `# stage4-baseline:` directives in `.totemignore`. */
+  readonly ignoreDirectives?: readonly string[];
+  /** Globs from `review.stage4Baseline.extend` in `totem.config.ts`. */
+  readonly configExtend?: readonly string[];
+  /** Globs from `review.stage4Baseline.exclude` in `totem.config.ts`. */
+  readonly configExclude?: readonly string[];
+}
+
+/**
+ * Compute the effective Stage 4 baseline for a compile run.
+ *
+ * Composition: `defaults ∪ ignoreDirectives ∪ configExtend ∖ configExclude`.
+ * `configExclude` is set-difference (LAST), so a consumer can remove a
+ * default baseline glob like `**\/tests/**` when their project legitimately
+ * treats `tests/` as production. Set membership uses byte-equal comparison
+ * on the glob string, NOT path matching — `exclude: ['**\/tests/**']`
+ * removes that exact default entry, not every glob that happens to match
+ * a `tests/` path.
+ *
+ * Pure function. Does NOT read the filesystem; the CLI integration site
+ * reads `.totemignore` and parses it via `parseStage4BaselineDirectives`
+ * before passing the directives in.
+ *
+ * @param input - The three composition inputs (all optional / default to `[]`).
+ * @returns A `Stage4Baseline` whose `excludeFileGlobs` is consumed by the
+ *   verifier and whose three provenance arrays are read by `totem doctor`
+ *   (T4 / `mmnto-ai/totem#1685`) and trace events.
+ */
+export function resolveStage4Baseline(input: ResolveStage4BaselineInput): Stage4Baseline {
+  const ignoreDirectives = input.ignoreDirectives ?? [];
+  const configExtend = input.configExtend ?? [];
+  const configExclude = input.configExclude ?? [];
+
+  const excludeSet = new Set<string>(DEFAULT_BASELINE_GLOBS);
+  for (const g of ignoreDirectives) excludeSet.add(g);
+  for (const g of configExtend) excludeSet.add(g);
+  for (const g of configExclude) excludeSet.delete(g);
+
+  return {
+    excludeFileGlobs: [...excludeSet],
+    extendedFromIgnoreFile: [...ignoreDirectives],
+    extendedFromConfig: [...configExtend],
+    excludedFromConfig: [...configExclude],
+  };
+}
+
+// ─── .totemignore directive parser (mmnto-ai/totem#1683) ─
+
+const STAGE4_BASELINE_DIRECTIVE_RE = /^#\s*stage4-baseline:\s*(.+?)\s*$/;
+
+/**
+ * Extract `# stage4-baseline: <glob>` directives from `.totemignore` content
+ * (or any line-oriented text). The leading `#` is REQUIRED — the directive
+ * lives on a comment line so it doesn't interfere with the rest of
+ * `.totemignore`'s ignore semantics. Variable whitespace around the `#`,
+ * the colon, and the body is allowed; the regex collapses it.
+ *
+ * Returns the globs in source order. Empty / whitespace-only directive
+ * bodies are skipped silently (no throw). The directive name is
+ * case-sensitive to match `.totemignore`'s overall convention.
+ *
+ * Pure function (`string → string[]`) so it can be invoked from any core
+ * consumer. CLI reads the file and hands the content to this helper;
+ * MCP integrations may want the same surface in the future.
+ *
+ * @param content - Raw `.totemignore` text (or any line-oriented content).
+ *   Empty or undefined returns `[]`. CRLF and LF line endings both work.
+ * @returns Glob strings extracted from `# stage4-baseline:` lines, in
+ *   source order, excluding empty/whitespace-only directive bodies.
+ *
+ * @example
+ * ```ts
+ * parseStage4BaselineDirectives('# stage4-baseline: build/**\nsrc/temp/**');
+ * // → ['build/**']  (only the directive line; 'src/temp/**' is ordinary
+ * //                 .totemignore content, not a stage4 directive)
+ * ```
+ */
+export function parseStage4BaselineDirectives(content: string): string[] {
+  if (!content) return [];
+  const out: string[] = [];
+  for (const rawLine of content.split(/\r?\n/)) {
+    const match = STAGE4_BASELINE_DIRECTIVE_RE.exec(rawLine);
+    if (!match) continue;
+    const body = match[1]?.trim() ?? '';
+    if (body.length === 0) continue;
+    out.push(body);
   }
-
-  // Literal filename match (e.g., "Dockerfile")
-  return normalized === glob || normalized.endsWith('/' + glob);
-}
-
-function globToRegex(glob: string): string {
-  let result = '';
-  let i = 0;
-  while (i < glob.length) {
-    const ch = glob[i]!;
-    if (ch === '*') {
-      if (glob[i + 1] === '*') {
-        result += '.*';
-        i += 2;
-        // Consume trailing `/` if present so `**/foo` becomes `.*foo`
-        if (glob[i] === '/') i++;
-        continue;
-      }
-      result += '[^/]*';
-    } else if (ch === '?') {
-      result += '[^/]';
-    } else if (ch === '{') {
-      const end = glob.indexOf('}', i);
-      if (end === -1) {
-        result += '\\{';
-      } else {
-        const alts = glob.slice(i + 1, end).split(',');
-        result += '(?:' + alts.map(escapeRegex).join('|') + ')';
-        i = end + 1;
-        continue;
-      }
-    } else if ('.+()[]^$|\\'.includes(ch)) {
-      result += '\\' + ch;
-    } else {
-      result += ch;
-    }
-    i++;
-  }
-  return result;
-}
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.+()[\]^$|\\*?{}]/g, '\\$&');
-}
-
-function fileMatchesAnyGlob(filePath: string, globs: readonly string[]): boolean {
-  return globs.some((g) => matchesGlob(filePath, g));
+  return out;
 }
 
 /**
@@ -211,6 +283,13 @@ function fileMatchesAnyGlob(filePath: string, globs: readonly string[]): boolean
  * inside `**\/*.ts` scope counts as baseline, not in-scope, because the
  * verifier's job is to detect over-broad firing — including on tests the
  * rule is supposed to skip.
+ *
+ * Glob matching delegates to `fileMatchesGlobs` from `rule-engine.ts`
+ * (mmnto-ai/totem#1758) — single source of truth for glob semantics
+ * across rule classification and Stage 4 baseline classification. The
+ * earlier local regex-conversion matcher had a substring hole
+ * (`**\/tests/**` would match `src/contests/foo.ts`) which the
+ * pattern-specific matcher in rule-engine fixes by construction.
  */
 function classifyFile(
   filePath: string,
@@ -219,14 +298,42 @@ function classifyFile(
 ): 'in-scope' | 'baseline' {
   // Rule has explicit fileGlobs and this file doesn't match → baseline (out-of-scope).
   if (ruleFileGlobs && ruleFileGlobs.length > 0) {
-    const positive = ruleFileGlobs.filter((g) => !g.startsWith('!'));
-    const negative = ruleFileGlobs.filter((g) => g.startsWith('!')).map((g) => g.slice(1));
-    const matchesPositive = positive.length === 0 || fileMatchesAnyGlob(filePath, positive);
-    const matchesNegative = fileMatchesAnyGlob(filePath, negative);
-    if (!matchesPositive || matchesNegative) return 'baseline';
+    if (!fileMatchesGlobs(filePath, ruleFileGlobs)) return 'baseline';
   }
   // File matches rule scope (or rule has no scope). Now check baseline overrides.
-  if (fileMatchesAnyGlob(filePath, baseline.excludeFileGlobs)) return 'baseline';
+  //
+  // Subtract rule-declared scope from the baseline first (CR mmnto-ai/totem#1766 R3).
+  // A rule that explicitly scopes itself to test or fixture files (e.g.
+  // `fileGlobs: ['**/*.test.*']` for a test-contract rule) needs to fire
+  // on those exact files. If the baseline contains the same glob (the
+  // default `DEFAULT_BASELINE_GLOBS` includes `**/*.test.*`), then without
+  // this subtraction every match the rule produces on its intended corpus
+  // is classified as baseline → the outcome flips to `out-of-scope` and
+  // the rule is archived on its own scope. Byte-equal subtraction is
+  // consistent with `resolveStage4Baseline`'s `exclude` semantics: an
+  // explicit `fileGlobs` entry that matches a baseline entry is the rule's
+  // way of claiming that part of the baseline as its own.
+  const effectiveBaselineGlobs =
+    ruleFileGlobs && ruleFileGlobs.length > 0
+      ? baseline.excludeFileGlobs.filter((g) => !ruleFileGlobs.includes(g))
+      : baseline.excludeFileGlobs;
+  // Guard against empty positive set explicitly. `fileMatchesGlobs` has
+  // default-allow semantics when its positive-glob set is empty (returns
+  // `true` so a rule with empty fileGlobs runs everywhere — that's the
+  // rule-engine's contract). Stage 4's baseline doesn't share that
+  // contract: an empty positive set means "nothing positively baseline-
+  // excluded", not "everything is baseline-excluded."
+  //
+  // Three empty-positive cases land here in practice:
+  // 1. Consumer `exclude`-s every default baseline glob → `excludeFileGlobs`
+  //    is fully empty (Sonnet R0 catch).
+  // 2. Consumer `extend`-s with only `!`-prefixed entries AND `exclude`-s
+  //    every default → `excludeFileGlobs` has only negatives, no positives
+  //    (GCA mmnto-ai/totem#1766 R1 catch).
+  // 3. Rule `fileGlobs` covers every positive baseline entry → after the
+  //    R3 subtraction above, `effectiveBaselineGlobs` has no positives.
+  const hasPositiveBaseline = effectiveBaselineGlobs.some((g) => !g.startsWith('!'));
+  if (hasPositiveBaseline && fileMatchesGlobs(filePath, effectiveBaselineGlobs)) return 'baseline';
   return 'in-scope';
 }
 

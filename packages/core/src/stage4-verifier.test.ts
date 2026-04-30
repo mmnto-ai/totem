@@ -8,6 +8,9 @@ import type { CompiledRule } from './compiler-schema.js';
 import {
   DEFAULT_BASELINE_GLOBS,
   getDefaultBaseline,
+  parseStage4BaselineDirectives,
+  resolveStage4Baseline,
+  STAGE4_MANIFEST_EXCLUSIONS,
   type Stage4Baseline,
   type Stage4VerifierDeps,
   verifyAgainstCodebase,
@@ -56,6 +59,187 @@ describe('getDefaultBaseline', () => {
     expect(baseline.excludeFileGlobs).toContain('**/tests/**');
     expect(baseline.excludeFileGlobs).toContain('**/__fixtures__/**');
     expect(baseline.excludeFileGlobs).toContain('**/fixtures/**');
+  });
+});
+
+// ─── parseStage4BaselineDirectives (mmnto-ai/totem#1683) ──
+
+describe('parseStage4BaselineDirectives', () => {
+  it('parses stage4-baseline comments with variable whitespace', () => {
+    const content = [
+      '#stage4-baseline:src/temp/**',
+      '# stage4-baseline: e2e/**',
+      '#  stage4-baseline:  build/**  ',
+      '# regular comment',
+      'tests/**',
+      '',
+    ].join('\n');
+    expect(parseStage4BaselineDirectives(content)).toEqual(['src/temp/**', 'e2e/**', 'build/**']);
+  });
+
+  it('returns empty array when content has no stage4-baseline directives', () => {
+    const content = '# Regular ignore file\nsrc/temp/**\n# stage4-other: foo';
+    expect(parseStage4BaselineDirectives(content)).toEqual([]);
+  });
+
+  it('returns empty array for empty content', () => {
+    expect(parseStage4BaselineDirectives('')).toEqual([]);
+  });
+
+  it('skips empty or whitespace-only directive bodies without throwing', () => {
+    const content = [
+      '# stage4-baseline:',
+      '# stage4-baseline:    ',
+      '# stage4-baseline: real/**',
+    ].join('\n');
+    expect(parseStage4BaselineDirectives(content)).toEqual(['real/**']);
+  });
+
+  it('is case-sensitive on the directive name', () => {
+    const content = '# Stage4-Baseline: foo/**\n# STAGE4-BASELINE: bar/**';
+    expect(parseStage4BaselineDirectives(content)).toEqual([]);
+  });
+
+  it('handles CRLF line endings', () => {
+    const content = '# stage4-baseline: a/**\r\n# stage4-baseline: b/**\r\n';
+    expect(parseStage4BaselineDirectives(content)).toEqual(['a/**', 'b/**']);
+  });
+});
+
+// ─── resolveStage4Baseline (mmnto-ai/totem#1683) ──────
+
+describe('resolveStage4Baseline', () => {
+  it('returns DEFAULT_BASELINE_GLOBS when no overrides provided', () => {
+    const baseline = resolveStage4Baseline({});
+    expect(baseline.excludeFileGlobs).toEqual([...DEFAULT_BASELINE_GLOBS]);
+    expect(baseline.extendedFromIgnoreFile).toEqual([]);
+    expect(baseline.extendedFromConfig).toEqual([]);
+    expect(baseline.excludedFromConfig).toEqual([]);
+  });
+
+  it('appends config.extend to default baseline', () => {
+    const baseline = resolveStage4Baseline({
+      configExtend: ['**/legacy/**', 'tools/scripts/**'],
+    });
+    expect(baseline.excludeFileGlobs).toContain('**/legacy/**');
+    expect(baseline.excludeFileGlobs).toContain('tools/scripts/**');
+    expect(baseline.extendedFromConfig).toEqual(['**/legacy/**', 'tools/scripts/**']);
+    for (const def of DEFAULT_BASELINE_GLOBS) {
+      expect(baseline.excludeFileGlobs).toContain(def);
+    }
+  });
+
+  it('appends ignore-file directives to baseline', () => {
+    const baseline = resolveStage4Baseline({
+      ignoreDirectives: ['build/**', 'dist/**'],
+    });
+    expect(baseline.excludeFileGlobs).toContain('build/**');
+    expect(baseline.excludeFileGlobs).toContain('dist/**');
+    expect(baseline.extendedFromIgnoreFile).toEqual(['build/**', 'dist/**']);
+  });
+
+  it('removes config.exclude entries from default baseline', () => {
+    const baseline = resolveStage4Baseline({
+      configExclude: ['**/tests/**'],
+    });
+    expect(baseline.excludeFileGlobs).not.toContain('**/tests/**');
+    expect(baseline.excludedFromConfig).toEqual(['**/tests/**']);
+    expect(baseline.excludeFileGlobs).toContain('**/*.test.*');
+  });
+
+  it('exclude wins over extend (set-difference is last)', () => {
+    const baseline = resolveStage4Baseline({
+      configExtend: ['**/sandbox/**'],
+      configExclude: ['**/sandbox/**'],
+    });
+    expect(baseline.excludeFileGlobs).not.toContain('**/sandbox/**');
+  });
+
+  it('composes ignore + config.extend ∖ config.exclude in the right order', () => {
+    const baseline = resolveStage4Baseline({
+      ignoreDirectives: ['build/**'],
+      configExtend: ['**/legacy/**'],
+      configExclude: ['**/fixtures/**'],
+    });
+    expect(baseline.excludeFileGlobs).toContain('build/**');
+    expect(baseline.excludeFileGlobs).toContain('**/legacy/**');
+    expect(baseline.excludeFileGlobs).not.toContain('**/fixtures/**');
+    expect(baseline.excludeFileGlobs).toContain('**/*.test.*');
+  });
+
+  it('preserves debug provenance fields independently of excludeFileGlobs', () => {
+    const baseline = resolveStage4Baseline({
+      ignoreDirectives: ['ignored/**'],
+      configExtend: ['extended/**'],
+      configExclude: ['**/tests/**'],
+    });
+    expect(baseline.extendedFromIgnoreFile).toEqual(['ignored/**']);
+    expect(baseline.extendedFromConfig).toEqual(['extended/**']);
+    expect(baseline.excludedFromConfig).toEqual(['**/tests/**']);
+  });
+
+  it('produces an empty excludeFileGlobs when consumer excludes every default (mmnto-ai/totem#1683 R1 Sonnet catch)', () => {
+    const baseline = resolveStage4Baseline({
+      configExclude: [...DEFAULT_BASELINE_GLOBS],
+    });
+    expect(baseline.excludeFileGlobs).toEqual([]);
+  });
+});
+
+// ─── classifyFile empty-baseline guard (R1 Sonnet) ──
+
+describe('verifyAgainstCodebase with consumer excluding every default baseline glob', () => {
+  it('keeps in-scope hits as in-scope when excludeFileGlobs is empty (no false-baseline classification)', async () => {
+    // A consumer that `exclude`-s every default baseline glob produces an
+    // empty `excludeFileGlobs`. Without the empty-array guard in
+    // `classifyFile`, `fileMatchesGlobs(_, [])` returns `true` (default-
+    // allow semantics) and every file is misclassified as baseline.
+    const baseline = resolveStage4Baseline({
+      configExclude: [...DEFAULT_BASELINE_GLOBS],
+    });
+    expect(baseline.excludeFileGlobs).toEqual([]);
+
+    const files = new Map<string, string>([['packages/cli/src/server.ts', "console.log('hit')\n"]]);
+    const result = await verifyAgainstCodebase(makeRule(), baseline, makeDeps(files));
+    // Without the guard: outcome would have been 'no-matches' (all
+    // violations partition to baseline + the out-of-scope short-circuit
+    // returns no-matches when violations.length is non-zero but baseline
+    // dominates — actually no, would return 'out-of-scope' with the file
+    // as a baseline match). With the guard: the in-scope hit is preserved
+    // and routes via badExample shape comparison.
+    expect(result.outcome).not.toBe('out-of-scope');
+    expect(result.baselineMatches).toEqual([]);
+  });
+
+  it('keeps in-scope hits when excludeFileGlobs has only !-prefixed entries (GCA mmnto-ai/totem#1766 R1)', async () => {
+    // Negative-only baseline: positive set is empty, but the array is
+    // non-empty. The original `length > 0` guard would have fired
+    // `fileMatchesGlobs` which returns true for every file not matching
+    // the negative — silently classifying everything as baseline.
+    const baseline: Stage4Baseline = {
+      excludeFileGlobs: ['!**/never-matches/**'],
+      extendedFromIgnoreFile: [],
+      extendedFromConfig: ['!**/never-matches/**'],
+      excludedFromConfig: [...DEFAULT_BASELINE_GLOBS],
+    };
+    const files = new Map<string, string>([['packages/cli/src/server.ts', "console.log('hit')\n"]]);
+    const result = await verifyAgainstCodebase(makeRule(), baseline, makeDeps(files));
+    expect(result.outcome).not.toBe('out-of-scope');
+    expect(result.baselineMatches).toEqual([]);
+    expect(result.inScopeMatches).toContain('packages/cli/src/server.ts');
+  });
+});
+
+// ─── STAGE4_MANIFEST_EXCLUSIONS (mmnto-ai/totem#1765) ─
+
+describe('STAGE4_MANIFEST_EXCLUSIONS', () => {
+  it('contains .totem/compiled-rules.json (the demonstrated self-match case)', () => {
+    expect(STAGE4_MANIFEST_EXCLUSIONS).toContain('.totem/compiled-rules.json');
+  });
+
+  it('is exported as a readonly array', () => {
+    expect(Array.isArray(STAGE4_MANIFEST_EXCLUSIONS)).toBe(true);
+    expect(STAGE4_MANIFEST_EXCLUSIONS.length).toBeGreaterThan(0);
   });
 });
 
@@ -249,6 +433,70 @@ describe('verifyAgainstCodebase rule without fileGlobs', () => {
   });
 });
 
+describe('verifyAgainstCodebase test-contract rule scope vs baseline (CR mmnto-ai/totem#1766 R3)', () => {
+  it('keeps test-scoped rule hits as in-scope when fileGlobs literally claims a baseline glob', async () => {
+    // A test-contract rule legitimately scopes itself to test files. Without
+    // R3 baseline-subtraction, classifyFile matched the rule scope first
+    // (file matches `**/*.test.*`) then re-classified the same file as
+    // baseline (because `**/*.test.*` is in `DEFAULT_BASELINE_GLOBS`),
+    // routing the rule to `out-of-scope` on its own intended corpus.
+    const testContractRule = makeRule({
+      fileGlobs: ['**/*.test.*'],
+      pattern: 'fdescribe',
+      badExample: 'fdescribe("focused", () => {})',
+    });
+    const files = new Map<string, string>([
+      ['packages/cli/src/foo.test.ts', 'fdescribe("focused", () => {})\n'],
+    ]);
+    const result = await verifyAgainstCodebase(
+      testContractRule,
+      getDefaultBaseline(),
+      makeDeps(files),
+    );
+    expect(result.outcome).toBe('in-scope-bad-example');
+    expect(result.inScopeMatches).toEqual(['packages/cli/src/foo.test.ts']);
+    expect(result.baselineMatches).toEqual([]);
+  });
+
+  it('keeps fixtures-scoped rule hits as in-scope when fileGlobs literally claims **/__fixtures__/**', async () => {
+    const fixtureRule = makeRule({
+      fileGlobs: ['**/__fixtures__/**'],
+      pattern: 'TODO',
+      badExample: '// TODO: replace fixture',
+    });
+    const files = new Map<string, string>([
+      ['packages/cli/src/__fixtures__/sample.ts', '// TODO: replace fixture\n'],
+    ]);
+    const result = await verifyAgainstCodebase(fixtureRule, getDefaultBaseline(), makeDeps(files));
+    expect(result.outcome).toBe('in-scope-bad-example');
+    expect(result.inScopeMatches).toEqual(['packages/cli/src/__fixtures__/sample.ts']);
+  });
+
+  it('still classifies non-claimed baseline files as baseline (no over-subtraction)', async () => {
+    // Rule scopes to `**/*.test.*` only — this claims that one baseline glob.
+    // A file at `packages/__tests__/foo.test.ts` matches BOTH `**/*.test.*`
+    // (rule scope, claimed) AND `**/__tests__/**` (baseline, NOT claimed).
+    // After subtraction the baseline still contains `**/__tests__/**`, so the
+    // file must classify as baseline. This locks in that subtraction is
+    // surgical (byte-equal on the entry the rule claimed) rather than a
+    // wholesale baseline disable.
+    const testContractRule = makeRule({
+      fileGlobs: ['**/*.test.*'],
+      pattern: 'console\\.log',
+    });
+    const files = new Map<string, string>([
+      ['packages/__tests__/foo.test.ts', "console.log('debug')\n"],
+    ]);
+    const result = await verifyAgainstCodebase(
+      testContractRule,
+      getDefaultBaseline(),
+      makeDeps(files),
+    );
+    expect(result.outcome).toBe('out-of-scope');
+    expect(result.baselineMatches).toEqual(['packages/__tests__/foo.test.ts']);
+  });
+});
+
 // ─── Failure modes ────────────────────────────────
 
 describe('verifyAgainstCodebase failure modes', () => {
@@ -286,9 +534,9 @@ describe('verifyAgainstCodebase failure modes', () => {
 
 describe('verifyAgainstCodebase custom baseline overrides', () => {
   it('honors a custom baseline that excludes additional patterns', async () => {
-    const customBaseline: Stage4Baseline = {
-      excludeFileGlobs: [...DEFAULT_BASELINE_GLOBS, '**/migrations/**'],
-    };
+    const customBaseline: Stage4Baseline = resolveStage4Baseline({
+      configExtend: ['**/migrations/**'],
+    });
     const files = new Map<string, string>([
       // Pattern fires on a migration file. Default baseline would treat
       // this as in-scope (since `migrations/` isn't in DEFAULT_BASELINE_GLOBS).

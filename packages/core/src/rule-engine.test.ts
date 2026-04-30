@@ -760,4 +760,50 @@ describe('matchesGlob', () => {
     // Nested files should NOT match single-star
     expect(matchesGlob('src/sub/foo.test.ts', 'src/*.test.*')).toBe(false);
   });
+
+  // mmnto-ai/totem#1758: `**/dir/**` must match any path containing the
+  // directory segment, not just paths starting with the directory. The
+  // pre-fix matcher stripped `**/` and required the rest to match at
+  // path-root, so `**/__tests__/**` failed on `packages/cli/src/__tests__/foo.ts`.
+  it('matches **/dir/** at any depth (mmnto-ai/totem#1758)', () => {
+    // Directory at root depth
+    expect(matchesGlob('__tests__/foo.ts', '**/__tests__/**')).toBe(true);
+    // Directory nested several segments deep
+    expect(matchesGlob('packages/cli/src/__tests__/foo.ts', '**/__tests__/**')).toBe(true);
+    // Same shape with `tests/` (different default-baseline glob)
+    expect(matchesGlob('packages/cli/src/tests/integration.ts', '**/tests/**')).toBe(true);
+    expect(matchesGlob('a/b/c/d/fixtures/data.json', '**/fixtures/**')).toBe(true);
+    // Negative: directory name as substring of another segment must NOT match
+    expect(matchesGlob('packages/cli/src/contests/foo.ts', '**/tests/**')).toBe(false);
+    // Negative: directory not present at all
+    expect(matchesGlob('packages/cli/src/main.ts', '**/__tests__/**')).toBe(false);
+  });
+
+  it('matches **/dir/file at any depth (mmnto-ai/totem#1758)', () => {
+    expect(matchesGlob('foo/bar.ts', '**/foo/bar.ts')).toBe(true);
+    expect(matchesGlob('a/b/foo/bar.ts', '**/foo/bar.ts')).toBe(true);
+    expect(matchesGlob('a/b/foo/baz.ts', '**/foo/bar.ts')).toBe(false);
+  });
+
+  // mmnto-ai/totem#1758 second hole (CR mmnto-ai/totem#1766 R1 catch):
+  // path-shaped literal globs MUST match exactly, not as a "/"-prefix
+  // suffix. The pre-fix matcher returned `endsWith('/' + glob)`, so
+  // `src/foo.ts` spuriously matched `packages/src/foo.ts`. Bare filenames
+  // (no `/`) keep their original behavior — `Dockerfile` continues to
+  // match `src/Dockerfile`.
+  it('requires exact match for path-shaped literal globs (mmnto-ai/totem#1758)', () => {
+    // Exact match: yes
+    expect(matchesGlob('src/foo.ts', 'src/foo.ts')).toBe(true);
+    // Suffix-only match must FAIL: this is the bug the consolidation fixes
+    expect(matchesGlob('packages/src/foo.ts', 'src/foo.ts')).toBe(false);
+    expect(matchesGlob('a/b/c/src/foo.ts', 'src/foo.ts')).toBe(false);
+  });
+
+  it('preserves bare-filename suffix matching for paths without `/` (mmnto-ai/totem#1758)', () => {
+    // Bare literal still matches at any depth (no `/` means "filename only")
+    expect(matchesGlob('Dockerfile', 'Dockerfile')).toBe(true);
+    expect(matchesGlob('src/Dockerfile', 'Dockerfile')).toBe(true);
+    expect(matchesGlob('packages/cli/Dockerfile', 'Dockerfile')).toBe(true);
+    expect(matchesGlob('Dockerfile.dev', 'Dockerfile')).toBe(false);
+  });
 });

@@ -224,12 +224,58 @@ export const ReviewSourceExtensionSchema = z
     'must match /\\.[A-Za-z0-9.-]+/ after normalization',
   );
 
+/**
+ * Stage 4 verification baseline overrides (mmnto-ai/totem#1683).
+ *
+ * `extend` adds globs to the default baseline; `exclude` removes them. Both
+ * default to `[]`. Naming discipline (per the GCA finding logged in ADR-091
+ * Deferred Decisions): no `allowlist` aliases. The schema explicitly rejects
+ * an `allowlist` key with a pointer to mmnto-ai/totem#1683 so a future
+ * regression surfaces at config-parse time, not in a silent passthrough.
+ */
+const STAGE4_BASELINE_KNOWN_KEYS = new Set(['extend', 'exclude']);
+
+export const Stage4BaselineConfigSchema = z
+  .object({
+    extend: z.array(z.string()).default([]),
+    exclude: z.array(z.string()).default([]),
+  })
+  .passthrough()
+  .superRefine((data, ctx) => {
+    const raw = data as Record<string, unknown>;
+    // Naming-discipline guard: the `allowlist` key gets a custom error
+    // message that points at mmnto-ai/totem#1683 so a future regression
+    // surfaces with the right rationale at config-parse time.
+    if ('allowlist' in raw) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Use 'baseline' framing (extend / exclude) — 'allowlist' is rejected per mmnto-ai/totem#1683 naming discipline.",
+        path: ['allowlist'],
+      });
+    }
+    // Reject other unknown keys (e.g. typos like `exlcude`/`extends`) at
+    // parse time rather than letting them silently passthrough and become
+    // load-bearing-but-ignored config (CR mmnto-ai/totem#1766 R1).
+    for (const key of Object.keys(raw)) {
+      if (key === 'allowlist') continue; // handled above with a custom message
+      if (!STAGE4_BASELINE_KNOWN_KEYS.has(key)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.unrecognized_keys,
+          keys: [key],
+          path: [],
+        });
+      }
+    }
+  });
+
 export const ReviewConfigSchema = z
   .object({
     sourceExtensions: z
       .array(ReviewSourceExtensionSchema)
       .min(1, 'review.sourceExtensions must contain at least one extension')
       .default([...DEFAULT_REVIEW_SOURCE_EXTENSIONS]),
+    stage4Baseline: Stage4BaselineConfigSchema.optional(),
   })
   .passthrough()
   .default({});

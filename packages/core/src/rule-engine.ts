@@ -36,9 +36,17 @@ export function matchesGlob(filePath: string, glob: string): boolean {
     }
     return normalized.endsWith(suffix);
   }
-  // **/*.ext — same as *.ext (match extension anywhere in path)
+  // **/<rest> — match `<rest>` against the full path AND every "/"-aligned
+  // tail of the path. This handles BOTH `**/*.ts` (extension match anywhere,
+  // historical use case) AND `**/dir/**` (directory match at any depth, the
+  // case Stage 4 baselines need per mmnto-ai/totem#1758).
   if (glob.startsWith('**/')) {
-    return matchesGlob(normalized, glob.slice(3));
+    const rest = glob.slice(3);
+    if (matchesGlob(normalized, rest)) return true;
+    for (let i = 0; i < normalized.length; i++) {
+      if (normalized[i] === '/' && matchesGlob(normalized.slice(i + 1), rest)) return true;
+    }
+    return false;
   }
   // dir/**/*.ext or dir/** — directory-prefixed recursive glob
   const dstarIdx = glob.indexOf('/**/');
@@ -72,11 +80,32 @@ export function matchesGlob(filePath: string, glob: string): boolean {
     return rest.endsWith(ext); // totem-ignore — this IS the glob matcher
   }
 
-  // Literal filename match (e.g., "Dockerfile")
+  // Literal-glob fallback. Two shapes carry different match contracts
+  // (mmnto-ai/totem#1758 second hole):
+  // - Bare filename (no `/`, e.g., "Dockerfile"): match anywhere in the
+  //   tree — `Dockerfile` should match `src/Dockerfile`.
+  // - Path-shaped literal (contains `/`, e.g., "src/foo.ts"): repo-relative
+  //   path that MUST match exactly. The earlier suffix-match form
+  //   (`endsWith('/' + glob)`) caused `src/foo.ts` to spuriously match
+  //   `packages/src/foo.ts`. CR mmnto-ai/totem#1766 R1 surfaced this as
+  //   the matching pair to the `**/dir/**` recursion fix earlier in the
+  //   PR.
+  // totem-context: detecting any slash in the glob string (mmnto-ai/totem#1758) — `.includes('/', 1)` would skip a leading slash, which is the opposite of the path-shape vs bare-filename distinction this branch needs.
+  if (glob.includes('/')) return normalized === glob;
   return normalized === glob || normalized.endsWith('/' + glob);
 }
 
-function fileMatchesGlobs(filePath: string, globs: string[]): boolean {
+/**
+ * Multi-glob file matcher with positive/negative split. Returns true when
+ * `filePath` matches ANY positive glob AND no negative (`!`-prefixed) glob.
+ * If `globs` contains no positive entries, every file is a positive match
+ * by default and only the negative filter applies.
+ *
+ * Exported for cross-module reuse (Stage 4 verifier consolidation per
+ * mmnto-ai/totem#1758) so both rule-engine classification and Stage 4
+ * baseline classification share a single source of truth on glob semantics.
+ */
+export function fileMatchesGlobs(filePath: string, globs: readonly string[]): boolean {
   const positive = globs.filter((g) => !g.startsWith('!'));
   const negative = globs.filter((g) => g.startsWith('!')).map((g) => g.slice(1));
 
