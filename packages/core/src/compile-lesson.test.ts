@@ -3474,6 +3474,67 @@ describe('compileLesson Stage 4 integration', () => {
     );
   });
 
+  it("'in-scope-bad-example' promotes a carry-forward 'untested-against-codebase' rule to 'active' — CR mmnto-ai/totem#1757 R2", async () => {
+    // F6 filters `'untested-against-codebase'` out of the lint path, so
+    // a recompile that produces positive Stage 4 evidence MUST clear the
+    // stale status or the rule stays inert despite high-confidence
+    // matches. Tested for both in-scope-bad-example (this case) and
+    // candidate-debt (next case).
+    const lesson = makePipeline2Lesson();
+    const { deps } = makePipeline2Deps({
+      outcome: 'in-scope-bad-example',
+      baselineMatches: [],
+      inScopeMatches: ['packages/cli/src/foo.ts'],
+      candidateDebtLines: [],
+    });
+    deps.existingByHash = new Map([
+      [
+        lesson.hash,
+        {
+          lessonHash: lesson.hash,
+          message: 'previously-untested',
+          pattern: 'console\\.log',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          status: 'untested-against-codebase',
+        } as CompiledRule,
+      ],
+    ]);
+    const result = await compileLesson(lesson, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.status).toBe('active');
+      expect(result.rule.confidence).toBe('high');
+    }
+  });
+
+  it("'candidate-debt' promotes a carry-forward 'untested-against-codebase' rule to 'active' — CR mmnto-ai/totem#1757 R2", async () => {
+    const lesson = makePipeline2Lesson();
+    const { deps } = makePipeline2Deps({
+      outcome: 'candidate-debt',
+      baselineMatches: [],
+      inScopeMatches: ['packages/cli/src/foo.ts'],
+      candidateDebtLines: ['console.log(req.body.id)'],
+    });
+    deps.existingByHash = new Map([
+      [
+        lesson.hash,
+        {
+          lessonHash: lesson.hash,
+          message: 'previously-untested',
+          pattern: 'console\\.log',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          status: 'untested-against-codebase',
+        } as CompiledRule,
+      ],
+    ]);
+    const result = await compileLesson(lesson, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.status).toBe('active');
+      expect(result.rule.severity).toBe('warning');
+    }
+  });
+
   it("'no-matches' preserves a previously archived rule's status (carry-forward) — CR mmnto-ai/totem#1757 R1", async () => {
     // `preserveLifecycleFields` carries `status: 'archived'` (and its
     // `archivedReason`/`archivedAt`) forward on `--force` recompile.

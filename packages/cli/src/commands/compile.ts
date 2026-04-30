@@ -647,14 +647,18 @@ export async function compileCommand(
         // in the batch. `LC_ALL=C` keeps output stable across locales.
         // Fail-loud if git is unavailable — this gate is the ADR-091
         // substrate's load-bearing invariant.
-        const lsOutput: string = safeExec('git', ['ls-files', '--recurse-submodules'], {
+        //
+        // `-z` (NUL-separator) is load-bearing: without it, git C-quotes
+        // filenames containing non-ASCII bytes, control characters, or
+        // whitespace (e.g. `"src/\303\244.ts"` for `src/ä.ts`), which
+        // breaks `path.join(repoRoot, file)` with ENOENT. `-z` emits
+        // raw bytes separated by NUL with NO escaping, so split on `\0`.
+        // (Sonnet pre-push review on the F2 fix.)
+        const lsOutput: string = safeExec('git', ['ls-files', '-z', '--recurse-submodules'], {
           cwd: repoRoot,
           env: { ...process.env, LC_ALL: 'C' },
         });
-        stage4FilesCache = lsOutput
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter((line) => line.length > 0);
+        stage4FilesCache = lsOutput.split('\0').filter((line) => line.length > 0);
       }
       return verifyAgainstCodebase(rule, getDefaultBaseline(), {
         listFiles: async () => stage4FilesCache!,

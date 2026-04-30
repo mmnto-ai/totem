@@ -993,6 +993,16 @@ async function applyStage4(
     }
     case 'in-scope-bad-example': {
       rule.confidence = 'high';
+      // Clear a carry-forward `'untested-against-codebase'` status so a
+      // previously-untested rule that now finds matches gets promoted to
+      // active (the F6 lint-path filter in `loadCompiledRules` excludes
+      // `'untested-against-codebase'`, so without this clear the rule
+      // would stay inert despite Stage 4 producing positive evidence).
+      // Sonnet pre-push review on the F3+F6 seam (CR mmnto-ai/totem#1757
+      // R1). `'archived'` is preserved — that's an explicit lifecycle
+      // decision; `'untested-against-codebase'` is a Stage 4-managed
+      // intermediate state that promotion can clear.
+      if (rule.status === 'untested-against-codebase') rule.status = 'active';
       trace.push({ layer: 4, action: 'verify', outcome: 'in-scope-bad-example' });
       return false;
     }
@@ -1008,6 +1018,11 @@ async function applyStage4(
       // 'warning' is post-condition-explicit without violating the
       // never-elevate contract — 'warning' is the floor, not above it.
       if (rule.severity !== 'warning') rule.severity = 'warning';
+      // Promote a carry-forward `'untested-against-codebase'` rule to
+      // active — same rationale as the in-scope-bad-example branch above.
+      // Candidate-debt is positive evidence the rule fires on real code;
+      // the warning severity carries the human-confirmation signal.
+      if (rule.status === 'untested-against-codebase') rule.status = 'active';
       trace.push({ layer: 4, action: 'verify', outcome: 'candidate-debt' });
       // Surface the debt sites so `totem doctor` (mmnto-ai/totem#1685) and
       // human reviewers can decide whether to confirm or archive. Cap the
