@@ -1,4 +1,9 @@
-import type { ContentType, LanceStore, SearchResult } from '@mmnto/totem';
+import type {
+  ContentType,
+  LanceStore,
+  SearchResult,
+  TotemConfigError as TotemConfigErrorClass,
+} from '@mmnto/totem';
 
 import type { StandardIssue } from '../adapters/issue-adapter.js';
 import { SYSTEM_PROMPT } from './spec-templates.js';
@@ -99,7 +104,7 @@ export function expandSpecQuery(query: string): string {
 
 // ─── Input types ────────────────────────────────────────
 
-interface ParsedInput {
+export interface ParsedInput {
   issue: StandardIssue | null;
   freeText: string | null;
 }
@@ -157,20 +162,82 @@ export async function assemblePrompt(
   return sections.join('\n');
 }
 
-// ─── Main command ───────────────────────────────────────
+// ─── Output routing (mmnto-ai/totem#1555) ──────────────
 
 export interface SpecOptions {
   raw?: boolean;
   out?: string;
+  stdout?: boolean;
   model?: string;
   fresh?: boolean;
 }
+
+/**
+ * mmnto-ai/totem#1555: validate that --stdout and --out are not used together.
+ * Run before any LLM call so a user-error surfaces in <50ms with no API cost.
+ */
+export function validateOutputOptions(
+  options: Pick<SpecOptions, 'out' | 'stdout'>,
+  TotemConfigErrorCtor: typeof TotemConfigErrorClass,
+): void {
+  if (options.stdout && options.out) {
+    throw new TotemConfigErrorCtor(
+      '--stdout and --out cannot be used together.',
+      'Pick one: --out <path> writes to a specific file; --stdout writes to standard output.',
+      'CONFIG_INVALID',
+    );
+  }
+}
+
+/**
+ * Sanitize a free-form topic string for use as a filename stem. Replaces any
+ * character outside `[a-zA-Z0-9_-]` with a single dash, collapses runs, and
+ * trims leading/trailing dashes. Returns `''` for inputs that sanitize to
+ * nothing — caller decides the fallback.
+ */
+export function sanitizeSpecFilename(input: string): string {
+  return input.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+export interface ResolveSpecPathDeps {
+  resolveGitRoot: (cwd: string) => string | null;
+  pathJoin: (...parts: string[]) => string;
+}
+
+/**
+ * Derive the default spec output path under `<gitRoot>/.totem/specs/<stem>.md`.
+ * Returns `null` for ambiguous cases (multi-input, empty topic) — the caller
+ * falls back to stdout with a hint.
+ */
+export function resolveDefaultSpecPath(
+  parsedInputs: ParsedInput[],
+  cwd: string,
+  deps: ResolveSpecPathDeps,
+): string | null {
+  if (parsedInputs.length !== 1) return null;
+  const first = parsedInputs[0]!;
+  let stem: string;
+  if (first.issue) {
+    stem = String(first.issue.number);
+  } else if (first.freeText) {
+    stem = sanitizeSpecFilename(first.freeText);
+    if (!stem) return null;
+  } else {
+    return null;
+  }
+  const root = deps.resolveGitRoot(cwd) ?? cwd;
+  return deps.pathJoin(root, '.totem', 'specs', `${stem}.md`);
+}
+
+// ─── Main command ───────────────────────────────────────
 
 export async function specCommand(inputs: string[], options: SpecOptions): Promise<void> {
   const path = await import('node:path');
   const {
     createEmbedder,
     LanceStore: LanceStoreImpl,
+    resolveGitRoot,
+    sanitizeForTerminal,
     TotemConfigError,
   } = await import('@mmnto/totem');
   const { log } = await import('../ui.js');
@@ -183,6 +250,8 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
     runOrchestrator,
     writeOutput,
   } = await import('../utils.js');
+
+  validateOutputOptions(options, TotemConfigError);
 
   const unique = [...new Set(inputs)];
   if (unique.length > MAX_INPUTS) {
@@ -302,8 +371,31 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   log.dim(TAG, `Prompt: ${(prompt.length / 1024).toFixed(0)}KB`);
 
   const content = await runOrchestrator({ prompt, tag: TAG, options, config, cwd, totalResults });
-  if (content != null) {
+  if (content == null) return;
+
+  if (options.stdout) {
+    writeOutput(content);
+    return;
+  }
+  if (options.out) {
     writeOutput(content, options.out);
-    if (options.out) log.success(TAG, `Written to ${options.out}`);
+    const safeOut = sanitizeForTerminal(options.out).replace(/[\n\t]+/g, ' ');
+    log.success(TAG, `Written to ${safeOut}`);
+    return;
+  }
+  const defaultPath = resolveDefaultSpecPath(parsed, cwd, {
+    resolveGitRoot,
+    pathJoin: path.join,
+  });
+  if (defaultPath) {
+    writeOutput(content, defaultPath);
+    const safeRelativePath = sanitizeForTerminal(path.relative(cwd, defaultPath)).replace(
+      /[\n\t]+/g,
+      ' ',
+    );
+    log.success(TAG, `Spec saved to ${safeRelativePath}`);
+  } else {
+    log.dim(TAG, 'No default save path — writing to stdout. Use --out <path> to save.');
+    writeOutput(content);
   }
 }
