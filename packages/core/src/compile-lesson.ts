@@ -846,6 +846,69 @@ export function isSecurityContext(
   return false;
 }
 
+// ─── Test-scope wording mismatch classifier (mmnto-ai/totem#1752) ──
+
+/**
+ * Heading vocabulary that implies a test-contract intent. When the lesson
+ * heading carries one of these words AND the explicit `**Scope:**` excludes
+ * test files, `detectTestScopeMismatch` emits a non-blocking warning so the
+ * author can align the surfaces. Word-boundary-anchored to dodge substring
+ * traps like `latest`, `protest`, `contestant`, `inspector`.
+ */
+const TEST_VOCAB_HEADING_RE = /\b(?:tests?|specs?|assertions?|contracts?)\b/i;
+
+/**
+ * Glob patterns that exclude test files. Mirrors the four shapes the
+ * test-contract scope classifier (mmnto-ai/totem#1626 / mmnto-ai/totem#1652)
+ * promotes-to-test-inclusive — `.test.*`, `.spec.*`, `tests/**`,
+ * `__tests__/**` — but keyed on the negated-glob form (leading `!`).
+ *
+ * Two alternation arms:
+ *   1. File-extension form — `.test.` or `.spec.` anywhere after the `!`.
+ *      Matches `!**\/*.test.*`, `!*.spec.ts`, etc.
+ *   2. Directory form — `tests/` or `__tests__/` either at the root (right
+ *      after `!`) or after any path segment. Matches `!tests/**`,
+ *      `!**\/tests/**`, `!__tests__/**`, `!**\/__tests__/**`. The optional
+ *      `[^!]*\/` prefix lets the directory live at the root of the glob too.
+ */
+const TEST_EXCLUDING_GLOB_RE = /^!(?:[^!]*\.(?:test|spec)\.|(?:[^!]*\/)?(?:tests|__tests__)\/)/;
+
+/**
+ * mmnto-ai/totem#1752: warn when a lesson's heading suggests test-contract
+ * intent but its explicit `**Scope:**` excludes test files. The mismatch is
+ * authoring-side — the rule itself fires correctly per its declared scope,
+ * but the agent-rendered title implies one thing while the rule enforces
+ * another, eroding clarity in `.github/copilot-instructions.md` and the other
+ * agent-mirror exports.
+ *
+ * Non-blocking: fires `callbacks.onWarn` and returns. Wording is heuristic;
+ * false positives on creative phrasings are acceptable per the ticket
+ * (warn-not-reject contract).
+ *
+ * Sibling classifiers:
+ *   - mmnto-ai/totem#1626 (closed via mmnto-ai/totem#1652) promotes test-
+ *     inclusive globs when the `testing` tag AND test-framework call signals
+ *     align with a missing scope. This classifier fires the inverse
+ *     direction: explicit scope contradicts heading wording.
+ *   - mmnto-ai/totem#1702 rejects test-scoped enforcement rules that lack
+ *     a `testing` tag — the third sub-dimension on the same axis.
+ */
+function detectTestScopeMismatch(
+  lesson: LessonInput,
+  callbacks: CompileLessonCallbacks | undefined,
+): void {
+  if (!callbacks?.onWarn) return;
+  if (!TEST_VOCAB_HEADING_RE.test(lesson.heading)) return;
+  const scope = parseDeclaredScope(lesson.body);
+  if (!scope) return;
+  const excludesTests = scope.some((glob) => TEST_EXCLUDING_GLOB_RE.test(glob));
+  if (!excludesTests) return;
+  callbacks.onWarn(
+    lesson.heading,
+    'Heading suggests test-contract intent, but explicit **Scope:** excludes test files. Align the heading with the scope, or widen the scope to include tests.',
+  );
+}
+
 /**
  * Compile a single lesson into a rule.
  * Handles both manual patterns (zero LLM) and LLM-compiled patterns.
@@ -858,6 +921,12 @@ export async function compileLesson(
 ): Promise<CompileLessonResult> {
   const { parseCompilerResponse, runOrchestrator, existingByHash, callbacks } = deps;
   const exampleHitPresent = hasExampleHits(lesson.body);
+
+  // mmnto-ai/totem#1752: heading-vs-scope wording mismatch classifier. Runs
+  // before any pipeline so the warning fires regardless of which path the
+  // lesson takes (manual / Pipeline 3 / Pipeline 2). Non-blocking by design
+  // — the rule still compiles per its declared scope.
+  detectTestScopeMismatch(lesson, callbacks);
 
   // mmnto-ai/totem#1656: extract the declared severity from the lesson body
   // via the shared `parseDeclaredSeverity` helper (same parser surface as

@@ -7497,10 +7497,10 @@
         "!**/*.test.*"
       ],
       "severity": "warning",
-      "unverified": true,
       "status": "archived",
       "archivedReason": "Pattern fires on every path.join(process.cwd(), ...) including legitimate test-source reads (lesson.test.ts, search.test.ts) and install-test tmp dirs. Lesson scope is substrate-file lookups in command code where configRoot is the right base; compiled rule lost that nuance and over-matches across the codebase.",
-      "archivedAt": "2026-04-29T17:12:42.962Z"
+      "archivedAt": "2026-04-29T17:12:42.962Z",
+      "unverified": true
     },
     {
       "lessonHash": "38fc929f07d83bf4",
@@ -7548,6 +7548,25 @@
       ],
       "severity": "warning",
       "unverified": true
+    },
+    {
+      "lessonHash": "de0eee8d0fa0b4db",
+      "lessonHeading": "Use unique temp files for atomic writes",
+      "message": "Temp file for atomic write should include a PID or random suffix (e.g., .tmp.${process.pid} or .tmp.<random>) to prevent collisions during concurrent executions.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "(?:writeFile|writeFileSync|createWriteStream)\\s*\\(\\s*['\"`][^'\"` ]*\\.tmp['\"`]",
+      "compiledAt": "2026-04-30T03:50:43.214Z",
+      "createdAt": "2026-04-30T03:50:43.214Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/recurrence-stats.ts"
+      ],
+      "badExample": "await writeFile('/data/output.tmp', content);",
+      "goodExample": "await writeFile(`/data/output.tmp.${process.pid}`, content);",
+      "unverified": true,
+      "status": "archived",
+      "archivedAt": "2026-04-29T23:45:00.000Z",
+      "archivedReason": "Under-scoped regex + weaker-than-convention message per CR finding on mmnto-ai/totem#1754 (https://github.com/mmnto-ai/totem/pull/1754#discussion_r3165648989). Pattern only catches inline quoted-string arguments (e.g., writeFileSync('/path.tmp')) and misses the actual production case in packages/cli/src/commands/recurrence-stats.ts:423 where the temp path is a template-literal variable (`const tmp = \\`${outputPath}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp\\``). Variable-assignment tracking is structurally outside regex's reach. Re-authoring as ast-grep with compound trace-and-inspect rule tracked in mmnto-ai/totem#1755."
     }
   ],
   "nonCompilable": [
@@ -12619,6 +12638,24 @@
       "title": "Use containment coefficient for diff matching",
       "reasonCode": "semantic-analysis-required",
       "reason": "Lesson describes an algorithmic choice (Jaccard vs. containment coefficient) for similarity scoring; detecting which formula is used requires semantic analysis of mathematical expressions across multiple variables and operations, not a surface-level pattern match."
+    },
+    {
+      "hash": "80436972332d2ca8",
+      "title": "Fix generated documentation at the source",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a process/workflow principle (edit sources not generated outputs) that cannot be detected by examining code patterns in any single file. There is no syntactic or structural marker that distinguishes a hand-edited generated file from a correctly-generated one."
+    },
+    {
+      "hash": "e03ddcebc800cefc",
+      "title": "Preserve line breaks in terminal sanitizers",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a design principle about preserving whitespace characters in sanitization helpers — it does not identify a specific detectable code pattern (e.g., a banned function call, a missing guard, or a structural anti-pattern) that a regex or AST rule could match."
+    },
+    {
+      "hash": "0b179de18f0ca20f",
+      "title": "Consolidate overlapping dynamic imports",
+      "reasonCode": "out-of-scope",
+      "reason": "Detecting multiple dynamic imports from the same module requires multi-statement analysis across the function/block scope — a single-pattern rule cannot see sibling import() calls to determine if they share the same module specifier."
     }
   ]
 }
