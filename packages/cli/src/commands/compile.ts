@@ -436,6 +436,7 @@ export async function compileCommand(
     readAllLessons,
     readCompileManifest,
     safeExec,
+    sanitizeForTerminal,
     saveCompiledRulesFile,
     scaffoldFixture,
     scaffoldFixturePath,
@@ -577,10 +578,15 @@ export async function compileCommand(
         candidateDebtCount: result.candidateDebtLines.length,
         // Sample only — full path lists can be reconstructed by re-running
         // the verifier; the telemetry record is for aggregate signal, not
-        // forensic recovery. Path-redaction precedent (mmnto-ai/totem#1644)
-        // is moot here because Stage 4 paths are repo-relative by
-        // construction (the verifier reads from the working tree).
-        baselineMatchSample: result.baselineMatches.slice(0, 5),
+        // forensic recovery. `baselineMatches` is `readonly string[]`
+        // (repo-relative paths, not source code per
+        // `Stage4VerificationResult.baselineMatches` in
+        // `packages/core/src/stage4-verifier.ts:78`). Sanitize even so —
+        // a hostile filename could plant CSI bytes that survive into
+        // `.totem/temp/telemetry.jsonl` and re-emerge when the file is
+        // tailed in a terminal (CR mmnto-ai/totem#1757 R1, mirrors the
+        // #1743 R4-R7 sanitization wave).
+        baselineMatchSample: result.baselineMatches.slice(0, 5).map(sanitizeForTerminal),
       };
       fs.appendFileSync(
         path.join(tempDir, 'telemetry.jsonl'),
@@ -608,19 +614,41 @@ export async function compileCommand(
   // adapter (`safeExec` call below), which gives us the canonical project
   // file set with `.gitignore` already applied; falling back to a
   // recursive walk would scan `node_modules/` and other non-project trees.
+  //
+  // CR mmnto-ai/totem#1757 R1: anchor enumeration AND file reads at the
+  // git repository root, not `cwd`. When `compileCommand` is invoked with
+  // a nested `cwd` (e.g. `compileCommand({ cwd: './packages/cli' })`),
+  // `git ls-files --recurse-submodules` from that nested directory returns
+  // paths relative to that directory. But every compiled rule's
+  // `fileGlobs` is repo-relative by construction (lessons declare scopes
+  // like `packages/**/*.ts`), so a nested-relative file list breaks
+  // `fileMatchesGlobs()` in `stage4-verifier.ts` and silently
+  // misclassifies in-scope hits as `'no-matches'`. Resolve to the repo
+  // top-level once via `git rev-parse --show-toplevel` and use it for both
+  // the file enumeration and the working-tree `readFile`.
+  let stage4RepoRootCache: string | undefined;
   let stage4FilesCache: readonly string[] | undefined;
   const buildStage4Verifier = () => {
     return async (rule: import('@mmnto/totem').CompiledRule) => {
+      if (stage4RepoRootCache === undefined) {
+        // `safeExec` is synchronous (sync `spawnSync` wrapper at
+        // `packages/core/src/sys/exec.ts:48`) and returns the trimmed
+        // stdout string directly — no `await`, no `.stdout` unwrap.
+        // Fail-loud if `cwd` is not inside a git repo.
+        const repoRoot: string = safeExec('git', ['rev-parse', '--show-toplevel'], {
+          cwd,
+          env: { ...process.env, LC_ALL: 'C' },
+        });
+        stage4RepoRootCache = repoRoot;
+      }
+      const repoRoot = stage4RepoRootCache;
       if (stage4FilesCache === undefined) {
         // Single git invocation per compile run; reused across all rules
         // in the batch. `LC_ALL=C` keeps output stable across locales.
         // Fail-loud if git is unavailable — this gate is the ADR-091
-        // substrate's load-bearing invariant. `safeExec` is synchronous
-        // (sync `spawnSync` wrapper at `packages/core/src/sys/exec.ts:48`)
-        // and returns the trimmed stdout string directly — no `await`,
-        // no `.stdout` unwrap.
+        // substrate's load-bearing invariant.
         const lsOutput: string = safeExec('git', ['ls-files', '--recurse-submodules'], {
-          cwd,
+          cwd: repoRoot,
           env: { ...process.env, LC_ALL: 'C' },
         });
         stage4FilesCache = lsOutput
@@ -631,14 +659,16 @@ export async function compileCommand(
       return verifyAgainstCodebase(rule, getDefaultBaseline(), {
         listFiles: async () => stage4FilesCache!,
         readFile: async (file: string) => {
-          // Read from the working tree. `path.join(cwd, file)` resolves
-          // the repo-relative path that `git ls-files --recurse-submodules` returns to an
-          // absolute path on disk. Throws on missing file (Tenet 4 fail-
-          // loud) — the verifier wraps the error with the offending
-          // filename in its own throw site.
-          return fs.promises.readFile(path.join(cwd, file), 'utf-8');
+          // Read from the working tree, anchored at the repo root so the
+          // repo-relative paths returned by the
+          // `git ls-files --recurse-submodules` enumeration above
+          // resolve correctly even when `compileCommand` was invoked with
+          // a nested `cwd`. Throws on missing file (Tenet 4 fail-loud) —
+          // the verifier wraps the error with the offending filename in
+          // its own throw site.
+          return fs.promises.readFile(path.join(repoRoot, file), 'utf-8');
         },
-        workingDirectory: cwd,
+        workingDirectory: repoRoot,
       });
     };
   };

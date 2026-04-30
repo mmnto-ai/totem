@@ -287,11 +287,16 @@ async function runRuleAgainstAllFiles(
     return applyRulesToAdditions(ctx, [ruleNoScope], [...additions]);
   }
 
-  // ast / ast-grep — requires a working directory for file resolution. If
-  // the caller did not provide one, skip the AST verification path and
-  // return zero violations. T1's CLI integration always passes a workingDirectory;
-  // tests can opt out by omitting it.
-  if (!workingDirectory) return [];
+  // ast / ast-grep — requires a working directory for file resolution.
+  // Fail loud when absent so Stage 4 cannot silently misclassify the run
+  // as `'no-matches'`. T1's CLI integration always passes a
+  // workingDirectory; tests that hit this path must pass one too.
+  // (CR mmnto-ai/totem#1757 R1 — earlier `return []` short-circuit
+  // hid the missing-input case as a clean result.)
+  if (!workingDirectory) {
+    const msg = `[Totem Error] Stage 4 verifier requires deps.workingDirectory for ${rule.engine} rules.`;
+    throw new Error(msg);
+  }
   return applyAstRulesToAdditions(ctx, [ruleNoScope], [...additions], workingDirectory);
 }
 

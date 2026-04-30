@@ -21,6 +21,7 @@ import {
 import type { RuleTestResult } from './rule-tester.js';
 import { testRule } from './rule-tester.js';
 import type { Stage4VerificationResult } from './stage4-verifier.js';
+import { sanitizeForTerminal } from './terminal-sanitize.js';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -979,7 +980,14 @@ async function applyStage4(
 
   switch (result.outcome) {
     case 'no-matches': {
-      rule.status = 'untested-against-codebase';
+      // Don't clobber a previously archived lifecycle. `preserveLifecycleFields`
+      // carries `status: 'archived'` (and its `archivedReason`/`archivedAt`)
+      // forward on `--force` recompile; setting `'untested-against-codebase'`
+      // unconditionally would silently un-archive rules that the postmerge
+      // curation path explicitly silenced (CR mmnto-ai/totem#1757 R1).
+      if (rule.status !== 'archived') {
+        rule.status = 'untested-against-codebase';
+      }
       trace.push({ layer: 4, action: 'verify', outcome: 'no-matches' });
       return false;
     }
@@ -1004,14 +1012,13 @@ async function applyStage4(
       // Surface the debt sites so `totem doctor` (mmnto-ai/totem#1685) and
       // human reviewers can decide whether to confirm or archive. Cap the
       // displayed sample to keep the warning concise; the full list lives
-      // in telemetry via `onStage4Outcome`.
-      const totalDebt = result.candidateDebtLines.length;
-      const sampleSuffix = formatSampleSuffix(
-        result.candidateDebtLines.slice(0, 3),
-        ' | ',
-        totalDebt,
-        3,
-      );
+      // in telemetry via `onStage4Outcome`. Sanitize first — debt lines
+      // are raw repository code that can carry CSI / control bytes from a
+      // tampered file, and `onWarn` lands in terminal output (CR
+      // mmnto-ai/totem#1757 R1, mirrors the #1743 R4-R7 sanitization wave).
+      const safeDebtLines = result.candidateDebtLines.map(sanitizeForTerminal);
+      const totalDebt = safeDebtLines.length;
+      const sampleSuffix = formatSampleSuffix(safeDebtLines.slice(0, 3), ' | ', totalDebt, 3);
       callbacks?.onWarn?.(
         lesson.heading,
         `Stage 4: candidate debt — ${totalDebt} site(s) outside the badExample shape: ${sampleSuffix}`,
@@ -1021,9 +1028,15 @@ async function applyStage4(
     case 'out-of-scope': {
       rule.status = 'archived';
       rule.archivedAt = new Date().toISOString();
-      const totalBaseline = result.baselineMatches.length;
+      // Sanitize before formatting — paths are repo-relative strings but
+      // a hostile filename (e.g. via a typosquatting commit) could plant
+      // CSI bytes that survive into `archivedReason` (persisted to
+      // compiled-rules.json) and `onWarn` (terminal). Same vector class
+      // as candidate-debt above (CR mmnto-ai/totem#1757 R1).
+      const safeBaselineMatches = result.baselineMatches.map(sanitizeForTerminal);
+      const totalBaseline = safeBaselineMatches.length;
       const pathSuffix = formatSampleSuffix(
-        result.baselineMatches.slice(0, 5),
+        safeBaselineMatches.slice(0, 5),
         ', ',
         totalBaseline,
         5,

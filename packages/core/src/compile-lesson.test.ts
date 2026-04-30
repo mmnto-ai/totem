@@ -3473,4 +3473,84 @@ describe('compileLesson Stage 4 integration', () => {
       expect.objectContaining({ layer: 4, action: 'verify', outcome: 'no-matches' }),
     );
   });
+
+  it("'no-matches' preserves a previously archived rule's status (carry-forward) — CR mmnto-ai/totem#1757 R1", async () => {
+    // `preserveLifecycleFields` carries `status: 'archived'` (and its
+    // `archivedReason`/`archivedAt`) forward on `--force` recompile.
+    // Setting `status = 'untested-against-codebase'` unconditionally on
+    // a `'no-matches'` outcome would silently un-archive a rule that
+    // postmerge curation explicitly silenced.
+    const lesson = makePipeline2Lesson();
+    const { deps } = makePipeline2Deps({
+      outcome: 'no-matches',
+      baselineMatches: [],
+      inScopeMatches: [],
+      candidateDebtLines: [],
+    });
+    deps.existingByHash = new Map([
+      [
+        lesson.hash,
+        {
+          lessonHash: lesson.hash,
+          message: 'previously-archived',
+          pattern: 'console\\.log',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          status: 'archived',
+          archivedReason: 'manual archive (postmerge curation)',
+          archivedAt: '2026-02-01T00:00:00.000Z',
+        } as CompiledRule,
+      ],
+    ]);
+    const result = await compileLesson(lesson, 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.status).toBe('archived');
+      expect(result.rule.archivedReason).toBe('manual archive (postmerge curation)');
+      expect(result.rule.archivedAt).toBe('2026-02-01T00:00:00.000Z');
+    }
+  });
+
+  it("'candidate-debt' sanitizes CSI bytes in debtLines before onWarn — CR mmnto-ai/totem#1757 R1", async () => {
+    // Repository code can carry CSI / control bytes from a tampered
+    // file. `onWarn` lands in terminal output; raw text would let a
+    // hostile pattern spoof cursor moves or color resets. Mirrors the
+    // #1743 R4-R7 sanitization wave on the agent-rendered surface.
+    const { deps, onWarn } = makePipeline2Deps({
+      outcome: 'candidate-debt',
+      baselineMatches: [],
+      inScopeMatches: ['packages/cli/src/foo.ts'],
+      candidateDebtLines: ['console.log(\x1b[31m"red"\x1b[0m)', 'console.log("\x07bell")'],
+    });
+    await compileLesson(makePipeline2Lesson(), 'system prompt', deps);
+    const warnArgs = onWarn.mock.calls.find(([, msg]: [string, string]) =>
+      msg.includes('candidate debt'),
+    );
+    expect(warnArgs).toBeDefined();
+    const message = warnArgs![1] as string;
+    // No raw ESC, no raw BEL after sanitization.
+    expect(message).not.toMatch(/\x1b/);
+    expect(message).not.toMatch(/\x07/);
+    // Visible code shape preserved (CSI sequence stripped, payload kept).
+    expect(message).toContain('"red"');
+  });
+
+  it("'out-of-scope' sanitizes CSI bytes in baselineMatches before archivedReason — CR mmnto-ai/totem#1757 R1", async () => {
+    // Path text persists into compiled-rules.json (`archivedReason`)
+    // and surfaces in `onWarn`. A hostile filename with CSI bytes would
+    // re-emerge whenever the manifest is tailed in a terminal.
+    const { deps } = makePipeline2Deps({
+      outcome: 'out-of-scope',
+      baselineMatches: ['packages/cli/src/\x1b[31mhostile\x1b[0m.test.ts'],
+      inScopeMatches: ['packages/cli/src/foo.ts'],
+      candidateDebtLines: [],
+    });
+    const result = await compileLesson(makePipeline2Lesson(), 'system prompt', deps);
+    expect(result.status).toBe('compiled');
+    if (result.status === 'compiled') {
+      expect(result.rule.archivedReason).toBeDefined();
+      expect(result.rule.archivedReason!).not.toMatch(/\x1b/);
+      // Path payload still present, just stripped of escape bytes.
+      expect(result.rule.archivedReason!).toContain('hostile');
+    }
+  });
 });

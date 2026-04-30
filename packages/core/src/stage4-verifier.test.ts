@@ -258,6 +258,23 @@ describe('verifyAgainstCodebase failure modes', () => {
       /Stage 4 verifier could not read packages\/cli\/src\/missing\.ts/,
     );
   });
+
+  it('throws when an ast-grep rule is verified without a workingDirectory (CR mmnto-ai/totem#1757 R1)', async () => {
+    // Earlier code returned `[]` from `runRuleAgainstAllFiles` when
+    // `workingDirectory` was absent on AST/ast-grep rules, which silently
+    // misclassified the run as `'no-matches'`. Fail loud instead so the
+    // missing-input case cannot masquerade as a clean codebase result.
+    const files = new Map<string, string>([['packages/cli/src/foo.ts', 'console.log("x")']]);
+    const deps: Stage4VerifierDeps = {
+      listFiles: async () => [...files.keys()],
+      readFile: async (file) => files.get(file) ?? '',
+      // workingDirectory intentionally omitted.
+    };
+    const astRule = makeRule({ engine: 'ast-grep', pattern: 'console.log($X)' });
+    await expect(verifyAgainstCodebase(astRule, getDefaultBaseline(), deps)).rejects.toThrow(
+      /Stage 4 verifier requires deps\.workingDirectory for ast-grep rules/,
+    );
+  });
 });
 
 // ─── Custom baseline ──────────────────────────────
