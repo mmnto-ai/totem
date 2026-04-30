@@ -1775,6 +1775,204 @@ describe('compileLesson', () => {
   });
 });
 
+// ─── Test-scope wording mismatch classifier (mmnto-ai/totem#1752) ──
+
+describe('compileLesson test-scope mismatch classifier (mmnto-ai/totem#1752)', () => {
+  function makeClassifierDeps(): CompileLessonDeps {
+    return {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: true,
+        pattern: 'console\\.log',
+        message: 'placeholder',
+        engine: 'regex' as const,
+        badExample: 'console.log("debug")',
+        goodExample: '// placeholder\n',
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('{"compilable": true}'),
+      existingByHash: new Map(),
+      callbacks: { onWarn: vi.fn(), onDim: vi.fn() },
+    };
+  }
+
+  function getMismatchWarnCalls(deps: CompileLessonDeps): unknown[][] {
+    const calls = (deps.callbacks!.onWarn as ReturnType<typeof vi.fn>).mock.calls;
+    return calls.filter(
+      (c) => typeof c[1] === 'string' && c[1].includes('Heading suggests test-contract intent'),
+    );
+  }
+
+  it('warns when heading carries test vocabulary AND scope excludes .test.* (n=1 anchor lesson-1d7283b3)', async () => {
+    const mismatchLesson: LessonInput = {
+      index: 0,
+      heading: 'Assert import boundaries in LLM-free tests',
+      body: '**Tags:** testing, architecture\n**Scope:** packages/cli/src/**/*.ts, !**/*.test.*\n\nUse regex assertions to forbid heavy imports.',
+      hash: 'mismatch-1d7283b3',
+    };
+    const deps = makeClassifierDeps();
+    await compileLesson(mismatchLesson, 'system prompt', deps);
+    expect(getMismatchWarnCalls(deps)).toHaveLength(1);
+    expect(deps.callbacks!.onWarn).toHaveBeenCalledWith(
+      mismatchLesson.heading,
+      expect.stringContaining('Heading suggests test-contract intent'),
+    );
+  });
+
+  it('warns on .spec.* exclusion shape', async () => {
+    const mismatchLesson: LessonInput = {
+      index: 0,
+      heading: 'Spy on logger contracts in tests',
+      body: '**Scope:** packages/**/*.ts, !**/*.spec.*\n\nBody.',
+      hash: 'mismatch-spec',
+    };
+    const deps = makeClassifierDeps();
+    await compileLesson(mismatchLesson, 'system prompt', deps);
+    expect(getMismatchWarnCalls(deps)).toHaveLength(1);
+  });
+
+  it('warns on /__tests__/ directory exclusion shape', async () => {
+    const mismatchLesson: LessonInput = {
+      index: 0,
+      heading: 'Assertion contract for emitter',
+      body: '**Scope:** packages/**/*.ts, !**/__tests__/**\n\nBody.',
+      hash: 'mismatch-dunder',
+    };
+    const deps = makeClassifierDeps();
+    await compileLesson(mismatchLesson, 'system prompt', deps);
+    expect(getMismatchWarnCalls(deps)).toHaveLength(1);
+  });
+
+  it('warns on /tests/ directory exclusion shape', async () => {
+    const mismatchLesson: LessonInput = {
+      index: 0,
+      heading: 'Test fixture isolation',
+      body: '**Scope:** packages/**/*.ts, !**/tests/**\n\nBody.',
+      hash: 'mismatch-tests-dir',
+    };
+    const deps = makeClassifierDeps();
+    await compileLesson(mismatchLesson, 'system prompt', deps);
+    expect(getMismatchWarnCalls(deps)).toHaveLength(1);
+  });
+
+  it('warns on root-relative !tests/** exclusion (no leading **/ glob)', async () => {
+    const mismatchLesson: LessonInput = {
+      index: 0,
+      heading: 'Spec coverage for emitter',
+      body: '**Scope:** src/**/*.ts, !tests/**\n\nBody.',
+      hash: 'mismatch-root-tests',
+    };
+    const deps = makeClassifierDeps();
+    await compileLesson(mismatchLesson, 'system prompt', deps);
+    expect(getMismatchWarnCalls(deps)).toHaveLength(1);
+  });
+
+  it('warns on root-relative !__tests__/** exclusion (no leading **/ glob)', async () => {
+    const mismatchLesson: LessonInput = {
+      index: 0,
+      heading: 'Assertion contract for emitter',
+      body: '**Scope:** src/**/*.ts, !__tests__/**\n\nBody.',
+      hash: 'mismatch-root-dunder',
+    };
+    const deps = makeClassifierDeps();
+    await compileLesson(mismatchLesson, 'system prompt', deps);
+    expect(getMismatchWarnCalls(deps)).toHaveLength(1);
+  });
+
+  it('does not warn when heading carries test vocabulary AND scope includes test patterns', async () => {
+    const alignedLesson: LessonInput = {
+      index: 0,
+      heading: 'Spy on logger contracts in tests',
+      body: '**Scope:** packages/**/*.test.ts\n\nBody.',
+      hash: 'aligned-1',
+    };
+    const deps = makeClassifierDeps();
+    await compileLesson(alignedLesson, 'system prompt', deps);
+    expect(getMismatchWarnCalls(deps)).toHaveLength(0);
+  });
+
+  it('does not warn when heading lacks test vocabulary even if scope excludes tests', async () => {
+    const nonTestLesson: LessonInput = {
+      index: 0,
+      heading: 'Use err not error in catch blocks',
+      body: '**Scope:** packages/**/*.ts, !**/*.test.*\n\nBody.',
+      hash: 'non-test-heading',
+    };
+    const deps = makeClassifierDeps();
+    await compileLesson(nonTestLesson, 'system prompt', deps);
+    expect(getMismatchWarnCalls(deps)).toHaveLength(0);
+  });
+
+  it('does not warn when source declares no Scope', async () => {
+    const noScopeLesson: LessonInput = {
+      index: 0,
+      heading: 'Test the public API surface',
+      body: 'No Scope field declared in this body.',
+      hash: 'no-scope-1',
+    };
+    const deps = makeClassifierDeps();
+    await compileLesson(noScopeLesson, 'system prompt', deps);
+    expect(getMismatchWarnCalls(deps)).toHaveLength(0);
+  });
+
+  it('respects word boundaries — substring traps like "latest" do not trigger', async () => {
+    const substringLesson: LessonInput = {
+      index: 0,
+      heading: 'Update latest manifest entries',
+      body: '**Scope:** packages/**/*.ts, !**/*.test.*\n\nBody.',
+      hash: 'substring-trap',
+    };
+    const deps = makeClassifierDeps();
+    await compileLesson(substringLesson, 'system prompt', deps);
+    expect(getMismatchWarnCalls(deps)).toHaveLength(0);
+  });
+
+  it('does not throw when callbacks are omitted entirely', async () => {
+    const mismatchLesson: LessonInput = {
+      index: 0,
+      heading: 'Assert tests pass',
+      body: '**Scope:** packages/**/*.ts, !**/*.test.*\n\nBody.',
+      hash: 'no-callbacks',
+    };
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: true,
+        pattern: 'console\\.log',
+        message: 'placeholder',
+        engine: 'regex' as const,
+        badExample: 'console.log("debug")',
+        goodExample: '// placeholder\n',
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('{"compilable": true}'),
+      existingByHash: new Map(),
+      // No callbacks
+    };
+    await expect(compileLesson(mismatchLesson, 'system prompt', deps)).resolves.toBeDefined();
+  });
+
+  it('does not warn when onWarn callback is omitted (other callbacks present)', async () => {
+    const mismatchLesson: LessonInput = {
+      index: 0,
+      heading: 'Assert tests pass',
+      body: '**Scope:** packages/**/*.ts, !**/*.test.*\n\nBody.',
+      hash: 'no-onwarn',
+    };
+    const onDim = vi.fn();
+    const deps: CompileLessonDeps = {
+      parseCompilerResponse: vi.fn().mockReturnValue({
+        compilable: true,
+        pattern: 'console\\.log',
+        message: 'placeholder',
+        engine: 'regex' as const,
+        badExample: 'console.log("debug")',
+        goodExample: '// placeholder\n',
+      }),
+      runOrchestrator: vi.fn().mockResolvedValue('{"compilable": true}'),
+      existingByHash: new Map(),
+      callbacks: { onDim },
+    };
+    await expect(compileLesson(mismatchLesson, 'system prompt', deps)).resolves.toBeDefined();
+  });
+});
+
 // ─── verifyRuleExamples ──────────────────────────────
 
 describe('verifyRuleExamples', () => {
