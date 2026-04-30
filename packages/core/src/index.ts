@@ -155,6 +155,7 @@ export {
   engineFields,
   extractAddedLines,
   extractJustification,
+  fileMatchesGlobs,
   hashLesson,
   LEDGER_RETRY_PENDING_CODES,
   loadCompiledRules,
@@ -327,6 +328,7 @@ export {
 
 // Stage 4 Verify-Against-Codebase verifier (mmnto-ai/totem#1682)
 export type {
+  ResolveStage4BaselineInput,
   Stage4Baseline,
   Stage4Outcome,
   Stage4VerificationResult,
@@ -335,6 +337,9 @@ export type {
 export {
   DEFAULT_BASELINE_GLOBS,
   getDefaultBaseline,
+  parseStage4BaselineDirectives,
+  resolveStage4Baseline,
+  STAGE4_MANIFEST_EXCLUSIONS,
   verifyAgainstCodebase,
 } from './stage4-verifier.js';
 

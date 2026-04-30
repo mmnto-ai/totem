@@ -224,12 +224,39 @@ export const ReviewSourceExtensionSchema = z
     'must match /\\.[A-Za-z0-9.-]+/ after normalization',
   );
 
+/**
+ * Stage 4 verification baseline overrides (mmnto-ai/totem#1683).
+ *
+ * `extend` adds globs to the default baseline; `exclude` removes them. Both
+ * default to `[]`. Naming discipline (per the GCA finding logged in ADR-091
+ * Deferred Decisions): no `allowlist` aliases. The schema explicitly rejects
+ * an `allowlist` key with a pointer to mmnto-ai/totem#1683 so a future
+ * regression surfaces at config-parse time, not in a silent passthrough.
+ */
+export const Stage4BaselineConfigSchema = z
+  .object({
+    extend: z.array(z.string()).default([]),
+    exclude: z.array(z.string()).default([]),
+  })
+  .passthrough()
+  .superRefine((data, ctx) => {
+    if ('allowlist' in (data as Record<string, unknown>)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Use 'baseline' framing (extend / exclude) — 'allowlist' is rejected per mmnto-ai/totem#1683 naming discipline.",
+        path: ['allowlist'],
+      });
+    }
+  });
+
 export const ReviewConfigSchema = z
   .object({
     sourceExtensions: z
       .array(ReviewSourceExtensionSchema)
       .min(1, 'review.sourceExtensions must contain at least one extension')
       .default([...DEFAULT_REVIEW_SOURCE_EXTENSIONS]),
+    stage4Baseline: Stage4BaselineConfigSchema.optional(),
   })
   .passthrough()
   .default({});

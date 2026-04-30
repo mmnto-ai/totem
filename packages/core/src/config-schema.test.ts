@@ -673,6 +673,101 @@ describe('review.sourceExtensions', () => {
   });
 });
 
+// ─── review.stage4Baseline (mmnto-ai/totem#1683) ────
+
+describe('review.stage4Baseline', () => {
+  it('validates extend and exclude as arrays of strings (happy path)', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      review: {
+        stage4Baseline: {
+          extend: ['**/legacy/**', 'tools/scripts/**'],
+          exclude: ['**/tests/**'],
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.review.stage4Baseline).toEqual({
+        extend: ['**/legacy/**', 'tools/scripts/**'],
+        exclude: ['**/tests/**'],
+      });
+    }
+  });
+
+  it('defaults extend and exclude to empty arrays when stage4Baseline is empty object', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      review: { stage4Baseline: {} },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.review.stage4Baseline).toEqual({ extend: [], exclude: [] });
+    }
+  });
+
+  it('omits stage4Baseline from parsed config when not provided', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      review: {},
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.review.stage4Baseline).toBeUndefined();
+    }
+  });
+
+  it('rejects allowlist key under stage4Baseline (naming-discipline guard, mmnto-ai/totem#1683)', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      review: {
+        stage4Baseline: {
+          allowlist: ['**/legacy/**'],
+        },
+      },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const messages = result.error.issues.map((i) => i.message).join('\n');
+      expect(messages).toMatch(/baseline/);
+      expect(messages).toMatch(/1683/);
+    }
+  });
+
+  it('rejects allowlist key even when extend is also present', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      review: {
+        stage4Baseline: {
+          extend: ['**/foo/**'],
+          allowlist: ['**/legacy/**'],
+        },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects extend with non-string elements', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      review: {
+        stage4Baseline: { extend: [42, '**/foo/**'] },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects exclude with non-string elements', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      review: {
+        stage4Baseline: { exclude: [{ glob: '**/foo/**' }] },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
 describe('GarbageCollectionSchema', () => {
   it('rejects garbage collection config with negative minAgeDays', () => {
     const result = GarbageCollectionSchema.safeParse({ minAgeDays: -1 });

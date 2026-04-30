@@ -65,6 +65,7 @@ export {
   applyRulesToAdditions,
   type CoreLogger,
   extractJustification,
+  fileMatchesGlobs,
   matchesGlob,
   type RuleEngineContext,
 } from './rule-engine.js';

@@ -427,20 +427,22 @@ export async function compileCommand(
     formatExampleFailure,
     generateInputHash,
     generateOutputHash,
-    getDefaultBaseline,
     hashLesson,
     LEDGER_RETRY_PENDING_CODES,
     loadCompiledRulesFile,
     parseCompilerResponse,
     parseDeclaredSeverity,
+    parseStage4BaselineDirectives,
     readAllLessons,
     readCompileManifest,
+    resolveStage4Baseline,
     safeExec,
     sanitizeForTerminal,
     saveCompiledRulesFile,
     scaffoldFixture,
     scaffoldFixturePath,
     shouldWriteToLedger,
+    STAGE4_MANIFEST_EXCLUSIONS,
     verifyAgainstCodebase,
     verifyRuleExamples,
     writeCompileManifest,
@@ -642,6 +644,18 @@ export async function compileCommand(
   // short-circuit if a million-file monorepo ever runs into the
   // "files-actually-touched" memory bound.
   const stage4ReadFileCache = new Map<string, Promise<string>>();
+  // mmnto-ai/totem#1683: resolved baseline cached once per compile run so
+  // every rule in the batch sees the same composed defaults + .totemignore
+  // directives + config overrides. Read happens lazily in
+  // `buildStage4Verifier` because `cwd`/`repoRoot` are only safe to resolve
+  // once the verifier is actually invoked (compile may bail out earlier).
+  let stage4BaselineCache: import('@mmnto/totem').Stage4Baseline | undefined;
+  // Manifest exclusions (mmnto-ai/totem#1765): exclude
+  // `.totem/compiled-rules.json` (and any future siblings) from the corpus
+  // before rules run, so a regex rule's own `badExample` text in the
+  // manifest doesn't self-match and route every regex rule to
+  // `outcome: 'out-of-scope'` regardless of real codebase risk.
+  const stage4ManifestExclusionSet = new Set<string>(STAGE4_MANIFEST_EXCLUSIONS);
   const buildStage4Verifier = () => {
     return async (rule: import('@mmnto/totem').CompiledRule) => {
       if (stage4RepoRootCache === undefined) {
@@ -672,9 +686,33 @@ export async function compileCommand(
           cwd: repoRoot,
           env: { ...process.env, LC_ALL: 'C' },
         });
-        stage4FilesCache = lsOutput.split('\0').filter((line) => line.length > 0);
+        stage4FilesCache = lsOutput
+          .split('\0')
+          .filter((line) => line.length > 0 && !stage4ManifestExclusionSet.has(line));
       }
-      return verifyAgainstCodebase(rule, getDefaultBaseline(), {
+      if (stage4BaselineCache === undefined) {
+        // mmnto-ai/totem#1683: load consumer overrides once per compile run.
+        // `.totemignore` is optional — missing file is treated as no
+        // directives. Read failures other than ENOENT propagate (a
+        // permission error or corrupt file is a real environment issue,
+        // not a silent-skip case).
+        const ignorePath = path.join(repoRoot, '.totemignore');
+        let ignoreContent = '';
+        try {
+          ignoreContent = await fs.promises.readFile(ignorePath, 'utf-8');
+        } catch (err) {
+          const code = (err as NodeJS.ErrnoException).code;
+          if (code !== 'ENOENT') throw err;
+        }
+        const ignoreDirectives = parseStage4BaselineDirectives(ignoreContent);
+        const configOverrides = config.review?.stage4Baseline;
+        stage4BaselineCache = resolveStage4Baseline({
+          ignoreDirectives,
+          configExtend: configOverrides?.extend,
+          configExclude: configOverrides?.exclude,
+        });
+      }
+      return verifyAgainstCodebase(rule, stage4BaselineCache, {
         listFiles: async () => stage4FilesCache!,
         readFile: (file: string) => {
           // Read from the working tree, anchored at the repo root so the
