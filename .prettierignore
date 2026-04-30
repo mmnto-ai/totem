@@ -2,7 +2,6 @@ node_modules/
 dist/
 .lancedb/
 .turbo/
-.strategy/
 # Agent worktree scratchpads — not auditable artifacts
 .claude/worktrees/
 pnpm-lock.yaml
