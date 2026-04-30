@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { LanceStore, SearchResult } from '@mmnto/totem';
+import { type LanceStore, type SearchResult, TotemConfigError } from '@mmnto/totem';
 
+import type { StandardIssue } from '../adapters/issue-adapter.js';
 import { log } from '../ui.js';
 import type { RetrievedContext } from './spec.js';
 import {
@@ -9,8 +10,11 @@ import {
   expandSpecQuery,
   MAX_LESSON_CHARS,
   MAX_LESSONS,
+  resolveDefaultSpecPath,
   retrieveContext,
+  sanitizeSpecFilename,
   SPEC_SYSTEM_PROMPT,
+  validateOutputOptions,
 } from './spec.js';
 
 // ─── Helpers ─────────────────────────────────────────────
@@ -326,5 +330,157 @@ describe('expandSpecQuery', () => {
     expect(expandSpecQuery('add verification step')).toContain('rule-tester');
     expect(expandSpecQuery('load fixtures from disk')).toContain('rule-tester');
     expect(expandSpecQuery('provide examples for docs')).toContain('rule-tester');
+  });
+});
+
+// ─── validateOutputOptions (mmnto-ai/totem#1555) ─────────
+
+describe('validateOutputOptions', () => {
+  it('rejects simultaneous use of --stdout and --out flags', () => {
+    expect(() =>
+      validateOutputOptions({ out: 'file.md', stdout: true }, TotemConfigError),
+    ).toThrowError(/--stdout and --out cannot be used together/);
+  });
+
+  it('throws a TotemConfigError with CONFIG_INVALID code', () => {
+    expect(() =>
+      validateOutputOptions({ out: 'file.md', stdout: true }, TotemConfigError),
+    ).toThrowError(TotemConfigError);
+    let thrown: unknown;
+    try {
+      validateOutputOptions({ out: 'file.md', stdout: true }, TotemConfigError);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toMatchObject({ code: 'CONFIG_INVALID' });
+  });
+
+  it('accepts --out alone', () => {
+    expect(() => validateOutputOptions({ out: 'file.md' }, TotemConfigError)).not.toThrow();
+  });
+
+  it('accepts --stdout alone', () => {
+    expect(() => validateOutputOptions({ stdout: true }, TotemConfigError)).not.toThrow();
+  });
+
+  it('accepts neither flag set', () => {
+    expect(() => validateOutputOptions({}, TotemConfigError)).not.toThrow();
+  });
+});
+
+// ─── sanitizeSpecFilename ────────────────────────────────
+
+describe('sanitizeSpecFilename', () => {
+  it('passes alphanumeric inputs through unchanged', () => {
+    expect(sanitizeSpecFilename('1555')).toBe('1555');
+    expect(sanitizeSpecFilename('my-topic')).toBe('my-topic');
+    expect(sanitizeSpecFilename('migration_plan')).toBe('migration_plan');
+  });
+
+  it('replaces unsafe characters with dashes', () => {
+    expect(sanitizeSpecFilename('foo/bar')).toBe('foo-bar');
+    expect(sanitizeSpecFilename('hello world')).toBe('hello-world');
+    expect(sanitizeSpecFilename('a.b.c')).toBe('a-b-c');
+  });
+
+  it('blocks path traversal attempts', () => {
+    expect(sanitizeSpecFilename('../../etc/passwd')).toBe('etc-passwd');
+    expect(sanitizeSpecFilename('..\\windows\\system32')).toBe('windows-system32');
+  });
+
+  it('collapses runs of unsafe characters into a single dash', () => {
+    expect(sanitizeSpecFilename('a///b')).toBe('a-b');
+    expect(sanitizeSpecFilename('a   b')).toBe('a-b');
+  });
+
+  it('trims leading and trailing dashes', () => {
+    expect(sanitizeSpecFilename('---foo---')).toBe('foo');
+    expect(sanitizeSpecFilename('//path//')).toBe('path');
+  });
+
+  it('returns empty string for inputs that sanitize to nothing', () => {
+    expect(sanitizeSpecFilename('!!!')).toBe('');
+    expect(sanitizeSpecFilename('   ')).toBe('');
+  });
+});
+
+// ─── resolveDefaultSpecPath ──────────────────────────────
+
+function makeIssue(number: number): StandardIssue {
+  return {
+    number,
+    title: `Issue #${number}`,
+    body: 'body',
+    state: 'open',
+    labels: [],
+  };
+}
+
+describe('resolveDefaultSpecPath', () => {
+  const deps = {
+    resolveGitRoot: vi.fn(() => '/repo'),
+    pathJoin: (...parts: string[]) => parts.join('/'),
+  };
+
+  it('resolves single issue input to <gitRoot>/.totem/specs/<number>.md', () => {
+    const result = resolveDefaultSpecPath(
+      [{ issue: makeIssue(1555), freeText: null }],
+      '/repo/packages/cli',
+      deps,
+    );
+    expect(result).toBe('/repo/.totem/specs/1555.md');
+  });
+
+  it('resolves single free-text input to sanitized filename', () => {
+    const result = resolveDefaultSpecPath(
+      [{ issue: null, freeText: 'migration plan' }],
+      '/repo',
+      deps,
+    );
+    expect(result).toBe('/repo/.totem/specs/migration-plan.md');
+  });
+
+  it('falls back to cwd when git root is unavailable', () => {
+    const fallbackDeps = {
+      resolveGitRoot: vi.fn(() => null),
+      pathJoin: (...parts: string[]) => parts.join('/'),
+    };
+    const result = resolveDefaultSpecPath(
+      [{ issue: makeIssue(42), freeText: null }],
+      '/some/cwd',
+      fallbackDeps,
+    );
+    expect(result).toBe('/some/cwd/.totem/specs/42.md');
+  });
+
+  it('returns null for multi-input invocations', () => {
+    const result = resolveDefaultSpecPath(
+      [
+        { issue: makeIssue(1), freeText: null },
+        { issue: makeIssue(2), freeText: null },
+      ],
+      '/repo',
+      deps,
+    );
+    expect(result).toBeNull();
+  });
+
+  it('returns null when free text sanitizes to empty', () => {
+    const result = resolveDefaultSpecPath([{ issue: null, freeText: '!!!' }], '/repo', deps);
+    expect(result).toBeNull();
+  });
+
+  it('returns null when single input has neither issue nor free text', () => {
+    const result = resolveDefaultSpecPath([{ issue: null, freeText: null }], '/repo', deps);
+    expect(result).toBeNull();
+  });
+
+  it('uses git root over cwd for monorepo subpackages', () => {
+    const result = resolveDefaultSpecPath(
+      [{ issue: makeIssue(99), freeText: null }],
+      '/repo/packages/cli/src',
+      deps,
+    );
+    expect(result).toBe('/repo/.totem/specs/99.md');
   });
 });

@@ -216,13 +216,20 @@ program
   .command('spec <inputs...>')
   .description('Generate a pre-work spec briefing for GitHub issue(s) or topic(s)')
   .option('--raw', 'Output retrieved context without LLM synthesis')
-  .option('--out <path>', 'Write output to a file instead of stdout')
+  .option(
+    '--out <path>',
+    'Write output to a specific file (overrides default .totem/specs/<topic>.md)',
+  )
+  .option(
+    '--stdout',
+    'Print to stdout instead of saving to .totem/specs/<topic>.md (mutually exclusive with --out)',
+  )
   .option('--model <name>', 'Override the default model for the orchestrator')
   .option('--fresh', 'Bypass cache and force a fresh LLM call (ignores cached responses)')
   .action(
     async (
       inputs: string[],
-      opts: { raw?: boolean; out?: string; model?: string; fresh?: boolean },
+      opts: { raw?: boolean; out?: string; stdout?: boolean; model?: string; fresh?: boolean },
     ) => {
       try {
         const { specCommand } = await import('./commands/spec.js');
