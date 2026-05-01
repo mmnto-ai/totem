@@ -328,22 +328,23 @@ export function validateAstGrepPattern(
   // correctly", etc.) at compile time instead. The pattern is accepted
   // when any one Lang accepts it; rejected with the last failure's
   // message when all Langs reject it.
-  const langs = resolveAstGrepLangs(fileGlobs);
-  let lastErr: unknown = undefined;
   // totem-context: try-each-Lang-then-collect-and-rethrow. The per-iteration
   // catch is not silent degradation — `lastErr` is rethrown via the
   // rejection-return below if every Lang fails, and the function returns
   // `{ valid: true }` from inside the try the moment any Lang accepts the
   // pattern. Pattern is the deliberate cross-grammar acceptance shape per
   // mmnto-ai/totem#1654.
+  const langs = resolveAstGrepLangs(fileGlobs);
+  let lastErr: unknown = undefined;
   for (const lang of langs) {
     try {
       const emptyRoot = parse(lang, '');
       // findAll accepts both string patterns and NapiConfig objects.
       emptyRoot.root().findAll(pattern as string);
       return { valid: true };
+      // totem-context: see preamble — collect-and-rethrow per #1654 cross-grammar accept
     } catch (err) {
-      lastErr = err;
+      lastErr = err; // totem-context: collected; rejection-return below uses it
     }
   }
   // All Langs rejected — surface the last failure with the same
