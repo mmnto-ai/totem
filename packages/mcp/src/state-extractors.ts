@@ -38,6 +38,7 @@ const FIXED_GROUP_PACKAGES = [
   '@mmnto/cli',
   '@mmnto/mcp',
   '@mmnto/pack-agent-security',
+  '@mmnto/pack-rust-architecture',
 ] as const;
 
 // ─── Git state ─────────────────────────────────────────────────────────────
