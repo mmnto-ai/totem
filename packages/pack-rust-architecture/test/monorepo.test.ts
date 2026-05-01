@@ -6,7 +6,7 @@ import { readJsonSafe } from '@mmnto/totem';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 
-describe('@totem/pack-rust-architecture monorepo integration', () => {
+describe('@mmnto/pack-rust-architecture monorepo integration', () => {
   it('enforces package is in the core changesets fixed group', () => {
     const config = readJsonSafe<{ fixed?: string[][] }>(
       path.join(REPO_ROOT, '.changeset', 'config.json'),
@@ -15,7 +15,7 @@ describe('@totem/pack-rust-architecture monorepo integration', () => {
     expect(config.fixed).toBeDefined();
     expect(config.fixed).toBeInstanceOf(Array);
 
-    const packName = '@totem/pack-rust-architecture';
+    const packName = '@mmnto/pack-rust-architecture';
     const anchors = ['@mmnto/totem', '@mmnto/cli', '@mmnto/mcp'];
 
     const coreGroup = config.fixed?.find((group) =>

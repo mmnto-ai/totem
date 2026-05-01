@@ -8,7 +8,7 @@
  *
  * ADR-089 carves out a narrow exception: rules shipped by a pack with
  * `immutable: true` AND `severity: 'error'` cannot be locally downgraded
- * or archived. Security packs like `@totem/pack-agent-security` rely on
+ * or archived. Security packs like `@mmnto/pack-agent-security` rely on
  * this contract to guarantee that enforcement cannot be silently weakened
  * by a motivated local override.
  *

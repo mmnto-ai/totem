@@ -37,7 +37,8 @@ const FIXED_GROUP_PACKAGES = [
   '@mmnto/totem',
   '@mmnto/cli',
   '@mmnto/mcp',
-  '@totem/pack-agent-security',
+  '@mmnto/pack-agent-security',
+  '@mmnto/pack-rust-architecture',
 ] as const;
 
 // ─── Git state ─────────────────────────────────────────────────────────────

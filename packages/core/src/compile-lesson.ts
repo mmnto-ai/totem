@@ -174,7 +174,7 @@ export interface CompileLessonDeps {
    * Decision 3 (Layer 3 zero-tolerance), security rules that fail the smoke
    * gate are rejected outright with no retry. Reserved for callers that know
    * the source pack context (e.g., compiling lessons from a pack scoped
-   * `@totem/pack-agent-security` or any pack whose manifest carries an
+   * `@mmnto/pack-agent-security` or any pack whose manifest carries an
    * immutable severity contract). Today's `totem lesson compile` at repo
    * level does not set this; a future pack-build command will. Defaults to
    * false; security zero-tolerance is gated on an affirmative caller assertion.

@@ -45,7 +45,7 @@ function extractRuleBPattern(): string {
   return rule.pattern;
 }
 
-describe('@totem/pack-agent-security domain-blocklist parity', () => {
+describe('@mmnto/pack-agent-security domain-blocklist parity', () => {
   const ruleARegex = extractRuleAConstraintRegex();
   const ruleBPattern = extractRuleBPattern();
 

@@ -94,7 +94,7 @@ function runRule(rule: CompiledRule, content: string, ext = '.ts'): RuleMatch[] 
   );
 }
 
-describe('@totem/pack-agent-security rule content', () => {
+describe('@mmnto/pack-agent-security rule content', () => {
   it('ships exactly the current rule set (drift guard)', () => {
     // Fail loudly if someone adds or removes a rule without updating this test.
     // PR1 shipped 2 rules (#1486 + #1487). PR2 added 3 (#1488 ast-grep, #1488

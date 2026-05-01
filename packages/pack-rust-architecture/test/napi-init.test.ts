@@ -9,7 +9,7 @@ import type { PackRegistrationAPI } from '@mmnto/totem';
 const PACK_ROOT = path.resolve(__dirname, '..');
 const require = createRequire(import.meta.url);
 
-describe('@totem/pack-rust-architecture napi side-channel', () => {
+describe('@mmnto/pack-rust-architecture napi side-channel', () => {
   it('register.cjs side-channel makes parse(rust, ...) work after invocation (mmnto-ai/totem#1774 v0.1 pattern)', () => {
     const mod = require(PACK_ROOT) as {
       default?: (api: PackRegistrationAPI) => void;

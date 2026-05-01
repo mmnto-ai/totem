@@ -4,13 +4,13 @@
 
 # Lesson — GCA decline protocol: Pack publish-flips and `workspace:*` references
 
-**Context:** PR #1780 flipped `@totem/pack-rust-architecture` from `private: true` to `private: false` (one-line change) to unblock ADR-097 § Stage 1's alpha-pilot consumer trigger (`liquid-city` consuming the pack via `extends:`). GCA flagged the flip on two grounds — both declined.
+**Context:** PR #1780 flipped `@mmnto/pack-rust-architecture` from `private: true` to `private: false` (one-line change) to unblock ADR-097 § Stage 1's alpha-pilot consumer trigger (`liquid-city` consuming the pack via `extends:`). GCA flagged the flip on two grounds — both declined.
 
 ## Decline 1 — "Security-sensitive packages must remain private until Sigstore signing exists"
 
 GCA cited a "General Rule" requiring packages of architectural-governance content to remain `private: true` until cryptographic signing infrastructure exists.
 
-**Why declined:** Hallucinated rule citation. Zero hits for `private: true | cryptographic | Sigstore | signing` anywhere in `.gemini/styleguide.md` at the time of the review. The Sigstore + in-toto verification gate is tracked separately in `mmnto-ai/totem#1492` and is open / tier-2 / pre-implementation. Alpha-pilot publishes during ADR-097 § Stage 1 are explicitly exempted in the canonical gating ticket (`mmnto-ai/totem#1779`) — the exemption is the deliberate strategic decision per dev-Gemini synthesis 2026-05-01: "alpha-soak inside a workspace vacuum is deferred friction, not validation." When `#1492` ships, both `@totem/pack-*` packages re-flow through the gate as part of normal pack-publish discipline.
+**Why declined:** Hallucinated rule citation. Zero hits for `private: true | cryptographic | Sigstore | signing` anywhere in `.gemini/styleguide.md` at the time of the review. The Sigstore + in-toto verification gate is tracked separately in `mmnto-ai/totem#1492` and is open / tier-2 / pre-implementation. Alpha-pilot publishes during ADR-097 § Stage 1 are explicitly exempted in the canonical gating ticket (`mmnto-ai/totem#1779`) — the exemption is the deliberate strategic decision per dev-Gemini synthesis 2026-05-01: "alpha-soak inside a workspace vacuum is deferred friction, not validation." When `#1492` ships, both `@mmnto/pack-*` packages re-flow through the gate as part of normal pack-publish discipline.
 
 ## Decline 2 — "`workspace:*` reference produces invalid registry package"
 

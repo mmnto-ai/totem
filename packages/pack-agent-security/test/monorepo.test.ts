@@ -6,7 +6,7 @@ import { readJsonSafe } from '@mmnto/totem';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 
-describe('@totem/pack-agent-security monorepo integration', () => {
+describe('@mmnto/pack-agent-security monorepo integration', () => {
   it('enforces package is in the core changesets fixed group', () => {
     const config = readJsonSafe<{ fixed?: string[][] }>(
       path.join(REPO_ROOT, '.changeset', 'config.json'),
@@ -15,10 +15,7 @@ describe('@totem/pack-agent-security monorepo integration', () => {
     expect(config.fixed).toBeDefined();
     expect(config.fixed).toBeInstanceOf(Array);
 
-    // totem-context: `@totem/` scope is intentional per ADR-089 + Proposal 227 —
-    // Engine packages (@mmnto) and Ecosystem packs (@totem) live under different scopes
-    // by design. Shield will flag this as a scope mismatch; the flag is a false positive.
-    const packName = '@totem/pack-agent-security';
+    const packName = '@mmnto/pack-agent-security';
     const anchors = ['@mmnto/totem', '@mmnto/cli', '@mmnto/mcp'];
 
     // Find the fixed group that holds the core anchors. The pack must live in that same group

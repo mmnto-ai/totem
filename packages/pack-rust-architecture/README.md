@@ -1,6 +1,6 @@
-# @totem/pack-rust-architecture
+# @mmnto/pack-rust-architecture
 
-Baseline architectural lessons for Rust + Bevy ECS consumers. ADR-097 Stage 1 pilot under the `@totem` scope (sister to `@totem/pack-agent-security`).
+Baseline architectural lessons for Rust + Bevy ECS consumers. ADR-097 Stage 1 pilot under the `@mmnto` scope (sister to `@mmnto/pack-agent-security`).
 
 ## Status
 
@@ -42,11 +42,11 @@ Add to `totem.config.ts`:
 
 ```typescript
 extends: [
-  '@totem/pack-rust-architecture',
+  '@mmnto/pack-rust-architecture',
 ],
 ```
 
-Plus `pnpm add -D -w @totem/pack-rust-architecture` per ADR-085 Layer 1 adoption.
+Plus `pnpm add -D -w @mmnto/pack-rust-architecture` per ADR-085 Layer 1 adoption.
 
 ## Substrate gap (v0.1)
 

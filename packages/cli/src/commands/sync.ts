@@ -90,7 +90,7 @@ export async function syncCommand(options: {
 
     // Emit `.totem/installed-packs.json` for boot-time pack registration
     // (mmnto-ai/totem#1768, ADR-097 § 10). Resolved from the deduplicated
-    // union of `package.json` `@totem/pack-*` deps + `totem.config.ts`
+    // union of `package.json` `@mmnto/pack-*` deps + `totem.config.ts`
     // `extends` array. Mismatch surfaces (dep without extends, extends
     // without dep, missing peerDependencies) emit per-pack warnings;
     // resolved entries are written to the manifest atomically.

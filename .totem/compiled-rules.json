@@ -12658,10 +12658,10 @@
       "reason": "Detecting multiple dynamic imports from the same module requires multi-statement analysis across the function/block scope — a single-pattern rule cannot see sibling import() calls to determine if they share the same module specifier."
     },
     {
-      "hash": "d33ccaf558708b35",
+      "hash": "0a791d1e03297a1b",
       "title": "Lesson — GCA decline protocol: Pack publish-flips",
       "reasonCode": "out-of-scope",
-      "reason": "Lesson describes a procedural/architectural protocol for handling GCA review declines — updating styleguide, capturing lessons, and posting consolidated comments. There is no detectable code pattern to match; the guidance is entirely about human/agent workflow conventions."
+      "reason": "Lesson describes a procedural/architectural protocol for handling code review declines (updating styleguide, posting consolidated comments, capturing lessons). There is no detectable code pattern — the lesson governs human and agent workflow, not source code structure."
     }
   ]
 }

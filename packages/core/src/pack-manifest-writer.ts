@@ -2,7 +2,7 @@
  * `installed-packs.json` writer (mmnto-ai/totem#1768, Step 4).
  *
  * Walks two source surfaces — the consumer's `package.json` dependencies
- * for `@totem/pack-*` entries, and the consumer's `totem.config.ts`
+ * for `@mmnto/pack-*` entries, and the consumer's `totem.config.ts`
  * `extends` array — deduplicates, resolves each pack's installed path
  * via npm/pnpm semantics, and writes `.totem/installed-packs.json` for
  * `pack-discovery.ts:loadInstalledPacks()` to consume at boot.
@@ -81,10 +81,10 @@ export interface ResolveInstalledPacksInput {
 
 // ─── Resolver ───────────────────────────────────────
 
-const PACK_NAME_PREFIX = '@totem/pack-';
+const PACK_NAME_PREFIX = '@mmnto/pack-';
 
 /**
- * Compute the deduplicated union of `package.json` `@totem/pack-*` deps
+ * Compute the deduplicated union of `package.json` `@mmnto/pack-*` deps
  * and `totem.config.ts` `extends` entries. Returns the manifest payload
  * shape ready for `installed-packs.json` plus per-pack warnings for any
  * surface mismatch.

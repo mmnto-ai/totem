@@ -7,8 +7,8 @@
       "@mmnto/totem",
       "@mmnto/cli",
       "@mmnto/mcp",
-      "@totem/pack-agent-security",
-      "@totem/pack-rust-architecture"
+      "@mmnto/pack-agent-security",
+      "@mmnto/pack-rust-architecture"
     ]
   ],
   "linked": [],

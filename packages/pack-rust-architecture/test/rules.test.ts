@@ -39,7 +39,7 @@ function bootEngineWithPack(): void {
     inMemoryPacks: [
       {
         pack: {
-          name: '@totem/pack-rust-architecture',
+          name: '@mmnto/pack-rust-architecture',
           resolvedPath: PACK_ROOT,
           declaredEngineRange: '^1.22.0',
         },
@@ -67,7 +67,7 @@ function ruleSource(rule: CompiledRule): AstGrepRule {
   return source;
 }
 
-describe('@totem/pack-rust-architecture compiled rules — runtime substrate integration', () => {
+describe('@mmnto/pack-rust-architecture compiled rules — runtime substrate integration', () => {
   beforeAll(() => {
     bootEngineWithPack();
   });

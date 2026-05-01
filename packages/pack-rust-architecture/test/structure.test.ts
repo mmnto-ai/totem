@@ -7,7 +7,7 @@ import { CompiledRulesFileSchema, readJsonSafe } from '@mmnto/totem';
 
 const PACK_ROOT = path.resolve(__dirname, '..');
 
-describe('@totem/pack-rust-architecture structure', () => {
+describe('@mmnto/pack-rust-architecture structure', () => {
   it('compiled-rules.json matches canonical schema with a rules array', () => {
     const manifest = readJsonSafe(
       path.join(PACK_ROOT, 'compiled-rules.json'),
@@ -86,8 +86,8 @@ describe('@totem/pack-rust-architecture structure', () => {
     // (external); devDeps cover @mmnto/totem (workspace), @vscode/tree-sitter-wasm
     // (build-time WASM source), and vitest. @mmnto/totem is intentionally NOT
     // a peerDep — pack-rust-architecture lives in the changesets `fixed`
-    // group with @mmnto/totem (and the rest of the @mmnto/* + @totem/*
-    // cohort), so version harmony is guaranteed at publish time. Declaring
+    // group with @mmnto/totem (and the rest of the @mmnto/* cohort), so
+    // version harmony is guaranteed at publish time. Declaring
     // @mmnto/totem as a peerDep AS WELL as a fixed-group member would create
     // a circular constraint on every minor bump, pre-empting the cluster to
     // a major bump (mmnto-ai/totem#1776 wiggle on PR #1775's first auto-cut).

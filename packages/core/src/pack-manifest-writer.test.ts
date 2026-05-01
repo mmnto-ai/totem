@@ -83,27 +83,27 @@ function makeConfig(extendsList: readonly string[] | undefined): TotemConfig {
 describe('resolveInstalledPacks: union of deps + extends', () => {
   it('resolves a pack present in both deps and extends with no warning', () => {
     const root = makeTmpRoot();
-    writeFixturePack(root, '@totem/pack-fake', '^1.19.0');
+    writeFixturePack(root, '@mmnto/pack-fake', '^1.19.0');
     const result = resolveInstalledPacks({
       projectRoot: root,
-      config: makeConfig(['@totem/pack-fake']),
-      packageJsonDeps: { '@totem/pack-fake': '0.1.0' },
+      config: makeConfig(['@mmnto/pack-fake']),
+      packageJsonDeps: { '@mmnto/pack-fake': '0.1.0' },
     });
     expect(result.warnings).toEqual([]);
     expect(result.resolved).toHaveLength(1);
-    expect(result.resolved[0]?.name).toBe('@totem/pack-fake');
+    expect(result.resolved[0]?.name).toBe('@mmnto/pack-fake');
     expect(result.resolved[0]?.declaredEngineRange).toBe('^1.19.0');
   });
 
   it('emits dep-only warning when pack is in deps but not extends', () => {
     const root = makeTmpRoot();
-    writeFixturePack(root, '@totem/pack-orphan-dep', '^1.19.0');
+    writeFixturePack(root, '@mmnto/pack-orphan-dep', '^1.19.0');
     const result = resolveInstalledPacks({
       projectRoot: root,
       config: makeConfig([]),
-      packageJsonDeps: { '@totem/pack-orphan-dep': '0.1.0' },
+      packageJsonDeps: { '@mmnto/pack-orphan-dep': '0.1.0' },
     });
-    expect(result.warnings).toEqual([{ name: '@totem/pack-orphan-dep', reason: 'dep-only' }]);
+    expect(result.warnings).toEqual([{ name: '@mmnto/pack-orphan-dep', reason: 'dep-only' }]);
     expect(result.resolved).toEqual([]);
   });
 
@@ -111,28 +111,28 @@ describe('resolveInstalledPacks: union of deps + extends', () => {
     const root = makeTmpRoot();
     const result = resolveInstalledPacks({
       projectRoot: root,
-      config: makeConfig(['@totem/pack-orphan-extends']),
+      config: makeConfig(['@mmnto/pack-orphan-extends']),
       packageJsonDeps: {},
     });
     expect(result.warnings).toEqual([
-      { name: '@totem/pack-orphan-extends', reason: 'extends-only' },
+      { name: '@mmnto/pack-orphan-extends', reason: 'extends-only' },
     ]);
     expect(result.resolved).toEqual([]);
   });
 
   it('emits not-a-pack warning when pack lacks peerDependencies[@mmnto/totem]', () => {
     const root = makeTmpRoot();
-    writeFixturePack(root, '@totem/pack-broken', undefined);
+    writeFixturePack(root, '@mmnto/pack-broken', undefined);
     const result = resolveInstalledPacks({
       projectRoot: root,
-      config: makeConfig(['@totem/pack-broken']),
-      packageJsonDeps: { '@totem/pack-broken': '0.1.0' },
+      config: makeConfig(['@mmnto/pack-broken']),
+      packageJsonDeps: { '@mmnto/pack-broken': '0.1.0' },
     });
-    expect(result.warnings).toEqual([{ name: '@totem/pack-broken', reason: 'not-a-pack' }]);
+    expect(result.warnings).toEqual([{ name: '@mmnto/pack-broken', reason: 'not-a-pack' }]);
     expect(result.resolved).toEqual([]);
   });
 
-  it('ignores non-pack dependencies (no @totem/pack- prefix)', () => {
+  it('ignores non-pack dependencies (no @mmnto/pack- prefix)', () => {
     const root = makeTmpRoot();
     const result = resolveInstalledPacks({
       projectRoot: root,
@@ -145,17 +145,17 @@ describe('resolveInstalledPacks: union of deps + extends', () => {
 
   it('returns sorted output (alphabetical by pack name)', () => {
     const root = makeTmpRoot();
-    writeFixturePack(root, '@totem/pack-zulu', '^1.19.0');
-    writeFixturePack(root, '@totem/pack-alpha', '^1.19.0');
+    writeFixturePack(root, '@mmnto/pack-zulu', '^1.19.0');
+    writeFixturePack(root, '@mmnto/pack-alpha', '^1.19.0');
     const result = resolveInstalledPacks({
       projectRoot: root,
-      config: makeConfig(['@totem/pack-zulu', '@totem/pack-alpha']),
+      config: makeConfig(['@mmnto/pack-zulu', '@mmnto/pack-alpha']),
       packageJsonDeps: {
-        '@totem/pack-zulu': '0.1.0',
-        '@totem/pack-alpha': '0.1.0',
+        '@mmnto/pack-zulu': '0.1.0',
+        '@mmnto/pack-alpha': '0.1.0',
       },
     });
-    expect(result.resolved.map((p) => p.name)).toEqual(['@totem/pack-alpha', '@totem/pack-zulu']);
+    expect(result.resolved.map((p) => p.name)).toEqual(['@mmnto/pack-alpha', '@mmnto/pack-zulu']);
   });
 });
 
@@ -167,7 +167,7 @@ describe('writeInstalledPacksManifest', () => {
       version: 1,
       packs: [
         {
-          name: '@totem/pack-fake',
+          name: '@mmnto/pack-fake',
           resolvedPath: '/fake/path',
           declaredEngineRange: '^1.19.0',
         },
@@ -180,7 +180,7 @@ describe('writeInstalledPacksManifest', () => {
     const parsed = JSON.parse(raw);
     const validation = InstalledPacksManifestSchema.safeParse(parsed);
     expect(validation.success).toBe(true);
-    expect(validation.success && validation.data.packs[0]?.name).toBe('@totem/pack-fake');
+    expect(validation.success && validation.data.packs[0]?.name).toBe('@mmnto/pack-fake');
   });
 
   it('creates the totemDir if it does not exist', () => {

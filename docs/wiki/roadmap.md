@@ -44,9 +44,9 @@ Strategic research not currently scoped to 1.16.0:
 
 ### 1.15.0: Pack Distribution (2026-04-20)
 
-The first shippable Totem pack plus the compile-hardening and zero-trust substrate that makes packs safe to distribute. Published `@mmnto/cli@1.15.0`, `@mmnto/totem@1.15.0`, `@mmnto/mcp@1.15.0` to npm on 2026-04-20 PM. `@totem/pack-agent-security` stays workspace-private pending #1492 Sigstore signing (tracked as #1609).
+The first shippable Totem pack plus the compile-hardening and zero-trust substrate that makes packs safe to distribute. Published `@mmnto/cli@1.15.0`, `@mmnto/totem@1.15.0`, `@mmnto/mcp@1.15.0` to npm on 2026-04-20 PM. `@mmnto/pack-agent-security` stays workspace-private pending #1492 Sigstore signing (tracked as #1609).
 
-- **Pack Distribution:** `@totem/pack-agent-security` flagship pack (5 immutable security rules covering unauthorized process spawning, dynamic code evaluation, network exfiltration, obfuscated string assembly), `totem install pack/<name>` command, `pack-merge` primitive refusing immutable downgrade, content-hash substrate across TypeScript and bash.
+- **Pack Distribution:** `@mmnto/pack-agent-security` flagship pack (5 immutable security rules covering unauthorized process spawning, dynamic code evaluation, network exfiltration, obfuscated string assembly), `totem install pack/<name>` command, `pack-merge` primitive refusing immutable downgrade, content-hash substrate across TypeScript and bash.
 - **Zero-trust default (ADR-089):** Pipeline 2 and Pipeline 3 LLM-generated rules ship `unverified: true` unconditionally; `totem rule promote <hash>` atomic activation CLI; Pipeline 1 (manual) keeps its conditional semantics.
 - **Compile hardening (ADR-088 Phase 1):** Layer 3 verify-retry, bidirectional smoke gate (`badExample` + `goodExample`), `archivedAt` round-trip preservation, 9-value `NonCompilableReasonCodeSchema` enum, `totem doctor` stale-rule + grandfathered-rule advisories.
 - **Platform:** Compound ast-grep rules (ADR-087, from Proposal 226), Windows shell-injection fix in `safeExec` via `cross-spawn.sync`, Cross-Repo Context Mesh, standalone binaries on darwin-arm64 / linux-x64 / win32-x64.
@@ -67,7 +67,7 @@ Eight patch releases over five days (2026-04-22 to 2026-04-26) closing the LC-ve
 
 ### 1.14.x: Foundation + Pack Substrate
 
-Fourteen releases over ten days (2026-04-09 to 2026-04-19). Headline foundation work in 1.14.0, a four-P0 governance sweep across 1.14.3 through 1.14.5, quality sweep + capstone in 1.14.6 and 1.14.7, perf follow-up in 1.14.8, precision + bundle release on 2026-04-15, ADR-088 Phase 1 substrate + `@totem/pack-agent-security` flagship pack in 1.14.11-13.
+Fourteen releases over ten days (2026-04-09 to 2026-04-19). Headline foundation work in 1.14.0, a four-P0 governance sweep across 1.14.3 through 1.14.5, quality sweep + capstone in 1.14.6 and 1.14.7, perf follow-up in 1.14.8, precision + bundle release on 2026-04-15, ADR-088 Phase 1 substrate + `@mmnto/pack-agent-security` flagship pack in 1.14.11-13.
 
 - **1.14.0** (2026-04-09): Cross-Repo Context Mesh (#1295), LLM Context Caching opt-in preview (#1292), `/preflight` v2 design-doc gate (#1296).
 - **1.14.1** (2026-04-11): Hotfix Sweep and Phase 1 Papercuts. Nine PRs including Pipeline 5 sanity gate, compile prune no-op fix, tilde-fence support.
@@ -80,7 +80,7 @@ Fourteen releases over ten days (2026-04-09 to 2026-04-19). Headline foundation 
 - **1.14.8** (2026-04-14): Perf Follow-up. `cwd` threading (#1401), batch upgrade hashes (#1401), PR template enforcement (#1402).
 - **1.14.9** (2026-04-15): The Precision Engine. Compound ast-grep rule support (#1410, #1412, #1415), compile-time smoke gate, `badExample` requirement (#1420) closing the LLM-hallucination loop.
 - **1.14.10** (2026-04-15): The Bundle Release. Shell-orchestrator `{model}` token RCE fix (#1429), Pipeline 1 compound rule authoring + fail-loud fixes in git.ts and rule-engine.ts (#1454).
-- **1.14.11** (2026-04-17 - 2026-04-18): Pre-1.15-review Phase B first wave. `@totem/pack-agent-security` scaffold (#1503), ADR-088 Phase 1 Layer 3 verify-retry (#1513), immutable severity flag + pack-merge primitive (#1510, #1515), `totem install pack/<name>` (#1516). `--force` / `--no-force` content-hash stamping (#1531).
+- **1.14.11** (2026-04-17 - 2026-04-18): Pre-1.15-review Phase B first wave. `@mmnto/pack-agent-security` scaffold (#1503), ADR-088 Phase 1 Layer 3 verify-retry (#1513), immutable severity flag + pack-merge primitive (#1510, #1515), `totem install pack/<name>` (#1516). `--force` / `--no-force` content-hash stamping (#1531).
 - **1.14.12** (2026-04-18): ADR-088 Phase 1 Layers 3+4 substrate. `unverified` flag on `CompiledRule` (#1544), `nonCompilable` 4-tuple with `NonCompilableReasonCodeSchema` enum (9 values), Read/Write schema split, security zero-tolerance (#1548), `--verbose` layer trace + `totem doctor` stale-rule advisory (#1549). Five security rules shipped on the flagship pack (#1521, #1522).
 - **1.14.13** (2026-04-19): RuleEngineContext thread-through. `fix(core)` removes `setCoreLogger` / `resetShieldContextWarning` module-level state in favor of `RuleEngineContext` threaded through `applyRulesToAdditions`, `applyAstRulesToAdditions`, `applyRules`, `extractJustification` (#1553). Closes the #1441 shared-mutable-global concurrency hazard. Inline archive of over-broad `TotemError($MSG, $$$REST)` rule (`4b091a1bc7d286d6`) via postmerge #1568.
 

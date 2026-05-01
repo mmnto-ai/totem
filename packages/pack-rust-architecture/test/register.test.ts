@@ -9,7 +9,7 @@ import type { PackRegistrationAPI, SupportedLanguage } from '@mmnto/totem';
 const PACK_ROOT = path.resolve(__dirname, '..');
 const require = createRequire(import.meta.url);
 
-describe('@totem/pack-rust-architecture register.cjs', () => {
+describe('@mmnto/pack-rust-architecture register.cjs', () => {
   it('default-exports a synchronous register callback', () => {
     const mod = require(PACK_ROOT) as {
       default?: unknown;
