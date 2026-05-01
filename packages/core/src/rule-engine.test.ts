@@ -10,6 +10,7 @@ import type {
   RuleEventCallback,
   RuleEventContext,
 } from './compiler-schema.js';
+import { TotemParseError } from './errors.js';
 import {
   applyAstRulesToAdditions,
   applyRulesToAdditions,
@@ -824,10 +825,26 @@ describe('applyAstRulesToAdditions fail-loud on unmapped extension (mmnto-ai/tot
 
     // Pre-#1653 this would silently skip with no signal — the rule
     // intended to fire on .py files but `extensionToLanguage('.py')`
-    // returns undefined. Now: fail loud naming the rule.
-    await expect(applyAstRulesToAdditions(ctx, [rule], additions, tmpDir)).rejects.toThrowError(
-      /AST rule 'py-rule-hash'.*scoped to.*extension '\.py'.*Install the pack/,
+    // returns undefined. Now: fail loud via TotemParseError. Capture the
+    // thrown error so we can assert both `message` (rule identity) and
+    // `recoveryHint` (install-the-pack guidance) — `toThrowError(regex)`
+    // resolves to void and can't reach the recoveryHint property.
+    let caught: unknown;
+    try {
+      await applyAstRulesToAdditions(ctx, [rule], additions, tmpDir);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(TotemParseError);
+    const tpe = caught as TotemParseError;
+    // The `[Totem Error]` prefix is auto-prepended by the TotemError
+    // base class constructor (`errors.ts:40`). Asserting on the resolved
+    // message keeps the runtime contract visible at the test boundary.
+    expect(tpe.message).toMatch(/^\[Totem Error\]/);
+    expect(tpe.message).toMatch(
+      /AST rule 'py-rule-hash'.*scoped to.*extension '\.py'.*no Tree-sitter language is registered/,
     );
+    expect(tpe.recoveryHint).toMatch(/Install the pack that provides '\.py'/);
   });
 
   it('does NOT throw when an unmapped-extension file is in the diff but no rule scopes to it', async () => {

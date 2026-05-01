@@ -407,8 +407,14 @@ export async function applyAstRulesToAdditions(
         (r) => r.fileGlobs && r.fileGlobs.length > 0 && fileMatchesGlobs(file, r.fileGlobs),
       );
       if (ruleExpectingThisFile) {
-        throw new Error(
-          `[Totem Error] AST rule '${ruleExpectingThisFile.lessonHash}' (${ruleExpectingThisFile.lessonHeading}) is scoped to '${file}' (extension '${ext}') but no Tree-sitter language is registered for that extension. Install the pack that provides '${ext}' support, or correct the rule's fileGlobs.`,
+        // `[Totem Error]` prefix is auto-prepended by the TotemError base
+        // class constructor (`errors.ts:40`). The literal prefix is
+        // intentionally NOT in the message argument here — duplicating it
+        // would produce `[Totem Error] [Totem Error] AST rule ...` at
+        // runtime. See `errors.ts` for the prefix contract.
+        throw new TotemParseError(
+          `AST rule '${ruleExpectingThisFile.lessonHash}' (${ruleExpectingThisFile.lessonHeading}) is scoped to '${file}' (extension '${ext}') but no Tree-sitter language is registered for that extension`,
+          `Install the pack that provides '${ext}' support (e.g., \`@totem/pack-rust-architecture\` for '.rs'), or correct the rule's fileGlobs to exclude this extension.`,
         );
       }
       continue;
