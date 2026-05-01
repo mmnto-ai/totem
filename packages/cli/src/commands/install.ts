@@ -23,6 +23,32 @@
 
 import type { CompiledRule, CompiledRulesFile } from '@mmnto/totem';
 
+// ─── Pack pending-verification (mmnto-ai/totem#1684) ──────────
+
+/**
+ * The activation hint printed after a successful `totem install` so the user
+ * knows pack rules are inert until the first `totem lint` invokes the Stage 4
+ * verifier on their codebase. Exported as a named constant so tests can lock
+ * the string byte-exactly per #1684 design-doc Invariant #8.
+ */
+export const PACK_INSTALL_ACTIVATION_MESSAGE = 'Run `totem lint` to activate pack rules';
+
+/**
+ * Force every pack-supplied rule into `status: 'pending-verification'` for
+ * the duration of the install. The pack's authoring environment (cloud
+ * compile in particular) cannot have run Stage 4 against the consumer's
+ * codebase, so any status it shipped is meaningless on the consumer side.
+ * The first-lint promotion interceptor (mmnto-ai/totem#1684 T5) replaces
+ * this status on first encounter; subsequent runs read the recorded
+ * outcome from `.totem/verification-outcomes.json`.
+ *
+ * Returns a new array with new rule objects — never mutates the input.
+ * Pure so it can be unit-tested without staging the full install flow.
+ */
+export function stampPackRulesAsPending(rules: readonly CompiledRule[]): CompiledRule[] {
+  return rules.map((rule) => ({ ...rule, status: 'pending-verification' as const }));
+}
+
 // ─── Pure helpers (exported for unit tests) ─────────
 
 export function detectPackageManager(
@@ -388,7 +414,16 @@ export async function installCommand(target: string, options: InstallOptions = {
   }
 
   // ── 6. Merge rules into .totem/compiled-rules.json ──
-  mergeLocalRules(fs, totemDir, path.join(totemDir, 'compiled-rules.json'), packRulesFile, {
+  // Stamp pack rules as `pending-verification` BEFORE mergeRules sees them
+  // (mmnto-ai/totem#1684). The cloud-compile bootstrap path cannot have
+  // verified the pack's rules against the consumer's codebase, so the
+  // first `totem lint` runs the Stage 4 verifier and promotes each rule
+  // per its outcome. Until then they are inert at lint time.
+  const stampedPackRulesFile: CompiledRulesFile = {
+    ...packRulesFile,
+    rules: stampPackRulesAsPending(packRulesFile.rules),
+  };
+  mergeLocalRules(fs, totemDir, path.join(totemDir, 'compiled-rules.json'), stampedPackRulesFile, {
     mergeRules,
     CompiledRulesFileSchema,
     saveCompiledRulesFile,
@@ -413,6 +448,7 @@ export async function installCommand(target: string, options: InstallOptions = {
   }
 
   log.success(TAG, `Installed ${packName}.`);
+  log.info(TAG, PACK_INSTALL_ACTIVATION_MESSAGE);
 }
 
 // ─── Internal helpers (not exported) ────────────────
