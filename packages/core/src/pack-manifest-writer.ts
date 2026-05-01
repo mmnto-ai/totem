@@ -193,13 +193,12 @@ function defaultResolvePackPath(name: string, fromDir: string): string | undefin
   // We resolve from the project root rather than from this module — packs
   // live in the consumer's node_modules, not core's.
   const require = createRequire(path.join(fromDir, 'package.json'));
-  // totem-context: intentional cleanup — unresolvable pack returns undefined to flow into the `extends-only` warning path
   try {
     // Resolve to the package's package.json so the directory containing it
     // is the pack's package root. require.resolve(name) would land on the
     // package's `main` entry, which isn't what pack-discovery wants.
     const pkgJsonPath = require.resolve(`${name}/package.json`);
-    return path.dirname(pkgJsonPath);
+    return path.dirname(pkgJsonPath); // totem-context: intentional cleanup — unresolvable pack returns undefined to flow into the `extends-only` warning path
   } catch {
     return undefined;
   }
