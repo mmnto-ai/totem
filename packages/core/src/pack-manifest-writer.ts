@@ -94,12 +94,10 @@ const PACK_NAME_PREFIX = '@totem/pack-';
  */
 export function resolveInstalledPacks(input: ResolveInstalledPacksInput): PackResolutionResult {
   const deps = input.packageJsonDeps ?? readPackageJsonDeps(input.projectRoot);
-  // totem-context: `extends` is z.string() per TotemConfigSchema — entries are guaranteed strings, not fileGlobs union members
-  const extendsList = (input.config.extends ?? []).filter((name) =>
-    name.startsWith(PACK_NAME_PREFIX),
+  const extendsList = (input.config.extends ?? []).filter(
+    (name) => name.startsWith(PACK_NAME_PREFIX), // totem-context: `extends` is z.string() per TotemConfigSchema — entries are guaranteed strings, not fileGlobs union members
   );
-  // totem-context: Object.keys() always returns strings — not fileGlobs ast-grep object form
-  const depPackNames = Object.keys(deps).filter((name) => name.startsWith(PACK_NAME_PREFIX));
+  const depPackNames = Object.keys(deps).filter((name) => name.startsWith(PACK_NAME_PREFIX)); // totem-context: Object.keys() returns strings; not fileGlobs ast-grep object form
 
   const extendsSet = new Set(extendsList);
   const depsSet = new Set(depPackNames);
@@ -218,9 +216,8 @@ function readPeerEngineRange(packResolvedPath: string): string | undefined {
     return undefined;
   }
   if (typeof parsed !== 'object' || parsed === null) return undefined;
-  const peer = (parsed as { peerDependencies?: unknown }).peerDependencies;
+  const peer = (parsed as { peerDependencies?: unknown }).peerDependencies; // totem-context: parsed was narrowed via `typeof !== 'object' || === null` guard above; the cast is for index access into already-validated JSON
   if (typeof peer !== 'object' || peer === null) return undefined;
-  // totem-context: peer was just narrowed to a non-null object on the line above; the cast is for index access, and the result is runtime-checked via `typeof range === 'string'` below
-  const range = (peer as Record<string, unknown>)['@mmnto/totem'];
+  const range = (peer as Record<string, unknown>)['@mmnto/totem']; // totem-context: peer was narrowed via `typeof !== 'object' || === null` guard above; the cast is for index access; result is runtime-checked via `typeof range === 'string'` below
   return typeof range === 'string' ? range : undefined;
 }
