@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { lookup as lookupChunker, registeredNames } from './chunkers/chunker-registry.js';
 import { TotemConfigError } from './errors.js';
 import { CustomSecretSchema } from './secrets.js';
 
@@ -26,22 +25,26 @@ const BUILTIN_CHUNK_STRATEGIES = [
 ] as const;
 
 /**
- * Runtime-validated `ChunkStrategy` schema. Replaces the previous closed
- * `z.enum([...])` per ADR-097 § 10 + mmnto-ai/totem#1769 — strategy
- * lookup goes through `chunker-registry.ts`, which is populated by
- * built-ins at module load and extended by Pack registration callbacks
- * during boot via `loadInstalledPacks()`.
+ * `ChunkStrategy` schema. Per ADR-097 § 10 + mmnto-ai/totem#1769 strategy
+ * lookup goes through `chunker-registry.ts` at runtime; this schema only
+ * shape-checks the input string.
  *
- * Validation surface: any string registered in the chunker registry
- * passes; everything else fails with an error message that lists the
- * registered set so the user can see what's actually valid.
+ * **Why not refine against the registry here?** Bootstrap chicken-and-egg
+ * (Gemini review of mmnto-ai/totem#1768 PR-A): config parse runs BEFORE
+ * `loadInstalledPacks()` populates the registry with pack-contributed
+ * strategies (the manifest is read AFTER config load by every command).
+ * A strict registry-check at parse time would crash `totem sync` on the
+ * very edit that adds the pack — user adds `@totem/pack-foo` to extends
+ * AND a target with `strategy: 'foo-strat'` in the same change, sync
+ * fails to parse the config, never writes installed-packs.json, never
+ * registers the pack. Forever stuck.
+ *
+ * The actual fail-loud happens at `createChunker(strategy)` in
+ * `chunkers/chunker.ts` — runtime lookup against the post-boot registry
+ * with a structured error naming the missing strategy. That's the right
+ * boundary because by then the registry IS populated.
  */
-export const ChunkStrategySchema = z.string().refine(
-  (value) => lookupChunker(value) !== undefined,
-  (value) => ({
-    message: `Unknown chunk strategy: '${value}'. Registered: ${registeredNames().join(', ')}. If '${value}' is provided by a pack, ensure the pack is in 'extends' and run \`totem sync\` to register it.`,
-  }),
-);
+export const ChunkStrategySchema = z.string().min(1);
 
 export const ContentTypeSchema = z.enum(['code', 'session_log', 'spec', 'lesson']);
 
