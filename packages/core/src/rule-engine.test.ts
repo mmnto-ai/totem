@@ -812,8 +812,9 @@ describe('matchesGlob', () => {
 // ─── Behavior change: ast-grep dispatch fail-loud (mmnto-ai/totem#1653) ──
 
 describe('applyAstRulesToAdditions fail-loud on unmapped extension (mmnto-ai/totem#1653)', () => {
+  // totem-context: test fixtures genuinely need async — they `await applyAstRulesToAdditions(...)` whose contract is async
   it('throws when an AST rule is scoped to an unregistered extension', async () => {
-    fs.writeFileSync(path.join(tmpDir, 'src', 'main.py'), 'print("x")\n');
+    fs.writeFileSync(path.join(tmpDir, 'src', 'main.py'), 'print("x")\n'); // totem-context: writing a python source fixture under tmpDir, not a git hook
     const rule = makeRule({
       engine: 'ast',
       astQuery: '(call_expression)',
@@ -836,7 +837,7 @@ describe('applyAstRulesToAdditions fail-loud on unmapped extension (mmnto-ai/tot
       caught = err;
     }
     expect(caught).toBeInstanceOf(TotemParseError);
-    const tpe = caught as TotemParseError;
+    const tpe = caught as TotemParseError; // totem-context: narrowing a thrown error after toBeInstanceOf — not parsing untrusted input
     // The `[Totem Error]` prefix is auto-prepended by the TotemError
     // base class constructor (`errors.ts:40`). Asserting on the resolved
     // message keeps the runtime contract visible at the test boundary.
@@ -847,9 +848,10 @@ describe('applyAstRulesToAdditions fail-loud on unmapped extension (mmnto-ai/tot
     expect(tpe.recoveryHint).toMatch(/Install the pack that provides '\.py'/);
   });
 
+  // totem-context: test fixture genuinely awaits async API
   it('does NOT throw when an unmapped-extension file is in the diff but no rule scopes to it', async () => {
-    fs.writeFileSync(path.join(tmpDir, 'src', 'main.py'), 'print("x")\n');
-    fs.writeFileSync(path.join(tmpDir, 'src', 'app.ts'), 'const x = 1;\n');
+    fs.writeFileSync(path.join(tmpDir, 'src', 'main.py'), 'print("x")\n'); // totem-context: writing a python source fixture under tmpDir, not a git hook
+    fs.writeFileSync(path.join(tmpDir, 'src', 'app.ts'), 'const x = 1;\n'); // totem-context: writing a typescript source fixture under tmpDir, not a git hook
 
     // Rule scoped to .ts only; .py file in the diff has no rule that
     // cares about it. Silent skip on the .py file is correct behavior —
@@ -873,8 +875,9 @@ describe('applyAstRulesToAdditions fail-loud on unmapped extension (mmnto-ai/tot
     );
   });
 
+  // totem-context: test fixture genuinely awaits async API
   it('does NOT throw when rule has no fileGlobs at all (rule applies everywhere by default)', async () => {
-    fs.writeFileSync(path.join(tmpDir, 'src', 'main.py'), 'print("x")\n');
+    fs.writeFileSync(path.join(tmpDir, 'src', 'main.py'), 'print("x")\n'); // totem-context: writing a python source fixture under tmpDir, not a git hook
     const rule = makeRule({
       engine: 'ast',
       astQuery: '(variable_declaration)',
