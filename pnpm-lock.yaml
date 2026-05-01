@@ -129,6 +129,9 @@ importers:
       safe-regex2:
         specifier: ^5.0.0
         version: 5.0.0
+      semver:
+        specifier: ^7.7.0
+        version: 7.7.4
       tree-sitter-javascript:
         specifier: ^0.25.0
         version: 0.25.0
@@ -160,6 +163,9 @@ importers:
       '@types/mdast':
         specifier: ^4.0.0
         version: 4.0.4
+      '@types/semver':
+        specifier: ^7.5.0
+        version: 7.7.1
       vitest:
         specifier: ^3.0.0
         version: 3.2.4(yaml@2.8.2)
@@ -1614,6 +1620,10 @@ packages:
 
   /@types/retry@0.12.0:
     resolution: {integrity: sha512-wWKOClTTiizcZhXnPY4wikVAwmdYHp8q6DmC+EJUzAMsycb7HB32Kh9RN4+0gExjmPmZSAQjgURXIGATPegAvA==}
+
+  /@types/semver@7.7.1:
+    resolution: {integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==}
+    dev: true
 
   /@types/unist@3.0.3:
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
@@ -4411,7 +4421,6 @@ packages:
     resolution: {integrity: sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA==}
     engines: {node: '>=10'}
     hasBin: true
-    dev: true
 
   /send@1.2.1:
     resolution: {integrity: sha512-1gnZf7DFcoIcajTjTwjwuDjzuz4PPcY2StKPlsGAQ1+YH20IRVrBaXSWmdjowTJ6u8Rc01PoYOGHXfP1mYcZNQ==}

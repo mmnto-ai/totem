@@ -79,6 +79,39 @@ export type {
 // Chunkers
 export type { Chunker } from './chunkers/chunker.js';
 export { createChunker } from './chunkers/chunker.js';
+export {
+  isBuiltin as isBuiltinChunkStrategy,
+  registeredNames as registeredChunkStrategies,
+} from './chunkers/chunker-registry.js';
+
+// ast-grep language registry public surface (mmnto-ai/totem#1653 + #1768,
+// ADR-097 § 10). The base AST classification exports — `SupportedLanguage`,
+// `extensionToLanguage`, `loadGrammar` — are re-exported below in the
+// "AST classification" section to preserve historical ordering.
+export { isBuiltinExtension, registeredExtensions, registeredLanguages } from './ast-classifier.js';
+
+// Pack discovery substrate (mmnto-ai/totem#1768, ADR-097 § 10)
+export type {
+  InstalledPacksManifest,
+  LoadedPack,
+  LoadInstalledPacksOptions,
+  PackRegisterCallback,
+  PackRegistrationAPI,
+} from './pack-discovery.js';
+export {
+  InstalledPacksManifestSchema,
+  isEngineSealed,
+  loadedPacks,
+  loadInstalledPacks,
+} from './pack-discovery.js';
+
+// Pack manifest writer (mmnto-ai/totem#1768, Step 4)
+export type {
+  PackResolutionResult,
+  PackResolutionWarning,
+  ResolveInstalledPacksInput,
+} from './pack-manifest-writer.js';
+export { resolveInstalledPacks, writeInstalledPacksManifest } from './pack-manifest-writer.js';
 
 // Embedders
 export type { Embedder } from './embedders/embedder.js';

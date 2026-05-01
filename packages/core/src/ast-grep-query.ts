@@ -1,6 +1,7 @@
 import type { NapiConfig } from '@ast-grep/napi';
 import { Lang, parse } from '@ast-grep/napi';
 
+import { extensionToLanguage } from './ast-classifier.js';
 import { rethrowAsParseError } from './errors.js';
 
 // ─── Types ──────────────────────────────────────────
@@ -20,22 +21,41 @@ const AST_GREP_HINT =
 
 // ─── Language mapping ───────────────────────────────
 
-/** Map file extensions to ast-grep Lang enum. */
-function extensionToLang(ext: string): Lang | undefined {
-  switch (ext.toLowerCase()) {
-    case '.ts':
+/**
+ * Map our `SupportedLanguage` string (e.g., `'typescript'`) to the
+ * ast-grep `Lang` enum value (e.g., `Lang.TypeScript`). Built-in mappings
+ * only — pack-contributed languages flow through as their SupportedLanguage
+ * string, which `@ast-grep/napi` accepts as a `CustomLang` string per
+ * its `NapiLang = Lang | (string & {})` type. Pack registration is
+ * expected to also register a dynamic language with `@ast-grep/napi`'s
+ * `registerDynamicLanguage()` API for the same string to flow end-to-end.
+ */
+function supportedLanguageToNapiLang(lang: string): Lang | string {
+  switch (lang) {
+    case 'typescript':
       return Lang.TypeScript;
-    case '.tsx':
+    case 'tsx':
       return Lang.Tsx;
-    case '.js':
-    case '.mjs':
-    case '.cjs':
+    case 'javascript':
       return Lang.JavaScript;
-    case '.jsx':
-      return Lang.Tsx;
     default:
-      return undefined;
+      // Pack-contributed language — pass the string through. Caller passes
+      // it to `parse(napiLang, source)` which accepts CustomLang strings.
+      return lang;
   }
+}
+
+/**
+ * Map a file extension to the ast-grep dispatch language label. Registry-
+ * backed via `extensionToLanguage` from ast-classifier.ts (mmnto-ai/totem#1653,
+ * #1654) — built-in extensions map to napi `Lang` enum values; pack-
+ * registered extensions map to their NapiLang custom string per
+ * ADR-097 § 10.
+ */
+function extensionToLang(ext: string): Lang | string | undefined {
+  const supported = extensionToLanguage(ext);
+  if (!supported) return undefined;
+  return supportedLanguageToNapiLang(supported);
 }
 
 // ─── Core matching ──────────────────────────────────
