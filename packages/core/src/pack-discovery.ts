@@ -65,8 +65,17 @@ export const InstalledPacksManifestSchema = z
         .object({
           /** Pack package name as it appears in npm (e.g., `@totem/pack-rust-architecture`). */
           name: z.string().min(1),
-          /** Absolute filesystem path to the pack's package root. */
-          resolvedPath: z.string().min(1),
+          /**
+           * Absolute filesystem path to the pack's package root. Refined to
+           * `path.isAbsolute()` so a relative entry can't pass schema
+           * validation and then probe two different locations downstream
+           * (`existsSync` resolves from cwd, `require.resolve` from this
+           * module).
+           */
+          resolvedPath: z
+            .string()
+            .min(1)
+            .refine((value) => path.isAbsolute(value), 'resolvedPath must be an absolute path'),
           /** The pack's `peerDependencies['@mmnto/totem']` semver range, verbatim. */
           declaredEngineRange: z.string().min(1),
         })
@@ -310,6 +319,14 @@ function resolvePackCallback(
     );
   }
 
+  // Synchronous `require()` is mandated by ADR-097 § 5 Q5: pack
+  // registration runs at boot before the engine seal, and boot is
+  // synchronous. This means the pack's registration entry must be
+  // CommonJS-resolvable — either authored as CJS, or ESM packs must
+  // ship a CJS-compatible registration entry (e.g., a built
+  // `dist/register.cjs`). Pure-ESM registration entries will throw
+  // `ERR_REQUIRE_ESM` at boot. Async-boot support (`await import()`)
+  // would lift this constraint and is tracked separately.
   let mod: { default?: unknown; register?: unknown };
   try {
     mod = require(resolvedPath) as { default?: unknown; register?: unknown };
@@ -357,9 +374,15 @@ function resolveEngineVersion(): string {
   for (const candidate of ['../package.json', '../../package.json']) {
     try {
       const pkg = require(candidate) as { version?: unknown };
-      if (typeof pkg.version === 'string') return pkg.version; // totem-context: intentional cleanup — ENOENT on a candidate path is expected; the catch below falls through to the next candidate, and the sentinel return at function end handles the all-fail case
-    } catch {
-      continue; // totem-context: intentional cleanup — paired with directive on preceding line
+      if (typeof pkg.version === 'string') return pkg.version;
+    } catch (err) {
+      const code =
+        err instanceof Error && 'code' in err ? (err as NodeJS.ErrnoException).code : undefined;
+      if (code === 'ENOENT' || code === 'MODULE_NOT_FOUND') continue;
+      throw new Error(
+        `Failed to resolve engine version from '${candidate}'. The file exists but could not be read or parsed; check permissions and JSON syntax.`,
+        { cause: err instanceof Error ? err : new Error(String(err)) },
+      );
     }
   }
   // Fall back to a sentinel that won't satisfy any reasonable range —

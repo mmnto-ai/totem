@@ -118,6 +118,32 @@ describe('loadInstalledPacks: malformed manifest', () => {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
     }
   });
+
+  it('rejects manifest entries with a relative resolvedPath at the schema boundary', () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pack-discovery-test-'));
+    try {
+      const totemDir = path.join(tmpRoot, '.totem');
+      fs.mkdirSync(totemDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(totemDir, 'installed-packs.json'),
+        JSON.stringify({
+          version: 1,
+          packs: [
+            {
+              name: '@totem/pack-relative',
+              resolvedPath: 'node_modules/@totem/pack-relative',
+              declaredEngineRange: '^1.19.0',
+            },
+          ],
+        }),
+      );
+      expect(() => loadInstalledPacks({ projectRoot: tmpRoot, totemDir: '.totem' })).toThrowError(
+        /resolvedPath must be an absolute path/,
+      );
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('loadInstalledPacks: peerDependencies engine version mismatch', () => {
