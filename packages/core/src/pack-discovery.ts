@@ -63,7 +63,7 @@ export const InstalledPacksManifestSchema = z
     packs: z.array(
       z
         .object({
-          /** Pack package name as it appears in npm (e.g., `@totem/pack-rust-architecture`). */
+          /** Pack package name as it appears in npm (e.g., `@mmnto/pack-rust-architecture`). */
           name: z.string().min(1),
           /**
            * Absolute filesystem path to the pack's package root. Refined to

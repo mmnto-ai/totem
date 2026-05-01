@@ -130,12 +130,12 @@ describe('loadInstalledPacks: malformed manifest', () => {
           version: 1,
           packs: [
             {
-              name: '@totem/pack-rust',
+              name: '@mmnto/pack-rust',
               resolvedPath: path.resolve('/abs/a'),
               declaredEngineRange: '^1.19.0',
             },
             {
-              name: '@totem/pack-rust',
+              name: '@mmnto/pack-rust',
               resolvedPath: path.resolve('/abs/b'),
               declaredEngineRange: '^1.19.0',
             },
@@ -143,7 +143,7 @@ describe('loadInstalledPacks: malformed manifest', () => {
         }),
       );
       expect(() => loadInstalledPacks({ projectRoot: tmpRoot, totemDir: '.totem' })).toThrowError(
-        /duplicate pack entry '@totem\/pack-rust'/,
+        /duplicate pack entry '@mmnto\/pack-rust'/,
       );
     } finally {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
@@ -161,8 +161,8 @@ describe('loadInstalledPacks: malformed manifest', () => {
           version: 1,
           packs: [
             {
-              name: '@totem/pack-relative',
-              resolvedPath: 'node_modules/@totem/pack-relative',
+              name: '@mmnto/pack-relative',
+              resolvedPath: 'node_modules/@mmnto/pack-relative',
               declaredEngineRange: '^1.19.0',
             },
           ],
@@ -181,7 +181,7 @@ describe('loadInstalledPacks: peerDependencies engine version mismatch', () => {
   it('throws structured error naming pack name + declared range + actual engine version', () => {
     const fakeCallback: PackRegisterCallback = () => {};
     const fakePack: LoadedPack = {
-      name: '@totem/pack-fake',
+      name: '@mmnto/pack-fake',
       resolvedPath: '/fake/path',
       declaredEngineRange: '^2.0.0',
     };
@@ -191,14 +191,14 @@ describe('loadInstalledPacks: peerDependencies engine version mismatch', () => {
         inMemoryPacks: [{ pack: fakePack, callback: fakeCallback }],
       }),
     ).toThrowError(
-      /Pack '@totem\/pack-fake' requires @mmnto\/totem '\^2\.0\.0'.*running engine is 1\.21\.0/,
+      /Pack '@mmnto\/pack-fake' requires @mmnto\/totem '\^2\.0\.0'.*running engine is 1\.21\.0/,
     );
   });
 
   it('passes when engine version satisfies declared range', () => {
     const fakeCallback: PackRegisterCallback = () => {};
     const fakePack: LoadedPack = {
-      name: '@totem/pack-fake',
+      name: '@mmnto/pack-fake',
       resolvedPath: '/fake/path',
       declaredEngineRange: '^1.19.0',
     };
@@ -207,13 +207,13 @@ describe('loadInstalledPacks: peerDependencies engine version mismatch', () => {
       inMemoryPacks: [{ pack: fakePack, callback: fakeCallback }],
     });
     expect(packs).toHaveLength(1);
-    expect(packs[0]?.name).toBe('@totem/pack-fake');
+    expect(packs[0]?.name).toBe('@mmnto/pack-fake');
   });
 
   it('throws when declared range is invalid semver', () => {
     const fakeCallback: PackRegisterCallback = () => {};
     const fakePack: LoadedPack = {
-      name: '@totem/pack-fake',
+      name: '@mmnto/pack-fake',
       resolvedPath: '/fake/path',
       declaredEngineRange: 'not-a-semver-range',
     };
@@ -242,7 +242,7 @@ describe('loadInstalledPacks: pack callback registration', () => {
       api.registerLanguage('.rs', 'rust', () => '/fake/tree-sitter-rust.wasm');
     };
     const fakePack: LoadedPack = {
-      name: '@totem/pack-rust-architecture',
+      name: '@mmnto/pack-rust-architecture',
       resolvedPath: '/fake/path',
       declaredEngineRange: '^1.19.0',
     };
@@ -261,7 +261,7 @@ describe('loadInstalledPacks: pack callback registration', () => {
       api.registerChunkStrategy('rust-ast', FakeChunker);
     };
     const fakePack: LoadedPack = {
-      name: '@totem/pack-rust-architecture',
+      name: '@mmnto/pack-rust-architecture',
       resolvedPath: '/fake/path',
       declaredEngineRange: '^1.19.0',
     };
@@ -279,7 +279,7 @@ describe('loadInstalledPacks: pack callback registration', () => {
       api.registerChunkStrategy('async-strat', FakeChunker);
     }) as unknown as PackRegisterCallback;
     const fakePack: LoadedPack = {
-      name: '@totem/pack-async',
+      name: '@mmnto/pack-async',
       resolvedPath: '/fake/path',
       declaredEngineRange: '^1.19.0',
     };
@@ -303,7 +303,7 @@ describe('loadInstalledPacks: pack callback registration', () => {
       throw new Error('pack-side bug');
     };
     const fakePack: LoadedPack = {
-      name: '@totem/pack-broken',
+      name: '@mmnto/pack-broken',
       resolvedPath: '/fake/path',
       declaredEngineRange: '^1.19.0',
     };
@@ -318,7 +318,7 @@ describe('loadInstalledPacks: pack callback registration', () => {
     }
     expect(caught).toBeInstanceOf(Error);
     const outer = caught as Error;
-    expect(outer.message).toMatch(/Pack '@totem\/pack-broken' registration callback threw/);
+    expect(outer.message).toMatch(/Pack '@mmnto\/pack-broken' registration callback threw/);
     expect(outer.message).toMatch(/must be fixed or removed/);
     expect(outer.cause).toBeInstanceOf(Error);
     expect((outer.cause as Error).message).toBe('pack-side bug');
@@ -338,7 +338,7 @@ describe('loadInstalledPacks: pack callback registration', () => {
         inMemoryPacks: [
           {
             pack: {
-              name: '@totem/pack-a',
+              name: '@mmnto/pack-a',
               resolvedPath: '/a',
               declaredEngineRange: '^1.19.0',
             },
@@ -346,7 +346,7 @@ describe('loadInstalledPacks: pack callback registration', () => {
           },
           {
             pack: {
-              name: '@totem/pack-b',
+              name: '@mmnto/pack-b',
               resolvedPath: '/b',
               declaredEngineRange: '^1.19.0',
             },
@@ -358,7 +358,7 @@ describe('loadInstalledPacks: pack callback registration', () => {
       caught = err;
     }
     expect(caught).toBeInstanceOf(Error);
-    expect((caught as Error).message).toMatch(/Pack '@totem\/pack-b' registration callback threw/);
+    expect((caught as Error).message).toMatch(/Pack '@mmnto\/pack-b' registration callback threw/);
     expect(((caught as Error).cause as Error).message).toMatch(/already registered/);
   });
 
@@ -376,7 +376,7 @@ describe('loadInstalledPacks: pack callback registration', () => {
         inMemoryPacks: [
           {
             pack: {
-              name: '@totem/pack-a',
+              name: '@mmnto/pack-a',
               resolvedPath: '/a',
               declaredEngineRange: '^1.19.0',
             },
@@ -384,7 +384,7 @@ describe('loadInstalledPacks: pack callback registration', () => {
           },
           {
             pack: {
-              name: '@totem/pack-b',
+              name: '@mmnto/pack-b',
               resolvedPath: '/b',
               declaredEngineRange: '^1.19.0',
             },
@@ -396,7 +396,7 @@ describe('loadInstalledPacks: pack callback registration', () => {
       caught = err;
     }
     expect(caught).toBeInstanceOf(Error);
-    expect((caught as Error).message).toMatch(/Pack '@totem\/pack-b' registration callback threw/);
+    expect((caught as Error).message).toMatch(/Pack '@mmnto\/pack-b' registration callback threw/);
     expect(((caught as Error).cause as Error).message).toMatch(/already registered to language/);
   });
 });

@@ -1,4 +1,4 @@
-// @totem/pack-rust-architecture — ADR-097 § 10 registration entry.
+// @mmnto/pack-rust-architecture — ADR-097 § 10 registration entry.
 //
 // Synchronous CJS callback per ADR-097 § 5 Q5. Wires Rust into both engine
 // language paths so ast-grep rules scoped to `.rs` files dispatch correctly:

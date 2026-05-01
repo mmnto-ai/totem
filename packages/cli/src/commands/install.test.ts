@@ -31,7 +31,7 @@ describe('resolvePackName', () => {
 describe('isValidTarget', () => {
   it('accepts pack/<name> and pack/@scope/<name>', () => {
     expect(isValidTarget('pack/agent-security')).toBe(true);
-    expect(isValidTarget('pack/@totem/pack-agent-security')).toBe(true);
+    expect(isValidTarget('pack/@mmnto/pack-agent-security')).toBe(true);
   });
 
   it('rejects targets without the pack/ prefix', () => {
@@ -98,18 +98,18 @@ describe('resolveCompiledRulesExport', () => {
 
 describe('isInExtends', () => {
   it('returns true when the pack name appears inside a single-line extends array', () => {
-    const config = `export default { extends: ['@totem/pack-agent-security'] };`;
-    expect(isInExtends(config, '@totem/pack-agent-security')).toBe(true);
+    const config = `export default { extends: ['@mmnto/pack-agent-security'] };`;
+    expect(isInExtends(config, '@mmnto/pack-agent-security')).toBe(true);
   });
 
   it('returns true when the pack name appears inside a multi-line extends array', () => {
     const config = `export default {
   extends: [
-    '@totem/pack-agent-security',
+    '@mmnto/pack-agent-security',
     'my-other-pack',
   ],
 };`;
-    expect(isInExtends(config, '@totem/pack-agent-security')).toBe(true);
+    expect(isInExtends(config, '@mmnto/pack-agent-security')).toBe(true);
     expect(isInExtends(config, 'my-other-pack')).toBe(true);
   });
 

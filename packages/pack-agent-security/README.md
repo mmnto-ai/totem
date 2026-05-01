@@ -1,4 +1,4 @@
-# @totem/pack-agent-security
+# @mmnto/pack-agent-security
 
 Zero-Trust Agent Governance security pack for Totem. Flagship consumer of the Totem Pack Ecosystem (ADR-085) and the first production pack under the `@totem` scope.
 

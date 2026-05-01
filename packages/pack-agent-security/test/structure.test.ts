@@ -7,7 +7,7 @@ import { CompiledRulesFileSchema, readJsonSafe } from '@mmnto/totem';
 
 const PACK_ROOT = path.resolve(__dirname, '..');
 
-describe('@totem/pack-agent-security structure', () => {
+describe('@mmnto/pack-agent-security structure', () => {
   it('compiled-rules.json matches canonical schema with a rules array', () => {
     const manifest = readJsonSafe(
       path.join(PACK_ROOT, 'compiled-rules.json'),
@@ -41,7 +41,7 @@ describe('@totem/pack-agent-security structure', () => {
     }>(path.join(PACK_ROOT, 'package.json'));
 
     expect(pkg.exports).toBeDefined();
-    // Root export points at package.json so bare `require.resolve('@totem/pack-agent-security')`
+    // Root export points at package.json so bare `require.resolve('@mmnto/pack-agent-security')`
     // works in strict ESM contexts. GCA catch on #1503.
     expect(pkg.exports?.['.']).toBe('./package.json');
     expect(pkg.exports?.['./compiled-rules.json']).toBe('./compiled-rules.json');

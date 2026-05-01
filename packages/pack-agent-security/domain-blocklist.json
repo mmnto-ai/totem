@@ -10,5 +10,5 @@
     "anonfiles.com"
   ],
   "ipv4Strategy": "match-any-literal",
-  "note": "Authoritative source-of-truth for the network-exfil rule domain list. The rule regex is baked into compiled-rules.json at author time; parity.test.ts asserts every entry here appears in both rule regexes with the correct anchoring, and that every host in the rule regexes is accounted for here. When updating: add the entry, regenerate the regex fragment, and re-run `pnpm --filter @totem/pack-agent-security test` to confirm parity."
+  "note": "Authoritative source-of-truth for the network-exfil rule domain list. The rule regex is baked into compiled-rules.json at author time; parity.test.ts asserts every entry here appears in both rule regexes with the correct anchoring, and that every host in the rule regexes is accounted for here. When updating: add the entry, regenerate the regex fragment, and re-run `pnpm --filter @mmnto/pack-agent-security test` to confirm parity."
 }

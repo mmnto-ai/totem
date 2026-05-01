@@ -414,7 +414,7 @@ export async function applyAstRulesToAdditions(
         // runtime. See `errors.ts` for the prefix contract.
         throw new TotemParseError(
           `AST rule '${ruleExpectingThisFile.lessonHash}' (${ruleExpectingThisFile.lessonHeading}) is scoped to '${file}' (extension '${ext}') but no Tree-sitter language is registered for that extension`,
-          `Install the pack that provides '${ext}' support (e.g., \`@totem/pack-rust-architecture\` for '.rs'), or correct the rule's fileGlobs to exclude this extension.`,
+          `Install the pack that provides '${ext}' support (e.g., \`@mmnto/pack-rust-architecture\` for '.rs'), or correct the rule's fileGlobs to exclude this extension.`,
         );
       }
       continue;

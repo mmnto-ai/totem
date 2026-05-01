@@ -32,7 +32,7 @@ export const BUILTIN_CHUNK_STRATEGIES = [
  * `loadInstalledPacks()` populates the registry with pack-contributed
  * strategies (the manifest is read AFTER config load by every command).
  * A strict registry-check at parse time would crash `totem sync` on the
- * very edit that adds the pack — user adds `@totem/pack-foo` to extends
+ * very edit that adds the pack — user adds `@mmnto/pack-foo` to extends
  * AND a target with `strategy: 'foo-strat'` in the same change, sync
  * fails to parse the config, never writes installed-packs.json, never
  * registers the pack. Forever stuck.
@@ -358,7 +358,7 @@ export const TotemConfigSchema = z.object({
   /**
    * Optional: pack package names to extend rules from (ADR-085 + ADR-097).
    *
-   * Each entry is a pack name like `@totem/pack-rust-architecture`. The
+   * Each entry is a pack name like `@mmnto/pack-rust-architecture`. The
    * pack must also appear in the consumer's `package.json` dependencies
    * (or devDependencies) so npm/pnpm can resolve it. Pack-merge logic
    * (`packages/core/src/pack-merge.ts`) reads pack rules at lint time.

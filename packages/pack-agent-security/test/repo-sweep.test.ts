@@ -299,7 +299,7 @@ function keyFor(hash: string, file: string): string {
 
 // ─── Tests ──────────────────────────────────────────────
 
-describe('@totem/pack-agent-security Totem-repo FP sweep', () => {
+describe('@mmnto/pack-agent-security Totem-repo FP sweep', () => {
   const violations = sweep();
 
   // Per-file tallies for count-based allowlist comparison (CR-6).
