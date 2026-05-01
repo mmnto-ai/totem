@@ -330,6 +330,12 @@ export function validateAstGrepPattern(
   // message when all Langs reject it.
   const langs = resolveAstGrepLangs(fileGlobs);
   let lastErr: unknown = undefined;
+  // totem-context: try-each-Lang-then-collect-and-rethrow. The per-iteration
+  // catch is not silent degradation — `lastErr` is rethrown via the
+  // rejection-return below if every Lang fails, and the function returns
+  // `{ valid: true }` from inside the try the moment any Lang accepts the
+  // pattern. Pattern is the deliberate cross-grammar acceptance shape per
+  // mmnto-ai/totem#1654.
   for (const lang of langs) {
     try {
       const emptyRoot = parse(lang, '');
