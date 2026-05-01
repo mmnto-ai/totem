@@ -64,15 +64,25 @@ export async function runFirstLintPromote(options: RunFirstLintPromoteOptions): 
   const hasPending = manifest.rules.some((r) => r.status === 'pending-verification');
   if (!hasPending) return;
 
-  // Per-process caches mirror the compile-side wiring in compile.ts:668.
-  // We resolve the repo root + file list once and reuse them across rules.
-  let repoRootCache: string | undefined;
-  let filesCache: readonly string[] | undefined;
+  // Resolve the repo root eagerly (only after we know there's pending work)
+  // so the .totemignore + manifest-exclusion paths can be computed relative
+  // to it. Monorepo subpackages run lint with `cwd` and `configRoot` inside
+  // the package, but `git ls-files` returns paths relative to the actual
+  // repo root — so the manifest-exclusion set must use the same base or
+  // the manifest entry won't match and Stage 4 will end up scanning the
+  // compiled-rules file (false-positive matches against rules' own
+  // `badExample` text).
+  const repoRoot: string = safeExec('git', ['rev-parse', '--show-toplevel'], {
+    cwd,
+    env: { ...process.env, LC_ALL: 'C' },
+  });
 
-  const activeManifestPath = path.join(config.totemDir, COMPILED_RULES_FILE).replace(/\\/g, '/');
+  const activeManifestPath = path.relative(repoRoot, manifestPath).replace(/\\/g, '/');
   const manifestExclusionSet = new Set<string>([...STAGE4_MANIFEST_EXCLUSIONS, activeManifestPath]);
 
-  const ignorePath = path.join(cwd, '.totemignore');
+  // `.totemignore` lives at the repo root by convention (matches compile.ts:708).
+  // Resolving from `cwd` would miss the file when totem is run from a subpackage.
+  const ignorePath = path.join(repoRoot, '.totemignore');
   let ignoreContent = '';
   try {
     ignoreContent = await fs.promises.readFile(ignorePath, 'utf-8'); // totem-context: best-effort optional file; ENOENT means no directives — see the catch
@@ -88,16 +98,10 @@ export async function runFirstLintPromote(options: RunFirstLintPromoteOptions): 
     configExclude: configOverrides?.exclude,
   });
 
+  let filesCache: readonly string[] | undefined;
   const readFileCache = new Map<string, Promise<string>>();
 
   const verifier = async (rule: import('@mmnto/totem').CompiledRule) => {
-    if (repoRootCache === undefined) {
-      repoRootCache = safeExec('git', ['rev-parse', '--show-toplevel'], {
-        cwd,
-        env: { ...process.env, LC_ALL: 'C' },
-      });
-    }
-    const repoRoot = repoRootCache;
     if (filesCache === undefined) {
       const lsOutput: string = safeExec('git', ['ls-files', '-z', '--recurse-submodules'], {
         cwd: repoRoot,
