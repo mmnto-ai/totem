@@ -241,6 +241,7 @@ export function loadInstalledPacks(options: LoadInstalledPacksOptions = {}): rea
     // "callback threw."
     if (
       callbackResult !== null &&
+      // totem-context: null is excluded by the `!== null` guard on the line above; rule matcher only sees the `=== 'object'` token in isolation
       (typeof callbackResult === 'object' || typeof callbackResult === 'function') &&
       'then' in callbackResult &&
       typeof (callbackResult as { then: unknown }).then === 'function'
