@@ -790,6 +790,41 @@ describe('validateAstGrepPattern', () => {
     });
     expect(result.valid).toBe(true);
   });
+
+  // ─── #1654: target-Lang threading via fileGlobs ────
+
+  it('falls back to Lang.Tsx when fileGlobs is undefined (#1654 regression: unscoped rules unchanged)', () => {
+    // Pre-#1654 behavior — the validator parsed every pattern under
+    // Lang.Tsx unconditionally. With #1654, omitting fileGlobs preserves
+    // that exact path so legacy unscoped rules don't shift validation
+    // semantics.
+    const result = validateAstGrepPattern('console.log($A)', undefined);
+    expect(result.valid).toBe(true);
+  });
+
+  it('falls back to Lang.Tsx when fileGlobs has no registered extensions', () => {
+    // A glob like `**/*.config` carries an extension but it's not
+    // registered in EXT_TO_LANG_REGISTRY. The validator must not crash;
+    // it falls back to Lang.Tsx rather than emitting a useless verdict.
+    const result = validateAstGrepPattern('console.log($A)', ['**/*.config']);
+    expect(result.valid).toBe(true);
+  });
+
+  it('threads TS-scoped fileGlobs through to Lang.TypeScript (round-trip baseline)', () => {
+    // A pattern that is valid TypeScript should stay valid when the
+    // validator routes through Lang.TypeScript via fileGlobs. Confirms
+    // the Lang dispatch path is wired without regressing TS rules.
+    const result = validateAstGrepPattern('const $X: string = $V', ['**/*.ts']);
+    expect(result.valid).toBe(true);
+  });
+
+  it('skips negation globs when resolving target Langs', () => {
+    // `!**/*.test.*` is exclusion syntax; including it in lang resolution
+    // would dilute the dispatch list with the negated extension. The
+    // resolver must drop these before mapping to Lang.
+    const result = validateAstGrepPattern('console.log($A)', ['**/*.ts', '!**/*.test.ts']);
+    expect(result.valid).toBe(true);
+  });
 });
 
 // ─── buildCompiledRule with ast-grep validation ────

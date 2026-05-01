@@ -1,0 +1,47 @@
+{
+  "name": "@totem/pack-rust-architecture",
+  "version": "1.22.0",
+  "private": true,
+  "description": "Baseline architectural lessons for Rust + Bevy ECS consumers. ADR-097 Stage 1 pilot. Numeric safety, compile-time discipline, ECS hot-path patterns, schedule edges, determinism fixtures, test-vs-production parity.",
+  "license": "MIT",
+  "main": "./register.cjs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mmnto-ai/totem.git",
+    "directory": "packages/pack-rust-architecture"
+  },
+  "homepage": "https://github.com/mmnto-ai/totem#readme",
+  "bugs": "https://github.com/mmnto-ai/totem/issues",
+  "files": [
+    "register.cjs",
+    "tree-sitter-rust.wasm",
+    "compiled-rules.json",
+    ".totemignore",
+    "README.md"
+  ],
+  "exports": {
+    ".": "./register.cjs",
+    "./compiled-rules.json": "./compiled-rules.json",
+    "./tree-sitter-rust.wasm": "./tree-sitter-rust.wasm",
+    "./.totemignore": "./.totemignore",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node scripts/copy-wasm.cjs",
+    "prepare": "node scripts/copy-wasm.cjs",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@mmnto/totem": "^1.22.0",
+    "@ast-grep/napi": "^0.42.0"
+  },
+  "dependencies": {
+    "@ast-grep/lang-rust": "^0.0.7"
+  },
+  "devDependencies": {
+    "@mmnto/totem": "workspace:*",
+    "@ast-grep/napi": "^0.42.0",
+    "@vscode/tree-sitter-wasm": "^0.3.1",
+    "vitest": "^3.0.0"
+  }
+}

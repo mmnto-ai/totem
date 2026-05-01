@@ -20,6 +20,7 @@ target/
 .vscode/
 *.code-workspace
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 .gemini/settings.json
 
 # Gemini hooks & skills ARE committed (no secrets)
@@ -38,6 +39,9 @@ Thumbs.db
 # Claude Code worktrees (agent isolation copies)
 .claude/worktrees/
 
+# Pack-vendored WASM grammars (copied from @vscode/tree-sitter-wasm at prepare/build time)
+packages/pack-rust-architecture/tree-sitter-rust.wasm
+
 # Totem runtime artifacts
 .totem/ledger/
 .totem/sync.lock
@@ -48,6 +52,7 @@ Thumbs.db
 .totem/*.jsonl
 .totem/.search-called
 .totem/review-extensions.txt
+.totem/installed-packs.json
 
 # Local scratchpad (personal scratch files go here, not in root)
 scratchpad/
