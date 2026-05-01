@@ -19,7 +19,7 @@
  */
 
 import type { AstGrepRule } from './ast-grep-query.js';
-import { matchAstGrepPattern } from './ast-grep-query.js';
+import { matchAstGrepPattern, TRAILING_EXT_RE } from './ast-grep-query.js';
 import type { CompiledRule } from './compiler-schema.js';
 
 // ─── Types ──────────────────────────────────────────
@@ -73,9 +73,6 @@ function runRegexGate(pattern: string, snippet: string): SmokeGateResult {
   }
   return matchCount > 0 ? { matched: true, matchCount } : { matched: false, matchCount: 0 };
 }
-
-/** Trailing-extension capture (`**\/foo/bar.rs` → `rs`). */
-const TRAILING_EXT_RE = /\.([a-zA-Z0-9]+)$/;
 
 /**
  * Collect the ordered list of file extensions the ast-grep engine could use

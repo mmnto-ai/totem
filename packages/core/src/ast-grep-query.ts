@@ -58,8 +58,12 @@ export function extensionToLang(ext: string): Lang | string | undefined {
   return supportedLanguageToNapiLang(supported);
 }
 
-/** Trailing-extension capture (`/foo/bar.rs` → `rs`). */
-const TRAILING_EXT_RE = /\.([a-zA-Z0-9]+)$/;
+/**
+ * Trailing-extension capture for glob/path strings (`/foo/bar.rs` → `rs`).
+ * Exported so compile-smoke-gate.ts shares the single source of truth for
+ * extracting target extensions out of `fileGlobs` (mmnto-ai/totem#1654).
+ */
+export const TRAILING_EXT_RE = /\.([a-zA-Z0-9]+)$/;
 
 /**
  * Resolve the ast-grep Lang dispatch list for a rule's `fileGlobs`. Used by
