@@ -170,6 +170,7 @@ function readPackageJsonDeps(projectRoot: string): Record<string, string> {
   const pkgPath = path.join(projectRoot, 'package.json');
   if (!fs.existsSync(pkgPath)) return {};
   let parsed: unknown;
+  // totem-context: intentional cleanup — package.json missing/corrupt is non-fatal to sync; treat as no deps
   try {
     parsed = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
   } catch {
@@ -192,6 +193,7 @@ function defaultResolvePackPath(name: string, fromDir: string): string | undefin
   // We resolve from the project root rather than from this module — packs
   // live in the consumer's node_modules, not core's.
   const require = createRequire(path.join(fromDir, 'package.json'));
+  // totem-context: intentional cleanup — unresolvable pack returns undefined to flow into the `extends-only` warning path
   try {
     // Resolve to the package's package.json so the directory containing it
     // is the pack's package root. require.resolve(name) would land on the
@@ -207,6 +209,7 @@ function readPeerEngineRange(packResolvedPath: string): string | undefined {
   const pkgPath = path.join(packResolvedPath, 'package.json');
   if (!fs.existsSync(pkgPath)) return undefined;
   let parsed: unknown;
+  // totem-context: intentional cleanup — corrupted pack package.json returns undefined to flow into the `not-a-pack` warning path
   try {
     parsed = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
   } catch {

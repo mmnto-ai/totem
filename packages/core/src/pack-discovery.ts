@@ -358,7 +358,7 @@ function resolveEngineVersion(): string {
       const pkg = require(candidate) as { version?: unknown };
       if (typeof pkg.version === 'string') return pkg.version;
     } catch {
-      // try next candidate
+      continue; // totem-context: intentional cleanup — ENOENT for one candidate path is expected; the loop falls through to the next path, and the sentinel return at the end handles the all-fail case
     }
   }
   // Fall back to a sentinel that won't satisfy any reasonable range —
