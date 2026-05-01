@@ -7,13 +7,42 @@ import { CustomSecretSchema } from './secrets.js';
  * Zod schema for totem.config.ts — lives at the root of consuming projects.
  */
 
-export const ChunkStrategySchema = z.enum([
+/**
+ * Built-in chunk strategy names. Exported so the literal union derived
+ * via `typeof BUILTIN_CHUNK_STRATEGIES[number]` keeps the runtime list
+ * and the type signature in sync with a single source of truth. Pack-
+ * contributed strategies extend `ChunkStrategy` via the `(string & {})`
+ * tail and register at boot through `chunker-registry.ts`.
+ */
+export const BUILTIN_CHUNK_STRATEGIES = [
   'typescript-ast',
   'markdown-heading',
   'session-log',
   'schema-file',
   'test-file',
-]);
+] as const;
+
+/**
+ * `ChunkStrategy` schema. Per ADR-097 § 10 + mmnto-ai/totem#1769 strategy
+ * lookup goes through `chunker-registry.ts` at runtime; this schema only
+ * shape-checks the input string.
+ *
+ * **Why not refine against the registry here?** Bootstrap chicken-and-egg
+ * (Gemini review of mmnto-ai/totem#1768 PR-A): config parse runs BEFORE
+ * `loadInstalledPacks()` populates the registry with pack-contributed
+ * strategies (the manifest is read AFTER config load by every command).
+ * A strict registry-check at parse time would crash `totem sync` on the
+ * very edit that adds the pack — user adds `@totem/pack-foo` to extends
+ * AND a target with `strategy: 'foo-strat'` in the same change, sync
+ * fails to parse the config, never writes installed-packs.json, never
+ * registers the pack. Forever stuck.
+ *
+ * The actual fail-loud happens at `createChunker(strategy)` in
+ * `chunkers/chunker.ts` — runtime lookup against the post-boot registry
+ * with a structured error naming the missing strategy. That's the right
+ * boundary because by then the registry IS populated.
+ */
+export const ChunkStrategySchema = z.string().min(1);
 
 export const ContentTypeSchema = z.enum(['code', 'session_log', 'spec', 'lesson']);
 
@@ -327,6 +356,20 @@ export const TotemConfigSchema = z.object({
   linkedIndexes: z.array(z.string()).optional(),
 
   /**
+   * Optional: pack package names to extend rules from (ADR-085 + ADR-097).
+   *
+   * Each entry is a pack name like `@totem/pack-rust-architecture`. The
+   * pack must also appear in the consumer's `package.json` dependencies
+   * (or devDependencies) so npm/pnpm can resolve it. Pack-merge logic
+   * (`packages/core/src/pack-merge.ts`) reads pack rules at lint time.
+   * Pack discovery (`packages/core/src/pack-discovery.ts`,
+   * mmnto-ai/totem#1768) reads this field plus the project's
+   * package.json dependencies, deduplicates, and writes the union to
+   * `.totem/installed-packs.json` for boot-time registration.
+   */
+  extends: z.array(z.string().min(1)).optional(),
+
+  /**
    * Optional: path override for the strategy repository (mmnto-ai/totem#1710).
    *
    * Resolved relative to the git root by `resolveStrategyRoot`, with the
@@ -383,7 +426,15 @@ export const TotemConfigSchema = z.object({
   review: ReviewConfigSchema,
 });
 
-export type ChunkStrategy = z.infer<typeof ChunkStrategySchema>;
+/**
+ * `ChunkStrategy` keeps the literal union of built-in strategy names for
+ * IntelliSense on core code paths while admitting any string registered
+ * via Pack registration callbacks at boot. The Zod schema validates the
+ * runtime value against the registry; this type alias lives independently
+ * so callers don't lose type safety on built-in names. Per ADR-097 § 10 +
+ * mmnto-ai/totem#1769.
+ */
+export type ChunkStrategy = (typeof BUILTIN_CHUNK_STRATEGIES)[number] | (string & {});
 export type ContentType = z.infer<typeof ContentTypeSchema>;
 export type IngestTarget = z.infer<typeof IngestTargetSchema>;
 export type EmbeddingProvider = z.infer<typeof EmbeddingProviderSchema>;

@@ -28,6 +28,7 @@
     "remark-frontmatter": "^5.0.0",
     "remark-parse": "^11.0.0",
     "safe-regex2": "^5.0.0",
+    "semver": "^7.7.0",
     "tree-sitter-javascript": "^0.25.0",
     "tree-sitter-typescript": "^0.23.2",
     "typescript": "^5.7.0",
@@ -48,6 +49,7 @@
     "@ast-grep/wasm": "^0.42.1",
     "@types/cross-spawn": "^6.0.6",
     "@types/mdast": "^4.0.0",
+    "@types/semver": "^7.5.0",
     "vitest": "^3.0.0"
   },
   "files": [

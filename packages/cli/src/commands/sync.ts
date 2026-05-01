@@ -79,13 +79,47 @@ export async function syncCommand(options: {
     // review.sourceExtensions in ~/.totem/totem.config.ts, skipping the write
     // would break TS/bash parity (TS uses the custom set, bash defaults). cwd
     // is the best proxy for git-toplevel available without shelling to git.
+    const targetRoot = isGlobalConfigPath(configPath) ? cwd : path.dirname(configPath);
+    const totemDirAbs = path.resolve(targetRoot, config.totemDir);
     try {
-      const targetRoot = isGlobalConfigPath(configPath) ? cwd : path.dirname(configPath);
-      const totemDirAbs = path.resolve(targetRoot, config.totemDir);
       writeReviewExtensionsFile(totemDirAbs, config.review.sourceExtensions); // totem-context: intentional cleanup — canonical file write is a convenience for the bash PreToolUse hook
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       log.dim(TAG, `Skipped review-extensions.txt write: ${sanitize(detail)}`);
+    }
+
+    // Emit `.totem/installed-packs.json` for boot-time pack registration
+    // (mmnto-ai/totem#1768, ADR-097 § 10). Resolved from the deduplicated
+    // union of `package.json` `@totem/pack-*` deps + `totem.config.ts`
+    // `extends` array. Mismatch surfaces (dep without extends, extends
+    // without dep, missing peerDependencies) emit per-pack warnings;
+    // resolved entries are written to the manifest atomically.
+    try {
+      const { resolveInstalledPacks, writeInstalledPacksManifest } = await import('@mmnto/totem');
+      const { resolved, warnings } = resolveInstalledPacks({
+        projectRoot: targetRoot,
+        config,
+      });
+      writeInstalledPacksManifest(totemDirAbs, { version: 1, packs: resolved });
+      for (const warning of warnings) {
+        const reasonText =
+          warning.reason === 'dep-only'
+            ? `present in package.json but not in totem.config.ts \`extends\` — pack rules will not be merged. Add to \`extends\` or remove the dependency.`
+            : warning.reason === 'extends-only'
+              ? `declared in totem.config.ts \`extends\` but not installed — install via \`pnpm add -D ${warning.name}\` (or equivalent).`
+              : `does not expose a registration callback — see ADR-097 § 5 for the pack contract.`;
+        log.warn(TAG, `Pack '${warning.name}': ${reasonText}`);
+      }
+      if (resolved.length > 0) {
+        log.dim(
+          TAG,
+          `Wrote installed-packs.json (${resolved.length} pack${resolved.length === 1 ? '' : 's'}).`,
+        );
+      }
+      // totem-context: intentional cleanup — manifest write is best-effort, mirrors the writeReviewExtensionsFile pattern above (failure logs at warn but does not abort sync)
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : 'unknown error';
+      log.warn(TAG, `Skipped installed-packs.json write: ${sanitize(detail)}`);
     }
 
     spinner.succeed(`Done: ${result.chunksProcessed} chunks from ${result.filesProcessed} files`);

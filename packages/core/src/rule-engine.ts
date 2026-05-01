@@ -385,11 +385,40 @@ export async function applyAstRulesToAdditions(
 
   const violations: Violation[] = [];
 
+  // Combined view of all AST rules consulted by the unmapped-extension
+  // fail-loud guard below (mmnto-ai/totem#1653). Hoisted outside the
+  // per-file loop so we don't re-allocate it on every iteration when
+  // the registered-extension fast path doesn't need it.
+  const allAstRules = [...treeSitterRules, ...astGrepRules];
+
   // Process each file once — batch all applicable queries per file
   for (const [file, fileAdditions] of byFile) {
-    // Check language support
+    // Check language support. mmnto-ai/totem#1653: silent-skip on unmapped
+    // extensions was the bug — rules scoped to `.rs` (or any unregistered
+    // extension) silently never fired with no signal to the rule author.
+    // Fail-loud surface is surgical: skip files only when NO rule's
+    // `fileGlobs` matches them (no rule cares → silent skip is correct);
+    // throw when a rule expected to run can't because the language isn't
+    // registered. Pack registration via `loadInstalledPacks()` is the
+    // mechanism for adding language support.
     const ext = path.extname(file);
-    if (!extensionToLanguage(ext)) continue;
+    if (!extensionToLanguage(ext)) {
+      const ruleExpectingThisFile = allAstRules.find(
+        (r) => r.fileGlobs && r.fileGlobs.length > 0 && fileMatchesGlobs(file, r.fileGlobs),
+      );
+      if (ruleExpectingThisFile) {
+        // `[Totem Error]` prefix is auto-prepended by the TotemError base
+        // class constructor (`errors.ts:40`). The literal prefix is
+        // intentionally NOT in the message argument here — duplicating it
+        // would produce `[Totem Error] [Totem Error] AST rule ...` at
+        // runtime. See `errors.ts` for the prefix contract.
+        throw new TotemParseError(
+          `AST rule '${ruleExpectingThisFile.lessonHash}' (${ruleExpectingThisFile.lessonHeading}) is scoped to '${file}' (extension '${ext}') but no Tree-sitter language is registered for that extension`,
+          `Install the pack that provides '${ext}' support (e.g., \`@totem/pack-rust-architecture\` for '.rs'), or correct the rule's fileGlobs to exclude this extension.`,
+        );
+      }
+      continue;
+    }
 
     // Collect added line numbers (suppression is checked post-match so metrics fire)
     const addedLineNumbers: number[] = [];

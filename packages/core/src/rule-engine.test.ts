@@ -10,6 +10,7 @@ import type {
   RuleEventCallback,
   RuleEventContext,
 } from './compiler-schema.js';
+import { TotemParseError } from './errors.js';
 import {
   applyAstRulesToAdditions,
   applyRulesToAdditions,
@@ -805,5 +806,89 @@ describe('matchesGlob', () => {
     expect(matchesGlob('src/Dockerfile', 'Dockerfile')).toBe(true);
     expect(matchesGlob('packages/cli/Dockerfile', 'Dockerfile')).toBe(true);
     expect(matchesGlob('Dockerfile.dev', 'Dockerfile')).toBe(false);
+  });
+});
+
+// ─── Behavior change: ast-grep dispatch fail-loud (mmnto-ai/totem#1653) ──
+
+describe('applyAstRulesToAdditions fail-loud on unmapped extension (mmnto-ai/totem#1653)', () => {
+  // totem-context: test fixtures genuinely need async — they `await applyAstRulesToAdditions(...)` whose contract is async
+  it('throws when an AST rule is scoped to an unregistered extension', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'src', 'main.py'), 'print("x")\n'); // totem-context: writing a python source fixture under tmpDir, not a git hook
+    const rule = makeRule({
+      engine: 'ast',
+      astQuery: '(call_expression)',
+      fileGlobs: ['**/*.py'],
+      lessonHash: 'py-rule-hash',
+      lessonHeading: 'Python rule',
+    });
+    const additions = [makeAddition('src/main.py', 'print("x")', 1)];
+
+    // Pre-#1653 this would silently skip with no signal — the rule
+    // intended to fire on .py files but `extensionToLanguage('.py')`
+    // returns undefined. Now: fail loud via TotemParseError. Capture the
+    // thrown error so we can assert both `message` (rule identity) and
+    // `recoveryHint` (install-the-pack guidance) — `toThrowError(regex)`
+    // resolves to void and can't reach the recoveryHint property.
+    let caught: unknown;
+    try {
+      await applyAstRulesToAdditions(ctx, [rule], additions, tmpDir);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(TotemParseError);
+    const tpe = caught as TotemParseError; // totem-context: narrowing a thrown error after toBeInstanceOf — not parsing untrusted input
+    // The `[Totem Error]` prefix is auto-prepended by the TotemError
+    // base class constructor (`errors.ts:40`). Asserting on the resolved
+    // message keeps the runtime contract visible at the test boundary.
+    expect(tpe.message).toMatch(/^\[Totem Error\]/);
+    expect(tpe.message).toMatch(
+      /AST rule 'py-rule-hash'.*scoped to.*extension '\.py'.*no Tree-sitter language is registered/,
+    );
+    expect(tpe.recoveryHint).toMatch(/Install the pack that provides '\.py'/);
+  });
+
+  // totem-context: test fixture genuinely awaits async API
+  it('does NOT throw when an unmapped-extension file is in the diff but no rule scopes to it', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'src', 'main.py'), 'print("x")\n'); // totem-context: writing a python source fixture under tmpDir, not a git hook
+    fs.writeFileSync(path.join(tmpDir, 'src', 'app.ts'), 'const x = 1;\n'); // totem-context: writing a typescript source fixture under tmpDir, not a git hook
+
+    // Rule scoped to .ts only; .py file in the diff has no rule that
+    // cares about it. Silent skip on the .py file is correct behavior —
+    // fail-loud is surgical to the case where a rule actually expected
+    // to run.
+    const rule = makeRule({
+      engine: 'ast',
+      astQuery: '(variable_declaration)',
+      fileGlobs: ['**/*.ts'],
+      lessonHash: 'ts-only-rule',
+    });
+    const additions = [
+      makeAddition('src/main.py', 'print("x")', 1),
+      makeAddition('src/app.ts', 'const x = 1;', 1),
+    ];
+
+    // No throw. Returns whatever the .ts rule produces; the key invariant
+    // is "doesn't throw on unrelated unmapped files."
+    await expect(applyAstRulesToAdditions(ctx, [rule], additions, tmpDir)).resolves.toEqual(
+      expect.any(Array),
+    );
+  });
+
+  // totem-context: test fixture genuinely awaits async API
+  it('does NOT throw when rule has no fileGlobs at all (rule applies everywhere by default)', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'src', 'main.py'), 'print("x")\n'); // totem-context: writing a python source fixture under tmpDir, not a git hook
+    const rule = makeRule({
+      engine: 'ast',
+      astQuery: '(variable_declaration)',
+      fileGlobs: undefined,
+      lessonHash: 'unscoped-rule',
+    });
+    const additions = [makeAddition('src/main.py', 'print("x")', 1)];
+
+    // A rule with no fileGlobs doesn't claim any specific extension —
+    // silent skip on unmapped extensions is the right behavior here.
+    // Fail-loud is reserved for the explicit "I scope to .py" case.
+    await expect(applyAstRulesToAdditions(ctx, [rule], additions, tmpDir)).resolves.toEqual([]);
   });
 });
