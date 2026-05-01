@@ -214,9 +214,9 @@ export function loadInstalledPacks(options: LoadInstalledPacksOptions = {}): rea
       };
       callback(api);
     } catch (err) {
-      const cause = err instanceof Error ? err.message : String(err);
       throw new Error(
-        `Pack '${pack.name}' registration callback threw: ${cause}. The pack at '${pack.resolvedPath}' must be fixed or removed.`,
+        `Pack '${pack.name}' registration callback threw. The pack at '${pack.resolvedPath}' must be fixed or removed.`,
+        { cause: err instanceof Error ? err : new Error(String(err)) },
       );
     }
     if (!PACK_REGISTRY.has(pack.name)) {
@@ -262,9 +262,9 @@ function readManifestAndResolveCallbacks(
       // run `totem sync` to populate.
       return [];
     }
-    const cause = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `Failed to read installed-packs manifest at '${manifestPath}': ${cause}. Re-run \`totem sync\` to regenerate.`,
+      `Failed to read installed-packs manifest at '${manifestPath}'. Re-run \`totem sync\` to regenerate.`,
+      { cause: err instanceof Error ? err : new Error(String(err)) },
     );
   }
 
@@ -272,9 +272,9 @@ function readManifestAndResolveCallbacks(
   try {
     parsedJson = JSON.parse(raw);
   } catch (err) {
-    const cause = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `installed-packs manifest at '${manifestPath}' is not valid JSON: ${cause}. Re-run \`totem sync\` to regenerate.`,
+      `installed-packs manifest at '${manifestPath}' is not valid JSON. Re-run \`totem sync\` to regenerate.`,
+      { cause: err instanceof Error ? err : new Error(String(err)) },
     );
   }
 
@@ -314,8 +314,9 @@ function resolvePackCallback(
   try {
     mod = require(resolvedPath) as { default?: unknown; register?: unknown };
   } catch (err) {
-    const cause = err instanceof Error ? err.message : String(err);
-    throw new Error(`Pack '${name}' at '${resolvedPath}' could not be loaded: ${cause}.`);
+    throw new Error(`Pack '${name}' at '${resolvedPath}' could not be loaded.`, {
+      cause: err instanceof Error ? err : new Error(String(err)),
+    });
   }
 
   // Pack callbacks may default-export OR named-export `register`. Default

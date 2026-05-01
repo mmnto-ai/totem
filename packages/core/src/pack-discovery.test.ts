@@ -224,12 +224,21 @@ describe('loadInstalledPacks: pack callback registration', () => {
       resolvedPath: '/fake/path',
       declaredEngineRange: '^1.19.0',
     };
-    expect(() =>
+    let caught: unknown;
+    try {
       loadInstalledPacks({
         engineVersion: '1.21.0',
         inMemoryPacks: [{ pack: fakePack, callback: errorThrowingCallback }],
-      }),
-    ).toThrowError(/Pack '@totem\/pack-broken' registration callback threw: pack-side bug/);
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    const outer = caught as Error;
+    expect(outer.message).toMatch(/Pack '@totem\/pack-broken' registration callback threw/);
+    expect(outer.message).toMatch(/must be fixed or removed/);
+    expect(outer.cause).toBeInstanceOf(Error);
+    expect((outer.cause as Error).message).toBe('pack-side bug');
   });
 
   it('two packs registering same chunk strategy: second fails loud', () => {
@@ -239,7 +248,8 @@ describe('loadInstalledPacks: pack callback registration', () => {
     const callback2: PackRegisterCallback = (api) => {
       api.registerChunkStrategy('shared', FakeChunker);
     };
-    expect(() =>
+    let caught: unknown;
+    try {
       loadInstalledPacks({
         engineVersion: '1.21.0',
         inMemoryPacks: [
@@ -260,8 +270,13 @@ describe('loadInstalledPacks: pack callback registration', () => {
             callback: callback2,
           },
         ],
-      }),
-    ).toThrowError(/Pack '@totem\/pack-b'.*already registered/);
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toMatch(/Pack '@totem\/pack-b' registration callback threw/);
+    expect(((caught as Error).cause as Error).message).toMatch(/already registered/);
   });
 
   it('two packs registering same extension to different langs: second fails loud', () => {
@@ -271,7 +286,8 @@ describe('loadInstalledPacks: pack callback registration', () => {
     const callback2: PackRegisterCallback = (api) => {
       api.registerLanguage('.shared', 'lang-b', () => '/b.wasm');
     };
-    expect(() =>
+    let caught: unknown;
+    try {
       loadInstalledPacks({
         engineVersion: '1.21.0',
         inMemoryPacks: [
@@ -292,7 +308,12 @@ describe('loadInstalledPacks: pack callback registration', () => {
             callback: callback2,
           },
         ],
-      }),
-    ).toThrowError(/Pack '@totem\/pack-b'.*already registered to language/);
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toMatch(/Pack '@totem\/pack-b' registration callback threw/);
+    expect(((caught as Error).cause as Error).message).toMatch(/already registered to language/);
   });
 });

@@ -8,15 +8,13 @@ import { CustomSecretSchema } from './secrets.js';
  */
 
 /**
- * Built-in chunk strategy names. The literal union below is derived from
- * this array via `typeof BUILTIN_CHUNK_STRATEGIES[number]` so the type
- * signature stays in sync with the runtime list. eslint-disable is
- * required because the array is referenced only in a type position
- * (`typeof`), not as a runtime value — but we can't write the type
- * inline without losing the single-source-of-truth.
+ * Built-in chunk strategy names. Exported so the literal union derived
+ * via `typeof BUILTIN_CHUNK_STRATEGIES[number]` keeps the runtime list
+ * and the type signature in sync with a single source of truth. Pack-
+ * contributed strategies extend `ChunkStrategy` via the `(string & {})`
+ * tail and register at boot through `chunker-registry.ts`.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- referenced via `typeof BUILTIN_CHUNK_STRATEGIES[number]` for the ChunkStrategy type alias (see end of file)
-const BUILTIN_CHUNK_STRATEGIES = [
+export const BUILTIN_CHUNK_STRATEGIES = [
   'typescript-ast',
   'markdown-heading',
   'session-log',
