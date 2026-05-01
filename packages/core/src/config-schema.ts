@@ -9,11 +9,14 @@ import { CustomSecretSchema } from './secrets.js';
  */
 
 /**
- * Built-in chunk strategy names. The literal union exists for IntelliSense
- * on `ChunkStrategy`-typed values inside core; runtime validation is
- * registry-backed so pack-contributed strategy names (per ADR-097 § 5 Q3
- * + mmnto-ai/totem#1769) flow through the same schema.
+ * Built-in chunk strategy names. The literal union below is derived from
+ * this array via `typeof BUILTIN_CHUNK_STRATEGIES[number]` so the type
+ * signature stays in sync with the runtime list. eslint-disable is
+ * required because the array is referenced only in a type position
+ * (`typeof`), not as a runtime value — but we can't write the type
+ * inline without losing the single-source-of-truth.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- referenced via `typeof BUILTIN_CHUNK_STRATEGIES[number]` for the ChunkStrategy type alias (see end of file)
 const BUILTIN_CHUNK_STRATEGIES = [
   'typescript-ast',
   'markdown-heading',
