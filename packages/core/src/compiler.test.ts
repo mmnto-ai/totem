@@ -856,6 +856,46 @@ describe('compiled rules file I/O', () => {
       expect(manifest.rules.some((r) => r.status === 'untested-against-codebase')).toBe(true);
     });
 
+    it('prevents pending-verification rules from firing during lint execution (mmnto-ai/totem#1684)', () => {
+      // Pack rules installed via `totem install` enter the manifest as
+      // `'pending-verification'` because the cloud-compile bootstrap path
+      // cannot have run Stage 4 against the consumer's codebase. They must
+      // stay inert until the first-lint promotion interceptor invokes the
+      // verifier and replaces the status with one of the three terminal
+      // lifecycle values. The interceptor reads the unfiltered manifest
+      // via {@link loadCompiledRulesFile}, so it sees pending rules even
+      // though `loadCompiledRules` (the lint-execution path) skips them.
+      const pendingRule: CompiledRule = {
+        lessonHash: 'eeeeeeeeeeeeeeee',
+        lessonHeading: 'Pack pending rule',
+        pattern: '\\bpending\\b',
+        message: 'pending',
+        engine: 'regex',
+        status: 'pending-verification',
+        compiledAt: '2026-05-01T00:00:00Z',
+      };
+      const rulesPath = path.join(tmpDir, 'compiled-rules.json');
+      saveCompiledRulesFile(rulesPath, {
+        version: 1,
+        rules: [activeRule, legacyRule, archivedRule, pendingRule],
+        nonCompilable: [],
+      });
+
+      const loaded = loadCompiledRules(rulesPath);
+      expect(loaded).toHaveLength(2);
+      expect(loaded.map((r) => r.lessonHash).sort()).toEqual(
+        [activeRule.lessonHash, legacyRule.lessonHash].sort(),
+      );
+      expect(loaded.some((r) => r.status === 'pending-verification')).toBe(false);
+
+      // The full manifest still preserves the pending entry so the
+      // first-lint promotion interceptor (T5) can find it and run the
+      // Stage 4 verifier against the consumer's codebase.
+      const manifest = loadCompiledRulesFile(rulesPath);
+      expect(manifest.rules).toHaveLength(4);
+      expect(manifest.rules.some((r) => r.status === 'pending-verification')).toBe(true);
+    });
+
     it('archived rules do not fire while a sibling active rule still triggers on the same diff', () => {
       // Integration proof: an active rule matching one added line and an
       // archived rule matching a second added line must resolve to exactly

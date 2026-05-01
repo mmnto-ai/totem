@@ -110,13 +110,20 @@ export function validateRegex(pattern: string): RegexValidation {
  *
  * Filters out rules with inert lifecycle status so the lint execution path,
  * rule tester, and every other consumer that enforces rules treats them as
- * silenced (#1336 — "The Archive Lie"). Two inert states qualify:
+ * silenced (#1336 — "The Archive Lie"). Three inert states qualify:
  *   - `'archived'` — explicitly silenced via curation (#1336).
  *   - `'untested-against-codebase'` — Stage 4 (mmnto-ai/totem#1682) ran
  *     against the consumer's codebase and produced zero matches. The
  *     rule's runtime behavior is unknown; the schema docstring at
  *     `compiler-schema.ts:100-107` commits to inert-like-archived
  *     semantics, and this filter is what enforces that contract.
+ *   - `'pending-verification'` — pack rule installed via `totem install`
+ *     in the cloud-compile bootstrap path (mmnto-ai/totem#1684). Stage 4
+ *     has not yet run on the consumer's codebase. The rule stays inert
+ *     until the first-lint promotion interceptor runs the verifier and
+ *     replaces the status with one of the three terminal lifecycle
+ *     values. The interceptor itself runs BEFORE this filter and reads
+ *     from the unfiltered manifest via {@link loadCompiledRulesFile}.
  *
  * Rules without a `status` field (legacy manifests compiled before the
  * lifecycle state was added) are treated as active.
@@ -138,7 +145,10 @@ export function loadCompiledRules(
     const json = JSON.parse(raw) as unknown;
     const parsed = CompiledRulesFileSchema.parse(json);
     return parsed.rules.filter(
-      (r) => r.status !== 'archived' && r.status !== 'untested-against-codebase',
+      (r) =>
+        r.status !== 'archived' &&
+        r.status !== 'untested-against-codebase' &&
+        r.status !== 'pending-verification',
     );
   } catch (err) {
     if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'ENOENT') return [];
