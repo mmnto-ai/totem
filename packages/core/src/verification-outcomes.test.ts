@@ -1,9 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { cleanTmpDir } from './test-utils.js';
 import {
+  readVerificationOutcomes,
   Stage4OutcomeStored,
   VerificationOutcomeEntrySchema,
   VerificationOutcomesFileSchema,
+  type VerificationOutcomesStore,
+  writeVerificationOutcomes,
 } from './verification-outcomes.js';
 
 // ─── Stage4OutcomeStored ───────────────────────────
@@ -123,5 +131,110 @@ describe('VerificationOutcomesFileSchema', () => {
         outcomes: { abc123: { ...validEntry, outcome: 'promoted' } },
       }),
     ).toThrow();
+  });
+});
+
+// ─── Persistence (mmnto-ai/totem#1684 T2) ───────────
+
+describe('readVerificationOutcomes / writeVerificationOutcomes', () => {
+  let tmpDir!: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-vouts-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  function tmpFile(name = 'verification-outcomes.json'): string {
+    return path.join(tmpDir, name);
+  }
+
+  const sampleStore: VerificationOutcomesStore = {
+    abc123: {
+      ruleHash: 'abc123',
+      verifiedAt: '2026-05-01T12:34:56.000Z',
+      outcome: 'in-scope-bad-example',
+      baselineMatches: [],
+      inScopeMatches: ['src/foo.ts', 'src/bar.ts'],
+      candidateDebtLines: [],
+    },
+    def456: {
+      ruleHash: 'def456',
+      verifiedAt: '2026-05-01T12:35:00.000Z',
+      outcome: 'candidate-debt',
+      baselineMatches: [],
+      inScopeMatches: ['src/baz.ts'],
+      candidateDebtLines: ['src/baz.ts:10:something'],
+    },
+  };
+
+  it('returns an empty store when the file does not exist', () => {
+    const warnings: string[] = [];
+    const store = readVerificationOutcomes(tmpFile('absent.json'), (m) => warnings.push(m));
+    expect(store).toEqual({});
+    expect(warnings).toEqual([]);
+  });
+
+  it('writes verification outcomes atomically and creates missing directories', () => {
+    const filePath = path.join(tmpFile('nested'), 'deep', 'verification-outcomes.json');
+    expect(fs.existsSync(path.dirname(filePath))).toBe(false);
+    writeVerificationOutcomes(filePath, sampleStore);
+    expect(fs.existsSync(filePath)).toBe(true);
+    expect(fs.existsSync(`${filePath}.tmp`)).toBe(false);
+    const roundTripped = readVerificationOutcomes(filePath);
+    expect(roundTripped).toEqual(sampleStore);
+  });
+
+  it('round-trips the sample store byte-stably', () => {
+    const filePath = tmpFile();
+    writeVerificationOutcomes(filePath, sampleStore);
+    const firstBytes = fs.readFileSync(filePath, 'utf-8');
+    writeVerificationOutcomes(filePath, sampleStore);
+    const secondBytes = fs.readFileSync(filePath, 'utf-8');
+    expect(secondBytes).toBe(firstBytes);
+  });
+
+  it('canonicalizes object key order regardless of insertion order', () => {
+    const filePath = tmpFile();
+    writeVerificationOutcomes(filePath, sampleStore);
+    const firstBytes = fs.readFileSync(filePath, 'utf-8');
+
+    const reordered: VerificationOutcomesStore = {
+      def456: sampleStore['def456']!,
+      abc123: sampleStore['abc123']!,
+    };
+    writeVerificationOutcomes(filePath, reordered);
+    const secondBytes = fs.readFileSync(filePath, 'utf-8');
+    expect(secondBytes).toBe(firstBytes);
+  });
+
+  it('returns an empty store and warns on malformed JSON', () => {
+    const filePath = tmpFile();
+    fs.writeFileSync(filePath, '{ this is : not json,', 'utf-8');
+    const warnings: string[] = [];
+    const store = readVerificationOutcomes(filePath, (m) => warnings.push(m));
+    expect(store).toEqual({});
+    expect(warnings.length).toBe(1);
+    expect(warnings[0]).toMatch(/Malformed JSON/);
+  });
+
+  it('returns an empty store and warns on schema mismatch', () => {
+    const filePath = tmpFile();
+    fs.writeFileSync(filePath, JSON.stringify({ version: 2, outcomes: {} }), 'utf-8');
+    const warnings: string[] = [];
+    const store = readVerificationOutcomes(filePath, (m) => warnings.push(m));
+    expect(store).toEqual({});
+    expect(warnings.length).toBe(1);
+    expect(warnings[0]).toMatch(/Schema validation failed/);
+  });
+
+  it('overwrites a prior corrupt file on next write', () => {
+    const filePath = tmpFile();
+    fs.writeFileSync(filePath, 'garbage{', 'utf-8');
+    expect(readVerificationOutcomes(filePath, () => {})).toEqual({});
+    writeVerificationOutcomes(filePath, sampleStore);
+    expect(readVerificationOutcomes(filePath)).toEqual(sampleStore);
   });
 });
