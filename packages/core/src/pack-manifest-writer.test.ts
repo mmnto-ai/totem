@@ -28,8 +28,9 @@ afterEach(() => {
   for (const root of tmpRoots) {
     try {
       fs.rmSync(root, { recursive: true, force: true });
-    } catch {
-      // best-effort cleanup
+    } catch (err) {
+      // best-effort cleanup — tmp dir already gone or held by AV scan
+      void err;
     }
   }
   tmpRoots = [];

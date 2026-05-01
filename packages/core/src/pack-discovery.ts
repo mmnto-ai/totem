@@ -212,20 +212,41 @@ export function loadInstalledPacks(options: LoadInstalledPacksOptions = {}): rea
   // remain. Callers running in production should treat any throw here
   // as a hard error and not attempt to recover.
   for (const { pack, callback } of packsToRegister) {
+    const api: PackRegistrationAPI = {
+      registerChunkStrategy(name, chunkerCtor) {
+        registerChunkerInRegistry(name, chunkerCtor);
+      },
+      registerLanguage(extension, lang, wasmLoader) {
+        registerLangInRegistry(extension, lang, wasmLoader);
+      },
+    };
+    let callbackResult: unknown;
     try {
-      const api: PackRegistrationAPI = {
-        registerChunkStrategy(name, chunkerCtor) {
-          registerChunkerInRegistry(name, chunkerCtor);
-        },
-        registerLanguage(extension, lang, wasmLoader) {
-          registerLangInRegistry(extension, lang, wasmLoader);
-        },
-      };
-      callback(api);
+      callbackResult = callback(api) as unknown;
     } catch (err) {
       throw new Error(
         `Pack '${pack.name}' registration callback threw. The pack at '${pack.resolvedPath}' must be fixed or removed.`,
         { cause: err instanceof Error ? err : new Error(String(err)) },
+      );
+    }
+    // Per ADR-097 § 5 Q5 the registration callback contract is
+    // synchronous; an `async register(api)` would resolve AFTER the
+    // engine seals, leaving partial registry state. The
+    // `PackRegisterCallback` type already says `void`, but TypeScript
+    // can't enforce sync vs async at runtime — a JS-authored pack or
+    // one that drifts from the type can still return a Promise. Detect
+    // the thenable shape here and fail loud before the seal. Kept
+    // outside the try-catch above so the contract-violation error
+    // surfaces with its own message rather than getting wrapped as
+    // "callback threw."
+    if (
+      callbackResult !== null &&
+      (typeof callbackResult === 'object' || typeof callbackResult === 'function') &&
+      'then' in callbackResult &&
+      typeof (callbackResult as { then: unknown }).then === 'function'
+    ) {
+      throw new Error(
+        `Pack '${pack.name}' registration callback returned a Promise — registration must be synchronous per ADR-097 § 5 Q5. The pack at '${pack.resolvedPath}' must export a synchronous \`register\` (not \`async register\`).`,
       );
     }
     if (!PACK_REGISTRY.has(pack.name)) {
@@ -395,19 +416,19 @@ function resolveEngineVersion(): string {
 // ─── Test-only helpers ──────────────────────────────
 
 /**
- * Test-only: reset pack discovery state. Called from tests that want to
- * re-run `loadInstalledPacks()` between cases. NEVER call from production.
+ * Test-only: reset pack-discovery local state (`PACK_REGISTRY` map and
+ * `engineSealed` flag). NEVER call from production.
  *
- * Resets in this order so that re-registration in built-ins succeeds:
- * 1. Clear PACK_REGISTRY + engineSealed flag.
- * 2. Reset both downstream registries (which re-registers built-ins).
+ * **This does NOT reset downstream registries.** Tests that need a
+ * fresh chunker or language registry must additionally invoke
+ * `__resetForTests` from `chunker-registry.js` and `ast-classifier.js`
+ * — those modules own their own lifecycle. Forgetting either reset
+ * leaks built-in registrations across cases. The standard `afterEach`
+ * pattern in `pack-discovery.test.ts` calls all three.
  */
 export function __resetForTests(): void {
   PACK_REGISTRY.clear();
   engineSealed = false;
-  // Note: tests are expected to call `__resetForTests` from
-  // `chunker-registry.js` and `ast-classifier.js` separately as needed —
-  // pack-discovery doesn't own those registries' lifecycle.
 }
 
 /** Test-only: inspect chunker registry seal state. */

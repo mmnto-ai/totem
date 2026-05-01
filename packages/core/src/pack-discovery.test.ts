@@ -241,6 +241,32 @@ describe('loadInstalledPacks: pack callback registration', () => {
     expect(isEngineSealed()).toBe(true);
   });
 
+  it('rejects an async (Promise-returning) registration callback before sealing', () => {
+    const asyncCallback = (async (api: {
+      registerChunkStrategy: (n: string, c: new () => Chunker) => void;
+    }) => {
+      api.registerChunkStrategy('async-strat', FakeChunker);
+    }) as unknown as PackRegisterCallback;
+    const fakePack: LoadedPack = {
+      name: '@totem/pack-async',
+      resolvedPath: '/fake/path',
+      declaredEngineRange: '^1.19.0',
+    };
+    let caught: unknown;
+    try {
+      loadInstalledPacks({
+        engineVersion: '1.21.0',
+        inMemoryPacks: [{ pack: fakePack, callback: asyncCallback }],
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toMatch(/registration must be synchronous/);
+    expect((caught as Error).message).toMatch(/ADR-097 § 5 Q5/);
+    expect(isEngineSealed()).toBe(false);
+  });
+
   it('throws and names the pack when callback throws', () => {
     const errorThrowingCallback: PackRegisterCallback = () => {
       throw new Error('pack-side bug');
