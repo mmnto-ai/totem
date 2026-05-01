@@ -82,24 +82,26 @@ describe('@totem/pack-rust-architecture structure', () => {
     const deps = pkg.dependencies ?? {};
     // @ast-grep/lang-rust is the napi-side parser binding required by the
     // v0.1 side-channel registration in register.cjs (mmnto-ai/totem#1774).
-    // No other runtime deps are admitted: peerDeps cover @mmnto/totem and
-    // @ast-grep/napi; devDeps cover @vscode/tree-sitter-wasm (build-time
-    // WASM source) and vitest.
+    // No other runtime deps are admitted: peerDep covers @ast-grep/napi
+    // (external); devDeps cover @mmnto/totem (workspace), @vscode/tree-sitter-wasm
+    // (build-time WASM source), and vitest. @mmnto/totem is intentionally NOT
+    // a peerDep — pack-rust-architecture lives in the changesets `fixed`
+    // group with @mmnto/totem (and the rest of the @mmnto/* + @totem/*
+    // cohort), so version harmony is guaranteed at publish time. Declaring
+    // @mmnto/totem as a peerDep AS WELL as a fixed-group member would create
+    // a circular constraint on every minor bump, pre-empting the cluster to
+    // a major bump (mmnto-ai/totem#1776 wiggle on PR #1775's first auto-cut).
     expect(Object.keys(deps).sort()).toEqual(['@ast-grep/lang-rust']);
   });
 
-  it('package.json peerDependencies pin both engine surfaces (totem + ast-grep napi)', () => {
+  it('package.json peerDependencies pin only the external @ast-grep/napi engine', () => {
     const pkg = readJsonSafe<{ peerDependencies?: Record<string, string> }>(
       path.join(PACK_ROOT, 'package.json'),
     );
-    expect(pkg.peerDependencies?.['@ast-grep/napi']).toBe('^0.42.0');
-  });
-
-  it('package.json peerDependencies pins @mmnto/totem to ^1.22.0 (Pack v0.1 substrate version)', () => {
-    const pkg = readJsonSafe<{ peerDependencies?: Record<string, string> }>(
-      path.join(PACK_ROOT, 'package.json'),
-    );
-    expect(pkg.peerDependencies?.['@mmnto/totem']).toBe('^1.22.0');
+    // Exact-key equality: @mmnto/totem MUST NOT appear here (fixed-group
+    // member; see test above for rationale). Only the external napi engine
+    // is pinned via peerDep.
+    expect(Object.keys(pkg.peerDependencies ?? {}).sort()).toEqual(['@ast-grep/napi']);
     expect(pkg.peerDependencies?.['@ast-grep/napi']).toBe('^0.42.0');
   });
 

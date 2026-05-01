@@ -32,7 +32,6 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "@mmnto/totem": "^1.22.0",
     "@ast-grep/napi": "^0.42.0"
   },
   "dependencies": {
