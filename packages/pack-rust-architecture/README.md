@@ -34,19 +34,11 @@ Each lesson is self-contained markdown with citation anchors back to the genesis
 
 ## Coverage boundaries (honest framing)
 
-This pack is a baseline, not a comprehensive Rust + Bevy lint suite. The 8 lessons capture the highest-signal architectural invariants surfaced by one consumer's blood-and-sweat review cycles (slice-6 spawn dispersion + vehicle-agent collision in `mmnto-ai/liquid-city`). A Rust consumer with no Bevy footprint will find ~50% direct applicability (the 4 Rust-universal lessons); a Rust + Bevy consumer with determinism requirements will find ~100% applicability.
-
-Future releases (v0.2+) expand coverage as the `totem review-learn` pipeline harvests additional consumer cycles. Pack v0.2 candidate territory includes (per the audit at `audits/internal/2026-04-30-ecosystem-churn-diagnosis.md` § 8): WorldBounds boundary-assertion patterns (dropped from this run's automated extraction; recoverable from PR #134 R6 inline thread), Rapier-specific physics determinism patterns, and broader ECS query-fairness invariants.
+This pack is a baseline, not a comprehensive Rust + Bevy lint suite. The 8 lessons capture the highest-signal architectural invariants surfaced by one consumer's review cycles (slice-6 spawn dispersion + vehicle-agent collision in `mmnto-ai/liquid-city`). A Rust consumer with no Bevy footprint will find ~50% direct applicability (the 4 Rust-universal lessons); a Rust + Bevy consumer with determinism requirements will find ~100% applicability.
 
 ## Install
 
-Once `mmnto-ai/totem#1491` (pack resolver) ships:
-
-```sh
-totem install pack/rust-architecture
-```
-
-In the interim, consumers add to `totem.config.ts`:
+Add to `totem.config.ts`:
 
 ```typescript
 extends: [
@@ -54,7 +46,7 @@ extends: [
 ],
 ```
 
-(plus `pnpm add -D -w @totem/pack-rust-architecture` per ADR-085 Layer 1 adoption).
+Plus `pnpm add -D -w @totem/pack-rust-architecture` per ADR-085 Layer 1 adoption.
 
 ## Substrate gap (v0.1)
 

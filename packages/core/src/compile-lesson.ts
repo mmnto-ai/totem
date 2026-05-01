@@ -821,6 +821,15 @@ export function buildManualRule(
   const manual = extractManualPattern(lesson.body);
   if (!manual) return { rule: null };
 
+  // Hoist sanitization above ast-grep validation (CR review on PR #1775,
+  // outside-diff): brace-expanded globs like `**/*.{rs,tsx}` need
+  // `sanitizeFileGlobs` (brace-expansion → `['**/*.rs', '**/*.tsx']`)
+  // before `resolveAstGrepLangs` can map them to Lang values. Validating
+  // against raw `manual.fileGlobs` would silently fall back to `Lang.Tsx`
+  // on every brace-expanded scope and reintroduce the #1654 grammar
+  // mismatch on the manual-authoring path.
+  const sanitizedGlobs = manual.fileGlobs ? sanitizeFileGlobs(manual.fileGlobs) : undefined;
+
   // Compound ast-grep path: the lesson authored a NapiConfig-shaped rule via
   // a yaml fenced block under **Pattern:**. Route the parsed object through
   // validateAstGrepPattern (which accepts both string and object shapes via
@@ -847,7 +856,7 @@ export function buildManualRule(
           'Manual ast-grep lesson has neither a flat **Pattern:** value nor a `yaml`-tagged fenced block',
       };
     }
-    const validation = validateAstGrepPattern(astSource, manual.fileGlobs);
+    const validation = validateAstGrepPattern(astSource, sanitizedGlobs);
     if (!validation.valid) {
       return { rule: null, rejectReason: `Manual ast-grep pattern rejected: ${validation.reason}` };
     }
@@ -855,7 +864,6 @@ export function buildManualRule(
 
   const now = new Date().toISOString();
   const existing = existingByHash.get(lesson.hash);
-  const sanitizedGlobs = manual.fileGlobs ? sanitizeFileGlobs(manual.fileGlobs) : undefined;
 
   const engineFieldArgs: string | Record<string, unknown> =
     manual.engine === 'ast-grep' && astSource !== undefined ? astSource : manual.pattern;

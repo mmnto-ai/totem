@@ -3,7 +3,7 @@ tags: ['rust', 'bevy', 'scheduling', 'architecture']
 lifecycle: nursery
 ---
 
-## Lesson — Bevy schedule edges must encode producer-consumer contracts
+## Lesson — Bevy schedule edges encode producer-consumer contracts
 
 **Tags:** rust, bevy, scheduling, architecture
 

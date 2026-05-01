@@ -40,6 +40,19 @@ describe('@totem/pack-rust-architecture structure', () => {
 
     expect(pkg.exports).toBeDefined();
     expect(pkg.main).toBe('./register.cjs');
+    // Lock the exports surface with exact-key equality so an accidentally-
+    // added export key fails this test rather than slipping into the
+    // published surface (CR nitpick on #1775; mirrors the precedent in
+    // pack-agent-security/test/structure.test.ts).
+    expect(new Set(Object.keys(pkg.exports ?? {}))).toEqual(
+      new Set([
+        '.',
+        './compiled-rules.json',
+        './tree-sitter-rust.wasm',
+        './.totemignore',
+        './package.json',
+      ]),
+    );
     expect(pkg.exports?.['.']).toBe('./register.cjs');
     expect(pkg.exports?.['./compiled-rules.json']).toBe('./compiled-rules.json');
     expect(pkg.exports?.['./tree-sitter-rust.wasm']).toBe('./tree-sitter-rust.wasm');
