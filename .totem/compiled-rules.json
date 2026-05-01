@@ -7552,21 +7552,21 @@
     {
       "lessonHash": "de0eee8d0fa0b4db",
       "lessonHeading": "Use unique temp files for atomic writes",
+      "pattern": "(?:writeFile|writeFileSync|createWriteStream)\\s*\\(\\s*['\"`][^'\"` ]*\\.tmp['\"`]",
       "message": "Temp file for atomic write should include a PID or random suffix (e.g., .tmp.${process.pid} or .tmp.<random>) to prevent collisions during concurrent executions.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "(?:writeFile|writeFileSync|createWriteStream)\\s*\\(\\s*['\"`][^'\"` ]*\\.tmp['\"`]",
+      "badExample": "await writeFile('/data/output.tmp', content);",
+      "goodExample": "await writeFile(`/data/output.tmp.${process.pid}`, content);",
       "compiledAt": "2026-04-30T03:50:43.214Z",
       "createdAt": "2026-04-30T03:50:43.214Z",
       "fileGlobs": [
         "packages/cli/src/commands/recurrence-stats.ts"
       ],
-      "badExample": "await writeFile('/data/output.tmp', content);",
-      "goodExample": "await writeFile(`/data/output.tmp.${process.pid}`, content);",
-      "unverified": true,
+      "severity": "warning",
       "status": "archived",
+      "archivedReason": "Under-scoped regex + weaker-than-convention message per CR finding on mmnto-ai/totem#1754 (https://github.com/mmnto-ai/totem/pull/1754#discussion_r3165648989). Pattern only catches inline quoted-string arguments (e.g., writeFileSync('/path.tmp')) and misses the actual production case in packages/cli/src/commands/recurrence-stats.ts:423 where the temp path is a template-literal variable (`const tmp = \\`${outputPath}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp\\``). Variable-assignment tracking is structurally outside regex's reach. Re-authoring as ast-grep with compound trace-and-inspect rule tracked in mmnto-ai/totem#1755.",
       "archivedAt": "2026-04-29T23:45:00.000Z",
-      "archivedReason": "Under-scoped regex + weaker-than-convention message per CR finding on mmnto-ai/totem#1754 (https://github.com/mmnto-ai/totem/pull/1754#discussion_r3165648989). Pattern only catches inline quoted-string arguments (e.g., writeFileSync('/path.tmp')) and misses the actual production case in packages/cli/src/commands/recurrence-stats.ts:423 where the temp path is a template-literal variable (`const tmp = \\`${outputPath}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp\\``). Variable-assignment tracking is structurally outside regex's reach. Re-authoring as ast-grep with compound trace-and-inspect rule tracked in mmnto-ai/totem#1755."
+      "unverified": true
     }
   ],
   "nonCompilable": [
@@ -12656,6 +12656,12 @@
       "title": "Consolidate overlapping dynamic imports",
       "reasonCode": "out-of-scope",
       "reason": "Detecting multiple dynamic imports from the same module requires multi-statement analysis across the function/block scope — a single-pattern rule cannot see sibling import() calls to determine if they share the same module specifier."
+    },
+    {
+      "hash": "d33ccaf558708b35",
+      "title": "Lesson — GCA decline protocol: Pack publish-flips",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a procedural/architectural protocol for handling GCA review declines — updating styleguide, capturing lessons, and posting consolidated comments. There is no detectable code pattern to match; the guidance is entirely about human/agent workflow conventions."
     }
   ]
 }
