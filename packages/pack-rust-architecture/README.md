@@ -1,6 +1,6 @@
 # @mmnto/pack-rust-architecture
 
-Baseline architectural lessons for Rust + Bevy ECS consumers. ADR-097 Stage 1 pilot under the `@totem` scope (sister to `@mmnto/pack-agent-security`).
+Baseline architectural lessons for Rust + Bevy ECS consumers. ADR-097 Stage 1 pilot under the `@mmnto` scope (sister to `@mmnto/pack-agent-security`).
 
 ## Status
 
