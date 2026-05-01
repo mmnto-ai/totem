@@ -19,7 +19,7 @@
  */
 
 import type { AstGrepRule } from './ast-grep-query.js';
-import { matchAstGrepPattern } from './ast-grep-query.js';
+import { matchAstGrepPattern, TRAILING_EXT_RE } from './ast-grep-query.js';
 import type { CompiledRule } from './compiler-schema.js';
 
 // ─── Types ──────────────────────────────────────────
@@ -76,9 +76,10 @@ function runRegexGate(pattern: string, snippet: string): SmokeGateResult {
 
 /**
  * Collect the ordered list of file extensions the ast-grep engine could use
- * when parsing the badExample. Returns every positive match from
- * `fileGlobs`; if no globs are declared, returns a broad default set so an
- * unscoped rule still has a chance to match the snippet under some parser.
+ * when parsing the badExample. Extracts the trailing extension from every
+ * positive `fileGlobs` entry; if no globs declare an extension at all,
+ * returns a broad TS/JS default set so an unscoped rule still has a chance
+ * to match the snippet under some parser.
  *
  * Why a list rather than a single extension: `.ts` and `.tsx` select
  * different tree-sitter parsers that reject each other's syntax. A TS
@@ -87,20 +88,31 @@ function runRegexGate(pattern: string, snippet: string): SmokeGateResult {
  * allow multiple extensions, runtime will pick whichever matches the real
  * file, so the gate must try every declared extension too. Passing on ANY
  * extension is sufficient — runtime scans the same surface.
+ *
+ * Registry-backed (#1654 fix): pre-fix this function used a hardcoded
+ * TS/JS regex, which silently fell back to the default set for every
+ * non-TS/JS rule (e.g., a `**\/*.rs`-scoped rule). Runtime would dispatch
+ * the rule against `.rs` files but the smoke gate would parse the
+ * badExample under TSX — a verdict-vs-runtime divergence that masked
+ * grammar-mismatched rules. Now: any trailing-extension token is
+ * captured and runtime's `extensionToLang` filters out unmapped
+ * extensions inside `matchAstGrepPattern`, so an unmapped extension
+ * cleanly returns zero matches without ever parsing under the wrong
+ * grammar.
  */
 function inferBadExampleExts(rule: CompiledRule): string[] {
   const exts = new Set<string>();
   for (const g of rule.fileGlobs ?? []) {
     if (g.startsWith('!')) continue;
-    for (const m of g.matchAll(/\.(ts|tsx|js|jsx|mjs|cjs)\b/gi)) {
-      exts.add(`.${m[1]!.toLowerCase()}`);
-    }
+    const match = g.match(TRAILING_EXT_RE);
+    if (match) exts.add(`.${match[1]!.toLowerCase()}`);
   }
-  // Unscoped rule: try the full supported set so the gate does not
-  // false-reject on a snippet that would match under some parser. Order
-  // puts TypeScript first (handles cast syntax), then TSX, then JS
-  // variants. Parity with runtime is preserved because runtime also
-  // executes the rule against any file whose extension matches.
+  // Unscoped or no-extension rule: try the full TS/JS supported set so
+  // the gate does not false-reject on a snippet that would match under
+  // some parser. Order puts TypeScript first (handles cast syntax),
+  // then TSX, then JS variants. Parity with runtime is preserved
+  // because runtime also executes the rule against any file whose
+  // extension matches.
   return exts.size > 0 ? [...exts] : ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
 }
 

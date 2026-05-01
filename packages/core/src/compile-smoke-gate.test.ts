@@ -205,6 +205,48 @@ describe('runSmokeGate badExample extension inference', () => {
     const result = runSmokeGate(rule, tsSnippet);
     expect(result.matched).toBe(true);
   });
+
+  // ─── #1654 regression coverage ───────────────────────
+
+  // Pre-#1654, the regex `\.(ts|tsx|js|jsx|mjs|cjs)\b` could not pick up
+  // `.rs`, `.py`, etc. — non-TS/JS globs silently fell back to the TS/JS
+  // default set, which meant the gate parsed `.rs` badExamples under TSX.
+  // Post-#1654, the trailing-extension capture pulls every extension out
+  // of fileGlobs regardless of language family.
+  it('extracts non-TS/JS extensions from fileGlobs (#1654 regression)', () => {
+    // Unregistered .rs (no pack registered in this test) — extension is
+    // captured but matchAstGrepPattern's `extensionToLang` returns
+    // undefined, so the smoke gate gets an empty match list rather than
+    // accidentally parsing under TSX. The result is "no false-positive
+    // pass via TSX misinterpretation", which is the load-bearing #1654
+    // invariant — Rust patterns don't accidentally pass the gate by
+    // virtue of TSX accepting JSX-like syntax (e.g., `ResMut<TacticalState>`).
+    const rule = makeAstGrepStringRule({
+      fileGlobs: ['packages/zomboid-sim/src/**/*.rs'],
+      astGrepPattern: 'ResMut<$T>',
+    });
+    // The historical LC exhibit: `ResMut<TacticalState>` parses under
+    // TSX as a JSX tag with attribute, which would let the smoke gate
+    // false-pass. Post-#1654, with `.rs` extracted but unregistered,
+    // the engine cleanly returns no match — neither false-pass nor
+    // false-fail under the wrong grammar.
+    const rustSnippet = 'fn handle(state: ResMut<TacticalState>) {}\n';
+    const result = runSmokeGate(rule, rustSnippet);
+    expect(result.matched).toBe(false);
+  });
+
+  it('falls back to TS/JS default set when no fileGlob carries an extension', () => {
+    // A glob like `packages/foo/**` has no trailing extension; the
+    // post-#1654 regex returns empty, and the fallback default set
+    // takes effect so unscoped-style rules keep working.
+    const rule = makeAstGrepStringRule({
+      fileGlobs: ['packages/foo/**'],
+      astGrepPattern: 'console.log($$$)',
+    });
+    const tsSnippet = 'console.log("hi");\n';
+    const result = runSmokeGate(rule, tsSnippet);
+    expect(result.matched).toBe(true);
+  });
 });
 
 // ─── over-matching check (mmnto-ai/totem#1580) ───────

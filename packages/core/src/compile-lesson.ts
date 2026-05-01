@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 
-import { Lang, parse } from '@ast-grep/napi';
+import { parse } from '@ast-grep/napi';
 
+import { resolveAstGrepLangs } from './ast-grep-query.js';
 import { runSmokeGate } from './compile-smoke-gate.js';
 import { engineFields, sanitizeFileGlobs, validateRegex } from './compiler.js';
 import type {
@@ -216,21 +217,30 @@ export interface CompileLessonDeps {
  *      patterns (statement boundaries outside braces/parens), and
  *      compound object patterns missing the required `rule` key.
  *      Gives fast, human-readable error messages for the common cases.
- *   2. Parser-based check (#1339) — actually invoke ast-grep's rule
- *      compiler via `parse(Lang.Tsx, '').root().findAll(pattern)`. If
- *      ast-grep cannot compile the pattern into a rule, the error
- *      surfaces here instead of crashing `totem lint` at runtime.
- *      This catches single-line patterns that look balanced but fail
- *      semantic validation — e.g. `.option("--no-$FLAG", $$$REST)`
- *      (floating member call with no receiver) or `catch($E) { $$$ }`
- *      (bare catch clause that can only exist inside a try statement).
+ *   2. Parser-based check (#1339, #1654) — actually invoke ast-grep's rule
+ *      compiler via `parse(lang, '').root().findAll(pattern)` for every
+ *      Lang resolved from the rule's `fileGlobs`. The pattern is accepted
+ *      if it parses under any of those Langs; rejected with the last
+ *      Lang's error message if all of them fail. This catches single-line
+ *      patterns that look balanced but fail semantic validation — e.g.
+ *      `.option("--no-$FLAG", $$$REST)` (floating member call with no
+ *      receiver) or `catch($E) { $$$ }` (bare catch clause that can only
+ *      exist inside a try statement) — and equally importantly, surfaces
+ *      grammar-mismatch failures when a pattern would parse under TSX
+ *      but not under the rule's actual target grammar (e.g. a Rust
+ *      `ResMut<TacticalState>` pattern that TSX accepts as a JSX element
+ *      but Rust rejects as a malformed type expression).
  *
- * Language choice: Tsx is the most permissive parser available (superset
- * of TypeScript plus JSX), so a valid ast-grep pattern for any
- * JS/TS/JSX/TSX source should also parse against it. Empty source
- * (`''`) keeps the call cheap — ast-grep compiles the pattern into a
- * rule before iterating any AST, so we see the rule-compile error even
- * though there's nothing to match against.
+ * Language choice: when `fileGlobs` resolves to one or more registered
+ * languages (e.g., `**\/*.rs` → Rust, `**\/*.ts` → TypeScript), the pattern
+ * is validated under every such grammar and accepted if any one accepts
+ * it. When `fileGlobs` is absent or no glob carries a registered
+ * extension, falls back to `Lang.Tsx` — the most permissive parser
+ * available (superset of TypeScript plus JSX) — so unscoped pre-1.16
+ * rules retain their legacy validation behavior. Empty source (`''`)
+ * keeps the call cheap — ast-grep compiles the pattern into a rule
+ * before iterating any AST, so we see the rule-compile error even though
+ * there's nothing to match against.
  *
  * Lite-build safety: this function is only called from compile flows
  * (buildCompiledRule / buildManualRule), which require an orchestrator
@@ -242,7 +252,10 @@ export interface CompileLessonDeps {
  * failure) degrades conservatively to `valid: false` rather than
  * crashing the compile command.
  */
-export function validateAstGrepPattern(pattern: string | Record<string, unknown>): RegexValidation {
+export function validateAstGrepPattern(
+  pattern: string | Record<string, unknown>,
+  fileGlobs?: readonly string[],
+): RegexValidation {
   // ── Object pattern (NapiConfig / compound rule) ──
   if (typeof pattern === 'object' && pattern !== null) {
     if (!('rule' in pattern)) {
@@ -307,20 +320,37 @@ export function validateAstGrepPattern(pattern: string | Record<string, unknown>
     }
   }
 
-  // ── Parser-based check (#1339) ──
+  // ── Parser-based check (#1339, #1654) ──
   // Hand the pattern to ast-grep's actual rule compiler. If ast-grep
-  // can't compile it into a single-rooted rule, we see the exact
-  // runtime error ("Multiple AST nodes are detected", "No AST root is
-  // detected", "rule is not configured correctly", etc.) at compile
-  // time instead. This is the authoritative source of truth for
-  // validity — the heuristic above only exists to give faster, more
-  // human-readable error messages for the common cases.
-  try {
-    const emptyRoot = parse(Lang.Tsx, '');
-    // findAll accepts both string patterns and NapiConfig objects.
-    emptyRoot.root().findAll(pattern as string);
-  } catch (err) {
-    const raw = err instanceof Error ? err.message : String(err);
+  // can't compile it into a single-rooted rule under any of the rule's
+  // target Langs, we see the exact runtime error ("Multiple AST nodes
+  // are detected", "No AST root is detected", "rule is not configured
+  // correctly", etc.) at compile time instead. The pattern is accepted
+  // when any one Lang accepts it; rejected with the last failure's
+  // message when all Langs reject it.
+  // totem-context: try-each-Lang-then-collect-and-rethrow. The per-iteration
+  // catch is not silent degradation — `lastErr` is rethrown via the
+  // rejection-return below if every Lang fails, and the function returns
+  // `{ valid: true }` from inside the try the moment any Lang accepts the
+  // pattern. Pattern is the deliberate cross-grammar acceptance shape per
+  // mmnto-ai/totem#1654.
+  const langs = resolveAstGrepLangs(fileGlobs);
+  let lastErr: unknown = undefined;
+  for (const lang of langs) {
+    try {
+      const emptyRoot = parse(lang, '');
+      // findAll accepts both string patterns and NapiConfig objects.
+      emptyRoot.root().findAll(pattern as string);
+      return { valid: true };
+      // totem-context: see preamble — collect-and-rethrow per #1654 cross-grammar accept
+    } catch (err) {
+      lastErr = err; // totem-context: collected; rejection-return below uses it
+    }
+  }
+  // All Langs rejected — surface the last failure with the same
+  // first-line preservation logic the original single-Lang code used.
+  {
+    const raw = lastErr instanceof Error ? lastErr.message : String(lastErr ?? '');
     // Keep the first LINE of the ast-grep error only — multi-line errors
     // confuse downstream loggers. Do NOT slice on `.` — ast-grep error
     // messages almost always embed the user's pattern source verbatim
@@ -350,8 +380,6 @@ export function validateAstGrepPattern(pattern: string | Record<string, unknown>
       reason: `ast-grep rejected pattern: ${firstLine}`,
     };
   }
-
-  return { valid: true };
 }
 
 // ─── Self-suppression guard (#1177) ─────────────────
@@ -552,8 +580,13 @@ export function buildCompiledRule(
       return reject('Missing astGrepPattern or astGrepYamlRule or message');
     }
 
-    // Validate ast-grep pattern at compile time (#1062, #1339, #1407)
-    const astValidation = validateAstGrepPattern(astSource);
+    // Validate ast-grep pattern at compile time (#1062, #1339, #1407, #1654).
+    // `sanitizedGlobs` carries the rule's effective fileGlobs (post-scope-
+    // override) so the validator can pick the right Lang grammar — TSX
+    // for unscoped or TS/JS rules, Rust for `**\/*.rs`, etc. Without this,
+    // a Rust pattern parses under Lang.Tsx and accidentally either
+    // false-passes (TSX accepts a JSX-ish tree) or false-fails.
+    const astValidation = validateAstGrepPattern(astSource, sanitizedGlobs);
     if (!astValidation.valid) {
       return reject(`Invalid ast-grep pattern: ${astValidation.reason}`);
     }
@@ -788,6 +821,15 @@ export function buildManualRule(
   const manual = extractManualPattern(lesson.body);
   if (!manual) return { rule: null };
 
+  // Hoist sanitization above ast-grep validation (CR review on PR #1775,
+  // outside-diff): brace-expanded globs like `**/*.{rs,tsx}` need
+  // `sanitizeFileGlobs` (brace-expansion → `['**/*.rs', '**/*.tsx']`)
+  // before `resolveAstGrepLangs` can map them to Lang values. Validating
+  // against raw `manual.fileGlobs` would silently fall back to `Lang.Tsx`
+  // on every brace-expanded scope and reintroduce the #1654 grammar
+  // mismatch on the manual-authoring path.
+  const sanitizedGlobs = manual.fileGlobs ? sanitizeFileGlobs(manual.fileGlobs) : undefined;
+
   // Compound ast-grep path: the lesson authored a NapiConfig-shaped rule via
   // a yaml fenced block under **Pattern:**. Route the parsed object through
   // validateAstGrepPattern (which accepts both string and object shapes via
@@ -814,7 +856,7 @@ export function buildManualRule(
           'Manual ast-grep lesson has neither a flat **Pattern:** value nor a `yaml`-tagged fenced block',
       };
     }
-    const validation = validateAstGrepPattern(astSource);
+    const validation = validateAstGrepPattern(astSource, sanitizedGlobs);
     if (!validation.valid) {
       return { rule: null, rejectReason: `Manual ast-grep pattern rejected: ${validation.reason}` };
     }
@@ -822,7 +864,6 @@ export function buildManualRule(
 
   const now = new Date().toISOString();
   const existing = existingByHash.get(lesson.hash);
-  const sanitizedGlobs = manual.fileGlobs ? sanitizeFileGlobs(manual.fileGlobs) : undefined;
 
   const engineFieldArgs: string | Record<string, unknown> =
     manual.engine === 'ast-grep' && astSource !== undefined ? astSource : manual.pattern;

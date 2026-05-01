@@ -1,0 +1,10 @@
+---
+tags: ['rust', 'bevy', 'scheduling', 'architecture']
+lifecycle: nursery
+---
+
+## Lesson — Bevy schedule edges encode producer-consumer contracts
+
+**Tags:** rust, bevy, scheduling, architecture
+
+Each `.before(X)` / `.after(X)` ordering constraint in a Bevy schedule must be tied to a specific producer-consumer (resource read-write) or wake-gate (state-mutation observed before guard) relationship; if a consumer reads a resource the producer just published in the same tick without an explicit `.after(producer)` edge, the consumer silently reads last-tick's value (one-tick lag) and the divergence is invisible to type-checking and most tests. Companion rules: (a) every `.before` / `.after` invocation should carry a comment naming the read-write or wake-gate relationship being enforced — naked edges rot when systems are renamed or moved; (b) Bevy 0.14's `.chain()` tuple-trait impl tops out at ~20 systems, so pipelines wider than that must split across multiple `add_systems` calls and use `.after(<terminal_system_of_prior_chain>)` to preserve end-to-end ordering across the boundary; (c) when a producer pipeline spans multiple `add_systems` calls, prefer constraining the whole downstream block to `.after(<the_chain_terminus>)` rather than threading edges through every intermediate system, so the boundary is named in one place. Cited evidence: liquid-city PR #125 R6 (GCA finding establishing the four ordering edges for the slice-5 mode-switch chain — `command_consume.before(position_update)`, `position_update.before(flow_field_rebuild)`, `command_consume.before(both_input_consumes)`, `command_consume.before(kind_publish)` — each tied to a documented read-write or wake-gate relationship); liquid-city PR #134 task 5 (slice-6 vehicle-agent contact producer wired with `.after(vehicle_position_publish_system).before(active_entity_kind_publish_system)`, slotted in its own `add_systems` call because the main agent + player chain already saturates the ~20-system tuple-trait limit).

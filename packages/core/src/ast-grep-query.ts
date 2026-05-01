@@ -52,10 +52,53 @@ function supportedLanguageToNapiLang(lang: string): Lang | string {
  * registered extensions map to their NapiLang custom string per
  * ADR-097 § 10.
  */
-function extensionToLang(ext: string): Lang | string | undefined {
+export function extensionToLang(ext: string): Lang | string | undefined {
   const supported = extensionToLanguage(ext);
   if (!supported) return undefined;
   return supportedLanguageToNapiLang(supported);
+}
+
+/**
+ * Trailing-extension capture for glob/path strings (`/foo/bar.rs` → `rs`).
+ * Exported so compile-smoke-gate.ts shares the single source of truth for
+ * extracting target extensions out of `fileGlobs` (mmnto-ai/totem#1654).
+ */
+export const TRAILING_EXT_RE = /\.([a-zA-Z0-9]+)$/;
+
+/**
+ * Resolve the ast-grep Lang dispatch list for a rule's `fileGlobs`. Used by
+ * the compile-time pattern validator (`validateAstGrepPattern`) to parse
+ * the pattern under the rule's actual target grammar instead of always
+ * defaulting to TSX (mmnto-ai/totem#1654).
+ *
+ * Returns the deduplicated list of registered Lang values mapped from each
+ * positive glob's trailing extension. Negation globs are skipped (they
+ * describe files the rule should NOT match). When no positive glob carries
+ * a registered extension — including the unscoped-rule case where
+ * `fileGlobs` is undefined or empty — falls back to `[Lang.Tsx]` to
+ * preserve the legacy permissive-default behavior. Lang.Tsx remains the
+ * "unscoped" parser because it is the broadest TS/JS superset and many
+ * pre-1.16 rules ship without globs.
+ */
+export function resolveAstGrepLangs(fileGlobs?: readonly string[]): (Lang | string)[] {
+  if (!fileGlobs || fileGlobs.length === 0) return [Lang.Tsx];
+
+  const seen = new Set<string>();
+  const langs: (Lang | string)[] = [];
+  for (const glob of fileGlobs) {
+    if (glob.startsWith('!')) continue;
+    const match = glob.match(TRAILING_EXT_RE);
+    if (!match) continue;
+    const ext = `.${match[1]!.toLowerCase()}`;
+    const lang = extensionToLang(ext);
+    if (lang === undefined) continue;
+    const key = String(lang);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    langs.push(lang);
+  }
+
+  return langs.length > 0 ? langs : [Lang.Tsx];
 }
 
 // ─── Core matching ──────────────────────────────────
