@@ -119,6 +119,37 @@ describe('loadInstalledPacks: malformed manifest', () => {
     }
   });
 
+  it('rejects manifest with duplicate pack names at the schema boundary', () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pack-discovery-test-'));
+    try {
+      const totemDir = path.join(tmpRoot, '.totem');
+      fs.mkdirSync(totemDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(totemDir, 'installed-packs.json'),
+        JSON.stringify({
+          version: 1,
+          packs: [
+            {
+              name: '@totem/pack-rust',
+              resolvedPath: path.resolve('/abs/a'),
+              declaredEngineRange: '^1.19.0',
+            },
+            {
+              name: '@totem/pack-rust',
+              resolvedPath: path.resolve('/abs/b'),
+              declaredEngineRange: '^1.19.0',
+            },
+          ],
+        }),
+      );
+      expect(() => loadInstalledPacks({ projectRoot: tmpRoot, totemDir: '.totem' })).toThrowError(
+        /duplicate pack entry '@totem\/pack-rust'/,
+      );
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
   it('rejects manifest entries with a relative resolvedPath at the schema boundary', () => {
     const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pack-discovery-test-'));
     try {

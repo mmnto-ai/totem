@@ -82,7 +82,25 @@ export const InstalledPacksManifestSchema = z
         .strict(),
     ),
   })
-  .strict();
+  .strict()
+  // Duplicate pack names would let two callbacks run while `PACK_REGISTRY`
+  // silently keeps only the first entry — the second callback's chunker
+  // or language registrations surface later as a registry collision
+  // instead of a clear manifest-boundary error. Fail loud here.
+  .superRefine((manifest, ctx) => {
+    const seen = new Set<string>();
+    manifest.packs.forEach((pack, index) => {
+      if (seen.has(pack.name)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['packs', index, 'name'],
+          message: `duplicate pack entry '${pack.name}'`,
+        });
+        return;
+      }
+      seen.add(pack.name);
+    });
+  });
 
 export type InstalledPacksManifest = z.infer<typeof InstalledPacksManifestSchema>;
 
