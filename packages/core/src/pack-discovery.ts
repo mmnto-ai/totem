@@ -356,9 +356,9 @@ function resolveEngineVersion(): string {
   for (const candidate of ['../package.json', '../../package.json']) {
     try {
       const pkg = require(candidate) as { version?: unknown };
-      if (typeof pkg.version === 'string') return pkg.version;
+      if (typeof pkg.version === 'string') return pkg.version; // totem-context: intentional cleanup — ENOENT on a candidate path is expected; the catch below falls through to the next candidate, and the sentinel return at function end handles the all-fail case
     } catch {
-      continue; // totem-context: intentional cleanup — ENOENT on a candidate path is expected; loop falls through to the next, and the sentinel return at function end handles the all-fail case
+      continue; // totem-context: intentional cleanup — paired with directive on preceding line
     }
   }
   // Fall back to a sentinel that won't satisfy any reasonable range —
