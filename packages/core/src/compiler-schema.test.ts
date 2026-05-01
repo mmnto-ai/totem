@@ -265,8 +265,34 @@ describe('CompiledRule status field — Stage 4 untested-against-codebase value'
   });
 
   it('rejects an unknown status value', () => {
-    const bogus = { ...stage4UntestedRule, status: 'pending-verification' };
+    const bogus = { ...stage4UntestedRule, status: 'unknown-status' };
     expect(() => CompiledRuleSchema.parse(bogus)).toThrow();
+  });
+});
+
+// ─── Stage 4 pack pending-verification value (mmnto-ai/totem#1684) ─────
+
+describe("CompiledRule status field — pack 'pending-verification' value", () => {
+  const pendingRule = {
+    lessonHash: 'def456abc789',
+    lessonHeading: 'Pack pending rule',
+    pattern: '\\bbar\\b',
+    message: 'No bar',
+    engine: 'regex' as const,
+    compiledAt: '2026-05-01T12:00:00Z',
+    status: 'pending-verification' as const,
+  };
+
+  it("accepts a CompiledRule with status 'pending-verification'", () => {
+    const parsed = CompiledRuleSchema.parse(pendingRule);
+    expect(parsed.status).toBe('pending-verification');
+  });
+
+  it("preserves status: 'pending-verification' across round-trip", () => {
+    const firstParse = CompiledRuleSchema.parse(pendingRule);
+    const serialized: unknown = JSON.parse(JSON.stringify(firstParse));
+    const secondParse = CompiledRuleSchema.parse(serialized);
+    expect(secondParse.status).toBe('pending-verification');
   });
 });
 
