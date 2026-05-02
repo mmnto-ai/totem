@@ -20,7 +20,7 @@ The strategic frame is "publishing without runtime-wiring is incomplete; ship ga
 
 - **Headline Work — Substrate Hardening (Tenet 15):**
   - [ ] **`@mmnto/pack-voice` (`mmnto-ai/totem#1798`).** Tier-2, scope: core, domain: architecture. Compile voice rules from `voice-tuning-dataset.md` (em-dash detection, banned-vocab list, "Not X, but Y" patterns) into a deterministic pack with regex / ast-grep rules. Solves the cross-repo voice-rules access path problem.
-  - [ ] **upstream-feedback/049 substrate response.** Two options not mutually exclusive: (A) local lint pack in totem-strategy for doubled-slug variants, bare-ref forms, section-anchor enforcement, truncation residues; (B) lift to `@mmnto/pack-governance` or built-in lint pack for cross-repo adoption. Sequencing: (A) first as fast-feedback proof, then (B) if false-positive rate stays low.
+  - [ ] **upstream-feedback/049 substrate response.** Two options not mutually exclusive: (A) local lint pack in totem-strategy for doubled-slug variants, bare-ref forms, section-link enforcement, truncation residues; (B) lift to `@mmnto/pack-governance` or built-in lint pack for cross-repo adoption. Sequencing: (A) first as fast-feedback proof, then (B) if false-positive rate stays low.
   - [ ] **`mmnto-ai/totem#1796` cwd/configRoot harmonization.** Tier-3. Mirror the eager `repoRoot` resolution pattern from PR #1787's `first-lint-promote-runner.ts` into `compile.ts:663` and `test-rules.ts`.
 
 - **Bundled Cleanup / Validation:**
