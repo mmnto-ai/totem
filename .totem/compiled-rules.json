@@ -7569,32 +7569,11 @@
       "unverified": true
     },
     {
-      "lessonHash": "6af24f1cf45e31b7",
-      "lessonHeading": "Ensure byte-stable JSON serialization",
-      "message": "Use JSON.stringify with a recursive key-sorting replacer to ensure byte-stable serialization and prevent phantom Git diffs",
-      "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
-      "astGrepPattern": "JSON.stringify($OBJ)",
-      "compiledAt": "2026-05-02T01:38:57.431Z",
-      "createdAt": "2026-05-02T01:38:57.431Z",
-      "fileGlobs": [
-        "packages/core/src/verification-outcomes.ts"
-      ],
-      "badExample": "JSON.stringify(state)",
-      "goodExample": "JSON.stringify(state, sortedKeysReplacer)",
-      "unverified": true,
-      "status": "archived",
-      "archivedAt": "2026-05-02T01:38:58.359Z",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 67 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .claude/hooks/session-context.js, .gemini/hooks/BeforeTool.js, packages/cli/build/esbuild-lite.mjs, packages/cli/src/adapters/gh-utils.test.ts, packages/cli/src/adapters/github-cli-pr.test.ts (+ 62 more). reasonCode: stage4-out-of-scope-match."
-    },
-    {
       "lessonHash": "ce494b0933f1e4aa",
       "lessonHeading": "Neutralize C1 and carriage return characters",
+      "pattern": "",
       "message": "Terminal sanitizer must explicitly target C1 control codes (U+0080–U+009F) and carriage returns (\\r) to prevent terminal line-rewind attacks.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepYamlRule": {
         "rule": {
           "pattern": "$STR.replace($REGEX, $REPLACEMENT)",
@@ -7606,18 +7585,59 @@
           }
         }
       },
+      "badExample": "const safe = raw.replace(/[\\x00-\\x1F]/g, '');",
+      "goodExample": "const safe = raw.replace(/[\\u0080-\\u009F\\r]/g, '');",
       "compiledAt": "2026-05-02T01:39:07.317Z",
       "createdAt": "2026-05-02T01:39:07.317Z",
       "fileGlobs": [
         "packages/cli/src/**/*.ts",
         "!**/*.test.*"
       ],
-      "badExample": "const safe = raw.replace(/[\\x00-\\x1F]/g, '');",
-      "goodExample": "const safe = raw.replace(/[\\u0080-\\u009F\\r]/g, '');",
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 39 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/doctor.test.ts, packages/cli/src/commands/import.test.ts, packages/cli/src/commands/init.test.ts, packages/cli/src/commands/install-hooks.test.ts, packages/cli/src/commands/shield-estimate.test.ts (+ 34 more). reasonCode: stage4-out-of-scope-match.",
+      "archivedAt": "2026-05-02T01:39:08.031Z",
+      "unverified": true
+    },
+    {
+      "lessonHash": "209d2575bf7f1c2d",
+      "lessonHeading": "Use unique temp files for atomic writes",
+      "message": "Static '.tmp' suffix risks collisions on concurrent or rapid writes. Use a unique suffix combining PID + timestamp (e.g. `${process.pid}.${Date.now().toString(36)}.tmp`) or a UUID.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "$PATH + '.tmp'",
+      "compiledAt": "2026-05-02T02:07:10.539Z",
+      "createdAt": "2026-05-02T02:07:10.539Z",
+      "fileGlobs": [
+        "packages/core/src/**/*.ts"
+      ],
+      "badExample": "const tmpPath = filePath + '.tmp';",
+      "goodExample": "const tmpPath = `${filePath}.${process.pid}.${Date.now().toString(36)}.tmp`;",
       "unverified": true,
       "status": "archived",
-      "archivedAt": "2026-05-02T01:39:08.031Z",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 39 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/doctor.test.ts, packages/cli/src/commands/import.test.ts, packages/cli/src/commands/init.test.ts, packages/cli/src/commands/install-hooks.test.ts, packages/cli/src/commands/shield-estimate.test.ts (+ 34 more). reasonCode: stage4-out-of-scope-match."
+      "archivedAt": "2026-05-02T02:07:11.456Z",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 3 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/shield.ts, packages/cli/src/commands/sync.ts, packages/cli/src/utils/pilot.ts. reasonCode: stage4-out-of-scope-match."
+    },
+    {
+      "lessonHash": "f0524b499c4dd8af",
+      "lessonHeading": "Ensure byte-stable JSON serialization",
+      "message": "Use canonicalStringify() instead of JSON.stringify() for committable state — recursive key sorting prevents phantom Git diffs from non-deterministic property ordering.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "JSON.stringify($VALUE, $$$REST)",
+      "compiledAt": "2026-05-02T02:07:19.520Z",
+      "createdAt": "2026-05-02T02:07:19.520Z",
+      "fileGlobs": [
+        "packages/core/src/**/*.ts"
+      ],
+      "badExample": "const output = JSON.stringify(manifest, null, 2);",
+      "goodExample": "const output = canonicalStringify(manifest, 2);",
+      "unverified": true,
+      "status": "archived",
+      "archivedAt": "2026-05-02T02:07:20.230Z",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 49 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/add-secret.test.ts, packages/cli/src/commands/add-secret.ts, packages/cli/src/commands/compile-export-archive-filter.test.ts, packages/cli/src/commands/compile-noop-refresh.test.ts, packages/cli/src/commands/compile-refresh-manifest.test.ts (+ 44 more). reasonCode: stage4-out-of-scope-match."
     }
   ],
   "nonCompilable": [
@@ -12715,12 +12735,6 @@
       "reason": "Lesson describes a procedural/architectural protocol for handling code review declines (updating styleguide, posting consolidated comments, capturing lessons). There is no detectable code pattern — the lesson governs human and agent workflow, not source code structure."
     },
     {
-      "hash": "22194880533227a5",
-      "title": "Verify escaped characters in global renames",
-      "reasonCode": "out-of-scope",
-      "reason": "Lesson describes a procedural/workflow guideline about using multi-pass sed scripts during package renames — there is no detectable code pattern in source files that constitutes a violation. The hazard is a missing step in a rename process, not a structural or textual anti-pattern in TypeScript source code."
-    },
-    {
       "hash": "0972b86fd805742a",
       "title": "Publishing private cohort members",
       "reasonCode": "out-of-scope",
@@ -12731,12 +12745,6 @@
       "title": "Isolate per-item errors in batch processing",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes an architectural pattern (wrapping individual tasks in try-catch during batch processing) that requires semantic understanding of which loops constitute 'batch processing' and whether their bodies already contain try-catch blocks. No structural pattern can reliably distinguish a batch-processing loop from any other loop, nor verify the presence or absence of per-item error isolation without false positives."
-    },
-    {
-      "hash": "e0e2357efab2663e",
-      "title": "Prioritize pipeline validation over security gates",
-      "reasonCode": "out-of-scope",
-      "reason": "Lesson describes a conceptual architectural prioritization principle (deferring security gates during alpha-pilot phases) with no detectable code pattern to match or flag in source files."
     },
     {
       "hash": "1aefddc5988df6b7",
@@ -12761,12 +12769,6 @@
       "title": "Exclude state files from verifier inputs",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes an architectural principle about which files to include/exclude as verifier inputs. The correct exclusion depends on runtime logic and file path semantics that cannot be detected by a structural pattern without knowing the full context of how the verifier input set is constructed."
-    },
-    {
-      "hash": "3592fb871089a61d",
-      "title": "Provision npm scopes before first publish",
-      "reasonCode": "out-of-scope",
-      "reason": "Lesson describes a CI/CD operational prerequisite (manually provisioning npm scopes before publishing) — there is no detectable code pattern in source files that indicates a violation of this requirement."
     },
     {
       "hash": "67248152c9cf6b31",
@@ -12797,6 +12799,24 @@
       "title": "Include generated artifacts in files",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes a package.json configuration audit (verifying that generated artifacts listed in 'files' match what the prepare script produces) — this requires semantic cross-field analysis between the 'scripts.prepare' value and the 'files' array contents, which no single regex or AST pattern can express."
+    },
+    {
+      "hash": "f7bccb0216cdb9d8",
+      "title": "Verify escaped characters in global renames",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a procedural/workflow guideline about using multi-pass sed scripts during package renames — there is no detectable code pattern in source files that constitutes a violation. The hazard is a missing step in a rename process, not a structural or textual anti-pattern in TypeScript source."
+    },
+    {
+      "hash": "44d37a9a64ce185d",
+      "title": "Alpha-pilot publish exemption from Sigstore gating",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Hazard requires project-state-conditional analysis: the exemption applies only while ADR-097 Stage 1 alpha-pilot is active and ticket #1492 is open and pre-implementation. No pattern can read governance/ticket state to determine whether the exemption is currently in force."
+    },
+    {
+      "hash": "2019606d76d3f6ab",
+      "title": "Provision npm scopes before first publish",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a procedural/operational requirement (manually provisioning npm scopes before publishing) that has no detectable code pattern — there is no syntactic anti-pattern to match in package.json, workflow YAML, or changeset config that would indicate a scope has not been provisioned on the registry."
     }
   ]
 }
