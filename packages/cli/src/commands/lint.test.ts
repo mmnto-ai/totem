@@ -42,6 +42,17 @@ vi.mock('./run-compiled-rules.js', () => ({
   }),
 }));
 
+// ─── Mock bootstrap-engine (mmnto-ai/totem#1794) ────────
+// Real bootstrapEngine would read .totem/installed-packs.json from the
+// scaffolded tmp dir — out of scope for staleness tests. Spy lets the
+// dedicated describe block below assert the call sequence.
+
+const bootstrapEngineMock = vi.fn();
+vi.mock('../utils/bootstrap-engine.js', () => ({
+  bootstrapEngine: (config: unknown, projectRoot: unknown) =>
+    bootstrapEngineMock(config, projectRoot),
+}));
+
 // ─── Helpers ────────────────────────────────────────────
 
 function makeTmpDir(): string {
@@ -240,5 +251,42 @@ describe('lintCommand regex timeout handling', () => {
 
     const { lintCommand } = await import('./lint.js');
     await expect(lintCommand({ timeoutMode: 'strict' })).resolves.toBeUndefined();
+  });
+});
+
+// ─── Engine bootstrap wiring (mmnto-ai/totem#1794) ──────
+
+describe('lintCommand engine bootstrap wiring', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+    fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), 'export default {};', 'utf-8');
+    bootstrapEngineMock.mockClear();
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+  });
+
+  it('invokes bootstrapEngine exactly once with the resolved config + configRoot', async () => {
+    const { lintCommand } = await import('./lint.js');
+    await lintCommand({});
+
+    expect(bootstrapEngineMock).toHaveBeenCalledTimes(1);
+    const [calledConfig, calledRoot] = bootstrapEngineMock.mock.calls[0];
+    expect(calledConfig).toMatchObject({ totemDir: '.totem' });
+    expect(typeof calledRoot).toBe('string');
+    // Pin to tmpDir (loose `length > 0` would silently pass a regression
+    // that wired `cwd` directly). Canonicalize both sides via
+    // `fs.realpathSync.native` because macOS resolves `os.tmpdir()`
+    // `/tmp/...` → `/private/tmp/...` after `process.chdir`; `.native`
+    // also expands Windows 8.3 short names so the assertion is robust
+    // on every CI runner.
+    expect(fs.realpathSync.native(calledRoot as string)).toBe(fs.realpathSync.native(tmpDir));
   });
 });

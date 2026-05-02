@@ -12,6 +12,13 @@ export async function testRulesCommand(opts: { filter?: string }): Promise<void>
   const configPath = resolveConfigPath(cwd);
   const config = await loadConfig(configPath);
 
+  // Engine boot (mmnto-ai/totem#1794). `runRuleTests` dispatches
+  // ast-grep against fixture files, which depends on pack-contributed
+  // language registrations.
+  const { bootstrapEngine } = await import('../utils/bootstrap-engine.js');
+  const configRoot = path.dirname(configPath);
+  await bootstrapEngine(config, configRoot);
+
   const rulesPath = path.join(cwd, config.totemDir, 'compiled-rules.json');
   const testsDir = path.join(cwd, config.totemDir, 'tests');
 
