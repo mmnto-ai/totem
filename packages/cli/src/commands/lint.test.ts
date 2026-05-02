@@ -281,6 +281,12 @@ describe('lintCommand engine bootstrap wiring', () => {
     const [calledConfig, calledRoot] = bootstrapEngineMock.mock.calls[0];
     expect(calledConfig).toMatchObject({ totemDir: '.totem' });
     expect(typeof calledRoot).toBe('string');
-    expect((calledRoot as string).length).toBeGreaterThan(0);
+    // Pin to tmpDir (loose `length > 0` would silently pass a regression
+    // that wired `cwd` directly). Canonicalize both sides via
+    // `fs.realpathSync.native` because macOS resolves `os.tmpdir()`
+    // `/tmp/...` → `/private/tmp/...` after `process.chdir`; `.native`
+    // also expands Windows 8.3 short names so the assertion is robust
+    // on every CI runner.
+    expect(fs.realpathSync.native(calledRoot as string)).toBe(fs.realpathSync.native(tmpDir));
   });
 });

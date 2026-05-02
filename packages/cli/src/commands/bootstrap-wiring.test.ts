@@ -50,7 +50,14 @@ function expectBootstrapCalledOnceWithConfigAndRoot(expectedRoot: string): void 
   expect(bootstrapEngineMock).toHaveBeenCalledTimes(1);
   const [calledConfig, calledRoot] = bootstrapEngineMock.mock.calls[0];
   expect(calledConfig).toMatchObject({ totemDir: '.totem' });
-  expect(calledRoot).toBe(expectedRoot);
+  expect(typeof calledRoot).toBe('string');
+  // macOS resolves `os.tmpdir()` `/tmp/...` → `/private/tmp/...` after
+  // `process.chdir`, but the fixture string stays `/tmp/...`. Canonicalize
+  // both sides via `fs.realpathSync.native` so the assertion compares
+  // logical identity, not raw string equality. `.native` (vs the JS-only
+  // variant) also expands Windows 8.3 short names, so the comparison is
+  // robust on every CI runner.
+  expect(fs.realpathSync.native(calledRoot as string)).toBe(fs.realpathSync.native(expectedRoot));
 }
 
 /**

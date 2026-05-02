@@ -60,7 +60,11 @@ describe('bootstrapEngine', () => {
     });
     const { bootstrapEngine } = await import('./bootstrap-engine.js');
 
-    await expect(bootstrapEngine(makeConfig(), '/abs/repo-root')).rejects.toThrowError(cause);
+    // .toBe(cause) instead of .toThrowError(cause) — the contract is
+    // "propagate the original Error instance verbatim," not just "throw
+    // an error with this message." A fresh Error with the same message
+    // would slip past .toThrowError; .toBe pins the exact instance.
+    await expect(bootstrapEngine(makeConfig(), '/abs/repo-root')).rejects.toBe(cause);
   });
 
   it('passes a non-default totemDir through unchanged (monorepo subpackage case)', async () => {
