@@ -34,6 +34,7 @@ export async function runFirstLintPromote(options: RunFirstLintPromoteOptions): 
     promotePendingRules,
     resolveStage4Baseline,
     safeExec,
+    sanitizeForTerminal,
     saveCompiledRulesFile,
     STAGE4_MANIFEST_EXCLUSIONS,
     verifyAgainstCodebase,
@@ -72,13 +73,36 @@ export async function runFirstLintPromote(options: RunFirstLintPromoteOptions): 
   // the manifest entry won't match and Stage 4 will end up scanning the
   // compiled-rules file (false-positive matches against rules' own
   // `badExample` text).
-  const repoRoot: string = safeExec('git', ['rev-parse', '--show-toplevel'], {
-    cwd,
-    env: { ...process.env, LC_ALL: 'C' },
-  });
+  // totem-context: log+exitCode rather than throw per `.gemini/styleguide.md`
+  // CLI-failure-signal rule (GCA mmnto-ai/totem#1787 R1) — git missing or
+  // running outside a repo should not surface a stack trace.
+  let repoRoot: string;
+  try {
+    repoRoot = safeExec('git', ['rev-parse', '--show-toplevel'], {
+      cwd,
+      env: { ...process.env, LC_ALL: 'C' },
+    }); // totem-context: intentional cleanup — CLI rejects throw at top-level per `.gemini/styleguide.md`; log+exitCode is the documented signal path
+  } catch (err) {
+    log.error(
+      'Totem Error',
+      `Failed to resolve git root: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exitCode = 1;
+    return;
+  }
 
+  // `.totem/verification-outcomes.json` is committable, so once tracked it
+  // surfaces in the tracked-files enumeration. Without an exclusion entry,
+  // a pending rule would Stage-4 match against serialized outcome JSON
+  // instead of consumer source files. Same class as the manifest-exclusion
+  // (CR mmnto-ai/totem#1787 R1).
   const activeManifestPath = path.relative(repoRoot, manifestPath).replace(/\\/g, '/');
-  const manifestExclusionSet = new Set<string>([...STAGE4_MANIFEST_EXCLUSIONS, activeManifestPath]);
+  const activeOutcomesPath = path.relative(repoRoot, outcomesPath).replace(/\\/g, '/');
+  const manifestExclusionSet = new Set<string>([
+    ...STAGE4_MANIFEST_EXCLUSIONS,
+    activeManifestPath,
+    activeOutcomesPath,
+  ]);
 
   // `.totemignore` lives at the repo root by convention (matches compile.ts:708).
   // Resolving from `cwd` would miss the file when totem is run from a subpackage.
@@ -129,7 +153,10 @@ export async function runFirstLintPromote(options: RunFirstLintPromoteOptions): 
   const result = await promotePendingRules(manifest.rules, {
     outcomesPath,
     verifier,
-    onWarn: (msg: string) => log.warn(tag, msg),
+    // totem-context: msg composed from untrusted lessonHeading + verifier
+    // error text in first-lint-promote.ts; sanitize before terminal write
+    // (CR mmnto-ai/totem#1787 R1, terminal-injection guideline).
+    onWarn: (msg: string) => log.warn(tag, sanitizeForTerminal(msg)),
   });
 
   if (result.changed) {

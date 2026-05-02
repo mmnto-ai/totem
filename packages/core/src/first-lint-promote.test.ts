@@ -266,7 +266,10 @@ describe('promotePendingRules', () => {
       [ruleA, ruleB],
       deps({ verifier, onWarn: (m) => warnings.push(m) }),
     );
-    expect(result.verifierInvocations).toBe(1);
+    // Both invocations are counted, including the throwing one — the metric
+    // reports verifier work attempted, not work succeeded
+    // (CR mmnto-ai/totem#1787 R1).
+    expect(result.verifierInvocations).toBe(2);
     expect(result.verifierFailures).toBe(1);
     expect(result.promoted).toBe(1);
     expect(result.mutatedRules.find((r) => r.lessonHash === 'fails')?.status).toBe(

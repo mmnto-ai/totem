@@ -3,6 +3,7 @@ import * as path from 'node:path';
 
 import { z } from 'zod';
 
+import { canonicalStringify } from './compile-manifest.js';
 import type { Stage4Outcome } from './stage4-verifier.js';
 
 /**
@@ -136,7 +137,22 @@ export function readVerificationOutcomes(
     );
     return {};
   }
-  return result.data.outcomes;
+  // totem-context: defense-in-depth — schema validates each entry's shape but
+  // not that the file-level record key matches the entry's stored ruleHash.
+  // A tampered or hand-edited file could memoize an outcome under the wrong
+  // hash. Drop those entries (with a warn) so memoization never satisfies a
+  // mismatched lookup.
+  const aligned: VerificationOutcomesStore = {};
+  for (const [key, entry] of Object.entries(result.data.outcomes)) {
+    if (entry.ruleHash !== key) {
+      onWarn?.(
+        `Key/hash mismatch in ${filePath}: key=${key}, entry.ruleHash=${entry.ruleHash}. Ignoring entry.`,
+      );
+      continue;
+    }
+    aligned[key] = entry;
+  }
+  return aligned;
 }
 
 /**
@@ -158,22 +174,16 @@ export function writeVerificationOutcomes(
   fs.mkdirSync(dir, { recursive: true });
 
   const file: VerificationOutcomesFile = { version: 1, outcomes };
-  const json = `${JSON.stringify(canonicalizeForSerialization(file), null, 2)}\n`;
+  const json = `${canonicalStringify(file, 2)}\n`;
 
-  const tmpPath = `${filePath}.tmp`;
-  fs.writeFileSync(tmpPath, json, 'utf-8');
-  fs.renameSync(tmpPath, filePath);
-}
-
-function canonicalizeForSerialization(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalizeForSerialization);
-  if (typeof value === 'object' && value !== null) {
-    const record = value as Record<string, unknown>;
-    const out: Record<string, unknown> = {};
-    for (const key of Object.keys(record).sort()) {
-      out[key] = canonicalizeForSerialization(record[key]);
-    }
-    return out;
+  // totem-context: per-write unique temp filename so two concurrent lint
+  // processes can't clobber each other's in-flight write and trigger a
+  // hard rename failure mid-pass (CR mmnto-ai/totem#1787 R1).
+  const tmpPath = `${filePath}.${process.pid}.${Date.now().toString(36)}.tmp`;
+  try {
+    fs.writeFileSync(tmpPath, json, 'utf-8');
+    fs.renameSync(tmpPath, filePath);
+  } finally {
+    if (fs.existsSync(tmpPath)) fs.rmSync(tmpPath, { force: true });
   }
-  return value;
 }

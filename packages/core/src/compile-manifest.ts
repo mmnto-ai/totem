@@ -124,12 +124,39 @@ function hasCompoundRule(parsed: unknown): boolean {
   return false;
 }
 
-export function canonicalStringify(value: unknown): string {
+/**
+ * Recursively shape an object tree so every nested record's keys are sorted
+ * lexicographically and `undefined` properties are dropped. Pure data
+ * transform — caller chooses how to serialize the result (minified for hash
+ * payloads, pretty-printed for committable files).
+ */
+export function canonicalizeKeys(value: unknown): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(canonicalizeKeys);
+  const record = value as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(record).sort()) {
+    if (record[k] === undefined) continue;
+    out[k] = canonicalizeKeys(record[k]);
+  }
+  return out;
+}
+
+/**
+ * Stringify a value with deterministic key order. The 1-arg form returns
+ * minified JSON (the manifest-hash payload form per mmnto/totem#1407). Pass
+ * `indent` to produce pretty-printed canonical JSON (used for committable
+ * artefacts like `.totem/verification-outcomes.json` per mmnto-ai/totem#1684).
+ */
+export function canonicalStringify(value: unknown, indent?: number): string {
   if (value === undefined) {
     throw new TotemParseError(
       'canonicalStringify: undefined is not a JSON value',
       'The manifest hash payload must be JSON-parseable. Undefined entries are filtered out of records before serialisation, so a direct undefined here indicates a caller bug rather than malformed data on disk.',
     );
+  }
+  if (indent !== undefined) {
+    return JSON.stringify(canonicalizeKeys(value), null, indent);
   }
   if (value === null || typeof value !== 'object') {
     return JSON.stringify(value);

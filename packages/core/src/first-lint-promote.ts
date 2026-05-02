@@ -57,7 +57,9 @@ export interface PromotePendingRulesDeps {
   readonly now?: () => Date;
   /**
    * Optional logger for verifier failures and self-healing diagnostics.
-   * Defaults to `console.warn` when omitted.
+   * Defaults to a no-op when omitted — pass an explicit logger to surface
+   * corrupt-cache and verifier-failure diagnostics. The CLI runner wires
+   * this to `log.warn` after sanitization (see `first-lint-promote-runner.ts`).
    */
   readonly onWarn?: (msg: string) => void;
 }
@@ -69,7 +71,11 @@ export interface PromotePendingRulesResult {
    * Callers persist this to `.totem/compiled-rules.json`.
    */
   readonly mutatedRules: CompiledRule[];
-  /** Count of rules that invoked the verifier this pass (excludes memoized hits). */
+  /**
+   * Count of verifier calls this pass (excludes memoized hits). Includes
+   * calls that threw, since the metric reports work attempted rather than
+   * work succeeded — pair with `verifierFailures` to derive the success count.
+   */
   readonly verifierInvocations: number;
   /** Count of rules whose status was replaced with a terminal lifecycle value. */
   readonly promoted: number;
@@ -133,8 +139,8 @@ export async function promotePendingRules(
       // No memoized outcome (or hash mismatch on a stale entry). Invoke the
       // verifier. Per-rule try/catch isolates failures (Invariant #7).
       try {
-        const result = await deps.verifier(rule);
         verifierInvocations += 1;
+        const result = await deps.verifier(rule);
         outcomeEntry = {
           ruleHash: rule.lessonHash,
           verifiedAt: now().toISOString(),

@@ -237,4 +237,42 @@ describe('readVerificationOutcomes / writeVerificationOutcomes', () => {
     writeVerificationOutcomes(filePath, sampleStore);
     expect(readVerificationOutcomes(filePath)).toEqual(sampleStore);
   });
+
+  it('drops entries whose key does not match their stored ruleHash', () => {
+    // Defense in depth: schema validates each entry's shape but not that the
+    // file-level key matches the stored ruleHash. A tampered or hand-edited
+    // file could memoize an outcome under the wrong hash; the loader filters
+    // those out with a warn (CR mmnto-ai/totem#1787 R1).
+    const filePath = tmpFile();
+    const tampered = {
+      version: 1,
+      outcomes: {
+        // Key "abc123" but entry.ruleHash is "different-hash" — mismatch.
+        abc123: {
+          ruleHash: 'different-hash',
+          verifiedAt: '2026-05-02T00:00:00.000Z',
+          outcome: 'in-scope-bad-example' as const,
+          baselineMatches: [],
+          inScopeMatches: [],
+          candidateDebtLines: [],
+        },
+        // Aligned entry — key matches ruleHash.
+        aligned: {
+          ruleHash: 'aligned',
+          verifiedAt: '2026-05-02T00:00:00.000Z',
+          outcome: 'no-matches' as const,
+          baselineMatches: [],
+          inScopeMatches: [],
+          candidateDebtLines: [],
+        },
+      },
+    };
+    fs.writeFileSync(filePath, JSON.stringify(tampered), 'utf-8');
+    const warnings: string[] = [];
+    const store = readVerificationOutcomes(filePath, (m) => warnings.push(m));
+    expect(Object.keys(store)).toEqual(['aligned']);
+    expect(warnings.length).toBe(1);
+    expect(warnings[0]).toMatch(/Key\/hash mismatch/);
+    expect(warnings[0]).toMatch(/abc123/);
+  });
 });

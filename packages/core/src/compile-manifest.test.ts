@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { CompileManifest } from './compile-manifest.js';
 import {
+  canonicalizeKeys,
   canonicalStringify,
   generateInputHash,
   generateOutputHash,
@@ -212,6 +213,47 @@ describe('canonicalStringify', () => {
     // Fail loud rather than silently produce the string "undefined"
     // that would then hash to something no other input produces.
     expect(() => canonicalStringify(undefined)).toThrow(/undefined is not a JSON value/);
+  });
+
+  it('produces pretty-printed output when given an indent argument', () => {
+    // The optional indent param routes through JSON.stringify so committable
+    // artefacts (verification-outcomes.json, etc.) stay diff-friendly while
+    // still using the canonical key order that minified hash payloads use.
+    const out = canonicalStringify({ b: 2, a: 1 }, 2);
+    expect(out).toBe('{\n  "a": 1,\n  "b": 2\n}');
+  });
+
+  it('agrees with the minified form when indent is omitted', () => {
+    const v = { z: 1, a: { c: 3, b: 2 } };
+    expect(canonicalStringify(v)).toBe('{"a":{"b":2,"c":3},"z":1}');
+  });
+});
+
+describe('canonicalizeKeys', () => {
+  it('sorts object keys recursively without serializing', () => {
+    const out = canonicalizeKeys({ z: { y: 1, x: 2 }, a: 0 }) as Record<string, unknown>;
+    expect(Object.keys(out)).toEqual(['a', 'z']);
+    expect(Object.keys(out.z as object)).toEqual(['x', 'y']);
+  });
+
+  it('preserves array order while sorting nested object keys', () => {
+    const out = canonicalizeKeys([{ b: 1, a: 2 }, 3, { d: 4, c: 5 }]) as Array<unknown>;
+    expect(out).toHaveLength(3);
+    expect(Object.keys(out[0] as object)).toEqual(['a', 'b']);
+    expect(out[1]).toBe(3);
+    expect(Object.keys(out[2] as object)).toEqual(['c', 'd']);
+  });
+
+  it('returns primitives unchanged', () => {
+    expect(canonicalizeKeys('s')).toBe('s');
+    expect(canonicalizeKeys(7)).toBe(7);
+    expect(canonicalizeKeys(null)).toBe(null);
+    expect(canonicalizeKeys(true)).toBe(true);
+  });
+
+  it('drops undefined-valued properties (JSON.stringify parity)', () => {
+    const out = canonicalizeKeys({ a: 1, b: undefined, c: 3 }) as Record<string, unknown>;
+    expect(Object.keys(out)).toEqual(['a', 'c']);
   });
 });
 

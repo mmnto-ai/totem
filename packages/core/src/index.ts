@@ -396,6 +396,7 @@ export {
 // Compile manifest (signing / provenance)
 export type { CompileManifest } from './compile-manifest.js';
 export {
+  canonicalizeKeys,
   canonicalStringify,
   CompileManifestSchema,
   generateInputHash,
