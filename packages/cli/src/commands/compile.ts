@@ -474,6 +474,16 @@ export async function compileCommand(
   loadEnv(cwd);
   const config = await loadConfig(configPath);
 
+  // Engine boot (mmnto-ai/totem#1794). The compile-time smoke gate
+  // (compiler.ts) executes ast-grep against each rule's `badExample`,
+  // which dispatches `extensionToLanguage()` and depends on
+  // pack-contributed language registrations being in place. Wire here
+  // — single seal covers the worker fan-out (Promise.all in same
+  // process inherits module state, no fork).
+  const { bootstrapEngine } = await import('../utils/bootstrap-engine.js');
+  const configRoot = path.dirname(configPath);
+  bootstrapEngine(config, configRoot);
+
   const totemDir = path.join(cwd, config.totemDir);
   const rulesPath = path.join(totemDir, COMPILED_RULES_FILE);
 

@@ -45,6 +45,13 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   loadEnv(cwd);
   const config = await loadConfig(configPath);
 
+  // Engine boot (mmnto-ai/totem#1794). Pack-contributed languages, chunkers,
+  // and grammars register here BEFORE any AST rule dispatch — see ADR-097
+  // § 10. Idempotent within one Node process via isEngineSealed() so test
+  // harnesses running multiple commands in sequence do not throw.
+  const { bootstrapEngine } = await import('../utils/bootstrap-engine.js');
+  bootstrapEngine(config, configRoot);
+
   // Non-blocking staleness check — warn if compile manifest is stale
   try {
     const fs = await import('node:fs');
