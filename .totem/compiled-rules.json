@@ -7602,42 +7602,42 @@
     {
       "lessonHash": "209d2575bf7f1c2d",
       "lessonHeading": "Use unique temp files for atomic writes",
+      "pattern": "",
       "message": "Static '.tmp' suffix risks collisions on concurrent or rapid writes. Use a unique suffix combining PID + timestamp (e.g. `${process.pid}.${Date.now().toString(36)}.tmp`) or a UUID.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "$PATH + '.tmp'",
+      "badExample": "const tmpPath = filePath + '.tmp';",
+      "goodExample": "const tmpPath = `${filePath}.${process.pid}.${Date.now().toString(36)}.tmp`;",
       "compiledAt": "2026-05-02T02:07:10.539Z",
       "createdAt": "2026-05-02T02:07:10.539Z",
       "fileGlobs": [
         "packages/core/src/**/*.ts"
       ],
-      "badExample": "const tmpPath = filePath + '.tmp';",
-      "goodExample": "const tmpPath = `${filePath}.${process.pid}.${Date.now().toString(36)}.tmp`;",
-      "unverified": true,
+      "severity": "warning",
       "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 3 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/shield.ts, packages/cli/src/commands/sync.ts, packages/cli/src/utils/pilot.ts. reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-05-02T02:07:11.456Z",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 3 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/shield.ts, packages/cli/src/commands/sync.ts, packages/cli/src/utils/pilot.ts. reasonCode: stage4-out-of-scope-match."
+      "unverified": true
     },
     {
       "lessonHash": "f0524b499c4dd8af",
       "lessonHeading": "Ensure byte-stable JSON serialization",
+      "pattern": "",
       "message": "Use canonicalStringify() instead of JSON.stringify() for committable state — recursive key sorting prevents phantom Git diffs from non-deterministic property ordering.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "JSON.stringify($VALUE, $$$REST)",
+      "badExample": "const output = JSON.stringify(manifest, null, 2);",
+      "goodExample": "const output = canonicalStringify(manifest, 2);",
       "compiledAt": "2026-05-02T02:07:19.520Z",
       "createdAt": "2026-05-02T02:07:19.520Z",
       "fileGlobs": [
         "packages/core/src/**/*.ts"
       ],
-      "badExample": "const output = JSON.stringify(manifest, null, 2);",
-      "goodExample": "const output = canonicalStringify(manifest, 2);",
-      "unverified": true,
+      "severity": "warning",
       "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 49 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/add-secret.test.ts, packages/cli/src/commands/add-secret.ts, packages/cli/src/commands/compile-export-archive-filter.test.ts, packages/cli/src/commands/compile-noop-refresh.test.ts, packages/cli/src/commands/compile-refresh-manifest.test.ts (+ 44 more). reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-05-02T02:07:20.230Z",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 49 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/add-secret.test.ts, packages/cli/src/commands/add-secret.ts, packages/cli/src/commands/compile-export-archive-filter.test.ts, packages/cli/src/commands/compile-noop-refresh.test.ts, packages/cli/src/commands/compile-refresh-manifest.test.ts (+ 44 more). reasonCode: stage4-out-of-scope-match."
+      "unverified": true
     }
   ],
   "nonCompilable": [
@@ -12817,6 +12817,12 @@
       "title": "Provision npm scopes before first publish",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes a procedural/operational requirement (manually provisioning npm scopes before publishing) that has no detectable code pattern — there is no syntactic anti-pattern to match in package.json, workflow YAML, or changeset config that would indicate a scope has not been provisioned on the registry."
+    },
+    {
+      "hash": "c7cdd32a901a0202",
+      "title": "Engine-boot helpers must inherit structured errors",
+      "reasonCode": "context-required",
+      "reason": "Lesson describes an architectural anti-pattern (wrapping already-structured errors in a generic TotemError catch) that requires knowing whether the callee already produces structured errors. A pattern matching try/catch + TotemError rethrow would fire on every legitimate error-wrapping site in the codebase; distinguishing lossy wraps from valid ones requires semantic knowledge of what the wrapped function throws."
     }
   ]
 }
