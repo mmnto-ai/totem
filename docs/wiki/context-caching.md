@@ -1,6 +1,6 @@
 # Context Caching
 
-When running bulk operations like `totem compile` across dozens of lessons, the token cost and latency of sending the heavy system prompt on every API call can become prohibitive. Context Caching uses LLM prompt caching to absorb that cost.
+When running bulk operations like `totem lesson compile` across dozens of lessons, the token cost and latency of sending the heavy system prompt on every API call can become prohibitive. Context Caching uses LLM prompt caching to absorb that cost.
 
 Context Caching is supported on the **Anthropic** provider (`anthropic:` prefix). Totem applies Anthropic's `cache_control` markers to the static portions of compile and review prompts; cache savings appear automatically once the provider returns prompt-cache usage metrics on the response.
 
