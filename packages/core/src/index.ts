@@ -376,9 +376,27 @@ export {
   verifyAgainstCodebase,
 } from './stage4-verifier.js';
 
+// Pack pending-verification install→lint promotion (mmnto-ai/totem#1684)
+export type { PromotePendingRulesDeps, PromotePendingRulesResult } from './first-lint-promote.js';
+export { applyOutcomeToRule, promotePendingRules } from './first-lint-promote.js';
+export type {
+  Stage4OutcomeStoredValue,
+  VerificationOutcomeEntry,
+  VerificationOutcomesFile,
+  VerificationOutcomesStore,
+} from './verification-outcomes.js';
+export {
+  readVerificationOutcomes,
+  Stage4OutcomeStored,
+  VerificationOutcomeEntrySchema,
+  VerificationOutcomesFileSchema,
+  writeVerificationOutcomes,
+} from './verification-outcomes.js';
+
 // Compile manifest (signing / provenance)
 export type { CompileManifest } from './compile-manifest.js';
 export {
+  canonicalizeKeys,
   canonicalStringify,
   CompileManifestSchema,
   generateInputHash,

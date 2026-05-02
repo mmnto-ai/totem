@@ -3,14 +3,18 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import type { CompiledRule } from '@mmnto/totem';
+
 import { cleanTmpDir } from '../test-utils.js';
 import {
   buildTotemignoreDiff,
   detectPackageManager,
   isInExtends,
   isValidTarget,
+  PACK_INSTALL_ACTIVATION_MESSAGE,
   resolveCompiledRulesExport,
   resolvePackName,
+  stampPackRulesAsPending,
 } from './install.js';
 
 describe('resolvePackName', () => {
@@ -240,5 +244,63 @@ describe('detectPackageManager', () => {
 
   it('falls back to npm when no lockfile is present', () => {
     expect(detectPackageManager(fs, path, tmpDir)).toBe('npm');
+  });
+});
+
+// ─── Pack pending-verification (mmnto-ai/totem#1684 T3) ──────
+
+describe('stampPackRulesAsPending', () => {
+  function makeRule(overrides: Partial<CompiledRule> = {}): CompiledRule {
+    return {
+      lessonHash: 'abc123',
+      lessonHeading: 'No console log',
+      pattern: 'console\\.log',
+      message: 'no console.log',
+      engine: 'regex' as const,
+      compiledAt: '2026-05-01T12:00:00.000Z',
+      ...overrides,
+    };
+  }
+
+  it('forces installed pack rules to pending-verification status and prints activation message', () => {
+    const inputRules: CompiledRule[] = [
+      makeRule({ lessonHash: 'a' }),
+      makeRule({ lessonHash: 'b', status: 'active' }),
+      makeRule({ lessonHash: 'c', status: 'untested-against-codebase' }),
+    ];
+    const stamped = stampPackRulesAsPending(inputRules);
+    expect(stamped).toHaveLength(3);
+    for (const rule of stamped) {
+      expect(rule.status).toBe('pending-verification');
+    }
+    expect(PACK_INSTALL_ACTIVATION_MESSAGE).toBe('Run `totem lint` to activate pack rules');
+  });
+
+  it('does not mutate the input rules', () => {
+    const original = makeRule({ lessonHash: 'a', status: 'active' });
+    const stamped = stampPackRulesAsPending([original]);
+    expect(original.status).toBe('active');
+    expect(stamped[0]?.status).toBe('pending-verification');
+    expect(stamped[0]).not.toBe(original);
+  });
+
+  it('preserves all other rule fields', () => {
+    const original = makeRule({
+      lessonHash: 'a',
+      pattern: 'foo',
+      message: 'No foo',
+      severity: 'warning',
+      category: 'style',
+    });
+    const [stamped] = stampPackRulesAsPending([original]);
+    expect(stamped?.lessonHash).toBe('a');
+    expect(stamped?.pattern).toBe('foo');
+    expect(stamped?.message).toBe('No foo');
+    expect(stamped?.severity).toBe('warning');
+    expect(stamped?.category).toBe('style');
+  });
+
+  it('returns an empty array unchanged for an empty pack', () => {
+    expect(stampPackRulesAsPending([])).toEqual([]);
   });
 });

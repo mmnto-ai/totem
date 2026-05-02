@@ -92,11 +92,11 @@ const CompiledRuleBaseSchema = z.object({
   /** Severity level — error blocks CI, warning reports but doesn't fail */
   severity: z.enum(['error', 'warning']).optional(),
   /**
-   * Lifecycle status. Three values:
+   * Lifecycle status. Four values:
    *   - `'active'`         — rule is enforced by `totem lint`/`totem review`.
    *   - `'archived'`       — rule is preserved on disk (telemetry continuity)
    *                          but skipped at lint time. `loadCompiledRules`
-   *                          filters these out (`compiler.ts:132`).
+   *                          filters these out (`compiler.ts:140`).
    *   - `'untested-against-codebase'` — Stage 4 verifier (mmnto-ai/totem#1682)
    *                          ran against the consumer's codebase but found
    *                          zero matches. The rule's runtime behavior on
@@ -105,6 +105,20 @@ const CompiledRuleBaseSchema = z.object({
    *                          distinct lifecycle semantic so a subsequent
    *                          compile cycle in a populated repo can re-run
    *                          Stage 4 and promote to `'active'`.
+   *   - `'pending-verification'` — pack rule installed via `totem install` in
+   *                          the cloud-compile bootstrap path
+   *                          (mmnto-ai/totem#1684). Stage 4 verifier has
+   *                          never run against the consumer's codebase. Inert
+   *                          at lint time exactly like `'archived'` and
+   *                          `'untested-against-codebase'`. The first-lint
+   *                          promotion interceptor invokes Stage 4 against
+   *                          the consumer's codebase on first encounter and
+   *                          replaces the status with one of the three
+   *                          terminal lifecycle values per Stage4Outcome →
+   *                          status mapping (see `first-lint-promote.ts`).
+   *                          Lifecycle is one-shot: a rule is `'pending-verification'`
+   *                          at most once per `lessonHash` per consumer
+   *                          repository (memoized in `verification-outcomes.json`).
    *
    * Distinct from the boolean `unverified` flag below: `unverified` is set
    * by ADR-089 zero-trust default on every LLM-generated rule (post-Layer-3
@@ -114,7 +128,9 @@ const CompiledRuleBaseSchema = z.object({
    * simultaneously — they answer different questions (author-trust vs
    * empirical-firing).
    */
-  status: z.enum(['active', 'archived', 'untested-against-codebase']).optional(),
+  status: z
+    .enum(['active', 'archived', 'untested-against-codebase', 'pending-verification'])
+    .optional(),
   /**
    * Stage 4 confidence (mmnto-ai/totem#1682). Set to `'high'` when Stage 4's
    * codebase walk found in-scope matches that are structurally equivalent

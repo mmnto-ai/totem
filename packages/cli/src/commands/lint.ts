@@ -66,6 +66,13 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     // Never crash lint due to staleness check — silently ignore errors
   }
 
+  // First-lint promotion (mmnto-ai/totem#1684): scan the manifest for pack
+  // rules in `'pending-verification'` state and run the Stage 4 verifier on
+  // each, mutating compiled-rules.json + writing verification-outcomes.json.
+  // No-op fast path returns immediately when nothing is pending.
+  const { runFirstLintPromote } = await import('./first-lint-promote-runner.js');
+  await runFirstLintPromote({ cwd, configRoot, config, tag: TAG });
+
   const result = await getDiffForReview(options, config, cwd, TAG);
   if (!result) return;
 

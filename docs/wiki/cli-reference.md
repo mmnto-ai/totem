@@ -77,6 +77,14 @@ For authoring patterns that pass the input-time gate, see [Regex Safety](regex-s
 
 Manage your deterministic rules (Pipeline 1). `rule list` outputs active rules, and `rule scaffold` creates a template for manual rule authoring.
 
+### `totem install pack/<name>`
+
+Installs a Totem pack from npm and merges its rules into your local manifest. Pack rules enter as `pending-verification` status and stay inert at lint time until the next `totem lint` runs the Stage 4 codebase verifier on each — only after that pass do rules promote to `active`, `archived`, or `untested-against-codebase` per their per-rule outcome. Verification outcomes are recorded in `.totem/verification-outcomes.json` (committable) so subsequent CI and local runs share the result and skip re-verification.
+
+- **Flags:**
+  - `--yes`: Auto-append the pack's `.totemignore` entries without showing the diff preview. Required in non-interactive contexts (CI).
+- **Output:** After a successful install, the command prints `Run \`totem lint\` to activate pack rules` as a reminder that pack rules are inert until the first lint pass promotes them.
+
 ### `totem import`
 
 Imports rules from existing tools into the Totem engine (Pipeline 4).
