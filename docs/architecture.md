@@ -118,7 +118,7 @@ All commands feature proper `--help` output documentation.
 
 The compiler supports manual pattern definitions and reverse-compiles curated rules. It includes a backfill of body text for 938 core architectural lessons to enrich rule context. An integrated WASM ast-grep engine targets complex imports and restricted properties alongside regex capabilities. These AST query engines implement graceful degradation and strictly manage process exits. Rules are stored in `.totem/compiled-rules.json`, extended with advanced telemetry fields.
 
-The compilation process reads files directly from disk instead of parsing staged diffs to prevent false positives. It also supports an `--upgrade <hash>` flow path that targets a specific rule, evicts it from the cache, and recompiles it through Sonnet using telemetry-driven directives. Developers can bypass false positives using audited inline suppression directives. Rules are scoped using anchored glob matching to prevent leaks outside specified directories. The system relies on a curated 419-rule set for baseline enforcement.
+The compilation process reads files directly from disk instead of parsing staged diffs to prevent false positives. It also supports an `--upgrade <hash>` flow path that targets a specific rule, evicts it from the cache, and recompiles it through Sonnet using telemetry-driven directives. Developers can bypass false positives using audited inline suppression directives. Rules are scoped using anchored glob matching to prevent leaks outside specified directories. The system relies on a curated 455-rule set for baseline enforcement.
 
 `totem lint` applies these compiled rules against additions with zero LLM calls. It shares a core execution engine with review commands for execution consistency. This process supports importing external configurations natively, translating flat configuration structures into deterministic rules without LLM usage. It also permits direct cross-repository rule sharing.
 
@@ -143,7 +143,28 @@ The CI pipeline features a structural drift gate, a manifest attestation gate, a
 
 To prevent pipeline lockouts, the local pre-push gate requires CLI installation and relies strictly on `totem lint`. Because `totem lint` operates purely on deterministic rules, it requires zero LLM API calls. This eliminates statistical hallucinations in CI.
 
-### 5. The MCP Server (`@mmnto/mcp`)
+### 5. Pack Ecosystem (`@mmnto/pack-*`)
+
+Packs distribute compiled rules and extension surfaces across the Totem ecosystem under the `@mmnto` npm scope. The architecture follows ADR-085 (Pack Ecosystem), ADR-091 (Ingestion Pipeline Refinements), and ADR-097 (Pack Language Archetype).
+
+- **Distribution Model:**
+  - **Namespace:** All canonical packs live under the `@mmnto` npm scope. Packs install via `pnpm add @mmnto/pack-<name>` plus `extends: ['@mmnto/pack-<name>']` in `totem.config.ts`.
+  - **Rule Substrate:** Each pack ships a sealed `compiled-rules.json`. Rules can be marked `immutable` (severity locked at distribution time, declined by `pack-merge` if a downstream tries to downgrade) or `pending-verification` (status awaits empirical Stage 4 validation in the consuming repo).
+  - **Pack Discovery:** `loadInstalledPacks()` (exported from `@mmnto/totem` since 1.22.0) reads `installed-packs.json` and synchronously registers each pack's contributions per ADR-097 § 5 Q5. The `bootstrapEngine(config, projectRoot)` helper (`packages/cli/src/utils/bootstrap-engine.ts`, 1.25.0+) wires this into the CLI lint, shield, compile, and test-rules paths and seals the engine after registration via `isEngineSealed()`.
+
+- **Pack Categories:**
+  - **Security packs:** `@mmnto/pack-agent-security` ships immutable rules covering unauthorized process spawning, dynamic code evaluation, network exfiltration, and obfuscated string assembly. Severity is locked.
+  - **Language architecture packs:** Per ADR-097 the canonical archetype is `@mmnto/pack-<lang>-architecture`. `@mmnto/pack-rust-architecture` is the first non-trivial third-party consumer; it bundles `tree-sitter-rust.wasm` from `@vscode/tree-sitter-wasm` and registers via the dual-channel pattern (`api.registerLanguage` for the WASM substrate plus `napi.registerDynamicLanguage` for the napi-side runtime).
+  - **Bot operations packs:** Per Proposal 248 the per-bot interpretive layer ships as packs (`@mmnto/pack-bot-coderabbit`, `@mmnto/pack-bot-gemini-code-assist`). Vendor-drift isolation is the load-bearing reason. v0.1 stubs sit in `pack-staging/` pending the Pack Ecosystem Graduation arc.
+
+- **Bootstrap Semantics (ADR-091 § Bootstrap):**
+  - **`pending-verification` install→lint promotion:** Pack rules ship with `status: 'pending-verification'`. The first `totem lint` run after installation runs them through the Stage 4 verifier and persists outcomes to a committable `.totem/verification-outcomes.json` (canonical-key-order via shared `canonicalStringify`).
+  - **Public Bootstrap API (1.24.0+):** `promotePendingRules`, `applyOutcomeToRule`, `readVerificationOutcomes`, `writeVerificationOutcomes`, schemas in `verification-outcomes.ts`. CLI exports `stampPackRulesAsPending` plus `PACK_INSTALL_ACTIVATION_MESSAGE`.
+  - **Status enum:** `CompiledRule.status` is one of `'active' | 'archived' | 'untested-against-codebase' | 'pending-verification'`.
+
+- **Fixed-Group Cohort Invariant:** Packs released under the same fixed-group cohort (currently `@mmnto/cli`, `@mmnto/totem`, `@mmnto/mcp`, `@mmnto/pack-agent-security`, `@mmnto/pack-rust-architecture`) MUST NOT declare a fixed-group sibling as a peerDependency. Doing so produces a major-version wiggle on Version Packages auto-PRs. Test invariant locked at `packages/pack-rust-architecture/test/structure.test.ts`.
+
+### 6. The MCP Server (`@mmnto/mcp`)
 
 A stdio-based server for LLM integration providing primary tools and strict access boundaries:
 
@@ -164,11 +185,11 @@ A stdio-based server for LLM integration providing primary tools and strict acce
 
 Totem supports three explicit capability tiers, auto-detected from the environment during `totem init`. The available command list is audited to prune stale tasks and preserve a streamlined interface:
 
-| Tier         | Requirements                               | Available Commands                                                                                               |
-| ------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `link`, `bridge`, `eject`, `lint`, `compile`, `test`, `explain`, `handoff --lite` |
-| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`, `doctor`                                                                       |
-| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `review`, `triage`, `audit`, `briefing`, `handoff`, `extract`, `docs`)                     |
+| Tier         | Requirements                               | Available Commands                                                                                                                |
+| ------------ | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `link`, `install`, `rule promote`, `eject`, `lint`, `compile`, `test`, `explain`, `handoff --lite` |
+| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`, `doctor`                                                                                        |
+| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `review`, `triage`, `handoff`, `extract`, `docs`, `proposal new`, `adr new`)                                |
 
 A lite-tier standalone WASM binary provides core CLI functions with zero native dependencies. The embedding field in configuration files is optional; when omitted, operations default to the Lite tier boundary constraints.
 
