@@ -107,6 +107,16 @@ describe('engine bootstrap wiring (mmnto-ai/totem#1794) — non-lint command sur
     expectBootstrapCalledOnceWithConfigAndRoot(tmpDir);
   });
 
+  it('shield (main LLM path) invokes bootstrapEngine with config + configRoot', async () => {
+    // shield.ts has TWO wiring sites — the --estimate branch (covered
+    // above) and the main LLM-review branch at ~line 1151. A regression
+    // that drops the wiring from one path would silently slip past a
+    // test that only exercises the other.
+    const { shieldCommand } = await import('./shield.js');
+    await tolerateDownstreamThrow(shieldCommand({} as never));
+    expectBootstrapCalledOnceWithConfigAndRoot(tmpDir);
+  });
+
   it('compile invokes bootstrapEngine with config + configRoot', async () => {
     const { compileCommand } = await import('./compile.js');
     await tolerateDownstreamThrow(compileCommand({} as never));
