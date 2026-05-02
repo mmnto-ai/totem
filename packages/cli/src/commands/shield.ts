@@ -1120,7 +1120,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
     const config = await loadConfig(configPath);
     // Engine boot (mmnto-ai/totem#1794) — see lint.ts wiring for context.
     const { bootstrapEngine } = await import('../utils/bootstrap-engine.js');
-    bootstrapEngine(config, configRoot);
+    await bootstrapEngine(config, configRoot);
     const { runEstimate } = await import('./shield-estimate.js');
     await runEstimate(options, config, cwd, configRoot);
     return;
@@ -1154,7 +1154,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const config = await loadConfig(configPath);
   // Engine boot (mmnto-ai/totem#1794) — see lint.ts wiring for context.
   const { bootstrapEngine } = await import('../utils/bootstrap-engine.js');
-  bootstrapEngine(config, configRoot);
+  await bootstrapEngine(config, configRoot);
 
   // --- Incremental shield fast-path (#1010) ---
   // If the change since the last passed shield is small enough (< 15 lines,

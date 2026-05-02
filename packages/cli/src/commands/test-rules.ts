@@ -17,7 +17,7 @@ export async function testRulesCommand(opts: { filter?: string }): Promise<void>
   // language registrations.
   const { bootstrapEngine } = await import('../utils/bootstrap-engine.js');
   const configRoot = path.dirname(configPath);
-  bootstrapEngine(config, configRoot);
+  await bootstrapEngine(config, configRoot);
 
   const rulesPath = path.join(cwd, config.totemDir, 'compiled-rules.json');
   const testsDir = path.join(cwd, config.totemDir, 'tests');

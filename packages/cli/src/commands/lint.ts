@@ -50,7 +50,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   // § 10. Idempotent within one Node process via isEngineSealed() so test
   // harnesses running multiple commands in sequence do not throw.
   const { bootstrapEngine } = await import('../utils/bootstrap-engine.js');
-  bootstrapEngine(config, configRoot);
+  await bootstrapEngine(config, configRoot);
 
   // Non-blocking staleness check — warn if compile manifest is stale
   try {

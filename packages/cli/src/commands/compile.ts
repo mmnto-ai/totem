@@ -482,7 +482,7 @@ export async function compileCommand(
   // process inherits module state, no fork).
   const { bootstrapEngine } = await import('../utils/bootstrap-engine.js');
   const configRoot = path.dirname(configPath);
-  bootstrapEngine(config, configRoot);
+  await bootstrapEngine(config, configRoot);
 
   const totemDir = path.join(cwd, config.totemDir);
   const rulesPath = path.join(totemDir, COMPILED_RULES_FILE);

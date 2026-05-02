@@ -22,9 +22,13 @@
  */
 
 import type { TotemConfig } from '@mmnto/totem';
-import { isEngineSealed, loadInstalledPacks } from '@mmnto/totem';
 
-export function bootstrapEngine(config: TotemConfig, projectRoot: string): void {
+export async function bootstrapEngine(config: TotemConfig, projectRoot: string): Promise<void> {
+  // Dynamic value imports per `.gemini/styleguide.md` § 6 — keeps any
+  // future helper added to this file from accidentally pulling
+  // `@mmnto/totem`'s heavy runtime deps at module-resolution time.
+  // `import type` above is erased at compile time and stays static.
+  const { isEngineSealed, loadInstalledPacks } = await import('@mmnto/totem');
   if (isEngineSealed()) return;
   loadInstalledPacks({ projectRoot, totemDir: config.totemDir });
 }

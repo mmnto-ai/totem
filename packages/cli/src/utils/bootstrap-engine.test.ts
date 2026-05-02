@@ -34,7 +34,7 @@ describe('bootstrapEngine', () => {
     isEngineSealedMock.mockReturnValue(false);
     const { bootstrapEngine } = await import('./bootstrap-engine.js');
 
-    bootstrapEngine(makeConfig(), '/abs/repo-root');
+    await bootstrapEngine(makeConfig(), '/abs/repo-root');
 
     expect(loadInstalledPacksMock).toHaveBeenCalledTimes(1);
     expect(loadInstalledPacksMock).toHaveBeenCalledWith({
@@ -47,7 +47,7 @@ describe('bootstrapEngine', () => {
     isEngineSealedMock.mockReturnValue(true);
     const { bootstrapEngine } = await import('./bootstrap-engine.js');
 
-    bootstrapEngine(makeConfig(), '/abs/repo-root');
+    await bootstrapEngine(makeConfig(), '/abs/repo-root');
 
     expect(loadInstalledPacksMock).not.toHaveBeenCalled();
   });
@@ -60,14 +60,14 @@ describe('bootstrapEngine', () => {
     });
     const { bootstrapEngine } = await import('./bootstrap-engine.js');
 
-    expect(() => bootstrapEngine(makeConfig(), '/abs/repo-root')).toThrowError(cause);
+    await expect(bootstrapEngine(makeConfig(), '/abs/repo-root')).rejects.toThrowError(cause);
   });
 
   it('passes a non-default totemDir through unchanged (monorepo subpackage case)', async () => {
     isEngineSealedMock.mockReturnValue(false);
     const { bootstrapEngine } = await import('./bootstrap-engine.js');
 
-    bootstrapEngine(makeConfig({ totemDir: '.custom-totem' }), '/abs/repo-root/sub');
+    await bootstrapEngine(makeConfig({ totemDir: '.custom-totem' }), '/abs/repo-root/sub');
 
     expect(loadInstalledPacksMock).toHaveBeenCalledWith({
       projectRoot: '/abs/repo-root/sub',

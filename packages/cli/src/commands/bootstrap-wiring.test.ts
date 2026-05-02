@@ -46,12 +46,35 @@ function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'totem-bootstrap-wiring-'));
 }
 
-function expectBootstrapCalledOnceWithConfigAndRoot(): void {
+function expectBootstrapCalledOnceWithConfigAndRoot(expectedRoot: string): void {
   expect(bootstrapEngineMock).toHaveBeenCalledTimes(1);
   const [calledConfig, calledRoot] = bootstrapEngineMock.mock.calls[0];
   expect(calledConfig).toMatchObject({ totemDir: '.totem' });
-  expect(typeof calledRoot).toBe('string');
-  expect((calledRoot as string).length).toBeGreaterThan(0);
+  expect(calledRoot).toBe(expectedRoot);
+}
+
+/**
+ * Tolerate the downstream throw on a `bootstrapEngine` wiring test —
+ * the command will fail later (no diff, no lessons, no rules file)
+ * but the spy captures the bootstrap call first, which is the only
+ * thing this test cares about. Asserting the rejection is an `Error`
+ * keeps the catch non-empty per the project's "no empty catches" rule
+ * and prevents a regression where the command resolves cleanly without
+ * ever triggering the downstream code path that exercises bootstrap.
+ */
+function tolerateDownstreamThrow(p: Promise<unknown>): Promise<void> {
+  return p.then(
+    () => {
+      // If the command resolves cleanly, the bootstrap-spy assertion
+      // below still runs — but this catch-arm exists to keep the
+      // negative case visible. A future change that makes the command
+      // resolve without invoking bootstrap would still fail the
+      // toHaveBeenCalledTimes(1) assertion.
+    },
+    (err: unknown) => {
+      expect(err).toBeInstanceOf(Error);
+    },
+  );
 }
 
 describe('engine bootstrap wiring (mmnto-ai/totem#1794) — non-lint command surfaces', () => {
@@ -73,21 +96,19 @@ describe('engine bootstrap wiring (mmnto-ai/totem#1794) — non-lint command sur
 
   it('shield (--estimate path) invokes bootstrapEngine with config + configRoot', async () => {
     const { shieldCommand } = await import('./shield.js');
-    // Estimate branch routes through runEstimate; will fail downstream
-    // (no git, no rules, etc.) but bootstrap fires first.
-    await shieldCommand({ estimate: true } as never).catch(() => {});
-    expectBootstrapCalledOnceWithConfigAndRoot();
+    await tolerateDownstreamThrow(shieldCommand({ estimate: true } as never));
+    expectBootstrapCalledOnceWithConfigAndRoot(tmpDir);
   });
 
   it('compile invokes bootstrapEngine with config + configRoot', async () => {
     const { compileCommand } = await import('./compile.js');
-    await compileCommand({} as never).catch(() => {});
-    expectBootstrapCalledOnceWithConfigAndRoot();
+    await tolerateDownstreamThrow(compileCommand({} as never));
+    expectBootstrapCalledOnceWithConfigAndRoot(tmpDir);
   });
 
   it('test-rules invokes bootstrapEngine with config + configRoot', async () => {
     const { testRulesCommand } = await import('./test-rules.js');
-    await testRulesCommand({}).catch(() => {});
-    expectBootstrapCalledOnceWithConfigAndRoot();
+    await tolerateDownstreamThrow(testRulesCommand({}));
+    expectBootstrapCalledOnceWithConfigAndRoot(tmpDir);
   });
 });
