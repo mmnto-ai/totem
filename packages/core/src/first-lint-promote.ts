@@ -105,8 +105,9 @@ export async function promotePendingRules(
   }
 
   // Empty-pending fast path (Invariant #9): skip the outcomes-file read
-  // when there's nothing to verify. Returns the original array unchanged
-  // — callers can shallow-equal compare to detect no-op.
+  // when there's nothing to verify. The returned array is a shallow copy
+  // of the input — `changed: false` is the no-op signal callers should use
+  // to skip manifest writes, not array-identity.
   if (pendingIndices.length === 0) {
     return { mutatedRules: [...rules], ...NOOP_RESULT_TEMPLATE };
   }
