@@ -222,7 +222,7 @@ function readEngineRange(packResolvedPath: string): string | undefined {
     return undefined;
   }
   if (typeof parsed !== 'object' || parsed === null) return undefined;
-  const engines = (parsed as { engines?: unknown }).engines; // totem-context: parsed was narrowed via `typeof !== 'object' || === null` guard above; the cast is for index access into already-validated JSON
+  const engines = (parsed as { engines?: unknown }).engines; // totem-context: SAFETY INVARIANT — `parsed` confirmed non-null object by the `typeof !== 'object' || === null` guard immediately above. Cast is for index access into runtime-narrowed JSON; no formal schema validation, but `engines` is itself runtime-checked on the next line before use.
   if (typeof engines !== 'object' || engines === null) return undefined;
   const range = (engines as Record<string, unknown>)['@mmnto/totem']; // totem-context: engines was narrowed via `typeof !== 'object' || === null` guard above; the cast is for index access; result is runtime-checked via `typeof range === 'string'` below
   return typeof range === 'string' ? range : undefined;
