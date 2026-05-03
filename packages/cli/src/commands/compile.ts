@@ -671,11 +671,17 @@ export async function compileCommand(
   // (e.g. `.my-totem`) put their manifest at `<totemDir>/compiled-rules.json`,
   // which doesn't match the default — so we ALSO add the active manifest
   // path computed from config. CR mmnto-ai/totem#1766 R1 catch.
-  const activeManifestPath = path.join(config.totemDir, 'compiled-rules.json').replace(/\\/g, '/');
-  const stage4ManifestExclusionSet = new Set<string>([
-    ...STAGE4_MANIFEST_EXCLUSIONS,
-    activeManifestPath,
-  ]);
+  //
+  // mmnto-ai/totem#1814 (GCA HIGH on auto-VP PR for mmnto-ai/totem#1796): the
+  // comparison is against the manifest scan output (line 705), which is
+  // repo-root-relative. When `cwd != configRoot != repoRoot` (monorepo
+  // subpackage invocation), joining `config.totemDir` alone produces e.g.
+  // `.totem/compiled-rules.json` while the scan returns
+  // `packages/sub/.totem/compiled-rules.json`. Resolution: compute
+  // `activeManifestPath` lazily AFTER `repoRoot` is resolved, then use
+  // `path.relative(repoRoot, …)` so the exclusion key matches the
+  // repo-relative paths from the scan. Mirrors the canonical pattern at
+  // `first-lint-promote-runner.ts:99`.
   const buildStage4Verifier = () => {
     return async (rule: import('@mmnto/totem').CompiledRule) => {
       if (stage4RepoRootCache === undefined) {
@@ -691,6 +697,17 @@ export async function compileCommand(
       }
       const repoRoot = stage4RepoRootCache;
       if (stage4FilesCache === undefined) {
+        // Compute repo-relative manifest path now that `repoRoot` is
+        // resolved (mmnto-ai/totem#1814). The exclusion set is built
+        // once per compile run alongside `stage4FilesCache`; subsequent
+        // rule invocations reuse the cached file list.
+        const activeManifestPath = path
+          .relative(repoRoot, path.join(totemDir, COMPILED_RULES_FILE))
+          .replace(/\\/g, '/');
+        const stage4ManifestExclusionSet = new Set<string>([
+          ...STAGE4_MANIFEST_EXCLUSIONS,
+          activeManifestPath,
+        ]);
         // Single git invocation per compile run; reused across all rules
         // in the batch. `LC_ALL=C` keeps output stable across locales.
         // Fail-loud if git is unavailable — this gate is the ADR-091
