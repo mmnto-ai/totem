@@ -107,7 +107,7 @@ export async function syncCommand(options: {
             ? `present in package.json but not in totem.config.ts \`extends\` — pack rules will not be merged. Add to \`extends\` or remove the dependency.`
             : warning.reason === 'extends-only'
               ? `declared in totem.config.ts \`extends\` but not installed — install via \`pnpm add -D ${warning.name}\` (or equivalent).`
-              : `does not expose a registration callback — see ADR-097 § 5 for the pack contract.`;
+              : `missing engines['@mmnto/totem'] declaration — pack cannot satisfy the engine-version cross-check (ADR-097 § 5 Q6). Add '"engines": { "@mmnto/totem": "^<version>" }' to the pack's package.json and republish.`;
         log.warn(TAG, `Pack '${warning.name}': ${reasonText}`);
       }
       if (resolved.length > 0) {

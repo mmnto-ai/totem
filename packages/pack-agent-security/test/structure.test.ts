@@ -68,4 +68,18 @@ describe('@mmnto/pack-agent-security structure', () => {
     const deps = pkg.dependencies ?? {};
     expect(Object.keys(deps)).toEqual([]);
   });
+
+  it('package.json engines declares @mmnto/totem with a non-empty semver range (ADR-097 § Q6)', () => {
+    const pkg = readJsonSafe<{ engines?: Record<string, string> }>(
+      path.join(PACK_ROOT, 'package.json'),
+    );
+    // ADR-097 § Q6 (amended 2026-05-03 via mmnto-ai/totem#1803): pack engine
+    // version constraint MUST live in `engines['@mmnto/totem']` for parity
+    // with public packs even though pack-agent-security is private. The
+    // resolver-vs-peer separation is consistent across the pack cohort.
+    expect(pkg.engines).toBeDefined();
+    const range = pkg.engines?.['@mmnto/totem'];
+    expect(typeof range).toBe('string');
+    expect(range).not.toBe('');
+  });
 });

@@ -1,6 +1,8 @@
 /**
  * Tests for pack manifest resolution + writer (mmnto-ai/totem#1768
- * Step 4, Q4 disposition).
+ * Step 4, Q4 disposition; ADR-097 § Q6 amended 2026-05-03 via
+ * mmnto-ai/totem#1803 — engine constraint moved from peerDependencies
+ * to the `engines` field).
  *
  * Covers invariant 18 from `.totem/specs/pack-substrate-bundle.md`:
  *
@@ -8,7 +10,10 @@
  *   `totem.config.ts` `extends` → manifest entry, no warning.
  * - Resolves a pack only in deps → no manifest entry, `dep-only` warning.
  * - Resolves a pack only in extends → no manifest entry, `extends-only` warning.
- * - Pack without `peerDependencies['@mmnto/totem']` → `not-a-pack` warning.
+ * - Pack without `engines['@mmnto/totem']` → `not-a-pack` warning.
+ * - Pack with engine constraint declared in legacy `peerDependencies`
+ *   slot but missing from `engines` → still `not-a-pack` (no fallback
+ *   read; the migration is hard, not graceful).
  * - Atomic write produces a stable JSON file.
  */
 
@@ -42,17 +47,36 @@ function makeTmpRoot(): string {
   return root;
 }
 
-function writeFixturePack(root: string, packName: string, peerRange: string | undefined): string {
+interface FixturePackOptions {
+  /** Engine semver range for `engines['@mmnto/totem']`. Omitted → not-a-pack. */
+  readonly engineRange?: string;
+  /**
+   * Legacy peerDependencies['@mmnto/totem'] value, for tests that
+   * verify the resolver no longer falls back to peer-dep reads after the
+   * #1803 migration. Default: not declared.
+   */
+  readonly legacyPeerRange?: string;
+}
+
+function writeFixturePack(
+  root: string,
+  packName: string,
+  options: FixturePackOptions = {},
+): string {
   // Create a node_modules layout that `require.resolve` can find. The pack
-  // directory holds package.json with `peerDependencies['@mmnto/totem']`.
+  // directory holds package.json with `engines['@mmnto/totem']` per ADR-097
+  // § Q6 (post-#1803).
   const packPath = path.join(root, 'node_modules', packName);
   fs.mkdirSync(packPath, { recursive: true });
   const pkgJson: Record<string, unknown> = {
     name: packName,
     version: '0.1.0',
   };
-  if (peerRange !== undefined) {
-    pkgJson.peerDependencies = { '@mmnto/totem': peerRange };
+  if (options.engineRange !== undefined) {
+    pkgJson.engines = { '@mmnto/totem': options.engineRange };
+  }
+  if (options.legacyPeerRange !== undefined) {
+    pkgJson.peerDependencies = { '@mmnto/totem': options.legacyPeerRange };
   }
   fs.writeFileSync(path.join(packPath, 'package.json'), JSON.stringify(pkgJson, null, 2));
   return packPath;
@@ -83,7 +107,7 @@ function makeConfig(extendsList: readonly string[] | undefined): TotemConfig {
 describe('resolveInstalledPacks: union of deps + extends', () => {
   it('resolves a pack present in both deps and extends with no warning', () => {
     const root = makeTmpRoot();
-    writeFixturePack(root, '@mmnto/pack-fake', '^1.19.0');
+    writeFixturePack(root, '@mmnto/pack-fake', { engineRange: '^1.19.0' });
     const result = resolveInstalledPacks({
       projectRoot: root,
       config: makeConfig(['@mmnto/pack-fake']),
@@ -97,7 +121,7 @@ describe('resolveInstalledPacks: union of deps + extends', () => {
 
   it('emits dep-only warning when pack is in deps but not extends', () => {
     const root = makeTmpRoot();
-    writeFixturePack(root, '@mmnto/pack-orphan-dep', '^1.19.0');
+    writeFixturePack(root, '@mmnto/pack-orphan-dep', { engineRange: '^1.19.0' });
     const result = resolveInstalledPacks({
       projectRoot: root,
       config: makeConfig([]),
@@ -120,9 +144,9 @@ describe('resolveInstalledPacks: union of deps + extends', () => {
     expect(result.resolved).toEqual([]);
   });
 
-  it('emits not-a-pack warning when pack lacks peerDependencies[@mmnto/totem]', () => {
+  it('emits not-a-pack warning when pack lacks engines[@mmnto/totem]', () => {
     const root = makeTmpRoot();
-    writeFixturePack(root, '@mmnto/pack-broken', undefined);
+    writeFixturePack(root, '@mmnto/pack-broken', {});
     const result = resolveInstalledPacks({
       projectRoot: root,
       config: makeConfig(['@mmnto/pack-broken']),
@@ -130,6 +154,32 @@ describe('resolveInstalledPacks: union of deps + extends', () => {
     });
     expect(result.warnings).toEqual([{ name: '@mmnto/pack-broken', reason: 'not-a-pack' }]);
     expect(result.resolved).toEqual([]);
+  });
+
+  it('emits not-a-pack warning for a legacy pack that declares only peerDependencies[@mmnto/totem] (no engines fallback)', () => {
+    // Migration is hard, not graceful: a pre-#1803 pack that didn't add the
+    // engines field is not silently accepted via a peerDeps fallback. The
+    // resolver reads engines only; pack must republish with engines declared.
+    const root = makeTmpRoot();
+    writeFixturePack(root, '@mmnto/pack-legacy', { legacyPeerRange: '^1.25.0' });
+    const result = resolveInstalledPacks({
+      projectRoot: root,
+      config: makeConfig(['@mmnto/pack-legacy']),
+      packageJsonDeps: { '@mmnto/pack-legacy': '0.1.0' },
+    });
+    expect(result.warnings).toEqual([{ name: '@mmnto/pack-legacy', reason: 'not-a-pack' }]);
+    expect(result.resolved).toEqual([]);
+  });
+
+  it('reads engines[@mmnto/totem] verbatim into declaredEngineRange (preserves caret/tilde/etc.)', () => {
+    const root = makeTmpRoot();
+    writeFixturePack(root, '@mmnto/pack-tilde-range', { engineRange: '~1.25.0' });
+    const result = resolveInstalledPacks({
+      projectRoot: root,
+      config: makeConfig(['@mmnto/pack-tilde-range']),
+      packageJsonDeps: { '@mmnto/pack-tilde-range': '0.1.0' },
+    });
+    expect(result.resolved[0]?.declaredEngineRange).toBe('~1.25.0');
   });
 
   it('ignores non-pack dependencies (no @mmnto/pack- prefix)', () => {
@@ -145,8 +195,8 @@ describe('resolveInstalledPacks: union of deps + extends', () => {
 
   it('returns sorted output (alphabetical by pack name)', () => {
     const root = makeTmpRoot();
-    writeFixturePack(root, '@mmnto/pack-zulu', '^1.19.0');
-    writeFixturePack(root, '@mmnto/pack-alpha', '^1.19.0');
+    writeFixturePack(root, '@mmnto/pack-zulu', { engineRange: '^1.19.0' });
+    writeFixturePack(root, '@mmnto/pack-alpha', { engineRange: '^1.19.0' });
     const result = resolveInstalledPacks({
       projectRoot: root,
       config: makeConfig(['@mmnto/pack-zulu', '@mmnto/pack-alpha']),

@@ -128,7 +128,7 @@ export function resolveInstalledPacks(input: ResolveInstalledPacksInput): PackRe
       continue;
     }
 
-    const declaredEngineRange = readPeerEngineRange(resolvedPath);
+    const declaredEngineRange = readEngineRange(resolvedPath);
     if (!declaredEngineRange) {
       warnings.push({ name, reason: 'not-a-pack' });
       continue;
@@ -204,7 +204,14 @@ function defaultResolvePackPath(name: string, fromDir: string): string | undefin
   }
 }
 
-function readPeerEngineRange(packResolvedPath: string): string | undefined {
+function readEngineRange(packResolvedPath: string): string | undefined {
+  // ADR-097 § Q6 (amended 2026-05-03 via mmnto-ai/totem#1803): pack engine
+  // version constraint lives in `engines['@mmnto/totem']`, NOT
+  // `peerDependencies`. The `peerDependencies` slot is reserved for actual
+  // peer packages the consumer must install (e.g., `@ast-grep/napi`).
+  // Rationale: changesets `fixed` group siblings cannot peer-dep one
+  // another (mmnto-ai/totem#1776 / #1777 wiggle); engines field is
+  // architecturally correct + immune to fixed-group auto-bump.
   const pkgPath = path.join(packResolvedPath, 'package.json');
   if (!fs.existsSync(pkgPath)) return undefined;
   let parsed: unknown;
@@ -215,8 +222,8 @@ function readPeerEngineRange(packResolvedPath: string): string | undefined {
     return undefined;
   }
   if (typeof parsed !== 'object' || parsed === null) return undefined;
-  const peer = (parsed as { peerDependencies?: unknown }).peerDependencies; // totem-context: parsed was narrowed via `typeof !== 'object' || === null` guard above; the cast is for index access into already-validated JSON
-  if (typeof peer !== 'object' || peer === null) return undefined;
-  const range = (peer as Record<string, unknown>)['@mmnto/totem']; // totem-context: peer was narrowed via `typeof !== 'object' || === null` guard above; the cast is for index access; result is runtime-checked via `typeof range === 'string'` below
+  const engines = (parsed as { engines?: unknown }).engines; // totem-context: SAFETY INVARIANT — `parsed` confirmed non-null object by the `typeof !== 'object' || === null` guard immediately above. Cast is for index access into runtime-narrowed JSON; no formal schema validation, but `engines` is itself runtime-checked on the next line before use.
+  if (typeof engines !== 'object' || engines === null) return undefined;
+  const range = (engines as Record<string, unknown>)['@mmnto/totem']; // totem-context: engines was narrowed via `typeof !== 'object' || === null` guard above; the cast is for index access; result is runtime-checked via `typeof range === 'string'` below
   return typeof range === 'string' ? range : undefined;
 }

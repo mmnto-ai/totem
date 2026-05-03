@@ -23,8 +23,10 @@
  *   to generate.
  * - Malformed manifest: hard error.
  * - Pack require throws: hard error.
- * - peerDependencies engine version mismatch: structured error per ADR-097
- *   Q6.
+ * - engines['@mmnto/totem'] version mismatch: structured error per ADR-097
+ *   Q6 (amended 2026-05-03 — moved from peerDependencies to engines field
+ *   per mmnto-ai/totem#1803 to avoid changesets `fixed` group sibling
+ *   peer-dep collision; see #1776 / #1777).
  * - Pack callback throws: hard error.
  */
 
@@ -76,7 +78,13 @@ export const InstalledPacksManifestSchema = z
             .string()
             .min(1)
             .refine((value) => path.isAbsolute(value), 'resolvedPath must be an absolute path'),
-          /** The pack's `peerDependencies['@mmnto/totem']` semver range, verbatim. */
+          /**
+           * The pack's `engines['@mmnto/totem']` semver range, verbatim.
+           * (Pre-1.26.0 packs used `peerDependencies['@mmnto/totem']`;
+           * mmnto-ai/totem#1803 moved the constraint to the `engines`
+           * field to free `peerDependencies` for actual peer packages
+           * and avoid changesets fixed-group sibling collisions.)
+           */
           declaredEngineRange: z.string().min(1),
         })
         .strict(),
@@ -170,7 +178,7 @@ export interface LoadInstalledPacksOptions {
   totemDir?: string;
   /**
    * Engine semver to compare against each pack's declared
-   * `peerDependencies['@mmnto/totem']` range. Defaults to the engine's
+   * `engines['@mmnto/totem']` range. Defaults to the engine's
    * own `package.json#version`.
    */
   engineVersion?: string;
@@ -394,7 +402,7 @@ function resolvePackCallback(
 function assertEngineRangeSatisfied(pack: LoadedPack, engineVersion: string): void {
   if (!semver.validRange(pack.declaredEngineRange)) {
     throw new Error(
-      `Pack '${pack.name}' declares peerDependencies['@mmnto/totem'] = '${pack.declaredEngineRange}', which is not a valid semver range. Fix the pack's package.json.`,
+      `Pack '${pack.name}' declares engines['@mmnto/totem'] = '${pack.declaredEngineRange}', which is not a valid semver range. Fix the pack's package.json.`,
     );
   }
   if (!semver.satisfies(engineVersion, pack.declaredEngineRange, { includePrerelease: true })) {

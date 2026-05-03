@@ -84,13 +84,9 @@ describe('@mmnto/pack-rust-architecture structure', () => {
     // v0.1 side-channel registration in register.cjs (mmnto-ai/totem#1774).
     // No other runtime deps are admitted: peerDep covers @ast-grep/napi
     // (external); devDeps cover @mmnto/totem (workspace), @vscode/tree-sitter-wasm
-    // (build-time WASM source), and vitest. @mmnto/totem is intentionally NOT
-    // a peerDep — pack-rust-architecture lives in the changesets `fixed`
-    // group with @mmnto/totem (and the rest of the @mmnto/* cohort), so
-    // version harmony is guaranteed at publish time. Declaring
-    // @mmnto/totem as a peerDep AS WELL as a fixed-group member would create
-    // a circular constraint on every minor bump, pre-empting the cluster to
-    // a major bump (mmnto-ai/totem#1776 wiggle on PR #1775's first auto-cut).
+    // (build-time WASM source), and vitest. The @mmnto/totem engine version
+    // constraint lives in the `engines` field per ADR-097 § Q6 (amended
+    // 2026-05-03 via mmnto-ai/totem#1803) — see the engines invariant below.
     expect(Object.keys(deps).sort()).toEqual(['@ast-grep/lang-rust']);
   });
 
@@ -98,11 +94,35 @@ describe('@mmnto/pack-rust-architecture structure', () => {
     const pkg = readJsonSafe<{ peerDependencies?: Record<string, string> }>(
       path.join(PACK_ROOT, 'package.json'),
     );
-    // Exact-key equality: @mmnto/totem MUST NOT appear here (fixed-group
-    // member; see test above for rationale). Only the external napi engine
-    // is pinned via peerDep.
+    // Exact-key equality: @mmnto/totem MUST NOT appear here. The engine
+    // version constraint is declared via the `engines` field instead
+    // (mmnto-ai/totem#1803). Rationale: pack-rust-architecture lives in the
+    // changesets `fixed` group with @mmnto/totem and the rest of the
+    // @mmnto/* cohort; declaring @mmnto/totem as a peerDep on a fixed-group
+    // sibling creates a circular constraint on every minor bump that
+    // pre-empts the cluster to a major (#1776 wiggle on #1775's first
+    // auto-cut). The `engines` field is npm-canonical for engine-version
+    // constraints, isn't touched by changesets fixed-group auto-bump, and
+    // makes the resolver-vs-peer separation explicit. Only the external
+    // napi engine is pinned via peerDep.
     expect(Object.keys(pkg.peerDependencies ?? {}).sort()).toEqual(['@ast-grep/napi']);
     expect(pkg.peerDependencies?.['@ast-grep/napi']).toBe('^0.42.0');
+  });
+
+  it('package.json engines declares @mmnto/totem with a non-empty semver range (ADR-097 § Q6)', () => {
+    const pkg = readJsonSafe<{ engines?: Record<string, string> }>(
+      path.join(PACK_ROOT, 'package.json'),
+    );
+    // ADR-097 § Q6 (amended 2026-05-03 via mmnto-ai/totem#1803): pack engine
+    // version constraint MUST live in `engines['@mmnto/totem']`. The
+    // resolver (`pack-manifest-writer.ts:readEngineRange`) reads this field
+    // to populate `installed-packs.json#packs[].declaredEngineRange`; the
+    // boot path (`pack-discovery.ts:assertEngineRangeSatisfied`) cross-checks
+    // it against the running engine version via semver.satisfies.
+    expect(pkg.engines).toBeDefined();
+    const range = pkg.engines?.['@mmnto/totem'];
+    expect(typeof range).toBe('string');
+    expect(range).not.toBe('');
   });
 
   it('tree-sitter-rust.wasm is present and non-empty', () => {
