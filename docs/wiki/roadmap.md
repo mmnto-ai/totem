@@ -8,9 +8,9 @@ Totem is a standard library for codebase governance — deterministic primitives
 
 ## 1.26.0: Pack Ecosystem Graduation (Active)
 
-**Theme:** Close the Pack v0.1 alpha pilot by completing the publishes-and-wires arc for bot packs, then collapse the convention-rule duplication between memory and packs. Pair with deterministic-substrate hardening for the rule classes currently encoded only as LLM-prose in CR/GCA styleguides (Tenet 15 violations surfaced by drift firing across multiple agents and repos).
+**Theme:** Close the Pack v0.1 alpha pilot by completing the publish-and-wire arc for bot packs, then collapse the convention-rule duplication between memory and packs. Pair with deterministic-substrate hardening for the rule classes currently encoded only as LLM-prose in CR/GCA styleguides (Tenet 15 violations surfaced by drift firing across multiple agents and repos).
 
-The strategic frame is **publishing without runtime-wiring is incomplete; ship gates require both**. The substrate-wiring gap shipped in `mmnto-ai/totem#1795` (1.25.0) closed the runtime-completeness leg of the alpha-pilot graduation gate; 1.26.0 closes the publishes-and-wires leg for bot packs and starts the convention-rule deterministic substrate.
+The strategic frame is **publishing without runtime-wiring is incomplete; ship gates require both**. The substrate-wiring gap shipped in `mmnto-ai/totem#1795` (1.25.0) closed the runtime-completeness leg of the alpha-pilot graduation gate; 1.26.0 closes the publish-and-wire leg for bot packs and starts the convention-rule deterministic substrate.
 
 - **Headline Work — Pack v0.1 graduation:**
   - [ ] **Bot-pack publish.** Lift `pack-staging/pack-bot-coderabbit-v0.1/` and `pack-staging/pack-bot-gemini-code-assist-v0.1/` to `@mmnto/pack-bot-coderabbit@1.x` and `@mmnto/pack-bot-gemini-code-assist@1.x` on npm. Publishing pipeline is proven; low risk.
@@ -40,9 +40,9 @@ The strategic frame is **publishing without runtime-wiring is incomplete; ship g
 Strategic research not currently scoped to 1.26.0:
 
 - **Strategy #6** — Adversarial trap corpus: evaluation suite to test the deterministic engine against evasion techniques.
-- **Strategy #62** — Model-specific prompt adapters (partially addressed by #1220 rewrite).
-- **Strategy #64** — Formal model routing matrix (partially addressed by #73 benchmark).
-- **#1236** — Revisit 6 upgrade-target lessons silenced during 1.13.0 cleanup.
+- **Model-specific prompt adapters** (Strategy #62) — partially addressed by `#1220` rewrite.
+- **Formal model routing matrix** (Strategy #64) — partially addressed by `#73` benchmark.
+- **`#1236`** — Revisit 6 upgrade-target lessons silenced during 1.13.0 cleanup.
 
 Carried over and de-prioritized for 1.26.0:
 

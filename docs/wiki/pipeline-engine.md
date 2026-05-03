@@ -46,7 +46,7 @@ The ADR-091 five-stage ingestion funnel (`Extract → Classify → Compile → V
 
 ### Pipeline 2: Telemetry-Driven Upgrades
 
-You can upgrade noisy regex rules using context telemetry. Run `totem compile --upgrade <hash>` to target a specific rule.
+You can upgrade noisy regex rules using context telemetry. Run `totem lesson compile --upgrade <hash>` to target a specific rule.
 
 - **Semantics:** Evicts only that rule from the cache (preserves `createdAt` metadata), recompiles through Sonnet with a telemetry-driven directive, and replaces the rule.
 - **Fail-safe:** Rejects `--cloud` (still routed to Gemini until #1221 ships) and `--force` (scoped eviction makes `--force` redundant and dangerous).
