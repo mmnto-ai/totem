@@ -7721,10 +7721,9 @@
     {
       "lessonHash": "32a0453e69f5a3f4",
       "lessonHeading": "Sanitize ANSI codes in logged messages",
+      "pattern": "",
       "message": "Strip ANSI escape codes from user-provided strings before logging to prevent terminal injection and maintain log file integrity. Use stripAnsi() or equivalent before passing values to log calls.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepYamlRule": {
         "rule": {
           "any": [
@@ -7761,17 +7760,60 @@
           }
         }
       },
+      "badExample": "console.log(`Processing file: ${userInput}`);",
+      "goodExample": "console.log(`Processing file: ${stripAnsi(userInput)}`);",
       "compiledAt": "2026-05-03T04:05:12.841Z",
       "createdAt": "2026-05-03T04:05:12.841Z",
       "fileGlobs": [
         "packages/cli/src/commands/first-lint-promote-runner.ts"
       ],
-      "badExample": "console.log(`Processing file: ${userInput}`);",
-      "goodExample": "console.log(`Processing file: ${stripAnsi(userInput)}`);",
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 46 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/build/esbuild-lite.mjs, packages/cli/src/commands/add-lesson.ts, packages/cli/src/commands/config.ts, packages/cli/src/commands/doctor.ts, packages/cli/src/commands/drift.ts (+ 41 more). reasonCode: stage4-out-of-scope-match.",
+      "archivedAt": "2026-05-03T04:05:14.001Z",
+      "unverified": true
+    },
+    {
+      "lessonHash": "8eb1924aed7f851c",
+      "lessonHeading": "Anchor CLI artifacts to configRoot",
+      "message": "Anchor CLI artifact paths to configRoot instead of process.cwd() to avoid resolution failures in monorepos",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "path.join(process.cwd(), $$$ARGS)",
+      "compiledAt": "2026-05-03T21:07:59.541Z",
+      "createdAt": "2026-05-03T21:07:59.541Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "badExample": "const totemDir = path.join(process.cwd(), '.totem');",
+      "goodExample": "const totemDir = path.join(configRoot, '.totem');",
       "unverified": true,
       "status": "archived",
-      "archivedAt": "2026-05-03T04:05:14.001Z",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 46 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/build/esbuild-lite.mjs, packages/cli/src/commands/add-lesson.ts, packages/cli/src/commands/config.ts, packages/cli/src/commands/doctor.ts, packages/cli/src/commands/drift.ts (+ 41 more). reasonCode: stage4-out-of-scope-match."
+      "archivedAt": "2026-05-03T21:08:00.573Z",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 3 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/install.test.ts, packages/cli/src/commands/lesson.test.ts, packages/cli/src/commands/search.test.ts. reasonCode: stage4-out-of-scope-match."
+    },
+    {
+      "lessonHash": "513f3b194be8d66d",
+      "lessonHeading": "Stage specific files in CLI tools",
+      "message": "Avoid 'git add .' in CLI tools — pass explicit file paths to prevent staging unrelated changes",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "execSync('git add .')",
+      "compiledAt": "2026-05-03T21:08:06.370Z",
+      "createdAt": "2026-05-03T21:08:06.370Z",
+      "fileGlobs": [
+        "packages/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "badExample": "execSync('git add .');",
+      "goodExample": "execSync(`git add ${filePath}`);",
+      "unverified": true,
+      "status": "untested-against-codebase"
     }
   ],
   "nonCompilable": [
@@ -13005,6 +13047,42 @@
       "title": "Use engines for version-tool-immune constraints",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes an architectural principle about using the 'engines' field in package.json for version constraints — it does not describe a detectable code pattern that violates a rule. There is no anti-pattern to match; the lesson prescribes a practice without specifying what forbidden construct to flag."
+    },
+    {
+      "hash": "359504da76275073",
+      "title": "Enforce pack compatibility via engines contract",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural convention (declaring an 'engines' field in package.json for pack compatibility) that cannot be detected as a violation pattern — the absence of a field in package.json requires multi-file, schema-aware analysis that no single regex or AST pattern can reliably express."
+    },
+    {
+      "hash": "aa67058216b23a0f",
+      "title": "Ensure monorepo exclusions are root-relative",
+      "reasonCode": "context-required",
+      "reason": "Lesson constrains the hazard to path exclusions passed to tools like 'git ls-files' that are not root-relative; detecting whether a given string literal or variable represents a root-relative vs. package-relative path requires runtime knowledge of the repo root, which no static pattern can express."
+    },
+    {
+      "hash": "426e3e928274ee0e",
+      "title": "Align exclusion paths with scanner output roots",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Hazard requires multi-file semantic analysis to determine which root variable (repoRoot, configRoot, cwd) is being used relative to the scanner output root; a single-pattern rule cannot distinguish correct from incorrect root alignment without tracking variable provenance across the codebase."
+    },
+    {
+      "hash": "9ac700147c1b8399",
+      "title": "Verify closure capture against compiler context",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a code review process guideline — verifying LLM findings with tsc before acting — not a detectable code pattern. No structural or textual anti-pattern can be identified in source code."
+    },
+    {
+      "hash": "2da6d546dff8d432",
+      "title": "Validate path resolution with chdir",
+      "reasonCode": "context-required",
+      "reason": "Lesson describes a testing strategy (using process.chdir + config path mocking to validate path resolution) rather than a detectable code pattern. The violation — missing chdir-based path resolution tests — requires knowing which command files lack corresponding test coverage, which no single-file pattern can determine."
+    },
+    {
+      "hash": "ecac01b2dd171158",
+      "title": "Validate untrusted packs during first execution",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural lifecycle state and zero-trust validation policy for a pack ecosystem. There is no detectable code pattern — the rule governs system design and runtime behavior, not a specific syntactic construct."
     }
   ]
 }
