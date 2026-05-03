@@ -29,11 +29,24 @@ When establishing rules, prefer pipelines in the following order: **P1 > P3 > P2
 4. **P4 (Import):** The bootstrapping pipeline. Use this on Day 1 to suck in your existing `eslint-plugin-no-restricted-syntax` configurations into the fast Totem engine.
 5. **P5 (Observation Capture):** Opt-in auto-capture. When invoked with `totem review --auto-capture`, P5 extracts the flagged line into a `severity: warning` rule. Default is off because captured rules are context-less and apply globally; enable per-invocation only when you want to seed rules from the current review pass.
 
+## Zero-trust default and the ADR-091 ingestion funnel
+
+Pipeline 2 and Pipeline 3 LLM-generated rules ship with `unverified: true` per ADR-089 (Zero-Trust Default, shipped 1.14.16). They land in one of four lifecycle states:
+
+| Status                      | Meaning                                                                          | Lints? |
+| --------------------------- | -------------------------------------------------------------------------------- | ------ |
+| `active`                    | Verified by the codebase verifier or manually promoted via `totem rule promote`  | Yes    |
+| `pending-verification`      | Pack rule installed via `totem install pack/<name>`; awaiting first `totem lint` | No     |
+| `untested-against-codebase` | Compiled, but Stage 4 produced no `bad-example` matches                          | No     |
+| `archived`                  | Withdrawn; preserved in the ledger for prompt-quality regression analysis        | No     |
+
+The ADR-091 five-stage ingestion funnel (`Extract → Classify → Compile → Verify-Against-Codebase → Activate`) gates pipeline output through the Stage 4 codebase verifier (shipped 1.19.0, `mmnto-ai/totem#1682`). Pack rules go through the `pending-verification → active | archived | untested-against-codebase` promotion path on first lint (shipped 1.24.0, `mmnto-ai/totem#1684`). Verification outcomes are recorded in `.totem/verification-outcomes.json` (committable, canonical-key-order) so subsequent CI and local runs share results and skip re-verification.
+
 ## Usage Examples
 
 ### Pipeline 2: Telemetry-Driven Upgrades
 
-You can upgrade noisy regex rules using context telemetry. Run `totem compile --upgrade <hash>` to target a specific rule.
+You can upgrade noisy regex rules using context telemetry. Run `totem lesson compile --upgrade <hash>` to target a specific rule.
 
 - **Semantics:** Evicts only that rule from the cache (preserves `createdAt` metadata), recompiles through Sonnet with a telemetry-driven directive, and replaces the rule.
 - **Fail-safe:** Rejects `--cloud` (still routed to Gemini until #1221 ships) and `--force` (scoped eviction makes `--force` redundant and dangerous).
@@ -103,4 +116,4 @@ Run review with `--auto-capture` to stage flagged lines as warnings in your rule
 totem review --auto-capture
 ```
 
-_(Auto-capture will resume as a default once ADR-091 Stage 2 Classifier and Stage 4 Codebase Verifier ship in 1.16.0 and the LLM-emitted rule loop has gates that prevent context-less emissions.)_
+_(Stage 4 Codebase Verifier shipped in 1.19.0 and gates LLM-emitted rule promotion. Auto-capture will resume as a default once Stage 2 Classifier ships and the LLM-emitted rule loop has full gates that prevent context-less emissions.)_

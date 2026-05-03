@@ -1,6 +1,6 @@
 # Supported Models & AI Tools Reference
 
-> **Last validated:** 2026-04-16
+> **Last validated:** 2026-05-02 (1.25.0 ship state)
 
 Totem supports four LLM provider families for orchestration, and exports project
 knowledge to all major AI coding tools. This document tracks model IDs, tool

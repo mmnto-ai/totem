@@ -45,7 +45,23 @@ Download `totem-lite-win32-x64.exe` from the Releases page and add the containin
 
 ### Command Availability in Totem Lite
 
-To keep the binary size manageable (~35MB), the Lite tier excludes the heavy C++ native bindings for the Vector Database and the LLM SDKs.
+The Lite tier excludes the heavy C++ native bindings for the Vector Database and the LLM SDKs.
 
 - **Fully Supported:** `totem init`, `totem lint`, `totem hooks`, `totem compile`, `totem doctor`, `totem status`, `totem rule` commands.
 - **Excluded:** `totem review`, `totem extract`, `totem sync`, `totem spec`, `totem triage` (These will exit with code `78` and prompt you to use the full `npx @mmnto/cli` version).
+
+## 3. Installing Packs
+
+After `totem init`, install third-party language and bot packs from npm to extend the rule set:
+
+```bash
+pnpm dlx @mmnto/cli install pack/agent-security
+pnpm dlx @mmnto/cli install pack/rust-architecture
+```
+
+Pack rules enter as `pending-verification` and stay inert at lint time until the next `totem lint` runs the Stage 4 codebase verifier on each — only after that pass do rules promote to `active`, `archived`, or `untested-against-codebase` per their per-rule outcome. Verification outcomes are recorded in `.totem/verification-outcomes.json` (committable) so subsequent CI and local runs share the result and skip re-verification.
+
+Live alpha-pilot packs:
+
+- `@mmnto/pack-agent-security` — 5 immutable security rules (unauthorized process spawning, dynamic code evaluation, network exfiltration, obfuscated string assembly).
+- `@mmnto/pack-rust-architecture` — first non-trivial third-party language pack with bundled `tree-sitter-rust.wasm`.
