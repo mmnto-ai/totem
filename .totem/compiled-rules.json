@@ -7713,10 +7713,65 @@
         "!**/*.spec.*"
       ],
       "severity": "warning",
-      "unverified": true,
       "status": "archived",
       "archivedReason": "Pattern fires on every '// SAFETY INVARIANT' comment but lesson's real scope is the narrower case where a totem-context: directive is already present (e.g. anthropic-orchestrator.ts:76, gemini-orchestrator.ts:71, mcp/src/context.ts:367 are all legitimate bare-SAFETY-INVARIANT uses with no underlying lint rule to suppress)",
-      "archivedAt": "2026-05-03T03:48:07.233Z"
+      "archivedAt": "2026-05-03T03:48:07.233Z",
+      "unverified": true
+    },
+    {
+      "lessonHash": "32a0453e69f5a3f4",
+      "lessonHeading": "Sanitize ANSI codes in logged messages",
+      "message": "Strip ANSI escape codes from user-provided strings before logging to prevent terminal injection and maintain log file integrity. Use stripAnsi() or equivalent before passing values to log calls.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepYamlRule": {
+        "rule": {
+          "any": [
+            {
+              "pattern": "console.log($$$ARGS)"
+            },
+            {
+              "pattern": "console.error($$$ARGS)"
+            },
+            {
+              "pattern": "console.warn($$$ARGS)"
+            },
+            {
+              "pattern": "console.info($$$ARGS)"
+            },
+            {
+              "pattern": "logger.log($$$ARGS)"
+            },
+            {
+              "pattern": "logger.error($$$ARGS)"
+            },
+            {
+              "pattern": "logger.warn($$$ARGS)"
+            },
+            {
+              "pattern": "logger.info($$$ARGS)"
+            }
+          ],
+          "not": {
+            "has": {
+              "pattern": "stripAnsi($$$)",
+              "stopBy": "end"
+            }
+          }
+        }
+      },
+      "compiledAt": "2026-05-03T04:05:12.841Z",
+      "createdAt": "2026-05-03T04:05:12.841Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/first-lint-promote-runner.ts"
+      ],
+      "badExample": "console.log(`Processing file: ${userInput}`);",
+      "goodExample": "console.log(`Processing file: ${stripAnsi(userInput)}`);",
+      "unverified": true,
+      "status": "archived",
+      "archivedAt": "2026-05-03T04:05:14.001Z",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 46 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/build/esbuild-lite.mjs, packages/cli/src/commands/add-lesson.ts, packages/cli/src/commands/config.ts, packages/cli/src/commands/doctor.ts, packages/cli/src/commands/drift.ts (+ 41 more). reasonCode: stage4-out-of-scope-match."
     }
   ],
   "nonCompilable": [
@@ -12946,10 +13001,10 @@
       "reason": "Lesson describes an architectural principle about avoiding graceful fallbacks during internal migrations. There is no detectable code pattern that distinguishes a 'graceful fallback in a migration context' from legitimate fallback logic — the violation depends on intent and architectural context, not on any specific syntax or construct."
     },
     {
-      "hash": "ea59e2f65f851773",
+      "hash": "9288155ab6cdd022",
       "title": "Use engines for version-tool-immune constraints",
       "reasonCode": "out-of-scope",
-      "reason": "Lesson describes a package.json configuration convention (using the 'engines' field) and an architectural principle about npm version management. There is no detectable code pattern in TypeScript source files to flag — the lesson is about what belongs in package.json, not about code structure or syntax."
+      "reason": "Lesson describes an architectural principle about using the 'engines' field in package.json for version constraints — it does not describe a detectable code pattern that violates a rule. There is no anti-pattern to match; the lesson prescribes a practice without specifying what forbidden construct to flag."
     }
   ]
 }
