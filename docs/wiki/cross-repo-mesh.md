@@ -72,8 +72,10 @@ search_knowledge({ query: 'error handling', boundary: 'api-server' });
 
 **Link Name Derivation:** The name of a linked store is derived by taking the `basename` of its resolved absolute path and stripping any leading dots. For example:
 
-- `.strategy` becomes `'strategy'`
+- `../totem-strategy` becomes `'totem-strategy'` (generic basename derivation, applies when you list the path explicitly in `linkedIndexes`)
 - `../totem-playground` becomes `'totem-playground'`
+
+**Auto-resolved strategy root uses a stable boundary name.** When the MCP server auto-injects the strategy repository (resolved via the STRATEGY_ROOT precedence chain described in the "When to use the Context Mesh" section below), it registers under the stable boundary name `'strategy'` regardless of the on-disk directory name. Use `'strategy'` for `boundary:` in `search_knowledge` queries against the auto-injected store; use the basename-derived name only for stores you list explicitly in `linkedIndexes`.
 
 **Resolution Order:** When a boundary is provided, Totem resolves it in this strict order:
 
@@ -106,7 +108,7 @@ If the primary store AND every single linked store fail, the response is an expl
 
 ## When to use the Context Mesh
 
-- **Strategy Repositories:** If you keep your ADRs and design tenets in a separate repository (like `.strategy`), link it so those architectural decisions inform code generation in the main repository.
+- **Strategy Repositories:** If you keep your ADRs and design tenets in a sibling repository (the recommended setup for `mmnto-ai/totem-strategy` and similar configurations), link it so those architectural decisions inform code generation in the main repository. Totem resolves the strategy repo via the STRATEGY_ROOT resolver, which walks four precedence layers: `TOTEM_STRATEGY_ROOT` environment variable (or its `STRATEGY_ROOT` legacy alias), then `totem.config.ts:strategyRoot`, then sibling clone at `<gitRoot>/../totem-strategy/`, then a legacy `.strategy/` submodule. The first layer that resolves to a real directory wins; the Context Mesh treats the resolved path as one of N linked stores. The `.strategy/` submodule layer is retained as a legacy fallback for repositories migrating from older setups, but new installations should use the sibling-clone pattern (`mmnto-ai/totem#1749` retired the submodule from this repo's own configuration).
 - **Shared Design Systems:** Link a centralized UI component repository so downstream applications automatically receive structural rules about component usage.
 - **Monorepo vs. Mesh:** If your code lives in a single monorepo, use **Partitions** to isolate context. If your code is spread across physically distinct repositories that cannot be merged, use the **Context Mesh**.
 
