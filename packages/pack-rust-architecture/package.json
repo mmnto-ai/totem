@@ -1,6 +1,6 @@
 {
   "name": "@mmnto/pack-rust-architecture",
-  "version": "1.26.0",
+  "version": "1.26.1",
   "private": false,
   "description": "Baseline architectural lessons for Rust + Bevy ECS consumers. ADR-097 Stage 1 pilot. Numeric safety, compile-time discipline, ECS hot-path patterns, schedule edges, determinism fixtures, test-vs-production parity.",
   "license": "MIT",
