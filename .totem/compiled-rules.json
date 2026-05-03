@@ -7638,6 +7638,64 @@
       "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 49 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/add-secret.test.ts, packages/cli/src/commands/add-secret.ts, packages/cli/src/commands/compile-export-archive-filter.test.ts, packages/cli/src/commands/compile-noop-refresh.test.ts, packages/cli/src/commands/compile-refresh-manifest.test.ts (+ 44 more). reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-05-02T02:07:20.230Z",
       "unverified": true
+    },
+    {
+      "lessonHash": "b0377a666dbc9a53",
+      "lessonHeading": "Avoid metaphorical terms in documentation",
+      "message": "Avoid metaphorical terms like 'anchor' in documentation; use direct technical descriptions such as 'directory-rooted'",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\banchors?\\b",
+      "compiledAt": "2026-05-03T00:34:26.280Z",
+      "createdAt": "2026-05-03T00:34:26.280Z",
+      "fileGlobs": [
+        "docs/**/*.md"
+      ],
+      "badExample": "This anchor ensures the path resolves correctly.",
+      "goodExample": "This directory-rooted path ensures the path resolves correctly.",
+      "unverified": true,
+      "status": "archived",
+      "archivedAt": "2026-05-03T00:34:26.784Z",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 47 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .gemini/styleguide.md, .github/copilot-instructions.md, .junie/skills/totem-rules/rules.md, .totem/lessons.md, .totem/lessons/lesson-0757a839.md (+ 42 more). reasonCode: stage4-out-of-scope-match."
+    },
+    {
+      "lessonHash": "064c968b8855dfa0",
+      "lessonHeading": "Limit doc headings to 60 characters",
+      "message": "Heading exceeds 60 characters — keep headings under 60 chars to satisfy SARIF identifier constraints and retrieval system requirements",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "^#{1,6}\\s+.{61,}$",
+      "compiledAt": "2026-05-03T00:34:26.344Z",
+      "createdAt": "2026-05-03T00:34:26.344Z",
+      "fileGlobs": [
+        "docs/**/*.md"
+      ],
+      "badExample": "## This is a very long heading that exceeds the sixty character limit set by the project",
+      "goodExample": "## Short heading under sixty chars",
+      "unverified": true,
+      "status": "archived",
+      "archivedAt": "2026-05-03T00:34:26.784Z",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 643 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .claude/hooks/content-hash.sh, .claude/hooks/post-compact.sh, .claude/hooks/pre-compact.sh, .claude/hooks/review-gate.sh, .claude/skills/preflight/SKILL.md (+ 638 more). reasonCode: stage4-out-of-scope-match."
+    },
+    {
+      "lessonHash": "eb52c63f78561d92",
+      "lessonHeading": "Use canonical totem lesson compile command",
+      "message": "Use 'totem lesson compile' instead of the deprecated 'totem compile' alias",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\btotem compile\\b(?!\\s+--help)",
+      "compiledAt": "2026-05-03T00:34:35.307Z",
+      "createdAt": "2026-05-03T00:34:35.307Z",
+      "fileGlobs": [
+        ".gemini/styleguide.md",
+        "docs/**/*.md"
+      ],
+      "badExample": "Run `totem compile` to process your lessons.",
+      "goodExample": "Run `totem lesson compile` to process your lessons.",
+      "unverified": true,
+      "status": "archived",
+      "archivedAt": "2026-05-03T00:34:35.380Z",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 38 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .claude/docs/architecture.md, .github/copilot-instructions.md, .junie/skills/totem-rules/SKILL.md, .junie/skills/totem-rules/rules.md, .totem/specs/1480-1481.md (+ 33 more). reasonCode: stage4-out-of-scope-match."
     }
   ],
   "nonCompilable": [
@@ -12823,6 +12881,36 @@
       "title": "Engine-boot helpers must inherit structured errors",
       "reasonCode": "context-required",
       "reason": "Lesson describes an architectural anti-pattern (wrapping already-structured errors in a generic TotemError catch) that requires knowing whether the callee already produces structured errors. A pattern matching try/catch + TotemError rethrow would fire on every legitimate error-wrapping site in the codebase; distinguishing lossy wraps from valid ones requires semantic knowledge of what the wrapped function throws."
+    },
+    {
+      "hash": "74e2e7b2f8a38d3e",
+      "title": "Retain .strategy as legacy fallback",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a documentation requirement (retaining legacy pattern documentation in a wiki file) — there is no detectable code pattern to match or flag in source code."
+    },
+    {
+      "hash": "57fcff52934af3ea",
+      "title": "Distinguish link-names from boundary-names",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a conceptual naming convention distinguishing filesystem-derived link names from runtime boundary names. There is no detectable code pattern that can distinguish a legitimate use of 'totem-strategy' as a link name from a violation where it is incorrectly used as a boundary name — the hazard depends on semantic context (which identifier is a link name vs. a boundary name) that no regex or AST pattern can resolve."
+    },
+    {
+      "hash": "8fa1285877b86d88",
+      "title": "Understand STRATEGY_ROOT resolution order",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a conceptual architectural principle (resolution order of a strategy resolver) with no detectable code pattern — it documents runtime lookup behavior, not a code construct that can be statically matched."
+    },
+    {
+      "hash": "38d679c8083764bb",
+      "title": "Verify provider support for context caching",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a documentation/architectural constraint about provider support status, not a detectable code pattern. The presence of Gemini in configuration schemas is intentional and should not be flagged."
+    },
+    {
+      "hash": "f8e5054d1274a900",
+      "title": "Prefer local Sonnet for compilation",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/tooling preference (which AI model to use for compilation) with no detectable code pattern to lint against."
     }
   ]
 }
