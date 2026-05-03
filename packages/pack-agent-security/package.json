@@ -27,6 +27,9 @@
     "build": "echo '[pack-agent-security] no build step (data-only pack)'",
     "test": "vitest run"
   },
+  "engines": {
+    "@mmnto/totem": "^1.25.0"
+  },
   "devDependencies": {
     "@mmnto/totem": "workspace:*",
     "vitest": "^3.0.0"

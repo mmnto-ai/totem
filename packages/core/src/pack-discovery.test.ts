@@ -177,7 +177,7 @@ describe('loadInstalledPacks: malformed manifest', () => {
   });
 });
 
-describe('loadInstalledPacks: peerDependencies engine version mismatch', () => {
+describe('loadInstalledPacks: engines[@mmnto/totem] version mismatch', () => {
   it('throws structured error naming pack name + declared range + actual engine version', () => {
     const fakeCallback: PackRegisterCallback = () => {};
     const fakePack: LoadedPack = {

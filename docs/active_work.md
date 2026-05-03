@@ -53,10 +53,11 @@ The strategic frame is "publishing without runtime-wiring is incomplete; ship ga
 
 #### Headline work — Pack v0.1 graduation
 
+- [ ] **`mmnto-ai/totem#1803` Option C — engines field migration.** Move the pack engine-version constraint from `peerDependencies['@mmnto/totem']` to `engines['@mmnto/totem']` per ADR-097 § Q6 amendment. Closes the structural collision with `mmnto-ai/totem#1777` (fixed-group sibling cannot peer-dep `@mmnto/totem` without triggering a MAJOR cascade) while preserving real semver cross-check at boot. Resolver mod + schema cascade across `pack-rust-architecture` and `pack-agent-security` + warning-text fix in `totem sync`. Unblocks Pack v0.1 alpha-pilot Leg 3 (external consumer adoption / LC un-quarantine).
 - [ ] **Bot-pack publish.** Lift `pack-staging/pack-bot-coderabbit-v0.1/` and `pack-staging/pack-bot-gemini-code-assist-v0.1/` to `@mmnto/pack-bot-coderabbit@1.x` and `@mmnto/pack-bot-gemini-code-assist@1.x` on npm. Publishing pipeline is proven; low risk.
 - [ ] **Bot-pack wire-into-hooks.** Session-start hooks for Claude Code and Gemini CLI consult the bot packs alongside the existing `totem describe` orientation pass. Same shape as the language-pack `extends` mechanism.
 - [ ] **Memory refactor.** Thin or remove the ~11 bot-specific rules in strategy-Claude memory that duplicate pack content; replace with one pointer rule directing future sessions to `@mmnto/pack-bot-coderabbit/workflows/*` and `@mmnto/pack-bot-gemini-code-assist/workflows/*` as the canonical source. Memory keeps session-incident receipts; pack holds the canonical operational rules.
-- [ ] **LC un-quarantine validation.** Pattern-quality review per `mmnto-ai/totem#1793` BEFORE un-quarantining the 4-rule `.rs` cohort (3 from upstream-014, 1 from upstream-048). End-to-end validation that PR #1795's substrate-wiring fix unblocks the LC PR-C cascade is the load-bearing signal that closes the alpha-pilot gate.
+- [ ] **LC un-quarantine validation.** Pattern-quality review per `mmnto-ai/totem#1793` BEFORE un-quarantining the 4-rule `.rs` cohort (3 from upstream-014, 1 from upstream-048). End-to-end validation that PR #1795's substrate-wiring fix + #1803's engines-field migration unblock the LC PR-C cascade is the load-bearing signal that closes the alpha-pilot gate.
 
 #### Headline work — Substrate hardening (Tenet 15)
 

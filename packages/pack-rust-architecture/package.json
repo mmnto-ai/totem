@@ -31,6 +31,9 @@
     "prepare": "node scripts/copy-wasm.cjs",
     "test": "vitest run"
   },
+  "engines": {
+    "@mmnto/totem": "^1.25.0"
+  },
   "peerDependencies": {
     "@ast-grep/napi": "^0.42.0"
   },
