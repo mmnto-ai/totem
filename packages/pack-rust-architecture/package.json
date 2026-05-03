@@ -32,7 +32,7 @@
     "test": "vitest run"
   },
   "engines": {
-    "@mmnto/totem": "^1.25.0"
+    "@mmnto/totem": "^1.26.0"
   },
   "peerDependencies": {
     "@ast-grep/napi": "^0.42.0"
