@@ -21,4 +21,4 @@ Welcome to the Totem documentation.
 
 - [Governing AI Agents](governing-ai-agents.md)
 - [Git Hook Integration](hook-integration.md)
-- [Language Packs](language-packs.md) & [Baseline Rules](baseline-rules.md)
+- [The Pack Ecosystem](pack-ecosystem.md) _(Note: The legacy `language-packs.md` and `baseline-rules.md` have been retired and redirected here)_
