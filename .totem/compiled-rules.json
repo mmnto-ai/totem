@@ -7642,60 +7642,136 @@
     {
       "lessonHash": "b0377a666dbc9a53",
       "lessonHeading": "Avoid metaphorical terms in documentation",
+      "pattern": "\\banchors?\\b",
       "message": "Avoid metaphorical terms like 'anchor' in documentation; use direct technical descriptions such as 'directory-rooted'",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\banchors?\\b",
+      "badExample": "This anchor ensures the path resolves correctly.",
+      "goodExample": "This directory-rooted path ensures the path resolves correctly.",
       "compiledAt": "2026-05-03T00:34:26.280Z",
       "createdAt": "2026-05-03T00:34:26.280Z",
       "fileGlobs": [
         "docs/**/*.md"
       ],
-      "badExample": "This anchor ensures the path resolves correctly.",
-      "goodExample": "This directory-rooted path ensures the path resolves correctly.",
-      "unverified": true,
+      "severity": "warning",
       "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 47 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .gemini/styleguide.md, .github/copilot-instructions.md, .junie/skills/totem-rules/rules.md, .totem/lessons.md, .totem/lessons/lesson-0757a839.md (+ 42 more). reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-05-03T00:34:26.784Z",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 47 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .gemini/styleguide.md, .github/copilot-instructions.md, .junie/skills/totem-rules/rules.md, .totem/lessons.md, .totem/lessons/lesson-0757a839.md (+ 42 more). reasonCode: stage4-out-of-scope-match."
+      "unverified": true
     },
     {
       "lessonHash": "064c968b8855dfa0",
       "lessonHeading": "Limit doc headings to 60 characters",
+      "pattern": "^#{1,6}\\s+.{61,}$",
       "message": "Heading exceeds 60 characters — keep headings under 60 chars to satisfy SARIF identifier constraints and retrieval system requirements",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "^#{1,6}\\s+.{61,}$",
+      "badExample": "## This is a very long heading that exceeds the sixty character limit set by the project",
+      "goodExample": "## Short heading under sixty chars",
       "compiledAt": "2026-05-03T00:34:26.344Z",
       "createdAt": "2026-05-03T00:34:26.344Z",
       "fileGlobs": [
         "docs/**/*.md"
       ],
-      "badExample": "## This is a very long heading that exceeds the sixty character limit set by the project",
-      "goodExample": "## Short heading under sixty chars",
-      "unverified": true,
+      "severity": "warning",
       "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 643 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .claude/hooks/content-hash.sh, .claude/hooks/post-compact.sh, .claude/hooks/pre-compact.sh, .claude/hooks/review-gate.sh, .claude/skills/preflight/SKILL.md (+ 638 more). reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-05-03T00:34:26.784Z",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 643 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .claude/hooks/content-hash.sh, .claude/hooks/post-compact.sh, .claude/hooks/pre-compact.sh, .claude/hooks/review-gate.sh, .claude/skills/preflight/SKILL.md (+ 638 more). reasonCode: stage4-out-of-scope-match."
+      "unverified": true
     },
     {
       "lessonHash": "eb52c63f78561d92",
       "lessonHeading": "Use canonical totem lesson compile command",
+      "pattern": "\\btotem compile\\b(?!\\s+--help)",
       "message": "Use 'totem lesson compile' instead of the deprecated 'totem compile' alias",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\btotem compile\\b(?!\\s+--help)",
+      "badExample": "Run `totem compile` to process your lessons.",
+      "goodExample": "Run `totem lesson compile` to process your lessons.",
       "compiledAt": "2026-05-03T00:34:35.307Z",
       "createdAt": "2026-05-03T00:34:35.307Z",
       "fileGlobs": [
         ".gemini/styleguide.md",
         "docs/**/*.md"
       ],
-      "badExample": "Run `totem compile` to process your lessons.",
-      "goodExample": "Run `totem lesson compile` to process your lessons.",
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 38 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .claude/docs/architecture.md, .github/copilot-instructions.md, .junie/skills/totem-rules/SKILL.md, .junie/skills/totem-rules/rules.md, .totem/specs/1480-1481.md (+ 33 more). reasonCode: stage4-out-of-scope-match.",
+      "archivedAt": "2026-05-03T00:34:35.380Z",
+      "unverified": true
+    },
+    {
+      "lessonHash": "13d87036696a5ea5",
+      "lessonHeading": "Preserve totem-context prefix for lint suppression",
+      "pattern": "//\\s*SAFETY INVARIANT",
+      "message": "Use '// totem-context: SAFETY INVARIANT ...' instead of '// SAFETY INVARIANT' — the totem-context prefix is required for lint suppression",
+      "engine": "regex",
+      "badExample": "// SAFETY INVARIANT: this value is always initialized before use",
+      "goodExample": "// totem-context: SAFETY INVARIANT: this value is always initialized before use",
+      "compiledAt": "2026-05-03T03:47:27.654Z",
+      "createdAt": "2026-05-03T03:47:27.654Z",
+      "fileGlobs": [
+        "packages/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Pattern fires on every '// SAFETY INVARIANT' comment but lesson's real scope is the narrower case where a totem-context: directive is already present (e.g. anthropic-orchestrator.ts:76, gemini-orchestrator.ts:71, mcp/src/context.ts:367 are all legitimate bare-SAFETY-INVARIANT uses with no underlying lint rule to suppress)",
+      "archivedAt": "2026-05-03T03:48:07.233Z",
+      "unverified": true
+    },
+    {
+      "lessonHash": "32a0453e69f5a3f4",
+      "lessonHeading": "Sanitize ANSI codes in logged messages",
+      "message": "Strip ANSI escape codes from user-provided strings before logging to prevent terminal injection and maintain log file integrity. Use stripAnsi() or equivalent before passing values to log calls.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepYamlRule": {
+        "rule": {
+          "any": [
+            {
+              "pattern": "console.log($$$ARGS)"
+            },
+            {
+              "pattern": "console.error($$$ARGS)"
+            },
+            {
+              "pattern": "console.warn($$$ARGS)"
+            },
+            {
+              "pattern": "console.info($$$ARGS)"
+            },
+            {
+              "pattern": "logger.log($$$ARGS)"
+            },
+            {
+              "pattern": "logger.error($$$ARGS)"
+            },
+            {
+              "pattern": "logger.warn($$$ARGS)"
+            },
+            {
+              "pattern": "logger.info($$$ARGS)"
+            }
+          ],
+          "not": {
+            "has": {
+              "pattern": "stripAnsi($$$)",
+              "stopBy": "end"
+            }
+          }
+        }
+      },
+      "compiledAt": "2026-05-03T04:05:12.841Z",
+      "createdAt": "2026-05-03T04:05:12.841Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/first-lint-promote-runner.ts"
+      ],
+      "badExample": "console.log(`Processing file: ${userInput}`);",
+      "goodExample": "console.log(`Processing file: ${stripAnsi(userInput)}`);",
       "unverified": true,
       "status": "archived",
-      "archivedAt": "2026-05-03T00:34:35.380Z",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 38 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .claude/docs/architecture.md, .github/copilot-instructions.md, .junie/skills/totem-rules/SKILL.md, .junie/skills/totem-rules/rules.md, .totem/specs/1480-1481.md (+ 33 more). reasonCode: stage4-out-of-scope-match."
+      "archivedAt": "2026-05-03T04:05:14.001Z",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 46 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/build/esbuild-lite.mjs, packages/cli/src/commands/add-lesson.ts, packages/cli/src/commands/config.ts, packages/cli/src/commands/doctor.ts, packages/cli/src/commands/drift.ts (+ 41 more). reasonCode: stage4-out-of-scope-match."
     }
   ],
   "nonCompilable": [
@@ -12911,6 +12987,24 @@
       "title": "Prefer local Sonnet for compilation",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes an architectural/tooling preference (which AI model to use for compilation) with no detectable code pattern to lint against."
+    },
+    {
+      "hash": "31be20a2a16c4557",
+      "title": "Avoid overstating validation in safety invariants",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a commenting and documentation convention (distinguishing 'formal schema validation' from 'type narrowing' in comments), not a detectable code pattern. The rule is about the semantic accuracy of comment prose, which cannot be expressed as a structural or string-match pattern without producing overwhelming false positives on any comment containing the word 'validated' or similar."
+    },
+    {
+      "hash": "fbb51f7dbd907c58",
+      "title": "Prefer hard migrations for architectural splits",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural principle about avoiding graceful fallbacks during internal migrations. There is no detectable code pattern that distinguishes a 'graceful fallback in a migration context' from legitimate fallback logic — the violation depends on intent and architectural context, not on any specific syntax or construct."
+    },
+    {
+      "hash": "9288155ab6cdd022",
+      "title": "Use engines for version-tool-immune constraints",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural principle about using the 'engines' field in package.json for version constraints — it does not describe a detectable code pattern that violates a rule. There is no anti-pattern to match; the lesson prescribes a practice without specifying what forbidden construct to flag."
     }
   ]
 }
