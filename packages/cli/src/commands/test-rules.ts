@@ -19,8 +19,11 @@ export async function testRulesCommand(opts: { filter?: string }): Promise<void>
   const configRoot = path.dirname(configPath);
   await bootstrapEngine(config, configRoot);
 
-  const rulesPath = path.join(cwd, config.totemDir, 'compiled-rules.json');
-  const testsDir = path.join(cwd, config.totemDir, 'tests');
+  // mmnto-ai/totem#1796: resolve `.totem/` against `configRoot`, not `cwd`,
+  // so monorepo subpackage invocations read rules + fixtures from the same
+  // root the manifest was written to (matches `run-compiled-rules.ts`).
+  const rulesPath = path.join(configRoot, config.totemDir, 'compiled-rules.json');
+  const testsDir = path.join(configRoot, config.totemDir, 'tests');
 
   log.info(TAG, 'Running rule tests...');
 
