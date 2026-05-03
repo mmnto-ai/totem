@@ -73,9 +73,13 @@ Timeout outcomes land in `.totem/temp/telemetry.jsonl` tagged `type: 'regex-exec
 
 For authoring patterns that pass the input-time gate, see [Regex Safety](regex-safety.md), which documents two empirically-verified safe forms for module-path-tolerant identifier matching (a class the gate makes non-obvious).
 
-### `totem rule list` / `totem rule scaffold`
+### `totem rule` (list / scaffold / promote)
 
-Manage your deterministic rules (Pipeline 1). `rule list` outputs active rules, and `rule scaffold` creates a template for manual rule authoring.
+Manage your deterministic rules (Pipeline 1).
+
+- `rule list` outputs active rules.
+- `rule scaffold` creates a template for manual rule authoring.
+- `rule promote <hash>` flips a rule from `unverified` to active per ADR-089 (Zero-Trust Default). Pipeline 2 and Pipeline 3 LLM-generated rules ship `unverified: true` unconditionally; this command is the atomic activation surface. Supports partial hash prefixes; ambiguous prefixes print candidates and exit non-zero with no mutation. Idempotent.
 
 ### `totem install pack/<name>`
 
@@ -186,14 +190,24 @@ Lists all locally documented lessons from `.totem/lessons.md` and the lessons di
 
 ### `totem lesson compile`
 
-Compiles `.totem/lessons.md` into deterministic regex/AST rules for zero-LLM checks. Outputs to `compiled-rules.json`. Supports Pipeline 2 (LLM-generated) and Pipeline 3 (Example-based compilation).
+Compiles `.totem/lessons.md` and `.totem/lessons/*.md` into deterministic regex / AST rules for zero-LLM checks. Outputs to `compiled-rules.json`. Supports Pipeline 2 (LLM-generated) and Pipeline 3 (Example-based compilation). Local compile routes to Sonnet 4.6 by default.
+
+> **Note:** `totem compile` is a deprecated alias for `totem lesson compile`. The CLI's own `--help` output marks it as deprecated. New documentation should use the entity-grouped form (`totem lesson compile`); the `totem --help` `Entities:` section lists `rule`, `lesson`, `exemption`, `config` as the canonical command groupings.
 
 - **Flags:**
-  - `--cloud <url>`: Offloads the compilation process to a cloud endpoint for parallel fan-out. (Note: Cloud compile is still routed to Gemini until #1221 ships).
+  - `--cloud <url>`: Offloads the compilation process to a cloud endpoint for parallel fan-out. (Note: Cloud compile is still routed to Gemini until #1221 migrates the cloud worker to Sonnet; local compile is the golden path.)
   - `--concurrency <n>`: Sets parallel compilation limit (default: 5).
+  - `--export`: Re-exports compiled rules to AI tool config files per the `exports` map in `totem.config.ts`.
   - `--force`: Bypasses the compilation cache.
   - `--from-cursor`: Ingests `.cursorrules`, `.windsurfrules`, and `.cursor/rules/*.mdc` files as lessons.
   - `--upgrade <hash>`: Targets one rule by hash (full or short prefix), evicts only that rule from the cache (preserves `createdAt` metadata), recompiles through Sonnet with a telemetry-driven directive, and replaces the rule. Rejects `--cloud` (not supported) and `--force` (scoped eviction makes force redundant and dangerous).
+  - `--refresh-manifest`: No-LLM primitive that recomputes the manifest's `output_hash` after manual edits to `compiled-rules.json` (e.g., archive lifecycle changes). Backs the atomic `totem lesson archive` command.
+
+### `totem lesson archive <hash> --reason "<text>"`
+
+Atomic archive command (1.15.2 / `mmnto-ai/totem#1587`). Flips a rule's `status` to `archived`, stamps `archivedAt` on first transition, refreshes `compile-manifest.json`'s `output_hash`, and regenerates the AI tool config exports — all in one invocation. Idempotent on rerun (`archivedReason` refreshes, `archivedAt` is preserved). Supports partial hash prefixes; ambiguous prefixes print candidates and exit non-zero with no mutation.
+
+This is the canonical curation surface; reverting `compiled-rules.json` via `git checkout` is forbidden (creates a manifest hash mismatch that fails `verify-manifest` at push time).
 
 ### `totem lesson extract <pr-ids...>`
 
@@ -273,11 +287,15 @@ Previously a 6-step post-merge workflow chain. Retired pending [mmnto-ai/totem#1
 pnpm exec totem lesson extract <pr-numbers> --yes
 pnpm exec totem sync
 pnpm exec totem lesson compile --export
-git checkout HEAD -- .totem/compiled-rules.json
+# Curate over-broad rules via the atomic archive (1.15.2):
+pnpm exec totem lesson archive <hash> --reason "<specific failure mode>"
 pnpm run format
-git add .totem/lessons/ .github/copilot-instructions.md .junie/skills/totem-rules/rules.md
+git add .totem/lessons/ .totem/compiled-rules.json .totem/compile-manifest.json \
+  .github/copilot-instructions.md   # plus any export targets in your totem.config.ts `exports` map
 git commit -m "chore: totem postmerge lessons for <prs>"
 ```
+
+> **Do NOT** use `git checkout HEAD -- .totem/compiled-rules.json` to revert the rules file. Reverting rules while keeping new lessons on disk creates a manifest inconsistency (manifest's `input_hash` reflects the new lessons; `output_hash` reflects the reverted rules). `totem verify-manifest` then fails on push. Archive-in-place via `totem lesson archive` is the intended curation surface.
 
 Three return conditions must ship before `totem wrap` comes back: a `--skip-docs` flag on wrap, a 24-hour git-author-date freshness guard on `totem docs`, and an end-to-end regression test that seeds a hand-crafted `active_work.md` and asserts the file survives the pipeline unmodified.
 

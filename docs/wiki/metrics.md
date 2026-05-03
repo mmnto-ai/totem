@@ -24,4 +24,4 @@ The telemetry data is stored within the `compiled-rules.json` manifest. The key 
 
 ## Off-by-one Seeding
 
-When `recordContextHit` is first called for a rule that already had a `triggerCount` prior to version 1.13.0, the historical hits are seamlessly seeded into the `unknown` bucket as `triggerCount - 1` (the `1` accounts for the current call). This preserves the integrity of historical data without polluting the precise new context metrics.
+When `recordContextHit` is first called for a rule that already had a `triggerCount` prior to version 1.13.0, the historical hits are seeded into the `unknown` bucket as `triggerCount - 1` (the `1` accounts for the current call). Historical totals stay consistent and the new context-aware buckets stay accurate from the first call forward.

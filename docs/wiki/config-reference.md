@@ -32,7 +32,7 @@ export default {
   // Command-Specific Options
   compileOptions: {
     concurrency: 4, // Max parallel lesson compilations
-    cloudFallback: true, // Whether to use Totem cloud API if local fails
+    cloudFallback: true, // Whether to fall back to the Totem cloud worker if local compile fails. Local Sonnet 4.6 is the golden path; cloud is still routed to Gemini until #1221 ships.
   },
 
   // Review configuration. `TotemConfigSchema` reads only the `review` key
