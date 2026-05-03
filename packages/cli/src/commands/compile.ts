@@ -484,13 +484,14 @@ export async function compileCommand(
   const configRoot = path.dirname(configPath);
   await bootstrapEngine(config, configRoot);
 
-  const totemDir = path.join(cwd, config.totemDir);
+  const totemDir = path.join(configRoot, config.totemDir);
   const rulesPath = path.join(totemDir, COMPILED_RULES_FILE);
 
   // mmnto-ai/totem#1656: shared helper for severity-override telemetry.
-  // Closes over the per-invocation `totemDir` (cwd-aware) so records land
-  // next to the other telemetry artifacts when compile runs from a
-  // sub-directory (sibling of mmnto-ai/totem#1645). Called from both the
+  // Closes over the per-invocation `totemDir` (configRoot-relative per
+  // mmnto-ai/totem#1796) so records land next to the lessons + compiled
+  // rules whether compile runs from the repo root or a monorepo
+  // sub-directory. Called from both the
   // local compile path (via the `onSeverityOverride` callback on
   // CompileLessonDeps) and the cloud compile path (inline when
   // buildCompiledRule reports a severityOverride on the cloud result).
