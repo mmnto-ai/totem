@@ -455,6 +455,14 @@ export type {
 } from './strategy-resolver.js';
 export { resolveStrategyRoot } from './strategy-resolver.js';
 
+// Substrate-path resolver (mmnto-ai/totem#1820, ADR-100 Phase C)
+export type {
+  SubstratePaths,
+  SubstrateResolverConfig,
+  SubstrateResolverOptions,
+} from './substrate-resolver.js';
+export { resolveSubstratePaths } from './substrate-resolver.js';
+
 // Semgrep adapter (Pipeline 4 — import rules from Semgrep YAML)
 export type { SemgrepImportResult } from './semgrep-adapter.js';
 export { parseSemgrepRules } from './semgrep-adapter.js';

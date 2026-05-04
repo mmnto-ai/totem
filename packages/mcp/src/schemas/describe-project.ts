@@ -57,7 +57,15 @@ export const StrategyPointerSchema = z.discriminatedUnion('resolved', [
       resolved: z.literal(true),
       /** Short-form 7-char SHA of the resolved strategy HEAD. Null when git rev-parse fails inside the strategy dir. */
       sha: z.string().nullable(),
-      /** Filename of the most recent `<strategyRoot>/.journal/*.md` entry, no path. Null when `.journal/` is missing or empty. */
+      /**
+       * Filename of the most recent `*.md` journal entry, no path.
+       *
+       * Resolved via `resolveSubstratePaths` (ADR-100 Phase C, mmnto-ai/totem#1820):
+       * substrate-preferred (`<parent>/totem-substrate/.journal/`) with
+       * sediment fallback (`<projectRoot>/.journal/`). Null when neither
+       * location resolves to a non-empty `.journal/` directory — graceful
+       * degradation per ADR-090.
+       */
       latestJournal: z.string().nullable(),
     })
     .strict(),

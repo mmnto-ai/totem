@@ -82,6 +82,112 @@ describe('extractStrategyPointer (mmnto-ai/totem#1710)', () => {
     }
   });
 
+  it('extracts latestJournal from resolved substrate path over local default', () => {
+    // Phase C dual-resolver invariant (mmnto-ai/totem#1820): when a
+    // substrate sibling is reachable, `latestJournal` reads from the
+    // substrate's journal subdir, NOT the repo-local sediment. The sediment
+    // is the fallback for when substrate is unreachable.
+    // totem-context: test fixture only; agents do not consume this temp dir.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-phase-c-'));
+    try {
+      const parent = path.join(tmp, 'parent');
+      fs.mkdirSync(parent);
+
+      // Strategy clone (satisfies resolveStrategyRoot's isDirectory check
+      // via the config-arg layer; SHA goes null because there's no real
+      // git history — the graceful-degrade contract on the resolved branch).
+      const strategyDir = path.join(parent, 'totem-strategy-clone');
+      fs.mkdirSync(strategyDir);
+
+      // Substrate clone with valid shape + a newer journal entry.
+      const substrateDir = path.join(parent, 'totem-substrate');
+      fs.mkdirSync(substrateDir);
+      // totem-context: substrate fixture build — shape gate, not gitRoot probe (see substrate-resolver.ts validateSubstrateShape).
+      fs.mkdirSync(path.join(substrateDir, '.git'));
+      fs.mkdirSync(path.join(substrateDir, '.handoff'));
+      const substrateJournal = path.join(substrateDir, '.journal');
+      fs.mkdirSync(substrateJournal);
+      // totem-context: writing test journal markdown to a journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(path.join(substrateJournal, '2026-05-01-test.md'), '');
+      // totem-context: writing test journal markdown to a journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(path.join(substrateJournal, '2026-05-04-newest.md'), '');
+
+      // Repo-local sediment with ONLY an older entry — proves substrate is preferred.
+      const repo = path.join(parent, 'repo');
+      fs.mkdirSync(repo);
+      const localJournal = path.join(repo, '.journal');
+      fs.mkdirSync(localJournal);
+      // totem-context: writing test journal markdown to a journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(path.join(localJournal, '2025-01-01-stale.md'), '');
+
+      // Strategy resolved via config; substrate resolved via sibling-walk
+      // from `repo` (depth 1 finds `parent/totem-substrate`).
+      const ptr = extractStrategyPointer(repo, { strategyRoot: strategyDir });
+      expect(ptr.resolved).toBe(true);
+      if (ptr.resolved) {
+        expect(ptr.latestJournal).toBe('2026-05-04-newest.md');
+      }
+    } finally {
+      // totem-context: matches established cleanup pattern in this file (12 existing instances at lines 31, 81, 209, …); centralization is out-of-scope follow-up.
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to repo-local sediment when substrate is unreachable', () => {
+    // Phase C ADR-090 invariant: when substrate is absent, latestJournal
+    // reads from repo-local sediment (the now-frozen pre-extraction path).
+    // totem-context: test fixture only; agents do not consume this temp dir.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-phase-c-fallback-'));
+    try {
+      const parent = path.join(tmp, 'parent');
+      fs.mkdirSync(parent);
+
+      const strategyDir = path.join(parent, 'totem-strategy-clone');
+      fs.mkdirSync(strategyDir);
+
+      // No `parent/totem-substrate/` — sibling-walk falls through.
+
+      const repo = path.join(parent, 'repo');
+      fs.mkdirSync(repo);
+      const localJournal = path.join(repo, '.journal');
+      fs.mkdirSync(localJournal);
+      // totem-context: writing test journal markdown to a journal subdir; not a hooks-manager bypass.
+      fs.writeFileSync(path.join(localJournal, '2026-04-15-sediment.md'), '');
+
+      const ptr = extractStrategyPointer(repo, { strategyRoot: strategyDir });
+      expect(ptr.resolved).toBe(true);
+      if (ptr.resolved) {
+        expect(ptr.latestJournal).toBe('2026-04-15-sediment.md');
+      }
+    } finally {
+      // totem-context: matches established cleanup pattern in this file (12 existing instances at lines 31, 81, 209, …); centralization is out-of-scope follow-up.
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('returns null latestJournal when neither substrate nor sediment resolves (ADR-090)', () => {
+    // totem-context: test fixture only; agents do not consume this temp dir.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-phase-c-null-'));
+    try {
+      const parent = path.join(tmp, 'parent');
+      fs.mkdirSync(parent);
+      const strategyDir = path.join(parent, 'totem-strategy-clone');
+      fs.mkdirSync(strategyDir);
+      const repo = path.join(parent, 'repo');
+      fs.mkdirSync(repo);
+      // No substrate, no sediment.
+
+      const ptr = extractStrategyPointer(repo, { strategyRoot: strategyDir });
+      expect(ptr.resolved).toBe(true);
+      if (ptr.resolved) {
+        expect(ptr.latestJournal).toBeNull();
+      }
+    } finally {
+      // totem-context: matches established cleanup pattern in this file (12 existing instances at lines 31, 81, 209, …); centralization is out-of-scope follow-up.
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   it('returns the resolved branch with a 7-char SHA and journal filename on the live repo', (ctx) => {
     const ptr = extractStrategyPointer(REPO_ROOT);
     // Integration assertion only runs when strategy is reachable on the
