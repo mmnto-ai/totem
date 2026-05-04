@@ -337,18 +337,20 @@ describe('resolveSubstratePaths graceful degradation', () => {
 // ─── Path normalization ────────────────────────────────────────────────────
 
 describe('resolveSubstratePaths path normalization', () => {
-  it('normalizes mixed separators in env value (cross-platform)', () => {
-    // Construct a path with mixed slashes: D:/dev\subdir or /tmp/dev\sub.
-    // path.normalize should collapse to OS-native separators.
+  // Mixed-separator handling is Windows-specific: on POSIX, backslash is a
+  // valid filename character and `/` is the only path separator, so the
+  // resolver-level mixed-sep behavior only matters on `process.platform ===
+  // 'win32'`. Coverage for `path.normalize`-driven cleanup is provided by
+  // the segment-collapse test below, which works on every platform.
+  const onWindows = process.platform === 'win32' ? it : it.skip;
+  onWindows('normalizes mixed separators in env value (Windows-only)', () => {
     const target = mkSubstrate(path.join(tmpRoot, 'mixed-seps'));
-    // Inject mixed separators by doing string-level concatenation.
-    const mixed = target.replace(path.sep, path.sep === '/' ? '\\' : '/');
+    const mixed = target.replace('\\', '/');
 
     const result = resolveSubstratePaths(configRoot, {
       env: { TOTEM_SUBSTRATE_PATH: mixed },
     });
 
-    // Whatever the resolver returns must be normalized — no mixed separators.
     expect(result.handoffRoot).toBe(path.normalize(path.join(target, '.handoff')));
   });
 
