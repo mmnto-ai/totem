@@ -52,13 +52,20 @@ describe('extractGitState', () => {
 describe('extractStrategyPointer (mmnto-ai/totem#1710)', () => {
   let prevEnvPrimary: string | undefined;
   let prevEnvAlias: string | undefined;
+  let prevEnvSubstrate: string | undefined;
   beforeEach(() => {
     // Isolate the resolver from any developer-shell env override so the
     // "absent strategy" test can reach the unresolved branch deterministically.
+    // TOTEM_SUBSTRATE_PATH is also scrubbed so resolveSubstratePaths()
+    // can't bypass test fixtures (CR review on PR #1821).
     prevEnvPrimary = process.env.TOTEM_STRATEGY_ROOT;
     prevEnvAlias = process.env.STRATEGY_ROOT;
+    // totem-context: env capture-and-restore is the canonical isolation pattern (per CR review on mmnto-ai/totem#1821).
+    prevEnvSubstrate = process.env.TOTEM_SUBSTRATE_PATH;
     delete process.env.TOTEM_STRATEGY_ROOT;
     delete process.env.STRATEGY_ROOT;
+    // totem-context: symmetric restore in afterEach below; leak prevention is preserved.
+    delete process.env.TOTEM_SUBSTRATE_PATH;
   });
   afterEach(() => {
     // Symmetric restore: when prev was undefined, the env var was unset
@@ -67,6 +74,10 @@ describe('extractStrategyPointer (mmnto-ai/totem#1710)', () => {
     else process.env.TOTEM_STRATEGY_ROOT = prevEnvPrimary;
     if (prevEnvAlias === undefined) delete process.env.STRATEGY_ROOT;
     else process.env.STRATEGY_ROOT = prevEnvAlias;
+    // totem-context: symmetric restore — DELETE when prev was undefined to avoid leaking the test's value.
+    if (prevEnvSubstrate === undefined) delete process.env.TOTEM_SUBSTRATE_PATH;
+    // totem-context: symmetric restore of captured value — canonical isolation pattern.
+    else process.env.TOTEM_SUBSTRATE_PATH = prevEnvSubstrate;
   });
 
   it('returns the unresolved branch when no strategy root is reachable', () => {

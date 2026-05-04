@@ -36,6 +36,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { resolveGitRoot } from './sys/git.js';
+
 /**
  * Resolved substrate path triple. Non-null path values are absolute.
  *
@@ -63,6 +65,8 @@ export interface SubstrateResolverOptions {
   env?: Record<string, string | undefined>;
   /** Loaded `totem.config.ts` shape (only `substratePath` is read). */
   config?: SubstrateResolverConfig;
+  /** Test seam — production callers omit and the resolver invokes `resolveGitRoot(configRoot)` itself. Mirrors `StrategyResolverOptions.gitRoot`. */
+  gitRoot?: string | null;
 }
 
 const ENV_VAR = 'TOTEM_SUBSTRATE_PATH';
@@ -80,9 +84,12 @@ const SIBLING_WALK_MAX_DEPTH = 3;
  * inside the product repo so the nested git metadata isn't there.
  */
 function validateSubstrateShape(dir: string): boolean {
-  // totem-context: shape gate (substrate clone detection), not a gitRoot probe — the rule that flags raw git-dir checks is targeted at resolveGitRoot-style probing, not clone-shape detection.
+  // totem-context: shape gate (substrate clone detection), not a gitRoot probe — the rule that flags raw git-metadata-dir checks is targeted at resolveGitRoot-style probing, not clone-shape detection.
+  // `fs.existsSync` (not `isDirectory`) handles submodule + linked-worktree
+  // setups where the git metadata path is a pointer file rather than a
+  // directory. Per GCA review on mmnto-ai/totem#1821.
   return (
-    isDirectory(path.join(dir, '.git')) && // totem-context: shape gate, not gitRoot probe.
+    fs.existsSync(path.join(dir, '.git')) && // totem-context: shape gate, not gitRoot probe; submodule/worktree compat.
     isDirectory(path.join(dir, '.handoff')) &&
     isDirectory(path.join(dir, '.journal'))
   );
@@ -156,14 +163,30 @@ export function resolveSubstratePaths(
   const env = options.env ?? process.env;
   const config = options.config;
 
-  // Absolutize the anchor up-front. A relative `configRoot` (e.g., `.`)
-  // would otherwise: (a) cause returned paths to violate the
-  // "Non-null path values are absolute" contract, and (b) break the
-  // sibling-walk because `path.dirname('.') === '.'` triggers the
-  // dirname-equals-self loop break on the first iteration.
-  // `path.resolve` anchors at `process.cwd()` for relative inputs and
-  // is a no-op for already-absolute paths.
-  const anchor = path.resolve(configRoot);
+  // Anchor resolution mirrors `resolveStrategyRoot` (PR mmnto-ai/totem#1743).
+  // Lazy `resolveGitRoot` probe lets monorepo subpackage callers anchor at
+  // the actual repo root for sibling-walk; falls back to `path.resolve` for
+  // non-git callers (tests, fresh clones with no git metadata, etc.). The
+  // `path.resolve` fallback handles the relative-`configRoot` case
+  // (`path.dirname('.') === '.'` breaks the walk loop unless absolutized).
+  let cachedAnchor: string | undefined;
+  const getAnchor = (): string => {
+    if (cachedAnchor !== undefined) return cachedAnchor;
+    let gitRoot: string | null;
+    if (options.gitRoot !== undefined) {
+      gitRoot = options.gitRoot;
+    } else {
+      try {
+        gitRoot = resolveGitRoot(configRoot);
+        // totem-context: intentional fall-through — resolveGitRoot throws on permission errors / corrupted index; fall back to absolutized configRoot so the precedence chain still completes.
+      } catch {
+        gitRoot = null;
+      }
+    }
+    cachedAnchor = gitRoot ?? path.resolve(configRoot);
+    return cachedAnchor;
+  };
+  const anchor = getAnchor();
 
   // Layer 1 — env var. Validate substrate shape; fall through on shape miss.
   const envValue = readEnvValue(env);

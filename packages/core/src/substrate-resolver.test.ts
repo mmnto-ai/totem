@@ -374,6 +374,37 @@ describe('resolveSubstratePaths path normalization', () => {
     expect(result.handoffRoot).toBe(path.normalize(path.join(sibling, '.handoff')));
   });
 
+  it('uses options.gitRoot test seam to override the natural configRoot anchor', () => {
+    // The lazy gitRoot probe lets monorepo subpackage callers anchor at
+    // the real repo root. To prove the seam overrides configRoot, we
+    // place substrate near the SEAM, NOT near configRoot — if the seam
+    // is honored, the walk finds substrate; if the seam is ignored and
+    // configRoot becomes the anchor, the walk fails.
+    const sibling = mkSubstrate(path.join(parent, 'totem-substrate'));
+    // Build an unrelated path whose dirname has NO substrate near it.
+    const unrelated = mkDir(path.join(tmpRoot, 'unrelated', 'somewhere'));
+    const result = resolveSubstratePaths(unrelated, {
+      env: emptyEnv(),
+      // Seam pins anchor at `configRoot` (= parent/repo); walk from
+      // there finds substrate at `parent/totem-substrate`.
+      gitRoot: configRoot,
+    });
+    expect(result.handoffRoot).toBe(path.normalize(path.join(sibling, '.handoff')));
+  });
+
+  it('falls back to absolutized configRoot when gitRoot is explicitly null', () => {
+    // `gitRoot: null` simulates the "configRoot is not in a git repo"
+    // case — production callers in fresh clones or non-git dirs hit this
+    // path. The resolver must absolutize configRoot (path.resolve) so the
+    // walk doesn't break on a relative anchor.
+    const sibling = mkSubstrate(path.join(parent, 'totem-substrate'));
+    const result = resolveSubstratePaths(configRoot, {
+      env: emptyEnv(),
+      gitRoot: null,
+    });
+    expect(result.handoffRoot).toBe(path.normalize(path.join(sibling, '.handoff')));
+  });
+
   it('absolutizes a relative configRoot before walking (review-1 catch)', () => {
     // Pre-fix bug: `path.dirname('.') === '.'`, so a relative anchor
     // broke the sibling-walk loop on the first iteration. The resolver
