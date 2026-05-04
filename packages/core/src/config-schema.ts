@@ -383,6 +383,23 @@ export const TotemConfigSchema = z.object({
    */
   strategyRoot: z.string().trim().min(1).optional(),
 
+  /**
+   * Optional: path override for the substrate repository (mmnto-ai/totem#1820,
+   * ADR-100 Phase C).
+   *
+   * Resolved relative to the config root by `resolveSubstratePaths`, with the
+   * `TOTEM_SUBSTRATE_PATH` env var taking precedence. When unset, the
+   * resolver walks up to 3 levels from the config root looking for a
+   * `<parent>/totem-substrate/` sibling clone, then falls back to repo-local
+   * `.handoff/` and `.journal/` sediment paths.
+   *
+   * Trimmed and required to be non-empty so a `substratePath: ''` typo
+   * fails fast at config-parse time instead of silently falling through
+   * to the next precedence layer (mirrors `strategyRoot` validation).
+   */
+  // totem-context: `.trim().min(1)` already follows the recommended pattern; lint rule's regex misfires here.
+  substratePath: z.string().trim().min(1).optional(),
+
   /** Optional: named partitions mapping logical aliases to file path prefixes for context isolation (e.g., { core: ['packages/core/'], mcp: ['packages/mcp/'] }) */
   partitions: z.record(z.array(z.string().min(1)).min(1)).optional(),
 

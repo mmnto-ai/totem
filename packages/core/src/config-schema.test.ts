@@ -144,6 +144,39 @@ describe('TotemConfigSchema', () => {
     });
     expect(whitespace.success).toBe(false);
   });
+
+  it('accepts substratePath as an optional string (mmnto-ai/totem#1820)', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      substratePath: '../totem-substrate',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.substratePath).toBe('../totem-substrate');
+    }
+  });
+
+  it('treats substratePath as undefined when omitted', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.substratePath).toBeUndefined();
+    }
+  });
+
+  it('rejects blank or whitespace-only substratePath (mmnto-ai/totem#1820, mirrors strategyRoot)', () => {
+    const blank = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      substratePath: '',
+    });
+    expect(blank.success).toBe(false);
+
+    const whitespace = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      substratePath: '   ',
+    });
+    expect(whitespace.success).toBe(false);
+  });
 });
 
 // ─── Orchestrator schema ─────────────────────────────

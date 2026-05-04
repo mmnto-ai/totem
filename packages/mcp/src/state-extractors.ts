@@ -18,8 +18,10 @@ import {
   readJsonSafe,
   resolveGitRoot,
   resolveStrategyRoot,
+  resolveSubstratePaths,
   safeExec,
   type StrategyResolverConfig,
+  type SubstrateResolverConfig,
 } from '@mmnto/totem';
 
 import {
@@ -79,21 +81,24 @@ export function extractGitState(cwd: string): GitState {
 // ─── Strategy pointer ──────────────────────────────────────────────────────
 
 /**
- * Resolve the strategy root via `resolveStrategyRoot` and return the rich-state
- * pointer for the MCP `describe_project` payload (mmnto-ai/totem#1710).
+ * Resolve the strategy-state pointer for the MCP `describe_project` payload
+ * (mmnto-ai/totem#1710). After ADR-100 Phase C (mmnto-ai/totem#1820), this
+ * uses two resolvers: `resolveStrategyRoot` for the strategy SHA (still in
+ * `mmnto-ai/totem-strategy`) and `resolveSubstratePaths` for the journal
+ * lookup (now in `mmnto-ai/totem-substrate`, with sediment fallback).
  *
  * Two outcomes:
  * - **Resolved:** `{ resolved: true, sha, latestJournal }`. `sha` and
  *   `latestJournal` follow the existing graceful-degrade contract — null when
- *   `git rev-parse` fails or `.journal/` is missing/empty inside the resolved
- *   directory. The agent gets a real pointer when one exists.
- * - **Unresolved:** `{ resolved: false, reason }`. The agent reads the
- *   resolver's actionable reason instead of seeing an empty pointer that
- *   could be confused with a present-but-uninitialized submodule.
+ *   `git rev-parse` fails on the strategy repo or when no journal directory
+ *   resolves. The agent gets a real pointer when one exists.
+ * - **Unresolved:** `{ resolved: false, reason }`. Strategy resolver couldn't
+ *   find the strategy repo at all. The agent reads the resolver's actionable
+ *   reason instead of seeing an empty pointer.
  */
 export function extractStrategyPointer(
   cwd: string,
-  config?: StrategyResolverConfig,
+  config?: StrategyResolverConfig & SubstrateResolverConfig,
 ): StrategyPointer {
   const status = resolveStrategyRoot(cwd, { config });
   if (!status.resolved) {
@@ -112,15 +117,20 @@ export function extractStrategyPointer(
 
   let latestJournal: string | null = null;
   try {
-    const journalDir = path.join(strategyDir, '.journal');
-    if (fs.existsSync(journalDir)) {
+    // Substrate-preferred-with-sediment-fallback resolution per ADR-100 Q8:
+    // the resolver returns substrate `<parent>/totem-substrate/.journal/` when
+    // the sibling clone is reachable, else the repo-local sediment
+    // `<cwd>/.journal/`. Null `journalRoot` means neither resolved — the
+    // ADR-090 graceful-degrade path.
+    const substrate = resolveSubstratePaths(cwd, { config });
+    if (substrate.journalRoot !== null) {
       const entries = fs
-        .readdirSync(journalDir)
+        .readdirSync(substrate.journalRoot)
         .filter((f) => f.endsWith('.md'))
         .sort();
       latestJournal = entries.length > 0 ? entries[entries.length - 1]! : null;
     }
-    // totem-context: ADR-090 substrate graceful degradation — null when .journal/ unreachable.
+    // totem-context: ADR-090 substrate graceful degradation — null when journalRoot unreachable.
   } catch {
     latestJournal = null;
   }
