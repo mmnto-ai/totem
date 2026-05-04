@@ -127,7 +127,7 @@ The "silent skip" surface in row 2 is the only new fail-silent path remaining an
 **Q2: `onWarn` signature widening.**
 
 - Today `applyAstRulesToAdditions(..., onWarn?: (msg: string) => void)`. The new `AstGrepWarning` payload is structured.
-- Options: (a) stringify in the rule engine (`onWarn(\`ast-grep: rule ${hash} skipped ${file} (extension ${ext} unmapped)\`)`), keep signature; (b) widen to `onWarn?: (msg: string \| AstGrepWarning) => void`discriminated union; (c) add a separate`onAstGrepUnmapped?: (w: AstGrepWarning) => void` callback.
+- Options: (a) stringify in the rule engine (`onWarn(\`ast-grep: rule ${hash} skipped ${file} (extension ${ext} unmapped)\`)`), keep signature; (b) widen to a discriminated union — `onWarn?: (msg: string \| AstGrepWarning) => void`; (c) add a separate callback — `onAstGrepUnmapped?: (w: AstGrepWarning) => void`.
 - Tradeoff: (a) lowest surface-area change, cheapest review. (b) structured payload available downstream (e.g., for telemetry) but breaks one parameter type and requires every call site to handle both shapes. (c) cleanest separation, two callbacks to thread.
 - Recommendation: **(a) stringify** for this PR. A structured callback can land later if telemetry consumes it (analogous to the `onSeverityOverride` callback added in #1658).
 
