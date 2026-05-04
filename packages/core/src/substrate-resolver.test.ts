@@ -293,6 +293,31 @@ describe('resolveSubstratePaths repo-local sediment', () => {
     });
   });
 
+  it('anchors layer-4 sediment at configRoot, not gitRoot (CR R2 catch)', () => {
+    // Monorepo-subpackage scenario: configRoot is a deep subpath; gitRoot
+    // is the monorepo root. Sediment lives under configRoot per the
+    // trigger spec (`<configRoot>/.handoff/`), NOT under gitRoot.
+    // Pre-fix bug (CR R2): both anchors collapsed to gitRoot, so layer 4
+    // looked for sediment in the wrong directory.
+    //
+    // Place sediment ONLY under configRoot. If the resolver mistakenly
+    // anchors at gitRoot, sediment lookup fails and we fall through to
+    // 'none'. Correct behavior: 'repo-local' with paths under configRoot.
+    const subpackage = mkDir(path.join(configRoot, 'packages', 'mcp'));
+    mkDir(path.join(subpackage, '.handoff'));
+    mkDir(path.join(subpackage, '.journal'));
+    // gitRoot is `parent` (monorepo root); no sediment there.
+    const result = resolveSubstratePaths(subpackage, {
+      env: emptyEnv(),
+      gitRoot: parent, // pin gitAnchor distinct from configAnchor
+    });
+    expect(result).toEqual({
+      handoffRoot: path.normalize(path.join(subpackage, '.handoff')),
+      journalRoot: path.normalize(path.join(subpackage, '.journal')),
+      source: 'repo-local',
+    });
+  });
+
   it('repo-local accepts placeholder-marker-only sediment dirs (Phase B cutover state)', () => {
     // Sediment-frozen dirs in product repos retain a placeholder marker
     // after Phase B markers landed. The resolver must accept these as

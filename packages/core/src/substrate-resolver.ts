@@ -163,35 +163,44 @@ export function resolveSubstratePaths(
   const env = options.env ?? process.env;
   const config = options.config;
 
-  // Anchor resolution mirrors `resolveStrategyRoot` (PR mmnto-ai/totem#1743).
-  // Lazy `resolveGitRoot` probe lets monorepo subpackage callers anchor at
-  // the actual repo root for sibling-walk; falls back to `path.resolve` for
-  // non-git callers (tests, fresh clones with no git metadata, etc.). The
-  // `path.resolve` fallback handles the relative-`configRoot` case
-  // (`path.dirname('.') === '.'` breaks the walk loop unless absolutized).
-  let cachedAnchor: string | undefined;
-  const getAnchor = (): string => {
-    if (cachedAnchor !== undefined) return cachedAnchor;
+  // Two distinct anchors per CR review on PR mmnto-ai/totem#1821:
+  //
+  // - `gitAnchor` (lazy, repo-wide) — anchors relative env/config values
+  //   and the sibling-walk start. Mirrors `resolveStrategyRoot` (PR
+  //   mmnto-ai/totem#1743): `options.gitRoot` test seam →
+  //   `resolveGitRoot(configRoot)` probe → `configAnchor` fallback. The
+  //   user's intent for a relative `TOTEM_SUBSTRATE_PATH=../...` is
+  //   "relative to my repo," not "relative to my subpackage."
+  //
+  // - `configAnchor` (eager, caller-scoped) — anchors layer 4 (repo-local
+  //   sediment). Per the trigger spec, sediment lives at
+  //   `<configRoot>/.handoff/` and `<configRoot>/.journal/`. In a
+  //   monorepo subpackage where `configRoot != gitRoot`, anchoring layer
+  //   4 at `gitRoot` would look for sediment in the wrong directory.
+  const configAnchor = path.resolve(configRoot);
+
+  let cachedGitAnchor: string | undefined;
+  const getGitAnchor = (): string => {
+    if (cachedGitAnchor !== undefined) return cachedGitAnchor;
     let gitRoot: string | null;
     if (options.gitRoot !== undefined) {
       gitRoot = options.gitRoot;
     } else {
       try {
         gitRoot = resolveGitRoot(configRoot);
-        // totem-context: intentional fall-through — resolveGitRoot throws on permission errors / corrupted index; fall back to absolutized configRoot so the precedence chain still completes.
+        // totem-context: intentional fall-through — resolveGitRoot throws on permission errors / corrupted index; fall back to configAnchor so the precedence chain still completes.
       } catch {
         gitRoot = null;
       }
     }
-    cachedAnchor = gitRoot ?? path.resolve(configRoot);
-    return cachedAnchor;
+    cachedGitAnchor = gitRoot ?? configAnchor;
+    return cachedGitAnchor;
   };
-  const anchor = getAnchor();
 
   // Layer 1 — env var. Validate substrate shape; fall through on shape miss.
   const envValue = readEnvValue(env);
   if (envValue !== undefined) {
-    const candidate = resolveValue(envValue, anchor);
+    const candidate = resolveValue(envValue, getGitAnchor());
     if (validateSubstrateShape(candidate)) {
       return substrateResult(candidate);
     }
@@ -202,17 +211,17 @@ export function resolveSubstratePaths(
   // that would crash `.trim()` with `TypeError`. Treating non-string as
   // unset preserves the contract. Mirrors `resolveStrategyRoot`.
   if (typeof config?.substratePath === 'string' && config.substratePath.trim().length > 0) {
-    const candidate = resolveValue(config.substratePath, anchor);
+    const candidate = resolveValue(config.substratePath, getGitAnchor());
     if (validateSubstrateShape(candidate)) {
       return substrateResult(candidate);
     }
   }
 
   // Layer 3 — sibling-walk. Walk up to SIBLING_WALK_MAX_DEPTH levels
-  // from the anchor looking for `<parent>/totem-substrate/`. Cap
-  // protects against pathological resolution when configRoot is
+  // from `gitAnchor` looking for `<parent>/totem-substrate/`. Cap
+  // protects against pathological resolution when the anchor is
   // accidentally a deep subpath.
-  let walkAnchor = anchor;
+  let walkAnchor = getGitAnchor();
   for (let i = 0; i < SIBLING_WALK_MAX_DEPTH; i++) {
     const parent = path.dirname(walkAnchor);
     // path.dirname returns the path itself at filesystem root; break to
@@ -226,14 +235,15 @@ export function resolveSubstratePaths(
     walkAnchor = parent;
   }
 
-  // Layer 4 — repo-local sediment. Per-directory presence: either
-  // `.handoff/` alone OR `.journal/` alone is a valid partial sediment
-  // result; consumer reads non-null only. The Phase B cutover left
-  // both as `.gitkeep`-only frozen markers in the product repos, so
+  // Layer 4 — repo-local sediment, anchored at `configAnchor` (NOT
+  // `gitAnchor`). Per-directory presence: either `.handoff/` alone OR
+  // `.journal/` alone is a valid partial sediment result; consumer
+  // reads non-null only. The Phase B cutover left both as
+  // `.gitkeep`-only frozen markers in the product repos, so
   // existence-of-directory (not existence-of-content) is the right
   // gate here — matches `isDirectory`'s semantic on layers 1-3.
-  const localHandoff = path.normalize(path.join(anchor, '.handoff'));
-  const localJournal = path.normalize(path.join(anchor, '.journal'));
+  const localHandoff = path.normalize(path.join(configAnchor, '.handoff'));
+  const localJournal = path.normalize(path.join(configAnchor, '.journal'));
   const handoffExists = isDirectory(localHandoff);
   const journalExists = isDirectory(localJournal);
   // totem-context: boolean-or for presence check; nullish-coalescing rule is targeted at numeric-metric defaults, not booleans.
