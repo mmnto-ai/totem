@@ -7721,10 +7721,9 @@
     {
       "lessonHash": "32a0453e69f5a3f4",
       "lessonHeading": "Sanitize ANSI codes in logged messages",
+      "pattern": "",
       "message": "Strip ANSI escape codes from user-provided strings before logging to prevent terminal injection and maintain log file integrity. Use stripAnsi() or equivalent before passing values to log calls.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepYamlRule": {
         "rule": {
           "any": [
@@ -7761,17 +7760,156 @@
           }
         }
       },
+      "badExample": "console.log(`Processing file: ${userInput}`);",
+      "goodExample": "console.log(`Processing file: ${stripAnsi(userInput)}`);",
       "compiledAt": "2026-05-03T04:05:12.841Z",
       "createdAt": "2026-05-03T04:05:12.841Z",
       "fileGlobs": [
         "packages/cli/src/commands/first-lint-promote-runner.ts"
       ],
-      "badExample": "console.log(`Processing file: ${userInput}`);",
-      "goodExample": "console.log(`Processing file: ${stripAnsi(userInput)}`);",
-      "unverified": true,
+      "severity": "warning",
       "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 46 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/build/esbuild-lite.mjs, packages/cli/src/commands/add-lesson.ts, packages/cli/src/commands/config.ts, packages/cli/src/commands/doctor.ts, packages/cli/src/commands/drift.ts (+ 41 more). reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-05-03T04:05:14.001Z",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 46 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/build/esbuild-lite.mjs, packages/cli/src/commands/add-lesson.ts, packages/cli/src/commands/config.ts, packages/cli/src/commands/doctor.ts, packages/cli/src/commands/drift.ts (+ 41 more). reasonCode: stage4-out-of-scope-match."
+      "unverified": true
+    },
+    {
+      "lessonHash": "8eb1924aed7f851c",
+      "lessonHeading": "Anchor CLI artifacts to configRoot",
+      "pattern": "",
+      "message": "Anchor CLI artifact paths to configRoot instead of process.cwd() to avoid resolution failures in monorepos",
+      "engine": "ast-grep",
+      "astGrepPattern": "path.join(process.cwd(), $$$ARGS)",
+      "badExample": "const totemDir = path.join(process.cwd(), '.totem');",
+      "goodExample": "const totemDir = path.join(configRoot, '.totem');",
+      "compiledAt": "2026-05-03T21:07:59.541Z",
+      "createdAt": "2026-05-03T21:07:59.541Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 3 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/install.test.ts, packages/cli/src/commands/lesson.test.ts, packages/cli/src/commands/search.test.ts. reasonCode: stage4-out-of-scope-match.",
+      "archivedAt": "2026-05-03T21:08:00.573Z",
+      "unverified": true
+    },
+    {
+      "lessonHash": "513f3b194be8d66d",
+      "lessonHeading": "Stage specific files in CLI tools",
+      "pattern": "",
+      "message": "Avoid 'git add .' in CLI tools — pass explicit file paths to prevent staging unrelated changes",
+      "engine": "ast-grep",
+      "astGrepPattern": "execSync('git add .')",
+      "badExample": "execSync('git add .');",
+      "goodExample": "execSync(`git add ${filePath}`);",
+      "compiledAt": "2026-05-03T21:08:06.370Z",
+      "createdAt": "2026-05-03T21:08:06.370Z",
+      "fileGlobs": [
+        "packages/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "severity": "warning",
+      "status": "untested-against-codebase",
+      "unverified": true
+    },
+    {
+      "lessonHash": "6f23f6f0e94f9675",
+      "lessonHeading": "Use join over resolve for paths",
+      "pattern": "",
+      "message": "Prefer path.join over path.resolve when combining paths with potentially untrusted inputs to mitigate path injection vulnerabilities.",
+      "engine": "ast-grep",
+      "astGrepPattern": "path.resolve($$$ARGS)",
+      "badExample": "const fullPath = path.resolve(baseDir, userInput);",
+      "goodExample": "const fullPath = path.join(baseDir, userInput);",
+      "compiledAt": "2026-05-04T05:50:12.335Z",
+      "createdAt": "2026-05-04T05:50:12.335Z",
+      "fileGlobs": [
+        "packages/core/src/strategy-resolver.ts"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 41 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/assets/compiled-baseline.test.ts, packages/cli/src/commands/config-drift.test.ts, packages/cli/src/commands/docs.ts, packages/cli/src/commands/doctor.ts, packages/cli/src/commands/extract-shared.ts (+ 36 more). reasonCode: stage4-out-of-scope-match.",
+      "archivedAt": "2026-05-04T05:50:13.325Z",
+      "unverified": true
+    },
+    {
+      "lessonHash": "16276e131632b236",
+      "lessonHeading": "Delete undefined env vars in tests",
+      "pattern": "",
+      "message": "Use 'delete process.env.KEY' instead of assigning undefined — assigning undefined leaves the key present in process.env, which can leak state between tests.",
+      "engine": "ast-grep",
+      "astGrepPattern": "process.env.$KEY = undefined",
+      "badExample": "afterEach(() => { process.env.MY_VAR = undefined; });",
+      "goodExample": "afterEach(() => { delete process.env.MY_VAR; });",
+      "compiledAt": "2026-05-04T05:50:20.174Z",
+      "createdAt": "2026-05-04T05:50:20.174Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/doctor.test.ts"
+      ],
+      "severity": "warning",
+      "status": "untested-against-codebase",
+      "unverified": true
+    },
+    {
+      "lessonHash": "c3c6ccd3ef0fe86e",
+      "lessonHeading": "Bump major version for discriminated unions",
+      "pattern": "^['\"]?[\\w@/-]+['\"]?:\\s*(patch|minor)\\s*$",
+      "message": "Changing a response shape to a discriminated union is a breaking change — bump must be 'major', not 'patch' or 'minor'",
+      "engine": "regex",
+      "badExample": "'my-package': minor",
+      "goodExample": "'my-package': major",
+      "compiledAt": "2026-05-04T05:50:24.795Z",
+      "createdAt": "2026-05-04T05:50:24.795Z",
+      "fileGlobs": [
+        ".changeset/*.md"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Pattern '^['\\\"]?[\\w@/-]+['\\\"]?:\\s*(patch|minor)\\s*$' fires on EVERY routine changeset entry, not just discriminated-union changes. Lesson's intent was discriminated-union-as-breaking-change but the regex captures all minor/patch bumps; would generate massive false-positives on any changeset PR. Archive pending pattern-tightening to detect actual discriminated-union shape changes (likely needs ast-grep against TS source, not regex against changeset MD).",
+      "archivedAt": "2026-05-04T05:51:33.744Z",
+      "unverified": true
+    },
+    {
+      "lessonHash": "d836e66183ab561d",
+      "lessonHeading": "Bump major version for schema changes",
+      "pattern": "^'[^']+': (minor|patch)$",
+      "message": "Breaking changes to public API shapes (e.g., discriminated union fields) must use a 'major' version bump in changesets",
+      "engine": "regex",
+      "badExample": "'my-package': minor",
+      "goodExample": "'my-package': major",
+      "compiledAt": "2026-05-04T05:50:32.571Z",
+      "createdAt": "2026-05-04T05:50:32.571Z",
+      "fileGlobs": [
+        ".changeset/*.md"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "unverified": true,
+      "archivedReason": "Pattern '^'[^']+': (minor|patch)$' fires on EVERY routine changeset entry. Same over-broad class as c3c6ccd3 ('Bump major version for discriminated unions'). Lesson intent was schema-change-as-breaking-change but regex doesn't distinguish breaking shape changes from any minor/patch bump. Archive pending pattern-tightening; likely needs ast-grep on the source TS schema files referenced by the changeset, not regex on the changeset MD.",
+      "archivedAt": "2026-05-04T05:51:42.747Z"
+    },
+    {
+      "lessonHash": "b6c78d82af432668",
+      "lessonHeading": "Prefer path.join for path security",
+      "pattern": "",
+      "message": "Prefer path.join over path.resolve when combining base paths with potentially untrusted inputs. path.resolve can treat absolute-looking input as a new root, enabling path injection.",
+      "engine": "ast-grep",
+      "astGrepPattern": "path.resolve($$$ARGS)",
+      "badExample": "const fullPath = path.resolve(baseDir, userInput);",
+      "goodExample": "const fullPath = path.join(baseDir, userInput);",
+      "compiledAt": "2026-05-04T05:50:35.357Z",
+      "createdAt": "2026-05-04T05:50:35.357Z",
+      "fileGlobs": [
+        "packages/core/src/strategy-resolver.ts"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 41 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/assets/compiled-baseline.test.ts, packages/cli/src/commands/config-drift.test.ts, packages/cli/src/commands/docs.ts, packages/cli/src/commands/doctor.ts, packages/cli/src/commands/extract-shared.ts (+ 36 more). reasonCode: stage4-out-of-scope-match.",
+      "archivedAt": "2026-05-04T05:50:36.072Z",
+      "unverified": true
     }
   ],
   "nonCompilable": [
@@ -13005,6 +13143,222 @@
       "title": "Use engines for version-tool-immune constraints",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes an architectural principle about using the 'engines' field in package.json for version constraints — it does not describe a detectable code pattern that violates a rule. There is no anti-pattern to match; the lesson prescribes a practice without specifying what forbidden construct to flag."
+    },
+    {
+      "hash": "359504da76275073",
+      "title": "Enforce pack compatibility via engines contract",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural convention (declaring an 'engines' field in package.json for pack compatibility) that cannot be detected as a violation pattern — the absence of a field in package.json requires multi-file, schema-aware analysis that no single regex or AST pattern can reliably express."
+    },
+    {
+      "hash": "aa67058216b23a0f",
+      "title": "Ensure monorepo exclusions are root-relative",
+      "reasonCode": "context-required",
+      "reason": "Lesson constrains the hazard to path exclusions passed to tools like 'git ls-files' that are not root-relative; detecting whether a given string literal or variable represents a root-relative vs. package-relative path requires runtime knowledge of the repo root, which no static pattern can express."
+    },
+    {
+      "hash": "426e3e928274ee0e",
+      "title": "Align exclusion paths with scanner output roots",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Hazard requires multi-file semantic analysis to determine which root variable (repoRoot, configRoot, cwd) is being used relative to the scanner output root; a single-pattern rule cannot distinguish correct from incorrect root alignment without tracking variable provenance across the codebase."
+    },
+    {
+      "hash": "9ac700147c1b8399",
+      "title": "Verify closure capture against compiler context",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a code review process guideline — verifying LLM findings with tsc before acting — not a detectable code pattern. No structural or textual anti-pattern can be identified in source code."
+    },
+    {
+      "hash": "2da6d546dff8d432",
+      "title": "Validate path resolution with chdir",
+      "reasonCode": "context-required",
+      "reason": "Lesson describes a testing strategy (using process.chdir + config path mocking to validate path resolution) rather than a detectable code pattern. The violation — missing chdir-based path resolution tests — requires knowing which command files lack corresponding test coverage, which no single-file pattern can determine."
+    },
+    {
+      "hash": "ecac01b2dd171158",
+      "title": "Validate untrusted packs during first execution",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural lifecycle state and zero-trust validation policy for a pack ecosystem. There is no detectable code pattern — the rule governs system design and runtime behavior, not a specific syntactic construct."
+    },
+    {
+      "hash": "045f107ee793583e",
+      "title": "Stabilize tests with conditional resolution skips",
+      "reasonCode": "context-required",
+      "reason": "Lesson describes a test-stabilization convention (using conditional runtime skips when host-resolved paths are missing) that requires knowing whether a test depends on host-resolved paths and whether a skip guard is already present. A pattern cannot distinguish a legitimately missing skip from a test that intentionally asserts on a present resource."
+    },
+    {
+      "hash": "67a26297d4015458",
+      "title": "Anchor relative config paths to git root",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural principle about path anchoring strategy (git root vs cwd). Detecting whether a relative path is anchored to the git root versus the current working directory requires semantic analysis of how the path is resolved at runtime — a pattern cannot distinguish `path.join(__dirname, '../..', 'config')` (git-root-anchored) from `path.join(process.cwd(), 'config')` (cwd-anchored) in all their varied forms, nor can it determine whether an environment variable value is a relative path that needs anchoring."
+    },
+    {
+      "hash": "50fd02254ab63c29",
+      "title": "Always forward config to resolvers",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural data-flow requirement (passing config through call chains) that cannot be detected by a single-file pattern. Determining whether a function 'bypasses the config layer' requires multi-file semantic analysis of call graphs and parameter threading."
+    },
+    {
+      "hash": "9d2b84e8a1ab157f",
+      "title": "Prefer resolvers over git submodules",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/workflow principle about repository structure and dependency resolution strategy. There is no detectable code pattern that distinguishes a resolver implementation from a submodule reference in source code — the violation (presence of git submodules) lives in .gitmodules and .git/config, not in source files that can be linted with regex or AST patterns."
+    },
+    {
+      "hash": "de0f676c6bd4874e",
+      "title": "Avoid devaluing major version signals",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a release management and versioning policy decision that requires human judgment about whether a breaking change has known programmatic consumers. No code pattern can detect whether a breaking change is 'isolated' or whether consumers exist — this is a semantic and organizational determination, not a detectable code pattern."
+    },
+    {
+      "hash": "a4f657941d9bc313",
+      "title": "Forward configuration to multi-layer resolvers",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/design principle about passing configuration objects through call chains. There is no detectable surface pattern that distinguishes a resolver call with a config argument from one without, without knowing which functions are 'resolvers' and what their expected signatures are — this requires semantic/multi-file analysis of the call graph."
+    },
+    {
+      "hash": "cb58ae7d11082f94",
+      "title": "Fixed grouping cascades major version bumps",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a release strategy decision (downgrading major to minor in changesets to prevent version inflation) that requires understanding intent and context across the release process. No detectable code pattern can distinguish an intentional major bump from one that should be downgraded."
+    },
+    {
+      "hash": "45d14053ff885962",
+      "title": "Prefer dynamic resolution over git submodules",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural principle about repository structure and dependency resolution strategy (git submodules vs. dynamic resolvers). There is no detectable code pattern that distinguishes a 'git submodule' usage from legitimate code — the violation exists at the repository/configuration level, not in TypeScript source files."
+    },
+    {
+      "hash": "f199e1d0bc88cd1c",
+      "title": "Provide actionable hints in CLI errors",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a UX/content quality requirement for error messages — whether a thrown error includes a sufficiently actionable hint cannot be determined by a structural or string pattern without producing massive false positives or false negatives."
+    },
+    {
+      "hash": "024e0393190efcc6",
+      "title": "Provide actionable hints in configuration errors",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a UX/content quality requirement for error messages — whether a thrown error includes a sufficiently actionable hint is a semantic judgment that cannot be expressed as a structural or string-match pattern without producing overwhelming false positives on every error throw."
+    },
+    {
+      "hash": "765f2768e85835ec",
+      "title": "Manually prune retired submodule artifacts",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a Git repository maintenance procedure (manual deletion of submodule directories and metadata after removal). There is no detectable source code pattern — the guidance applies to shell commands or developer workflow steps, not to any file content that can be statically analyzed."
+    },
+    {
+      "hash": "3fc5e202455f6234",
+      "title": "Order strategy root resolution precedence",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural precedence system for strategy root resolution, not a detectable code pattern. There is no specific code construct, API call, or syntax violation that can be matched."
+    },
+    {
+      "hash": "6afe3ec0918c382a",
+      "title": "Layered strategy root resolution precedence",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a conceptual architectural precedence ordering for a resolver, not a detectable code pattern. No specific code construct, API call, or syntax violation can be derived from the rule."
+    },
+    {
+      "hash": "cbd3be83ebe0c4a2",
+      "title": "Require multiple markers for standalone detection",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/algorithmic principle about combining multiple directory checks for detection logic. The specific combination of conditions required cannot be expressed as a single structural pattern without knowing the exact implementation shape, and the rule depends on the absence of a multi-marker check rather than the presence of a detectable anti-pattern."
+    },
+    {
+      "hash": "396c5d2b4e82fe59",
+      "title": "Use discriminated unions for resolution",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/type-design principle (prefer discriminated unions over type assertions for resolution results). There is no detectable code pattern that distinguishes a discriminated union return type from a non-discriminated one, nor can a pattern reliably identify missing discriminated unions in resolution functions."
+    },
+    {
+      "hash": "46de79f4b08e6d00",
+      "title": "Manually prune retired git submodule directories",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a manual filesystem/git hygiene procedure (pruning retired submodule directories) that has no detectable code pattern — it is an operational workflow reminder, not a source code anti-pattern."
+    },
+    {
+      "hash": "cd9c65be79b3ddbc",
+      "title": "Defer git root resolution in layers",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/execution-order principle (lazy vs. eager initialization of git root resolution) that cannot be detected from a single code pattern. Determining whether a call to a git-root resolver is 'premature' requires understanding the control-flow context and whether an absolute-path override was already provided — analysis that spans multiple branches and cannot be expressed as a structural or string pattern."
+    },
+    {
+      "hash": "ec2ac3c914bb4850",
+      "title": "Use ledgers for deferred breaking changes",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a release management and versioning process/convention (maintaining a deferred-major ledger), not a detectable code pattern. No source code construct can be statically analyzed to enforce or detect violations of this practice."
+    },
+    {
+      "hash": "97c784280802eec2",
+      "title": "Preserve additive fields in union success paths",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a schema evolution and backward-compatibility architectural principle. Detecting whether a discriminated union's success branch is missing fields that existed in a prior schema version requires multi-file semantic analysis (comparing old vs. new type definitions) that no single-pattern rule can express."
+    },
+    {
+      "hash": "c6db6190fd1ecdae",
+      "title": "Evaluate breaking changes by consumer impact",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a conceptual architectural principle for evaluating versioning decisions based on consumer usage patterns; there is no detectable code pattern that distinguishes 'human-rendered text' consumption from 'programmatic JSON' consumption."
+    },
+    {
+      "hash": "00993304e8c7d585",
+      "title": "Classify additive schema changes as minor",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a versioning classification principle for schema changes based on semantic impact assessment. There is no detectable code pattern that distinguishes 'additive success path' or 'consumed as rendered text rather than parsed JSON' from source code alone — this requires human judgment about API contract semantics."
+    },
+    {
+      "hash": "c2fcfd23019a0021",
+      "title": "Use discriminated unions for resolution results",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/type-design principle (prefer discriminated unions over nullable fields) that cannot be detected as a code pattern — there is no structural signature that distinguishes a nullable-field return from a discriminated union return without semantic type analysis across call sites."
+    },
+    {
+      "hash": "4720637256525883",
+      "title": "Require dual-folder presence for standalone detection",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an algorithmic/logical requirement (checking for multiple folder conditions simultaneously) that cannot be expressed as a single pattern match. Detecting whether a function checks for both 'proposals' AND 'ADRs' folders requires semantic analysis of the boolean logic inside the detection function, which is beyond what regex or ast-grep structural patterns can express."
+    },
+    {
+      "hash": "ebdedf01ae5c0efe",
+      "title": "Rationale for additive schema changes as minor",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a versioning rationale and schema design principle — there is no detectable code pattern that distinguishes a discriminated union change treated as minor from one treated as major, nor can a pattern determine whether a field is consumed as human-readable text vs. programmatic JSON parsing."
+    },
+    {
+      "hash": "946e954fa1167b8b",
+      "title": "Use stable names for linked indexes",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a naming convention for auto-injected link identifiers whose 'stability' depends on semantic intent and project-specific conventions, not a detectable code pattern. There is no structural or lexical signature that distinguishes a 'stable' name like 'strategy' from an 'unstable' one without knowing the full set of valid stable names, which is not provided in the lesson."
+    },
+    {
+      "hash": "7b50691fa123a1fc",
+      "title": "Stabilize host-dependent integration tests",
+      "reasonCode": "context-required",
+      "reason": "Lesson requires knowing whether a test depends on optional host-level resources (e.g., strategy clones) and whether a conditional skip is present; pattern cannot distinguish tests that legitimately lack a skip guard from those that intentionally run unconditionally."
+    },
+    {
+      "hash": "8d1beb3440f5e39f",
+      "title": "Verify directory existence during resolution",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural invariant — that every path resolution step must call fs.statSync to verify directory existence — which requires semantic analysis to determine whether a given path resolution step is missing a verification call. A pattern matching fs.statSync presence/absence cannot distinguish a compliant resolution chain from an unrelated stat call, nor can it detect the absence of a required call without full control-flow analysis."
+    },
+    {
+      "hash": "ec055b85101ae121",
+      "title": "Defer git root resolution in resolvers",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural principle about deferring git root resolution to specific code paths; detecting whether a git root probe is 'eager' vs 'deferred' requires semantic analysis of call order and control flow across the resolver's precedence layers, which no single-pattern rule can express."
+    },
+    {
+      "hash": "216315c800e8f90b",
+      "title": "Anchor relative paths to git root",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural principle about path anchoring strategy. Detecting whether a relative path is anchored to the git root versus the current working directory requires semantic analysis of runtime values and call context — no structural pattern can distinguish `path.join(__dirname, '../..')` (git-root-anchored) from `path.join(process.cwd(), 'config')` (cwd-anchored) without understanding the directory layout and intent."
+    },
+    {
+      "hash": "73606d1ab9209ca5",
+      "title": "Track deferred breaking changes in a ledger",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a project governance and documentation process (maintaining a ledger of deferred breaking changes), not a detectable code pattern. No structural or textual pattern in source files can distinguish an intentionally misclassified changeset from a legitimate minor change."
     }
   ]
 }
