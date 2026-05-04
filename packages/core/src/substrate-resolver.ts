@@ -156,10 +156,19 @@ export function resolveSubstratePaths(
   const env = options.env ?? process.env;
   const config = options.config;
 
+  // Absolutize the anchor up-front. A relative `configRoot` (e.g., `.`)
+  // would otherwise: (a) cause returned paths to violate the
+  // "Non-null path values are absolute" contract, and (b) break the
+  // sibling-walk because `path.dirname('.') === '.'` triggers the
+  // dirname-equals-self loop break on the first iteration.
+  // `path.resolve` anchors at `process.cwd()` for relative inputs and
+  // is a no-op for already-absolute paths.
+  const anchor = path.resolve(configRoot);
+
   // Layer 1 — env var. Validate substrate shape; fall through on shape miss.
   const envValue = readEnvValue(env);
   if (envValue !== undefined) {
-    const candidate = resolveValue(envValue, configRoot);
+    const candidate = resolveValue(envValue, anchor);
     if (validateSubstrateShape(candidate)) {
       return substrateResult(candidate);
     }
@@ -170,17 +179,17 @@ export function resolveSubstratePaths(
   // that would crash `.trim()` with `TypeError`. Treating non-string as
   // unset preserves the contract. Mirrors `resolveStrategyRoot`.
   if (typeof config?.substratePath === 'string' && config.substratePath.trim().length > 0) {
-    const candidate = resolveValue(config.substratePath, configRoot);
+    const candidate = resolveValue(config.substratePath, anchor);
     if (validateSubstrateShape(candidate)) {
       return substrateResult(candidate);
     }
   }
 
   // Layer 3 — sibling-walk. Walk up to SIBLING_WALK_MAX_DEPTH levels
-  // from configRoot looking for `<parent>/totem-substrate/`. Cap
+  // from the anchor looking for `<parent>/totem-substrate/`. Cap
   // protects against pathological resolution when configRoot is
   // accidentally a deep subpath.
-  let walkAnchor = path.normalize(configRoot);
+  let walkAnchor = anchor;
   for (let i = 0; i < SIBLING_WALK_MAX_DEPTH; i++) {
     const parent = path.dirname(walkAnchor);
     // path.dirname returns the path itself at filesystem root; break to
@@ -200,8 +209,8 @@ export function resolveSubstratePaths(
   // both as `.gitkeep`-only frozen markers in the product repos, so
   // existence-of-directory (not existence-of-content) is the right
   // gate here — matches `isDirectory`'s semantic on layers 1-3.
-  const localHandoff = path.normalize(path.join(configRoot, '.handoff'));
-  const localJournal = path.normalize(path.join(configRoot, '.journal'));
+  const localHandoff = path.normalize(path.join(anchor, '.handoff'));
+  const localJournal = path.normalize(path.join(anchor, '.journal'));
   const handoffExists = isDirectory(localHandoff);
   const journalExists = isDirectory(localJournal);
   // totem-context: boolean-or for presence check; nullish-coalescing rule is targeted at numeric-metric defaults, not booleans.

@@ -371,6 +371,30 @@ describe('resolveSubstratePaths path normalization', () => {
     // Sanity: the absolute path points at the sibling we built.
     expect(result.handoffRoot).toBe(path.normalize(path.join(sibling, '.handoff')));
   });
+
+  it('absolutizes a relative configRoot before walking (review-1 catch)', () => {
+    // Pre-fix bug: `path.dirname('.') === '.'`, so a relative anchor
+    // broke the sibling-walk loop on the first iteration. The resolver
+    // must absolutize via `path.resolve` so the walk reaches real ancestors.
+    const prevCwd = process.cwd();
+    try {
+      // chdir into configRoot so '.' resolves to it. The sibling at
+      // `parent/totem-substrate/` becomes reachable via the walk's
+      // first iteration once `path.resolve('.')` produces an absolute path.
+      const sibling = mkSubstrate(path.join(parent, 'totem-substrate'));
+      process.chdir(configRoot);
+      const result = resolveSubstratePaths('.', { env: emptyEnv() });
+      // Path equality on the absolutized resolution. Use realpathSync so
+      // macOS `/tmp` ↔ `/private/tmp` symlink discrepancies don't break
+      // assertions on `process.chdir`-resolved paths.
+      const expected = fs.realpathSync.native(path.join(sibling, '.handoff'));
+      const actual = result.handoffRoot ? fs.realpathSync.native(result.handoffRoot) : null;
+      expect(actual).toBe(expected);
+      expect(path.isAbsolute(result.handoffRoot ?? '')).toBe(true);
+    } finally {
+      process.chdir(prevCwd);
+    }
+  });
 });
 
 // ─── Type compile-checks (no runtime behavior) ─────────────────────────────
