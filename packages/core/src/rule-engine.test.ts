@@ -10,7 +10,8 @@ import type {
   RuleEventCallback,
   RuleEventContext,
 } from './compiler-schema.js';
-import { TotemParseError } from './errors.js';
+import { TotemError, TotemParseError } from './errors.js';
+import { resolveEngineVersion } from './pack-discovery.js';
 import {
   applyAstRulesToAdditions,
   applyRulesToAdditions,
@@ -19,6 +20,24 @@ import {
   type RuleEngineContext,
 } from './rule-engine.js';
 import { cleanTmpDir, makeRuleEngineCtx } from './test-utils.js';
+
+/**
+ * Seed `.totem/installed-packs.json` at `dir` so the stale-manifest
+ * detector (mmnto-ai/totem#1811, ADR-101) sees a fresh cohort and
+ * the rule-engine falls through to the original `TotemParseError`
+ * path. Pre-1811, the existence check wasn't there so test fixtures
+ * didn't need a manifest.
+ */
+function seedFreshManifest(dir: string, cohort: string = resolveEngineVersion()): void {
+  const totemDir = path.join(dir, '.totem');
+  fs.mkdirSync(totemDir, { recursive: true });
+  // totem-context: writing a totem manifest fixture under tmpDir, not a git hook
+  fs.writeFileSync(
+    path.join(totemDir, 'installed-packs.json'),
+    JSON.stringify({ version: 1, cohort, packs: [] }),
+    'utf-8',
+  );
+}
 
 // ─── Helpers ────────────────────────────────────────
 
@@ -814,6 +833,8 @@ describe('matchesGlob', () => {
 describe('applyAstRulesToAdditions fail-loud on unmapped extension (mmnto-ai/totem#1653)', () => {
   // totem-context: test fixtures genuinely need async — they `await applyAstRulesToAdditions(...)` whose contract is async
   it('throws when an AST rule is scoped to an unregistered extension', async () => {
+    // totem-context: seed the manifest with a fresh cohort so mmnto-ai/totem#1811's STALE_MANIFEST nudge stays silent and the original install-hint path stays under test
+    seedFreshManifest(tmpDir);
     fs.writeFileSync(path.join(tmpDir, 'src', 'main.py'), 'print("x")\n'); // totem-context: writing a python source fixture under tmpDir, not a git hook
     const rule = makeRule({
       engine: 'ast',
@@ -846,6 +867,98 @@ describe('applyAstRulesToAdditions fail-loud on unmapped extension (mmnto-ai/tot
       /AST rule 'py-rule-hash'.*scoped to.*extension '\.py'.*no Tree-sitter language is registered/,
     );
     expect(tpe.recoveryHint).toMatch(/Install the pack that provides '\.py'/);
+  });
+
+  // mmnto-ai/totem#1811 (ADR-101): stale-manifest UX nudge — when the
+  // installed-packs.json cohort doesn't match the running engine, the
+  // unmapped-extension throw is replaced with a structured
+  // STALE_MANIFEST error pointing at `totem sync --packs-only`. Two
+  // parallel tests below establish the contract: cohort-match passes
+  // through to the original TotemParseError; everything else fires
+  // the nudge.
+
+  // totem-context: test fixture genuinely awaits async API (`applyAstRulesToAdditions`)
+  it('surfaces STALE_MANIFEST when installed-packs.json is missing', async () => {
+    // Note: NO seedFreshManifest call — tmpDir has no .totem/.
+    fs.writeFileSync(path.join(tmpDir, 'src', 'main.py'), 'print("x")\n'); // totem-context: writing a python source fixture under tmpDir, not a git hook
+    const rule = makeRule({
+      engine: 'ast',
+      astQuery: '(call_expression)',
+      fileGlobs: ['**/*.py'],
+      lessonHash: 'py-rule-hash',
+    });
+    const additions = [makeAddition('src/main.py', 'print("x")', 1)];
+
+    let caught: unknown;
+    try {
+      await applyAstRulesToAdditions(ctx, [rule], additions, tmpDir);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(TotemError);
+    expect(caught).not.toBeInstanceOf(TotemParseError);
+    // totem-context: narrowing a thrown error after toBeInstanceOf — not parsing untrusted input
+    const te = caught as TotemError;
+    expect(te.code).toBe('STALE_MANIFEST');
+    expect(te.recoveryHint).toMatch(/--packs-only/);
+  });
+
+  // totem-context: test fixture genuinely awaits async API (`applyAstRulesToAdditions`)
+  it('surfaces STALE_MANIFEST when manifest cohort is from a prior minor version', async () => {
+    // Seed cohort '0.0.0' so semver-minor compare always reads stale
+    // regardless of the running engine version.
+    seedFreshManifest(tmpDir, '0.0.0');
+    fs.writeFileSync(path.join(tmpDir, 'src', 'main.py'), 'print("x")\n'); // totem-context: writing a python source fixture under tmpDir, not a git hook
+    const rule = makeRule({
+      engine: 'ast',
+      astQuery: '(call_expression)',
+      fileGlobs: ['**/*.py'],
+      lessonHash: 'py-rule-hash',
+    });
+    const additions = [makeAddition('src/main.py', 'print("x")', 1)];
+
+    let caught: unknown;
+    try {
+      await applyAstRulesToAdditions(ctx, [rule], additions, tmpDir);
+    } catch (err) {
+      caught = err;
+    }
+    // totem-context: narrowing a thrown error after toBeInstanceOf — not parsing untrusted input
+    const te1 = caught as TotemError;
+    expect(te1.code).toBe('STALE_MANIFEST');
+    expect(te1.message).toMatch(/0\.0\.0/);
+  });
+
+  // totem-context: test fixture genuinely awaits async API (`applyAstRulesToAdditions`)
+  it('surfaces STALE_MANIFEST when manifest is pre-1.27.0 (no cohort field)', async () => {
+    // Pre-1.27.0 manifest shape: schema-valid but missing cohort.
+    const totemDir = path.join(tmpDir, '.totem');
+    fs.mkdirSync(totemDir, { recursive: true });
+    // totem-context: writing a totem manifest fixture under tmpDir, not a git hook
+    fs.writeFileSync(
+      path.join(totemDir, 'installed-packs.json'),
+      JSON.stringify({ version: 1, packs: [] }),
+      'utf-8',
+    );
+    fs.writeFileSync(path.join(tmpDir, 'src', 'main.py'), 'print("x")\n'); // totem-context: writing a python source fixture under tmpDir, not a git hook
+    const rule = makeRule({
+      engine: 'ast',
+      astQuery: '(call_expression)',
+      fileGlobs: ['**/*.py'],
+      lessonHash: 'py-rule-hash',
+    });
+    const additions = [makeAddition('src/main.py', 'print("x")', 1)];
+
+    let caught: unknown;
+    try {
+      await applyAstRulesToAdditions(ctx, [rule], additions, tmpDir);
+    } catch (err) {
+      caught = err;
+    }
+    // totem-context: narrowing a thrown error after toBeInstanceOf — not parsing untrusted input
+    const te2 = caught as TotemError;
+    expect(te2.code).toBe('STALE_MANIFEST');
+    expect(te2.message).toMatch(/pre-1\.27\.0/);
   });
 
   // totem-context: test fixture genuinely awaits async API

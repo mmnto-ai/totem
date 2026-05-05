@@ -248,4 +248,51 @@ describe('writeInstalledPacksManifest', () => {
     writeInstalledPacksManifest(totemDir, { version: 1, packs: [] });
     expect(fs.existsSync(path.join(totemDir, 'installed-packs.json.tmp'))).toBe(false);
   });
+
+  it('stamps cohort with the running engine version when caller omits it (mmnto-ai/totem#1811)', () => {
+    const root = makeTmpRoot();
+    const totemDir = path.join(root, '.totem');
+    const finalPath = writeInstalledPacksManifest(totemDir, { version: 1, packs: [] });
+    const parsed = JSON.parse(fs.readFileSync(finalPath, 'utf-8')); // totem-context: synchronous read in test fixture; runtime callers use the boot-time pack-discovery loader path
+    expect(typeof parsed.cohort).toBe('string');
+    // Stamped value must be a real semver version (not the '0.0.0'
+    // sentinel from resolveEngineVersion's last-resort fallback when
+    // run inside the actual package).
+    expect(parsed.cohort).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  it('preserves a caller-provided cohort verbatim (test-driven override)', () => {
+    const root = makeTmpRoot();
+    const totemDir = path.join(root, '.totem');
+    const finalPath = writeInstalledPacksManifest(totemDir, {
+      version: 1,
+      cohort: '1.2.3-test',
+      packs: [],
+    });
+    const parsed = JSON.parse(fs.readFileSync(finalPath, 'utf-8')); // totem-context: synchronous read in test fixture; runtime callers use the boot-time pack-discovery loader path
+    expect(parsed.cohort).toBe('1.2.3-test');
+  });
+
+  it('manifest with cohort round-trips through the schema', () => {
+    const root = makeTmpRoot();
+    const totemDir = path.join(root, '.totem');
+    writeInstalledPacksManifest(totemDir, {
+      version: 1,
+      cohort: '9.9.9',
+      packs: [],
+    });
+    const parsed = JSON.parse(
+      fs.readFileSync(path.join(totemDir, 'installed-packs.json'), 'utf-8'), // totem-context: synchronous read in test fixture; runtime callers use the boot-time pack-discovery loader path
+    );
+    const validation = InstalledPacksManifestSchema.safeParse(parsed);
+    expect(validation.success).toBe(true);
+    expect(validation.success && validation.data.cohort).toBe('9.9.9');
+  });
+
+  it('forward-compat: pre-1.27.0 manifest without cohort parses cleanly (mmnto-ai/totem#1811)', () => {
+    const legacy = { version: 1, packs: [] };
+    const validation = InstalledPacksManifestSchema.safeParse(legacy);
+    expect(validation.success).toBe(true);
+    expect(validation.success && validation.data.cohort).toBeUndefined();
+  });
 });

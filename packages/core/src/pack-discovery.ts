@@ -62,6 +62,19 @@ import {
 export const InstalledPacksManifestSchema = z
   .object({
     version: z.literal(1),
+    /**
+     * `@mmnto/totem` package version that wrote the manifest. Optional
+     * for forward-compat with pre-1.27.0 manifests. Stamped at write
+     * time by `writeInstalledPacksManifest()` from `resolveEngineVersion()`.
+     *
+     * Read on the lint-time stale-manifest UX-nudge fast-path
+     * (`rule-engine.ts` parser-error intercept). Schema does not
+     * enforce semver-validity here so a malformed cohort doesn't make
+     * the entire manifest unreadable; the consumer treats malformed
+     * or missing values as "stale" and surfaces the same nudge
+     * (mmnto-ai/totem#1811, ADR-101).
+     */
+    cohort: z.string().optional(),
     packs: z.array(
       z
         .object({
@@ -412,7 +425,15 @@ function assertEngineRangeSatisfied(pack: LoadedPack, engineVersion: string): vo
   }
 }
 
-function resolveEngineVersion(): string {
+/**
+ * Resolve the running `@mmnto/totem` package version from disk.
+ *
+ * Exported (mmnto-ai/totem#1811) so `pack-manifest-writer.ts` can
+ * stamp the manifest's `cohort` field at write time and the
+ * `rule-engine.ts` parser-error intercept can compare the running
+ * engine against the manifest's recorded cohort.
+ */
+export function resolveEngineVersion(): string {
   // Resolve relative to this module's URL so the read works regardless
   // of cwd. The package.json sits at packages/core/package.json — two
   // levels up from packages/core/dist/pack-discovery.js when the build

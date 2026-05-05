@@ -103,6 +103,7 @@ export {
   isEngineSealed,
   loadedPacks,
   loadInstalledPacks,
+  resolveEngineVersion,
 } from './pack-discovery.js';
 
 // Pack manifest writer (mmnto-ai/totem#1768, Step 4)
@@ -112,6 +113,14 @@ export type {
   ResolveInstalledPacksInput,
 } from './pack-manifest-writer.js';
 export { resolveInstalledPacks, writeInstalledPacksManifest } from './pack-manifest-writer.js';
+
+// Stale-manifest detector (mmnto-ai/totem#1811, ADR-101)
+export type {
+  DetectStaleManifestOptions,
+  StaleManifestDetection,
+  StaleManifestReason,
+} from './stale-manifest.js';
+export { detectStaleManifest, staleManifestError } from './stale-manifest.js';
 
 // Embedders
 export type { Embedder } from './embedders/embedder.js';

@@ -31,6 +31,7 @@ import * as path from 'node:path';
 
 import type { TotemConfig } from './config-schema.js';
 import type { InstalledPacksManifest } from './pack-discovery.js';
+import { resolveEngineVersion } from './pack-discovery.js';
 
 // ─── Types ──────────────────────────────────────────
 
@@ -149,6 +150,11 @@ export function resolveInstalledPacks(input: ResolveInstalledPacksInput): PackRe
  * manifest payload. Mirrors `writeReviewExtensionsFile` semantics: temp
  * file + rename so a concurrent boot-time read sees the old or new
  * contents, never a partial write.
+ *
+ * Stamps the `cohort` field with the running `@mmnto/totem` version
+ * via `resolveEngineVersion()` when the caller has not pre-populated
+ * one (mmnto-ai/totem#1811). Tests pass an explicit cohort to override
+ * the stamp.
  */
 export function writeInstalledPacksManifest(
   totemDirAbs: string,
@@ -157,9 +163,14 @@ export function writeInstalledPacksManifest(
   if (!fs.existsSync(totemDirAbs)) {
     fs.mkdirSync(totemDirAbs, { recursive: true });
   }
+  const stamped: InstalledPacksManifest = {
+    ...manifest,
+    cohort: manifest.cohort ?? resolveEngineVersion(),
+  };
   const finalPath = path.join(totemDirAbs, 'installed-packs.json');
   const tmpPath = finalPath + '.tmp';
-  fs.writeFileSync(tmpPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
+  // totem-context: writing the totem pack manifest under <totemDir>/, not a git hook
+  fs.writeFileSync(tmpPath, JSON.stringify(stamped, null, 2) + '\n', 'utf-8');
   fs.renameSync(tmpPath, finalPath);
   return finalPath;
 }

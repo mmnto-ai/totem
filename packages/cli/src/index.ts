@@ -112,9 +112,24 @@ program
   .option('--full', 'Force a full re-index (ignores incremental)')
   .option('--incremental', 'Run an incremental sync (default behavior)')
   .option('--prune', 'Detect and interactively remove lessons with stale file references')
+  .option(
+    '--packs-only',
+    'Run only the deterministic pack manifest write (no API key required); skips embedding sync, prune, and the global registry update (mmnto-ai/totem#1811)',
+  )
+  .option(
+    '--index-only',
+    'Run only the embedding sync; skip the pack manifest write (use when installed-packs.json is already current)',
+  )
   .option('-q, --quiet', 'Suppress output (for background/hook usage)')
   .action(
-    async (opts: { full?: boolean; incremental?: boolean; prune?: boolean; quiet?: boolean }) => {
+    async (opts: {
+      full?: boolean;
+      incremental?: boolean;
+      prune?: boolean;
+      packsOnly?: boolean;
+      indexOnly?: boolean;
+      quiet?: boolean;
+    }) => {
       try {
         const { syncCommand } = await import('./commands/sync.js');
         await syncCommand(opts);

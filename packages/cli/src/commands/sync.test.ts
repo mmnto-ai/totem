@@ -16,27 +16,38 @@ vi.mock('../ui.js', () => ({
 const mockLoadConfig = vi.fn();
 const mockResolveConfigPath = vi.fn();
 const mockIsGlobalConfigPath = vi.fn();
+const mockRequireEmbedding = vi.fn();
 vi.mock('../utils.js', () => ({
   resolveConfigPath: (...args: unknown[]) => mockResolveConfigPath(...args),
   isGlobalConfigPath: (...args: unknown[]) => mockIsGlobalConfigPath(...args),
   loadEnv: vi.fn(),
-  loadConfig: (...args: unknown[]) => mockLoadConfig(...args),
-  requireEmbedding: vi.fn(),
+  loadConfig: (...args: unknown[]) => mockLoadConfig(...args), // totem-context: mock surface
+  requireEmbedding: (...args: unknown[]) => mockRequireEmbedding(...args), // totem-context: mock surface
   sanitize: (s: string) => s,
 }));
 
 const mockUpdateRegistryEntry = vi.fn().mockResolvedValue(undefined);
+const mockRunSync = vi
+  .fn()
+  .mockResolvedValue({ chunksProcessed: 10, filesProcessed: 3, totalChunks: 42 });
+const mockResolveInstalledPacks = vi.fn().mockReturnValue({ resolved: [], warnings: [] });
+const mockWriteInstalledPacksManifest = vi.fn();
 
+// totem-context: full-module mock — syncCommand is the unit under test; importing actual @mmnto/totem would cross the unit boundary into runSync's pipeline-walk side effects. The mock surfaces are call-spied in tests, not invoked for behavior.
 vi.mock('@mmnto/totem', () => ({
-  runSync: vi.fn().mockResolvedValue({ chunksProcessed: 10, filesProcessed: 3, totalChunks: 42 }),
-  updateRegistryEntry: (...args: unknown[]) => mockUpdateRegistryEntry(...args),
+  runSync: (...args: unknown[]) => mockRunSync(...args), // totem-context: mock surface; not a re-implementation of utility logic
+  updateRegistryEntry: (...args: unknown[]) => mockUpdateRegistryEntry(...args), // totem-context: mock surface
+  resolveInstalledPacks: (...args: unknown[]) => mockResolveInstalledPacks(...args), // totem-context: mock surface
+  writeInstalledPacksManifest: (...args: unknown[]) => mockWriteInstalledPacksManifest(...args), // totem-context: mock surface
   TotemError: class TotemError extends Error {
     constructor(
       public code: string,
       message: string,
       public hint?: string,
+      // totem-context: mock mirrors real TotemError(code, message, hint, cause) signature for R2 cause-preservation tests
+      cause?: unknown,
     ) {
-      super(message);
+      super(message, { cause });
     }
   },
 }));
@@ -67,6 +78,13 @@ describe('syncCommand', () => {
     mockLoadConfig.mockResolvedValue(baseConfig());
     mockResolveConfigPath.mockReset();
     mockIsGlobalConfigPath.mockReset();
+    // totem-context: vitest mock reset in unit-test setup; not an orchestrator timeout candidate
+    mockRequireEmbedding.mockReset();
+    mockRunSync.mockReset();
+    mockRunSync.mockResolvedValue({ chunksProcessed: 10, filesProcessed: 3, totalChunks: 42 });
+    mockResolveInstalledPacks.mockReset();
+    mockResolveInstalledPacks.mockReturnValue({ resolved: [], warnings: [] });
+    mockWriteInstalledPacksManifest.mockReset();
     // Default: config lives next to wherever the user invoked totem from.
     // Individual tests override to exercise cwd !== configRoot scenarios.
     mockResolveConfigPath.mockImplementation((cwd: unknown) =>
@@ -183,6 +201,128 @@ describe('syncCommand', () => {
     const canonical = path.join(tmpDir, '.totem', 'review-extensions.txt');
     expect(fs.existsSync(canonical)).toBe(true);
     expect(fs.readFileSync(canonical, 'utf-8')).toBe('.ts\n.rs\n');
+  });
+
+  // ─── mmnto-ai/totem#1811: Phase A / Phase B split ─────
+
+  // totem-context: test callback genuinely awaits async syncCommand
+  it('--packs-only skips runSync and does NOT call requireEmbedding', async () => {
+    await syncCommand({ packsOnly: true, quiet: true });
+    expect(mockRequireEmbedding).not.toHaveBeenCalled();
+    expect(mockRunSync).not.toHaveBeenCalled();
+  });
+
+  // totem-context: test callback genuinely awaits async syncCommand
+  it('--packs-only writes installed-packs.json (Phase A still fires)', async () => {
+    await syncCommand({ packsOnly: true, quiet: true });
+    expect(mockResolveInstalledPacks).toHaveBeenCalledTimes(1);
+    expect(mockWriteInstalledPacksManifest).toHaveBeenCalledTimes(1);
+  });
+
+  // totem-context: test callback genuinely awaits async syncCommand
+  it('--packs-only short-circuits — no spinner, no registry update', async () => {
+    await syncCommand({ packsOnly: true, quiet: true });
+    expect(mockUpdateRegistryEntry).not.toHaveBeenCalled();
+    expect(mockCreateSpinner).not.toHaveBeenCalled();
+  });
+
+  // totem-context: test callback genuinely awaits async syncCommand
+  it('--index-only skips pack-resolution + manifest write but still runs runSync', async () => {
+    await syncCommand({ indexOnly: true, quiet: true });
+    expect(mockResolveInstalledPacks).not.toHaveBeenCalled();
+    expect(mockWriteInstalledPacksManifest).not.toHaveBeenCalled();
+    expect(mockRunSync).toHaveBeenCalledTimes(1);
+    expect(mockRequireEmbedding).toHaveBeenCalledTimes(1);
+  });
+
+  // totem-context: test callback genuinely awaits async syncCommand
+  it('default sync (no flags) runs both Phase A AND Phase B', async () => {
+    await syncCommand({ quiet: true });
+    expect(mockResolveInstalledPacks).toHaveBeenCalledTimes(1);
+    expect(mockWriteInstalledPacksManifest).toHaveBeenCalledTimes(1);
+    expect(mockRunSync).toHaveBeenCalledTimes(1);
+    expect(mockRequireEmbedding).toHaveBeenCalledTimes(1);
+  });
+
+  // totem-context: test callback genuinely awaits async syncCommand
+  it('--packs-only + --index-only is a hard FLAG_CONFLICT error', async () => {
+    await expect(syncCommand({ packsOnly: true, indexOnly: true, quiet: true })).rejects.toThrow(
+      /--packs-only.*--index-only/,
+    );
+    expect(mockRequireEmbedding).not.toHaveBeenCalled();
+    expect(mockRunSync).not.toHaveBeenCalled();
+    expect(mockResolveInstalledPacks).not.toHaveBeenCalled();
+  });
+
+  // totem-context: test callback genuinely awaits async syncCommand
+  it('--packs-only + --full is a hard FLAG_CONFLICT error', async () => {
+    await expect(syncCommand({ packsOnly: true, full: true, quiet: true })).rejects.toThrow(
+      /--packs-only.*--full/,
+    );
+    expect(mockRunSync).not.toHaveBeenCalled();
+  });
+
+  // totem-context: test callback genuinely awaits async syncCommand
+  it('--packs-only + --prune is a hard FLAG_CONFLICT error', async () => {
+    await expect(syncCommand({ packsOnly: true, prune: true, quiet: true })).rejects.toThrow(
+      /--packs-only.*--prune/,
+    );
+    expect(mockRunSync).not.toHaveBeenCalled();
+  });
+
+  // totem-context: test callback genuinely awaits async syncCommand — load-bearing CI-unblock guard for --packs-only Phase A failure (#1828); cause preservation per styleguide §6 (R2)
+  it('--packs-only throws SYNC_FAILED with original err as cause when Phase A manifest write fails', async () => {
+    // totem-context: sentinel error fixture for cause-preservation assertion; not a TotemError-wrapping pattern
+    const original = new Error('EACCES: permission denied');
+    mockWriteInstalledPacksManifest.mockImplementationOnce(() => {
+      // totem-context: throw inside vitest mock to simulate a Phase A write failure; sentinel string is test-only and never surfaces to a user
+      throw original;
+    });
+    // totem-context: test genuinely awaits async syncCommand; rejects.toThrow asserts the SYNC_FAILED message
+    await expect(syncCommand({ packsOnly: true, quiet: true })).rejects.toThrow(
+      /Failed to write installed-packs\.json/,
+    );
+    // Re-run to capture the thrown error and assert cause is preserved
+    mockWriteInstalledPacksManifest.mockImplementationOnce(() => {
+      // totem-context: throw inside vitest mock to assert Error.cause preservation; second-pass check on the same code path
+      throw original;
+    });
+    let caught: unknown;
+    try {
+      await syncCommand({ packsOnly: true, quiet: true });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    // totem-context: TS type assertion to access Error.cause in test scaffold — not Zod-relevant runtime validation
+    expect((caught as Error & { cause?: unknown }).cause).toBe(original);
+    expect(mockRunSync).not.toHaveBeenCalled();
+  });
+
+  // totem-context: test callback genuinely awaits async syncCommand — regression guard for default-mode warn-and-continue (#1828 review carve-out)
+  it('default mode keeps warn-and-continue when Phase A manifest write fails', async () => {
+    // totem-context: regression guard — default mode keeps best-effort warn-and-continue while --packs-only throws (sibling test above)
+    mockWriteInstalledPacksManifest.mockImplementationOnce(() => {
+      // totem-context: throw inside vitest mock to simulate a Phase A write failure; sentinel string is test-only and never surfaces to a user
+      throw new Error('EACCES: permission denied');
+    });
+    await expect(syncCommand({ quiet: true })).resolves.toBeUndefined();
+    expect(mockRunSync).toHaveBeenCalledTimes(1);
+  });
+
+  // totem-context: test callback genuinely awaits async syncCommand
+  it('mutex error fires BEFORE config load and embedder gate', async () => {
+    // Load-bearing for the CI-unblock invariant: a mutex violation
+    // must not cascade through `requireEmbedding`, which would mask
+    // FLAG_CONFLICT behind a TotemConfigError on missing API keys.
+    mockRequireEmbedding.mockImplementationOnce(() => {
+      // totem-context: throw inside vitest mock to assert mutex fires before requireEmbedding; sentinel string is test-only and never surfaces to a user
+      throw new Error('embedding gate fired despite mutex violation');
+    });
+    await expect(syncCommand({ packsOnly: true, indexOnly: true })).rejects.toThrow(/--packs-only/);
+    // totem-context: mutex-fires-before-config invariant (#1828 R2 CR finding); test genuinely awaits async syncCommand
+    expect(mockLoadConfig).not.toHaveBeenCalled();
+    expect(mockRequireEmbedding).not.toHaveBeenCalled();
   });
 
   it('resolves canonical file path relative to configRoot when invoked from subdirectory', async () => {
