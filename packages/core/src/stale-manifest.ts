@@ -75,6 +75,12 @@ export function detectStaleManifest(
     return { reason: 'no-manifest', engineVersion };
   }
 
+  // totem-context: intentional cleanup — corrupted manifest JSON is
+  // treated as missing for the lint-time UX-nudge fast-path. Surfacing
+  // the parse error here would mask the load-bearing "user just needs
+  // to re-sync" signal under noise. The boot-time loader at
+  // `pack-discovery.ts:readManifestAndResolveCallbacks` enforces the
+  // strict failure-mode contract; this fallback is downstream of that.
   let parsedJson: unknown;
   try {
     parsedJson = JSON.parse(raw);
@@ -133,16 +139,18 @@ export function staleManifestError(
   return new TotemError('STALE_MANIFEST', message, hint);
 }
 
+// totem-context: intentional cleanup — every read failure (ENOENT,
+// EACCES, transient I/O) collapses to the same "no manifest" sentinel
+// for this UX-nudge fast-path. The caller maps the null to the
+// `'no-manifest'` reason and surfaces a structured `STALE_MANIFEST`
+// error pointing at `totem sync --packs-only`. The boot-time loader
+// at `pack-discovery.ts:readManifestAndResolveCallbacks` is the
+// strict-failure surface (re-throws on non-ENOENT); this helper is a
+// best-effort sibling for the lint-time nudge.
 function defaultReadManifest(manifestPath: string): string | null {
   try {
-    return fs.readFileSync(manifestPath, 'utf-8');
-  } catch (err) {
-    const code =
-      err instanceof Error && 'code' in err ? (err as NodeJS.ErrnoException).code : undefined;
-    if (code === 'ENOENT') return null;
-    // Permission / I/O issues other than ENOENT are also treated as
-    // "no manifest" for this fast-path — same intent as the caller's
-    // graceful-degradation expectation.
+    return fs.readFileSync(manifestPath, 'utf-8'); // totem-context: synchronous read keeps the per-file Tree-sitter language-miss check non-async; the caller's parse-error path is hot — threading a Promise here would cascade async into every AST rule dispatch site
+  } catch {
     return null;
   }
 }
