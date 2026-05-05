@@ -919,7 +919,7 @@ describe('applyAstRulesToAdditions fail-loud on unmapped extension (mmnto-ai/tot
       caught = err;
     }
     expect((caught as TotemError).code).toBe('STALE_MANIFEST');
-    expect((caught as TotemError).message).toContain('0.0.0');
+    expect((caught as TotemError).message).toMatch(/0\.0\.0/);
   });
 
   it('surfaces STALE_MANIFEST when manifest is pre-1.27.0 (no cohort field)', async () => {
