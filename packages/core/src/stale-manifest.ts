@@ -107,7 +107,7 @@ export function detectStaleManifest(
   // change, so rebuilding the manifest on a 1.27.0 → 1.27.1 bump is
   // spurious (mmnto-ai/totem#1811 OQ2).
   if (
-    semver.major(manifestCohort) !== semver.major(engineVersion) ||
+    semver.major(manifestCohort) !== semver.major(engineVersion) || // totem-context: `||` combines two booleans (`semver.major` returns are integers, `!==` produces booleans); the "use ?? for numeric metric defaults" rule targets `metric || fallback` numeric-coercion, not boolean OR
     semver.minor(manifestCohort) !== semver.minor(engineVersion)
   ) {
     return { reason: 'cohort-mismatch', manifestCohort, engineVersion };
