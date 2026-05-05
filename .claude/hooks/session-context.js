@@ -72,7 +72,7 @@ async function buildStaticContext(gitRoot, branch, ticket) {
     ({ resolveSubstratePaths, resolveStrategyRoot } = await loadResolvers(gitRoot));
   } catch (err) {
     process.stderr.write(
-      `[session-context] Resolvers unavailable (CLI dist missing?): ${err.message}\n`,
+      `[session-context] Resolvers unavailable (core dist missing?): ${err.message}\n`,
     );
     return lines.join('\n');
   }
