@@ -4,7 +4,7 @@
 
 `totem lint` skips gracefully when `compiled-rules.json` is empty (mmnto-ai/totem#1831).
 
-Empty-corpus repos (e.g., aspirational pre-lessons setups like `totem-status`) used to hit a hard `NO_RULES` `TotemError` at `run-compiled-rules.ts:113-119` whenever a non-empty diff reached the lint runner. The runner now logs the empty-corpus state and returns an empty result so the caller exits cleanly. Behavior parity with the implicit no-op state of repos that never run `totem compile` and have no `compiled-rules.json` on disk — both paths now produce zero violations + zero exit code.
+Empty-corpus repos (e.g., aspirational pre-lessons setups like `totem-status`) used to hit a hard `NO_RULES` `TotemError` at `run-compiled-rules.ts:113-119` whenever a non-empty diff reached the lint runner. The runner now logs the empty-corpus state and returns an empty result so the caller exits cleanly. This matches the implicit no-op state of repos that have not yet run `totem compile` and have no `compiled-rules.json` on disk — both paths produce zero violations and a zero exit code.
 
 Consumers that need a "rule count > 0" CI guardrail can check `.totem/compiled-rules.json` rule count directly in their pipeline; the runner deliberately does not opinionate on that policy.
 

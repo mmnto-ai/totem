@@ -105,6 +105,7 @@ describe('runCompiledRules', () => {
 
   // ─── Empty rules ─────────────────────────────────────
 
+  // totem-context: runCompiledRules is genuinely async (it awaits internal dynamic imports + safeExec); test runs in <100ms so the orchestrator-tier 15s timeout rule does not apply
   it('returns empty result and skips gracefully when compiled-rules.json has no rules (mmnto-ai/totem#1831)', async () => {
     // Empty corpus is a legitimate state for early-adoption repos.
     const rulesPath = path.join(tmpDir, TOTEM_DIR, 'compiled-rules.json');
