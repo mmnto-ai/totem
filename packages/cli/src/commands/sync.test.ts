@@ -16,20 +16,28 @@ vi.mock('../ui.js', () => ({
 const mockLoadConfig = vi.fn();
 const mockResolveConfigPath = vi.fn();
 const mockIsGlobalConfigPath = vi.fn();
+const mockRequireEmbedding = vi.fn();
 vi.mock('../utils.js', () => ({
   resolveConfigPath: (...args: unknown[]) => mockResolveConfigPath(...args),
   isGlobalConfigPath: (...args: unknown[]) => mockIsGlobalConfigPath(...args),
   loadEnv: vi.fn(),
   loadConfig: (...args: unknown[]) => mockLoadConfig(...args),
-  requireEmbedding: vi.fn(),
+  requireEmbedding: (...args: unknown[]) => mockRequireEmbedding(...args),
   sanitize: (s: string) => s,
 }));
 
 const mockUpdateRegistryEntry = vi.fn().mockResolvedValue(undefined);
+const mockRunSync = vi
+  .fn()
+  .mockResolvedValue({ chunksProcessed: 10, filesProcessed: 3, totalChunks: 42 });
+const mockResolveInstalledPacks = vi.fn().mockReturnValue({ resolved: [], warnings: [] });
+const mockWriteInstalledPacksManifest = vi.fn();
 
 vi.mock('@mmnto/totem', () => ({
-  runSync: vi.fn().mockResolvedValue({ chunksProcessed: 10, filesProcessed: 3, totalChunks: 42 }),
+  runSync: (...args: unknown[]) => mockRunSync(...args),
   updateRegistryEntry: (...args: unknown[]) => mockUpdateRegistryEntry(...args),
+  resolveInstalledPacks: (...args: unknown[]) => mockResolveInstalledPacks(...args),
+  writeInstalledPacksManifest: (...args: unknown[]) => mockWriteInstalledPacksManifest(...args),
   TotemError: class TotemError extends Error {
     constructor(
       public code: string,
@@ -67,6 +75,12 @@ describe('syncCommand', () => {
     mockLoadConfig.mockResolvedValue(baseConfig());
     mockResolveConfigPath.mockReset();
     mockIsGlobalConfigPath.mockReset();
+    mockRequireEmbedding.mockReset();
+    mockRunSync.mockReset();
+    mockRunSync.mockResolvedValue({ chunksProcessed: 10, filesProcessed: 3, totalChunks: 42 });
+    mockResolveInstalledPacks.mockReset();
+    mockResolveInstalledPacks.mockReturnValue({ resolved: [], warnings: [] });
+    mockWriteInstalledPacksManifest.mockReset();
     // Default: config lives next to wherever the user invoked totem from.
     // Individual tests override to exercise cwd !== configRoot scenarios.
     mockResolveConfigPath.mockImplementation((cwd: unknown) =>
@@ -183,6 +197,76 @@ describe('syncCommand', () => {
     const canonical = path.join(tmpDir, '.totem', 'review-extensions.txt');
     expect(fs.existsSync(canonical)).toBe(true);
     expect(fs.readFileSync(canonical, 'utf-8')).toBe('.ts\n.rs\n');
+  });
+
+  // ─── mmnto-ai/totem#1811: Phase A / Phase B split ─────
+
+  it('--packs-only skips runSync and does NOT call requireEmbedding', async () => {
+    await syncCommand({ packsOnly: true, quiet: true });
+    expect(mockRequireEmbedding).not.toHaveBeenCalled();
+    expect(mockRunSync).not.toHaveBeenCalled();
+  });
+
+  it('--packs-only writes installed-packs.json (Phase A still fires)', async () => {
+    await syncCommand({ packsOnly: true, quiet: true });
+    expect(mockResolveInstalledPacks).toHaveBeenCalledTimes(1);
+    expect(mockWriteInstalledPacksManifest).toHaveBeenCalledTimes(1);
+  });
+
+  it('--packs-only short-circuits — no spinner, no registry update', async () => {
+    await syncCommand({ packsOnly: true, quiet: true });
+    expect(mockUpdateRegistryEntry).not.toHaveBeenCalled();
+    expect(mockCreateSpinner).not.toHaveBeenCalled();
+  });
+
+  it('--index-only skips pack-resolution + manifest write but still runs runSync', async () => {
+    await syncCommand({ indexOnly: true, quiet: true });
+    expect(mockResolveInstalledPacks).not.toHaveBeenCalled();
+    expect(mockWriteInstalledPacksManifest).not.toHaveBeenCalled();
+    expect(mockRunSync).toHaveBeenCalledTimes(1);
+    expect(mockRequireEmbedding).toHaveBeenCalledTimes(1);
+  });
+
+  it('default sync (no flags) runs both Phase A AND Phase B', async () => {
+    await syncCommand({ quiet: true });
+    expect(mockResolveInstalledPacks).toHaveBeenCalledTimes(1);
+    expect(mockWriteInstalledPacksManifest).toHaveBeenCalledTimes(1);
+    expect(mockRunSync).toHaveBeenCalledTimes(1);
+    expect(mockRequireEmbedding).toHaveBeenCalledTimes(1);
+  });
+
+  it('--packs-only + --index-only is a hard FLAG_CONFLICT error', async () => {
+    await expect(syncCommand({ packsOnly: true, indexOnly: true, quiet: true })).rejects.toThrow(
+      /--packs-only.*--index-only/,
+    );
+    expect(mockRequireEmbedding).not.toHaveBeenCalled();
+    expect(mockRunSync).not.toHaveBeenCalled();
+    expect(mockResolveInstalledPacks).not.toHaveBeenCalled();
+  });
+
+  it('--packs-only + --full is a hard FLAG_CONFLICT error', async () => {
+    await expect(syncCommand({ packsOnly: true, full: true, quiet: true })).rejects.toThrow(
+      /--packs-only.*--full/,
+    );
+    expect(mockRunSync).not.toHaveBeenCalled();
+  });
+
+  it('--packs-only + --prune is a hard FLAG_CONFLICT error', async () => {
+    await expect(syncCommand({ packsOnly: true, prune: true, quiet: true })).rejects.toThrow(
+      /--packs-only.*--prune/,
+    );
+    expect(mockRunSync).not.toHaveBeenCalled();
+  });
+
+  it('mutex error fires BEFORE config load and embedder gate', async () => {
+    // Load-bearing for the CI-unblock invariant: a mutex violation
+    // must not cascade through `requireEmbedding`, which would mask
+    // FLAG_CONFLICT behind a TotemConfigError on missing API keys.
+    mockRequireEmbedding.mockImplementationOnce(() => {
+      throw new Error('embedding gate fired despite mutex violation');
+    });
+    await expect(syncCommand({ packsOnly: true, indexOnly: true })).rejects.toThrow(/--packs-only/);
+    expect(mockRequireEmbedding).not.toHaveBeenCalled();
   });
 
   it('resolves canonical file path relative to configRoot when invoked from subdirectory', async () => {

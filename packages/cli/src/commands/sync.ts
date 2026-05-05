@@ -32,15 +32,62 @@ export function writeReviewExtensionsFile(
   return finalPath;
 }
 
-export async function syncCommand(options: {
+/**
+ * `--packs-only` (Phase A) is mutually exclusive with every Phase B
+ * flag (`--index-only`, `--full`, `--prune`). Hard error before any
+ * sync logic runs so callers get a clean, actionable diagnostic
+ * instead of a silently-mixed run (mmnto-ai/totem#1811, ADR-101).
+ */
+function assertNoPhaseBFlags(
+  options: SyncCommandOptions,
+  TotemError: typeof import('@mmnto/totem').TotemError,
+): void {
+  if (!options.packsOnly) return;
+  const conflicts: string[] = [];
+  if (options.indexOnly) conflicts.push('--index-only');
+  if (options.full) conflicts.push('--full');
+  if (options.prune) conflicts.push('--prune');
+  if (conflicts.length === 0) return;
+  throw new TotemError(
+    'FLAG_CONFLICT',
+    `--packs-only cannot be combined with ${conflicts.join(', ')}: those flags drive the embedding-side phase, which --packs-only skips.`,
+    'Re-run with --packs-only alone, or drop --packs-only to run the full sync.',
+  );
+}
+
+export interface SyncCommandOptions {
   full?: boolean;
   prune?: boolean;
   quiet?: boolean;
-}): Promise<void> {
+  /**
+   * Run only Phase A — deterministic pack-resolution + manifest write
+   * (`installed-packs.json`). Skips `requireEmbedding`, `runSync`, the
+   * post-sync `review-extensions.txt` write, the global-registry
+   * update, and prune. Designed for CI environments without API keys
+   * after a `@mmnto/totem` cohort bump (mmnto-ai/totem#1811, ADR-101).
+   * Mutually exclusive with `indexOnly`, `full`, and `prune`.
+   */
+  packsOnly?: boolean;
+  /**
+   * Run only Phase B — `runSync` + post-sync side outputs. Skips
+   * pack-resolution + `installed-packs.json` write. Use when the
+   * manifest is already current and only the vector-store needs to
+   * re-embed (mmnto-ai/totem#1811, ADR-101). Mutually exclusive with
+   * `packsOnly`.
+   */
+  indexOnly?: boolean;
+}
+
+export async function syncCommand(options: SyncCommandOptions): Promise<void> {
   const { runSync, TotemError, updateRegistryEntry } = await import('@mmnto/totem');
   const { createSpinner, log } = await import('../ui.js');
   const { isGlobalConfigPath, loadConfig, loadEnv, requireEmbedding, resolveConfigPath, sanitize } =
     await import('../utils.js');
+
+  // Validate flag mutex BEFORE loading config or constructing any
+  // embedder-touching surface — keeps --packs-only clean of init-time
+  // failures from the gates it's specifically designed to skip.
+  assertNoPhaseBFlags(options, TotemError);
 
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
@@ -48,52 +95,24 @@ export async function syncCommand(options: {
   loadEnv(cwd);
 
   const config = await loadConfig(configPath);
-  requireEmbedding(config);
-  const incremental = !options.full;
 
-  const noopSpinner: Spinner = {
-    update() {},
-    succeed() {},
-    fail() {},
-    stop() {},
-  };
+  // Phase B requires an embedding key. Skipping `requireEmbedding`
+  // when `--packs-only` is the load-bearing CI-unblock invariant of
+  // ADR-101: a baseline environment can rebuild `installed-packs.json`
+  // without an API key.
+  if (!options.packsOnly) {
+    requireEmbedding(config);
+  }
 
-  const spinner = options.quiet
-    ? noopSpinner
-    : await createSpinner(TAG, incremental ? 'Incremental sync...' : 'Full re-index...');
+  const targetRoot = isGlobalConfigPath(configPath) ? cwd : path.dirname(configPath);
+  const totemDirAbs = path.resolve(targetRoot, config.totemDir);
 
-  try {
-    const result = await runSync(config, {
-      projectRoot: cwd,
-      incremental,
-      onProgress: (msg) => spinner.update(msg),
-    });
-
-    // Emit canonical review-extensions.txt for .claude/hooks/content-hash.sh (#1527).
-    // Written on every sync, even when the user omits review.sourceExtensions
-    // (default set persisted), so downstream bash consumers see a consistent file.
-    // Resolves against configRoot for local configs so monorepo users invoking
-    // from a subdirectory land the file at <project-root>/.totem/, where shield
-    // and the bash hook read it (lesson 61975bb96c9bf27f / f5a75d98a43e0721).
-    // Falls back to cwd for global-only configs: if the user customized
-    // review.sourceExtensions in ~/.totem/totem.config.ts, skipping the write
-    // would break TS/bash parity (TS uses the custom set, bash defaults). cwd
-    // is the best proxy for git-toplevel available without shelling to git.
-    const targetRoot = isGlobalConfigPath(configPath) ? cwd : path.dirname(configPath);
-    const totemDirAbs = path.resolve(targetRoot, config.totemDir);
-    try {
-      writeReviewExtensionsFile(totemDirAbs, config.review.sourceExtensions); // totem-context: intentional cleanup — canonical file write is a convenience for the bash PreToolUse hook
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      log.dim(TAG, `Skipped review-extensions.txt write: ${sanitize(detail)}`);
-    }
-
-    // Emit `.totem/installed-packs.json` for boot-time pack registration
-    // (mmnto-ai/totem#1768, ADR-097 § 10). Resolved from the deduplicated
-    // union of `package.json` `@mmnto/pack-*` deps + `totem.config.ts`
-    // `extends` array. Mismatch surfaces (dep without extends, extends
-    // without dep, missing peerDependencies) emit per-pack warnings;
-    // resolved entries are written to the manifest atomically.
+  // ─── Phase A — pack-resolution + manifest write ─────
+  // Re-ordered to BEFORE `runSync` so `--packs-only` can short-circuit
+  // cleanly without invoking embedding (mmnto-ai/totem#1811 OQ3).
+  // `runSync` operates against pack registrations resolved at boot, so
+  // the re-order is observably equivalent for the default case.
+  if (!options.indexOnly) {
     try {
       const { resolveInstalledPacks, writeInstalledPacksManifest } = await import('@mmnto/totem');
       const { resolved, warnings } = resolveInstalledPacks({
@@ -116,10 +135,58 @@ export async function syncCommand(options: {
           `Wrote installed-packs.json (${resolved.length} pack${resolved.length === 1 ? '' : 's'}).`,
         );
       }
-      // totem-context: intentional cleanup — manifest write is best-effort, mirrors the writeReviewExtensionsFile pattern above (failure logs at warn but does not abort sync)
+      // totem-context: intentional cleanup — manifest write is best-effort, mirrors the writeReviewExtensionsFile pattern below (failure logs at warn but does not abort sync)
     } catch (err) {
       const detail = err instanceof Error ? err.message : 'unknown error';
       log.warn(TAG, `Skipped installed-packs.json write: ${sanitize(detail)}`);
+    }
+  }
+
+  // `--packs-only` short-circuit: Phase B (embedding sync, review
+  // extensions, registry update, prune) is the entire scope of work
+  // that's skipped. Surface a confirmation so the operator sees the
+  // command did the deterministic work it advertised.
+  if (options.packsOnly) {
+    log.success(TAG, 'Pack manifest synced (--packs-only).');
+    return;
+  }
+
+  const incremental = !options.full;
+
+  const noopSpinner: Spinner = {
+    update() {},
+    succeed() {},
+    fail() {},
+    stop() {},
+  };
+
+  const spinner = options.quiet
+    ? noopSpinner
+    : await createSpinner(TAG, incremental ? 'Incremental sync...' : 'Full re-index...');
+
+  // ─── Phase B — embedding-driven sync ─────────────────
+  try {
+    const result = await runSync(config, {
+      projectRoot: cwd,
+      incremental,
+      onProgress: (msg) => spinner.update(msg),
+    });
+
+    // Emit canonical review-extensions.txt for .claude/hooks/content-hash.sh (#1527).
+    // Written on every sync, even when the user omits review.sourceExtensions
+    // (default set persisted), so downstream bash consumers see a consistent file.
+    // Resolves against configRoot for local configs so monorepo users invoking
+    // from a subdirectory land the file at <project-root>/.totem/, where shield
+    // and the bash hook read it (lesson 61975bb96c9bf27f / f5a75d98a43e0721).
+    // Falls back to cwd for global-only configs: if the user customized
+    // review.sourceExtensions in ~/.totem/totem.config.ts, skipping the write
+    // would break TS/bash parity (TS uses the custom set, bash defaults). cwd
+    // is the best proxy for git-toplevel available without shelling to git.
+    try {
+      writeReviewExtensionsFile(totemDirAbs, config.review.sourceExtensions); // totem-context: intentional cleanup — canonical file write is a convenience for the bash PreToolUse hook
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      log.dim(TAG, `Skipped review-extensions.txt write: ${sanitize(detail)}`);
     }
 
     spinner.succeed(`Done: ${result.chunksProcessed} chunks from ${result.filesProcessed} files`);

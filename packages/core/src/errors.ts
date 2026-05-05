@@ -30,7 +30,9 @@ export type TotemErrorCode =
   | 'UPGRADE_HASH_NOT_FOUND'
   | 'UPGRADE_HASH_AMBIGUOUS'
   | 'STAGED_READ_FAILED'
-  | 'UPGRADE_CLOUD_UNSUPPORTED';
+  | 'UPGRADE_CLOUD_UNSUPPORTED'
+  | 'STALE_MANIFEST'
+  | 'FLAG_CONFLICT';
 
 export class TotemError extends Error {
   readonly code: TotemErrorCode;

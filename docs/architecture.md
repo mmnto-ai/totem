@@ -185,13 +185,15 @@ A stdio-based server for LLM integration providing primary tools and strict acce
 
 Totem supports three explicit capability tiers, auto-detected from the environment during `totem init`. The available command list is audited to prune stale tasks and preserve a streamlined interface:
 
-| Tier         | Requirements                               | Available Commands                                                                                                                |
-| ------------ | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `link`, `install`, `rule promote`, `eject`, `lint`, `compile`, `test`, `explain`, `handoff --lite` |
-| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `search`, `stats`, `doctor`                                                                                        |
-| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `review`, `triage`, `handoff`, `extract`, `docs`, `proposal new`, `adr new`)                                |
+| Tier         | Requirements                               | Available Commands                                                                                                                                     |
+| ------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Lite**     | Zero API keys                              | `init`, `hooks`, `add-lesson`, `link`, `install`, `rule promote`, `eject`, `lint`, `compile`, `test`, `explain`, `handoff --lite`, `sync --packs-only` |
+| **Standard** | Embedding key (`OPENAI_API_KEY` or Ollama) | Lite + `sync`, `sync --index-only`, `search`, `stats`, `doctor`                                                                                        |
+| **Full**     | Embedding + Orchestrator                   | All commands (`spec`, `review`, `triage`, `handoff`, `extract`, `docs`, `proposal new`, `adr new`)                                                     |
 
 A lite-tier standalone WASM binary provides core CLI functions with zero native dependencies. The embedding field in configuration files is optional; when omitted, operations default to the Lite tier boundary constraints.
+
+`totem sync` decomposes into two phases (mmnto-ai/totem#1811, ADR-101): Phase A — pack manifest write — is deterministic and tier-Lite (`sync --packs-only`); Phase B — vector-store embedding — keeps `sync` and `sync --index-only` in Standard. The split unblocks CI environments without API keys after a `@mmnto/totem` cohort bump, where pack-resolution alone needs to run before `totem lint` recognizes newly registered Tree-sitter languages.
 
 ## Orchestrator Providers
 

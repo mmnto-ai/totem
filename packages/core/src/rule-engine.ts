@@ -13,6 +13,7 @@ import type {
 } from './compiler-schema.js';
 import { extractAddedLines } from './diff-parser.js';
 import { TotemParseError } from './errors.js';
+import { detectStaleManifest, staleManifestError } from './stale-manifest.js';
 
 // ─── File glob matching ─────────────────────────────
 
@@ -407,6 +408,22 @@ export async function applyAstRulesToAdditions(
         (r) => r.fileGlobs && r.fileGlobs.length > 0 && fileMatchesGlobs(file, r.fileGlobs),
       );
       if (ruleExpectingThisFile) {
+        // mmnto-ai/totem#1811 (ADR-101): before re-throwing the raw
+        // Tree-sitter language-miss error, check whether the user is
+        // one `totem sync --packs-only` away from a working state.
+        // The detector consults `.totem/installed-packs.json`'s
+        // `cohort` field against the running engine; on staleness
+        // (missing / pre-1.27.0 / minor bump) we surface a structured
+        // `STALE_MANIFEST` nudge instead of the generic install hint.
+        // Cohort-match falls through to the original parse error.
+        const staleDetection = detectStaleManifest({ workingDirectory });
+        if (staleDetection) {
+          throw staleManifestError(staleDetection, {
+            file,
+            extension: ext,
+            ruleHash: ruleExpectingThisFile.lessonHash,
+          });
+        }
         // `[Totem Error]` prefix is auto-prepended by the TotemError base
         // class constructor (`errors.ts:40`). The literal prefix is
         // intentionally NOT in the message argument here — duplicating it
