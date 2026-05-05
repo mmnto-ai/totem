@@ -110,12 +110,23 @@ export async function runCompiledRules(
   const rulesPath = path.join(resolvedTotemDir, COMPILED_RULES_FILE);
   const rules = loadCompiledRules(rulesPath);
 
+  // Empty corpus is a legitimate state for early-adoption / aspirational repos
+  // (mmnto-ai/totem#1831). Log + skip rather than throwing so CI does not fail
+  // on repos that have a valid lint configuration but no lessons compiled yet.
+  // Consumers that need a "rule count > 0" CI guardrail can check
+  // `compiled-rules.json` length directly in their pipeline.
   if (rules.length === 0) {
-    throw new TotemError(
-      'NO_RULES',
-      `No compiled rules found at ${totemDir}/${COMPILED_RULES_FILE}.`,
-      "Run 'totem compile' to generate rules.",
+    log.info(
+      tag,
+      `No compiled rules at ${totemDir}/${COMPILED_RULES_FILE} — skipping (empty-corpus repo). Run 'totem lesson compile' once you have lessons.`,
     );
+    return {
+      violations: [],
+      findings: [],
+      rules: [],
+      output: '',
+      regexTimeouts: [],
+    };
   }
 
   log.info(tag, `Running ${rules.length} rules (zero LLM)...`);
