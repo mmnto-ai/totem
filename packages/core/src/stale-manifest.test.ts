@@ -134,10 +134,10 @@ describe('staleManifestError', () => {
       ruleHash: 'abc123',
     });
     expect(err.code).toBe('STALE_MANIFEST');
-    expect(err.message).toContain('1.26.0');
-    expect(err.message).toContain('1.27.0');
-    expect(err.message).toContain('main.rs');
-    expect(err.recoveryHint).toContain('--packs-only');
+    expect(err.message).toMatch(/1\.26\.0/);
+    expect(err.message).toMatch(/1\.27\.0/);
+    expect(err.message).toMatch(/main\.rs/);
+    expect(err.recoveryHint).toMatch(/--packs-only/);
   });
 
   it('reports no-manifest cleanly when cohort is absent from the message', () => {
@@ -147,8 +147,8 @@ describe('staleManifestError', () => {
       extension: '.rs',
       ruleHash: 'def456',
     });
-    expect(err.message).toContain('missing or unreadable');
-    expect(err.message).toContain('def456');
+    expect(err.message).toMatch(/missing or unreadable/);
+    expect(err.message).toMatch(/def456/);
   });
 
   it('reports no-cohort with the pre-1.27.0 framing', () => {
@@ -158,6 +158,6 @@ describe('staleManifestError', () => {
       extension: '.rs',
       ruleHash: 'xyz789',
     });
-    expect(err.message).toContain('pre-1.27.0');
+    expect(err.message).toMatch(/pre-1\.27\.0/);
   });
 });
