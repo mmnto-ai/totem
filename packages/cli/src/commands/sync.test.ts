@@ -269,6 +269,34 @@ describe('syncCommand', () => {
   });
 
   // totem-context: test callback genuinely awaits async syncCommand
+  it('--packs-only throws SYNC_FAILED when Phase A manifest write fails', async () => {
+    // Load-bearing for the CI-unblock invariant (#1828 review): under
+    // --packs-only, Phase A IS the entire scope of work. Silent
+    // warn-and-continue would leave installed-packs.json stale or
+    // missing while exit 0 reports success. Default mode keeps the
+    // best-effort warn — see regression guard below.
+    mockWriteInstalledPacksManifest.mockImplementationOnce(() => {
+      // totem-context: throw inside vitest mock to simulate a Phase A write failure; sentinel string is test-only and never surfaces to a user
+      throw new Error('EACCES: permission denied');
+    });
+    await expect(syncCommand({ packsOnly: true, quiet: true })).rejects.toThrow(
+      /Failed to write installed-packs\.json.*EACCES/,
+    );
+    expect(mockRunSync).not.toHaveBeenCalled();
+  });
+
+  // totem-context: test callback genuinely awaits async syncCommand — regression guard for default-mode warn-and-continue (#1828 review carve-out)
+  it('default mode keeps warn-and-continue when Phase A manifest write fails', async () => {
+    // totem-context: regression guard — default mode keeps best-effort warn-and-continue while --packs-only throws (sibling test above)
+    mockWriteInstalledPacksManifest.mockImplementationOnce(() => {
+      // totem-context: throw inside vitest mock to simulate a Phase A write failure; sentinel string is test-only and never surfaces to a user
+      throw new Error('EACCES: permission denied');
+    });
+    await expect(syncCommand({ quiet: true })).resolves.toBeUndefined();
+    expect(mockRunSync).toHaveBeenCalledTimes(1);
+  });
+
+  // totem-context: test callback genuinely awaits async syncCommand
   it('mutex error fires BEFORE config load and embedder gate', async () => {
     // Load-bearing for the CI-unblock invariant: a mutex violation
     // must not cascade through `requireEmbedding`, which would mask

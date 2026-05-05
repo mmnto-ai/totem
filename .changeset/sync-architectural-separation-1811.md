@@ -18,7 +18,7 @@ New mutually-exclusive flags on `totem sync`:
 - `--packs-only` (Lite tier): write the pack manifest only; skip embedding sync, prune, the global registry update, and the `review-extensions.txt` write. Designed for CI environments without API keys after a `@mmnto/totem` cohort bump where pack-resolution alone needs to run before `totem lint` recognizes newly registered Tree-sitter languages.
 - `--index-only` (Standard tier): run only the embedding sync; skip pack-resolution. Use when `installed-packs.json` is already current and only the vector store needs to re-embed.
 
-Both flags hard-error when combined with each other or with `--full` / `--prune`.
+`--packs-only` hard-errors when combined with `--index-only`, `--full`, or `--prune` — Phase B is skipped under `--packs-only`, so those flags would silently no-op. `--index-only` composes with `--full` and `--prune` since all three modify Phase B.
 
 The CLI orchestrator now writes `installed-packs.json` BEFORE invoking `runSync` so `--packs-only` can short-circuit cleanly. The default flag-less behavior is observably equivalent to prior releases.
 

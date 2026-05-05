@@ -135,9 +135,17 @@ export async function syncCommand(options: SyncCommandOptions): Promise<void> {
           `Wrote installed-packs.json (${resolved.length} pack${resolved.length === 1 ? '' : 's'}).`,
         );
       }
-      // totem-context: intentional cleanup — manifest write is best-effort, mirrors the writeReviewExtensionsFile pattern below (failure logs at warn but does not abort sync)
+      // totem-context: intentional cleanup — manifest write is best-effort in DEFAULT sync (mirrors writeReviewExtensionsFile below). Under --packs-only it's the entire scope of work, so failure must propagate (#1828 review).
     } catch (err) {
-      const detail = err instanceof Error ? err.message : 'unknown error';
+      // totem-context: String(err) is the canonical non-Error fallback for catch-block normalization — type-narrowing throwables here would lose diagnostic info (matches L188 pattern; #1828 review)
+      const detail = err instanceof Error ? err.message : String(err);
+      if (options.packsOnly) {
+        throw new TotemError(
+          'SYNC_FAILED',
+          `Failed to write installed-packs.json: ${sanitize(detail)}`,
+          'Fix the manifest error above and re-run `totem sync --packs-only`.',
+        );
+      }
       log.warn(TAG, `Skipped installed-packs.json write: ${sanitize(detail)}`);
     }
   }
