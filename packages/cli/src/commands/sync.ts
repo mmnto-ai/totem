@@ -79,7 +79,13 @@ export interface SyncCommandOptions {
 }
 
 export async function syncCommand(options: SyncCommandOptions): Promise<void> {
-  const { runSync, TotemError, updateRegistryEntry } = await import('@mmnto/totem');
+  const {
+    resolveInstalledPacks,
+    runSync,
+    TotemError,
+    updateRegistryEntry,
+    writeInstalledPacksManifest,
+  } = await import('@mmnto/totem');
   const { createSpinner, log } = await import('../ui.js');
   const { isGlobalConfigPath, loadConfig, loadEnv, requireEmbedding, resolveConfigPath, sanitize } =
     await import('../utils.js');
@@ -114,20 +120,20 @@ export async function syncCommand(options: SyncCommandOptions): Promise<void> {
   // the re-order is observably equivalent for the default case.
   if (!options.indexOnly) {
     try {
-      const { resolveInstalledPacks, writeInstalledPacksManifest } = await import('@mmnto/totem');
       const { resolved, warnings } = resolveInstalledPacks({
         projectRoot: targetRoot,
         config,
       });
       writeInstalledPacksManifest(totemDirAbs, { version: 1, packs: resolved });
       for (const warning of warnings) {
+        const packName = sanitize(warning.name);
         const reasonText =
           warning.reason === 'dep-only'
             ? `present in package.json but not in totem.config.ts \`extends\` — pack rules will not be merged. Add to \`extends\` or remove the dependency.`
             : warning.reason === 'extends-only'
-              ? `declared in totem.config.ts \`extends\` but not installed — install via \`pnpm add -D ${warning.name}\` (or equivalent).`
+              ? `declared in totem.config.ts \`extends\` but not installed — install via \`pnpm add -D ${packName}\` (or equivalent).`
               : `missing engines['@mmnto/totem'] declaration — pack cannot satisfy the engine-version cross-check (ADR-097 § 5 Q6). Add '"engines": { "@mmnto/totem": "^<version>" }' to the pack's package.json and republish.`;
-        log.warn(TAG, `Pack '${warning.name}': ${reasonText}`);
+        log.warn(TAG, `Pack '${packName}': ${reasonText}`);
       }
       if (resolved.length > 0) {
         log.dim(
@@ -137,15 +143,16 @@ export async function syncCommand(options: SyncCommandOptions): Promise<void> {
       }
       // totem-context: intentional cleanup — manifest write is best-effort in DEFAULT sync (mirrors writeReviewExtensionsFile below). Under --packs-only it's the entire scope of work, so failure must propagate (#1828 review).
     } catch (err) {
-      // totem-context: String(err) is the canonical non-Error fallback for catch-block normalization — type-narrowing throwables here would lose diagnostic info (matches L188 pattern; #1828 review)
-      const detail = err instanceof Error ? err.message : String(err);
       if (options.packsOnly) {
         throw new TotemError(
           'SYNC_FAILED',
-          `Failed to write installed-packs.json: ${sanitize(detail)}`,
+          'Failed to write installed-packs.json',
           'Fix the manifest error above and re-run `totem sync --packs-only`.',
+          err,
         );
       }
+      // totem-context: String(err) is the canonical non-Error fallback for catch-block normalization — matches L188 pattern in this file
+      const detail = err instanceof Error ? err.message : String(err);
       log.warn(TAG, `Skipped installed-packs.json write: ${sanitize(detail)}`);
     }
   }

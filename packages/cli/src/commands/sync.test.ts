@@ -44,8 +44,10 @@ vi.mock('@mmnto/totem', () => ({
       public code: string,
       message: string,
       public hint?: string,
+      // totem-context: mock mirrors real TotemError(code, message, hint, cause) signature for R2 cause-preservation tests
+      cause?: unknown,
     ) {
-      super(message);
+      super(message, { cause });
     }
   },
 }));
@@ -268,20 +270,32 @@ describe('syncCommand', () => {
     expect(mockRunSync).not.toHaveBeenCalled();
   });
 
-  // totem-context: test callback genuinely awaits async syncCommand
-  it('--packs-only throws SYNC_FAILED when Phase A manifest write fails', async () => {
-    // Load-bearing for the CI-unblock invariant (#1828 review): under
-    // --packs-only, Phase A IS the entire scope of work. Silent
-    // warn-and-continue would leave installed-packs.json stale or
-    // missing while exit 0 reports success. Default mode keeps the
-    // best-effort warn — see regression guard below.
+  // totem-context: test callback genuinely awaits async syncCommand — load-bearing CI-unblock guard for --packs-only Phase A failure (#1828); cause preservation per styleguide §6 (R2)
+  it('--packs-only throws SYNC_FAILED with original err as cause when Phase A manifest write fails', async () => {
+    // totem-context: sentinel error fixture for cause-preservation assertion; not a TotemError-wrapping pattern
+    const original = new Error('EACCES: permission denied');
     mockWriteInstalledPacksManifest.mockImplementationOnce(() => {
       // totem-context: throw inside vitest mock to simulate a Phase A write failure; sentinel string is test-only and never surfaces to a user
-      throw new Error('EACCES: permission denied');
+      throw original;
     });
+    // totem-context: test genuinely awaits async syncCommand; rejects.toThrow asserts the SYNC_FAILED message
     await expect(syncCommand({ packsOnly: true, quiet: true })).rejects.toThrow(
-      /Failed to write installed-packs\.json.*EACCES/,
+      /Failed to write installed-packs\.json/,
     );
+    // Re-run to capture the thrown error and assert cause is preserved
+    mockWriteInstalledPacksManifest.mockImplementationOnce(() => {
+      // totem-context: throw inside vitest mock to assert Error.cause preservation; second-pass check on the same code path
+      throw original;
+    });
+    let caught: unknown;
+    try {
+      await syncCommand({ packsOnly: true, quiet: true });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    // totem-context: TS type assertion to access Error.cause in test scaffold — not Zod-relevant runtime validation
+    expect((caught as Error & { cause?: unknown }).cause).toBe(original);
     expect(mockRunSync).not.toHaveBeenCalled();
   });
 
@@ -306,6 +320,8 @@ describe('syncCommand', () => {
       throw new Error('embedding gate fired despite mutex violation');
     });
     await expect(syncCommand({ packsOnly: true, indexOnly: true })).rejects.toThrow(/--packs-only/);
+    // totem-context: mutex-fires-before-config invariant (#1828 R2 CR finding); test genuinely awaits async syncCommand
+    expect(mockLoadConfig).not.toHaveBeenCalled();
     expect(mockRequireEmbedding).not.toHaveBeenCalled();
   });
 
