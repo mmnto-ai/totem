@@ -7914,10 +7914,11 @@
     {
       "lessonHash": "817eec739b533bad",
       "lessonHeading": "Hook stderr diagnostics use script-identifier prefix, not",
+      "pattern": "process\\.stderr\\.write\\(['\"]\\[Totem Error\\]",
       "message": "Hook stderr diagnostics must use a script-identifier prefix (e.g. '[auto-context]'), not '[Totem Error]'. The '[Totem Error]' prefix is reserved for thrown Error objects per styleguide §3.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "process\\.stderr\\.write\\(['\"]\\[Totem Error\\]",
+      "badExample": "process.stderr.write('[Totem Error] failed to load proposals\\n');",
+      "goodExample": "process.stderr.write('[auto-context] failed to load proposals\\n');",
       "compiledAt": "2026-05-05T04:03:03.425Z",
       "createdAt": "2026-05-05T04:03:03.425Z",
       "fileGlobs": [
@@ -7925,12 +7926,62 @@
         "**/.gemini/hooks/**/*.js",
         "packages/cli/src/hooks/**/*.ts"
       ],
-      "badExample": "process.stderr.write('[Totem Error] failed to load proposals\\n');",
-      "goodExample": "process.stderr.write('[auto-context] failed to load proposals\\n');",
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 1 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/init-templates.ts. reasonCode: stage4-out-of-scope-match.",
+      "archivedAt": "2026-05-05T04:03:03.864Z",
+      "unverified": true
+    },
+    {
+      "lessonHash": "027b32b8ea3c8c51",
+      "lessonHeading": "Prefix hook diagnostics with script identifiers",
+      "message": "Use '[<script-name>]' prefix instead of '[Totem Error]' for stderr diagnostics in hook helpers. '[Totem Error]' is reserved for thrown exceptions.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "\\[Totem Error\\]",
+      "compiledAt": "2026-05-05T05:16:17.198Z",
+      "createdAt": "2026-05-05T05:16:17.198Z",
+      "fileGlobs": [
+        ".claude/hooks/**/*.js",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "badExample": "process.stderr.write('[Totem Error] missing config\\n');",
+      "goodExample": "process.stderr.write('[my-hook] missing config\\n');",
       "unverified": true,
       "status": "archived",
-      "archivedAt": "2026-05-05T04:03:03.864Z",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 1 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/init-templates.ts. reasonCode: stage4-out-of-scope-match."
+      "archivedAt": "2026-05-05T05:16:17.611Z",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 54 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .claude/hooks/pre-compact.sh, .gemini/hooks/BeforeTool.js, .gemini/hooks/SessionStart.js, .gemini/styleguide.md, .github/copilot-instructions.md (+ 49 more). reasonCode: stage4-out-of-scope-match."
+    },
+    {
+      "lessonHash": "52ab4c84140ecb42",
+      "lessonHeading": "Ensure resilient continuation in session hooks",
+      "message": "Do not throw inside catch blocks in session hooks — use process.stderr.write and continue to ensure resilient session boot",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepYamlRule": {
+        "rule": {
+          "pattern": "throw $ERR",
+          "inside": {
+            "kind": "catch_clause",
+            "stopBy": "end"
+          }
+        }
+      },
+      "compiledAt": "2026-05-05T05:16:18.083Z",
+      "createdAt": "2026-05-05T05:16:18.083Z",
+      "fileGlobs": [
+        ".claude/hooks/**/*.js",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "badExample": "try { loadContext(); } catch (err) { throw err; }",
+      "goodExample": "try { loadContext(); } catch (err) { process.stderr.write(String(err) + '\\n'); }",
+      "unverified": true,
+      "status": "archived",
+      "archivedAt": "2026-05-05T05:16:18.859Z",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 38 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .gemini/hooks/BeforeTool.js, packages/cli/src/adapters/gh-utils.ts, packages/cli/src/commands/compile.ts, packages/cli/src/commands/doctor.ts, packages/cli/src/commands/first-lint-promote-runner.ts (+ 33 more). reasonCode: stage4-out-of-scope-match."
     }
   ],
   "nonCompilable": [
@@ -13380,6 +13431,18 @@
       "title": "Track deferred breaking changes in a ledger",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes a project governance and documentation process (maintaining a ledger of deferred breaking changes), not a detectable code pattern. No structural or textual pattern in source files can distinguish an intentionally misclassified changeset from a legitimate minor change."
+    },
+    {
+      "hash": "4abc7cd14b2461fa",
+      "title": "Guard against null substrate journal roots",
+      "reasonCode": "context-required",
+      "reason": "Lesson requires knowing whether a null-check is absent before a file operation on a journal root value; a pattern cannot distinguish a missing null guard from code that legitimately operates on a value already known to be non-null through prior validation."
+    },
+    {
+      "hash": "b9b612629318bf5e",
+      "title": "Avoid circular dependencies with dynamic imports",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural pattern (using dynamic imports to avoid circular dependencies) rather than a detectable code violation. There is no specific banned construct or incorrect form that a pattern could match — the lesson prescribes a structural approach without identifying a concrete anti-pattern expressible as a regex or AST rule."
     }
   ]
 }
