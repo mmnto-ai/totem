@@ -119,6 +119,21 @@ describe('detectStaleManifest', () => {
     });
     expect(result).toEqual({ reason: 'no-manifest', engineVersion: STUB_ENGINE });
   });
+
+  it('returns null when engineVersion is not semver-valid (defensive fallback; mmnto-ai/totem#1829)', () => {
+    // Defensive against a malformed `@mmnto/totem` package.json that
+    // somehow escapes `resolveEngineVersion`'s sentinel fallback.
+    // Without this guard, `semver.major(engineVersion)` would throw
+    // when the cohort comparison ran. Caller falls through to the
+    // original TotemParseError unmasked. Source-level validation in
+    // resolveEngineVersion is tracked as mmnto-ai/totem#1829.
+    const result = detectStaleManifest({
+      workingDirectory: '/fake',
+      resolveVersion: () => 'not-a-semver',
+      readManifest: makeReader({ version: 1, cohort: '1.26.0', packs: [] }),
+    });
+    expect(result).toBeNull();
+  });
 });
 
 describe('staleManifestError', () => {

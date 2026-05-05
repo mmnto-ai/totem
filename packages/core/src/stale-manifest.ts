@@ -59,6 +59,12 @@ export interface DetectStaleManifestOptions {
  * - Cohort field present but not semver-valid: `'no-cohort'`
  *   (defensive fallback — design doc spec line for malformed cohort).
  * - Cohort major.minor differs from engine: `'cohort-mismatch'`.
+ * - `engineVersion` itself not semver-valid (defensive — should not
+ *   happen given `resolveEngineVersion`'s '0.0.0' sentinel fallback,
+ *   but a malformed `@mmnto/totem` package.json could surface one):
+ *   return `null` so the caller falls through to the original
+ *   `TotemParseError` unmasked. Source-level validation of engine
+ *   version is tracked separately as mmnto-ai/totem#1829.
  */
 export function detectStaleManifest(
   opts: DetectStaleManifestOptions,
@@ -69,6 +75,9 @@ export function detectStaleManifest(
   const reader = opts.readManifest ?? defaultReadManifest;
 
   const engineVersion = resolve();
+  if (!semver.valid(engineVersion)) {
+    return null;
+  }
 
   const raw = reader(manifestPath);
   if (raw === null) {
