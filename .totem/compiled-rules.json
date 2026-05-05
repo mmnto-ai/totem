@@ -7887,9 +7887,9 @@
       ],
       "severity": "warning",
       "status": "archived",
-      "unverified": true,
       "archivedReason": "Pattern '^'[^']+': (minor|patch)$' fires on EVERY routine changeset entry. Same over-broad class as c3c6ccd3 ('Bump major version for discriminated unions'). Lesson intent was schema-change-as-breaking-change but regex doesn't distinguish breaking shape changes from any minor/patch bump. Archive pending pattern-tightening; likely needs ast-grep on the source TS schema files referenced by the changeset, not regex on the changeset MD.",
-      "archivedAt": "2026-05-04T05:51:42.747Z"
+      "archivedAt": "2026-05-04T05:51:42.747Z",
+      "unverified": true
     },
     {
       "lessonHash": "b6c78d82af432668",
@@ -7910,6 +7910,27 @@
       "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 41 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/assets/compiled-baseline.test.ts, packages/cli/src/commands/config-drift.test.ts, packages/cli/src/commands/docs.ts, packages/cli/src/commands/doctor.ts, packages/cli/src/commands/extract-shared.ts (+ 36 more). reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-05-04T05:50:36.072Z",
       "unverified": true
+    },
+    {
+      "lessonHash": "817eec739b533bad",
+      "lessonHeading": "Hook stderr diagnostics use script-identifier prefix, not",
+      "message": "Hook stderr diagnostics must use a script-identifier prefix (e.g. '[auto-context]'), not '[Totem Error]'. The '[Totem Error]' prefix is reserved for thrown Error objects per styleguide §3.",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "process\\.stderr\\.write\\(['\"]\\[Totem Error\\]",
+      "compiledAt": "2026-05-05T04:03:03.425Z",
+      "createdAt": "2026-05-05T04:03:03.425Z",
+      "fileGlobs": [
+        "**/.claude/hooks/**/*.js",
+        "**/.gemini/hooks/**/*.js",
+        "packages/cli/src/hooks/**/*.ts"
+      ],
+      "badExample": "process.stderr.write('[Totem Error] failed to load proposals\\n');",
+      "goodExample": "process.stderr.write('[auto-context] failed to load proposals\\n');",
+      "unverified": true,
+      "status": "archived",
+      "archivedAt": "2026-05-05T04:03:03.864Z",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 1 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/init-templates.ts. reasonCode: stage4-out-of-scope-match."
     }
   ],
   "nonCompilable": [
