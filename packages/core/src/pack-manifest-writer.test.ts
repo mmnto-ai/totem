@@ -253,7 +253,7 @@ describe('writeInstalledPacksManifest', () => {
     const root = makeTmpRoot();
     const totemDir = path.join(root, '.totem');
     const finalPath = writeInstalledPacksManifest(totemDir, { version: 1, packs: [] });
-    const parsed = JSON.parse(fs.readFileSync(finalPath, 'utf-8'));
+    const parsed = JSON.parse(fs.readFileSync(finalPath, 'utf-8')); // totem-context: synchronous read in test fixture; runtime callers use the boot-time pack-discovery loader path
     expect(typeof parsed.cohort).toBe('string');
     // Stamped value must be a real semver version (not the '0.0.0'
     // sentinel from resolveEngineVersion's last-resort fallback when
@@ -269,7 +269,7 @@ describe('writeInstalledPacksManifest', () => {
       cohort: '1.2.3-test',
       packs: [],
     });
-    const parsed = JSON.parse(fs.readFileSync(finalPath, 'utf-8'));
+    const parsed = JSON.parse(fs.readFileSync(finalPath, 'utf-8')); // totem-context: synchronous read in test fixture; runtime callers use the boot-time pack-discovery loader path
     expect(parsed.cohort).toBe('1.2.3-test');
   });
 
@@ -282,7 +282,7 @@ describe('writeInstalledPacksManifest', () => {
       packs: [],
     });
     const parsed = JSON.parse(
-      fs.readFileSync(path.join(totemDir, 'installed-packs.json'), 'utf-8'),
+      fs.readFileSync(path.join(totemDir, 'installed-packs.json'), 'utf-8'), // totem-context: synchronous read in test fixture; runtime callers use the boot-time pack-discovery loader path
     );
     const validation = InstalledPacksManifestSchema.safeParse(parsed);
     expect(validation.success).toBe(true);

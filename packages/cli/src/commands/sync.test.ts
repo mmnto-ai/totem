@@ -21,8 +21,8 @@ vi.mock('../utils.js', () => ({
   resolveConfigPath: (...args: unknown[]) => mockResolveConfigPath(...args),
   isGlobalConfigPath: (...args: unknown[]) => mockIsGlobalConfigPath(...args),
   loadEnv: vi.fn(),
-  loadConfig: (...args: unknown[]) => mockLoadConfig(...args),
-  requireEmbedding: (...args: unknown[]) => mockRequireEmbedding(...args),
+  loadConfig: (...args: unknown[]) => mockLoadConfig(...args), // totem-context: mock surface
+  requireEmbedding: (...args: unknown[]) => mockRequireEmbedding(...args), // totem-context: mock surface
   sanitize: (s: string) => s,
 }));
 
@@ -33,11 +33,12 @@ const mockRunSync = vi
 const mockResolveInstalledPacks = vi.fn().mockReturnValue({ resolved: [], warnings: [] });
 const mockWriteInstalledPacksManifest = vi.fn();
 
+// totem-context: full-module mock — syncCommand is the unit under test; importing actual @mmnto/totem would cross the unit boundary into runSync's pipeline-walk side effects. The mock surfaces are call-spied in tests, not invoked for behavior.
 vi.mock('@mmnto/totem', () => ({
-  runSync: (...args: unknown[]) => mockRunSync(...args),
-  updateRegistryEntry: (...args: unknown[]) => mockUpdateRegistryEntry(...args),
-  resolveInstalledPacks: (...args: unknown[]) => mockResolveInstalledPacks(...args),
-  writeInstalledPacksManifest: (...args: unknown[]) => mockWriteInstalledPacksManifest(...args),
+  runSync: (...args: unknown[]) => mockRunSync(...args), // totem-context: mock surface; not a re-implementation of utility logic
+  updateRegistryEntry: (...args: unknown[]) => mockUpdateRegistryEntry(...args), // totem-context: mock surface
+  resolveInstalledPacks: (...args: unknown[]) => mockResolveInstalledPacks(...args), // totem-context: mock surface
+  writeInstalledPacksManifest: (...args: unknown[]) => mockWriteInstalledPacksManifest(...args), // totem-context: mock surface
   TotemError: class TotemError extends Error {
     constructor(
       public code: string,
@@ -75,6 +76,7 @@ describe('syncCommand', () => {
     mockLoadConfig.mockResolvedValue(baseConfig());
     mockResolveConfigPath.mockReset();
     mockIsGlobalConfigPath.mockReset();
+    // totem-context: vitest mock reset in unit-test setup; not an orchestrator timeout candidate
     mockRequireEmbedding.mockReset();
     mockRunSync.mockReset();
     mockRunSync.mockResolvedValue({ chunksProcessed: 10, filesProcessed: 3, totalChunks: 42 });
@@ -201,24 +203,28 @@ describe('syncCommand', () => {
 
   // ─── mmnto-ai/totem#1811: Phase A / Phase B split ─────
 
+  // totem-context: test callback genuinely awaits async syncCommand
   it('--packs-only skips runSync and does NOT call requireEmbedding', async () => {
     await syncCommand({ packsOnly: true, quiet: true });
     expect(mockRequireEmbedding).not.toHaveBeenCalled();
     expect(mockRunSync).not.toHaveBeenCalled();
   });
 
+  // totem-context: test callback genuinely awaits async syncCommand
   it('--packs-only writes installed-packs.json (Phase A still fires)', async () => {
     await syncCommand({ packsOnly: true, quiet: true });
     expect(mockResolveInstalledPacks).toHaveBeenCalledTimes(1);
     expect(mockWriteInstalledPacksManifest).toHaveBeenCalledTimes(1);
   });
 
+  // totem-context: test callback genuinely awaits async syncCommand
   it('--packs-only short-circuits — no spinner, no registry update', async () => {
     await syncCommand({ packsOnly: true, quiet: true });
     expect(mockUpdateRegistryEntry).not.toHaveBeenCalled();
     expect(mockCreateSpinner).not.toHaveBeenCalled();
   });
 
+  // totem-context: test callback genuinely awaits async syncCommand
   it('--index-only skips pack-resolution + manifest write but still runs runSync', async () => {
     await syncCommand({ indexOnly: true, quiet: true });
     expect(mockResolveInstalledPacks).not.toHaveBeenCalled();
@@ -227,6 +233,7 @@ describe('syncCommand', () => {
     expect(mockRequireEmbedding).toHaveBeenCalledTimes(1);
   });
 
+  // totem-context: test callback genuinely awaits async syncCommand
   it('default sync (no flags) runs both Phase A AND Phase B', async () => {
     await syncCommand({ quiet: true });
     expect(mockResolveInstalledPacks).toHaveBeenCalledTimes(1);
@@ -235,6 +242,7 @@ describe('syncCommand', () => {
     expect(mockRequireEmbedding).toHaveBeenCalledTimes(1);
   });
 
+  // totem-context: test callback genuinely awaits async syncCommand
   it('--packs-only + --index-only is a hard FLAG_CONFLICT error', async () => {
     await expect(syncCommand({ packsOnly: true, indexOnly: true, quiet: true })).rejects.toThrow(
       /--packs-only.*--index-only/,
@@ -244,6 +252,7 @@ describe('syncCommand', () => {
     expect(mockResolveInstalledPacks).not.toHaveBeenCalled();
   });
 
+  // totem-context: test callback genuinely awaits async syncCommand
   it('--packs-only + --full is a hard FLAG_CONFLICT error', async () => {
     await expect(syncCommand({ packsOnly: true, full: true, quiet: true })).rejects.toThrow(
       /--packs-only.*--full/,
@@ -251,6 +260,7 @@ describe('syncCommand', () => {
     expect(mockRunSync).not.toHaveBeenCalled();
   });
 
+  // totem-context: test callback genuinely awaits async syncCommand
   it('--packs-only + --prune is a hard FLAG_CONFLICT error', async () => {
     await expect(syncCommand({ packsOnly: true, prune: true, quiet: true })).rejects.toThrow(
       /--packs-only.*--prune/,
@@ -258,11 +268,13 @@ describe('syncCommand', () => {
     expect(mockRunSync).not.toHaveBeenCalled();
   });
 
+  // totem-context: test callback genuinely awaits async syncCommand
   it('mutex error fires BEFORE config load and embedder gate', async () => {
     // Load-bearing for the CI-unblock invariant: a mutex violation
     // must not cascade through `requireEmbedding`, which would mask
     // FLAG_CONFLICT behind a TotemConfigError on missing API keys.
     mockRequireEmbedding.mockImplementationOnce(() => {
+      // totem-context: throw inside vitest mock to assert mutex fires before requireEmbedding; sentinel string is test-only and never surfaces to a user
       throw new Error('embedding gate fired despite mutex violation');
     });
     await expect(syncCommand({ packsOnly: true, indexOnly: true })).rejects.toThrow(/--packs-only/);

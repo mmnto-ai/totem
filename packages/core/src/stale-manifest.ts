@@ -75,15 +75,9 @@ export function detectStaleManifest(
     return { reason: 'no-manifest', engineVersion };
   }
 
-  // totem-context: intentional cleanup — corrupted manifest JSON is
-  // treated as missing for the lint-time UX-nudge fast-path. Surfacing
-  // the parse error here would mask the load-bearing "user just needs
-  // to re-sync" signal under noise. The boot-time loader at
-  // `pack-discovery.ts:readManifestAndResolveCallbacks` enforces the
-  // strict failure-mode contract; this fallback is downstream of that.
   let parsedJson: unknown;
   try {
-    parsedJson = JSON.parse(raw);
+    parsedJson = JSON.parse(raw); // totem-context: intentional cleanup — corrupted manifest JSON is treated as missing for the lint-time UX-nudge fast-path; the boot-time loader at pack-discovery.ts:readManifestAndResolveCallbacks is the strict-failure surface (re-throws), this fallback is downstream of it
   } catch {
     return { reason: 'no-manifest', engineVersion };
   }

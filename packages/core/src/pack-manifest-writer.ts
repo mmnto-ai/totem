@@ -169,6 +169,7 @@ export function writeInstalledPacksManifest(
   };
   const finalPath = path.join(totemDirAbs, 'installed-packs.json');
   const tmpPath = finalPath + '.tmp';
+  // totem-context: writing the totem pack manifest under <totemDir>/, not a git hook
   fs.writeFileSync(tmpPath, JSON.stringify(stamped, null, 2) + '\n', 'utf-8');
   fs.renameSync(tmpPath, finalPath);
   return finalPath;
