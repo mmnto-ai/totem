@@ -1,5 +1,16 @@
 # @mmnto/mcp
 
+## 1.29.0
+
+### Minor Changes
+
+- Add universal agent orientation lesson.
+
+### Patch Changes
+
+- Updated dependencies
+  - @mmnto/totem@1.29.0
+
 ## 1.28.1
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 1.29.0
+
+### Minor Changes
+
+- Add universal agent orientation lesson.
+
 ## 1.28.1
 
 ## 1.28.0
