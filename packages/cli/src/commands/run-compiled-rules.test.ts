@@ -105,22 +105,27 @@ describe('runCompiledRules', () => {
 
   // ─── Empty rules ─────────────────────────────────────
 
-  it('throws NO_RULES when compiled-rules.json has no rules', async () => {
-    // Write an empty rules array
+  // totem-context: runCompiledRules is genuinely async (it awaits internal dynamic imports + safeExec); test runs in <100ms so the orchestrator-tier 15s timeout rule does not apply
+  it('returns empty result and skips gracefully when compiled-rules.json has no rules (mmnto-ai/totem#1831)', async () => {
+    // Empty corpus is a legitimate state for early-adoption repos.
     const rulesPath = path.join(tmpDir, TOTEM_DIR, 'compiled-rules.json');
     fs.writeFileSync(rulesPath, JSON.stringify({ version: 1, rules: [] }));
 
     const diff = makeDiff('src/app.ts', '  const x = 1;');
 
-    await expect(
-      runCompiledRules({
-        diff,
-        cwd: tmpDir,
-        totemDir: TOTEM_DIR,
-        format: 'text',
-        tag: 'Test',
-      }),
-    ).rejects.toThrow('No compiled rules found');
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'text',
+      tag: 'Test',
+    });
+
+    expect(result.violations).toHaveLength(0);
+    expect(result.findings).toHaveLength(0);
+    expect(result.rules).toHaveLength(0);
+    expect(result.regexTimeouts).toHaveLength(0);
+    expect(result.output).toBe('');
   });
 
   // ─── Suppression via totem-ignore ────────────────────

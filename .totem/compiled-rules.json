@@ -7935,10 +7935,11 @@
     {
       "lessonHash": "027b32b8ea3c8c51",
       "lessonHeading": "Prefix hook diagnostics with script identifiers",
+      "pattern": "\\[Totem Error\\]",
       "message": "Use '[<script-name>]' prefix instead of '[Totem Error]' for stderr diagnostics in hook helpers. '[Totem Error]' is reserved for thrown exceptions.",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "\\[Totem Error\\]",
+      "badExample": "process.stderr.write('[Totem Error] missing config\\n');",
+      "goodExample": "process.stderr.write('[my-hook] missing config\\n');",
       "compiledAt": "2026-05-05T05:16:17.198Z",
       "createdAt": "2026-05-05T05:16:17.198Z",
       "fileGlobs": [
@@ -7946,20 +7947,18 @@
         "!**/*.test.*",
         "!**/*.spec.*"
       ],
-      "badExample": "process.stderr.write('[Totem Error] missing config\\n');",
-      "goodExample": "process.stderr.write('[my-hook] missing config\\n');",
-      "unverified": true,
+      "severity": "warning",
       "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 54 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .claude/hooks/pre-compact.sh, .gemini/hooks/BeforeTool.js, .gemini/hooks/SessionStart.js, .gemini/styleguide.md, .github/copilot-instructions.md (+ 49 more). reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-05-05T05:16:17.611Z",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 54 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .claude/hooks/pre-compact.sh, .gemini/hooks/BeforeTool.js, .gemini/hooks/SessionStart.js, .gemini/styleguide.md, .github/copilot-instructions.md (+ 49 more). reasonCode: stage4-out-of-scope-match."
+      "unverified": true
     },
     {
       "lessonHash": "52ab4c84140ecb42",
       "lessonHeading": "Ensure resilient continuation in session hooks",
+      "pattern": "",
       "message": "Do not throw inside catch blocks in session hooks — use process.stderr.write and continue to ensure resilient session boot",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepYamlRule": {
         "rule": {
           "pattern": "throw $ERR",
@@ -7969,6 +7968,8 @@
           }
         }
       },
+      "badExample": "try { loadContext(); } catch (err) { throw err; }",
+      "goodExample": "try { loadContext(); } catch (err) { process.stderr.write(String(err) + '\\n'); }",
       "compiledAt": "2026-05-05T05:16:18.083Z",
       "createdAt": "2026-05-05T05:16:18.083Z",
       "fileGlobs": [
@@ -7976,12 +7977,11 @@
         "!**/*.test.*",
         "!**/*.spec.*"
       ],
-      "badExample": "try { loadContext(); } catch (err) { throw err; }",
-      "goodExample": "try { loadContext(); } catch (err) { process.stderr.write(String(err) + '\\n'); }",
-      "unverified": true,
+      "severity": "warning",
       "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 38 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .gemini/hooks/BeforeTool.js, packages/cli/src/adapters/gh-utils.ts, packages/cli/src/commands/compile.ts, packages/cli/src/commands/doctor.ts, packages/cli/src/commands/first-lint-promote-runner.ts (+ 33 more). reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-05-05T05:16:18.859Z",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 38 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .gemini/hooks/BeforeTool.js, packages/cli/src/adapters/gh-utils.ts, packages/cli/src/commands/compile.ts, packages/cli/src/commands/doctor.ts, packages/cli/src/commands/first-lint-promote-runner.ts (+ 33 more). reasonCode: stage4-out-of-scope-match."
+      "unverified": true
     }
   ],
   "nonCompilable": [
@@ -13443,6 +13443,66 @@
       "title": "Avoid circular dependencies with dynamic imports",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes an architectural pattern (using dynamic imports to avoid circular dependencies) rather than a detectable code violation. There is no specific banned construct or incorrect form that a pattern could match — the lesson prescribes a structural approach without identifying a concrete anti-pattern expressible as a regex or AST rule."
+    },
+    {
+      "hash": "f315d5b37195e49c",
+      "title": "Validate mutex flags before side-effecting calls",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural ordering principle (validate mutex flags before loading config/making side-effecting calls) that cannot be expressed as a detectable code pattern — it requires semantic understanding of which flags are mutually exclusive and which calls are side-effecting, plus cross-statement ordering analysis."
+    },
+    {
+      "hash": "c01748325191d57e",
+      "title": "Prevent silent failures in short-circuit modes",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a control-flow correctness invariant — that failure in an active phase must block success logs and non-zero exit — which requires semantic analysis of branching logic, error propagation, and exit-code paths across the function body. No single pattern or structural combinator can distinguish a correctly-guarded success log from one that follows an unhandled failure branch."
+    },
+    {
+      "hash": "7b66ec9a35cf2dbd",
+      "title": "Write manifests before main execution logic",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an ordering constraint between two operations (manifest write before sync logic invocation) that requires semantic analysis of execution order across multiple statements or functions — no single-node pattern or structural combinator can detect when the manifest write is absent or placed after the sync call."
+    },
+    {
+      "hash": "8ce960cb15508382",
+      "title": "Trigger manifest staleness on semver-minor drift",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a behavioral/UX policy for manifest staleness detection logic — it requires semantic analysis of version comparison logic across multiple files and runtime state to determine whether semver-minor drift is being checked vs. patch drift. No single-pattern rule can distinguish correct from incorrect version comparison semantics."
+    },
+    {
+      "hash": "c331d11885f030e4",
+      "title": "Verify gate ordering in short-circuit tests",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Hazard requires multi-node semantic analysis: the rule must correlate a mutex-flag assertion with the absence of a downstream side-effect call (e.g., config loading) within the same test body. No single pattern can express the relationship between what IS asserted and what is NOT called."
+    },
+    {
+      "hash": "58bd6f3e213f3fae",
+      "title": "Validate mutually exclusive phase flags",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a runtime validation principle (checking mutually exclusive flag combinations at execution time) rather than a detectable source code pattern. The specific flags, their names, and the validation logic are not specified, making it impossible to write a pattern that catches violations without knowing what the flags are."
+    },
+    {
+      "hash": "e9f47c48a5874770",
+      "title": "Use major-minor cohorts for manifest versioning",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural versioning convention (using major.minor cohorts for manifest stamping) with no detectable code pattern — the rule cannot be expressed as a regex or AST match without knowing the specific manifest structure, field names, or version format being enforced."
+    },
+    {
+      "hash": "640c65f8c9ef2393",
+      "title": "Sanitize untrusted metadata before logging",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Hazard requires multi-file and semantic analysis to determine whether a value passed to a logger originates from external/untrusted sources versus internal constants; a single-pattern rule cannot distinguish trusted from untrusted data at the call site."
+    },
+    {
+      "hash": "99b2e6380ecbdfdf",
+      "title": "Split CLI commands for keyless CI",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural decomposition principle (separating deterministic resolution from side-effectful sync) that cannot be detected as a code pattern. No structural or textual signature reliably distinguishes a command that mixes both phases from one that correctly separates them."
+    },
+    {
+      "hash": "4ec69a47ff161265",
+      "title": "When reviewing PR diffs that add a new return-statement",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Lesson describes a code-review reasoning error (inferring required fields from cross-surface name similarity without verifying the TypeScript interface). Detecting this hazard requires semantic analysis of the actual interface definition and comparison with the suggested field — no single-pattern rule can distinguish a legitimate field addition from a hallucinated one based on naming similarity across unrelated surfaces."
     }
   ]
 }
