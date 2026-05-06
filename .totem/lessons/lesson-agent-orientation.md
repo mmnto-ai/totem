@@ -22,7 +22,7 @@ If you (the agent) are tempted to add a feature that "decides which agent runs n
 
 ## §2 The Four-Layer Framework
 
-Totem development organizes around four layers (`governance-os-thesis/the-totem-framework.md`):
+Totem development organizes around four layers (mmnto-ai/totem-strategy:governance-os-thesis/the-totem-framework.md):
 
 | Layer | Role | Tools | Failure mode if missing |
 |---|---|---|---|
@@ -73,7 +73,7 @@ Agents are organized by `<lane>-<vendor>` composite identifier (per ADR-098 Q7).
 
 ## §5 The Handoff Pipeline
 
-Inter-agent coordination flows through `mmnto-ai/totem-substrate:.handoff/<target-agent>/inbox/<UTC-TZ>-<from-agent>.md` (per ADR-098). Current frontmatter schema (`adr-098-v0.3`):
+Inter-agent coordination flows through mmnto-ai/totem-substrate:.handoff/<target-agent>/inbox/<UTC-TZ>-<from-agent>.md (per ADR-098). Current frontmatter schema (`adr-098-v0.3`):
 
 ```yaml
 ---
@@ -87,17 +87,17 @@ expected-action: <what recipient should do>
 
 **Lifecycle:** recipient processes message, moves from `inbox/` to `processed/`. Both subdirs are pre-created and git-tracked per ADR-098 v0.3 amendment. Direct-commit-to-main on substrate for routine handoffs; surgical `git add <path>` to avoid sweeping concurrent agents' WIP.
 
-**Session-start hooks** (`.claude/hooks/SessionStart.cjs`, `.gemini/hooks/SessionStart.js`) read agent's inbox automatically and prepend pending dispatches to orientation pass. **Signoff skill** writes journal + handoffs at end-of-session.
+**Session-start hooks** (.claude/hooks/SessionStart.cjs, .gemini/hooks/SessionStart.js) read agent's inbox automatically and prepend pending dispatches to orientation pass. **Signoff skill** writes journal + handoffs at end-of-session.
 
 **Broadcast vs point-to-point** (`feedback_handoff_broadcast_vs_point_to_point`): same paragraph to 3+ agents → `.handoff/_broadcast/`; "Agent X, do Y" or thread reply → per-agent inbox.
 
 ## §6 The Tenets — Load-Bearing Pair
 
-All 16 tenets matter (`mmnto-ai/totem-strategy:design-tenets.md`), but two are load-bearing for orchestration discipline:
+All 16 tenets matter (mmnto-ai/totem-strategy:design-tenets.md), but two are load-bearing for orchestration discipline:
 
 **Tenet 15 (The Axiom Mandate):** Totem's core value is the *deterministic substrate* — regex, filesystem checks, schema validations, git hooks, content hashes. Prose rules drift; substrate-encoded rules survive across model versions, vendor changes, and prompt instability. **When designing a feature, ask first: "Can this be encoded as regex, schema, hook, or filesystem invariant?" If yes, encode it there — even if an LLM version would be more elegant.**
 
-**Tenet 16 (Model-Stack Agnosticism):** The deterministic safety harness must work regardless of vendor (Claude, Gemini, OpenAI, local). No tenet, rule, or core feature may assume a specific provider. Vendor-locked features (provider-specific schemas, prompts, memory caches) are reference implementations only — never core constraints. Vendor-specific work ships as Packs (`@mmnto/pack-claude-attestation`), never baked into core.
+**Tenet 16 (Model-Stack Agnosticism):** The deterministic safety harness must work regardless of vendor (Claude, Gemini, OpenAI, local). No tenet, rule, or core feature may assume a specific provider. Vendor-locked features (provider-specific schemas, prompts, memory caches) are reference implementations only — never core constraints. Vendor-specific work ships as Packs (e.g. @mmnto/pack-claude-attestation), never baked into core.
 
 **Together:** the substrate is permanent and vendor-neutral; LLM-prose is volatile and vendor-locked. The substrate is the product.
 
@@ -109,7 +109,7 @@ This lesson is a **summary**, not a snapshot. If discrepancy with canonical arti
 - For repo state: read the actual repo file
 - For ticket state: `gh issue/pr view`
 - For substrate state: `ls .handoff/` + `git log` on substrate
-- For tenet text: re-read `mmnto-ai/totem-strategy:design-tenets.md`
+- For tenet text: re-read mmnto-ai/totem-strategy:design-tenets.md
 - For ADR state: check `Status:` line in the ADR file (Accepted, Proposed, Superseded)
 
 **`feedback_empirical_vs_cached_drift` fires N=6+ times across the ecosystem.** This lesson is itself a candidate for the same failure mode if treated as authoritative without re-derivation. The vector DB pipeline + `totem-status` Visor exist precisely to catch staleness; use them.
@@ -120,24 +120,23 @@ For every fact above, the canonical source:
 
 | Topic | Source |
 |---|---|
-| Totem scope (substrate vs orchestrator) | `mmnto-ai/totem-strategy:adr/adr-090-multi-agent-substrate.md` |
-| Four-layer framework | `mmnto-ai/totem-strategy:governance-os-thesis/the-totem-framework.md` |
-| Pack ecosystem | `mmnto-ai/totem-strategy:adr/adr-085-totem-pack-ecosystem.md`, `adr/adr-097-pack-language-archetype.md` |
-| Universal lessons | `mmnto-ai/totem-strategy:adr/adr-011-universal-lessons.md` |
-| Handoff pipeline | `mmnto-ai/totem-strategy:adr/adr-098-inter-agent-handoff-substrate.md` |
-| Substrate repo extraction | `mmnto-ai/totem-strategy:adr/adr-100-substrate-repo-extraction.md` |
-| Totem-sync separation | `mmnto-ai/totem-strategy:adr/adr-101-totem-sync-architectural-separation.md` |
-| Multi-agent state substrate | `mmnto-ai/totem-strategy:adr/adr-090-multi-agent-substrate.md` |
-| Design tenets (all 16) | `mmnto-ai/totem-strategy:design-tenets.md` |
-| Strategy-vs-Gemini role split | `mmnto-ai/totem-strategy:audits/internal/2026-04-25-issue-routing-triage.md` (per `reference_strategy_role_split`) |
-| Substrate-friction synthesis | `mmnto-ai/totem-strategy:audits/internal/2026-05-06-substrate-friction-cross-stream-synthesis.md` (mmnto-ai/totem-strategy#236) |
-| Derived standing state proposal | `mmnto-ai/totem-strategy:proposals/active/264-derived-standing-state.md` |
-| Liquid-city dogfood positioning | `feedback_liquid_city_is_godot_game` (memory) + `mmnto-ai/liquid-city:.totem/specs/` |
+| Totem scope (substrate vs orchestrator) + multi-agent state | mmnto-ai/totem-strategy:adr/adr-090-multi-agent-substrate.md |
+| Four-layer framework | mmnto-ai/totem-strategy:governance-os-thesis/the-totem-framework.md |
+| Pack ecosystem | mmnto-ai/totem-strategy:adr/adr-085-totem-pack-ecosystem.md, mmnto-ai/totem-strategy:adr/adr-097-pack-language-archetype.md |
+| Universal lessons | mmnto-ai/totem-strategy:adr/adr-011-universal-lessons.md |
+| Handoff pipeline | mmnto-ai/totem-strategy:adr/adr-098-inter-agent-handoff-substrate.md |
+| Substrate repo extraction | mmnto-ai/totem-strategy:adr/adr-100-substrate-repo-extraction.md |
+| Totem-sync separation | mmnto-ai/totem-strategy:adr/adr-101-totem-sync-architectural-separation.md |
+| Design tenets (all 16) | mmnto-ai/totem-strategy:design-tenets.md |
+| Strategy-vs-Gemini role split | mmnto-ai/totem-strategy:audits/internal/2026-04-25-issue-routing-triage.md (per `reference_strategy_role_split`) |
+| Substrate-friction synthesis | mmnto-ai/totem-strategy:audits/internal/2026-05-06-substrate-friction-cross-stream-synthesis.md (mmnto-ai/totem-strategy#236) |
+| Derived standing state proposal | mmnto-ai/totem-strategy:proposals/active/264-derived-standing-state.md |
+| Liquid-city dogfood positioning | `feedback_liquid_city_is_godot_game` (memory) + mmnto-ai/liquid-city:.totem/specs/ |
 
 ## §9 What's locked vs fluid
 
 **Locked (don't change without ADR amendment):**
-- Tenets 1–16 (`design-tenets.md`)
+- Tenets 1–16 (mmnto-ai/totem-strategy:design-tenets.md)
 - Substrate scope per ADR-090
 - Handoff pipeline schema per ADR-098 v0.3
 - Pack ecosystem governance per ADR-085 + ADR-097

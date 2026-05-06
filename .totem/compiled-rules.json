@@ -7982,24 +7982,6 @@
       "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 38 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .gemini/hooks/BeforeTool.js, packages/cli/src/adapters/gh-utils.ts, packages/cli/src/commands/compile.ts, packages/cli/src/commands/doctor.ts, packages/cli/src/commands/first-lint-promote-runner.ts (+ 33 more). reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-05-05T05:16:18.859Z",
       "unverified": true
-    },
-    {
-      "lessonHash": "8512d4ec9ce6ce03",
-      "lessonHeading": "Unset environment variables in test cleanup",
-      "pattern": "",
-      "message": "Use 'delete process.env.VAR' instead of assigning undefined — assignment leaves the key present and leaks state between tests",
-      "engine": "ast-grep",
-      "astGrepPattern": "process.env.$VAR = undefined",
-      "badExample": "afterEach(() => {\n  process.env.MY_VAR = undefined;\n});",
-      "goodExample": "afterEach(() => {\n  delete process.env.MY_VAR;\n});",
-      "compiledAt": "2026-05-06T20:43:49.657Z",
-      "createdAt": "2026-05-06T20:43:49.657Z",
-      "fileGlobs": [
-        "**/*.test.ts"
-      ],
-      "severity": "warning",
-      "status": "untested-against-codebase",
-      "unverified": true
     }
   ],
   "nonCompilable": [
@@ -13535,10 +13517,10 @@
       "reason": "Lesson describes an architectural principle about separation of concerns between core runners and CI policy enforcement. There is no specific detectable code pattern (no banned function call, import, or construct) that can reliably distinguish 'opinionated policy enforcement' from legitimate runner logic."
     },
     {
-      "hash": "d7c093084df156a9",
+      "hash": "dc1bf4bb507f121a",
       "title": "Totem Ecosystem Orientation",
       "reasonCode": "out-of-scope",
-      "reason": "Lesson describes a structural orientation and architectural overview of the Totem ecosystem — roles, repo composition, tenets, and source-of-truth pointers. It explicitly carries 'Compile classification: Yellow (per Tenet 9) — subjective interpretation, NOT compiled to regex/AST.' There is no detectable code pattern to enforce."
+      "reason": "Lesson describes a structural orientation and architectural framework for multi-agent ecosystem governance. It contains no detectable code pattern — it covers repo composition, agent roles, tenets, handoff pipeline schemas, and re-derivation discipline. The lesson itself explicitly declares 'Compile classification: Yellow (per Tenet 9) — subjective interpretation, NOT compiled to regex/AST.'"
     }
   ]
 }
