@@ -13497,6 +13497,12 @@
       "title": "Split CLI commands for keyless CI",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes an architectural decomposition principle (separating deterministic resolution from side-effectful sync) that cannot be detected as a code pattern. No structural or textual signature reliably distinguishes a command that mixes both phases from one that correctly separates them."
+    },
+    {
+      "hash": "4ec69a47ff161265",
+      "title": "When reviewing PR diffs that add a new return-statement",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Lesson describes a code-review reasoning error (inferring required fields from cross-surface name similarity without verifying the TypeScript interface). Detecting this hazard requires semantic analysis of the actual interface definition and comparison with the suggested field — no single-pattern rule can distinguish a legitimate field addition from a hallucinated one based on naming similarity across unrelated surfaces."
     }
   ]
 }
