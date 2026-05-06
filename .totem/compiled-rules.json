@@ -7982,6 +7982,25 @@
       "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 38 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .gemini/hooks/BeforeTool.js, packages/cli/src/adapters/gh-utils.ts, packages/cli/src/commands/compile.ts, packages/cli/src/commands/doctor.ts, packages/cli/src/commands/first-lint-promote-runner.ts (+ 33 more). reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-05-05T05:16:18.859Z",
       "unverified": true
+    },
+    {
+      "lessonHash": "ee482ceb7e8aa32a",
+      "lessonHeading": "Align tool contracts with runtime validation",
+      "message": "Zod array schema should use .nonempty() when the tool contract requires at least one value",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "z\\.array\\((?!.*\\.nonempty\\(\\))",
+      "compiledAt": "2026-05-06T21:40:22.503Z",
+      "createdAt": "2026-05-06T21:40:22.503Z",
+      "fileGlobs": [
+        "packages/mcp/src/tools/add-lesson.ts"
+      ],
+      "badExample": "const schema = z.object({ tags: z.array(z.string()) });",
+      "goodExample": "const schema = z.object({ tags: z.array(z.string()).nonempty() });",
+      "unverified": true,
+      "status": "archived",
+      "archivedAt": "2026-05-06T21:40:22.877Z",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 28 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .totem/specs/1488.md, .totem/specs/1663.md, .totem/specs/1683.md, .totem/specs/1684.md, .totem/specs/1713.md (+ 23 more). reasonCode: stage4-out-of-scope-match."
     }
   ],
   "nonCompilable": [
@@ -13523,10 +13542,10 @@
       "reason": "Lesson describes a structural orientation and architectural framework for multi-agent ecosystem governance. It contains no detectable code pattern — it covers repo composition, agent roles, tenets, handoff pipeline schemas, and re-derivation discipline. The lesson itself explicitly declares 'Compile classification: Yellow (per Tenet 9) — subjective interpretation, NOT compiled to regex/AST.'"
     },
     {
-      "hash": "803df9fb053025b5",
-      "title": "Hash-name filename convention is extract-pipeline-specific, not a directory mandate",
+      "hash": "0844f3943b0e187c",
+      "title": "Curated lessons are exempt from hash-name filenames",
       "reasonCode": "out-of-scope",
-      "reason": "Lesson describes a code review convention and naming-scheme interpretation rule — there is no detectable code pattern that distinguishes a 'curated' lesson filename from a 'hash-named' one in a way that could be flagged as a violation. The rule instructs reviewers NOT to flag descriptive filenames, which is a conceptual/architectural guideline about review behavior, not a source-code anti-pattern."
+      "reason": "Lesson describes a code review guideline and naming convention exemption — there is no detectable code pattern to flag. The rule instructs reviewers NOT to flag certain filenames, which is a negative constraint on reviewer behavior, not a source code anti-pattern that can be matched by regex or AST analysis."
     }
   ]
 }

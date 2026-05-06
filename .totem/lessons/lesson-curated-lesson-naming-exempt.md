@@ -1,4 +1,4 @@
-## Lesson — Hash-name filename convention is extract-pipeline-specific, not a directory mandate
+## Lesson — Curated lessons are exempt from hash-name filenames
 
 **Tags:** review-guidance, lesson-files, naming-conventions, gca-decline, curated
 
