@@ -172,3 +172,34 @@ identifiers by design. If a future change unifies them under a single scheme,
 that will be discussed in a strategy proposal under
 `<strategyRoot>/proposals/` (resolved by `resolveStrategyRoot`, typically a
 sibling `../totem-strategy/` clone), not as a code review finding.
+
+### Curated lessons are exempt from hash-named filenames
+
+The `lesson-XXXXXXXX.md` hash-name pattern documented above applies to
+**extracted lessons** produced by `totem extract` (the auto-derivation pipeline
+that turns PR-review feedback into lesson files). It is NOT a universal
+mandate for all files under `.totem/lessons/`.
+
+**Curated lessons** — manually authored lesson files committed by maintainers,
+typically Yellow / non-compilable architectural or convention guidance — use
+**descriptive kebab-case filenames** (`lesson-<descriptive-name>.md` or
+`<descriptive-name>.md`). This is the established convention since the project
+shipped, with 14+ examples in tree as of `mmnto-ai/totem#1836`:
+
+- `lesson-error-cause-chain.md`, `lesson-fail-open-catch-ban.md`
+- `lesson-forbid-child-process.md`, `lesson-forbid-inline-json-parse.md`
+- `lesson-forbid-raw-git-exec.md`, `lesson-knowledge-quality-chain.md`
+- `lesson-protect-lessons-md.md`, `lesson-spawn-shell-true-ban.md`
+- `lesson-security-audit.md`, `lesson-exported-mutable-let-ban.md`
+- `lesson-docs-regen-hallucination.md`, `lesson-agent-orientation.md`
+- `dev-environment-setup.md`, `testing-conventions.md`,
+  `maintainer-release-process.md`
+
+The export pipeline (`exportLessons` in `compile.ts`) operates on the in-file
+heading + body, NOT on the filename — so descriptive-named curated lessons
+flow through the pipeline identically to hash-named extracted lessons. Both
+coexist in `.totem/lessons/` without collision.
+
+**Do not flag** descriptive-named lesson filenames as styleguide violations.
+The `lesson-XXXXXXXX.md` hash convention is a property of the extract
+pipeline's output, not a constraint on the directory.
