@@ -514,15 +514,12 @@ export class LanceStore {
       const now = new Date().toISOString();
       for (const [filePath, count] of counts) {
         let origin = 'local';
-        const segments = filePath.split('/');
 
-        if (segments.indexOf('node_modules') !== -1) {
-          const matchArray = [...filePath.matchAll(/node_modules\/((?:@[^\/]+\/)?[^\/]+)/g)];
-          if (matchArray.length > 0 && matchArray[0]?.[1]) {
-            origin = matchArray[0][1];
+        if (filePath.includes('node_modules/')) {
+          const match = filePath.match(/node_modules\/((?:@[^/]+\/)?[^/]+)/);
+          if (match?.[1]) {
+            origin = match[1];
           }
-        } else if (segments.length > 1 && segments[0] === '.totem' && segments[1] === 'lessons') {
-          origin = 'local';
         }
 
         docs.push({

@@ -118,6 +118,38 @@ function writeSyncState(totemDir: string, state: SyncState): void {
   fs.writeFileSync(statePath, JSON.stringify(state, null, 2) + '\n', 'utf-8');
 }
 
+export interface ManifestDocument {
+  sourceFile: string;
+  origin: string;
+  rowCount: number;
+  lastSynced: string;
+}
+
+export interface IndexManifest {
+  schema: string;
+  writtenAt: string;
+  documents: ManifestDocument[];
+  gitCommit?: string;
+}
+
+export const INDEX_MANIFEST_SCHEMA = 'totem-index-manifest-v0.2';
+
+export function buildIndexManifest(input: {
+  documents: ManifestDocument[];
+  headSha: string | null | undefined;
+  writtenAt: Date;
+}): IndexManifest {
+  const manifest: IndexManifest = {
+    schema: INDEX_MANIFEST_SCHEMA,
+    writtenAt: input.writtenAt.toISOString(),
+    documents: input.documents,
+  };
+  if (input.headSha) {
+    manifest.gitCommit = `git:${input.headSha}`;
+  }
+  return manifest;
+}
+
 export async function runSync(
   config: TotemConfig,
   options: SyncOptions,
@@ -314,17 +346,11 @@ async function runSyncInner(
   // Persist index manifest for downstream consumers (e.g. totem-status Visor)
   try {
     const docs = await store.manifestDocuments();
-    const manifest = {
-      schema: 'totem-index-manifest-v0.1',
-      writtenAt: new Date().toISOString(),
-      indexHash: headSha ? `sha1:${headSha}` : 'sha1:unknown',
-      documents: docs,
-    };
+    const manifest = buildIndexManifest({ documents: docs, headSha, writtenAt: new Date() });
     const manifestPath = path.join(totemDir, 'index-manifest.json');
     const tmpManifestPath = manifestPath + '.tmp';
-    // totem-ignore
     fs.writeFileSync(tmpManifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
-    fs.renameSync(tmpManifestPath, manifestPath); // totem-context: intentional cleanup
+    fs.renameSync(tmpManifestPath, manifestPath);
   } catch (err) {
     const detail =
       err instanceof Error ? err.message : typeof err === 'string' ? err : 'unknown error';

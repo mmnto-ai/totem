@@ -454,4 +454,97 @@ describe('LanceStore', () => {
       expect(result.ftsAvailable).toBe(false);
     });
   });
+
+  describe('manifestDocuments', () => {
+    it('returns empty array when store is empty', async () => {
+      const docs = await store.manifestDocuments();
+      expect(docs).toEqual([]);
+    });
+
+    it('groups rows by filePath with row counts', async () => {
+      await store.insert([
+        makeChunk({ filePath: 'src/a.ts', content: 'a1' }),
+        makeChunk({ filePath: 'src/a.ts', content: 'a2' }),
+        makeChunk({ filePath: 'src/b.ts', content: 'b1' }),
+      ]);
+
+      const docs = await store.manifestDocuments();
+
+      expect(docs).toHaveLength(2);
+      const a = docs.find((d) => d.sourceFile === 'src/a.ts');
+      const b = docs.find((d) => d.sourceFile === 'src/b.ts');
+      expect(a?.rowCount).toBe(2);
+      expect(b?.rowCount).toBe(1);
+    });
+
+    it('returns docs sorted by sourceFile', async () => {
+      await store.insert([
+        makeChunk({ filePath: 'z/last.ts', content: 'z' }),
+        makeChunk({ filePath: 'a/first.ts', content: 'a' }),
+        makeChunk({ filePath: 'm/middle.ts', content: 'm' }),
+      ]);
+
+      const docs = await store.manifestDocuments();
+
+      expect(docs.map((d) => d.sourceFile)).toEqual(['a/first.ts', 'm/middle.ts', 'z/last.ts']);
+    });
+
+    it('derives origin "local" for repo paths', async () => {
+      await store.insert([
+        makeChunk({ filePath: 'src/foo.ts', content: 'x' }),
+        makeChunk({ filePath: '.totem/lessons/lesson-abc.md', content: 'y', type: 'spec' }),
+        makeChunk({ filePath: 'docs/readme.md', content: 'z', type: 'spec' }),
+      ]);
+
+      const docs = await store.manifestDocuments();
+
+      for (const d of docs) {
+        expect(d.origin).toBe('local');
+      }
+    });
+
+    it('derives origin from node_modules pkg name (scoped)', async () => {
+      await store.insert([
+        makeChunk({ filePath: 'node_modules/@mmnto/totem/dist/index.js', content: 'x' }),
+      ]);
+
+      const docs = await store.manifestDocuments();
+
+      expect(docs[0]?.origin).toBe('@mmnto/totem');
+    });
+
+    it('derives origin from node_modules pkg name (unscoped)', async () => {
+      await store.insert([makeChunk({ filePath: 'node_modules/lodash/index.js', content: 'x' })]);
+
+      const docs = await store.manifestDocuments();
+
+      expect(docs[0]?.origin).toBe('lodash');
+    });
+
+    it('does not special-case any specific filename or path identity', async () => {
+      // Regression guard: a hardcoded `.totem/lessons` path-identity branch
+      // previously existed in the writer (tagged for status-Gemini mock-data
+      // matching). Stripped per Tenet 14 — origin must derive from structural
+      // signal (node_modules presence) only, not path-identity matches.
+      await store.insert([
+        makeChunk({
+          filePath: '.totem/lessons/lesson-agent-orientation.md',
+          content: 'x',
+          type: 'spec',
+        }),
+      ]);
+
+      const docs = await store.manifestDocuments();
+
+      expect(docs[0]?.origin).toBe('local');
+    });
+
+    it('populates lastSynced as ISO timestamp', async () => {
+      await store.insert([makeChunk({ filePath: 'src/x.ts', content: 'x' })]);
+
+      const docs = await store.manifestDocuments();
+
+      expect(docs[0]?.lastSynced).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+    });
+  });
 });
