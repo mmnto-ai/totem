@@ -488,4 +488,53 @@ export class LanceStore {
       () => this.hasFtsIndex,
     );
   }
+
+  /**
+   * Generates the documents array for the index manifest.
+   * Groups rows by filePath and computes row counts.
+   */
+  async manifestDocuments(): Promise<
+    { sourceFile: string; origin: string; rowCount: number; lastSynced: string }[]
+  > {
+    if (!this.table) return [];
+
+    const snapshot = await this.openReadSnapshot();
+    try {
+      if (!snapshot.table) return [];
+      const rows = await snapshot.table.query().select(['filePath']).toArray();
+      const counts = new Map<string, number>();
+      for (const r of rows) {
+        const p = r['filePath'];
+        if (typeof p === 'string') {
+          counts.set(p, (counts.get(p) ?? 0) + 1);
+        }
+      }
+
+      const docs = [];
+      const now = new Date().toISOString();
+      for (const [filePath, count] of counts) {
+        let origin = 'local';
+        const segments = filePath.split('/');
+
+        if (segments.indexOf('node_modules') !== -1) {
+          const matchArray = [...filePath.matchAll(/node_modules\/((?:@[^\/]+\/)?[^\/]+)/g)];
+          if (matchArray.length > 0 && matchArray[0]?.[1]) {
+            origin = matchArray[0][1];
+          }
+        } else if (segments.length > 1 && segments[0] === '.totem' && segments[1] === 'lessons') {
+          origin = 'local';
+        }
+
+        docs.push({
+          sourceFile: filePath,
+          origin,
+          rowCount: count,
+          lastSynced: now,
+        });
+      }
+      return docs.sort((a, b) => a.sourceFile.localeCompare(b.sourceFile));
+    } finally {
+      closeReadSnapshot(snapshot.db, this.onWarn);
+    }
+  }
 }

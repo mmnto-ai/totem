@@ -311,6 +311,26 @@ async function runSyncInner(
     lastSync: new Date().toISOString(),
   });
 
+  // Persist index manifest for downstream consumers (e.g. totem-status Visor)
+  try {
+    const docs = await store.manifestDocuments();
+    const manifest = {
+      schema: 'totem-index-manifest-v0.1',
+      writtenAt: new Date().toISOString(),
+      indexHash: headSha ? `sha1:${headSha}` : 'sha1:unknown',
+      documents: docs,
+    };
+    const manifestPath = path.join(totemDir, 'index-manifest.json');
+    const tmpManifestPath = manifestPath + '.tmp';
+    // totem-ignore
+    fs.writeFileSync(tmpManifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
+    fs.renameSync(tmpManifestPath, manifestPath); // totem-context: intentional cleanup
+  } catch (err) {
+    const detail =
+      err instanceof Error ? err.message : typeof err === 'string' ? err : 'unknown error';
+    log(`Warning: Failed to write index-manifest.json: ${detail}`);
+  }
+
   // Get total chunk count from the store (includes pre-existing chunks from incremental syncs)
   let totalStoredChunks = totalChunks;
   try {
