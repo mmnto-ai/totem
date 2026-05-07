@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { TotemConfig } from '../config-schema.js';
 import { TotemConfigSchema } from '../config-schema.js';
 import { cleanTmpDir } from '../test-utils.js';
-import { runSync } from './pipeline.js';
+import { buildIndexManifest, INDEX_MANIFEST_SCHEMA, runSync } from './pipeline.js';
 
 // Import the internal helpers via a workaround — we test the state file contract
 // since readSyncState/writeSyncState are not exported directly.
@@ -114,5 +114,62 @@ describe('runSync embedding guard', () => {
     await expect(runSync(config, { projectRoot: os.tmpdir(), incremental: false })).rejects.toThrow(
       'No embedding provider configured',
     );
+  });
+});
+
+describe('buildIndexManifest', () => {
+  const writtenAt = new Date('2026-05-07T00:00:00.000Z');
+  const docs = [
+    {
+      sourceFile: 'src/a.ts',
+      origin: 'local',
+      rowCount: 3,
+      lastSynced: '2026-05-07T00:00:00.000Z',
+    },
+  ];
+
+  it('writes the v0.2 schema identifier', () => {
+    const m = buildIndexManifest({ documents: docs, headSha: 'abc123', writtenAt });
+    expect(m.schema).toBe('totem-index-manifest-v0.2');
+    expect(INDEX_MANIFEST_SCHEMA).toBe('totem-index-manifest-v0.2');
+  });
+
+  it('includes documents array verbatim', () => {
+    const m = buildIndexManifest({ documents: docs, headSha: 'abc123', writtenAt });
+    expect(m.documents).toEqual(docs);
+  });
+
+  it('serializes writtenAt as an ISO timestamp', () => {
+    const m = buildIndexManifest({ documents: docs, headSha: 'abc123', writtenAt });
+    expect(m.writtenAt).toBe('2026-05-07T00:00:00.000Z');
+  });
+
+  it('emits gitCommit with git: prefix when headSha is provided', () => {
+    const m = buildIndexManifest({ documents: docs, headSha: 'abc123def456', writtenAt });
+    expect(m.gitCommit).toBe('git:abc123def456');
+  });
+
+  it('OMITS gitCommit field when headSha is null', () => {
+    const m = buildIndexManifest({ documents: docs, headSha: null, writtenAt });
+    expect(m.gitCommit).toBeUndefined();
+    expect('gitCommit' in m).toBe(false);
+  });
+
+  it('OMITS gitCommit field when headSha is empty string', () => {
+    const m = buildIndexManifest({ documents: docs, headSha: '', writtenAt });
+    expect('gitCommit' in m).toBe(false);
+  });
+
+  it('does not synthesize a fake hash URI on no-git (Tenet 14: honest absence)', () => {
+    const m = buildIndexManifest({ documents: docs, headSha: undefined, writtenAt });
+    const serialized = JSON.stringify(m);
+    expect(serialized).not.toMatch(/sha\d+:unknown/);
+    expect(serialized).not.toMatch(/sha1:/);
+    expect(serialized).not.toMatch(/sha256:/);
+  });
+
+  it('does not label the git commit as indexHash (Tenet 14: identity ≠ content hash)', () => {
+    const m = buildIndexManifest({ documents: docs, headSha: 'abc123', writtenAt });
+    expect('indexHash' in m).toBe(false);
   });
 });

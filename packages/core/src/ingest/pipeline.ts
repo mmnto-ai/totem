@@ -118,6 +118,79 @@ function writeSyncState(totemDir: string, state: SyncState): void {
   fs.writeFileSync(statePath, JSON.stringify(state, null, 2) + '\n', 'utf-8');
 }
 
+/**
+ * One entry in the index-manifest `documents[]` array.
+ *
+ * `lastSynced` is the time the manifest itself was written, not a per-document
+ * sync timestamp — LanceDB rows do not currently carry per-row sync timestamps,
+ * so every document in a single manifest carries the same `lastSynced` value
+ * (equal to `IndexManifest.writtenAt`). Treat it as a manifest-level signal,
+ * not as per-document staleness data.
+ */
+export interface ManifestDocument {
+  sourceFile: string;
+  /**
+   * Pack name (`@scope/pkg` or `pkg`) when the source file lives under
+   * `node_modules/`; otherwise `local`. Derived from path structure only;
+   * never from filename- or path-identity matches.
+   */
+  origin: string;
+  rowCount: number;
+  /** See `ManifestDocument` doc-comment — this is manifest-write time, not per-doc sync time. */
+  lastSynced: string;
+}
+
+/**
+ * Persisted contents of `.totem/index-manifest.json`.
+ *
+ * Schema is versioned via {@link INDEX_MANIFEST_SCHEMA}. Consumers (e.g. the
+ * `totem-status` Visor TUI) read this file to enumerate indexed documents
+ * without needing the LanceDB Go/CGO bindings.
+ *
+ * `gitCommit` carries `git:<sha>` when a HEAD SHA is available at sync time.
+ * The field is OMITTED entirely when no git SHA is available — never
+ * synthesized as a fake-presence value (Tenet 14: honest absence over fake
+ * presence; identity hashes must not masquerade as content hashes).
+ */
+export interface IndexManifest {
+  schema: string;
+  writtenAt: string;
+  documents: ManifestDocument[];
+  gitCommit?: string;
+}
+
+/** Current schema identifier persisted to `.totem/index-manifest.json`. */
+export const INDEX_MANIFEST_SCHEMA = 'totem-index-manifest-v0.2';
+
+/**
+ * Builds an {@link IndexManifest} payload from the per-document data and the
+ * sync run's HEAD SHA + write timestamp.
+ *
+ * - `writtenAt` is serialized to ISO-8601.
+ * - `gitCommit` is included as `git:<sha>` only when `input.headSha` is a
+ *   non-empty string; null / undefined / `''` cause the field to be omitted
+ *   entirely (no `sha1:unknown` or other synthesized fake-presence values).
+ * - `schema` is always set to {@link INDEX_MANIFEST_SCHEMA}.
+ *
+ * Pure helper — does not touch the filesystem. The sync pipeline is
+ * responsible for atomic write/rename of the returned payload.
+ */
+export function buildIndexManifest(input: {
+  documents: ManifestDocument[];
+  headSha: string | null | undefined;
+  writtenAt: Date;
+}): IndexManifest {
+  const manifest: IndexManifest = {
+    schema: INDEX_MANIFEST_SCHEMA,
+    writtenAt: input.writtenAt.toISOString(),
+    documents: input.documents,
+  };
+  if (input.headSha) {
+    manifest.gitCommit = `git:${input.headSha}`;
+  }
+  return manifest;
+}
+
 export async function runSync(
   config: TotemConfig,
   options: SyncOptions,
@@ -313,18 +386,15 @@ async function runSyncInner(
 
   // Persist index manifest for downstream consumers (e.g. totem-status Visor)
   try {
-    const docs = await store.manifestDocuments();
-    const manifest = {
-      schema: 'totem-index-manifest-v0.1',
-      writtenAt: new Date().toISOString(),
-      indexHash: headSha ? `sha1:${headSha}` : 'sha1:unknown',
-      documents: docs,
-    };
+    // Single timestamp threaded through both manifestDocuments() and buildIndexManifest
+    // so documents[].lastSynced == manifest.writtenAt, per the v0.2 contract.
+    const writtenAt = new Date();
+    const docs = await store.manifestDocuments(writtenAt);
+    const manifest = buildIndexManifest({ documents: docs, headSha, writtenAt });
     const manifestPath = path.join(totemDir, 'index-manifest.json');
     const tmpManifestPath = manifestPath + '.tmp';
-    // totem-ignore
     fs.writeFileSync(tmpManifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
-    fs.renameSync(tmpManifestPath, manifestPath); // totem-context: intentional cleanup
+    fs.renameSync(tmpManifestPath, manifestPath);
   } catch (err) {
     const detail =
       err instanceof Error ? err.message : typeof err === 'string' ? err : 'unknown error';

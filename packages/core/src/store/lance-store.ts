@@ -490,12 +490,23 @@ export class LanceStore {
   }
 
   /**
-   * Generates the documents array for the index manifest.
-   * Groups rows by filePath and computes row counts.
+   * Returns one entry per distinct `filePath` in the store, with row counts
+   * and a derived `origin` (`@scope/pkg` or `pkg` when the path lives under
+   * `node_modules/`, otherwise `local`).
+   *
+   * `lastSynced` on every returned entry is set to the supplied `writtenAt`
+   * timestamp (or `new Date()` if omitted). LanceDB rows do not carry per-row
+   * sync timestamps in the current schema, so every document in a single
+   * manifest necessarily carries the same `lastSynced` value — callers
+   * building an `IndexManifest` should pass their `writtenAt` here so that
+   * `documents[].lastSynced === manifest.writtenAt` for that run.
+   *
+   * Output is sorted by `sourceFile` ascending so the manifest payload is
+   * deterministic across runs.
    */
-  async manifestDocuments(): Promise<
-    { sourceFile: string; origin: string; rowCount: number; lastSynced: string }[]
-  > {
+  async manifestDocuments(
+    writtenAt: Date = new Date(),
+  ): Promise<{ sourceFile: string; origin: string; rowCount: number; lastSynced: string }[]> {
     if (!this.table) return [];
 
     const snapshot = await this.openReadSnapshot();
@@ -511,25 +522,24 @@ export class LanceStore {
       }
 
       const docs = [];
-      const now = new Date().toISOString();
+      const lastSynced = writtenAt.toISOString();
       for (const [filePath, count] of counts) {
         let origin = 'local';
-        const segments = filePath.split('/');
+        // Normalize backslashes so Windows-style paths classify the same as POSIX.
+        const normalizedPath = filePath.replace(/\\/g, '/');
 
-        if (segments.indexOf('node_modules') !== -1) {
-          const matchArray = [...filePath.matchAll(/node_modules\/((?:@[^\/]+\/)?[^\/]+)/g)];
-          if (matchArray.length > 0 && matchArray[0]?.[1]) {
-            origin = matchArray[0][1];
+        if (normalizedPath.includes('node_modules/')) {
+          const match = normalizedPath.match(/node_modules\/((?:@[^/]+\/)?[^/]+)/);
+          if (match?.[1]) {
+            origin = match[1];
           }
-        } else if (segments.length > 1 && segments[0] === '.totem' && segments[1] === 'lessons') {
-          origin = 'local';
         }
 
         docs.push({
           sourceFile: filePath,
           origin,
           rowCount: count,
-          lastSynced: now,
+          lastSynced,
         });
       }
       return docs.sort((a, b) => a.sourceFile.localeCompare(b.sourceFile));

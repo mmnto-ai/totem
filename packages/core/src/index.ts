@@ -131,10 +131,12 @@ export { TOTEM_TABLE_NAME } from './store/lance-schema.js';
 export { LanceStore } from './store/lance-store.js';
 
 // Pipeline
-export type { ResolvedFile } from './ingest/sync.js';
+export type { IndexManifest, ManifestDocument, ResolvedFile } from './ingest/sync.js';
 export {
+  buildIndexManifest,
   getChangedFiles,
   getHeadSha,
+  INDEX_MANIFEST_SCHEMA,
   resolveFiles,
   runSync,
   verifyIndexMeta,

@@ -53,6 +53,7 @@ packages/pack-rust-architecture/tree-sitter-rust.wasm
 .totem/.search-called
 .totem/review-extensions.txt
 .totem/installed-packs.json
+.totem/index-manifest.json
 
 # Local scratchpad (personal scratch files go here, not in root)
 scratchpad/
