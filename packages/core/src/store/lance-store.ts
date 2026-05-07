@@ -490,8 +490,18 @@ export class LanceStore {
   }
 
   /**
-   * Generates the documents array for the index manifest.
-   * Groups rows by filePath and computes row counts.
+   * Returns one entry per distinct `filePath` in the store, with row counts
+   * and a derived `origin` (`@scope/pkg` or `pkg` when the path lives under
+   * `node_modules/`, otherwise `local`).
+   *
+   * `lastSynced` on every returned entry is the moment this method runs, not
+   * a per-document sync timestamp — LanceDB rows do not carry per-row sync
+   * timestamps in the current schema. Callers that need per-document
+   * staleness data must derive it elsewhere; this method's `lastSynced` is
+   * effectively a manifest-write timestamp.
+   *
+   * Output is sorted by `sourceFile` ascending so the manifest payload is
+   * deterministic across runs.
    */
   async manifestDocuments(): Promise<
     { sourceFile: string; origin: string; rowCount: number; lastSynced: string }[]
