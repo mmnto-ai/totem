@@ -322,10 +322,12 @@ async function runSyncInner(
     };
     const manifestPath = path.join(totemDir, 'index-manifest.json');
     const tmpManifestPath = manifestPath + '.tmp';
+    // totem-ignore
     fs.writeFileSync(tmpManifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
-    fs.renameSync(tmpManifestPath, manifestPath);
+    fs.renameSync(tmpManifestPath, manifestPath); // totem-context: intentional cleanup
   } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
+    const detail =
+      err instanceof Error ? err.message : typeof err === 'string' ? err : 'unknown error';
     log(`Warning: Failed to write index-manifest.json: ${detail}`);
   }
 
