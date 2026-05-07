@@ -546,5 +546,21 @@ describe('LanceStore', () => {
 
       expect(docs[0]?.lastSynced).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     });
+
+    it('uses the supplied writtenAt for every doc lastSynced (manifest-write invariant)', async () => {
+      await store.insert([
+        makeChunk({ filePath: 'src/a.ts', content: 'a' }),
+        makeChunk({ filePath: 'src/b.ts', content: 'b' }),
+        makeChunk({ filePath: 'src/c.ts', content: 'c' }),
+      ]);
+
+      const writtenAt = new Date('2026-05-07T12:34:56.789Z');
+      const docs = await store.manifestDocuments(writtenAt);
+
+      expect(docs).toHaveLength(3);
+      for (const d of docs) {
+        expect(d.lastSynced).toBe('2026-05-07T12:34:56.789Z');
+      }
+    });
   });
 });

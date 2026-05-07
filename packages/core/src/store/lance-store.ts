@@ -494,18 +494,19 @@ export class LanceStore {
    * and a derived `origin` (`@scope/pkg` or `pkg` when the path lives under
    * `node_modules/`, otherwise `local`).
    *
-   * `lastSynced` on every returned entry is the moment this method runs, not
-   * a per-document sync timestamp — LanceDB rows do not carry per-row sync
-   * timestamps in the current schema. Callers that need per-document
-   * staleness data must derive it elsewhere; this method's `lastSynced` is
-   * effectively a manifest-write timestamp.
+   * `lastSynced` on every returned entry is set to the supplied `writtenAt`
+   * timestamp (or `new Date()` if omitted). LanceDB rows do not carry per-row
+   * sync timestamps in the current schema, so every document in a single
+   * manifest necessarily carries the same `lastSynced` value — callers
+   * building an `IndexManifest` should pass their `writtenAt` here so that
+   * `documents[].lastSynced === manifest.writtenAt` for that run.
    *
    * Output is sorted by `sourceFile` ascending so the manifest payload is
    * deterministic across runs.
    */
-  async manifestDocuments(): Promise<
-    { sourceFile: string; origin: string; rowCount: number; lastSynced: string }[]
-  > {
+  async manifestDocuments(
+    writtenAt: Date = new Date(),
+  ): Promise<{ sourceFile: string; origin: string; rowCount: number; lastSynced: string }[]> {
     if (!this.table) return [];
 
     const snapshot = await this.openReadSnapshot();
@@ -521,7 +522,7 @@ export class LanceStore {
       }
 
       const docs = [];
-      const now = new Date().toISOString();
+      const lastSynced = writtenAt.toISOString();
       for (const [filePath, count] of counts) {
         let origin = 'local';
 
@@ -536,7 +537,7 @@ export class LanceStore {
           sourceFile: filePath,
           origin,
           rowCount: count,
-          lastSynced: now,
+          lastSynced,
         });
       }
       return docs.sort((a, b) => a.sourceFile.localeCompare(b.sourceFile));

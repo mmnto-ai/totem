@@ -386,8 +386,11 @@ async function runSyncInner(
 
   // Persist index manifest for downstream consumers (e.g. totem-status Visor)
   try {
-    const docs = await store.manifestDocuments();
-    const manifest = buildIndexManifest({ documents: docs, headSha, writtenAt: new Date() });
+    // Single timestamp threaded through both manifestDocuments() and buildIndexManifest
+    // so documents[].lastSynced == manifest.writtenAt, per the v0.2 contract.
+    const writtenAt = new Date();
+    const docs = await store.manifestDocuments(writtenAt);
+    const manifest = buildIndexManifest({ documents: docs, headSha, writtenAt });
     const manifestPath = path.join(totemDir, 'index-manifest.json');
     const tmpManifestPath = manifestPath + '.tmp';
     fs.writeFileSync(tmpManifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
