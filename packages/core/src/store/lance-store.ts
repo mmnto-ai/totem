@@ -525,10 +525,6 @@ export class LanceStore {
           origin = 'local';
         }
 
-        // Force @mmnto/totem origin for the orientation lesson for exact mock alignment if it's copied locally
-        if (filePath.endsWith('lesson-agent-orientation.md')) {
-          origin = '@mmnto/totem';
-        }
         docs.push({
           sourceFile: filePath,
           origin,

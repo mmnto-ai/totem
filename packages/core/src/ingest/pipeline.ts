@@ -317,7 +317,7 @@ async function runSyncInner(
     const manifest = {
       schema: 'totem-index-manifest-v0.1',
       writtenAt: new Date().toISOString(),
-      indexHash: headSha ? `sha256:${headSha}` : 'sha256:unknown',
+      indexHash: headSha ? `sha1:${headSha}` : 'sha1:unknown',
       documents: docs,
     };
     const manifestPath = path.join(totemDir, 'index-manifest.json');
