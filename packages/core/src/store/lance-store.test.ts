@@ -521,6 +521,20 @@ describe('LanceStore', () => {
       expect(docs[0]?.origin).toBe('lodash');
     });
 
+    it('derives origin correctly from Windows-style backslash paths', async () => {
+      await store.insert([
+        makeChunk({ filePath: 'node_modules\\@mmnto\\totem\\dist\\index.js', content: 'x' }),
+        makeChunk({ filePath: 'node_modules\\lodash\\index.js', content: 'y' }),
+      ]);
+
+      const docs = await store.manifestDocuments();
+      const scoped = docs.find((d) => d.sourceFile.includes('@mmnto'));
+      const unscoped = docs.find((d) => d.sourceFile.includes('lodash'));
+
+      expect(scoped?.origin).toBe('@mmnto/totem');
+      expect(unscoped?.origin).toBe('lodash');
+    });
+
     it('does not special-case any specific filename or path identity', async () => {
       // Regression guard: a hardcoded `.totem/lessons` path-identity branch
       // previously existed in the writer (tagged for status-Gemini mock-data

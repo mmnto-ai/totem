@@ -525,9 +525,11 @@ export class LanceStore {
       const lastSynced = writtenAt.toISOString();
       for (const [filePath, count] of counts) {
         let origin = 'local';
+        // Normalize backslashes so Windows-style paths classify the same as POSIX.
+        const normalizedPath = filePath.replace(/\\/g, '/');
 
-        if (filePath.includes('node_modules/')) {
-          const match = filePath.match(/node_modules\/((?:@[^/]+\/)?[^/]+)/);
+        if (normalizedPath.includes('node_modules/')) {
+          const match = normalizedPath.match(/node_modules\/((?:@[^/]+\/)?[^/]+)/);
           if (match?.[1]) {
             origin = match[1];
           }
