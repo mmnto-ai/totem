@@ -63,6 +63,22 @@ ${REFLEX_END}
 
 export const TOTEM_FILE_MARKER = '// [totem] auto-generated';
 
+// ─── Bare-ref regex (xrepo-qualify-refs sealed at mmnto-ai/totem-strategy#145) ───
+//
+// Mirrors the compiled rule pattern at lessonHash "xrepo-qualify-refs"
+// in mmnto-ai/totem-strategy:.totem/compiled-rules.json.
+// Seal SHA: c488888b (mmnto-ai/totem-strategy#145, merged 2026-04-26).
+//
+// If the lint-side rule changes shape, update this constant too — readers
+// can verify "is the rule still the same shape?" by comparing the seal SHA
+// pointer against the current totem-strategy compiled-rules.json.
+//
+// The regex matches bare `#NNN` references that are NOT preceded by an
+// `owner/repo` qualifier and NOT followed by an alpha/dash character
+// (excludes anchor-style IDs like `#section-2`).
+
+export const BARE_REF_REGEX_SOURCE = '(?<!\\b[\\w-]+/[\\w-]+)#(\\d+)(?![-\\w])';
+
 // --- Gemini CLI hook templates ---
 
 export const GEMINI_SESSION_START = `// [totem] auto-generated — Gemini CLI SessionStart hook
@@ -80,10 +96,48 @@ try {
 `;
 
 export const GEMINI_BEFORE_TOOL = `// [totem] auto-generated — Gemini CLI BeforeTool hook
-// Intercepts git push/commit to run \`totem review\` before proceeding.
+// Intercepts:
+//   1. git push/commit   → run \`totem lint\` before proceeding (existing shield-gate behavior)
+//   2. write_file/edit_file → block bare cross-repo refs in substrate paths
+//      (xrepo-qualify-refs, sealed in mmnto-ai/totem-strategy#145)
 const { execSync } = require('child_process');
 
+const BARE_REF_REGEX_SOURCE = ${JSON.stringify(BARE_REF_REGEX_SOURCE)};
+const SCOPED_PATH_RE = /(\\.handoff[\\\\\\/]|\\.journal[\\\\\\/]|\\.md$)/i;
+const SUPPRESS_DIRECTIVE_RE = /<!--\\s*totem-context:/;
+
+function checkXrepoQualifyRefs(toolName, toolInput) {
+  if (toolName !== 'write_file' && toolName !== 'edit_file') return;
+  const input = (typeof toolInput === 'object' && toolInput !== null) ? toolInput : {};
+  const filePath = String(input.file_path || input.path || '');
+  if (!SCOPED_PATH_RE.test(filePath)) return;
+  const content = input.content !== undefined ? input.content : input.new_string;
+  if (typeof content !== 'string') return;
+
+  const lines = content.split(/\\r?\\n/);
+  const filtered = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const prev = i > 0 ? lines[i - 1] : '';
+    if (SUPPRESS_DIRECTIVE_RE.test(line) || SUPPRESS_DIRECTIVE_RE.test(prev)) continue;
+    filtered.push(line);
+  }
+  const re = new RegExp(BARE_REF_REGEX_SOURCE, 'g');
+  const matches = [...filtered.join('\\n').matchAll(re)];
+  if (matches.length === 0) return;
+
+  const refs = matches.slice(0, 5).map((m) => '#' + m[1]).join(', ');
+  throw new Error(
+    '[totem PreWriteShield] Bare PR/issue reference(s) in write to ' + filePath + ': ' + refs + '. ' +
+    'Qualify each as <owner>/<repo>#NNN (e.g., mmnto-ai/totem#1234). ' +
+    'For verbatim quotation, prefix with a <!-- totem-context: <reason> --> directive on the preceding line. ' +
+    'Sealed in mmnto-ai/totem-strategy#145.',
+  );
+}
+
 module.exports = function beforeTool(toolName, toolInput) {
+  checkXrepoQualifyRefs(toolName, toolInput);
+
   if (toolName !== 'run_shell_command') return;
   const cmd = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput);
   if (!/git\\s+(push|commit)/.test(cmd) && !/["']git["'].*["'](push|commit)["']/.test(cmd)) return;
@@ -130,6 +184,112 @@ export const CLAUDE_PRETOOLUSE_ENTRY = {
     {
       type: 'command',
       command: 'node .totem/hooks/shield-gate.cjs',
+    },
+  ],
+};
+
+// ─── PreWriteShield: write-time xrepo-qualify-refs enforcement ──────────
+//
+// Intercepts Write/Edit tool calls in substrate-participating paths
+// (.handoff/**, .journal/**, *.md) and blocks bare PR/issue references
+// before they hit disk. Eliminates the agent friction loop where a write
+// only fails at commit-time (`totem lint` pre-commit).
+//
+// Exit-code contract is load-bearing — see hook source for details.
+//
+// Per OQ 2 of mmnto-ai/totem#1846 design: this entry installs into
+// committed `.claude/settings.json` (team-level guarantee) — distinct
+// from CLAUDE_PRETOOLUSE_ENTRY which lives in `.claude/settings.local.json`
+// (per-developer environment safety). The asymmetry reflects the
+// architectural distinction between seal-anchored substrate enforcement
+// and per-developer command interception.
+
+export const CLAUDE_PREWRITESHIELD = `// [totem] auto-generated — Claude Code PreWriteShield hook
+// Write-time enforcement of xrepo-qualify-refs.
+// Sealed in mmnto-ai/totem-strategy#145 (seal SHA c488888b).
+//
+// Mirrors the compiled rule pattern at lessonHash "xrepo-qualify-refs"
+// in mmnto-ai/totem-strategy:.totem/compiled-rules.json.
+//
+// Exit-code contract (LOAD-BEARING — preserves the rule encoded as numbers):
+//   0 = allow (no violation, out of scope, or hook-internal failure → fail-soft)
+//   1 = hook-internal error (distinguish from intentional block)
+//   2 = block (Claude Code blocking convention; bare ref detected in scoped path)
+//
+// Fail-soft on parse errors / non-string content: \`totem lint\` at
+// commit-time remains the hard gate. The hook tightens the loop where
+// it can; it does not weaken the existing commit-time guarantee.
+'use strict';
+
+const BARE_REF_REGEX_SOURCE = ${JSON.stringify(BARE_REF_REGEX_SOURCE)};
+const SCOPED_PATH_RE = /(\\.handoff[\\\\\\/]|\\.journal[\\\\\\/]|\\.md$)/i;
+const SUPPRESS_DIRECTIVE_RE = /<!--\\s*totem-context:/;
+
+let stdin = '';
+process.stdin.setEncoding('utf-8');
+process.stdin.on('data', (chunk) => {
+  stdin += chunk;
+});
+process.stdin.on('end', () => {
+  let parsed;
+  try {
+    parsed = stdin ? JSON.parse(stdin) : {};
+  } catch (err) {
+    process.stderr.write('[totem PreWriteShield] could not parse stdin JSON; allowing\\n');
+    process.exit(0);
+  }
+
+  const toolName = parsed.tool_name;
+  if (toolName !== 'Write' && toolName !== 'Edit') {
+    process.exit(0);
+  }
+
+  const input = (typeof parsed.tool_input === 'object' && parsed.tool_input !== null) ? parsed.tool_input : {};
+  const filePath = String(input.file_path || '');
+  if (!SCOPED_PATH_RE.test(filePath)) {
+    process.exit(0);
+  }
+
+  const content = input.content !== undefined ? input.content : input.new_string;
+  if (typeof content !== 'string') {
+    process.stderr.write('[totem PreWriteShield] non-string content; allowing\\n');
+    process.exit(0);
+  }
+
+  // Suppression-directive bypass mirrors rule-engine.ts isSuppressed
+  // (line + preceding-line window).
+  const lines = content.split(/\\r?\\n/);
+  const filtered = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const prev = i > 0 ? lines[i - 1] : '';
+    if (SUPPRESS_DIRECTIVE_RE.test(line) || SUPPRESS_DIRECTIVE_RE.test(prev)) continue;
+    filtered.push(line);
+  }
+
+  const re = new RegExp(BARE_REF_REGEX_SOURCE, 'g');
+  const matches = [...filtered.join('\\n').matchAll(re)];
+  if (matches.length === 0) {
+    process.exit(0);
+  }
+
+  const refs = matches.slice(0, 5).map((m) => '#' + m[1]).join(', ');
+  process.stderr.write(
+    '[totem PreWriteShield] Bare PR/issue reference(s) in write to ' + filePath + ': ' + refs + '\\n' +
+    'Qualify each as \`<owner>/<repo>#NNN\` before writing (e.g., \`mmnto-ai/totem#1234\`).\\n' +
+    'For verbatim quotation, prefix with a \`<!-- totem-context: <reason> -->\` directive on the preceding line.\\n' +
+    'Sealed in mmnto-ai/totem-strategy#145.\\n',
+  );
+  process.exit(2);
+});
+`;
+
+export const CLAUDE_PREWRITESHIELD_ENTRY = {
+  matcher: 'Write|Edit',
+  hooks: [
+    {
+      type: 'command',
+      command: 'node .claude/hooks/PreWriteShield.cjs',
     },
   ],
 };
