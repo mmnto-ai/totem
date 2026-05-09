@@ -185,9 +185,11 @@ function mergeClaudePreToolUseEntry(
     const result = ClaudeSettingsSchema.safeParse(rawParsed);
     if (!result.success) {
       const detail = result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
+      // Prefix not added here — call site (initCommand) emits via
+      // log.error('Totem Error', ...) which adds the prefix automatically.
       return {
         action: 'skipped',
-        err: `[Totem Error] Could not merge config: ${fileName} has unexpected shape: ${detail}`,
+        err: `Could not merge config: ${fileName} has unexpected shape: ${detail}`,
       };
     }
 
