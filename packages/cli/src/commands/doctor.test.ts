@@ -381,11 +381,20 @@ describe('doctorCommand', () => {
       path.join(totemDir, 'compiled-rules.json'),
       JSON.stringify({ version: 1, rules: [] }),
     );
+
+    // checkOllama transitively probes http://localhost:11434/api/tags via the
+    // exported isOllamaAvailable. Force it to resolve `false` deterministically
+    // so this integration suite stays environment-independent and doesn't pay
+    // the 3s AbortSignal timeout in CI (mmnto-ai/totem#1860 CR R1).
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+    );
   });
 
   afterEach(() => {
     process.chdir(originalCwd);
     cleanTmpDir(tmpDir);
+    vi.restoreAllMocks();
   });
 
   it('runs without throwing', async () => {
@@ -434,12 +443,17 @@ describe('doctorCommand output', () => {
     );
 
     stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // See sibling describe's beforeEach (mmnto-ai/totem#1860 CR R1).
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+    );
   });
 
   afterEach(() => {
     process.chdir(originalCwd);
     cleanTmpDir(tmpDir);
-    stderrSpy.mockRestore();
+    vi.restoreAllMocks();
   });
 
   it('outputs all check names in console output', async () => {
