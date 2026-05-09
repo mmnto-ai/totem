@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { EmbeddingProvider } from '../config-schema.js';
+import { TotemConfigError } from '../errors.js';
 import { createEmbedder } from './embedder.js';
 
 // ─── Mock OpenAI embedder ──────────────────────────
@@ -85,5 +86,105 @@ describe('LazyEmbedder concurrency', () => {
     expect(r1).toHaveLength(1);
     expect(r2).toHaveLength(1);
     expect(r3).toHaveLength(1);
+  });
+});
+
+// The fallback chain triggers when `tryBuildEmbedder` throws (typically the
+// configured provider's constructor failing on missing API key). When Ollama
+// is also unreachable, callers MUST get the documented 3-step
+// `TotemConfigError`. Regressing this contract pushes consumers back toward
+// vendor-coupling workarounds (mmnto-ai/totem-status#8 → upstream-feedback/064 →
+// mmnto-ai/totem#1851). The Gemini SDK-missing path is asymmetric and tracked
+// separately as mmnto-ai/totem#1859.
+describe('LazyEmbedder fallback chain — regression contract (mmnto-ai/totem#1851)', () => {
+  let originalGeminiKey: string | undefined;
+  let originalGoogleKey: string | undefined;
+  let originalOpenAIKey: string | undefined;
+
+  beforeEach(() => {
+    originalGeminiKey = process.env['GEMINI_API_KEY'];
+    originalGoogleKey = process.env['GOOGLE_API_KEY'];
+    originalOpenAIKey = process.env['OPENAI_API_KEY'];
+    delete process.env['GEMINI_API_KEY'];
+    delete process.env['GOOGLE_API_KEY'];
+    delete process.env['OPENAI_API_KEY'];
+  });
+
+  afterEach(() => {
+    if (originalGeminiKey !== undefined) process.env['GEMINI_API_KEY'] = originalGeminiKey;
+    else delete process.env['GEMINI_API_KEY'];
+    if (originalGoogleKey !== undefined) process.env['GOOGLE_API_KEY'] = originalGoogleKey;
+    else delete process.env['GOOGLE_API_KEY'];
+    if (originalOpenAIKey !== undefined) process.env['OPENAI_API_KEY'] = originalOpenAIKey;
+    else delete process.env['OPENAI_API_KEY'];
+    vi.restoreAllMocks();
+  });
+
+  it('throws CONFIG_MISSING TotemConfigError with 3-step remediation when configured provider fails and Ollama is unreachable (gemini path)', async () => {
+    // Force isOllamaAvailable() → false via the only network call it makes.
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+    );
+
+    const warns: string[] = [];
+    const config: EmbeddingProvider = { provider: 'gemini', model: 'gemini-embedding-2-preview' };
+    const embedder = createEmbedder(config, (msg) => warns.push(msg));
+
+    let caught: unknown;
+    try {
+      await embedder.embed(['x']);
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(TotemConfigError);
+    const err = caught as TotemConfigError;
+    expect(err.code).toBe('CONFIG_MISSING');
+    expect(err.message).toContain('No embedding provider available');
+    expect(err.recoveryHint).toContain('(1) Install the SDK');
+    expect(err.recoveryHint).toContain('(2) Install and start Ollama');
+    expect(err.recoveryHint).toContain("(3) Set provider: 'ollama'");
+
+    // The warn callback is the agent-facing breadcrumb that the fallback was
+    // attempted before the terminal throw. Substring-match keeps copy edits
+    // cheap while still locking the diagnostic chain.
+    const allWarns = warns.join('\n');
+    expect(allWarns).toContain('unavailable');
+    expect(allWarns).toContain('Falling back to Ollama');
+  });
+
+  it('returns the Ollama fallback embedder when Ollama is reachable after configured provider fails', async () => {
+    // 200 from Ollama — fallback path succeeds, no terminal throw.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ models: [{ name: 'nomic-embed-text' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const warns: string[] = [];
+    const config: EmbeddingProvider = { provider: 'gemini', model: 'gemini-embedding-2-preview' };
+    const embedder = createEmbedder(config, (msg) => warns.push(msg));
+
+    // Force the LazyEmbedder to resolve. The Ollama fallback embedder will be
+    // returned; we assert the warn breadcrumb fired and we don't call embed()
+    // (which would hit the live Ollama HTTP API).
+    let resolveErr: unknown;
+    try {
+      // Trigger doResolve via a direct embed call wrapped in expectation that
+      // we'll get past resolve and into OllamaEmbedder.embed (which would then
+      // try to fetch /api/embeddings — also fetch-mocked here, but we don't
+      // need to assert on the embedding shape, only that the fallback was
+      // selected).
+      await embedder.embed([]);
+    } catch (err) {
+      resolveErr = err;
+    }
+
+    // Empty texts short-circuits OllamaEmbedder.embed → []; no throw expected.
+    expect(resolveErr).toBeUndefined();
+    const allWarns = warns.join('\n');
+    expect(allWarns).toContain('Falling back to Ollama');
+    expect(allWarns).toContain('Using Ollama fallback embedder');
   });
 });

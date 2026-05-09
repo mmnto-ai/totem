@@ -16,6 +16,7 @@ import {
   checkGrandfatheredRules,
   checkIndex,
   checkLinkedIndexes,
+  checkOllama,
   checkSecretLeaks,
   checkSecretsFileTracked,
   checkStaleRules,
@@ -257,6 +258,89 @@ describe('checkEmbeddingConfig', () => {
   });
 });
 
+// ─── Ollama probe (mmnto-ai/totem#1851) ─────────────────
+
+describe('checkOllama', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns 'pass' when Ollama is reachable at the default URL", async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ models: [] }), { status: 200 }),
+    );
+
+    const result = await checkOllama();
+    expect(result.name).toBe('Ollama');
+    expect(result.status).toBe('pass');
+    expect(result.message).toContain('http://localhost:11434');
+  });
+
+  it("returns 'warn' with floor recommendation when Ollama is not reachable", async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+    );
+
+    const result = await checkOllama();
+    expect(result.name).toBe('Ollama');
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('not reachable');
+    expect(result.message).toContain('floor not satisfied');
+    expect(result.remediation).toBeDefined();
+    expect(result.remediation).toContain('https://ollama.com');
+    expect(result.remediation).toContain('ollama pull nomic-embed-text');
+  });
+
+  it("returns 'warn' when probe times out (no hang, no throw)", async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      Object.assign(new Error('aborted'), { name: 'AbortError' }),
+    );
+
+    const result = await checkOllama();
+    expect(result.status).toBe('warn');
+  });
+
+  it("honors custom baseUrl from config when provider is 'ollama'", async () => {
+    const calls: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (url: string | URL | Request): Promise<Response> => {
+        calls.push(typeof url === 'string' ? url : url.toString());
+        return new Response(JSON.stringify({ models: [] }), { status: 200 });
+      },
+    );
+
+    const result = await checkOllama({
+      embedding: { provider: 'ollama', baseUrl: 'http://ollama.internal:9999' },
+    });
+
+    expect(result.status).toBe('pass');
+    expect(result.message).toContain('http://ollama.internal:9999');
+    expect(calls.some((u) => u.includes('http://ollama.internal:9999/api/tags'))).toBe(true);
+  });
+
+  it("ignores embedding.baseUrl when provider is not 'ollama'", async () => {
+    const calls: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (url: string | URL | Request): Promise<Response> => {
+        calls.push(typeof url === 'string' ? url : url.toString());
+        return new Response(JSON.stringify({ models: [] }), { status: 200 });
+      },
+    );
+
+    // Defensive: even if a non-ollama config carries a stray baseUrl-shaped
+    // field (it can't via the discriminated union, but checkOllama receives
+    // a widened narrow shape), the probe must use the default URL.
+    const result = await checkOllama({
+      embedding: { provider: 'gemini', baseUrl: 'http://wrong.example:9999' },
+    });
+
+    expect(result.status).toBe('pass');
+    expect(result.message).toContain('http://localhost:11434');
+    expect(calls.some((u) => u.includes('http://localhost:11434/api/tags'))).toBe(true);
+    expect(calls.every((u) => !u.includes('http://wrong.example:9999'))).toBe(true);
+  });
+});
+
 // ─── Index health check ─────────────────────────────────
 
 describe('checkIndex', () => {
@@ -307,7 +391,7 @@ describe('doctorCommand', () => {
   it('runs without throwing', async () => {
     const results = await doctorCommand();
     expect(results).toBeDefined();
-    expect(results.length).toBe(12);
+    expect(results.length).toBe(13);
   });
 
   it('returns correct check names', async () => {
@@ -317,6 +401,7 @@ describe('doctorCommand', () => {
     expect(names).toContain('Compiled Rules');
     expect(names).toContain('Git Hooks');
     expect(names).toContain('Embedding');
+    expect(names).toContain('Ollama');
     expect(names).toContain('Index');
     expect(names).toContain('Linked Indexes');
     expect(names).toContain('Strategy Root');
@@ -364,6 +449,7 @@ describe('doctorCommand output', () => {
     expect(output).toContain('Compiled Rules');
     expect(output).toContain('Git Hooks');
     expect(output).toContain('Embedding');
+    expect(output).toContain('Ollama');
     expect(output).toContain('Index');
     expect(output).toContain('Linked Indexes');
     expect(output).toContain('Secret Scan');

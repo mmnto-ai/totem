@@ -124,7 +124,7 @@ export { detectStaleManifest, staleManifestError } from './stale-manifest.js';
 
 // Embedders
 export type { Embedder } from './embedders/embedder.js';
-export { createEmbedder } from './embedders/embedder.js';
+export { createEmbedder, isOllamaAvailable } from './embedders/embedder.js';
 
 // Store
 export { TOTEM_TABLE_NAME } from './store/lance-schema.js';

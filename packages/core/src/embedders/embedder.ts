@@ -23,9 +23,17 @@ const OLLAMA_DEFAULTS = {
 };
 
 /**
- * Check if Ollama is reachable by pinging its API.
+ * Probe the Ollama daemon's `/api/tags` endpoint to determine whether it's
+ * reachable. Used internally by `LazyEmbedder`'s fallback chain and exported
+ * for `totem doctor`'s floor-expectation diagnostic (mmnto-ai/totem#1851).
+ *
+ * Never throws — network errors, timeouts, ECONNREFUSED, and non-2xx
+ * responses all resolve to `false`. Bounded by a 3-second `AbortSignal`
+ * timeout.
  */
-async function isOllamaAvailable(baseUrl: string = OLLAMA_DEFAULTS.baseUrl): Promise<boolean> {
+export async function isOllamaAvailable(
+  baseUrl: string = OLLAMA_DEFAULTS.baseUrl,
+): Promise<boolean> {
   try {
     const response = await fetch(`${baseUrl}/api/tags`, {
       method: 'GET',
