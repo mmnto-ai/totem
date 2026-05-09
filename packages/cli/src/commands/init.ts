@@ -15,6 +15,8 @@ import {
 import {
   AI_PROMPT_BLOCK,
   CLAUDE_PRETOOLUSE_ENTRY,
+  CLAUDE_PREWRITESHIELD,
+  CLAUDE_PREWRITESHIELD_ENTRY,
   GEMINI_BEFORE_TOOL,
   GEMINI_SESSION_START,
   GEMINI_SKILL,
@@ -134,21 +136,36 @@ function hasTotemShield(entry: z.infer<typeof HookCommandSchema>): boolean {
   );
 }
 
+/** Check whether a hook entry already contains a PreWriteShield reference. */
+function hasPreWriteShield(entry: z.infer<typeof HookCommandSchema>): boolean {
+  if (typeof entry === 'string') return entry.includes('PreWriteShield');
+  return entry.command.includes('PreWriteShield');
+}
+
+type ParsedSettings = z.infer<typeof ClaudeSettingsSchema>;
+type PreToolUseMatcher = 'Bash' | 'Write|Edit';
+type ScaffoldOutcome = { action: 'created' | 'merged' | 'skipped'; err?: string };
+
 /**
- * Merge Totem hooks into .claude/settings.local.json without overwriting
- * existing user-defined hooks.
+ * Shared merge logic for installing a single PreToolUse entry into a
+ * Claude settings JSON file (settings.local.json or settings.json).
+ *
+ * Idempotent: returns 'skipped' if `alreadyInstalled(parsed)` returns true.
  */
-export function scaffoldClaudeHooks(filePath: string): {
-  action: 'created' | 'merged' | 'skipped';
-  err?: string;
-} {
+function mergeClaudePreToolUseEntry(
+  filePath: string,
+  entry: typeof CLAUDE_PRETOOLUSE_ENTRY | typeof CLAUDE_PREWRITESHIELD_ENTRY,
+  alreadyInstalled: (parsed: ParsedSettings) => boolean,
+): ScaffoldOutcome {
   try {
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    const fullConfig = { hooks: { PreToolUse: [CLAUDE_PRETOOLUSE_ENTRY] } };
+    const fileName = path.basename(filePath);
+
+    const fullConfig = { hooks: { PreToolUse: [entry] } };
 
     if (!fs.existsSync(filePath)) {
       fs.writeFileSync(filePath, JSON.stringify(fullConfig, null, 2) + '\n', 'utf-8');
@@ -160,11 +177,9 @@ export function scaffoldClaudeHooks(filePath: string): {
     try {
       rawParsed = JSON.parse(raw);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        action: 'skipped',
-        err: `[Totem Error] Could not parse settings.local.json (invalid JSON): ${message}`,
-      };
+      throw new Error(`Could not parse ${fileName} (invalid JSON)`, {
+        cause: err instanceof Error ? err : new Error(String(err)),
+      });
     }
 
     const result = ClaudeSettingsSchema.safeParse(rawParsed);
@@ -172,23 +187,18 @@ export function scaffoldClaudeHooks(filePath: string): {
       const detail = result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
       return {
         action: 'skipped',
-        err: `[Totem Error] Could not merge config: settings.local.json has unexpected shape: ${detail}`,
+        err: `[Totem Error] Could not merge config: ${fileName} has unexpected shape: ${detail}`,
       };
     }
 
     const parsed = result.data;
-    const preToolUse = parsed.hooks?.PreToolUse ?? [];
-
-    if (
-      preToolUse.some(
-        (h) => h.matcher === 'Bash' && Array.isArray(h.hooks) && h.hooks.some(hasTotemShield),
-      )
-    ) {
+    if (alreadyInstalled(parsed)) {
       return { action: 'skipped' };
     }
 
+    const preToolUse = parsed.hooks?.PreToolUse ?? [];
     const hooks = parsed.hooks ?? {};
-    hooks.PreToolUse = [...preToolUse, CLAUDE_PRETOOLUSE_ENTRY];
+    hooks.PreToolUse = [...preToolUse, entry];
     parsed.hooks = hooks;
     fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
     return { action: 'merged' };
@@ -198,10 +208,69 @@ export function scaffoldClaudeHooks(filePath: string): {
   }
 }
 
-async function installClaudeHooks(_cwd: string): Promise<HookInstallerResult[]> {
-  // Gate architecture removed (Proposal 207) — Claude hooks are now
-  // workflow-only instructions in CLAUDE.md, no bash enforcement.
-  return [];
+function preToolUseHasMatcher(
+  parsed: ParsedSettings,
+  matcher: PreToolUseMatcher,
+  probe: (entry: z.infer<typeof HookCommandSchema>) => boolean,
+): boolean {
+  const preToolUse = parsed.hooks?.PreToolUse ?? [];
+  return preToolUse.some(
+    (h) => h.matcher === matcher && Array.isArray(h.hooks) && h.hooks.some(probe),
+  );
+}
+
+/**
+ * Merge Totem hooks into .claude/settings.local.json without overwriting
+ * existing user-defined hooks. Installs the Bash matcher for shield-gate.
+ */
+export function scaffoldClaudeHooks(filePath: string): ScaffoldOutcome {
+  return mergeClaudePreToolUseEntry(filePath, CLAUDE_PRETOOLUSE_ENTRY, (parsed) =>
+    preToolUseHasMatcher(parsed, 'Bash', hasTotemShield),
+  );
+}
+
+/**
+ * Merge the PreWriteShield hook into .claude/settings.json (committed,
+ * team-level) without overwriting existing user-defined hooks. Installs
+ * the Write|Edit matcher for write-time xrepo-qualify-refs enforcement.
+ *
+ * Distinct from scaffoldClaudeHooks: that targets settings.local.json
+ * (per-developer environment safety); this targets settings.json
+ * (team-level governance, sealed at mmnto-ai/totem-strategy#145).
+ */
+export function scaffoldClaudeWriteShield(filePath: string): ScaffoldOutcome {
+  return mergeClaudePreToolUseEntry(filePath, CLAUDE_PREWRITESHIELD_ENTRY, (parsed) =>
+    preToolUseHasMatcher(parsed, 'Write|Edit', hasPreWriteShield),
+  );
+}
+
+async function installClaudeHooks(cwd: string): Promise<HookInstallerResult[]> {
+  // Bash gate architecture removed (Proposal 207). Write-time enforcement
+  // re-introduced via PreWriteShield hook (mmnto-ai/totem#1846): blocks
+  // bare cross-repo refs in substrate-participating paths before disk write.
+  // Sealed at mmnto-ai/totem-strategy#145.
+  const results: HookInstallerResult[] = [];
+
+  // 1. Scaffold the hook script — committed to .claude/hooks/ for team-level
+  //    propagation per OQ 2 of the design (mmnto-ai/totem-strategy:.totem/specs).
+  const hookPath = path.join(cwd, '.claude', 'hooks', 'PreWriteShield.cjs');
+  const hookResult = scaffoldFile(hookPath, CLAUDE_PREWRITESHIELD, TOTEM_FILE_MARKER);
+  results.push({
+    file: '.claude/hooks/PreWriteShield.cjs',
+    ...hookResult,
+  });
+
+  // 2. Merge the PreToolUse entry into committed .claude/settings.json
+  //    (distinct from settings.local.json which holds the per-developer
+  //    shield-gate from before Proposal 207).
+  const settingsPath = path.join(cwd, '.claude', 'settings.json');
+  const settingsResult = scaffoldClaudeWriteShield(settingsPath);
+  results.push({
+    file: '.claude/settings.json',
+    ...settingsResult,
+  });
+
+  return results;
 }
 
 // Wire up hook installers on the AI_TOOLS entries that need them.

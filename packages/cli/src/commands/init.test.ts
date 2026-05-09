@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -21,12 +22,19 @@ import {
   installBaselineLessons,
   REFLEX_VERSION,
   scaffoldClaudeHooks,
+  scaffoldClaudeWriteShield,
   scaffoldFile,
   scaffoldMcpConfig,
   upgradeReflexes,
 } from './init.js';
 import { detectProject } from './init-detect.js';
-import { generateConfigForFormat } from './init-templates.js';
+import {
+  BARE_REF_REGEX_SOURCE,
+  CLAUDE_PREWRITESHIELD,
+  CLAUDE_PREWRITESHIELD_ENTRY,
+  GEMINI_BEFORE_TOOL,
+  generateConfigForFormat,
+} from './init-templates.js';
 
 const SERVER_ENTRY = { type: 'stdio', command: 'npx', args: ['-y', '@mmnto/mcp'] };
 
@@ -1070,5 +1078,293 @@ describe('initCommand --global', () => {
     expect(configContent).not.toContain('embedding');
     expect(configContent).toContain('targets:');
     expect(configContent).toContain("glob: '.totem/lessons/*.md'");
+  });
+});
+
+// ─── Write-time xrepo-qualify-refs hook (mmnto-ai/totem#1846) ────────────
+
+describe('BARE_REF_REGEX_SOURCE', () => {
+  it('matches the compiled rule pattern shape', () => {
+    // Mirror of mmnto-ai/totem-strategy:.totem/compiled-rules.json
+    // lessonHash "xrepo-qualify-refs" pattern.
+    const re = new RegExp(BARE_REF_REGEX_SOURCE, 'g');
+    expect('this references #247 here').toMatch(re);
+    expect('see #99 below').toMatch(re);
+  });
+
+  it('does NOT match qualified cross-repo refs', () => {
+    const re = new RegExp(BARE_REF_REGEX_SOURCE, 'g');
+    expect('this references mmnto-ai/totem#247 here').not.toMatch(re);
+    expect('see owner/repo#99 below').not.toMatch(re);
+  });
+
+  it('does NOT match anchor-style refs (CSS ids, headings)', () => {
+    const re = new RegExp(BARE_REF_REGEX_SOURCE, 'g');
+    expect('color: #abc123').not.toMatch(re);
+    expect('navigate to #section-2').not.toMatch(re);
+  });
+});
+
+describe('scaffoldClaudeWriteShield', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-prewriteshield-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('creates settings.json with PreWriteShield entry when none exists', () => {
+    const filePath = path.join(tmpDir, '.claude', 'settings.json');
+    const result = scaffoldClaudeWriteShield(filePath);
+
+    expect(result).toEqual({ action: 'created' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.hooks).toBeDefined();
+    expect(content.hooks.PreToolUse).toHaveLength(1);
+    expect(content.hooks.PreToolUse[0].matcher).toBe('Write|Edit');
+    expect(content.hooks.PreToolUse[0].hooks[0]).toEqual({
+      type: 'command',
+      command: expect.stringContaining('PreWriteShield.cjs'),
+    });
+  });
+
+  it('is idempotent — double invoke does not duplicate', () => {
+    const filePath = path.join(tmpDir, '.claude', 'settings.json');
+
+    const first = scaffoldClaudeWriteShield(filePath);
+    expect(first).toEqual({ action: 'created' });
+
+    const second = scaffoldClaudeWriteShield(filePath);
+    expect(second).toEqual({ action: 'skipped' });
+
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.hooks.PreToolUse).toHaveLength(1);
+  });
+
+  it('preserves unrelated PreToolUse matchers (no conflict with shield-gate)', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.json');
+    const existing = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: 'Bash',
+            hooks: [{ type: 'command', command: 'node .totem/hooks/shield-gate.cjs' }],
+          },
+        ],
+      },
+    };
+    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeWriteShield(filePath);
+
+    expect(result).toEqual({ action: 'merged' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.hooks.PreToolUse).toHaveLength(2);
+    expect(content.hooks.PreToolUse[0].matcher).toBe('Bash');
+    expect(content.hooks.PreToolUse[1].matcher).toBe('Write|Edit');
+  });
+
+  it('skips when PreWriteShield entry already present', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({ hooks: { PreToolUse: [CLAUDE_PREWRITESHIELD_ENTRY] } }, null, 2) + '\n',
+      'utf-8',
+    );
+
+    const result = scaffoldClaudeWriteShield(filePath);
+
+    expect(result).toEqual({ action: 'skipped' });
+  });
+
+  it('returns error on malformed JSON', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.json');
+    fs.writeFileSync(filePath, '{ broken!!!', 'utf-8');
+
+    const result = scaffoldClaudeWriteShield(filePath);
+
+    expect(result.action).toBe('skipped');
+    expect(result.err).toContain('invalid JSON');
+  });
+});
+
+describe('CLAUDE_PREWRITESHIELD template', () => {
+  it('contains the totem auto-generated marker', () => {
+    expect(CLAUDE_PREWRITESHIELD).toContain('// [totem] auto-generated');
+  });
+
+  it('inlines the BARE_REF_REGEX_SOURCE pattern (JSON-encoded for safe JS string-literal embedding)', () => {
+    expect(CLAUDE_PREWRITESHIELD).toContain(JSON.stringify(BARE_REF_REGEX_SOURCE));
+  });
+
+  it('documents the exit-code contract (0=allow, 1=hook error, 2=block)', () => {
+    expect(CLAUDE_PREWRITESHIELD).toMatch(/0\s*=.*allow/i);
+    expect(CLAUDE_PREWRITESHIELD).toMatch(/1\s*=.*hook|hook.*error/i);
+    expect(CLAUDE_PREWRITESHIELD).toMatch(/2\s*=.*block/i);
+  });
+
+  it('cites the seal at mmnto-ai/totem-strategy#145', () => {
+    expect(CLAUDE_PREWRITESHIELD).toContain('mmnto-ai/totem-strategy#145');
+  });
+});
+
+describe('PreWriteShield runtime behavior', () => {
+  let tmpDir: string;
+  let hookPath: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-prewriteshield-runtime-'));
+    hookPath = path.join(tmpDir, 'PreWriteShield.cjs');
+    fs.writeFileSync(hookPath, CLAUDE_PREWRITESHIELD, 'utf-8');
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  function runHook(input: Record<string, unknown>): {
+    exitCode: number;
+    stderr: string;
+  } {
+    const result = spawnSync(process.execPath, [hookPath], {
+      input: JSON.stringify(input),
+      encoding: 'utf-8',
+    });
+    return { exitCode: result.status ?? -1, stderr: result.stderr ?? '' };
+  }
+
+  it('exits 2 on bare ref in scoped .journal/*.md path', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: '.journal/totem/test.md', content: 'See #247 above' },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('#247');
+  });
+
+  it('exits 2 on bare ref in scoped .handoff/*.md path (Windows backslash)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: '.handoff\\totem-claude\\inbox\\test.md',
+        content: 'See #247 above',
+      },
+    });
+    expect(result.exitCode).toBe(2);
+  });
+
+  it('exits 0 on bare ref in OUT-OF-scope path (e.g. src/index.ts)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: 'src/index.ts', content: 'See #247 above' },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('exits 0 on QUALIFIED ref in scoped path', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: '.journal/test.md', content: 'See mmnto-ai/totem#247' },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('exits 0 on Edit with new_string field instead of content', () => {
+    const result = runHook({
+      tool_name: 'Edit',
+      tool_input: { file_path: '.journal/test.md', new_string: 'See mmnto-ai/totem#247' },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('exits 2 on Edit with bare ref in new_string', () => {
+    const result = runHook({
+      tool_name: 'Edit',
+      tool_input: { file_path: '.journal/test.md', new_string: 'See #247 above' },
+    });
+    expect(result.exitCode).toBe(2);
+  });
+
+  it('cites suppression-directive escape valve in block message', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: '.journal/test.md', content: 'See #247 above' },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/totem-context|suppression|directive/i);
+  });
+
+  it('cites the seal at mmnto-ai/totem-strategy#145 in block message', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: '.journal/test.md', content: 'See #247 above' },
+    });
+    expect(result.stderr).toContain('mmnto-ai/totem-strategy#145');
+  });
+
+  it('exits 0 with stderr warning on malformed stdin JSON (fail-soft)', () => {
+    const result = spawnSync(process.execPath, [hookPath], {
+      input: '{ this is not json',
+      encoding: 'utf-8',
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toMatch(/parse|json/i);
+  });
+
+  it('exits 0 with stderr warning when content is non-string (fail-soft)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: '.journal/test.md', content: { not: 'a string' } },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('respects suppression-directive bypass on adjacent line', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: '.journal/test.md',
+        content:
+          '<!-- totem-context: verbatim quotation of legacy commit message -->\nThe original commit said #247 was the cause.',
+      },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('does NOT trigger on Bash tool (out of scope by tool_name)', () => {
+    const result = runHook({
+      tool_name: 'Bash',
+      tool_input: { command: 'echo "see #247"' },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+});
+
+describe('GEMINI_BEFORE_TOOL write_file/edit_file extension', () => {
+  it('extends BeforeTool with write_file/edit_file branch', () => {
+    expect(GEMINI_BEFORE_TOOL).toContain("'write_file'");
+    expect(GEMINI_BEFORE_TOOL).toContain("'edit_file'");
+  });
+
+  it('inlines BARE_REF_REGEX_SOURCE in write-tool branch (JSON-encoded for safe JS string-literal embedding)', () => {
+    expect(GEMINI_BEFORE_TOOL).toContain(JSON.stringify(BARE_REF_REGEX_SOURCE));
+  });
+
+  it('preserves the existing run_shell_command branch', () => {
+    expect(GEMINI_BEFORE_TOOL).toContain('run_shell_command');
+    expect(GEMINI_BEFORE_TOOL).toContain('git');
+  });
+
+  it('cites the seal at mmnto-ai/totem-strategy#145 in BeforeTool extension', () => {
+    expect(GEMINI_BEFORE_TOOL).toContain('mmnto-ai/totem-strategy#145');
   });
 });
