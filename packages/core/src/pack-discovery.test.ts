@@ -400,3 +400,197 @@ describe('loadInstalledPacks: pack callback registration', () => {
     expect(((caught as Error).cause as Error).message).toMatch(/already registered to language/);
   });
 });
+
+// ─── Data-only pack archetype (mmnto-ai/totem#1848 — 1.30.1 patch) ────────
+//
+// Bot Interpretive Packs (e.g. @mmnto/pack-bot-coderabbit,
+// @mmnto/pack-bot-gemini-code-assist) ship workflows + templates only,
+// with no `main`/`exports`/`register.*`. They are intentionally data-only
+// per docs/wiki/pack-ecosystem.md; resolvePackCallback must accept them
+// via require.resolve() probe and return a no-op callback rather than
+// throwing.
+//
+// These tests exercise the on-disk path through readManifestAndResolveCallbacks;
+// the inMemoryPacks escape hatch bypasses resolvePackCallback entirely, so
+// fixture packs on tmpdir are required.
+
+function writePackFixture(
+  tmpRoot: string,
+  packageJson: Record<string, unknown>,
+  files: Record<string, string> = {},
+): string {
+  const packDir = path.join(tmpRoot, 'fixture-pack');
+  fs.mkdirSync(packDir, { recursive: true });
+  fs.writeFileSync(path.join(packDir, 'package.json'), JSON.stringify(packageJson, null, 2));
+  for (const [relPath, content] of Object.entries(files)) {
+    const filePath = path.join(packDir, relPath);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, content);
+  }
+  return packDir;
+}
+
+function writeInstalledPacksManifest(
+  tmpRoot: string,
+  entries: Array<{ name: string; resolvedPath: string; declaredEngineRange: string }>,
+): void {
+  const totemDir = path.join(tmpRoot, '.totem');
+  fs.mkdirSync(totemDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(totemDir, 'installed-packs.json'),
+    JSON.stringify({ version: 1, packs: entries }),
+  );
+}
+
+describe('loadInstalledPacks: data-only pack archetype (mmnto-ai/totem#1848)', () => {
+  it('returns no-op callback for a data-only pack with no main/exports/register', () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pack-discovery-data-only-'));
+    try {
+      const packDir = writePackFixture(
+        tmpRoot,
+        {
+          name: '@fixture/data-only-pack',
+          version: '0.1.0',
+          files: ['workflows'],
+          engines: { '@mmnto/totem': '^1.30.0' },
+        },
+        { 'workflows/orientation.md': '# orientation' },
+      );
+      writeInstalledPacksManifest(tmpRoot, [
+        {
+          name: '@fixture/data-only-pack',
+          resolvedPath: packDir,
+          declaredEngineRange: '^1.30.0',
+        },
+      ]);
+      const packs = loadInstalledPacks({
+        projectRoot: tmpRoot,
+        totemDir: '.totem',
+        engineVersion: '1.30.1',
+      });
+      expect(packs).toHaveLength(1);
+      expect(packs[0]?.name).toBe('@fixture/data-only-pack');
+      expect(isEngineSealed()).toBe(true);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('reproduces the @mmnto/pack-bot-coderabbit@0.2.0 LC consumer scenario without throwing', () => {
+    // Exact shape from mmnto-ai/totem-strategy:upstream-feedback/065:
+    // type: "module", files: ["workflows", "templates", "README.md", "LICENSE"],
+    // no main, no exports, no register.*.
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pack-discovery-lc-repro-'));
+    try {
+      const packDir = writePackFixture(
+        tmpRoot,
+        {
+          name: '@mmnto/pack-bot-coderabbit',
+          version: '0.2.0',
+          type: 'module',
+          files: ['workflows', 'templates', 'README.md', 'LICENSE'],
+          engines: { '@mmnto/totem': '^1.26.0' },
+        },
+        {
+          'workflows/01-protocol.md': '# protocol',
+          'templates/reply.md': '# reply template',
+        },
+      );
+      writeInstalledPacksManifest(tmpRoot, [
+        {
+          name: '@mmnto/pack-bot-coderabbit',
+          resolvedPath: packDir,
+          declaredEngineRange: '^1.26.0',
+        },
+      ]);
+      expect(() =>
+        loadInstalledPacks({
+          projectRoot: tmpRoot,
+          totemDir: '.totem',
+          engineVersion: '1.30.1',
+        }),
+      ).not.toThrow();
+      expect(isEngineSealed()).toBe(true);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('does NOT swallow MODULE_NOT_FOUND thrown from inside a code packs entry point', () => {
+    // Code pack whose register.cjs requires a non-existent sibling file.
+    // The error originates inside require(), not require.resolve(), so the
+    // existing wrap fires and the new try/catch must not mask it.
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pack-discovery-mnf-'));
+    try {
+      const packDir = writePackFixture(
+        tmpRoot,
+        {
+          name: '@fixture/broken-code-pack',
+          version: '0.1.0',
+          main: './register.cjs',
+          engines: { '@mmnto/totem': '^1.30.0' },
+        },
+        {
+          'register.cjs': "module.exports = require('./this-file-does-not-exist.cjs');",
+        },
+      );
+      writeInstalledPacksManifest(tmpRoot, [
+        {
+          name: '@fixture/broken-code-pack',
+          resolvedPath: packDir,
+          declaredEngineRange: '^1.30.0',
+        },
+      ]);
+      let caught: unknown;
+      try {
+        loadInstalledPacks({
+          projectRoot: tmpRoot,
+          totemDir: '.totem',
+          engineVersion: '1.30.1',
+        });
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      expect((caught as Error).message).toMatch(/could not be loaded/);
+      expect((caught as Error).cause).toBeInstanceOf(Error);
+      expect(((caught as Error).cause as NodeJS.ErrnoException).code).toBe('MODULE_NOT_FOUND');
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('does NOT silently no-op a code pack that resolves but exports the wrong shape', () => {
+    // The "missing callback shape" guard must still fire when require.resolve
+    // succeeds but the module exports neither default nor register.
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pack-discovery-shape-'));
+    try {
+      const packDir = writePackFixture(
+        tmpRoot,
+        {
+          name: '@fixture/empty-export-pack',
+          version: '0.1.0',
+          main: './register.cjs',
+          engines: { '@mmnto/totem': '^1.30.0' },
+        },
+        { 'register.cjs': 'module.exports = {};' },
+      );
+      writeInstalledPacksManifest(tmpRoot, [
+        {
+          name: '@fixture/empty-export-pack',
+          resolvedPath: packDir,
+          declaredEngineRange: '^1.30.0',
+        },
+      ]);
+      expect(() =>
+        loadInstalledPacks({
+          projectRoot: tmpRoot,
+          totemDir: '.totem',
+          engineVersion: '1.30.1',
+        }),
+      ).toThrowError(/did not export a registration callback/);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+});
