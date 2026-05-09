@@ -380,6 +380,31 @@ function resolvePackCallback(
     );
   }
 
+  // Probe for an entry point before attempting to load. Bot Interpretive
+  // Packs (e.g. @mmnto/pack-bot-coderabbit) intentionally ship workflows +
+  // templates only with no `main`/`exports`/`register.*`; they are
+  // documented as a structurally distinct archetype in
+  // `docs/wiki/pack-ecosystem.md`. For these packs, return a no-op
+  // callback so the pack is registered as known-but-data-only and its
+  // workflows/templates remain available to other consumers (session
+  // hooks, totem describe, etc.). See mmnto-ai/totem#1848 for the
+  // 1.30.0 regression that this guards against.
+  //
+  // Scoping the try/catch tightly to `require.resolve` is load-bearing —
+  // wrapping the actual `require()` would mask MODULE_NOT_FOUND errors
+  // thrown by code INSIDE the pack's entry point.
+  try {
+    require.resolve(resolvedPath);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'MODULE_NOT_FOUND' || code === 'ERR_PACKAGE_PATH_NOT_EXPORTED') {
+      return () => {};
+    }
+    throw new Error(`Pack '${name}' at '${resolvedPath}' could not be loaded.`, {
+      cause: err instanceof Error ? err : new Error(String(err)),
+    });
+  }
+
   // Synchronous `require()` is mandated by ADR-097 § 5 Q5: pack
   // registration runs at boot before the engine seal, and boot is
   // synchronous. This means the pack's registration entry must be
@@ -387,7 +412,8 @@ function resolvePackCallback(
   // ship a CJS-compatible registration entry (e.g., a built
   // `dist/register.cjs`). Pure-ESM registration entries will throw
   // `ERR_REQUIRE_ESM` at boot. Async-boot support (`await import()`)
-  // would lift this constraint and is tracked separately.
+  // would lift this constraint and is tracked separately
+  // (mmnto-ai/totem#1771).
   let mod: { default?: unknown; register?: unknown };
   try {
     mod = require(resolvedPath) as { default?: unknown; register?: unknown };
