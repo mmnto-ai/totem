@@ -364,6 +364,25 @@ describe('checkIndex', () => {
 
 // ─── doctorCommand integration ──────────────────────────
 
+// Single source of truth for both the diagnostic count and the per-name
+// enumeration in this suite. Add a check to `doctorCommand` → add the name
+// here. Drift between count and name list is impossible by construction.
+const EXPECTED_DIAGNOSTIC_NAMES = [
+  'Config',
+  'Compiled Rules',
+  'Git Hooks',
+  'Embedding',
+  'Ollama',
+  'Index',
+  'Linked Indexes',
+  'Strategy Root',
+  'Secret Scan',
+  'Secrets File Security',
+  'Upgrade Candidates',
+  'Stale Rules',
+  'Grandfathered Rules',
+] as const;
+
 describe('doctorCommand', () => {
   let tmpDir: string;
   let originalCwd: string;
@@ -400,25 +419,13 @@ describe('doctorCommand', () => {
   it('runs without throwing', async () => {
     const results = await doctorCommand();
     expect(results).toBeDefined();
-    expect(results.length).toBe(13);
+    expect(results).toHaveLength(EXPECTED_DIAGNOSTIC_NAMES.length);
   });
 
   it('returns correct check names', async () => {
     const results = await doctorCommand();
     const names = results.map((r: DiagnosticResult) => r.name);
-    expect(names).toContain('Config');
-    expect(names).toContain('Compiled Rules');
-    expect(names).toContain('Git Hooks');
-    expect(names).toContain('Embedding');
-    expect(names).toContain('Ollama');
-    expect(names).toContain('Index');
-    expect(names).toContain('Linked Indexes');
-    expect(names).toContain('Strategy Root');
-    expect(names).toContain('Secret Scan');
-    expect(names).toContain('Secrets File Security');
-    expect(names).toContain('Upgrade Candidates');
-    expect(names).toContain('Stale Rules');
-    expect(names).toContain('Grandfathered Rules');
+    expect(names).toEqual(expect.arrayContaining([...EXPECTED_DIAGNOSTIC_NAMES]));
   });
 });
 
