@@ -1,5 +1,12 @@
 # @mmnto/mcp
 
+## 1.31.0
+
+### Patch Changes
+
+- Updated dependencies [2003419]
+  - @mmnto/totem@1.31.0
+
 ## 1.30.1
 
 ### Patch Changes
