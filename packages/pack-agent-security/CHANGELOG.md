@@ -2,6 +2,9 @@
 
 ## 1.34.1
 
+Coordinated cohort bump — no direct changes to this pack. See `@mmnto/totem`'s
+CHANGELOG.md for the `generateLessonHeading`/`truncateHeading` mid-clause truncation fix.
+
 ## 1.34.0
 
 Coordinated cohort bump — no direct changes to this pack. See `@mmnto/cli`'s

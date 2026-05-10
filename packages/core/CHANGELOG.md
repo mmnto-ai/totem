@@ -5,7 +5,7 @@
 ### Patch Changes
 
 - 9e7606d: `generateLessonHeading` / `truncateHeading` now strip clause-internal-cut tails
-  where a verb/adjective-shaped trailing word is anchored to an immediately-preceding
+  where a verb/adjective-shaped trailing word is attached to an immediately-preceding
   preposition. Closes the per-postmerge-cycle tax LC was paying on extracted
   headings like:
   - `Validate const_name suffix before codegen to prevent` → `Validate const_name suffix before codegen`
@@ -19,8 +19,8 @@
 
   The fix walks backwards from the end of the heading collecting consecutive
   expectant-shaped words (verb/adjective suffixes `-ate|-ize|-ify|-able|-ible|-ing|-ent|-ant`,
-  or hyphenated compounds), then checks the IMMEDIATE anchor word. If the
-  anchor is a preposition, the run is stripped and the existing dangling-tail
+  or hyphenated compounds), then checks the IMMEDIATE preceding word. If the
+  preceding word is a preposition, the run is stripped and the existing dangling-tail
   check removes the prep too. The immediate-adjacency check protects common
   nouns ending in those suffixes (`component`, `client`, `state`, `environment`,
   `load-balancer`) — when an article like `the` sits between the preposition
