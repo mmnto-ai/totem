@@ -567,6 +567,23 @@ describe('probeOllamaFloor', () => {
     expect(result.available).toBe(false);
     expect(result.message).toContain('https://ollama.com');
   });
+
+  it('does not throw when isOllamaAvailable itself rejects (dependency-level failure)', async () => {
+    // Locks the never-throws contract against a regression in the
+    // upstream `isOllamaAvailable` primitive: even if a future refactor
+    // loosens its swallow-all-errors guarantee, `probeOllamaFloor`
+    // still returns the absent state so init doesn't abort mid-flight.
+    const totem = await import('@mmnto/totem');
+    vi.spyOn(totem, 'isOllamaAvailable').mockRejectedValueOnce(
+      new Error('simulated upstream contract regression'),
+    );
+
+    const result = await probeOllamaFloor();
+    expect(result.available).toBe(false);
+    expect(result.baseUrl).toBe(OLLAMA_FLOOR_DEFAULT_BASE_URL);
+    expect(result.message).toContain('https://ollama.com');
+    expect(result.message).toContain('no API key, no quota, runs locally');
+  });
 });
 
 describe('generateConfig', () => {

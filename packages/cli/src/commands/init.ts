@@ -55,9 +55,23 @@ export async function probeOllamaFloor(): Promise<{
   baseUrl: string;
   message: string;
 }> {
-  const { isOllamaAvailable } = await import('@mmnto/totem');
   const baseUrl = OLLAMA_FLOOR_DEFAULT_BASE_URL;
-  const available = await isOllamaAvailable(baseUrl);
+  let available = false;
+  try {
+    const { isOllamaAvailable } = await import('@mmnto/totem');
+    available = await isOllamaAvailable(baseUrl);
+  } catch (err) {
+    // Probe is best-effort: import error or any contract regression in
+    // `isOllamaAvailable` is treated as floor-absent so init does not
+    // abort mid-flight (we run between buildTargets and embedding-tier
+    // branching, so a throw here would leave the user in partial state).
+    // Re-throw truly unexpected non-Error throws to surface them to the
+    // top-level handler instead of silently swallowing them.
+    if (!(err instanceof Error)) {
+      throw err;
+    }
+    available = false;
+  }
   const message = available
     ? `Ollama floor detected at ${baseUrl} (recommended fallback — ${OLLAMA_FLOOR_FRAMING}).`
     : `Ollama floor not detected (recommended fallback — ${OLLAMA_FLOOR_FRAMING}). Install: https://ollama.com.`;
