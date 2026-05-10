@@ -1,5 +1,11 @@
 # @mmnto/totem
 
+## 1.34.0
+
+Coordinated cohort bump — no direct changes to `@mmnto/totem`. The behavior change
+ships in `@mmnto/cli` (see its CHANGELOG.md for the `totem init` Ollama floor probe
+entry that closes `mmnto-ai/totem#1851`).
+
 ## 1.33.0
 
 ### Minor Changes
