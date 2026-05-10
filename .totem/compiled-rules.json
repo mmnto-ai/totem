@@ -8005,31 +8005,30 @@
     {
       "lessonHash": "eb7acec2f8f1a1d6",
       "lessonHeading": "Lazy load heavy CLI command dependencies",
+      "pattern": "",
       "message": "Use dynamic `await import()` inside the command handler instead of a top-level static import for heavy core dependencies. Static imports slow down CLI startup by loading unused modules at boot time.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepPattern": "import { $$$IMPORTS } from '$MODULE'",
+      "badExample": "import { heavyCore } from '../../core/heavyCore';",
+      "goodExample": "const { heavyCore } = await import('../../core/heavyCore');",
       "compiledAt": "2026-05-10T03:36:55.448Z",
       "createdAt": "2026-05-10T03:36:55.448Z",
       "fileGlobs": [
         "packages/cli/src/commands/**/*.ts",
         "!**/*.test.*"
       ],
-      "badExample": "import { heavyCore } from '../../core/heavyCore';",
-      "goodExample": "const { heavyCore } = await import('../../core/heavyCore');",
-      "unverified": true,
+      "severity": "warning",
       "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 301 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .claude/hooks/session-context.js, packages/cli/build/esbuild-lite.mjs, packages/cli/src/adapters/gh-utils.test.ts, packages/cli/src/adapters/gh-utils.ts, packages/cli/src/adapters/github-cli-pr.test.ts (+ 296 more). reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-05-10T03:36:56.212Z",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 301 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .claude/hooks/session-context.js, packages/cli/build/esbuild-lite.mjs, packages/cli/src/adapters/gh-utils.test.ts, packages/cli/src/adapters/gh-utils.ts, packages/cli/src/adapters/github-cli-pr.test.ts (+ 296 more). reasonCode: stage4-out-of-scope-match."
+      "unverified": true
     },
     {
       "lessonHash": "e17a7ebfa8836c73",
       "lessonHeading": "Validate JSON shapes during configuration scrubbing",
+      "pattern": "",
       "message": "Wrap JSON.parse in a try/catch and validate the parsed shape (e.g., check typeof result === 'object' && result !== null) before manipulation to prevent crashes on unexpected input.",
       "engine": "ast-grep",
-      "severity": "warning",
-      "pattern": "",
       "astGrepYamlRule": {
         "rule": {
           "pattern": "JSON.parse($INPUT)",
@@ -8041,6 +8040,8 @@
           }
         }
       },
+      "badExample": "const config = JSON.parse(raw);\ndelete config.secret;",
+      "goodExample": "try {\n  const config = JSON.parse(raw);\n  if (typeof config !== 'object' || config === null) throw new Error('Invalid config shape');\n  delete config.secret;\n} catch (err) {\n  logger.error('Failed to parse config', err);\n}",
       "compiledAt": "2026-05-10T03:36:35.883Z",
       "createdAt": "2026-05-10T03:36:35.883Z",
       "fileGlobs": [
@@ -8048,20 +8049,20 @@
         "!**/*.test.*",
         "!**/*.spec.*"
       ],
-      "badExample": "const config = JSON.parse(raw);\ndelete config.secret;",
-      "goodExample": "try {\n  const config = JSON.parse(raw);\n  if (typeof config !== 'object' || config === null) throw new Error('Invalid config shape');\n  delete config.secret;\n} catch (err) {\n  logger.error('Failed to parse config', err);\n}",
-      "unverified": true,
+      "severity": "warning",
       "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 43 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/build/esbuild-lite.mjs, packages/cli/src/commands/add-secret.test.ts, packages/cli/src/commands/compile-refresh-manifest.test.ts, packages/cli/src/commands/config-drift.test.ts, packages/cli/src/commands/config.test.ts (+ 38 more). reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-05-10T03:36:36.932Z",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 43 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/build/esbuild-lite.mjs, packages/cli/src/commands/add-secret.test.ts, packages/cli/src/commands/compile-refresh-manifest.test.ts, packages/cli/src/commands/config-drift.test.ts, packages/cli/src/commands/config.test.ts (+ 38 more). reasonCode: stage4-out-of-scope-match."
+      "unverified": true
     },
     {
       "lessonHash": "1b2a0c1adc42be39",
       "lessonHeading": "Use .cjs for Claude Code hooks",
+      "pattern": "hooks\\s*[=:].*\\.js[\"']",
       "message": "Claude Code hooks must use .cjs extension (not .js) in ESM projects — Node.js require() rejects ESM .js files",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "hooks\\s*[=:].*\\.js[\"']",
+      "badExample": "config.hooks = { PreToolUse: \"./hooks/pre-tool-use.js\" };",
+      "goodExample": "config.hooks = { PreToolUse: \"./hooks/pre-tool-use.cjs\" };",
       "compiledAt": "2026-05-10T03:36:40.772Z",
       "createdAt": "2026-05-10T03:36:40.772Z",
       "fileGlobs": [
@@ -8069,12 +8070,29 @@
         "!**/*.test.*",
         "!**/*.spec.*"
       ],
-      "badExample": "config.hooks = { PreToolUse: \"./hooks/pre-tool-use.js\" };",
-      "goodExample": "config.hooks = { PreToolUse: \"./hooks/pre-tool-use.cjs\" };",
-      "unverified": true,
+      "severity": "warning",
       "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 1 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/init.test.ts. reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-05-10T03:36:40.848Z",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 1 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/init.test.ts. reasonCode: stage4-out-of-scope-match."
+      "unverified": true
+    },
+    {
+      "lessonHash": "b3a081a8f30b0cbd",
+      "lessonHeading": "Prefer global mock restoration in Vitest",
+      "pattern": "",
+      "message": "Prefer vi.restoreAllMocks() in afterEach instead of storing vi.spyOn results in variables to avoid TypeScript narrowing issues in strict mode.",
+      "engine": "ast-grep",
+      "astGrepPattern": "const $VAR = vi.spyOn($$$ARGS).mockResolvedValue($VAL)",
+      "badExample": "const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(response);",
+      "goodExample": "afterEach(() => { vi.restoreAllMocks(); });",
+      "compiledAt": "2026-05-10T04:15:03.506Z",
+      "createdAt": "2026-05-10T04:15:03.506Z",
+      "fileGlobs": [
+        "packages/**/*.test.ts"
+      ],
+      "severity": "warning",
+      "status": "untested-against-codebase",
+      "unverified": true
     }
   ],
   "nonCompilable": [
@@ -13640,12 +13658,6 @@
       "reason": "Detecting whether a numeric literal in an assertion is a 'magic number' (vs. a legitimately meaningful literal like 0 or 1) requires semantic analysis of the surrounding context and knowledge of which constants have been defined elsewhere in the codebase; a single-pattern rule cannot distinguish magic numbers from intentional literals."
     },
     {
-      "hash": "06b6e453b908e78a",
-      "title": "Route stderr to stdout for hooks",
-      "reasonCode": "out-of-scope",
-      "reason": "Lesson describes an architectural/operational principle about shell I/O redirection in hook configuration. There is no detectable code pattern in TypeScript source files that represents a violation — the rule governs how hooks are invoked (e.g., 2>&1 in shell scripts or process spawn options), not a specific anti-pattern expressible as a structural or string match in the scoped TS command files."
-    },
-    {
       "hash": "c0a9cbf91f4e59f8",
       "title": "Use named constants for diagnostic counts",
       "reasonCode": "context-required",
@@ -13716,6 +13728,12 @@
       "title": "Run local floor probes unconditionally",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes an architectural principle about probe execution order and conditional logic that cannot be detected as a code pattern — determining whether a probe is 'unconditional' requires understanding the full control flow and provider selection logic across the file."
+    },
+    {
+      "hash": "5dba33c99481d702",
+      "title": "Use .cjs extension for Claude hooks",
+      "reasonCode": "context-required",
+      "reason": "The lesson describes a file-naming convention (use .cjs extension instead of .js for hook files). The violation is in the filename or string literal used when registering/referencing the hook file, not in a structural code pattern. Detecting whether a string literal referencing a hook file ends in .js vs .cjs requires knowing which strings represent Claude hook paths, which cannot be determined from a single-line or single-node pattern without semantic context about what constitutes a 'Claude hook' reference."
     }
   ]
 }

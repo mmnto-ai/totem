@@ -1,4 +1,4 @@
-## Lesson — Route stderr to stdout for hooks
+## Lesson — Route stderr to stdout for AI session hooks
 
 **Tags:** claude, cli, dx
 **Scope:** packages/cli/src/commands/**/*.ts, !**/*.test.*, !**/*.spec.*
