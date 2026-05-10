@@ -8093,6 +8093,101 @@
       "severity": "warning",
       "status": "untested-against-codebase",
       "unverified": true
+    },
+    {
+      "lessonHash": "3cf86d286ed15e63",
+      "lessonHeading": "Guard against Windows teardown races",
+      "pattern": "",
+      "message": "Directory cleanup on Windows may race with antivirus/indexing services. Wrap in a retry loop with delays (e.g., maxRetries: 3) instead of a bare synchronous remove.",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "any": [
+            {
+              "pattern": "fs.rmSync($PATH, { recursive: true })"
+            },
+            {
+              "pattern": "fs.rmSync($PATH, { recursive: true, force: true })"
+            },
+            {
+              "pattern": "fs.rmSync($PATH, { force: true, recursive: true })"
+            },
+            {
+              "pattern": "fse.removeSync($PATH)"
+            },
+            {
+              "pattern": "rimraf.sync($PATH)"
+            },
+            {
+              "pattern": "rimrafSync($PATH)"
+            }
+          ]
+        }
+      },
+      "badExample": "fs.rmSync(tmpDir, { recursive: true, force: true });",
+      "goodExample": "await rimraf(tmpDir, { maxRetries: 3, retryDelay: 100 });",
+      "compiledAt": "2026-05-10T08:13:43.505Z",
+      "createdAt": "2026-05-10T08:13:43.505Z",
+      "fileGlobs": [
+        "packages/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 8 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/shield.content-hash-parity.test.ts, packages/cli/src/commands/sync.test.ts, packages/cli/src/exemptions/__tests__/exemption-engine.test.ts, packages/cli/src/hooks/__tests__/auto-context.test.ts, packages/core/src/pack-discovery.test.ts (+ 3 more). reasonCode: stage4-out-of-scope-match.",
+      "archivedAt": "2026-05-10T08:13:44.724Z",
+      "unverified": true
+    },
+    {
+      "lessonHash": "f8924779ee40c3ee",
+      "lessonHeading": "Use global mock restoration for Vitest spies",
+      "pattern": "",
+      "message": "When spying on globals with vi.spyOn, add vi.restoreAllMocks() in an afterEach block to avoid TypeScript narrowing issues in strict mode.",
+      "engine": "ast-grep",
+      "astGrepPattern": "vi.spyOn(global, $METHOD)",
+      "badExample": "beforeEach(() => { vi.spyOn(global, 'fetch').mockResolvedValue(mockResponse); });",
+      "goodExample": "beforeEach(() => { vi.spyOn(myModule, 'fetch').mockResolvedValue(mockResponse); }); afterEach(() => { vi.restoreAllMocks(); });",
+      "compiledAt": "2026-05-10T08:13:52.638Z",
+      "createdAt": "2026-05-10T08:13:52.638Z",
+      "fileGlobs": [
+        "packages/**/*.test.ts"
+      ],
+      "severity": "warning",
+      "status": "untested-against-codebase",
+      "unverified": true
+    },
+    {
+      "lessonHash": "36c4f7f89f9d7493",
+      "lessonHeading": "Ensure environment probes are non-throwing",
+      "pattern": "",
+      "message": "Environment probes must wrap dynamic imports in try/catch to return a 'not available' state instead of throwing",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "pattern": "await import($$$)",
+          "not": {
+            "inside": {
+              "kind": "try_statement",
+              "stopBy": "end"
+            }
+          }
+        }
+      },
+      "badExample": "async function probe() {\n  const mod = await import('some-optional-dep');\n  return mod.check();\n}",
+      "goodExample": "async function probe() {\n  try {\n    const mod = await import('some-optional-dep');\n    return mod.check();\n  } catch {\n    return null;\n  }\n}",
+      "compiledAt": "2026-05-10T08:13:56.797Z",
+      "createdAt": "2026-05-10T08:13:56.797Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 47 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .claude/hooks/session-context.js, packages/cli/src/adapters/create-issue-adapter.ts, packages/cli/src/adapters/multi-repo-adapter.ts, packages/cli/src/commands/adr.test.ts, packages/cli/src/commands/bootstrap-wiring.test.ts (+ 42 more). reasonCode: stage4-out-of-scope-match.",
+      "archivedAt": "2026-05-10T08:13:57.505Z",
+      "unverified": true
     }
   ],
   "nonCompilable": [
@@ -13734,6 +13829,30 @@
       "title": "Use .cjs extension for Claude hooks",
       "reasonCode": "context-required",
       "reason": "The lesson describes a file-naming convention (use .cjs extension instead of .js for hook files). The violation is in the filename or string literal used when registering/referencing the hook file, not in a structural code pattern. Detecting whether a string literal referencing a hook file ends in .js vs .cjs requires knowing which strings represent Claude hook paths, which cannot be determined from a single-line or single-node pattern without semantic context about what constitutes a 'Claude hook' reference."
+    },
+    {
+      "hash": "2f266f1a9a9d4272",
+      "title": "Apply platform-specific test timeouts",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a configuration best practice (setting platform-specific timeouts in vitest.config.ts) that requires understanding the runtime logic of the config file — e.g., whether a conditional on `process.platform === 'win32'` exists and sets a higher timeout. No single regex or AST pattern can reliably distinguish a config that applies platform-specific timeouts from one that uses a single global timeout, without false-positiving on every vitest config that happens to set any timeout value."
+    },
+    {
+      "hash": "76d324e2a9569f3a",
+      "title": "Surface local fallbacks during initialization",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/UX principle about logging initialization status of local model providers. There is no specific detectable code pattern (no banned function call, import, or structural anti-pattern) that can be mechanically flagged — the violation is the absence of a proactive status log during setup, which requires semantic understanding of initialization flow and cannot be expressed as a regex or AST pattern."
+    },
+    {
+      "hash": "03c5da1584a0f3d4",
+      "title": "Verify probe resilience against dependency failures",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a testing strategy (writing regression tests that mock dependency rejections) rather than a detectable code pattern. There is no structural or textual anti-pattern in source code that can be flagged; the violation is the absence of a certain kind of test, which no regex or AST pattern can detect."
+    },
+    {
+      "hash": "9bd3b795024d3395",
+      "title": "Avoid live-repo coupling in tests",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural testing principle (use fixture repos instead of live repo root) that cannot be detected from source code patterns alone — identifying whether a path reference points to the live repository root versus a fixture directory requires semantic knowledge of the project layout and cannot be expressed as a regex or AST pattern without prohibitive false positives."
     }
   ]
 }
