@@ -22,12 +22,12 @@ import {
 
 // totem-context: fixture-based git repo isolates extractGitState from the
 // live repo's working-tree size so Windows CI's slow process spawn can't
-// trip the default 5s vitest timeout. shell:true on win32 mirrors the
-// canonical verify-execution.ts pattern for resolving the git binary.
-const IS_WIN = process.platform === 'win32';
+// trip the default 5s vitest timeout. No shell:true per the MCP package's
+// "No shell: true on spawn calls" policy; existing pattern in shield.test.ts
+// confirms git execFileSync resolves on Windows CI without a shell.
 function initFixtureRepo(tmp: string, branch = 'main'): void {
   const run = (...args: string[]): void => {
-    execFileSync('git', args, { cwd: tmp, stdio: 'pipe', shell: IS_WIN });
+    execFileSync('git', args, { cwd: tmp, stdio: 'pipe' });
   };
   run('init', '-b', branch);
   run(
