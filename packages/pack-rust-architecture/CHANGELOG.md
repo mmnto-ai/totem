@@ -2,6 +2,9 @@
 
 ## 1.34.0
 
+Coordinated cohort bump — no direct changes to this pack. See `@mmnto/cli`'s
+CHANGELOG.md for the `totem init` Ollama floor probe entry.
+
 ## 1.33.0
 
 ## 1.32.0
