@@ -398,7 +398,7 @@ describe('temp dir cleanup safety', () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-cleanup-'));
   });
   afterEach(() => {
-    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(tmp, RM_OPTS);
   });
   it('temp dir exists inside the test', () => {
     expect(fs.existsSync(tmp)).toBe(true);
