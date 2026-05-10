@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -19,6 +20,31 @@ import {
   extractTestCount,
 } from './state-extractors.js';
 
+// totem-context: fixture-based git repo isolates extractGitState from the
+// live repo's working-tree size so Windows CI's slow process spawn can't
+// trip the default 5s vitest timeout. No shell:true per the MCP package's
+// "No shell: true on spawn calls" policy; existing pattern in shield.test.ts
+// confirms git execFileSync resolves on Windows CI without a shell.
+function initFixtureRepo(tmp: string, branch = 'main'): void {
+  const run = (...args: string[]): void => {
+    execFileSync('git', args, { cwd: tmp, stdio: 'pipe' });
+  };
+  run('init', '-b', branch);
+  run(
+    '-c',
+    'user.email=test@example.invalid',
+    '-c',
+    'user.name=Test',
+    'commit',
+    '--allow-empty',
+    '-m',
+    'initial',
+  );
+}
+
+// Retry semantics avoid Windows AV/handle-hold races on tempdir cleanup.
+const RM_OPTS = { recursive: true, force: true, maxRetries: 3, retryDelay: 100 } as const;
+
 describe('extractGitState', () => {
   it('returns null/empty for a non-git directory', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-nogit-'));
@@ -28,23 +54,38 @@ describe('extractGitState', () => {
       expect(state.uncommittedFiles).toEqual([]);
       expect(state.truncated).toBe(false);
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      fs.rmSync(tmp, RM_OPTS);
     }
   });
 
-  it('returns branch (or null on detached HEAD) and staged/unstaged files on the live repo', () => {
-    const state = extractGitState(REPO_ROOT);
-    // GitHub Actions checks out the merge commit in detached HEAD, so branch
-    // legitimately resolves to null there. Locally it is a string. Either is
-    // valid; the important invariant is that the call does not throw.
-    if (state.branch !== null) {
-      expect(state.branch).toBeTypeOf('string');
-      expect(state.branch.length).toBeGreaterThan(0);
+  it('returns the current branch and uncommitted files for a fresh repo', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-git-'));
+    try {
+      initFixtureRepo(tmp, 'fixture-branch');
+      fs.writeFileSync(path.join(tmp, 'untracked.txt'), 'hello');
+
+      const state = extractGitState(tmp);
+      expect(state.branch).toBe('fixture-branch');
+      expect(state.uncommittedFiles).toEqual(['untracked.txt']);
+      expect(state.truncated).toBe(false);
+    } finally {
+      fs.rmSync(tmp, RM_OPTS);
     }
-    expect(state.uncommittedFiles.length).toBeLessThanOrEqual(UNCOMMITTED_FILES_CAP);
-    // If a truncation happened the cap must be hit exactly.
-    if (state.truncated) {
+  });
+
+  it('caps the file list and flags truncation at UNCOMMITTED_FILES_CAP', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-git-cap-'));
+    try {
+      initFixtureRepo(tmp);
+      for (let i = 0; i < UNCOMMITTED_FILES_CAP + 5; i++) {
+        fs.writeFileSync(path.join(tmp, `f${i}.txt`), '');
+      }
+
+      const state = extractGitState(tmp);
+      expect(state.truncated).toBe(true);
       expect(state.uncommittedFiles.length).toBe(UNCOMMITTED_FILES_CAP);
+    } finally {
+      fs.rmSync(tmp, RM_OPTS);
     }
   });
 });
@@ -89,7 +130,7 @@ describe('extractStrategyPointer (mmnto-ai/totem#1710)', () => {
         expect(ptr.reason).toMatch(/strategy/i);
       }
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      fs.rmSync(tmp, RM_OPTS);
     }
   });
 
@@ -140,7 +181,7 @@ describe('extractStrategyPointer (mmnto-ai/totem#1710)', () => {
       }
     } finally {
       // totem-context: matches established cleanup pattern in this file (12 existing instances at lines 31, 81, 209, …); centralization is out-of-scope follow-up.
-      fs.rmSync(tmp, { recursive: true, force: true });
+      fs.rmSync(tmp, RM_OPTS);
     }
   });
 
@@ -172,7 +213,7 @@ describe('extractStrategyPointer (mmnto-ai/totem#1710)', () => {
       }
     } finally {
       // totem-context: matches established cleanup pattern in this file (12 existing instances at lines 31, 81, 209, …); centralization is out-of-scope follow-up.
-      fs.rmSync(tmp, { recursive: true, force: true });
+      fs.rmSync(tmp, RM_OPTS);
     }
   });
 
@@ -195,7 +236,7 @@ describe('extractStrategyPointer (mmnto-ai/totem#1710)', () => {
       }
     } finally {
       // totem-context: matches established cleanup pattern in this file (12 existing instances at lines 31, 81, 209, …); centralization is out-of-scope follow-up.
-      fs.rmSync(tmp, { recursive: true, force: true });
+      fs.rmSync(tmp, RM_OPTS);
     }
   });
 
@@ -228,7 +269,7 @@ describe('extractPackageVersions', () => {
     try {
       expect(extractPackageVersions(tmp)).toEqual({});
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      fs.rmSync(tmp, RM_OPTS);
     }
   });
 
@@ -252,7 +293,7 @@ describe('extractRuleCounts', () => {
       const counts = extractRuleCounts(tmp, '.totem');
       expect(counts).toEqual({ active: 0, archived: 0, nonCompilable: 0 });
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      fs.rmSync(tmp, RM_OPTS);
     }
   });
 
@@ -264,7 +305,7 @@ describe('extractRuleCounts', () => {
       const counts = extractRuleCounts(tmp, '.totem');
       expect(counts).toEqual({ active: 0, archived: 0, nonCompilable: 0 });
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      fs.rmSync(tmp, RM_OPTS);
     }
   });
 
@@ -282,7 +323,7 @@ describe('extractLessonCount', () => {
     try {
       expect(extractLessonCount(tmp, '.totem')).toBe(0);
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      fs.rmSync(tmp, RM_OPTS);
     }
   });
 
@@ -298,7 +339,7 @@ describe('extractMilestoneState', () => {
       const state = extractMilestoneState(tmp);
       expect(state).toEqual({ name: null, gateTickets: [], bestEffort: true });
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      fs.rmSync(tmp, RM_OPTS);
     }
   });
 
@@ -330,7 +371,7 @@ describe('extractRecentPrs', () => {
     try {
       expect(extractRecentPrs(tmp)).toEqual([]);
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      fs.rmSync(tmp, RM_OPTS);
     }
   });
 
@@ -357,7 +398,7 @@ describe('temp dir cleanup safety', () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-cleanup-'));
   });
   afterEach(() => {
-    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(tmp, RM_OPTS);
   });
   it('temp dir exists inside the test', () => {
     expect(fs.existsSync(tmp)).toBe(true);
