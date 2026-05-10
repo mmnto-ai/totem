@@ -43,7 +43,7 @@ export function formatLessonsAsMarkdown(
       hashLesson(lesson.heading, lesson.body).toLowerCase(),
     );
     const archivedSuffix = archivedReason ? ` _(archived: ${archivedReason})_` : '';
-    lines.push(`- **${heading}** - ${bodyOneLine}${tagSuffix}${archivedSuffix}`);
+    lines.push(`- **${heading}** - ` + bodyOneLine + tagSuffix + archivedSuffix);
   }
 
   lines.push('', SENTINEL_END);
