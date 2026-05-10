@@ -241,24 +241,35 @@ export async function lessonArchiveCommand(id: string, opts: { reason?: string }
   compileManifest.compiled_at = new Date().toISOString();
   writeCompileManifest(manifestPath, compileManifest);
 
-  // Regenerate exports so the archived rule gets filtered out of
-  // copilot-instructions.md and junie rules.md (mirrors the compile.ts
-  // mmnto-ai/totem#1345 export-path filter). No-op if no exports are
+  // Regenerate exports so the archived rule gets surfaced WITH its
+  // `_(archived: <reason>)_` annotation in copilot-instructions.md and
+  // junie rules.md, mirroring the compile.ts export-path semantics
+  // (mmnto-ai/totem#1873). The lesson prose stays useful as agent context
+  // even when the compiled regex is silenced at lint time.
+  // `untested-against-codebase` rules continue to be suppressed per CR
+  // mmnto-ai/totem#1757 R2: Stage 4 declared their behavior unknown, so
+  // agent context shouldn't rely on them either. No-op if no exports are
   // configured.
   if (config.exports && Object.keys(config.exports).length > 0) {
     const lessons = readAllLessons(totemDir);
-    const archivedHashes = new Set(
-      rulesFile.rules
-        .filter((r: CompiledRule) => r.status === 'archived')
-        .map((r: CompiledRule) => r.lessonHash.toLowerCase()),
+    const untestedHashes = new Set(
+      (rulesFile.rules as CompiledRule[])
+        .filter((r) => r.status === 'untested-against-codebase')
+        .map((r) => r.lessonHash.toLowerCase()),
     );
+    const archivedReasonByHash = new Map<string, string>();
+    for (const r of rulesFile.rules as CompiledRule[]) {
+      if (r.status === 'archived' && r.archivedReason) {
+        archivedReasonByHash.set(r.lessonHash.toLowerCase(), r.archivedReason);
+      }
+    }
     const lessonsForExport =
-      archivedHashes.size === 0
+      untestedHashes.size === 0
         ? lessons
-        : lessons.filter((l) => !archivedHashes.has(hashLesson(l.heading, l.body).toLowerCase()));
+        : lessons.filter((l) => !untestedHashes.has(hashLesson(l.heading, l.body).toLowerCase()));
     for (const [name, filePath] of Object.entries(config.exports)) {
       const absPath = path.join(cwd, filePath);
-      exportLessons(lessonsForExport, absPath);
+      exportLessons(lessonsForExport, absPath, archivedReasonByHash);
       log.dim(TAG, `Exported ${lessonsForExport.length} rules to ${filePath} (${name})`);
     }
   }

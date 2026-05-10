@@ -1778,19 +1778,25 @@ export async function compileCommand(
       return;
     }
 
-    // Filter lessons whose compiled rule is inert so exports never emit
-    // guidance the runtime loader suppresses. Mirrors the mmnto-ai/totem#1345
-    // lint-path filter in loadCompiledRules; closes the symmetric export-path
-    // hole. CR mmnto-ai/totem#1757 R2 extended the inert set to include
-    // `'untested-against-codebase'` (Stage 4) — `loadCompiledRules` excludes
-    // those alongside `'archived'`, so the export path has to as well or
-    // the agent-rendered guidance diverges from the enforcement surface.
+    // Filter lessons whose compiled rule is `untested-against-codebase` so
+    // exports never emit guidance Stage 4 hasn't validated (CR mmnto-ai/
+    // totem#1757 R2: agent context shouldn't rely on unverified rules).
+    // Archived rules are surfaced WITH an `_(archived: <reason>)_` suffix
+    // so the prose stays available as agent context — Stage 4 archival
+    // concerns pattern-matching false positives, not lesson-prose validity
+    // (mmnto-ai/totem#1873).
     const rawRulesFile = loadCompiledRulesFile(rulesPath);
     const inertHashes = new Set(
       rawRulesFile.rules
-        .filter((r) => r.status === 'archived' || r.status === 'untested-against-codebase')
+        .filter((r) => r.status === 'untested-against-codebase')
         .map((r) => r.lessonHash.toLowerCase()),
     );
+    const archivedReasonByHash = new Map<string, string>();
+    for (const r of rawRulesFile.rules) {
+      if (r.status === 'archived' && r.archivedReason) {
+        archivedReasonByHash.set(r.lessonHash.toLowerCase(), r.archivedReason);
+      }
+    }
     const lessonsForExport =
       inertHashes.size === 0
         ? lessons
@@ -1798,7 +1804,7 @@ export async function compileCommand(
 
     for (const [name, filePath] of Object.entries(config.exports)) {
       const absPath = path.join(cwd, filePath);
-      exportLessons(lessonsForExport, absPath);
+      exportLessons(lessonsForExport, absPath, archivedReasonByHash);
       log.success(TAG, `Exported ${lessonsForExport.length} rules to ${filePath} (${name})`); // totem-ignore
     }
   }
