@@ -233,9 +233,9 @@ function scrubCommittedClaudeSettings(cwd: string, summary: EjectSummary): void 
   // a distinct failure mode from invalid JSON, which is recoverable as
   // a documented eject skip per Tenet 4's "best-effort cleanup" carve-out).
   const raw = fs.readFileSync(filePath, 'utf-8');
-  let parsed: Record<string, unknown>;
+  let rawParsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    rawParsed = JSON.parse(raw);
   } catch (err) {
     if (err instanceof SyntaxError) {
       summary.skipped.push('.claude/settings.json (invalid JSON)');
@@ -243,12 +243,18 @@ function scrubCommittedClaudeSettings(cwd: string, summary: EjectSummary): void 
     }
     throw err;
   }
+  if (!rawParsed || typeof rawParsed !== 'object' || Array.isArray(rawParsed)) {
+    summary.skipped.push('.claude/settings.json (unexpected root shape)');
+    return;
+  }
+  const parsed = rawParsed as Record<string, unknown>;
 
-  const hooks = parsed.hooks as Record<string, unknown[]> | undefined;
-  if (!hooks) {
+  const hooksRaw = parsed.hooks;
+  if (!hooksRaw || typeof hooksRaw !== 'object' || Array.isArray(hooksRaw)) {
     summary.skipped.push('.claude/settings.json (no hooks)');
     return;
   }
+  const hooks = hooksRaw as Record<string, unknown>;
 
   const commandIncludes = (entry: { hooks?: Array<unknown> }, needle: string): boolean => {
     const entryHooks = entry.hooks ?? [];
@@ -261,11 +267,12 @@ function scrubCommittedClaudeSettings(cwd: string, summary: EjectSummary): void 
   let mutated = false;
 
   // PreToolUse → drop only the PreWriteShield entry. Other matchers
-  // (Bash legacy, user-defined Write|Edit) preserved.
-  const preToolUse = hooks.PreToolUse as
-    | Array<{ matcher?: string; hooks?: Array<unknown> }>
-    | undefined;
-  if (preToolUse) {
+  // (Bash legacy, user-defined Write|Edit) preserved. Array guard so a
+  // malformed-but-valid JSON shape (e.g., `"PreToolUse": null`) is
+  // skipped instead of crashing the eject best-effort cleanup.
+  const preToolUseRaw = hooks.PreToolUse;
+  if (Array.isArray(preToolUseRaw)) {
+    const preToolUse = preToolUseRaw as Array<{ matcher?: string; hooks?: Array<unknown> }>;
     const filtered = preToolUse.filter(
       (entry) => !(entry.matcher === 'Write|Edit' && commandIncludes(entry, 'PreWriteShield')),
     );
@@ -281,8 +288,9 @@ function scrubCommittedClaudeSettings(cwd: string, summary: EjectSummary): void 
 
   // SessionStart → drop only the Totem entry (matches by command needle,
   // no matcher field on SessionStart entries).
-  const sessionStart = hooks.SessionStart as Array<{ hooks?: Array<unknown> }> | undefined;
-  if (sessionStart) {
+  const sessionStartRaw = hooks.SessionStart;
+  if (Array.isArray(sessionStartRaw)) {
+    const sessionStart = sessionStartRaw as Array<{ hooks?: Array<unknown> }>;
     const filtered = sessionStart.filter((entry) => !commandIncludes(entry, 'SessionStart.cjs'));
     if (filtered.length !== sessionStart.length) {
       mutated = true;

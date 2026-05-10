@@ -264,6 +264,60 @@ describe('ejectCommand', () => {
     expect(fs.existsSync(path.join(hookDir, 'SessionStart.cjs'))).toBe(true);
   });
 
+  it('skips committed Claude settings.json when JSON root is not an object (e.g., array, string, null)', async () => {
+    const settingsDir = path.join(cwd, '.claude');
+    fs.mkdirSync(settingsDir, { recursive: true });
+    // A `.claude/settings.json` consisting of just `[]` parses successfully
+    // but isn't a config object — eject must skip it cleanly without
+    // crashing on the implicit Object property access.
+    fs.writeFileSync(path.join(settingsDir, 'settings.json'), '[]');
+
+    await ejectCommand({ force: true });
+
+    // File should still exist (eject skipped, didn't mutate)
+    expect(fs.existsSync(path.join(settingsDir, 'settings.json'))).toBe(true);
+    expect(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8')).toBe('[]');
+  });
+
+  it('skips committed Claude settings.json when hooks key is malformed (string instead of object)', async () => {
+    const settingsDir = path.join(cwd, '.claude');
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({ hooks: 'unexpected-string' }),
+    );
+
+    await ejectCommand({ force: true });
+
+    // File should still exist (eject skipped, didn't crash)
+    expect(fs.existsSync(path.join(settingsDir, 'settings.json'))).toBe(true);
+  });
+
+  it('skips entries when hooks.PreToolUse is a non-array (e.g., null) without crashing', async () => {
+    const settingsDir = path.join(cwd, '.claude');
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        hooks: {
+          PreToolUse: null,
+          SessionStart: [
+            { hooks: [{ type: 'command', command: 'node .claude/hooks/SessionStart.cjs' }] },
+          ],
+        },
+      }),
+    );
+
+    await ejectCommand({ force: true });
+
+    // SessionStart still scrubbed even though PreToolUse was malformed.
+    const updated = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
+    // After mutation: SessionStart removed, PreToolUse:null preserved as
+    // unexpected-shape input. The file may or may not exist depending on
+    // pruning; if it does, it must not contain the SessionStart entry.
+    expect(updated.hooks?.SessionStart).toBeUndefined();
+  });
+
   it('preserves user-defined permissions and unrelated keys in committed Claude settings.json', async () => {
     const settingsDir = path.join(cwd, '.claude');
     fs.mkdirSync(settingsDir, { recursive: true });
