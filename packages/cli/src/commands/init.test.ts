@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IngestTarget } from '@mmnto/totem';
 
@@ -20,6 +20,8 @@ import {
   generateConfig,
   initCommand,
   installBaselineLessons,
+  OLLAMA_FLOOR_DEFAULT_BASE_URL,
+  probeOllamaFloor,
   REFLEX_VERSION,
   scaffoldClaudeHooks,
   scaffoldClaudeSessionStart,
@@ -519,6 +521,51 @@ describe('detectEmbeddingTier', () => {
   it('returns none when OPENAI_API_KEY is whitespace-only in .env', () => {
     fs.writeFileSync(path.join(tmpDir, '.env'), 'OPENAI_API_KEY=   \n', 'utf-8');
     expect(detectEmbeddingTier(tmpDir)).toBe('none');
+  });
+});
+
+// ─── Ollama floor probe (mmnto-ai/totem#1851 PR-2) ────────
+
+describe('probeOllamaFloor', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns available=true with detected message when Ollama is reachable', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ models: [] }), { status: 200 }),
+    );
+
+    const result = await probeOllamaFloor();
+    expect(result.available).toBe(true);
+    expect(result.baseUrl).toBe(OLLAMA_FLOOR_DEFAULT_BASE_URL);
+    expect(result.message).toContain(OLLAMA_FLOOR_DEFAULT_BASE_URL);
+    // Spec contract beats: floor framing + "no API key, no quota, runs locally"
+    expect(result.message).toContain('no API key, no quota, runs locally');
+  });
+
+  it('returns available=false with install hint when Ollama is unreachable', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+    );
+
+    const result = await probeOllamaFloor();
+    expect(result.available).toBe(false);
+    expect(result.baseUrl).toBe(OLLAMA_FLOOR_DEFAULT_BASE_URL);
+    // Spec contract: install URL surfaces only when absent
+    expect(result.message).toContain('https://ollama.com');
+    // Floor framing preserved across both states
+    expect(result.message).toContain('no API key, no quota, runs locally');
+  });
+
+  it('does not throw when probe times out (returns available=false)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      Object.assign(new Error('aborted'), { name: 'AbortError' }),
+    );
+
+    const result = await probeOllamaFloor();
+    expect(result.available).toBe(false);
+    expect(result.message).toContain('https://ollama.com');
   });
 });
 

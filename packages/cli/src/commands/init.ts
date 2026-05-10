@@ -40,6 +40,30 @@ export {
   REFLEX_VERSION,
 } from './init-templates.js';
 
+// ─── Ollama floor probe (mmnto-ai/totem#1851 PR-2) ──────────
+// Init-time companion to the doctor.ts `checkOllama` diagnostic shipped
+// in PR-1 (mmnto-ai/totem#1860). Surfaces the embedder fallback floor
+// before the user picks an embedding tier so cloud-key auto-detection
+// doesn't silently bury Ollama as an option (Tenet 16).
+
+export const OLLAMA_FLOOR_DEFAULT_BASE_URL = 'http://localhost:11434';
+
+const OLLAMA_FLOOR_FRAMING = 'no API key, no quota, runs locally';
+
+export async function probeOllamaFloor(): Promise<{
+  available: boolean;
+  baseUrl: string;
+  message: string;
+}> {
+  const { isOllamaAvailable } = await import('@mmnto/totem');
+  const baseUrl = OLLAMA_FLOOR_DEFAULT_BASE_URL;
+  const available = await isOllamaAvailable(baseUrl);
+  const message = available
+    ? `Ollama floor detected at ${baseUrl} (recommended fallback — ${OLLAMA_FLOOR_FRAMING}).`
+    : `Ollama floor not detected (recommended fallback — ${OLLAMA_FLOOR_FRAMING}). Install: https://ollama.com.`;
+  return { available, baseUrl, message };
+}
+
 /**
  * Scaffold a file with idempotency — skips if the marker is already present.
  * Creates parent directories as needed.
@@ -721,6 +745,12 @@ export default {
         }
 
         targets = buildTargets(detected);
+
+        // Surface the Ollama floor expectation BEFORE embedding-tier
+        // branching, so cloud-key auto-detection doesn't silently bury
+        // Ollama as a no-quota fallback option (mmnto-ai/totem#1851).
+        const ollamaFloor = await probeOllamaFloor();
+        log.info('Totem', ollamaFloor.message);
 
         if (embeddingTier === 'openai') {
           log.info(
