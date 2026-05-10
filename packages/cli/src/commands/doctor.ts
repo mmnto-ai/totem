@@ -273,6 +273,51 @@ export function checkEmbeddingConfig(cwd: string): DiagnosticResult {
   }
 }
 
+/**
+ * Probe whether the Ollama daemon is reachable. Surfaces the floor-embedder
+ * expectation diagnostically (mmnto-ai/totem#1851) so consumers don't perceive
+ * the well-formed `LazyEmbedder` `TotemConfigError` as a crash and reach for
+ * a vendor-coupling workaround. Always probes regardless of configured
+ * provider — Ollama IS the floor per Tenet 16.
+ *
+ * Reads `embedding.baseUrl` from config when `provider: 'ollama'` is
+ * configured with a custom URL; otherwise probes the default
+ * (`http://localhost:11434`). The configured-but-unreachable case for
+ * `provider: 'ollama'` produces the same `warn` here as it does for any
+ * other provider; the false-`pass` in `checkEmbeddingConfig` for that
+ * exact scenario is tracked separately and intentionally left untouched
+ * to keep this PR additive.
+ */
+export async function checkOllama(config?: {
+  embedding?: { provider?: string; baseUrl?: string };
+}): Promise<DiagnosticResult> {
+  const { isOllamaAvailable } = await import('@mmnto/totem');
+
+  const configuredBaseUrl =
+    config?.embedding?.provider === 'ollama' ? config?.embedding?.baseUrl : undefined;
+  const probedUrl = configuredBaseUrl ?? 'http://localhost:11434';
+
+  const available = await isOllamaAvailable(configuredBaseUrl);
+
+  if (available) {
+    return {
+      name: 'Ollama',
+      status: 'pass',
+      message: `reachable at ${probedUrl}`,
+    };
+  }
+
+  return {
+    name: 'Ollama',
+    status: 'warn',
+    message: `not reachable at ${probedUrl} (floor not satisfied)`,
+    remediation:
+      'Totem uses Ollama as the local embedder floor (no API key, no quota). ' +
+      "Install: https://ollama.com — then 'ollama pull nomic-embed-text'. " +
+      'Or configure a cloud embedder in totem.config.ts.',
+  };
+}
+
 export function checkIndex(cwd: string, lanceDir = '.lancedb'): DiagnosticResult {
   const configResult = readConfigFile(cwd);
   if (!configResult || !hasEmbeddingProvider(configResult[1])) {
@@ -1534,7 +1579,9 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
   // a personal default for tier/embedder choice and must NOT leak its
   // strategyRoot across every repo on disk.
   let doctorThresholds: { staleRuleWindow: number } | undefined;
-  let loadedConfig: { strategyRoot?: string } | undefined;
+  let loadedConfig:
+    | { strategyRoot?: string; embedding?: { provider?: string; baseUrl?: string } }
+    | undefined;
   try {
     const { loadConfig, resolveConfigPath, isGlobalConfigPath } = await import('../utils.js');
     const configPath = resolveConfigPath(cwd);
@@ -1562,6 +1609,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     checkCompiledRules(cwd),
     checkGitHooks(cwd),
     checkEmbeddingConfig(cwd),
+    await checkOllama(loadedConfig),
     checkIndex(cwd),
     checkLinkedIndexes(cwd),
     await checkStrategyRoot(cwd, loadedConfig),
