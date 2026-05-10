@@ -8154,8 +8154,10 @@
         "packages/**/*.test.ts"
       ],
       "severity": "warning",
-      "status": "untested-against-codebase",
-      "unverified": true
+      "status": "archived",
+      "unverified": true,
+      "archivedReason": "Pattern fires on every vi.spyOn(global, ...) site regardless of whether the suite has vi.restoreAllMocks() in afterEach — ast-grep local scope cannot verify cross-block restoration. Persistent false-positive class flagged by GCA HIGH on #1870.",
+      "archivedAt": "2026-05-10T08:30:02.870Z"
     },
     {
       "lessonHash": "36c4f7f89f9d7493",
