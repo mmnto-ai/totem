@@ -163,6 +163,93 @@ describe('truncateHeading', () => {
       'Guard reversed marker ordering',
     );
   });
+
+  // ─── Clause-internal truncation (mmnto-ai/totem#1872) ──
+  // Empirical regressions from mmnto-ai/liquid-city#229 / #234 / #238:
+  // headings ≤60 chars whose final word is a complete English word
+  // (prevent, fixed-size, isolate, auditable) but in context completes
+  // an incomplete prepositional/infinitival phrase. The trailing word
+  // alone passes the single-word dangling-tail check, but the phrase
+  // reads as mid-clause cut.
+
+  it('trims trailing infinitive after "to" (LC#229)', () => {
+    expect(truncateHeading('Validate const_name suffix before codegen to prevent')).toBe(
+      'Validate const_name suffix before codegen',
+    );
+  });
+
+  it('trims trailing hyphenated adjective after "for" (LC#229)', () => {
+    expect(truncateHeading('RON tuple syntax differs from array syntax for fixed-size')).toBe(
+      'RON tuple syntax differs from array syntax',
+    );
+  });
+
+  it('trims trailing -ate verb after "to" (LC#229)', () => {
+    expect(truncateHeading('Snapshot canonical form should exclude metadata to isolate')).toBe(
+      'Snapshot canonical form should exclude metadata',
+    );
+  });
+
+  it('trims chained trailing expectant words (LC#234)', () => {
+    // "to enable auditable" — strip "auditable" (-able), then "enable" (-able),
+    // then "to" (dangling prep) — three iterations
+    expect(truncateHeading('Document pre-resource call sites to enable auditable')).toBe(
+      'Document pre-resource call sites',
+    );
+  });
+
+  it('does NOT trim bare verb at end when no preceding preposition', () => {
+    // "validate" has -ate suffix but no preposition before it in heading
+    expect(truncateHeading('Always validate')).toBe('Always validate');
+  });
+
+  it('does NOT trim valid prepositional phrase ending in plain noun', () => {
+    // "from user" / "in CI" / "for tests" — trailing word is a plain noun
+    // (no expectant suffix, no hyphen), so the prep+noun pair is kept.
+    expect(truncateHeading('Sanitize input from user')).toBe('Sanitize input from user');
+    expect(truncateHeading('Run integration tests in CI')).toBe('Run integration tests in CI');
+  });
+
+  // ─── False-positive guards (totem review CRITICAL on this PR) ──
+  // The first iteration of the fix used a non-adjacent prep check
+  // ("does the heading contain ANY prep") and over-stripped common
+  // programming nouns ending in expectant suffixes. The walk-back-then-
+  // immediate-anchor approach should preserve all of these.
+
+  it('does NOT strip when anchor before expectant word is an article', () => {
+    // "component" matches -ent suffix but anchor "the" is an article (not a prep)
+    expect(truncateHeading('Pass the props to the component')).toBe(
+      'Pass the props to the component',
+    );
+  });
+
+  it('does NOT strip when consecutive expectant words have non-prep anchor', () => {
+    // "client state" — both -ent/-ate, anchor is "Restore" (verb, not prep)
+    expect(truncateHeading('Restore client state')).toBe('Restore client state');
+  });
+
+  it('does NOT strip hyphenated noun with non-prep anchor', () => {
+    // "load-balancer" hyphenated, but anchor "Configure" is not a prep
+    expect(truncateHeading('Configure load-balancer')).toBe('Configure load-balancer');
+  });
+
+  it('does NOT strip expectant-suffixed common nouns with article anchor', () => {
+    // "environment" / "variable" / "string" all match suffixes but anchor "the"
+    expect(truncateHeading('Detect the environment')).toBe('Detect the environment');
+    expect(truncateHeading('Reset the variable')).toBe('Reset the variable');
+    expect(truncateHeading('Parse the string')).toBe('Parse the string');
+  });
+
+  it('handles >60-char heading with mid-clause cut at word boundary', () => {
+    // After cutting to 60 chars at word boundary the heading should still
+    // strip trailing incomplete-clause tails.
+    const long = 'Ensure all consumer repos qualify cross-repo references to prevent broken links';
+    // Truncates to "Ensure all consumer repos qualify cross-repo references" (~54 chars)
+    // No trailing prep+verb after truncation, so it stays clean.
+    const result = truncateHeading(long);
+    expect(result.length).toBeLessThanOrEqual(HEADING_MAX_CHARS);
+    expect(result).not.toMatch(/\sto\s+prevent$/);
+  });
 });
 
 // ─── rewriteLessonHeadings ─────────────────────────────
