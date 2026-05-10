@@ -7986,21 +7986,95 @@
     {
       "lessonHash": "ee482ceb7e8aa32a",
       "lessonHeading": "Align tool contracts with runtime validation",
+      "pattern": "z\\.array\\((?!.*\\.nonempty\\(\\))",
       "message": "Zod array schema should use .nonempty() when the tool contract requires at least one value",
       "engine": "regex",
-      "severity": "warning",
-      "pattern": "z\\.array\\((?!.*\\.nonempty\\(\\))",
+      "badExample": "const schema = z.object({ tags: z.array(z.string()) });",
+      "goodExample": "const schema = z.object({ tags: z.array(z.string()).nonempty() });",
       "compiledAt": "2026-05-06T21:40:22.503Z",
       "createdAt": "2026-05-06T21:40:22.503Z",
       "fileGlobs": [
         "packages/mcp/src/tools/add-lesson.ts"
       ],
-      "badExample": "const schema = z.object({ tags: z.array(z.string()) });",
-      "goodExample": "const schema = z.object({ tags: z.array(z.string()).nonempty() });",
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 28 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .totem/specs/1488.md, .totem/specs/1663.md, .totem/specs/1683.md, .totem/specs/1684.md, .totem/specs/1713.md (+ 23 more). reasonCode: stage4-out-of-scope-match.",
+      "archivedAt": "2026-05-06T21:40:22.877Z",
+      "unverified": true
+    },
+    {
+      "lessonHash": "eb7acec2f8f1a1d6",
+      "lessonHeading": "Lazy load heavy CLI command dependencies",
+      "message": "Use dynamic `await import()` inside the command handler instead of a top-level static import for heavy core dependencies. Static imports slow down CLI startup by loading unused modules at boot time.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepPattern": "import { $$$IMPORTS } from '$MODULE'",
+      "compiledAt": "2026-05-10T03:36:55.448Z",
+      "createdAt": "2026-05-10T03:36:55.448Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.*"
+      ],
+      "badExample": "import { heavyCore } from '../../core/heavyCore';",
+      "goodExample": "const { heavyCore } = await import('../../core/heavyCore');",
       "unverified": true,
       "status": "archived",
-      "archivedAt": "2026-05-06T21:40:22.877Z",
-      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 28 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .totem/specs/1488.md, .totem/specs/1663.md, .totem/specs/1683.md, .totem/specs/1684.md, .totem/specs/1713.md (+ 23 more). reasonCode: stage4-out-of-scope-match."
+      "archivedAt": "2026-05-10T03:36:56.212Z",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 301 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .claude/hooks/session-context.js, packages/cli/build/esbuild-lite.mjs, packages/cli/src/adapters/gh-utils.test.ts, packages/cli/src/adapters/gh-utils.ts, packages/cli/src/adapters/github-cli-pr.test.ts (+ 296 more). reasonCode: stage4-out-of-scope-match."
+    },
+    {
+      "lessonHash": "e17a7ebfa8836c73",
+      "lessonHeading": "Validate JSON shapes during configuration scrubbing",
+      "message": "Wrap JSON.parse in a try/catch and validate the parsed shape (e.g., check typeof result === 'object' && result !== null) before manipulation to prevent crashes on unexpected input.",
+      "engine": "ast-grep",
+      "severity": "warning",
+      "pattern": "",
+      "astGrepYamlRule": {
+        "rule": {
+          "pattern": "JSON.parse($INPUT)",
+          "not": {
+            "inside": {
+              "kind": "try_statement",
+              "stopBy": "end"
+            }
+          }
+        }
+      },
+      "compiledAt": "2026-05-10T03:36:35.883Z",
+      "createdAt": "2026-05-10T03:36:35.883Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "badExample": "const config = JSON.parse(raw);\ndelete config.secret;",
+      "goodExample": "try {\n  const config = JSON.parse(raw);\n  if (typeof config !== 'object' || config === null) throw new Error('Invalid config shape');\n  delete config.secret;\n} catch (err) {\n  logger.error('Failed to parse config', err);\n}",
+      "unverified": true,
+      "status": "archived",
+      "archivedAt": "2026-05-10T03:36:36.932Z",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 43 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/build/esbuild-lite.mjs, packages/cli/src/commands/add-secret.test.ts, packages/cli/src/commands/compile-refresh-manifest.test.ts, packages/cli/src/commands/config-drift.test.ts, packages/cli/src/commands/config.test.ts (+ 38 more). reasonCode: stage4-out-of-scope-match."
+    },
+    {
+      "lessonHash": "1b2a0c1adc42be39",
+      "lessonHeading": "Use .cjs for Claude Code hooks",
+      "message": "Claude Code hooks must use .cjs extension (not .js) in ESM projects — Node.js require() rejects ESM .js files",
+      "engine": "regex",
+      "severity": "warning",
+      "pattern": "hooks\\s*[=:].*\\.js[\"']",
+      "compiledAt": "2026-05-10T03:36:40.772Z",
+      "createdAt": "2026-05-10T03:36:40.772Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "badExample": "config.hooks = { PreToolUse: \"./hooks/pre-tool-use.js\" };",
+      "goodExample": "config.hooks = { PreToolUse: \"./hooks/pre-tool-use.cjs\" };",
+      "unverified": true,
+      "status": "archived",
+      "archivedAt": "2026-05-10T03:36:40.848Z",
+      "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 1 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: packages/cli/src/commands/init.test.ts. reasonCode: stage4-out-of-scope-match."
     }
   ],
   "nonCompilable": [
@@ -13546,6 +13620,102 @@
       "title": "Curated lessons are exempt from hash-name filenames",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes a code review guideline and naming convention exemption — there is no detectable code pattern to flag. The rule instructs reviewers NOT to flag certain filenames, which is a negative constraint on reviewer behavior, not a source code anti-pattern that can be matched by regex or AST analysis."
+    },
+    {
+      "hash": "27cf9e882cbe618a",
+      "title": "Verify ownership before removing config entries",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Hazard requires semantic analysis of what constitutes 'ownership' or 'user-authored content' versus tool-managed entries; no surface pattern can distinguish a broad substring match that is safe from one that accidentally deletes user content without understanding the data model and ownership semantics."
+    },
+    {
+      "hash": "01a032f29b66aa8f",
+      "title": "Probe local fallbacks regardless of configuration",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/behavioral requirement about which health checks to run during diagnostics — it cannot be expressed as a detectable code pattern. The violation (skipping local fallback checks when cloud providers are active) depends on the overall logic and control flow of the doctor command, not any specific syntactic construct."
+    },
+    {
+      "hash": "054cbf69d7d6d6d4",
+      "title": "Use constants for diagnostic count assertions",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Detecting whether a numeric literal in an assertion is a 'magic number' (vs. a legitimately meaningful literal like 0 or 1) requires semantic analysis of the surrounding context and knowledge of which constants have been defined elsewhere in the codebase; a single-pattern rule cannot distinguish magic numbers from intentional literals."
+    },
+    {
+      "hash": "06b6e453b908e78a",
+      "title": "Route stderr to stdout for hooks",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural/operational principle about shell I/O redirection in hook configuration. There is no detectable code pattern in TypeScript source files that represents a violation — the rule governs how hooks are invoked (e.g., 2>&1 in shell scripts or process spawn options), not a specific anti-pattern expressible as a structural or string match in the scoped TS command files."
+    },
+    {
+      "hash": "c0a9cbf91f4e59f8",
+      "title": "Use named constants for diagnostic counts",
+      "reasonCode": "context-required",
+      "reason": "Lesson requires distinguishing magic numbers used in diagnostic count assertions from other numeric literals in test files; no pattern can reliably identify which numeric literals represent diagnostic counts versus other test values (timeouts, array lengths, loop bounds, etc.)."
+    },
+    {
+      "hash": "fed1685ea18e6c4a",
+      "title": "Guard string operations on untrusted JSON",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Hazard requires semantic analysis to determine whether a JSON field has been type-validated before a string method call; a single-pattern rule cannot distinguish validated from unvalidated access."
+    },
+    {
+      "hash": "e651d9e2d3860514",
+      "title": "Dynamic imports can bypass constructor fallbacks",
+      "reasonCode": "context-required",
+      "reason": "Lesson constrains the hazard to dynamic imports that bypass constructor-time fallback logic; a pattern matching dynamic imports cannot distinguish those inside constructors from those inside methods, nor can it determine whether a fallback mechanism exists elsewhere in the class."
+    },
+    {
+      "hash": "390ded6f1994240a",
+      "title": "Align probe timeouts with production budgets",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural alignment principle — probe timeouts should match production budget values — but there is no detectable code pattern that distinguishes a 'probe timeout' from a 'production timeout' without semantic knowledge of which constants represent which concept."
+    },
+    {
+      "hash": "e3fa897bc3dd0994",
+      "title": "Verify ownership before scrubbing config",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Hazard requires multi-file and semantic analysis: detecting whether a substring match is used to verify tool ownership during eject requires understanding the runtime context of which config entries belong to the tool versus user-defined hooks. A surface pattern on string methods (e.g., .includes(), indexOf()) would fire on all legitimate substring operations unrelated to config scrubbing."
+    },
+    {
+      "hash": "e7d6ed8720cf91e2",
+      "title": "Differentiate filesystem errors from syntax errors",
+      "reasonCode": "context-required",
+      "reason": "Lesson constrains behavior to specific call-site contexts (filesystem permission errors vs. JSON syntax errors during cleanup/ejection tasks); a pattern cannot distinguish which catch blocks are handling filesystem errors versus syntax errors, nor which try/catch blocks are inside 'best-effort cleanup tasks' versus critical paths."
+    },
+    {
+      "hash": "136b53b8bd3b38cd",
+      "title": "Separate read from parse in cleanup",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Hazard requires distinguishing between catch blocks that handle read/permission errors versus JSON parse errors within the same try/catch scope; detecting whether a catch block swallows only SyntaxError (JSON parse) while re-throwing or propagating I/O errors requires multi-statement semantic analysis of error type discrimination that no single-pattern rule can express."
+    },
+    {
+      "hash": "3fb45e452d9b8a69",
+      "title": "Design availability probes to never throw",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Hazard requires closure-body analysis to determine whether a function designated as an availability probe catches all exceptions and returns a boolean; single-pattern rules cannot distinguish probe functions from other async functions or verify exhaustive catch coverage."
+    },
+    {
+      "hash": "1d8f8e6563e3e973",
+      "title": "Guard against late-surfacing dynamic import failures",
+      "reasonCode": "context-required",
+      "reason": "Lesson constrains the violation to dynamic imports placed inside execution methods (as opposed to constructors); the pattern cannot structurally distinguish a dynamic import inside an execution method from one legitimately placed in a constructor or module-level initializer without knowing which method is an 'execution method' vs. a constructor."
+    },
+    {
+      "hash": "2f40352b202e5c45",
+      "title": "Avoid refactoring production for test ergonomics",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural principle (prefer spies over dependency injection for test probes) that cannot be detected from source code patterns — there is no syntactic signature that distinguishes dependency injection introduced for test ergonomics from legitimate production DI design."
+    },
+    {
+      "hash": "cd4a08a09175919c",
+      "title": "Guard string operations on configuration values",
+      "reasonCode": "context-required",
+      "reason": "Lesson requires knowing whether a variable holds a configuration value before flagging .includes() calls on it; a pattern matching all .includes() calls would produce massive false positives, and there is no structural marker distinguishing config-sourced values from other strings."
+    },
+    {
+      "hash": "898ca7508b1748d3",
+      "title": "Run local floor probes unconditionally",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural principle about probe execution order and conditional logic that cannot be detected as a code pattern — determining whether a probe is 'unconditional' requires understanding the full control flow and provider selection logic across the file."
     }
   ]
 }
