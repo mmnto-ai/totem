@@ -19,6 +19,11 @@ const TOTEM_SCAFFOLDED_FILES = [
   '.gemini/hooks/BeforeTool.js',
   '.gemini/skills/totem.md',
   '.totem/hooks/shield-gate.cjs',
+  // Phase B PreWriteShield (mmnto-ai/totem#1853, eject parity closing
+  // mmnto-ai/totem#1852).
+  '.claude/hooks/PreWriteShield.cjs',
+  // Phase C slice 1 SessionStart (mmnto-ai/totem#1845).
+  '.claude/hooks/SessionStart.cjs',
 ];
 
 // ─── Helpers ────────────────────────────────────────────
@@ -205,6 +210,110 @@ function scrubClaudeSettings(cwd: string, summary: EjectSummary): void {
 }
 
 /**
+ * Remove Totem-injected hook entries from the committed `.claude/settings.json`.
+ * Targets both:
+ *   - `hooks.PreToolUse` entries whose command references `PreWriteShield`
+ *     (Phase B install — closes mmnto-ai/totem#1852, the eject parity gap
+ *     left over from when Phase B added the install side).
+ *   - `hooks.SessionStart` entries whose command references `SessionStart.cjs`
+ *     (Phase C slice 1 install — mmnto-ai/totem#1845).
+ *
+ * User-defined entries (other matchers, other commands) are preserved.
+ * Empty arrays/objects/files are pruned bottom-up to leave a clean
+ * filesystem state, matching the legacy scrubClaudeSettings cleanup chain.
+ */
+function scrubCommittedClaudeSettings(cwd: string, summary: EjectSummary): void {
+  const filePath = path.join(cwd, '.claude', 'settings.json');
+  if (!fs.existsSync(filePath)) {
+    summary.skipped.push('.claude/settings.json (not found)');
+    return;
+  }
+
+  // Read separately from parse so permission errors fail loud (they are
+  // a distinct failure mode from invalid JSON, which is recoverable as
+  // a documented eject skip per Tenet 4's "best-effort cleanup" carve-out).
+  const raw = fs.readFileSync(filePath, 'utf-8');
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      summary.skipped.push('.claude/settings.json (invalid JSON)');
+      return;
+    }
+    throw err;
+  }
+
+  const hooks = parsed.hooks as Record<string, unknown[]> | undefined;
+  if (!hooks) {
+    summary.skipped.push('.claude/settings.json (no hooks)');
+    return;
+  }
+
+  const commandIncludes = (entry: { hooks?: Array<unknown> }, needle: string): boolean => {
+    const entryHooks = entry.hooks ?? [];
+    return entryHooks.some((h) => {
+      const cmd = typeof h === 'string' ? h : ((h as { command?: string } | null)?.command ?? '');
+      return cmd.includes(needle);
+    });
+  };
+
+  let mutated = false;
+
+  // PreToolUse → drop only the PreWriteShield entry. Other matchers
+  // (Bash legacy, user-defined Write|Edit) preserved.
+  const preToolUse = hooks.PreToolUse as
+    | Array<{ matcher?: string; hooks?: Array<unknown> }>
+    | undefined;
+  if (preToolUse) {
+    const filtered = preToolUse.filter(
+      (entry) => !(entry.matcher === 'Write|Edit' && commandIncludes(entry, 'PreWriteShield')),
+    );
+    if (filtered.length !== preToolUse.length) {
+      mutated = true;
+      if (filtered.length === 0) {
+        delete hooks.PreToolUse;
+      } else {
+        hooks.PreToolUse = filtered;
+      }
+    }
+  }
+
+  // SessionStart → drop only the Totem entry (matches by command needle,
+  // no matcher field on SessionStart entries).
+  const sessionStart = hooks.SessionStart as Array<{ hooks?: Array<unknown> }> | undefined;
+  if (sessionStart) {
+    const filtered = sessionStart.filter((entry) => !commandIncludes(entry, 'SessionStart.cjs'));
+    if (filtered.length !== sessionStart.length) {
+      mutated = true;
+      if (filtered.length === 0) {
+        delete hooks.SessionStart;
+      } else {
+        hooks.SessionStart = filtered;
+      }
+    }
+  }
+
+  if (!mutated) {
+    summary.skipped.push('.claude/settings.json (no Totem hooks)');
+    return;
+  }
+
+  // Bottom-up pruning matches the .local.json cleanup chain.
+  if (Object.keys(hooks).length === 0) {
+    delete parsed.hooks;
+  }
+
+  if (Object.keys(parsed).length === 0) {
+    fs.unlinkSync(filePath);
+    summary.removed.push('.claude/settings.json');
+  } else {
+    fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
+    summary.scrubbed.push('.claude/settings.json');
+  }
+}
+
+/**
  * Remove the AI Integration block appended by `totem init` to reflex files.
  */
 function scrubReflexFiles(cwd: string, summary: EjectSummary): void {
@@ -303,13 +412,16 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
   // 2. Remove scaffolded Gemini/Claude hook files
   removeScaffoldedFiles(cwd, summary);
 
-  // 3. Scrub Claude settings.local.json
+  // 3. Scrub Claude settings.local.json (per-developer shield-gate)
   scrubClaudeSettings(cwd, summary);
 
-  // 4. Scrub AI reflex blocks from markdown files
+  // 4. Scrub Claude settings.json (committed PreWriteShield + SessionStart entries)
+  scrubCommittedClaudeSettings(cwd, summary);
+
+  // 5. Scrub AI reflex blocks from markdown files
   scrubReflexFiles(cwd, summary);
 
-  // 5. Delete artifacts
+  // 6. Delete artifacts
   deleteArtifacts(cwd, summary);
 
   // Print summary

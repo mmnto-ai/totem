@@ -140,6 +140,157 @@ describe('ejectCommand', () => {
     // Should not throw
   });
 
+  // Phase C slice 1 (mmnto-ai/totem#1845) added committed `.claude/settings.json`
+  // SessionStart eject parity. Same PR closes mmnto-ai/totem#1852 by also
+  // scrubbing the Phase B PreWriteShield entry from the same file. Both
+  // entries must be removed without disturbing user-defined hooks.
+  it('scrubs SessionStart entry from committed Claude settings.json', async () => {
+    const settingsDir = path.join(cwd, '.claude');
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify(
+        {
+          hooks: {
+            SessionStart: [
+              { hooks: [{ type: 'command', command: 'node .claude/hooks/SessionStart.cjs' }] },
+              { hooks: [{ type: 'command', command: 'echo "user-defined"' }] },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    await ejectCommand({ force: true });
+
+    const updated = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
+    expect(updated.hooks.SessionStart).toHaveLength(1);
+    expect(updated.hooks.SessionStart[0].hooks[0].command).toBe('echo "user-defined"');
+  });
+
+  it('scrubs PreWriteShield entry from committed Claude settings.json (closes #1852)', async () => {
+    const settingsDir = path.join(cwd, '.claude');
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify(
+        {
+          hooks: {
+            PreToolUse: [
+              {
+                matcher: 'Write|Edit',
+                hooks: [{ type: 'command', command: 'node .claude/hooks/PreWriteShield.cjs' }],
+              },
+              {
+                matcher: 'Write',
+                hooks: [{ type: 'command', command: 'echo "user-defined"' }],
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    await ejectCommand({ force: true });
+
+    const updated = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
+    expect(updated.hooks.PreToolUse).toHaveLength(1);
+    expect(updated.hooks.PreToolUse[0].matcher).toBe('Write');
+  });
+
+  it('scrubs both PreWriteShield and SessionStart entries in one pass, leaving file empty', async () => {
+    const settingsDir = path.join(cwd, '.claude');
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify(
+        {
+          hooks: {
+            PreToolUse: [
+              {
+                matcher: 'Write|Edit',
+                hooks: [{ type: 'command', command: 'node .claude/hooks/PreWriteShield.cjs' }],
+              },
+            ],
+            SessionStart: [
+              { hooks: [{ type: 'command', command: 'node .claude/hooks/SessionStart.cjs' }] },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    await ejectCommand({ force: true });
+
+    // Both entries gone → both arrays empty → both keys deleted → hooks
+    // empty → hooks key deleted → file empty {} → file unlinked.
+    expect(fs.existsSync(path.join(settingsDir, 'settings.json'))).toBe(false);
+  });
+
+  it('removes scaffolded .claude/hooks/SessionStart.cjs and PreWriteShield.cjs files', async () => {
+    const hookDir = path.join(cwd, '.claude', 'hooks');
+    fs.mkdirSync(hookDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(hookDir, 'SessionStart.cjs'),
+      '// [totem] auto-generated — Claude Code SessionStart hook\nconsole.log("hi");',
+    );
+    fs.writeFileSync(
+      path.join(hookDir, 'PreWriteShield.cjs'),
+      '// [totem] auto-generated — Claude Code PreWriteShield hook\nconsole.log("hi");',
+    );
+
+    await ejectCommand({ force: true });
+
+    expect(fs.existsSync(path.join(hookDir, 'SessionStart.cjs'))).toBe(false);
+    expect(fs.existsSync(path.join(hookDir, 'PreWriteShield.cjs'))).toBe(false);
+  });
+
+  it('does not remove .claude/hooks/SessionStart.cjs if user-authored (no Totem marker)', async () => {
+    const hookDir = path.join(cwd, '.claude', 'hooks');
+    fs.mkdirSync(hookDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(hookDir, 'SessionStart.cjs'),
+      'console.log("user-authored, no marker");',
+    );
+
+    await ejectCommand({ force: true });
+
+    expect(fs.existsSync(path.join(hookDir, 'SessionStart.cjs'))).toBe(true);
+  });
+
+  it('preserves user-defined permissions and unrelated keys in committed Claude settings.json', async () => {
+    const settingsDir = path.join(cwd, '.claude');
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify(
+        {
+          permissions: { allow: ['Bash'] },
+          hooks: {
+            SessionStart: [
+              { hooks: [{ type: 'command', command: 'node .claude/hooks/SessionStart.cjs' }] },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    await ejectCommand({ force: true });
+
+    const updated = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
+    expect(updated.permissions).toBeDefined();
+    expect(updated.permissions.allow).toEqual(['Bash']);
+    expect(updated.hooks).toBeUndefined();
+  });
+
   it('removes post-merge hook with new conditional format (if/fi block)', async () => {
     const hookPath = path.join(cwd, '.git', 'hooks', 'post-merge');
     fs.writeFileSync(

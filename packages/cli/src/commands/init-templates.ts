@@ -294,6 +294,78 @@ export const CLAUDE_PREWRITESHIELD_ENTRY = {
   ],
 };
 
+// --- Claude Code SessionStart hook (mmnto-ai/totem#1845 slice 1) ---
+//
+// Symmetric to .gemini/hooks/SessionStart.js: runs the Totem CLI's
+// `describe` at session start so Claude boots with project orientation
+// (project name, tier, lessons count, targets list) instead of starting
+// cold. Wires into committed `.claude/settings.json` (team-level
+// guarantee per the same architectural rule that placed PreWriteShield
+// there in Phase B; orientation IS a team contract).
+//
+// `.cjs` extension is load-bearing: package.json `type: module` repos
+// otherwise resolve `.js` as ESM and reject the CommonJS `require()`
+// calls. Claude Code execs hooks via plain `node`.
+//
+// stderr is routed to stdout because the Totem CLI writes diagnostic
+// output to stderr; SessionStart context must land in Claude's prompt,
+// not in user-visible noise.
+//
+// Fallbacks are deliberately generic — project-specific orientation is
+// the job of `totem describe` itself, not the fallback message.
+
+// totem-context: hook script template content — child_process is part
+// of the rendered .cjs payload that Claude Code execs via plain `node`,
+// not a runtime call from this cli source. Same shape as
+// GEMINI_SESSION_START + CLAUDE_PREWRITESHIELD above. Hook scripts
+// can't go through safeExec because they don't have access to the cli
+// runtime when Claude execs them.
+export const CLAUDE_SESSION_START = `// [totem] auto-generated — Claude Code SessionStart hook
+// Runs \`@mmnto/cli describe\` at the start of every Claude Code session.
+// Mirrors \`.gemini/hooks/SessionStart.js\`. \`.cjs\` extension because
+// package.json may have "type": "module" — Claude Code execs hooks via
+// plain \`node\`, which would otherwise treat \`.js\` as ESM.
+const { spawnSync } = require('child_process');
+const { existsSync } = require('fs');
+const { join } = require('path');
+
+try {
+  const cliPath = join(process.cwd(), 'node_modules', '@mmnto', 'cli', 'dist', 'index.js');
+  if (existsSync(cliPath)) {
+    const result = spawnSync(process.execPath, [cliPath, 'describe'], {
+      encoding: 'utf-8',
+      timeout: 30000,
+    });
+    if (result.error) {
+      throw result.error;
+    }
+    // Totem CLI writes diagnostic output to stderr; route to stdout so the
+    // session-start context lands in Claude's prompt rather than user-visible noise.
+    process.stdout.write((result.stdout || '') + (result.stderr || ''));
+  } else {
+    process.stdout.write(
+      '[Totem] @mmnto/cli not installed. Run \`pnpm install\` (or your package manager equivalent) to enable session-start orientation.\\n',
+    );
+  }
+} catch (err) {
+  process.stdout.write(
+    '[Totem] Briefing unavailable: ' +
+      (err instanceof Error ? err.message : String(err)) +
+      '\\n',
+  );
+}
+`;
+
+export const CLAUDE_SESSION_START_ENTRY = {
+  hooks: [
+    {
+      type: 'command',
+      command: 'node .claude/hooks/SessionStart.cjs',
+      timeout: 30000,
+    },
+  ],
+};
+
 // ─── Config generation ──────────────────────────────────
 
 export async function generateConfig(

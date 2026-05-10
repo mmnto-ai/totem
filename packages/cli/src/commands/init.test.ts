@@ -22,6 +22,7 @@ import {
   installBaselineLessons,
   REFLEX_VERSION,
   scaffoldClaudeHooks,
+  scaffoldClaudeSessionStart,
   scaffoldClaudeWriteShield,
   scaffoldFile,
   scaffoldMcpConfig,
@@ -32,6 +33,8 @@ import {
   BARE_REF_REGEX_SOURCE,
   CLAUDE_PREWRITESHIELD,
   CLAUDE_PREWRITESHIELD_ENTRY,
+  CLAUDE_SESSION_START,
+  CLAUDE_SESSION_START_ENTRY,
   GEMINI_BEFORE_TOOL,
   generateConfigForFormat,
 } from './init-templates.js';
@@ -1194,6 +1197,159 @@ describe('scaffoldClaudeWriteShield', () => {
 
     expect(result.action).toBe('skipped');
     expect(result.err).toContain('invalid JSON');
+  });
+});
+
+// Phase C slice 1 — symmetric Claude SessionStart hook (mmnto-ai/totem#1845).
+// Locks the install-side parity with .gemini/hooks/SessionStart.js: scaffold
+// the .cjs script, merge a SessionStart entry into committed
+// .claude/settings.json, idempotency on re-run, preserve user hooks +
+// coexist with Phase B's PreWriteShield entry under the same hooks object.
+describe('scaffoldClaudeSessionStart', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-claude-sessionstart-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('creates settings.json with SessionStart entry when none exists', () => {
+    const filePath = path.join(tmpDir, '.claude', 'settings.json');
+    const result = scaffoldClaudeSessionStart(filePath);
+
+    expect(result).toEqual({ action: 'created' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.hooks).toBeDefined();
+    expect(content.hooks.SessionStart).toHaveLength(1);
+    expect(content.hooks.SessionStart[0].hooks[0]).toEqual({
+      type: 'command',
+      command: 'node .claude/hooks/SessionStart.cjs',
+      timeout: 30000,
+    });
+    // SessionStart entries do NOT carry a `matcher` field.
+    expect(content.hooks.SessionStart[0].matcher).toBeUndefined();
+  });
+
+  it('is idempotent — double invoke does not duplicate', () => {
+    const filePath = path.join(tmpDir, '.claude', 'settings.json');
+
+    const first = scaffoldClaudeSessionStart(filePath);
+    expect(first).toEqual({ action: 'created' });
+
+    const second = scaffoldClaudeSessionStart(filePath);
+    expect(second).toEqual({ action: 'skipped' });
+
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.hooks.SessionStart).toHaveLength(1);
+  });
+
+  it('preserves a user-defined SessionStart entry alongside the Totem entry', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.json');
+    const existing = {
+      hooks: {
+        SessionStart: [{ hooks: [{ type: 'command', command: 'echo "user-defined"' }] }],
+      },
+    };
+    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeSessionStart(filePath);
+
+    expect(result).toEqual({ action: 'merged' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.hooks.SessionStart).toHaveLength(2);
+    expect(content.hooks.SessionStart[0].hooks[0].command).toBe('echo "user-defined"');
+    expect(content.hooks.SessionStart[1].hooks[0].command).toContain('SessionStart.cjs');
+  });
+
+  it('coexists with Phase B PreWriteShield entry under the same hooks object', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.json');
+    const existing = {
+      hooks: { PreToolUse: [CLAUDE_PREWRITESHIELD_ENTRY] },
+    };
+    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeSessionStart(filePath);
+
+    expect(result).toEqual({ action: 'merged' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.hooks.PreToolUse).toHaveLength(1);
+    expect(content.hooks.PreToolUse[0].matcher).toBe('Write|Edit');
+    expect(content.hooks.SessionStart).toHaveLength(1);
+    expect(content.hooks.SessionStart[0].hooks[0].command).toContain('SessionStart.cjs');
+  });
+
+  it('skips when a Totem SessionStart entry is already present', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({ hooks: { SessionStart: [CLAUDE_SESSION_START_ENTRY] } }, null, 2) + '\n',
+      'utf-8',
+    );
+
+    const result = scaffoldClaudeSessionStart(filePath);
+
+    expect(result).toEqual({ action: 'skipped' });
+  });
+
+  it('returns error on malformed JSON', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.json');
+    fs.writeFileSync(filePath, '{ broken!!!', 'utf-8');
+
+    const result = scaffoldClaudeSessionStart(filePath);
+
+    expect(result.action).toBe('skipped');
+    expect(result.err).toContain('invalid JSON');
+  });
+});
+
+describe('CLAUDE_SESSION_START template', () => {
+  it('contains the totem auto-generated marker', () => {
+    expect(CLAUDE_SESSION_START).toContain('// [totem] auto-generated');
+  });
+
+  it('routes stderr to stdout (substring contract)', () => {
+    // The hook MUST surface CLI stderr alongside stdout because the Totem
+    // CLI writes diagnostic output (the actual `describe` text) to stderr;
+    // routing it to stdout is the only way Claude sees the orientation
+    // banner in its prompt context. Substring-match keeps copy edits cheap
+    // while still locking the breadcrumb chain.
+    expect(CLAUDE_SESSION_START).toContain('result.stdout');
+    expect(CLAUDE_SESSION_START).toContain('result.stderr');
+    expect(CLAUDE_SESSION_START).toContain('process.stdout.write');
+  });
+
+  it('includes the @mmnto/cli not-installed fallback message', () => {
+    expect(CLAUDE_SESSION_START).toContain('@mmnto/cli not installed');
+  });
+
+  it('includes the process-error fallback path', () => {
+    expect(CLAUDE_SESSION_START).toContain('Briefing unavailable');
+  });
+
+  it('uses the canonical node_modules/@mmnto/cli/dist/index.js path probe', () => {
+    expect(CLAUDE_SESSION_START).toContain('@mmnto');
+    expect(CLAUDE_SESSION_START).toContain("'cli'");
+    expect(CLAUDE_SESSION_START).toContain("'dist'");
+    expect(CLAUDE_SESSION_START).toContain("'index.js'");
+  });
+
+  it('does NOT propagate strategy-repo-specific orientation pointers', () => {
+    // OQ 2 disposition: keep the fallback generic. The strategy reference
+    // mentions README.md, design-tenets.md, .journal/strategy/ — none of
+    // those should leak into the consumer-facing baseline.
+    expect(CLAUDE_SESSION_START).not.toContain('design-tenets');
+    expect(CLAUDE_SESSION_START).not.toContain('.journal/strategy');
   });
 });
 

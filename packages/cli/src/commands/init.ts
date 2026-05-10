@@ -17,6 +17,8 @@ import {
   CLAUDE_PRETOOLUSE_ENTRY,
   CLAUDE_PREWRITESHIELD,
   CLAUDE_PREWRITESHIELD_ENTRY,
+  CLAUDE_SESSION_START,
+  CLAUDE_SESSION_START_ENTRY,
   GEMINI_BEFORE_TOOL,
   GEMINI_SESSION_START,
   GEMINI_SKILL,
@@ -105,20 +107,29 @@ const HookCommandSchema = z.union([
   z.object({ type: z.string(), command: z.string() }).passthrough(),
 ]);
 
+const PreToolUseEntrySchema = z
+  .object({
+    matcher: z.string().optional(),
+    hooks: z.array(HookCommandSchema).optional(),
+  })
+  .passthrough();
+
+const SessionStartEntrySchema = z
+  .object({
+    // SessionStart entries do NOT carry a `matcher` field (unlike
+    // PreToolUse entries). Adding it here would silently drop unknown
+    // shapes; passthrough preserves any future fields without breaking
+    // round-trip read/write.
+    hooks: z.array(HookCommandSchema).optional(),
+  })
+  .passthrough();
+
 const ClaudeSettingsSchema = z
   .object({
     hooks: z
       .object({
-        PreToolUse: z
-          .array(
-            z
-              .object({
-                matcher: z.string().optional(),
-                hooks: z.array(HookCommandSchema).optional(),
-              })
-              .passthrough(),
-          )
-          .optional(),
+        PreToolUse: z.array(PreToolUseEntrySchema).optional(),
+        SessionStart: z.array(SessionStartEntrySchema).optional(),
       })
       .passthrough()
       .optional(),
@@ -142,19 +153,34 @@ function hasPreWriteShield(entry: z.infer<typeof HookCommandSchema>): boolean {
   return entry.command.includes('PreWriteShield');
 }
 
+/** Check whether a hook entry already contains a SessionStart.cjs reference. */
+function hasTotemSessionStart(entry: z.infer<typeof HookCommandSchema>): boolean {
+  if (typeof entry === 'string') return entry.includes('SessionStart.cjs');
+  return entry.command.includes('SessionStart.cjs');
+}
+
 type ParsedSettings = z.infer<typeof ClaudeSettingsSchema>;
 type PreToolUseMatcher = 'Bash' | 'Write|Edit';
 type ScaffoldOutcome = { action: 'created' | 'merged' | 'skipped'; err?: string };
+type ClaudeHooksKey = 'PreToolUse' | 'SessionStart';
+type ClaudeHookEntry =
+  | typeof CLAUDE_PRETOOLUSE_ENTRY
+  | typeof CLAUDE_PREWRITESHIELD_ENTRY
+  | typeof CLAUDE_SESSION_START_ENTRY;
 
 /**
- * Shared merge logic for installing a single PreToolUse entry into a
- * Claude settings JSON file (settings.local.json or settings.json).
+ * Shared merge logic for installing a single hook entry into a Claude
+ * settings JSON file (`settings.local.json` or `settings.json`) under
+ * `hooks.<key>`. Both `PreToolUse` and `SessionStart` lifecycles share
+ * the same read → safeparse → idempotency probe → append → write shape;
+ * this is the single source of truth.
  *
- * Idempotent: returns 'skipped' if `alreadyInstalled(parsed)` returns true.
+ * Idempotent: returns `'skipped'` if `alreadyInstalled(parsed)` is true.
  */
-function mergeClaudePreToolUseEntry(
+function mergeClaudeHooksKey(
   filePath: string,
-  entry: typeof CLAUDE_PRETOOLUSE_ENTRY | typeof CLAUDE_PREWRITESHIELD_ENTRY,
+  hookKind: ClaudeHooksKey,
+  entry: ClaudeHookEntry,
   alreadyInstalled: (parsed: ParsedSettings) => boolean,
 ): ScaffoldOutcome {
   try {
@@ -165,7 +191,7 @@ function mergeClaudePreToolUseEntry(
 
     const fileName = path.basename(filePath);
 
-    const fullConfig = { hooks: { PreToolUse: [entry] } };
+    const fullConfig = { hooks: { [hookKind]: [entry] } };
 
     if (!fs.existsSync(filePath)) {
       fs.writeFileSync(filePath, JSON.stringify(fullConfig, null, 2) + '\n', 'utf-8');
@@ -198,9 +224,9 @@ function mergeClaudePreToolUseEntry(
       return { action: 'skipped' };
     }
 
-    const preToolUse = parsed.hooks?.PreToolUse ?? [];
+    const existing = parsed.hooks?.[hookKind] ?? [];
     const hooks = parsed.hooks ?? {};
-    hooks.PreToolUse = [...preToolUse, entry];
+    hooks[hookKind] = [...existing, entry];
     parsed.hooks = hooks;
     fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
     return { action: 'merged' };
@@ -221,12 +247,20 @@ function preToolUseHasMatcher(
   );
 }
 
+function sessionStartHas(
+  parsed: ParsedSettings,
+  probe: (entry: z.infer<typeof HookCommandSchema>) => boolean,
+): boolean {
+  const sessionStart = parsed.hooks?.SessionStart ?? [];
+  return sessionStart.some((h) => Array.isArray(h.hooks) && h.hooks.some(probe));
+}
+
 /**
  * Merge Totem hooks into .claude/settings.local.json without overwriting
  * existing user-defined hooks. Installs the Bash matcher for shield-gate.
  */
 export function scaffoldClaudeHooks(filePath: string): ScaffoldOutcome {
-  return mergeClaudePreToolUseEntry(filePath, CLAUDE_PRETOOLUSE_ENTRY, (parsed) =>
+  return mergeClaudeHooksKey(filePath, 'PreToolUse', CLAUDE_PRETOOLUSE_ENTRY, (parsed) =>
     preToolUseHasMatcher(parsed, 'Bash', hasTotemShield),
   );
 }
@@ -241,8 +275,22 @@ export function scaffoldClaudeHooks(filePath: string): ScaffoldOutcome {
  * (team-level governance, sealed at mmnto-ai/totem-strategy#145).
  */
 export function scaffoldClaudeWriteShield(filePath: string): ScaffoldOutcome {
-  return mergeClaudePreToolUseEntry(filePath, CLAUDE_PREWRITESHIELD_ENTRY, (parsed) =>
+  return mergeClaudeHooksKey(filePath, 'PreToolUse', CLAUDE_PREWRITESHIELD_ENTRY, (parsed) =>
     preToolUseHasMatcher(parsed, 'Write|Edit', hasPreWriteShield),
+  );
+}
+
+/**
+ * Merge the Claude SessionStart hook entry into .claude/settings.json
+ * (committed, team-level) without overwriting existing user-defined
+ * hooks. Symmetric with the Gemini-side .gemini/hooks/SessionStart.js
+ * install (mmnto-ai/totem#1845 slice 1) — orientation IS a team-level
+ * guarantee, so it shares the committed settings.json placement with
+ * Phase B's PreWriteShield.
+ */
+export function scaffoldClaudeSessionStart(filePath: string): ScaffoldOutcome {
+  return mergeClaudeHooksKey(filePath, 'SessionStart', CLAUDE_SESSION_START_ENTRY, (parsed) =>
+    sessionStartHas(parsed, hasTotemSessionStart),
   );
 }
 
@@ -250,26 +298,48 @@ async function installClaudeHooks(cwd: string): Promise<HookInstallerResult[]> {
   // Bash gate architecture removed (Proposal 207). Write-time enforcement
   // re-introduced via PreWriteShield hook (mmnto-ai/totem#1846): blocks
   // bare cross-repo refs in substrate-participating paths before disk write.
-  // Sealed at mmnto-ai/totem-strategy#145.
+  // Sealed at mmnto-ai/totem-strategy#145. SessionStart hook added in
+  // mmnto-ai/totem#1845 slice 1 for parity with Gemini-side install.
   const results: HookInstallerResult[] = [];
+  const settingsPath = path.join(cwd, '.claude', 'settings.json');
 
-  // 1. Scaffold the hook script — committed to .claude/hooks/ for team-level
-  //    propagation per OQ 2 of the design (mmnto-ai/totem-strategy:.totem/specs).
-  const hookPath = path.join(cwd, '.claude', 'hooks', 'PreWriteShield.cjs');
-  const hookResult = scaffoldFile(hookPath, CLAUDE_PREWRITESHIELD, TOTEM_FILE_MARKER);
+  // 1. Scaffold the PreWriteShield hook script (committed to .claude/hooks/).
+  const preWritePath = path.join(cwd, '.claude', 'hooks', 'PreWriteShield.cjs');
+  const preWriteResult = scaffoldFile(preWritePath, CLAUDE_PREWRITESHIELD, TOTEM_FILE_MARKER);
   results.push({
     file: '.claude/hooks/PreWriteShield.cjs',
-    ...hookResult,
+    ...preWriteResult,
   });
 
-  // 2. Merge the PreToolUse entry into committed .claude/settings.json
-  //    (distinct from settings.local.json which holds the per-developer
-  //    shield-gate from before Proposal 207).
-  const settingsPath = path.join(cwd, '.claude', 'settings.json');
-  const settingsResult = scaffoldClaudeWriteShield(settingsPath);
+  // 2. Scaffold the SessionStart hook script (committed to .claude/hooks/).
+  //    Symmetric with .gemini/hooks/SessionStart.js — Tenet 16 parity.
+  const sessionStartPath = path.join(cwd, '.claude', 'hooks', 'SessionStart.cjs');
+  const sessionStartResult = scaffoldFile(
+    sessionStartPath,
+    CLAUDE_SESSION_START,
+    TOTEM_FILE_MARKER,
+  );
+  results.push({
+    file: '.claude/hooks/SessionStart.cjs',
+    ...sessionStartResult,
+  });
+
+  // 3. Merge the PreWriteShield PreToolUse entry into committed
+  //    .claude/settings.json (distinct from settings.local.json which
+  //    holds the per-developer shield-gate from before Proposal 207).
+  const writeShieldEntryResult = scaffoldClaudeWriteShield(settingsPath);
   results.push({
     file: '.claude/settings.json',
-    ...settingsResult,
+    ...writeShieldEntryResult,
+  });
+
+  // 4. Merge the SessionStart entry into committed .claude/settings.json.
+  //    Same file as step 3; the merge helper appends idempotently under
+  //    `hooks.SessionStart` without disturbing `hooks.PreToolUse`.
+  const sessionStartEntryResult = scaffoldClaudeSessionStart(settingsPath);
+  results.push({
+    file: '.claude/settings.json (SessionStart)',
+    ...sessionStartEntryResult,
   });
 
   return results;
