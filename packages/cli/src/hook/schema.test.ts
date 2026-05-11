@@ -112,6 +112,58 @@ describe('hook schema', () => {
       expect(() => HooksYamlSchema.parse({ version: 0, hooks: [] })).toThrow();
       expect(() => HooksYamlSchema.parse({ version: -1, hooks: [] })).toThrow();
     });
+
+    it('accepts hooks with distinct ids', () => {
+      const distinct = {
+        version: HOOKS_YAML_SCHEMA_VERSION,
+        hooks: [
+          {
+            id: 'r1',
+            trigger: { tool: 'bash', pattern: '.*' },
+            check: { pattern: 'x', type: 'reject-if-match' },
+            message: 'm1',
+          },
+          {
+            id: 'r2',
+            trigger: { tool: 'bash', pattern: '.*' },
+            check: { pattern: 'y', type: 'reject-if-match' },
+            message: 'm2',
+          },
+        ],
+      };
+      expect(() => HooksYamlSchema.parse(distinct)).not.toThrow();
+    });
+
+    it('rejects duplicate hook ids within a pack (provenance must stay deterministic)', () => {
+      // Two rules with the same id within one pack would make
+      // `<packId>/<ruleId>` rejection trails ambiguous (ADR-104 § Decision 1).
+      const dup = {
+        version: HOOKS_YAML_SCHEMA_VERSION,
+        hooks: [
+          {
+            id: 'r1',
+            trigger: { tool: 'bash', pattern: '.*' },
+            check: { pattern: 'x', type: 'reject-if-match' },
+            message: 'first',
+          },
+          {
+            id: 'r1',
+            trigger: { tool: 'bash', pattern: '.*' },
+            check: { pattern: 'y', type: 'reject-if-match' },
+            message: 'second',
+          },
+        ],
+      };
+      const result = HooksYamlSchema.safeParse(dup);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const issue = result.error.issues.find(
+          (i) => i.message === 'Duplicate hook id within pack: r1',
+        );
+        expect(issue).toBeDefined();
+        expect(issue?.path).toEqual(['hooks', 1, 'id']);
+      }
+    });
   });
 
   describe('CompiledHooksManifestSchema', () => {

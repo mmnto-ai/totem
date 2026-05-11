@@ -81,10 +81,28 @@ export const HOOKS_YAML_SCHEMA_VERSION = 1 as const;
  * than the runner supports), it warns-and-skips that pack entirely
  * (ADR-104 § Decision 4).
  */
-export const HooksYamlSchema = z.object({
-  version: z.number().int().positive(),
-  hooks: z.array(HookRuleSchema),
-});
+export const HooksYamlSchema = z
+  .object({
+    version: z.number().int().positive(),
+    hooks: z.array(HookRuleSchema),
+  })
+  .superRefine((data, ctx) => {
+    // Duplicate hook ids within a single pack would make the
+    // `<packId>/<ruleId>` provenance in rejection messages (ADR-104 § Decision 1)
+    // ambiguous. Enforce uniqueness at parse time so a misauthored pack fails
+    // on load rather than producing non-deterministic rejection trails.
+    const seen = new Set<string>();
+    data.hooks.forEach((hook, i) => {
+      if (seen.has(hook.id)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate hook id within pack: ${hook.id}`,
+          path: ['hooks', i, 'id'],
+        });
+      }
+      seen.add(hook.id);
+    });
+  });
 
 export type HooksYaml = z.infer<typeof HooksYamlSchema>;
 
