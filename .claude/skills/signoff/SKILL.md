@@ -3,6 +3,8 @@ name: signoff
 description: End-of-session — update memory, write journal entry, clean up
 ---
 
+<!-- totem:skill-start -->
+
 End-of-session wrap-up:
 
 1. Update `MEMORY.md` with any new state (version shipped, tickets closed, key decisions)
@@ -26,3 +28,4 @@ End-of-session wrap-up:
 
 4. Clean up stale local branches: `git branch -vv | grep ': gone]' | awk '{print $1}' | xargs git branch -D`
 5. Report: what shipped, what's pending, what's next
+<!-- totem:skill-end -->

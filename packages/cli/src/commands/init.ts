@@ -19,6 +19,7 @@ import {
   CLAUDE_PREWRITESHIELD_ENTRY,
   CLAUDE_SESSION_START,
   CLAUDE_SESSION_START_ENTRY,
+  DISTRIBUTED_CLAUDE_SKILLS,
   GEMINI_BEFORE_TOOL,
   GEMINI_SESSION_START,
   GEMINI_SKILL,
@@ -27,6 +28,8 @@ import {
   REFLEX_START,
   REFLEX_VERSION,
   REFLEX_VERSION_RE,
+  SKILL_MARKER_END,
+  SKILL_MARKER_START,
   TOTEM_FILE_MARKER,
 } from './init-templates.js';
 
@@ -380,7 +383,107 @@ async function installClaudeHooks(cwd: string): Promise<HookInstallerResult[]> {
     ...sessionStartEntryResult,
   });
 
+  // 5. Distribute session-utility skills (mmnto-ai/totem#1890 Phase C
+  //    slice 3). Marker-based replace: fresh repos get the canonical
+  //    content; refreshes replace the inside-marker section while
+  //    preserving user customizations below the end marker.
+  //
+  //    scaffoldClaudeSkill's native action union ('created' | 'refreshed' |
+  //    'unchanged' | 'preserved') is mapped onto the existing
+  //    HookInstallerResult union for installer summary compatibility:
+  //    refreshed → 'merged' (file mutated), unchanged → 'exists' (no-op),
+  //    preserved → 'skipped' (user content protected).
+  for (const skill of DISTRIBUTED_CLAUDE_SKILLS) {
+    const skillPath = path.join(cwd, '.claude', 'skills', skill.name, 'SKILL.md');
+    const skillResult = scaffoldClaudeSkill(skillPath, skill.content);
+    const mappedAction: HookInstallerResult['action'] =
+      skillResult.action === 'created'
+        ? 'created'
+        : skillResult.action === 'refreshed'
+          ? 'merged'
+          : skillResult.action === 'unchanged'
+            ? 'exists'
+            : 'skipped';
+    results.push({
+      file: `.claude/skills/${skill.name}/SKILL.md`,
+      action: mappedAction,
+      ...(skillResult.err ? { err: skillResult.err } : {}),
+    });
+  }
+
   return results;
+}
+
+/**
+ * Install or refresh a Claude Code skill file at the target path using
+ * marker-based replacement. The canonical content lives between
+ * `SKILL_MARKER_START` and `SKILL_MARKER_END`; content AFTER the end marker
+ * is user-customization territory and survives across refreshes (Phase C
+ * slice 3 design doc, mmnto-ai/totem#1890).
+ *
+ * Outcomes:
+ * - `created` — file didn't exist; wrote canonical
+ * - `refreshed` — file existed with markers; replaced inside-marker content,
+ *   preserved everything after the end marker
+ * - `unchanged` — file existed with markers and the merged content was
+ *   byte-identical to the existing content
+ * - `preserved` — file exists without the end marker (user-authored,
+ *   pre-marker scaffold, or malformed); skipped to preserve user content.
+ *   Surfaces a warning hint via `err` so callers can log a migration nudge.
+ */
+export function scaffoldClaudeSkill(
+  filePath: string,
+  canonicalContent: string,
+): { action: 'created' | 'refreshed' | 'unchanged' | 'preserved'; err?: string } {
+  try {
+    if (!fs.existsSync(filePath)) {
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(filePath, canonicalContent, 'utf-8');
+      return { action: 'created' };
+    }
+
+    const existing = fs.readFileSync(filePath, 'utf-8');
+    const existingEnd = existing.indexOf(SKILL_MARKER_END);
+    const existingStart = existing.indexOf(SKILL_MARKER_START);
+
+    // Preserve absolutely if either marker is missing or out of order — this
+    // is either a user-authored skill (no markers) or a malformed totem
+    // scaffold. Don't auto-rewrite; surface a migration hint instead.
+    if (existingStart === -1 || existingEnd === -1 || existingStart > existingEnd) {
+      return {
+        action: 'preserved',
+        err: `Skill file exists without canonical markers — preserving. To pick up the canonical refresh, move custom content below \`${SKILL_MARKER_END}\` (see mmnto-ai/totem#1890 migration checklist).`,
+      };
+    }
+
+    const canonicalEnd = canonicalContent.indexOf(SKILL_MARKER_END);
+    if (canonicalEnd === -1) {
+      // Canonical content is missing its own end marker — shouldn't happen
+      // (the source-of-truth invariant test guards this), but degrade safely.
+      return {
+        action: 'preserved',
+        err: 'Canonical skill content is missing its end marker — preserving existing file.',
+      };
+    }
+
+    const canonicalThroughEnd = canonicalContent.slice(0, canonicalEnd + SKILL_MARKER_END.length);
+    const existingAfterEnd = existing.slice(existingEnd + SKILL_MARKER_END.length);
+    const merged = canonicalThroughEnd + existingAfterEnd;
+
+    if (merged === existing) {
+      return { action: 'unchanged' };
+    }
+
+    fs.writeFileSync(filePath, merged, 'utf-8');
+    return { action: 'refreshed' };
+    // totem-context: intentional cleanup — preserve user's skill file on any IO failure rather than aborting init mid-flight; mirrors scaffoldFile's failure posture
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { action: 'preserved', err: `[Totem Error] ${message}` };
+  }
 }
 
 // Wire up hook installers on the AI_TOOLS entries that need them.

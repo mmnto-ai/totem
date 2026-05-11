@@ -3,6 +3,8 @@ name: review-reply
 description: Unified PR review triage — fetch, normalize, and batch-action bot comments
 ---
 
+<!-- totem:skill-start -->
+
 Triage PR review comments from all bots for PR $ARGUMENTS.
 
 ## Phase 1: Fetch & Categorize (Deterministic)
@@ -56,3 +58,5 @@ Print summary of actions taken and exit.
 ## CRITICAL: GCA Reply Protocol
 
 **NEVER reply individually to GCA bot comments.** GCA has a quota and will NOT respond to replies unless they contain `@gemini-code-assist`. Always batch ALL GCA responses into a single PR-level comment using the issue comments API endpoint (`/issues/{pr}/comments`), not the review comments reply endpoint.
+
+<!-- totem:skill-end -->
