@@ -1,5 +1,7 @@
 # Changelog
 
+## 1.34.2
+
 ## 1.34.1
 
 Coordinated cohort bump — no direct changes to this pack. See `@mmnto/totem`'s
