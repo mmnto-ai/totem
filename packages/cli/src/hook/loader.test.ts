@@ -41,7 +41,7 @@ describe('loadCompiledHooks', () => {
     expect(result.errors).toEqual([]);
   });
 
-  it('records a structural error on invalid JSON', () => {
+  it('records a structural error on invalid JSON and preserves the original SyntaxError via cause', () => {
     const manifestPath = path.join(workDir, 'compiled-hooks.json');
     fs.writeFileSync(manifestPath, '{ not valid json', 'utf8');
     const result = loadCompiledHooks({
@@ -50,7 +50,12 @@ describe('loadCompiledHooks', () => {
     });
     expect(result.hooks).toEqual([]);
     expect(result.errors.length).toBe(1);
-    expect(result.errors[0]).toContain('not valid JSON');
+    const err = result.errors[0]!;
+    expect(err.message).toContain('not valid JSON');
+    expect(err.code).toBe('HOOKS_LOAD_FAILED');
+    // Original parse error preserved on `.cause` so debug consumers can
+    // walk the chain without the stack being collapsed into a string.
+    expect(err.cause).toBeInstanceOf(SyntaxError);
   });
 
   it('warns and skips when schemaVersion is higher than the runner supports', () => {
@@ -99,7 +104,11 @@ describe('loadCompiledHooks', () => {
     });
     expect(result.hooks).toEqual([]);
     expect(result.errors.length).toBe(1);
-    expect(result.errors[0]).toContain('schema validation');
+    const err = result.errors[0]!;
+    expect(err.message).toContain('schema validation');
+    expect(err.code).toBe('HOOKS_LOAD_FAILED');
+    // Zod's ZodError preserved as the cause for debug-mode chain traversal.
+    expect(err.cause).toBeDefined();
   });
 
   it('returns hooks with no warnings when installed pack versions match compiled versions', () => {

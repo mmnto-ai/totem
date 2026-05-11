@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 
+import { TotemError } from '@mmnto/totem';
+
 import {
   COMPILED_HOOKS_SCHEMA_VERSION,
   type CompiledHookRule,
@@ -42,12 +44,19 @@ export interface LoadCompiledHooksOptions {
 export interface LoadCompiledHooksResult {
   hooks: CompiledHookRule[];
   warnings: string[];
-  errors: string[];
+  /**
+   * Errors carry the original cause via `Error.cause` so debug consumers
+   * can traverse the chain (per the codebase styleguide rule against
+   * concatenating `err.message` into new strings — destroys the stack).
+   * Callers that just need to log can use `err.message`; debug tooling
+   * walks `err.cause` recursively.
+   */
+  errors: TotemError[];
 }
 
 export function loadCompiledHooks(options: LoadCompiledHooksOptions): LoadCompiledHooksResult {
   const warnings: string[] = [];
-  const errors: string[] = [];
+  const errors: TotemError[] = [];
 
   if (!fs.existsSync(options.manifestPath)) {
     return { hooks: [], warnings, errors };
@@ -59,7 +68,12 @@ export function loadCompiledHooks(options: LoadCompiledHooksOptions): LoadCompil
     // totem-context: intentional — error captured into diagnostics array (the loader's contract is diagnostics-not-throws per Tenet 4 carve-out for hooks being best-effort)
   } catch (err) {
     errors.push(
-      `failed to read compiled-hooks manifest at ${options.manifestPath}: ${(err as Error).message}`,
+      new TotemError(
+        'HOOKS_LOAD_FAILED',
+        `failed to read compiled-hooks manifest at ${options.manifestPath}`,
+        'verify the file is readable and re-run `totem sync` to regenerate',
+        err,
+      ),
     );
     return { hooks: [], warnings, errors };
   }
@@ -70,7 +84,12 @@ export function loadCompiledHooks(options: LoadCompiledHooksOptions): LoadCompil
     // totem-context: intentional — error captured into diagnostics array (the loader's contract is diagnostics-not-throws per Tenet 4 carve-out for hooks being best-effort)
   } catch (err) {
     errors.push(
-      `compiled-hooks manifest at ${options.manifestPath} is not valid JSON: ${(err as Error).message}`,
+      new TotemError(
+        'HOOKS_LOAD_FAILED',
+        `compiled-hooks manifest at ${options.manifestPath} is not valid JSON`,
+        're-run `totem sync` to regenerate the manifest',
+        err,
+      ),
     );
     return { hooks: [], warnings, errors };
   }
@@ -93,10 +112,16 @@ export function loadCompiledHooks(options: LoadCompiledHooksOptions): LoadCompil
 
   const validation = CompiledHooksManifestSchema.safeParse(parsed);
   if (!validation.success) {
+    const summary = validation.error.issues
+      .map((i) => `${i.path.join('.')}: ${i.message}`)
+      .join('; ');
     errors.push(
-      `compiled-hooks manifest at ${options.manifestPath} failed schema validation: ${validation.error.issues
-        .map((i) => `${i.path.join('.')}: ${i.message}`)
-        .join('; ')}`,
+      new TotemError(
+        'HOOKS_LOAD_FAILED',
+        `compiled-hooks manifest at ${options.manifestPath} failed schema validation: ${summary}`,
+        're-run `totem sync` to regenerate the manifest, or upgrade totem CLI if the manifest was authored by a newer version',
+        validation.error,
+      ),
     );
     return { hooks: [], warnings, errors };
   }
