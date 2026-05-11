@@ -13,11 +13,13 @@ End-of-session wrap-up:
    cd <substrate-repo-root>
    git add .journal/totem/<filename>.md
    git commit -m "journal(totem): <slug>"
+   pushed=0
    for i in 1 2 3 4 5; do
-     git push origin main && break
-     git pull --rebase --autostash origin main
+     git push origin main && { pushed=1; break; }
+     git pull --rebase --autostash origin main || { echo "Rebase conflict — manual resolution needed"; break; }
      sleep 1
    done
+   [ "$pushed" = 1 ] || { echo "ERROR: substrate push failed — surface to user"; exit 1; }
    ```
 
    **Why the retry loop:** Substrate `main` accepts only fast-forward pushes. If a peer push (strategy-Claude, lc-Claude, status-Claude, etc.) lands between your commit and your push, yours fails with `non-fast-forward`. Per-agent journal filenames (`<model>-NNNN-*.md`) don't collide, so the rebase auto-succeeds without conflict — typically resolves within 1-2 retries. After 5 retries surface failure to the user; that's likely a genuine same-file edit (e.g., two recipients moving the same `_broadcast/` file to `processed/`) that needs manual resolution.
