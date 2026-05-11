@@ -92,6 +92,38 @@ describe('hook schema', () => {
       };
       expect(() => HookRuleSchema.parse(badRegex)).toThrow();
     });
+
+    it('rejects rules whose check.pattern has ReDoS risk (parse-time)', () => {
+      // `(a+)+$` is the canonical exponential-backtracking ReDoS shape — runs
+      // exponentially in the input length on near-matches. Pack-supplied
+      // patterns get a parse-time safety check via safe-regex2 to keep the
+      // engine's availability guarantee independent of pack quality.
+      const redosRule = {
+        id: 'r1',
+        trigger: { tool: 'bash', pattern: '.*' },
+        check: { pattern: '(a+)+$', type: 'reject-if-match' },
+        message: 'm',
+      };
+      const result = HookRuleSchema.safeParse(redosRule);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const issue = result.error.issues.find((i) =>
+          i.message.includes('catastrophic-backtracking'),
+        );
+        expect(issue).toBeDefined();
+      }
+    });
+
+    it('rejects rules whose pattern exceeds the length cap', () => {
+      const oversized = {
+        id: 'r1',
+        trigger: { tool: 'bash', pattern: 'a'.repeat(600) },
+        check: { pattern: 'x', type: 'reject-if-match' },
+        message: 'm',
+      };
+      const result = HookRuleSchema.safeParse(oversized);
+      expect(result.success).toBe(false);
+    });
   });
 
   describe('HooksYamlSchema', () => {

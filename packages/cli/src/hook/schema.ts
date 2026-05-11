@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { isRegexSafe } from '@mmnto/totem';
+
 /**
  * Hook rule schemas for the bot-pack wiring engine (ADR-104).
  *
@@ -17,25 +19,68 @@ const HookCheckTypeSchema = z.enum(['reject-if-match', 'reject-if-no-match']);
 export type HookCheckType = z.infer<typeof HookCheckTypeSchema>;
 
 /**
- * Validate that a regex pattern compiles. Runs at parse time so an invalid
- * pack pattern surfaces as a schema validation error rather than a runtime
- * crash inside `evaluateHook` (Tenet 4: don't fail open silently on
- * invalid input).
+ * Generous upper bound on pack-supplied regex pattern length. Real rules in
+ * the existing corpus run well under 200 chars; 512 leaves headroom while
+ * capping the attack surface against deliberately-bloated inputs. Bounding
+ * length at the schema layer also makes ReDoS-style worst-case payloads
+ * easier to reason about (the engine never compiles 10KB patterns).
  */
-const RegexPatternSchema = z
-  .string()
-  .min(1)
-  .refine(
-    (p) => {
-      try {
-        new RegExp(p);
-        return true; // totem-context: intentional — catch below is throw-as-control-flow for regex validation
-      } catch {
-        return false;
-      }
-    },
-    { message: 'pattern is not a valid regular expression' },
-  );
+const MAX_PATTERN_LENGTH = 512;
+
+/**
+ * Validate that a regex pattern is well-formed AND safe from catastrophic
+ * backtracking. Runs at parse time (Tenet 4: don't fail open silently on
+ * invalid input). Three layers, gated in order with `fatal: true` so an
+ * earlier failure short-circuits — otherwise Zod would run `isRegexSafe`
+ * against an unbounded-length or syntactically-invalid input:
+ *
+ * 1. Bounded length (`MAX_PATTERN_LENGTH`) — caps the attack surface against
+ *    deliberately-bloated patterns.
+ * 2. Syntactically valid (compiles via `new RegExp`).
+ * 3. Free of nested unbounded-quantifier shapes via `safe-regex2`
+ *    (re-exported from core as `isRegexSafe`). Without this, a pack
+ *    publishing a pattern like `(a+)+$` would hang `evaluateHook` on
+ *    crafted tool-call payloads. Pack-supplied patterns come from
+ *    third-party npm, so ReDoS rejection at parse time is load-bearing
+ *    for the engine's availability guarantee.
+ */
+const RegexPatternSchema = z.string().superRefine((p, ctx) => {
+  if (p.length < 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'pattern must not be empty',
+      fatal: true,
+    });
+    return z.NEVER;
+  }
+  if (p.length > MAX_PATTERN_LENGTH) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `pattern exceeds ${MAX_PATTERN_LENGTH}-char limit`,
+      fatal: true,
+    });
+    return z.NEVER;
+  }
+  try {
+    new RegExp(p);
+    // totem-context: intentional — catch below is throw-as-control-flow for regex validation
+  } catch {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'pattern is not a valid regular expression',
+      fatal: true,
+    });
+    return z.NEVER;
+  }
+  if (!isRegexSafe(p)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'pattern has catastrophic-backtracking risk (ReDoS); reshape to bounded quantifiers',
+      fatal: true,
+    });
+    return z.NEVER;
+  }
+});
 
 const HookTriggerSchema = z.object({
   tool: z.string().min(1),
