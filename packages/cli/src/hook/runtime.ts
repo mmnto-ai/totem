@@ -76,17 +76,37 @@ export function formatRejection(decision: RejectDecision): string {
  * verification_shadow happens at the load layer when compiling pack
  * hooks.yaml, not on every hook-run invocation.
  */
+/**
+ * Memoizes compiled RegExp instances keyed by pattern string. Pack rule
+ * patterns are stable for the lifetime of a CLI process (the manifest is
+ * loaded once at startup), so a string-keyed cache is sufficient — there
+ * is no unbounded-growth concern in the single-shot CLI use case.
+ *
+ * Safe to memoize because the patterns are compiled with no flags, so the
+ * returned RegExp has no stateful `lastIndex` carry-over between `.test()`
+ * calls.
+ */
+const regexCache = new Map<string, RegExp>();
+
+function getCompiledRegex(pattern: string): RegExp {
+  const cached = regexCache.get(pattern);
+  if (cached) return cached;
+  const compiled = new RegExp(pattern);
+  regexCache.set(pattern, compiled);
+  return compiled;
+}
+
 export function evaluateHook(rule: CompiledHookRule, payload: ToolCallPayload): HookDecision {
   if (rule.trigger.tool !== payload.tool) {
     return { decision: 'allow' };
   }
 
-  const triggerRegex = new RegExp(rule.trigger.pattern);
+  const triggerRegex = getCompiledRegex(rule.trigger.pattern);
   if (!triggerRegex.test(payload.args)) {
     return { decision: 'allow' };
   }
 
-  const checkRegex = new RegExp(rule.check.pattern);
+  const checkRegex = getCompiledRegex(rule.check.pattern);
   const matched = checkRegex.test(payload.args);
 
   const shouldReject =
