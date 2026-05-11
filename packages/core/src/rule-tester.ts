@@ -10,9 +10,37 @@ import { getErrorMessage } from './errors.js';
 // ─── Types ───────────────────────────────────────────
 
 /**
+ * Valid values for the `surface:` frontmatter field on a test fixture.
+ *
+ * Per ADR-104 § Convergence: the existing single-file fixture schema is
+ * extended additively with `surface: rules | hooks`. The field dispatches
+ * which matcher consumes the fixture. Defaults to `'rules'` when absent
+ * (backwards-compat for existing fixtures predating the hook engine).
+ */
+export const FIXTURE_SURFACES = ['rules', 'hooks'] as const;
+export type FixtureSurface = (typeof FIXTURE_SURFACES)[number];
+
+/**
+ * Valid values for the `corpus:` frontmatter field on a test fixture.
+ *
+ * Per ADR-104 § Convergence: tags a fixture as a positive (`pass`) or
+ * negative (`fail`) case. Defaults to `'pass'` when absent (backwards-compat
+ * for existing dual-section rules-surface fixtures, where the pass/fail
+ * semantic was carried by ## section headings inside the fixture body).
+ */
+export const FIXTURE_CORPORA = ['pass', 'fail'] as const;
+export type FixtureCorpus = (typeof FIXTURE_CORPORA)[number];
+
+/**
  * Fixture for verifying compiled rule patterns against examples.
  * Used by the rule testing infrastructure to validate hits (fail lines)
  * and misses (pass lines) for regex and AST-grep rules.
+ *
+ * The `surface` and `corpus` fields are filled with their defaults when
+ * absent from the fixture frontmatter (ADR-104 § Convergence — additive,
+ * backwards-compatible). PR-1's runtime keeps the existing dual-section
+ * behavior on `surface: rules`; the hooks-surface dispatch lands in the
+ * PR-1 follow-on.
  */
 export interface RuleTestFixture {
   /** lessonHash of the rule to test */
@@ -25,6 +53,19 @@ export interface RuleTestFixture {
   passLines: string[];
   /** Source file path of the fixture */
   fixturePath: string;
+  /**
+   * Which matcher pipeline consumes this fixture. Always populated by
+   * `parseFixture` (defaults to `'rules'`). Marked optional so existing
+   * call sites that construct fixtures inline (test scaffolding, the
+   * compile pipeline) compile without per-site updates.
+   */
+  surface?: FixtureSurface;
+  /**
+   * Whether the fixture asserts a positive or negative case. Always
+   * populated by `parseFixture` (defaults to `'pass'`). Optional for the
+   * same reason as `surface`.
+   */
+  corpus?: FixtureCorpus;
 }
 
 export interface RuleTestResult {
@@ -56,6 +97,28 @@ const PASS_SECTION_RE = /##\s*[Ss]hould\s+pass\s*\n+```[^\n]*\n([\s\S]*?)```/;
 
 const TODO_MARKER = '// TODO: add code that should';
 
+/**
+ * Extract a simple `key: value` from frontmatter using line iteration —
+ * avoids needing a full YAML parser and stays consistent with the existing
+ * regex-based field extraction.
+ *
+ * Returns `undefined` ONLY when the key is absent from the frontmatter.
+ * Returns `''` (empty string) when the key is present but its value is empty
+ * — so callers can distinguish "omitted, apply default" from "explicit empty,
+ * reject as invalid." Without this distinction, `surface:` (blank) would
+ * silently route to the default and bypass the enum typo guard.
+ */
+function extractFrontmatterField(meta: string, key: string): string | undefined {
+  const prefix = `${key}:`;
+  for (const line of meta.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith(prefix)) {
+      return trimmed.slice(prefix.length).trim();
+    }
+  }
+  return undefined;
+}
+
 /** Return true when every line in the fixture is a scaffolding placeholder. */
 export function isTodoFixture(fixture: RuleTestFixture): boolean {
   const allLines = [...fixture.failLines, ...fixture.passLines];
@@ -82,7 +145,32 @@ export function parseFixture(content: string, fixturePath: string): RuleTestFixt
   const failLines = failMatch ? failMatch[1]!.split('\n').filter((l) => l.trim().length > 0) : [];
   const passLines = passMatch ? passMatch[1]!.split('\n').filter((l) => l.trim().length > 0) : [];
 
-  return { ruleHash, filePath, failLines, passLines, fixturePath };
+  // ADR-104 § Convergence — additive `surface:` and `corpus:` frontmatter
+  // fields. Both default when absent (backwards-compat with existing
+  // fixtures predating the hook engine). Invalid values reject the fixture
+  // entirely rather than defaulting silently — a typo in the enum would
+  // otherwise misroute the matcher dispatch in PR-1's follow-on.
+  const surfaceRaw = extractFrontmatterField(meta, 'surface');
+  let surface: FixtureSurface = 'rules';
+  if (surfaceRaw !== undefined) {
+    // Explicit-empty is a fixture-authoring mistake (`surface:` with no value)
+    // — fail loud rather than silently defaulting, same as a typo.
+    if (!FIXTURE_SURFACES.includes(surfaceRaw as FixtureSurface)) {
+      return null;
+    }
+    surface = surfaceRaw as FixtureSurface;
+  }
+
+  const corpusRaw = extractFrontmatterField(meta, 'corpus');
+  let corpus: FixtureCorpus = 'pass';
+  if (corpusRaw !== undefined) {
+    if (!FIXTURE_CORPORA.includes(corpusRaw as FixtureCorpus)) {
+      return null;
+    }
+    corpus = corpusRaw as FixtureCorpus;
+  }
+
+  return { ruleHash, filePath, failLines, passLines, fixturePath, surface, corpus };
 }
 
 // ─── Fixture scaffolding ────────────────────────────

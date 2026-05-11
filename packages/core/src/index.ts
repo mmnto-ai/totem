@@ -237,6 +237,10 @@ export { redactPath, type RegexTelemetry, RegexTelemetrySchema } from './regex-s
 
 // Rule testing
 export {
+  FIXTURE_CORPORA,
+  FIXTURE_SURFACES,
+  type FixtureCorpus,
+  type FixtureSurface,
   isTodoFixture,
   loadFixtures,
   parseFixture,
