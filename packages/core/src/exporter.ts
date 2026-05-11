@@ -34,15 +34,21 @@ export function formatLessonsAsMarkdown(
     '',
   ];
 
+  const escapeMarkdown = (s: string) => s.replace(/[*_]/g, '\\$&');
+  // Strip C0 control bytes (incl. CR/LF/TAB) so an archivedReason copied
+  // from an operator's terminal session cannot break the bullet shape or
+  // bleed across lines. Mirrors the sanitizing discipline applied to
+  // lesson body content above (per CR mmnto-ai/totem#1878).
+  const sanitizeReason = (s: string) => escapeMarkdown(s.replace(/[\x00-\x1F\x7F]/g, ' ').trim());
   for (const lesson of lessons) {
-    const escapeMarkdown = (s: string) => s.replace(/[*_]/g, '\\$&');
     const heading = escapeMarkdown(lesson.heading);
     const bodyOneLine = escapeMarkdown(lesson.body.replace(/\n+/g, ' ').trim());
     const tagSuffix = lesson.tags.length > 0 ? ` _(${lesson.tags.join(', ')})_` : '';
-    const archivedReason = archivedReasonByHash?.get(
-      hashLesson(lesson.heading, lesson.body).toLowerCase(),
-    );
-    const archivedSuffix = archivedReason ? ` _(archived: ${archivedReason})_` : '';
+    const rawReason = archivedReasonByHash
+      ? archivedReasonByHash.get(hashLesson(lesson.heading, lesson.body))
+      : undefined;
+    const cleanedReason = rawReason ? sanitizeReason(rawReason) : '';
+    const archivedSuffix = cleanedReason ? ` _(archived: ${cleanedReason})_` : '';
     lines.push(`- **${heading}** - ` + bodyOneLine + tagSuffix + archivedSuffix);
   }
 

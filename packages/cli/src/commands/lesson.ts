@@ -252,21 +252,19 @@ export async function lessonArchiveCommand(id: string, opts: { reason?: string }
   // configured.
   if (config.exports && Object.keys(config.exports).length > 0) {
     const lessons = readAllLessons(totemDir);
-    const untestedHashes = new Set(
-      rulesFile.rules
-        .filter((r: CompiledRule) => r.status === 'untested-against-codebase')
-        .map((r: CompiledRule) => r.lessonHash.toLowerCase()),
-    );
+    const untestedHashes = new Set<string>();
     const archivedReasonByHash = new Map<string, string>();
     for (const r of rulesFile.rules) {
-      if (r.status === 'archived' && r.archivedReason) {
-        archivedReasonByHash.set(r.lessonHash.toLowerCase(), r.archivedReason);
+      if (r.status === 'untested-against-codebase') {
+        untestedHashes.add(r.lessonHash);
+      } else if (r.status === 'archived' && r.archivedReason) {
+        archivedReasonByHash.set(r.lessonHash, r.archivedReason);
       }
     }
     const lessonsForExport =
       untestedHashes.size === 0
         ? lessons
-        : lessons.filter((l) => !untestedHashes.has(hashLesson(l.heading, l.body).toLowerCase()));
+        : lessons.filter((l) => !untestedHashes.has(hashLesson(l.heading, l.body)));
     for (const [name, filePath] of Object.entries(config.exports)) {
       const absPath = path.join(cwd, filePath);
       exportLessons(lessonsForExport, absPath, archivedReasonByHash);

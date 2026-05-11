@@ -275,6 +275,48 @@ describe('compileCommand --export archive filter', () => {
     expect(secondRun).toContain(archivedHeading);
   });
 
+  it('archived rule with control bytes / markdown metachars in reason sanitizes the annotation (CR mmnto-ai/totem#1878 R1)', async () => {
+    // A7 invariant: archivedReason is operator-provided free text (via
+    // `--reason "..."`). Control bytes (CR/LF/TAB) MUST NOT break the
+    // bullet shape, markdown metachars MUST be escaped, whitespace-only
+    // input MUST fall back to a plain bullet.
+    const archivedHeading = 'Archived with hostile reason';
+    const archivedBody = 'Lesson body present.';
+    // Embeds: newline, tab, asterisk, underscore — all of which would
+    // distort the bullet if interpolated raw.
+    const dirtyReason = 'broken*pattern_overlaps\nwith next line\twith tab';
+
+    setupWorkspace(
+      tmpDir,
+      {
+        'archived.md': lessonMarkdown(archivedHeading, archivedBody),
+      },
+      [
+        {
+          lessonHash: hashLesson(archivedHeading, archivedBody),
+          lessonHeading: archivedHeading,
+          archived: true,
+          archivedReason: dirtyReason,
+        },
+      ],
+      'copilot-instructions.md',
+    );
+
+    await compileCommand({ export: true });
+
+    const exportPath = path.join(tmpDir, 'copilot-instructions.md');
+    const exported = fs.readFileSync(exportPath, 'utf-8');
+
+    // Bullet survives intact on a single line — no embedded newlines
+    // from the reason text reached the rendered output.
+    const bulletLine = exported.split('\n').find((l) => l.includes(archivedHeading));
+    expect(bulletLine).toBeTruthy();
+    expect(bulletLine).toMatch(/_\(archived:.+\)_/);
+    // Markdown metachars escaped, control bytes replaced with spaces.
+    expect(bulletLine).not.toMatch(/[\x00-\x1F\x7F]/);
+    expect(bulletLine).toContain('broken\\*pattern\\_overlaps');
+  });
+
   it('archived rule rendered without archivedReason falls back to plain bullet (mmnto-ai/totem#1873 graceful degrade)', async () => {
     // A6 invariant: when archivedReason is missing/empty, the bullet
     // still renders — just without the annotation suffix. Tenet 4 spirit:

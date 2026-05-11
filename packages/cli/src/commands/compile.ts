@@ -1786,21 +1786,19 @@ export async function compileCommand(
     // concerns pattern-matching false positives, not lesson-prose validity
     // (mmnto-ai/totem#1873).
     const rawRulesFile = loadCompiledRulesFile(rulesPath);
-    const inertHashes = new Set(
-      rawRulesFile.rules
-        .filter((r) => r.status === 'untested-against-codebase')
-        .map((r) => r.lessonHash.toLowerCase()),
-    );
+    const inertHashes = new Set<string>();
     const archivedReasonByHash = new Map<string, string>();
     for (const r of rawRulesFile.rules) {
-      if (r.status === 'archived' && r.archivedReason) {
-        archivedReasonByHash.set(r.lessonHash.toLowerCase(), r.archivedReason);
+      if (r.status === 'untested-against-codebase') {
+        inertHashes.add(r.lessonHash);
+      } else if (r.status === 'archived' && r.archivedReason) {
+        archivedReasonByHash.set(r.lessonHash, r.archivedReason);
       }
     }
     const lessonsForExport =
       inertHashes.size === 0
         ? lessons
-        : lessons.filter((l) => !inertHashes.has(hashLesson(l.heading, l.body).toLowerCase()));
+        : lessons.filter((l) => !inertHashes.has(hashLesson(l.heading, l.body)));
 
     for (const [name, filePath] of Object.entries(config.exports)) {
       const absPath = path.join(cwd, filePath);
