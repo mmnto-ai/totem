@@ -11,10 +11,13 @@ import { compileCommand } from './compile.js';
 
 // ─── Helpers ─────────────────────────────────────────
 //
-// These tests exercise the export path's archive filter. The fix ensures
-// `totem lesson compile --export` does not emit lessons whose compiled
-// rule is marked `status: archived`, closing the symmetric counterpart of
-// the mmnto-ai/totem#1345 lint-path filter in loadCompiledRules.
+// These tests exercise the export path's inert-status filter. Post
+// mmnto-ai/totem#1873, the filter no longer suppresses `status: archived`
+// rules — Stage-4 archival concerns pattern-matching false positives,
+// not lesson-prose validity, so the prose is still useful agent context.
+// The filter continues to suppress `status: untested-against-codebase`
+// rules per the CR mmnto-ai/totem#1757 R2 rationale: Stage 4 declared
+// behavior unknown, so agent context shouldn't rely on it either.
 
 function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'totem-export-archive-'));
@@ -28,6 +31,7 @@ interface RuleSpec {
   lessonHash: string;
   lessonHeading: string;
   archived?: boolean;
+  archivedReason?: string;
   untestedAgainstCodebase?: boolean;
 }
 
@@ -77,7 +81,10 @@ function setupWorkspace(
           engine: 'regex',
           compiledAt: now,
           ...(r.archived
-            ? { status: 'archived' as const, archivedReason: 'over-broad in test' }
+            ? {
+                status: 'archived' as const,
+                archivedReason: r.archivedReason ?? 'over-broad in test',
+              }
             : r.untestedAgainstCodebase
               ? { status: 'untested-against-codebase' as const }
               : {}),
@@ -123,11 +130,18 @@ describe('compileCommand --export archive filter', () => {
     cleanTmpDir(tmpDir);
   });
 
-  it('excludes lessons whose compiled rule is archived from the export', async () => {
+  it('includes lessons whose compiled rule is archived, annotated with the archival reason (mmnto-ai/totem#1873)', async () => {
+    // Stage-4 archival concerns pattern-matching false positives, not
+    // lesson-prose validity. The export digest is the agent-facing
+    // knowledge surface; archived lesson prose stays useful as agent
+    // context even when the compiled regex is silenced at lint time.
+    // The bullet carries an `_(archived: <reason>)_` suffix so a reading
+    // agent can weight the guidance appropriately.
     const liveHeading = 'Keep this guidance';
     const liveBody = 'Good advice that should always ship.';
-    const archivedHeading = 'Suppress this guidance';
-    const archivedBody = 'Over-broad pattern; archived post-compile.';
+    const archivedHeading = 'Surface this guidance with annotation';
+    const archivedBody = 'Over-broad pattern; archived but prose is still useful.';
+    const archivedReason = 'over-broad in test';
 
     setupWorkspace(
       tmpDir,
@@ -141,6 +155,7 @@ describe('compileCommand --export archive filter', () => {
           lessonHash: hashLesson(archivedHeading, archivedBody),
           lessonHeading: archivedHeading,
           archived: true,
+          archivedReason,
         },
       ],
       'copilot-instructions.md',
@@ -152,7 +167,8 @@ describe('compileCommand --export archive filter', () => {
     const exported = fs.readFileSync(exportPath, 'utf-8');
 
     expect(exported).toContain(liveHeading);
-    expect(exported).not.toContain(archivedHeading);
+    expect(exported).toContain(archivedHeading);
+    expect(exported).toContain(`_(archived: ${archivedReason})_`);
   });
 
   it("excludes lessons whose compiled rule is 'untested-against-codebase' from the export (CR mmnto-ai/totem#1757 R2)", async () => {
@@ -218,5 +234,120 @@ describe('compileCommand --export archive filter', () => {
 
     expect(exported).toContain(h1);
     expect(exported).toContain(h2);
+  });
+
+  it('re-running export over an already-archived rule produces an identical digest (mmnto-ai/totem#1873 Symptom B regression)', async () => {
+    // Symptom B from mmnto-ai/totem#1873: running `compile --export`
+    // twice over the same compiled-rules.json silently dropped the
+    // archived rule on the second run. Verify the digest is identical
+    // across two consecutive invocations on unchanged on-disk state.
+    const liveHeading = 'Stable guidance';
+    const liveBody = 'Always present.';
+    const archivedHeading = 'Stable archived guidance';
+    const archivedBody = 'Archived but still surfaced for agent context.';
+
+    setupWorkspace(
+      tmpDir,
+      {
+        'live.md': lessonMarkdown(liveHeading, liveBody),
+        'archived.md': lessonMarkdown(archivedHeading, archivedBody),
+      },
+      [
+        { lessonHash: hashLesson(liveHeading, liveBody), lessonHeading: liveHeading },
+        {
+          lessonHash: hashLesson(archivedHeading, archivedBody),
+          lessonHeading: archivedHeading,
+          archived: true,
+        },
+      ],
+      'copilot-instructions.md',
+    );
+
+    const exportPath = path.join(tmpDir, 'copilot-instructions.md');
+
+    await compileCommand({ export: true });
+    const firstRun = fs.readFileSync(exportPath, 'utf-8');
+
+    await compileCommand({ export: true });
+    const secondRun = fs.readFileSync(exportPath, 'utf-8');
+
+    expect(secondRun).toBe(firstRun);
+    expect(firstRun).toContain(archivedHeading);
+    expect(secondRun).toContain(archivedHeading);
+  });
+
+  it('archived rule with control bytes / markdown metachars in reason sanitizes the annotation (CR mmnto-ai/totem#1878 R1)', async () => {
+    // A7 invariant: archivedReason is operator-provided free text (via
+    // `--reason "..."`). Control bytes (CR/LF/TAB) MUST NOT break the
+    // bullet shape, markdown metachars MUST be escaped, whitespace-only
+    // input MUST fall back to a plain bullet.
+    const archivedHeading = 'Archived with hostile reason';
+    const archivedBody = 'Lesson body present.';
+    // Embeds: newline, tab, asterisk, underscore — all of which would
+    // distort the bullet if interpolated raw.
+    const dirtyReason = 'broken*pattern_overlaps\nwith next line\twith tab';
+
+    setupWorkspace(
+      tmpDir,
+      {
+        'archived.md': lessonMarkdown(archivedHeading, archivedBody),
+      },
+      [
+        {
+          lessonHash: hashLesson(archivedHeading, archivedBody),
+          lessonHeading: archivedHeading,
+          archived: true,
+          archivedReason: dirtyReason,
+        },
+      ],
+      'copilot-instructions.md',
+    );
+
+    await compileCommand({ export: true });
+
+    const exportPath = path.join(tmpDir, 'copilot-instructions.md');
+    const exported = fs.readFileSync(exportPath, 'utf-8');
+
+    // Bullet survives intact on a single line — no embedded newlines
+    // from the reason text reached the rendered output.
+    const bulletLine = exported.split('\n').find((l) => l.includes(archivedHeading));
+    expect(bulletLine).toBeTruthy();
+    expect(bulletLine).toMatch(/_\(archived:.+\)_/);
+    // Markdown metachars escaped, control bytes replaced with spaces.
+    expect(bulletLine).not.toMatch(/[\x00-\x1F\x7F]/);
+    expect(bulletLine).toContain('broken\\*pattern\\_overlaps');
+  });
+
+  it('archived rule rendered without archivedReason falls back to plain bullet (mmnto-ai/totem#1873 graceful degrade)', async () => {
+    // A6 invariant: when archivedReason is missing/empty, the bullet
+    // still renders — just without the annotation suffix. Tenet 4 spirit:
+    // the rule appears loudly in the digest rather than silently
+    // disappearing.
+    const archivedHeading = 'Archived with no stated reason';
+    const archivedBody = 'Lesson body present.';
+
+    setupWorkspace(
+      tmpDir,
+      {
+        'archived.md': lessonMarkdown(archivedHeading, archivedBody),
+      },
+      [
+        {
+          lessonHash: hashLesson(archivedHeading, archivedBody),
+          lessonHeading: archivedHeading,
+          archived: true,
+          archivedReason: '',
+        },
+      ],
+      'copilot-instructions.md',
+    );
+
+    await compileCommand({ export: true });
+
+    const exportPath = path.join(tmpDir, 'copilot-instructions.md');
+    const exported = fs.readFileSync(exportPath, 'utf-8');
+
+    expect(exported).toContain(archivedHeading);
+    expect(exported).not.toContain('_(archived:');
   });
 });
