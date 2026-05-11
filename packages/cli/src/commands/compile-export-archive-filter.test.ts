@@ -155,6 +155,7 @@ describe('compileCommand --export archive filter', () => {
           lessonHash: hashLesson(archivedHeading, archivedBody),
           lessonHeading: archivedHeading,
           archived: true,
+          archivedReason,
         },
       ],
       'copilot-instructions.md',
