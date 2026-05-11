@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { evaluateHook, formatRejection, type HookDecision } from './runtime.js';
+import { evaluateHook, formatRejection, type RejectDecision } from './runtime.js';
 import type { CompiledHookRule } from './schema.js';
 
 function rule(overrides: Partial<CompiledHookRule> = {}): CompiledHookRule {
@@ -125,7 +125,7 @@ describe('evaluateHook', () => {
 
 describe('formatRejection', () => {
   it('formats the structured prefix with packId/ruleId when recoveryHint is absent', () => {
-    const decision: HookDecision = {
+    const decision: RejectDecision = {
       decision: 'reject',
       packId: '@mmnto/pack-bot-coderabbit',
       ruleId: 'r1',
@@ -137,7 +137,7 @@ describe('formatRejection', () => {
   });
 
   it('includes the recovery-hint line when present', () => {
-    const decision: HookDecision = {
+    const decision: RejectDecision = {
       decision: 'reject',
       packId: '@mmnto/pack-bot-coderabbit',
       ruleId: 'r1',
@@ -150,7 +150,7 @@ describe('formatRejection', () => {
     );
   });
 
-  it('throws when given an allow decision (caller bug)', () => {
-    expect(() => formatRejection({ decision: 'allow' })).toThrow();
-  });
+  // The previous "throws when given an allow decision" runtime guard is gone —
+  // formatRejection's parameter is now narrowed to RejectDecision so the type
+  // system prevents the caller bug at compile time. TS-only enforcement.
 });

@@ -29,7 +29,7 @@ const RegexPatternSchema = z
     (p) => {
       try {
         new RegExp(p);
-        return true;
+        return true; // totem-context: intentional — catch below is throw-as-control-flow for regex validation
       } catch {
         return false;
       }

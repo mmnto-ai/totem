@@ -21,15 +21,17 @@ export interface ToolCallPayload {
   args: string;
 }
 
-export type HookDecision =
-  | { decision: 'allow' }
-  | {
-      decision: 'reject';
-      message: string;
-      packId: string;
-      ruleId: string;
-      recoveryHint?: string;
-    };
+export type AllowDecision = { decision: 'allow' };
+
+export type RejectDecision = {
+  decision: 'reject';
+  message: string;
+  packId: string;
+  ruleId: string;
+  recoveryHint?: string;
+};
+
+export type HookDecision = AllowDecision | RejectDecision;
 
 /**
  * Build the structured rejection message per ADR-104 § Decision 1:
@@ -40,11 +42,11 @@ export type HookDecision =
  * The `→ <recoveryHint>` line is omitted when no recoveryHint is provided.
  * Agents and operators grep for the `[totem:hook-block]` prefix; the
  * `<packId>/<ruleId>` carries provenance.
+ *
+ * Parameter is narrowed to `RejectDecision` so the type system prevents
+ * passing an allow decision — no runtime guard needed.
  */
-export function formatRejection(decision: HookDecision): string {
-  if (decision.decision !== 'reject') {
-    throw new Error('formatRejection: expected reject decision');
-  }
+export function formatRejection(decision: RejectDecision): string {
   const header = `[totem:hook-block] ${decision.packId}/${decision.ruleId}: ${decision.message}`;
   if (decision.recoveryHint) {
     return `${header}\n  → ${decision.recoveryHint}`;
