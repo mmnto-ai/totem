@@ -44,7 +44,7 @@ When deciding where to store information or rules, use this decision tree:
 ### Workflow Orchestrator Rituals
 [FOR LOCAL CLI/TERMINAL AGENTS ONLY] Do not attempt to run these commands if you are a headless bot or operating in a cloud PR environment (e.g., Gemini Code Assist on GitHub).
 Totem provides CLI commands that map to your development lifecycle. Use them at these moments:
-1. **Start of Session:** Run \`totem status\` to check manifest freshness, rule count, lesson count, and review staleness. Read \`docs/active_work.md\` for momentum. Run \`totem triage\` if you need to pick a new task.
+1. **Start of Session:** The SessionStart hook automatically runs \`totem describe\` to emit the project-orientation banner (project, tier, rule/lesson counts, targets, hooks). For a freshness check (manifest staleness, shield drift, review state), run \`totem status\`. Read \`docs/active_work.md\` for momentum. Run \`totem triage\` if you need to pick a new task.
 2. **Before Implementation:** Run \`totem spec <issue-url-or-topic>\` to generate an architectural plan and review related context before writing code.
 3. **Before Push:** Run \`totem lint\` for a fast compiled-rules check (zero LLM, ~2s). **Before PR:** Run \`totem review\` for a full AI-powered code review against project knowledge (~18s).
 4. **End of Session:** Run \`totem handoff\` to generate a snapshot for the next agent session with current progress and open threads.
@@ -82,16 +82,21 @@ export const BARE_REF_REGEX_SOURCE = '(?<!\\b[\\w-]+/[\\w-]+)#(\\d+)(?![-\\w])';
 // --- Gemini CLI hook templates ---
 
 export const GEMINI_SESSION_START = `// [totem] auto-generated — Gemini CLI SessionStart hook
-// Runs \`totem status\` at the start of every Gemini CLI session.
+// Runs \`totem describe\` at the start of every Gemini CLI session to emit
+// the project-orientation banner ("[Describe] Project: ... Lessons: N
+// Targets: N Hooks: ..."). Matches the family-canonical pattern used by
+// totem-strategy, totem-substrate, arhgap11, and totem-status, and
+// matches the Claude-side SessionStart hook scaffolded by this same init
+// pass (mmnto-ai/totem#1884).
 const { execSync } = require('child_process');
 
 try {
-  execSync('totem status', {
+  execSync('totem describe', {
     timeout: 30000,
     stdio: ['ignore', 'inherit', 'inherit'],
   });
 } catch (err) {
-  process.stderr.write('[Totem Error] Status unavailable: ' + (err instanceof Error ? err.message : String(err)) + '\\n');
+  process.stderr.write('[Totem] Briefing unavailable: ' + (err instanceof Error ? err.message : String(err)) + '\\n');
 }
 `;
 

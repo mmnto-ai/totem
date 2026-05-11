@@ -38,6 +38,7 @@ import {
   CLAUDE_SESSION_START,
   CLAUDE_SESSION_START_ENTRY,
   GEMINI_BEFORE_TOOL,
+  GEMINI_SESSION_START,
   generateConfigForFormat,
 } from './init-templates.js';
 
@@ -1414,6 +1415,44 @@ describe('CLAUDE_SESSION_START template', () => {
     // those should leak into the consumer-facing baseline.
     expect(CLAUDE_SESSION_START).not.toContain('design-tenets');
     expect(CLAUDE_SESSION_START).not.toContain('.journal/strategy');
+  });
+});
+
+describe('GEMINI_SESSION_START template', () => {
+  // Locks the family-canonical convergence on `totem describe` per
+  // mmnto-ai/totem#1884. The hook must call `describe` to emit the
+  // orientation banner consumers integrate against at session start;
+  // `status` produces health output (manifest freshness, shield drift)
+  // which serves a different purpose. Catches template drift before it
+  // ships to fresh-init repos.
+  it('contains the totem auto-generated marker', () => {
+    expect(GEMINI_SESSION_START).toContain('// [totem] auto-generated');
+  });
+
+  it('calls `totem describe` (canonical orientation command)', () => {
+    expect(GEMINI_SESSION_START).toContain("'totem describe'");
+  });
+
+  it('does NOT call `totem status` (the prior drifted shape)', () => {
+    expect(GEMINI_SESSION_START).not.toContain("'totem status'");
+  });
+
+  it('uses a 30-second timeout matching the Claude-side hook contract', () => {
+    expect(GEMINI_SESSION_START).toContain('timeout: 30000');
+  });
+
+  it('routes diagnostic stdio so the banner lands in the session prompt', () => {
+    // Gemini SessionStart hooks inherit stdio; the third entry must be
+    // 'inherit' for the orientation output to reach the agent.
+    expect(GEMINI_SESSION_START).toContain("stdio: ['ignore', 'inherit', 'inherit']");
+  });
+
+  it('emits a generic fallback breadcrumb when describe fails', () => {
+    // No strategy-repo-specific pointers leak; matches the Claude-side
+    // fallback wording for cross-agent consistency.
+    expect(GEMINI_SESSION_START).toContain('Briefing unavailable');
+    expect(GEMINI_SESSION_START).not.toContain('design-tenets');
+    expect(GEMINI_SESSION_START).not.toContain('.journal/strategy');
   });
 });
 
