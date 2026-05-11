@@ -100,16 +100,20 @@ const TODO_MARKER = '// TODO: add code that should';
 /**
  * Extract a simple `key: value` from frontmatter using line iteration —
  * avoids needing a full YAML parser and stays consistent with the existing
- * regex-based field extraction. Returns `undefined` when the key is absent
- * or has no value after the colon.
+ * regex-based field extraction.
+ *
+ * Returns `undefined` ONLY when the key is absent from the frontmatter.
+ * Returns `''` (empty string) when the key is present but its value is empty
+ * — so callers can distinguish "omitted, apply default" from "explicit empty,
+ * reject as invalid." Without this distinction, `surface:` (blank) would
+ * silently route to the default and bypass the enum typo guard.
  */
 function extractFrontmatterField(meta: string, key: string): string | undefined {
   const prefix = `${key}:`;
   for (const line of meta.split('\n')) {
     const trimmed = line.trim();
     if (trimmed.startsWith(prefix)) {
-      const value = trimmed.slice(prefix.length).trim();
-      return value.length > 0 ? value : undefined;
+      return trimmed.slice(prefix.length).trim();
     }
   }
   return undefined;
@@ -149,6 +153,8 @@ export function parseFixture(content: string, fixturePath: string): RuleTestFixt
   const surfaceRaw = extractFrontmatterField(meta, 'surface');
   let surface: FixtureSurface = 'rules';
   if (surfaceRaw !== undefined) {
+    // Explicit-empty is a fixture-authoring mistake (`surface:` with no value)
+    // — fail loud rather than silently defaulting, same as a typo.
     if (!FIXTURE_SURFACES.includes(surfaceRaw as FixtureSurface)) {
       return null;
     }

@@ -31,7 +31,7 @@ const validRule = {
 };
 
 describe('loadCompiledHooks', () => {
-  it('returns an empty result when the manifest file does not exist (fresh repo)', () => {
+  it('returns an empty result when the manifest file does not exist (fresh repo, ENOENT)', () => {
     const result = loadCompiledHooks({
       manifestPath: path.join(workDir, 'missing.json'),
       installedPackVersions: {},
@@ -39,6 +39,26 @@ describe('loadCompiledHooks', () => {
     expect(result.hooks).toEqual([]);
     expect(result.warnings).toEqual([]);
     expect(result.errors).toEqual([]);
+  });
+
+  it('surfaces non-ENOENT read errors as HOOKS_LOAD_FAILED (does not pretend the file is missing)', () => {
+    // Reading a directory as a file produces EISDIR on POSIX / EBADF or
+    // ENOTSUP-flavoured failures on Windows. Whatever the platform-specific
+    // errno, it is NOT ENOENT — so the loader must surface it, not silently
+    // return the "manifest absent" result that the prior existsSync pre-check
+    // would have masked.
+    const dirAsManifest = path.join(workDir, 'a-directory');
+    fs.mkdirSync(dirAsManifest);
+    const result = loadCompiledHooks({
+      manifestPath: dirAsManifest,
+      installedPackVersions: {},
+    });
+    expect(result.hooks).toEqual([]);
+    expect(result.errors.length).toBe(1);
+    const err = result.errors[0]!;
+    expect(err.code).toBe('HOOKS_LOAD_FAILED');
+    expect(err.message).toContain('failed to read compiled-hooks manifest');
+    expect(err.cause).toBeDefined();
   });
 
   it('records a structural error on invalid JSON and preserves the original SyntaxError via cause', () => {

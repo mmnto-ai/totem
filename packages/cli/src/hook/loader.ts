@@ -58,15 +58,20 @@ export function loadCompiledHooks(options: LoadCompiledHooksOptions): LoadCompil
   const warnings: string[] = [];
   const errors: TotemError[] = [];
 
-  if (!fs.existsSync(options.manifestPath)) {
-    return { hooks: [], warnings, errors };
-  }
-
+  // No `fs.existsSync` pre-check: that returns false for any filesystem
+  // error (permission denied, symlink loops, EBUSY, etc.), not just ENOENT.
+  // Treating those as "missing manifest" would silently swallow real
+  // diagnostics. Catch ENOENT explicitly inside the read; everything else
+  // surfaces as a HOOKS_LOAD_FAILED entry.
   let raw: string;
   try {
     raw = fs.readFileSync(options.manifestPath, 'utf8');
     // totem-context: intentional — error captured into diagnostics array (the loader's contract is diagnostics-not-throws per Tenet 4 carve-out for hooks being best-effort)
   } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      // Fresh repo without installed pack hooks is a valid state, not a fault.
+      return { hooks: [], warnings, errors };
+    }
     errors.push(
       new TotemError(
         'HOOKS_LOAD_FAILED',

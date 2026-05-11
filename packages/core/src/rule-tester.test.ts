@@ -139,6 +139,34 @@ corpus: maybe
     const fixture = parseFixture(content, 'test.md');
     expect(fixture).toBeNull();
   });
+
+  it('rejects fixtures whose surface field is present but explicit-empty (no silent default)', () => {
+    // `surface:` with no value should fail loud — silently defaulting would
+    // misroute the fixture and weaken the typo-guard semantics.
+    const content = `---
+rule: abc123
+file: src/app.ts
+surface:
+---
+
+## Should fail
+`;
+    const fixture = parseFixture(content, 'test.md');
+    expect(fixture).toBeNull();
+  });
+
+  it('rejects fixtures whose corpus field is present but explicit-empty (no silent default)', () => {
+    const content = `---
+rule: abc123
+file: src/app.ts
+corpus:
+---
+
+## Should fail
+`;
+    const fixture = parseFixture(content, 'test.md');
+    expect(fixture).toBeNull();
+  });
 });
 
 describe('scaffoldFixture', () => {
