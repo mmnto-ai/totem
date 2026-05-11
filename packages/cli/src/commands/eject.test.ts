@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanTmpDir } from '../test-utils.js';
 import type { EjectSummary } from './eject.js';
 import { ejectCommand, scrubPostCheckoutHook, scrubPostMergeHook } from './eject.js';
+import { SKILL_MARKER_END, SKILL_MARKER_START } from './init-templates.js';
 
 function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'totem-eject-'));
@@ -539,5 +540,86 @@ fi
     expect(content).toContain('deploy notification');
     expect(content).not.toContain('[totem]');
     expect(summary.scrubbed).toContain('.git/hooks/post-checkout');
+  });
+});
+
+describe('eject — distributed Claude skills (mmnto-ai/totem#1890 Phase C slice 3)', () => {
+  let cwd: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    cwd = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(cwd);
+    fs.mkdirSync(path.join(cwd, '.git', 'hooks'), { recursive: true });
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(cwd);
+  });
+
+  function writeSkill(name: string, body: string): string {
+    const filePath = path.join(cwd, '.claude', 'skills', name, 'SKILL.md');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, body, 'utf-8');
+    return filePath;
+  }
+
+  it('removes signoff + review-reply SKILL.md files when markers are present', async () => {
+    const signoffPath = writeSkill(
+      'signoff',
+      `---\nname: signoff\n---\n\n${SKILL_MARKER_START}\nbody\n${SKILL_MARKER_END}\n`,
+    );
+    const reviewReplyPath = writeSkill(
+      'review-reply',
+      `---\nname: review-reply\n---\n\n${SKILL_MARKER_START}\nbody\n${SKILL_MARKER_END}\n`,
+    );
+
+    await ejectCommand({ force: true });
+
+    expect(fs.existsSync(signoffPath)).toBe(false);
+    expect(fs.existsSync(reviewReplyPath)).toBe(false);
+  });
+
+  it('prunes empty per-skill directories and the skills root after removal', async () => {
+    writeSkill(
+      'signoff',
+      `---\nname: signoff\n---\n\n${SKILL_MARKER_START}\nbody\n${SKILL_MARKER_END}\n`,
+    );
+    writeSkill(
+      'review-reply',
+      `---\nname: review-reply\n---\n\n${SKILL_MARKER_START}\nbody\n${SKILL_MARKER_END}\n`,
+    );
+
+    await ejectCommand({ force: true });
+
+    expect(fs.existsSync(path.join(cwd, '.claude', 'skills', 'signoff'))).toBe(false);
+    expect(fs.existsSync(path.join(cwd, '.claude', 'skills', 'review-reply'))).toBe(false);
+    expect(fs.existsSync(path.join(cwd, '.claude', 'skills'))).toBe(false);
+  });
+
+  it('preserves user-authored skill files without markers', async () => {
+    const customPath = writeSkill('signoff', '# my custom signoff\n\ndo it differently\n');
+
+    await ejectCommand({ force: true });
+
+    expect(fs.existsSync(customPath)).toBe(true);
+    expect(fs.readFileSync(customPath, 'utf-8')).toContain('do it differently');
+  });
+
+  it('preserves the skills root if a non-distributed skill remains', async () => {
+    writeSkill(
+      'signoff',
+      `---\nname: signoff\n---\n\n${SKILL_MARKER_START}\nbody\n${SKILL_MARKER_END}\n`,
+    );
+    // User has their own skill not managed by totem
+    const customSkill = writeSkill('panel-audit', '# Custom panel audit skill\n');
+
+    await ejectCommand({ force: true });
+
+    expect(fs.existsSync(path.join(cwd, '.claude', 'skills', 'signoff'))).toBe(false);
+    expect(fs.existsSync(customSkill)).toBe(true);
+    expect(fs.existsSync(path.join(cwd, '.claude', 'skills'))).toBe(true);
   });
 });

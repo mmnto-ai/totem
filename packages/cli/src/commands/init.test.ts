@@ -25,6 +25,7 @@ import {
   REFLEX_VERSION,
   scaffoldClaudeHooks,
   scaffoldClaudeSessionStart,
+  scaffoldClaudeSkill,
   scaffoldClaudeWriteShield,
   scaffoldFile,
   scaffoldMcpConfig,
@@ -37,9 +38,14 @@ import {
   CLAUDE_PREWRITESHIELD_ENTRY,
   CLAUDE_SESSION_START,
   CLAUDE_SESSION_START_ENTRY,
+  DISTRIBUTED_CLAUDE_SKILLS,
   GEMINI_BEFORE_TOOL,
   GEMINI_SESSION_START,
   generateConfigForFormat,
+  REVIEW_REPLY_SKILL_CONTENT,
+  SIGNOFF_SKILL_CONTENT,
+  SKILL_MARKER_END,
+  SKILL_MARKER_START,
 } from './init-templates.js';
 
 const SERVER_ENTRY = { type: 'stdio', command: 'npx', args: ['-y', '@mmnto/mcp'] };
@@ -1625,5 +1631,120 @@ describe('GEMINI_BEFORE_TOOL write_file/edit_file extension', () => {
 
   it('cites the seal at mmnto-ai/totem-strategy#145 in BeforeTool extension', () => {
     expect(GEMINI_BEFORE_TOOL).toContain('mmnto-ai/totem-strategy#145');
+  });
+});
+
+describe('scaffoldClaudeSkill (mmnto-ai/totem#1890 Phase C slice 3)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-skill-test-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('creates the file with canonical content when none exists', () => {
+    const filePath = path.join(tmpDir, '.claude', 'skills', 'signoff', 'SKILL.md');
+    const result = scaffoldClaudeSkill(filePath, SIGNOFF_SKILL_CONTENT);
+    expect(result.action).toBe('created');
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe(SIGNOFF_SKILL_CONTENT);
+  });
+
+  it('refreshes inside-marker content and preserves user addenda below the end marker', () => {
+    const filePath = path.join(tmpDir, '.claude', 'skills', 'signoff', 'SKILL.md');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+
+    const oldCanonical = `---
+name: signoff
+description: End-of-session — update memory, write journal entry, clean up
+---
+
+${SKILL_MARKER_START}
+OLD canonical step 1.
+OLD canonical step 2.
+${SKILL_MARKER_END}
+
+## User addenda
+
+LC-specific: run \`pnpm docs:inject\` before journal write.
+`;
+    fs.writeFileSync(filePath, oldCanonical, 'utf-8');
+
+    const result = scaffoldClaudeSkill(filePath, SIGNOFF_SKILL_CONTENT);
+    expect(result.action).toBe('refreshed');
+
+    const after = fs.readFileSync(filePath, 'utf-8');
+    expect(after).toContain('LC-specific: run `pnpm docs:inject`');
+    // Inside-marker content should match canonical's inside-marker section.
+    const canonicalEnd = SIGNOFF_SKILL_CONTENT.indexOf(SKILL_MARKER_END);
+    expect(
+      after.startsWith(SIGNOFF_SKILL_CONTENT.slice(0, canonicalEnd + SKILL_MARKER_END.length)),
+    ).toBe(true);
+  });
+
+  it('returns `unchanged` when the file already matches canonical byte-for-byte', () => {
+    const filePath = path.join(tmpDir, '.claude', 'skills', 'signoff', 'SKILL.md');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, SIGNOFF_SKILL_CONTENT, 'utf-8');
+
+    const result = scaffoldClaudeSkill(filePath, SIGNOFF_SKILL_CONTENT);
+    expect(result.action).toBe('unchanged');
+  });
+
+  it('preserves a user-authored file without markers and surfaces a migration hint', () => {
+    const filePath = path.join(tmpDir, '.claude', 'skills', 'signoff', 'SKILL.md');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    const userContent = '# My custom signoff\n\nDo it my way.\n';
+    fs.writeFileSync(filePath, userContent, 'utf-8');
+
+    const result = scaffoldClaudeSkill(filePath, SIGNOFF_SKILL_CONTENT);
+    expect(result.action).toBe('preserved');
+    expect(result.err).toContain('canonical markers');
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe(userContent);
+  });
+
+  it('preserves a file whose markers are out of order (malformed)', () => {
+    const filePath = path.join(tmpDir, '.claude', 'skills', 'signoff', 'SKILL.md');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    const malformed = `# Custom\n${SKILL_MARKER_END}\n[bogus content]\n${SKILL_MARKER_START}\n`;
+    fs.writeFileSync(filePath, malformed, 'utf-8');
+
+    const result = scaffoldClaudeSkill(filePath, SIGNOFF_SKILL_CONTENT);
+    expect(result.action).toBe('preserved');
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe(malformed);
+  });
+
+  it('DISTRIBUTED_CLAUDE_SKILLS lists signoff and review-reply with their canonical content', () => {
+    const names = DISTRIBUTED_CLAUDE_SKILLS.map((s) => s.name);
+    expect(names).toEqual(['signoff', 'review-reply']);
+    const lookup = Object.fromEntries(DISTRIBUTED_CLAUDE_SKILLS.map((s) => [s.name, s.content]));
+    expect(lookup.signoff).toBe(SIGNOFF_SKILL_CONTENT);
+    expect(lookup['review-reply']).toBe(REVIEW_REPLY_SKILL_CONTENT);
+  });
+});
+
+describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890)', () => {
+  // The canonical skill content embedded in init-templates.ts MUST match the
+  // SKILL.md file checked into .claude/skills/<name>/SKILL.md verbatim. If
+  // they drift, consumers of `totem init` ship stale skill content. This
+  // invariant fails CI rather than silently propagating the drift.
+  const repoRoot = path.resolve(__dirname, '..', '..', '..', '..');
+
+  it('SIGNOFF_SKILL_CONTENT matches .claude/skills/signoff/SKILL.md', () => {
+    const source = fs.readFileSync(
+      path.join(repoRoot, '.claude', 'skills', 'signoff', 'SKILL.md'),
+      'utf-8',
+    );
+    expect(SIGNOFF_SKILL_CONTENT).toBe(source);
+  });
+
+  it('REVIEW_REPLY_SKILL_CONTENT matches .claude/skills/review-reply/SKILL.md', () => {
+    const source = fs.readFileSync(
+      path.join(repoRoot, '.claude', 'skills', 'review-reply', 'SKILL.md'),
+      'utf-8',
+    );
+    expect(REVIEW_REPLY_SKILL_CONTENT).toBe(source);
   });
 });

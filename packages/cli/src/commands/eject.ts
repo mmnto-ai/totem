@@ -1,6 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { SKILL_MARKER_END, SKILL_MARKER_START } from './init-templates.js';
+
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Eject';
@@ -9,6 +11,9 @@ const TOTEM_HOOK_END = '[totem] end post-merge';
 const TOTEM_CHECKOUT_MARKER = '[totem] post-checkout hook';
 const TOTEM_CHECKOUT_END = '[totem] end post-checkout';
 const TOTEM_FILE_MARKER = '// [totem] auto-generated';
+
+/** Skill names distributed by Phase C slice 3 (mmnto-ai/totem#1890). */
+const DISTRIBUTED_CLAUDE_SKILL_NAMES = ['signoff', 'review-reply'];
 
 /** Files that may have AI reflex blocks appended by `totem init`. */
 const REFLEX_FILES = ['CLAUDE.md', '.cursorrules'];
@@ -322,6 +327,66 @@ function scrubCommittedClaudeSettings(cwd: string, summary: EjectSummary): void 
 }
 
 /**
+ * Remove the distributed Claude session-utility skills installed by Phase C
+ * slice 3 (mmnto-ai/totem#1890). Marker-checked: only removes files whose
+ * canonical content (between SKILL_MARKER_START / SKILL_MARKER_END) is
+ * present. User-authored skills without markers are preserved.
+ *
+ * Bottom-up directory pruning matches the existing scrub helper precedent —
+ * empty `.claude/skills/<name>/` and `.claude/skills/` get unlinked so the
+ * filesystem state is clean.
+ */
+function scrubClaudeSkills(cwd: string, summary: EjectSummary): void {
+  const skillsRoot = path.join(cwd, '.claude', 'skills');
+
+  for (const name of DISTRIBUTED_CLAUDE_SKILL_NAMES) {
+    const rel = `.claude/skills/${name}/SKILL.md`;
+    const filePath = path.join(skillsRoot, name, 'SKILL.md');
+    if (!fs.existsSync(filePath)) {
+      summary.skipped.push(`${rel} (not found)`);
+      continue;
+    }
+
+    const content = fs.readFileSync(filePath, 'utf-8');
+    if (!content.includes(SKILL_MARKER_START) || !content.includes(SKILL_MARKER_END)) {
+      summary.skipped.push(`${rel} (no Totem markers — user-authored)`);
+      continue;
+    }
+
+    try {
+      fs.unlinkSync(filePath);
+      summary.removed.push(rel);
+      // totem-context: intentional cleanup — eject best-effort per Tenet 4 carve-out
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      summary.skipped.push(`${rel} (${msg})`);
+      continue;
+    }
+
+    // Prune the per-skill directory if empty.
+    const skillDir = path.join(skillsRoot, name);
+    try {
+      if (fs.existsSync(skillDir) && fs.readdirSync(skillDir).length === 0) {
+        fs.rmdirSync(skillDir);
+      }
+      // totem-context: intentional cleanup — best-effort directory pruning
+    } catch {
+      /* eject best-effort */
+    }
+  }
+
+  // Prune the skills root if empty after per-skill pruning.
+  try {
+    if (fs.existsSync(skillsRoot) && fs.readdirSync(skillsRoot).length === 0) {
+      fs.rmdirSync(skillsRoot);
+    }
+    // totem-context: intentional cleanup — best-effort skills-root pruning
+  } catch {
+    /* eject best-effort */
+  }
+}
+
+/**
  * Remove the AI Integration block appended by `totem init` to reflex files.
  */
 function scrubReflexFiles(cwd: string, summary: EjectSummary): void {
@@ -426,10 +491,13 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
   // 4. Scrub Claude settings.json (committed PreWriteShield + SessionStart entries)
   scrubCommittedClaudeSettings(cwd, summary);
 
-  // 5. Scrub AI reflex blocks from markdown files
+  // 5. Scrub distributed Claude session-utility skills (Phase C slice 3)
+  scrubClaudeSkills(cwd, summary);
+
+  // 6. Scrub AI reflex blocks from markdown files
   scrubReflexFiles(cwd, summary);
 
-  // 6. Delete artifacts
+  // 7. Delete artifacts
   deleteArtifacts(cwd, summary);
 
   // Print summary

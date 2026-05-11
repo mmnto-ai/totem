@@ -371,6 +371,131 @@ export const CLAUDE_SESSION_START_ENTRY = {
   ],
 };
 
+// ─── Claude Code skill distribution (mmnto-ai/totem#1890 Phase C slice 3) ───
+//
+// Skills are surfaced into consumer repos at `.claude/skills/<name>/SKILL.md`.
+// Marker-based replace: canonical content lives between SKILL_MARKER_START
+// and SKILL_MARKER_END. Re-running `totem init` replaces inside-marker
+// content with the current canonical; content AFTER the end marker is
+// user-customization territory and survives across refreshes.
+//
+// v0.1 ships two skills: signoff and review-reply. Both passed the
+// canonical/customization audit (universal across consumer repos,
+// idempotent on refresh, no `totem <name>` subcommand collision).
+//
+// Source-of-truth is `mmnto-ai/totem:.claude/skills/<name>/SKILL.md`. The
+// `installed-skills-match-source.test.ts` invariant locks these constants
+// against the source files so canonical drift fails CI rather than
+// silently propagating stale skill content to consumers.
+
+export const SKILL_MARKER_START = '<!-- totem:skill-start -->';
+export const SKILL_MARKER_END = '<!-- totem:skill-end -->';
+
+export const SIGNOFF_SKILL_CONTENT =
+  `---
+name: signoff
+description: End-of-session — update memory, write journal entry, clean up
+---
+
+${SKILL_MARKER_START}
+
+End-of-session wrap-up:
+
+1. Update \`MEMORY.md\` with any new state (version shipped, tickets closed, key decisions)
+2. Write a journal entry to the substrate journal at \`<substrate>/.journal/totem/<filename>.md\` summarizing today's work. Use \`resolveSubstratePaths(gitRoot).journalRoot\` from \`@mmnto/totem\` to locate the substrate; if \`source === 'none'\`, fall back to repo-local \`.journal/totem/\` and warn (ADR-090 graceful degradation).
+3. Commit + push the substrate journal entry from \`mmnto-ai/totem-substrate\` (NOT this repo — \`.journal/\` is sediment-frozen here per ADR-100). Use rebase-and-retry on the push since other agents may sign off concurrently:
+
+   \`\`\`bash
+   cd <substrate-repo-root>
+   git add .journal/totem/<filename>.md
+   git commit -m "journal(totem): <slug>"
+   pushed=0
+   for i in 1 2 3 4 5; do
+     git push origin main && { pushed=1; break; }
+     git pull --rebase --autostash origin main || { echo "Rebase conflict — manual resolution needed"; break; }
+     sleep 1
+   done
+   [ "$pushed" = 1 ] || { echo "ERROR: substrate push failed — surface to user"; exit 1; }
+   \`\`\`
+
+   **Why the retry loop:** Substrate \`main\` accepts only fast-forward pushes. If a peer push (strategy-Claude, lc-Claude, status-Claude, etc.) lands between your commit and your push, yours fails with \`non-fast-forward\`. Per-agent journal filenames (\`<model>-NNNN-*.md\`) don't collide, so the rebase auto-succeeds without conflict — typically resolves within 1-2 retries. After 5 retries surface failure to the user; that's likely a genuine same-file edit (e.g., two recipients moving the same \`_broadcast/\` file to \`processed/\`) that needs manual resolution.
+
+` +
+  // totem-context: documentation example — `git branch -D` shown in canonical signoff procedure for human readers; not a runtime invocation in this file
+  `4. Clean up stale local branches: \`git branch -vv | grep ': gone]' | awk '{print $1}' | xargs git branch -D\`
+5. Report: what shipped, what's pending, what's next
+${SKILL_MARKER_END}
+`;
+
+export const REVIEW_REPLY_SKILL_CONTENT = `---
+name: review-reply
+description: Unified PR review triage — fetch, normalize, and batch-action bot comments
+---
+
+${SKILL_MARKER_START}
+
+Triage PR review comments from all bots for PR $ARGUMENTS.
+
+## Phase 1: Fetch & Categorize (Deterministic)
+
+Run the triage command to fetch, normalize, deduplicate, and categorize all bot comments:
+
+\`\`\`bash
+pnpm totem triage-pr $ARGUMENTS
+\`\`\`
+
+This outputs a categorized inbox grouped by blast radius (Security → Architecture → Convention → Nits) with cross-bot deduplication already applied. The heavy lifting is done in TypeScript — no LLM math needed.
+
+**STOP HERE.** Present the output to the user and wait for them to specify actions. Do NOT proceed to Phase 2 until the user replies.
+
+## Phase 2: Execute Actions (Bulk Support)
+
+The user may type individual IDs (e.g., \`fix 4, 11\`) OR use bulk actions:
+
+- \`fix all security\`
+- \`defer all nits\`
+- \`extract all architecture\`
+
+### \`fix <numbers | category>\`
+
+Mark items as will-fix. No API calls — just acknowledge. The user will make code changes next.
+
+### \`defer <numbers | category> [ticket]\`
+
+Auto-reply on the PR acknowledging the deferral:
+
+- **CodeRabbit items:** Reply inline to each thread with "Tracked in #NNN" or "Deferred — not blocking for this PR."
+- **GCA items:** DO NOT reply inline. Batch ALL GCA responses into ONE issue comment: \`@gemini-code-assist\` followed by a numbered list addressing each finding. Use \`gh api repos/{owner}/{repo}/issues/$ARGUMENTS/comments --input -\` with JSON payload.
+- **SARIF items:** No reply needed (our own tool).
+
+### \`nit <numbers | category>\`
+
+Same as defer but reply text is "Acknowledged — nit / by design."
+
+### \`extract <numbers | category>\`
+
+For each selected finding, generate a lesson and call \`mcp__totem-dev__add_lesson\` (or equivalent):
+
+- Use the bot's finding as the lesson body
+- Add relevant tags from the file path and finding category
+- The lesson will automatically get \`lifecycle: nursery\` treatment
+
+### \`done\`
+
+Print summary of actions taken and exit.
+
+## CRITICAL: GCA Reply Protocol
+
+**NEVER reply individually to GCA bot comments.** GCA has a quota and will NOT respond to replies unless they contain \`@gemini-code-assist\`. Always batch ALL GCA responses into a single PR-level comment using the issue comments API endpoint (\`/issues/{pr}/comments\`), not the review comments reply endpoint.
+
+${SKILL_MARKER_END}
+`;
+
+export const DISTRIBUTED_CLAUDE_SKILLS = [
+  { name: 'signoff', content: SIGNOFF_SKILL_CONTENT },
+  { name: 'review-reply', content: REVIEW_REPLY_SKILL_CONTENT },
+] as const;
+
 // ─── Config generation ──────────────────────────────────
 
 export async function generateConfig(
