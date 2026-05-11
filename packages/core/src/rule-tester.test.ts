@@ -75,6 +75,70 @@ file: src/app.ts
     const fixture = parseFixture(content, 'test.md');
     expect(fixture).toBeNull();
   });
+
+  it('defaults surface to rules and corpus to pass when frontmatter omits them (backwards-compat)', () => {
+    const content = `---
+rule: abc123
+file: src/app.ts
+---
+
+## Should fail
+
+\`\`\`ts
+const x = badThing();
+\`\`\`
+`;
+    const fixture = parseFixture(content, 'test.md');
+    expect(fixture).not.toBeNull();
+    expect(fixture!.surface).toBe('rules');
+    expect(fixture!.corpus).toBe('pass');
+  });
+
+  it('reads explicit surface: hooks and corpus: fail from frontmatter', () => {
+    const content = `---
+rule: gca-tag-xor-command
+file: .totem/hook-fixtures/gca.txt
+surface: hooks
+corpus: fail
+---
+
+## Should fail
+
+\`\`\`text
+gh pr comment 123 -b "@gemini-code-assist /gemini review"
+\`\`\`
+`;
+    const fixture = parseFixture(content, 'test.md');
+    expect(fixture).not.toBeNull();
+    expect(fixture!.surface).toBe('hooks');
+    expect(fixture!.corpus).toBe('fail');
+  });
+
+  it('rejects the fixture entirely when surface is an unknown enum value (typo guard)', () => {
+    const content = `---
+rule: abc123
+file: src/app.ts
+surface: hokks
+---
+
+## Should fail
+`;
+    const fixture = parseFixture(content, 'test.md');
+    expect(fixture).toBeNull();
+  });
+
+  it('rejects the fixture entirely when corpus is an unknown enum value (typo guard)', () => {
+    const content = `---
+rule: abc123
+file: src/app.ts
+corpus: maybe
+---
+
+## Should fail
+`;
+    const fixture = parseFixture(content, 'test.md');
+    expect(fixture).toBeNull();
+  });
 });
 
 describe('scaffoldFixture', () => {
