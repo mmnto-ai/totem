@@ -69,6 +69,29 @@ describe('hook schema', () => {
       };
       expect(() => HookRuleSchema.parse(badType)).toThrow();
     });
+
+    it('rejects rules whose trigger.pattern is not a valid regex (parse-time)', () => {
+      // Unterminated character class — `new RegExp('[')` throws SyntaxError.
+      // Schema must catch this before any `evaluateHook` invocation so a
+      // malformed pack rule surfaces at parse time rather than at first-fire.
+      const badRegex = {
+        id: 'r1',
+        trigger: { tool: 'bash', pattern: '[' },
+        check: { pattern: 'x', type: 'reject-if-match' },
+        message: 'm',
+      };
+      expect(() => HookRuleSchema.parse(badRegex)).toThrow();
+    });
+
+    it('rejects rules whose check.pattern is not a valid regex (parse-time)', () => {
+      const badRegex = {
+        id: 'r1',
+        trigger: { tool: 'bash', pattern: '.*' },
+        check: { pattern: '*invalid', type: 'reject-if-match' },
+        message: 'm',
+      };
+      expect(() => HookRuleSchema.parse(badRegex)).toThrow();
+    });
   });
 
   describe('HooksYamlSchema', () => {

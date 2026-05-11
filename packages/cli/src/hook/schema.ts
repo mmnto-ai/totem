@@ -16,13 +16,34 @@ const HookCheckTypeSchema = z.enum(['reject-if-match', 'reject-if-no-match']);
 
 export type HookCheckType = z.infer<typeof HookCheckTypeSchema>;
 
+/**
+ * Validate that a regex pattern compiles. Runs at parse time so an invalid
+ * pack pattern surfaces as a schema validation error rather than a runtime
+ * crash inside `evaluateHook` (Tenet 4: don't fail open silently on
+ * invalid input).
+ */
+const RegexPatternSchema = z
+  .string()
+  .min(1)
+  .refine(
+    (p) => {
+      try {
+        new RegExp(p);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'pattern is not a valid regular expression' },
+  );
+
 const HookTriggerSchema = z.object({
   tool: z.string().min(1),
-  pattern: z.string().min(1),
+  pattern: RegexPatternSchema,
 });
 
 const HookCheckSchema = z.object({
-  pattern: z.string().min(1),
+  pattern: RegexPatternSchema,
   type: HookCheckTypeSchema,
 });
 
