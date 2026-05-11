@@ -38,13 +38,20 @@ export function describeProject(config: TotemConfig, configRoot: string): Projec
 
   const tier = getConfigTier(config);
 
-  // Rule count from compiled rules
+  // Rule count from compiled rules. `compiled-rules.json` is an object of
+  // shape `{ version, rules: CompiledRule[], nonCompilable: [...] }` — NOT
+  // an array. Reading `parsed.rules.length` is the canonical access
+  // pattern used by `loadCompiledRulesFile` and the rest of the codebase
+  // (mmnto-ai/totem#1884 R1 — prior `Array.isArray(parsed)` check always
+  // failed, reporting 0 rules in every orientation banner).
   let rules = 0;
   try {
     const rulesPath = path.join(totemDir, 'compiled-rules.json');
     if (fs.existsSync(rulesPath)) {
       const parsed = JSON.parse(fs.readFileSync(rulesPath, 'utf-8'));
-      rules = Array.isArray(parsed) ? parsed.length : 0;
+      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.rules)) {
+        rules = parsed.rules.length;
+      }
     }
   } catch {
     // compiled-rules.json missing or malformed

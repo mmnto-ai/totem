@@ -43,11 +43,17 @@ function scaffoldProject(
     fs.writeFileSync(path.join(lessonsDir, `lesson-${i}.md`), `# Lesson ${i}`);
   }
 
-  // .totem/compiled-rules.json
+  // .totem/compiled-rules.json — canonical object envelope shape
+  // (`{ version, rules: [...] }`) matching `loadCompiledRulesFile` and
+  // the rest of the codebase. Prior versions of this helper wrote a bare
+  // array, which masked the rule-count bug fixed in mmnto-ai/totem#1884.
   const rulesCount = opts.rules ?? 0;
   if (rulesCount > 0) {
     const rules = Array.from({ length: rulesCount }, (_, i) => ({ id: `rule-${i}` }));
-    fs.writeFileSync(path.join(dir, '.totem', 'compiled-rules.json'), JSON.stringify(rules));
+    fs.writeFileSync(
+      path.join(dir, '.totem', 'compiled-rules.json'),
+      JSON.stringify({ version: 1, rules, nonCompilable: [] }),
+    );
   }
 }
 
