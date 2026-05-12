@@ -3,8 +3,13 @@ import path from 'node:path';
 import { TotemError } from '@mmnto/totem';
 
 import type { HookTestResult, HookTestSummary } from '../hook/test-runner.js';
-import { runHookTests } from '../hook/test-runner.js';
-import { resolveInstalledPackVersions } from './hook-run.js';
+
+// Static `TotemError` import is intentional: `applyFilter` below is a pure
+// synchronous helper that throws TEST_FAILED on a typoed `--filter`, and an
+// async wrapper would defeat the testability win of extracting it. The
+// per-codebase guideline against top-level heavy internal value imports is
+// applied to `runHookTests` and `resolveInstalledPackVersions` (lazy-loaded
+// inside the command handler below) instead.
 
 const TAG = 'HookTest';
 
@@ -56,6 +61,8 @@ export async function hookTestCommand(opts: HookTestCommandOptions): Promise<voi
   const { log, bold, errorColor, success: successColor } = await import('../ui.js');
   const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
   const { sanitize } = await import('@mmnto/totem');
+  const { runHookTests } = await import('../hook/test-runner.js');
+  const { resolveInstalledPackVersions } = await import('./hook-run.js');
 
   const cwd = process.cwd();
   loadEnv(cwd);
@@ -96,7 +103,7 @@ export async function hookTestCommand(opts: HookTestCommandOptions): Promise<voi
     summary.unknownHooks.length === 0 &&
     summary.loadErrors.length === 0
   ) {
-    log.dim(TAG, `No hook fixtures (surface: hooks) found in ${config.totemDir}/tests/`); // totem-ignore — config.totemDir is our own config, not untrusted
+    log.dim(TAG, `No hook fixtures (surface: hooks) found in ${sanitize(config.totemDir)}/tests/`);
     log.dim(TAG, 'Create a fixture with:');
     log.dim(TAG, '');
     log.dim(TAG, '  ---');
