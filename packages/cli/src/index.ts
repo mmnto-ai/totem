@@ -702,7 +702,8 @@ program
       const { testRulesCommand } = await import('./commands/test-rules.js');
       await testRulesCommand(opts);
     } catch (err) {
-      handleError(err);
+      handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
+      throw err;
     }
   });
 
@@ -916,7 +917,8 @@ program
         const { hooksCommand } = await import('./commands/install-hooks.js');
         await hooksCommand(opts);
       } catch (err) {
-        handleError(err);
+        handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
+        throw err;
       }
     },
   );
@@ -977,7 +979,8 @@ hookCmd
         const { hooksCommand } = await import('./commands/install-hooks.js');
         await hooksCommand(opts);
       } catch (err) {
-        handleError(err);
+        handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
+        throw err;
       }
     },
   );
@@ -994,7 +997,8 @@ hookCmd
       const { hookRunCommand } = await import('./commands/hook-run.js');
       await hookRunCommand(opts);
     } catch (err) {
-      handleError(err);
+      handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
+      throw err;
     }
   });
 
@@ -1007,7 +1011,8 @@ hookCmd
       const { hookTestCommand } = await import('./commands/hook-test.js');
       await hookTestCommand(opts);
     } catch (err) {
-      handleError(err);
+      handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
+      throw err;
     }
   });
 
@@ -1024,7 +1029,8 @@ ruleCmd
       const { testRulesCommand } = await import('./commands/test-rules.js');
       await testRulesCommand(opts);
     } catch (err) {
-      handleError(err);
+      handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
+      throw err;
     }
   });
 
