@@ -75,7 +75,12 @@ export async function hookRunCommand(opts: HookRunCommandOptions): Promise<void>
     console.error(line);
   }
   if (result.exitCode !== 0) {
-    process.exit(result.exitCode);
+    // Set process.exitCode rather than calling process.exit() so the top-level
+    // handler stays in control of shutdown ordering (per the codebase guideline
+    // against process.exit() inside command bodies). PreToolUse semantics are
+    // preserved — Node exits with the assigned code once the event loop drains.
+    process.exitCode = result.exitCode;
+    return;
   }
 }
 
@@ -137,9 +142,14 @@ export function resolveInstalledPackVersions(projectRoot: string): Record<string
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(scopeDir, { withFileTypes: true });
-    // totem-context: intentional — scope dir may not exist when no @mmnto packs are installed; valid fresh-repo state
-  } catch {
-    return result;
+    // totem-context: intentional — ENOENT on the scope dir is the valid
+    // fresh-repo state (no `@mmnto` packs installed). Any other errno
+    // (EACCES, permission denied, etc.) is a real fault that should surface.
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return result;
+    }
+    throw err;
   }
 
   for (const entry of entries) {

@@ -4,7 +4,8 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { runHookTests } from './test-runner.js';
+import { applyFilter } from '../commands/hook-test.js';
+import { type HookTestResult, type HookTestSummary, runHookTests } from './test-runner.js';
 
 let workDir: string;
 let testsDir: string;
@@ -213,5 +214,64 @@ git push --force origin main
     });
     expect(summary.loadErrors.length).toBe(1);
     expect(summary.loadErrors[0]!.code).toBe('HOOKS_LOAD_FAILED');
+  });
+});
+
+describe('applyFilter (hookTestCommand --filter contract)', () => {
+  function fakeResult(hookId: string, passed = true): HookTestResult {
+    return {
+      hookId,
+      packId: '@mmnto/pack-bot-coderabbit',
+      fixturePath: `tests/${hookId}.md`,
+      failures: [],
+      passed,
+    };
+  }
+
+  function fakeSummary(overrides: Partial<HookTestSummary> = {}): HookTestSummary {
+    const results: HookTestResult[] = [
+      fakeResult('alpha'),
+      fakeResult('beta'),
+      fakeResult('gamma'),
+    ];
+    return {
+      total: results.length,
+      passed: results.length,
+      failed: 0,
+      unknownHooks: [],
+      results,
+      loadWarnings: [],
+      loadErrors: [],
+      ...overrides,
+    };
+  }
+
+  it('returns all results when filter is undefined', () => {
+    const summary = fakeSummary();
+    expect(applyFilter(summary, undefined).map((r) => r.hookId)).toEqual([
+      'alpha',
+      'beta',
+      'gamma',
+    ]);
+  });
+
+  it('returns only matching results when filter matches a substring', () => {
+    const summary = fakeSummary();
+    expect(applyFilter(summary, 'eta').map((r) => r.hookId)).toEqual(['beta']);
+  });
+
+  it('matches case-insensitively', () => {
+    const summary = fakeSummary();
+    expect(applyFilter(summary, 'ALPHA').map((r) => r.hookId)).toEqual(['alpha']);
+  });
+
+  it('throws TEST_FAILED when --filter matches nothing AND fixtures exist (typoed filter guard)', () => {
+    const summary = fakeSummary();
+    expect(() => applyFilter(summary, 'no-such-hook')).toThrow(/No hook tests matched/);
+  });
+
+  it('does NOT throw when filter is set but no fixtures exist (the placeholder branch handles that)', () => {
+    const summary = fakeSummary({ total: 0, results: [] });
+    expect(applyFilter(summary, 'anything')).toEqual([]);
   });
 });

@@ -214,6 +214,18 @@ describe('resolveInstalledPackVersions', () => {
     expect(result).toEqual({});
   });
 
+  it('rethrows non-ENOENT readdirSync errors (e.g. scope-dir-is-a-file)', () => {
+    // Make `<projectRoot>/node_modules/@mmnto` a regular file so readdirSync
+    // fails with a non-ENOENT errno (ENOTDIR on POSIX, varies on Windows but
+    // never ENOENT). The function must surface that fault rather than mask
+    // it as "no packs installed."
+    const scopePath = path.join(workDir, 'node_modules', '@mmnto');
+    fs.mkdirSync(path.dirname(scopePath), { recursive: true });
+    fs.writeFileSync(scopePath, 'not a directory', 'utf8');
+
+    expect(() => resolveInstalledPackVersions(workDir)).toThrow();
+  });
+
   it('reads from symlinked pack directories (pnpm/yarn workspaces case)', () => {
     // Regression: Dirent.isDirectory() returns false for symlinks even when
     // the target is a directory. Workspace setups symlink packs into

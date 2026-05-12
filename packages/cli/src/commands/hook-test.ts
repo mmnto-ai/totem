@@ -1,5 +1,8 @@
 import path from 'node:path';
 
+import { TotemError } from '@mmnto/totem';
+
+import type { HookTestResult, HookTestSummary } from '../hook/test-runner.js';
 import { runHookTests } from '../hook/test-runner.js';
 import { resolveInstalledPackVersions } from './hook-run.js';
 
@@ -21,10 +24,38 @@ export interface HookTestCommandOptions {
   filter?: string;
 }
 
+/**
+ * Apply `--filter` to a hook-test summary, failing loud when the filter
+ * matches nothing despite fixtures being present. Pure helper extracted
+ * from `hookTestCommand` so the filter contract is unit-testable without
+ * driving the command end-to-end through `process.cwd()` + `loadConfig`.
+ *
+ * Returns the filtered result slice when the filter matches (or is absent).
+ * Throws TEST_FAILED when `--filter` is set, `summary.total > 0`, and the
+ * filter matches no fixtures — a typoed filter must never look like a
+ * successful zero-test run.
+ */
+export function applyFilter(
+  summary: HookTestSummary,
+  filter: string | undefined,
+): HookTestResult[] {
+  if (!filter) return summary.results;
+  const term = filter.toLowerCase();
+  const filtered = summary.results.filter((r) => r.hookId.toLowerCase().includes(term));
+  if (filtered.length === 0 && summary.total > 0) {
+    throw new TotemError(
+      'TEST_FAILED',
+      `No hook tests matched --filter "${filter}".`,
+      'Use an existing hook id substring or omit --filter to run all hook tests.',
+    );
+  }
+  return filtered;
+}
+
 export async function hookTestCommand(opts: HookTestCommandOptions): Promise<void> {
   const { log, bold, errorColor, success: successColor } = await import('../ui.js');
   const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
-  const { TotemError, sanitize } = await import('@mmnto/totem');
+  const { sanitize } = await import('@mmnto/totem');
 
   const cwd = process.cwd();
   loadEnv(cwd);
@@ -53,11 +84,7 @@ export async function hookTestCommand(opts: HookTestCommandOptions): Promise<voi
     );
   }
 
-  let results = summary.results;
-  if (opts.filter) {
-    const term = opts.filter.toLowerCase();
-    results = results.filter((r) => r.hookId.toLowerCase().includes(term));
-  }
+  const results = applyFilter(summary, opts.filter);
 
   // "No fixtures" only fires when no fixtures exist at all — neither
   // evaluatable results nor orphans referencing an absent hook. A directory
