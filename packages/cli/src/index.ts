@@ -701,7 +701,8 @@ program
       const { testRulesCommand } = await import('./commands/test-rules.js');
       await testRulesCommand(opts);
     } catch (err) {
-      handleError(err);
+      handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
+      throw err;
     }
   });
 
@@ -902,8 +903,8 @@ program
   });
 
 program
-  .command('hooks')
-  .description('Install git hooks (pre-commit, pre-push, post-merge) non-interactively')
+  .command('hooks', { hidden: true })
+  .description('Deprecated alias for `totem hook install`')
   .option('--check', 'Verify hooks are installed (exit 1 if missing)')
   .option('-f, --force', 'Force overwrite existing hooks')
   .option('--strict', 'Use strict enforcement tier (spec-required + review gate)')
@@ -911,10 +912,12 @@ program
   .action(
     async (opts: { check?: boolean; force?: boolean; strict?: boolean; standard?: boolean }) => {
       try {
+        console.error("⚠ 'totem hooks' is deprecated. Use 'totem hook install' instead.");
         const { hooksCommand } = await import('./commands/install-hooks.js');
         await hooksCommand(opts);
       } catch (err) {
-        handleError(err);
+        handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
+        throw err;
       }
     },
   );
@@ -953,6 +956,62 @@ program
       await describeCommand();
     } catch (err) {
       handleError(err);
+    }
+  });
+
+// ─── Hook noun-verb subcommands (ADR-104 bot-pack wiring engine) ─────
+
+const hookCmd = program
+  .command('hook')
+  .description('Hook engine — install git hooks, run PreToolUse rules, test fixtures');
+
+hookCmd
+  .command('install')
+  .description('Install git hooks (pre-commit, pre-push, post-merge) non-interactively')
+  .option('--check', 'Verify hooks are installed (exit 1 if missing)')
+  .option('-f, --force', 'Force overwrite existing hooks')
+  .option('--strict', 'Use strict enforcement tier (spec-required + review gate)')
+  .option('--standard', 'Use standard enforcement tier (default)')
+  .action(
+    async (opts: { check?: boolean; force?: boolean; strict?: boolean; standard?: boolean }) => {
+      try {
+        const { hooksCommand } = await import('./commands/install-hooks.js');
+        await hooksCommand(opts);
+      } catch (err) {
+        handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
+        throw err;
+      }
+    },
+  );
+
+hookCmd
+  .command('run')
+  .description(
+    'Evaluate compiled-hooks against a tool-call payload (PreToolUse runtime entrypoint)',
+  )
+  .requiredOption('--tool <name>', 'Tool the agent is attempting to invoke (e.g. bash)')
+  .requiredOption('--args <args>', 'Serialized tool arguments (passed as a single argv element)')
+  .action(async (opts: { tool: string; args: string }) => {
+    try {
+      const { hookRunCommand } = await import('./commands/hook-run.js');
+      await hookRunCommand(opts);
+    } catch (err) {
+      handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
+      throw err;
+    }
+  });
+
+hookCmd
+  .command('test')
+  .description('Run hook fixtures (surface: hooks) against compiled-hooks rules')
+  .option('--filter <term>', 'Filter results by hook id substring')
+  .action(async (opts: { filter?: string }) => {
+    try {
+      const { hookTestCommand } = await import('./commands/hook-test.js');
+      await hookTestCommand(opts);
+    } catch (err) {
+      handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
+      throw err;
     }
   });
 
