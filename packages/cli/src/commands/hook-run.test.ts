@@ -214,6 +214,39 @@ describe('resolveInstalledPackVersions', () => {
     expect(result).toEqual({});
   });
 
+  it('reads from symlinked pack directories (pnpm/yarn workspaces case)', () => {
+    // Regression: Dirent.isDirectory() returns false for symlinks even when
+    // the target is a directory. Workspace setups symlink packs into
+    // `node_modules/@mmnto/`, so a pre-filter on `entry.isDirectory()` would
+    // have silently skipped every workspace-linked pack. The function now
+    // drops the type pre-filter and lets the `readFileSync` traversal +
+    // try/catch handle it.
+    const scopeDir = path.join(workDir, 'node_modules', '@mmnto');
+    fs.mkdirSync(scopeDir, { recursive: true });
+
+    // Target directory (the "source" of the pack).
+    const sourceDir = path.join(workDir, 'workspace-pack-source');
+    fs.mkdirSync(sourceDir);
+    fs.writeFileSync(
+      path.join(sourceDir, 'package.json'),
+      JSON.stringify({ name: '@mmnto/pack-workspace', version: '2.0.0' }),
+      'utf8',
+    );
+
+    // Symlink it into node_modules/@mmnto/pack-workspace. Skip the test on
+    // platforms that do not grant the calling process permission to create
+    // directory symlinks (Windows without developer mode / admin).
+    try {
+      fs.symlinkSync(sourceDir, path.join(scopeDir, 'pack-workspace'), 'dir');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EPERM') return;
+      throw err;
+    }
+
+    const result = resolveInstalledPackVersions(workDir);
+    expect(result).toEqual({ '@mmnto/pack-workspace': '2.0.0' });
+  });
+
   it('skips directory entries with unreadable or malformed package.json without failing the whole scan', () => {
     const scopeDir = path.join(workDir, 'node_modules', '@mmnto');
     const broken = path.join(scopeDir, 'pack-broken');

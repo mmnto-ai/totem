@@ -1,6 +1,6 @@
 ---
-"@mmnto/cli": minor
-"@mmnto/totem": minor
+'@mmnto/cli': minor
+'@mmnto/totem': minor
 ---
 
 feat(hook): bot-pack wiring engine — CLI surface (ADR-104 PR-1 follow-on slice 1)

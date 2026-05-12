@@ -143,7 +143,12 @@ export function resolveInstalledPackVersions(projectRoot: string): Record<string
   }
 
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+    // Don't pre-filter on `entry.isDirectory()`: in pnpm/yarn workspaces a
+    // pack is symlinked into `node_modules/@mmnto/`, and a Dirent for a
+    // symlink reports `isDirectory()` false even when the target is a
+    // directory. The `readFileSync` below transparently traverses the
+    // symlink and the surrounding `try/catch` discards any path that does
+    // not resolve to a readable package.json.
     if (!entry.name.startsWith('pack-')) continue;
     const packName = `@mmnto/${entry.name}`;
     try {
