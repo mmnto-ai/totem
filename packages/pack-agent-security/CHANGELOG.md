@@ -1,5 +1,10 @@
 # @mmnto/pack-agent-security
 
+## 1.36.0
+
+Coordinated cohort bump — no direct changes to this pack. See `@mmnto/cli`'s
+CHANGELOG.md for the `totem hook` namespace entry.
+
 ## 1.35.0
 
 ## 1.34.3
