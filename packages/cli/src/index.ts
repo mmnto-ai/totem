@@ -693,11 +693,12 @@ program
   });
 
 program
-  .command('test')
-  .description('Run test fixtures against compiled rules (TDD for governance rules)')
+  .command('test', { hidden: true })
+  .description('Deprecated alias for `totem rule test`')
   .option('--filter <term>', 'Filter by rule hash or heading substring')
   .action(async (opts: { filter?: string }) => {
     try {
+      console.error("⚠ 'totem test' is deprecated. Use 'totem rule test' instead.");
       const { testRulesCommand } = await import('./commands/test-rules.js');
       await testRulesCommand(opts);
     } catch (err) {
@@ -902,8 +903,8 @@ program
   });
 
 program
-  .command('hooks')
-  .description('Install git hooks (pre-commit, pre-push, post-merge) non-interactively')
+  .command('hooks', { hidden: true })
+  .description('Deprecated alias for `totem hook install`')
   .option('--check', 'Verify hooks are installed (exit 1 if missing)')
   .option('-f, --force', 'Force overwrite existing hooks')
   .option('--strict', 'Use strict enforcement tier (spec-required + review gate)')
@@ -911,6 +912,7 @@ program
   .action(
     async (opts: { check?: boolean; force?: boolean; strict?: boolean; standard?: boolean }) => {
       try {
+        console.error("⚠ 'totem hooks' is deprecated. Use 'totem hook install' instead.");
         const { hooksCommand } = await import('./commands/install-hooks.js');
         await hooksCommand(opts);
       } catch (err) {
@@ -951,6 +953,76 @@ program
     try {
       const { describeCommand } = await import('./commands/describe.js');
       await describeCommand();
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+// ─── Hook noun-verb subcommands (ADR-104 bot-pack wiring engine) ─────
+
+const hookCmd = program
+  .command('hook')
+  .description('Hook engine — install git hooks, run PreToolUse rules, test fixtures');
+
+hookCmd
+  .command('install')
+  .description('Install git hooks (pre-commit, pre-push, post-merge) non-interactively')
+  .option('--check', 'Verify hooks are installed (exit 1 if missing)')
+  .option('-f, --force', 'Force overwrite existing hooks')
+  .option('--strict', 'Use strict enforcement tier (spec-required + review gate)')
+  .option('--standard', 'Use standard enforcement tier (default)')
+  .action(
+    async (opts: { check?: boolean; force?: boolean; strict?: boolean; standard?: boolean }) => {
+      try {
+        const { hooksCommand } = await import('./commands/install-hooks.js');
+        await hooksCommand(opts);
+      } catch (err) {
+        handleError(err);
+      }
+    },
+  );
+
+hookCmd
+  .command('run')
+  .description(
+    'Evaluate compiled-hooks against a tool-call payload (PreToolUse runtime entrypoint)',
+  )
+  .requiredOption('--tool <name>', 'Tool the agent is attempting to invoke (e.g. bash)')
+  .requiredOption('--args <args>', 'Serialized tool arguments (passed as a single argv element)')
+  .action(async (opts: { tool: string; args: string }) => {
+    try {
+      const { hookRunCommand } = await import('./commands/hook-run.js');
+      await hookRunCommand(opts);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+hookCmd
+  .command('test')
+  .description('Run hook fixtures (surface: hooks) against compiled-hooks rules')
+  .option('--filter <term>', 'Filter results by hook id substring')
+  .action(async (opts: { filter?: string }) => {
+    try {
+      const { hookTestCommand } = await import('./commands/hook-test.js');
+      await hookTestCommand(opts);
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+// ─── Rule noun-verb subcommands ──────────────────────────
+
+const ruleCmd = program.command('rule').description('Run rule fixtures and other rule operations');
+
+ruleCmd
+  .command('test')
+  .description('Run test fixtures against compiled rules (TDD for governance rules)')
+  .option('--filter <term>', 'Filter by rule hash or heading substring')
+  .action(async (opts: { filter?: string }) => {
+    try {
+      const { testRulesCommand } = await import('./commands/test-rules.js');
+      await testRulesCommand(opts);
     } catch (err) {
       handleError(err);
     }

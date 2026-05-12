@@ -338,7 +338,13 @@ export function loadFixtures(testsDir: string): RuleTestFixture[] {
 
 export function runRuleTests(rulesPath: string, testsDir: string): RuleTestSummary {
   const rules = loadCompiledRules(rulesPath);
-  const fixtures = loadFixtures(testsDir);
+  // ADR-104 § Convergence — the hooks-surface dispatch lives in CLI's hook
+  // test runner (avoids cross-package import from core to the CLI foundation
+  // engine). Filter to rules-surface fixtures here so a hooks-surface fixture
+  // does not surface as `(unknown — hash X not found in compiled rules)`
+  // under `totem rule test`. Defaults to `'rules'` when surface is absent
+  // (backwards-compat with fixtures predating the hook engine).
+  const fixtures = loadFixtures(testsDir).filter((f) => (f.surface ?? 'rules') === 'rules');
 
   if (fixtures.length === 0) {
     return { total: 0, passed: 0, failed: 0, skipped: 0, skippedFixtures: [], results: [] };
