@@ -77,17 +77,25 @@ export async function hookTestCommand(opts: HookTestCommandOptions): Promise<voi
 
   const summary = runHookTests({ manifestPath, testsDir, installedPackVersions });
 
+  // Sanitize every value that flows in from pack-supplied data (manifest
+  // contents, fixture paths) before it reaches the terminal — third-party
+  // packs are an untrusted boundary and identifiers like `hookId`/`packId`
+  // could carry ANSI control sequences that would mangle the operator's
+  // shell. The loader-emitted warnings/errors carry our own message text
+  // but may interpolate user-controlled paths, so they get sanitized too.
   for (const w of summary.loadWarnings) {
-    log.warn(TAG, w);
+    log.warn(TAG, sanitize(w));
   }
   for (const e of summary.loadErrors) {
-    log.error('Totem Error', `${e.code}: ${e.message}`);
+    log.error('Totem Error', `${sanitize(e.code)}: ${sanitize(e.message)}`);
   }
 
   for (const unknown of summary.unknownHooks) {
+    const safeFixture = sanitize(path.basename(unknown.fixturePath));
+    const safeHookId = sanitize(unknown.hookId);
     log.warn(
       TAG,
-      `Fixture ${path.basename(unknown.fixturePath)} references hook id "${unknown.hookId}" not present in compiled manifest`,
+      `Fixture ${safeFixture} references hook id "${safeHookId}" not present in compiled manifest`,
     );
   }
 
@@ -120,7 +128,7 @@ export async function hookTestCommand(opts: HookTestCommandOptions): Promise<voi
   }
 
   for (const result of results) {
-    const label = `${result.packId}/${result.hookId}`;
+    const label = `${sanitize(result.packId)}/${sanitize(result.hookId)}`;
     if (result.passed) {
       log.success(TAG, `${label} — PASS`);
       continue;
