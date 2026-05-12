@@ -124,11 +124,15 @@ export function executeHookRun(inputs: HookRunInputs): HookRunResult {
  * the compiled-hooks loader's staleness check.
  *
  * Bounded cost: one `readdirSync` plus N `readFileSync` calls (N = number
- * of installed `@mmnto/pack-*` packages, typically <5). All failures
- * are silently dropped — the loader emits `[totem:hook-stale]` warnings
- * for packs referenced in the manifest but missing from this map, which
- * is the correct signal for an operator who has uninstalled a pack but
- * not re-run `totem sync`.
+ * of installed `@mmnto/pack-*` packages, typically <5). Expected per-pack
+ * read/parse failures (ENOENT/ENOTDIR/EPERM/EACCES on the package.json,
+ * SyntaxError on malformed JSON) are skipped so the loader can emit
+ * `[totem:hook-stale]` warnings for missing/invalid packs — the correct
+ * signal for an operator who has uninstalled a pack but not re-run
+ * `totem sync`. Unexpected exceptions (IO timeout, OOM, etc.) are
+ * rethrown to surface real faults. The outer `readdirSync` on the
+ * `@mmnto` scope dir applies the same discipline: ENOENT returns empty;
+ * any other errno surfaces as a thrown error.
  *
  * Workspace setups (pnpm workspace, yarn workspaces) symlink the pack
  * directory into `node_modules/@mmnto/`, so the `readdirSync` + JSON
