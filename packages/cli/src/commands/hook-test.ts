@@ -59,7 +59,16 @@ export async function hookTestCommand(opts: HookTestCommandOptions): Promise<voi
     results = results.filter((r) => r.hookId.toLowerCase().includes(term));
   }
 
-  if (results.length === 0 && summary.total === 0) {
+  // "No fixtures" only fires when no fixtures exist at all — neither
+  // evaluatable results nor orphans referencing an absent hook. A directory
+  // containing only orphan fixtures must fail loud below, not show the
+  // "create a fixture" placeholder.
+  if (
+    results.length === 0 &&
+    summary.total === 0 &&
+    summary.unknownHooks.length === 0 &&
+    summary.loadErrors.length === 0
+  ) {
     log.dim(TAG, `No hook fixtures (surface: hooks) found in ${config.totemDir}/tests/`); // totem-ignore — config.totemDir is our own config, not untrusted
     log.dim(TAG, 'Create a fixture with:');
     log.dim(TAG, '');
@@ -94,16 +103,37 @@ export async function hookTestCommand(opts: HookTestCommandOptions): Promise<voi
   const failedCount = results.length - passedCount;
 
   console.error('');
-  if (failedCount === 0) {
+
+  // Tenet 4: load errors or orphan fixtures must fail loud — they are
+  // never "success" states. A corrupt manifest or a fixture pointing at a
+  // typoed hook id silently passing would mask broken pack wiring.
+  const hasOrphans = summary.unknownHooks.length > 0;
+  const hasLoadErrors = summary.loadErrors.length > 0;
+
+  if (failedCount === 0 && !hasOrphans && !hasLoadErrors) {
     const label = successColor(bold('PASS'));
     log.info(TAG, `${label} — ${passedCount} hook test(s) passed`);
     return;
   }
+
   const label = errorColor(bold('FAIL'));
-  log.info(TAG, `${label} — ${failedCount} failed, ${passedCount} passed`);
+  const parts: string[] = [];
+  if (failedCount > 0) parts.push(`${failedCount} failed`);
+  if (hasOrphans) parts.push(`${summary.unknownHooks.length} unknown-hook reference(s)`);
+  if (hasLoadErrors) parts.push(`${summary.loadErrors.length} manifest load error(s)`);
+  parts.push(`${passedCount} passed`);
+  log.info(TAG, `${label} — ${parts.join(', ')}`);
+
+  const reasons: string[] = [];
+  if (failedCount > 0) reasons.push(`${failedCount} hook test(s) failed`);
+  if (hasOrphans)
+    reasons.push(`${summary.unknownHooks.length} fixture(s) reference unknown hook id`);
+  if (hasLoadErrors)
+    reasons.push(`${summary.loadErrors.length} compiled-hooks manifest load error(s)`);
+
   throw new TotemError(
     'TEST_FAILED',
-    `${failedCount} hook test(s) failed.`,
-    'Fix the failing hook patterns or update test fixtures, then re-run `totem hook test`.',
+    reasons.join('; ') + '.',
+    'Fix failing patterns, orphan fixtures, or manifest issues, then re-run `totem hook test`.',
   );
 }
