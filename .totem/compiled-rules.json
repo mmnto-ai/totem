@@ -8155,9 +8155,9 @@
       ],
       "severity": "warning",
       "status": "archived",
-      "unverified": true,
       "archivedReason": "Pattern fires on every vi.spyOn(global, ...) site regardless of whether the suite has vi.restoreAllMocks() in afterEach — ast-grep local scope cannot verify cross-block restoration. Persistent false-positive class flagged by GCA HIGH on #1870.",
-      "archivedAt": "2026-05-10T08:30:02.870Z"
+      "archivedAt": "2026-05-10T08:30:02.870Z",
+      "unverified": true
     },
     {
       "lessonHash": "36c4f7f89f9d7493",
@@ -13855,6 +13855,24 @@
       "title": "Avoid live-repo coupling in tests",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes an architectural testing principle (use fixture repos instead of live repo root) that cannot be detected from source code patterns alone — identifying whether a path reference points to the live repository root versus a fixture directory requires semantic knowledge of the project layout and cannot be expressed as a regex or AST pattern without prohibitive false positives."
+    },
+    {
+      "hash": "0d342ee7bf3dda9a",
+      "title": "Enforce unique IDs in Zod schemas",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Enforcing uniqueness of identifiers within a collection requires analyzing the values of all items in the parsed array at runtime; no single-pattern rule can detect whether a Zod schema is missing a superRefine uniqueness check without multi-node semantic analysis of the schema's full validation chain."
+    },
+    {
+      "hash": "bf7005b43497298b",
+      "title": "Implement verification shadow for rule promotion",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes an architectural pattern (adding a verification_shadow field to a rule system) that cannot be detected as a code violation. There is no specific anti-pattern to flag — the lesson prescribes a design approach for rule promotion infrastructure, not a detectable misuse of a particular API, import, or syntax construct."
+    },
+    {
+      "hash": "219466f556ac0d80",
+      "title": "Harden regex patterns against ReDoS",
+      "reasonCode": "semantic-analysis-required",
+      "reason": "Hazard requires multi-file semantic analysis: detecting whether a regex pattern is missing both a length cap and a safety check requires knowing the full validation pipeline context, not just the presence or absence of a single call or literal at a single site. No single-pattern rule can distinguish a regex that is already guarded elsewhere from one that is genuinely unprotected."
     }
   ]
 }
