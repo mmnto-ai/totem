@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { TotemError } from '@mmnto/totem';
+import { sanitize, TotemError } from '@mmnto/totem';
 
 import type { HookTestResult, HookTestSummary } from '../hook/test-runner.js';
 
@@ -50,7 +50,7 @@ export function applyFilter(
   if (filtered.length === 0 && summary.total > 0) {
     throw new TotemError(
       'TEST_FAILED',
-      `No hook tests matched --filter "${filter}".`,
+      `No hook tests matched --filter "${sanitize(filter)}".`,
       'Use an existing hook id substring or omit --filter to run all hook tests.',
     );
   }
@@ -60,7 +60,6 @@ export function applyFilter(
 export async function hookTestCommand(opts: HookTestCommandOptions): Promise<void> {
   const { log, bold, errorColor, success: successColor } = await import('../ui.js');
   const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
-  const { sanitize } = await import('@mmnto/totem');
   const { runHookTests } = await import('../hook/test-runner.js');
   const { resolveInstalledPackVersions } = await import('./hook-run.js');
 

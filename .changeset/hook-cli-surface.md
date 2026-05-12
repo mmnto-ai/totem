@@ -15,7 +15,9 @@ New commands:
   entrypoint. Loads `.totem/compiled-hooks.json`, evaluates each compiled
   hook against the tool-call payload, and emits a structured
   `[totem:hook-block]` rejection (exit code 2) on the first match. Allow
-  path is exit code 0 with no output.
+  path is exit code 0 with no block output — diagnostics (e.g.
+  `[totem:hook-stale]` / `[totem:hook-schema]` / `[totem:hook-error]`)
+  still flow to stderr when applicable.
 - `totem hook install` — git-hooks installer (renamed from `totem hooks`).
   Same behavior; the legacy plural remains as a hidden deprecation alias
   for one cycle.
