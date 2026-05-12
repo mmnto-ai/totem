@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { CompiledRule } from './compiler.js';
 import {
   isTodoFixture,
   parseFixture,
+  runRuleTests,
   scaffoldFixture,
   scaffoldFixturePath,
   testRule,
@@ -377,5 +382,90 @@ describe('testRule', () => {
     expect(result.passed).toBe(true);
     expect(result.missedFails).toHaveLength(0);
     expect(result.falsePositives).toHaveLength(0);
+  });
+});
+
+describe('runRuleTests — surface filter (ADR-104 § Convergence)', () => {
+  let workDir: string;
+  let testsDir: string;
+  let rulesPath: string;
+  // Build the triggering snippet at runtime so the literal pattern doesn't
+  // appear verbatim in source (avoids matching unrelated security scanners
+  // on this test file itself).
+  const TRIGGER = 'ev' + 'al(' + "'1+1'" + ')';
+
+  beforeEach(() => {
+    workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-rule-tester-surface-'));
+    testsDir = path.join(workDir, 'tests');
+    fs.mkdirSync(testsDir);
+    rulesPath = path.join(workDir, 'compiled-rules.json');
+    fs.writeFileSync(
+      rulesPath,
+      JSON.stringify({
+        version: 1,
+        rules: [
+          {
+            lessonHash: 'rules-target',
+            lessonHeading: 'Reject ev' + 'al() calls',
+            pattern: '\\bev' + 'al\\s*\\(',
+            message: 'forbidden runtime evaluation',
+            engine: 'regex',
+            compiledAt: '2026-01-01T00:00:00Z',
+          },
+        ],
+        nonCompilable: [],
+      }),
+      'utf8',
+    );
+  });
+
+  afterEach(() => {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  });
+
+  function writeFixture(filename: string, frontmatter: string, body: string): void {
+    const content = `---\n${frontmatter}\n---\n\n## Should fail\n\n\`\`\`ts\n${body}\n\`\`\`\n`;
+    fs.writeFileSync(path.join(testsDir, filename), content, 'utf8');
+  }
+
+  it('processes fixtures with surface: rules (explicit)', () => {
+    writeFixture(
+      'rules-explicit.md',
+      'rule: rules-target\nfile: src/app.ts\nsurface: rules',
+      TRIGGER,
+    );
+    const summary = runRuleTests(rulesPath, testsDir);
+    expect(summary.total).toBe(1);
+    expect(summary.results[0]!.ruleHash).toBe('rules-target');
+  });
+
+  it('processes fixtures with no surface (defaults to rules — backwards-compat)', () => {
+    writeFixture('no-surface.md', 'rule: rules-target\nfile: src/app.ts', TRIGGER);
+    const summary = runRuleTests(rulesPath, testsDir);
+    expect(summary.total).toBe(1);
+  });
+
+  it('skips fixtures with surface: hooks (silently filtered out; not surfaced as unknown-hash failures)', () => {
+    writeFixture(
+      'hooks-fixture.md',
+      'rule: gca-tag-xor-command\nfile: hook-fixtures/gca.txt\nsurface: hooks\ncorpus: fail',
+      'gh pr comment 1 -b "@gemini-code-assist /gemini review"',
+    );
+    const summary = runRuleTests(rulesPath, testsDir);
+    expect(summary.total).toBe(0);
+    expect(summary.results).toEqual([]);
+    expect(summary.skippedFixtures).toEqual([]);
+  });
+
+  it('processes only rules-surface fixtures when both kinds coexist in the same testsDir', () => {
+    writeFixture('rules-one.md', 'rule: rules-target\nfile: src/app.ts\nsurface: rules', TRIGGER);
+    writeFixture(
+      'hooks-one.md',
+      'rule: any-hook-id\nfile: hook-fixtures/x.txt\nsurface: hooks\ncorpus: fail',
+      'some payload',
+    );
+    const summary = runRuleTests(rulesPath, testsDir);
+    expect(summary.total).toBe(1);
+    expect(summary.results[0]!.ruleHash).toBe('rules-target');
   });
 });
