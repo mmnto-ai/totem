@@ -693,12 +693,11 @@ program
   });
 
 program
-  .command('test', { hidden: true })
-  .description('Deprecated alias for `totem rule test`')
+  .command('test')
+  .description('Run test fixtures against compiled rules (TDD for governance rules)')
   .option('--filter <term>', 'Filter by rule hash or heading substring')
   .action(async (opts: { filter?: string }) => {
     try {
-      console.error("⚠ 'totem test' is deprecated. Use 'totem rule test' instead.");
       const { testRulesCommand } = await import('./commands/test-rules.js');
       await testRulesCommand(opts);
     } catch (err) {
@@ -1010,24 +1009,6 @@ hookCmd
     try {
       const { hookTestCommand } = await import('./commands/hook-test.js');
       await hookTestCommand(opts);
-    } catch (err) {
-      handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
-      throw err;
-    }
-  });
-
-// ─── Rule noun-verb subcommands ──────────────────────────
-
-const ruleCmd = program.command('rule').description('Run rule fixtures and other rule operations');
-
-ruleCmd
-  .command('test')
-  .description('Run test fixtures against compiled rules (TDD for governance rules)')
-  .option('--filter <term>', 'Filter by rule hash or heading substring')
-  .action(async (opts: { filter?: string }) => {
-    try {
-      const { testRulesCommand } = await import('./commands/test-rules.js');
-      await testRulesCommand(opts);
     } catch (err) {
       handleError(err); // handleError returns `never`; unreachable throw below satisfies the fail-loud check
       throw err;
