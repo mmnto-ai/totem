@@ -53,10 +53,17 @@ export interface HookRunInputs {
   payload: ToolCallPayload;
 }
 
-const PRE_TOOL_USE_BLOCK_EXIT_CODE = 2 as const;
+/**
+ * The exit code Claude Code's PreToolUse hook convention treats as "block
+ * the tool call." Exported so test suites assert against the same constant
+ * rather than against a magic number that could drift.
+ */
+export const EXIT_ALLOW = 0 as const;
+export const PRE_TOOL_USE_BLOCK_EXIT_CODE = 2 as const;
 
 export async function hookRunCommand(opts: HookRunCommandOptions): Promise<void> {
   const { loadConfig, resolveConfigPath } = await import('../utils.js');
+  const { sanitize } = await import('@mmnto/totem');
 
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
@@ -71,8 +78,14 @@ export async function hookRunCommand(opts: HookRunCommandOptions): Promise<void>
     payload: { tool: opts.tool, args: opts.args },
   });
 
+  // Sanitize every stderr line at the terminal boundary — the lines flow
+  // through `executeHookRun` carrying pack-supplied content (rejection
+  // messages, recovery hints, hook ids, loader warnings interpolating pack
+  // names). Sanitizing once at the wrapper is simpler than instrumenting
+  // every emitter, and the pure-function tests already assert structural
+  // shape on the unsanitized form.
   for (const line of result.stderr) {
-    console.error(line);
+    console.error(sanitize(line));
   }
   if (result.exitCode !== 0) {
     // Set process.exitCode rather than calling process.exit() so the top-level

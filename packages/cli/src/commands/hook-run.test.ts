@@ -4,7 +4,15 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { executeHookRun, resolveInstalledPackVersions } from './hook-run.js';
+import {
+  executeHookRun,
+  EXIT_ALLOW,
+  PRE_TOOL_USE_BLOCK_EXIT_CODE as EXIT_BLOCK,
+  resolveInstalledPackVersions,
+} from './hook-run.js';
+
+/** Schema version no live runner supports — used to assert warn-and-skip on unknown manifest versions. */
+const UNSUPPORTED_SCHEMA_VERSION = 999;
 
 let workDir: string;
 
@@ -52,7 +60,7 @@ describe('executeHookRun — allow path', () => {
       installedPackVersions: {},
       payload: { tool: 'bash', args: 'whatever' },
     });
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode).toBe(EXIT_ALLOW);
     expect(result.stderr).toEqual([]);
   });
 
@@ -63,7 +71,7 @@ describe('executeHookRun — allow path', () => {
       installedPackVersions: { '@mmnto/pack-bot-gemini-code-assist': '1.0.0' },
       payload: { tool: 'write', args: 'console.log("hi")' },
     });
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode).toBe(EXIT_ALLOW);
     expect(result.stderr).toEqual([]);
   });
 
@@ -77,7 +85,7 @@ describe('executeHookRun — allow path', () => {
         args: 'gh pr comment 1 --body "@gemini-code-assist take a look"',
       },
     });
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode).toBe(EXIT_ALLOW);
     expect(result.stderr).toEqual([]);
   });
 });
@@ -93,7 +101,7 @@ describe('executeHookRun — reject path (ADR-104 § Decision 1)', () => {
         args: 'gh pr comment 1 --body "@gemini-code-assist /gemini review please"',
       },
     });
-    expect(result.exitCode).toBe(2);
+    expect(result.exitCode).toBe(EXIT_BLOCK);
     const rejectLine = result.stderr[result.stderr.length - 1]!;
     expect(rejectLine).toContain('[totem:hook-block]');
     expect(rejectLine).toContain('@mmnto/pack-bot-gemini-code-assist/gca-tag-xor-command');
@@ -116,7 +124,7 @@ describe('executeHookRun — reject path (ADR-104 § Decision 1)', () => {
         args: 'gh pr comment 1 --body "@gemini-code-assist /gemini review"',
       },
     });
-    expect(result.exitCode).toBe(2);
+    expect(result.exitCode).toBe(EXIT_BLOCK);
     expect(result.stderr.some((l) => l.includes('never-reached'))).toBe(false);
     expect(result.stderr.some((l) => l.includes('should not appear'))).toBe(false);
   });
@@ -132,7 +140,7 @@ describe('executeHookRun — reject path (ADR-104 § Decision 1)', () => {
         args: 'gh pr comment 1 --body "@gemini-code-assist /gemini review"',
       },
     });
-    expect(result.exitCode).toBe(2);
+    expect(result.exitCode).toBe(EXIT_BLOCK);
     const rejectLine = result.stderr[result.stderr.length - 1]!;
     expect(rejectLine).not.toContain('→');
   });
@@ -149,7 +157,7 @@ describe('executeHookRun — diagnostics ordering', () => {
         args: 'gh pr comment 1 --body "@gemini-code-assist /gemini review"',
       },
     });
-    expect(result.exitCode).toBe(2);
+    expect(result.exitCode).toBe(EXIT_BLOCK);
     const staleIdx = result.stderr.findIndex((l) => l.includes('[totem:hook-stale]'));
     const rejectIdx = result.stderr.findIndex((l) => l.includes('[totem:hook-block]'));
     expect(staleIdx).toBeGreaterThanOrEqual(0);
@@ -157,13 +165,16 @@ describe('executeHookRun — diagnostics ordering', () => {
   });
 
   it('emits [totem:hook-schema] warning and returns allow when manifest schemaVersion is unsupported', () => {
-    const manifestPath = writeManifest({ ...(baseManifest() as object), schemaVersion: 999 });
+    const manifestPath = writeManifest({
+      ...(baseManifest() as object),
+      schemaVersion: UNSUPPORTED_SCHEMA_VERSION,
+    });
     const result = executeHookRun({
       manifestPath,
       installedPackVersions: {},
       payload: { tool: 'bash', args: 'whatever' },
     });
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode).toBe(EXIT_ALLOW);
     expect(result.stderr.some((l) => l.includes('[totem:hook-schema]'))).toBe(true);
   });
 
@@ -175,7 +186,7 @@ describe('executeHookRun — diagnostics ordering', () => {
       installedPackVersions: {},
       payload: { tool: 'bash', args: 'whatever' },
     });
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode).toBe(EXIT_ALLOW);
     expect(result.stderr.some((l) => l.startsWith('[totem:hook-error]'))).toBe(true);
   });
 });
