@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { executeHookRun, resolveInstalledPackVersions } from './hook-run.js';
 
@@ -257,6 +257,35 @@ describe('resolveInstalledPackVersions', () => {
 
     const result = resolveInstalledPackVersions(workDir);
     expect(result).toEqual({ '@mmnto/pack-workspace': '2.0.0' });
+  });
+
+  it('rethrows unusual per-pack errors (not in the expected errno set, not SyntaxError)', () => {
+    // The per-pack catch suppresses ENOENT/ENOTDIR/EPERM/EACCES (expected
+    // dir/permission quirks) and SyntaxError (malformed package.json), but
+    // any other exception class is treated as a real fault that surfaces.
+    // Mock readFileSync to throw a synthetic non-errno error and assert the
+    // function propagates it rather than silently skipping the pack.
+    const scopeDir = path.join(workDir, 'node_modules', '@mmnto');
+    const packDir = path.join(scopeDir, 'pack-unusual');
+    fs.mkdirSync(packDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(packDir, 'package.json'),
+      JSON.stringify({ name: '@mmnto/pack-unusual', version: '1.0.0' }),
+      'utf8',
+    );
+
+    // `resolveInstalledPackVersions` only calls `readFileSync` for pack
+    // package.json files, so a blanket-throw mock exercises the inner catch
+    // without affecting other code paths.
+    const unusual = new Error('synthetic IO timeout');
+    const spy = vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      throw unusual;
+    });
+    try {
+      expect(() => resolveInstalledPackVersions(workDir)).toThrow(unusual);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('skips directory entries with unreadable or malformed package.json without failing the whole scan', () => {

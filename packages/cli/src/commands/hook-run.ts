@@ -167,9 +167,21 @@ export function resolveInstalledPackVersions(projectRoot: string): Record<string
       if (typeof pkg.version === 'string') {
         result[packName] = pkg.version;
       }
-      // totem-context: intentional — individual pack metadata read failures are non-fatal; loader emits a stale warning when a pack referenced in the manifest is absent from this map
-    } catch {
-      continue;
+      // totem-context: intentional — the expected per-pack failure modes
+      // (missing/corrupt package.json, permission-quirk on individual pack
+      // dirs) are non-fatal; the loader emits a stale warning for any pack
+      // referenced in the manifest but missing from this map. Unusual
+      // errors (IO timeout, OOM, etc.) are not in the expected set and
+      // surface as a real fault so debug consumers can find them.
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT' || code === 'ENOTDIR' || code === 'EPERM' || code === 'EACCES') {
+        continue;
+      }
+      if (err instanceof SyntaxError) {
+        continue;
+      }
+      throw err;
     }
   }
 
