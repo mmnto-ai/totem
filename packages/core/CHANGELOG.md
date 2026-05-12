@@ -23,7 +23,7 @@
     for one cycle.
   - `totem hook test [--filter <term>]` — runs fixtures with `surface: hooks`
     against compiled-hooks rules. Per-line failure reporting
-    (`missed reject` / `false positive`). Fails loud on manifest load
+    (`missed reject` / `false positive`). Fails loudly on manifest load
     errors and on orphan fixtures referencing unknown hook ids
     (Tenet 4 — no silent passes when pack wiring is broken).
 
