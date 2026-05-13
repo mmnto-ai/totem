@@ -5,7 +5,7 @@
 Before writing any code or making any changes:
 
 1. Run `totem status` for health and read `docs/active_work.md` for current milestone and momentum.
-2. **NEVER GUESS ARCHITECTURE.** Before modifying any core system (hooks, orchestrator, compiler, extract pipeline), run `totem search_knowledge <system_name>` to load architectural context.
+2. **NEVER GUESS ARCHITECTURE.** Before modifying any core system (hooks, orchestrator, compiler, extract pipeline), run `totem search <system_name>` to load architectural context.
 3. Do not push speculative fixes to "see what CI says." Run `totem lint` locally. Front-load all checks before the first push.
 
 ## Essentials
