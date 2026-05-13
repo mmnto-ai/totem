@@ -8,14 +8,13 @@ Totem is a standard library for codebase governance — deterministic primitives
 
 ## 1.26.0: Pack Ecosystem Graduation (Active)
 
-**Theme:** Close the Pack v0.1 alpha pilot by completing the publish-and-wire arc for bot packs, then collapse the convention-rule duplication between memory and packs. Pair with deterministic-substrate hardening for the rule classes currently encoded only as LLM-prose in CR/GCA styleguides (Tenet 15 violations surfaced by drift firing across multiple agents and repos).
+**Theme:** Close the Pack v0.1 alpha pilot by closing the remaining language-pack publish-and-wire arc and starting the convention-rule deterministic substrate that replaces LLM-prose enforcement (Tenet 15 violations surfaced by drift firing across multiple agents and repos).
 
-The strategic frame is **publishing without runtime-wiring is incomplete; ship gates require both**. The substrate-wiring gap shipped in `mmnto-ai/totem#1795` (1.25.0) closed the runtime-completeness leg of the alpha-pilot graduation gate; 1.26.0 closes the publish-and-wire leg for bot packs and starts the convention-rule deterministic substrate.
+The strategic frame is **publishing without runtime-wiring is incomplete; ship gates require both**. The substrate-wiring gap shipped in `mmnto-ai/totem#1795` (1.25.0) closed the runtime-completeness leg of the alpha-pilot graduation gate.
+
+> **Note on bot packs.** A "Bot Interpretive Pack" graduation arc previously sat under this milestone (publish `@mmnto/pack-bot-coderabbit` + `@mmnto/pack-bot-gemini-code-assist`, wire into session hooks, refactor agent memory to point at packs). It was retired on 2026-05-12 per [ADR-105 (Bot-Protocol Centralization)](https://github.com/mmnto-ai/totem-strategy/blob/main/adr/adr-105-bot-protocol-centralization.md). Bot-interaction protocols now live as canonical doctrine at `mmnto-ai/totem-strategy:doctrine/bot-protocols.md`; mechanical enforcement is tracked at [`mmnto-ai/totem#1900`](https://github.com/mmnto-ai/totem/issues/1900).
 
 - **Headline Work — Pack v0.1 graduation:**
-  - [ ] **Bot-pack publish.** Lift `pack-staging/pack-bot-coderabbit-v0.1/` and `pack-staging/pack-bot-gemini-code-assist-v0.1/` to `@mmnto/pack-bot-coderabbit@1.x` and `@mmnto/pack-bot-gemini-code-assist@1.x` on npm. Publishing pipeline is proven; low risk.
-  - [ ] **Bot-pack wire-into-hooks.** Session-start hooks for Claude Code and Gemini CLI consult the bot packs alongside the existing `totem describe` orientation pass. Same shape as the language-pack `extends` mechanism.
-  - [ ] **Memory refactor.** Thin the bot-specific rules in agent memory that duplicate pack content; replace with one pointer rule directing future sessions to `@mmnto/pack-bot-coderabbit/workflows/*` and `@mmnto/pack-bot-gemini-code-assist/workflows/*` as the canonical source. Memory keeps session-incident receipts; the pack holds canonical operational rules.
   - [ ] **LC un-quarantine validation.** Pattern-quality review per `mmnto-ai/totem#1793` BEFORE un-quarantining the 4-rule `.rs` cohort (3 from upstream-014, 1 from upstream-048). End-to-end validation that PR #1795's substrate-wiring fix unblocks the LC PR-C cascade is the load-bearing signal that closes the alpha-pilot gate.
 
 - **Headline Work — Substrate hardening (Tenet 15):**

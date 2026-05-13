@@ -380,11 +380,9 @@ function resolvePackCallback(
     );
   }
 
-  // Probe for an entry point before attempting to load. Bot Interpretive
-  // Packs (e.g. @mmnto/pack-bot-coderabbit) intentionally ship workflows +
-  // templates only with no `main`/`exports`/`register.*`; they are
-  // documented as a structurally distinct archetype in
-  // `docs/wiki/pack-ecosystem.md`. For these packs, return a no-op
+  // Probe for an entry point before attempting to load. Data-only packs
+  // intentionally ship workflows + templates only with no
+  // `main`/`exports`/`register.*`. For these packs, return a no-op
   // callback so the pack is registered as known-but-data-only and its
   // workflows/templates remain available to other consumers (session
   // hooks, totem describe, etc.). See mmnto-ai/totem#1848 for the

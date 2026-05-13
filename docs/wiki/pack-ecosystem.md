@@ -1,27 +1,24 @@
 # The Pack Ecosystem
 
-Totem 1.25.0+ distributes ecosystem-specific baseline rules, structural constraints, and interpretive bot guidelines as installable NPM packages under the `@mmnto/pack-*` scope.
+Totem 1.25.0+ distributes ecosystem-specific baseline rules and structural constraints as installable NPM packages under the `@mmnto/pack-*` scope.
 
 Packs replace the monolithic internal baseline system. You install a pack into your project using the standard Node.js ecosystem, and Totem dynamically incorporates its rules via the `loadInstalledPacks()` runtime invocation.
 
 ## Pack Categories
 
-Packs are structurally divided into three distinct categories based on their role and scope:
+Packs are structurally divided into two distinct categories based on their role and scope:
 
 ### 1. Language & Architecture Packs
 
 **(e.g., `@mmnto/pack-rust-architecture`, forthcoming: `@mmnto/pack-godot-architecture`)**
 These packs encode structural, deterministic AST and regex rules specific to a language or framework. They are the core enforcement primitives that protect your architecture from common footguns (e.g., empty catch blocks in TypeScript, or incorrect macro usages in Rust).
 
-### 2. Bot Interpretive Packs
-
-**(e.g., `@mmnto/pack-bot-coderabbit`, `@mmnto/pack-bot-gemini-code-assist`)**
-These packs are structurally distinct. They encode _interpretive knowledge_ of bot output and behavior, not workflow enforcement. They contain guidelines and patterns necessary for LLMs (like CodeRabbit or Gemini) to interact with your codebase effectively without hallucinating structural patterns.
-
-### 3. Capability Packs
+### 2. Capability Packs
 
 **(e.g., `@mmnto/pack-agent-security`)**
 These packs provide cross-cutting rule families that aren't tied to a specific language. For instance, the `pack-agent-security` module (which is `private: true` and restricted to workspace-only use) provides immutable security constraints protecting against unauthorized code evaluation or network exfiltration.
+
+> **Note on bot-interaction protocols.** A "Bot Interpretive Pack" archetype was previously proposed for distributing cohort bot-interaction protocols (CodeRabbit, Gemini Code Assist, etc.) as separate npm packages. That model was retired on 2026-05-12 per [ADR-105](https://github.com/mmnto-ai/totem-strategy/blob/main/adr/adr-105-bot-protocol-centralization.md). Bot-interaction protocols now live as canonical doctrine at `mmnto-ai/totem-strategy:doctrine/bot-protocols.md`, with mechanical enforcement deferred to runtime hooks ([`mmnto-ai/totem#1900`](https://github.com/mmnto-ai/totem/issues/1900)). The Pack channel remains valid for portable expertise (language packs, security packs); it was a channel mismatch for internal cohort protocols.
 
 ## Architecture and the Zero-Trust Default
 
@@ -45,7 +42,7 @@ This acts as a strict structural contract (as amended by ADR-097 § Q6).
 
 ## Publishing & Trust
 
-Canonical `@mmnto` packs (such as the 0.2.0 bot pack cohort) are published to NPM via OIDC, include cryptographic attestations, and are Sigstore-signed. This provides supply-chain security for governance primitives, ensuring that the rules governing your codebase haven't been tampered with.
+Canonical `@mmnto` packs are published to NPM via OIDC, include cryptographic attestations, and are Sigstore-signed. This provides supply-chain security for governance primitives, ensuring that the rules governing your codebase haven't been tampered with.
 
 ## Consumer Positioning: The Graduation Phase
 
