@@ -121,12 +121,7 @@ All overrides are recorded in the Trap Ledger (`.totem/ledger/events.ndjson`) fo
 
 ## 10. PR Review Reply Protocol
 
-Responses to GCA findings follow a batched model by design, not because of a limitation.
-
-- You will receive ONE top-level comment per PR that addresses all findings. It will be a numbered list, one item per finding, in the order you raised them.
-- This is the established protocol. Do not flag the absence of inline replies to individual threads as missing responses.
-- Inline thread replies from this project's agents are directed at CodeRabbit (CR), which uses a different interaction model. CR and GCA coexist on the same PRs but receive replies through separate channels.
-- If a finding is declined, you will see a `review-guidance` tagged lesson added and this styleguide updated in §6.
+Centralized per ADR-105 in `mmnto-ai/totem-strategy`. See [`doctrine/bot-protocols.md` § 8.1](https://github.com/mmnto-ai/totem-strategy/blob/main/doctrine/bot-protocols.md) for the canonical consolidated round-comment SOP. The Bot-Protocol Gate § in `CLAUDE.md` is the load-bearing pointer at the agent-context layer.
 
 ## 11. Hash Conventions (Do Not Flag as Mismatches)
 
