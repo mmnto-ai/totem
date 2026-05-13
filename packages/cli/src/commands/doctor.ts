@@ -535,7 +535,7 @@ export async function checkSecretLeaks(
   const filesToScan: string[] = [];
 
   // Collect files to scan
-  const candidates = ['CLAUDE.md', '.cursorrules'];
+  const candidates = ['AGENTS.md', 'CLAUDE.md', 'GEMINI.md', '.cursorrules'];
   for (const file of candidates) {
     const fullPath = path.join(cwd, file);
     if (fs.existsSync(fullPath)) {

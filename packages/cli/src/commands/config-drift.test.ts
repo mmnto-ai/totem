@@ -73,16 +73,14 @@ describe('dev hooks match consumer templates', () => {
 // ─── Agent config drift ─────────────────────────────
 
 describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
-  const claudeMd = readRoot('CLAUDE.md');
-  const geminiMd = readRoot('GEMINI.md');
+  // Post ADR-038 migration: AGENTS.md is the canonical for Claude Code + Gemini CLI
+  // (read via CLAUDE.md + GEMINI.md redirect files). .junie/guidelines.md remains
+  // canonical for Junie sessions until that migration follows.
+  const agentsMd = readRoot('AGENTS.md');
   const junieGuidelines = readRoot('.junie/guidelines.md');
 
-  it('CLAUDE.md contains the search_knowledge instruction', () => {
-    expect(claudeMd).toContain('search_knowledge');
-  });
-
-  it('GEMINI.md contains the search_knowledge instruction', () => {
-    expect(geminiMd).toContain('search_knowledge');
+  it('AGENTS.md contains the search_knowledge instruction', () => {
+    expect(agentsMd).toContain('search_knowledge');
   });
 
   it('Junie guidelines.md contains the search_knowledge instruction', () => {
@@ -102,28 +100,41 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
 // ─── Instruction file length limits (FR-C01) ─────────
 
 describe('agent instruction files stay concise (FMEA-001 / FR-C01)', () => {
-  // Budget bumped 2026-05 (3000→4000 chars, 25→30 directives) to fit the
-  // ADR-105 Layer-3 bot-protocol gate § that CLAUDE.md now carries at the
-  // root (see mmnto-ai/totem-strategy:doctrine/bot-protocols.md). The gate
-  // is the minimum floor; the discipline still applies to everything else.
-  const MAX_CHARS = 4000;
-  const MAX_DIRECTIVES = 30;
+  // Canonical files carry full agent context (cross-vendor for AGENTS.md,
+  // self-canonical for .junie/guidelines.md). Budget bumped to 6000/40 in
+  // ADR-038 migration to accommodate AGENTS.md absorbing the cross-vendor
+  // content that CLAUDE.md + GEMINI.md previously held separately.
+  const CANONICAL_MAX_CHARS = 6000;
+  const CANONICAL_MAX_DIRECTIVES = 40;
 
-  const files = [
-    { name: 'CLAUDE.md', content: readRoot('CLAUDE.md') },
-    { name: 'GEMINI.md', content: readRoot('GEMINI.md') },
+  // Redirect files exist only to point Claude Code / Gemini CLI at AGENTS.md.
+  // They should stay tiny; this ceiling enforces redirect-shape post-migration.
+  const REDIRECT_MAX_CHARS = 1000;
+
+  const canonical = [
+    { name: 'AGENTS.md', content: readRoot('AGENTS.md') },
     { name: '.junie/guidelines.md', content: readRoot('.junie/guidelines.md') },
   ];
 
-  for (const { name, content } of files) {
-    it(`${name} is under ${MAX_CHARS} characters`, () => {
-      expect(content.length).toBeLessThanOrEqual(MAX_CHARS);
+  const redirects = [
+    { name: 'CLAUDE.md', content: readRoot('CLAUDE.md') },
+    { name: 'GEMINI.md', content: readRoot('GEMINI.md') },
+  ];
+
+  for (const { name, content } of canonical) {
+    it(`${name} is under ${CANONICAL_MAX_CHARS} characters`, () => {
+      expect(content.length).toBeLessThanOrEqual(CANONICAL_MAX_CHARS);
     });
 
-    it(`${name} has fewer than ${MAX_DIRECTIVES} directives`, () => {
-      // Count bullet points and numbered items as distinct directives
+    it(`${name} has fewer than ${CANONICAL_MAX_DIRECTIVES} directives`, () => {
       const directives = content.split('\n').filter((l) => /^\s*[-*]\s|^\s*\d+\.\s/.test(l)).length;
-      expect(directives).toBeLessThanOrEqual(MAX_DIRECTIVES);
+      expect(directives).toBeLessThanOrEqual(CANONICAL_MAX_DIRECTIVES);
+    });
+  }
+
+  for (const { name, content } of redirects) {
+    it(`${name} stays a redirect (under ${REDIRECT_MAX_CHARS} characters)`, () => {
+      expect(content.length).toBeLessThanOrEqual(REDIRECT_MAX_CHARS);
     });
   }
 });
@@ -131,8 +142,12 @@ describe('agent instruction files stay concise (FMEA-001 / FR-C01)', () => {
 // ─── Cross-agent consistency ─────────────────────────
 
 describe('all agent instruction files share the same project rules', () => {
-  // Claude uses a lean root + linked sub-docs; combine them for rule checking
-  const claudeRoot = readRoot('CLAUDE.md');
+  // Post ADR-038 migration: AGENTS.md + .claude/docs/* covers Claude Code (via redirect)
+  // and Gemini CLI (via redirect, no docs subdir — content lives in AGENTS.md proper
+  // plus .gemini/styleguide.md). Junie has its own self-contained .junie/guidelines.md.
+  // The test ensures shared rules don't drift between the cross-vendor canonical and
+  // the Junie canonical.
+  const agentsRoot = readRoot('AGENTS.md');
   const claudeDocs = fs.existsSync(path.join(ROOT, '.claude', 'docs'))
     ? fs
         .readdirSync(path.join(ROOT, '.claude', 'docs'))
@@ -140,8 +155,7 @@ describe('all agent instruction files share the same project rules', () => {
         .map((f) => fs.readFileSync(path.join(ROOT, '.claude', 'docs', f), 'utf-8'))
         .join('\n')
     : '';
-  const claudeMd = claudeRoot + '\n' + claudeDocs;
-  const geminiMd = readRoot('GEMINI.md');
+  const crossVendorCanonical = agentsRoot + '\n' + claudeDocs;
   const junieGuidelines = readRoot('.junie/guidelines.md');
 
   const SHARED_RULES = [
@@ -173,9 +187,8 @@ describe('all agent instruction files share the same project rules', () => {
   ];
 
   for (const rule of SHARED_RULES) {
-    it(`all agent files contain: "${rule}"`, () => {
-      expect(claudeMd).toContain(rule);
-      expect(geminiMd).toContain(rule);
+    it(`agent canonicals contain: "${rule}"`, () => {
+      expect(crossVendorCanonical).toContain(rule);
       expect(junieGuidelines).toContain(rule);
     });
   }
@@ -244,6 +257,7 @@ describe('totem init scaffolds correct paths for each agent', () => {
 
 describe('no secrets in tracked config files', () => {
   const CONFIG_FILES = [
+    'AGENTS.md',
     'CLAUDE.md',
     'GEMINI.md',
     '.junie/guidelines.md',

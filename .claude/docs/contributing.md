@@ -8,23 +8,7 @@
 
 ## PR Review Bot Protocol
 
-Two bots review PRs. Their interaction models are completely different -- confusing them causes missed feedback or duplicate noise.
-
-### CodeRabbit (CR)
-
-- Reply inline to any CR comment thread freely.
-- CR reads every reply in its thread automatically -- no tagging needed.
-- Supports `@coderabbitai fix` commands to trigger automated fixes.
-- One reply per finding is fine; multiple back-and-forth exchanges are normal.
-
-### Gemini Code Assist (GCA)
-
-- ONE batched top-level PR comment per PR. Never reply inline to individual GCA comment threads.
-- Every GCA reply MUST contain `@gemini-code-assist` -- GCA only sees messages that tag it explicitly.
-- Batch all findings into a single numbered-list response: address each finding in order.
-- GCA decline: add a lesson with `review-guidance` tag + update `.gemini/styleguide.md` §6.
-
-> **WARNING:** Do not apply CR habits to GCA. Inline thread replies to GCA threads are invisible to GCA and will be silently ignored. Always compose one top-level comment with `@gemini-code-assist` and the full response.
+See [`mmnto-ai/totem-strategy:doctrine/bot-protocols.md`](https://github.com/mmnto-ai/totem-strategy/blob/main/doctrine/bot-protocols.md) — canonical per [ADR-105](https://github.com/mmnto-ai/totem-strategy/blob/main/adr/adr-105-bot-protocol-centralization.md). Doctrine § 8.1 is the consolidated round-comment SOP (reply structure, @-mention rules, XOR Tag Rule, quota management, decline framing). Do not paraphrase here (paraphrases drift). Same retire-to-pointer pattern as `mmnto-ai/totem-playground@80b4d1b`.
 
 ## Publishing
 
