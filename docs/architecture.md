@@ -155,7 +155,8 @@ Packs distribute compiled rules and extension surfaces across the Totem ecosyste
 - **Pack Categories:**
   - **Security packs:** `@mmnto/pack-agent-security` ships immutable rules covering unauthorized process spawning, dynamic code evaluation, network exfiltration, and obfuscated string assembly. Severity is locked.
   - **Language architecture packs:** Per ADR-097 the canonical archetype is `@mmnto/pack-<lang>-architecture`. `@mmnto/pack-rust-architecture` is the first non-trivial third-party consumer; it bundles `tree-sitter-rust.wasm` from `@vscode/tree-sitter-wasm` and registers via the dual-channel pattern (`api.registerLanguage` for the WASM substrate plus `napi.registerDynamicLanguage` for the napi-side runtime).
-  - **Bot operations packs:** Per Proposal 248 the per-bot interpretive layer ships as packs (`@mmnto/pack-bot-coderabbit`, `@mmnto/pack-bot-gemini-code-assist`). Vendor-drift isolation is the load-bearing reason. v0.1 stubs sit in `pack-staging/` pending the Pack Ecosystem Graduation arc.
+
+  Note: a "bot operations pack" category was previously proposed (Proposal 248). It was retired 2026-05-12 per [ADR-105](https://github.com/mmnto-ai/totem-strategy/blob/main/adr/adr-105-bot-protocol-centralization.md); bot-interaction protocols now live as canonical doctrine at `mmnto-ai/totem-strategy:doctrine/bot-protocols.md` with mechanical enforcement deferred to runtime hooks ([`mmnto-ai/totem#1900`](https://github.com/mmnto-ai/totem/issues/1900)).
 
 - **Bootstrap Semantics (ADR-091 § Bootstrap):**
   - **`pending-verification` install→lint promotion:** Pack rules ship with `status: 'pending-verification'`. The first `totem lint` run after installation runs them through the Stage 4 verifier and persists outcomes to a committable `.totem/verification-outcomes.json` (canonical-key-order via shared `canonicalStringify`).
