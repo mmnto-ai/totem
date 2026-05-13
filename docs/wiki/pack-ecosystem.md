@@ -1,6 +1,6 @@
 # The Pack Ecosystem
 
-Totem 1.25.0+ distributes ecosystem-specific baseline rules, structural constraints, and interpretive bot guidelines as installable NPM packages under the `@mmnto/pack-*` scope.
+Totem 1.25.0+ distributes ecosystem-specific baseline rules and structural constraints as installable NPM packages under the `@mmnto/pack-*` scope.
 
 Packs replace the monolithic internal baseline system. You install a pack into your project using the standard Node.js ecosystem, and Totem dynamically incorporates its rules via the `loadInstalledPacks()` runtime invocation.
 
