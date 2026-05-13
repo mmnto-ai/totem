@@ -102,8 +102,12 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
 // ─── Instruction file length limits (FR-C01) ─────────
 
 describe('agent instruction files stay concise (FMEA-001 / FR-C01)', () => {
-  const MAX_CHARS = 3000;
-  const MAX_DIRECTIVES = 25;
+  // Budget bumped 2026-05 (3000→4000 chars, 25→30 directives) to fit the
+  // ADR-105 Layer-3 bot-protocol gate § that CLAUDE.md now carries at the
+  // root (see mmnto-ai/totem-strategy:doctrine/bot-protocols.md). The gate
+  // is the minimum floor; the discipline still applies to everything else.
+  const MAX_CHARS = 4000;
+  const MAX_DIRECTIVES = 30;
 
   const files = [
     { name: 'CLAUDE.md', content: readRoot('CLAUDE.md') },
