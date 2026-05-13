@@ -25,7 +25,7 @@ Not mechanically enforced. Follow because they reduce PR bot noise.
 
 - **Before coding:** `/preflight <issue>`. Create a feature branch.
 - **Before pushing:** `pnpm run format` → `totem lint` → `totem review` → verify compile manifest is current.
-- **After merging a PR:** `totem extract <pr> --yes`, then `totem docs` if releasing. Lessons: `totem lesson extract <prs>` → `totem lesson compile`.
+- **After merging a PR:** `totem lesson extract <pr> --yes`, then `totem docs` if releasing. Lessons: `totem lesson extract <prs>` → `totem lesson compile`.
 - **NEVER use `git push --no-verify`.** Also no `totem-ignore` or `eslint-disable` without a ticket.
 
 ## Contributor Principles

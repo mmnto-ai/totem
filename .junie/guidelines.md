@@ -34,6 +34,6 @@
 
 ## Totem
 
-- After merging a PR: run `totem extract <pr> --yes`, then `totem docs` if releasing.
+- After merging a PR: run `totem lesson extract <pr> --yes`, then `totem docs` if releasing.
 - **NEVER use `git push --no-verify`.** Fix the violation or file a ticket.
 - Before writing code, you MUST call `search_knowledge` with a query describing what you're about to change.

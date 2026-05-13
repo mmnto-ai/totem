@@ -14,7 +14,7 @@ See [`mmnto-ai/totem-strategy:doctrine/bot-protocols.md`](https://github.com/mmn
 
 - Changesets: write `.changeset/` files manually.
 - Use `pnpm run version` (never bare `pnpm version`).
-- After merge: `totem extract <pr> --yes`, then `totem docs` if releasing.
+- After merge: `totem lesson extract <pr> --yes`, then `totem docs` if releasing.
 
 ## Code Style
 
