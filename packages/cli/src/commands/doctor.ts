@@ -638,6 +638,102 @@ export function checkSecretsFileTracked(cwd: string, totemDir = '.totem'): Diagn
   };
 }
 
+// ─── AGENTS.md canonical-redirect check (Proposal 272 § 6.7 / mmnto-ai/totem#1905) ───
+
+/**
+ * Maximum byte size for a `CLAUDE.md` that's purely a thin redirect to
+ * `AGENTS.md`. Anchored to Proposal 272 § 6.7. Empirical headroom:
+ * the largest post-migration cohort redirect is 558 bytes.
+ */
+export const CLAUDE_MD_REDIRECT_MAX_BYTES = 600;
+
+/**
+ * Minimal shape signature for a `CLAUDE.md` redirect to `AGENTS.md`
+ * per ADR-038. The canonical phrase plus the link target is load-bearing;
+ * surrounding wording is intentionally unconstrained so future template
+ * tweaks survive without breaking every consumer.
+ */
+export const AGENTS_MD_REDIRECT_PATTERN =
+  /canonical agent instructions[^.]*\[`AGENTS\.md`\]\(AGENTS\.md\)/i;
+
+export function checkAgentsMdCanonical(cwd: string): DiagnosticResult {
+  const hasPackageJson = fs.existsSync(path.join(cwd, 'package.json'));
+  // totem-ignore-next-line — predicate is "is THIS cwd a project root" (Proposal 272 § 6.7); existsSync correctly handles both .git/ dir and .git file (worktrees). resolveGitRoot would traverse UP and report a parent repo, which is the wrong semantic.
+  const hasGitDir = fs.existsSync(path.join(cwd, '.git'));
+
+  if (!hasPackageJson && !hasGitDir) {
+    return {
+      name: 'AGENTS.md Canonical',
+      status: 'skip',
+      message: 'not a project root',
+    };
+  }
+
+  const claudeMdPath = path.join(cwd, 'CLAUDE.md');
+  if (!fs.existsSync(claudeMdPath)) {
+    return {
+      name: 'AGENTS.md Canonical',
+      status: 'pass',
+      message: 'no CLAUDE.md (no enforcement)',
+    };
+  }
+
+  let content: string;
+  try {
+    // totem-ignore-next-line — sync read of a tiny on-disk file (~1KB max for the canonical redirect); the doctor pipeline is sync and intentionally reads unstaged on-disk state (the whole point of the check is to surface disk-vs-canonical drift).
+    content = fs.readFileSync(claudeMdPath, 'utf-8'); // totem-context: intentional cleanup — best-effort read; a permission / IO error surfaces as `warn`, matching the `checkCompiledRules` / `checkConfig` convention.
+  } catch {
+    return {
+      name: 'AGENTS.md Canonical',
+      status: 'warn',
+      message: 'CLAUDE.md unreadable',
+    };
+  }
+
+  const bytes = Buffer.byteLength(content, 'utf-8');
+  // totem-ignore-next-line — non-global regex on markdown document content (not shell/command input); the .test()-related lessons target command-validation contexts. The pattern is anchored by its load-bearing literal substrings ("canonical agent instructions" + the AGENTS.md link), so ^ would be wrong here.
+  const matchesRedirect = AGENTS_MD_REDIRECT_PATTERN.test(content);
+
+  // Whenever CLAUDE.md claims to be a redirect, AGENTS.md MUST exist —
+  // independent of size. Without this, a small CLAUDE.md copied from the
+  // template (but with no AGENTS.md authored) would silently pass.
+  if (matchesRedirect && !fs.existsSync(path.join(cwd, 'AGENTS.md'))) {
+    return {
+      name: 'AGENTS.md Canonical',
+      status: 'fail',
+      message: 'CLAUDE.md redirects to AGENTS.md but AGENTS.md does not exist',
+      remediation: 'Create AGENTS.md per ADR-038',
+    };
+  }
+
+  // Below the size threshold, CLAUDE.md is too small to carry meaningful
+  // load-bearing content. Proposal 272 § 6.7 picks 600 bytes as the gate.
+  if (bytes <= CLAUDE_MD_REDIRECT_MAX_BYTES) {
+    return {
+      name: 'AGENTS.md Canonical',
+      status: 'pass',
+      message: matchesRedirect
+        ? `CLAUDE.md is a redirect (${bytes} bytes)`
+        : `CLAUDE.md is under the redirect threshold (${bytes} bytes)`,
+    };
+  }
+
+  if (!matchesRedirect) {
+    return {
+      name: 'AGENTS.md Canonical',
+      status: 'fail',
+      message: `CLAUDE.md is ${bytes} bytes and not a redirect to AGENTS.md (ADR-038)`,
+      remediation: 'Lift content to AGENTS.md and replace CLAUDE.md with the redirect template',
+    };
+  }
+
+  return {
+    name: 'AGENTS.md Canonical',
+    status: 'pass',
+    message: `CLAUDE.md is a verbose redirect (${bytes} bytes)`,
+  };
+}
+
 // ─── Upgrade candidate check (mmnto/totem#1131) ────────────────────
 
 /**
@@ -1615,6 +1711,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     await checkStrategyRoot(cwd, loadedConfig),
     await checkSecretLeaks(cwd),
     checkSecretsFileTracked(cwd),
+    checkAgentsMdCanonical(cwd),
     await checkUpgradeCandidates(cwd),
     await checkStaleRules(cwd, '.totem', doctorThresholds),
     await checkGrandfatheredRules(cwd),
