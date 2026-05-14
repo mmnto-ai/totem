@@ -8232,9 +8232,58 @@
       ],
       "severity": "warning",
       "status": "archived",
-      "unverified": true,
       "archivedReason": "Pattern targets hallucinated function names (findGitRoot, findProjectRoot, findRoot, gitRoot, findUp) that don't exist in the codebase. The actual canonical traversal name is resolveGitRoot, which the pattern doesn't match. Rule wouldn't fire on real code.",
-      "archivedAt": "2026-05-14T02:26:05.142Z"
+      "archivedAt": "2026-05-14T02:26:05.142Z",
+      "unverified": true
+    },
+    {
+      "lessonHash": "aceaaf59db2258fc",
+      "lessonHeading": "Downgrade missing credentials to warnings",
+      "pattern": "",
+      "message": "Missing credentials or API keys should trigger warn() rather than fail() in doctor diagnostics to avoid blocking CI or git hooks in environments where those integrations are not required.",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "pattern": "fail($$$ARGS)",
+          "inside": {
+            "kind": "if_statement",
+            "stopBy": "end"
+          }
+        }
+      },
+      "badExample": "if (!process.env.OPENAI_API_KEY) { fail('Missing OPENAI_API_KEY'); }",
+      "goodExample": "if (!process.env.OPENAI_API_KEY) { warn('Missing OPENAI_API_KEY'); }",
+      "compiledAt": "2026-05-14T04:55:45.590Z",
+      "createdAt": "2026-05-14T04:55:45.590Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/doctor.ts"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Compiled with undefined astGrepPattern and empty regex pattern; rule cannot fire on anything. Compile-worker prompt failure to produce a valid pattern for the warn-vs-fail classification lesson.",
+      "archivedAt": "2026-05-14T04:55:46.607Z",
+      "unverified": true
+    },
+    {
+      "lessonHash": "7f8b10f4fb827d56",
+      "lessonHeading": "Decouple CLI logic from process exit",
+      "pattern": "",
+      "message": "Command functions should return result objects instead of calling process.exit(). This prevents side effects when commands are invoked programmatically.",
+      "engine": "ast-grep",
+      "astGrepPattern": "process.exit($CODE)",
+      "badExample": "export async function runBuild() { if (!valid) { process.exit(1); } }",
+      "goodExample": "export async function runBuild() { if (!valid) { return { success: false, code: 1 }; } }",
+      "compiledAt": "2026-05-14T04:55:52.423Z",
+      "createdAt": "2026-05-14T04:55:52.423Z",
+      "fileGlobs": [
+        "packages/cli/src/**/*.ts",
+        "!**/*.test.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "Pattern process.exit($CODE) fires on the legitimate handleError() path in index.ts (CLI entry's terminal error path); lesson scope was deep callees like doctorCommand, not the CLI entry's error handler. Over-broad pattern.",
+      "archivedAt": "2026-05-14T04:55:53.217Z",
+      "unverified": true
     }
   ],
   "nonCompilable": [
@@ -13924,6 +13973,12 @@
       "title": "Verify redirect targets",
       "reasonCode": "out-of-scope",
       "reason": "Lesson describes a logical ordering requirement between two runtime checks (existence verification before size-based short-circuit), which requires semantic analysis of control flow across multiple conditional branches. No single pattern or structural combinator can distinguish code that checks size before existence from code that correctly checks existence first."
+    },
+    {
+      "hash": "4a773bc5d993c58f",
+      "title": "Tiered enforcement for strict gates",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a conditional enforcement architecture (tiered by user type or environment) that cannot be detected by a structural pattern. Determining whether a strict gate is correctly gated behind an agent/tier check requires semantic analysis of control flow and runtime context, not a surface-level code match."
     }
   ]
 }
