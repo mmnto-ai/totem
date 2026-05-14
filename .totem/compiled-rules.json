@@ -8190,6 +8190,51 @@
       "archivedReason": "Stage 4 (mmnto-ai/totem#1682): pattern fired on 47 file(s) in the verification baseline (test files, fixture directories, or files outside fileGlobs scope) — over-broad. Offending paths: .claude/hooks/session-context.js, packages/cli/src/adapters/create-issue-adapter.ts, packages/cli/src/adapters/multi-repo-adapter.ts, packages/cli/src/commands/adr.test.ts, packages/cli/src/commands/bootstrap-wiring.test.ts (+ 42 more). reasonCode: stage4-out-of-scope-match.",
       "archivedAt": "2026-05-10T08:13:57.505Z",
       "unverified": true
+    },
+    {
+      "lessonHash": "7def4ccc4c3e2092",
+      "lessonHeading": "Detect project roots via local existence",
+      "pattern": "",
+      "message": "Use fs.existsSync('.git') to detect the project root instead of traversal helpers — this correctly handles both standard .git directories and worktree .git files without risking parent-repo detection.",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "any": [
+            {
+              "pattern": "findGitRoot($$$)"
+            },
+            {
+              "pattern": "findProjectRoot($$$)"
+            },
+            {
+              "pattern": "findRoot($$$)"
+            },
+            {
+              "pattern": "gitRoot($$$)"
+            },
+            {
+              "pattern": "findUp($$$ARGS, { type: 'directory' }$$$)"
+            },
+            {
+              "pattern": "findUp('.git', $$$)"
+            }
+          ]
+        }
+      },
+      "badExample": "const root = await findUp('.git', { cwd: process.cwd() });",
+      "goodExample": "const isRoot = fs.existsSync(path.join(process.cwd(), '.git'));",
+      "compiledAt": "2026-05-14T02:25:11.937Z",
+      "createdAt": "2026-05-14T02:25:11.937Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*"
+      ],
+      "severity": "warning",
+      "status": "archived",
+      "unverified": true,
+      "archivedReason": "Pattern targets hallucinated function names (findGitRoot, findProjectRoot, findRoot, gitRoot, findUp) that don't exist in the codebase. The actual canonical traversal name is resolveGitRoot, which the pattern doesn't match. Rule wouldn't fire on real code.",
+      "archivedAt": "2026-05-14T02:26:05.142Z"
     }
   ],
   "nonCompilable": [
@@ -13873,6 +13918,12 @@
       "title": "Harden regex patterns against ReDoS",
       "reasonCode": "semantic-analysis-required",
       "reason": "Hazard requires multi-file semantic analysis: detecting whether a regex pattern is missing both a length cap and a safety check requires knowing the full validation pipeline context, not just the presence or absence of a single call or literal at a single site. No single-pattern rule can distinguish a regex that is already guarded elsewhere from one that is genuinely unprotected."
+    },
+    {
+      "hash": "4d397beafd1899b5",
+      "title": "Verify redirect targets",
+      "reasonCode": "out-of-scope",
+      "reason": "Lesson describes a logical ordering requirement between two runtime checks (existence verification before size-based short-circuit), which requires semantic analysis of control flow across multiple conditional branches. No single pattern or structural combinator can distinguish code that checks size before existence from code that correctly checks existence first."
     }
   ]
 }
