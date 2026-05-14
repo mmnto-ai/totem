@@ -658,8 +658,7 @@ export const AGENTS_MD_REDIRECT_PATTERN =
 
 export function checkAgentsMdCanonical(cwd: string): DiagnosticResult {
   const hasPackageJson = fs.existsSync(path.join(cwd, 'package.json'));
-  // totem-ignore-next-line — predicate is "is THIS cwd a project root" (Proposal 272 § 6.7); existsSync correctly handles both .git/ dir and .git file (worktrees). resolveGitRoot would traverse UP and report a parent repo, which is the wrong semantic.
-  const hasGitDir = fs.existsSync(path.join(cwd, '.git'));
+  const hasGitDir = fs.existsSync(path.join(cwd, '.git')); // totem-context: predicate is "is THIS cwd a project root" (Proposal 272 § 6.7); existsSync correctly handles both .git/ dir and .git file (worktrees). resolveGitRoot would traverse UP and report a parent repo, which is the wrong semantic.
 
   if (!hasPackageJson && !hasGitDir) {
     return {
@@ -680,8 +679,7 @@ export function checkAgentsMdCanonical(cwd: string): DiagnosticResult {
 
   let content: string;
   try {
-    // totem-ignore-next-line — sync read of a tiny on-disk file (~1KB max for the canonical redirect); the doctor pipeline is sync and intentionally reads unstaged on-disk state (the whole point of the check is to surface disk-vs-canonical drift).
-    content = fs.readFileSync(claudeMdPath, 'utf-8'); // totem-context: intentional cleanup — best-effort read; a permission / IO error surfaces as `warn`, matching the `checkCompiledRules` / `checkConfig` convention.
+    content = fs.readFileSync(claudeMdPath, 'utf-8'); // totem-context: intentional cleanup — best-effort sync read of a tiny on-disk file (~1KB max for the canonical redirect). The doctor pipeline is sync; the check intentionally reads unstaged on-disk state (the whole point is to surface disk-vs-canonical drift). A permission / IO error surfaces as `warn`, matching the `checkCompiledRules` / `checkConfig` convention.
   } catch {
     return {
       name: 'AGENTS.md Canonical',
@@ -691,8 +689,7 @@ export function checkAgentsMdCanonical(cwd: string): DiagnosticResult {
   }
 
   const bytes = Buffer.byteLength(content, 'utf-8');
-  // totem-ignore-next-line — non-global regex on markdown document content (not shell/command input); the .test()-related lessons target command-validation contexts. The pattern is anchored by its load-bearing literal substrings ("canonical agent instructions" + the AGENTS.md link), so ^ would be wrong here.
-  const matchesRedirect = AGENTS_MD_REDIRECT_PATTERN.test(content);
+  const matchesRedirect = AGENTS_MD_REDIRECT_PATTERN.test(content); // totem-context: non-global regex on markdown document content (not shell/command input); the .test()-related lessons target command-validation contexts. The pattern is anchored by its load-bearing literal substrings ("canonical agent instructions" + the AGENTS.md link), so ^ would be wrong here.
 
   // Whenever CLAUDE.md claims to be a redirect, AGENTS.md MUST exist —
   // independent of size. Without this, a small CLAUDE.md copied from the
