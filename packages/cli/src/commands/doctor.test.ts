@@ -492,6 +492,81 @@ describe('doctorCommand output', () => {
   });
 });
 
+// ─── Strict mode contract (mmnto-ai/totem#1908) ─────────
+//
+// `doctorCommand` itself is unchanged — it returns `DiagnosticResult[]` and
+// does NOT touch `process.exit` / `process.exitCode`. The exit-code decision
+// lives at the CLI edge (`packages/cli/src/index.ts` doctor action handler).
+// These tests lock that contract: the function stays composable and the
+// strict flag does not introduce process-exit side effects deep in the call
+// graph (Tenet 4 / process-exit-masking trap from spec § Edge Cases).
+
+describe('doctorCommand strict mode contract', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+  let originalExitCode: typeof process.exitCode;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+    originalExitCode = process.exitCode;
+
+    // Minimal workspace (matches sibling describes).
+    fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), 'export default { targets: [] };');
+    const totemDir = path.join(tmpDir, '.totem');
+    fs.mkdirSync(totemDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(totemDir, 'compiled-rules.json'),
+      JSON.stringify({ version: 1, rules: [] }),
+    );
+
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+    );
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+    process.exitCode = originalExitCode;
+    vi.restoreAllMocks();
+  });
+
+  it('does not modify process.exitCode when strict is true (CLI edge owns gating)', async () => {
+    // Seed a guaranteed failure: no config means checkConfig returns `fail`.
+    fs.unlinkSync(path.join(tmpDir, 'totem.config.ts'));
+    process.exitCode = undefined;
+
+    const results = await doctorCommand({ strict: true });
+
+    expect(results.some((r: DiagnosticResult) => r.status === 'fail')).toBe(true);
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('does not call process.exit regardless of strict flag', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((_: number) => {
+      throw new Error('process.exit should not be called by doctorCommand');
+    }) as never);
+
+    await doctorCommand({ strict: true });
+    await doctorCommand({ strict: false });
+    await doctorCommand();
+
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns the same DiagnosticResult[] shape regardless of strict flag', async () => {
+    const resultsStrict = await doctorCommand({ strict: true });
+    const resultsLoose = await doctorCommand({ strict: false });
+
+    expect(resultsStrict.map((r: DiagnosticResult) => r.name)).toEqual(
+      resultsLoose.map((r: DiagnosticResult) => r.name),
+    );
+  });
+});
+
 // ─── Secrets file tracking check ────────────────────────
 
 describe('checkSecretsFileTracked', () => {

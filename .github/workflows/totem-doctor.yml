@@ -1,0 +1,38 @@
+name: Doctor
+
+# Repo-state diagnostics gate. Mirrors `totem lint` (diff-shape gate) with
+# `totem doctor --strict` (repo-shape gate) per Proposal 273 § 7 routing matrix
+# row 6 (Repo + Auto + PR-time). Reference: mmnto-ai/totem#1908.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  doctor:
+    name: Totem Doctor (--strict)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+
+      - name: Run totem doctor --strict
+        run: node packages/cli/dist/index.js doctor --strict

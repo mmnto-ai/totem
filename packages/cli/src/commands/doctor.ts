@@ -1262,6 +1262,16 @@ export async function checkGrandfatheredRules(
 
 export interface DoctorOptions {
   pr?: boolean;
+  /**
+   * When true, callers should treat any `fail` diagnostic as a gating
+   * condition (exit non-zero). The flag itself doesn't change what
+   * `doctorCommand` returns — the exit-code decision lives at the CLI edge
+   * so this function stays composable and free of process-exit side effects.
+   *
+   * Reference: mmnto-ai/totem#1908 (Proposal 273 § 6 Q2 / § 7 routing matrix
+   * row 5).
+   */
+  strict?: boolean;
 }
 
 // ─── Self-healing flow ──────────────────────────────────

@@ -179,10 +179,17 @@ program
   .command('doctor')
   .description('Run workspace health diagnostics')
   .option('--pr', 'Auto-downgrade noisy rules and open a PR')
-  .action(async (opts: { pr?: boolean }) => {
+  .option(
+    '--strict',
+    'Exit non-zero if any check reports a `fail` status (gating mode for hooks / CI)',
+  )
+  .action(async (opts: { pr?: boolean; strict?: boolean }) => {
     try {
       const { doctorCommand } = await import('./commands/doctor.js');
-      await doctorCommand(opts);
+      const results = await doctorCommand(opts);
+      if (opts.strict && results.some((r) => r.status === 'fail')) {
+        process.exitCode = 1;
+      }
     } catch (err) {
       handleError(err);
     }

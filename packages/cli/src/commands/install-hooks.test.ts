@@ -1245,6 +1245,27 @@ describe('buildPrePushHook with strict tier', () => {
     expect(hook).toContain('is_agent=0');
     expect(hook).toContain('CLAUDE_CODE_AGENT');
   });
+
+  // mmnto-ai/totem#1908 — doctor --strict is wired into the strict-tier
+  // shieldBlock alongside the existing `totem review` gate. Repo-state
+  // checks (like checkAgentsMdCanonical) now block push when they fail.
+  it('includes $TOTEM_CMD doctor --strict in the shield block', () => {
+    const hook = buildPrePushHook(FALLBACK, 'strict');
+    expect(hook).toContain('$TOTEM_CMD doctor --strict');
+    expect(hook).toContain('doctor --strict (repo-state gate)');
+  });
+
+  it('gates doctor --strict on the agent/strict guard (does NOT fire unconditionally)', () => {
+    const hook = buildPrePushHook(FALLBACK, 'strict');
+    // Find the position of the doctor --strict invocation and the surrounding
+    // guard; assert the invocation lives INSIDE the agent-or-tier block.
+    const guardIdx = hook.indexOf('if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]');
+    const doctorIdx = hook.indexOf('$TOTEM_CMD doctor --strict');
+    const fiCloseIdx = hook.indexOf('fi', guardIdx);
+    expect(guardIdx).toBeGreaterThan(-1);
+    expect(doctorIdx).toBeGreaterThan(guardIdx);
+    expect(doctorIdx).toBeLessThan(fiCloseIdx);
+  });
 });
 
 describe('buildPrePushHook with standard tier', () => {
@@ -1266,6 +1287,21 @@ describe('buildPrePushHook with standard tier', () => {
   it('still includes agent detection', () => {
     const hook = buildPrePushHook(FALLBACK, 'standard');
     expect(hook).toContain('is_agent=0');
+  });
+
+  // mmnto-ai/totem#1908 — even in standard tier, the doctor --strict line
+  // is emitted inside the same agent/strict guard so an agent (detected via
+  // CLAUDE_CODE_AGENT etc.) still gets the gate. Standard-tier human
+  // operators bypass it because their `is_agent=0` and `TOTEM_HOOK_TIER` is
+  // standard, so the guard branch never enters.
+  it('emits doctor --strict gated by agent/strict guard (no unconditional fire in standard tier)', () => {
+    const hook = buildPrePushHook(FALLBACK, 'standard');
+    const guardIdx = hook.indexOf('if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]');
+    const doctorIdx = hook.indexOf('$TOTEM_CMD doctor --strict');
+    const fiCloseIdx = hook.indexOf('fi', guardIdx);
+    expect(guardIdx).toBeGreaterThan(-1);
+    expect(doctorIdx).toBeGreaterThan(guardIdx);
+    expect(doctorIdx).toBeLessThan(fiCloseIdx);
   });
 });
 
