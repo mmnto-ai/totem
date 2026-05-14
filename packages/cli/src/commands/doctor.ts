@@ -227,9 +227,14 @@ export function checkEmbeddingConfig(cwd: string): DiagnosticResult {
           message: 'openai (text-embedding-3-small)',
         };
       }
+      // Missing env key is an operator-setup state, not a repo defect. The
+      // repo's config is correct; the local environment is incomplete.
+      // Parallels `checkOllama` warn-on-unreachable. Empirical: under
+      // `doctor --strict` (mmnto-ai/totem#1908), this was misclassified as a
+      // gating fail in CI where the key is intentionally absent.
       return {
         name: 'Embedding',
-        status: 'fail',
+        status: 'warn',
         message: 'OpenAI configured but OPENAI_API_KEY missing',
         remediation: 'Set OPENAI_API_KEY in your .env file',
       };
@@ -243,9 +248,10 @@ export function checkEmbeddingConfig(cwd: string): DiagnosticResult {
           message: 'gemini (gemini-embedding-2-preview)',
         };
       }
+      // See OpenAI branch above for classification rationale.
       return {
         name: 'Embedding',
-        status: 'fail',
+        status: 'warn',
         message: 'Gemini configured but API key missing',
         remediation: 'Set GEMINI_API_KEY or GOOGLE_API_KEY in your .env file',
       };

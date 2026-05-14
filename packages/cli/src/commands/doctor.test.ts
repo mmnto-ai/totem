@@ -259,6 +259,48 @@ describe('checkEmbeddingConfig', () => {
     expect(result.status).toBe('warn');
     expect(result.message).toContain('Lite tier');
   });
+
+  // mmnto-ai/totem#1908 — Missing env key is operator-setup state, not a
+  // repo defect; classified as `warn` so `doctor --strict` doesn't gate on
+  // CI environments that intentionally lack the key. Mirrors `checkOllama`
+  // warn-on-unreachable. CI workflow `totem-doctor.yml` regression coverage.
+
+  it('returns warn (not fail) when OpenAI configured but OPENAI_API_KEY missing', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.config.ts'),
+      "export default { targets: [], embedding: { provider: 'openai' } };",
+    );
+    const originalKey = process.env['OPENAI_API_KEY'];
+    delete process.env['OPENAI_API_KEY'];
+    try {
+      const result = checkEmbeddingConfig(tmpDir);
+      expect(result.status).toBe('warn');
+      expect(result.message).toContain('OPENAI_API_KEY missing');
+      expect(result.remediation).toContain('OPENAI_API_KEY');
+    } finally {
+      if (originalKey !== undefined) process.env['OPENAI_API_KEY'] = originalKey;
+    }
+  });
+
+  it('returns warn (not fail) when Gemini configured but API key missing', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.config.ts'),
+      "export default { targets: [], embedding: { provider: 'gemini' } };",
+    );
+    const originalGemini = process.env['GEMINI_API_KEY'];
+    const originalGoogle = process.env['GOOGLE_API_KEY'];
+    delete process.env['GEMINI_API_KEY'];
+    delete process.env['GOOGLE_API_KEY'];
+    try {
+      const result = checkEmbeddingConfig(tmpDir);
+      expect(result.status).toBe('warn');
+      expect(result.message).toContain('API key missing');
+      expect(result.remediation).toContain('GEMINI_API_KEY');
+    } finally {
+      if (originalGemini !== undefined) process.env['GEMINI_API_KEY'] = originalGemini;
+      if (originalGoogle !== undefined) process.env['GOOGLE_API_KEY'] = originalGoogle;
+    }
+  });
 });
 
 // ─── Ollama probe (mmnto-ai/totem#1851) ─────────────────
