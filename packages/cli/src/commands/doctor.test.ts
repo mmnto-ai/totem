@@ -8,7 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanTmpDir } from '../test-utils.js';
 import type { DiagnosticResult } from './doctor.js';
 import {
+  AGENTS_MD_REDIRECT_PATTERN,
   BYPASS_THRESHOLD,
+  checkAgentsMdCanonical,
   checkCompiledRules,
   checkConfig,
   checkEmbeddingConfig,
@@ -22,6 +24,7 @@ import {
   checkStaleRules,
   checkStrategyRoot,
   checkUpgradeCandidates,
+  CLAUDE_MD_REDIRECT_MAX_BYTES,
   doctorCommand,
   findLegacyGrandfatheredRules,
   findStaleRules,
@@ -378,6 +381,7 @@ const EXPECTED_DIAGNOSTIC_NAMES = [
   'Strategy Root',
   'Secret Scan',
   'Secrets File Security',
+  'AGENTS.md Canonical',
   'Upgrade Candidates',
   'Stale Rules',
   'Grandfathered Rules',
@@ -529,6 +533,144 @@ describe('checkSecretsFileTracked', () => {
     // tmpDir is not a git repo — execSync will throw, which we catch
     const result = checkSecretsFileTracked(tmpDir);
     expect(result.status).toBe('pass');
+  });
+});
+
+// ─── AGENTS.md canonical redirect check (Proposal 272 § 6.7 / #1905) ──
+
+describe('checkAgentsMdCanonical', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  function makeProjectRoot(): void {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"fixture"}');
+  }
+
+  function canonicalRedirect(repoSlug = 'mmnto-ai/fixture'): string {
+    return [
+      '# Fixture: Claude Code Entry Point',
+      '',
+      'The canonical agent instructions for this repository live in [`AGENTS.md`](AGENTS.md).',
+      '',
+      `Per [Totem ADR-038 "AGENTS.md Standard Adoption"](https://github.com/mmnto-ai/totem-strategy/blob/main/adr/adr-038-agents-md-standard.md), \`${repoSlug}\` uses a single \`AGENTS.md\` as the source of truth for how all AI coding agents (Claude Code, Gemini CLI, Cursor, etc.) should behave here. This file exists only so Claude Code finds its way to \`AGENTS.md\`.`,
+      '',
+      'Read `AGENTS.md` before doing anything else.',
+      '',
+    ].join('\n');
+  }
+
+  it('skips non-project directories', () => {
+    // No package.json, no .git
+    const result = checkAgentsMdCanonical(tmpDir);
+    expect(result.status).toBe('skip');
+    expect(result.message).toContain('not a project root');
+  });
+
+  it('passes when CLAUDE.md is absent', () => {
+    makeProjectRoot();
+    const result = checkAgentsMdCanonical(tmpDir);
+    expect(result.status).toBe('pass');
+    expect(result.message).toContain('no CLAUDE.md');
+  });
+
+  it('passes for a canonical cohort redirect (under threshold)', () => {
+    makeProjectRoot();
+    const redirect = canonicalRedirect();
+    expect(Buffer.byteLength(redirect, 'utf-8')).toBeLessThanOrEqual(CLAUDE_MD_REDIRECT_MAX_BYTES);
+    fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), redirect);
+    fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), 'canonical');
+
+    const result = checkAgentsMdCanonical(tmpDir);
+    expect(result.status).toBe('pass');
+    expect(result.message).toContain('redirect');
+  });
+
+  it('fails when CLAUDE.md is fat and does not match the redirect pattern', () => {
+    makeProjectRoot();
+    const fat = `# Project Rules\n\n${'Some load-bearing rule that should live in AGENTS.md. '.repeat(20)}`;
+    expect(Buffer.byteLength(fat, 'utf-8')).toBeGreaterThan(CLAUDE_MD_REDIRECT_MAX_BYTES);
+    fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), fat);
+
+    const result = checkAgentsMdCanonical(tmpDir);
+    expect(result.status).toBe('fail');
+    expect(result.message).toContain('not a redirect');
+    expect(result.remediation).toContain('AGENTS.md');
+  });
+
+  it('passes for a verbose redirect (over threshold but matches pattern) with AGENTS.md present', () => {
+    makeProjectRoot();
+    // Pad the redirect with an extra paragraph above the threshold while
+    // keeping the canonical phrase + link intact.
+    const verbose =
+      canonicalRedirect() +
+      '\n\n## Local addendum\n\n' +
+      'Long-form addendum for a downstream consumer that needs vendor-specific notes. '.repeat(4);
+    expect(Buffer.byteLength(verbose, 'utf-8')).toBeGreaterThan(CLAUDE_MD_REDIRECT_MAX_BYTES);
+    fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), verbose);
+    fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), 'canonical');
+
+    const result = checkAgentsMdCanonical(tmpDir);
+    expect(result.status).toBe('pass');
+    expect(result.message).toContain('verbose redirect');
+  });
+
+  it('fails when CLAUDE.md is a verbose redirect but AGENTS.md is missing', () => {
+    makeProjectRoot();
+    const verbose =
+      canonicalRedirect() +
+      '\n\n## Addendum\n\n' +
+      'Long-form addendum for a downstream consumer. '.repeat(8);
+    expect(Buffer.byteLength(verbose, 'utf-8')).toBeGreaterThan(CLAUDE_MD_REDIRECT_MAX_BYTES);
+    fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), verbose);
+    // No AGENTS.md
+
+    const result = checkAgentsMdCanonical(tmpDir);
+    expect(result.status).toBe('fail');
+    expect(result.message).toContain('AGENTS.md does not exist');
+    expect(result.remediation).toContain('Create AGENTS.md');
+  });
+
+  it('fails when a small CLAUDE.md matches the redirect pattern but AGENTS.md is missing', () => {
+    // Defends against the template-copied-but-AGENTS.md-not-authored case.
+    // The AGENTS.md existence requirement is independent of file size.
+    makeProjectRoot();
+    const redirect = canonicalRedirect();
+    expect(Buffer.byteLength(redirect, 'utf-8')).toBeLessThanOrEqual(CLAUDE_MD_REDIRECT_MAX_BYTES);
+    fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), redirect);
+    // No AGENTS.md — the test surface
+
+    const result = checkAgentsMdCanonical(tmpDir);
+    expect(result.status).toBe('fail');
+    expect(result.message).toContain('AGENTS.md does not exist');
+  });
+
+  it('recognizes a bare .git directory as a project root', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    // No package.json, no CLAUDE.md — should pass (nothing to enforce)
+    const result = checkAgentsMdCanonical(tmpDir);
+    expect(result.status).toBe('pass');
+    expect(result.message).toContain('no CLAUDE.md');
+  });
+
+  it('redirect pattern is case-insensitive on the canonical phrase', () => {
+    expect(
+      AGENTS_MD_REDIRECT_PATTERN.test(
+        'The Canonical Agent Instructions for this repository live in [`AGENTS.md`](AGENTS.md).',
+      ),
+    ).toBe(true);
+  });
+
+  it('redirect pattern rejects content that mentions AGENTS.md without the canonical delegation phrase', () => {
+    expect(AGENTS_MD_REDIRECT_PATTERN.test('See [`AGENTS.md`](AGENTS.md) for more info.')).toBe(
+      false,
+    );
   });
 });
 
