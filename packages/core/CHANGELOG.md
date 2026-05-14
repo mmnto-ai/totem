@@ -1,5 +1,7 @@
 # @mmnto/totem
 
+## 1.37.0
+
 ## 1.36.0
 
 ### Minor Changes
