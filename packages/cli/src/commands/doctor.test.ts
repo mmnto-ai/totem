@@ -259,6 +259,48 @@ describe('checkEmbeddingConfig', () => {
     expect(result.status).toBe('warn');
     expect(result.message).toContain('Lite tier');
   });
+
+  // mmnto-ai/totem#1908 — Missing env key is operator-setup state, not a
+  // repo defect; classified as `warn` so `doctor --strict` doesn't gate on
+  // CI environments that intentionally lack the key. Mirrors `checkOllama`
+  // warn-on-unreachable. CI workflow `totem-doctor.yml` regression coverage.
+
+  it('returns warn (not fail) when OpenAI configured but OPENAI_API_KEY missing', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.config.ts'),
+      "export default { targets: [], embedding: { provider: 'openai' } };",
+    );
+    const originalKey = process.env['OPENAI_API_KEY'];
+    delete process.env['OPENAI_API_KEY'];
+    try {
+      const result = checkEmbeddingConfig(tmpDir);
+      expect(result.status).toBe('warn');
+      expect(result.message).toContain('OPENAI_API_KEY missing');
+      expect(result.remediation).toContain('OPENAI_API_KEY');
+    } finally {
+      if (originalKey !== undefined) process.env['OPENAI_API_KEY'] = originalKey;
+    }
+  });
+
+  it('returns warn (not fail) when Gemini configured but API key missing', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.config.ts'),
+      "export default { targets: [], embedding: { provider: 'gemini' } };",
+    );
+    const originalGemini = process.env['GEMINI_API_KEY'];
+    const originalGoogle = process.env['GOOGLE_API_KEY'];
+    delete process.env['GEMINI_API_KEY'];
+    delete process.env['GOOGLE_API_KEY'];
+    try {
+      const result = checkEmbeddingConfig(tmpDir);
+      expect(result.status).toBe('warn');
+      expect(result.message).toContain('API key missing');
+      expect(result.remediation).toContain('GEMINI_API_KEY');
+    } finally {
+      if (originalGemini !== undefined) process.env['GEMINI_API_KEY'] = originalGemini;
+      if (originalGoogle !== undefined) process.env['GOOGLE_API_KEY'] = originalGoogle;
+    }
+  });
 });
 
 // ─── Ollama probe (mmnto-ai/totem#1851) ─────────────────
@@ -489,6 +531,81 @@ describe('doctorCommand output', () => {
     expect(output).toMatch(/\d+ passed/);
     expect(output).toMatch(/\d+ warnings/);
     expect(output).toMatch(/\d+ failures/);
+  });
+});
+
+// ─── Strict mode contract (mmnto-ai/totem#1908) ─────────
+//
+// `doctorCommand` itself is unchanged — it returns `DiagnosticResult[]` and
+// does NOT touch `process.exit` / `process.exitCode`. The exit-code decision
+// lives at the CLI edge (`packages/cli/src/index.ts` doctor action handler).
+// These tests lock that contract: the function stays composable and the
+// strict flag does not introduce process-exit side effects deep in the call
+// graph (Tenet 4 / process-exit-masking trap from spec § Edge Cases).
+
+describe('doctorCommand strict mode contract', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+  let originalExitCode: typeof process.exitCode;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+    originalExitCode = process.exitCode;
+
+    // Minimal workspace (matches sibling describes).
+    fs.writeFileSync(path.join(tmpDir, 'totem.config.ts'), 'export default { targets: [] };');
+    const totemDir = path.join(tmpDir, '.totem');
+    fs.mkdirSync(totemDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(totemDir, 'compiled-rules.json'),
+      JSON.stringify({ version: 1, rules: [] }),
+    );
+
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+    );
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+    process.exitCode = originalExitCode;
+    vi.restoreAllMocks();
+  });
+
+  it('does not modify process.exitCode when strict is true (CLI edge owns gating)', async () => {
+    // Seed a guaranteed failure: no config means checkConfig returns `fail`.
+    fs.unlinkSync(path.join(tmpDir, 'totem.config.ts'));
+    process.exitCode = undefined;
+
+    const results = await doctorCommand({ strict: true });
+
+    expect(results.some((r: DiagnosticResult) => r.status === 'fail')).toBe(true);
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('does not call process.exit regardless of strict flag', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((_: number) => {
+      throw new Error('process.exit should not be called by doctorCommand');
+    }) as never);
+
+    await doctorCommand({ strict: true });
+    await doctorCommand({ strict: false });
+    await doctorCommand();
+
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns the same DiagnosticResult[] shape regardless of strict flag', async () => {
+    const resultsStrict = await doctorCommand({ strict: true });
+    const resultsLoose = await doctorCommand({ strict: false });
+
+    expect(resultsStrict.map((r: DiagnosticResult) => r.name)).toEqual(
+      resultsLoose.map((r: DiagnosticResult) => r.name),
+    );
   });
 });
 

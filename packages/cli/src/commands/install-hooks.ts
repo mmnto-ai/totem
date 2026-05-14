@@ -305,9 +305,16 @@ ${strictBlock}
 
 export function buildPrePushHook(fallbackCmd: string, tier?: 'strict' | 'standard'): string {
   const effectiveTier = tier ?? 'standard';
+  // Strict-tier gate per Proposal 273 § 6 Q2 (mmnto-ai/totem#1908): operator-invoked
+  // is the default for new checks while behavior calibrates. Doctor's `--strict`
+  // mode gates on repo-state `fail` results; unconditional firing would break
+  // cohort consumers mid-migration. Wired inside the existing `is_agent` /
+  // `TOTEM_HOOK_TIER=strict` guard alongside the shield gate.
   const shieldBlock = `
-  # Strict mode: require shield pass before push
+  # Strict mode: require doctor repo-state + shield pass before push
   if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
+    echo "[Totem] Running doctor --strict (repo-state gate)..."
+    $TOTEM_CMD doctor --strict || exit 1
     echo "[Totem] Running shield gate (strict mode)..."
     $TOTEM_CMD review || exit 1
   fi`;
