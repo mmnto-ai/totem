@@ -30,6 +30,9 @@ export function writeSessionId(
   sessionId: string,
   onWarn?: (msg: string) => void,
 ): void {
+  // totem-context: fire-and-forget telemetry write — failures are surfaced
+  // via onWarn but must not crash the SessionStart hook or block the
+  // briefing path. Sensors-not-actuators per lesson-b1bae311.
   try {
     const ledgerDir = path.join(totemDir, LEDGER_DIR);
     fs.mkdirSync(ledgerDir, { recursive: true });
@@ -52,6 +55,11 @@ export function writeSessionId(
  */
 export function readSessionId(totemDir: string, ttlHours = DEFAULT_TTL_HOURS): string | undefined {
   const filePath = path.join(totemDir, LEDGER_DIR, SESSION_ID_FILE);
+  // totem-context: missing/unreadable .session-id is a normal state (pre-hook
+  // session, hookless agent, stale file outside TTL). The caller distinguishes
+  // "undefined session" from "I/O failure" by treating both as "no session
+  // ID available" — same downstream behavior, no value in propagating the
+  // error class. Sensors-not-actuators per lesson-b1bae311.
   try {
     const stat = fs.statSync(filePath);
     const ageMs = Date.now() - stat.mtimeMs;
