@@ -614,8 +614,8 @@ export function registerSearchKnowledge(server: McpServer): void {
       // logMcpCall has its own internal try/catch, but defense-in-depth with
       // .catch() guards against any unhandledRejection if internals ever
       // throw synchronously between awaits.
-      logMcpCall('search_knowledge').catch(() => {
-        /* fire-and-forget */
+      logMcpCall('search_knowledge').catch((err) => {
+        void err;
       });
       try {
         // Initialize log directory on first call (lazy — avoids loading config at import time)

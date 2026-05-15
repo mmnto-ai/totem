@@ -47,7 +47,7 @@ Same forward-only story as A.3.a schema:
 ## ADR alignment
 
 - ADR-029 § Session Heuristic: explicit UUID supersedes the rolling-2h activity heuristic when `.session-id` is present.
-- ADR-078 § Event Attribution: `source: 'bot'` for both writers (emitter = MCP server / hook subsystem). `agent_source` left undefined; A.3.c populates it via orchestrator → MCP correlation propagation.
+- ADR-078 § Event Attribution: `source: 'bot'` for both writers (emitter = MCP server / hook subsystem). In this lift, `session_start` includes `agent_source: 'claude'` (the Claude hook template knows its vendor); MCP `mcp_call` agent attribution is deferred to A.3.c via orchestrator → MCP correlation propagation.
 - ADR-077 Smart Briefing: SessionStart hook already shipped (`installClaudeHooks` scaffolds the script); this PR only extends its body.
 
 ## Out of scope (next sub-lifts)

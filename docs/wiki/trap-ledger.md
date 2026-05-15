@@ -25,7 +25,7 @@ The Ledger captures two semantic families of events.
 - `mcp_call` — MCP tool invocation (e.g., `search_knowledge`); identified by `activity_name`. Emitted by the MCP server when a tool fires.
 - `tool_call_first_significant` — first non-Read/Grep/Glob orchestrator tool call in the session. (Writer ships in A.3.b.)
 - `hook_fire` — lifecycle hook executed (e.g., `SessionStart`, `PreToolUse`, `pre-push`). (Writer ships in A.4.a.)
-- `session_start` — SessionStart hook fired; new `session_id` minted to `.totem/ledger/.session-id`. Emitted by the Claude / Gemini SessionStart hook scripts scaffolded by `totem init`.
+- `session_start` — SessionStart hook fired; new `session_id` minted to `.totem/ledger/.session-id`. Emitted by the Claude SessionStart hook script scaffolded by `totem init` (Gemini writer deferred).
 
 ### Event Schema
 
