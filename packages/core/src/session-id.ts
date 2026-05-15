@@ -58,6 +58,14 @@ export function writeSessionId(
  *
  * The TTL fallback uses file mtime; sessions exceeding the window are treated
  * as "missing" so callers can defensively decide whether to rotate.
+ *
+ * Race-condition note (strategy-Claude T0345Z): if a ledger writer reads this
+ * file mid-SessionStart-hook rotation, it will stamp the event with the prior
+ * session UUID. This is intentional and NOT a bug — the event's timestamp
+ * reflects when it actually fired, and the ADR-029 compliance metric considers
+ * it part of the prior session (correctly, per its temporal semantics). Future
+ * readers tempted to "fix" this race by guarding rotation with a lockfile
+ * should re-read this doc-comment and the metric semantics before changing.
  */
 export function readSessionId(totemDir: string, ttlHours = DEFAULT_TTL_HOURS): string | undefined {
   const filePath = path.join(totemDir, LEDGER_DIR, SESSION_ID_FILE);
@@ -77,7 +85,11 @@ export function readSessionId(totemDir: string, ttlHours = DEFAULT_TTL_HOURS): s
     // Missing/unreadable .session-id is a normal state (pre-hook session,
     // hookless agent, stale file outside TTL). Treat as "no session ID
     // available" — same downstream behavior as the TTL-expired branch.
-    if (code === 'ENOENT' || code === 'EACCES') return undefined;
+    // EPERM + EROFS added for parity with writeSessionId's fs-failure-class
+    // discrimination (CR + GCA Round-1 catch).
+    if (code === 'ENOENT' || code === 'EACCES' || code === 'EPERM' || code === 'EROFS') {
+      return undefined;
+    }
     // Unexpected error class — propagate so Tenet 4 (Fail Loud) catches drift.
     throw err;
   }

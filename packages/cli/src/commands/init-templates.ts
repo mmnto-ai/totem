@@ -357,8 +357,16 @@ try {
     session_id: sessionId,
   };
   appendFileSync(join(ledgerDir, 'events.ndjson'), JSON.stringify(event) + '\\n', 'utf-8');
-} catch (_err) {
-  // Fire-and-forget; ledger failures must not block the briefing.
+} catch (err) {
+  // Fire-and-forget; ledger failures must not block the briefing. A lightweight
+  // stderr breadcrumb makes hook misconfigurations diagnosable in consumer repos
+  // (CR R1 catch — empty catch suppresses all signal). stderr (not stdout) so
+  // the briefing path remains clean for Claude's prompt context.
+  process.stderr.write(
+    '[Totem] Session-start telemetry unavailable (non-fatal): ' +
+      (err instanceof Error ? err.message : String(err)) +
+      '\\n',
+  );
 }
 
 // ─── totem describe briefing (existing behavior) ────────────────

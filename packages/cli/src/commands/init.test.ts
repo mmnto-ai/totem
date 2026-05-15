@@ -1444,8 +1444,11 @@ describe('CLAUDE_SESSION_START template', () => {
   it('keeps the session-start writer fire-and-forget (no rethrow)', () => {
     // The ledger-write block must catch its own errors and NOT block the
     // briefing path that follows. Per Tenet 4 + lesson-b1bae311 (sensors,
-    // not actuators).
-    expect(CLAUDE_SESSION_START).toContain('catch (_err)');
+    // not actuators). CR R1 (#1920) replaced the empty catch with a stderr
+    // breadcrumb — confirm the breadcrumb shape lands in the template.
+    expect(CLAUDE_SESSION_START).toContain('catch (err)');
+    expect(CLAUDE_SESSION_START).toContain('process.stderr.write');
+    expect(CLAUDE_SESSION_START).toContain('Session-start telemetry unavailable');
   });
 
   it('does NOT propagate strategy-repo-specific orientation pointers', () => {
