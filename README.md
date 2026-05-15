@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@mmnto/totem.svg)](https://www.npmjs.com/package/@mmnto/totem)
 [![CI](https://github.com/mmnto-ai/totem/actions/workflows/ci.yml/badge.svg)](https://github.com/mmnto-ai/totem/actions/workflows/ci.yml)
 
-_AI coding agents are brilliant goldfish. Totem is the file-anchored substrate they read and write to keep architectural context durable across sessions._
+_AI coding agents are brilliant goldfish. Totem is the file-based substrate they read from and write to. It keeps architectural context durable across sessions._
 
 > `totem lint` runs entirely offline and completes in under 2 seconds. No LLMs in the loop.
 
@@ -11,7 +11,7 @@ When using LLMs on projects, I found that agents kept making the same architectu
 
 They can make the wrong way look brilliant (until you realize what happened). They'll rarely ask: _"doesn't a shared helper already exist for this?"_
 
-Totem is what I extracted to solve that friction. It's a deterministic, file-anchored toolkit: a substrate of plain markdown lessons, a queryable knowledge index, compiled lint rules, and CLI primitives that AI agents read and write to coordinate work. The structural pieces (the substrate, the index, the compiled-rule lint engine) ship today. The discipline and telemetry layers (whether agents consistently query the index, whether compliance gets measured end-to-end) are in active development; see [What Works and What Doesn't](#what-works-and-what-doesnt) for the honest split.
+Totem is what I extracted to solve that friction. It's a file-based toolkit with a deterministic core: a substrate of plain markdown lessons, a queryable knowledge index, compiled lint rules, and CLI primitives that AI agents read from and write to in order to coordinate work. The structural pieces (the substrate, the index, the compiled-rule lint engine) ship today. The discipline and telemetry layers (whether agents consistently query the index, whether compliance gets measured end-to-end) are in active development; see [What Works and What Doesn't](#what-works-and-what-doesnt) for the honest split.
 
 ---
 
