@@ -1415,6 +1415,42 @@ describe('CLAUDE_SESSION_START template', () => {
     expect(CLAUDE_SESSION_START).toContain("'index.js'");
   });
 
+  // A.3.a — SessionStart hook mints session_id + emits session_start ledger event
+  it('mints a session_id via crypto.randomUUID', () => {
+    expect(CLAUDE_SESSION_START).toContain('randomUUID');
+    expect(CLAUDE_SESSION_START).toContain("require('crypto')");
+  });
+
+  it('persists session_id to .totem/ledger/.session-id', () => {
+    expect(CLAUDE_SESSION_START).toContain(".totem'");
+    expect(CLAUDE_SESSION_START).toContain("'ledger'");
+    expect(CLAUDE_SESSION_START).toContain(".session-id'");
+  });
+
+  it('appends a session_start event to events.ndjson', () => {
+    expect(CLAUDE_SESSION_START).toContain("type: 'session_start'");
+    expect(CLAUDE_SESSION_START).toContain("activity_name: 'SessionStart'");
+    expect(CLAUDE_SESSION_START).toContain('events.ndjson');
+    expect(CLAUDE_SESSION_START).toContain('appendFileSync');
+  });
+
+  it('stamps agent_source: claude on the Claude-specific hook', () => {
+    // Claude hook knows its origin — populating agent_source here is the
+    // minimal-coupling alternative to waiting for A.3.c correlation
+    // propagation.
+    expect(CLAUDE_SESSION_START).toContain("agent_source: 'claude'");
+  });
+
+  it('keeps the session-start writer fire-and-forget (no rethrow)', () => {
+    // The ledger-write block must catch its own errors and NOT block the
+    // briefing path that follows. Per Tenet 4 + lesson-b1bae311 (sensors,
+    // not actuators). CR R1 (#1920) replaced the empty catch with a stderr
+    // breadcrumb — confirm the breadcrumb shape lands in the template.
+    expect(CLAUDE_SESSION_START).toContain('catch (err)');
+    expect(CLAUDE_SESSION_START).toContain('process.stderr.write');
+    expect(CLAUDE_SESSION_START).toContain('Session-start telemetry unavailable');
+  });
+
   it('does NOT propagate strategy-repo-specific orientation pointers', () => {
     // OQ 2 disposition: keep the fallback generic. The strategy reference
     // mentions README.md, design-tenets.md, .journal/strategy/ — none of
