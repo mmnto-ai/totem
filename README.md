@@ -21,7 +21,6 @@ Totem is what I extracted to solve that friction. It's a file-based toolkit. The
 - [What's in the Box](#whats-in-the-box)
 - [What Works and What Doesn't](#what-works-and-what-doesnt)
 - [Quickstart](#quickstart)
-- [Try It Live](#try-it-live)
 - [Documentation & Workflows](#documentation--workflows)
 
 ---
@@ -159,13 +158,7 @@ curl -L https://github.com/mmnto-ai/totem/releases/latest/download/totem-lite-da
 chmod +x totem && sudo mv totem /usr/local/bin/
 ```
 
-The Lite binary includes the full AST engine and can run `totem init`, `totem lint`, and `totem hooks` completely offline. For Windows and other platforms, see the [Installation Guide](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/installation.md).
-
-## Try It Live
-
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/mmnto-ai/totem-playground)
-
-The [Totem Playground](https://github.com/mmnto-ai/totem-playground) is a pre-broken Next.js app with 5 intentional architectural violations. Open it in Codespaces and run `totem lint`. Totem catches every one, with zero config and zero API keys. Then try `totem rule list --json` to see the engine as a scriptable API.
+The Lite binary includes the full AST engine and can run `totem init`, `totem lint`, and `totem hook install` completely offline. For Windows and other platforms, see the [Installation Guide](https://github.com/mmnto-ai/totem/blob/main/docs/wiki/installation.md).
 
 ## Documentation & Workflows
 
