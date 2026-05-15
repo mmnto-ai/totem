@@ -56,9 +56,11 @@ export type EvaluateResult =
 // (Windows main-branch CI run 25939618872 saw "timeout after 139ms" on a
 // single-line `.sh` corpus). 250ms keeps the per-rule budget snappy in
 // production while giving CI hardware ~2× headroom over observed worst-case.
+const DEFAULT_TIMEOUT_MS = 250;
+const DEFAULT_SOFT_WARNING_MS = 100;
 const DEFAULT_CONFIG: RegexEvaluatorConfig = {
-  timeoutMs: 250,
-  softWarningMs: 100,
+  timeoutMs: DEFAULT_TIMEOUT_MS,
+  softWarningMs: DEFAULT_SOFT_WARNING_MS,
 };
 
 type PendingEntry = {
