@@ -85,9 +85,9 @@ AI agents are stateless by default. Every new session starts from zero, with no 
 
 Totem's approach is to ship a queryable knowledge index that holds your lessons and ADRs in a local semantic store (Tree-sitter + LanceDB). The index lives in your repo as plain files, so there's no cloud dependency and no vendor lock-in.
 
-Any MCP-compatible agent can query it (e.g., Claude, Gemini, Cursor, Windsurf, Copilot). Before your agent writes a line of code, it can ask "what patterns are banned in this codebase?" or "what's the architecture of the auth system?" and get a real answer grounded in your project's actual history. Whether an agent actually issues that query before deriving from scratch is currently an agent-discipline question — see [What Works and What Doesn't](#what-works-and-what-doesnt).
+Any MCP-compatible agent can query it. Before your agent writes a line of code, it can ask "what patterns are banned in this codebase?" or "what's the architecture of the auth system?" and get a real set of ranked candidates from your project's actual history (the agent still has to read them and synthesize — a queryable index returns candidates, not pre-synthesized answers). Whether an agent actually issues that query before deriving from scratch is currently an agent-discipline question — see [What Works and What Doesn't](#what-works-and-what-doesnt).
 
-With [Cross-Repo Mesh](docs/wiki/cross-repo-mesh.md), you can federate search across sibling repos. One repo's lessons become queryable from all linked repos, so context doesn't stop at the repo boundary. (Local filesystem-linked siblings are free; centralized federation with RBAC and hosted compile is the paid tier — see [Open Core Covenant](https://github.com/mmnto-ai/totem/blob/main/COVENANT.md).)
+With [Cross-Repo Mesh](docs/wiki/cross-repo-mesh.md), federation across sibling repos is supported via the opt-in `linkedIndexes` config — one repo's lessons become queryable from all linked repos when cohorts opt in, so context doesn't stop at the repo boundary. (Local filesystem-linked siblings are free; centralized federation with RBAC and hosted compile is the paid tier — see [Open Core Covenant](https://github.com/mmnto-ai/totem/blob/main/COVENANT.md).)
 
 ## What's in the Box
 
