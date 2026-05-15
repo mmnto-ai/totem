@@ -58,7 +58,7 @@ The "wrong" way becomes the "loud" way. No LLM in the loop at runtime. Just sub-
 
 ## How Mistakes Become Rules
 
-The core loop is simple. A mistake gets caught in a PR review, a bot nit, or a production bug. I write a plain-English lesson that explains what went wrong. `totem lesson compile` turns the lesson into an AST or regex rule, and `totem lint` enforces it on every push from that point forward. The same mistake can never happen again.
+The core loop is simple. A mistake gets caught in a PR review, a bot nit, or a production bug. I write a plain-English lesson that explains what went wrong. `totem lesson compile` turns the lesson into an AST or regex rule, and `totem lint` enforces it on every push from that point forward. The same compiled pattern can't ship past the linter again.
 
 ```mermaid
 graph LR

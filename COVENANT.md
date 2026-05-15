@@ -17,8 +17,8 @@ The Totem core CLI, compiler, MCP server, and enforcement engine are released un
 Everything a single team needs to enforce rules locally:
 
 - **Enforcement:** `totem lint` with compiled rules, git hooks, SARIF output. Zero LLM, zero network, zero API keys.
-- **Learning:** `totem extract`, `totem compile`, `totem review-learn`. Full lesson-to-rule pipeline.
-- **AI Integration:** MCP server for agent context queries, `totem shield` for LLM-based review, `totem spec` for planning.
+- **Learning:** `totem lesson extract`, `totem lesson compile`, `totem review-learn`. Full lesson-to-rule pipeline.
+- **AI Integration:** MCP server for agent context queries, `totem review` for LLM-based review, `totem spec` for planning.
 - **Rule Packs:** Community baseline packs (TypeScript, Python, Rust, Go) and ecosystem detection.
 - **Self-Healing:** Trap Ledger, `totem doctor --pr`, automatic rule downgrading.
 - **Source Code:** Full source for all core packages on GitHub.
